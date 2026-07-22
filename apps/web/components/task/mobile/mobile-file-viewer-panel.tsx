@@ -70,7 +70,12 @@ function MobileViewerBody({
             onTogglePreview={onToggleMarkdownPreview}
           />
         ) : (
-          <FileViewerContent path={file.path} repo={file.repo} content={file.content} />
+          <FileViewerContent
+            path={file.path}
+            repo={file.repo}
+            content={file.content}
+            sessionId={sessionId ?? undefined}
+          />
         ))}
     </div>
   );

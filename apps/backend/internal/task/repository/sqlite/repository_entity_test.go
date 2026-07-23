@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -69,6 +70,122 @@ func TestRepositoryCopyFiles_RoundTrip(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].CopyFiles != ".env, *.local" {
 		t.Errorf("ListRepositories CopyFiles = %v, want one repo with %q", list, ".env, *.local")
+	}
+}
+
+func TestRepositoryProviderHost_RoundTrip(t *testing.T) {
+	repo := newRepoForEntityTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "ws-provider-host")
+	in := &models.Repository{
+		ID: "repo-gitlab", WorkspaceID: "ws-provider-host", Name: "group/subgroup/project",
+		SourceType: "provider", Provider: "gitlab", ProviderHost: "http://gitlab.internal:8080",
+		ProviderOwner: "group/subgroup", ProviderName: "project",
+	}
+	if err := repo.CreateRepository(ctx, in); err != nil {
+		t.Fatalf("create repository: %v", err)
+	}
+	got, err := repo.GetRepository(ctx, in.ID)
+	if err != nil {
+		t.Fatalf("get repository: %v", err)
+	}
+	if got.ProviderHost != in.ProviderHost {
+		t.Fatalf("provider_host = %q, want %q", got.ProviderHost, in.ProviderHost)
+	}
+	got.ProviderHost = "https://gitlab.internal"
+	if err := repo.UpdateRepository(ctx, got); err != nil {
+		t.Fatalf("update repository: %v", err)
+	}
+	updated, err := repo.GetRepository(ctx, in.ID)
+	if err != nil || updated.ProviderHost != "https://gitlab.internal" {
+		t.Fatalf("updated provider_host = %q, err = %v", updated.ProviderHost, err)
+	}
+}
+
+func TestGetRepositoryByProviderInfoSeparatesGitLabHosts(t *testing.T) {
+	repo := newRepoForEntityTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "ws-host-collision")
+	for _, item := range []*models.Repository{
+		{ID: "repo-public", WorkspaceID: "ws-host-collision", Name: "public", SourceType: "provider", Provider: "gitlab", ProviderHost: "https://gitlab.com", ProviderOwner: "group/subgroup", ProviderName: "project"},
+		{ID: "repo-private", WorkspaceID: "ws-host-collision", Name: "private", SourceType: "provider", Provider: "gitlab", ProviderHost: "https://gitlab.internal", ProviderOwner: "group/subgroup", ProviderName: "project"},
+	} {
+		if err := repo.CreateRepository(ctx, item); err != nil {
+			t.Fatalf("create repository %s: %v", item.ID, err)
+		}
+	}
+	got, err := repo.GetRepositoryByProviderInfo(
+		ctx, "ws-host-collision", "gitlab", "https://gitlab.internal", "group/subgroup", "project",
+	)
+	if err != nil || got == nil || got.ID != "repo-private" {
+		t.Fatalf("host-aware lookup = %+v, err = %v; want repo-private", got, err)
+	}
+}
+
+// TestGetRepositoryByProviderInfoReturnsEarliestCreatedDuplicate guards the
+// Greptile-flagged race window: when two rows already share the same
+// provider identity (left over from a resolver race that predates
+// Service.repoResolveMu), GetRepositoryByProviderInfo must resolve to the
+// same row ListRepositories' dedupeRepositoriesByIdentity keeps as the
+// canonical winner (earliest created_at, ties broken by the smaller id) —
+// not an arbitrary one of the two — otherwise a caller can attach a task to,
+// or backfill fields onto, the duplicate ListRepositories hides.
+func TestGetRepositoryByProviderInfoReturnsEarliestCreatedDuplicate(t *testing.T) {
+	repo := newRepoForEntityTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "ws-provider-dup")
+	for _, item := range []*models.Repository{
+		{ID: "repo-dup-later", WorkspaceID: "ws-provider-dup", Name: "later", SourceType: "provider", Provider: "github", ProviderHost: "https://github.com", ProviderOwner: "kdlbs", ProviderName: "kandev"},
+		{ID: "repo-dup-earlier", WorkspaceID: "ws-provider-dup", Name: "earlier", SourceType: "provider", Provider: "github", ProviderHost: "https://github.com", ProviderOwner: "kdlbs", ProviderName: "kandev"},
+	} {
+		if err := repo.CreateRepository(ctx, item); err != nil {
+			t.Fatalf("create repository %s: %v", item.ID, err)
+		}
+	}
+	// CreateRepository always stamps created_at = time.Now(), so backdate the
+	// intended winner directly to make ordering deterministic regardless of
+	// wall-clock resolution.
+	earlier := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := repo.db.ExecContext(ctx, repo.db.Rebind(`UPDATE repositories SET created_at = ? WHERE id = ?`), earlier, "repo-dup-earlier"); err != nil {
+		t.Fatalf("backdate repo-dup-earlier: %v", err)
+	}
+
+	got, err := repo.GetRepositoryByProviderInfo(ctx, "ws-provider-dup", "github", "https://github.com", "kdlbs", "kandev")
+	if err != nil {
+		t.Fatalf("GetRepositoryByProviderInfo: %v", err)
+	}
+	if got == nil || got.ID != "repo-dup-earlier" {
+		t.Fatalf("GetRepositoryByProviderInfo = %+v, want repo-dup-earlier (the row ListRepositories keeps as canonical)", got)
+	}
+}
+
+func TestRepositoryProviderHostMigrationBackfillsOnlyUnambiguousGitHubRows(t *testing.T) {
+	repo := newRepoForEntityTests(t)
+	ctx := context.Background()
+	seedWorkspace(t, repo, "ws-provider-upgrade")
+	for _, item := range []*models.Repository{
+		{ID: "legacy-github", WorkspaceID: "ws-provider-upgrade", Name: "org/repo", SourceType: "provider", Provider: "github", ProviderOwner: "org", ProviderName: "repo"},
+		{ID: "legacy-gitlab", WorkspaceID: "ws-provider-upgrade", Name: "group/repo", SourceType: "provider", Provider: "gitlab", ProviderOwner: "group", ProviderName: "repo"},
+	} {
+		if err := repo.CreateRepository(ctx, item); err != nil {
+			t.Fatalf("create legacy repository %s: %v", item.ID, err)
+		}
+	}
+
+	if err := repo.initSchema(); err != nil {
+		t.Fatalf("first upgrade replay: %v", err)
+	}
+	if err := repo.initSchema(); err != nil {
+		t.Fatalf("second upgrade replay: %v", err)
+	}
+
+	githubRepo, err := repo.GetRepository(ctx, "legacy-github")
+	if err != nil || githubRepo.ProviderHost != "https://github.com" {
+		t.Fatalf("GitHub provider_host = %q, err = %v", githubRepo.ProviderHost, err)
+	}
+	gitlabRepo, err := repo.GetRepository(ctx, "legacy-gitlab")
+	if err != nil || gitlabRepo.ProviderHost != "" {
+		t.Fatalf("GitLab provider_host = %q, err = %v; want unknown", gitlabRepo.ProviderHost, err)
 	}
 }
 

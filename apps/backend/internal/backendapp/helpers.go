@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -38,6 +39,7 @@ import (
 	debughandlers "github.com/kandev/kandev/internal/debug"
 	editorcontroller "github.com/kandev/kandev/internal/editors/controller"
 	editorhandlers "github.com/kandev/kandev/internal/editors/handlers"
+	"github.com/kandev/kandev/internal/entityrefs"
 	"github.com/kandev/kandev/internal/events/bus"
 	gateways "github.com/kandev/kandev/internal/gateway/websocket"
 	"github.com/kandev/kandev/internal/github"
@@ -128,11 +130,11 @@ const sessionUpdatedAtPayloadKey = "updated_at"
 //
 // Non-blocking by design — sendSessionData runs in the WS read loop, so a
 // network probe here would delay every subscribe/focus ACK by its timeout.
-// Instead, treat the workspace stream's presence as the cached readiness
-// signal: streamManager only attaches it AFTER waitForAgentctlReady's Health
-// check succeeds. If the stream is wired we emit `agentctl_ready`; otherwise
-// `agentctl_starting`. The subsequent waitForAgentctlReady event (or its
-// error) will correct the status if the snapshot picked the wrong one.
+// Instead, replay the readiness cached by waitForAgentctlReady's successful
+// health check. Agent process and workspace stream state are deliberately not
+// used here: prepared sessions have a healthy agentctl before either exists.
+// The subsequent waitForAgentctlReady event (or its error) corrects the status
+// if the snapshot runs while startup is still in progress.
 //
 // Emits no message when the session has no live execution — the lazy
 // create-on-terminal-connect path publishes events normally in that case.
@@ -162,7 +164,7 @@ func appendAgentctlStatusMessage(
 		payload["worktree_path"] = execution.WorkspacePath
 	}
 	action := ws.ActionSessionAgentctlStarting
-	if execution.GetWorkspaceStream() != nil {
+	if execution.IsAgentctlReady() {
 		action = ws.ActionSessionAgentctlReady
 	}
 
@@ -542,11 +544,20 @@ func registerRoutes(p routeParams) {
 	if p.services.GitHub != nil {
 		p.services.GitHub.SetCascadeTaskDeleter(handoffSvc)
 	}
+	if p.services.GitLab != nil {
+		p.services.GitLab.SetCascadeTaskDeleter(handoffSvc)
+	}
 	// repoLookup validates a watcher's optional repository binding (workspace
 	// ownership + default-branch fill) on create/update. Shared across the three
 	// repo-less watchers; one concrete adapter satisfies each package's
 	// structurally-identical RepositoryLookup interface.
 	repoLookup := &repositoryLookupAdapter{svc: p.taskSvc}
+	if p.services.GitLab != nil {
+		p.services.GitLab.SetRepositoryLookup(repoLookup)
+		p.services.GitLab.SetWatchDependencyValidator(&gitLabWatchDependencyValidator{
+			tasks: p.taskSvc, workflows: p.services.Workflow, agents: p.agentSettingsRepo,
+		})
+	}
 	if p.services.Jira != nil {
 		p.services.Jira.SetTaskDeleter(handoffSvc)
 		p.services.Jira.SetRepositoryLookup(repoLookup)
@@ -704,11 +715,25 @@ func bootActivePlugins(p routeParams) []webapp.ActivePluginPayload {
 		out = append(out, webapp.ActivePluginPayload{
 			ID:        rec.ID,
 			Name:      rec.DisplayName,
-			BundleURL: "/api/plugins/" + rec.ID + "/bundle",
+			BundleURL: pluginBundleURL(rec),
 			StyleURLs: pluginStyleURLs(rec),
 		})
 	}
 	return out
+}
+
+// pluginBundleURL builds the browser-facing bundle URL, mirrored on the
+// frontend by lib/plugins/active-plugin.ts's toActivePlugin. The `?v=`
+// query param keys the URL on the installed version so an updated plugin
+// resolves to a *different* module specifier: without it,
+// unloadPlugin(id, {evictCache: true}) (apps/web/lib/plugins/host.ts) drops
+// the cached bundle registration on update, but a same-tab re-import() of
+// the identical URL returns the browser's already-evaluated ES module
+// without re-running its top-level registerKandevPlugin() call — leaving
+// the plugin active but unregistered. An unchanged version keeps the same
+// URL across boots, so normal (non-update) loads stay cache-friendly.
+func pluginBundleURL(rec pluginstore.Record) string {
+	return "/api/plugins/" + rec.ID + "/bundle?v=" + url.QueryEscape(rec.Version)
 }
 
 // pluginStyleURLs maps a plugin's root-relative ui.styles paths to
@@ -787,7 +812,7 @@ func resolveRepositoryIDForSubpath(ctx context.Context, taskRepo *sqliterepo.Rep
 		if err != nil || repo == nil {
 			continue
 		}
-		if repo.Name == subpath {
+		if repo.Name == subpath || worktree.SanitizeRepoDirName(repo.Name) == subpath {
 			return link.RepositoryID
 		}
 	}
@@ -831,6 +856,9 @@ func resolveRepositoryIDForSessionSubpath(ctx context.Context, taskRepo *sqliter
 // registerTaskRoutes registers all task-related HTTP and WebSocket routes.
 func registerTaskRoutes(p routeParams, planService *taskservice.PlanService, handoffSvc *taskservice.HandoffService) {
 	taskhandlers.RegisterWorkspaceRoutes(p.router, p.gateway.Dispatcher, p.taskSvc, p.log)
+	if p.services != nil {
+		registerMentionRoutes(p.router, p.services.Mentions)
+	}
 	taskhandlers.RegisterWorkflowRoutes(p.router, p.gateway.Dispatcher, p.taskSvc, p.services.Workflow, p.log)
 	taskH := taskhandlers.RegisterTaskRoutes(p.router, p.gateway.Dispatcher, p.taskSvc, p.orchestratorSvc, p.taskRepo, planService, p.log)
 	if p.services != nil && p.services.User != nil {
@@ -856,9 +884,13 @@ func registerTaskRoutes(p routeParams, planService *taskservice.PlanService, han
 	taskhandlers.RegisterExecutorRoutes(p.router, p.gateway.Dispatcher, p.taskSvc, p.log)
 	taskhandlers.RegisterExecutorProfileRoutes(p.router, p.gateway.Dispatcher, p.taskSvc, p.agentList, p.log)
 	taskhandlers.RegisterEnvironmentRoutes(p.router, p.gateway.Dispatcher, p.taskSvc, p.log)
+	var referenceValidators []entityrefs.SubmissionValidator
+	if p.services != nil && p.services.Mentions != nil && p.services.Mentions.Submission != nil {
+		referenceValidators = append(referenceValidators, p.services.Mentions.Submission)
+	}
 	taskhandlers.RegisterMessageRoutes(
 		p.router, p.gateway.Dispatcher, p.taskSvc,
-		&orchestratorWrapper{svc: p.orchestratorSvc}, p.log,
+		&orchestratorWrapper{svc: p.orchestratorSvc}, p.log, referenceValidators...,
 	)
 	taskhandlers.RegisterProcessRoutes(p.router, p.taskSvc, p.lifecycleMgr, p.log)
 	analyticshandlers.RegisterStatsRoutes(p.router, p.analyticsRepo, p.log)
@@ -880,7 +912,7 @@ func registerSecondaryRoutes(
 	planService *taskservice.PlanService,
 	handoffSvc *taskservice.HandoffService,
 ) {
-	workflowhandlers.RegisterRoutes(p.router, p.gateway.Dispatcher, workflowCtrl, p.log)
+	workflowhandlers.RegisterRoutes(p.router, p.gateway.Dispatcher, workflowCtrl, p.eventBus, p.log)
 	p.log.Info("Registered Workflow handlers (HTTP + WebSocket)")
 
 	agentsettingshandlers.RegisterRoutes(p.router, p.agentSettingsController, p.gateway.Hub, p.log)
@@ -1027,7 +1059,9 @@ func registerSecondaryRoutes(
 	if p.services.Automation != nil {
 		automationSvc = p.services.Automation.Service
 	}
-	registerE2EResetRoutes(p.router, p.taskRepo, p.taskSvc, automationSvc, p.services.GitHub, p.log)
+	registerE2EResetRoutes(
+		p.router, p.taskRepo, p.taskSvc, automationSvc, p.services.GitHub, p.services.GitLab, p.log,
+	)
 
 	if officetestharness.Enabled() {
 		var officeAgentSvc *officeagents.AgentService

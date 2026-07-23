@@ -483,15 +483,19 @@ func TestPersistInPlaceModelSwitch_DoesNotRestoreStaleActiveStateAfterCancellati
 
 func TestSwitchModelFallback_PreservesRestrictedMCPMode(t *testing.T) {
 	tests := []struct {
-		name     string
-		metadata map[string]interface{}
-		wantMode string
+		name         string
+		isFromOffice bool
+		assignee     string
+		metadata     map[string]interface{}
+		wantMode     string
 	}{
-		{name: "Office task", wantMode: McpModeOffice},
+		{name: "unassigned Office task", isFromOffice: true, wantMode: McpModeOffice},
+		{name: "assigned Kanban task", assignee: "assigned-agent", wantMode: ""},
 		{
-			name:     "Config session takes precedence for Office task",
-			metadata: map[string]interface{}{"config_mode": true},
-			wantMode: McpModeConfig,
+			name:         "Config session takes precedence for Office task",
+			isFromOffice: true,
+			metadata:     map[string]interface{}{"config_mode": true},
+			wantMode:     McpModeConfig,
 		},
 	}
 
@@ -502,7 +506,8 @@ func TestSwitchModelFallback_PreservesRestrictedMCPMode(t *testing.T) {
 				ID:                     "task-office",
 				WorkspaceID:            "workspace-1",
 				Title:                  "Office task",
-				AssigneeAgentProfileID: "office-agent",
+				IsFromOffice:           tt.isFromOffice,
+				AssigneeAgentProfileID: tt.assignee,
 			}
 			repo.sessions["session-office"] = &models.TaskSession{
 				ID:             "session-office",
@@ -523,6 +528,9 @@ func TestSwitchModelFallback_PreservesRestrictedMCPMode(t *testing.T) {
 				},
 			}
 			exec := newTestExecutor(t, manager, repo)
+			exec.SetGitLabCredentialResolver(&fakeGitLabCredentialResolver{byWorkspace: map[string]struct{ host, token string }{
+				"workspace-1": {host: "https://gitlab.example", token: "switch-token"},
+			}})
 
 			if _, err := exec.SwitchModel(
 				context.Background(), "task-office", "session-office", "new-model", "continue",
@@ -534,6 +542,9 @@ func TestSwitchModelFallback_PreservesRestrictedMCPMode(t *testing.T) {
 			}
 			if capturedReq.McpMode != tt.wantMode {
 				t.Fatalf("McpMode = %q, want %q", capturedReq.McpMode, tt.wantMode)
+			}
+			if capturedReq.WorkspaceID != "workspace-1" || capturedReq.Env[envGitLabToken] != "switch-token" {
+				t.Fatalf("model-switch credentials not workspace scoped: workspace=%q env=%#v", capturedReq.WorkspaceID, capturedReq.Env)
 			}
 		})
 	}

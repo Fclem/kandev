@@ -12,6 +12,17 @@ import type { Agent, AgentProfile } from "../../lib/types/http-agents";
 import type { TaskCIAutomationOptions, TaskCIAutomationPatch } from "../../lib/types/github";
 import type { VoiceModeSettings } from "../../lib/types/http-voice";
 import type {
+  GitLabMRApproval,
+  GitLabMRCommit,
+  GitLabMRDiscussion,
+  GitLabMRFile,
+  GitLabPipeline,
+  GitLabProjectMember,
+  Issue as MockGitLabIssue,
+  MR as MockGitLabMR,
+  TaskMR,
+} from "../../lib/types/gitlab";
+import type {
   SSHAgentReadinessResponse,
   SSHProbeShellsResponse,
   SSHSession,
@@ -91,6 +102,9 @@ export type MockCheckRun = {
   completed_at?: string;
 };
 
+export type MockGitLabMRSeed = Pick<MockGitLabMR, "iid" | "title"> & Partial<MockGitLabMR>;
+export type MockGitLabIssueSeed = Pick<MockGitLabIssue, "iid" | "title"> & Partial<MockGitLabIssue>;
+
 function setIf(body: Record<string, unknown>, key: string, value: unknown) {
   if (value !== undefined && value !== null) body[key] = value;
 }
@@ -100,14 +114,27 @@ type CreateTaskOpts = {
   workflow_id?: string;
   workflow_step_id?: string;
   agent_profile_id?: string;
+  executor_profile_id?: string;
   repository_ids?: string[];
-  repositories?: Array<{ repository_id: string; base_branch?: string; checkout_branch?: string }>;
+  repositories?: TaskRepositoryInput[];
   plan_mode?: boolean;
   metadata?: Record<string, unknown>;
   parent_id?: string;
   workspace_mode?: "inherit_parent" | "new_workspace" | "shared_group";
   workspace_group_id?: string;
   attachments?: MessageAttachmentInput[];
+};
+
+type TaskRepositoryInput = {
+  repository_id?: string;
+  base_branch?: string;
+  checkout_branch?: string;
+  pr_number?: number;
+  remote_url?: string;
+  provider?: string;
+  provider_repo_id?: string;
+  provider_owner?: string;
+  provider_name?: string;
 };
 
 function buildTaskMetadata(opts: CreateTaskOpts): Record<string, unknown> | undefined {
@@ -131,6 +158,8 @@ function buildCreateTaskBody(
   };
   setIf(body, "workflow_id", options.workflow_id);
   setIf(body, "workflow_step_id", options.workflow_step_id);
+  setIf(body, "agent_profile_id", options.agent_profile_id);
+  setIf(body, "executor_profile_id", options.executor_profile_id);
   setIf(body, "metadata", buildTaskMetadata(options));
   setIf(
     body,
@@ -157,7 +186,7 @@ type OptionalAgentTaskOpts = {
   workflow_id?: string;
   workflow_step_id?: string;
   repository_ids?: string[];
-  repositories?: Array<{ repository_id: string; base_branch?: string; checkout_branch?: string }>;
+  repositories?: TaskRepositoryInput[];
   executor_id?: string;
   executor_profile_id?: string;
   metadata?: Record<string, unknown>;
@@ -239,6 +268,12 @@ export class ApiClient {
     return this.request("POST", "/api/v1/workspaces", { name });
   }
 
+  async deleteWorkspace(workspaceId: string, confirmName: string): Promise<void> {
+    await this.request("DELETE", `/api/v1/workspaces/${workspaceId}`, {
+      confirm_name: confirmName,
+    });
+  }
+
   async listWorkspaces(): Promise<{ workspaces: Workspace[]; total: number }> {
     return this.request("GET", "/api/v1/workspaces");
   }
@@ -313,14 +348,12 @@ export class ApiClient {
       workflow_step_id?: string;
       /** Stored in task.Metadata so auto_start_agent can pick it up on on_enter. */
       agent_profile_id?: string;
+      /** Executor profile used when the task session is prepared. */
+      executor_profile_id?: string;
       /** Repository IDs to associate with the task (required for agent execution). */
       repository_ids?: string[];
-      /** Full repository entries with optional checkout_branch / base_branch. */
-      repositories?: Array<{
-        repository_id: string;
-        base_branch?: string;
-        checkout_branch?: string;
-      }>;
+      /** Full repository entries with optional checkout_branch / base_branch / pr_number. */
+      repositories?: TaskRepositoryInput[];
       /** When true, task is placed at position 0 regardless of is_start_step. */
       plan_mode?: boolean;
       /** Extra metadata to store on the task. */
@@ -469,12 +502,8 @@ export class ApiClient {
       workflow_id?: string;
       workflow_step_id?: string;
       repository_ids?: string[];
-      /** Full repository entries with optional checkout_branch / base_branch. */
-      repositories?: Array<{
-        repository_id: string;
-        base_branch?: string;
-        checkout_branch?: string;
-      }>;
+      /** Full repository entries with optional checkout_branch / base_branch / pr_number. */
+      repositories?: TaskRepositoryInput[];
       executor_id?: string;
       executor_profile_id?: string;
       metadata?: Record<string, unknown>;
@@ -545,6 +574,7 @@ export class ApiClient {
     opts?: {
       name?: string;
       provider?: string;
+      provider_host?: string;
       provider_owner?: string;
       provider_name?: string;
     },
@@ -555,6 +585,7 @@ export class ApiClient {
       local_path: localPath,
       default_branch: defaultBranch,
       ...(opts?.provider ? { provider: opts.provider } : {}),
+      ...(opts?.provider_host ? { provider_host: opts.provider_host } : {}),
       ...(opts?.provider_owner ? { provider_owner: opts.provider_owner } : {}),
       ...(opts?.provider_name ? { provider_name: opts.provider_name } : {}),
     });
@@ -563,6 +594,10 @@ export class ApiClient {
   async updateRepository(
     repositoryId: string,
     updates: {
+      provider?: string;
+      provider_host?: string;
+      provider_owner?: string;
+      provider_name?: string;
       dev_script?: string;
       setup_script?: string;
       cleanup_script?: string;
@@ -1097,6 +1132,14 @@ export class ApiClient {
     await this.request("POST", "/api/v1/github/mock/task-prs", data);
   }
 
+  async associateGitHubTaskPR(data: {
+    task_id: string;
+    repository_id: string;
+    pr_url: string;
+  }): Promise<void> {
+    await this.request("POST", "/api/v1/github/task-prs", data);
+  }
+
   async getTaskCIAutomationOptions(taskId: string): Promise<TaskCIAutomationOptions> {
     return this.request("GET", `/api/v1/github/tasks/${encodeURIComponent(taskId)}/ci-options`);
   }
@@ -1191,6 +1234,227 @@ export class ApiClient {
     return this.request("GET", "/api/v1/github/status");
   }
 
+  // --- GitLab Mock Control ---
+
+  private gitLabWorkspacePath(path: string, workspaceId: string): string {
+    const separator = path.includes("?") ? "&" : "?";
+    return `${path}${separator}workspace_id=${encodeURIComponent(workspaceId)}`;
+  }
+
+  async configureGitLab(
+    workspaceId: string,
+    host = "https://gitlab.com",
+    token = `e2e-gitlab:${workspaceId}`,
+  ): Promise<void> {
+    await this.request("PUT", this.gitLabWorkspacePath("/api/v1/gitlab/config", workspaceId), {
+      host,
+      auth_method: "pat",
+      token,
+    });
+  }
+
+  async configureGitLabRepositoryRemote(repositoryId: string, remoteUrl: string): Promise<void> {
+    await this.request("PUT", `/api/v1/_test/repositories/${repositoryId}/git-remote`, {
+      remote_url: remoteUrl,
+    });
+  }
+
+  async clearGitLabRepositoryRemote(repositoryId: string): Promise<void> {
+    await this.request("DELETE", `/api/v1/_test/repositories/${repositoryId}/git-remote`);
+  }
+
+  async getGitLabPushRecord(repositoryId: string): Promise<{ args: string }> {
+    return this.request("GET", `/api/v1/_test/repositories/${repositoryId}/git-push-record`);
+  }
+
+  async mockGitLabReset(workspaceId: string): Promise<void> {
+    await this.request(
+      "DELETE",
+      this.gitLabWorkspacePath("/api/v1/gitlab/mock/reset", workspaceId),
+    );
+  }
+
+  async mockGitLabSetUser(workspaceId: string, username: string): Promise<void> {
+    await this.request("PUT", this.gitLabWorkspacePath("/api/v1/gitlab/mock/user", workspaceId), {
+      username,
+    });
+  }
+
+  async mockGitLabAddMRs(
+    workspaceId: string,
+    project: string,
+    mrs: MockGitLabMRSeed[],
+  ): Promise<void> {
+    await this.request("POST", this.gitLabWorkspacePath("/api/v1/gitlab/mock/mrs", workspaceId), {
+      project,
+      mrs,
+    });
+  }
+
+  async mockGitLabAddIssues(
+    workspaceId: string,
+    project: string,
+    issues: MockGitLabIssueSeed[],
+  ): Promise<void> {
+    await this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/mock/issues", workspaceId),
+      { project, issues },
+    );
+  }
+
+  async mockGitLabAddPipelines(
+    workspaceId: string,
+    project: string,
+    pipelines: GitLabPipeline[],
+  ): Promise<void> {
+    await this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/mock/pipelines", workspaceId),
+      { project, pipelines },
+    );
+  }
+
+  async mockGitLabAddDiscussions(
+    workspaceId: string,
+    project: string,
+    iid: number,
+    discussions: GitLabMRDiscussion[],
+  ): Promise<void> {
+    await this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/mock/discussions", workspaceId),
+      { project, iid, discussions },
+    );
+  }
+
+  async mockGitLabAddApprovals(
+    workspaceId: string,
+    project: string,
+    iid: number,
+    approvals: GitLabMRApproval[],
+    required: number,
+  ): Promise<void> {
+    await this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/mock/approvals", workspaceId),
+      { project, iid, approvals, required },
+    );
+  }
+
+  async mockGitLabAddBranches(
+    workspaceId: string,
+    project: string,
+    branches: Array<{ name: string }>,
+  ): Promise<void> {
+    await this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/mock/branches", workspaceId),
+      { project, branches },
+    );
+  }
+
+  async mockGitLabAddMembers(
+    workspaceId: string,
+    project: string,
+    members: GitLabProjectMember[],
+  ): Promise<void> {
+    await this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/mock/members", workspaceId),
+      { project, members },
+    );
+  }
+
+  async mockGitLabAddFiles(
+    workspaceId: string,
+    project: string,
+    iid: number,
+    files: GitLabMRFile[],
+  ): Promise<void> {
+    await this.request("POST", this.gitLabWorkspacePath("/api/v1/gitlab/mock/files", workspaceId), {
+      project,
+      iid,
+      files,
+    });
+  }
+
+  async mockGitLabAddCommits(
+    workspaceId: string,
+    project: string,
+    iid: number,
+    commits: GitLabMRCommit[],
+  ): Promise<void> {
+    await this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/mock/commits", workspaceId),
+      { project, iid, commits },
+    );
+  }
+
+  async linkTaskGitLabMR(
+    workspaceId: string,
+    data: { task_id: string; repository_id?: string; mr_url: string },
+  ): Promise<TaskMR> {
+    return this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/task-mrs", workspaceId),
+      data,
+    );
+  }
+
+  async createGitLabReviewWatch(data: {
+    workspace_id: string;
+    workflow_id: string;
+    workflow_step_id: string;
+    agent_profile_id: string;
+    executor_profile_id: string;
+    projects?: Array<{ path: string }>;
+    prompt?: string;
+    enabled?: boolean;
+  }): Promise<{ id: string; workspace_id: string }> {
+    return this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/watches/review", data.workspace_id),
+      {
+        ...data,
+        projects: data.projects ?? [],
+        prompt: data.prompt ?? "Review {{mr.url}}",
+        review_scope: "user_and_teams",
+        custom_query: "",
+        enabled: data.enabled ?? true,
+        poll_interval_seconds: 300,
+        cleanup_policy: "auto",
+      },
+    );
+  }
+
+  async createGitLabIssueWatch(data: {
+    workspace_id: string;
+    workflow_id: string;
+    workflow_step_id: string;
+    agent_profile_id: string;
+    executor_profile_id: string;
+    projects?: Array<{ path: string }>;
+    prompt?: string;
+    enabled?: boolean;
+  }): Promise<{ id: string; workspace_id: string }> {
+    return this.request(
+      "POST",
+      this.gitLabWorkspacePath("/api/v1/gitlab/watches/issue", data.workspace_id),
+      {
+        ...data,
+        projects: data.projects ?? [],
+        prompt: data.prompt ?? "Investigate {{issue.url}}",
+        labels: [],
+        custom_query: "",
+        enabled: data.enabled ?? true,
+        poll_interval_seconds: 300,
+        cleanup_policy: "auto",
+      },
+    );
+  }
+
   // --- Session ---
 
   async listSessionMessages(sessionId: string): Promise<{
@@ -1221,6 +1485,7 @@ export class ApiClient {
       task_environment_id?: string;
       worktree_path?: string;
       worktree_branch?: string;
+      worktrees?: Array<{ repository_id?: string; worktree_path?: string }>;
       error_message?: string;
       metadata?: Record<string, unknown>;
     }>;

@@ -6,6 +6,8 @@ import { Textarea } from "@kandev/ui/textarea";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { cn } from "@/lib/utils";
 import type { ClarificationOption } from "@/lib/types/http";
+import { KeyboardShortcutTooltip } from "@/components/keyboard-shortcut-tooltip";
+import { KEYS } from "@/lib/keyboard/constants";
 
 // Grow the custom-answer box up to ~6 lines, then scroll internally so the
 // clarification overlay stays compact.
@@ -243,11 +245,20 @@ export function ClarificationCustomInput({
     <div
       data-testid="clarification-custom-input"
       data-active={active ? "true" : "false"}
+      onMouseDown={(event) => {
+        if (isSubmitting) return;
+        const target = event.target as HTMLElement;
+        if (target.closest("textarea, button")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        textareaRef.current?.focus({ preventScroll: true });
+      }}
       className={cn(
-        "mt-2.5 flex items-start gap-2 px-3 py-2 rounded-lg border transition-colors",
+        "mt-2.5 flex min-h-11 items-start gap-2 px-3 py-2 rounded-lg border transition-colors",
         active
           ? "bg-blue-500/15 border-blue-500/50 text-foreground"
           : "border-dashed border-border/70 bg-muted/30",
+        isSubmitting ? "cursor-not-allowed" : "cursor-text",
       )}
     >
       <span
@@ -328,36 +339,52 @@ export function ClarificationCarouselNav({
   const isLast = activeIndex === total - 1;
   return (
     <div className="flex items-center justify-between gap-2 px-4 pb-3">
-      <button
-        type="button"
-        onClick={onPrev}
-        disabled={isFirst || isSubmitting}
-        data-testid="clarification-prev"
-        className={cn(
-          "inline-flex items-center gap-1 text-xs px-2 py-1 rounded border",
-          isFirst
-            ? "border-transparent text-muted-foreground/40 cursor-not-allowed"
-            : "border-border text-foreground/80 hover:bg-muted/50 cursor-pointer",
-        )}
+      <KeyboardShortcutTooltip
+        shortcut={{ key: KEYS.ARROW_LEFT }}
+        description="Previous question"
+        enabled={!isFirst && !isSubmitting}
       >
-        <IconArrowLeft className="h-3 w-3" />
-        Back
-      </button>
-      <button
-        type="button"
-        onClick={onNext}
-        disabled={isLast || isSubmitting}
-        data-testid="clarification-next"
-        className={cn(
-          "inline-flex items-center gap-1 text-xs px-2 py-1 rounded border",
-          isLast
-            ? "border-transparent text-muted-foreground/40 cursor-not-allowed"
-            : "border-border text-foreground/80 hover:bg-muted/50 cursor-pointer",
-        )}
+        <span className="inline-flex">
+          <button
+            type="button"
+            onClick={onPrev}
+            disabled={isFirst || isSubmitting}
+            data-testid="clarification-prev"
+            className={cn(
+              "inline-flex items-center gap-1 text-xs px-2 py-1 rounded border",
+              isFirst
+                ? "border-transparent text-muted-foreground/40 cursor-not-allowed"
+                : "border-border text-foreground/80 hover:bg-muted/50 cursor-pointer",
+            )}
+          >
+            <IconArrowLeft className="h-3 w-3" />
+            Back
+          </button>
+        </span>
+      </KeyboardShortcutTooltip>
+      <KeyboardShortcutTooltip
+        shortcut={{ key: KEYS.ARROW_RIGHT }}
+        description="Next question"
+        enabled={!isLast && !isSubmitting}
       >
-        Next
-        <IconArrowRight className="h-3 w-3" />
-      </button>
+        <span className="inline-flex">
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={isLast || isSubmitting}
+            data-testid="clarification-next"
+            className={cn(
+              "inline-flex items-center gap-1 text-xs px-2 py-1 rounded border",
+              isLast
+                ? "border-transparent text-muted-foreground/40 cursor-not-allowed"
+                : "border-border text-foreground/80 hover:bg-muted/50 cursor-pointer",
+            )}
+          >
+            Next
+            <IconArrowRight className="h-3 w-3" />
+          </button>
+        </span>
+      </KeyboardShortcutTooltip>
     </div>
   );
 }

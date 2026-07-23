@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo, type RefObject } from "react";
 import { PanelRoot, PanelBody } from "./panel-primitives";
 import { useSettingsData } from "@/hooks/domains/settings/use-settings-data";
-import { type ChatInputContainerHandle } from "@/components/task/chat/chat-input-container";
+import {
+  type ChatInputContainerHandle,
+  type ChatSubmitPayload,
+  type ChatSubmitResult,
+} from "@/components/task/chat/chat-input-container";
 import { MessageList } from "@/components/task/chat/message-list";
 import { useIsTaskArchived } from "./task-archived-context";
 import { useChatPanelState } from "./chat/use-chat-panel-state";
@@ -18,6 +22,7 @@ import { useSessionSearch } from "@/hooks/domains/session/use-session-search";
 import { useLazyLoadMessages } from "@/hooks/use-lazy-load-messages";
 import { useAppStore } from "@/components/state-provider";
 import type { Message } from "@/lib/types/http";
+import { routePanelMouseDown } from "./chat/route-panel-mouse-down";
 
 function useClarificationKey(agentMessageCount: number) {
   const lastCountRef = useRef(agentMessageCount);
@@ -118,7 +123,7 @@ function useSessionAgentIdentity(sessionId: string | null | undefined): {
 }
 
 type TaskChatPanelProps = {
-  onSend?: (message: string) => void;
+  onSend?: (payload: ChatSubmitPayload) => ChatSubmitResult;
   sessionId?: string | null;
   taskId?: string | null;
   onOpenFile?: (path: string) => void;
@@ -236,6 +241,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
         height={clarificationHeight}
         messages={pendingClarificationGroup}
         onResolved={handleClarificationResolved}
+        shortcutScopeRef={panelRef}
       />
       <ChatFooter
         isArchived={isArchived}
@@ -262,6 +268,7 @@ type ClarificationSectionProps = {
   height: number | null;
   messages: readonly Message[] | null | undefined;
   onResolved: () => void;
+  shortcutScopeRef: RefObject<HTMLElement | null>;
 };
 
 function ClarificationSection({
@@ -272,6 +279,7 @@ function ClarificationSection({
   height,
   messages,
   onResolved,
+  shortcutScopeRef,
 }: ClarificationSectionProps) {
   if (!pendingClarification || isArchived) return null;
   return (
@@ -283,7 +291,11 @@ function ClarificationSection({
         className="px-1 overflow-y-scroll overscroll-contain max-h-[50vh]"
         style={height === null ? undefined : { height }}
       >
-        <ClarificationInputOverlay messages={messages} onResolved={onResolved} />
+        <ClarificationInputOverlay
+          messages={messages}
+          onResolved={onResolved}
+          shortcutScopeRef={shortcutScopeRef}
+        />
       </div>
     </div>
   );
@@ -339,22 +351,4 @@ function ChatFooter({
       hideSessionsDropdown={hideSessionsDropdown}
     />
   );
-}
-
-// routePanelMouseDown routes non-interactive clicks to the panel root so that
-// Ctrl+F can detect focus within the session panel. Extracted to keep
-// TaskChatPanel's cyclomatic complexity within limits.
-const interactiveSelector =
-  "input, textarea, select, button, a, [contenteditable], [tabindex]:not([tabindex='-1'])";
-
-function routePanelMouseDown(
-  e: React.MouseEvent<HTMLDivElement>,
-  ref: React.RefObject<HTMLDivElement | null>,
-): void {
-  const target = e.target as HTMLElement | null;
-  if (!target) return;
-  // Exclude `tabindex="-1"` so we don't match PanelRoot itself (which is
-  // marked focus-receivable but shouldn't short-circuit this handler).
-  if (target.closest(interactiveSelector)) return;
-  ref.current?.focus({ preventScroll: true });
 }

@@ -1,25 +1,40 @@
 ---
-description: Run Kandev format, typecheck, tests, and lint before commit, then fix failures and rerun focused failed commands until clean.
+description: Verify committed changes before push, reusing proven hook coverage and using full mode only for broad or ambiguous impact.
 mode: subagent
 temperature: 0.1
 permission:
-  edit: ask
+  task: deny
+  edit: deny
   bash:
     "*": ask
 ---
 
-Run the monorepo verification pipeline and fix issues found.
+Follow `.agents/agents/verify.md`, its impact matrix, and hook-evidence
+reference. Run after commit and before push. Default to changed scope; validate
+any supplied receipt, run only uncovered commands, and report PR/scope bases,
+receipt eligibility, omissions, changed paths, commands, limits, and
+`changed-scope PASS` versus `full PASS`. Never infer hook success, and never
+rerun an eligible hook-covered command for reassurance.
 
 Install `apps` dependencies when missing. Resolve the current PR base with
-`gh pr view --json baseRefName`, fetch and rebase only when it resolves, and
-otherwise report that rebasing was skipped; do not infer stacked-PR bases from Git upstream.
+`gh pr view --json baseRefName`, fetch and report ancestry when it resolves;
+do not rebase, resolve conflicts, or infer stacked-PR bases from Git upstream.
 
-Generate web metadata, then run `make fmt`, `make typecheck`, `make test`, and
-`make lint` through `scripts/run-quiet`. Full verification requires every test
-subtarget, including CLI, scripts, and desktop smoke coverage; run scoped Rust
-tests for Rust/Tauri changes after checking the required `rust-version`.
+Run only uncovered matrix-selected commands. Full mode is for explicit,
+ambiguous, broad, release/toolchain, or no-PR-CI delivery; ignore hook
+omissions and cover every relevant subtarget.
 
-Fix root causes and rerun focused failed commands. Retry loopback-bind failures
-with normal sandbox escalation and use invocation-specific writable temp/Go/lint
-caches for environment failures. Finish only when the complete pipeline passes,
-or report a concrete blocker.
+Do not fix source or test logic. Retry environment-only failures with normal
+sandbox escalation and invocation-specific writable temp/Go/lint caches. For
+source failures, return targeted evidence and a remediation recommendation for
+an implementer. Finish with a compact pass/fail report.
+
+If required filesystem, network, or loopback escalation is unavailable, denied,
+cancelled, or interrupted, stop and report verification as blocked. Explain
+that mandatory verification is preventing push and PR delivery. Include a
+required user action telling the user to enable the runtime's full access mode,
+then retry verification. Do not offer to proceed unverified or imply that the
+agent or repository host cannot create PRs. Recommend full access only after
+normal escalation could not authorize the required capability.
+
+Do not spawn subagents.

@@ -1,9 +1,8 @@
 "use client";
 
 import { SessionPanelContent } from "@kandev/ui/pannel-session";
-import { MessageRenderer } from "@/components/task/chat/message-renderer";
-import { AgentStatus } from "@/components/task/chat/messages/agent-status";
 import type { Message, TaskSessionState } from "@/lib/types/http";
+import { MessageListFooter } from "./message-list-footer";
 import { MessageListStatus } from "./message-list-shared";
 
 export function VirtuosoMessageListFallback(props: {
@@ -29,14 +28,12 @@ export function VirtuosoMessageListFallback(props: {
         messagesCount={props.messages.length}
         onLoadMore={props.loadMore}
       />
-      <AgentStatus
+      <MessageListFooter
         sessionState={props.sessionState}
         sessionId={props.sessionId}
         messages={props.messages}
+        footerActionMessages={props.footerActions}
       />
-      {props.footerActions.map((message) => (
-        <MessageRenderer key={message.id} comment={message} isTaskDescription={false} />
-      ))}
     </SessionPanelContent>
   );
 }

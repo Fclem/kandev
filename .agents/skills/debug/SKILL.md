@@ -8,6 +8,15 @@ allowed-tools: Bash(curl:*) Bash(jq:*) Bash(npx:*) Bash(scripts/kandev-instances
 
 Diagnose efficiently and safely. Debugging produces evidence and a root-cause hypothesis; `/fix` turns that into a regression-tested patch.
 
+## Planner Entry
+
+The planner performs first-pass triage directly. Delegate only a concrete broad
+or long/noisy debugging question after local triage to one `implementer` with
+production edits forbidden; then decide whether `/fix` is needed.
+
+An explicitly assigned worker follows the remaining procedure, cleans up its
+temporary artifacts, reports evidence, and does not spawn other workers.
+
 ## First: Create The Pipeline
 
 Create a visible task list:
@@ -15,7 +24,7 @@ Create a visible task list:
 1. **Triage** - classify the bug and choose the cheapest faithful path
 2. **Gather evidence** - targeted test, debug export/logs, browser state, or instrumentation
 3. **Diagnose** - trace the failure to root cause
-4. **Report or hand off** - summarize evidence and invoke `/fix` or `/tdd` if code changes are needed
+4. **Report** - summarize evidence and propose a bounded `/fix` or `/tdd` packet for the planner when code changes are needed
 5. **Clean up** - remove temporary logs, throwaway repro tests, isolated instances, and browser sessions
 
 ## Triage Gate
@@ -71,7 +80,9 @@ When you can state:
 - why it fails,
 - how to reproduce it,
 
-then stop debugging and use `/fix` or `/tdd` to implement the regression test and patch.
+then stop debugging and return a bounded recommended fix packet to the planner.
+The planner assigns `/fix` or `/tdd` work to an implementer; this diagnostic
+worker does not continue into implementation or spawn another worker.
 
 ## Final Report
 

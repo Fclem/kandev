@@ -41,15 +41,20 @@ export type MobileKanbanState = {
   isSearchOpen: boolean;
 };
 
-export type MobileSessionPanel = "chat" | "plan" | "changes" | "files" | "terminal";
+export type MobileSessionPanel = "chat" | "plan" | "changes" | "files" | "terminal" | "review";
 
 export type MobileSessionState = {
   activePanelBySessionId: Record<string, MobileSessionPanel>;
+  reviewMRKeyBySessionId: Record<string, string>;
   isTaskSwitcherOpen: boolean;
 };
 
 export type ChatInputState = {
   planModeBySessionId: Record<string, boolean>;
+};
+
+export type ReviewPRSelectionState = {
+  selectedKeyByTaskId: Record<string, string>;
 };
 
 export type ActiveDocument =
@@ -142,6 +147,7 @@ export type UISliceState = {
   mobileKanban: MobileKanbanState;
   mobileSession: MobileSessionState;
   chatInput: ChatInputState;
+  reviewPRSelection: ReviewPRSelectionState;
   documentPanel: DocumentPanelState;
   systemHealth: SystemHealthState;
   quickChat: QuickChatState;
@@ -186,8 +192,10 @@ export type UISliceActions = {
   setMobileKanbanMenuOpen: (open: boolean) => void;
   setMobileKanbanSearchOpen: (open: boolean) => void;
   setMobileSessionPanel: (sessionId: string, panel: MobileSessionPanel) => void;
+  setMobileSessionReview: (sessionId: string, mrKey: string | null) => void;
   setMobileSessionTaskSwitcherOpen: (open: boolean) => void;
   setPlanMode: (sessionId: string, enabled: boolean) => void;
+  setReviewPRSelection: (taskId: string, selectedKey: string) => void;
   setActiveDocument: (sessionId: string, doc: ActiveDocument | null) => void;
   setSystemHealth: (response: SystemHealthResponse) => void;
   setSystemHealthLoading: (loading: boolean) => void;

@@ -40,18 +40,61 @@ Guidelines:
 - `name`: stable lowercase identifier, hyphen-separated unless the target platform requires another style.
 - `description`: when the parent should delegate to it.
 - `tools`: smallest sufficient set.
-- `model`: `opus` for architecture/deep review; `sonnet` for implementation/verification; cheaper/faster models only for read-only mapping where supported.
+- `model`: use the current role tier. Claude uses `opus` for
+  architecture/security/deep review and `sonnet` for other workers. Codex uses
+  GPT-5.6 Sol, Terra, and Luna for frontier, balanced, and cheap roles. Codex
+  may additionally use GPT-5.3-Codex-Spark as an opt-in specialist tier, not
+  a replacement for those tiers: read-only bounded exploration or explicit
+  localized low-risk implementation. Codex `verify` is the sole exception:
+  pin it to Spark/medium for deterministic mechanical verification, while
+  `pr-poller` remains Luna/low. Spark is not for polling, architecture,
+  security, or deep review. Cursor uses Grok 4.5 for frontier review and
+  Composer 2.5 for normal workers.
+  OpenCode intentionally inherits the configured provider in this repository.
+- `effort`: reasoning depth for Claude source agents; map to Codex
+  `model_reasoning_effort` where supported. Kandev role mapping:
+  - `high`: `architect`, `code-review`, `security-auditor`
+  - `medium`: `implementer`, `test-engineer`, `qa`, `simplify`
+  - `low`: `verify`, `pr-poller`
+
+  The list above remains the semantic tier mapping for non-Codex platforms.
+  Codex alone pins its existing `verify` agent to GPT-5.3-Codex-Spark at medium
+  effort; `pr-poller` remains Luna/low.
 - `permissionMode`: read-only/review roles should not accept edits; implementers can accept edits.
 - `skills`: preload only the minimum domain skills needed.
 - Body: input required, workflow, output contract, stop conditions, and "Do not spawn subagents" unless nested delegation is intentional.
 
+Codex-specific Spark roles:
+
+- `spark-explorer`: GPT-5.3-Codex-Spark, medium effort, read-only. Limit it to
+  bounded exploration, call-path tracing, and evidence gathering; explicitly
+  forbid architecture, security, final review, implementation, and edits.
+- `spark-implementer`: GPT-5.3-Codex-Spark, medium effort, workspace-write.
+  Limit it to targeted UI changes or localized low-risk edits with explicit
+  acceptance and exact verification. Require tests/verification and stop for
+  ambiguity, cross-subsystem work, auth/security/workspace isolation,
+  concurrency, persistence/migrations, process/filesystem execution, public
+  contracts, or architectural changes.
+
 ## Platform Choice
+
+Delegation is always native to the active harness:
+
+- Claude Code uses the `Agent` tool.
+- Codex uses `spawn_agent`, `send_message`/`followup_task`, and `wait_agent`.
+- Cursor uses its native custom-subagent invocation.
+- OpenCode uses the `Task` tool.
+
+Never use Kandev MCP `spawn_session_kandev`, `create_task_kandev`, or
+`message_task_kandev` as a subagent mechanism. Use them only when the user
+explicitly requests Kandev platform task/session management.
 
 When the user asks to create or update a subagent/agent, update every existing project-local platform mirror by default:
 
 - `.agents/agents/<name>.md` - Kandev source agent shape used by current repo workflows.
 - `.codex/agents/<name>.toml` - Codex custom agent mirror, when present or when Codex support is requested.
 - `.claude/agents/<name>.md` - Claude Code subagent mirror, when present or when Claude support is requested.
+- `.cursor/agents/<name>.md` - Cursor custom subagent mirror.
 - `.opencode/agents/<name>.md` or project config - OpenCode agent mirror, when present or when OpenCode support is requested.
 
 Only update one platform when the user explicitly says "only Codex", "only Claude", or equivalent.
@@ -60,8 +103,8 @@ Load platform references as needed:
 
 - For Claude-native subagents, read `platforms/claude.md`.
 - For Codex custom agents, read `platforms/codex.md`.
+- For Cursor custom subagents, read `platforms/cursor.md`.
 - For OpenCode agents, read `platforms/opencode.md`.
-- Cursor does not use this repo's `.agents/agents/*.md` shape directly; read `platforms/cursor.md` when the user asks about Cursor rules/skills.
 
 ## Cross-Platform Sync
 
@@ -69,7 +112,8 @@ Use `.agents/agents/<name>.md` as the semantic source unless the user identifies
 
 Field mapping:
 
-- Role name: `.agents`/Claude frontmatter `name`, Codex TOML `name`, OpenCode filename or config key.
+- Role name: `.agents`/Claude frontmatter `name`, Codex TOML `name`, Cursor
+  frontmatter `name`, OpenCode filename or config key.
 - Trigger: `.agents`/Claude `description`, Codex TOML `description`, OpenCode `description`.
 - Instructions: Markdown body, Codex `developer_instructions`, OpenCode body or `prompt`.
 - Model: translate model tier, not literal provider names when the platform requires provider-qualified IDs.
@@ -80,11 +124,28 @@ If a platform mirror does not exist, create it only when repo convention or the 
 
 ## Validation
 
-Run:
+Validate only mirrors and search roots that already exist:
 
 ```bash
-git diff --check -- .agents/agents/<name>.md .codex/agents/<name>.toml .claude/agents/<name>.md .opencode/agents/<name>.md
-rg -n "<agent-name>" .agents/agents .codex/agents .claude/agents .opencode/agents .agents/skills AGENTS.md CLAUDE.md
+mirror_paths=(
+  ".agents/agents/<name>.md"
+  ".codex/agents/<name>.toml"
+  ".claude/agents/<name>.md"
+  ".cursor/agents/<name>.md"
+  ".opencode/agents/<name>.md"
+)
+existing_mirrors=()
+for path in "${mirror_paths[@]}"; do
+  [[ -e "$path" ]] && existing_mirrors+=("$path")
+done
+((${#existing_mirrors[@]})) && git diff --check -- "${existing_mirrors[@]}"
+
+search_roots=(.agents/agents .codex/agents .claude/agents .cursor/agents .opencode/agents .agents/skills AGENTS.md CLAUDE.md)
+existing_roots=()
+for path in "${search_roots[@]}"; do
+  [[ -e "$path" ]] && existing_roots+=("$path")
+done
+((${#existing_roots[@]})) && rg -n "<agent-name>" "${existing_roots[@]}"
 ```
 
 Check that orchestration skills reference new agents only where they should be used.

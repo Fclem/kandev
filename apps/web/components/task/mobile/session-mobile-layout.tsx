@@ -8,9 +8,7 @@ import { MobileFileViewerPanel } from "./mobile-file-viewer-panel";
 import { TaskChatPanel } from "../task-chat-panel";
 import { TaskPlanPanel } from "../task-plan-panel";
 import { MobileChangesPanel } from "./mobile-changes-panel";
-import { ReviewDialog } from "@/components/review/review-dialog";
-import { WalkthroughOverlay } from "@/components/review/walkthrough-overlay";
-import { useReviewDialog } from "../use-review-dialog";
+import { TaskReviewDialogMount } from "../dockview-review-dialog";
 import { TaskFilesPanel } from "../task-files-panel";
 import { PassthroughToolbar } from "../passthrough-toolbar";
 import { MobileTerminalKeybar, KEYBAR_HEIGHT_PX } from "./mobile-terminal-keybar";
@@ -20,9 +18,17 @@ import { SessionPanelContent } from "@kandev/ui/pannel-session";
 import { useSessionLayoutState } from "@/hooks/use-session-layout-state";
 import { useVisualViewportOffset } from "@/hooks/use-visual-viewport-offset";
 import { useToast } from "@/components/toast-provider";
+import { useAppStatusDrawer } from "@/components/app-status-bar/app-status-surface-provider";
+import { useAppStore } from "@/components/state-provider";
 import { fetchAndOpenFile } from "../file-browser-hooks";
 import type { MobileSessionPanel } from "@/lib/state/slices/ui/types";
 import type { OpenFileTab } from "@/lib/types/backend";
+import { useTaskMRs } from "@/hooks/domains/gitlab/use-task-mr";
+import {
+  MRDetailPanelComponent,
+  mrTaskKey,
+  selectExplicitPanelMR,
+} from "@/components/gitlab/mr-detail-panel";
 
 const TOP_NAV_HEIGHT = "3.5rem";
 const BOTTOM_NAV_HEIGHT = "3.25rem";
@@ -99,6 +105,7 @@ type MobilePanelAreaProps = {
   handlePanelChangeAndClearSheet: (panel: MobileSessionPanel) => void;
   topNavHeight: string;
   bottomNavHeight: string;
+  mrKey?: string;
 };
 
 function MobilePanelArea({
@@ -114,6 +121,7 @@ function MobilePanelArea({
   handlePanelChangeAndClearSheet,
   topNavHeight,
   bottomNavHeight,
+  mrKey,
 }: MobilePanelAreaProps) {
   const { keyboardOpen, bottomOffset } = useVisualViewportOffset();
   // Keep terminal content's visible bottom glued to the keybar top. When the
@@ -181,6 +189,11 @@ function MobilePanelArea({
           </SessionPanelContent>
         </div>
       )}
+      {currentMobilePanel === "review" && mrKey && (
+        <div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-mr-review-panel">
+          <MRDetailPanelComponent panelId="mobile-mr-detail" params={{ mrKey }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -231,42 +244,6 @@ function MobileTopBarSticky(props: MobileTopBarStickyProps) {
         isArchived={props.isArchived}
       />
     </div>
-  );
-}
-
-function MobileReviewDialogMount({
-  sessionId,
-  review,
-  activeTaskId,
-  onSelectWalkthroughFile,
-}: {
-  sessionId: string | null;
-  review: ReturnType<typeof useReviewDialog>;
-  activeTaskId: string | null;
-  onSelectWalkthroughFile: (path: string, repo?: string) => void;
-}) {
-  if (!sessionId) return null;
-  return (
-    <>
-      <ReviewDialog
-        open={review.reviewDialogOpen}
-        onOpenChange={review.setReviewDialogOpen}
-        sessionId={sessionId}
-        baseBranch={review.baseBranch}
-        onSendComments={review.handleReviewSendComments}
-        onOpenFile={review.reviewOpenFile}
-        gitStatusFiles={review.reviewGitStatusFiles}
-        cumulativeDiff={review.reviewCumulativeDiff}
-        prDiffFiles={review.reviewPRDiffFiles}
-        prRepoName={review.reviewPRRepoName}
-        useRepositoryKeys={review.reviewUseRepositoryKeys}
-      />
-      <WalkthroughOverlay
-        taskId={activeTaskId}
-        sessionId={sessionId}
-        onSelectFile={onSelectWalkthroughFile}
-      />
-    </>
   );
 }
 
@@ -362,22 +339,98 @@ export function useMobilePanelHandlers({
   };
 }
 
-export const SessionMobileLayout = memo(function SessionMobileLayout({
-  workspaceId,
-  workflowId,
+function useMobileMRSelection(
+  activeTaskId: string | null,
+  effectiveSessionId: string | null,
+  requestedPanel: MobileSessionPanel,
+  changePanel: (panel: MobileSessionPanel) => void,
+) {
+  const mrs = useTaskMRs(activeTaskId);
+  const reviewSourcesResolved = useAppStore((state) => {
+    const workspaceId = state.workspaces.activeId;
+    return !!workspaceId && Object.hasOwn(state.taskMRs.byWorkspaceId, workspaceId);
+  });
+  const reviewMRKey = useAppStore((state) =>
+    effectiveSessionId
+      ? (state.mobileSession.reviewMRKeyBySessionId?.[effectiveSessionId] ?? null)
+      : null,
+  );
+  const setMobileSessionReview = useAppStore((state) => state.setMobileSessionReview);
+  const selectedMR = selectExplicitPanelMR(mrs, reviewMRKey);
+
+  useEffect(() => {
+    const hasInvalidReviewPreference =
+      requestedPanel === "review" && (!reviewMRKey || (reviewSourcesResolved && !selectedMR));
+    if (effectiveSessionId && hasInvalidReviewPreference) {
+      setMobileSessionReview(effectiveSessionId, null);
+    }
+  }, [
+    effectiveSessionId,
+    requestedPanel,
+    reviewMRKey,
+    reviewSourcesResolved,
+    selectedMR,
+    setMobileSessionReview,
+  ]);
+
+  const handlePanelChange = useCallback(
+    (panel: MobileSessionPanel) => {
+      if (panel === "review" && effectiveSessionId && !selectedMR) {
+        const primaryMR = mrs[0];
+        if (primaryMR) setMobileSessionReview(effectiveSessionId, mrTaskKey(primaryMR));
+      }
+      changePanel(panel);
+    },
+    [changePanel, effectiveSessionId, mrs, selectedMR, setMobileSessionReview],
+  );
+  return { mrs, selectedMR, handlePanelChange };
+}
+
+type SessionMobileFooterProps = {
+  sessionId: string | null;
+  activePanel: MobileSessionPanel;
+  onPanelChange: (panel: MobileSessionPanel) => void;
+  planBadge: boolean;
+  changesBadge: number;
+  hasReview: boolean;
+  showStatus: boolean;
+  onOpenStatus: () => void;
+};
+
+function SessionMobileFooter({
   sessionId,
-  baseBranch,
-  worktreeBranch,
-  taskTitle,
-  isRemoteExecutor,
-  remoteExecutorType,
-  remoteExecutorName,
-  remoteState,
-  remoteCreatedAt,
-  remoteCheckedAt,
-  remoteStatusError,
-  isArchived,
-}: SessionMobileLayoutProps) {
+  activePanel,
+  onPanelChange,
+  planBadge,
+  changesBadge,
+  hasReview,
+  showStatus,
+  onOpenStatus,
+}: SessionMobileFooterProps) {
+  return (
+    <>
+      <MobileTerminalKeybar
+        sessionId={sessionId}
+        visible={activePanel === "terminal"}
+        baseBottomOffset={BOTTOM_NAV_HEIGHT}
+      />
+      <SessionMobileBottomNav
+        activePanel={activePanel}
+        onPanelChange={onPanelChange}
+        planBadge={planBadge}
+        changesBadge={changesBadge}
+        hasReview={hasReview}
+        showStatus={showStatus}
+        onOpenStatus={onOpenStatus}
+      />
+    </>
+  );
+}
+
+export const SessionMobileLayout = memo(function SessionMobileLayout(
+  props: SessionMobileLayoutProps,
+) {
+  const { enabled: statusDrawerEnabled, openStatusDrawer } = useAppStatusDrawer();
   const {
     activeTaskId,
     effectiveSessionId,
@@ -393,37 +446,31 @@ export const SessionMobileLayout = memo(function SessionMobileLayout({
     isTaskSwitcherOpen,
     handleMenuClick,
     setMobileSessionTaskSwitcherOpen,
-  } = useSessionLayoutState({ sessionId });
-
+  } = useSessionLayoutState({ sessionId: props.sessionId });
   const { selectedFile, handleOpenFileFromChat, handleOpenFile, handlePanelChangeAndClearSheet } =
     useMobilePanelHandlers({ effectiveSessionId, handlePanelChange });
-
-  const review = useReviewDialog(effectiveSessionId);
+  const mobileMR = useMobileMRSelection(
+    activeTaskId,
+    effectiveSessionId,
+    currentMobilePanel,
+    handlePanelChangeAndClearSheet,
+  );
+  const effectiveMobilePanel =
+    currentMobilePanel === "review" && !mobileMR.selectedMR ? "chat" : currentMobilePanel;
 
   return (
     <div className="h-dvh relative bg-background">
       <MobileTopBarSticky
+        {...props}
         activeTaskId={activeTaskId}
-        workspaceId={workspaceId}
-        taskTitle={taskTitle}
         effectiveSessionId={effectiveSessionId}
-        baseBranch={baseBranch}
-        worktreeBranch={worktreeBranch}
         onMenuClick={handleMenuClick}
         showApproveButton={showApproveButton}
         onApprove={handleApprove}
-        isRemoteExecutor={isRemoteExecutor}
-        remoteExecutorType={remoteExecutorType}
-        remoteExecutorName={remoteExecutorName}
-        remoteState={remoteState}
-        remoteCreatedAt={remoteCreatedAt}
-        remoteCheckedAt={remoteCheckedAt}
-        remoteStatusError={remoteStatusError}
-        isArchived={isArchived}
       />
 
       <MobilePanelArea
-        currentMobilePanel={currentMobilePanel}
+        currentMobilePanel={effectiveMobilePanel}
         activeTaskId={activeTaskId}
         isPassthroughMode={isPassthroughMode}
         effectiveSessionId={effectiveSessionId}
@@ -435,35 +482,32 @@ export const SessionMobileLayout = memo(function SessionMobileLayout({
         handlePanelChangeAndClearSheet={handlePanelChangeAndClearSheet}
         topNavHeight={TOP_NAV_HEIGHT}
         bottomNavHeight={BOTTOM_NAV_HEIGHT}
+        mrKey={mobileMR.selectedMR ? mrTaskKey(mobileMR.selectedMR) : undefined}
       />
 
-      <MobileTerminalKeybar
+      <SessionMobileFooter
         sessionId={effectiveSessionId ?? null}
-        visible={currentMobilePanel === "terminal"}
-        baseBottomOffset={BOTTOM_NAV_HEIGHT}
-      />
-
-      {/* Fixed Bottom Navigation */}
-      <SessionMobileBottomNav
-        activePanel={currentMobilePanel}
-        onPanelChange={handlePanelChangeAndClearSheet}
+        activePanel={effectiveMobilePanel}
+        onPanelChange={mobileMR.handlePanelChange}
         planBadge={hasUnseenPlanUpdate}
         changesBadge={totalChangesCount}
+        hasReview={mobileMR.mrs.length > 0}
+        showStatus={statusDrawerEnabled}
+        onOpenStatus={openStatusDrawer}
       />
 
       {/* Task Switcher Sheet */}
       <SessionTaskSwitcherSheet
         open={isTaskSwitcherOpen}
         onOpenChange={setMobileSessionTaskSwitcherOpen}
-        workspaceId={workspaceId}
-        workflowId={workflowId}
+        workspaceId={props.workspaceId}
+        workflowId={props.workflowId}
         presentation="drawer"
       />
 
-      <MobileReviewDialogMount
+      <TaskReviewDialogMount
         sessionId={effectiveSessionId}
-        review={review}
-        activeTaskId={activeTaskId}
+        taskId={activeTaskId}
         onSelectWalkthroughFile={handleOpenFileFromChat}
       />
     </div>

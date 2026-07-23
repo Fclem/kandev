@@ -7,6 +7,8 @@ import {
   IconGitBranch,
   IconFolder,
   IconTerminal2,
+  IconGitMerge,
+  IconActivity,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@kandev/ui/badge";
@@ -17,30 +19,35 @@ type SessionMobileBottomNavProps = {
   onPanelChange: (panel: MobileSessionPanel) => void;
   planBadge?: boolean;
   changesBadge?: number;
+  hasReview?: boolean;
+  showStatus: boolean;
+  onOpenStatus: () => void;
 };
 
 type NavItem = {
-  id: MobileSessionPanel;
   label: string;
   icon: React.ReactNode;
   badge?: React.ReactNode;
-};
+} & ({ panel: MobileSessionPanel; onClick?: never } | { panel?: never; onClick: () => void });
 
 export function SessionMobileBottomNav({
   activePanel,
   onPanelChange,
   planBadge = false,
   changesBadge = 0,
+  hasReview = false,
+  showStatus,
+  onOpenStatus,
 }: SessionMobileBottomNavProps) {
   const items: NavItem[] = useMemo(
     () => [
       {
-        id: "chat",
+        panel: "chat",
         label: "Chat",
         icon: <IconMessage className="h-5 w-5" />,
       },
       {
-        id: "plan",
+        panel: "plan",
         label: "Plan",
         icon: <IconListCheck className="h-5 w-5" />,
         badge: planBadge ? (
@@ -48,7 +55,7 @@ export function SessionMobileBottomNav({
         ) : undefined,
       },
       {
-        id: "changes",
+        panel: "changes",
         label: "Changes",
         icon: <IconGitBranch className="h-5 w-5" />,
         badge:
@@ -62,17 +69,35 @@ export function SessionMobileBottomNav({
           ) : undefined,
       },
       {
-        id: "files",
+        panel: "files",
         label: "Files",
         icon: <IconFolder className="h-5 w-5" />,
       },
+      ...(hasReview
+        ? [
+            {
+              panel: "review" as const,
+              label: "Review",
+              icon: <IconGitMerge className="h-5 w-5" />,
+            },
+          ]
+        : []),
       {
-        id: "terminal",
+        panel: "terminal",
         label: "Terminal",
         icon: <IconTerminal2 className="h-5 w-5" />,
       },
+      ...(showStatus
+        ? [
+            {
+              label: "Status",
+              icon: <IconActivity className="h-5 w-5" />,
+              onClick: onOpenStatus,
+            },
+          ]
+        : []),
     ],
-    [planBadge, changesBadge],
+    [planBadge, changesBadge, hasReview, showStatus, onOpenStatus],
   );
 
   return (
@@ -82,12 +107,12 @@ export function SessionMobileBottomNav({
     >
       {items.map((item) => (
         <button
-          key={item.id}
+          key={item.label}
           type="button"
-          onClick={() => onPanelChange(item.id)}
+          onClick={item.onClick ?? (() => onPanelChange(item.panel))}
           className={cn(
-            "flex flex-col items-center justify-center py-2 px-3 gap-0.5 min-w-0 flex-1 transition-colors",
-            activePanel === item.id
+            "flex min-h-11 flex-col items-center justify-center py-2 px-3 gap-0.5 min-w-0 flex-1 transition-colors",
+            activePanel === item.panel
               ? "text-primary"
               : "text-muted-foreground hover:text-foreground",
           )}

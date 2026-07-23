@@ -14,6 +14,7 @@ import type {
   SidebarViewDraftApi,
   SidebarTaskPrefsApi,
   TaskCreateLastUsedApi,
+  AppStatusBarOrderApi,
   MCPTaskAgentProfileDefault,
   TaskPendingAction,
   TaskSessionState,
@@ -24,6 +25,7 @@ import type {
 import type { SecretListItem } from "@/lib/types/http-secrets";
 import type { GitEventPayload } from "@/lib/types/git-events";
 import type { GitHubRateLimitUpdate, TaskCIAutomationOptions, TaskPR } from "@/lib/types/github";
+import type { TaskMR } from "@/lib/types/gitlab";
 import type { SystemMetricsSnapshot } from "./system";
 import type { FileChangeNotificationPayload } from "./workspace-files";
 import type {
@@ -362,7 +364,8 @@ export type UserSettingsUpdatedPayload = {
   keyboard_shortcuts?: Record<string, { key: string; modifiers?: Record<string, boolean> }>;
   terminal_link_behavior?: string;
   changes_panel_layout?: "flat" | "tree";
-  system_metrics_display?: { show_in_topbar?: boolean };
+  system_metrics_display?: { show_in_topbar?: boolean; simplified?: boolean };
+  app_status_bar_order?: AppStatusBarOrderApi;
   voice_mode?: import("@/lib/types/http-voice").VoiceModeSettings;
   updated_at?: string;
 };
@@ -559,6 +562,10 @@ export type BackendMessageMap = OfficeBackendMessageMap &
       TaskCIAutomationOptions
     >;
     "github.rate_limit.updated": BackendMessage<"github.rate_limit.updated", GitHubRateLimitUpdate>;
+    "gitlab.task_mr.updated": BackendMessage<
+      "gitlab.task_mr.updated",
+      TaskMR & { workspace_id: string }
+    >;
     "run.event.appended": BackendMessage<"run.event.appended", RunEventAppendedPayload>;
   };
 

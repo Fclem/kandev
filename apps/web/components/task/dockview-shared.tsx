@@ -12,6 +12,7 @@ import { useFileEditors } from "@/hooks/use-file-editors";
 import { useSessionGitStatus } from "@/hooks/domains/session/use-session-git-status";
 import { useSessionCommits } from "@/hooks/domains/session/use-session-commits";
 import { useEnvironmentSessionId } from "@/hooks/use-environment-session-id";
+import type { ReviewSource } from "@/hooks/domains/session/use-review-sources";
 
 // Panel components (rendered via portals, not directly by dockview)
 import { TaskChatPanel } from "./task-chat-panel";
@@ -33,7 +34,8 @@ import { BrowserPanel } from "./browser-panel";
 import { VscodePanel } from "./vscode-panel";
 import { CommitDetailPanel } from "./commit-detail-panel";
 import type { OpenDiffOptions } from "./changes-diff-target";
-import { PRDetailPanelComponent } from "@/components/github/pr-detail-panel";
+import { ReviewDetailPanelComponent } from "./review-detail-panel";
+import { MRDetailPanelComponent } from "@/components/gitlab/mr-detail-panel";
 
 import { setPanelTitle, panelPortalManager } from "@/lib/layout/panel-portal-manager";
 import { getWebSocketClient } from "@/lib/ws/connection";
@@ -63,7 +65,7 @@ import { ENV_SCOPED_DOCKVIEW_COMPONENTS } from "@/lib/state/dockview-env-scoped-
  *  - vscode        — VS Code Server iframe running in the env's container
  *  - commit-detail — displays a commit from the env's git history
  *  - diff-viewer   — shows file diffs from the env's working tree
- *  - pr-detail     — PR linked to the env's task
+ *  - pr-detail / mr-detail — review linked to the env's task
  *
  * Components NOT listed here are **global** — they read `activeSessionId`
  * reactively from the store and automatically reflect the current session:
@@ -112,6 +114,7 @@ export const dockviewComponents: Record<string, React.FunctionComponent<IDockvie
   vscode: PortalSlot,
   plan: PortalSlot,
   "pr-detail": PortalSlot,
+  "mr-detail": PortalSlot,
   // Backwards compat aliases for saved layouts
   "diff-files": PortalSlot,
   "all-files": PortalSlot,
@@ -260,6 +263,8 @@ function DiffViewerContent({
   const selectedPath = panelKind === "file" ? (params?.path as string) : undefined;
   const selectedRepositoryName =
     panelKind === "file" ? (params?.repositoryName as string | undefined) : undefined;
+  const selectedPRKey = panelKind === "file" ? (params?.prKey as string | undefined) : undefined;
+  const sourceFilter = ((params?.source as string) || "all") as "all" | ReviewSource;
   const panelSelectedDiff = panelKind === "all" ? selectedDiff : null;
   useResyncGitStatusOnTabActivate(panelId, activeSessionId);
   const handleClosePanel = useCallback(() => {
@@ -273,6 +278,8 @@ function DiffViewerContent({
       mode={panelKind as "all" | "file"}
       filePath={selectedPath}
       fileRepositoryName={selectedRepositoryName}
+      prKey={selectedPRKey}
+      sourceFilter={sourceFilter}
       selectedDiff={panelSelectedDiff}
       onClearSelected={() => setSelectedDiff(null)}
       onOpenFile={openFile}
@@ -306,7 +313,11 @@ function ChangesContent({ panelId }: { panelId: string }) {
   );
   const handleOpenDiffFile = useCallback(
     (path: string, options?: OpenDiffOptions) =>
-      addFileDiffPanel(path, { source: options?.source, repositoryName: options?.repositoryName }),
+      addFileDiffPanel(path, {
+        source: options?.source,
+        repositoryName: options?.repositoryName,
+        prKey: options?.prKey,
+      }),
     [addFileDiffPanel],
   );
   const handleOpenCommitDetail = useCallback(
@@ -388,7 +399,14 @@ export function renderPanel(
     case "plan":
       return <PlanContent />;
     case "pr-detail":
-      return <PRDetailPanelComponent panelId={panelId} />;
+      return <ReviewDetailPanelComponent panelId={panelId} params={params} />;
+    case "mr-detail":
+      return (
+        <MRDetailPanelComponent
+          panelId={panelId}
+          params={{ mrKey: typeof params.mrKey === "string" ? params.mrKey : undefined }}
+        />
+      );
     default:
       return <div className="p-4 text-muted-foreground">Unknown panel: {component}</div>;
   }

@@ -83,6 +83,9 @@ func (m *mockRepository) ArchiveTask(ctx context.Context, id string) error {
 func (m *mockRepository) ListTasksForAutoArchive(ctx context.Context) ([]*models.Task, error) {
 	return nil, nil
 }
+func (m *mockRepository) ListArchivedTasksWithActiveSessions(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
 func (m *mockRepository) ListExpiredQuickChatTasks(ctx context.Context, cutoff time.Time) ([]*models.Task, error) {
 	return nil, nil
 }
@@ -229,6 +232,9 @@ func (m *mockRepository) ListMessagesByTurnID(ctx context.Context, turnID string
 func (m *mockRepository) ListMessagesPaginated(ctx context.Context, sessionID string, opts models.ListMessagesOptions) ([]*models.Message, bool, error) {
 	return nil, false, nil
 }
+func (m *mockRepository) ListMessagesForPlugin(ctx context.Context, filter models.PluginMessageFilter) ([]*models.Message, error) {
+	return nil, nil
+}
 func (m *mockRepository) SearchMessages(ctx context.Context, sessionID string, opts models.SearchMessagesOptions) ([]*models.Message, error) {
 	return nil, nil
 }
@@ -294,8 +300,8 @@ func (m *mockRepository) ListActiveTaskSessions(ctx context.Context) ([]*models.
 func (m *mockRepository) ListActiveTaskSessionsByTaskID(ctx context.Context, taskID string) ([]*models.TaskSession, error) {
 	return nil, nil
 }
-func (m *mockRepository) CancelActiveTaskSessionsByTaskID(ctx context.Context, taskID, reason string) (int64, error) {
-	return 0, nil
+func (m *mockRepository) CancelActiveTaskSessionsByTaskID(ctx context.Context, taskID, reason string) ([]*models.TaskSession, error) {
+	return nil, nil
 }
 func (m *mockRepository) HasActiveTaskSessionsByAgentProfile(ctx context.Context, agentProfileID string) (bool, error) {
 	return false, nil
@@ -372,7 +378,10 @@ func (m *mockRepository) ListRepositoryScripts(ctx context.Context, repositoryID
 func (m *mockRepository) ListScriptsByRepositoryIDs(_ context.Context, _ []string) (map[string][]*models.RepositoryScript, error) {
 	return make(map[string][]*models.RepositoryScript), nil
 }
-func (m *mockRepository) GetRepositoryByProviderInfo(_ context.Context, _, _, _, _ string) (*models.Repository, error) {
+func (m *mockRepository) GetRepositoryByProviderInfo(_ context.Context, _, _, _, _, _ string) (*models.Repository, error) {
+	return nil, nil
+}
+func (m *mockRepository) GetRepositoryByLocalPath(_ context.Context, _, _ string) (*models.Repository, error) {
 	return nil, nil
 }
 func (m *mockRepository) CreateExecutor(ctx context.Context, executor *models.Executor) error {

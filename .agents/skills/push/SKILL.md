@@ -1,39 +1,49 @@
 ---
 name: push
-description: Commit and push to the current branch. Use --fixup to also wait for CI and CodeRabbit, Greptile, Claude, OpenCode, and cubic review feedback, then fix issues.
+description: Push an already verified and committed branch. With --fixup, return control to the planner for delegated CI and review handling.
 ---
 
 # Push
 
+## Planner Entry
+
+The planner may push a routine verified commit directly. With `--fixup`, it
+keeps long monitoring on delegated `pr-poller`; delegate delivery only when it
+has a material isolation or coordination benefit.
+
+An explicitly assigned push worker pushes only the already verified and
+committed branch and does not spawn other workers.
+
 ## Available skills
 
-- **`/commit`** — Stage and commit changes using Conventional Commits. Runs `/verify` internally.
+- **`/commit`** — Creates the artifact and hook receipt before verification.
+- **`/verify`** — Mandatory post-commit gate for the exact current `HEAD`.
 - **`/pr-fixup`** — Wait for CI checks and CodeRabbit, Greptile, Claude, OpenCode, and cubic review feedback, fix any failures or valid comments, and push again.
-
-## Context
-
-- Current branch: !`git branch --show-current`
-- Current git status: !`git status`
 
 ## Options
 
-- `--fixup` — after pushing, run `/pr-fixup` to wait for CI and CodeRabbit, Greptile, Claude, OpenCode, and cubic review feedback, fix issues, and push again.
+- `--fixup` — after pushing, report that the planner should begin the delegated `/pr-fixup` workflow.
 
 > **Note:** This skill only uses `git push`. GitHub CLI dependency is indirect via `/pr-fixup`.
 
 ## Your task
 
-Commit any pending changes and push to the remote branch.
+Push the already committed branch to its remote.
 
 ### Steps
 
 **Create a todo/task for each step below and mark them as completed as you go.**
 
-1. **Uncommitted changes:** If there are dirty or staged changes, run `/commit` first (it runs `/verify` internally).
+1. **Uncommitted changes:** If there are dirty or staged changes, stop and tell
+   the planner that a new commit and verification run are required first.
 
-2. **Safety check:** Verify the current branch is NOT `main` or `master`. If it is, stop and ask the user — direct pushes to the default branch should go through a PR.
+2. **Verification evidence:** Require a successful post-commit `verify` result
+   whose reported `HEAD` exactly equals current `HEAD`. If the checkout or
+   commit changed afterward, stop and require fresh verification.
 
-3. **Push** the current branch:
+3. **Safety check:** Verify the current branch is NOT `main` or `master`. If it is, stop and ask the user — direct pushes to the default branch should go through a PR.
+
+4. **Push** the current branch:
    ```bash
    git push
    ```
@@ -47,6 +57,7 @@ Commit any pending changes and push to the remote branch.
    example `git push git@github.com:<owner>/<repo>.git <branch>`, or tell the
    user the token needs `workflow` scope.
 
-4. **Report** the pushed commit hash and branch.
+5. **Report** the pushed commit hash and branch.
 
-5. **If `--fixup`:** Run `/pr-fixup` to wait for CI checks and CodeRabbit, Greptile, Claude, OpenCode, and cubic review feedback, fix any failures or valid comments, and push.
+6. **If `--fixup`:** Return the pushed branch state to the planner so it can
+   coordinate `/pr-fixup`. Do not poll, fix, verify, or spawn another worker.

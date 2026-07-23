@@ -7,11 +7,18 @@ description: Simplify recently changed code — inline one-off abstractions, rem
 
 Post-implementation simplification pass. Review recently changed code and actively simplify it while preserving all behavior.
 
+## Planner Entry
+
+The planner may simplify small localized changes directly; delegate larger or
+cross-component work. Code/test/config changes still require final Spark
+`verify`. A simplify worker owns one packet and does not spawn workers.
+
 The best code is code you don't have to write. The second best is code anyone can read.
 
 ## Available skills and subagents
 
-- **`verify` subagent** — Run after simplifications to ensure all tests, lints, and typechecks still pass.
+- **`verify` worker** — After simplification is accepted and committed through
+  hooks, the planner runs this post-commit gate before push.
 
 ## Steps
 
@@ -21,7 +28,9 @@ Run `git diff --name-only` (or `git diff origin/<base>...HEAD --name-only` for a
 
 ### 2. Apply simplifications
 
-Work through each changed file. For each simplification, verify tests still pass before moving on.
+Work through each changed file. Preserve behavior by inspection; do not run
+tests, lint, typecheck, or full verification from the simplify assignment.
+Report any verification concerns or focused checks the planner should delegate.
 
 **Inline one-off abstractions:**
 - Helper functions with a single call site — inline them
@@ -52,7 +61,10 @@ Work through each changed file. For each simplification, verify tests still pass
 
 ### 3. Verify
 
-Delegate to the **`verify` sub-agent** to ensure all tests, lints, and typechecks still pass. If anything breaks, the simplification changed behavior — revert it.
+Report the required final change-aware verification and any focused concerns to the planner;
+do not run verification yourself. The planner delegates it to the `verify`
+worker. If anything breaks, the simplification changed behavior and the
+planner assigns the correction to a worker.
 
 ### 4. Summary
 
@@ -60,3 +72,4 @@ Report what was simplified:
 - Files modified
 - What was removed/inlined/simplified
 - Lines removed (net)
+- Verification concerns or recommended focused checks

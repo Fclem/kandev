@@ -12,10 +12,12 @@ import (
 	"github.com/kandev/kandev/internal/agent/runtime/lifecycle"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/common/scripts"
+	"github.com/kandev/kandev/internal/entityrefs"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 	gateways "github.com/kandev/kandev/internal/gateway/websocket"
 	"github.com/kandev/kandev/internal/github"
+	"github.com/kandev/kandev/internal/gitlab"
 	lspinstaller "github.com/kandev/kandev/internal/lsp/installer"
 	notificationcontroller "github.com/kandev/kandev/internal/notifications/controller"
 	notificationservice "github.com/kandev/kandev/internal/notifications/service"
@@ -109,6 +111,8 @@ func provideGateway(
 	taskRepo *sqliterepo.Repository,
 	terminalRepo *terminalrepo.Repository,
 	githubSvc *github.Service,
+	gitlabSvc *gitlab.Service,
+	referenceValidator entityrefs.SubmissionValidator,
 	dataDir string,
 ) (*gateways.Gateway, *notificationservice.Service, *notificationcontroller.Controller, *terminalservice.Service, error) {
 	gateway, err := gateways.Provide(log)
@@ -144,7 +148,13 @@ func provideGateway(
 	orchestratorHandlers.RegisterHandlers(gateway.Dispatcher)
 
 	// Register message queue handlers
-	queueHandlers := orchestratorhandlers.NewQueueHandlers(orchestratorSvc.GetMessageQueue(), orchestratorSvc.GetEventBus(), log, orchestratorSvc)
+	queueHandlers := orchestratorhandlers.NewQueueHandlers(
+		orchestratorSvc.GetMessageQueue(),
+		orchestratorSvc.GetEventBus(),
+		log,
+		orchestratorSvc,
+		referenceValidator,
+	)
 	queueHandlers.RegisterHandlers(gateway.Dispatcher)
 
 	if lifecycleMgr != nil && agentRegistry != nil {
@@ -162,14 +172,37 @@ func provideGateway(
 		shellHandlers.RegisterHandlers(gateway.Dispatcher)
 
 		gitHandlers := agenthandlers.NewGitHandlers(lifecycleMgr, &sessionReaderAdapter{repo: taskRepo, logger: log}, log)
-		if githubSvc != nil {
-			gitHandlers.SetOnPRCreated(func(ctx context.Context, sessionID, taskID, prURL, branch, repo string) {
-				// Resolve the multi-repo subpath to a per-task repository_id so the
-				// resulting TaskPR / PRWatch rows are scoped per-repo. Empty `repo`
-				// (single-repo task) yields empty repositoryID and preserves legacy
-				// 1:1 task→PR semantics.
-				repositoryID := resolveRepositoryIDForSubpath(ctx, taskRepo, taskID, repo, log)
-				githubSvc.AssociatePRByURL(ctx, sessionID, taskID, repositoryID, prURL, branch)
+		if githubSvc != nil || gitlabSvc != nil {
+			router := createdChangeAssociationRouter{
+				resolveRepositoryID: func(ctx context.Context, taskID, repo string) string {
+					return resolveRepositoryIDForSubpath(ctx, taskRepo, taskID, repo, log)
+				},
+				resolveWorkspaceID: func(ctx context.Context, taskID string) (string, error) {
+					if taskRepo == nil {
+						return "", fmt.Errorf("task repository unavailable")
+					}
+					task, err := taskRepo.GetTask(ctx, taskID)
+					if err != nil || task == nil || task.WorkspaceID == "" {
+						return "", fmt.Errorf("task workspace unavailable")
+					}
+					return task.WorkspaceID, nil
+				},
+			}
+			if githubSvc != nil {
+				router.associateGitHub = githubSvc.AssociatePRByURL
+			}
+			if gitlabSvc != nil {
+				router.associateGitLab = func(ctx context.Context, workspaceID, taskID, repositoryID, mrURL string) error {
+					_, err := gitlabSvc.AssociateExistingMRByURL(ctx, workspaceID, taskID, repositoryID, mrURL)
+					return err
+				}
+			}
+			gitHandlers.SetOnPRCreated(func(ctx context.Context, sessionID, taskID, provider, prURL, branch, repo string) {
+				if err := router.associate(ctx, sessionID, taskID, provider, prURL, branch, repo); err != nil {
+					// Provider errors may contain request URLs or credentials.
+					// Keep the log generic; retrying creation re-runs association.
+					log.Warn("failed to associate created change request", zap.String("task_id", taskID))
+				}
 			})
 		}
 		gitHandlers.SetOnBranchRenamed(func(ctx context.Context, sessionID, newName, repo string) {
@@ -305,6 +338,45 @@ func provideGateway(
 	}
 
 	return gateway, notificationSvc, notificationCtrl, terminalSvc, nil
+}
+
+type createdChangeAssociationRouter struct {
+	resolveRepositoryID func(context.Context, string, string) string
+	resolveWorkspaceID  func(context.Context, string) (string, error)
+	associateGitHub     func(context.Context, string, string, string, string, string)
+	associateGitLab     func(context.Context, string, string, string, string) error
+}
+
+func (r createdChangeAssociationRouter) associate(
+	ctx context.Context,
+	sessionID, taskID, provider, changeURL, branch, repo string,
+) error {
+	repositoryID := ""
+	if r.resolveRepositoryID != nil {
+		repositoryID = r.resolveRepositoryID(ctx, taskID, repo)
+	}
+	switch provider {
+	case "gitlab":
+		if r.associateGitLab == nil {
+			return nil
+		}
+		if repositoryID == "" {
+			return fmt.Errorf("GitLab repository unavailable")
+		}
+		if r.resolveWorkspaceID == nil {
+			return fmt.Errorf("GitLab workspace resolver unavailable")
+		}
+		workspaceID, err := r.resolveWorkspaceID(ctx, taskID)
+		if err != nil {
+			return err
+		}
+		return r.associateGitLab(ctx, workspaceID, taskID, repositoryID, changeURL)
+	case "github", "":
+		if r.associateGitHub != nil {
+			r.associateGitHub(ctx, sessionID, taskID, repositoryID, changeURL, branch)
+		}
+	}
+	return nil
 }
 
 // subscribeTerminalCleanup wires the terminal service to task.deleted /

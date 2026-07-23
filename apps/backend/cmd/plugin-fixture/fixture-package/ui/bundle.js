@@ -4,7 +4,8 @@
  * imports, no bundled React — that calls `window.registerKandevPlugin(id,
  * plugin)` at evaluation time and, on `initialize(registry, host)`,
  * registers a nav item, a top-level route, a `task-sidebar` slot component,
- * and a `task.created` WS handler. Uses only host.React/host.jsx.
+ * a `main-top-bar` slot component, and a `task.created` WS handler. Uses
+ * only host.React/host.jsx.
  *
  * The task-created counter lives in module scope (not component state) with
  * a tiny listener set, so it survives across route navigations (the page
@@ -58,6 +59,24 @@
         return jsx("div", { id: "hello-sidebar" }, "Hello E2E sidebar");
       }
 
+      function MainTopBarSlot(props) {
+        var slotProps = props.slotProps || {};
+        return jsx("span", { id: "hello-main-top-bar" }, "Hello " + slotProps.currentPage);
+      }
+
+      function StatusSlot(props) {
+        var slotProps = props.slotProps || {};
+        var id = slotProps.placement === "left" ? "hello-status-left" : "hello-status-right";
+        return jsx(
+          "span",
+          { id: id },
+          "Hello status " +
+            String(slotProps.presentation || "unknown") +
+            " " +
+            String(slotProps.activeTaskId || "no-task"),
+        );
+      }
+
       registry.registerNavItem({
         id: "e2e-hello",
         label: "Hello E2E",
@@ -66,6 +85,9 @@
       });
       registry.registerRoute("/plugins/e2e-hello", PluginPage);
       registry.registerComponent("task-sidebar", SidebarSlot);
+      registry.registerComponent("main-top-bar", MainTopBarSlot);
+      registry.registerComponent("app-status-bar-left", StatusSlot);
+      registry.registerComponent("app-status-bar-right", StatusSlot);
       registry.registerWsHandler("task.created", function () {
         incrementCount();
       });

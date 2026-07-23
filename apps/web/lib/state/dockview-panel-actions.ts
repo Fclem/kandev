@@ -24,6 +24,34 @@ function addSimplePanel(api: DockviewApi, groupId: string, opts: SimplePanelOpts
   focusOrAddPanel(api, { ...opts, position: { referenceGroup: groupId } });
 }
 
+function focusMatchingLegacyPanel(
+  api: DockviewApi,
+  keyedPanelId: string,
+  legacyPanelId: string,
+  paramName: string,
+  key: string,
+): boolean {
+  if (api.getPanel(keyedPanelId)) return false;
+  const legacy = api.getPanel(legacyPanelId);
+  const legacyKey = (legacy?.params as Record<string, unknown> | undefined)?.[paramName];
+  if (!legacy || legacyKey !== key) return false;
+  legacy.api.setActive();
+  return true;
+}
+
+function removeMatchingLegacyPanel(
+  api: DockviewApi,
+  keyedPanelId: string,
+  legacyPanelId: string,
+  paramName: string,
+  key: string,
+): void {
+  if (api.getPanel(keyedPanelId)) return;
+  const legacy = api.getPanel(legacyPanelId);
+  const legacyKey = (legacy?.params as Record<string, unknown> | undefined)?.[paramName];
+  if (legacy && legacyKey === key) api.removePanel(legacy);
+}
+
 // ---------------------------------------------------------------------------
 // Preview-tab machinery
 // ---------------------------------------------------------------------------
@@ -290,11 +318,12 @@ function buildFileDiffAction(get: StoreGet) {
       groupId?: string;
       source?: string;
       repositoryName?: string;
+      prKey?: string;
     },
   ) => {
     const { api, centerGroupId } = get();
     if (!api) return;
-    const itemId = buildRepoScopedItemId(path, opts?.repositoryName);
+    const itemId = buildRepoScopedItemId(path, opts?.prKey ?? opts?.repositoryName);
     openOrReplacePreview({
       api,
       type: "file-diff",
@@ -306,6 +335,7 @@ function buildFileDiffAction(get: StoreGet) {
         content: opts?.content,
         source: opts?.source,
         repositoryName: opts?.repositoryName,
+        prKey: opts?.prKey,
       },
       groupId: opts?.groupId ?? centerGroupId,
       quiet: opts?.quiet,
@@ -497,14 +527,7 @@ export function buildExtraPanelActions(get: StoreGet) {
       // A legacy panel showing a DIFFERENT PR (multi-repo "+" menu click)
       // must NOT be repurposed — that would silently swap its content
       // instead of opening a distinct tab for the newly requested PR.
-      if (prKey && !api.getPanel(id)) {
-        const legacy = api.getPanel("pr-detail");
-        const legacyKey = (legacy?.params as { prKey?: string } | undefined)?.prKey;
-        if (legacy && legacyKey === prKey) {
-          legacy.api.setActive();
-          return;
-        }
-      }
+      if (prKey && focusMatchingLegacyPanel(api, id, "pr-detail", "prKey", prKey)) return;
       // Prefer the live session panel's group over the store's centerGroupId
       // — the latter can be stale across layout transitions and lands the PR
       // panel in a separate split group instead of as a tab next to the
@@ -518,6 +541,22 @@ export function buildExtraPanelActions(get: StoreGet) {
         title: "Pull Request",
         position: { referenceGroup: targetGroupId },
         params: prKey ? { prKey } : undefined,
+      });
+    },
+    addMRPanel: (mrKey: string, activeSessionId?: string | null) => {
+      const { api, centerGroupId } = get();
+      if (!api) return;
+      const id = `mr-detail|${mrKey}`;
+      removeMatchingLegacyPanel(api, id, "mr-detail", "mrKey", mrKey);
+      const targetGroupId = activeSessionId
+        ? (api.getPanel(`session:${activeSessionId}`)?.group?.id ?? centerGroupId)
+        : centerGroupId;
+      focusOrAddPanel(api, {
+        id,
+        component: "mr-detail",
+        title: "Merge Request",
+        position: { referenceGroup: targetGroupId },
+        params: { mrKey },
       });
     },
     addTerminalPanel: (

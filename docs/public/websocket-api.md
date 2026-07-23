@@ -205,9 +205,15 @@ If `intent` is omitted, the backend infers it from those fields. That inference 
 
 A successful response contains `success`, `task_id`, `state`, and usually `session_id`; it can also contain `agent_execution_id`, `worktree_path`, and `worktree_branch`. Session states use uppercase values such as `CREATED`, `STARTING`, `RUNNING`, `WAITING_FOR_INPUT`, `COMPLETED`, `FAILED`, and `CANCELLED`.
 
+### Search work-item references over HTTP
+
+The structured chat composer's `#` search calls `GET /api/v1/workspaces/:workspaceId/mentions/search?q=<plain-text>&limit=<per-source-limit>&exclude_task_id=<optional-task-id>`. `q` is required after trimming and accepts 1–200 Unicode characters. `limit` defaults to 5 and is clamped to 1–10. When supplied, `exclude_task_id` must belong to the requested workspace.
+
+A successful response returns the normalized query and an ordered `groups` array. Each group includes `source`, `provider`, `kind`, `display_name`, `kind_label`, `status`, and `results`. One source can report `not_configured`, `unauthorized`, `rate_limited`, `timeout`, `upstream_error`, or `unsupported_scope` while the request remains HTTP 200 and other groups remain usable. Each result is a versioned `EntityReference` with the fields described below; raw provider errors and credentials are not returned.
+
 ### Send a user turn
 
-`message.add` requires `task_id`, `session_id`, and either non-whitespace `content` or at least one attachment. Optional fields are `author_id`, `model`, `plan_mode`, `has_review_comments`, `attachments`, and `context_files`.
+`message.add` requires `task_id`, `session_id`, and either non-whitespace `content` or at least one attachment. Optional fields are `author_id`, `model`, `plan_mode`, `has_review_comments`, `attachments`, `context_files`, and `entity_references`.
 
 ```json
 {
@@ -221,6 +227,10 @@ A successful response contains `success`, `task_id`, `state`, and usually `sessi
   }
 }
 ```
+
+`entity_references` is the structured companion to work-item Markdown links inserted by the `#` composer. Each version-1 entry carries `ref`, `provider`, `kind`, immutable `id`, optional display `key`, title snapshot, canonical `url`, and provider-connection `scope`. The backend derives the workspace from the persisted session, validates canonical identity and destination through the registered provider, deduplicates by `ref`, and rejects the request when a supplied reference is invalid or unauthorized. CLI-passthrough sessions do not accept structured references.
+
+`message.queue.add` accepts the same optional array. `message.queue.update` also accepts it and treats the array as a replacement: send `[]` after removing every generated reference link so stale metadata is cleared. Queue status and message responses return validated entries under `metadata.entity_references`.
 
 If the agent is busy, use the `message.queue.*` operations rather than retrying `message.add`. Permission prompts are represented in persisted/session message data; answer one with `permission.respond`. Its payload requires `session_id` and `pending_id`, plus `option_id` unless `cancelled:true`; optional `rejected:true` distinguishes an explicit denial from dismissing the prompt.
 
@@ -421,6 +431,8 @@ vscode.start
 vscode.status
 vscode.stop
 ```
+
+`worktree.create_pr` is a provider-neutral compatibility action despite its name. For a successful GitLab remote it returns `success:true`, `provider:"gitlab"`, and the merge-request URL in `pr_url`; successful GitHub and Azure responses use the same URL field. See [Git Operations](git-operations.md#create-a-pull-request-or-merge-request) for provider detection, authentication, and partial-failure behavior.
 
 `ssh.test` checks an SSH profile and `ssh.sessions.list` reads the backend's active SSH-session view; both are registered with literal action names rather than `actions.go` constants. `user_shell.stop` is a compatibility alias for destroy. Port-tunnel handlers require the tunnel service to be wired. Git semantics and destructive behavior are documented in [Git Operations](git-operations.md); executor-specific filesystem and credential boundaries are documented in [Executors](executors.md).
 

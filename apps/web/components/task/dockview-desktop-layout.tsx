@@ -41,16 +41,15 @@ import {
   useAutoSessionTab,
   useAutoPRPanel,
 } from "./dockview-session-tabs";
+import { useAutoMRPanel } from "./dockview-auto-mr-panel";
 import {
   useCompactDockviewDefault,
   useDockviewUnmountCleanup,
 } from "./dockview-desktop-layout-hooks";
 import { renderPanel } from "./dockview-panel-content";
 import { PreviewController } from "./preview-controller";
-import { WalkthroughOverlay } from "@/components/review/walkthrough-overlay";
 import { BottomTerminalPanel } from "./bottom-terminal-panel";
-import { DockviewReviewDialog } from "./dockview-review-dialog";
-import { useReviewDialog } from "./use-review-dialog";
+import { TaskReviewDialogMount } from "./dockview-review-dialog";
 
 import type { Repository, RepositoryScript } from "@/lib/types/http";
 import type { Terminal } from "@/hooks/domains/session/use-terminals";
@@ -84,7 +83,7 @@ import type { LayoutState } from "@/lib/state/layout-manager";
  *  - vscode        — VS Code Server iframe running in the env's container
  *  - commit-detail — displays a commit from the env's git history
  *  - diff-viewer   — shows file diffs from the env's working tree
- *  - pr-detail     — PR linked to the env's task
+ *  - pr-detail / mr-detail — review linked to the env's task
  *
  * Components NOT listed here are **global** — they read `activeSessionId`
  * reactively from the store and automatically reflect the current session:
@@ -133,6 +132,7 @@ const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   vscode: PortalSlot,
   plan: PortalSlot,
   "pr-detail": PortalSlot,
+  "mr-detail": PortalSlot,
   // Backwards compat aliases for saved layouts
   "diff-files": PortalSlot,
   "all-files": PortalSlot,
@@ -367,8 +367,6 @@ export const DockviewDesktopLayout = memo(function DockviewDesktopLayout({
   const envIdRef = useRef<string | null>(effectiveEnvId);
   const hasDevScript = Boolean(repository?.dev_script?.trim());
 
-  const review = useReviewDialog(effectiveSessionId);
-
   const userDefaultLayout = useSyncUserDefaultLayout();
   useLspFileOpener();
   useEditorKeybinds();
@@ -408,6 +406,7 @@ export const DockviewDesktopLayout = memo(function DockviewDesktopLayout({
   useChangesPanelAutoFocus(changesFocusKey);
 
   useAutoPRPanel();
+  useAutoMRPanel();
   useDockviewUnmountCleanup(saveTimerRef, readyDisposersRef);
 
   // Visual masking: hide the dockview container during slow-path layout
@@ -433,12 +432,7 @@ export const DockviewDesktopLayout = memo(function DockviewDesktopLayout({
       />
       <BottomTerminalPanel />
       <PanelPortalHost renderPanel={renderPanel} />
-      <DockviewReviewDialog sessionId={effectiveSessionId} review={review} />
-      <WalkthroughOverlay
-        taskId={activeTaskId}
-        sessionId={effectiveSessionId}
-        onSelectFile={review.reviewOpenFile}
-      />
+      <TaskReviewDialogMount taskId={activeTaskId} sessionId={effectiveSessionId} />
     </div>
   );
 });

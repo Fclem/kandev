@@ -7,12 +7,26 @@ description: Fix bugs and issues — reproduce, find root cause, minimal fix wit
 
 Systematic bug fixing: reproduce the problem, find the root cause, apply a minimal fix with a regression test.
 
+## Planner Entry
+
+For small, clear bugs, the planner performs the bounded reproduction,
+root-cause trace, TDD fix, and focused checks directly. It does not delegate
+first-pass logs, sessions, call-path mapping, or reproduction just because the
+issue is unfamiliar. Delegate only a concrete post-triage question requiring
+independent evidence, or a broad, large, or cross-component fix. A diagnostic
+worker may own an explicitly named regression test but not production edits; a
+patch worker owns the minimal production change and targeted verification.
+Apply `/planner-orchestration` risk routing: for PR delivery, obtain qualifying
+current-head PR AI semantic evidence, always run final `verify`, and use local
+QA/review/security agents only for exceptional routes. Workers do not spawn.
+
 ## Available skills and subagents
 
 - **`/tdd`** — Use for implementing the fix with a regression test (Red-Green-Refactor).
 - **`/e2e`** — Use when the bug is in a user-facing flow and needs a Playwright regression test.
-- **`/verify`** — Run after fixing to ensure nothing else broke.
-- **`/record`** — Record architectural decisions or insights discovered during the fix.
+- **`/verify`** — After targeted checks pass, the planner commits through hooks
+  and launches this post-commit gate before push.
+- **`/record`** — The planner uses this when the worker reports a durable architectural decision.
 
 ## What a fix produces (and what it doesn't)
 
@@ -35,8 +49,9 @@ Create these tasks immediately (use your task/todo tracking tool if available):
 1. **Reproduce the bug** — Write a test or find a reliable reproduction case
 2. **Find the root cause** — Trace the code path, narrow the scope, state the cause clearly
 3. **Fix with TDD** — Minimal fix with regression test, no surrounding refactors
-4. **Verify** — Run full verification, check for similar patterns elsewhere
-5. **Record** — Save any architectural decisions or insights, AND update the related feature spec if the bug exposed a requirement gap
+4. **Review and verify** — Planner obtains PR-first semantic evidence,
+   mandatory final verification, and only exceptional local gates; assigns remediation
+5. **Record** — Planner updates durable artifacts when worker evidence exposes a requirement or architecture gap
 
 Then start with task 0 when the bug is issue-sourced, otherwise task 1. Mark each task in_progress when you begin it and completed when you finish it. Do not skip ahead — fixing without reading the source issue (when one exists) or reproducing leads to patches that don't address the real problem. Fixing without understanding the root cause leads to whack-a-mole.
 
@@ -65,14 +80,19 @@ Mark task 0 as completed.
 
 Mark task 1 as in_progress.
 
-Before anything else, reproduce the bug reliably. Pick the right method based on where the bug lives:
+Before anything else, reproduce the bug reliably:
 
-- **Backend** (API, logic, data): write a Go test that calls the function/endpoint and asserts the wrong behavior. Run with `go test -v -run TestName ./path/...`
-- **Frontend** (UI, state, interaction): write a Playwright E2E test using `/e2e` that navigates to the page and triggers the bug. Run with `make test-e2e` to verify.
-- **Full-stack** (user flow breaks end-to-end): Playwright E2E test that exercises the full path from UI through API to DB and back.
-- **Unclear where it lives**: start by reading the code path from the reported symptom (a page, an error message, a wrong value) back to its source. Then write the test at the appropriate level.
+- **If the diagnosis packet explicitly owns a test path:** write and run the
+  minimal failing regression test at the appropriate level, then return its red
+  result with the evidence and root cause.
+- **If it does not own a test path:** use existing tests, manual or
+  non-mutating runtime evidence, or read-only tracing. Do not edit tests or
+  production. Return concrete reproduction evidence plus the proposed
+  regression-test scenario and path for the Phase 3 patch worker.
 
-If it can't be reproduced, add logging/assertions to gather more info — don't guess at a fix.
+If it can't be reproduced, use test-only assertions/instrumentation only when
+the test path is owned; otherwise use non-mutating runtime evidence — don't
+guess at a fix.
 Find the minimal reproduction case: strip away everything that isn't needed to trigger the bug.
 
 For flaky Playwright failures, do not stop after one clean focused run. Use the
@@ -92,7 +112,11 @@ Mark task 2 as in_progress.
 
 Don't guess and patch — systematically narrow the scope:
 
-**Trace the code path:** Follow the data from input to the failure point. Add assertions or logging at the midpoint of the call chain. Is the data correct there? If yes, the bug is downstream. If no, upstream. Repeat until you find the exact line where things go wrong.
+**Trace the code path:** Follow the data from input to the failure point. Use
+test-only assertions/instrumentation only when the test path is owned;
+otherwise use non-mutating runtime evidence at the midpoint of the call chain.
+Is the data correct there? If yes, the bug is downstream. If no, upstream.
+Repeat until you find the exact line where things go wrong.
 
 **Narrow the input:** What's the smallest input that triggers the bug? What's the largest input that succeeds? Strip away everything that isn't needed to trigger it.
 
@@ -114,9 +138,11 @@ Mark task 2 as completed.
 Mark task 3 as in_progress.
 
 Follow `/tdd`:
-1. Write a test that reproduces the exact bug — confirm it fails
+1. Preserve or complete the diagnosis regression test; if diagnosis did not
+   own a test path, add the proposed regression test, then confirm the exact
+   bug fails
 2. Write the minimal fix — change only what's necessary, don't refactor surrounding code
-3. Confirm the test passes and no other tests regress
+3. Confirm the regression test and targeted verification pass
 
 Mark task 3 as completed.
 
@@ -126,9 +152,30 @@ Mark task 3 as completed.
 
 Mark task 4 as in_progress.
 
-1. Run `/verify` to ensure nothing else broke
-2. Check that the fix addresses the root cause, not just the symptom
-3. If the same category of bug could occur elsewhere, grep for similar patterns and flag them
+This is a planner coordination phase. After the fix implementer reports its
+targeted test results and compact handoff capsule (intent/acceptance; base/head
+SHA when applicable; changed files and entry points; named spec/ADR sections;
+risk tags; exact targeted commands/results; uncertainties), apply
+`/planner-orchestration` risk routing. For PR delivery, defer routine semantic
+review to qualifying exact-current-head PR AI evidence; do not launch local
+`code-review` by default. Use `qa` only for unusually large/complex
+multi-component behavior or an important integration boundary without faithful
+tests. Use `security-auditor` only for high-impact new/changed authz,
+workspace-isolation, secrets, untrusted-execution, or credential-trust
+boundaries, an explicit request, or concrete automated security concerns.
+Commit the accepted fix through `/commit`, then always run final `verify`
+before push with its hook receipt. The planner's acceptance check is not a
+substitute for the required evidence.
+
+Route every finding to a bounded implementer packet. Reuse the same native
+thread when role, change, and file scope remain materially the same; use a new
+thread after major redesign, unrelated scope, stale/noisy context, or when
+independent judgment is needed. Rerun only affected semantic, QA, and security
+gates only when the remediation meets their exceptional route. For a small,
+scope-preserving PR fix, use the finding, focused regression, final Spark
+`verify`, and fresh qualifying exact-head PR AI review. The fix worker only
+reports targeted results, its handoff capsule, and any similar patterns it
+noticed.
 
 Mark task 4 as completed.
 
@@ -145,7 +192,9 @@ Two questions, in order:
 A bug can mean the spec was wrong, ambiguous, or silent about the scenario that broke. Ask: "If someone re-implemented this feature from the spec alone, would they reproduce this bug?" If yes, the spec is incomplete.
 
 - Find the related spec under `docs/specs/<slug>/spec.md` (check `docs/specs/INDEX.md`).
-- Update it to cover the missing requirement — usually a new line under **What** and/or a new **GIVEN/WHEN/THEN** scenario. Keep it observable and behavior-focused; don't paste the root cause or the fix.
+- The planner updates it to cover the missing requirement, usually with a new
+  line under **What** or a new GIVEN/WHEN/THEN scenario. The fix worker only
+  reports the gap.
 - If no spec exists yet but should (this category of behavior is feature-shaped and load-bearing), flag it to the user — don't create one unilaterally during a fix.
 - If the bug was in infra, tooling, or behavior not covered by any feature spec, skip — there is nothing to update.
 
@@ -153,7 +202,10 @@ A bug can mean the spec was wrong, ambiguous, or silent about the scenario that 
 
 **2. Did the fix encode a new project-wide convention?**
 
-If the root cause exposed an architectural gap, a non-obvious constraint, or a rule that should bind future code (e.g., "GC code must fail-closed", "all bulk deletes must be transactional"), run `/record decision` to capture it as an ADR.
+If the root cause exposed an architectural gap, a non-obvious constraint, or a
+rule that should bind future code, the planner runs `/record decision`. The fix
+worker reports the candidate decision and alternatives; it does not create the
+ADR.
 
 If neither question applies, skip this phase.
 

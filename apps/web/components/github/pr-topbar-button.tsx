@@ -29,12 +29,12 @@ import {
   getPRStatusColor,
   hasPRChecksInProgressForDisplay,
   hasPRChecksPassedWithoutReviewWaitForDisplay,
+  isPRDraft,
   isPRAwaitingReview,
   isPRReadyToMerge,
   isPRWaitingOnBranchProtection,
 } from "@/components/github/pr-task-icon";
-import { prTaskKey } from "@/components/github/pr-detail-panel";
-import { prIdentitySlug } from "@/components/github/pr-utils";
+import { prIdentitySlug, prTaskKey } from "@/components/github/pr-utils";
 import { PR_CI_DESKTOP_POPOVER_SCROLL_CLASS, PRCIPopover } from "@/components/github/pr-ci-popover";
 import { MultiPRCIPopover } from "@/components/github/multi-pr-ci-popover";
 import { useAppStore } from "@/components/state-provider";
@@ -69,6 +69,9 @@ function PRStatusIcon({ pr }: { pr: TaskPR }) {
   // Review/check states only matter for open PRs
   if (pr.checks_state === "failure" || pr.review_state === "changes_requested") {
     return <IconX className="h-3 w-3 text-red-500" />;
+  }
+  if (isPRDraft(pr)) {
+    return <IconGitPullRequest className="h-3 w-3 text-muted-foreground" />;
   }
   const blockerBadge = mergeBlockerBadge(pr);
   if (blockerBadge) return blockerBadge;

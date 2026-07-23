@@ -52,6 +52,13 @@ type TaskRepository interface {
 	// Returns whether the row was updated.
 	UnarchiveTask(ctx context.Context, id string) (bool, error)
 	ListTasksForAutoArchive(ctx context.Context) ([]*models.Task, error)
+	// ListArchivedTasksWithActiveSessions returns the IDs of archived tasks
+	// (archived_at IS NOT NULL) that still have at least one task_sessions
+	// row in an active DB state (CREATED/STARTING/RUNNING/WAITING_FOR_INPUT).
+	// Candidate list for the periodic reconciliation sweep that recovers
+	// sessions left stranded when finalizeCancelledSessions's bounded
+	// in-line retry was exhausted by sustained SQLite writer contention.
+	ListArchivedTasksWithActiveSessions(ctx context.Context) ([]string, error)
 	ListExpiredQuickChatTasks(ctx context.Context, cutoff time.Time) ([]*models.Task, error)
 	DeleteExpiredQuickChatTask(ctx context.Context, id string, cutoff time.Time) (bool, error)
 	// CountOpenWatcherCreatedTasks returns the number of open watcher-created
@@ -154,6 +161,7 @@ type MessageRepository interface {
 	ListMessages(ctx context.Context, sessionID string) ([]*models.Message, error)
 	ListMessagesByTurnID(ctx context.Context, turnID string) ([]*models.Message, error)
 	ListMessagesPaginated(ctx context.Context, sessionID string, opts models.ListMessagesOptions) ([]*models.Message, bool, error)
+	ListMessagesForPlugin(ctx context.Context, filter models.PluginMessageFilter) ([]*models.Message, error)
 	SearchMessages(ctx context.Context, sessionID string, opts models.SearchMessagesOptions) ([]*models.Message, error)
 	DeleteMessage(ctx context.Context, id string) error
 }
@@ -182,7 +190,7 @@ type SessionRepository interface {
 	ListTaskSessions(ctx context.Context, taskID string) ([]*models.TaskSession, error)
 	ListActiveTaskSessions(ctx context.Context) ([]*models.TaskSession, error)
 	ListActiveTaskSessionsByTaskID(ctx context.Context, taskID string) ([]*models.TaskSession, error)
-	CancelActiveTaskSessionsByTaskID(ctx context.Context, taskID, reason string) (int64, error)
+	CancelActiveTaskSessionsByTaskID(ctx context.Context, taskID, reason string) ([]*models.TaskSession, error)
 	HasActiveTaskSessionsByAgentProfile(ctx context.Context, agentProfileID string) (bool, error)
 	GetActiveTaskInfoByAgentProfile(ctx context.Context, agentProfileID string) ([]agentdto.ActiveTaskInfo, error)
 	HasActiveTaskSessionsByExecutor(ctx context.Context, executorID string) (bool, error)
@@ -262,7 +270,16 @@ type RepositoryEntityRepository interface {
 	DeleteRepositoryScript(ctx context.Context, id string) error
 	ListRepositoryScripts(ctx context.Context, repositoryID string) ([]*models.RepositoryScript, error)
 	ListScriptsByRepositoryIDs(ctx context.Context, repoIDs []string) (map[string][]*models.RepositoryScript, error)
-	GetRepositoryByProviderInfo(ctx context.Context, workspaceID, provider, owner, name string) (*models.Repository, error)
+	GetRepositoryByProviderInfo(ctx context.Context, workspaceID, provider, host, owner, name string) (*models.Repository, error)
+	// GetRepositoryByLocalPath finds a live repository by workspace and canonical
+	// local_path. Returns nil, nil if not found. Used by
+	// Service.FindOrCreateRepositoryByLocalPath to check for an existing row by
+	// canonical path immediately before insert (serialized via repoResolveMu),
+	// instead of relying solely on a batch snapshot that can go stale across
+	// concurrent callers within this process. This closes the common
+	// single-process race; it is not a substitute for a database-level
+	// uniqueness constraint against writers outside this process.
+	GetRepositoryByLocalPath(ctx context.Context, workspaceID, localPath string) (*models.Repository, error)
 }
 
 // ExecutorRepository handles executor CRUD, executor profiles, and running state.

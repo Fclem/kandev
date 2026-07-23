@@ -5,6 +5,10 @@ description: Create a committed implementation plan from a feature spec. Explore
 
 # Create Implementation Plan
 
+This is a planner-side artifact skill. The user-started primary planner creates
+the plan and worker packets for substantial independent work; it keeps small,
+localized execution and focused verification local.
+
 Translate a feature spec into a concrete, phased implementation plan saved under
 `docs/plans/<feature>/`. Plans and task files are committed implementation
 records for the current buildout; specs remain the durable requirements under

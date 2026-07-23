@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"maps"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kandev/kandev/internal/agent/runtime/lifecycle"
 	"github.com/kandev/kandev/internal/orchestrator/sessionstate"
+	"github.com/kandev/kandev/internal/repoclone"
 	"github.com/kandev/kandev/internal/sysprompt"
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/worktree"
@@ -43,7 +45,7 @@ func (e *Executor) resolveTaskSessionMCPMode(ctx context.Context, taskID string,
 	if err != nil {
 		return "", fmt.Errorf("load task for MCP mode: %w", err)
 	}
-	if task != nil && task.AssigneeAgentProfileID != "" {
+	if task != nil && task.IsFromOffice {
 		return McpModeOffice, nil
 	}
 	return "", nil
@@ -291,7 +293,7 @@ func (e *Executor) shouldSkipFailedStartReviewForTask(ctx context.Context, taskI
 			zap.Error(err))
 		return true
 	}
-	if task != nil && task.AssigneeAgentProfileID != "" {
+	if task != nil && task.IsFromOffice {
 		e.logger.Debug("skipping failed-start task REVIEW state for office task",
 			zap.String("task_id", taskID),
 			zap.String("session_id", failedSessionID))
@@ -390,8 +392,18 @@ func (e *Executor) transitionSessionState(
 	state models.TaskSessionState,
 	errorMessage string,
 ) (bool, models.TaskSessionState, error) {
+	return e.transitionSessionStateWithHook(ctx, taskID, sessionID, state, errorMessage, nil)
+}
+
+func (e *Executor) transitionSessionStateWithHook(
+	ctx context.Context,
+	taskID, sessionID string,
+	state models.TaskSessionState,
+	errorMessage string,
+	onChanged func(),
+) (bool, models.TaskSessionState, error) {
 	if e.onSessionStateTransition != nil {
-		return e.onSessionStateTransition(ctx, taskID, sessionID, state, errorMessage)
+		return e.onSessionStateTransition(ctx, taskID, sessionID, state, errorMessage, onChanged)
 	}
 
 	current, err := e.repo.GetTaskSession(ctx, sessionID)
@@ -416,6 +428,9 @@ func (e *Executor) transitionSessionState(
 	}
 	if refreshed.State != state {
 		return false, refreshed.State, nil
+	}
+	if onChanged != nil {
+		onChanged()
 	}
 	return true, refreshed.State, nil
 }
@@ -442,7 +457,9 @@ func (e *Executor) updateSessionStarting(ctx context.Context, taskID string, ses
 	}
 	allowedTerminalRecovery := !promoteTask &&
 		session.State == models.TaskSessionStateStarting &&
-		current.State == models.TaskSessionStateFailed
+		(current.State == models.TaskSessionStateFailed ||
+			(current.State == models.TaskSessionStateCancelled &&
+				models.IsArchiveCancelReason(current.ErrorMessage)))
 	if isStopTerminalSessionState(current.State) && !allowedTerminalRecovery {
 		return &SessionStateSupersededError{SessionID: session.ID, State: current.State}
 	}
@@ -484,8 +501,6 @@ func shouldUseWorktree(executorType string) bool {
 	return models.ExecutorType(executorType) == models.ExecutorTypeWorktree
 }
 
-const providerGitHub = "github"
-
 // repositoryCloneURL builds a clone URL for the repository. It prefers the
 // provider info when present (HTTPS GitHub/GitLab/Bitbucket URL); otherwise
 // it inspects the local checkout's `origin` remote. The latter lets local-only
@@ -496,18 +511,16 @@ func repositoryCloneURL(repo *models.Repository) string {
 		return strings.TrimSpace(repo.RemoteURL)
 	}
 	if repo.ProviderOwner != "" && repo.ProviderName != "" {
-		var host string
-		switch strings.ToLower(repo.Provider) {
-		case providerGitHub, "":
-			host = "github.com"
-		case "gitlab":
-			host = "gitlab.com"
-		case "bitbucket":
-			host = "bitbucket.org"
-		default:
+		if strings.EqualFold(repo.Provider, "gitlab") && strings.TrimSpace(repo.ProviderHost) == "" {
 			return ""
 		}
-		return fmt.Sprintf("https://%s/%s/%s.git", host, repo.ProviderOwner, repo.ProviderName)
+		cloneURL, err := repoclone.CloneURLWithHost(
+			repo.Provider, repo.ProviderHost, repo.ProviderOwner, repo.ProviderName, repoclone.ProtocolHTTPS,
+		)
+		if err != nil {
+			return ""
+		}
+		return cloneURL
 	}
 	if repo.LocalPath == "" {
 		return ""
@@ -890,7 +903,7 @@ func (e *Executor) LaunchPreparedSession(ctx context.Context, task *v1.Task, ses
 	// Call the AgentManager to launch the container
 	resp, err := e.agentManager.LaunchAgent(ctx, req)
 	if err != nil {
-		return nil, e.handleLaunchFailure(ctx, task.ID, sessionID, err)
+		return nil, e.handleLaunchFailure(ctx, task.ID, sessionID, failingLaunchRepositoryID(req, err), err)
 	}
 
 	// Create or update the task environment with launch results
@@ -909,6 +922,59 @@ func (e *Executor) LaunchPreparedSession(ctx context.Context, task *v1.Task, ses
 	return e.finalizeLaunch(ctx, task, session, agentProfileID, sessionID, primaryRepo, resp, startAgent, execCfg)
 }
 
+// failingLaunchRepositoryID identifies the repository that caused a
+// multi-repository branch-fetch failure. A lifecycle launch error only carries
+// the failed branch name, so correlate it with the unique per-repository
+// checkout branch in the request. Ambiguous or unrecognized branches fail
+// closed: no repository-scoped destructive guidance can be offered.
+func failingLaunchRepositoryID(req *LaunchAgentRequest, launchErr error) string {
+	if req == nil {
+		return ""
+	}
+	if len(req.Repositories) == 0 {
+		return req.RepositoryID
+	}
+
+	branch := extractLaunchFailureBranch(launchErr)
+	if branch == "" {
+		return ""
+	}
+	var repositoryID string
+	for _, spec := range req.Repositories {
+		if strings.TrimSpace(spec.CheckoutBranch) != branch {
+			continue
+		}
+		if repositoryID != "" {
+			return ""
+		}
+		repositoryID = spec.RepositoryID
+	}
+	return repositoryID
+}
+
+var (
+	launchQuotedBranchPattern   = regexp.MustCompile(`branch "([^"]+)"`)
+	launchRemoteRefPattern      = regexp.MustCompile(`remote ref ([^\s]+)`)
+	launchPathspecBranchPattern = regexp.MustCompile(`pathspec '([^']+)'`)
+)
+
+func extractLaunchFailureBranch(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := err.Error()
+	for _, pattern := range []*regexp.Regexp{
+		launchQuotedBranchPattern,
+		launchRemoteRefPattern,
+		launchPathspecBranchPattern,
+	} {
+		if match := pattern.FindStringSubmatch(message); len(match) == 2 {
+			return strings.TrimSpace(match[1])
+		}
+	}
+	return ""
+}
+
 func resumeTokenForExecutionProfile(running *models.ExecutorRunning, profileID string) string {
 	if running == nil || profileID == "" ||
 		(running.ExecutionProfileID != "" && running.ExecutionProfileID != profileID) {
@@ -918,27 +984,33 @@ func resumeTokenForExecutionProfile(running *models.ExecutorRunning, profileID s
 }
 
 // handleLaunchFailure marks the session and task as FAILED and returns the original error.
-func (e *Executor) handleLaunchFailure(ctx context.Context, taskID, sessionID string, launchErr error) error {
+func (e *Executor) handleLaunchFailure(ctx context.Context, taskID, sessionID, repositoryID string, launchErr error) error {
 	// Detach from caller context so failure bookkeeping completes even if the
 	// original request context was cancelled.
 	failCtx := context.WithoutCancel(ctx)
 	e.logger.Error("failed to launch agent",
 		zap.String("task_id", taskID),
 		zap.Error(launchErr))
-	// Call onLaunchFailed before state updates so it can set the suppressToast
-	// flag that updateSessionState will propagate to the frontend.
+	var onChanged func()
 	if e.onLaunchFailed != nil {
-		e.onLaunchFailed(failCtx, taskID, sessionID, launchErr)
+		onChanged = func() {
+			e.onLaunchFailed(failCtx, taskID, sessionID, repositoryID, launchErr)
+		}
 	}
-	if updateErr := e.updateSessionState(failCtx, taskID, sessionID, models.TaskSessionStateFailed, launchErr.Error()); updateErr != nil {
+	changed, _, updateErr := e.transitionSessionStateWithHook(
+		failCtx, taskID, sessionID, models.TaskSessionStateFailed, launchErr.Error(), onChanged,
+	)
+	if updateErr != nil {
 		e.logger.Warn("failed to mark session as failed after launch error",
 			zap.String("session_id", sessionID),
 			zap.Error(updateErr))
 	}
-	if updateErr := e.updateTaskState(failCtx, taskID, v1.TaskStateFailed); updateErr != nil {
-		e.logger.Warn("failed to mark task as failed after launch error",
-			zap.String("task_id", taskID),
-			zap.Error(updateErr))
+	if changed {
+		if updateErr := e.updateTaskState(failCtx, taskID, v1.TaskStateFailed); updateErr != nil {
+			e.logger.Warn("failed to mark task as failed after launch error",
+				zap.String("task_id", taskID),
+				zap.Error(updateErr))
+		}
 	}
 	return launchErr
 }
@@ -1066,6 +1138,7 @@ func (e *Executor) buildLaunchAgentRequest(ctx context.Context, task *v1.Task, s
 	if executorNeedsResolvedCredentials(execConfig.ExecutorType) {
 		e.applyContainerCredentials(ctx, req, metadata)
 	}
+	e.injectGitLabWorkspaceCredentials(ctx, req)
 	req.WorktreeBranchTicket = worktree.TicketForBranchName(task.Identifier, metadata)
 
 	metadata, err := e.applyRepositoryConfig(req, task, repoInfo, execConfig, metadata)
@@ -1371,8 +1444,10 @@ func (e *Executor) startAgentOnExistingWorkspace(ctx context.Context, task *v1.T
 			// Non-fatal: agent may start without description
 		}
 	}
-	if len(env) > 0 {
-		if err := e.agentManager.SetExecutionEnv(ctx, executionID, env); err != nil {
+	credentialReq := &LaunchAgentRequest{WorkspaceID: task.WorkspaceID, Env: cloneStringMap(env)}
+	e.injectGitLabWorkspaceCredentials(ctx, credentialReq)
+	if len(credentialReq.Env) > 0 {
+		if err := e.agentManager.SetExecutionEnv(ctx, executionID, credentialReq.Env); err != nil {
 			e.logger.Warn("failed to set execution env for existing workspace",
 				zap.String("session_id", session.ID),
 				zap.String("agent_execution_id", executionID),

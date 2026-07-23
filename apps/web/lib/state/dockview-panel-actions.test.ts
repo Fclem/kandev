@@ -341,6 +341,23 @@ describe("addFileDiffPanel — preview behavior", () => {
     expect(preview.isActive).toBe(true);
   });
 
+  it("does not reuse a pinned diff for the same path from a different PR", () => {
+    actions.addFileDiffPanel(SHARED_PATH, {
+      pin: true,
+      repositoryName: "backend",
+      prKey: "acme/backend/41",
+    });
+
+    actions.addFileDiffPanel(SHARED_PATH, {
+      repositoryName: "backend",
+      prKey: "acme/backend/42",
+    });
+
+    const preview = api.getPanel(PREVIEW_DIFF_ID) as unknown as MockPanel;
+    expect(preview).toBeDefined();
+    expect(preview.params.prKey).toBe("acme/backend/42");
+  });
+
   it("promotePreviewToPinned sets promoted flag on the preview diff", () => {
     actions.addFileDiffPanel(PATH_A);
     actions.promotePreviewToPinned("file-diff");
@@ -601,5 +618,47 @@ describe("addPRPanel — group placement", () => {
     const pr = api.getPanel(KEYED_PR_ID) as unknown as MockPanel;
     expect(pr).toBeDefined();
     expect(pr.group.id).toBe(CENTER_GROUP);
+  });
+});
+
+describe("addMRPanel — dedup with legacy auto-shown panel", () => {
+  const MR_KEY = "https://gitlab.example.test|platform/kandev|81";
+  const OTHER_MR_KEY = "https://gitlab.example.test|platform/kandev|82";
+  const LEGACY_MR_ID = "mr-detail";
+
+  function buildExtra(api: DockviewApi) {
+    const store = makeStore(api);
+    return { api, actions: buildExtraPanelActions(store.get) };
+  }
+
+  function seedLegacyPanel(api: DockviewApi, mrKey: string): void {
+    api.addPanel({
+      id: LEGACY_MR_ID,
+      component: "mr-detail",
+      title: "Merge Request",
+      params: { mrKey },
+      position: { referenceGroup: CENTER_GROUP },
+    });
+  }
+
+  it("replaces a matching auto-shown panel with an active keyed panel", () => {
+    const { api, actions } = buildExtra(makeApi());
+    seedLegacyPanel(api, MR_KEY);
+
+    actions.addMRPanel(MR_KEY);
+
+    expect(api.panels.filter((panel) => panel.id.startsWith(LEGACY_MR_ID))).toHaveLength(1);
+    expect(api.getPanel(LEGACY_MR_ID)).toBeUndefined();
+    expect((api.getPanel(`${LEGACY_MR_ID}|${MR_KEY}`) as unknown as MockPanel).isActive).toBe(true);
+  });
+
+  it("opens a keyed panel when the auto-shown panel displays a different MR", () => {
+    const { api, actions } = buildExtra(makeApi());
+    seedLegacyPanel(api, MR_KEY);
+
+    actions.addMRPanel(OTHER_MR_KEY);
+
+    expect(api.getPanel(`${LEGACY_MR_ID}|${OTHER_MR_KEY}`)).toBeDefined();
+    expect(api.panels.filter((panel) => panel.id.startsWith(LEGACY_MR_ID))).toHaveLength(2);
   });
 });

@@ -23,11 +23,11 @@ Task arrives
 |-- Seed isolated product demo data? -------> /product-demo-seeding
 |-- Record landing/product media? ----------> /product-demo-seeding -> /product-video-capture (always in that order)
 |-- Frontend/UI change? --------------------> /mobile-parity plus /e2e as needed
-|-- Security-sensitive change? -------------> security-auditor subagent plus /code-review
+|-- High-impact security boundary/concern? -> security-auditor per /planner-orchestration
 |-- Test strategy or coverage gaps? --------> test-engineer subagent plus /tdd or /e2e
 |-- Add debug logs? ------------------------> /debug
 |-- Add Jira/Linear-style integration? -----> /add-integration
-|-- Verify implemented behavior? -----------> /qa then /verify
+|-- Verify implemented behavior? -----------> PR-first review, exceptional /qa, mandatory /verify
 |-- Simplify recent code? ------------------> /simplify
 |-- Review code? ---------------------------> /code-review
 |-- Improve skills/agents/commands? --------> /harness-improvement
@@ -39,13 +39,16 @@ Task arrives
 
 ## Operating Rules
 
-1. Check for an applicable local skill before starting non-trivial work.
-2. If multiple skills apply, use the smallest set that covers the task and state the order.
-3. Skills are workflows, not suggestions. Follow required verification and stop conditions.
-4. Surface assumptions before building on them. If requirements, specs, and code disagree, stop and name the conflict.
-5. Keep scope tight. Do not refactor adjacent systems or add "useful" features that are not in the request/spec.
-6. Verify with evidence: targeted tests, full `/verify` when needed, browser/E2E proof for user-facing flows.
-7. Product media always invokes `/product-demo-seeding` before `/product-video-capture`, even when a prior seed or capture exists. Re-prove current `origin/main`, disposable runtime/data, and teardown; never capture a developer instance or database.
+1. Determine whether the current session is the planner or an assigned worker.
+2. Check for an applicable local skill before starting non-trivial work.
+3. If multiple skills apply, use the smallest set that covers the task and state the order.
+4. Skills are workflows, not suggestions. Follow required verification and stop conditions.
+5. Surface assumptions before building on them. If requirements, specs, and code disagree, stop and name the conflict.
+6. Keep scope tight. Do not refactor adjacent systems or add "useful" features that are not in the request/spec.
+7. Verify with evidence: targeted tests, full `/verify` when needed, browser/E2E proof for user-facing flows.
+8. Keep small safe work local when context reload and coordination cost exceed
+   delegation value; preserve worker packet/no-subagent rules when delegating.
+9. Product media always invokes `/product-demo-seeding` before `/product-video-capture`, even when a prior seed or capture exists. Re-prove current `origin/main`, disposable runtime/data, and teardown; never capture a developer instance or database.
 
 ## Upstream Name Mapping
 

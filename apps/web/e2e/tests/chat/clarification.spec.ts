@@ -21,6 +21,12 @@ function seedClarificationTask(
   return seedClarificationSession(testPage, apiClient, seedData, title, { scenario });
 }
 
+const PLAN_WITH_CLARIFICATION_SCRIPT = [
+  'e2e:mcp:kandev:create_task_plan_kandev({"task_id":"{task_id}","content":"## Plan\\n\\nEdit 1 item","title":"Implementation Plan"})',
+  "e2e:delay(100)",
+  'e2e:mcp:kandev:ask_user_question_kandev({"questions":[{"id":"db","prompt":"Which database should we use?","options":[{"label":"PostgreSQL","description":"Relational"},{"label":"SQLite","description":"Embedded"}]},{"id":"language","prompt":"Which language should we use?","options":[{"label":"Go","description":"Compiled"},{"label":"TypeScript","description":"Web"}]},{"id":"deploy","prompt":"How should we deploy?","options":[{"label":"Docker","description":"Containerized"},{"label":"Bare metal","description":"Direct"}]}]})',
+].join("\n");
+
 // Exercises the regular task-create dialog (New Task in the sidebar); run with office off.
 useRegularMode();
 
@@ -80,6 +86,33 @@ test.describe("Clarification flow", () => {
     await expect(session.chat).not.toContainText("linesecond line");
   });
 
+  test("custom answer row ignores a hidden stale session chat", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const session = await seedClarificationTask(
+      testPage,
+      apiClient,
+      seedData,
+      "Clarification Active Chat Locator",
+      "clarification",
+    );
+
+    await expect(session.clarificationOverlay()).toBeVisible({ timeout: 30_000 });
+
+    // Dockview can retain a prior session's chat in the DOM after its tab is
+    // hidden. The custom-answer row must come from the visible chat only.
+    await testPage.locator("body").evaluate((body) => {
+      body.insertAdjacentHTML(
+        "beforeend",
+        '<div data-testid="session-chat" style="display: none"><div data-testid="clarification-custom-input">stale custom answer</div></div>',
+      );
+    });
+
+    await expect(session.clarificationCustomInput()).toHaveCount(1);
+  });
+
   test("skip clarification", async ({ testPage, apiClient, seedData }) => {
     const session = await seedClarificationTask(
       testPage,
@@ -94,7 +127,7 @@ test.describe("Clarification flow", () => {
     await expect(session.idleInput()).toBeVisible({ timeout: 30_000 });
   });
 
-  test("timeout detaches clarification but keeps overlay for deferred answer", async ({
+  test("timeout detaches clarification and accepts a custom deferred answer", async ({
     testPage,
     apiClient,
     seedData,
@@ -148,9 +181,17 @@ test.describe("Clarification flow", () => {
     );
     expect(primarySession?.state).toBe("WAITING_FOR_INPUT");
 
-    // Agent moved on; a late answer goes through the event fallback as a new prompt.
-    await session.clarificationOption("PostgreSQL").click();
+    // Agent moved on; a late custom answer remains editable and goes through
+    // the event fallback as a new prompt.
+    const input = session.clarificationInput();
+    await expect(input).toBeEnabled();
+    await session.clarificationCustomInput().click({ position: { x: 4, y: 4 } });
+    await expect(input).toBeFocused();
+    await input.pressSequentially("Use the embedded database for this task");
+    await expect(input).toHaveValue("Use the embedded database for this task");
+    await input.press("Enter");
     await expect(session.idleInput()).toBeVisible({ timeout: 30_000 });
+    await expect(session.chat).toContainText("Use the embedded database for this task");
   });
 
   test("options render label and description on separate rows", async ({
@@ -478,6 +519,7 @@ test.describe("Multi-question clarification carousel", () => {
     await expect(session.clarificationOverlay()).toBeVisible({ timeout: 30_000 });
 
     // Press "1" → first option of the first question, auto-advance.
+    await session.chat.focus();
     await testPage.keyboard.press("1");
     await expect(session.clarificationStep(1)).toHaveAttribute("data-active", "true");
     await expect(session.clarificationGroupProgress()).toContainText("1 of 3 answered");
@@ -495,6 +537,129 @@ test.describe("Multi-question clarification carousel", () => {
     await testPage.keyboard.press("ArrowRight");
     await expect(session.clarificationOverlay()).not.toBeVisible({ timeout: 30_000 });
     await expect(session.idleInput()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("question shortcuts only fire while the chat panel has focus", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const task = await apiClient.createTaskWithAgent(
+      seedData.workspaceId,
+      "Clarification shortcuts stay in chat",
+      seedData.agentProfileId,
+      {
+        description: PLAN_WITH_CLARIFICATION_SCRIPT,
+        workflow_id: seedData.workflowId,
+        workflow_step_id: seedData.startStepId,
+        repository_ids: [seedData.repositoryId],
+      },
+    );
+    if (!task.session_id) throw new Error("createTaskWithAgent did not return a session_id");
+
+    await testPage.goto(`/t/${task.id}`);
+    const session = new SessionPage(testPage);
+    await session.waitForLoad();
+    await expect(session.clarificationOverlay()).toBeVisible({ timeout: 30_000 });
+    if (!(await session.planPanel.isVisible())) await session.togglePlanMode();
+    await expect(session.planEditor()).toBeVisible({ timeout: 15_000 });
+
+    const planEditor = session.planEditor();
+    await planEditor.click();
+    await testPage.keyboard.press("1");
+    await expect(planEditor).toContainText("Edit 1 item1");
+    await expect(session.clarificationStep(0)).toHaveAttribute("data-active", "true");
+    await expect(session.clarificationGroupProgress()).toContainText("0 of 3 answered");
+
+    await session.chat.focus();
+    await testPage.keyboard.press("1");
+    await expect(session.clarificationStep(1)).toHaveAttribute("data-active", "true");
+    await session.clarificationOption("Go").click();
+    await session.clarificationOption("Docker").click();
+    await expect(session.clarificationGroupProgress()).toContainText("3 of 3 answered");
+
+    await planEditor.focus();
+    await testPage.keyboard.press("ControlOrMeta+Enter");
+    await expect(session.clarificationOverlay()).toBeVisible();
+
+    await session.chat.focus();
+    await testPage.keyboard.press("ControlOrMeta+Enter");
+    await expect(session.clarificationOverlay()).not.toBeVisible({ timeout: 30_000 });
+  });
+
+  test("action tooltips show their keyboard shortcuts", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const session = await seedClarificationTask(
+      testPage,
+      apiClient,
+      seedData,
+      "Clarification shortcut hints",
+      "clarification-multi",
+    );
+
+    await expect(session.clarificationOverlay()).toBeVisible({ timeout: 30_000 });
+
+    await testPage.getByTestId("clarification-submit-shortcut").hover();
+    const submitTooltip = testPage.getByRole("tooltip", { name: /Submit answers/ });
+    await expect(submitTooltip).toContainText(/Ctrl|⌘/);
+    await expect(submitTooltip).toContainText("Enter");
+
+    await testPage.getByTestId("clarification-skip-shortcut").hover();
+    const skipTooltip = testPage.getByRole("tooltip", { name: /Skip all questions/ });
+    await expect(skipTooltip).toContainText("Esc");
+
+    await session.clarificationOption("PostgreSQL").click();
+    await session.clarificationPrev().hover();
+    const previousTooltip = testPage.getByRole("tooltip", { name: /Previous question/ });
+    await expect(previousTooltip).toContainText("←");
+
+    await session.clarificationNext().hover();
+    const nextTooltip = testPage.getByRole("tooltip", { name: /Next question/ });
+    await expect(nextTooltip).toContainText("→");
+  });
+
+  test("question shortcuts stay disabled while answers are submitting", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const session = await seedClarificationTask(
+      testPage,
+      apiClient,
+      seedData,
+      "Clarification shortcuts while submitting",
+      "clarification-multi",
+    );
+
+    await expect(session.clarificationOverlay()).toBeVisible({ timeout: 30_000 });
+    await session.clarificationOption("PostgreSQL").click();
+    await session.clarificationOption("Go").click();
+    await session.clarificationOption("Docker").click();
+
+    let releaseResponse = () => undefined;
+    const heldResponse = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    await testPage.route("**/api/v1/clarification/*/respond", async (route) => {
+      await heldResponse;
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    });
+
+    await session.chat.focus();
+    await testPage.keyboard.press("ControlOrMeta+Enter");
+    await expect(session.clarificationSubmit()).toContainText("Submitting");
+
+    await testPage.keyboard.press("ArrowLeft");
+    await expect(session.clarificationStep(2)).toHaveAttribute("data-active", "true");
+
+    await testPage.getByTestId("clarification-submit-shortcut").hover();
+    await expect(testPage.getByRole("tooltip", { name: /Submit answers/ })).not.toBeVisible();
+
+    releaseResponse();
+    await expect(session.clarificationOverlay()).not.toBeVisible({ timeout: 30_000 });
   });
 
   test("Esc skips the entire bundle from anywhere in the carousel", async ({

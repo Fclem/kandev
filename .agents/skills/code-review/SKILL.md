@@ -5,6 +5,15 @@ description: Review changed code for quality, security, and architecture complia
 
 # Code Review
 
+## Planner Entry
+
+The user-started primary session reviews small, localized changes directly and
+uses current-head PR AI review as the routine independent semantic evidence.
+Delegate to the registered `code-review` worker only for exceptional
+architecture, cross-cutting, high-risk, or insufficiently reviewed changes.
+Assign fixes or security follow-up to workers only when their scope warrants it.
+An explicitly assigned review worker continues below and does not spawn workers.
+
 Review the current changes in the codebase (Go backend + Vite/React SPA monorepo). Every finding needs a `file_path:line_number` reference, an explanation of *why* it matters, and a concrete fix.
 
 Start from intent and evidence: read the spec/task first when available, then changed tests before production code. Tests reveal the expected behavior and whether the change is actually verified.
@@ -114,7 +123,7 @@ Check every changed file for the following layers. Skip layers that don't apply 
 - Exceptions: config files, generated code, React component markup
 - Missing tests for new or changed logic is a **blocker** — suggest what tests to add and recommend `/tdd`
 
-### 4. Fix or report
+### 4. Report
 
 When the user says not to post or modify the PR, do not make any GitHub
 mutation: no fixes, comments, review submissions, or thread resolution. When
@@ -123,8 +132,8 @@ branch, do not edit the checkout or push code; report findings through the
 channel the user requested. Do not submit or resolve reviews unless explicitly
 asked.
 
-- **Fix directly** any issues you can resolve confidently (dead code, unused imports, simple duplication, missing early returns)
-- **Report** issues that need the author's input — always explain *why* the issue matters and provide a concrete suggested fix
+Report findings to the planner with a concrete suggested fix. Do not edit the
+checkout; the planner creates a bounded implementer assignment for remediation.
 
 ### 5. Output
 

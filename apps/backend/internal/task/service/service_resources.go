@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -26,6 +27,28 @@ const (
 )
 
 var ErrWorkspaceConfirmNameMismatch = errors.New("confirm_name does not match workspace name")
+
+func normalizeProviderHost(provider, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		if strings.EqualFold(strings.TrimSpace(provider), githubProviderName) {
+			return githubProviderHost
+		}
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return ""
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return ""
+	}
+	return scheme + "://" + strings.ToLower(parsed.Host)
+}
 
 type workspaceDeleteTaskCleanup struct {
 	task        *models.Task
@@ -585,6 +608,22 @@ func (s *Service) CreateRepository(ctx context.Context, req *CreateRepositoryReq
 	if err != nil {
 		return nil, err
 	}
+	return s.createRepository(ctx, req, localPath, true)
+}
+
+func (s *Service) createRepositoryWithCanonicalPath(
+	ctx context.Context,
+	req *CreateRepositoryRequest,
+) (*models.Repository, error) {
+	return s.createRepository(ctx, req, req.LocalPath, false)
+}
+
+func (s *Service) createRepository(
+	ctx context.Context,
+	req *CreateRepositoryRequest,
+	localPath string,
+	resolveProvider bool,
+) (*models.Repository, error) {
 	sourceType := req.SourceType
 	if sourceType == "" {
 		sourceType = sourceTypeLocal
@@ -615,6 +654,7 @@ func (s *Service) CreateRepository(ctx context.Context, req *CreateRepositoryReq
 		LocalPath:              localPath,
 		Provider:               req.Provider,
 		ProviderRepoID:         req.ProviderRepoID,
+		ProviderHost:           normalizeProviderHost(req.Provider, req.ProviderHost),
 		ProviderOwner:          req.ProviderOwner,
 		ProviderName:           req.ProviderName,
 		RemoteURL:              req.RemoteURL,
@@ -628,13 +668,8 @@ func (s *Service) CreateRepository(ctx context.Context, req *CreateRepositoryReq
 		CopyFiles:              req.CopyFiles,
 	}
 
-	// Auto-detect GitHub provider info from git remote if not provided
-	if repository.Provider == "" && repository.LocalPath != "" {
-		if p, o, n := ResolveGitRemoteProvider(repository.LocalPath); p != "" {
-			repository.Provider = p
-			repository.ProviderOwner = o
-			repository.ProviderName = n
-		}
+	if resolveProvider {
+		resolveRepositoryProviderIdentity(repository)
 	}
 
 	if err := s.repoEntities.CreateRepository(ctx, repository); err != nil {
@@ -647,14 +682,30 @@ func (s *Service) CreateRepository(ctx context.Context, req *CreateRepositoryReq
 	return repository, nil
 }
 
+// resolveRepositoryProviderIdentity fills missing provider metadata from a local repository origin.
+func resolveRepositoryProviderIdentity(repository *models.Repository) {
+	if repository.LocalPath == "" || (repository.Provider != "" && repository.ProviderHost != "") {
+		return
+	}
+	p, h, o, n := ResolveGitRemoteProviderIdentity(repository.LocalPath)
+	if repository.Provider == "" {
+		repository.Provider = p
+	}
+	if repository.Provider != "" && (strings.HasPrefix(h, "http://") || strings.HasPrefix(h, "https://")) {
+		repository.ProviderHost = h
+		repository.ProviderOwner = o
+		repository.ProviderName = n
+	}
+}
+
 func (s *Service) GetRepository(ctx context.Context, id string) (*models.Repository, error) {
 	return s.repoEntities.GetRepository(ctx, id)
 }
 
 // GetRepositoryByProviderInfo looks up a repository by workspace and provider identity.
 // Returns nil (with nil error) when no matching repository exists.
-func (s *Service) GetRepositoryByProviderInfo(ctx context.Context, workspaceID, provider, owner, name string) (*models.Repository, error) {
-	return s.repoEntities.GetRepositoryByProviderInfo(ctx, workspaceID, provider, owner, name)
+func (s *Service) GetRepositoryByProviderInfo(ctx context.Context, workspaceID, provider, host, owner, name string) (*models.Repository, error) {
+	return s.repoEntities.GetRepositoryByProviderInfo(ctx, workspaceID, provider, normalizeProviderHost(provider, host), owner, name)
 }
 
 // FindOrCreateRepository looks up a repository by provider info, creating one if not found.
@@ -667,7 +718,12 @@ func (s *Service) GetRepositoryByProviderInfo(ctx context.Context, workspaceID, 
 // create race between snapshot and lookup, so a snapshot-miss does NOT
 // mean this call created the row.
 func (s *Service) FindOrCreateRepository(ctx context.Context, req *FindOrCreateRepositoryRequest) (*models.Repository, bool, error) {
-	existing, err := s.repoEntities.GetRepositoryByProviderInfo(ctx, req.WorkspaceID, req.Provider, req.ProviderOwner, req.ProviderName)
+	s.repoResolveMu.Lock()
+	defer s.repoResolveMu.Unlock()
+	req.ProviderHost = normalizeProviderHost(req.Provider, req.ProviderHost)
+	existing, err := s.repoEntities.GetRepositoryByProviderInfo(
+		ctx, req.WorkspaceID, req.Provider, req.ProviderHost, req.ProviderOwner, req.ProviderName,
+	)
 	if err != nil {
 		return nil, false, fmt.Errorf("lookup repository: %w", err)
 	}
@@ -684,6 +740,10 @@ func (s *Service) FindOrCreateRepository(ctx context.Context, req *FindOrCreateR
 				return nil, false, pathErr
 			}
 			existing.LocalPath = localPath
+			dirty = true
+		}
+		if existing.ProviderHost == "" && req.ProviderHost != "" {
+			existing.ProviderHost = normalizeProviderHost(req.Provider, req.ProviderHost)
 			dirty = true
 		}
 		// Backfill default_branch when the caller carries one and the existing
@@ -719,11 +779,51 @@ func (s *Service) FindOrCreateRepository(ctx context.Context, req *FindOrCreateR
 		LocalPath:      req.LocalPath,
 		Provider:       req.Provider,
 		ProviderRepoID: req.ProviderRepoID,
+		ProviderHost:   req.ProviderHost,
 		ProviderOwner:  req.ProviderOwner,
 		ProviderName:   req.ProviderName,
 		RemoteURL:      req.RemoteURL,
 		DefaultBranch:  req.DefaultBranch,
 	})
+	if createErr != nil {
+		return nil, false, createErr
+	}
+	return created, true, nil
+}
+
+// FindOrCreateRepositoryByLocalPath looks up a repository by its canonical
+// local_path within workspaceID, creating one from req if none exists.
+// Mirrors FindOrCreateRepository's provider-identity flow: the lookup and the
+// insert both happen while holding repoResolveMu, so two resolvers racing to
+// register the same not-yet-known on-disk repo (e.g. two task-creation
+// requests naming the same local_path) converge on one row instead of each
+// inserting its own. canonicalPath must already be resolved (see
+// resolveExplicitLocalRepositoryPath); pass "" when canonicalization failed
+// or was skipped, which disables the lookup and always creates — matching
+// prior behavior for that edge case, since there is no reliable identity to
+// dedupe against.
+//
+// Returns created=true only when this call inserted the new row.
+func (s *Service) FindOrCreateRepositoryByLocalPath(
+	ctx context.Context, workspaceID, canonicalPath string, req *CreateRepositoryRequest,
+) (*models.Repository, bool, error) {
+	s.repoResolveMu.Lock()
+	defer s.repoResolveMu.Unlock()
+
+	if canonicalPath != "" {
+		existing, err := s.repoEntities.GetRepositoryByLocalPath(ctx, workspaceID, canonicalPath)
+		if err != nil {
+			return nil, false, fmt.Errorf("lookup repository by local path: %w", err)
+		}
+		if existing != nil {
+			replacement, replacementCreated, replaceErr := s.replaceTaskWorktreeRepositoryMatch(ctx, workspaceID, existing)
+			if replaceErr != nil {
+				return nil, false, replaceErr
+			}
+			return replacement, replacementCreated, nil
+		}
+	}
+	created, createErr := s.CreateRepository(ctx, req)
 	if createErr != nil {
 		return nil, false, createErr
 	}
@@ -786,6 +886,9 @@ func applyRepositoryUpdates(repository *models.Repository, req *UpdateRepository
 	}
 	if req.ProviderRepoID != nil {
 		repository.ProviderRepoID = *req.ProviderRepoID
+	}
+	if req.ProviderHost != nil {
+		repository.ProviderHost = normalizeProviderHost(repository.Provider, *req.ProviderHost)
 	}
 	if req.ProviderOwner != nil {
 		repository.ProviderOwner = *req.ProviderOwner
@@ -899,7 +1002,69 @@ func (s *Service) ListRepositories(ctx context.Context, workspaceID string) ([]*
 			live = append(live, repository)
 		}
 	}
-	return live, nil
+	return dedupeRepositoriesByIdentity(live), nil
+}
+
+// repositoryIdentityKey returns a stable dedup key for repo: local_path when
+// set (a local checkout is identified by where it lives on disk), otherwise
+// the provider identity tuple when host/owner/name are all present (a
+// provider-backed repo is identified by where it lives upstream), otherwise
+// the row's own ID. A missing provider_host (legacy rows, or self-managed
+// providers we've never normalized a host for) means we cannot tell two
+// same-namespace repos on different unknown hosts apart, so those rows fail
+// closed to their own ID instead of risking a false-positive collapse.
+// Placeholder rows with neither local_path nor provider also fall back to ID
+// so they never collide with one another.
+func repositoryIdentityKey(repo *models.Repository) string {
+	if repo.LocalPath != "" {
+		return "local\x00" + repo.LocalPath
+	}
+	if repo.Provider != "" && repo.ProviderHost != "" && repo.ProviderOwner != "" && repo.ProviderName != "" {
+		return "provider\x00" + repo.Provider + "\x00" + repo.ProviderHost + "\x00" + repo.ProviderOwner + "\x00" + repo.ProviderName
+	}
+	return "id\x00" + repo.ID
+}
+
+// dedupeRepositoriesByIdentity collapses rows that share a
+// repositoryIdentityKey — e.g. two rows for the same local_path left behind
+// by a resolver race, or the same provider repo registered twice — down to
+// one. Keeps the earliest-created row per key (ties broken by the smaller
+// ID), matching the winner FindOrCreateRepository /
+// FindOrCreateRepositoryByLocalPath resolve future references to via
+// GetRepositoryByProviderInfo / GetRepositoryByLocalPath's
+// `ORDER BY created_at ASC, id ASC` — so callers do not add a
+// task_repositories link the UI would then de-list. This is a read-time
+// safety net: it hides pre-existing duplicate rows from callers without
+// touching the underlying table, so a caller that still deletes by ID (e.g.
+// DeleteRepository) must use the ID this function returned, not one filtered
+// out. Preserves the relative order of first occurrence.
+func dedupeRepositoriesByIdentity(repos []*models.Repository) []*models.Repository {
+	winners := make(map[string]*models.Repository, len(repos))
+	for _, repo := range repos {
+		if repo == nil {
+			continue
+		}
+		key := repositoryIdentityKey(repo)
+		current, ok := winners[key]
+		if !ok || repo.CreatedAt.Before(current.CreatedAt) ||
+			(repo.CreatedAt.Equal(current.CreatedAt) && repo.ID < current.ID) {
+			winners[key] = repo
+		}
+	}
+	deduped := make([]*models.Repository, 0, len(winners))
+	seen := make(map[string]struct{}, len(winners))
+	for _, repo := range repos {
+		if repo == nil {
+			continue
+		}
+		key := repositoryIdentityKey(repo)
+		if _, done := seen[key]; done {
+			continue
+		}
+		seen[key] = struct{}{}
+		deduped = append(deduped, winners[key])
+	}
+	return deduped
 }
 
 // CountActiveSessionsByRepository returns the number of agent sessions in an

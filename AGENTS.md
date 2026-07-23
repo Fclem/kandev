@@ -75,7 +75,10 @@ Every code change must include tests for new or changed logic. Backend: `*_test.
 - **Plans:** Implementation plans are generated from specs via `/plan` and committed under `docs/plans/<slug>/plan.md`, with individual sibling task files named `docs/plans/<slug>/task-<NN>-<short-slug>.md`. Specs are the living requirements; plans and task files are implementation records for the current buildout.
 
 ### Plan Implementation
-- After implementing a plan, run `make fmt` first to format code, then run `make typecheck test lint` to verify the changes. Formatting must come first because formatters may split lines, which can trigger complexity linter warnings.
+- After implementing a substantial plan, commit through active hooks, then
+  delegate `verify` with `mode=full` before push. Full mode ignores hook
+  omissions and runs `make fmt` before `make typecheck test lint`; formatting
+  comes first because it may split lines and expose complexity-linter failures.
 
 ### Observability
 - In dev mode (`KANDEV_MOCK_AGENT=true` or `debug.pprofEnabled`), `/debug/vars` exposes the stdlib expvar handler. Office provider-routing metrics live under `routing_*` (route attempts, fallbacks, parked runs, provider degraded/recovered counters). The metrics are also still emitted as structured `routing.metric.*` zap logs for human debugging.
@@ -91,12 +94,47 @@ For PR review/fixup workflows, prefer the repo helpers before manually querying 
 
 When a Kandev system message references an MCP tool that is not visible in the active tool list, use the runtime's tool discovery mechanism, such as `tool_search` when available, before falling back to a less specific workflow. Some task messaging and platform helpers are exposed on demand.
 
+### Planner and Worker Execution
+
+The user-started primary session is the planner and default architect: it owns
+clarification, first-pass investigation, architecture, specs, plans, task
+decomposition, integration judgment, and user communication. It may directly perform small scoped work
+when one clear concern touches a few localized files, has no useful isolation or
+parallelism benefit, and has quick bounded verification. Follow the applicable
+skill, protect unrelated dirty changes, and obtain delegated Spark `verify`
+after commit and before push when code, tests, or config changed. Pass the
+successful non-bypassed hook receipt so changed-scope verification skips only
+equivalent hook-covered checks; PR CI remains the authoritative full matrix.
+
+Delegate only when it has positive ROI or independent evidence is essential:
+broad/unknown exploration, substantial plan tasks, large/cross-component work,
+parallel packets, long/noisy E2E or debugging, exceptional specialist review,
+and final change-aware `verify`. Keep long PR monitoring on cheap `pr-poller`.
+Delegation is not default ceremony: weigh context reload and coordination cost.
+Do not delegate routine log/session inspection, call-path mapping, reproduction,
+waiting, or status reporting; investigate and report those directly first.
+Each delegated worker executes one bounded packet and does not spawn agents.
+The architect agent is only for a user-requested independent architecture
+second opinion. Detailed routing lives in `planner-orchestration`.
+
 ### Kandev Task Creation
 
-When creating follow-up or delegated Kandev work from an active task, use `create_task_kandev` with `parent_id: "self"` when the work is related. That preserves workspace, workflow, repository, agent profile, and executor context from the current task. For genuinely unrelated top-level tasks, do not rely on workspace defaults when the user expects continuity; explicitly preserve the current task's `agent_profile_id` / `executor_profile_id`, or ask if the intended profile is ambiguous.
+Use Kandev task/session MCP APIs only when the user explicitly asks to create or
+manage persistent Kandev platform tasks or sessions. Planner-to-worker
+delegation must use the active coding harness's native subagent tools; never use
+`create_task_kandev`, `spawn_session_kandev`, or `message_task_kandev` as a
+worker mechanism or fallback.
 
-For remediation discovered while reviewing a PR that must start after the PR
-merges, create a related subtask with `parent_id: "self"`,
+When the user explicitly requests related Kandev follow-up work, use
+`create_task_kandev` with `parent_id: "self"`. That preserves workspace,
+workflow, repository, agent profile, and executor context from the current
+task. For genuinely unrelated top-level tasks, do not rely on workspace
+defaults when the user expects continuity; explicitly preserve the current
+task's `agent_profile_id` / `executor_profile_id`, or ask if the intended
+profile is ambiguous.
+
+When the user requests a persistent remediation task discovered during PR
+review that must start after merge, create it with `parent_id: "self"`,
 `workspace_mode: "new_workspace"`, and the reviewed PR's base branch; otherwise
 a same-repository subtask inherits the reviewed branch. Set `start_agent: false`
 when the follow-up is intentionally queued until merge.
@@ -135,4 +173,4 @@ For developing in ephemeral cloud VMs (Cursor Cloud, Codex, GitHub Codespaces, e
 
 ---
 
-**Last Updated**: 2026-07-20
+**Last Updated**: 2026-07-21

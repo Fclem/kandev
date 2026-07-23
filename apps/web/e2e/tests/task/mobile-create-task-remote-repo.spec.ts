@@ -60,11 +60,12 @@ test.describe("Create task Remote repo picker on mobile", () => {
     );
   });
 
-  test("selects an Azure DevOps repository from the unified picker", async ({
+  test("selects a GitLab repository from the unified provider picker", async ({
     apiClient,
     seedData,
     testPage,
   }) => {
+    await apiClient.configureGitLab(seedData.workspaceId);
     await apiClient.mockAzureDevOpsSeed({
       authenticated: true,
       projects: [{ id: "project-1", name: "Platform", url: "https://dev.azure.com/acme/Platform" }],
@@ -88,6 +89,8 @@ test.describe("Create task Remote repo picker on mobile", () => {
     const providerTabs = testPage.getByTestId("remote-repo-provider-tabs");
     await expect(providerTabs).toBeVisible();
     await expect(providerTabs.getByRole("tab", { name: "GitHub" })).toBeVisible();
+    const gitLabTab = providerTabs.getByRole("tab", { name: "GitLab" });
+    await expect(gitLabTab).toBeVisible();
     const azureTab = providerTabs.getByRole("tab", { name: "Azure DevOps" });
     await expect(azureTab).toBeVisible();
     await testPage.getByTestId("remote-repo-popover-content").evaluate(async (element) => {
@@ -95,9 +98,11 @@ test.describe("Create task Remote repo picker on mobile", () => {
         element.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
       );
     });
-    const azureTabBox = await azureTab.boundingBox();
-    expect(azureTabBox).not.toBeNull();
-    expect(azureTabBox!.height).toBeGreaterThanOrEqual(44);
+    const tabBoxes = await Promise.all([gitLabTab.boundingBox(), azureTab.boundingBox()]);
+    for (const tabBox of tabBoxes) {
+      expect(tabBox).not.toBeNull();
+      expect(tabBox!.height).toBeGreaterThanOrEqual(44);
+    }
     const tabOverflow = await providerTabs.evaluate((element) => ({
       overflowY: getComputedStyle(element).overflowY,
       scrollHeight: element.scrollHeight,
@@ -105,16 +110,54 @@ test.describe("Create task Remote repo picker on mobile", () => {
     }));
     expect(tabOverflow.overflowY).toBe("hidden");
     expect(tabOverflow.scrollHeight).toBeLessThanOrEqual(tabOverflow.clientHeight);
-    await azureTab.click();
-    const option = testPage.getByTestId("remote-repo-option").filter({ hasText: "Platform/api" });
+    await gitLabTab.click();
+    const option = testPage.getByTestId("remote-repo-option").filter({ hasText: "kandev/sample" });
     await expect(option).toBeVisible({ timeout: 10_000 });
     await option.click();
     await expect(testPage.getByTestId("remote-repo-chip-trigger").first()).toContainText(
-      "Platform/api",
+      "kandev/sample",
     );
     const hasHorizontalOverflow = await testPage.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     );
     expect(hasHorizontalOverflow).toBe(false);
+  });
+
+  test("marks an already selected provider repository without disabling its touch selection", async ({
+    apiClient,
+    testPage,
+  }) => {
+    await apiClient.mockGitHubAddRepos("mock-user", [
+      { full_name: "mock-user/duplicate", owner: "mock-user", name: "duplicate", private: false },
+    ]);
+
+    await openRemotePicker(testPage);
+    const firstOption = testPage
+      .getByTestId("remote-repo-option")
+      .filter({ hasText: "mock-user/duplicate" });
+    await expect(firstOption).toBeVisible({ timeout: 10_000 });
+    await firstOption.tap();
+
+    await testPage.getByTestId("remote-add-row").tap();
+    await testPage.getByTestId("remote-repo-chip-trigger").nth(1).tap();
+    const duplicateOption = testPage
+      .getByTestId("remote-repo-option")
+      .filter({ hasText: "mock-user/duplicate" });
+    await expect(duplicateOption.getByTestId("already-added-repository-marker")).toBeVisible();
+
+    const [optionBox, viewport] = await Promise.all([
+      duplicateOption.boundingBox(),
+      testPage.viewportSize(),
+    ]);
+    expect(optionBox).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    expect(optionBox!.x).toBeGreaterThanOrEqual(0);
+    expect(optionBox!.x + optionBox!.width).toBeLessThanOrEqual(viewport!.width);
+    expect(optionBox!.y + optionBox!.height).toBeLessThanOrEqual(viewport!.height);
+
+    await duplicateOption.tap();
+    await expect(testPage.getByTestId("remote-repo-chip-trigger").nth(1)).toContainText(
+      "mock-user/duplicate",
+    );
   });
 });

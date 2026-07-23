@@ -19,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kandev/kandev/internal/common/httpmw"
+	"github.com/kandev/kandev/internal/entityrefs"
 	"go.uber.org/zap"
 
 	// Common packages
@@ -469,7 +470,7 @@ func startAgentInfrastructure(
 	log.Info("Initializing Orchestrator...")
 
 	orchestratorSvc, msgCreator, err := provideOrchestrator(cfg, log, dbPool, eventBus, repos.Task, services.Task, services.User,
-		lifecycleMgr, agentRegistry, services.Workflow, repos.Secrets, repoCloner)
+		lifecycleMgr, agentRegistry, services.Workflow, repos.Secrets, repoCloner, services.Prompts)
 	if err != nil {
 		log.Error("Failed to initialize orchestrator", zap.Error(err))
 		return false
@@ -517,6 +518,7 @@ func startAgentInfrastructure(
 	// orchestrator so review/issue watch events get turned into tasks.
 	if services.GitLab != nil {
 		orchestratorSvc.SetGitLabService(services.GitLab)
+		orchestratorSvc.SetGitLabCredentialResolver(services.GitLab)
 		services.GitLab.SetTaskDeleter(&taskDeleterAdapter{svc: services.Task})
 		services.GitLab.SetTaskSessionChecker(&taskSessionCheckerAdapter{repo: repos.Task})
 		glPoller := gitlabpkg.NewPoller(services.GitLab, eventBus, log)
@@ -644,10 +646,15 @@ func startGatewayAndServe(
 	// WEBSOCKET GATEWAY
 	// ============================================
 	log.Info("Initializing WebSocket Gateway...")
+	var referenceValidator entityrefs.SubmissionValidator
+	if services.Mentions != nil {
+		referenceValidator = services.Mentions.Submission
+	}
 	gateway, _, notificationCtrl, terminalSvc, err := provideGateway(
 		ctx, log, eventBus, services.Task, services.User,
 		orchestratorSvc, lifecycleMgr, agentRegistry,
-		repos.Notification, repos.Task, repos.Terminal, services.GitHub,
+		repos.Notification, repos.Task, repos.Terminal, services.GitHub, services.GitLab,
+		referenceValidator,
 		cfg.ResolvedHomeDir(),
 	)
 	if terminalSvc != nil {
@@ -714,6 +721,14 @@ func startGatewayAndServe(
 		services.Slack.SetRunner(slackRunner)
 	}
 
+	// Wire Host.InvokeUtilityAgent (ADR 0048): plugins delegate one-shot LLM
+	// calls to the utility agent selected in each plugin's configuration and
+	// runs them through the sessionless host-utility
+	// tier. Same landing point as the Slack runner — hostUtilityMgr is live.
+	if services.Plugins != nil && services.Utility != nil {
+		services.Plugins.SetUtilityAgent(pluginsUtilityAgentAdapter{svc: services.Utility}, pluginsHostUtilityAdapter{mgr: hostUtilityMgr})
+	}
+
 	if err := orchestratorSvc.Start(ctx); err != nil {
 		log.Error("Failed to start orchestrator", zap.Error(err))
 		return false
@@ -736,6 +751,7 @@ func startGatewayAndServe(
 	}
 
 	services.Task.StartAutoArchiveLoop(ctx)
+	services.Task.StartArchivedSessionReconciliationLoop(ctx)
 	services.Task.StartQuickChatExpirationLoop(ctx)
 
 	// ============================================

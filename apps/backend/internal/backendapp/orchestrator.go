@@ -28,6 +28,7 @@ import (
 	officesqlite "github.com/kandev/kandev/internal/office/repository/sqlite"
 	"github.com/kandev/kandev/internal/orchestrator"
 	"github.com/kandev/kandev/internal/orchestrator/messagequeue"
+	promptservice "github.com/kandev/kandev/internal/prompts/service"
 	"github.com/kandev/kandev/internal/repoclone"
 	"github.com/kandev/kandev/internal/secrets"
 	sentrypkg "github.com/kandev/kandev/internal/sentry"
@@ -59,6 +60,7 @@ func provideOrchestrator(
 	workflowSvc *workflowservice.Service,
 	secretStore secrets.SecretStore,
 	repoCloner *repoclone.Cloner,
+	promptSvc *promptservice.Service,
 ) (*orchestrator.Service, *messageCreatorAdapter, error) {
 	if lifecycleMgr == nil {
 		return nil, nil, errors.New("lifecycle manager is required: configure agent runtime (docker or standalone)")
@@ -120,6 +122,12 @@ func provideOrchestrator(
 	// Wire workflow step getter for prompt building
 	if workflowSvc != nil {
 		orchestratorSvc.SetWorkflowStepGetter(&orchestratorWorkflowStepGetterAdapter{svc: workflowSvc})
+	}
+
+	// Wire "@name" saved-prompt reference expansion into workflow-step prompt
+	// building.
+	if promptSvc != nil {
+		orchestratorSvc.SetPromptReferenceExpander(promptSvc)
 	}
 
 	// Wire review task creator for auto-creating tasks from review watch PRs
@@ -689,7 +697,8 @@ type repositoryResolverAdapter struct {
 func (a *repositoryResolverAdapter) ResolveForReview(
 	ctx context.Context, workspaceID, provider, owner, name, defaultBranch string,
 ) (string, string, error) {
-	existing, err := a.taskSvc.GetRepositoryByProviderInfo(ctx, workspaceID, provider, owner, name)
+	providerHost := "https://" + defaultProviderHostname(provider)
+	existing, err := a.taskSvc.GetRepositoryByProviderInfo(ctx, workspaceID, provider, providerHost, owner, name)
 	if err != nil {
 		return "", "", fmt.Errorf("lookup repository by provider info: %w", err)
 	}
@@ -711,6 +720,7 @@ func (a *repositoryResolverAdapter) ResolveForReview(
 	repo, _, err := a.taskSvc.FindOrCreateRepository(ctx, &taskservice.FindOrCreateRepositoryRequest{
 		WorkspaceID:   workspaceID,
 		Provider:      provider,
+		ProviderHost:  providerHost,
 		ProviderOwner: owner,
 		ProviderName:  name,
 		DefaultBranch: defaultBranch,
@@ -722,6 +732,17 @@ func (a *repositoryResolverAdapter) ResolveForReview(
 
 	baseBranch := a.resolveReviewBaseBranch(ctx, repo, localPath, defaultBranch)
 	return repo.ID, baseBranch, nil
+}
+
+func defaultProviderHostname(provider string) string {
+	switch strings.ToLower(provider) {
+	case "gitlab":
+		return "gitlab.com"
+	case "bitbucket":
+		return "bitbucket.org"
+	default:
+		return "github.com"
+	}
 }
 
 func (a *repositoryResolverAdapter) resolveReviewBaseBranch(

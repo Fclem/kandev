@@ -29,6 +29,9 @@ const defaultPriority = "medium"
 const (
 	providerAzureDevOps = "azure_devops"
 	providerGitHub      = "github"
+	providerGitLab      = "gitlab"
+	protocolHTTP        = "http"
+	protocolHTTPS       = "https"
 )
 
 const defaultKandevTaskWorktreePathSegment = "/.kandev/tasks/"
@@ -389,7 +392,7 @@ func (s *Service) createTaskRepositories(ctx context.Context, taskID, workspaceI
 // empty. Best-effort: lookup failures degrade to the next fallback.
 func (s *Service) repoDisplayLabel(ctx context.Context, repoInput TaskRepositoryInput, repositoryID string) string {
 	if remoteURL := effectiveRemoteURL(repoInput); remoteURL != "" {
-		if _, owner, name, _, err := parseRemoteRepositoryURL(remoteURL); err == nil {
+		if _, owner, name, _, err := parseRemoteRepositoryURL(remoteURL, repoInput.Provider); err == nil {
 			return owner + "/" + name
 		}
 	}
@@ -497,6 +500,7 @@ func (s *Service) safeRepositoryIDForTaskWorktree(ctx context.Context, workspace
 		SourceType:     sourceTypeProvider,
 		Provider:       repo.Provider,
 		ProviderRepoID: repo.ProviderRepoID,
+		ProviderHost:   repo.ProviderHost,
 		ProviderOwner:  repo.ProviderOwner,
 		ProviderName:   repo.ProviderName,
 		DefaultBranch:  repo.DefaultBranch,
@@ -565,6 +569,8 @@ func (s *Service) findSafeReplacementRepository(ctx context.Context, workspaceID
 
 func sameProviderIdentity(left, right *models.Repository) bool {
 	return left.Provider == right.Provider &&
+		normalizeProviderHost(left.Provider, left.ProviderHost) ==
+			normalizeProviderHost(right.Provider, right.ProviderHost) &&
 		left.ProviderOwner == right.ProviderOwner &&
 		left.ProviderName == right.ProviderName
 }
@@ -606,9 +612,12 @@ func pathAtOrInsideRoot(path, root string) bool {
 }
 
 // resolveRepoInputLocal handles the LocalPath branch of resolveRepoInput.
-// Looks the path up in the workspace snapshot; on miss, calls
-// CreateRepository (and reports created=true). Extracted to keep
-// resolveRepoInput inside the cyclomatic-complexity budget.
+// Looks the path up in the workspace snapshot first; on miss, delegates to
+// FindOrCreateRepositoryByLocalPath, which re-checks the canonical path
+// against the database immediately before inserting (see repoResolveMu) so a
+// second resolver racing this one onto the same on-disk repo reuses its row
+// instead of creating a sibling duplicate. Extracted to keep resolveRepoInput
+// inside the cyclomatic-complexity budget.
 func (s *Service) resolveRepoInputLocal(
 	ctx context.Context, workspaceID string, repoInput TaskRepositoryInput,
 	repoByPath map[string]*models.Repository, baseBranch string,
@@ -645,22 +654,30 @@ func (s *Service) resolveRepoInputLocal(
 				defaultBranch = probedBranch
 			}
 		}
-		createdRepo, createErr := s.CreateRepository(ctx, &CreateRepositoryRequest{
+		// identityPath is left empty when canonicalization failed: there is no
+		// reliable identity to dedupe against in that case, so
+		// FindOrCreateRepositoryByLocalPath always creates — same as prior
+		// behavior for that edge case.
+		var identityPath string
+		if pathErr == nil {
+			identityPath = canonicalPath
+		}
+		resolved, wasCreated, resolveErr := s.FindOrCreateRepositoryByLocalPath(ctx, workspaceID, identityPath, &CreateRepositoryRequest{
 			WorkspaceID:   workspaceID,
 			Name:          name,
 			SourceType:    "local",
 			LocalPath:     repoInput.LocalPath,
 			DefaultBranch: defaultBranch,
 		})
-		if createErr != nil {
-			return "", "", false, createErr
+		if resolveErr != nil {
+			return "", "", false, resolveErr
 		}
-		repo = createdRepo
+		repo = resolved
 		if repoByPath != nil {
 			repoByPath[repoInput.LocalPath] = repo
 			repoByPath[repo.LocalPath] = repo
 		}
-		created = true
+		created = wasCreated
 	} else {
 		replacement, replacementCreated, replaceErr := s.replaceTaskWorktreeRepositoryMatch(ctx, workspaceID, repo)
 		if replaceErr != nil {
@@ -683,7 +700,9 @@ func (s *Service) resolveRepoInputLocal(
 func (s *Service) resolveRepoInputRemote(
 	ctx context.Context, workspaceID string, repoInput TaskRepositoryInput, baseBranch string,
 ) (string, string, bool, error) {
-	provider, owner, name, canonicalURL, parseErr := parseRemoteRepositoryURL(effectiveRemoteURL(repoInput))
+	provider, owner, name, canonicalURL, parseErr := parseRemoteRepositoryURL(
+		effectiveRemoteURL(repoInput), repoInput.Provider,
+	)
 	if parseErr != nil {
 		return "", "", false, parseErr
 	}
@@ -698,10 +717,12 @@ func (s *Service) resolveRepoInputRemote(
 	if defaultBranch == "" && repoInput.ResolveProviderDefaults && s.providerProber != nil && provider == providerGitHub {
 		defaultBranch = s.probeProviderDefaultBranchIfMissing(ctx, workspaceID, provider, owner, name)
 	}
+	providerHost := remoteProviderHost(provider, canonicalURL)
 	repo, repoCreated, createErr := s.FindOrCreateRepository(ctx, &FindOrCreateRepositoryRequest{
 		WorkspaceID:    workspaceID,
 		Provider:       provider,
 		ProviderRepoID: repoInput.ProviderRepoID,
+		ProviderHost:   providerHost,
 		ProviderOwner:  owner,
 		ProviderName:   name,
 		RemoteURL:      canonicalURL,
@@ -747,23 +768,28 @@ func effectiveRemoteURL(input TaskRepositoryInput) string {
 	return strings.TrimSpace(input.GitHubURL)
 }
 
-func parseRemoteRepositoryURL(raw string) (provider, owner, name, canonical string, err error) {
+func parseRemoteRepositoryURL(raw, providerHint string) (provider, owner, name, canonical string, err error) {
 	parsed, sshStyle, parseErr := normalizeRemoteRepositoryURL(raw)
 	if parseErr != nil {
 		return "", "", "", "", parseErr
 	}
 	host := strings.ToLower(parsed.Hostname())
+	originHost := strings.ToLower(parsed.Host)
 	parts := strings.Split(strings.Trim(strings.TrimSuffix(parsed.Path, ".git"), "/"), "/")
 	switch host {
 	case "github.com", "www.github.com":
 		return parseGitHubRemote(host, parts, sshStyle)
 	case "gitlab.com", "www.gitlab.com":
-		return parseGitLabRemote(host, parts, sshStyle)
+		return parseGitLabRemote(parsed.Scheme, strings.TrimPrefix(originHost, "www."), parts, sshStyle)
 	case "dev.azure.com":
 		return parseAzureHTTPSRemote(parts)
 	case "ssh.dev.azure.com":
 		return parseAzureSSHRemote(parts)
 	default:
+		if strings.EqualFold(providerHint, providerGitLab) &&
+			(parsed.Scheme == protocolHTTP || parsed.Scheme == protocolHTTPS) {
+			return parseGitLabRemote(parsed.Scheme, originHost, parts, false)
+		}
 		return "", "", "", "", fmt.Errorf("unsupported remote repository host: %s", host)
 	}
 }
@@ -800,7 +826,7 @@ func parseGitHubRemote(host string, parts []string, sshStyle bool) (string, stri
 	return providerGitHub, owner, name, canonical, nil
 }
 
-func parseGitLabRemote(host string, parts []string, sshStyle bool) (string, string, string, string, error) {
+func parseGitLabRemote(scheme, host string, parts []string, sshStyle bool) (string, string, string, string, error) {
 	for index, part := range parts {
 		if part == "-" {
 			parts = parts[:index]
@@ -814,11 +840,31 @@ func parseGitLabRemote(host string, parts []string, sshStyle bool) (string, stri
 	if owner == "" || name == "" {
 		return "", "", "", "", fmt.Errorf("remote repository owner and name are required")
 	}
-	canonical := fmt.Sprintf("https://gitlab.com/%s/%s.git", owner, name)
+	if scheme != protocolHTTP && scheme != protocolHTTPS {
+		scheme = protocolHTTPS
+	}
+	canonical := fmt.Sprintf("%s://%s/%s/%s.git", scheme, host, owner, name)
 	if sshStyle {
 		canonical = fmt.Sprintf("git@%s:%s/%s.git", host, owner, name)
 	}
-	return "gitlab", owner, name, canonical, nil
+	return providerGitLab, owner, name, canonical, nil
+}
+
+func remoteProviderHost(provider, remoteURL string) string {
+	if provider == providerGitHub {
+		return githubProviderHost
+	}
+	if !strings.EqualFold(provider, providerGitLab) {
+		return ""
+	}
+	origin, _ := ParseGitRemoteIdentity(remoteURL)
+	if strings.HasPrefix(origin, protocolHTTP+"://") || strings.HasPrefix(origin, protocolHTTPS+"://") {
+		return origin
+	}
+	if sshHost := strings.TrimPrefix(origin, "ssh://"); sshHost != origin && sshHost != "" {
+		return protocolHTTPS + "://" + sshHost
+	}
+	return ""
 }
 
 func parseAzureHTTPSRemote(parts []string) (string, string, string, string, error) {
@@ -850,7 +896,7 @@ func parseAzureSSHRemote(parts []string) (string, string, string, string, error)
 func (s *Service) probeProviderDefaultBranchIfMissing(
 	ctx context.Context, workspaceID, provider, owner, name string,
 ) string {
-	existing, lookupErr := s.repoEntities.GetRepositoryByProviderInfo(ctx, workspaceID, provider, owner, name)
+	existing, lookupErr := s.repoEntities.GetRepositoryByProviderInfo(ctx, workspaceID, provider, githubProviderHost, owner, name)
 	if lookupErr != nil {
 		s.logger.Warn("resolveRepoInput: failed to look up existing repo before probe",
 			zap.String("provider", provider),
@@ -873,7 +919,7 @@ func (s *Service) probeProviderDefaultBranchIfMissing(
 // Supports: https://github.com/owner/repo, github.com/owner/repo,
 // https://github.com/owner/repo.git, with optional trailing slashes.
 func parseGitHubRepoURL(rawURL string) (owner, name string, err error) {
-	provider, owner, name, _, parseErr := parseRemoteRepositoryURL(rawURL)
+	provider, owner, name, _, parseErr := parseRemoteRepositoryURL(rawURL, "")
 	if parseErr != nil {
 		return "", "", parseErr
 	}
@@ -1141,34 +1187,34 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 	// that raced in after the snapshot and must clean itself up.
 	s.registerTaskRuntimeStopOwners(stopTargets, true)
 
-	// 3b. Finalize active sessions in the DB. The async cleanup below tears down
-	// the agent processes; this records the terminal session state, which
-	// process teardown does not persist on its own.
-	if reaped, rerr := s.sessions.CancelActiveTaskSessionsByTaskID(ctx, id, "task archived"); rerr != nil {
-		s.logger.Warn("failed to reap active sessions on archive",
-			zap.String("task_id", id),
-			zap.Error(rerr))
-	} else if reaped > 0 {
-		s.logger.Info("reaped active sessions on archive",
-			zap.String("task_id", id),
-			zap.Int64("count", reaped))
-	}
+	// archived_at has committed above: the rest of this function only
+	// reports on that already-durable state (cancelling sessions, re-reading
+	// the task, publishing task.updated) or kicks off cleanup that already
+	// runs detached from ctx. A client disconnecting right after the write
+	// above must not stop any of that from finishing and reaching
+	// event-driven clients that don't share the archiving caller's
+	// connection.
+	finalizeCtx := context.WithoutCancel(ctx)
+
+	// 3b. Finalize active sessions in the DB and publish their cancellation
+	// events. See finalizeCancelledSessions for the detailed rationale.
+	s.finalizeCancelledSessions(finalizeCtx, id, activeSessions)
 
 	// 4. Re-read task for updated archived_at field
-	task, err = s.tasks.GetTask(ctx, id)
+	task, err = s.tasks.GetTask(finalizeCtx, id)
 	if err != nil {
 		return err
 	}
 
 	// 5. Publish task.updated event so frontend removes from board
-	s.publishTaskEvent(ctx, events.TaskUpdated, task, nil)
+	s.publishTaskEvent(finalizeCtx, events.TaskUpdated, task, nil)
 	s.logger.Info("task archived",
 		zap.String("task_id", id),
 		zap.Duration("duration", time.Since(start)))
 
 	// 6. Background: Stop agents and cleanup worktrees
 	if cleanupJob != nil {
-		if err := s.StartPreparedTaskResourceCleanup(ctx, cleanupJob.OperationID); err != nil {
+		if err := s.StartPreparedTaskResourceCleanup(finalizeCtx, cleanupJob.OperationID); err != nil {
 			s.logger.Warn("start committed archive resource cleanup",
 				zap.String("job_id", cleanupJob.ID), zap.String("task_id", id), zap.Error(err))
 		}
@@ -1178,6 +1224,69 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// finalizeCancelledSessions finalizes an archived task's active sessions in
+// the DB and publishes a session.state_changed event for each one actually
+// cancelled. The async cleanup that follows tears down the agent processes;
+// this records the terminal session state, which process teardown does not
+// persist on its own. The DB write alone is invisible to any client cache
+// (e.g. an Office task list's "is running" indicator) that's kept fresh
+// exclusively by that event, and would otherwise show a live spinner
+// forever after archive.
+//
+// CancelActiveTaskSessionsByTaskID is bounded by its own internal 10s
+// timeout, so a single attempt can time out under SQLite writer contention
+// alone — with archived_at already committed by the caller, that would
+// silently leave this task's sessions stuck in an active DB state forever,
+// since nothing else ever re-attempts the cancellation and no
+// session.state_changed event is delivered to clear a client's running
+// indicator. Retrying a small, fixed number of times — each attempt getting
+// its own fresh 10s budget from the repository — meaningfully shrinks that
+// window without making it unbounded. This is deliberately NOT a background
+// reconciliation/sweep system, just closing the immediate race; if every
+// attempt still fails, ArchiveTask has already committed archived_at, so
+// this remains best-effort cleanup and is not a reason to fail the archive.
+func (s *Service) finalizeCancelledSessions(ctx context.Context, taskID string, activeSessions []*models.TaskSession) {
+	const maxCancelAttempts = 3
+	const cancelRetryBackoff = 250 * time.Millisecond
+
+	var cancelledSessions []*models.TaskSession
+	var cancelErr error
+	for attempt := 1; attempt <= maxCancelAttempts; attempt++ {
+		cancelledSessions, cancelErr = s.sessions.CancelActiveTaskSessionsByTaskID(ctx, taskID, models.SessionArchiveCancelReason)
+		if cancelErr == nil {
+			break
+		}
+		if attempt < maxCancelAttempts {
+			time.Sleep(cancelRetryBackoff)
+		}
+	}
+	if cancelErr != nil {
+		s.logger.Error("failed to reap active sessions on archive after retries",
+			zap.String("task_id", taskID),
+			zap.Int("attempts", maxCancelAttempts),
+			zap.Error(cancelErr))
+		return
+	}
+	if len(cancelledSessions) == 0 {
+		return
+	}
+	s.logger.Info("reaped active sessions on archive",
+		zap.String("task_id", taskID),
+		zap.Int("count", len(cancelledSessions)))
+	// Detach from ctx via WithoutCancel: the DB write above already
+	// committed on a detached context, so a client disconnect here must
+	// not also suppress the event publish below — event-driven clients
+	// need session.state_changed regardless of whether the archiving
+	// caller is still connected.
+	// Deliberately left unbounded (no timeout) here: publishSessionsCancelled
+	// gives each session in cancelledSessions its own independent 10s
+	// deadline around its Publish call, so one slow synchronous subscriber
+	// can no longer consume a shared batch-wide budget and starve the
+	// events for sessions later in the loop.
+	detachedCtx := context.WithoutCancel(ctx)
+	s.publishSessionsCancelled(detachedCtx, taskID, activeSessions, cancelledSessions, models.SessionArchiveCancelReason)
 }
 
 func (s *Service) registerTaskRuntimeStopOwners(stopTargets []taskStopTarget, force bool) {

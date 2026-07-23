@@ -72,8 +72,13 @@ export const defaultUIState: UISliceState = {
   diffs: { files: [] },
   connection: { status: "disconnected", error: null },
   mobileKanban: { activeColumnIndex: 0, isMenuOpen: false, isSearchOpen: false },
-  mobileSession: { activePanelBySessionId: {}, isTaskSwitcherOpen: false },
+  mobileSession: {
+    activePanelBySessionId: {},
+    reviewMRKeyBySessionId: {},
+    isTaskSwitcherOpen: false,
+  },
   chatInput: { planModeBySessionId: {} },
+  reviewPRSelection: { selectedKeyByTaskId: {} },
   documentPanel: { activeDocumentBySessionId: {} },
   systemHealth: { issues: [], checks: [], healthy: true, loaded: false, loading: false },
   quickChat: { isOpen: false, sessions: [], activeSessionId: null },
@@ -163,6 +168,18 @@ function buildMobileActions(set: ImmerSet) {
     ) =>
       set((draft) => {
         draft.mobileSession.activePanelBySessionId[sessionId] = panel;
+      }),
+    setMobileSessionReview: (sessionId: string, mrKey: string | null) =>
+      set((draft) => {
+        if (mrKey) {
+          draft.mobileSession.reviewMRKeyBySessionId[sessionId] = mrKey;
+          draft.mobileSession.activePanelBySessionId[sessionId] = "review";
+          return;
+        }
+        delete draft.mobileSession.reviewMRKeyBySessionId[sessionId];
+        if (draft.mobileSession.activePanelBySessionId[sessionId] === "review") {
+          draft.mobileSession.activePanelBySessionId[sessionId] = "chat";
+        }
       }),
     setMobileSessionTaskSwitcherOpen: (open: boolean) =>
       set((draft) => {
@@ -392,6 +409,10 @@ export const createUISlice: StateCreator<UISlice, [["zustand/immer", never]], []
   setPlanMode: (sessionId, enabled) =>
     set((draft) => {
       draft.chatInput.planModeBySessionId[sessionId] = enabled;
+    }),
+  setReviewPRSelection: (taskId, selectedKey) =>
+    set((draft) => {
+      draft.reviewPRSelection.selectedKeyByTaskId[taskId] = selectedKey;
     }),
   setActiveDocument: (sessionId, doc) =>
     set((draft) => {

@@ -136,24 +136,30 @@ function useAutoScroll(
 ) {
   const isNearBottomRef = useRef(true);
   const prevIsWorkingRef = useRef(isWorking);
+  const isNavigationBusyRef = useRef(isNavigationBusy);
+  isNavigationBusyRef.current = isNavigationBusy;
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const onScroll = () => {
+      if (isNavigationBusyRef.current) {
+        isNearBottomRef.current = false;
+        return;
+      }
       isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, [scrollRef]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isNavigationBusy) isNearBottomRef.current = false;
   }, [isNavigationBusy]);
 
   // When isWorking transitions to true, force scroll to bottom
   useEffect(() => {
-    if (!isNavigationBusy && isWorking && !prevIsWorkingRef.current) {
+    if (!isNavigationBusyRef.current && isWorking && !prevIsWorkingRef.current) {
       const el = scrollRef.current;
       if (el) {
         el.scrollTop = el.scrollHeight;
@@ -161,18 +167,18 @@ function useAutoScroll(
       }
     }
     prevIsWorkingRef.current = isWorking;
-  }, [isNavigationBusy, isWorking, scrollRef]);
+  }, [isWorking, scrollRef]);
 
   // Auto-scroll on new messages if near bottom
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (!el || isNavigationBusy) return;
+    if (!el || isNavigationBusyRef.current) return;
     // Skip auto-scroll when a layout rebuild scroll restore is pending
     if (useDockviewStore.getState().pendingChatScrollTop !== null) return;
     if (isNearBottomRef.current) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [isNavigationBusy, messages, scrollRef]);
+  }, [messages, scrollRef]);
 }
 
 const NAVIGATION_SETTLE_ATTEMPTS = 4;

@@ -115,7 +115,7 @@ describe("NativeMessageList user navigation", () => {
     expect(scrollOwner.scrollTop).toBe(120);
   });
 
-  it("does not follow streaming messages while user navigation is active", () => {
+  it("does not follow streaming messages during or immediately after user navigation", () => {
     const initialProps = props();
     const { rerender } = render(<NativeMessageList {...initialProps} />);
     const scrollOwner = screen.getByTestId("native-scroll-owner");
@@ -132,6 +132,17 @@ describe("NativeMessageList user navigation", () => {
       id: "agent-1",
       author_type: "agent",
     } as Message;
+    rerender(
+      <NativeMessageList
+        {...initialProps}
+        messages={[...initialProps.messages, streamedMessage]}
+      />,
+    );
+
+    expect(scrollOwner.scrollTop).toBe(850);
+
+    scrollOwner.dispatchEvent(new Event("scroll"));
+    navigation.isBusy = false;
     rerender(
       <NativeMessageList
         {...initialProps}

@@ -10,6 +10,37 @@ import {
 } from "./user-message-navigation-helpers";
 
 test.describe("User message navigation on mobile", () => {
+  test("keeps controls visible and touch-sized on a coarse-pointer tablet", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    test.setTimeout(180_000);
+    await testPage.setViewportSize({ width: 768, height: 851 });
+    expect(
+      await testPage.evaluate(
+        () => window.innerWidth >= 640 && matchMedia("(pointer: coarse)").matches,
+      ),
+    ).toBe(true);
+
+    const { taskId } = await seedLongUserMessageHistory(apiClient, seedData);
+    const session = new SessionPage(testPage);
+    await openLongHistory(testPage, session, taskId);
+
+    const currentPrompt = session.userMessageContaining(CURRENT_USER_PROMPT);
+    const previous = session.previousUserMessageButton(currentPrompt);
+    const next = session.nextUserMessageButton(currentPrompt);
+    await expect(currentPrompt.getByTestId("message-actions")).toHaveCSS("opacity", "1");
+
+    const [previousBox, nextBox] = await Promise.all([previous.boundingBox(), next.boundingBox()]);
+    expect(previousBox).not.toBeNull();
+    expect(nextBox).not.toBeNull();
+    expect(previousBox!.width).toBeGreaterThanOrEqual(44);
+    expect(previousBox!.height).toBeGreaterThanOrEqual(44);
+    expect(nextBox!.width).toBeGreaterThanOrEqual(44);
+    expect(nextBox!.height).toBeGreaterThanOrEqual(44);
+  });
+
   test("keeps touch controls visible and navigates across unloaded history", async ({
     testPage,
     apiClient,

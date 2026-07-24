@@ -31,9 +31,14 @@ import {
   DrawerTrigger,
 } from "@kandev/ui/drawer";
 import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
+import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 
 const ACTION_BUTTON_SIZE = "h-5 w-5 p-1";
 const ACTION_BUTTON_HOVER = "hover:bg-muted rounded";
+
+function shouldCompactNavigation(isFinePointer: boolean, isMobile: boolean): boolean {
+  return isFinePointer && !isMobile;
+}
 const ACTION_BUTTON_TRANSITION = "transition-colors duration-200";
 
 type MessageActionsProps = {
@@ -60,11 +65,13 @@ function NavigationButton({
   direction,
   disabled,
   isBusy,
+  compact,
   onClick,
 }: {
   direction: "previous" | "next";
   disabled: boolean;
   isBusy: boolean;
+  compact: boolean;
   onClick: () => void;
 }) {
   const isPrevious = direction === "previous";
@@ -81,7 +88,10 @@ function NavigationButton({
       aria-label={label}
       aria-busy={isBusy || undefined}
       title={label}
-      className="h-11 w-11 cursor-pointer rounded p-3 transition-colors duration-200 hover:bg-muted disabled:cursor-default disabled:opacity-35 sm:h-5 sm:w-5 sm:p-1"
+      className={cn(
+        "h-11 w-11 shrink-0 cursor-pointer rounded p-3 transition-colors duration-200 hover:bg-muted disabled:cursor-default disabled:opacity-35",
+        compact && "h-5 w-5 p-1",
+      )}
     >
       <Icon className="h-full w-full" />
     </button>
@@ -264,6 +274,8 @@ export function MessageActions({
   navigation,
 }: MessageActionsProps) {
   const { copied, copy } = useCopyToClipboard();
+  const { isFinePointer, isMobile } = useResponsiveBreakpoint();
+  const compactNavigation = shouldCompactNavigation(isFinePointer, isMobile);
   const { turn, usageMultiplier } = useAppStore(
     useShallow((state) => {
       const turnId = message.turn_id;
@@ -290,7 +302,10 @@ export function MessageActions({
   return (
     <div
       data-testid="message-actions"
-      className="mt-2 flex items-center gap-2 opacity-100 transition-opacity focus-within:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+      className={cn(
+        "mt-2 flex items-center gap-2 opacity-100 transition-opacity focus-within:opacity-100",
+        { "opacity-0 group-hover:opacity-100": compactNavigation },
+      )}
     >
       {showCopy && <CopyButton copied={copied} onCopy={handleCopy} />}
       {showRawToggle && onToggleRaw && (
@@ -307,12 +322,14 @@ export function MessageActions({
             direction="previous"
             disabled={navigation.isBusy || !navigation.canNavigatePrevious}
             isBusy={navigation.isBusy}
+            compact={compactNavigation}
             onClick={navigation.onPrevious}
           />
           <NavigationButton
             direction="next"
             disabled={navigation.isBusy || !navigation.canNavigateNext}
             isBusy={navigation.isBusy}
+            compact={compactNavigation}
             onClick={navigation.onNext}
           />
         </>

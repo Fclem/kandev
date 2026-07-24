@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { listTaskSessionMessages } from "@/lib/api";
 import { useAppStore } from "@/components/state-provider";
 import { createDebugLogger } from "@/lib/debug/log";
 
 const debug = createDebugLogger("messages:lazyload");
+const inFlightRequestsBySession = new Map<string, Promise<number>>();
 
 function describeSkip(args: { sessionId: string | null; hasMore: boolean }): string {
   if (!args.sessionId) return "no-session";
@@ -66,21 +67,32 @@ export function useLazyLoadMessages(sessionId: string | null) {
   );
 
   // Store current values in refs to avoid recreating loadMore on every state change
-  const stateRef = useRef({ hasMore, oldestCursor, isLoading });
-  const inFlightRef = useRef<Promise<number> | null>(null);
-  useEffect(() => {
-    stateRef.current = { hasMore, oldestCursor, isLoading };
-  }, [hasMore, oldestCursor, isLoading]);
+  const stateRef = useRef({ sessionId, hasMore, oldestCursor, isLoading });
+  useLayoutEffect(() => {
+    stateRef.current = { sessionId, hasMore, oldestCursor, isLoading };
+  }, [sessionId, hasMore, oldestCursor, isLoading]);
 
   const prependMessages = useAppStore((state) => state.prependMessages);
   const setMessagesMetadata = useAppStore((state) => state.setMessagesMetadata);
 
   // Stable loadMore - only depends on sessionId and store actions
   const loadMore = useCallback(() => {
-    if (inFlightRef.current) return inFlightRef.current;
+    if (!sessionId) {
+      debug("loadMore: skipped", {
+        sessionId,
+        reason: describeSkip({ sessionId, hasMore: stateRef.current.hasMore }),
+        hasMore: stateRef.current.hasMore,
+        oldestCursor: stateRef.current.oldestCursor,
+      });
+      return Promise.resolve(0);
+    }
+
+    const inFlightRequest = inFlightRequestsBySession.get(sessionId);
+    if (inFlightRequest) return inFlightRequest;
+
     const { hasMore, oldestCursor } = stateRef.current;
 
-    if (!sessionId || !hasMore || !oldestCursor) {
+    if (!hasMore || !oldestCursor) {
       debug("loadMore: skipped", {
         sessionId,
         reason: describeSkip({ sessionId, hasMore }),
@@ -104,7 +116,7 @@ export function useLazyLoadMessages(sessionId: string | null) {
         });
         const orderedMessages = [...(response.messages ?? [])].reverse();
         // After reversing, orderedMessages[0] is the oldest message in this batch
-        const newOldestCursor = orderedMessages[0]?.id ?? null;
+        const newOldestCursor = orderedMessages[0]?.id ?? (response.has_more ? oldestCursor : null);
         logLoadMoreResponse({
           sessionId,
           requestedBefore: oldestCursor,
@@ -114,11 +126,14 @@ export function useLazyLoadMessages(sessionId: string | null) {
         });
         // Sync ref immediately so the next intersection callback sees correct state
         // (the useEffect sync may not have run yet between store update and next observer fire)
-        stateRef.current = {
-          hasMore: response.has_more,
-          oldestCursor: newOldestCursor,
-          isLoading: false,
-        };
+        if (stateRef.current.sessionId === sessionId) {
+          stateRef.current = {
+            sessionId,
+            hasMore: response.has_more,
+            oldestCursor: newOldestCursor,
+            isLoading: false,
+          };
+        }
         prependMessages(sessionId, orderedMessages, {
           hasMore: response.has_more,
           oldestCursor: newOldestCursor,
@@ -127,14 +142,16 @@ export function useLazyLoadMessages(sessionId: string | null) {
       } catch (error) {
         console.error("[useLazyLoadMessages] Error loading messages:", error);
         debug("loadMore: error", { sessionId, error });
-        stateRef.current.isLoading = false;
+        if (stateRef.current.sessionId === sessionId) stateRef.current.isLoading = false;
         setMessagesMetadata(sessionId, { isLoading: false });
         return 0;
       }
     })();
-    inFlightRef.current = request;
+    inFlightRequestsBySession.set(sessionId, request);
     void request.finally(() => {
-      if (inFlightRef.current === request) inFlightRef.current = null;
+      if (inFlightRequestsBySession.get(sessionId) === request) {
+        inFlightRequestsBySession.delete(sessionId);
+      }
     });
     return request;
   }, [sessionId, prependMessages, setMessagesMetadata]);

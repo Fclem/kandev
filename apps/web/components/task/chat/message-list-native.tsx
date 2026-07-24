@@ -132,6 +132,7 @@ function useAutoScroll(
   scrollRef: React.RefObject<HTMLDivElement | null>,
   messages: Message[],
   isWorking: boolean,
+  isNavigationBusy: boolean,
 ) {
   const isNearBottomRef = useRef(true);
   const prevIsWorkingRef = useRef(isWorking);
@@ -146,9 +147,13 @@ function useAutoScroll(
     return () => el.removeEventListener("scroll", onScroll);
   }, [scrollRef]);
 
+  useEffect(() => {
+    if (isNavigationBusy) isNearBottomRef.current = false;
+  }, [isNavigationBusy]);
+
   // When isWorking transitions to true, force scroll to bottom
   useEffect(() => {
-    if (isWorking && !prevIsWorkingRef.current) {
+    if (!isNavigationBusy && isWorking && !prevIsWorkingRef.current) {
       const el = scrollRef.current;
       if (el) {
         el.scrollTop = el.scrollHeight;
@@ -156,18 +161,18 @@ function useAutoScroll(
       }
     }
     prevIsWorkingRef.current = isWorking;
-  }, [isWorking, scrollRef]);
+  }, [isNavigationBusy, isWorking, scrollRef]);
 
   // Auto-scroll on new messages if near bottom
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el || isNavigationBusy) return;
     // Skip auto-scroll when a layout rebuild scroll restore is pending
     if (useDockviewStore.getState().pendingChatScrollTop !== null) return;
     if (isNearBottomRef.current) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, scrollRef]);
+  }, [isNavigationBusy, messages, scrollRef]);
 }
 
 const NAVIGATION_SETTLE_ATTEMPTS = 4;
@@ -289,7 +294,7 @@ export const NativeMessageList = memo(function NativeMessageList({
 
   useScrollPositionOnPrepend(scrollRef, items.length);
   const sentinelRef = useLazyLoadSentinel(scrollRef, hasMore, isLoadingMore, loadMore);
-  useAutoScroll(scrollRef, messages, isWorking);
+  useAutoScroll(scrollRef, messages, isWorking, navigation.isBusy);
   useInitialScrollToBottom(scrollRef, items.length);
 
   return (

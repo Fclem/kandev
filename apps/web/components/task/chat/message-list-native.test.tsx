@@ -7,6 +7,7 @@ import type { Message } from "@/lib/types/http";
 const navigation = vi.hoisted(() => ({
   goPrevious: vi.fn(),
   goNext: vi.fn(),
+  isBusy: false,
   options: null as null | { navigateTo: (id: string) => boolean | Promise<boolean> },
 }));
 
@@ -19,7 +20,7 @@ vi.mock("@/hooks/use-message-navigation", () => ({
       userMessageIds: ["user-1"],
       canNavigatePrevious: vi.fn(() => true),
       canNavigateNext: vi.fn(() => false),
-      isBusy: false,
+      isBusy: navigation.isBusy,
       goPrevious: navigation.goPrevious,
       goNext: navigation.goNext,
     };
@@ -51,7 +52,10 @@ class IntersectionObserverStub {
   disconnect() {}
 }
 vi.stubGlobal("IntersectionObserver", IntersectionObserverStub);
-afterEach(cleanup);
+afterEach(() => {
+  navigation.isBusy = false;
+  cleanup();
+});
 
 import { NativeMessageList } from "./message-list-native";
 
@@ -95,5 +99,46 @@ describe("NativeMessageList user navigation", () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
     expect(destination.classList.contains("search-flash")).toBe(true);
     vi.useRealTimers();
+  });
+
+  it("restores the scroll position when the destination does not settle", async () => {
+    const { container } = render(<NativeMessageList {...props()} />);
+    const scrollOwner = screen.getByTestId("native-scroll-owner");
+    scrollOwner.scrollTop = 120;
+    container
+      .querySelector<HTMLElement>('[data-user-message-id="user-1"]')
+      ?.removeAttribute("data-user-message-id");
+
+    const didNavigate = await navigation.options?.navigateTo("user-1");
+
+    expect(didNavigate).toBe(false);
+    expect(scrollOwner.scrollTop).toBe(120);
+  });
+
+  it("does not follow streaming messages while user navigation is active", () => {
+    const initialProps = props();
+    const { rerender } = render(<NativeMessageList {...initialProps} />);
+    const scrollOwner = screen.getByTestId("native-scroll-owner");
+    Object.defineProperties(scrollOwner, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 100 },
+    });
+    scrollOwner.scrollTop = 850;
+    scrollOwner.dispatchEvent(new Event("scroll"));
+    navigation.isBusy = true;
+
+    const streamedMessage = {
+      ...initialProps.messages[0],
+      id: "agent-1",
+      author_type: "agent",
+    } as Message;
+    rerender(
+      <NativeMessageList
+        {...initialProps}
+        messages={[...initialProps.messages, streamedMessage]}
+      />,
+    );
+
+    expect(scrollOwner.scrollTop).toBe(850);
   });
 });

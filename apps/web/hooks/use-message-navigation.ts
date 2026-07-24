@@ -213,12 +213,15 @@ export function useUserMessageNavigation({
     (messageId: string) => runNextNavigation(runtimeRef.current, messageId),
     [],
   );
-  return {
-    userMessageIds,
-    canNavigatePrevious,
-    canNavigateNext,
-    isBusy,
-    goPrevious,
-    goNext,
-  };
+  return useMemo(
+    () => ({
+      userMessageIds,
+      canNavigatePrevious,
+      canNavigateNext,
+      isBusy,
+      goPrevious,
+      goNext,
+    }),
+    [userMessageIds, canNavigatePrevious, canNavigateNext, isBusy, goPrevious, goNext],
+  );
 }

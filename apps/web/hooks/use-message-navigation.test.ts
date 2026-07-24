@@ -86,6 +86,25 @@ describe("useUserMessageNavigation", () => {
     expect(result.current.goNext).toEqual(expect.any(Function));
   });
 
+  it("preserves the navigation value when its inputs are unchanged", () => {
+    const items = [messageItem("u1", "user"), messageItem("u2", "user")];
+    const loadOlder = vi.fn(async () => 0);
+    const navigateTo = vi.fn(async () => true);
+    const hook = renderNavigation(items, { loadOlder, navigateTo });
+    const initialValue = hook.result.current;
+
+    hook.rerender({
+      sessionId: SESSION_ID,
+      items,
+      hasOlder: false,
+      oldestCursor: "u1",
+      loadOlder,
+      navigateTo,
+    });
+
+    expect(hook.result.current).toBe(initialValue);
+  });
+
   it("navigates to the next loaded prompt without loading older history", async () => {
     const navigateTo = vi.fn(async () => true);
     const loadOlder = vi.fn(async () => 20);

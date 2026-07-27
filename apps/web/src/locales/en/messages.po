@@ -13,6 +13,19 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#. placeholder {0}: activeWorkflow.name
+#: components/kanban/mobile-column-tabs.tsx
+msgid "{0}, {stepLabel}. Choose workflow or step."
+msgstr "{0}, {stepLabel}. Choose workflow or step."
+
+#: components/kanban/task-multi-select-toolbar.tsx
+msgid "{count} selected"
+msgstr "{count} selected"
+
+#: components/kanban/graph2-task-pipeline.tsx
+msgid "{days}d ago"
+msgstr "{days}d ago"
+
 #: lib/i18n/formats.ts
 msgid "{diffDay}d ago"
 msgstr "{diffDay}d ago"
@@ -25,25 +38,122 @@ msgstr "{diffHr}h ago"
 msgid "{diffMin}m ago"
 msgstr "{diffMin}m ago"
 
+#: components/kanban/graph2-task-pipeline.tsx
+msgid "{hours}h ago"
+msgstr "{hours}h ago"
+
+#: components/kanban/mobile-column-tabs.tsx
+msgid "{label} tasks"
+msgstr "{label} tasks"
+
+#: components/kanban/mobile-column-tabs.tsx
+msgid "{label} tasks, over WIP limit"
+msgstr "{label} tasks, over WIP limit"
+
+#: components/kanban/graph2-task-pipeline.tsx
+msgid "{minutes}m ago"
+msgstr "{minutes}m ago"
+
+#: components/kanban/graph2-task-pipeline.tsx
+msgid "{months}mo ago"
+msgstr "{months}mo ago"
+
+#: components/kanban/graph2-task-pipeline.tsx
+msgid "{sessionCount, plural, one {# session} other {# sessions}}"
+msgstr "{sessionCount, plural, one {# session} other {# sessions}}"
+
+#: components/kanban/mobile-column-tabs.tsx
+msgid "{stepLabel}. Choose step."
+msgstr "{stepLabel}. Choose step."
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Add repository, pull request, session, parent, and review context to List rows."
+msgstr "Add repository, pull request, session, parent, and review context to List rows."
+
+#: components/kanban/mobile-fab.tsx
+msgid "Add task"
+msgstr "Add task"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "All repositories"
+msgstr "All repositories"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "All workflows"
+msgstr "All workflows"
+
+#: components/kanban/kanban-header.tsx
+msgid "All workspaces"
+msgstr "All workspaces"
+
+#: components/kanban/task-multi-select-toolbar.tsx
+msgid "Archive {count}"
+msgstr "Archive {count}"
+
+#: components/kanban/graph2-task-pipeline.tsx
+msgid "Archive task"
+msgstr "Archive task"
+
+#: components/kanban/mobile-column-tabs.tsx
+msgid "Board navigator"
+msgstr "Board navigator"
+
+#: components/kanban/task-multi-select-toolbar.tsx
+msgid "Cannot move tasks from different workflows"
+msgstr "Cannot move tasks from different workflows"
+
 #: components/settings/language-settings.tsx
 msgid "Changes the language of the Kandev interface. Applies immediately and is remembered on this device. Task titles, chat, and other content you create are not translated."
 msgstr "Changes the language of the Kandev interface. Applies immediately and is remembered on this device. Task titles, chat, and other content you create are not translated."
+
+#: components/kanban/mobile-menu-task-list-options.tsx
+msgid "Choose how tasks are ordered in this list."
+msgstr "Choose how tasks are ordered in this list."
 
 #: components/settings/language-settings.tsx
 msgid "Choose the language used across the Kandev interface"
 msgstr "Choose the language used across the Kandev interface"
 
+#: components/kanban/mobile-column-tabs.tsx
+msgid "Choose workflow and step shown on board."
+msgstr "Choose workflow and step shown on board."
+
+#: components/kanban/task-multi-select-toolbar.tsx
+msgid "Clear selection"
+msgstr "Clear selection"
+
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "Close"
 msgstr "Close"
+
+#: components/kanban/task-multi-select-toolbar.tsx
+msgid "Delete {count}"
+msgstr "Delete {count}"
+
+#: components/kanban/graph2-task-pipeline.tsx
+msgid "Delete task"
+msgstr "Delete task"
 
 #: components/settings/language-settings.tsx
 msgid "Display language"
 msgstr "Display language"
 
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Display Options"
+msgstr "Display Options"
+
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "Displays the mobile sidebar."
 msgstr "Displays the mobile sidebar."
+
+#: components/kanban/mobile-drop-targets.tsx
+msgid "Drop on a column to move task"
+msgstr "Drop on a column to move task"
+
+#: components/kanban/swimlane-graph-content.tsx
+#: components/kanban/swimlane-kanban-content.tsx
+msgid "Failed to move task"
+msgstr "Failed to move task"
 
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "Go to next page"
@@ -53,17 +163,60 @@ msgstr "Go to next page"
 msgid "Go to previous page"
 msgstr "Go to previous page"
 
+#: components/kanban/mobile-menu-task-list-options.tsx
+msgid "Group"
+msgstr "Group"
+
+#: components/kanban/mobile-menu-task-list-options.tsx
+msgid "Group tasks into sections by state, workflow, repository, or none."
+msgstr "Group tasks into sections by state, workflow, repository, or none."
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Health issues"
+msgstr "Health issues"
+
+#: components/kanban/graph2-task-pipeline.tsx
 #: lib/i18n/formats.ts
 msgid "just now"
 msgstr "just now"
+
+#: components/kanban/kanban-header.tsx
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Kanban"
+msgstr "Kanban"
+
+#: components/kanban/kanban-header-mobile.tsx
+msgid "Kandev home"
+msgstr "Kandev home"
 
 #: components/settings/language-settings.tsx
 msgid "Language"
 msgstr "Language"
 
+#: components/kanban/kanban-header.tsx
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "List"
+msgstr "List"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "List rows"
+msgstr "List rows"
+
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "Loading"
 msgstr "Loading"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Loading repositories..."
+msgstr "Loading repositories..."
+
+#: components/kanban/swimlane-container.tsx
+msgid "Loading..."
+msgstr "Loading..."
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Menu"
+msgstr "Menu"
 
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "More"
@@ -73,6 +226,18 @@ msgstr "More"
 msgid "More pages"
 msgstr "More pages"
 
+#: components/kanban/task-multi-select-toolbar.tsx
+msgid "Move to"
+msgstr "Move to"
+
+#: components/kanban/swimlane-header.tsx
+msgid "Multi-select"
+msgstr "Multi-select"
+
+#: components/kanban/swimlane-kanban-content.tsx
+msgid "Needs Reassignment"
+msgstr "Needs Reassignment"
+
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "Next"
 msgstr "Next"
@@ -80,6 +245,57 @@ msgstr "Next"
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "Next slide"
 msgstr "Next slide"
+
+#: components/kanban/mobile-column-tabs.tsx
+msgid "Next step"
+msgstr "Next step"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "No repositories"
+msgstr "No repositories"
+
+#: components/kanban/mobile-column-tabs.tsx
+msgid "No steps configured"
+msgstr "No steps configured"
+
+#: components/kanban/mobile-column-tabs.tsx
+msgid "No steps configured."
+msgstr "No steps configured."
+
+#: components/kanban/swimlane-kanban-content.tsx
+msgid "No steps configured. Choose another workflow or add steps in Settings."
+msgstr "No steps configured. Choose another workflow or add steps in Settings."
+
+#: components/kanban/swimlane-graph-content.tsx
+#: components/kanban/swimlane-graph2-content.tsx
+msgid "No tasks"
+msgstr "No tasks"
+
+#: components/kanban/swimlane-container.tsx
+msgid "No tasks yet"
+msgstr "No tasks yet"
+
+#: components/kanban/swimlane-container.tsx
+msgid "No workflows available yet."
+msgstr "No workflows available yet."
+
+#: components/kanban/kanban-header-mobile.tsx
+#: components/kanban/kanban-header.tsx
+msgid "Open menu"
+msgstr "Open menu"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Open preview on click"
+msgstr "Open preview on click"
+
+#: components/kanban/kanban-header.tsx
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Pipeline"
+msgstr "Pipeline"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Preview Panel"
+msgstr "Preview Panel"
 
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "Previous"
@@ -89,10 +305,101 @@ msgstr "Previous"
 msgid "Previous slide"
 msgstr "Previous slide"
 
+#: components/kanban/mobile-column-tabs.tsx
+msgid "Previous step"
+msgstr "Previous step"
+
+#: components/kanban/kanban-header-mobile.tsx
+#: components/kanban/kanban-header.tsx
+msgid "Quick Chat"
+msgstr "Quick Chat"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Repository"
+msgstr "Repository"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Search"
+msgstr "Search"
+
+#: components/kanban/kanban-header-mobile.tsx
+msgid "Search tasks"
+msgstr "Search tasks"
+
+#: components/kanban/kanban-header.tsx
+#: components/kanban/mobile-menu-sheet.tsx
+#: components/kanban/mobile-search-bar.tsx
+#: components/kanban/task-search-input.tsx
+msgid "Search tasks..."
+msgstr "Search tasks..."
+
+#: components/kanban/kanban-header.tsx
+msgid "Search..."
+msgstr "Search..."
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Select repository"
+msgstr "Select repository"
+
+#. placeholder {0}: task.title
+#: components/kanban/graph2-task-pipeline.tsx
+msgid "Select task {0}"
+msgstr "Select task {0}"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Settings"
+msgstr "Settings"
+
+#: components/kanban/mobile-menu-task-list-options.tsx
+msgid "Show archived"
+msgstr "Show archived"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Show task details"
+msgstr "Show task details"
+
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "Sidebar"
 msgstr "Sidebar"
 
+#: components/kanban/mobile-menu-task-list-options.tsx
+msgid "Sort"
+msgstr "Sort"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Status"
+msgstr "Status"
+
+#: components/kanban/mobile-column-tabs.tsx
+msgid "Step"
+msgstr "Step"
+
+#: components/kanban/mobile-menu-task-list-options.tsx
+msgid "Task list"
+msgstr "Task list"
+
+#: components/kanban/mobile-menu-task-list-options.tsx
+msgid "These options affect this task list only."
+msgstr "These options affect this task list only."
+
 #: lib/i18n/ui-strings-bridge.tsx
 msgid "Toggle Sidebar"
 msgstr "Toggle Sidebar"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Utilities"
+msgstr "Utilities"
+
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "View"
+msgstr "View"
+
+#: components/kanban/mobile-column-tabs.tsx
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Workflow"
+msgstr "Workflow"
+
+#: components/kanban/kanban-header.tsx
+#: components/kanban/mobile-menu-sheet.tsx
+msgid "Workspace"
+msgstr "Workspace"

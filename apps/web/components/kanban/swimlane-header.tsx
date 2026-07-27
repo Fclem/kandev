@@ -1,6 +1,7 @@
 "use client";
 
 import type { HTMLAttributes } from "react";
+import { Trans } from "@lingui/react/macro";
 import { Badge } from "@kandev/ui/badge";
 import { Checkbox } from "@kandev/ui/checkbox";
 import { IconChevronRight, IconGripVertical } from "@tabler/icons-react";
@@ -56,7 +57,7 @@ export function SwimlaneHeader({
               tabIndex={-1}
               aria-hidden
             />
-            Multi-select
+            <Trans>Multi-select</Trans>
           </div>
         )}
         <div className="flex-1 border-t border-dashed border-border/50" />

@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Trans, Plural, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { IconArchive, IconDots, IconTrash } from "@tabler/icons-react";
 import {
   DropdownMenu,
@@ -27,15 +29,15 @@ function formatRelativeTime(dateStr: string): string {
   const then = new Date(dateStr).getTime();
   const diff = now - then;
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return t`just now`;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t`${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t`${hours}h ago`;
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) return t`${days}d ago`;
   const months = Math.floor(days / 30);
-  return `${months}mo ago`;
+  return t`${months}mo ago`;
 }
 
 export type Graph2TaskPipelineProps = {
@@ -175,7 +177,7 @@ function TaskActions({
               className="cursor-pointer"
             >
               <IconArchive className="h-3.5 w-3.5 mr-2" />
-              Archive task
+              <Trans>Archive task</Trans>
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
@@ -184,7 +186,7 @@ function TaskActions({
             className="text-destructive focus:text-destructive cursor-pointer"
           >
             <IconTrash className="h-3.5 w-3.5 mr-2" />
-            Delete task
+            <Trans>Delete task</Trans>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -252,7 +254,7 @@ function TaskButton({
         )}
         {sessionCount > 0 && (
           <span className="text-[10px] text-muted-foreground/60">
-            {sessionCount} {sessionCount === 1 ? "session" : "sessions"}
+            <Plural value={sessionCount} one="# session" other="# sessions" />
           </span>
         )}
       </div>
@@ -288,6 +290,7 @@ export function Graph2TaskPipeline({
   onToggleSelect,
   isMultiSelectMode,
 }: Graph2TaskPipelineProps) {
+  const { t } = useLingui();
   const currentStepIndex = useMemo(
     () => steps.findIndex((s) => s.id === task.workflowStepId),
     [steps, task.workflowStepId],
@@ -322,7 +325,7 @@ export function Graph2TaskPipeline({
           >
             <Checkbox
               checked={!!isSelected}
-              aria-label={`Select task ${task.title}`}
+              aria-label={t`Select task ${task.title}`}
               className="cursor-pointer border-muted-foreground/50"
             />
           </div>

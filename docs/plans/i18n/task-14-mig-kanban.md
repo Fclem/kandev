@@ -1,7 +1,7 @@
 ---
 id: "14-mig-kanban"
 title: "Migrate: components/kanban (30) — playbook pilot"
-status: pending
+status: done
 wave: 2
 depends_on: ["07-migration-playbook"]
 plan: "plan.md"

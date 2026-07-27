@@ -1,5 +1,6 @@
 "use client";
 
+import { useLingui } from "@lingui/react/macro";
 import { TaskSearchInput } from "./task-search-input";
 
 type MobileSearchBarProps = {
@@ -8,12 +9,13 @@ type MobileSearchBarProps = {
 };
 
 export function MobileSearchBar({ searchQuery, onSearchChange }: MobileSearchBarProps) {
+  const { t } = useLingui();
   return (
     <div className="border-b border-border px-4 py-2" data-testid="mobile-search-bar">
       <TaskSearchInput
         value={searchQuery}
         onChange={onSearchChange}
-        placeholder="Search tasks..."
+        placeholder={t`Search tasks...`}
         className="w-full"
         autoFocus
       />

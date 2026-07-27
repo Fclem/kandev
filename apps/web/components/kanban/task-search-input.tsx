@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { Input } from "@kandev/ui/input";
 import { IconSearch, IconX, IconLoader2 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
@@ -18,12 +19,14 @@ interface TaskSearchInputProps {
 export function TaskSearchInput({
   value,
   onChange,
-  placeholder = "Search tasks...",
+  placeholder,
   debounceMs = 300,
   isLoading = false,
   className,
   autoFocus = false,
 }: TaskSearchInputProps) {
+  const { t } = useLingui();
+  const resolvedPlaceholder = placeholder ?? t`Search tasks...`;
   const [localValue, setLocalValue] = useState(value);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -87,7 +90,7 @@ export function TaskSearchInput({
         type="text"
         value={localValue}
         onChange={handleChange}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         className="pl-8 pr-8 w-full border border-border text-[16px] md:text-[16px] lg:text-xs/relaxed"
       />
       {localValue && !isLoading && (

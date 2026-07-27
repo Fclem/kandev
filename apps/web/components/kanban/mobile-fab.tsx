@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@kandev/ui/button";
+import { Trans } from "@lingui/react/macro";
 import { IconPlus } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +30,9 @@ export function MobileFab({ onClick, isDragging = false }: MobileFabProps) {
       }}
     >
       <IconPlus className="h-6 w-6" />
-      <span className="sr-only">Add task</span>
+      <span className="sr-only">
+        <Trans>Add task</Trans>
+      </span>
     </Button>
   );
 }

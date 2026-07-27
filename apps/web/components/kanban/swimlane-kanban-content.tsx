@@ -11,6 +11,8 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import { Trans } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { KanbanColumn } from "@/components/kanban-column";
 import { type Task } from "@/components/kanban-card";
 import { KanbanCardPreview } from "@/components/kanban-card-preview";
@@ -40,7 +42,7 @@ export const ORPHAN_STEP_ID = "__kandev_orphan__";
 
 export const ORPHAN_STEP: WorkflowStep = {
   id: ORPHAN_STEP_ID,
-  title: "Needs Reassignment",
+  title: t`Needs Reassignment`,
   color: "#f59e0b",
 };
 
@@ -136,7 +138,7 @@ function useSwimlaneKanbanDnd({ tasks, workflowId, onMoveError }: SwimlaneKanban
             .getState()
             .setWorkflowSnapshot(workflowId, { ...currentSnapshot, tasks: originalTasks });
         }
-        const message = error instanceof Error ? error.message : "Failed to move task";
+        const message = error instanceof Error ? error.message : t`Failed to move task`;
         onMoveError?.({ message, taskId, sessionId: task.primarySessionId ?? null });
       }
     },
@@ -303,7 +305,7 @@ function MobileKanbanLayout({
           className="mx-4 my-3 flex flex-1 items-center justify-center rounded-xl border border-dashed border-border/70 px-6 text-center text-sm text-muted-foreground"
           data-testid="mobile-kanban-no-steps"
         >
-          No steps configured. Choose another workflow or add steps in Settings.
+          <Trans>No steps configured. Choose another workflow or add steps in Settings.</Trans>
         </div>
       ) : (
         <SwipeableColumns

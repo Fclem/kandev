@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import {
@@ -32,6 +33,7 @@ type MobileColumnTabsProps = {
 };
 
 function StepCount({ step, count }: { step: WorkflowStep; count: number }) {
+  const { t } = useLingui();
   const overWipLimit = isOverWipLimit(count, step.wip_limit);
   const label = formatWipCount(count, step.wip_limit);
 
@@ -42,7 +44,7 @@ function StepCount({ step, count }: { step: WorkflowStep; count: number }) {
         "h-5 shrink-0 px-1.5 text-xs tabular-nums",
         overWipLimit && "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300",
       )}
-      aria-label={overWipLimit ? `${label} tasks, over WIP limit` : `${label} tasks`}
+      aria-label={overWipLimit ? t`${label} tasks, over WIP limit` : t`${label} tasks`}
     >
       {label}
     </Badge>
@@ -71,7 +73,7 @@ function WorkflowOptions({
         id="mobile-workflow-heading"
         className="px-3 pb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground"
       >
-        Workflow
+        <Trans>Workflow</Trans>
       </h3>
       {navigation.workflows.map((workflow) => {
         const isActive = workflow.id === navigation.activeWorkflowId;
@@ -123,10 +125,12 @@ function StepOptions({
         id="mobile-step-heading"
         className="px-3 pb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground"
       >
-        Step
+        <Trans>Step</Trans>
       </h3>
       {steps.length === 0 && (
-        <p className="px-3 py-3 text-sm text-muted-foreground">No steps configured.</p>
+        <p className="px-3 py-3 text-sm text-muted-foreground">
+          <Trans>No steps configured.</Trans>
+        </p>
       )}
       {steps.map((step, index) => {
         const isActive = index === activeIndex;
@@ -168,9 +172,11 @@ function NavigatorDrawerContent({
   return (
     <DrawerContent data-testid="mobile-board-navigator-drawer" className="max-h-[85dvh]">
       <DrawerHeader className="pb-2 text-left">
-        <DrawerTitle className="text-balance">Board navigator</DrawerTitle>
+        <DrawerTitle className="text-balance">
+          <Trans>Board navigator</Trans>
+        </DrawerTitle>
         <DrawerDescription className="text-pretty">
-          Choose workflow and step shown on board.
+          <Trans>Choose workflow and step shown on board.</Trans>
         </DrawerDescription>
       </DrawerHeader>
       <div className="min-h-0 overflow-y-auto px-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -196,13 +202,14 @@ export function MobileColumnTabs({
   onColumnChange,
   workflowNavigation,
 }: MobileColumnTabsProps) {
+  const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const activeStep = steps[activeIndex] ?? steps[0];
   const activeWorkflow =
     workflowNavigation?.workflows.find(
       (workflow) => workflow.id === workflowNavigation.activeWorkflowId,
     ) ?? workflowNavigation?.workflows[0];
-  const stepLabel = activeStep?.title ?? "No steps configured";
+  const stepLabel = activeStep?.title ?? t`No steps configured`;
 
   const selectStep = (index: number) => {
     onColumnChange(index);
@@ -222,7 +229,7 @@ export function MobileColumnTabs({
           className="h-11 w-11 cursor-pointer rounded-xl transition-[background-color,color,border-color,transform] duration-150 ease-out active:scale-[0.96]"
           disabled={!activeStep || activeIndex === 0}
           onClick={() => onColumnChange(activeIndex - 1)}
-          aria-label="Previous step"
+          aria-label={t`Previous step`}
         >
           <IconChevronLeft className="h-4 w-4" />
         </Button>
@@ -235,8 +242,8 @@ export function MobileColumnTabs({
             data-testid="mobile-board-navigator"
             aria-label={
               activeWorkflow
-                ? `${activeWorkflow.name}, ${stepLabel}. Choose workflow or step.`
-                : `${stepLabel}. Choose step.`
+                ? t`${activeWorkflow.name}, ${stepLabel}. Choose workflow or step.`
+                : t`${stepLabel}. Choose step.`
             }
           >
             <span className="flex min-w-0 items-center gap-2.5 text-left">
@@ -269,7 +276,7 @@ export function MobileColumnTabs({
           className="h-11 w-11 cursor-pointer rounded-xl transition-[background-color,color,border-color,transform] duration-150 ease-out active:scale-[0.96]"
           disabled={!activeStep || activeIndex === steps.length - 1}
           onClick={() => onColumnChange(activeIndex + 1)}
-          aria-label="Next step"
+          aria-label={t`Next step`}
         >
           <IconChevronRight className="h-4 w-4" />
         </Button>

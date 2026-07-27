@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import { IconMenu2, IconMessageCircle, IconSearch } from "@tabler/icons-react";
 import Link from "@/components/routing/app-link";
@@ -27,10 +28,11 @@ type KanbanHeaderMobileProps = {
 };
 
 function MobileBrandLink({ workspaceId }: Pick<KanbanHeaderMobileProps, "workspaceId">) {
+  const { t } = useLingui();
   return (
     <Link
       href={workspaceHomeHref(workspaceId ? { id: workspaceId } : undefined)}
-      aria-label="Kandev home"
+      aria-label={t`Kandev home`}
       className="relative z-10 shrink-0 cursor-pointer text-[15px] font-semibold leading-none transition-colors hover:text-foreground/80"
     >
       Kandev
@@ -57,6 +59,7 @@ function MobileHeaderActions({
   toggleSearch: () => void;
   setMenuOpen: (open: boolean) => void;
 }) {
+  const { t } = useLingui();
   return (
     <>
       <MainTopBarPluginActions
@@ -71,7 +74,7 @@ function MobileHeaderActions({
           size="icon-lg"
           onClick={handleOpenQuickChat}
           className="cursor-pointer"
-          aria-label="Quick Chat"
+          aria-label={t`Quick Chat`}
           data-testid="mobile-quick-chat-button"
         >
           <IconMessageCircle className="h-4 w-4" />
@@ -84,7 +87,7 @@ function MobileHeaderActions({
           onClick={toggleSearch}
           className="cursor-pointer"
           aria-pressed={isSearchOpen}
-          aria-label="Search tasks"
+          aria-label={t`Search tasks`}
           data-testid="mobile-search-toggle"
         >
           <IconSearch className="h-4 w-4" />
@@ -97,7 +100,9 @@ function MobileHeaderActions({
         className="cursor-pointer"
       >
         <IconMenu2 className="h-4 w-4" />
-        <span className="sr-only">Open menu</span>
+        <span className="sr-only">
+          <Trans>Open menu</Trans>
+        </span>
       </Button>
     </>
   );

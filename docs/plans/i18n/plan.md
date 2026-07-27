@@ -148,7 +148,7 @@ Wave 2 — Migration batch A (parallel candidates, disjoint dirs):
 - [ ] [task-11-mig-sidebar-statusbar](task-11-mig-sidebar-statusbar.md)    app-sidebar/ + app-status-bar/ + quick-chat/ + command-panel
 - [ ] [task-12-mig-settings-components](task-12-mig-settings-components.md) components/settings/ (221)
 - [ ] [task-13-mig-settings-app](task-13-mig-settings-app.md)              app/settings/ (90)
-- [ ] [task-14-mig-kanban](task-14-mig-kanban.md)                          components/kanban/ (30)
+- [x] [task-14-mig-kanban](task-14-mig-kanban.md)                          components/kanban/ (30)
 
 Wave 3 — Migration batch B (parallel candidates, disjoint dirs):
 - [ ] [task-20-mig-task-a](task-20-mig-task-a.md)                          components/task/ subset A

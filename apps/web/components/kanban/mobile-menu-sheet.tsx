@@ -1,6 +1,8 @@
 "use client";
 
 import { type ReactNode, type RefObject, useRef } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { useRouter } from "@/lib/routing/client-router";
 import Link from "@/components/routing/app-link";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@kandev/ui/sheet";
@@ -53,9 +55,9 @@ const mobileControlClass = "h-10 w-full px-3 text-sm";
 const mobileControlIconClass = "h-4 w-4 shrink-0";
 
 function getRepositoryPlaceholder(loading: boolean, empty: boolean): string {
-  if (loading) return "Loading repositories...";
-  if (empty) return "No repositories";
-  return "Select repository";
+  if (loading) return t`Loading repositories...`;
+  if (empty) return t`No repositories`;
+  return t`Select repository`;
 }
 
 type MobileDisplayOptionsProps = {
@@ -93,20 +95,25 @@ function MobileDisplaySelects({
   | "showTaskDetails"
   | "tasksListOptions"
 >) {
+  const { t } = useLingui();
   return (
     <>
       {showWorkflow && (
         <div className={mobileFieldClass}>
-          <label className={mobileFieldLabelClass}>Workflow</label>
+          <label className={mobileFieldLabelClass}>
+            <Trans>Workflow</Trans>
+          </label>
           <Select
             value={activeWorkflowId ?? "all"}
             onValueChange={(value) => onWorkflowChange(value === "all" ? null : value)}
           >
             <SelectTrigger className={mobileControlClass}>
-              <SelectValue placeholder="All workflows" />
+              <SelectValue placeholder={t`All workflows`} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All workflows</SelectItem>
+              <SelectItem value="all">
+                <Trans>All workflows</Trans>
+              </SelectItem>
               {workflows.map((workflow: WorkflowsState["items"][number]) => (
                 <SelectItem key={workflow.id} value={workflow.id}>
                   {workflow.name}
@@ -118,7 +125,9 @@ function MobileDisplaySelects({
       )}
 
       <div className={mobileFieldClass}>
-        <label className={mobileFieldLabelClass}>Repository</label>
+        <label className={mobileFieldLabelClass}>
+          <Trans>Repository</Trans>
+        </label>
         <Select
           value={repositoryValue}
           onValueChange={(value) => onRepositoryChange(value as string | "all")}
@@ -130,7 +139,9 @@ function MobileDisplaySelects({
             />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All repositories</SelectItem>
+            <SelectItem value="all">
+              <Trans>All repositories</Trans>
+            </SelectItem>
             {repositories.map((repo: Repository) => (
               <SelectItem key={repo.id} value={repo.id}>
                 {repo.name}
@@ -155,10 +166,14 @@ function MobileDisplayOptions(props: MobileDisplayOptionsProps) {
   } = props;
   return (
     <div className="space-y-4">
-      <label className={mobileSectionTitleClass}>Display Options</label>
+      <label className={mobileSectionTitleClass}>
+        <Trans>Display Options</Trans>
+      </label>
       <MobileDisplaySelects {...selectProps} />
       <div className={mobileFieldClass}>
-        <label className={mobileFieldLabelClass}>Preview Panel</label>
+        <label className={mobileFieldLabelClass}>
+          <Trans>Preview Panel</Trans>
+        </label>
         <label className="flex h-10 cursor-pointer items-center gap-3 rounded-md px-0 text-sm font-medium">
           <Checkbox
             checked={enablePreviewOnClick ?? false}
@@ -166,21 +181,29 @@ function MobileDisplayOptions(props: MobileDisplayOptionsProps) {
               onTogglePreviewOnClick?.(!!checked);
             }}
           />
-          <span className="text-sm">Open preview on click</span>
+          <span className="text-sm">
+            <Trans>Open preview on click</Trans>
+          </span>
         </label>
       </div>
       {showTaskDetails && (
         <div className={mobileFieldClass}>
-          <label className={mobileFieldLabelClass}>List rows</label>
+          <label className={mobileFieldLabelClass}>
+            <Trans>List rows</Trans>
+          </label>
           <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-0 text-sm font-medium">
             <Checkbox
               checked={tasksListShowDetails}
               onCheckedChange={(checked) => onToggleTasksListShowDetails(checked === true)}
             />
-            <span>Show task details</span>
+            <span>
+              <Trans>Show task details</Trans>
+            </span>
           </label>
           <p className="pl-6 text-xs text-muted-foreground">
-            Add repository, pull request, session, parent, and review context to List rows.
+            <Trans>
+              Add repository, pull request, session, parent, and review context to List rows.
+            </Trans>
           </p>
         </div>
       )}
@@ -198,15 +221,18 @@ function MobileSearchSection({
   onSearchChange?: (query: string) => void;
   isSearchLoading: boolean;
 }) {
+  const { t } = useLingui();
   if (!onSearchChange) return null;
 
   return (
     <div className={mobileSectionClass}>
-      <label className={mobileSectionTitleClass}>Search</label>
+      <label className={mobileSectionTitleClass}>
+        <Trans>Search</Trans>
+      </label>
       <TaskSearchInput
         value={searchQuery}
         onChange={onSearchChange}
-        placeholder="Search tasks..."
+        placeholder={t`Search tasks...`}
         isLoading={isSearchLoading}
         className="w-full [&_[data-slot=input]]:h-10 [&_[data-slot=input]]:pl-9 [&_[data-slot=input]]:pr-9 [&_[data-slot=input]]:text-sm"
       />
@@ -217,7 +243,9 @@ function MobileSearchSection({
 function MobileWorkspaceSection({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
   return (
     <div className={mobileSectionClass}>
-      <label className={mobileSectionTitleClass}>Workspace</label>
+      <label className={mobileSectionTitleClass}>
+        <Trans>Workspace</Trans>
+      </label>
       <AppSidebarWorkspacePicker
         modal={false}
         onActionComplete={() => onOpenChange(false)}
@@ -242,7 +270,9 @@ function MobileViewSection({
 }) {
   return (
     <div className={mobileSectionClass}>
-      <label className={mobileSectionTitleClass}>View</label>
+      <label className={mobileSectionTitleClass}>
+        <Trans>View</Trans>
+      </label>
       <ToggleGroup
         type="single"
         value={viewValue}
@@ -255,7 +285,7 @@ function MobileViewSection({
           className="h-10 min-w-0 flex-1 cursor-pointer gap-2 text-sm data-[state=on]:bg-muted data-[state=on]:text-foreground"
         >
           <IconLayoutKanban className={mobileControlIconClass} />
-          Kanban
+          <Trans>Kanban</Trans>
         </ToggleGroupItem>
         {showPipeline && (
           <ToggleGroupItem
@@ -263,7 +293,7 @@ function MobileViewSection({
             className="h-10 min-w-0 flex-1 cursor-pointer gap-2 text-sm data-[state=on]:bg-muted data-[state=on]:text-foreground"
           >
             <IconTimeline className={mobileControlIconClass} />
-            Pipeline
+            <Trans>Pipeline</Trans>
           </ToggleGroupItem>
         )}
         <ToggleGroupItem
@@ -271,7 +301,7 @@ function MobileViewSection({
           className="h-10 min-w-0 flex-1 cursor-pointer gap-2 text-sm data-[state=on]:bg-muted data-[state=on]:text-foreground"
         >
           <IconList className={mobileControlIconClass} />
-          List
+          <Trans>List</Trans>
         </ToggleGroupItem>
       </ToggleGroup>
     </div>
@@ -300,7 +330,9 @@ function MobileUtilityActions({
 
   return (
     <div className="mt-auto flex flex-col gap-3 pt-4 border-t border-border">
-      <div className={mobileSectionTitleClass}>Utilities</div>
+      <div className={mobileSectionTitleClass}>
+        <Trans>Utilities</Trans>
+      </div>
       {statusDrawerEnabled && (
         <Button
           type="button"
@@ -310,7 +342,7 @@ function MobileUtilityActions({
           data-testid="mobile-home-status-button"
         >
           <IconActivity className={mobileControlIconClass} />
-          Status
+          <Trans>Status</Trans>
         </Button>
       )}
       <Button
@@ -320,7 +352,7 @@ function MobileUtilityActions({
       >
         <Link href="/settings" onClick={closeSheet}>
           <IconSettings className={mobileControlIconClass} />
-          Settings
+          <Trans>Settings</Trans>
         </Link>
       </Button>
       {showHealthIndicator && (
@@ -331,7 +363,7 @@ function MobileUtilityActions({
           onClick={openHealth}
         >
           <IconAlertTriangle className={cn(mobileControlIconClass, "text-warning")} />
-          Health issues
+          <Trans>Health issues</Trans>
         </Button>
       )}
     </div>
@@ -367,7 +399,9 @@ function ResponsiveMenuSurface({
             className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-background shadow-2xl shadow-black/20"
           >
             <DrawerHeader className="shrink-0 border-b border-border/70 pb-3 text-left">
-              <DrawerTitle>Menu</DrawerTitle>
+              <DrawerTitle>
+                <Trans>Menu</Trans>
+              </DrawerTitle>
             </DrawerHeader>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom,0px)]">
               {children}
@@ -388,7 +422,9 @@ function ResponsiveMenuSurface({
         className="w-full overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:max-w-sm"
       >
         <SheetHeader>
-          <SheetTitle>Menu</SheetTitle>
+          <SheetTitle>
+            <Trans>Menu</Trans>
+          </SheetTitle>
         </SheetHeader>
         {children}
       </SheetContent>

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { msg, t } from "@lingui/core/macro";
+import type { MessageDescriptor } from "@lingui/core";
 import { useRouter } from "@/lib/routing/client-router";
 import { Button } from "@kandev/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@kandev/ui/toggle-group";
@@ -44,13 +47,13 @@ type KanbanHeaderProps = {
 type ViewToggleItem = {
   value: string;
   icon: typeof IconLayoutKanban;
-  label: string;
+  label: MessageDescriptor;
 };
 
 const VIEW_TOGGLE_ITEMS: ViewToggleItem[] = [
-  { value: "kanban", icon: IconLayoutKanban, label: "Kanban" },
-  { value: "pipeline", icon: IconTimeline, label: "Pipeline" },
-  { value: "list", icon: IconList, label: "List" },
+  { value: "kanban", icon: IconLayoutKanban, label: msg`Kanban` },
+  { value: "pipeline", icon: IconTimeline, label: msg`Pipeline` },
+  { value: "list", icon: IconList, label: msg`List` },
 ];
 
 const WORKBENCH_TOPBAR_CLASSNAME = "h-12 border-b-0 px-3 py-2";
@@ -60,8 +63,8 @@ function getWorkspaceLabel(
   workspaces: Array<{ id: string; name: string }>,
   activeWorkspaceId: string | null,
 ): string {
-  if (!activeWorkspaceId) return "All workspaces";
-  return workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.name ?? "Workspace";
+  if (!activeWorkspaceId) return t`All workspaces`;
+  return workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.name ?? t`Workspace`;
 }
 
 function getHeaderTitle(currentPage: string): string {
@@ -85,6 +88,7 @@ function ViewToggleGroup({
   className?: string;
   itemClassName?: string;
 }) {
+  const { t } = useLingui();
   return (
     <ToggleGroup
       type="single"
@@ -107,7 +111,7 @@ function ViewToggleGroup({
                 <Icon className="h-4 w-4" />
               </span>
             </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
+            <TooltipContent>{t(label)}</TooltipContent>
           </Tooltip>
         </ToggleGroupItem>
       ))}
@@ -160,6 +164,7 @@ function TabletHeader({
   onOpenHealthDialog: () => void;
   hideTitle?: boolean;
 }) {
+  const { t } = useLingui();
   const isHome = title === "Home";
   const handleOpenQuickChat = useQuickChatLauncher(workspaceId);
 
@@ -177,7 +182,7 @@ function TabletHeader({
             <TaskSearchInput
               value={searchQuery}
               onChange={onSearchChange}
-              placeholder="Search..."
+              placeholder={t`Search...`}
               isLoading={isSearchLoading}
               className="hidden md:flex w-48 lg:w-56 [&_input]:h-8"
             />
@@ -194,7 +199,7 @@ function TabletHeader({
               size="icon-lg"
               onClick={handleOpenQuickChat}
               className="cursor-pointer"
-              aria-label="Quick Chat"
+              aria-label={t`Quick Chat`}
               data-testid="tablet-quick-chat-button"
             >
               <IconMessageCircle className="h-4 w-4" />
@@ -216,7 +221,9 @@ function TabletHeader({
             className="cursor-pointer"
           >
             <IconMenu2 className="h-4 w-4" />
-            <span className="sr-only">Open menu</span>
+            <span className="sr-only">
+              <Trans>Open menu</Trans>
+            </span>
           </Button>
         </>
       }
@@ -251,13 +258,14 @@ function DesktopHeader({
   onOpenHealthDialog: () => void;
   hideTitle?: boolean;
 }) {
+  const { t } = useLingui();
   const headerRef = useRef<HTMLElement>(null);
   const isNarrow = useIsHeaderNarrow(headerRef);
   const searchInput = onSearchChange ? (
     <TaskSearchInput
       value={searchQuery}
       onChange={onSearchChange}
-      placeholder="Search tasks..."
+      placeholder={t`Search tasks...`}
       isLoading={isSearchLoading}
       className={`${isNarrow ? "w-44" : "w-72 xl:w-80"} [&_input]:h-8`}
     />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconTrash, IconArchive, IconChevronRight, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { TaskDeleteConfirmDialog } from "@/components/task/task-delete-confirm-dialog";
@@ -65,7 +66,7 @@ function BulkArchiveDialog({
         data-testid="bulk-archive-button"
       >
         <IconArchive className="h-4 w-4" />
-        Archive {count}
+        <Trans>Archive {count}</Trans>
       </Button>
       <TaskArchiveConfirmDialog
         open={open}
@@ -108,7 +109,7 @@ function BulkDeleteDialog({
         data-testid="bulk-delete-button"
       >
         <IconTrash className="h-4 w-4" />
-        Delete {count}
+        <Trans>Delete {count}</Trans>
       </Button>
       <TaskDeleteConfirmDialog
         open={open}
@@ -135,6 +136,7 @@ export function TaskMultiSelectToolbar({
   onBulkArchive,
   onBulkMove,
 }: TaskMultiSelectToolbarProps) {
+  const { t } = useLingui();
   const taskIds = useMemo(() => [...selectedIds], [selectedIds]);
   const executorTypes = useBulkExecutorTypes(taskIds);
 
@@ -151,7 +153,9 @@ export function TaskMultiSelectToolbar({
       )}
       data-testid="multi-select-toolbar"
     >
-      <span className="text-sm font-medium text-muted-foreground mr-1">{count} selected</span>
+      <span className="text-sm font-medium text-muted-foreground mr-1">
+        <Trans>{count} selected</Trans>
+      </span>
 
       {steps.length > 0 && (
         <DropdownMenu>
@@ -161,10 +165,10 @@ export function TaskMultiSelectToolbar({
               variant="outline"
               className="cursor-pointer gap-1.5"
               disabled={isProcessing || !canMove}
-              title={!canMove ? "Cannot move tasks from different workflows" : undefined}
+              title={!canMove ? t`Cannot move tasks from different workflows` : undefined}
               data-testid="bulk-move-button"
             >
-              Move to
+              <Trans>Move to</Trans>
               <IconChevronRight className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -206,7 +210,7 @@ export function TaskMultiSelectToolbar({
         className="cursor-pointer ml-1"
         onClick={onClearSelection}
         disabled={isProcessing}
-        aria-label="Clear selection"
+        aria-label={t`Clear selection`}
         data-testid="bulk-clear-selection"
       >
         <IconX className="h-4 w-4" />

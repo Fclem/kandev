@@ -14,6 +14,8 @@ import {
   type Modifier,
 } from "@dnd-kit/core";
 import { cn } from "@kandev/ui/lib/utils";
+import { Trans } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { Badge } from "@kandev/ui/badge";
 import { getTaskStateIcon } from "@/lib/ui/state-icons";
 import { needsAction } from "@/lib/utils/needs-action";
@@ -200,7 +202,7 @@ async function moveTaskAcrossSwimlaneSteps({
         .getState()
         .setWorkflowSnapshot(workflowId, { ...currentSnapshot, tasks: originalTasks });
     }
-    const message = error instanceof Error ? error.message : "Failed to move task";
+    const message = error instanceof Error ? error.message : t`Failed to move task`;
     onMoveError?.({ message, taskId, sessionId: task.primarySessionId ?? null });
   }
 }
@@ -309,7 +311,9 @@ export function SwimlaneGraphContent({
   if (tasks.length === 0) {
     return (
       <div className="px-3 pb-3">
-        <div className="text-xs text-muted-foreground text-center py-4">No tasks</div>
+        <div className="text-xs text-muted-foreground text-center py-4">
+          <Trans>No tasks</Trans>
+        </div>
       </div>
     );
   }

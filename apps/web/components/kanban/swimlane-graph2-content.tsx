@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Trans } from "@lingui/react/macro";
 import { useSwimlaneMove } from "@/hooks/domains/kanban/use-swimlane-move";
 import { Graph2TaskPipeline } from "./graph2-task-pipeline";
 import { ORPHAN_STEP, ORPHAN_STEP_ID, remapOrphanTasks } from "./swimlane-kanban-content";
@@ -67,7 +68,9 @@ export function SwimlaneGraph2Content({
   if (displayTasks.length === 0) {
     return (
       <div className="px-3 pb-3">
-        <div className="text-xs text-muted-foreground text-center py-4">No tasks</div>
+        <div className="text-xs text-muted-foreground text-center py-4">
+          <Trans>No tasks</Trans>
+        </div>
       </div>
     );
   }

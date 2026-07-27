@@ -5,6 +5,8 @@ import { setOnUnauthorized } from "@/lib/api/client";
 import { PluginModalHost } from "@/components/plugins/plugin-modal-host";
 import { useAppStoreApi, StateProvider } from "@/components/state-provider";
 import { PluginBootBridge } from "@/lib/plugins/plugin-boot-bridge";
+import { activateLocale } from "@/lib/i18n";
+import { resolveInitialLocale } from "@/lib/i18n/boot";
 import { AppShell } from "./app-shell";
 import { AuthGatedScreen, useAuthGateDecision } from "./auth-gate";
 import { loadBootPayload } from "./boot-payload";
@@ -59,10 +61,17 @@ if (!root) {
   throw new Error("Missing #root element");
 }
 
-void loadBootPayload().then((payload) => {
-  createRoot(root).render(
-    <StrictMode>
-      <App payload={payload} />
-    </StrictMode>,
-  );
-});
+void loadBootPayload()
+  .then(async (payload) => {
+    // Activate the locale before first paint so there is no English flash and
+    // <html lang> (already set by the Go shell) matches the rendered catalog.
+    await activateLocale(resolveInitialLocale(payload));
+    return payload;
+  })
+  .then((payload) => {
+    createRoot(root).render(
+      <StrictMode>
+        <App payload={payload} />
+      </StrictMode>,
+    );
+  });

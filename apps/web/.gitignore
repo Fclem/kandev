@@ -44,3 +44,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Lingui compiled catalogs (built from .po by the Vite plugin; .po is committed)
+src/locales/**/*.js
+src/locales/**/*.mjs

@@ -704,10 +704,27 @@ func webAppHandlerOptions(p routeParams) []webapp.HandlerOption {
 	}
 }
 
+// localeCookieName is the source of truth for the active UI locale. Written by
+// the SPA when the user picks a language; read here to set <html lang> and the
+// boot payload so first paint matches without a flash.
+const localeCookieName = "kandev_locale"
+
+func localeFromRequest(req *http.Request) string {
+	if cookie, err := req.Cookie(localeCookieName); err == nil {
+		return webapp.NormalizeLocale(cookie.Value)
+	}
+	return webapp.DefaultLocale
+}
+
 func bootPayload(ctx context.Context, req *http.Request, p routeParams, route webapp.RouteClassification) webapp.BootPayload {
 	payload := webapp.NewBootPayload(
 		route,
-		webapp.RuntimeConfig{APIPrefix: "/api/v1", WebSocketPath: "/ws", Debug: p.devMode},
+		webapp.RuntimeConfig{
+			APIPrefix:     "/api/v1",
+			WebSocketPath: "/ws",
+			Debug:         p.devMode,
+			Locale:        localeFromRequest(req),
+		},
 		bootInitialState(ctx, req, p, route),
 	)
 	payload.RouteData = bootRouteData(ctx, req, p, route)

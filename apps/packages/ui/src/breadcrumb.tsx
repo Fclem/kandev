@@ -2,6 +2,7 @@ import * as React from "react";
 import { Slot } from "radix-ui";
 
 import { cn } from "./lib/utils";
+import { useUIStrings } from "./lib/ui-strings";
 import { IconChevronRight, IconDots } from "@tabler/icons-react";
 
 function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
@@ -79,6 +80,7 @@ function BreadcrumbSeparator({ children, className, ...props }: React.ComponentP
 }
 
 function BreadcrumbEllipsis({ className, ...props }: React.ComponentProps<"span">) {
+  const uiStrings = useUIStrings();
   return (
     <span
       data-slot="breadcrumb-ellipsis"
@@ -88,7 +90,7 @@ function BreadcrumbEllipsis({ className, ...props }: React.ComponentProps<"span"
       {...props}
     >
       <IconDots />
-      <span className="sr-only">More</span>
+      <span className="sr-only">{uiStrings.more}</span>
     </span>
   );
 }

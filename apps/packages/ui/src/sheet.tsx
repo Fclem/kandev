@@ -4,6 +4,7 @@ import * as React from "react";
 import { Dialog as SheetPrimitive } from "radix-ui";
 
 import { cn } from "./lib/utils";
+import { useUIStrings } from "./lib/ui-strings";
 import { Button } from "./button";
 import { IconX } from "@tabler/icons-react";
 
@@ -49,6 +50,7 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left";
   showCloseButton?: boolean;
 }) {
+  const uiStrings = useUIStrings();
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -66,7 +68,7 @@ function SheetContent({
           <SheetPrimitive.Close data-slot="sheet-close" asChild>
             <Button variant="ghost" className="absolute top-4 right-4" size="icon-sm">
               <IconX />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{uiStrings.close}</span>
             </Button>
           </SheetPrimitive.Close>
         )}

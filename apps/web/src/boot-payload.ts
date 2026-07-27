@@ -17,6 +17,8 @@ export type BootRuntime = {
   apiPrefix?: string;
   webSocketPath?: string;
   debug?: boolean;
+  /** Active UI locale from the kandev_locale cookie; drives first-paint i18n. */
+  locale?: string;
 };
 
 export type BootRouteData = {
@@ -134,6 +136,7 @@ function readRuntime(value: Record<string, unknown>): BootRuntime {
     apiPrefix: readString(value.apiPrefix),
     webSocketPath: readString(value.webSocketPath),
     debug: value.debug === true ? true : undefined,
+    locale: readString(value.locale),
   };
 }
 

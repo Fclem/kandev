@@ -4,6 +4,7 @@ import * as React from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { cn } from "./lib/utils";
+import { useUIStrings } from "./lib/ui-strings";
 import { Button } from "./button";
 import { IconX } from "@tabler/icons-react";
 import { handleDialogDefaultActionKeyDown } from "./lib/dialog-default-action";
@@ -67,6 +68,7 @@ function DialogContent({
   /** Pressing Enter activates the semantic action button. Default: true. */
   enterConfirms?: boolean;
 }) {
+  const uiStrings = useUIStrings();
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     onKeyDown?.(event);
     if (enterConfirms) handleDialogDefaultActionKeyDown(event);
@@ -88,7 +90,7 @@ function DialogContent({
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button variant="ghost" className="absolute top-2 right-2" size="icon-sm">
               <IconX />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{uiStrings.close}</span>
             </Button>
           </DialogPrimitive.Close>
         )}

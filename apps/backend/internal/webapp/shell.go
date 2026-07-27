@@ -11,7 +11,28 @@ const bootPayloadGlobal = "window.__KANDEV_BOOT_PAYLOAD__"
 const debugGlobalAssignment = "window.__KANDEV_DEBUG=true;"
 const maxInt = int(^uint(0) >> 1)
 
+// DefaultLocale is the source locale shipped as the message catalog.
+const DefaultLocale = "en"
+
+// supportedLocales enumerates the locales the shell will honor for <html lang>.
+// Unknown values coerce to DefaultLocale. Keep in sync with the frontend
+// SUPPORTED_LOCALES in apps/web/lib/i18n/index.ts.
+var supportedLocales = map[string]bool{
+	"en":     true,
+	"pseudo": true,
+}
+
 var headCloseTag = []byte("</head>")
+
+var htmlOpenTag = []byte("<html")
+
+// NormalizeLocale returns locale if it is supported, otherwise DefaultLocale.
+func NormalizeLocale(locale string) string {
+	if supportedLocales[locale] {
+		return locale
+	}
+	return DefaultLocale
+}
 
 // RenderShell reads indexPath from assets and injects the boot payload before
 // </head>. The assets FS can be an embedded Vite dist in production or an
@@ -32,7 +53,55 @@ func RenderShellHTML(indexHTML []byte, payload BootPayload) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return injectBeforeHeadClose(indexHTML, script), nil
+	localized := rewriteHTMLLang(indexHTML, NormalizeLocale(payload.Runtime.Locale))
+	return injectBeforeHeadClose(localized, script), nil
+}
+
+// rewriteHTMLLang sets the lang="" attribute on the shell's opening <html> tag
+// to locale so first paint matches the SPA's active locale. If the tag has no
+// lang attribute, one is inserted. Only the opening <html ...> tag is touched.
+func rewriteHTMLLang(indexHTML []byte, locale string) []byte {
+	start := bytes.Index(indexHTML, htmlOpenTag)
+	if start < 0 {
+		return indexHTML
+	}
+	end := bytes.IndexByte(indexHTML[start:], '>')
+	if end < 0 {
+		return indexHTML
+	}
+	end += start
+	tag := indexHTML[start : end+1]
+	langAttr := []byte(` lang="` + locale + `"`)
+
+	out := make([]byte, 0, len(indexHTML)+len(langAttr))
+	out = append(out, indexHTML[:start]...)
+	out = append(out, replaceLangInTag(tag, locale, langAttr)...)
+	out = append(out, indexHTML[end+1:]...)
+	return out
+}
+
+func replaceLangInTag(tag []byte, locale string, langAttr []byte) []byte {
+	idx := bytes.Index(tag, []byte(` lang="`))
+	if idx < 0 {
+		// No lang attribute: insert one right after "<html".
+		insertAt := len(htmlOpenTag)
+		result := make([]byte, 0, len(tag)+len(langAttr))
+		result = append(result, tag[:insertAt]...)
+		result = append(result, langAttr...)
+		result = append(result, tag[insertAt:]...)
+		return result
+	}
+	valueStart := idx + len(` lang="`)
+	valueEnd := bytes.IndexByte(tag[valueStart:], '"')
+	if valueEnd < 0 {
+		return tag
+	}
+	valueEnd += valueStart
+	result := make([]byte, 0, len(tag)+len(locale))
+	result = append(result, tag[:valueStart]...)
+	result = append(result, locale...)
+	result = append(result, tag[valueEnd:]...)
+	return result
 }
 
 // BootPayloadScript serializes payload into an inline script safe to embed in

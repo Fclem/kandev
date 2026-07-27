@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "./lib/utils";
+import { useUIStrings } from "./lib/ui-strings";
 import { Button } from "./button";
 import { IconChevronLeft, IconChevronRight, IconDots } from "@tabler/icons-react";
 
@@ -49,34 +50,37 @@ function PaginationLink({ className, isActive, size = "icon", ...props }: Pagina
 }
 
 function PaginationPrevious({ className, ...props }: React.ComponentProps<typeof PaginationLink>) {
+  const uiStrings = useUIStrings();
   return (
     <PaginationLink
-      aria-label="Go to previous page"
+      aria-label={uiStrings.goToPreviousPage}
       size="default"
       className={cn("pl-2!", className)}
       {...props}
     >
       <IconChevronLeft data-icon="inline-start" />
-      <span className="hidden sm:block">Previous</span>
+      <span className="hidden sm:block">{uiStrings.previous}</span>
     </PaginationLink>
   );
 }
 
 function PaginationNext({ className, ...props }: React.ComponentProps<typeof PaginationLink>) {
+  const uiStrings = useUIStrings();
   return (
     <PaginationLink
-      aria-label="Go to next page"
+      aria-label={uiStrings.goToNextPage}
       size="default"
       className={cn("pr-2!", className)}
       {...props}
     >
-      <span className="hidden sm:block">Next</span>
+      <span className="hidden sm:block">{uiStrings.next}</span>
       <IconChevronRight data-icon="inline-end" />
     </PaginationLink>
   );
 }
 
 function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span">) {
+  const uiStrings = useUIStrings();
   return (
     <span
       aria-hidden
@@ -88,7 +92,7 @@ function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span"
       {...props}
     >
       <IconDots />
-      <span className="sr-only">More pages</span>
+      <span className="sr-only">{uiStrings.morePages}</span>
     </span>
   );
 }

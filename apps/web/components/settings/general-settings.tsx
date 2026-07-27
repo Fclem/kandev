@@ -25,6 +25,7 @@ import { updateUserSettings } from "@/lib/api";
 import type { Theme } from "@/lib/settings/types";
 import type { UserSettingsState } from "@/lib/state/slices/settings/types";
 import { ArchiveConfirmationSettings } from "@/components/settings/archive-confirmation-settings";
+import { LanguageSettings } from "@/components/settings/language-settings";
 import { MCPTaskAgentProfileDefaultSettings } from "@/components/settings/mcp-task-agent-profile-default-settings";
 import { useSettingsSaveContributor } from "@/components/settings/settings-save-provider";
 import type { StoredShortcutOverrides } from "@/lib/keyboard/shortcut-overrides";
@@ -263,6 +264,10 @@ export function AppearanceSettings() {
           }}
         />
       </SettingsSection>
+
+      <Separator />
+
+      <LanguageSettings />
 
       <Separator />
 

@@ -37,6 +37,10 @@ type RuntimeConfig struct {
 	APIPrefix     string `json:"apiPrefix"`
 	WebSocketPath string `json:"webSocketPath"`
 	Debug         bool   `json:"debug,omitempty"`
+	// Locale is the active UI locale (BCP-47-ish tag) the SPA should activate
+	// before first paint. Sourced from the kandev_locale cookie; defaults to
+	// "en". Also drives the shell's <html lang> so first paint matches.
+	Locale string `json:"locale,omitempty"`
 }
 
 // BootError is a serializable non-fatal boot-data error for partial hydration.

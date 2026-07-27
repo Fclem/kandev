@@ -175,6 +175,18 @@ surface.
   hover/title/tooltip metadata. Tasks with no repository, or only a non-repo
   local folder, should not render a repo chip.
 
+## Internationalization (i18n)
+
+User-facing strings are localized with Lingui. Wrap new JSX text in `<Trans>`
+and attributes/toasts/variables in the `t` macro (`useLingui`); never translate
+user/domain data, code identifiers, `data-testid`, or brand names. Commit `.po`
+catalogs (`pnpm extract`); the Vite plugin compiles them at build. The Lingui
+CLI requires **Node 24**. `pnpm lint:i18n` guards against new hardcoded strings,
+and the **pseudo-locale** (Settings → Appearance, dev/e2e) is the completeness
+check — any plain-English text under it is an un-externalized string. Full
+guide: [`docs/i18n.md`](../../docs/i18n.md); spec:
+[`docs/specs/platform/i18n.md`](../../docs/specs/platform/i18n.md).
+
 ## Markdown safety
 
 Any renderer that enables embedded raw HTML must pair `rehype-raw` immediately

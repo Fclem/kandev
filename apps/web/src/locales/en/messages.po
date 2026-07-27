@@ -1,0 +1,98 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-07-27 20:21+0100\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: en\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Plural-Forms: \n"
+
+#: lib/i18n/formats.ts
+msgid "{diffDay}d ago"
+msgstr "{diffDay}d ago"
+
+#: lib/i18n/formats.ts
+msgid "{diffHr}h ago"
+msgstr "{diffHr}h ago"
+
+#: lib/i18n/formats.ts
+msgid "{diffMin}m ago"
+msgstr "{diffMin}m ago"
+
+#: components/settings/language-settings.tsx
+msgid "Changes the language of the Kandev interface. Applies immediately and is remembered on this device. Task titles, chat, and other content you create are not translated."
+msgstr "Changes the language of the Kandev interface. Applies immediately and is remembered on this device. Task titles, chat, and other content you create are not translated."
+
+#: components/settings/language-settings.tsx
+msgid "Choose the language used across the Kandev interface"
+msgstr "Choose the language used across the Kandev interface"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Close"
+msgstr "Close"
+
+#: components/settings/language-settings.tsx
+msgid "Display language"
+msgstr "Display language"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Displays the mobile sidebar."
+msgstr "Displays the mobile sidebar."
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Go to next page"
+msgstr "Go to next page"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Go to previous page"
+msgstr "Go to previous page"
+
+#: lib/i18n/formats.ts
+msgid "just now"
+msgstr "just now"
+
+#: components/settings/language-settings.tsx
+msgid "Language"
+msgstr "Language"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Loading"
+msgstr "Loading"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "More"
+msgstr "More"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "More pages"
+msgstr "More pages"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Next"
+msgstr "Next"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Next slide"
+msgstr "Next slide"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Previous"
+msgstr "Previous"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Previous slide"
+msgstr "Previous slide"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Sidebar"
+msgstr "Sidebar"
+
+#: lib/i18n/ui-strings-bridge.tsx
+msgid "Toggle Sidebar"
+msgstr "Toggle Sidebar"

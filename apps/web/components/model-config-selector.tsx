@@ -2,6 +2,8 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@kandev/ui/button";
@@ -159,7 +161,7 @@ function triggerDetails(
     ? [
         {
           id: modelConfig?.id || MODEL_CONFIG_CATEGORY,
-          name: modelConfig?.name || "Model",
+          name: modelConfig?.name || t`Model`,
           value: modelValue,
         },
       ]
@@ -246,11 +248,13 @@ function ConfigOptionSubSelector({
   onBack: () => void;
   onChange?: (configId: string, value: string) => void;
 }) {
+  const { t } = useLingui();
+  const optionName = option.name;
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <button
         type="button"
-        aria-label={`Back to model settings from ${option.name}`}
+        aria-label={t`Back to model settings from ${optionName}`}
         autoFocus
         className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left text-xs/relaxed hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:outline-none"
         onClick={onBack}
@@ -336,6 +340,7 @@ function ModelConfigSelectorContent({
   onConfigBack,
   onConfigChange,
 }: ModelConfigSelectorContentProps) {
+  const { t } = useLingui();
   const pendingFocusConfigId = useRef<string | null>(null);
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const showModelFilter = modelOptions.length > 5;
@@ -368,10 +373,12 @@ function ModelConfigSelectorContent({
   return (
     <>
       <Command>
-        {showModelFilter && <CommandInput placeholder="Filter models..." className="h-8" />}
+        {showModelFilter && <CommandInput placeholder={t`Filter models...`} className="h-8" />}
         <CommandList className="max-h-60">
-          <CommandEmpty>No models found.</CommandEmpty>
-          <CommandGroup heading="Model">
+          <CommandEmpty>
+            <Trans>No models found.</Trans>
+          </CommandEmpty>
+          <CommandGroup heading={t`Model`}>
             {modelOptions.map((model) => (
               <ModelRow
                 key={model.id}
@@ -491,8 +498,8 @@ export const ModelConfigSelector = memo(function ModelConfigSelector({
   onModelChange,
   onConfigChange,
   disabled,
-  placeholder = "Select model...",
-  ariaLabel = "Model settings",
+  placeholder = t`Select model...`,
+  ariaLabel = t`Model settings`,
   variant = "field",
   popoverSide = "bottom",
   triggerClassName: customTriggerClassName,

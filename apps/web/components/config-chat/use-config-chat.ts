@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { t } from "@lingui/core/macro";
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { updateWorkspaceAction } from "@/app/actions/workspaces";
@@ -88,7 +89,7 @@ function registerStartedSession({
   } else {
     store.addQuickChatSession(response.session_id, workspaceId, agentProfileId, "config");
   }
-  store.renameQuickChatSession(response.session_id, prompt.slice(0, 40) || "Config Chat");
+  store.renameQuickChatSession(response.session_id, prompt.slice(0, 40) || t`Config Chat`);
   if (!isPassthrough) store.setQuickChatInitialPrompt(response.session_id, prompt);
 }
 
@@ -140,7 +141,7 @@ export function useConfigChat(workspaceId: string) {
         .getState()
         .agentProfiles.items.find((item) => item.id === agentProfileId);
       if (!profile) {
-        setError("The selected agent profile is not available yet. Try again shortly.");
+        setError(t`The selected agent profile is not available yet. Try again shortly.`);
         return undefined;
       }
       if (activeWorkspaceStarts.has(workspaceId)) return undefined;
@@ -181,7 +182,7 @@ export function useConfigChat(workspaceId: string) {
         return response.session_id;
       } catch (err) {
         if (latestRequestId.current !== requestId) return undefined;
-        setError(err instanceof Error ? err.message : "Unknown error");
+        setError(err instanceof Error ? err.message : t`Unknown error`);
         return undefined;
       } finally {
         if (activeWorkspaceStarts.get(workspaceId) === workspaceStart) {

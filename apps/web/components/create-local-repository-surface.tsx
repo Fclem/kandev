@@ -8,6 +8,8 @@ import {
   IconFolderPlus,
   IconInfoCircle,
 } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -33,10 +35,10 @@ import type { Repository } from "@/lib/types/http";
 
 export function validateLocalRepositoryName(name: string): string | null {
   const trimmed = name.trim();
-  if (!trimmed) return "Enter a repository name.";
-  if (trimmed === "." || trimmed === "..") return "Choose a different repository name.";
+  if (!trimmed) return t`Enter a repository name.`;
+  if (trimmed === "." || trimmed === "..") return t`Choose a different repository name.`;
   if (trimmed.includes("/") || trimmed.includes("\\") || trimmed.includes("\0")) {
-    return "The repository name must be one folder name.";
+    return t`The repository name must be one folder name.`;
   }
   return null;
 }
@@ -62,15 +64,16 @@ function executorNotice(
   context: NonNullable<CreateLocalRepositorySurfaceProps["context"]>,
 ): string {
   if (context === "workspace") {
-    return "Creates an empty Git repository and registers it in this workspace.";
+    return t`Creates an empty Git repository and registers it in this workspace.`;
   }
   if (!selection) {
-    return "A direct local executor profile is required to create and use an empty repository.";
+    return t`A direct local executor profile is required to create and use an empty repository.`;
   }
+  const executorProfileName = selection.executorProfileName;
   if (selection.requiresSwitch) {
-    return `Empty repositories run directly on this machine. This task will switch to “${selection.executorProfileName}”.`;
+    return t`Empty repositories run directly on this machine. This task will switch to “${executorProfileName}”.`;
   }
-  return `This empty repository will run with “${selection.executorProfileName}” on this machine.`;
+  return t`This empty repository will run with “${executorProfileName}” on this machine.`;
 }
 
 type RepositoryLocationFieldsProps = {
@@ -90,10 +93,13 @@ function RepositoryLocationFields({
   onParentPathChange,
   onLoadTypedDirectory,
 }: RepositoryLocationFieldsProps) {
+  const { t } = useLingui();
   return (
     <>
       <label className="block space-y-1.5 text-xs font-medium">
-        <span>Repository name</span>
+        <span>
+          <Trans>Repository name</Trans>
+        </span>
         <Input
           value={name}
           onChange={(event) => onNameChange(event.target.value)}
@@ -104,7 +110,7 @@ function RepositoryLocationFields({
       </label>
       <div className="space-y-1.5">
         <label htmlFor="local-repository-parent" className="text-xs font-medium">
-          Parent directory
+          <Trans>Parent directory</Trans>
         </label>
         <div className="flex min-w-0 items-center gap-2">
           <Input
@@ -126,8 +132,8 @@ function RepositoryLocationFields({
             className="size-11 sm:size-8"
             onClick={onLoadTypedDirectory}
             disabled={!parentPath}
-            aria-label="Browse parent directory"
-            title="Browse parent directory"
+            aria-label={t`Browse parent directory`}
+            title={t`Browse parent directory`}
           >
             <IconFolderOpen />
           </Button>
@@ -135,9 +141,11 @@ function RepositoryLocationFields({
       </div>
       <div className="flex min-w-0 items-center gap-2 border-t border-border/70 pt-2 sm:col-span-2">
         <IconFolder className="size-4 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 text-xs text-muted-foreground">Destination</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          <Trans>Destination</Trans>
+        </span>
         <span className="truncate font-mono text-xs" title={targetPath || parentPath}>
-          {targetPath || parentPath || "Loading folder…"}
+          {targetPath || parentPath || t`Loading folder…`}
         </span>
       </div>
     </>
@@ -191,6 +199,7 @@ function CreateRepositoryFooter({
   canSubmit: boolean;
   submitting: boolean;
 }) {
+  const { t } = useLingui();
   return (
     <div className="flex shrink-0 justify-end border-t border-border px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <Button
@@ -199,7 +208,7 @@ function CreateRepositoryFooter({
         disabled={!canSubmit}
       >
         <IconFolderPlus className="h-4 w-4" />
-        {submitting ? "Creating…" : "Create repository"}
+        {submitting ? t`Creating…` : t`Create repository`}
       </Button>
     </div>
   );
@@ -250,7 +259,7 @@ function CreateRepositoryForm({
       setName("");
       onDismiss();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Failed to create repository");
+      setSubmitError(err instanceof Error ? err.message : t`Failed to create repository`);
     } finally {
       setSubmitting(false);
     }
@@ -325,9 +334,11 @@ export function CreateLocalRepositorySurface(props: CreateLocalRepositorySurface
           className="h-[88dvh] max-h-[88dvh] min-w-0 overflow-hidden pb-0"
         >
           <DrawerHeader className="shrink-0 border-b border-border text-left">
-            <DrawerTitle>Create new repository</DrawerTitle>
+            <DrawerTitle>
+              <Trans>Create new repository</Trans>
+            </DrawerTitle>
             <DrawerDescription>
-              Choose a folder or enter a new path on this machine.
+              <Trans>Choose a folder or enter a new path on this machine.</Trans>
             </DrawerDescription>
           </DrawerHeader>
           {form}
@@ -343,9 +354,11 @@ export function CreateLocalRepositorySurface(props: CreateLocalRepositorySurface
         className="flex h-[min(640px,85dvh)] max-w-xl min-w-0 flex-col overflow-hidden p-0"
       >
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12">
-          <DialogTitle>Create new repository</DialogTitle>
+          <DialogTitle>
+            <Trans>Create new repository</Trans>
+          </DialogTitle>
           <DialogDescription>
-            Choose a folder or enter a new path on this machine.
+            <Trans>Choose a folder or enter a new path on this machine.</Trans>
           </DialogDescription>
         </DialogHeader>
         {form}

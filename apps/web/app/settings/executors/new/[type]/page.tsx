@@ -1,6 +1,9 @@
 "use client";
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
+import type { MessageDescriptor } from "@lingui/core";
 import { useRouter } from "@/lib/routing/client-router";
 import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
 import { Badge } from "@kandev/ui/badge";
@@ -77,9 +80,11 @@ function InvalidTypeFallback() {
   return (
     <Card>
       <CardContent className="py-12 text-center">
-        <p className="text-muted-foreground">Unknown executor type</p>
+        <p className="text-muted-foreground">
+          <Trans>Unknown executor type</Trans>
+        </p>
         <Button className="mt-4 cursor-pointer" onClick={() => router.push(EXECUTORS_ROUTE)}>
-          Back to Executors
+          <Trans>Back to Executors</Trans>
         </Button>
       </CardContent>
     </Card>
@@ -102,7 +107,9 @@ function CreateProfileHeader({
         <div>
           <div className="flex items-center gap-2">
             <ExecutorTypeIcon type={type} />
-            <h2 className="text-2xl font-bold">New {label} Profile</h2>
+            <h2 className="text-2xl font-bold">
+              <Trans>New {label} Profile</Trans>
+            </h2>
             <Badge variant="outline" className="text-xs">
               {getExecutorLabel(type)}
             </Badge>
@@ -115,7 +122,7 @@ function CreateProfileHeader({
           onClick={() => router.push(EXECUTORS_ROUTE)}
           className="cursor-pointer"
         >
-          Back to Executors
+          <Trans>Back to Executors</Trans>
         </Button>
       </div>
       <Separator />
@@ -281,6 +288,7 @@ function useCreateGitIdentityState(isRemote: boolean) {
 }
 
 function useCreateProfileFormState(executorType: ExecutorType) {
+  const { t } = useLingui();
   const [name, setName] = useState(() => (executorType === "local_docker" ? "Docker" : ""));
   const [mcpPolicy, setMcpPolicy] = useState("");
   const [prepareScript, setPrepareScript] = useState("");
@@ -323,9 +331,12 @@ function useCreateProfileFormState(executorType: ExecutorType) {
       builtDockerImage?.dockerfile === dockerfile &&
       builtDockerImage?.imageTag === imageTag.trim());
 
+  // Rendered literally as `{{` in the copy; kept as an interpolated value so the
+  // extracted ICU message doesn't contain unescaped braces.
+  const placeholderToken = "{{";
   const prepareDesc = flags.isRemote
-    ? "Runs inside the execution environment before the agent starts. Type {{ to see available placeholders."
-    : "Runs on the host machine before the agent starts.";
+    ? t`Runs inside the execution environment before the agent starts. Type ${placeholderToken} to see available placeholders.`
+    : t`Runs on the host machine before the agent starts.`;
 
   return {
     name,
@@ -391,7 +402,7 @@ function useCreateProfileSave(executorId: string) {
         );
         runWithNavigationBlockerBypassed(() => router.push(`/settings/executors/${profile.id}`));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to create profile");
+        setError(err instanceof Error ? err.message : t`Failed to create profile`);
         throw err;
       } finally {
         setSaving(false);
@@ -412,6 +423,7 @@ function CreateProfileSections({
   form: ReturnType<typeof useCreateProfileFormState>;
   secrets: ReturnType<typeof useSecrets>["items"];
 }) {
+  const { t } = useLingui();
   return (
     <>
       <ProfileDetailsCard name={form.name} baselineName="" onNameChange={form.setName} />
@@ -472,7 +484,7 @@ function CreateProfileSections({
         onRemove={form.removeEnvVar}
       />
       <ScriptCard
-        title="Prepare Script"
+        title={t`Prepare Script`}
         description={form.prepareDesc}
         value={form.prepareScript}
         baselineValue=""
@@ -483,8 +495,8 @@ function CreateProfileSections({
       />
       {form.isRemote && (
         <ScriptCard
-          title="Cleanup Script"
-          description="Runs after the agent session ends for cleanup tasks."
+          title={t`Cleanup Script`}
+          description={t`Runs after the agent session ends for cleanup tasks.`}
           value={form.cleanupScript}
           baselineValue=""
           onChange={form.setCleanupScript}
@@ -508,14 +520,14 @@ function getCreateDisabledReason(
   spritesTokenMissing: boolean,
   saving: boolean,
 ) {
-  if (saving) return "Creating profile...";
-  if (!form.name.trim()) return "Enter a profile name.";
+  if (saving) return t`Creating profile...`;
+  if (!form.name.trim()) return t`Enter a profile name.`;
   if (form.mcpPolicyError) return form.mcpPolicyError;
-  if (spritesTokenMissing) return "Add a Sprites API key before creating the profile.";
+  if (spritesTokenMissing) return t`Add a Sprites API key before creating the profile.`;
   if (form.isDocker) {
-    if (!form.imageTag.trim()) return "Enter an image tag before creating the profile.";
-    if (!form.dockerfile.trim()) return "Add Dockerfile content before creating the profile.";
-    if (!form.dockerImageBuilt) return "Build this Docker image before creating the profile.";
+    if (!form.imageTag.trim()) return t`Enter an image tag before creating the profile.`;
+    if (!form.dockerfile.trim()) return t`Add Dockerfile content before creating the profile.`;
+    if (!form.dockerImageBuilt) return t`Build this Docker image before creating the profile.`;
   }
   return null;
 }
@@ -549,8 +561,9 @@ function CreateProfileForm({
   typeInfo,
 }: {
   executorType: ExecutorType;
-  typeInfo: { executorId: string; label: string; description: string };
+  typeInfo: { executorId: string; label: MessageDescriptor; description: MessageDescriptor };
 }) {
+  const { t } = useLingui();
   const { items: secrets } = useSecrets();
   const form = useCreateProfileFormState(executorType);
   const { saving, error, handleSave } = useCreateProfileSave(typeInfo.executorId);
@@ -572,14 +585,16 @@ function CreateProfileForm({
     <div className="space-y-8">
       <CreateProfileHeader
         type={executorType}
-        label={typeInfo.label}
-        description={typeInfo.description}
+        label={t(typeInfo.label)}
+        description={t(typeInfo.description)}
       />
       <fieldset disabled={saving} className="contents">
         <CreateProfileSections executorType={executorType} form={form} secrets={secrets} />
       </fieldset>
       {spritesTokenMissing && (
-        <p className="text-sm text-destructive">Sprites API key is required.</p>
+        <p className="text-sm text-destructive">
+          <Trans>Sprites API key is required.</Trans>
+        </p>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>

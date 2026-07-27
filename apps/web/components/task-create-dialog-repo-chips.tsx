@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { IconGitFork } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { Repository } from "@/lib/types/http";
@@ -205,12 +207,13 @@ function ModeBody({
   onRefreshRepositories?: () => void;
   repositoriesRefreshing?: boolean;
 }) {
+  const { t } = useLingui();
   if (fs.noRepository) {
     return (
       <FolderPicker
         value={fs.workspacePath}
         onChange={onWorkspacePathChange ?? (() => {})}
-        placeholder="pick a starting folder (optional)"
+        placeholder={t`pick a starting folder (optional)`}
       />
     );
   }
@@ -265,6 +268,7 @@ function FreshBranchToggle({
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
 }) {
+  const { t } = useLingui();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -275,8 +279,8 @@ function FreshBranchToggle({
           aria-pressed={enabled}
           aria-label={
             enabled
-              ? "Fork a new branch from a base (turn off to use current checkout)"
-              : "Fork a new branch from a base instead of using current checkout"
+              ? t`Fork a new branch from a base (turn off to use current checkout)`
+              : t`Fork a new branch from a base instead of using current checkout`
           }
           className={cn(
             "inline-flex h-7 w-7 items-center justify-center rounded-md border border-input cursor-pointer transition-colors",
@@ -290,8 +294,8 @@ function FreshBranchToggle({
       </TooltipTrigger>
       <TooltipContent className="max-w-xs">
         {enabled
-          ? "Fork mode: a new branch will be created from the selected base before the agent runs. Click to turn off and use your repository's current checkout instead."
-          : "By default the local executor uses your repository's current checkout. Click to fork a new branch from a base instead, leaving your working tree untouched."}
+          ? t`Fork mode: a new branch will be created from the selected base before the agent runs. Click to turn off and use your repository's current checkout instead.`
+          : t`By default the local executor uses your repository's current checkout. Click to fork a new branch from a base instead, leaving your working tree untouched.`}
       </TooltipContent>
     </Tooltip>
   );
@@ -299,6 +303,6 @@ function FreshBranchToggle({
 
 function computeAddHint(canAddMore: boolean, workspaceRepoCount: number): string | undefined {
   if (canAddMore) return undefined;
-  if (workspaceRepoCount === 0) return "No repositories available in this workspace";
-  return "All workspace repositories are already added";
+  if (workspaceRepoCount === 0) return t`No repositories available in this workspace`;
+  return t`All workspace repositories are already added`;
 }

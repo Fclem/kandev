@@ -2,6 +2,7 @@
 
 import type { PointerEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { cn } from "@/lib/utils";
 
 type DebugOverlayProps = {
@@ -22,7 +23,9 @@ function formatValue(value: unknown): string {
   }
 }
 
-export function DebugOverlay({ title = "Debug", entries, className }: DebugOverlayProps) {
+export function DebugOverlay({ title, entries, className }: DebugOverlayProps) {
+  const { t } = useLingui();
+  const titleText = title ?? t`Debug`;
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const dragOffsetRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -103,8 +106,10 @@ export function DebugOverlay({ title = "Debug", entries, className }: DebugOverl
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       >
-        <span>{title}</span>
-        <span className="text-[10px] opacity-70">drag</span>
+        <span>{titleText}</span>
+        <span className="text-[10px] opacity-70">
+          <Trans>drag</Trans>
+        </span>
       </div>
       <div className="space-y-1">
         {displayEntries.map((entry) => (

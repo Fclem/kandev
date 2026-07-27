@@ -1,5 +1,8 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
+import { msg, t } from "@lingui/core/macro";
+import type { MessageDescriptor } from "@lingui/core";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Label } from "@kandev/ui/label";
 import { Switch } from "@kandev/ui/switch";
@@ -69,8 +72,7 @@ const POPULAR_SERVERS: Record<string, Record<string, unknown>> = {
   },
 };
 
-const KANDEV_TOOLS_DESCRIPTION =
-  "Tools: list_workspaces, list_boards, list_workflow_steps, list_tasks, create_task, update_task";
+const KANDEV_TOOLS_DESCRIPTION: MessageDescriptor = msg`Tools: list_workspaces, list_boards, list_workflow_steps, list_tasks, create_task, update_task`;
 
 type PopularServerButtonProps = {
   label: string;
@@ -129,16 +131,16 @@ function validateDraftServers(value: string): string | null {
   try {
     const parsed = JSON.parse(value);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return "MCP servers config must be a JSON object";
+      return t`MCP servers config must be a JSON object`;
     }
     if ("mcpServers" in parsed) {
       const nested = (parsed as { mcpServers?: unknown }).mcpServers;
       if (!nested || typeof nested !== "object" || Array.isArray(nested)) {
-        return "mcpServers must be a JSON object";
+        return t`mcpServers must be a JSON object`;
       }
     }
   } catch {
-    return "Invalid JSON";
+    return t`Invalid JSON`;
   }
   return null;
 }
@@ -153,7 +155,7 @@ function PassthroughMcpInjectionHint({
   if (!cliPassthrough || !mcpInjection) return null;
   return (
     <p className="text-xs text-muted-foreground">
-      In CLI passthrough mode, kandev injects these MCP servers via {mcpInjection}.
+      <Trans>In CLI passthrough mode, kandev injects these MCP servers via {mcpInjection}.</Trans>
     </p>
   );
 }
@@ -183,6 +185,7 @@ function McpServersEditor({
   onDraftStateChange,
   handleMcpServersChange,
 }: McpServersEditorProps) {
+  const { t: translate } = useLingui();
   const handleApplyServer = (label: string) => {
     applyPopularServerToJson(
       currentServers,
@@ -201,7 +204,9 @@ function McpServersEditor({
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={`mcp-servers-${profileId}`}>MCP servers (JSON)</Label>
+      <Label htmlFor={`mcp-servers-${profileId}`}>
+        <Trans>MCP servers (JSON)</Trans>
+      </Label>
       <Textarea
         id={`mcp-servers-${profileId}`}
         className="min-h-[200px] font-mono text-xs"
@@ -218,11 +223,15 @@ function McpServersEditor({
         data-testid={`mcp-servers-${profileId}`}
       />
       <p className="text-xs text-muted-foreground">
-        MCP definitions are stored in the database and resolved per executor at runtime. This does
-        not override your local agent config.
+        <Trans>
+          MCP definitions are stored in the database and resolved per executor at runtime. This does
+          not override your local agent config.
+        </Trans>
       </p>
       <PassthroughMcpInjectionHint cliPassthrough={cliPassthrough} mcpInjection={mcpInjection} />
-      <p className="text-xs font-medium text-muted-foreground">Built-in</p>
+      <p className="text-xs font-medium text-muted-foreground">
+        <Trans>Built-in</Trans>
+      </p>
       <div className="flex flex-wrap gap-2 mb-2">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -231,12 +240,16 @@ function McpServersEditor({
             </span>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-[320px] text-xs">
-            <p className="font-medium mb-1">Automatically available</p>
-            <p>{KANDEV_TOOLS_DESCRIPTION}</p>
+            <p className="font-medium mb-1">
+              <Trans>Automatically available</Trans>
+            </p>
+            <p>{translate(KANDEV_TOOLS_DESCRIPTION)}</p>
           </TooltipContent>
         </Tooltip>
       </div>
-      <p className="text-xs font-medium text-muted-foreground">Popular servers</p>
+      <p className="text-xs font-medium text-muted-foreground">
+        <Trans>Popular servers</Trans>
+      </p>
       <div className="flex flex-wrap gap-2">
         <PopularServerButton
           label="playwright"
@@ -328,9 +341,11 @@ function McpEnableToggle({
       data-testid="mcp-enabled-row"
     >
       <div className="space-y-1">
-        <Label>Enable MCP</Label>
+        <Label>
+          <Trans>Enable MCP</Trans>
+        </Label>
         <p className="text-xs text-muted-foreground">
-          Allow this profile to use MCP servers during sessions.
+          <Trans>Allow this profile to use MCP servers during sessions.</Trans>
         </p>
       </div>
       <Switch
@@ -357,12 +372,13 @@ function McpProfileHint({
   isDraft: boolean;
   isEditableProfile: boolean;
 }) {
+  const { t: translate } = useLingui();
   if (isEditableProfile) return null;
   return (
     <p className="text-xs text-muted-foreground">
       {isDraft
-        ? "MCP config will be applied after the profile is saved."
-        : "Save this profile to configure MCP servers."}
+        ? translate`MCP config will be applied after the profile is saved.`
+        : translate`Save this profile to configure MCP servers.`}
     </p>
   );
 }
@@ -416,7 +432,9 @@ export function ProfileMcpConfigCard({
   return (
     <SettingsCard isDirty={state.currentDirty}>
       <CardHeader>
-        <CardTitle>MCP Configuration</CardTitle>
+        <CardTitle>
+          <Trans>MCP Configuration</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <McpProfileHint isDraft={state.isDraft} isEditableProfile={state.isEditableProfile} />

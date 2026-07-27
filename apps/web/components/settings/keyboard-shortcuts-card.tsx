@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconAlertTriangle, IconRotate, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -132,13 +133,15 @@ function ShortcutRecorderLabel({
   label: string;
   conflictsWith?: string[];
 }) {
+  const { t } = useLingui();
+  const conflictNames = conflictsWith?.join(", ") ?? "";
   return (
     <span className="text-sm flex items-center gap-1.5">
       {label}
       {conflictsWith && conflictsWith.length > 0 && (
         <span
           className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500"
-          title={`Same shortcut as: ${conflictsWith.join(", ")}`}
+          title={t`Same shortcut as: ${conflictNames}`}
         >
           <IconAlertTriangle className="size-3.5" />
         </span>
@@ -162,6 +165,7 @@ function ShortcutRecorderActions({
   onReset: (id: string) => void;
   onClear?: (id: string) => void;
 }) {
+  const { t } = useLingui();
   return (
     <>
       {onClear && !isUnbound && !defaultIsUnbound && (
@@ -170,8 +174,8 @@ function ShortcutRecorderActions({
           size="icon"
           className="h-8 w-8 cursor-pointer"
           onClick={() => onClear(shortcutId)}
-          aria-label="Clear shortcut"
-          title="Clear shortcut"
+          aria-label={t`Clear shortcut`}
+          title={t`Clear shortcut`}
         >
           <IconX className="size-3.5" />
         </Button>
@@ -182,8 +186,8 @@ function ShortcutRecorderActions({
           size="icon"
           className="h-8 w-8 cursor-pointer"
           onClick={() => onReset(shortcutId)}
-          aria-label={defaultIsUnbound ? "Reset (clear shortcut)" : "Reset to default"}
-          title={defaultIsUnbound ? "Reset (clear shortcut)" : "Reset to default"}
+          aria-label={defaultIsUnbound ? t`Reset (clear shortcut)` : t`Reset to default`}
+          title={defaultIsUnbound ? t`Reset (clear shortcut)` : t`Reset to default`}
         >
           <IconRotate className="size-3.5" />
         </Button>
@@ -201,8 +205,18 @@ function renderRecorderLabel({
   current: KeyboardShortcut;
   isUnbound: boolean;
 }) {
-  if (recording) return <span className="animate-pulse">Press a key combo...</span>;
-  if (isUnbound) return <span className="text-muted-foreground italic">Unbound</span>;
+  if (recording)
+    return (
+      <span className="animate-pulse">
+        <Trans>Press a key combo...</Trans>
+      </span>
+    );
+  if (isUnbound)
+    return (
+      <span className="text-muted-foreground italic">
+        <Trans>Unbound</Trans>
+      </span>
+    );
   return <Kbd>{formatShortcut(current)}</Kbd>;
 }
 
@@ -273,7 +287,9 @@ export function KeyboardShortcutsCard({
   return (
     <SettingsCard isDirty={JSON.stringify(overrides) !== JSON.stringify(baselineOverrides)}>
       <CardHeader>
-        <CardTitle className="text-base">Keyboard Shortcuts</CardTitle>
+        <CardTitle className="text-base">
+          <Trans>Keyboard Shortcuts</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="divide-y divide-border">
@@ -294,7 +310,9 @@ export function KeyboardShortcutsCard({
         </div>
         {pluginEntries.length > 0 && (
           <div className="mt-4">
-            <p className="text-xs font-medium text-muted-foreground mb-1">Plugin Shortcuts</p>
+            <p className="text-xs font-medium text-muted-foreground mb-1">
+              <Trans>Plugin Shortcuts</Trans>
+            </p>
             <div className="divide-y divide-border">
               {pluginEntries.map((entry) => (
                 <ShortcutRecorder
@@ -317,7 +335,7 @@ export function KeyboardShortcutsCard({
           </div>
         )}
         <p className="text-xs text-muted-foreground mt-3">
-          Click a shortcut to record a new key combination.
+          <Trans>Click a shortcut to record a new key combination.</Trans>
         </p>
       </CardContent>
     </SettingsCard>

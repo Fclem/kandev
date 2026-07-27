@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,9 +31,10 @@ export function DiscardLocalChangesDialog({
   onConfirm,
   onCancel,
 }: DiscardLocalChangesDialogProps) {
+  const { t } = useLingui();
   const visible = dirtyFiles.slice(0, MAX_VISIBLE_FILES);
   const overflow = dirtyFiles.length - visible.length;
-  const target = repoPath ? ` in your local clone at ${repoPath}` : " in your local clone";
+  const target = repoPath ? t`in your local clone at ${repoPath}` : t`in your local clone`;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -41,10 +43,14 @@ export function DiscardLocalChangesDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>Discard local changes?</AlertDialogTitle>
+          <AlertDialogTitle>
+            <Trans>Discard local changes?</Trans>
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            Starting this task will permanently discard the uncommitted changes
-            {target}. Back up anything you want to keep before continuing.
+            <Trans>
+              Starting this task will permanently discard the uncommitted changes {target}. Back up
+              anything you want to keep before continuing.
+            </Trans>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <ul
@@ -61,7 +67,7 @@ export function DiscardLocalChangesDialog({
               className="pt-1 text-[11px] italic text-muted-foreground/80"
               data-testid="discard-local-changes-overflow"
             >
-              +{overflow} more
+              <Trans>+{overflow} more</Trans>
             </li>
           )}
         </ul>
@@ -71,14 +77,14 @@ export function DiscardLocalChangesDialog({
             data-testid="discard-local-changes-cancel"
             onClick={onCancel}
           >
-            Cancel
+            <Trans>Cancel</Trans>
           </AlertDialogCancel>
           <AlertDialogAction
             className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
             data-testid="discard-local-changes-confirm"
             onClick={onConfirm}
           >
-            Discard and continue
+            <Trans>Discard and continue</Trans>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans } from "@lingui/react/macro";
 import Link from "@/components/routing/app-link";
 import { IconRobot, IconChevronRight } from "@tabler/icons-react";
 import { Card, CardContent } from "@kandev/ui/card";
@@ -30,13 +31,17 @@ export function AgentCard({ agent }: AgentCardProps) {
                   </Badge>
                   {agent.autoApprove && (
                     <Badge variant="outline" className="text-xs text-green-600">
-                      Auto-approve
+                      <Trans>Auto-approve</Trans>
                     </Badge>
                   )}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  <p>Model: {agent.model}</p>
-                  <p>Temperature: {agent.temperature}</p>
+                  <p>
+                    <Trans>Model: {agent.model}</Trans>
+                  </p>
+                  <p>
+                    <Trans>Temperature: {agent.temperature}</Trans>
+                  </p>
                 </div>
               </div>
             </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@lingui/core/macro";
 import { useCallback, useState } from "react";
 import { getLocalRepositoryStatusAction } from "@/app/actions/workspaces";
 import { ApiError } from "@/lib/api/client";
@@ -81,8 +82,8 @@ export function useFreshBranchConsent({
       return await promptForList(status.dirty_files);
     } catch (error) {
       toast({
-        title: "Failed to check local repository status",
-        description: error instanceof Error ? error.message : "Request failed",
+        title: t`Failed to check local repository status`,
+        description: error instanceof Error ? error.message : t`Request failed`,
         variant: "error",
       });
       return null;

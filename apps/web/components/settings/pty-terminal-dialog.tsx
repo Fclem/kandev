@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Trans } from "@lingui/react/macro";
+import { t as globalT } from "@lingui/core/macro";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -146,7 +148,7 @@ function openSessionWebSocket(
   ws.binaryType = "arraybuffer";
   ws.onmessage = makeWsMessageHandler(term, setters);
   ws.onerror = () => {
-    setters.setError("Connection error");
+    setters.setError(globalT`Connection error`);
     setters.setStatus("error");
   };
   if (initialInput) {
@@ -283,11 +285,17 @@ function PtySessionView({
         className="h-[420px] rounded-md bg-[#0b0b0c] p-2 overflow-hidden"
       />
       {status === "connecting" && (
-        <p className="text-xs text-muted-foreground">Starting session…</p>
+        <p className="text-xs text-muted-foreground">
+          <Trans>Starting session…</Trans>
+        </p>
       )}
       {status === "exited" && (
         <p className="text-xs text-muted-foreground">
-          Session ended{exitCode != null ? ` (exit ${exitCode})` : ""}.
+          {exitCode != null ? (
+            <Trans>Session ended (exit {exitCode}).</Trans>
+          ) : (
+            <Trans>Session ended.</Trans>
+          )}
         </p>
       )}
       {status === "error" && error && <p className="text-xs text-destructive">{error}</p>}
@@ -298,7 +306,7 @@ function PtySessionView({
           className="cursor-pointer"
           data-testid={`${testIdPrefix ?? "pty"}-done`}
         >
-          Done
+          <Trans>Done</Trans>
         </Button>
       </DialogFooter>
     </>

@@ -1,3 +1,5 @@
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { Badge } from "@kandev/ui/badge";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
@@ -29,20 +31,23 @@ const RADIO_LABEL =
 const RADIO_ITEM = "mt-0.5 border border-muted-foreground/80 data-[state=checked]:border-primary";
 
 export function GitIdentityAccordionItem(props: GitIdentityFieldsProps) {
+  const { t } = useLingui();
   const isLocal = props.mode === "local" && props.localGitIdentity.detected;
   const modeDirty = props.mode !== props.baselineMode;
   const nameDirty = props.mode === "override" && props.gitUserName !== props.baselineGitUserName;
   const emailDirty = props.mode === "override" && props.gitUserEmail !== props.baselineGitUserEmail;
   const description = props.localGitIdentity.detected
     ? `${props.localGitIdentity.userName} <${props.localGitIdentity.userEmail}>`
-    : "Local git user.name/user.email not detected on this machine";
+    : t`Local git user.name/user.email not detected on this machine`;
   const badgeLabel = gitIdentityBadgeLabel(props.mode, isLocal);
 
   return (
     <AccordionItem value="git_identity" data-settings-dirty={modeDirty || nameDirty || emailDirty}>
       <AccordionTrigger>
         <div className="flex flex-1 items-center gap-2">
-          <span className="text-sm font-medium">Git Identity</span>
+          <span className="text-sm font-medium">
+            <Trans>Git Identity</Trans>
+          </span>
           <Badge
             variant={isLocal ? "default" : "secondary"}
             className={isLocal ? "bg-green-600 px-1.5 py-0 text-[10px]" : "px-1.5 py-0 text-[10px]"}
@@ -54,7 +59,7 @@ export function GitIdentityAccordionItem(props: GitIdentityFieldsProps) {
       <AccordionContent className="h-auto">
         <div className="space-y-3 text-sm">
           <p className="text-xs text-muted-foreground">
-            Used by remote executors for commit author configuration.
+            <Trans>Used by remote executors for commit author configuration.</Trans>
           </p>
           <RadioGroup
             value={props.mode}
@@ -67,15 +72,15 @@ export function GitIdentityAccordionItem(props: GitIdentityFieldsProps) {
               selected={props.mode === "local"}
               baselineSelected={props.baselineMode === "local"}
               disabled={!props.localGitIdentity.detected}
-              title="Use local git config"
+              title={t`Use local git config`}
               description={description}
             />
             <IdentityModeOption
               value="override"
               selected={props.mode === "override"}
               baselineSelected={props.baselineMode === "override"}
-              title="Override identity"
-              description="Set a custom name and email for remote git commits."
+              title={t`Override identity`}
+              description={t`Set a custom name and email for remote git commits.`}
             />
           </RadioGroup>
           {props.mode === "override" && <OverrideIdentityFields {...props} />}
@@ -86,8 +91,8 @@ export function GitIdentityAccordionItem(props: GitIdentityFieldsProps) {
 }
 
 function gitIdentityBadgeLabel(mode: GitIdentityMode, isLocal: boolean): string {
-  if (isLocal) return "Auto-detect";
-  return mode === "local" ? "Not Configured" : "Custom";
+  if (isLocal) return t`Auto-detect`;
+  return mode === "local" ? t`Not Configured` : t`Custom`;
 }
 
 function IdentityModeOption({
@@ -120,20 +125,25 @@ function IdentityModeOption({
 }
 
 function OverrideIdentityFields(props: GitIdentityFieldsProps) {
+  const { t } = useLingui();
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-1.5">
-        <Label htmlFor="remote-git-user-name">Git User Name</Label>
+        <Label htmlFor="remote-git-user-name">
+          <Trans>Git User Name</Trans>
+        </Label>
         <Input
           id="remote-git-user-name"
           value={props.gitUserName}
           onChange={(event) => props.onGitUserNameChange(event.target.value)}
-          placeholder="Jane Developer"
+          placeholder={t`Jane Developer`}
           data-settings-dirty={props.gitUserName !== props.baselineGitUserName}
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="remote-git-user-email">Git User Email</Label>
+        <Label htmlFor="remote-git-user-email">
+          <Trans>Git User Email</Trans>
+        </Label>
         <Input
           id="remote-git-user-email"
           value={props.gitUserEmail}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconBell } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
@@ -36,6 +37,8 @@ function AppriseProviderCardActions({
   onDeleteProvider: (providerId: string) => void;
   onTestProvider: (providerId: string) => Promise<void>;
 }) {
+  const { t } = useLingui();
+  const providerName = provider.name;
   return (
     <div className="flex items-center gap-2">
       <TooltipProvider>
@@ -45,13 +48,15 @@ function AppriseProviderCardActions({
               variant="outline"
               size="icon"
               className="h-8 w-8 cursor-pointer"
-              aria-label={`Send test notification for ${provider.name}`}
+              aria-label={t`Send test notification for ${providerName}`}
               onClick={() => void onTestProvider(provider.id)}
             >
               <IconBell className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Send test notification</TooltipContent>
+          <TooltipContent>
+            <Trans>Send test notification</Trans>
+          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
       <Button
@@ -60,7 +65,7 @@ function AppriseProviderCardActions({
         className="cursor-pointer"
         onClick={() => onOpenForm("edit", provider)}
       >
-        Edit
+        <Trans>Edit</Trans>
       </Button>
       <Button
         variant="outline"
@@ -68,7 +73,7 @@ function AppriseProviderCardActions({
         className="cursor-pointer"
         onClick={() => onDeleteProvider(provider.id)}
       >
-        Remove
+        <Trans>Remove</Trans>
       </Button>
     </div>
   );
@@ -209,27 +214,33 @@ function ExternalProvidersSection({
   return (
     <div className="space-y-4">
       <div>
-        <div className="text-base font-medium">External Providers</div>
+        <div className="text-base font-medium">
+          <Trans>External Providers</Trans>
+        </div>
         <p className="text-sm text-muted-foreground">
-          Configure external providers for remote notifications.
+          <Trans>Configure external providers for remote notifications.</Trans>
         </p>
       </div>
       {!appriseAvailable && (
         <p className="text-sm text-muted-foreground">
-          Apprise is not installed yet. You can add it later to enable remote notifications.{" "}
-          <a
-            className="underline"
-            href="https://github.com/caronc/apprise?tab=readme-ov-file#installation"
-            target="_blank"
-            rel="noreferrer"
-          >
-            View installation instructions
-          </a>
-          .
+          <Trans>
+            Apprise is not installed yet. You can add it later to enable remote notifications.{" "}
+            <a
+              className="underline"
+              href="https://github.com/caronc/apprise?tab=readme-ov-file#installation"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View installation instructions
+            </a>
+            .
+          </Trans>
         </p>
       )}
       {appriseProviders.length === 0 && (
-        <p className="text-sm text-muted-foreground">No Apprise providers configured yet.</p>
+        <p className="text-sm text-muted-foreground">
+          <Trans>No Apprise providers configured yet.</Trans>
+        </p>
       )}
       <AppriseProviderList
         providers={appriseProviders}
@@ -257,7 +268,7 @@ function ExternalProvidersSection({
             onClick={() => onOpenForm("create")}
             disabled={showAppriseForm}
           >
-            Add Apprise Provider
+            <Trans>Add Apprise Provider</Trans>
           </Button>
           {showAppriseForm && appriseFormMode === "create" && (
             <AppriseProviderForm
@@ -305,6 +316,7 @@ function useTableData(state: NotificationsState) {
 }
 
 function useNotificationPageSaveState(state: NotificationsState, soundIsDirty: boolean) {
+  const { t } = useLingui();
   const providerIsDirty = useIsDirty(state);
   const creatingApprise = state.showAppriseForm && state.appriseFormMode === "create";
   const canSave = !creatingApprise || state.appriseUrls.trim().length > 0;
@@ -331,12 +343,13 @@ function useNotificationPageSaveState(state: NotificationsState, soundIsDirty: b
     providerIsDirty,
     cardIsDirty: providerIsDirty || soundIsDirty,
     canSave,
-    invalidReason: canSave ? undefined : "At least one Apprise service URL is required.",
+    invalidReason: canSave ? undefined : t`At least one Apprise service URL is required.`,
     revision,
   };
 }
 
 export function NotificationsSettings() {
+  const { t } = useLingui();
   const state = useNotificationsState();
   const { notificationPermission, refreshPermission } = useNotificationPermission();
   const saveRequest = useSaveRequest(state);
@@ -359,8 +372,8 @@ export function NotificationsSettings() {
   const appriseProviders = providers.filter((provider) => provider.type === "apprise");
   return (
     <SettingsPageTemplate
-      title="Notifications"
-      description="Configure providers and choose which events should alert you."
+      title={t`Notifications`}
+      description={t`Configure providers and choose which events should alert you.`}
       isDirty={saveState.providerIsDirty}
       cardIsDirty={saveState.cardIsDirty}
       saveStatus={saveRequest.status}
@@ -402,9 +415,11 @@ export function NotificationsSettings() {
       <Separator className="my-4" />
       <div className="space-y-4">
         <div>
-          <div className="text-base font-medium">Notification Events</div>
+          <div className="text-base font-medium">
+            <Trans>Notification Events</Trans>
+          </div>
           <p className="text-sm text-muted-foreground">
-            Select which providers should receive each notification type.
+            <Trans>Select which providers should receive each notification type.</Trans>
           </p>
         </div>
         {tableProviders.length > 0 && (
@@ -450,24 +465,27 @@ function AppriseProviderForm({
   formIsDirty = nameIsDirty || urlsIsDirty,
   showSubmit = true,
 }: AppriseProviderFormProps) {
+  const { t } = useLingui();
   return (
     <div
       className="rounded-lg border border-dashed border-muted p-4 space-y-3"
       data-settings-dirty={formIsDirty}
       data-settings-dirty-level="container"
     >
-      <div className="text-base font-medium">Apprise Provider</div>
+      <div className="text-base font-medium">
+        <Trans>Apprise Provider</Trans>
+      </div>
       <Input
         value={name}
         onChange={(event) => onNameChange(event.target.value)}
-        placeholder="Provider name"
+        placeholder={t`Provider name`}
         data-settings-dirty={nameIsDirty}
       />
       <Textarea
         value={urls}
         onChange={(event) => onUrlsChange(event.target.value)}
         onInput={onInput}
-        placeholder="Service URL(s)"
+        placeholder={t`Service URL(s)`}
         rows={1}
         className="min-h-0 h-auto"
         data-settings-dirty={urlsIsDirty}
@@ -475,11 +493,11 @@ function AppriseProviderForm({
       <div className="flex items-center gap-2">
         {showSubmit && (
           <Button className="cursor-pointer" onClick={onSubmit}>
-            {mode === "create" ? "Add provider" : "Done"}
+            {mode === "create" ? t`Add provider` : t`Done`}
           </Button>
         )}
         <Button variant="ghost" className="cursor-pointer" onClick={onCancel}>
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
       </div>
     </div>

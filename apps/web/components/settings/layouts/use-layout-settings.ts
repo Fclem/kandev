@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { t } from "@lingui/core/macro";
 import { useAppStore } from "@/components/state-provider";
 import { updateUserSettings } from "@/lib/api";
 import {
@@ -34,13 +35,13 @@ function defaultSelection(profiles: SavedLayout[]): LayoutProfileSelection {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Failed to save layout profiles";
+  return error instanceof Error ? error.message : t`Failed to save layout profiles`;
 }
 
 function getDefaultActionLabel(isCustomDefault: boolean, selectedIsDefault: boolean) {
-  if (isCustomDefault) return "Use built-in Default";
-  if (selectedIsDefault) return "Default";
-  return "Use as default";
+  if (isCustomDefault) return t`Use built-in Default`;
+  if (selectedIsDefault) return t`Default`;
+  return t`Use as default`;
 }
 
 function attempt(setError: Dispatch<SetStateAction<string | null>>, action: () => void) {
@@ -150,7 +151,7 @@ function updateBuiltInDefault(drafts: Drafts, selected: SelectedState) {
 }
 
 function useProfileActions(drafts: Drafts, selected: SelectedState) {
-  const selectedName = selected.selectedBuiltIn?.name ?? selected.selectedCustom?.name ?? "Layout";
+  const selectedName = selected.selectedBuiltIn?.name ?? selected.selectedCustom?.name ?? t`Layout`;
   const duplicate = () =>
     attempt(drafts.setError, () => {
       const id = createLayoutProfileId();
@@ -251,7 +252,7 @@ function useSaveProfiles(drafts: Drafts) {
   return async () => {
     if (!drafts.isDirty || drafts.saveStatus === "loading") return;
     if (drafts.profiles.some((profile) => !profile.name.trim())) {
-      drafts.setError("Layout profile names must not be empty");
+      drafts.setError(t`Layout profile names must not be empty`);
       drafts.setSaveStatus("error");
       return;
     }
@@ -302,7 +303,7 @@ function getDefaultActionState(drafts: Drafts, selected: SelectedState) {
     drafts.selection.kind === "built-in" && drafts.selection.id === "default";
   const label =
     builtInDefaultSelected && selectedIsDefault
-      ? "Default"
+      ? t`Default`
       : getDefaultActionLabel(selectedSavedDefault, selectedIsDefault);
   return { disabled, label, selectedIsDefault, selectedSavedDefault };
 }

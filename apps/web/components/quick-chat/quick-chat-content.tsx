@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useId, useRef, useState, type RefObject } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconChevronDown, IconChevronUp, IconMessageQuestion } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { useSettingsData } from "@/hooks/domains/settings/use-settings-data";
@@ -39,6 +40,7 @@ function QuickChatClarificationSection({
   onResolved,
   shortcutScopeRef,
 }: QuickChatClarificationSectionProps) {
+  const { t } = useLingui();
   const [collapsed, setCollapsed] = useState(false);
   const contentId = useId();
   const { height, containerRef, resetHeight, resizeHandleProps } =
@@ -55,7 +57,7 @@ function QuickChatClarificationSection({
 
   if (!pending) return null;
 
-  const actionLabel = collapsed ? "Expand clarification" : "Collapse clarification";
+  const actionLabel = collapsed ? t`Expand clarification` : t`Collapse clarification`;
 
   return (
     <div className="relative flex-shrink-0 border-t border-sky-400/30 bg-card">
@@ -73,7 +75,9 @@ function QuickChatClarificationSection({
         <div className="flex h-11 flex-shrink-0 items-center justify-between gap-2 pl-4">
           <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
             <IconMessageQuestion className="h-4 w-4 flex-shrink-0 text-blue-500" />
-            <span className="truncate">Clarification needed</span>
+            <span className="truncate">
+              <Trans>Clarification needed</Trans>
+            </span>
           </div>
           <Button
             type="button"

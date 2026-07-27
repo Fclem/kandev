@@ -27,6 +27,9 @@ import {
   IconArrowDown,
   IconCloud,
 } from "@tabler/icons-react";
+import { msg } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import type { MessageDescriptor } from "@lingui/core";
 import { Kbd } from "@kandev/ui/kbd";
 import { type ProfileFormData } from "@/components/settings/profile-form-fields";
 import { permissionsToProfilePatch, profilePermissionValues } from "@/lib/agent-permissions";
@@ -42,36 +45,51 @@ interface OnboardingDialogProps {
 
 const TOTAL_STEPS = 4;
 
-const RUNTIMES = [
+const RUNTIMES: Array<{
+  id: string;
+  name: MessageDescriptor;
+  description: MessageDescriptor;
+  icon: typeof IconFolder;
+  href?: string;
+}> = [
   {
-    name: "Local",
-    description: "Run agents directly on your machine with full access to your local filesystem.",
+    id: "local",
+    name: msg`Local`,
+    description: msg`Run agents directly on your machine with full access to your local filesystem.`,
     icon: IconFolder,
   },
   {
-    name: "Git Worktree",
-    description: "Isolated branch environment under a worktree root for parallel work.",
+    id: "worktree",
+    name: msg`Git Worktree`,
+    description: msg`Isolated branch environment under a worktree root for parallel work.`,
     icon: IconFolders,
   },
   {
-    name: "Docker",
-    description: "Containerized execution for full isolation and reproducibility.",
+    id: "docker",
+    name: msg`Docker`,
+    description: msg`Containerized execution for full isolation and reproducibility.`,
     icon: IconBrandDocker,
   },
   {
-    name: "Sprites (Remote sprites.dev)",
-    description: "Hardware-isolated execution environment for arbitrary code.",
+    id: "sprites",
+    name: msg`Sprites (Remote sprites.dev)`,
+    description: msg`Hardware-isolated execution environment for arbitrary code.`,
     icon: IconCloud,
     href: "https://sprites.dev",
   },
 ];
 
-const STEP_TITLES = ["AI Agents", "Executors", "Agentic Workflows", "Command Panel"];
-const STEP_DESCRIPTIONS = [
-  "Manage discovered agents and install new ones.",
-  "Agents can run in different executor environments — local, containerized, or remote.",
-  "Workflows define the steps and automation for your tasks.",
-  "Quick access to actions from anywhere with a keyboard shortcut.",
+const STEP_TITLES: MessageDescriptor[] = [
+  msg`AI Agents`,
+  msg`Executors`,
+  msg`Agentic Workflows`,
+  msg`Command Panel`,
+];
+const STEP_DESCRIPTIONS: MessageDescriptor[] = [
+  msg`Manage discovered agents and install new ones.`,
+  msg`Agents can run in different executor environments — local, containerized, or remote.`,
+  msg`Workflows define the steps and automation for your tasks.`,
+  msg`Quick access to actions from anywhere with a keyboard shortcut.`,
 ];
 
 function buildAgentSettings(
@@ -220,24 +238,24 @@ function OnboardingFooter({ step, onSkip, onBack, onNext, onGetStarted }: Onboar
       <div className="flex w-full items-center justify-between">
         <Button variant="ghost" size="sm" onClick={onSkip} className="cursor-pointer">
           <IconX className="mr-1.5 h-3.5 w-3.5" />
-          Skip
+          <Trans>Skip</Trans>
         </Button>
         <div className="flex gap-2">
           {step > 0 && (
             <Button variant="outline" onClick={onBack} className="cursor-pointer">
               <IconArrowLeft className="mr-1.5 h-4 w-4" />
-              Back
+              <Trans>Back</Trans>
             </Button>
           )}
           {step < TOTAL_STEPS - 1 ? (
             <Button onClick={onNext} className="cursor-pointer">
-              Next
+              <Trans>Next</Trans>
               <IconArrowRight className="ml-1.5 h-4 w-4" />
             </Button>
           ) : (
             <Button onClick={onGetStarted} className="cursor-pointer">
               <IconCheck className="mr-1.5 h-4 w-4" />
-              Get Started
+              <Trans>Get Started</Trans>
             </Button>
           )}
         </div>
@@ -248,6 +266,7 @@ function OnboardingFooter({ step, onSkip, onBack, onNext, onGetStarted }: Onboar
 
 export function OnboardingDialog({ open, onComplete }: OnboardingDialogProps) {
   const [step, setStep] = useState(0);
+  const { t } = useLingui();
   const {
     availableAgents,
     tools,
@@ -305,8 +324,10 @@ export function OnboardingDialog({ open, onComplete }: OnboardingDialogProps) {
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent className="sm:max-w-3xl" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle className="text-center text-2xl">{STEP_TITLES[step]}</DialogTitle>
-          <DialogDescription className="text-center">{STEP_DESCRIPTIONS[step]}</DialogDescription>
+          <DialogTitle className="text-center text-2xl">{t(STEP_TITLES[step])}</DialogTitle>
+          <DialogDescription className="text-center">
+            {t(STEP_DESCRIPTIONS[step])}
+          </DialogDescription>
         </DialogHeader>
         <div className="py-4 min-h-[220px]">
           {step === 0 && (
@@ -336,11 +357,13 @@ export function OnboardingDialog({ open, onComplete }: OnboardingDialogProps) {
 }
 
 function StepEnvironments() {
+  const { t } = useLingui();
   return (
     <div className="space-y-3">
       <div className="grid gap-2">
         {RUNTIMES.map((runtime) => {
           const Icon = runtime.icon;
+          const runtimeName = t(runtime.name);
           const nameEl = runtime.href ? (
             <a
               href={runtime.href}
@@ -348,26 +371,26 @@ function StepEnvironments() {
               rel="noopener noreferrer"
               className="text-sm font-medium hover:underline cursor-pointer"
             >
-              {runtime.name}
+              {runtimeName}
             </a>
           ) : (
-            <p className="text-sm font-medium">{runtime.name}</p>
+            <p className="text-sm font-medium">{runtimeName}</p>
           );
           return (
-            <div key={runtime.name} className="flex items-start gap-3 rounded-lg border p-3">
+            <div key={runtime.id} className="flex items-start gap-3 rounded-lg border p-3">
               <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
                 <Icon className="h-4.5 w-4.5 text-muted-foreground" />
               </div>
               <div className="min-w-0">
                 {nameEl}
-                <p className="text-xs text-muted-foreground">{runtime.description}</p>
+                <p className="text-xs text-muted-foreground">{t(runtime.description)}</p>
               </div>
             </div>
           );
         })}
       </div>
       <p className="text-xs text-muted-foreground">
-        Configure executors in Settings to control where agents execute.
+        <Trans>Configure executors in Settings to control where agents execute.</Trans>
       </p>
     </div>
   );
@@ -384,7 +407,7 @@ function StepWorkflows({
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-sm text-muted-foreground">
         <IconLoader2 className="h-6 w-6 animate-spin" />
-        Loading workflow templates...
+        <Trans>Loading workflow templates...</Trans>
       </div>
     );
   }
@@ -398,7 +421,9 @@ function StepWorkflows({
         {defaultTemplate && <TemplateCard template={defaultTemplate} isDefault />}
         {otherTemplates.length > 0 && (
           <>
-            <p className="text-xs text-muted-foreground mt-1">Available templates</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              <Trans>Available templates</Trans>
+            </p>
             {otherTemplates.map((template) => (
               <TemplateCard key={template.id} template={template} />
             ))}
@@ -406,22 +431,30 @@ function StepWorkflows({
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Workflows control the steps, automation, and agent behavior for your tasks. You can add more
-        workflows from Settings.
+        <Trans>
+          Workflows control the steps, automation, and agent behavior for your tasks. You can add
+          more workflows from Settings.
+        </Trans>
       </p>
     </div>
   );
 }
 
-const COMMAND_PANEL_PREVIEW_ITEMS = [
-  { icon: IconSearch, label: "Search Tasks", trailing: "→" },
-  { icon: IconHome, label: "Go to Home" },
-  { icon: IconGitCommit, label: "Commit Changes" },
-  { icon: IconArrowDown, label: "Pull" },
-  { icon: IconTerminal2, label: "Add Terminal Panel" },
+const COMMAND_PANEL_PREVIEW_ITEMS: Array<{
+  id: string;
+  icon: typeof IconSearch;
+  label: MessageDescriptor;
+  trailing?: string;
+}> = [
+  { id: "search-tasks", icon: IconSearch, label: msg`Search Tasks`, trailing: "→" },
+  { id: "go-home", icon: IconHome, label: msg`Go to Home` },
+  { id: "commit-changes", icon: IconGitCommit, label: msg`Commit Changes` },
+  { id: "pull", icon: IconArrowDown, label: msg`Pull` },
+  { id: "add-terminal-panel", icon: IconTerminal2, label: msg`Add Terminal Panel` },
 ];
 
 function StepCommandPanel() {
+  const { t } = useLingui();
   return (
     <div className="space-y-4">
       {/* Mock command panel preview */}
@@ -429,7 +462,9 @@ function StepCommandPanel() {
         {/* Search input */}
         <div className="flex items-center gap-2 px-3 py-2 border-b">
           <IconSearch className="h-3.5 w-3.5 text-muted-foreground/50" />
-          <span className="text-xs text-muted-foreground/50">Type a command...</span>
+          <span className="text-xs text-muted-foreground/50">
+            <Trans>Type a command...</Trans>
+          </span>
         </div>
         {/* Sample commands */}
         <div className="py-1">
@@ -437,11 +472,11 @@ function StepCommandPanel() {
             const Icon = item.icon;
             return (
               <div
-                key={item.label}
+                key={item.id}
                 className="flex items-center gap-3 px-3 py-1.5 text-sm first:bg-muted/50"
               >
                 <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="flex-1 text-xs">{item.label}</span>
+                <span className="flex-1 text-xs">{t(item.label)}</span>
                 {item.trailing && (
                   <span className="text-xs text-muted-foreground">{item.trailing}</span>
                 )}
@@ -454,34 +489,46 @@ function StepCommandPanel() {
           <span className="inline-flex items-center gap-1">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd>
-            <span className="text-[0.6rem]">Navigate</span>
+            <span className="text-[0.6rem]">
+              <Trans>Navigate</Trans>
+            </span>
           </span>
           <span className="inline-flex items-center gap-1">
             <Kbd>↵</Kbd>
-            <span className="text-[0.6rem]">Select</span>
+            <span className="text-[0.6rem]">
+              <Trans>Select</Trans>
+            </span>
           </span>
           <span className="inline-flex items-center gap-1">
             <Kbd>esc</Kbd>
-            <span className="text-[0.6rem]">Close</span>
+            <span className="text-[0.6rem]">
+              <Trans>Close</Trans>
+            </span>
           </span>
         </div>
       </div>
 
       {/* Shortcut hint */}
       <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-        <span>Press</span>
+        <span>
+          <Trans>Press</Trans>
+        </span>
         <span className="inline-flex items-center gap-0.5">
           <Kbd>
             <IconCommand className="size-3" />
           </Kbd>
           <Kbd>K</Kbd>
         </span>
-        <span>to open it anytime</span>
+        <span>
+          <Trans>to open it anytime</Trans>
+        </span>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Navigate between pages, search tasks, trigger git operations, and manage panels — all
-        without leaving the keyboard. Context-aware commands appear based on the active page.
+        <Trans>
+          Navigate between pages, search tasks, trigger git operations, and manage panels — all
+          without leaving the keyboard. Context-aware commands appear based on the active page.
+        </Trans>
       </p>
     </div>
   );
@@ -505,7 +552,7 @@ function TemplateCard({
         {isDefault && (
           <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
             <IconCheck className="h-3.5 w-3.5" />
-            Default
+            <Trans>Default</Trans>
           </span>
         )}
       </div>

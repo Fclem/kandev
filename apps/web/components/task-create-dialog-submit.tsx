@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, FormEvent } from "react";
+import { t } from "@lingui/core/macro";
 import { useRouter } from "@/lib/routing/client-router";
 import { updateTask } from "@/lib/api";
 import { useAppStore } from "@/components/state-provider";
@@ -22,8 +23,10 @@ import {
   toMessageAttachments,
 } from "@/components/task-create-dialog-helpers";
 
-const GENERIC_ERROR_MESSAGE = "An error occurred";
-const DUPLICATE_REPO_TITLE = "Duplicate repository";
+// Lazily evaluated so the active locale is resolved when the toast fires, not
+// at module-import time.
+const genericErrorMessage = () => t`An error occurred`;
+const duplicateRepoTitle = () => t`Duplicate repository`;
 
 // eslint-disable-next-line max-lines-per-function
 export function useTaskSubmitHandlers({
@@ -121,8 +124,8 @@ export function useTaskSubmitHandlers({
     const duplicate = findDuplicateRemoteRepo(remoteRepos);
     if (!duplicate) return false;
     toast({
-      title: DUPLICATE_REPO_TITLE,
-      description: `${duplicate} is added more than once — remove the duplicate row.`,
+      title: duplicateRepoTitle(),
+      description: t`${duplicate} is added more than once — remove the duplicate row.`,
       variant: "error",
     });
     return true;
@@ -210,8 +213,8 @@ export function useTaskSubmitHandlers({
       router.push(linkToTask(taskId));
     } catch (error) {
       toast({
-        title: "Failed to create session",
-        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
+        title: t`Failed to create session`,
+        description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
     } finally {
@@ -275,8 +278,8 @@ export function useTaskSubmitHandlers({
       onSuccess?.(updatedTask, "edit", { taskSessionId });
     } catch (error) {
       toast({
-        title: "Failed to update task",
-        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
+        title: t`Failed to update task`,
+        description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
     } finally {
@@ -302,8 +305,8 @@ export function useTaskSubmitHandlers({
       onSuccess?.(result.updatedTask, "edit");
     } catch (error) {
       toast({
-        title: "Failed to update task",
-        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
+        title: t`Failed to update task`,
+        description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
     } finally {
@@ -444,8 +447,8 @@ export function useTaskSubmitHandlers({
         await performEditWithPlanMode();
       } catch (error) {
         toast({
-          title: "Failed to start task in plan mode",
-          description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
+          title: t`Failed to start task in plan mode`,
+          description: error instanceof Error ? error.message : genericErrorMessage(),
           variant: "error",
         });
       } finally {
@@ -473,8 +476,8 @@ export function useTaskSubmitHandlers({
       });
     } catch (error) {
       toast({
-        title: "Failed to start task in plan mode",
-        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
+        title: t`Failed to start task in plan mode`,
+        description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
     } finally {
@@ -520,8 +523,8 @@ export function useTaskSubmitHandlers({
       }
     } catch (error) {
       toast({
-        title: "Failed to create task",
-        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
+        title: t`Failed to create task`,
+        description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
     } finally {
@@ -579,8 +582,8 @@ export function useTaskSubmitHandlers({
       onOpenChange(false);
     } catch (error) {
       toast({
-        title: "Failed to create task",
-        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
+        title: t`Failed to create task`,
+        description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
     } finally {

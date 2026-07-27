@@ -2,41 +2,44 @@
 // Keep entries here (not inline in the page) so the page file stays under
 // the 600-line lint cap and new types can be added without touching layout.
 
+import { msg } from "@lingui/core/macro";
+import type { MessageDescriptor } from "@lingui/core";
+
 export type ExecutorTypeInfo = {
   executorId: string;
-  label: string;
-  description: string;
+  label: MessageDescriptor;
+  description: MessageDescriptor;
 };
 
 export const EXECUTOR_TYPE_MAP: Record<string, ExecutorTypeInfo> = {
   local: {
     executorId: "exec-local",
-    label: "Local",
-    description: "Runs agents directly in the repository folder.",
+    label: msg`Local`,
+    description: msg`Runs agents directly in the repository folder.`,
   },
   worktree: {
     executorId: "exec-worktree",
-    label: "Worktree",
-    description: "Creates git worktrees for isolated agent sessions.",
+    label: msg`Worktree`,
+    description: msg`Creates git worktrees for isolated agent sessions.`,
   },
   local_docker: {
     executorId: "exec-local-docker",
-    label: "Docker",
-    description: "Runs Docker containers on this machine.",
+    label: msg`Docker`,
+    description: msg`Runs Docker containers on this machine.`,
   },
   remote_docker: {
     executorId: "exec-remote-docker",
-    label: "Remote Docker",
-    description: "Connects to a remote Docker host.",
+    label: msg`Remote Docker`,
+    description: msg`Connects to a remote Docker host.`,
   },
   sprites: {
     executorId: "exec-sprites",
-    label: "Sprites.dev",
-    description: "Runs agents in Sprites.dev cloud sandboxes.",
+    label: msg`Sprites.dev`,
+    description: msg`Runs agents in Sprites.dev cloud sandboxes.`,
   },
   ssh: {
     executorId: "exec-ssh",
-    label: "SSH",
-    description: "Connects to a remote host over SSH and runs agentctl there.",
+    label: msg`SSH`,
+    description: msg`Connects to a remote host over SSH and runs agentctl there.`,
   },
 };

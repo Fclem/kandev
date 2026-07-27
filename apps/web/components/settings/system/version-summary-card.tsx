@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans } from "@lingui/react/macro";
 import Link from "@/components/routing/app-link";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Badge } from "@kandev/ui/badge";
@@ -18,10 +19,10 @@ export function VersionSummaryCard() {
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <IconRefresh className="h-4 w-4" />
-          Version
+          <Trans>Version</Trans>
           {updateAvailable && (
             <Badge variant="default" className="text-[10px]">
-              Update available
+              <Trans>Update available</Trans>
             </Badge>
           )}
         </CardTitle>
@@ -29,13 +30,17 @@ export function VersionSummaryCard() {
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <div className="text-xs text-muted-foreground">Current</div>
+            <div className="text-xs text-muted-foreground">
+              <Trans>Current</Trans>
+            </div>
             <div className="font-mono text-sm" data-testid="system-version-current">
               {current}
             </div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Latest</div>
+            <div className="text-xs text-muted-foreground">
+              <Trans>Latest</Trans>
+            </div>
             <div className="font-mono text-sm" data-testid="system-version-latest">
               {latest}
             </div>
@@ -43,7 +48,7 @@ export function VersionSummaryCard() {
         </div>
         <Button asChild variant="outline" size="sm" className="cursor-pointer">
           <Link href="/settings/system/updates" data-testid="system-version-updates-link">
-            View updates
+            <Trans>View updates</Trans>
             <IconArrowRight className="h-3.5 w-3.5 ml-1" />
           </Link>
         </Button>

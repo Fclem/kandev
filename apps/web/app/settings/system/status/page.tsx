@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { StateProvider } from "@/components/state-provider";
 import { SystemPageShell } from "@/components/settings/system/system-page-shell";
 import { HealthIssuesCard } from "@/components/settings/system/health-issues-card";
@@ -32,7 +33,10 @@ export default async function SystemStatusPage() {
 
   return (
     <StateProvider initialState={initialState}>
-      <SystemPageShell title="Status" description="Health checks, disk usage, and version summary.">
+      <SystemPageShell
+        title={t`Status`}
+        description={t`Health checks, disk usage, and version summary.`}
+      >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <HealthIssuesCard />
           <VersionSummaryCard />

@@ -1,5 +1,7 @@
 "use client";
 
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@kandev/ui/lib/utils";
 import { useAppStore } from "@/components/state-provider";
@@ -19,36 +21,36 @@ export function connectionStatusDetails(
   switch (status) {
     case "connected":
       return {
-        label: "Connected",
-        description: "Connected to Kandev",
+        label: t`Connected`,
+        description: t`Connected to Kandev`,
         dotClass: "bg-success",
         animate: false,
       };
     case "connecting":
       return {
-        label: "Connecting",
-        description: "Connecting to Kandev",
+        label: t`Connecting`,
+        description: t`Connecting to Kandev`,
         dotClass: "bg-muted-foreground",
         animate: true,
       };
     case "reconnecting":
       return {
-        label: "Reconnecting",
-        description: "Reconnecting to Kandev",
+        label: t`Reconnecting`,
+        description: t`Reconnecting to Kandev`,
         dotClass: "bg-amber-500",
         animate: true,
       };
     case "error":
       return {
-        label: "Connection error",
-        description: error ? `Connection error: ${error}` : "Connection error",
+        label: t`Connection error`,
+        description: error ? t`Connection error: ${error}` : t`Connection error`,
         dotClass: "bg-destructive",
         animate: false,
       };
     case "disconnected":
       return {
-        label: "Offline",
-        description: "Connection unavailable",
+        label: t`Offline`,
+        description: t`Connection unavailable`,
         dotClass: "bg-muted-foreground/50",
         animate: false,
       };
@@ -81,7 +83,7 @@ export function ConnectionStatusItem({ presentation }: { presentation: "bar" | "
           ) : (
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Connection
+                <Trans>Connection</Trans>
               </span>
               <span className="text-sm font-medium text-foreground">{details.description}</span>
             </span>

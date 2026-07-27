@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Switch } from "@kandev/ui/switch";
@@ -22,6 +23,7 @@ import { usePluginActions } from "./use-plugin-actions";
  * flag by the page-level default export.
  */
 export function PluginsSettings() {
+  const { t } = useLingui();
   const list = usePlugins();
   const actions = usePluginActions();
   const autoUpdate = useAutoUpdateSettings();
@@ -43,8 +45,8 @@ export function PluginsSettings() {
 
   return (
     <SettingsPageTemplate
-      title="Plugins"
-      description="Browse the marketplace, then install, enable, disable, and uninstall kandev plugins."
+      title={t`Plugins`}
+      description={t`Browse the marketplace, then install, enable, disable, and uninstall kandev plugins.`}
       isDirty={false}
       saveStatus="idle"
       onSave={() => undefined}
@@ -57,10 +59,10 @@ export function PluginsSettings() {
             data-testid="plugins-tab-installed"
             className="cursor-pointer"
           >
-            Installed
+            <Trans>Installed</Trans>
           </TabsTrigger>
           <TabsTrigger value="browse" data-testid="plugins-tab-browse" className="cursor-pointer">
-            Browse
+            <Trans>Browse</Trans>
           </TabsTrigger>
         </TabsList>
 
@@ -121,7 +123,9 @@ function InstalledTab({
       <GlobalAutoUpdateToggle settings={autoUpdate} />
 
       <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-medium text-foreground">Installed plugins</div>
+        <div className="text-sm font-medium text-foreground">
+          <Trans>Installed plugins</Trans>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             data-testid="plugins-sync-button"
@@ -131,14 +135,14 @@ function InstalledTab({
             className="cursor-pointer"
           >
             <IconRefresh className={`h-4 w-4 ${actions.syncBusy ? "animate-spin" : ""}`} />
-            Sync
+            <Trans>Sync</Trans>
           </Button>
           <Button
             data-testid="install-plugin-trigger"
             onClick={actions.openInstall}
             className="cursor-pointer"
           >
-            Install plugin
+            <Trans>Install plugin</Trans>
           </Button>
         </div>
       </div>
@@ -185,11 +189,13 @@ function GlobalAutoUpdateToggle({
           htmlFor="plugins-auto-update-default"
           className="text-sm font-medium text-foreground cursor-pointer"
         >
-          Automatically update plugins
+          <Trans>Automatically update plugins</Trans>
         </label>
         <p className="text-xs text-muted-foreground">
-          Check the marketplace periodically and install newer versions of active plugins. Applies
-          to every plugin unless overridden per plugin below.
+          <Trans>
+            Check the marketplace periodically and install newer versions of active plugins. Applies
+            to every plugin unless overridden per plugin below.
+          </Trans>
         </p>
       </div>
       <Switch
@@ -234,7 +240,7 @@ function PluginList({
   if (!loaded && loading) {
     return (
       <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-        Loading plugins...
+        <Trans>Loading plugins...</Trans>
       </div>
     );
   }
@@ -242,7 +248,7 @@ function PluginList({
   if (loaded && items.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-        No plugins yet. Install one from the Browse tab, or upload a package.
+        <Trans>No plugins yet. Install one from the Browse tab, or upload a package.</Trans>
       </div>
     );
   }

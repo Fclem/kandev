@@ -1,5 +1,7 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
@@ -88,6 +90,7 @@ function ConfigFieldControl({
   disabled,
   onChange,
 }: ConfigFieldControlProps) {
+  const { t } = useLingui();
   if (field.type === "boolean") {
     return (
       <div>
@@ -117,7 +120,7 @@ function ConfigFieldControl({
           className="max-w-md cursor-pointer"
           data-settings-dirty={isDirty}
         >
-          <SelectValue placeholder="Select..." />
+          <SelectValue placeholder={t`Select...`} />
         </SelectTrigger>
         <SelectContent>
           {!field.required && (
@@ -125,7 +128,7 @@ function ConfigFieldControl({
               value={ENUM_UNSET_SENTINEL}
               className="cursor-pointer text-muted-foreground"
             >
-              Not set
+              <Trans>Not set</Trans>
             </SelectItem>
           )}
           {(field.enumValues ?? []).map((option) => (
@@ -199,7 +202,7 @@ function UtilityAgentSelect({
             value={UTILITY_AGENT_UNSET_SENTINEL}
             className="cursor-pointer text-muted-foreground"
           >
-            Not set
+            <Trans>Not set</Trans>
           </SelectItem>
         )}
         {agents.map((agent) => (
@@ -219,13 +222,13 @@ function UtilityAgentSelect({
 
 function selectedUtilityAgentFallback(selectedID: string, loading: boolean): string | undefined {
   if (selectedID === "") return undefined;
-  return loading ? "Loading selected utility agent..." : "Selected utility agent unavailable";
+  return loading ? t`Loading selected utility agent...` : t`Selected utility agent unavailable`;
 }
 
 function utilityAgentPlaceholder(loading: boolean, error: Error | null): string {
-  if (loading) return "Loading utility agents...";
-  if (error) return "Utility agents unavailable";
-  return "Select a utility agent...";
+  if (loading) return t`Loading utility agents...`;
+  if (error) return t`Utility agents unavailable`;
+  return t`Select a utility agent...`;
 }
 
 function inputType(field: PluginConfigField): string {

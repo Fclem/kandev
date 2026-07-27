@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconLayoutKanban, IconGitBranch, IconList, IconPlus } from "@tabler/icons-react";
+import { useLingui } from "@lingui/react/macro";
 import { useRegisterCommands } from "@/hooks/use-register-commands";
 import { useKanbanDisplaySettings } from "@/hooks/use-kanban-display-settings";
 import { linkToTasks } from "@/lib/links";
@@ -16,6 +17,7 @@ type HomepageCommandsProps = {
 };
 
 export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
+  const { t } = useLingui();
   const router = useRouter();
   const { onViewModeChange } = useKanbanDisplaySettings();
   const { isMobile } = useResponsiveBreakpoint();
@@ -26,7 +28,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
     const items: CommandItem[] = [
       {
         id: "task-create",
-        label: "Create New Task",
+        label: t`Create New Task`,
         group: "Tasks",
         icon: <IconPlus className="size-3.5" />,
         shortcut: newTaskShortcut,
@@ -36,7 +38,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
       },
       {
         id: "view-kanban",
-        label: "Switch to Kanban View",
+        label: t`Switch to Kanban View`,
         group: "View",
         icon: <IconLayoutKanban className="size-3.5" />,
         keywords: ["kanban", "board", "view"],
@@ -51,7 +53,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
     if (!isMobile) {
       items.push({
         id: "view-pipeline",
-        label: "Switch to Pipeline View",
+        label: t`Switch to Pipeline View`,
         group: "View",
         icon: <IconGitBranch className="size-3.5" />,
         keywords: ["pipeline", "graph", "view"],
@@ -65,7 +67,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
 
     items.push({
       id: "view-list",
-      label: "Switch to List View",
+      label: t`Switch to List View`,
       group: "View",
       icon: <IconList className="size-3.5" />,
       keywords: ["list", "table", "view"],
@@ -74,7 +76,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
     });
 
     return items;
-  }, [onCreateTask, router, onViewModeChange, newTaskShortcut, isMobile]);
+  }, [onCreateTask, router, onViewModeChange, newTaskShortcut, isMobile, t]);
 
   useRegisterCommands(commands);
 

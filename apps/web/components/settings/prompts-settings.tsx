@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t as globalT } from "@lingui/core/macro";
 import { IconEdit, IconTrash, IconLock } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Badge } from "@kandev/ui/badge";
@@ -28,7 +30,7 @@ const defaultFormState = {
 };
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Request failed";
+  return error instanceof Error ? error.message : globalT`Request failed`;
 }
 
 async function runPromptSave(
@@ -53,6 +55,7 @@ type PromptCreateFormProps = {
 };
 
 function PromptCreateForm({ formState, onFormChange, onCancel, isBusy }: PromptCreateFormProps) {
+  const { t } = useLingui();
   const nameIsDirty = formState.name !== defaultFormState.name;
   const contentIsDirty = formState.content !== defaultFormState.content;
   return (
@@ -62,11 +65,13 @@ function PromptCreateForm({ formState, onFormChange, onCancel, isBusy }: PromptC
       data-settings-dirty="true"
       data-settings-dirty-level="container"
     >
-      <div className="text-sm font-medium text-foreground">Add prompt</div>
+      <div className="text-sm font-medium text-foreground">
+        <Trans>Add prompt</Trans>
+      </div>
       <Input
         value={formState.name}
         onChange={(event) => onFormChange({ name: event.target.value })}
-        placeholder="Prompt name"
+        placeholder={t`Prompt name`}
         data-testid="prompt-name-input"
         disabled={isBusy}
         data-settings-dirty={nameIsDirty}
@@ -74,7 +79,7 @@ function PromptCreateForm({ formState, onFormChange, onCancel, isBusy }: PromptC
       <Textarea
         value={formState.content}
         onChange={(event) => onFormChange({ content: event.target.value })}
-        placeholder="Prompt content"
+        placeholder={t`Prompt content`}
         rows={5}
         className="resize-y max-h-60 overflow-auto"
         data-testid="prompt-content-input"
@@ -83,7 +88,7 @@ function PromptCreateForm({ formState, onFormChange, onCancel, isBusy }: PromptC
       />
       <div className="flex items-center gap-2">
         <Button variant="ghost" onClick={onCancel} disabled={isBusy}>
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
       </div>
     </div>
@@ -115,6 +120,7 @@ function PromptListItem({
   isBusy,
   showCreate,
 }: PromptListItemProps) {
+  const { t } = useLingui();
   const getPromptPreview = (content: string) => {
     return content.split(/\r?\n/)[0] ?? "";
   };
@@ -135,7 +141,7 @@ function PromptListItem({
           {prompt.builtin && (
             <Badge variant="secondary" className="text-xs">
               <IconLock className="h-3 w-3 mr-1" />
-              Built-in
+              <Trans>Built-in</Trans>
             </Badge>
           )}
         </div>
@@ -166,7 +172,7 @@ function PromptListItem({
           <Input
             value={formState.name}
             onChange={(event) => onFormChange({ name: event.target.value })}
-            placeholder="Prompt name"
+            placeholder={t`Prompt name`}
             data-testid="prompt-name-input"
             disabled={isBusy}
             data-settings-dirty={nameIsDirty}
@@ -174,7 +180,7 @@ function PromptListItem({
           <Textarea
             value={formState.content}
             onChange={(event) => onFormChange({ content: event.target.value })}
-            placeholder="Prompt content"
+            placeholder={t`Prompt content`}
             rows={5}
             className="resize-y max-h-60 overflow-auto"
             data-testid="prompt-content-input"
@@ -183,7 +189,7 @@ function PromptListItem({
           />
           <div className="flex items-center gap-2">
             <Button variant="ghost" onClick={onCancel} disabled={isBusy}>
-              Cancel
+              <Trans>Cancel</Trans>
             </Button>
           </div>
         </div>
@@ -226,14 +232,14 @@ function PromptListContent({
   if (!promptsLoaded) {
     return (
       <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-        Loading prompts…
+        <Trans>Loading prompts…</Trans>
       </div>
     );
   }
   if (prompts.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-        No prompts yet. Add your first prompt to get started.
+        <Trans>No prompts yet. Add your first prompt to get started.</Trans>
       </div>
     );
   }
@@ -266,6 +272,8 @@ type DeletePromptDialogProps = {
 };
 
 function DeletePromptDialog({ deleteTarget, onClose, onConfirm, isBusy }: DeletePromptDialogProps) {
+  const { t } = useLingui();
+  const targetLabel = deleteTarget ? `@${deleteTarget.name}` : t`this prompt`;
   return (
     <Dialog
       open={Boolean(deleteTarget)}
@@ -277,21 +285,23 @@ function DeletePromptDialog({ deleteTarget, onClose, onConfirm, isBusy }: Delete
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete prompt</DialogTitle>
+          <DialogTitle>
+            <Trans>Delete prompt</Trans>
+          </DialogTitle>
           <DialogDescription>
-            This will permanently remove{" "}
-            <span className="font-medium text-foreground">
-              {deleteTarget ? `@${deleteTarget.name}` : "this prompt"}
-            </span>
-            . This action cannot be undone.
+            <Trans>
+              This will permanently remove{" "}
+              <span className="font-medium text-foreground">{targetLabel}</span>. This action cannot
+              be undone.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button type="button" variant="destructive" onClick={onConfirm} disabled={isBusy}>
-            Delete prompt
+            <Trans>Delete prompt</Trans>
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -336,6 +346,7 @@ function usePromptsActions(state: ReturnType<typeof usePromptsState>) {
     deleteTarget,
     formState,
   } = state;
+  const { t } = useLingui();
   const { toast } = useToast();
 
   const resetForm = useCallback(() => {
@@ -386,13 +397,13 @@ function usePromptsActions(state: ReturnType<typeof usePromptsState>) {
     toast({ title, description: errorMessage(err), variant: "error" });
   const handleCreate = () => {
     if (!isValid || isBusy) return;
-    return runPromptSave(() => createRequest.run(formState), toastError("Couldn't create prompt"));
+    return runPromptSave(() => createRequest.run(formState), toastError(t`Couldn't create prompt`));
   };
   const handleUpdate = () => {
     if (!isValid || isBusy || !editingId) return;
     return runPromptSave(
       () => updateRequest.run(editingId, formState),
-      toastError("Couldn't save prompt"),
+      toastError(t`Couldn't save prompt`),
     );
   };
   const startEditing = (prompt: CustomPrompt) => {
@@ -413,7 +424,7 @@ function usePromptsActions(state: ReturnType<typeof usePromptsState>) {
   };
   const confirmDelete = () => {
     if (!deleteTarget) return;
-    deleteRequest.run(deleteTarget.id).catch(toastError("Couldn't delete prompt"));
+    deleteRequest.run(deleteTarget.id).catch(toastError(t`Couldn't delete prompt`));
     closeDeleteDialog();
   };
 
@@ -450,6 +461,7 @@ export function getPromptDraftMeta(
 }
 
 export function PromptsSettings() {
+  const { t } = useLingui();
   const state = usePromptsState();
   const {
     editingId,
@@ -483,32 +495,36 @@ export function PromptsSettings() {
 
   return (
     <SettingsPageTemplate
-      title="Prompts"
-      description="Create reusable prompt snippets for the chat input."
+      title={t`Prompts`}
+      description={t`Create reusable prompt snippets for the chat input.`}
       isDirty={draft.isDirty}
       saveStatus="idle"
       saveId="prompts-item-draft"
       saveRevision={draft.revision}
       canSave={!draft.isDirty || isValid}
       invalidReason={
-        draft.isDirty && !isValid ? "Prompt name and content are required." : undefined
+        draft.isDirty && !isValid ? t`Prompt name and content are required.` : undefined
       }
       onSave={showCreate ? handleCreate : handleUpdate}
       onDiscard={resetForm}
     >
       <div className="rounded-lg border border-border/70 bg-muted/30 p-4 text-xs text-muted-foreground">
-        Use <span className="font-medium text-foreground">@name</span> in the chat input to insert a
-        prompt’s content. Prompts are matched by name and expanded in place.
+        <Trans>
+          Use <span className="font-medium text-foreground">@name</span> in the chat input to insert
+          a prompt’s content. Prompts are matched by name and expanded in place.
+        </Trans>
       </div>
       <div className="space-y-6 mt-4">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-foreground">Custom prompts</div>
+          <div className="text-sm font-medium text-foreground">
+            <Trans>Custom prompts</Trans>
+          </div>
           <Button
             onClick={startCreate}
             disabled={isBusy || isEditing || showCreate}
             data-testid="prompt-create-button"
           >
-            Add prompt
+            <Trans>Add prompt</Trans>
           </Button>
         </div>
 

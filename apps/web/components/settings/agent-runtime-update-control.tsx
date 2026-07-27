@@ -1,5 +1,7 @@
 "use client";
 
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import { IconLoader2, IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 
@@ -16,13 +18,13 @@ const ACTIVE_UPDATE_STATUSES = new Set<AgentUpdateJob["status"]>([
 function updatePhase(status: AgentUpdateJob["status"] | undefined): string | null {
   switch (status) {
     case "queued":
-      return "Update queued…";
+      return t`Update queued…`;
     case "resolving":
-      return "Checking latest version…";
+      return t`Checking latest version…`;
     case "updating":
-      return "Updating runtime…";
+      return t`Updating runtime…`;
     case "refreshing":
-      return "Refreshing models…";
+      return t`Refreshing models…`;
     default:
       return null;
   }
@@ -31,17 +33,17 @@ function updatePhase(status: AgentUpdateJob["status"] | undefined): string | nul
 function updateButtonLabel(status: AgentUpdateJob["status"] | undefined) {
   switch (status) {
     case "queued":
-      return "Update queued";
+      return t`Update queued`;
     case "resolving":
-      return "Resolving update";
+      return t`Resolving update`;
     case "updating":
-      return "Updating agent";
+      return t`Updating agent`;
     case "refreshing":
-      return "Refreshing agent capabilities";
+      return t`Refreshing agent capabilities`;
     case "failed":
-      return "Retry update";
+      return t`Retry update`;
     default:
-      return "Update agent";
+      return t`Update agent`;
   }
 }
 
@@ -52,14 +54,18 @@ function VersionSummary({
   runtimeUpdate: RuntimeUpdate;
   job?: AgentUpdateJob;
 }) {
-  const current = job?.current_version || runtimeUpdate.current_version || "Unknown";
+  const current = job?.current_version || runtimeUpdate.current_version || t`Unknown`;
   if (job?.target_version) {
     return <p className="break-words font-mono text-xs">{`${current} → ${job.target_version}`}</p>;
   }
   if (job?.status === "resolving") {
-    return <p className="break-words font-mono text-xs">{`${current} → Checking latest…`}</p>;
+    return <p className="break-words font-mono text-xs">{t`${current} → Checking latest…`}</p>;
   }
-  return <p className="break-words text-xs text-muted-foreground">Current version: {current}</p>;
+  return (
+    <p className="break-words text-xs text-muted-foreground">
+      <Trans>Current version: {current}</Trans>
+    </p>
+  );
 }
 
 function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdateJob }) {
@@ -71,7 +77,7 @@ function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdate
         role="alert"
         data-testid={`agent-update-result-${agentName}`}
       >
-        Runtime updated, but capabilities could not be refreshed: {job.refresh_error}
+        <Trans>Runtime updated, but capabilities could not be refreshed: {job.refresh_error}</Trans>
       </p>
     );
   }
@@ -82,7 +88,7 @@ function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdate
         role="status"
         data-testid={`agent-update-result-${agentName}`}
       >
-        Runtime updated successfully.
+        <Trans>Runtime updated successfully.</Trans>
       </p>
     );
   }
@@ -93,7 +99,7 @@ function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdate
         role="alert"
         data-testid={`agent-update-result-${agentName}`}
       >
-        {job.error || "The runtime update failed."}
+        {job.error || t`The runtime update failed.`}
       </p>
     );
   }
@@ -136,7 +142,7 @@ export function AgentRuntimeUpdateControl({
       )}
       {installInFlight && (
         <p className="break-words text-xs text-muted-foreground">
-          Agent installation is in progress.
+          <Trans>Agent installation is in progress.</Trans>
         </p>
       )}
       {job?.output && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { IconTestPipe, IconLoader2, IconCheck, IconX, IconSparkles } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -26,6 +27,7 @@ export function SpritesApiKeyCard({
   secrets,
 }: SpritesApiKeyCardProps) {
   const { status } = useSprites(secretId ?? undefined);
+  const { t } = useLingui();
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<SpritesTestResult | null>(null);
 
@@ -42,12 +44,12 @@ export function SpritesApiKeyCard({
         steps: [],
         total_duration_ms: 0,
         sprite_name: "",
-        error: "Failed to connect to backend",
+        error: t`Failed to connect to backend`,
       });
     } finally {
       setTesting(false);
     }
-  }, [secretId]);
+  }, [secretId, t]);
 
   const isDirty = baselineSecretId !== undefined && secretId !== baselineSecretId;
   return (
@@ -57,10 +59,10 @@ export function SpritesApiKeyCard({
           <div>
             <CardTitle className="flex items-center gap-2">
               <IconSparkles className="h-5 w-5" />
-              API Key
+              <Trans>API Key</Trans>
             </CardTitle>
             <CardDescription>
-              Select the secret containing your Sprites.dev API token.
+              <Trans>Select the secret containing your Sprites.dev API token.</Trans>
             </CardDescription>
           </div>
           <ConnectionBadge secretId={secretId} status={status} />
@@ -71,7 +73,7 @@ export function SpritesApiKeyCard({
           secretId={secretId}
           onSecretIdChange={onSecretIdChange}
           secrets={secrets}
-          label="Secret"
+          label={t`Secret`}
           isDirty={isDirty}
         />
         {secretId && (
@@ -95,19 +97,31 @@ function ConnectionBadge({
   status: ReturnType<typeof useSprites>["status"];
 }) {
   if (!secretId) {
-    return <Badge variant="secondary">Not Configured</Badge>;
+    return (
+      <Badge variant="secondary">
+        <Trans>Not Configured</Trans>
+      </Badge>
+    );
   }
   if (status?.connected) {
     return (
       <Badge variant="default" className="bg-green-600">
-        Connected
+        <Trans>Connected</Trans>
       </Badge>
     );
   }
   if (status?.token_configured) {
-    return <Badge variant="destructive">Disconnected</Badge>;
+    return (
+      <Badge variant="destructive">
+        <Trans>Disconnected</Trans>
+      </Badge>
+    );
   }
-  return <Badge variant="secondary">Checking...</Badge>;
+  return (
+    <Badge variant="secondary">
+      <Trans>Checking...</Trans>
+    </Badge>
+  );
 }
 
 function ConnectionDetails({
@@ -136,7 +150,7 @@ function ConnectionDetails({
         ) : (
           <IconTestPipe className="mr-1.5 h-4 w-4" />
         )}
-        Test Connection
+        <Trans>Test Connection</Trans>
       </Button>
       {testResult && <TestResultDisplay result={testResult} />}
     </>
@@ -148,17 +162,30 @@ function ConnectionStatusText({ status }: { status: ReturnType<typeof useSprites
     const count = status.instance_count;
     return (
       <p className="text-sm text-muted-foreground">
-        Connected. {count} active sprite{count !== 1 ? "s" : ""}.
+        <Plural
+          value={count}
+          one="Connected. # active sprite."
+          other="Connected. # active sprites."
+        />
       </p>
     );
   }
   if (status?.token_configured) {
-    return <p className="text-sm text-muted-foreground">Token configured but unable to connect.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        <Trans>Token configured but unable to connect.</Trans>
+      </p>
+    );
   }
-  return <p className="text-sm text-muted-foreground">Verifying connection...</p>;
+  return (
+    <p className="text-sm text-muted-foreground">
+      <Trans>Verifying connection...</Trans>
+    </p>
+  );
 }
 
 function TestResultDisplay({ result }: { result: SpritesTestResult }) {
+  const { t } = useLingui();
   return (
     <div className="rounded-md border p-3 space-y-2">
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -167,7 +194,7 @@ function TestResultDisplay({ result }: { result: SpritesTestResult }) {
         ) : (
           <IconX className="h-4 w-4 text-red-600" />
         )}
-        {result.success ? "Connection test passed" : "Connection test failed"}
+        {result.success ? t`Connection test passed` : t`Connection test failed`}
         <span className="text-muted-foreground font-normal">({result.total_duration_ms}ms)</span>
       </div>
       {result.steps.map((step: SpritesTestStep) => (

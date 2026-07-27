@@ -10,6 +10,7 @@ import {
   IconLoader2,
   IconSubtask,
 } from "@tabler/icons-react";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { Badge } from "@kandev/ui/badge";
 import { Card, CardContent } from "@kandev/ui/card";
 import { Checkbox } from "@kandev/ui/checkbox";
@@ -168,6 +169,7 @@ export function KanbanCardBody({
 }
 
 function KanbanCardBadges({ task }: { task: Task }) {
+  const { t } = useLingui();
   const parentTitle = useAppStore((s) => {
     if (!task.parentTaskId) return null;
     return s.kanban.tasks.find((t) => t.id === task.parentTaskId)?.title ?? null;
@@ -186,18 +188,20 @@ function KanbanCardBadges({ task }: { task: Task }) {
       {task.parentTaskId && (
         <Badge variant="outline" className="text-xs h-5 gap-1 max-w-[160px] min-w-0">
           <IconSubtask className="h-3 w-3 shrink-0" />
-          <span className="truncate">{parentTitle ?? "Subtask"}</span>
+          <span className="truncate">{parentTitle ?? t`Subtask`}</span>
         </Badge>
       )}
       {task.sessionCount && task.sessionCount > 1 && (
         <Badge variant="secondary" className="text-xs h-5">
-          {task.sessionCount} sessions
+          <Plural value={task.sessionCount} one="# session" other="# sessions" />
         </Badge>
       )}
       {task.reviewStatus === "pending" && task.state !== "IN_PROGRESS" && (
         <div className="flex items-center gap-1 text-amber-700 dark:text-amber-600">
           <IconAlertCircle className="h-3.5 w-3.5" />
-          <span className="text-[10px] font-medium">Approval Required</span>
+          <span className="text-[10px] font-medium">
+            <Trans>Approval Required</Trans>
+          </span>
         </div>
       )}
       {task.reviewStatus === "changes_requested" && (
@@ -205,7 +209,7 @@ function KanbanCardBadges({ task }: { task: Task }) {
           variant="outline"
           className="border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-950/50 text-xs h-5"
         >
-          Changes Requested
+          <Trans>Changes Requested</Trans>
         </Badge>
       )}
     </div>
@@ -331,19 +335,7 @@ function KanbanCardActions({
     <div className="flex items-center gap-2">
       {statusIcon}
       {showMaximizeButton && onOpenFullPage && hasKnownSession && (
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-sm p-1 -m-1 transition-colors cursor-pointer"
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenFullPage(task);
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-          aria-label="Open full page"
-          title="Open full page"
-        >
-          <IconArrowsMaximize className="h-4 w-4" />
-        </button>
+        <OpenFullPageButton onOpen={() => onOpenFullPage(task)} />
       )}
       <KanbanCardMenu
         task={task}
@@ -357,12 +349,32 @@ function KanbanCardActions({
   );
 }
 
+function OpenFullPageButton({ onOpen }: { onOpen: () => void }) {
+  const { t } = useLingui();
+  return (
+    <button
+      type="button"
+      className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-sm p-1 -m-1 transition-colors cursor-pointer"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      aria-label={t`Open full page`}
+      title={t`Open full page`}
+    >
+      <IconArrowsMaximize className="h-4 w-4" />
+    </button>
+  );
+}
+
 type KanbanCardMenuProps = KanbanCardActionProps & {
   effectiveMenuOpen: boolean;
   setMenuOpen: (open: boolean) => void;
 };
 
 function KanbanCardMenu(props: KanbanCardMenuProps) {
+  const { t } = useLingui();
   const { effectiveMenuOpen, setMenuOpen, isDeleting, isArchiving } = props;
   const { menuEntries } = props;
   const isProcessing = isDeleting || isArchiving;
@@ -381,7 +393,7 @@ function KanbanCardMenu(props: KanbanCardMenuProps) {
           className="text-muted-foreground hover:text-foreground hover:bg-muted rounded-sm p-1 -m-1 transition-colors cursor-pointer"
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          aria-label="More options"
+          aria-label={t`More options`}
         >
           <IconDots className="h-4 w-4" />
         </button>
@@ -404,6 +416,7 @@ function KanbanCardCheckbox({
   isSelected?: boolean;
   onCheckboxClick: (e: React.MouseEvent) => void;
 }) {
+  const { t } = useLingui();
   return (
     <div
       className="mt-0.5 shrink-0"
@@ -413,7 +426,7 @@ function KanbanCardCheckbox({
     >
       <Checkbox
         checked={!!isSelected}
-        aria-label={`Select task ${taskTitle}`}
+        aria-label={t`Select task ${taskTitle}`}
         className="cursor-pointer border-muted-foreground/50"
       />
     </div>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
@@ -20,16 +22,25 @@ export type EditorFormState = {
   enabled: boolean;
 };
 
-const CUSTOM_KIND_OPTIONS: Array<{ value: CustomKind; label: string }> = [
-  { value: "custom_command", label: "Command" },
-  { value: "custom_remote_ssh", label: "VS Code Remote SSH" },
-  { value: "custom_hosted_url", label: "Hosted URL" },
+const CUSTOM_KIND_VALUES: CustomKind[] = [
+  "custom_command",
+  "custom_remote_ssh",
+  "custom_hosted_url",
 ];
 
 const PLACEHOLDER_HINT = "{cwd} {file} {rel} {line} {column}";
 
 export function getCustomKindLabel(kind: string) {
-  return CUSTOM_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? "Custom";
+  switch (kind) {
+    case "custom_command":
+      return t`Command`;
+    case "custom_remote_ssh":
+      return t`VS Code Remote SSH`;
+    case "custom_hosted_url":
+      return t`Hosted URL`;
+    default:
+      return t`Custom`;
+  }
 }
 
 export function isCustomEditor(editor: EditorOption) {
@@ -175,7 +186,9 @@ function EditorKindFields({
           onChange={(event) => setField("command", event.target.value)}
           placeholder="code --goto {file}:{line}"
         />
-        <p className="text-xs text-muted-foreground">Supports placeholders: {PLACEHOLDER_HINT}</p>
+        <p className="text-xs text-muted-foreground">
+          <Trans>Supports placeholders: {PLACEHOLDER_HINT}</Trans>
+        </p>
       </div>
     );
   }
@@ -192,17 +205,19 @@ function EditorKindFields({
           value={state.user}
           data-settings-dirty={state.user !== baseline.user}
           onChange={(event) => setField("user", event.target.value)}
-          placeholder="optional username"
+          placeholder={t`optional username`}
         />
         <Input
           value={state.scheme}
           data-settings-dirty={state.scheme !== baseline.scheme}
           onChange={(event) => setField("scheme", event.target.value)}
-          placeholder="optional scheme (vscode, cursor)"
+          placeholder={t`optional scheme (vscode, cursor)`}
         />
         <p className="text-xs text-muted-foreground">
-          Opens a VS Code Remote SSH URL using the scheme (example:{" "}
-          vscode://vscode-remote/ssh-remote+user@host:/path/file:line).
+          <Trans>
+            Opens a VS Code Remote SSH URL using the scheme (example:{" "}
+            vscode://vscode-remote/ssh-remote+user@host:/path/file:line).
+          </Trans>
         </p>
       </div>
     );
@@ -218,6 +233,34 @@ function EditorKindFields({
     );
   }
   return null;
+}
+
+function EditorKindSelect({
+  value,
+  isDirty,
+  onChange,
+}: {
+  value: CustomKind;
+  isDirty: boolean;
+  onChange: (kind: CustomKind) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={(next) => onChange(next as CustomKind)}>
+      <SelectTrigger data-settings-dirty={isDirty}>
+        <SelectValue placeholder={t`Editor type`} />
+      </SelectTrigger>
+      <SelectContent>
+        <div className="px-2 py-1.5 text-xs text-muted-foreground border-b">
+          <Trans>Editor type</Trans>
+        </div>
+        {CUSTOM_KIND_VALUES.map((kind) => (
+          <SelectItem key={kind} value={kind}>
+            {getCustomKindLabel(kind)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 export function EditorForm({
@@ -271,7 +314,7 @@ export function EditorForm({
     revision,
     isDirty: isCoordinatedDirty,
     canSave: isValid,
-    invalidReason: isValid ? undefined : "Complete the required editor fields before saving.",
+    invalidReason: isValid ? undefined : t`Complete the required editor fields before saving.`,
     save: async () => {
       const submitted = normalizedState;
       await onSave(submitted);
@@ -291,25 +334,17 @@ export function EditorForm({
         value={state.name}
         data-settings-dirty={state.name !== baseline.name}
         onChange={(event) => setField("name", event.target.value)}
-        placeholder="Editor name"
+        placeholder={t`Editor name`}
       />
-      <Select value={state.kind} onValueChange={(value) => setField("kind", value as CustomKind)}>
-        <SelectTrigger data-settings-dirty={state.kind !== baseline.kind}>
-          <SelectValue placeholder="Editor type" />
-        </SelectTrigger>
-        <SelectContent>
-          <div className="px-2 py-1.5 text-xs text-muted-foreground border-b">Editor type</div>
-          {CUSTOM_KIND_OPTIONS.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <EditorKindSelect
+        value={state.kind}
+        isDirty={state.kind !== baseline.kind}
+        onChange={(kind) => setField("kind", kind)}
+      />
       <EditorKindFields state={state} baseline={baseline} setField={setField} />
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
         {!coordinatedSaveId && (
           <Button

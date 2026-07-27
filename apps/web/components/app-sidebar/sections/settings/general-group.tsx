@@ -1,6 +1,7 @@
 "use client";
 
 import { IconSettings } from "@tabler/icons-react";
+import { useLingui } from "@lingui/react/macro";
 import { GENERAL_NAV_ITEMS } from "@/components/settings/general-nav";
 import { SettingsGroup, SettingsLeaf } from "./settings-nav-primitives";
 
@@ -13,9 +14,10 @@ type GeneralGroupProps = {
 };
 
 export function GeneralGroup({ pathname, expanded, onToggle }: GeneralGroupProps) {
+  const { t } = useLingui();
   return (
     <SettingsGroup
-      label="General"
+      label={t`General`}
       icon={IconSettings}
       href={GENERAL_HREF}
       isActive={pathname === GENERAL_HREF}

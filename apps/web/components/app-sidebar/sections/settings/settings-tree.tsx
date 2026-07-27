@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import {
   IconKey,
   IconMessageCircle,
@@ -58,6 +59,7 @@ export function settingsOpenGroupIdForPath(pathname: string): string {
  * footer gear is active, as the full-height sidebar takeover.
  */
 export function SettingsTree({ pathname }: { pathname: string }) {
+  const { t } = useLingui();
   const pluginsEnabled = useFeature("plugins");
   const authEnabled = useFeature("auth");
   const authMode = useAppStore((s) => s.auth.mode);
@@ -84,19 +86,19 @@ export function SettingsTree({ pathname }: { pathname: string }) {
       <AgentsGroup pathname={pathname} {...groupProps("agents")} />
       <SettingsLeaf
         href={PROMPTS_HREF}
-        label="Prompts"
+        label={t`Prompts`}
         icon={IconMessageCircle}
         isActive={pathname === PROMPTS_HREF}
       />
       <SettingsLeaf
         href={VOICE_MODE_HREF}
-        label="Voice Mode"
+        label={t`Voice Mode`}
         icon={IconMicrophone}
         isActive={pathname === VOICE_MODE_HREF}
       />
       <SettingsLeaf
         href={UTILITY_HREF}
-        label="Utility Agents"
+        label={t`Utility Agents`}
         icon={IconWand}
         isActive={pathname === UTILITY_HREF}
       />
@@ -104,13 +106,13 @@ export function SettingsTree({ pathname }: { pathname: string }) {
       {/* Editors lives under General (see GeneralGroup) — no duplicate top-level leaf. */}
       <SettingsLeaf
         href={SECRETS_HREF}
-        label="Secrets"
+        label={t`Secrets`}
         icon={IconKey}
         isActive={pathname === SECRETS_HREF}
       />
       <SettingsLeaf
         href={EXT_MCP_HREF}
-        label="External MCP"
+        label={t`External MCP`}
         icon={IconPlugConnected}
         isActive={pathname === EXT_MCP_HREF}
       />
@@ -118,7 +120,7 @@ export function SettingsTree({ pathname }: { pathname: string }) {
       {pluginsEnabled && (
         <SettingsLeaf
           href={PLUGINS_HREF}
-          label="Plugins"
+          label={t`Plugins`}
           icon={IconPuzzle}
           isActive={pathname === PLUGINS_HREF}
         />

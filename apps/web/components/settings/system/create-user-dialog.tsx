@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -48,7 +49,7 @@ function CreateUserFields({
     <div className="space-y-3">
       <div className="flex flex-col gap-1">
         <label htmlFor="create-user-display-name" className="text-xs text-muted-foreground">
-          Display name
+          <Trans>Display name</Trans>
         </label>
         <Input
           id="create-user-display-name"
@@ -59,7 +60,7 @@ function CreateUserFields({
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor="create-user-email" className="text-xs text-muted-foreground">
-          Email
+          <Trans>Email</Trans>
         </label>
         <Input
           id="create-user-email"
@@ -71,7 +72,7 @@ function CreateUserFields({
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor="create-user-password" className="text-xs text-muted-foreground">
-          Password
+          <Trans>Password</Trans>
         </label>
         <Input
           id="create-user-password"
@@ -84,15 +85,19 @@ function CreateUserFields({
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor="create-user-role" className="text-xs text-muted-foreground">
-          Role
+          <Trans>Role</Trans>
         </label>
         <Select value={role} onValueChange={setRole}>
           <SelectTrigger id="create-user-role" data-testid="create-user-role">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="member">Member</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
+            <SelectItem value="member">
+              <Trans>Member</Trans>
+            </SelectItem>
+            <SelectItem value="admin">
+              <Trans>Admin</Trans>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -106,6 +111,7 @@ function CreateUserFields({
 }
 
 export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
+  const { t } = useLingui();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -130,7 +136,7 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
       onOpenChange(false);
       reset();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create user.");
+      setError(err instanceof ApiError ? err.message : t`Could not create user.`);
     } finally {
       setSubmitting(false);
     }
@@ -146,10 +152,14 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
     >
       <DialogContent data-testid="create-user-dialog">
         <DialogHeader>
-          <DialogTitle>Add a user</DialogTitle>
+          <DialogTitle>
+            <Trans>Add a user</Trans>
+          </DialogTitle>
           <DialogDescription>
-            Creates an account directly with a password you set. Prefer an invite link when the user
-            should choose their own password.
+            <Trans>
+              Creates an account directly with a password you set. Prefer an invite link when the
+              user should choose their own password.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <CreateUserFields
@@ -165,7 +175,7 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
         />
         <DialogFooter>
           <Button variant="outline" className="cursor-pointer" onClick={() => onOpenChange(false)}>
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button
             className="cursor-pointer"
@@ -173,7 +183,7 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
             onClick={() => void onSubmit()}
             data-testid="create-user-submit"
           >
-            {submitting ? "Creating..." : "Create user"}
+            {submitting ? t`Creating...` : t`Create user`}
           </Button>
         </DialogFooter>
       </DialogContent>

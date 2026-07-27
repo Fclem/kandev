@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -44,16 +46,20 @@ function InviteForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Invite a user</DialogTitle>
+        <DialogTitle>
+          <Trans>Invite a user</Trans>
+        </DialogTitle>
         <DialogDescription>
-          Generates a one-time invite link. Leave the email blank to create a link anyone can use to
-          sign up with the selected role; set an email to pin the invite to that address.
+          <Trans>
+            Generates a one-time invite link. Leave the email blank to create a link anyone can use
+            to sign up with the selected role; set an email to pin the invite to that address.
+          </Trans>
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="invite-dialog-email" className="text-xs text-muted-foreground">
-            Email (optional)
+            <Trans>Email (optional)</Trans>
           </label>
           <Input
             id="invite-dialog-email"
@@ -65,15 +71,19 @@ function InviteForm({
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="invite-dialog-role" className="text-xs text-muted-foreground">
-            Role
+            <Trans>Role</Trans>
           </label>
           <Select value={role} onValueChange={setRole}>
             <SelectTrigger id="invite-dialog-role" data-testid="invite-dialog-role">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="member">Member</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="member">
+                <Trans>Member</Trans>
+              </SelectItem>
+              <SelectItem value="admin">
+                <Trans>Admin</Trans>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -85,7 +95,7 @@ function InviteForm({
       </div>
       <DialogFooter>
         <Button variant="outline" className="cursor-pointer" onClick={onCancel}>
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
         <Button
           className="cursor-pointer"
@@ -93,7 +103,7 @@ function InviteForm({
           onClick={onSubmit}
           data-testid="invite-dialog-submit"
         >
-          {submitting ? "Creating..." : "Create invite link"}
+          {submitting ? <Trans>Creating...</Trans> : <Trans>Create invite link</Trans>}
         </Button>
       </DialogFooter>
     </>
@@ -109,9 +119,11 @@ function InviteLinkResult({ url, onDone }: { url: string; onDone: () => void }) 
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Invite link ready</DialogTitle>
+        <DialogTitle>
+          <Trans>Invite link ready</Trans>
+        </DialogTitle>
         <DialogDescription>
-          Share this link with the invitee. It is shown only once — copy it now.
+          <Trans>Share this link with the invitee. It is shown only once — copy it now.</Trans>
         </DialogDescription>
       </DialogHeader>
       <div className="flex items-center gap-2">
@@ -128,7 +140,7 @@ function InviteLinkResult({ url, onDone }: { url: string; onDone: () => void }) 
       </div>
       <DialogFooter>
         <Button className="cursor-pointer" onClick={onDone} data-dialog-default-action>
-          Done
+          <Trans>Done</Trans>
         </Button>
       </DialogFooter>
     </>
@@ -157,7 +169,7 @@ export function InviteDialog({ open, onOpenChange, onCreated }: Props) {
       setResultUrl(`${window.location.origin}${url}`);
       onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create invite.");
+      setError(err instanceof ApiError ? err.message : t`Could not create invite.`);
     } finally {
       setSubmitting(false);
     }

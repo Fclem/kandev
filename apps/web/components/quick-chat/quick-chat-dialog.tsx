@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Dialog, DialogContent, DialogTitle } from "@kandev/ui/dialog";
 import { Button } from "@kandev/ui/button";
 import { Label } from "@kandev/ui/label";
@@ -30,23 +31,28 @@ type FormState = {
 const NONE_VALUE = "__none__";
 
 function QuickChatFormBody({ state }: { state: FormState }) {
+  const { t } = useLingui();
   const { selectedRepoId, setSelectedRepoId, selectedAgentId, setSelectedAgentId } = state;
   return (
     <div className="p-4 space-y-4">
       <p className="text-sm text-muted-foreground">
-        Start a quick conversation with an agent without creating a formal task.
+        <Trans>Start a quick conversation with an agent without creating a formal task.</Trans>
       </p>
       <div className="space-y-2">
-        <Label htmlFor="repository">Repository (optional)</Label>
+        <Label htmlFor="repository">
+          <Trans>Repository (optional)</Trans>
+        </Label>
         <Select
           value={selectedRepoId || NONE_VALUE}
           onValueChange={(v) => setSelectedRepoId(v === NONE_VALUE ? "" : v)}
         >
           <SelectTrigger id="repository" className="w-full">
-            <SelectValue placeholder="Select a repository..." />
+            <SelectValue placeholder={t`Select a repository...`} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NONE_VALUE}>No repository</SelectItem>
+            <SelectItem value={NONE_VALUE}>
+              <Trans>No repository</Trans>
+            </SelectItem>
             {state.repositories.map((repo) => (
               <SelectItem key={repo.id} value={repo.id}>
                 {repo.name}
@@ -56,16 +62,20 @@ function QuickChatFormBody({ state }: { state: FormState }) {
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="agent">Agent (optional)</Label>
+        <Label htmlFor="agent">
+          <Trans>Agent (optional)</Trans>
+        </Label>
         <Select
           value={selectedAgentId || NONE_VALUE}
           onValueChange={(v) => setSelectedAgentId(v === NONE_VALUE ? "" : v)}
         >
           <SelectTrigger id="agent" className="w-full">
-            <SelectValue placeholder="Use workspace default..." />
+            <SelectValue placeholder={t`Use workspace default...`} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NONE_VALUE}>Use workspace default</SelectItem>
+            <SelectItem value={NONE_VALUE}>
+              <Trans>Use workspace default</Trans>
+            </SelectItem>
             {state.agentProfiles.map((profile) => (
               <SelectItem key={profile.id} value={profile.id}>
                 {profile.label}
@@ -84,6 +94,7 @@ export const QuickChatPickerDialog = memo(function QuickChatPickerDialog({
   onOpenChange,
   workspaceId,
 }: QuickChatPickerDialogProps) {
+  const { t } = useLingui();
   const { toast } = useToast();
   const openQuickChat = useAppStore((s) => s.openQuickChat);
   const [isStarting, setIsStarting] = useState(false);
@@ -105,8 +116,8 @@ export const QuickChatPickerDialog = memo(function QuickChatPickerDialog({
       openQuickChat(response.session_id, workspaceId);
     } catch (error) {
       toast({
-        title: "Failed to start quick chat",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t`Failed to start quick chat`,
+        description: error instanceof Error ? error.message : t`Unknown error`,
         variant: "error",
       });
     } finally {
@@ -120,6 +131,7 @@ export const QuickChatPickerDialog = memo(function QuickChatPickerDialog({
     onOpenChange,
     openQuickChat,
     toast,
+    t,
   ]);
 
   const formState: FormState = {
@@ -138,9 +150,13 @@ export const QuickChatPickerDialog = memo(function QuickChatPickerDialog({
         showCloseButton={false}
         overlayClassName="bg-black/20"
       >
-        <DialogTitle className="sr-only">New Quick Chat</DialogTitle>
+        <DialogTitle className="sr-only">
+          <Trans>New Quick Chat</Trans>
+        </DialogTitle>
         <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h2 className="text-lg font-semibold">New Quick Chat</h2>
+          <h2 className="text-lg font-semibold">
+            <Trans>New Quick Chat</Trans>
+          </h2>
           <Button
             variant="ghost"
             size="icon"
@@ -153,11 +169,11 @@ export const QuickChatPickerDialog = memo(function QuickChatPickerDialog({
         <QuickChatFormBody state={formState} />
         <div className="flex justify-end gap-2 px-4 py-3 border-t bg-muted/30">
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button onClick={handleStart} disabled={isStarting} className="cursor-pointer">
             <IconRocket className="h-4 w-4 mr-2" />
-            {isStarting ? "Starting..." : "Start Chat"}
+            {isStarting ? t`Starting...` : t`Start Chat`}
           </Button>
         </div>
       </DialogContent>

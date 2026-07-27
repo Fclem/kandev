@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@lingui/core/macro";
 import { IconDownload, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent } from "@kandev/ui/card";
@@ -15,13 +16,13 @@ function installButtonContent(status: InstallStatus): {
 } {
   switch (status) {
     case "queued":
-      return { icon: "spinner", label: "Queued…" };
+      return { icon: "spinner", label: t`Queued…` };
     case "running":
-      return { icon: "spinner", label: "Installing…" };
+      return { icon: "spinner", label: t`Installing…` };
     case "failed":
-      return { icon: "download", label: "Retry" };
+      return { icon: "download", label: t`Retry` };
     default:
-      return { icon: "download", label: "Install" };
+      return { icon: "download", label: t`Install` };
   }
 }
 

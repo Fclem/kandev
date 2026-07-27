@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { t } from "@lingui/core/macro";
 import { toast } from "sonner";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { createQueuedUserSettingsSync } from "@/lib/user-settings-sync";
@@ -49,7 +50,7 @@ export function useAppStatusBarOrder<T extends AppStatusItemDescriptor>(activeIt
         .catch(() => {
           if (latestRevision.current !== revision) return;
           setOptimisticOrder(null);
-          toast.error("Could not save status bar order");
+          toast.error(t`Could not save status bar order`);
         });
     },
     [activeItems, order, store],

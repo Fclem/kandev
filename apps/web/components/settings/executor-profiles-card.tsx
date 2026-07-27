@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { Trans } from "@lingui/react/macro";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconTrash, IconPlus, IconChevronRight } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
@@ -15,6 +16,43 @@ type ExecutorProfilesCardProps = {
   executorId: string;
   profiles: ExecutorProfile[];
 };
+
+function ExecutorProfileRow({
+  profile,
+  onOpen,
+  onDelete,
+}: {
+  profile: ExecutorProfile;
+  onOpen: () => void;
+  onDelete: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between rounded-md border px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors"
+      onClick={onOpen}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-sm font-medium truncate">{profile.name}</span>
+        {profile.prepare_script && (
+          <Badge variant="outline" className="text-xs flex-shrink-0">
+            <Trans>Prepare script</Trans>
+          </Badge>
+        )}
+      </div>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+          className="h-7 w-7 p-0 text-destructive hover:text-destructive cursor-pointer"
+        >
+          <IconTrash className="h-3.5 w-3.5" />
+        </Button>
+        <IconChevronRight className="h-4 w-4 text-muted-foreground" />
+      </div>
+    </div>
+  );
+}
 
 export function ExecutorProfilesCard({ executorId, profiles }: ExecutorProfilesCardProps) {
   const router = useRouter();
@@ -64,51 +102,38 @@ export function ExecutorProfilesCard({ executorId, profiles }: ExecutorProfilesC
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Profiles</CardTitle>
+              <CardTitle>
+                <Trans>Profiles</Trans>
+              </CardTitle>
               <CardDescription>
-                Different configurations for this executor. Each profile can have its own prepare
-                script, environment variables, and settings.
+                <Trans>
+                  Different configurations for this executor. Each profile can have its own prepare
+                  script, environment variables, and settings.
+                </Trans>
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={handleCreate} className="cursor-pointer">
               <IconPlus className="h-4 w-4 mr-1" />
-              Add
+              <Trans>Add</Trans>
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {profiles.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No profiles configured.</p>
+            <p className="text-sm text-muted-foreground">
+              <Trans>No profiles configured.</Trans>
+            </p>
           ) : (
             <div className="space-y-2">
               {profiles.map((profile) => (
-                <div
+                <ExecutorProfileRow
                   key={profile.id}
-                  className="flex items-center justify-between rounded-md border px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors"
-                  onClick={() =>
+                  profile={profile}
+                  onOpen={() =>
                     router.push(`/settings/executor/${executorId}/profile/${profile.id}`)
                   }
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-medium truncate">{profile.name}</span>
-                    {profile.prepare_script && (
-                      <Badge variant="outline" className="text-xs flex-shrink-0">
-                        Prepare script
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => handleDelete(e, profile.id)}
-                      className="h-7 w-7 p-0 text-destructive hover:text-destructive cursor-pointer"
-                    >
-                      <IconTrash className="h-3.5 w-3.5" />
-                    </Button>
-                    <IconChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </div>
+                  onDelete={(e) => handleDelete(e, profile.id)}
+                />
               ))}
             </div>
           )}

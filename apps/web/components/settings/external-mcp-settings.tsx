@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   IconCheck,
   IconChevronDown,
@@ -29,6 +30,7 @@ import {
 import { EXTERNAL_MCP_TOOL_GROUPS, countExternalMcpTools } from "@/lib/settings/external-mcp-tools";
 
 export function ExternalMcpSettings() {
+  const { t } = useLingui();
   const baseUrl = useMemo(() => getBackendConfig().apiBaseUrl.replace(/\/$/, ""), []);
   const streamableUrl = `${baseUrl}/mcp`;
   const sseUrl = `${baseUrl}/mcp/sse`;
@@ -50,13 +52,17 @@ export function ExternalMcpSettings() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">External MCP</h2>
+        <h2 className="text-2xl font-bold">
+          <Trans>External MCP</Trans>
+        </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Use this if you want to manage Kandev from coding agents that run <strong>outside</strong>{" "}
-          Kandev (e.g. Claude Code, Cursor, or Codex on your host), or from{" "}
-          <strong>passthrough agents</strong> running inside Kandev. <br />
-          Agents launched inside Kandev in their normal mode already have the Kandev MCP wired in
-          automatically, no setup needed.
+          <Trans>
+            Use this if you want to manage Kandev from coding agents that run{" "}
+            <strong>outside</strong> Kandev (e.g. Claude Code, Cursor, or Codex on your host), or
+            from <strong>passthrough agents</strong> running inside Kandev. <br />
+            Agents launched inside Kandev in their normal mode already have the Kandev MCP wired in
+            automatically, no setup needed.
+          </Trans>
         </p>
       </div>
 
@@ -66,29 +72,33 @@ export function ExternalMcpSettings() {
 
       <SettingsSection
         icon={<IconPlugConnected className="h-5 w-5" />}
-        title="Endpoints"
-        description="Available on the same host and port as Kandev. Use localhost for same-machine agents, or the reachable Kandev URL for LAN, VPN, and reverse-proxy clients."
+        title={t`Endpoints`}
+        description={t`Available on the same host and port as Kandev. Use localhost for same-machine agents, or the reachable Kandev URL for LAN, VPN, and reverse-proxy clients.`}
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Streamable HTTP</CardTitle>
+            <CardTitle className="text-base">
+              <Trans>Streamable HTTP</Trans>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <UrlRow url={streamableUrl} copied={copied} onCopy={handleCopy} />
             <p className="text-xs text-muted-foreground mt-2">
-              Recommended for Claude Code, Cursor, and Codex.
+              <Trans>Recommended for Claude Code, Cursor, and Codex.</Trans>
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Server-Sent Events (SSE)</CardTitle>
+            <CardTitle className="text-base">
+              <Trans>Server-Sent Events (SSE)</Trans>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <UrlRow url={sseUrl} copied={copied} onCopy={handleCopy} />
             <p className="text-xs text-muted-foreground mt-2">
-              Compatibility transport for older MCP clients.
+              <Trans>Compatibility transport for older MCP clients.</Trans>
             </p>
           </CardContent>
         </Card>
@@ -104,6 +114,7 @@ export function ExternalMcpSettings() {
 function ToolsPreview() {
   const [open, setOpen] = useState(false);
   const total = countExternalMcpTools();
+  const groupCount = EXTERNAL_MCP_TOOL_GROUPS.length;
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="rounded-md border bg-muted/30">
       <CollapsibleTrigger asChild>
@@ -113,10 +124,14 @@ function ToolsPreview() {
         >
           <IconTools className="h-4 w-4 text-muted-foreground shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">Available tools</p>
+            <p className="text-sm font-medium">
+              <Trans>Available tools</Trans>
+            </p>
             <p className="text-xs text-muted-foreground">
-              {total} tools across {EXTERNAL_MCP_TOOL_GROUPS.length} categories &mdash; expand to
-              preview what external agents can do.
+              <Trans>
+                {total} tools across {groupCount} categories — expand to preview what external
+                agents can do.
+              </Trans>
             </p>
           </div>
           <IconChevronDown
@@ -159,20 +174,21 @@ function SnippetsSection({
   copied: string | null;
   onCopy: (text: string) => void;
 }) {
+  const { t } = useLingui();
   return (
     <SettingsSection
       icon={<IconCode className="h-5 w-5" />}
-      title="Configuration snippets"
-      description="Paste these into your agent's global MCP configuration."
+      title={t`Configuration snippets`}
+      description={t`Paste these into your agent's global MCP configuration.`}
     >
       <SnippetCard
         title="Claude Code"
-        subtitle="~/.claude.json — or run the CLI command below"
+        subtitle={t`~/.claude.json — or run the CLI command below`}
         snippet={buildClaudeCodeConfig(streamableUrl)}
         copied={copied}
         onCopy={onCopy}
         extraSnippet={buildClaudeCodeCliCommand(streamableUrl)}
-        extraSnippetLabel="One-liner (writes to ~/.claude.json)"
+        extraSnippetLabel={t`One-liner (writes to ~/.claude.json)`}
       />
       <SnippetCard
         title="Cursor"
@@ -183,25 +199,25 @@ function SnippetsSection({
       />
       <SnippetCard
         title="Codex"
-        subtitle="~/.codex/config.toml — or run the CLI command below"
+        subtitle={t`~/.codex/config.toml — or run the CLI command below`}
         snippet={buildCodexConfig(streamableUrl)}
         copied={copied}
         onCopy={onCopy}
         extraSnippet={buildCodexCliCommand(streamableUrl)}
-        extraSnippetLabel="One-liner (writes to ~/.codex/config.toml)"
+        extraSnippetLabel={t`One-liner (writes to ~/.codex/config.toml)`}
       />
       <SnippetCard
         title="Auggie CLI"
-        subtitle="~/.augment/settings.json — or run the CLI command below"
+        subtitle={t`~/.augment/settings.json — or run the CLI command below`}
         snippet={buildAuggieConfig(streamableUrl)}
         copied={copied}
         onCopy={onCopy}
         extraSnippet={buildAuggieCliCommand(streamableUrl)}
-        extraSnippetLabel="One-liner (writes to settings.json)"
+        extraSnippetLabel={t`One-liner (writes to settings.json)`}
       />
       <SnippetCard
         title="OpenCode"
-        subtitle="opencode.json (project) or ~/.config/opencode/opencode.json (global)"
+        subtitle={t`opencode.json (project) or ~/.config/opencode/opencode.json (global)`}
         snippet={buildOpenCodeConfig(streamableUrl)}
         copied={copied}
         onCopy={onCopy}
@@ -226,6 +242,7 @@ function UrlRow({
   copied: string | null;
   onCopy: (text: string) => void;
 }) {
+  const { t } = useLingui();
   const isCopied = copied === url;
   return (
     <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1.5 font-mono text-xs">
@@ -234,7 +251,7 @@ function UrlRow({
         variant="ghost"
         size="sm"
         className="h-7 w-7 p-0 cursor-pointer shrink-0"
-        aria-label={isCopied ? "Copied" : "Copy URL"}
+        aria-label={isCopied ? t`Copied` : t`Copy URL`}
         onClick={() => onCopy(url)}
       >
         {isCopied ? (
@@ -294,6 +311,7 @@ function SnippetBlock({
   copied: string | null;
   onCopy: (text: string) => void;
 }) {
+  const { t } = useLingui();
   const isCopied = copied === snippet;
   return (
     <div className="relative">
@@ -305,7 +323,7 @@ function SnippetBlock({
         size="sm"
         className="absolute right-2 top-2 cursor-pointer"
         onClick={() => onCopy(snippet)}
-        title="Copy to clipboard"
+        title={t`Copy to clipboard`}
       >
         {isCopied ? (
           <IconCheck className="h-4 w-4 text-green-500" />

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import Link from "@/components/routing/app-link";
 import { useRouter } from "@/lib/routing/client-router";
 import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
@@ -44,9 +46,13 @@ export function WorkspaceEditClient({ workspaceId }: WorkspaceEditClientProps) {
       <div>
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">Workspace not found</p>
+            <p className="text-muted-foreground">
+              <Trans>Workspace not found</Trans>
+            </p>
             <Button className="mt-4" asChild>
-              <Link href="/settings/workspace">Back to Workspaces</Link>
+              <Link href="/settings/workspace">
+                <Trans>Back to Workspaces</Trans>
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -80,15 +86,19 @@ function SelectField({
   emptyLabel,
   emptyValue,
 }: SelectFieldProps) {
+  const { t } = useLingui();
+  const lowerLabel = label.toLowerCase();
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
       <Select value={value || "none"} onValueChange={(v) => onChange(v === "none" ? "" : v)}>
         <SelectTrigger className="w-full" data-settings-dirty={isDirty}>
-          <SelectValue placeholder={`Select ${label.toLowerCase()}`} />
+          <SelectValue placeholder={t`Select ${lowerLabel}`} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="none">No default</SelectItem>
+          <SelectItem value="none">
+            <Trans>No default</Trans>
+          </SelectItem>
           {options.map((opt) => (
             <SelectItem key={opt.id} value={opt.id}>
               {opt.name}
@@ -134,6 +144,7 @@ function WorkspaceSettingsCard({
   onAgentProfileChange,
   agentProfiles,
 }: WorkspaceSettingsCardProps) {
+  const { t } = useLingui();
   const executorOptions = activeExecutors.map((e: Executor) => ({ id: e.id, name: e.name }));
   const profileOptions = agentProfiles.map((p: AgentProfileOption) => ({
     id: p.id,
@@ -142,12 +153,16 @@ function WorkspaceSettingsCard({
   return (
     <SettingsCard isDirty={nameIsDirty || executorIsDirty || agentProfileIsDirty}>
       <CardHeader>
-        <CardTitle>Workspace Settings</CardTitle>
+        <CardTitle>
+          <Trans>Workspace Settings</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="workspace-name">Name</Label>
+            <Label htmlFor="workspace-name">
+              <Trans>Name</Trans>
+            </Label>
             <Input
               id="workspace-name"
               value={workspaceNameDraft}
@@ -156,21 +171,21 @@ function WorkspaceSettingsCard({
             />
           </div>
           <SelectField
-            label="Default Executor"
+            label={t`Default Executor`}
             value={defaultExecutorId}
             isDirty={executorIsDirty}
             onChange={onExecutorChange}
             options={executorsEmpty ? [] : executorOptions}
-            emptyLabel="No executors available"
+            emptyLabel={t`No executors available`}
             emptyValue=""
           />
           <SelectField
-            label="Default Agent Profile"
+            label={t`Default Agent Profile`}
             value={defaultAgentProfileId}
             isDirty={agentProfileIsDirty}
             onChange={onAgentProfileChange}
             options={profileOptions}
-            emptyLabel="No agent profiles available"
+            emptyLabel={t`No agent profiles available`}
             emptyValue="empty-agent-profiles"
           />
         </div>
@@ -187,20 +202,22 @@ function WorkspaceLinksCard({ workspaceId }: WorkspaceLinksCardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Workspace Links</CardTitle>
+        <CardTitle>
+          <Trans>Workspace Links</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid gap-3 sm:grid-cols-2">
           <Button asChild variant="outline" className="justify-start gap-2">
             <Link href={`/settings/workspace/${workspaceId}/repositories`}>
               <IconGitBranch className="h-4 w-4" />
-              Repositories
+              <Trans>Repositories</Trans>
             </Link>
           </Button>
           <Button asChild variant="outline" className="justify-start gap-2">
             <Link href={`/settings/workspace/${workspaceId}/workflows`}>
               <IconLayoutColumns className="h-4 w-4" />
-              Workflows
+              <Trans>Workflows</Trans>
             </Link>
           </Button>
         </div>
@@ -230,13 +247,19 @@ function DeleteWorkspaceCard({
     <>
       <Card className="border-destructive">
         <CardHeader>
-          <CardTitle className="text-destructive">Delete Workspace</CardTitle>
+          <CardTitle className="text-destructive">
+            <Trans>Delete Workspace</Trans>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Delete this workspace</p>
-              <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
+              <p className="text-sm font-medium">
+                <Trans>Delete this workspace</Trans>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                <Trans>This action cannot be undone.</Trans>
+              </p>
             </div>
             <Button
               variant="destructive"
@@ -245,7 +268,7 @@ function DeleteWorkspaceCard({
               data-testid="workspace-settings-delete-button"
             >
               <IconTrash className="h-4 w-4 mr-2" />
-              Delete
+              <Trans>Delete</Trans>
             </Button>
           </div>
         </CardContent>
@@ -254,14 +277,20 @@ function DeleteWorkspaceCard({
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Workspace</DialogTitle>
+            <DialogTitle>
+              <Trans>Delete Workspace</Trans>
+            </DialogTitle>
             <DialogDescription>
-              Type the workspace name <span className="font-medium">{workspaceName}</span> to
-              confirm deletion. This action cannot be undone.
+              <Trans>
+                Type the workspace name <span className="font-medium">{workspaceName}</span> to
+                confirm deletion. This action cannot be undone.
+              </Trans>
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="confirm-delete">Confirm Delete</Label>
+            <Label htmlFor="confirm-delete">
+              <Trans>Confirm Delete</Trans>
+            </Label>
             <Input
               id="confirm-delete"
               value={deleteConfirmText}
@@ -277,7 +306,7 @@ function DeleteWorkspaceCard({
               onClick={() => setDeleteDialogOpen(false)}
               className="cursor-pointer"
             >
-              Cancel
+              <Trans>Cancel</Trans>
             </Button>
             <Button
               variant="destructive"
@@ -286,7 +315,7 @@ function DeleteWorkspaceCard({
               className="cursor-pointer"
               data-testid="workspace-settings-delete-confirm-button"
             >
-              Delete
+              <Trans>Delete</Trans>
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -381,8 +410,8 @@ function buildSaveHandler({
       );
     } catch (error) {
       toast({
-        title: "Failed to save workspace",
-        description: error instanceof Error ? error.message : "Request failed",
+        title: t`Failed to save workspace`,
+        description: error instanceof Error ? error.message : t`Request failed`,
         variant: "error",
       });
       throw error;
@@ -442,8 +471,8 @@ function useWorkspaceEditForm(workspace: Workspace) {
       runWithNavigationBlockerBypassed(() => router.push("/settings/workspace"));
     } catch (error) {
       toast({
-        title: "Failed to delete workspace",
-        description: error instanceof Error ? error.message : "Request failed",
+        title: t`Failed to delete workspace`,
+        description: error instanceof Error ? error.message : t`Request failed`,
         variant: "error",
       });
     }
@@ -485,6 +514,7 @@ function useWorkspaceEditForm(workspace: Workspace) {
 }
 
 function WorkspaceEditForm({ workspace }: WorkspaceEditFormProps) {
+  const { t } = useLingui();
   const {
     currentWorkspace,
     workspaceNameDraft,
@@ -516,7 +546,7 @@ function WorkspaceEditForm({ workspace }: WorkspaceEditFormProps) {
     }),
     isDirty,
     canSave: Boolean(workspaceNameDraft.trim()),
-    invalidReason: workspaceNameDraft.trim() ? undefined : "Workspace name is required.",
+    invalidReason: workspaceNameDraft.trim() ? undefined : t`Workspace name is required.`,
     save: handleSave,
     discard: handleDiscard,
   });
@@ -526,7 +556,7 @@ function WorkspaceEditForm({ workspace }: WorkspaceEditFormProps) {
       <div>
         <h2 className="text-2xl font-bold">{currentWorkspace.name}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Manage workspace details and jump into workflows or repositories.
+          <Trans>Manage workspace details and jump into workflows or repositories.</Trans>
         </p>
       </div>
       <Separator />

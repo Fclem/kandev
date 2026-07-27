@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -208,6 +209,7 @@ function CuratedFlagsSection({
   onToggle: (setting: CuratedSetting, enabled: boolean) => void;
   compact: boolean;
 }) {
+  const { t } = useLingui();
   const labelCls = compact ? "text-xs" : undefined;
   const switchSize = compact ? ("sm" as const) : ("default" as const);
   return (
@@ -215,6 +217,7 @@ function CuratedFlagsSection({
       {curated.map((setting) => {
         const entry = flags.find((f) => f.flag === setting.flag);
         const enabled = entry ? entry.enabled : setting.default;
+        const settingLabel = setting.label;
         return (
           <div
             key={setting.key}
@@ -231,7 +234,7 @@ function CuratedFlagsSection({
               checked={enabled}
               onCheckedChange={(checked) => onToggle(setting, checked)}
               data-testid={`cli-flag-curated-enabled-${setting.key}`}
-              aria-label={`${enabled ? "Disable" : "Enable"} ${setting.label}`}
+              aria-label={enabled ? t`Disable ${settingLabel}` : t`Enable ${settingLabel}`}
             />
           </div>
         );
@@ -255,7 +258,7 @@ function CustomFlagsSection({
     <div className="space-y-3">
       {customFlags.length === 0 ? (
         <p className="text-xs italic text-muted-foreground" data-testid="cli-flags-empty">
-          No CLI flags configured. Add one below.
+          <Trans>No CLI flags configured. Add one below.</Trans>
         </p>
       ) : (
         <ul className="space-y-2" data-testid="cli-flags-list">
@@ -286,7 +289,10 @@ function CLIFlagRow({
   onUpdateRow: (index: number, next: CLIFlag) => void;
   onRemove: (index: number) => void;
 }) {
+  const { t } = useLingui();
   const row = flagToRow(flag);
+  const rowFlag = row.flag;
+  const removeTarget = row.flag || t`flag`;
   const update = (patch: Partial<CustomFlagRow>) => {
     onUpdateRow(index, rowToFlag({ ...row, ...patch }));
   };
@@ -302,7 +308,7 @@ function CLIFlagRow({
       <Input
         value={row.value}
         onChange={(e) => update({ value: e.target.value })}
-        placeholder="value (optional)"
+        placeholder={t`value (optional)`}
         className="flex-[3] font-mono text-xs"
         data-testid={`cli-flag-value-${index}`}
       />
@@ -310,7 +316,7 @@ function CLIFlagRow({
         checked={row.enabled}
         onCheckedChange={(checked) => update({ enabled: checked })}
         data-testid={`cli-flag-enabled-${index}`}
-        aria-label={`${row.enabled ? "Disable" : "Enable"} ${row.flag}`}
+        aria-label={row.enabled ? t`Disable ${rowFlag}` : t`Enable ${rowFlag}`}
       />
       <Button
         type="button"
@@ -319,7 +325,7 @@ function CLIFlagRow({
         onClick={() => onRemove(index)}
         className="h-8 w-8 shrink-0 cursor-pointer"
         data-testid={`cli-flag-remove-${index}`}
-        aria-label={`Remove ${row.flag || "flag"}`}
+        aria-label={t`Remove ${removeTarget}`}
       >
         <IconTrash className="h-3.5 w-3.5 text-muted-foreground" />
       </Button>
@@ -328,6 +334,7 @@ function CLIFlagRow({
 }
 
 function CLIFlagsAddForm({ onAdd }: { onAdd: (next: CLIFlag) => void }) {
+  const { t } = useLingui();
   const uid = useId();
   const flagId = `${uid}-flag`;
   const valueId = `${uid}-value`;
@@ -350,7 +357,7 @@ function CLIFlagsAddForm({ onAdd }: { onAdd: (next: CLIFlag) => void }) {
     <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
       <div className="flex-[2] space-y-1">
         <Label className="text-xs" htmlFor={flagId}>
-          Flag
+          <Trans>Flag</Trans>
         </Label>
         <Input
           id={flagId}
@@ -364,13 +371,13 @@ function CLIFlagsAddForm({ onAdd }: { onAdd: (next: CLIFlag) => void }) {
       </div>
       <div className="flex-[3] space-y-1">
         <Label className="text-xs" htmlFor={valueId}>
-          Value (optional)
+          <Trans>Value (optional)</Trans>
         </Label>
         <Input
           id={valueId}
           value={newValue}
           onChange={(e) => setNewValue(e.target.value)}
-          placeholder="value"
+          placeholder={t`value`}
           className="font-mono text-xs"
           data-testid="cli-flag-new-value-input"
           onKeyDown={onEnter}
@@ -386,7 +393,7 @@ function CLIFlagsAddForm({ onAdd }: { onAdd: (next: CLIFlag) => void }) {
         data-testid="cli-flag-add-button"
       >
         <IconPlus className="h-3.5 w-3.5 mr-1" />
-        Add
+        <Trans>Add</Trans>
       </Button>
     </div>
   );
@@ -423,6 +430,7 @@ export function CustomCLIFlagsCard({
     [flags, curatedFlagTexts],
   );
   const enabledCount = customFlags.filter((e) => e.flag.enabled).length;
+  const customFlagCount = customFlags.length;
   const isDirty =
     baselineFlags !== undefined && JSON.stringify(flags) !== JSON.stringify(baselineFlags);
 
@@ -437,14 +445,20 @@ export function CustomCLIFlagsCard({
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <CardTitle>Agent CLI flags</CardTitle>
+            <CardTitle>
+              <Trans>Agent CLI flags</Trans>
+            </CardTitle>
             <CardDescription>
-              Flags passed to the agent CLI on launch. Only enabled entries are applied.
+              <Trans>
+                Flags passed to the agent CLI on launch. Only enabled entries are applied.
+              </Trans>
             </CardDescription>
           </div>
           {customFlags.length > 0 && (
             <span className="text-[10px] text-muted-foreground" data-testid="cli-flags-count">
-              {enabledCount} of {customFlags.length} enabled
+              <Trans>
+                {enabledCount} of {customFlagCount} enabled
+              </Trans>
             </span>
           )}
         </div>

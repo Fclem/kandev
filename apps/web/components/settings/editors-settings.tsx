@@ -1,20 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo } from "react";
-import {
-  IconEdit,
-  IconTrash,
-  IconChevronDown,
-  IconExternalLink,
-  IconInfoCircle,
-} from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
+import { IconEdit, IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
-import { Checkbox } from "@kandev/ui/checkbox";
 import { Separator } from "@kandev/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
-import { Switch } from "@kandev/ui/switch";
-import { Textarea } from "@kandev/ui/textarea";
 import { SettingsPageTemplate } from "@/components/settings/settings-page-template";
 import { Combobox, type ComboboxOption } from "@/components/combobox";
 import { EditableCard } from "@/components/settings/editable-card";
@@ -25,7 +17,10 @@ import {
   formStateFromEditor,
   getCustomEditorSummary,
 } from "@/components/settings/editor-form";
-import { LSP_DEFAULT_CONFIGS } from "@/lib/lsp/lsp-client-manager";
+import {
+  LspLanguageCards,
+  LspServerConfigSection,
+} from "@/components/settings/editors-lsp-sections";
 import type { EditorOption } from "@/lib/types/http";
 import type { RequestStatus } from "@/lib/http/use-request";
 import {
@@ -40,218 +35,7 @@ import {
   isCustomEditor,
   type EditorsSettingsState,
 } from "@/components/settings/editors-settings-state";
-import { isDraftEntryDirty, isEditorsSettingsDirty } from "./settings-dirty";
-
-const LSP_LANGUAGE_OPTIONS = [
-  {
-    id: "typescript",
-    label: "TypeScript / JavaScript",
-    binary: "typescript-language-server",
-    docsUrl:
-      "https://github.com/typescript-language-server/typescript-language-server#workspace-configuration",
-    installHint:
-      "Installs typescript-language-server and typescript via npm into ~/.kandev/lsp-servers/",
-  },
-  {
-    id: "go",
-    label: "Go",
-    binary: "gopls",
-    docsUrl: "https://github.com/golang/tools/blob/master/gopls/doc/settings.md",
-    installHint: 'Runs "go install golang.org/x/tools/gopls@latest". Requires Go to be installed.',
-  },
-  {
-    id: "rust",
-    label: "Rust",
-    binary: "rust-analyzer",
-    docsUrl: "https://rust-analyzer.github.io/book/configuration.html",
-    installHint:
-      "Downloads the rust-analyzer binary from GitHub releases into ~/.kandev/lsp-servers/",
-  },
-  {
-    id: "python",
-    label: "Python",
-    binary: "pyright-langserver",
-    docsUrl: "https://microsoft.github.io/pyright/#/settings",
-    installHint: "Installs pyright via npm into ~/.kandev/lsp-servers/",
-  },
-];
-
-type LspLanguageCardsProps = {
-  lspAutoStartLanguages: string[];
-  lspAutoInstallLanguages: string[];
-  baselineLspAutoStart: string[];
-  baselineLspAutoInstall: string[];
-  toggleAutoStart: (langId: string, checked: boolean) => void;
-  toggleAutoInstall: (langId: string, checked: boolean) => void;
-};
-
-function LspLanguageCards({
-  lspAutoStartLanguages,
-  lspAutoInstallLanguages,
-  baselineLspAutoStart,
-  baselineLspAutoInstall,
-  toggleAutoStart,
-  toggleAutoInstall,
-}: LspLanguageCardsProps) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <div className="text-sm font-medium text-foreground">Language Servers</div>
-        <div className="text-xs text-muted-foreground">
-          Auto-start language servers when opening files to get diagnostics, hover info, and
-          go-to-definition. You can also toggle each server on/off per file.
-          <br />
-          When enabled, install your project&apos;s dependencies (e.g.{" "}
-          <code className="text-[11px] bg-muted px-1 rounded">npm install</code> via repository
-          setup scripts) to avoid missing type errors.
-        </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {LSP_LANGUAGE_OPTIONS.map((lang) => {
-          const autoStartDirty =
-            lspAutoStartLanguages.includes(lang.id) !== baselineLspAutoStart.includes(lang.id);
-          const autoInstallDirty =
-            lspAutoInstallLanguages.includes(lang.id) !== baselineLspAutoInstall.includes(lang.id);
-          return (
-            <div
-              key={lang.id}
-              className="rounded-lg border border-border/60 bg-background px-4 py-3 space-y-2.5"
-              data-settings-dirty={autoStartDirty || autoInstallDirty}
-            >
-              <div>
-                <div className="text-sm font-medium text-foreground">{lang.label}</div>
-                <div className="text-xs text-muted-foreground">{lang.binary}</div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Auto-start</span>
-                <Switch
-                  checked={lspAutoStartLanguages.includes(lang.id)}
-                  onCheckedChange={(checked) => toggleAutoStart(lang.id, checked === true)}
-                  data-settings-dirty={autoStartDirty}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id={`lsp-install-${lang.id}`}
-                  checked={lspAutoInstallLanguages.includes(lang.id)}
-                  onCheckedChange={(checked) => toggleAutoInstall(lang.id, checked === true)}
-                  className="h-3.5 w-3.5"
-                  data-settings-dirty={autoInstallDirty}
-                />
-                <label
-                  htmlFor={`lsp-install-${lang.id}`}
-                  className="text-xs text-muted-foreground cursor-pointer"
-                >
-                  Auto-install if not found
-                </label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[260px] text-xs">
-                    {lang.installHint}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-type LspServerConfigSectionProps = {
-  lspConfigStrings: Record<string, string>;
-  baselineLspConfigStrings: Record<string, string>;
-  lspConfigErrors: Record<string, string>;
-  expandedConfigLang: string | null;
-  setExpandedConfigLang: (lang: string | null) => void;
-  updateLspConfigString: (langId: string, value: string) => void;
-};
-
-function LspServerConfigSection({
-  lspConfigStrings,
-  baselineLspConfigStrings,
-  lspConfigErrors,
-  expandedConfigLang,
-  setExpandedConfigLang,
-  updateLspConfigString,
-}: LspServerConfigSectionProps) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <div className="text-sm font-medium text-foreground">Server Configuration</div>
-        <div className="text-xs text-muted-foreground">
-          Override settings sent to each language server via{" "}
-          <code className="text-[11px] bg-muted px-1 rounded">workspace/configuration</code>. JSON
-          format.
-        </div>
-      </div>
-      {LSP_LANGUAGE_OPTIONS.map((lang) => {
-        const isExpanded = expandedConfigLang === lang.id;
-        const configStr = lspConfigStrings[lang.id] ?? "";
-        const defaultConfig = LSP_DEFAULT_CONFIGS[lang.id];
-        const hasDefaults = defaultConfig && Object.keys(defaultConfig).length > 0;
-        const error = lspConfigErrors[lang.id];
-        const isDirty = isDraftEntryDirty(lspConfigStrings, baselineLspConfigStrings, lang.id);
-        return (
-          <div
-            key={lang.id}
-            className="rounded-lg border border-border/60 bg-background overflow-hidden"
-            data-settings-dirty={isDirty}
-          >
-            <button
-              type="button"
-              className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-muted/50 transition-colors"
-              onClick={() => setExpandedConfigLang(isExpanded ? null : lang.id)}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-foreground">{lang.label}</span>
-                {configStr.trim() && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                    custom
-                  </Badge>
-                )}
-              </div>
-              <IconChevronDown
-                className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`}
-              />
-            </button>
-            {isExpanded && (
-              <div className="border-t border-border/60 px-4 py-3 space-y-2">
-                {hasDefaults && (
-                  <div className="text-[11px] text-muted-foreground">
-                    Defaults:{" "}
-                    <code className="bg-muted px-1 rounded">{JSON.stringify(defaultConfig)}</code>
-                  </div>
-                )}
-                <a
-                  href={lang.docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  View available settings
-                  <IconExternalLink className="h-3 w-3" />
-                </a>
-                <Textarea
-                  value={configStr}
-                  onChange={(e) => updateLspConfigString(lang.id, e.target.value)}
-                  placeholder={hasDefaults ? JSON.stringify(defaultConfig, null, 2) : "{\n  \n}"}
-                  className="font-mono text-xs min-h-[80px] resize-y"
-                  rows={4}
-                  data-settings-dirty={isDirty}
-                />
-                {error && <div className="text-xs text-destructive">{error}</div>}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+import { isEditorsSettingsDirty } from "./settings-dirty";
 
 type EditorRequestProps = { isLoading: boolean; status: RequestStatus };
 type CreateReq = EditorRequestProps & { run: (state: EditorFormState) => Promise<void> };
@@ -286,6 +70,7 @@ function CustomEditorRow({
   updateRequest,
   deleteRequest,
 }: CustomEditorRowProps) {
+  const editorName = editor.name;
   return (
     <EditableCard
       key={editor.id}
@@ -295,12 +80,12 @@ function CustomEditorRow({
       onClose={() => setEditingId(null)}
       renderEdit={({ close }) => (
         <EditorForm
-          title={`Edit ${editor.name}`}
+          title={t`Edit ${editorName}`}
           initialState={formStateFromEditor(editor)}
           onCancel={close}
           onSave={(state) => updateRequest.run(editor.id, state)}
           onSaved={close}
-          submitLabel="Save changes"
+          submitLabel={t`Save changes`}
           isSaving={updateRequest.isLoading}
           coordinatedSaveId={`custom-editor:${editor.id}`}
         />
@@ -328,7 +113,7 @@ function CustomEditorRow({
               }}
             >
               <IconEdit className="h-4 w-4" />
-              Edit
+              <Trans>Edit</Trans>
             </Button>
             <Button
               type="button"
@@ -341,7 +126,7 @@ function CustomEditorRow({
               }}
             >
               <IconTrash className="h-4 w-4" />
-              Remove
+              <Trans>Remove</Trans>
             </Button>
           </div>
         </div>
@@ -363,19 +148,21 @@ function CustomEditorsList({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-medium text-foreground">Custom Editors</div>
+        <div className="text-sm font-medium text-foreground">
+          <Trans>Custom Editors</Trans>
+        </div>
         <Button type="button" variant="outline" onClick={() => setIsAdding(true)}>
-          Add custom editor
+          <Trans>Add custom editor</Trans>
         </Button>
       </div>
       {isAdding && (
         <EditorForm
-          title="New custom editor"
+          title={t`New custom editor`}
           initialState={defaultFormState()}
           onCancel={() => setIsAdding(false)}
           onSave={(state) => createRequest.run(state)}
           onSaved={() => setIsAdding(false)}
-          submitLabel="Add editor"
+          submitLabel={t`Add editor`}
           isSaving={createRequest.isLoading}
           coordinatedSaveId="custom-editor:new"
           dirtyWhenMounted
@@ -384,7 +171,7 @@ function CustomEditorsList({
       <div className="space-y-3">
         {customEditors.length === 0 && !isAdding && (
           <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground">
-            No custom editors yet.
+            <Trans>No custom editors yet.</Trans>
           </div>
         )}
         {customEditors.map((editor) => (
@@ -438,10 +225,12 @@ function EditorsSection({
   return (
     <div className="space-y-6">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Editors
+        <Trans>Editors</Trans>
       </div>
       <div className="space-y-2">
-        <div className="text-sm font-medium text-foreground">Default</div>
+        <div className="text-sm font-medium text-foreground">
+          <Trans>Default</Trans>
+        </div>
         <div
           className="min-w-[280px] rounded-md border border-transparent"
           data-settings-dirty={defaultEditorId !== baselineDefaultId}
@@ -453,9 +242,9 @@ function EditorsSection({
               if (!value) return;
               onDefaultEditorChange(value);
             }}
-            placeholder="Select a default editor"
-            searchPlaceholder="Search editors..."
-            emptyMessage="No editor found."
+            placeholder={t`Select a default editor`}
+            searchPlaceholder={t`Search editors...`}
+            emptyMessage={t`No editor found.`}
             disabled={availableEditors.length === 0}
           />
         </div>
@@ -472,7 +261,9 @@ function EditorsSection({
       />
       {builtInEditors.length > 0 && (
         <div className="space-y-2">
-          <div className="text-sm font-medium text-foreground">Supported Editors</div>
+          <div className="text-sm font-medium text-foreground">
+            <Trans>Supported Editors</Trans>
+          </div>
           <div className="grid gap-2 md:grid-cols-2">
             {builtInEditors.map((editor) => (
               <div
@@ -481,7 +272,7 @@ function EditorsSection({
               >
                 <span className="text-sm text-foreground truncate">{editor.name}</span>
                 <Badge variant={editor.installed ? "secondary" : "outline"}>
-                  {editor.installed ? "Installed" : "Not installed"}
+                  {editor.installed ? <Trans>Installed</Trans> : <Trans>Not installed</Trans>}
                 </Badge>
               </div>
             ))}
@@ -555,21 +346,21 @@ export function EditorsSettings() {
 
   return (
     <SettingsPageTemplate
-      title="Editors"
-      description="Configure the included code editor and external editors"
+      title={t`Editors`}
+      description={t`Configure the included code editor and external editors`}
       isDirty={isDirty}
       saveStatus={saveDefaultRequest.status}
       saveRevision={saveRevision}
       canSave={!hasInvalidConfig}
       invalidReason={
-        hasInvalidConfig ? "Fix invalid LSP server configuration before saving." : undefined
+        hasInvalidConfig ? t`Fix invalid LSP server configuration before saving.` : undefined
       }
       onSave={() => saveDefaultRequest.run()}
     >
       <div className="space-y-6">
         <div className="space-y-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            File Editor
+            <Trans>File Editor</Trans>
           </div>
           <LspLanguageCards
             lspAutoStartLanguages={state.lspAutoStartLanguages}

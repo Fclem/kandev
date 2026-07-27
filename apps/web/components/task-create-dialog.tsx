@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@lingui/core/macro";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { JiraTicket } from "@/lib/types/jira";
 import type { LinearIssue } from "@/lib/types/linear";
@@ -49,7 +50,7 @@ import { TaskCreateDialogPopoverContainerProvider } from "@/hooks/use-task-creat
 import { shouldShowTaskTitleField } from "@/components/task-create-dialog-helpers";
 import { usePromptResultDelivery } from "@/hooks/use-prompt-result-delivery";
 
-const PROMPT_INSERTED_MESSAGE = "Enhanced prompt inserted.";
+const promptInsertedMessage = () => t`Enhanced prompt inserted.`;
 
 export interface TaskCreateDialogProps {
   open: boolean;
@@ -294,7 +295,7 @@ function useEnhanceForDialog(
     void enhancePrompt(current, (result) => {
       const inserted = promptDelivery.deliver(current, result, generation);
       if (inserted) {
-        toast({ description: PROMPT_INSERTED_MESSAGE, variant: "success" });
+        toast({ description: promptInsertedMessage(), variant: "success" });
       }
       return inserted;
     });

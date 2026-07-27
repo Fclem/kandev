@@ -1,6 +1,8 @@
 "use client";
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { useRouter } from "@/lib/routing/client-router";
 import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
 import { Button } from "@kandev/ui/button";
@@ -180,9 +182,11 @@ export default function ProfileEditPage({ params }: { params: Promise<{ profileI
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground">Profile not found</p>
+          <p className="text-muted-foreground">
+            <Trans>Profile not found</Trans>
+          </p>
           <Button className="mt-4 cursor-pointer" onClick={() => router.push(EXECUTORS_ROUTE)}>
-            Back to Executors
+            <Trans>Back to Executors</Trans>
           </Button>
         </CardContent>
       </Card>
@@ -218,14 +222,14 @@ function useProfilePersistence(executor: Executor, profile: ExecutorProfile) {
       try {
         const updated = await updateExecutorProfile(executor.id, profile.id, data);
         setSaveStatus("success");
-        toast({ title: "Profile saved", variant: "success" });
+        toast({ title: t`Profile saved`, variant: "success" });
         setExecutors(upsertExecutorProfile(executors, executor, updated));
         window.setTimeout(() => setSaveStatus("idle"), 1500);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to save profile";
+        const message = err instanceof Error ? err.message : t`Failed to save profile`;
         setError(message);
         setSaveStatus("error");
-        toast({ title: "Failed to save profile", description: message, variant: "error" });
+        toast({ title: t`Failed to save profile`, description: message, variant: "error" });
         throw err;
       }
     },
@@ -258,6 +262,7 @@ function useProfilePersistence(executor: Executor, profile: ExecutorProfile) {
 }
 
 function useProfileFormState(executor: Executor, profile: ExecutorProfile) {
+  const { t } = useLingui();
   const [name, setName] = useState(profile.name);
   const [mcpPolicy, setMcpPolicy] = useState(profile.mcp_policy ?? "");
   const [prepareScript, setPrepareScript] = useState(profile.prepare_script ?? "");
@@ -289,9 +294,12 @@ function useProfileFormState(executor: Executor, profile: ExecutorProfile) {
     return vars;
   }, [envVarRows, flags.isSprites, spritesSecretId]);
 
+  // Rendered literally as `{{` in the copy; kept as an interpolated value so the
+  // extracted ICU message doesn't contain unescaped braces.
+  const placeholderToken = "{{";
   const prepareDesc = flags.isRemote
-    ? "Runs inside the execution environment before the agent starts. Type {{ to see available placeholders."
-    : "Runs on the host machine before the agent starts.";
+    ? t`Runs inside the execution environment before the agent starts. Type ${placeholderToken} to see available placeholders.`
+    : t`Runs on the host machine before the agent starts.`;
 
   return {
     name,
@@ -410,6 +418,8 @@ type ProfileEditSectionsProps = {
   secrets: ReturnType<typeof useSecrets>["items"];
 };
 
+// Uses the global `t` macro rather than `useLingui()` so this stays under the
+// 100-line function cap; it re-renders with its `useLingui`-subscribed parent.
 function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSectionsProps) {
   const gitIdentityBaseline = getGitIdentityBaseline(profile, form.localGitIdentity);
   return (
@@ -480,7 +490,7 @@ function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSe
         onRemove={form.removeEnvVar}
       />
       <ScriptCard
-        title="Prepare Script"
+        title={t`Prepare Script`}
         description={form.prepareDesc}
         value={form.prepareScript}
         baselineValue={profile.prepare_script ?? ""}
@@ -491,8 +501,8 @@ function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSe
       />
       {form.isRemote && (
         <ScriptCard
-          title="Cleanup Script"
-          description="Runs after the agent session ends for cleanup tasks."
+          title={t`Cleanup Script`}
+          description={t`Runs after the agent session ends for cleanup tasks.`}
           value={form.cleanupScript}
           baselineValue={profile.cleanup_script ?? ""}
           onChange={form.setCleanupScript}
@@ -512,6 +522,7 @@ function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSe
 }
 
 function ProfileEditForm({ executor, profile }: { executor: Executor; profile: ExecutorProfile }) {
+  const { t } = useLingui();
   const router = useRouter();
   const { items: secrets } = useSecrets();
   const persistence = useProfilePersistence(executor, profile);
@@ -528,7 +539,7 @@ function ProfileEditForm({ executor, profile }: { executor: Executor; profile: E
         data-testid="ssh-connection-settings-link"
       >
         <IconShieldLock className="mr-1.5 h-4 w-4" />
-        Connection Settings
+        <Trans>Connection Settings</Trans>
       </Button>
     ) : undefined;
 
@@ -556,9 +567,9 @@ function ProfileEditForm({ executor, profile }: { executor: Executor; profile: E
     setSavedRevision(submittedRevision);
   };
   let invalidReason: string | undefined;
-  if (!form.name.trim()) invalidReason = "Profile name is required.";
+  if (!form.name.trim()) invalidReason = t`Profile name is required.`;
   else if (form.mcpPolicyError) invalidReason = form.mcpPolicyError;
-  else if (spritesTokenMissing) invalidReason = "Sprites token is required.";
+  else if (spritesTokenMissing) invalidReason = t`Sprites token is required.`;
   useSettingsSaveContributor({
     id: `executor-profile:${profile.id}`,
     revision: saveRevision,
@@ -597,7 +608,9 @@ function ProfileEditForm({ executor, profile }: { executor: Executor; profile: E
         <ProfileEditSections executor={executor} profile={profile} form={form} secrets={secrets} />
       </fieldset>
       {spritesTokenMissing && (
-        <p className="text-sm text-destructive">Sprites API key is required.</p>
+        <p className="text-sm text-destructive">
+          <Trans>Sprites API key is required.</Trans>
+        </p>
       )}
       {persistence.error && <p className="text-sm text-destructive">{persistence.error}</p>}
       <ProfileFormActions onDelete={() => persistence.setDeleteDialogOpen(true)} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import Link from "@/components/routing/app-link";
 import { useTheme } from "@/components/theme/app-theme";
 import {
@@ -19,7 +20,7 @@ import { SettingsSection } from "@/components/settings/settings-section";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { KeyboardShortcutsCard } from "@/components/settings/keyboard-shortcuts-card";
 import { SystemMetricsSettingsCard } from "@/components/settings/system-metrics-settings-card";
-import { GENERAL_NAV_ITEMS } from "@/components/settings/general-nav";
+import { useGeneralNavItems } from "@/components/settings/general-nav";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { updateUserSettings } from "@/lib/api";
 import type { Theme } from "@/lib/settings/types";
@@ -44,7 +45,9 @@ function ThemeSettingsCard({
   return (
     <SettingsCard isDirty={isDirty} data-testid="theme-settings-card">
       <CardHeader>
-        <CardTitle className="text-base">Color Theme</CardTitle>
+        <CardTitle className="text-base">
+          <Trans>Color Theme</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
@@ -53,9 +56,15 @@ function ThemeSettingsCard({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="system">System</SelectItem>
-              <SelectItem value="light">Light</SelectItem>
-              <SelectItem value="dark">Dark</SelectItem>
+              <SelectItem value="system">
+                <Trans>System</Trans>
+              </SelectItem>
+              <SelectItem value="light">
+                <Trans>Light</Trans>
+              </SelectItem>
+              <SelectItem value="dark">
+                <Trans>Dark</Trans>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -73,27 +82,36 @@ function ChatSubmitKeyCard({
   isDirty: boolean;
   onChange: (value: "enter" | "cmd_enter") => void;
 }) {
+  const { t } = useLingui();
   return (
     <SettingsCard isDirty={isDirty} data-testid="chat-submit-key-card">
       <CardHeader>
-        <CardTitle className="text-base">Submit Shortcut</CardTitle>
+        <CardTitle className="text-base">
+          <Trans>Submit Shortcut</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          <Label htmlFor="chat-submit-key">Message Submit Key</Label>
+          <Label htmlFor="chat-submit-key">
+            <Trans>Message Submit Key</Trans>
+          </Label>
           <Select value={value} onValueChange={(next) => onChange(next as "enter" | "cmd_enter")}>
             <SelectTrigger id="chat-submit-key" data-settings-dirty={isDirty}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="cmd_enter">Cmd/Ctrl+Enter to send</SelectItem>
-              <SelectItem value="enter">Enter to send</SelectItem>
+              <SelectItem value="cmd_enter">
+                <Trans>Cmd/Ctrl+Enter to send</Trans>
+              </SelectItem>
+              <SelectItem value="enter">
+                <Trans>Enter to send</Trans>
+              </SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
             {value === "cmd_enter"
-              ? "Press Cmd/Ctrl+Enter to send messages. Press Enter for newlines."
-              : "Press Enter to send messages. Press Shift+Enter for newlines."}
+              ? t`Press Cmd/Ctrl+Enter to send messages. Press Enter for newlines.`
+              : t`Press Enter to send messages. Press Shift+Enter for newlines.`}
           </p>
         </div>
       </CardContent>
@@ -113,11 +131,15 @@ function ChangesPanelLayoutCard({
   return (
     <SettingsCard isDirty={isDirty} data-testid="changes-panel-layout-card">
       <CardHeader>
-        <CardTitle className="text-base">Changes Panel Layout</CardTitle>
+        <CardTitle className="text-base">
+          <Trans>Changes Panel Layout</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          <Label htmlFor="changes-panel-layout">File list view</Label>
+          <Label htmlFor="changes-panel-layout">
+            <Trans>File list view</Trans>
+          </Label>
           <Select value={value} onValueChange={(next) => onChange(next as "flat" | "tree")}>
             <SelectTrigger
               id="changes-panel-layout"
@@ -128,12 +150,18 @@ function ChangesPanelLayoutCard({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="flat">Flat list</SelectItem>
-              <SelectItem value="tree">Tree</SelectItem>
+              <SelectItem value="flat">
+                <Trans>Flat list</Trans>
+              </SelectItem>
+              <SelectItem value="tree">
+                <Trans>Tree</Trans>
+              </SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Display changed files as a flat list with full paths, or as a folder tree.
+            <Trans>
+              Display changed files as a flat list with full paths, or as a folder tree.
+            </Trans>
           </p>
         </div>
       </CardContent>
@@ -154,10 +182,11 @@ function createAppearanceSavedState(
 }
 
 export function GeneralSettings() {
+  const navItems = useGeneralNavItems();
   return (
     <div className="space-y-8">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {GENERAL_NAV_ITEMS.map(({ href, label, description, icon: Icon }) => (
+        {navItems.map(({ href, label, description, icon: Icon }) => (
           <Link key={href} href={href} className="cursor-pointer">
             <Card className="h-full transition-colors hover:bg-muted/40">
               <CardHeader className="pb-3">
@@ -178,12 +207,13 @@ export function GeneralSettings() {
 }
 
 export function TaskActionsSettings() {
+  const { t } = useLingui();
   return (
     <div className="space-y-8">
       <SettingsSection
         icon={<IconArchive className="h-5 w-5" />}
-        title="Task Actions"
-        description="Configure archive safeguards and defaults for tasks created by agents"
+        title={t`Task Actions`}
+        description={t`Configure archive safeguards and defaults for tasks created by agents`}
       >
         <div className="space-y-4">
           <MCPTaskAgentProfileDefaultSettings />
@@ -195,6 +225,7 @@ export function TaskActionsSettings() {
 }
 
 export function AppearanceSettings() {
+  const { t } = useLingui();
   const userSettings = useAppStore((state) => state.userSettings);
   const setUserSettings = useAppStore((state) => state.setUserSettings);
   const storeApi = useAppStoreApi();
@@ -252,8 +283,8 @@ export function AppearanceSettings() {
     <div className="space-y-8">
       <SettingsSection
         icon={<IconPalette className="h-5 w-5" />}
-        title="Appearance"
-        description="Customize how the application looks"
+        title={t`Appearance`}
+        description={t`Customize how the application looks`}
       >
         <ThemeSettingsCard
           theme={draft.theme}
@@ -273,8 +304,8 @@ export function AppearanceSettings() {
 
       <SettingsSection
         icon={<IconGitBranch className="h-5 w-5" />}
-        title="Changes Panel"
-        description="Customize how changed files are displayed"
+        title={t`Changes Panel`}
+        description={t`Customize how changed files are displayed`}
       >
         <ChangesPanelLayoutCard
           value={draft.changesPanelLayout}
@@ -287,8 +318,8 @@ export function AppearanceSettings() {
 
       <SettingsSection
         icon={<IconActivity className="h-5 w-5" />}
-        title="Resource Metrics"
-        description="Configure backend and execution resource sampling"
+        title={t`Resource Metrics`}
+        description={t`Configure backend and execution resource sampling`}
       >
         <SystemMetricsSettingsCard
           showInTopbar={draft.showMetrics}
@@ -304,6 +335,7 @@ export function AppearanceSettings() {
 }
 
 export function KeyboardShortcutsSettings() {
+  const { t } = useLingui();
   const userSettings = useAppStore((state) => state.userSettings);
   const setUserSettings = useAppStore((state) => state.setUserSettings);
   const storeApi = useAppStoreApi();
@@ -339,8 +371,8 @@ export function KeyboardShortcutsSettings() {
     <div className="space-y-8">
       <SettingsSection
         icon={<IconKeyboard className="h-5 w-5" />}
-        title="Chat Input"
-        description="Configure chat input behavior"
+        title={t`Chat Input`}
+        description={t`Configure chat input behavior`}
       >
         <ChatSubmitKeyCard
           value={draft.chatSubmitKey}
@@ -353,8 +385,8 @@ export function KeyboardShortcutsSettings() {
 
       <SettingsSection
         icon={<IconCommand className="h-5 w-5" />}
-        title="Keyboard Shortcuts"
-        description="Customize keyboard shortcuts for the command panel"
+        title={t`Keyboard Shortcuts`}
+        description={t`Customize keyboard shortcuts for the command panel`}
       >
         <KeyboardShortcutsCard
           overrides={draft.keyboardShortcuts}

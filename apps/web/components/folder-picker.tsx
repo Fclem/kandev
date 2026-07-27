@@ -9,6 +9,8 @@ import {
   IconFolderPlus,
   IconX,
 } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
@@ -30,10 +32,11 @@ type FolderPickerProps = {
  * trigger lives in the chip row and the popover handles browse + commit.
  */
 export function FolderPicker({ value, onChange, placeholder }: FolderPickerProps) {
+  const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const { listing, loading, error, load } = useDirectoryListing(open, value);
   const leaf = leafName(value);
-  const triggerLabel = leaf || placeholder || "scratch workspace";
+  const triggerLabel = leaf || placeholder || t`scratch workspace`;
   const hasValue = !!value;
 
   const triggerClass = cn(
@@ -122,7 +125,7 @@ export function useDirectoryListing(open: boolean, value: string) {
       setListing(nextListing);
     } catch (err) {
       if (generation !== requestGeneration.current) return;
-      setError(err instanceof Error ? err.message : "Failed to load directory");
+      setError(err instanceof Error ? err.message : t`Failed to load directory`);
     } finally {
       if (generation === requestGeneration.current) setLoading(false);
     }
@@ -201,7 +204,9 @@ function Breadcrumb({
   return (
     <div className="flex items-center gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border bg-muted/30 px-2 py-1.5">
       {segs.length === 0 && (
-        <span className="text-[11px] text-muted-foreground italic">Loading…</span>
+        <span className="text-[11px] text-muted-foreground italic">
+          <Trans>Loading…</Trans>
+        </span>
       )}
       {segs.map((seg, i) => {
         const last = i === segs.length - 1;
@@ -280,6 +285,7 @@ function DirectoryBrowserToolbar({
   onCreateDirectory: (name: string) => Promise<void>;
   touchRows: boolean;
 }) {
+  const { t } = useLingui();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -294,7 +300,7 @@ function DirectoryBrowserToolbar({
       await onCreateDirectory(trimmedName);
       setEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create folder");
+      setError(err instanceof Error ? err.message : t`Failed to create folder`);
     } finally {
       setCreating(false);
     }
@@ -307,7 +313,7 @@ function DirectoryBrowserToolbar({
           <div className="flex min-w-0 items-center gap-2">
             <IconFolderPlus className="size-4 shrink-0 text-muted-foreground" />
             <Input
-              aria-label="New folder name"
+              aria-label={t`New folder name`}
               value={name}
               onChange={(event) => {
                 setName(event.target.value);
@@ -321,7 +327,7 @@ function DirectoryBrowserToolbar({
                   setEditing(false);
                 }
               }}
-              placeholder="Folder name"
+              placeholder={t`Folder name`}
               autoFocus
               className={cn("min-w-0 flex-1", touchRows && "h-10")}
             />
@@ -331,8 +337,8 @@ function DirectoryBrowserToolbar({
               className={touchRows ? "size-11" : undefined}
               onClick={() => void createFolder()}
               disabled={!name.trim() || creating}
-              aria-label="Create folder"
-              title="Create folder"
+              aria-label={t`Create folder`}
+              title={t`Create folder`}
             >
               <IconCheck />
             </Button>
@@ -342,8 +348,8 @@ function DirectoryBrowserToolbar({
               size={touchRows ? "icon-lg" : "icon"}
               className={touchRows ? "size-11" : undefined}
               onClick={() => setEditing(false)}
-              aria-label="Cancel new folder"
-              title="Cancel"
+              aria-label={t`Cancel new folder`}
+              title={t`Cancel`}
             >
               <IconX />
             </Button>
@@ -355,21 +361,37 @@ function DirectoryBrowserToolbar({
           ) : null}
         </div>
       ) : (
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xs font-medium text-muted-foreground">Folders</span>
-          <Button
-            type="button"
-            variant="ghost"
-            size={touchRows ? "lg" : "sm"}
-            className={touchRows ? "min-h-11" : undefined}
-            onClick={() => setEditing(true)}
-            disabled={disabled}
-          >
-            <IconFolderPlus />
-            New folder
-          </Button>
-        </div>
+        <NewFolderRow disabled={disabled} touchRows={touchRows} onStart={() => setEditing(true)} />
       )}
+    </div>
+  );
+}
+
+function NewFolderRow({
+  disabled,
+  touchRows,
+  onStart,
+}: {
+  disabled: boolean;
+  touchRows: boolean;
+  onStart: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs font-medium text-muted-foreground">
+        <Trans>Folders</Trans>
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size={touchRows ? "lg" : "sm"}
+        className={touchRows ? "min-h-11" : undefined}
+        onClick={onStart}
+        disabled={disabled}
+      >
+        <IconFolderPlus />
+        <Trans>New folder</Trans>
+      </Button>
     </div>
   );
 }
@@ -389,10 +411,11 @@ function Entries({
   touchRows?: boolean;
   fillAvailableHeight?: boolean;
 }) {
-  if (loading) return <EmptyRow text="Loading…" />;
+  const { t } = useLingui();
+  if (loading) return <EmptyRow text={t`Loading…`} />;
   if (error) return <EmptyRow text={error} variant="error" testId="folder-picker-error" />;
   if (!listing || listing.entries.length === 0) {
-    return <EmptyRow text="No folders here — pick this one or go up" />;
+    return <EmptyRow text={t`No folders here — pick this one or go up`} />;
   }
   return (
     <div
@@ -454,7 +477,7 @@ function Footer({
         className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
       >
         <IconBox className="h-3 w-3" />
-        Use scratch instead
+        <Trans>Use scratch instead</Trans>
       </button>
       <button
         type="button"
@@ -468,7 +491,7 @@ function Footer({
         )}
       >
         <IconFolder className="h-3 w-3" />
-        Use this folder
+        <Trans>Use this folder</Trans>
       </button>
     </div>
   );

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { IconPlayerPlay, IconLoader2, IconCheck, IconX, IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -61,19 +63,24 @@ function parseDockerLine(raw: string): string | null {
 
 function BuildStatusBadge({ status }: { status: BuildStatus }) {
   if (status === "idle") return null;
-  if (status === "building") return <Badge variant="secondary">Building...</Badge>;
+  if (status === "building")
+    return (
+      <Badge variant="secondary">
+        <Trans>Building...</Trans>
+      </Badge>
+    );
   if (status === "success") {
     return (
       <Badge variant="default" className="bg-green-600">
         <IconCheck className="mr-1 h-3 w-3" />
-        Success
+        <Trans>Success</Trans>
       </Badge>
     );
   }
   return (
     <Badge variant="destructive">
       <IconX className="mr-1 h-3 w-3" />
-      Failed
+      <Trans>Failed</Trans>
     </Badge>
   );
 }
@@ -121,14 +128,15 @@ function useBuildStream(onBuildSuccess?: (result: DockerBuildSuccess) => void) {
         const response = await buildDockerImage({ dockerfile, tag });
         if (!response.ok) {
           const text = await response.text();
+          const status = response.status;
           setBuildStatus("failed");
-          setBuildLog(`Build failed (${response.status}): ${text}`);
+          setBuildLog(t`Build failed (${status}): ${text}`);
           return;
         }
         const reader = response.body?.getReader();
         if (!reader) {
           setBuildStatus("failed");
-          setBuildLog("No response body");
+          setBuildLog(t`No response body`);
           return;
         }
         const hasError = await readDockerStream(reader, appendLog);
@@ -139,8 +147,9 @@ function useBuildStream(onBuildSuccess?: (result: DockerBuildSuccess) => void) {
         }
       } catch (err) {
         setBuildStatus("failed");
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        setBuildLog((prev) => prev + `\nBuild failed: ${msg}`);
+        const msg = err instanceof Error ? err.message : t`Unknown error`;
+        const failure = t`Build failed: ${msg}`;
+        setBuildLog((prev) => prev + `\n${failure}`);
       }
     },
     [appendLog, onBuildSuccess],
@@ -158,6 +167,39 @@ type DockerfileBuildCardProps = {
   onImageTagChange: (v: string) => void;
   onBuildSuccess?: (result: DockerBuildSuccess) => void;
 };
+
+function DockerfileBuildHeader({
+  canFillDefaults,
+  onFillDefaults,
+}: {
+  canFillDefaults: boolean;
+  onFillDefaults: () => void;
+}) {
+  return (
+    <CardHeader>
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <CardTitle>
+            <Trans>Dockerfile</Trans>
+          </CardTitle>
+          <CardDescription>
+            <Trans>Define the Docker image. Build and test it here.</Trans>
+          </CardDescription>
+        </div>
+        {canFillDefaults && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onFillDefaults}
+            className="cursor-pointer text-xs text-muted-foreground"
+          >
+            <Trans>Use defaults</Trans>
+          </Button>
+        )}
+      </div>
+    </CardHeader>
+  );
+}
 
 export function DockerfileBuildCard({
   dockerfile,
@@ -190,27 +232,12 @@ export function DockerfileBuildCard({
 
   return (
     <SettingsCard isDirty={dockerfileDirty || imageTagDirty}>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <CardTitle>Dockerfile</CardTitle>
-            <CardDescription>Define the Docker image. Build and test it here.</CardDescription>
-          </div>
-          {canFillDefaults && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={fillDefaults}
-              className="cursor-pointer text-xs text-muted-foreground"
-            >
-              Use defaults
-            </Button>
-          )}
-        </div>
-      </CardHeader>
+      <DockerfileBuildHeader canFillDefaults={canFillDefaults} onFillDefaults={fillDefaults} />
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="image-tag">Image Tag</Label>
+          <Label htmlFor="image-tag">
+            <Trans>Image Tag</Trans>
+          </Label>
           <Input
             id="image-tag"
             value={imageTag}
@@ -221,7 +248,9 @@ export function DockerfileBuildCard({
           />
         </div>
         <div className="space-y-2">
-          <Label>Dockerfile Content</Label>
+          <Label>
+            <Trans>Dockerfile Content</Trans>
+          </Label>
           <div
             className="overflow-hidden rounded-md border"
             data-settings-dirty={dockerfileDirty}
@@ -246,7 +275,7 @@ export function DockerfileBuildCard({
             ) : (
               <IconPlayerPlay className="mr-1.5 h-4 w-4" />
             )}
-            Build Image
+            <Trans>Build Image</Trans>
           </Button>
           <BuildStatusBadge status={buildStatus} />
         </div>
@@ -268,11 +297,15 @@ function ContainersEmptyState({ loading }: { loading: boolean }) {
     return (
       <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
         <IconLoader2 className="h-4 w-4 animate-spin" />
-        Loading...
+        <Trans>Loading...</Trans>
       </div>
     );
   }
-  return <p className="py-4 text-sm text-muted-foreground">No Docker containers.</p>;
+  return (
+    <p className="py-4 text-sm text-muted-foreground">
+      <Trans>No Docker containers.</Trans>
+    </p>
+  );
 }
 
 export function useDockerProfileContainers(profileId: string, enabled = true) {
@@ -307,7 +340,7 @@ export function useDockerProfileContainers(profileId: string, enabled = true) {
 
 export function containerTaskLabel(container: DockerContainer) {
   const title = container.labels?.["kandev.task_title"]?.trim();
-  return title || container.labels?.["kandev.task_id"] || "Untracked";
+  return title || container.labels?.["kandev.task_id"] || t`Untracked`;
 }
 
 function ContainerRow({
@@ -321,6 +354,7 @@ function ContainerRow({
   onStop: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useLingui();
   const isLoading = actionLoading === container.id;
   return (
     <TableRow data-testid={`docker-container-row-${container.id}`}>
@@ -343,7 +377,7 @@ function ContainerRow({
               onClick={() => onStop(container.id)}
               disabled={isLoading}
               className="cursor-pointer"
-              title="Stop"
+              title={t`Stop`}
             >
               {isLoading ? (
                 <IconLoader2 className="h-4 w-4 animate-spin" />
@@ -358,7 +392,7 @@ function ContainerRow({
             onClick={() => onRemove(container.id)}
             disabled={isLoading}
             className="cursor-pointer"
-            title="Remove"
+            title={t`Remove`}
           >
             <IconTrash className="h-4 w-4" />
           </Button>
@@ -388,8 +422,12 @@ export function DockerContainersCard({ profileId }: { profileId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Docker Containers</CardTitle>
-        <CardDescription>Docker containers created by this profile.</CardDescription>
+        <CardTitle>
+          <Trans>Docker Containers</Trans>
+        </CardTitle>
+        <CardDescription>
+          <Trans>Docker containers created by this profile.</Trans>
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {containers.length === 0 ? (
@@ -398,10 +436,18 @@ export function DockerContainersCard({ profileId }: { profileId: string }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Image</TableHead>
-                <TableHead>Task</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>
+                  <Trans>Name</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Image</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Task</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Status</Trans>
+                </TableHead>
                 <TableHead className="w-[100px]" />
               </TableRow>
             </TableHeader>

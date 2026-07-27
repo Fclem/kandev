@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -24,6 +25,7 @@ function PolicyRuleRow({
   onUpdate: (index: number, field: keyof NetworkPolicyRule, val: string) => void;
   onRemove: (index: number) => void;
 }) {
+  const { t } = useLingui();
   return (
     <TableRow
       data-settings-dirty={!baselineRule || JSON.stringify(rule) !== JSON.stringify(baselineRule)}
@@ -49,11 +51,13 @@ function PolicyRuleRow({
           <SelectContent>
             <SelectItem value="allow">
               <Badge variant="default" className="bg-green-600">
-                Allow
+                <Trans>Allow</Trans>
               </Badge>
             </SelectItem>
             <SelectItem value="deny">
-              <Badge variant="destructive">Deny</Badge>
+              <Badge variant="destructive">
+                <Trans>Deny</Trans>
+              </Badge>
             </SelectItem>
           </SelectContent>
         </Select>
@@ -62,7 +66,7 @@ function PolicyRuleRow({
         <Input
           value={rule.include ?? ""}
           onChange={(e) => onUpdate(index, "include", e.target.value)}
-          placeholder="Optional pattern"
+          placeholder={t`Optional pattern`}
           className="text-sm"
           data-settings-dirty={!baselineRule || rule.include !== baselineRule.include}
         />
@@ -96,9 +100,15 @@ function PolicyRulesTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Domain</TableHead>
-          <TableHead className="w-[120px]">Action</TableHead>
-          <TableHead>Include</TableHead>
+          <TableHead>
+            <Trans>Domain</Trans>
+          </TableHead>
+          <TableHead className="w-[120px]">
+            <Trans>Action</Trans>
+          </TableHead>
+          <TableHead>
+            <Trans>Include</Trans>
+          </TableHead>
           <TableHead className="w-[60px]" />
         </TableRow>
       </TableHeader>
@@ -154,9 +164,13 @@ export function NetworkPoliciesCard({
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Network Policies</CardTitle>
+            <CardTitle>
+              <Trans>Network Policies</Trans>
+            </CardTitle>
             <CardDescription>
-              Define network access rules applied when a sprite is created for this profile.
+              <Trans>
+                Define network access rules applied when a sprite is created for this profile.
+              </Trans>
             </CardDescription>
           </div>
           <Button
@@ -167,13 +181,15 @@ export function NetworkPoliciesCard({
             className="cursor-pointer"
           >
             <IconPlus className="mr-1 h-3.5 w-3.5" />
-            Add Rule
+            <Trans>Add Rule</Trans>
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         {rules.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No network policy rules configured.</p>
+          <p className="text-sm text-muted-foreground">
+            <Trans>No network policy rules configured.</Trans>
+          </p>
         ) : (
           <PolicyRulesTable
             rules={rules}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { Trans } from "@lingui/react/macro";
 import { usePathname, useRouter, useSearchParams } from "@/lib/routing/client-router";
 import ReactMarkdown from "react-markdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -49,7 +50,7 @@ function ChangelogEntryCard({ entry }: { entry: ChangelogEntry }) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
-            View on GitHub
+            <Trans>View on GitHub</Trans>
             <IconExternalLink className="h-3 w-3" />
           </a>
         </div>
@@ -111,7 +112,11 @@ export function ChangelogList() {
   }, [changelog, currentPage]);
 
   if (changelog.length === 0) {
-    return <p className="text-sm text-muted-foreground">No changelog entries available.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        <Trans>No changelog entries available.</Trans>
+      </p>
+    );
   }
 
   const pageNumbers = buildPageNumbers(currentPage, totalPages);

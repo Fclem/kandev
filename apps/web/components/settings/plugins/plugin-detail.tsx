@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans } from "@lingui/react/macro";
 import { IconArrowLeft } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -89,7 +90,7 @@ function PluginDetailHeader({ plugin }: PluginDetailHeaderProps) {
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground cursor-pointer"
       >
         <IconArrowLeft className="h-4 w-4" />
-        Plugins
+        <Trans>Plugins</Trans>
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
@@ -101,7 +102,7 @@ function PluginDetailHeader({ plugin }: PluginDetailHeaderProps) {
                 variant="outline"
                 className="border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px]"
               >
-                unsigned
+                <Trans>unsigned</Trans>
               </Badge>
             )}
           </div>
@@ -130,7 +131,9 @@ function PluginSettingsCard({ plugin, form, busy }: PluginSettingsCardProps) {
   return (
     <SettingsCard isDirty={form.isDirty} data-testid="plugin-settings-card">
       <CardHeader>
-        <CardTitle className="text-base">Settings</CardTitle>
+        <CardTitle className="text-base">
+          <Trans>Settings</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <PluginSettingsBody plugin={plugin} form={form} busy={busy} />
@@ -143,7 +146,9 @@ function PluginSettingsBody({ plugin, form, busy }: PluginSettingsCardProps) {
   if (form.fields.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        This plugin does not declare any settings (no <code>config_schema</code> in its manifest).
+        <Trans>
+          This plugin does not declare any settings (no <code>config_schema</code> in its manifest).
+        </Trans>
       </p>
     );
   }
@@ -151,7 +156,11 @@ function PluginSettingsBody({ plugin, form, busy }: PluginSettingsCardProps) {
     return <p className="text-sm text-destructive">{form.configError}</p>;
   }
   if (form.configLoading) {
-    return <p className="text-sm text-muted-foreground">Loading settings...</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        <Trans>Loading settings...</Trans>
+      </p>
+    );
   }
   return (
     <div className="space-y-4">
@@ -164,7 +173,7 @@ function PluginSettingsBody({ plugin, form, busy }: PluginSettingsCardProps) {
       />
       {plugin.status === "active" && (
         <p className="text-xs text-muted-foreground">
-          Saving restarts the plugin so the new settings take effect.
+          <Trans>Saving restarts the plugin so the new settings take effect.</Trans>
         </p>
       )}
     </div>
@@ -191,7 +200,7 @@ function PluginDangerZone({ plugin, actions }: PluginDangerZoneProps) {
           disabled={busy}
           onClick={() => actions.handleEnable(plugin)}
         >
-          Enable
+          <Trans>Enable</Trans>
         </Button>
       )}
       {canDisable && (
@@ -202,7 +211,7 @@ function PluginDangerZone({ plugin, actions }: PluginDangerZoneProps) {
           disabled={busy}
           onClick={() => actions.handleDisable(plugin)}
         >
-          Disable
+          <Trans>Disable</Trans>
         </Button>
       )}
       <Button
@@ -212,7 +221,7 @@ function PluginDangerZone({ plugin, actions }: PluginDangerZoneProps) {
         disabled={busy}
         onClick={() => actions.openUninstall(plugin)}
       >
-        Uninstall
+        <Trans>Uninstall</Trans>
       </Button>
     </div>
   );
@@ -226,10 +235,12 @@ function PluginNotFound({ pluginId }: { pluginId: string }) {
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground cursor-pointer"
       >
         <IconArrowLeft className="h-4 w-4" />
-        Plugins
+        <Trans>Plugins</Trans>
       </Link>
       <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-        No installed plugin with id <span className="font-mono">{pluginId}</span>.
+        <Trans>
+          No installed plugin with id <span className="font-mono">{pluginId}</span>.
+        </Trans>
       </div>
     </div>
   );

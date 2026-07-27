@@ -1,6 +1,7 @@
 "use client";
 
 import { IconSparkles } from "@tabler/icons-react";
+import { useLingui } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { GridSpinner } from "@/components/grid-spinner";
@@ -17,11 +18,12 @@ export function EnhancePromptButton({
   isLoading,
   isConfigured = true,
 }: EnhancePromptButtonProps) {
+  const { t } = useLingui();
   const { tooltipOpenState, handleTooltipOpenChange } = useTooltipMountGate();
   const isDisabled = !isConfigured || isLoading;
   const tooltipText = isConfigured
-    ? "Enhance prompt with AI"
-    : "Configure a utility agent in settings to enable AI enhancement";
+    ? t`Enhance prompt with AI`
+    : t`Configure a utility agent in settings to enable AI enhancement`;
 
   return (
     <Tooltip open={tooltipOpenState} onOpenChange={handleTooltipOpenChange}>
@@ -40,7 +42,7 @@ export function EnhancePromptButton({
               className="h-7 w-7 cursor-pointer hover:bg-muted/40 text-slate-400"
               onClick={isConfigured ? onClick : undefined}
               disabled={isDisabled}
-              aria-label="Enhance prompt with AI"
+              aria-label={t`Enhance prompt with AI`}
               aria-busy={isLoading}
               data-testid="enhance-prompt-button"
             >

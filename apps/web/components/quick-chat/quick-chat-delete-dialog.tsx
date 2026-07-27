@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans } from "@lingui/react/macro";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,26 +27,40 @@ export function QuickChatDeleteDialog({
     <AlertDialog open={!!sessionToDelete} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Quick Chat?</AlertDialogTitle>
+          <AlertDialogTitle>
+            <Trans>Delete Quick Chat?</Trans>
+          </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div>
-              <p>This will permanently delete this quick chat session, including:</p>
+              <p>
+                <Trans>This will permanently delete this quick chat session, including:</Trans>
+              </p>
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>All conversation history</li>
-                <li>The task and its data</li>
-                <li>The associated worktree</li>
+                <li>
+                  <Trans>All conversation history</Trans>
+                </li>
+                <li>
+                  <Trans>The task and its data</Trans>
+                </li>
+                <li>
+                  <Trans>The associated worktree</Trans>
+                </li>
               </ul>
-              <p className="mt-2">This action cannot be undone.</p>
+              <p className="mt-2">
+                <Trans>This action cannot be undone.</Trans>
+              </p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">
+            <Trans>Cancel</Trans>
+          </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Delete
+            <Trans>Delete</Trans>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

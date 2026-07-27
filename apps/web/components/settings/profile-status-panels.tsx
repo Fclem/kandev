@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t as globalT } from "@lingui/core/macro";
 import {
   IconAlertCircle,
   IconLoader2,
@@ -29,7 +31,7 @@ export function ProbingPanel() {
     >
       <IconLoader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
       <p className="text-sm text-muted-foreground">
-        Probing agent capabilities… this usually takes a few seconds.
+        <Trans>Probing agent capabilities… this usually takes a few seconds.</Trans>
       </p>
     </div>
   );
@@ -37,12 +39,12 @@ export function ProbingPanel() {
 
 function noAuthHint({ isAuth, canLogin }: { isAuth: boolean; canLogin: boolean }): React.ReactNode {
   if (!isAuth) {
-    return "Install the agent CLI, then click Refresh.";
+    return globalT`Install the agent CLI, then click Refresh.`;
   }
   if (canLogin) {
-    return "Click Open terminal to sign in, then refresh.";
+    return globalT`Click Open terminal to sign in, then refresh.`;
   }
-  return "Click Open terminal to launch a shell, run the agent's sign-in command, then refresh.";
+  return globalT`Click Open terminal to launch a shell, run the agent's sign-in command, then refresh.`;
 }
 
 function NoAuthActions({
@@ -68,7 +70,7 @@ function NoAuthActions({
           data-testid="profile-no-auth-open-terminal"
         >
           <IconTerminal2 className="mr-2 h-4 w-4" />
-          Open terminal
+          <Trans>Open terminal</Trans>
         </Button>
       )}
       <Button
@@ -81,7 +83,7 @@ function NoAuthActions({
         data-testid="profile-no-auth-refresh"
       >
         <IconRefresh className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-        Refresh
+        <Trans>Refresh</Trans>
       </Button>
     </div>
   );
@@ -102,9 +104,10 @@ export function NoAuthPanel({
   error: string | null;
   rawError: string | null;
 }) {
+  const { t } = useLingui();
   const isAuth = status === "auth_required";
   const Icon = isAuth ? IconLock : IconPackageOff;
-  const title = isAuth ? "No auth - login required" : "Not installed";
+  const title = isAuth ? t`No auth - login required` : t`Not installed`;
   const detail = error || rawError;
   const [loginOpen, setLoginOpen] = useState(false);
   const [shellOpen, setShellOpen] = useState(false);
@@ -143,7 +146,7 @@ export function NoAuthPanel({
                   data-testid="profile-no-auth-details"
                 >
                   <IconAlertCircle className="h-3 w-3" />
-                  details
+                  <Trans>details</Trans>
                 </button>
               </TooltipTrigger>
               <TooltipContent className="max-w-md">

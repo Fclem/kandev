@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import { IconExternalLink } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +34,7 @@ export function PluginRepoLink({ url, className }: { url?: string | null; classN
       )}
     >
       <IconExternalLink className="h-3.5 w-3.5" />
-      Repo
+      <Trans>Repo</Trans>
     </a>
   );
 }

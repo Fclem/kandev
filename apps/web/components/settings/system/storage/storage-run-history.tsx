@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@kandev/ui/accordion";
 import { Badge } from "@kandev/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -12,11 +13,15 @@ export function StorageRunHistory({ runs }: { runs: StorageMaintenanceRun[] }) {
   return (
     <Card className="min-w-0" data-testid="storage-run-history">
       <CardHeader>
-        <CardTitle className="text-base">Maintenance history</CardTitle>
+        <CardTitle className="text-base">
+          <Trans>Maintenance history</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {runs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No storage maintenance runs yet.</p>
+          <p className="text-sm text-muted-foreground">
+            <Trans>No storage maintenance runs yet.</Trans>
+          </p>
         ) : (
           <Accordion type="multiple">
             {runs.map((run) => (

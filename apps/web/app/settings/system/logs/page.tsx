@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { StateProvider } from "@/components/state-provider";
 import { SystemPageShell } from "@/components/settings/system/system-page-shell";
 import { LogViewer } from "@/components/settings/system/log-viewer";
@@ -21,8 +22,8 @@ export default async function SystemLogsPage() {
   return (
     <StateProvider initialState={initialState}>
       <SystemPageShell
-        title="Logs"
-        description="Tail of the active backend log file plus rotated downloads."
+        title={t`Logs`}
+        description={t`Tail of the active backend log file plus rotated downloads.`}
       >
         <LogViewer />
       </SystemPageShell>

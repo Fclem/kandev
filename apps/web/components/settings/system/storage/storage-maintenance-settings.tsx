@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { Alert, AlertDescription, AlertTitle } from "@kandev/ui/alert";
 import { Spinner } from "@kandev/ui/spinner";
 import { IconAlertTriangle, IconCheck, IconPlayerPlay, IconRefresh } from "@tabler/icons-react";
@@ -63,6 +65,7 @@ function StorageActions({
   controller: ReturnType<typeof useStorageMaintenance>;
   disabledReason?: string;
 }) {
+  const { t } = useLingui();
   const analysisActive =
     controller.analysisJob?.state === "queued" || controller.analysisJob?.state === "running";
   const cleanupActive =
@@ -70,10 +73,14 @@ function StorageActions({
   return (
     <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 sm:max-w-xl">
-        <p className="text-sm font-medium">Reclaim disk space safely</p>
+        <p className="text-sm font-medium">
+          <Trans>Reclaim disk space safely</Trans>
+        </p>
         <p className="text-xs text-muted-foreground">
-          Analyze for a read-only snapshot, or run the enabled cleanup rules when you want to
-          recover space immediately.
+          <Trans>
+            Analyze for a read-only snapshot, or run the enabled cleanup rules when you want to
+            recover space immediately.
+          </Trans>
         </p>
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
@@ -82,7 +89,7 @@ function StorageActions({
             variant="outline"
             className="w-full sm:w-44"
             disabledReason={
-              disabledReason ?? (analysisActive ? "Storage analysis is still running." : undefined)
+              disabledReason ?? (analysisActive ? t`Storage analysis is still running.` : undefined)
             }
             onClick={() => void controller.analyze()}
             data-testid="storage-analyze"
@@ -90,10 +97,10 @@ function StorageActions({
           >
             <StorageJobButtonContent
               job={controller.analysisJob}
-              idleLabel="Analyze"
-              activeLabel="Analyzing..."
-              successLabel="Analysis complete"
-              failedLabel="Analysis failed"
+              idleLabel={t`Analyze`}
+              activeLabel={t`Analyzing...`}
+              successLabel={t`Analysis complete`}
+              failedLabel={t`Analysis failed`}
               idleIcon={<IconRefresh className="size-4" />}
             />
           </StorageActionButton>
@@ -102,7 +109,7 @@ function StorageActions({
           <StorageActionButton
             className="w-full sm:w-44"
             disabledReason={
-              disabledReason ?? (cleanupActive ? "Storage cleanup is still running." : undefined)
+              disabledReason ?? (cleanupActive ? t`Storage cleanup is still running.` : undefined)
             }
             onClick={() => void controller.runNow()}
             data-testid="storage-run-now"
@@ -110,10 +117,10 @@ function StorageActions({
           >
             <StorageJobButtonContent
               job={controller.cleanupJob}
-              idleLabel="Run now"
-              activeLabel="Cleaning..."
-              successLabel="Cleanup complete"
-              failedLabel="Cleanup failed"
+              idleLabel={t`Run now`}
+              activeLabel={t`Cleaning...`}
+              successLabel={t`Cleanup complete`}
+              failedLabel={t`Cleanup failed`}
               idleIcon={<IconPlayerPlay className="size-4" />}
             />
           </StorageActionButton>
@@ -132,8 +139,8 @@ function policyPendingAction(action: ReturnType<typeof useStorageMaintenance>["p
 }
 
 function policyBlockedReason(action: ReturnType<typeof useStorageMaintenance>["pendingAction"]) {
-  if (action === "adopt") return "Wait for Go cache adoption to finish.";
-  if (action === "load") return "Wait for storage settings to finish loading.";
+  if (action === "adopt") return t`Wait for Go cache adoption to finish.`;
+  if (action === "load") return t`Wait for storage settings to finish loading.`;
   return undefined;
 }
 
@@ -184,11 +191,12 @@ function useStoragePolicyDraft(controller: ReturnType<typeof useStorageMaintenan
 }
 
 export function StorageMaintenanceSettings() {
+  const { t } = useLingui();
   const controller = useStorageMaintenance();
   const { draft, setDraft, savedSettings } = useStoragePolicyDraft(controller);
   const controlsPending = policyPendingAction(controller.pendingAction);
   const actionDisabledReason = controller.pendingAction
-    ? "Wait for the current storage action to finish."
+    ? t`Wait for the current storage action to finish.`
     : undefined;
 
   return (
@@ -198,7 +206,9 @@ export function StorageMaintenanceSettings() {
       {controller.error && (
         <Alert variant="destructive" data-testid="storage-error">
           <IconAlertTriangle className="size-4" />
-          <AlertTitle>Storage action failed</AlertTitle>
+          <AlertTitle>
+            <Trans>Storage action failed</Trans>
+          </AlertTitle>
           <AlertDescription className="break-words">{controller.error}</AlertDescription>
         </Alert>
       )}

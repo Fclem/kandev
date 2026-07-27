@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import type { useRouter } from "@/lib/routing/client-router";
 import type { Task, Branch, LocalRepository, Repository } from "@/lib/types/http";
 import type { AgentProfileOption } from "@/lib/state/slices";
@@ -151,7 +152,7 @@ export function activatePlanMode({
 }: ActivatePlanModeArgs) {
   setActiveDocument(sessionId, { type: "plan", taskId });
   setPlanMode(sessionId, true);
-  useContextFilesStore.getState().addFile(sessionId, { path: "plan:context", name: "Plan" });
+  useContextFilesStore.getState().addFile(sessionId, { path: "plan:context", name: t`Plan` });
   router.push(linkToTask(taskId, INTENT_PLAN));
 }
 

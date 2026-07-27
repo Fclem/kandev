@@ -1,5 +1,6 @@
 "use client";
 
+import { useLingui } from "@lingui/react/macro";
 import { IconPlus, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
@@ -18,11 +19,16 @@ type KeyValueInputProps = {
 export function KeyValueInput({
   items,
   onChange,
-  keyPlaceholder = "Key",
-  valuePlaceholder = "Value",
-  addButtonLabel = "Add Item",
+  keyPlaceholder,
+  valuePlaceholder,
+  addButtonLabel,
   masked = false,
 }: KeyValueInputProps) {
+  const { t } = useLingui();
+  const keyPlaceholderLabel = keyPlaceholder ?? t`Key`;
+  const valuePlaceholderLabel = valuePlaceholder ?? t`Value`;
+  const addLabel = addButtonLabel ?? t`Add Item`;
+
   const handleAdd = () => {
     onChange([...items, { id: generateUUID(), key: "", value: "" }]);
   };
@@ -40,14 +46,14 @@ export function KeyValueInput({
       {items.map((item) => (
         <div key={item.id} className="flex gap-2">
           <Input
-            placeholder={keyPlaceholder}
+            placeholder={keyPlaceholderLabel}
             value={item.key}
             onChange={(e) => handleChange(item.id, "key", e.target.value)}
             className="flex-1"
           />
           <Input
             type={masked ? "password" : "text"}
-            placeholder={valuePlaceholder}
+            placeholder={valuePlaceholderLabel}
             value={item.value}
             onChange={(e) => handleChange(item.id, "value", e.target.value)}
             className="flex-1"
@@ -59,7 +65,7 @@ export function KeyValueInput({
       ))}
       <Button variant="outline" size="sm" onClick={handleAdd} className="w-full">
         <IconPlus className="h-4 w-4 mr-2" />
-        {addButtonLabel}
+        {addLabel}
       </Button>
     </div>
   );

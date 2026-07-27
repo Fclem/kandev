@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { FeatureTogglesSettings } from "@/components/settings/system/feature-toggles-settings";
 import { SystemPageShell } from "@/components/settings/system/system-page-shell";
 import { fetchRuntimeFlags } from "@/lib/api/domains/runtime-flags-api";
@@ -11,8 +12,8 @@ export default async function FeatureTogglesPage() {
 
   return (
     <SystemPageShell
-      title="Feature Toggles"
-      description="Enable or disable experimental and diagnostic Kandev features."
+      title={t`Feature Toggles`}
+      description={t`Enable or disable experimental and diagnostic Kandev features.`}
     >
       <FeatureTogglesSettings
         initialFlags={flagsResponse?.flags ?? []}

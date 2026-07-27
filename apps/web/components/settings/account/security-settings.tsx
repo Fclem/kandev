@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Input } from "@kandev/ui/input";
@@ -22,6 +24,7 @@ function ChangePasswordCard() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const { t } = useLingui();
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +37,7 @@ function ChangePasswordCard() {
       setNext("");
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not change password.");
+      setError(err instanceof ApiError ? err.message : t`Could not change password.`);
     } finally {
       setSubmitting(false);
     }
@@ -44,14 +47,14 @@ function ChangePasswordCard() {
     <Card data-testid="account-security-password-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <IconKey className="h-4 w-4" /> Password
+          <IconKey className="h-4 w-4" /> <Trans>Password</Trans>
         </CardTitle>
       </CardHeader>
       <CardContent>
         <form className="flex flex-col gap-3 max-w-sm" onSubmit={(e) => void onSubmit(e)}>
           <div className="flex flex-col gap-1">
             <label htmlFor="account-current-password" className="text-xs text-muted-foreground">
-              Current password
+              <Trans>Current password</Trans>
             </label>
             <Input
               id="account-current-password"
@@ -63,7 +66,7 @@ function ChangePasswordCard() {
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="account-new-password" className="text-xs text-muted-foreground">
-              New password
+              <Trans>New password</Trans>
             </label>
             <Input
               id="account-new-password"
@@ -81,7 +84,7 @@ function ChangePasswordCard() {
           )}
           {success && (
             <p className="text-xs text-muted-foreground" data-testid="account-password-success">
-              Password updated.
+              <Trans>Password updated.</Trans>
             </p>
           )}
           <Button
@@ -90,7 +93,7 @@ function ChangePasswordCard() {
             disabled={submitting}
             data-testid="account-password-submit"
           >
-            {submitting ? "Saving..." : "Change password"}
+            {submitting ? t`Saving...` : t`Change password`}
           </Button>
         </form>
       </CardContent>
@@ -110,7 +113,7 @@ function useSessionsList() {
       setSessions(res.sessions);
       setLoaded(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load sessions.");
+      setError(err instanceof ApiError ? err.message : t`Failed to load sessions.`);
     }
   }, []);
 
@@ -133,7 +136,7 @@ function SessionsCard() {
     <Card data-testid="account-sessions-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <IconDevices className="h-4 w-4" /> Active sessions
+          <IconDevices className="h-4 w-4" /> <Trans>Active sessions</Trans>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -144,17 +147,25 @@ function SessionsCard() {
         )}
         {!loaded && !error && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-4" /> Loading sessions...
+            <Spinner className="size-4" /> <Trans>Loading sessions...</Trans>
           </div>
         )}
         {loaded && sessions.length > 0 && (
           <Table data-testid="account-sessions-table">
             <TableHeader>
               <TableRow>
-                <TableHead>Device</TableHead>
-                <TableHead>IP</TableHead>
-                <TableHead>Last seen</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>
+                  <Trans>Device</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>IP</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Last seen</Trans>
+                </TableHead>
+                <TableHead className="text-right">
+                  <Trans>Actions</Trans>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -164,7 +175,7 @@ function SessionsCard() {
                     {session.user_agent}
                     {session.current && (
                       <Badge variant="default" className="ml-2 text-[10px]">
-                        This device
+                        <Trans>This device</Trans>
                       </Badge>
                     )}
                   </TableCell>
@@ -181,7 +192,7 @@ function SessionsCard() {
                         onClick={() => void onRevoke(session.id)}
                         data-testid="account-sessions-revoke"
                       >
-                        Sign out
+                        <Trans>Sign out</Trans>
                       </Button>
                     )}
                   </TableCell>

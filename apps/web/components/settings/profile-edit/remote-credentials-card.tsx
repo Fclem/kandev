@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import ReactMarkdown from "react-markdown";
 import { IconLoader2 } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
@@ -99,9 +100,11 @@ export function RemoteCredentialsCard({
   return (
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
-        <CardTitle>Remote Credentials</CardTitle>
+        <CardTitle>
+          <Trans>Remote Credentials</Trans>
+        </CardTitle>
         <CardDescription>
-          Configure authentication for tools and agents in the remote environment.
+          <Trans>Configure authentication for tools and agents in the remote environment.</Trans>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -142,7 +145,9 @@ export function RemoteCredentialsCard({
             })}
           </Accordion>
         ) : (
-          <p className="text-sm text-muted-foreground">No transferable credentials found.</p>
+          <p className="text-sm text-muted-foreground">
+            <Trans>No transferable credentials found.</Trans>
+          </p>
         )}
       </CardContent>
     </SettingsCard>
@@ -153,12 +158,14 @@ function RemoteCredentialsLoading({ isDirty }: { isDirty: boolean }) {
   return (
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
-        <CardTitle>Remote Credentials</CardTitle>
+        <CardTitle>
+          <Trans>Remote Credentials</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <IconLoader2 className="h-4 w-4 animate-spin" />
-          Loading...
+          <Trans>Loading...</Trans>
         </div>
       </CardContent>
     </SettingsCard>
@@ -309,6 +316,7 @@ function EnvOnlySection({
   onSecretIdChange: (id: string | null) => void;
   secrets: SecretListItem[];
 }) {
+  const { t } = useLingui();
   return (
     <>
       {envMethod.setup_hint && (
@@ -321,7 +329,7 @@ function EnvOnlySection({
         onSecretIdChange={onSecretIdChange}
         secrets={secrets}
         label={envMethod.env_var}
-        placeholder="Select or create a secret..."
+        placeholder={t`Select or create a secret...`}
         isDirty={secretId !== baselineSecretId}
       />
     </>
@@ -341,19 +349,22 @@ function FileOption({
   filesAvailable: boolean;
   onSelect: () => void;
 }) {
+  const { t } = useLingui();
   const filesLabel = method.source_files?.join(", ") ?? "";
+  const optionLabel = method.label ?? t`Copy auth files`;
+  const filesMissingNote = t`files not found on this machine`;
   return (
     <AuthOptionButton
       selected={isSelected}
       isDirty={isDirty}
       onSelect={onSelect}
-      label={method.label ?? "Copy auth files"}
+      label={optionLabel}
     >
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium">{method.label ?? "Copy auth files"}</span>
+        <span className="text-sm font-medium">{optionLabel}</span>
         <span className="text-xs text-muted-foreground">
           {filesLabel}
-          {!filesAvailable && " — files not found on this machine"}
+          {!filesAvailable && ` — ${filesMissingNote}`}
         </span>
       </div>
     </AuthOptionButton>
@@ -379,19 +390,24 @@ function EnvOption({
   secrets: SecretListItem[];
   onSelect: () => void;
 }) {
+  const { t } = useLingui();
   return (
     <div>
       <AuthOptionButton
         selected={isSelected}
         isDirty={isDirty}
         onSelect={onSelect}
-        label="Provide secret"
+        label={t`Provide secret`}
       >
         <div className="flex flex-col gap-0.5">
-          <span className="text-sm font-medium">Provide secret</span>
+          <span className="text-sm font-medium">
+            <Trans>Provide secret</Trans>
+          </span>
           <span className="text-xs text-muted-foreground">
-            Set <code className="text-[11px] bg-muted px-1 rounded">{method.env_var}</code> via a
-            stored secret
+            <Trans>
+              Set <code className="text-[11px] bg-muted px-1 rounded">{method.env_var}</code> via a
+              stored secret
+            </Trans>
           </span>
           {method.setup_hint && (
             <div className="markdown-body text-xs text-muted-foreground [&_p]:m-0">
@@ -406,7 +422,7 @@ function EnvOption({
             secretId={secretId}
             onSecretIdChange={onSecretIdChange}
             secrets={secrets}
-            placeholder="Select or create a secret..."
+            placeholder={t`Select or create a secret...`}
             isDirty={secretId !== baselineSecretId}
           />
         </div>
@@ -436,8 +452,9 @@ function AuthChoiceRadio({
   onSecretIdChange: (id: string | null) => void;
   secrets: SecretListItem[];
 }) {
+  const { t } = useLingui();
   return (
-    <div role="radiogroup" aria-label="Remote auth method" className="grid gap-0">
+    <div role="radiogroup" aria-label={t`Remote auth method`} className="grid gap-0">
       {fileMethod && (
         <FileOption
           method={fileMethod}
@@ -509,20 +526,20 @@ function AuthStatusBadge({ choice, hasSecret }: { choice: AuthChoice; hasSecret:
   if (choice === "env" && hasSecret) {
     return (
       <Badge variant="default" className="bg-green-600 text-[10px] px-1.5 py-0">
-        Configured
+        <Trans>Configured</Trans>
       </Badge>
     );
   }
   if (choice === "files") {
     return (
       <Badge variant="default" className="bg-green-600 text-[10px] px-1.5 py-0">
-        Files Selected
+        <Trans>Files Selected</Trans>
       </Badge>
     );
   }
   return (
     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-      Not Configured
+      <Trans>Not Configured</Trans>
     </Badge>
   );
 }

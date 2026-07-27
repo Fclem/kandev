@@ -1,5 +1,7 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@kandev/ui/card";
 import { Label } from "@kandev/ui/label";
 import { Textarea } from "@kandev/ui/textarea";
@@ -34,9 +36,9 @@ export function validateMcpPolicy(value: string | undefined): string | null {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return "MCP policy must be a JSON object";
+      return t`MCP policy must be a JSON object`;
   } catch {
-    return "Invalid JSON";
+    return t`Invalid JSON`;
   }
   return null;
 }
@@ -54,6 +56,7 @@ export function McpPolicyCard({
   mcpPolicyError,
   onPolicyChange,
 }: McpPolicyCardProps) {
+  const { t } = useLingui();
   const isDirty = baselinePolicy !== undefined && mcpPolicy !== baselinePolicy;
   const applyPreset = (updater: (parsed: Record<string, unknown>) => Record<string, unknown>) => {
     const parsed = parseMcpPolicyJson(mcpPolicy);
@@ -65,15 +68,19 @@ export function McpPolicyCard({
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          MCP Policy
+          <Trans>MCP Policy</Trans>
           <span className="rounded-full border border-muted-foreground/30 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-            Advanced
+            <Trans>Advanced</Trans>
           </span>
         </CardTitle>
-        <CardDescription>JSON policy overrides for MCP servers on this profile.</CardDescription>
+        <CardDescription>
+          <Trans>JSON policy overrides for MCP servers on this profile.</Trans>
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
-        <Label htmlFor="mcp-policy">MCP policy JSON</Label>
+        <Label htmlFor="mcp-policy">
+          <Trans>MCP policy JSON</Trans>
+        </Label>
         <Textarea
           id="mcp-policy"
           value={mcpPolicy}
@@ -84,21 +91,23 @@ export function McpPolicyCard({
         />
         {mcpPolicyError && <p className="text-xs text-destructive">{mcpPolicyError}</p>}
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-xs font-medium text-muted-foreground">Quick presets</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            <Trans>Quick presets</Trans>
+          </p>
           <McpPresetButton
-            label="Only HTTP/SSE"
+            label={t`Only HTTP/SSE`}
             onClick={() =>
               applyPreset((p) => ({ ...p, allow_stdio: false, allow_http: true, allow_sse: true }))
             }
           />
           <McpPresetButton
-            label="Only stdio"
+            label={t`Only stdio`}
             onClick={() =>
               applyPreset((p) => ({ ...p, allow_stdio: true, allow_http: false, allow_sse: false }))
             }
           />
           <McpPresetButton
-            label="Allowlist GitHub + Playwright"
+            label={t`Allowlist GitHub + Playwright`}
             onClick={() =>
               applyPreset((p) => {
                 const existing = Array.isArray(p.allowlist_servers)
@@ -112,7 +121,7 @@ export function McpPolicyCard({
             }
           />
           <McpPresetButton
-            label="Rewrite localhost for Docker"
+            label={t`Rewrite localhost for Docker`}
             onClick={() =>
               applyPreset((p) => {
                 const existing =

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { t } from "@lingui/core/macro";
 import type { Repository, Executor, ExecutorProfile } from "@/lib/types/http";
 import { DEFAULT_LOCAL_EXECUTOR_TYPE } from "@/lib/utils";
 import { useToast } from "@/components/toast-provider";
@@ -78,8 +79,8 @@ export function useDiscoverReposEffect(
       })
       .catch((e) => {
         toast({
-          title: "Failed to discover repositories",
-          description: e instanceof Error ? e.message : "Request failed",
+          title: t`Failed to discover repositories`,
+          description: e instanceof Error ? e.message : t`Request failed`,
           variant: "error",
         });
         setDiscoveredRepositories([]);
@@ -528,7 +529,7 @@ export function useGitHubUrlErrorEffect(fs: DialogFormState, open: boolean) {
     }
     const parsed = parseGitHubAnyUrl(trimmed);
     if (!parsed) {
-      setGitHubUrlError("Invalid GitHub URL — expected github.com/owner/repo or .../pull/123");
+      setGitHubUrlError(t`Invalid GitHub URL — expected github.com/owner/repo or .../pull/123`);
       return;
     }
     setGitHubUrlError(null);

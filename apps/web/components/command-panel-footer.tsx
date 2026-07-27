@@ -2,6 +2,8 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import { formatDistanceToNow } from "date-fns";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconArchive, IconArrowRight, IconHammer, IconLoader2 } from "@tabler/icons-react";
 import {
   Command,
@@ -159,19 +161,24 @@ function CommandsListContent({
   repoMap,
   onTaskSelect,
 }: CommandsListContentProps) {
+  const { t } = useLingui();
   const hasInlineResults = taskResults.length > 0 || isSearching;
   return (
     <>
-      {!hasInlineResults && !isSearching && <CommandEmpty>No commands found.</CommandEmpty>}
+      {!hasInlineResults && !isSearching && (
+        <CommandEmpty>
+          <Trans>No commands found.</Trans>
+        </CommandEmpty>
+      )}
       {isSearching && taskResults.length === 0 && (
-        <CommandGroup heading="Active Tasks" forceMount>
+        <CommandGroup heading={t`Active Tasks`} forceMount>
           <div className="flex items-center justify-center py-3">
             <IconLoader2 className="size-3.5 animate-spin text-muted-foreground" />
           </div>
         </CommandGroup>
       )}
       {taskResults.length > 0 && (
-        <CommandGroup heading={search.trim() ? "Tasks" : "Active Tasks"} forceMount>
+        <CommandGroup heading={search.trim() ? t`Tasks` : t`Active Tasks`} forceMount>
           {taskResults.map((task) => (
             <TaskResultItem
               key={task.id}
@@ -184,7 +191,7 @@ function CommandsListContent({
         </CommandGroup>
       )}
       {search.trim() ? (
-        <CommandGroup heading="Commands">
+        <CommandGroup heading={t`Commands`}>
           {/* cmdk preserves this priority pre-sort when filter scores tie. */}
           {sortCommandsForSearch(commands, search).map((cmd) => (
             <CommandItemRow key={cmd.id} cmd={cmd} onSelect={onSelect} />
@@ -211,6 +218,7 @@ type FileSearchContentProps = {
 };
 
 function FileSearchContent({ files, isSearching, search, onSelect }: FileSearchContentProps) {
+  const { t } = useLingui();
   if (isSearching && files.length === 0) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -218,10 +226,22 @@ function FileSearchContent({ files, isSearching, search, onSelect }: FileSearchC
       </div>
     );
   }
-  if (search.trim() && files.length === 0) return <CommandEmpty>No files found.</CommandEmpty>;
-  if (!search.trim()) return <CommandEmpty>Type to search files...</CommandEmpty>;
+  if (search.trim() && files.length === 0) {
+    return (
+      <CommandEmpty>
+        <Trans>No files found.</Trans>
+      </CommandEmpty>
+    );
+  }
+  if (!search.trim()) {
+    return (
+      <CommandEmpty>
+        <Trans>Type to search files...</Trans>
+      </CommandEmpty>
+    );
+  }
   return (
-    <CommandGroup heading="Files" forceMount>
+    <CommandGroup heading={t`Files`} forceMount>
       {files.map((filePath) => {
         const fileName = getFileName(filePath);
         const lastSlash = filePath.lastIndexOf("/");
@@ -244,22 +264,22 @@ function FileSearchContent({ files, isSearching, search, onSelect }: FileSearchC
 }
 
 function getInputPlaceholder(mode: CommandPanelMode, inputCommand: CommandItemType | null) {
-  if (mode === "input") return inputCommand?.inputPlaceholder ?? "Enter value...";
-  if (mode === "search-tasks") return "Search for tasks...";
-  if (mode === MODE_SEARCH_FILES) return "Search for files...";
-  return "Type a command...";
+  if (mode === "input") return inputCommand?.inputPlaceholder ?? t`Enter value...`;
+  if (mode === "search-tasks") return t`Search for tasks...`;
+  if (mode === MODE_SEARCH_FILES) return t`Search for files...`;
+  return t`Type a command...`;
 }
 
 function getEnterLabel(mode: CommandPanelMode) {
-  if (mode === "input") return "Confirm";
-  if (mode === "search-tasks" || mode === MODE_SEARCH_FILES) return "Open";
-  return "Select";
+  if (mode === "input") return t`Confirm`;
+  if (mode === "search-tasks" || mode === MODE_SEARCH_FILES) return t`Open`;
+  return t`Select`;
 }
 
 function getModeLabel(mode: CommandPanelMode, inputCommand: CommandItemType | null) {
   if (mode === "input") return inputCommand?.label;
-  if (mode === "search-tasks") return "Tasks";
-  if (mode === MODE_SEARCH_FILES) return "Files";
+  if (mode === "search-tasks") return t`Tasks`;
+  if (mode === MODE_SEARCH_FILES) return t`Files`;
   return null;
 }
 
@@ -272,11 +292,15 @@ function CommandPanelFooter({ mode }: { mode: CommandPanelMode }) {
           <KbdGroup>
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd>
-            <span>Navigate</span>
+            <span>
+              <Trans>Navigate</Trans>
+            </span>
           </KbdGroup>
           <KbdGroup>
             <Kbd>{formatShortcut(getShortcut("FILE_SEARCH", keyboardShortcuts))}</Kbd>
-            <span>File Search</span>
+            <span>
+              <Trans>File Search</Trans>
+            </span>
           </KbdGroup>
         </>
       )}
@@ -287,12 +311,16 @@ function CommandPanelFooter({ mode }: { mode: CommandPanelMode }) {
       {mode !== MODE_COMMANDS && (
         <KbdGroup>
           <Kbd>⌫</Kbd>
-          <span>Back</span>
+          <span>
+            <Trans>Back</Trans>
+          </span>
         </KbdGroup>
       )}
       <KbdGroup>
         <Kbd>esc</Kbd>
-        <span>Close</span>
+        <span>
+          <Trans>Close</Trans>
+        </span>
       </KbdGroup>
     </div>
   );
@@ -414,9 +442,11 @@ export function CommandPanelView({
           )}
           {mode === "input" &&
             (!search.trim() ? (
-              <CommandEmpty>{inputCommand?.inputPlaceholder ?? "Enter a value..."}</CommandEmpty>
+              <CommandEmpty>{inputCommand?.inputPlaceholder ?? t`Enter a value...`}</CommandEmpty>
             ) : (
-              <CommandEmpty>Press Enter to confirm</CommandEmpty>
+              <CommandEmpty>
+                <Trans>Press Enter to confirm</Trans>
+              </CommandEmpty>
             ))}
         </CommandList>
         <CommandPanelFooter mode={mode} />

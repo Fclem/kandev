@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import { IconTerminal2 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import {
@@ -13,6 +14,7 @@ import type { ProfileFormData } from "./profile-form-fields";
 
 export function CommandsButton({ commands }: { commands: CommandEntry[] }) {
   if (commands.length === 0) return null;
+  const commandCount = commands.length;
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -24,14 +26,18 @@ export function CommandsButton({ commands }: { commands: CommandEntry[] }) {
           data-testid="profile-commands-button"
         >
           <IconTerminal2 className="mr-2 h-4 w-4" />
-          Available commands ({commands.length})
+          <Trans>Available commands ({commandCount})</Trans>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Available slash commands</DialogTitle>
+          <DialogTitle>
+            <Trans>Available slash commands</Trans>
+          </DialogTitle>
           <DialogDescription>
-            Type these during a session chat to invoke them - e.g. <code>/init</code>.
+            <Trans>
+              Type these during a session chat to invoke them - e.g. <code>/init</code>.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto space-y-2">

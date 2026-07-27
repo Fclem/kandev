@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,7 +41,7 @@ function useUsersList() {
       setUsers(res.users);
       setLoaded(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load users.");
+      setError(err instanceof ApiError ? err.message : t`Failed to load users.`);
     } finally {
       setIsLoading(false);
     }
@@ -70,6 +72,7 @@ function UserRow({
   onToggleStatus: (user: AuthUser) => void;
 }) {
   const isDisabled = user.status === "disabled";
+  const nextRole = user.role === "admin" ? "member" : "admin";
   return (
     <TableRow data-testid="users-table-row" data-user-id={user.id}>
       <TableCell className="text-xs" data-testid="users-table-email">
@@ -93,7 +96,7 @@ function UserRow({
             onClick={() => onToggleRole(user)}
             data-testid="users-table-toggle-role"
           >
-            Make {user.role === "admin" ? "member" : "admin"}
+            <Trans>Make {nextRole}</Trans>
           </Button>
           <Button
             size="sm"
@@ -102,7 +105,7 @@ function UserRow({
             onClick={() => onToggleStatus(user)}
             data-testid="users-table-toggle-status"
           >
-            {isDisabled ? "Enable" : "Disable"}
+            {isDisabled ? <Trans>Enable</Trans> : <Trans>Disable</Trans>}
           </Button>
         </div>
       </TableCell>
@@ -119,19 +122,22 @@ function UsersConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const email = pending?.user.email;
   return (
     <AlertDialog open={pending !== null} onOpenChange={(open) => !open && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{pending?.label}</AlertDialogTitle>
           <AlertDialogDescription>
-            {pending?.user.email} — this takes effect immediately.
+            <Trans>{email} — this takes effect immediately.</Trans>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">
+            <Trans>Cancel</Trans>
+          </AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm} className="cursor-pointer">
-            Confirm
+            <Trans>Confirm</Trans>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -141,7 +147,7 @@ function UsersConfirmDialog({
 
 function roleTogglePending(u: AuthUser): PendingAction {
   const next = u.role === "admin" ? "member" : "admin";
-  return { user: u, next: { role: next }, label: `Change ${u.email} to ${next}?` };
+  return { user: u, next: { role: next }, label: t`Change ${u.email} to ${next}?` };
 }
 
 function statusTogglePending(u: AuthUser): PendingAction {
@@ -150,8 +156,8 @@ function statusTogglePending(u: AuthUser): PendingAction {
     user: u,
     next: { status: disabling ? "disabled" : "active" },
     label: disabling
-      ? `Disable ${u.email}? They will be signed out everywhere.`
-      : `Re-enable ${u.email}?`,
+      ? t`Disable ${u.email}? They will be signed out everywhere.`
+      : t`Re-enable ${u.email}?`,
   };
 }
 
@@ -168,11 +174,21 @@ function UsersTableList({
     <Table data-testid="users-table">
       <TableHeader>
         <TableRow>
-          <TableHead>Email</TableHead>
-          <TableHead>Name</TableHead>
-          <TableHead>Role</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          <TableHead>
+            <Trans>Email</Trans>
+          </TableHead>
+          <TableHead>
+            <Trans>Name</Trans>
+          </TableHead>
+          <TableHead>
+            <Trans>Role</Trans>
+          </TableHead>
+          <TableHead>
+            <Trans>Status</Trans>
+          </TableHead>
+          <TableHead className="text-right">
+            <Trans>Actions</Trans>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -190,6 +206,7 @@ function UsersTableList({
 }
 
 export function UsersTable() {
+  const { t } = useLingui();
   const { users, loaded, isLoading, error, reload } = useUsersList();
   const [createOpen, setCreateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -204,11 +221,11 @@ export function UsersTable() {
     } catch (err) {
       toast({
         variant: "error",
-        title: "Could not update user",
+        title: t`Could not update user`,
         description:
           err instanceof ApiError
             ? err.message
-            : "This deployment must keep at least one active admin.",
+            : t`This deployment must keep at least one active admin.`,
       });
     } finally {
       setPending(null);
@@ -219,7 +236,7 @@ export function UsersTable() {
     <Card data-testid="users-table-card">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-base flex items-center gap-2">
-          <IconUsers className="h-4 w-4" /> Users
+          <IconUsers className="h-4 w-4" /> <Trans>Users</Trans>
         </CardTitle>
         <div className="flex gap-2">
           <Button
@@ -229,7 +246,7 @@ export function UsersTable() {
             onClick={() => setInviteOpen(true)}
             data-testid="users-table-invite"
           >
-            <IconMailForward className="h-3.5 w-3.5" /> Invite link
+            <IconMailForward className="h-3.5 w-3.5" /> <Trans>Invite link</Trans>
           </Button>
           <Button
             size="sm"
@@ -237,7 +254,7 @@ export function UsersTable() {
             onClick={() => setCreateOpen(true)}
             data-testid="users-table-create"
           >
-            <IconUserPlus className="h-3.5 w-3.5" /> Add user
+            <IconUserPlus className="h-3.5 w-3.5" /> <Trans>Add user</Trans>
           </Button>
         </div>
       </CardHeader>
@@ -249,7 +266,7 @@ export function UsersTable() {
         )}
         {!loaded && isLoading && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-4" /> Loading users...
+            <Spinner className="size-4" /> <Trans>Loading users...</Trans>
           </div>
         )}
         {loaded && users.length > 0 && (
@@ -261,7 +278,7 @@ export function UsersTable() {
         )}
         {loaded && users.length === 0 && !error && (
           <p className="text-sm text-muted-foreground" data-testid="users-table-empty">
-            No users yet.
+            <Trans>No users yet.</Trans>
           </p>
         )}
       </CardContent>

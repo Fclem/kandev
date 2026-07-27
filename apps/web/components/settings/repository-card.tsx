@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t as globalT, plural } from "@lingui/core/macro";
 import { IconEdit, IconGitBranch, IconTrash, IconX } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { CardContent } from "@kandev/ui/card";
@@ -49,11 +51,12 @@ function RepositoryBasicFields({
   worktreeBranchTemplate,
   pullBeforeWorktree,
 }: RepositoryBasicFieldsProps) {
+  const { t } = useLingui();
   return (
     <>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <Label>Repository Name</Label>
+          <Label>{t`Repository Name`}</Label>
           <Input
             value={repositoryName}
             onChange={(e) => onUpdate(repositoryId, { name: e.target.value })}
@@ -62,11 +65,11 @@ function RepositoryBasicFields({
           />
         </div>
         <div className="space-y-2">
-          <Label>Local Path</Label>
+          <Label>{t`Local Path`}</Label>
           <Input
             value={repositoryLocalPath}
             onChange={(e) => onUpdate(repositoryId, { local_path: e.target.value })}
-            placeholder="/path/to/repository"
+            placeholder={t`/path/to/repository`}
             disabled={sourceType !== "local"}
             data-settings-dirty={repositoryLocalPath !== (savedRepository?.local_path ?? "")}
           />
@@ -75,7 +78,7 @@ function RepositoryBasicFields({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
-            <Label>Worktree Branch Template</Label>
+            <Label>{t`Worktree Branch Template`}</Label>
             <RepositoryBranchTemplateHelp />
           </div>
           <Input
@@ -89,7 +92,7 @@ function RepositoryBasicFields({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor={`repo-pull-before-${repositoryId}`}>Worktree Sync</Label>
+          <Label htmlFor={`repo-pull-before-${repositoryId}`}>{t`Worktree Sync`}</Label>
           <div className="flex items-start gap-2 pt-2">
             <Checkbox
               id={`repo-pull-before-${repositoryId}`}
@@ -106,7 +109,7 @@ function RepositoryBasicFields({
                 htmlFor={`repo-pull-before-${repositoryId}`}
                 className="text-sm text-muted-foreground cursor-pointer"
               >
-                Always pull before creating a new worktree
+                {t`Always pull before creating a new worktree`}
               </Label>
             </div>
           </div>
@@ -133,41 +136,42 @@ function RepositoryScriptFields({
   devScript,
   copyFiles,
 }: RepositoryScriptFieldsProps) {
+  const { t } = useLingui();
   return (
     <>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <Label>Setup Script</Label>
+          <Label>{t`Setup Script`}</Label>
           <Textarea
             value={setupScript}
             onChange={(e) => onUpdate(repositoryId, { setup_script: e.target.value })}
-            placeholder="#!/bin/bash&#10;# any manual setup you need"
+            placeholder={t`#!/bin/bash\n# any manual setup you need`}
             rows={3}
             className="font-mono text-sm"
             data-settings-dirty={setupScript !== (savedRepository?.setup_script ?? "")}
           />
           <p className="text-xs text-muted-foreground">
-            Runs when the repo is cloned or a git worktree is created.
+            {t`Runs when the repo is cloned or a git worktree is created.`}
           </p>
         </div>
         <div className="space-y-2">
-          <Label>Cleanup Script</Label>
+          <Label>{t`Cleanup Script`}</Label>
           <Textarea
             value={cleanupScript}
             onChange={(e) => onUpdate(repositoryId, { cleanup_script: e.target.value })}
-            placeholder="#!/bin/bash&#10;# any manual clean up you need"
+            placeholder={t`#!/bin/bash\n# any manual clean up you need`}
             rows={3}
             className="font-mono text-sm"
             data-settings-dirty={cleanupScript !== (savedRepository?.cleanup_script ?? "")}
           />
           <p className="text-xs text-muted-foreground">
-            Runs when the task is completed to clean up the workspace.
+            {t`Runs when the task is completed to clean up the workspace.`}
           </p>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label>Dev Script</Label>
+        <Label>{t`Dev Script`}</Label>
         <Textarea
           value={devScript}
           onChange={(e) => onUpdate(repositoryId, { dev_script: e.target.value })}
@@ -177,8 +181,11 @@ function RepositoryScriptFields({
           data-settings-dirty={devScript !== (savedRepository?.dev_script ?? "")}
         />
         <p className="text-xs text-muted-foreground">
-          Used to start the preview dev server for this repository. Use{" "}
-          <code className="px-1 py-0.5 bg-muted rounded">$PORT</code> for automatic port allocation.
+          <Trans>
+            Used to start the preview dev server for this repository. Use{" "}
+            <code className="px-1 py-0.5 bg-muted rounded">$PORT</code> for automatic port
+            allocation.
+          </Trans>
         </p>
       </div>
 
@@ -219,6 +226,7 @@ function RepositoryEditView({
   deleteLoading,
   close,
 }: RepositoryEditViewProps) {
+  const { t } = useLingui();
   return (
     <SettingsCard isDirty={isDirty}>
       <CardContent className="pt-6">
@@ -227,7 +235,7 @@ function RepositoryEditView({
             <div className="flex items-center gap-2">
               <IconGitBranch className="h-4 w-4 text-muted-foreground" />
               <Label className="flex items-center gap-2">
-                <span>Repository</span>
+                <span>{t`Repository`}</span>
                 {isDirty && <UnsavedChangesBadge />}
               </Label>
             </div>
@@ -236,7 +244,7 @@ function RepositoryEditView({
               variant="ghost"
               size="icon"
               className="cursor-pointer"
-              aria-label="Close repository editor"
+              aria-label={t`Close repository editor`}
               onClick={close}
             >
               <IconX className="h-4 w-4" />
@@ -284,7 +292,7 @@ function RepositoryEditView({
               disabled={deleteLoading}
             >
               <IconTrash className="h-4 w-4 mr-2" />
-              Delete Repository
+              {t`Delete Repository`}
             </Button>
           </div>
         </div>
@@ -312,8 +320,8 @@ function buildRepoScriptsSummary(repository: RepositoryWithScripts) {
   const showScriptsSummary = scriptsCount > 0 || hasSetupScript || hasCleanupScript || hasDevScript;
   const scriptsLabel =
     scriptsCount === 0
-      ? "No custom scripts"
-      : `${scriptsCount} custom script${scriptsCount === 1 ? "" : "s"}`;
+      ? globalT`No custom scripts`
+      : plural(scriptsCount, { one: "# custom script", other: "# custom scripts" });
   return {
     scriptsCount,
     hasSetupScript,
@@ -326,13 +334,13 @@ function buildRepoScriptsSummary(repository: RepositoryWithScripts) {
 
 function buildRepoPreviewData(repository: RepositoryWithScripts) {
   const repositoryName = repository.name ?? "";
-  const sourceLabel = repository.source_type === "local" ? "Local" : "Remote";
+  const sourceLabel = repository.source_type === "local" ? globalT`Local` : globalT`Remote`;
   const subtitle =
     repository.source_type === "local"
-      ? repository.local_path || "Local path not set"
+      ? repository.local_path || globalT`Local path not set`
       : [repository.provider_owner, repository.provider_name].filter(Boolean).join("/") ||
         repository.provider ||
-        "Remote repository";
+        globalT`Remote repository`;
   return {
     repositoryName,
     sourceLabel,
@@ -348,6 +356,7 @@ function RepositoryPreview({
   onOpenDelete,
   open,
 }: RepositoryPreviewProps) {
+  const { t } = useLingui();
   const {
     repositoryName,
     scriptsCount,
@@ -370,7 +379,7 @@ function RepositoryPreview({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="font-medium truncate">{repositoryName || "Untitled repository"}</h4>
+                <h4 className="font-medium truncate">{repositoryName || t`Untitled repository`}</h4>
                 <Badge variant="secondary" className="text-xs">
                   {sourceLabel}
                 </Badge>
@@ -380,9 +389,9 @@ function RepositoryPreview({
               {showScriptsSummary ? (
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
                   {scriptsCount > 0 && <span>{scriptsLabel}</span>}
-                  {hasSetupScript && <span>build script</span>}
-                  {hasCleanupScript && <span>cleanup script</span>}
-                  {hasDevScript && <span>dev script</span>}
+                  {hasSetupScript && <span>{t`build script`}</span>}
+                  {hasCleanupScript && <span>{t`cleanup script`}</span>}
+                  {hasDevScript && <span>{t`dev script`}</span>}
                 </div>
               ) : null}
             </div>
@@ -399,7 +408,7 @@ function RepositoryPreview({
               }}
             >
               <IconEdit className="h-4 w-4" />
-              Edit
+              {t`Edit`}
             </Button>
             <Button
               type="button"
@@ -413,7 +422,7 @@ function RepositoryPreview({
               disabled={deleteLoading}
             >
               <IconTrash className="h-4 w-4" />
-              Delete
+              {t`Delete`}
             </Button>
           </div>
         </div>
@@ -441,6 +450,7 @@ function useRepositoryDelete(
   onDelete: (repoId: string) => Promise<void> | void,
   onDeleted: () => void,
 ) {
+  const { t } = useLingui();
   const { toast } = useToast();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [activeSessionCount, setActiveSessionCount] = useState(0);
@@ -465,8 +475,8 @@ function useRepositoryDelete(
       setDeleteOpen(true);
     } catch (error) {
       toast({
-        title: "Failed to check repository sessions",
-        description: error instanceof Error ? error.message : "Request failed",
+        title: t`Failed to check repository sessions`,
+        description: error instanceof Error ? error.message : t`Request failed`,
         variant: "error",
       });
     } finally {
@@ -481,8 +491,8 @@ function useRepositoryDelete(
       onDeleted();
     } catch (error) {
       toast({
-        title: "Failed to delete repository",
-        description: error instanceof Error ? error.message : "Request failed",
+        title: t`Failed to delete repository`,
+        description: error instanceof Error ? error.message : t`Request failed`,
         variant: "error",
       });
     }
@@ -512,6 +522,7 @@ export function RepositoryCard({
   onSave,
   onDelete,
 }: RepositoryCardProps) {
+  const { t } = useLingui();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(() => autoOpen);
   const saveRequest = useRequest(() => onSave(repository.id));
@@ -523,8 +534,8 @@ export function RepositoryCard({
       await saveRequest.run();
     } catch (error) {
       toast({
-        title: "Failed to save repository",
-        description: error instanceof Error ? error.message : "Request failed",
+        title: t`Failed to save repository`,
+        description: error instanceof Error ? error.message : t`Request failed`,
         variant: "error",
       });
       throw error;

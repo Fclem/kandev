@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   Dialog,
   DialogContent,
@@ -43,21 +44,26 @@ function ConfirmView({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useLingui();
   return (
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <IconAlertTriangle className="h-5 w-5 text-destructive" />
-          Restore snapshot
+          <Trans>Restore snapshot</Trans>
         </DialogTitle>
         <DialogDescription className="space-y-2">
           <span>
-            Restore <code className="font-mono">{name}</code> over the current database. After the
-            staged copy is in place you will be asked to quit and relaunch Kandev so the new data is
-            loaded fresh - the backend does not auto-restart.
+            <Trans>
+              Restore <code className="font-mono">{name}</code> over the current database. After the
+              staged copy is in place you will be asked to quit and relaunch Kandev so the new data
+              is loaded fresh - the backend does not auto-restart.
+            </Trans>
           </span>
           <span className="block font-medium text-foreground">
-            Type <code>RESTORE</code> to enable the confirm button.
+            <Trans>
+              Type <code>{CONFIRM_TOKEN}</code> to enable the confirm button.
+            </Trans>
           </span>
         </DialogDescription>
       </DialogHeader>
@@ -65,7 +71,7 @@ function ConfirmView({
       <div className="space-y-3">
         <Input
           autoFocus
-          placeholder="Type RESTORE to confirm"
+          placeholder={t`Type ${CONFIRM_TOKEN} to confirm`}
           value={typed}
           onChange={(e) => onTyped(e.target.value)}
           disabled={submitting}
@@ -81,7 +87,8 @@ function ConfirmView({
             className="flex items-center gap-2 text-sm text-muted-foreground"
             data-testid="system-restore-pending"
           >
-            <Spinner className="size-4" /> Writing the snapshot over the live database...
+            <Spinner className="size-4" />{" "}
+            <Trans>Writing the snapshot over the live database...</Trans>
           </div>
         )}
       </div>
@@ -94,7 +101,7 @@ function ConfirmView({
           className="cursor-pointer"
           data-testid="system-restore-cancel"
         >
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
         <Button
           variant="destructive"
@@ -103,7 +110,7 @@ function ConfirmView({
           className="cursor-pointer"
           data-testid="system-restore-confirm"
         >
-          Restore
+          <Trans>Restore</Trans>
         </Button>
       </DialogFooter>
     </>
@@ -116,13 +123,15 @@ function SuccessView({ name, onClose }: { name: string; onClose: () => void }) {
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <IconCircleCheck className="h-5 w-5 text-emerald-500" />
-          Restore complete
+          <Trans>Restore complete</Trans>
         </DialogTitle>
         <DialogDescription>
           <span>
-            <code className="font-mono">{name}</code> has been written over the current database.
-            Quit and relaunch Kandev to load the restored data - the running backend still holds
-            connections to the previous version and will serve stale rows until you restart.
+            <Trans>
+              <code className="font-mono">{name}</code> has been written over the current database.
+              Quit and relaunch Kandev to load the restored data - the running backend still holds
+              connections to the previous version and will serve stale rows until you restart.
+            </Trans>
           </span>
         </DialogDescription>
       </DialogHeader>
@@ -133,7 +142,7 @@ function SuccessView({ name, onClose }: { name: string; onClose: () => void }) {
           className="cursor-pointer"
           data-testid="system-restore-close"
         >
-          Close
+          <Trans>Close</Trans>
         </Button>
       </DialogFooter>
     </>
@@ -141,6 +150,7 @@ function SuccessView({ name, onClose }: { name: string; onClose: () => void }) {
 }
 
 export function RestoreDialog({ open, onOpenChange, name }: Props) {
+  const { t } = useLingui();
   const [typed, setTyped] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [requestPending, setRequestPending] = useState(false);
@@ -151,7 +161,7 @@ export function RestoreDialog({ open, onOpenChange, name }: Props) {
   const failed = job?.state === "failed";
   // submitting spans both the HTTP roundtrip and the in-flight backend job.
   const submitting = requestPending || (jobId !== null && !succeeded && !failed);
-  const error = requestError ?? (failed ? (job?.message ?? "Restore failed") : null);
+  const error = requestError ?? (failed ? (job?.message ?? t`Restore failed`) : null);
   const enabled = typed === CONFIRM_TOKEN && !submitting && !succeeded;
 
   const handleClose = (next: boolean) => {
@@ -172,7 +182,7 @@ export function RestoreDialog({ open, onOpenChange, name }: Props) {
       const res = await restoreBackup(name, CONFIRM_TOKEN);
       setJobId(res.job_id);
     } catch (err) {
-      setRequestError(err instanceof Error ? err.message : "Restore request failed");
+      setRequestError(err instanceof Error ? err.message : t`Restore request failed`);
     } finally {
       setRequestPending(false);
     }

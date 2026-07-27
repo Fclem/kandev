@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@kandev/ui/dropdown-menu";
 import {
@@ -87,9 +88,15 @@ describe("KanbanCardDropdownMenuItems — click propagation", () => {
 });
 
 describe("buildKanbanCardMenuEntries — external issue links", () => {
+  // Menu labels are localized ReactNodes (`<Trans>`), not plain strings, so
+  // render each to text before comparing against the expected English copy.
   function itemLabels(entry: KanbanCardMenuEntry | undefined) {
     if (entry?.kind !== "submenu") return [];
-    return entry.children.filter((child) => child.kind === "item").map((child) => child.label);
+    return entry.children
+      .filter((child) => child.kind === "item")
+      .map((child) =>
+        typeof child.label === "string" ? child.label : renderToStaticMarkup(<>{child.label}</>),
+      );
   }
 
   it("adds configured external issue providers to the Link submenu", () => {

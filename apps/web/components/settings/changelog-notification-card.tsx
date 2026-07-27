@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trans } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Label } from "@kandev/ui/label";
@@ -50,14 +51,20 @@ export function ChangelogNotificationCard() {
   return (
     <SettingsCard isDirty={draft !== saved}>
       <CardHeader>
-        <CardTitle className="text-base">Topbar Release Notification</CardTitle>
+        <CardTitle className="text-base">
+          <Trans>Topbar Release Notification</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label htmlFor="release-notification-toggle">Show notification for new releases</Label>
+            <Label htmlFor="release-notification-toggle">
+              <Trans>Show notification for new releases</Trans>
+            </Label>
             <p className="text-xs text-muted-foreground">
-              When enabled, a sparkle icon appears in the topbar when a new version is released
+              <Trans>
+                When enabled, a sparkle icon appears in the topbar when a new version is released
+              </Trans>
             </p>
           </div>
           <Switch
@@ -71,9 +78,11 @@ export function ChangelogNotificationCard() {
         <Separator className="my-4" />
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label>Reset seen releases</Label>
+            <Label>
+              <Trans>Reset seen releases</Trans>
+            </Label>
             <p className="text-xs text-muted-foreground">
-              Clear your last seen version so the topbar notification appears again
+              <Trans>Clear your last seen version so the topbar notification appears again</Trans>
             </p>
           </div>
           <Button
@@ -83,7 +92,7 @@ export function ChangelogNotificationCard() {
             disabled={isResetting || !userSettings.releaseNotesLastSeenVersion}
             className="cursor-pointer"
           >
-            Reset
+            <Trans>Reset</Trans>
           </Button>
         </div>
       </CardContent>

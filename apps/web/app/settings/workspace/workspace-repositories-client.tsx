@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import Link from "@/components/routing/app-link";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconGitBranch } from "@tabler/icons-react";
@@ -314,6 +315,7 @@ function useDiscoverDialog(
   const [manualValidation, setManualValidation] = useState<ManualValidation>({ status: "idle" });
   const discoverRequest = useRequest(discoverRepositoriesAction);
   const validateRequest = useRequest(validateRepositoryPathAction);
+  const { t } = useLingui();
 
   const filteredRepositories = useMemo(() => {
     const query = repoSearch.trim().toLowerCase();
@@ -330,8 +332,8 @@ function useDiscoverDialog(
       setDiscoveredRepositories(result.repositories);
     } catch (error) {
       toast({
-        title: "Failed to discover repositories",
-        description: error instanceof Error ? error.message : "Request failed",
+        title: t`Failed to discover repositories`,
+        description: error instanceof Error ? error.message : t`Request failed`,
         variant: "error",
       });
     }
@@ -355,21 +357,21 @@ function useDiscoverDialog(
         setManualValidation({
           status: "success",
           isValid: true,
-          message: "Valid git repository",
+          message: t`Valid git repository`,
           path: result.path,
         });
       else
         setManualValidation({
           status: "error",
           isValid: false,
-          message: result.message || "Invalid repository path",
+          message: result.message || t`Invalid repository path`,
           path: result.path,
         });
     } catch (error) {
       setManualValidation({
         status: "error",
         isValid: false,
-        message: error instanceof Error ? error.message : "Request failed",
+        message: error instanceof Error ? error.message : t`Request failed`,
       });
     }
   };
@@ -507,6 +509,7 @@ export function WorkspaceRepositoriesClient({
   repositories,
 }: WorkspaceRepositoriesClientProps) {
   const state = useWorkspaceRepositoriesPage(workspace, repositories);
+  const { t } = useLingui();
   const {
     router,
     repositoryItems,
@@ -544,21 +547,23 @@ export function WorkspaceRepositoriesClient({
         <div>
           <h2 className="text-2xl font-bold">{workspace.name}</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage repositories connected to this workspace.
+            <Trans>Manage repositories connected to this workspace.</Trans>
           </p>
         </div>
         <Button asChild variant="outline" size="sm">
-          <Link href={`/settings/workspace/${workspace.id}`}>Workspace settings</Link>
+          <Link href={`/settings/workspace/${workspace.id}`}>
+            <Trans>Workspace settings</Trans>
+          </Link>
         </Button>
       </div>
       <Separator />
       <SettingsSection
         icon={<IconGitBranch className="h-5 w-5" />}
-        title="Repositories"
-        description="Repositories in this workspace"
+        title={t`Repositories`}
+        description={t`Repositories in this workspace`}
         action={
           <Button size="sm" className="cursor-pointer" onClick={openDialog}>
-            Add Local Repository
+            <Trans>Add Local Repository</Trans>
           </Button>
         }
       >

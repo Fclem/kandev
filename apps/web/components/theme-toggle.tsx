@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans } from "@lingui/react/macro";
 import { useTheme } from "@/components/theme/app-theme";
 import { IconMoon, IconSun } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -25,7 +26,9 @@ export function ThemeToggle() {
       className="h-9 w-9 p-0"
     >
       {theme === "dark" ? <IconSun className="h-4 w-4" /> : <IconMoon className="h-4 w-4" />}
-      <span className="sr-only">Toggle theme</span>
+      <span className="sr-only">
+        <Trans>Toggle theme</Trans>
+      </span>
     </Button>
   );
 }

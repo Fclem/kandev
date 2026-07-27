@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@kandev/ui/dialog";
 import { Button } from "@kandev/ui/button";
 import { IconAlertTriangle, IconStethoscope, IconCheck } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 
 import { useToast } from "@/components/toast-provider";
 import { useAppStore } from "@/components/state-provider";
@@ -90,7 +92,7 @@ export function ImproveKandevDialog(props: ImproveKandevDialogProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconStethoscope className="h-5 w-5" />
-            Improve Kandev
+            <Trans>Improve Kandev</Trans>
           </DialogTitle>
         </DialogHeader>
         <IntroBody
@@ -124,7 +126,7 @@ function useGitHubAuthCheck(
           kind: "missing",
           message: ghIssue.message,
           fixUrl: ghIssue.fix_url.replace("{workspaceId}", workspaceId),
-          fixLabel: ghIssue.fix_label || "Configure GitHub",
+          fixLabel: ghIssue.fix_label || t`Configure GitHub`,
         });
       } catch {
         if (!cancelled) setAuth({ kind: "ok" }); // Fail open — bootstrap will surface real errors.
@@ -155,10 +157,10 @@ function useBootstrapKandev(
         // would only fail at the PR step.
         if (data.fork_status === "blocked_emu") {
           if (cancelled) return;
-          const message = data.fork_message || "Your account cannot fork kdlbs/kandev.";
+          const message = data.fork_message || t`Your account cannot fork kdlbs/kandev.`;
           setBootstrap({ kind: "blocked", message });
           toast({
-            title: "Cannot contribute from this account",
+            title: t`Cannot contribute from this account`,
             description: message,
             variant: "error",
           });
@@ -176,10 +178,10 @@ function useBootstrapKandev(
         setBootstrap({ kind: "ready", data, steps: stepsRes.steps });
       } catch (err) {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : "Bootstrap failed";
+        const message = err instanceof Error ? err.message : t`Bootstrap failed`;
         setBootstrap({ kind: "error", message });
         toast({
-          title: "Could not prepare Improve Kandev",
+          title: t`Could not prepare Improve Kandev`,
           description: message,
           variant: "error",
         });
@@ -218,16 +220,20 @@ function GhAuthMissing({
       <div className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
         <IconAlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
         <div>
-          <p className="font-medium text-foreground">GitHub CLI not authenticated</p>
+          <p className="font-medium text-foreground">
+            <Trans>GitHub CLI not authenticated</Trans>
+          </p>
           <p className="mt-1 text-muted-foreground">
-            The final step of this workflow opens a pull request, which needs the <code>gh</code>{" "}
-            CLI to be authenticated. {auth.message}
+            <Trans>
+              The final step of this workflow opens a pull request, which needs the <code>gh</code>{" "}
+              CLI to be authenticated. {auth.message}
+            </Trans>
           </p>
         </div>
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel} className="cursor-pointer">
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
         <Button asChild className="cursor-pointer">
           <Link href={auth.fixUrl} onClick={onCancel}>
@@ -251,32 +257,44 @@ function IntroExplanation({
   return (
     <div className="space-y-5 py-2">
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Kandev is open source, and you can help make it better.
+        <Trans>Kandev is open source, and you can help make it better.</Trans>
       </p>
 
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Describe a bug you hit or a feature you&apos;d like, and we&apos;ll create a task on your
-        own agent to implement it in the kandev codebase.
+        <Trans>
+          Describe a bug you hit or a feature you&apos;d like, and we&apos;ll create a task on your
+          own agent to implement it in the kandev codebase.
+        </Trans>
       </p>
 
       <p className="text-sm leading-relaxed text-muted-foreground">
-        When it&apos;s done, the agent opens a pull request to{" "}
-        <code className="font-mono text-xs">kdlbs/kandev</code> for the maintainers to review,
-        saving them time and shipping the improvement to everyone.
+        <Trans>
+          When it&apos;s done, the agent opens a pull request to{" "}
+          <code className="font-mono text-xs">kdlbs/kandev</code> for the maintainers to review,
+          saving them time and shipping the improvement to everyone.
+        </Trans>
       </p>
 
       <ul className="space-y-2 text-sm text-muted-foreground">
-        <IntroBullet>Create a task describing your bug or feature request</IntroBullet>
-        <IntroBullet>Your agent implements it in the kandev repository, with tests</IntroBullet>
-        <IntroBullet>You verify and test the change in a second kandev instance</IntroBullet>
         <IntroBullet>
-          The agent forks <code className="font-mono text-xs">kdlbs/kandev</code> to your GitHub
-          account and opens a PR from your fork, credited to you
+          <Trans>Create a task describing your bug or feature request</Trans>
+        </IntroBullet>
+        <IntroBullet>
+          <Trans>Your agent implements it in the kandev repository, with tests</Trans>
+        </IntroBullet>
+        <IntroBullet>
+          <Trans>You verify and test the change in a second kandev instance</Trans>
+        </IntroBullet>
+        <IntroBullet>
+          <Trans>
+            The agent forks <code className="font-mono text-xs">kdlbs/kandev</code> to your GitHub
+            account and opens a PR from your fork, credited to you
+          </Trans>
         </IntroBullet>
       </ul>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel} className="cursor-pointer">
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
         <Button
           onClick={onProceed}
@@ -284,7 +302,7 @@ function IntroExplanation({
           className="cursor-pointer"
           data-testid="improve-kandev-proceed"
         >
-          Contribute
+          <Trans>Contribute</Trans>
         </Button>
       </div>
     </div>

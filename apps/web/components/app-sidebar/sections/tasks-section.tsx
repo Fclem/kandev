@@ -1,6 +1,7 @@
 "use client";
 
 import { IconCircleDot } from "@tabler/icons-react";
+import { useLingui } from "@lingui/react/macro";
 import { useAppStore } from "@/components/state-provider";
 import { TaskSessionSidebar } from "@/components/task/task-session-sidebar";
 import { APP_SIDEBAR_SECTION_IDS } from "../app-sidebar-constants";
@@ -12,13 +13,14 @@ type TasksSectionProps = {
 };
 
 export function TasksSection({ collapsed }: TasksSectionProps) {
+  const { t } = useLingui();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const workflowId = useAppStore((s) => s.kanban.workflowId);
 
   return (
     <AppSidebarSection
       id={APP_SIDEBAR_SECTION_IDS.tasks}
-      label="Tasks"
+      label={t`Tasks`}
       collapsed={collapsed}
       icon={IconCircleDot}
       headerAction={<TasksViewPicker />}

@@ -16,6 +16,7 @@ import {
   IconTrash,
   IconUnlink,
 } from "@tabler/icons-react";
+import { Trans } from "@lingui/react/macro";
 import {
   ContextMenuItem,
   ContextMenuSeparator,
@@ -104,9 +105,15 @@ function StepBadges({ step, isCurrent }: { step: TaskMoveStep; isCurrent: boolea
 
   return (
     <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
-      {isCurrent && <span data-testid={`task-context-step-current-${step.id}`}>Current</span>}
+      {isCurrent && (
+        <span data-testid={`task-context-step-current-${step.id}`}>
+          <Trans>Current</Trans>
+        </span>
+      )}
       {hasAutoStart && (
-        <span data-testid={`task-context-step-autostart-${step.id}`}>Auto-start</span>
+        <span data-testid={`task-context-step-autostart-${step.id}`}>
+          <Trans>Auto-start</Trans>
+        </span>
       )}
     </span>
   );
@@ -149,7 +156,7 @@ function buildMoveToCurrentWorkflowSubmenu({
     key: "move-to",
     testId: "task-context-move-to",
     icon: <IconArrowRight className="mr-2 h-4 w-4" />,
-    label: "Move to",
+    label: <Trans>Move to</Trans>,
     disabled,
     className: "w-48",
     children: steps.map((step) => buildStepEntry(step, currentStepId, onMoveToStep)),
@@ -176,7 +183,7 @@ function buildWorkflowTargetEntry({
       label: <span className="flex-1 truncate">{workflow.name}</span>,
       trailing: (
         <span data-testid="task-context-disabled-reason" className="ml-2 text-[10px]">
-          No steps
+          <Trans>No steps</Trans>
         </span>
       ),
     };
@@ -215,7 +222,7 @@ function buildSendToWorkflowSubmenu({
     key: "send-to-workflow",
     testId: "task-context-send-to-workflow",
     icon: <IconLogicBuffer className="mr-2 h-4 w-4" />,
-    label: "Send to workflow",
+    label: <Trans>Send to workflow</Trans>,
     disabled,
     className: "w-56",
     children: targets.map((workflow) =>
@@ -242,7 +249,7 @@ function buildGitLabMergeRequestLinkEntry({
     key: "link-gitlab-merge-request",
     testId: "task-context-link-gitlab-merge-request",
     icon: <IconBrandGitlab className="mr-2 h-4 w-4" />,
-    label: "GitLab Merge Request",
+    label: <Trans>GitLab Merge Request</Trans>,
     disabled,
     onSelect: onLinkMergeRequest,
   };
@@ -282,7 +289,7 @@ function buildLinkSubmenu({
       key: "link-github-pull-request",
       testId: "task-context-link-github-pull-request",
       icon: <IconGitPullRequest className="mr-2 h-4 w-4" />,
-      label: "GitHub Pull Request",
+      label: <Trans>GitHub Pull Request</Trans>,
       disabled,
       onSelect: onLinkPullRequest,
     });
@@ -293,7 +300,7 @@ function buildLinkSubmenu({
       key: "link-github-issue",
       testId: "task-context-link-github-issue",
       icon: <IconCircleDot className="mr-2 h-4 w-4" />,
-      label: "GitHub Issue",
+      label: <Trans>GitHub Issue</Trans>,
       disabled,
       onSelect: onLinkIssue,
     });
@@ -306,7 +313,7 @@ function buildLinkSubmenu({
       key: "link-jira-ticket",
       testId: "task-context-link-jira-ticket",
       icon: <IconTicket className="mr-2 h-4 w-4" />,
-      label: "Jira Ticket",
+      label: <Trans>Jira Ticket</Trans>,
       disabled,
       onSelect: onLinkJiraTicket,
     });
@@ -317,7 +324,7 @@ function buildLinkSubmenu({
       key: "link-linear-issue",
       testId: "task-context-link-linear-issue",
       icon: <IconCircleDot className="mr-2 h-4 w-4" />,
-      label: "Linear Issue",
+      label: <Trans>Linear Issue</Trans>,
       disabled,
       onSelect: onLinkLinearIssue,
     });
@@ -328,7 +335,7 @@ function buildLinkSubmenu({
       key: "link-sentry-issue",
       testId: "task-context-link-sentry-issue",
       icon: <IconBrandSentry className="mr-2 h-4 w-4" />,
-      label: "Sentry Issue",
+      label: <Trans>Sentry Issue</Trans>,
       disabled,
       onSelect: onLinkSentryIssue,
     });
@@ -338,7 +345,7 @@ function buildLinkSubmenu({
     key: "link",
     testId: "task-context-link",
     icon: <IconLink className="mr-2 h-4 w-4" />,
-    label: "Link",
+    label: <Trans>Link</Trans>,
     disabled,
     className: "w-56",
     children,
@@ -376,7 +383,7 @@ export function buildKanbanCardMenuEntries({
       kind: "item",
       key: "edit",
       icon: <IconPencil className="mr-2 h-4 w-4" />,
-      label: "Edit",
+      label: <Trans>Edit</Trans>,
       disabled: isProcessing || !onEdit,
       onSelect: onEdit,
     },
@@ -418,7 +425,7 @@ export function buildKanbanCardMenuEntries({
     ) : (
       <IconArchive className="mr-2 h-4 w-4" />
     ),
-    label: "Archive",
+    label: <Trans>Archive</Trans>,
     disabled: isProcessing || !onArchive,
     onSelect: onArchive,
   });
@@ -435,7 +442,7 @@ export function buildKanbanCardMenuEntries({
     ) : (
       <IconTrash className="mr-2 h-4 w-4" />
     ),
-    label: "Delete",
+    label: <Trans>Delete</Trans>,
     destructive: true,
     disabled: isProcessing || !onDelete,
     onSelect: onDelete,
@@ -462,7 +469,7 @@ function buildDetachEntry({
     ) : (
       <IconUnlink className="mr-2 h-4 w-4" />
     ),
-    label: "Detach from parent",
+    label: <Trans>Detach from parent</Trans>,
     disabled: isProcessing,
     onSelect: onDetach,
   };

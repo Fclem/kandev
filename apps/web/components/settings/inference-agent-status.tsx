@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { t } from "@lingui/core/macro";
 import { IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import type { InferenceAgent, InferenceAgentStatus } from "@/lib/api/domains/utility-api";
@@ -33,18 +34,18 @@ type Note = { text: string; refreshable: boolean };
 function noteForStatus(status: InferenceAgentStatus | undefined, name: string): Note {
   switch (status) {
     case "probing":
-      return { text: `Setting up ${name}…`, refreshable: true };
+      return { text: t`Setting up ${name}…`, refreshable: true };
     case "auth_required":
-      return { text: `Sign in to ${name} to load models.`, refreshable: true };
+      return { text: t`Sign in to ${name} to load models.`, refreshable: true };
     case "not_installed":
-      return { text: `${name} CLI is not installed on this machine.`, refreshable: true };
+      return { text: t`${name} CLI is not installed on this machine.`, refreshable: true };
     case "not_configured":
-      return { text: `${name} is not configured for inference.`, refreshable: false };
+      return { text: t`${name} is not configured for inference.`, refreshable: false };
     case "failed":
-      return { text: `Probe failed for ${name}.`, refreshable: true };
+      return { text: t`Probe failed for ${name}.`, refreshable: true };
     case "ok":
     default:
-      return { text: `${name} advertised no models.`, refreshable: true };
+      return { text: t`${name} advertised no models.`, refreshable: true };
   }
 }
 
@@ -70,7 +71,7 @@ function RefreshButton({ onRefresh }: { onRefresh: () => Promise<unknown> | void
       data-testid="inference-agent-refresh"
     >
       <IconRefresh className={refreshing ? "h-3 w-3 animate-spin" : "h-3 w-3"} />
-      <span className="ml-1">{refreshing ? "Refreshing…" : "Refresh"}</span>
+      <span className="ml-1">{refreshing ? t`Refreshing…` : t`Refresh`}</span>
     </Button>
   );
 }
@@ -89,10 +90,10 @@ export function InferenceAgentStatusNote({ agent, fallbackName, onRefresh }: Pro
     return null;
   }
 
-  const name = agent?.display_name ?? fallbackName ?? "this agent";
+  const name = agent?.display_name ?? fallbackName ?? t`this agent`;
   const note: Note = agent
     ? noteForStatus(agent.status, name)
-    : { text: `${name} is no longer available.`, refreshable: true };
+    : { text: t`${name} is no longer available.`, refreshable: true };
   const detail = agent?.status_message?.trim();
 
   return (

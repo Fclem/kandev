@@ -1,5 +1,7 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Button } from "@kandev/ui/button";
 import { Spinner } from "@kandev/ui/spinner";
@@ -15,8 +17,7 @@ import { formatBytes } from "@/lib/utils/format-bytes";
 import { ActionButtonContent } from "./action-button-content";
 import { JobProgressIndicator } from "./job-progress-indicator";
 
-const REFRESH_HELP =
-  "Walks every directory inside the data folder and adds up the file sizes. Results are cached for a couple of hours; click to compute fresh numbers right now. Can take a few seconds on large workspaces.";
+const REFRESH_HELP = t`Walks every directory inside the data folder and adds up the file sizes. Results are cached for a couple of hours; click to compute fresh numbers right now. Can take a few seconds on large workspaces.`;
 
 type Row = {
   key: keyof Omit<DiskBreakdown, "warnings" | "computed_at" | "total">;
@@ -24,13 +25,13 @@ type Row = {
 };
 
 const ROWS: Row[] = [
-  { key: "data_dir", label: "Data directory" },
-  { key: "worktrees", label: "Worktrees" },
-  { key: "repos", label: "Repositories" },
-  { key: "sessions", label: "Sessions" },
-  { key: "tasks", label: "Tasks" },
-  { key: "quick_chat", label: "Quick chat" },
-  { key: "backups", label: "Backups" },
+  { key: "data_dir", label: t`Data directory` },
+  { key: "worktrees", label: t`Worktrees` },
+  { key: "repos", label: t`Repositories` },
+  { key: "sessions", label: t`Sessions` },
+  { key: "tasks", label: t`Tasks` },
+  { key: "quick_chat", label: t`Quick chat` },
+  { key: "backups", label: t`Backups` },
 ];
 
 function formatComputedAt(iso: string): string {
@@ -46,7 +47,9 @@ function HomeDirRow({ homeDir }: { homeDir: string }) {
       data-testid="system-disk-usage-home-dir"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Data directory</p>
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          <Trans>Data directory</Trans>
+        </p>
         <p className="text-xs font-mono break-all">{homeDir}</p>
       </div>
       <Button
@@ -59,7 +62,7 @@ function HomeDirRow({ homeDir }: { homeDir: string }) {
         data-testid="system-disk-usage-open"
       >
         <IconFolderOpen className="h-3.5 w-3.5 mr-1" />
-        Open
+        <Trans>Open</Trans>
       </Button>
     </div>
   );
@@ -74,7 +77,9 @@ function WarningsBlock({ warnings }: { warnings: string[] }) {
     >
       <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
       <div>
-        <div className="font-medium">Some directories could not be measured:</div>
+        <div className="font-medium">
+          <Trans>Some directories could not be measured:</Trans>
+        </div>
         <ul className="list-disc pl-4 mt-1">
           {warnings.map((w, i) => (
             <li key={i}>{w}</li>
@@ -85,13 +90,25 @@ function WarningsBlock({ warnings }: { warnings: string[] }) {
   );
 }
 
+function ComputedAtLine({ computedAt }: { computedAt: string }) {
+  return (
+    <p className="text-xs text-muted-foreground" data-testid="system-disk-usage-computed-at">
+      <Trans>Computed at {computedAt}</Trans>
+    </p>
+  );
+}
+
 function BreakdownTable({ data }: { data: DiskBreakdown }) {
   return (
     <Table data-testid="system-disk-usage-table">
       <TableHeader>
         <TableRow>
-          <TableHead>Path</TableHead>
-          <TableHead className="text-right">Size</TableHead>
+          <TableHead>
+            <Trans>Path</Trans>
+          </TableHead>
+          <TableHead className="text-right">
+            <Trans>Size</Trans>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -102,7 +119,9 @@ function BreakdownTable({ data }: { data: DiskBreakdown }) {
           </TableRow>
         ))}
         <TableRow className="font-semibold">
-          <TableCell>Total</TableCell>
+          <TableCell>
+            <Trans>Total</Trans>
+          </TableCell>
           <TableCell className="text-right tabular-nums" data-testid="system-disk-usage-total">
             {formatBytes(data.total)}
           </TableCell>
@@ -113,6 +132,7 @@ function BreakdownTable({ data }: { data: DiskBreakdown }) {
 }
 
 export function DiskUsageCard() {
+  const { t } = useLingui();
   const { diskUsage, isLoading, error, refresh } = useDiskUsage();
   const refreshFeedback = useActionFeedback();
   const data = diskUsage?.data ?? null;
@@ -129,10 +149,10 @@ export function DiskUsageCard() {
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base flex items-center gap-2">
           <IconDatabase className="h-4 w-4" />
-          Disk Usage
+          <Trans>Disk Usage</Trans>
           {computing && data && (
             <Badge variant="outline" className="text-[10px]">
-              Refreshing...
+              <Trans>Refreshing...</Trans>
             </Badge>
           )}
         </CardTitle>
@@ -152,9 +172,9 @@ export function DiskUsageCard() {
                 <ActionButtonContent
                   state={refreshFeedback.state}
                   idleIcon={<IconRefresh className="h-3.5 w-3.5 mr-1" />}
-                  idleLabel="Refresh"
-                  pendingLabel="Refreshing..."
-                  successLabel="Refreshed"
+                  idleLabel={t`Refresh`}
+                  pendingLabel={t`Refreshing...`}
+                  successLabel={t`Refreshed`}
                 />
               </Button>
             </TooltipTrigger>
@@ -175,19 +195,14 @@ export function DiskUsageCard() {
             data-testid="system-disk-usage-spinner"
           >
             <Spinner className="size-4" />
-            Calculating...
+            <Trans>Calculating...</Trans>
           </div>
         )}
         {data && (
           <div className="space-y-3">
             <BreakdownTable data={data} />
             <WarningsBlock warnings={data.warnings ?? []} />
-            <p
-              className="text-xs text-muted-foreground"
-              data-testid="system-disk-usage-computed-at"
-            >
-              Computed at {formatComputedAt(data.computed_at)}
-            </p>
+            <ComputedAtLine computedAt={formatComputedAt(data.computed_at)} />
           </div>
         )}
       </CardContent>

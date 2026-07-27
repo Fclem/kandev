@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +35,7 @@ interface ApplyGate {
 }
 
 function formatChecked(value: string | number | null | undefined): string {
-  if (!value) return "never";
+  if (!value) return t`never`;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
   return d.toLocaleString();
@@ -64,6 +66,7 @@ function getApplyGate(updates: UpdatesResponse | null | undefined): ApplyGate {
 }
 
 export function UpdatesCard() {
+  const { t } = useLingui();
   const { updates, check, reload } = useUpdates();
   const selfUpdate = useSelfUpdate({ latestVersion: updates?.latest, onComplete: reload });
   const desktopUpdater = useDesktopUpdater();
@@ -82,7 +85,7 @@ export function UpdatesCard() {
     try {
       await check();
     } catch (err) {
-      const message = errorMessage(err, "Update check failed");
+      const message = errorMessage(err, t`Update check failed`);
       setError(message);
       setRetryAfter(retryAfterSeconds(message));
     } finally {
@@ -193,7 +196,7 @@ function DesktopCurrentStatus({ phase }: { phase: string | undefined }) {
   if (phase !== "up-to-date") return null;
   return (
     <p className="text-xs text-muted-foreground" data-testid="system-updates-current-status">
-      Kandev is up to date.
+      <Trans>Kandev is up to date.</Trans>
     </p>
   );
 }
@@ -203,14 +206,16 @@ async function ignoreFailure(operation: Promise<void>): Promise<void> {
 }
 
 function DesktopUpdateProgress({ updater }: { updater: DesktopUpdaterController }) {
+  const { t } = useLingui();
   const state = updater.state;
   if (state?.phase !== "downloading" && state?.phase !== "installing") return null;
-  let detail = "Installing update...";
+  let detail = t`Installing update...`;
   if (state.phase === "downloading") {
     const downloaded = state.downloadedBytes ?? 0;
-    detail = state.totalBytes
-      ? `Downloading update (${downloaded} of ${state.totalBytes} bytes)...`
-      : `Downloading update (${downloaded} bytes)...`;
+    const total = state.totalBytes;
+    detail = total
+      ? t`Downloading update (${downloaded} of ${total} bytes)...`
+      : t`Downloading update (${downloaded} bytes)...`;
   }
   return (
     <div
@@ -228,10 +233,10 @@ function UpdatesHeader({ available }: { available: boolean }) {
   return (
     <CardTitle className="text-base flex items-center gap-2">
       <IconRefresh className="h-4 w-4" />
-      Updates
+      <Trans>Updates</Trans>
       {available && (
         <Badge variant="default" className="text-[10px]" data-testid="system-updates-badge">
-          Update available
+          <Trans>Update available</Trans>
         </Badge>
       )}
     </CardTitle>
@@ -239,10 +244,11 @@ function UpdatesHeader({ available }: { available: boolean }) {
 }
 
 function VersionGrid({ current, latest }: { current: string; latest: string }) {
+  const { t } = useLingui();
   return (
     <div className="grid grid-cols-2 gap-3 text-sm">
-      <VersionValue label="Current version" value={current} testId="system-updates-current" />
-      <VersionValue label="Latest release" value={latest} testId="system-updates-latest" />
+      <VersionValue label={t`Current version`} value={current} testId="system-updates-current" />
+      <VersionValue label={t`Latest release`} value={latest} testId="system-updates-latest" />
     </div>
   );
 }
@@ -259,9 +265,10 @@ function VersionValue({ label, value, testId }: { label: string; value: string; 
 }
 
 function LastChecked({ checkedAt }: { checkedAt?: string | number | null }) {
+  const checked = formatChecked(checkedAt);
   return (
     <div className="text-xs text-muted-foreground" data-testid="system-updates-checked-at">
-      Last checked {formatChecked(checkedAt)}
+      <Trans>Last checked {checked}</Trans>
     </div>
   );
 }
@@ -315,7 +322,7 @@ function CheckNowButton({
       ) : (
         <IconRefresh className="h-3.5 w-3.5 mr-1" />
       )}
-      Check now
+      <Trans>Check now</Trans>
     </Button>
   );
 }
@@ -331,7 +338,7 @@ function ReleaseNotesLink({ url }: { url?: string }) {
       data-testid="system-updates-release-link"
     >
       <a href={url} target="_blank" rel="noreferrer">
-        Release notes
+        <Trans>Release notes</Trans>
         <IconExternalLink className="h-3.5 w-3.5 ml-1" />
       </a>
     </Button>
@@ -346,32 +353,37 @@ interface ApplyUpdateDialogProps {
 }
 
 function ApplyUpdateDialog({ showApply, latest, onApply, desktop }: ApplyUpdateDialogProps) {
+  const { t } = useLingui();
   if (!showApply) return null;
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button size="sm" className="cursor-pointer" data-testid="system-updates-apply">
           <IconDownload className="h-3.5 w-3.5 mr-1" />
-          Apply update
+          <Trans>Apply update</Trans>
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Apply update?</AlertDialogTitle>
+          <AlertDialogTitle>
+            <Trans>Apply update?</Trans>
+          </AlertDialogTitle>
           <AlertDialogDescription className="text-left">
             {desktop
-              ? `Kandev will install ${latest} and restart the desktop app.`
-              : `Kandev will update to ${latest}, reinstall the user service, and restart it.`}
+              ? t`Kandev will install ${latest} and restart the desktop app.`
+              : t`Kandev will update to ${latest}, reinstall the user service, and restart it.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">
+            <Trans>Cancel</Trans>
+          </AlertDialogCancel>
           <AlertDialogAction
             className="cursor-pointer"
             onClick={() => void onApply()}
             data-testid="system-updates-apply-confirm"
           >
-            Apply update
+            <Trans>Apply update</Trans>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -411,10 +423,11 @@ function ManualCommands({ commands }: { commands: string[] }) {
 }
 
 function UpdateError({ error, retryAfter }: { error: string | null; retryAfter: number | null }) {
+  const { t } = useLingui();
   if (!error) return null;
   return (
     <p className="text-xs text-destructive" data-testid="system-updates-error">
-      {retryAfter ? `Already checked. Try again in ${retryAfter}s.` : error}
+      {retryAfter ? t`Already checked. Try again in ${retryAfter}s.` : error}
     </p>
   );
 }

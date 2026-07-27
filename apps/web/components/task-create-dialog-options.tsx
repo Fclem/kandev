@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { IconGitBranch, IconTerminal2 } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
 import { Badge } from "@kandev/ui/badge";
 import { ScrollOnOverflow } from "@kandev/ui/scroll-on-overflow";
 import type {
@@ -108,7 +109,7 @@ export function useBranchOptions(branchOptionsRaw: Branch[]) {
               </span>
             </span>
             <Badge variant="outline" className="text-xs">
-              {branchObj.type === "local" ? "local" : branchObj.remote || "remote"}
+              {branchObj.type === "local" ? t`local` : branchObj.remote || t`remote`}
             </Badge>
           </span>
         ),
@@ -141,7 +142,7 @@ export function useAgentProfileOptions(agentProfiles: AgentProfileOption[]): Opt
               {isPassthrough && (
                 <IconTerminal2
                   className="size-3.5 text-muted-foreground"
-                  title="CLI mode - your prompt will be auto-injected into the terminal"
+                  title={t`CLI mode - your prompt will be auto-injected into the terminal`}
                 />
               )}
               {profileLabel ? (
@@ -190,15 +191,15 @@ export function computeExecutorHint(
   const selectedExecutor = executors.find((e: Executor) => e.id === executorId);
   if (selectedExecutor?.type === "worktree") {
     if (repoCount > 1) {
-      return "A git worktree will be created for each repository in a parent folder. The agent runs in that parent folder so it can see every worktree side by side.";
+      return t`A git worktree will be created for each repository in a parent folder. The agent runs in that parent folder so it can see every worktree side by side.`;
     }
-    return "A git worktree will be created from the base branch.";
+    return t`A git worktree will be created from the base branch.`;
   }
   if (selectedExecutor?.type === "local_docker" || selectedExecutor?.type === "remote_docker") {
-    return "A Docker container will be created from the selected base branch and checked out on a task branch.";
+    return t`A Docker container will be created from the selected base branch and checked out on a task branch.`;
   }
   if (selectedExecutor?.type === "local" || selectedExecutor?.type === "local_pc")
-    return "The agent will run directly on the repository.";
+    return t`The agent will run directly on the repository.`;
   return null;
 }
 

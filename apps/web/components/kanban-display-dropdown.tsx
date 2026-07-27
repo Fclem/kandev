@@ -11,6 +11,8 @@ import {
 } from "@kandev/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { IconAdjustmentsHorizontal } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useKanbanDisplaySettings } from "@/hooks/use-kanban-display-settings";
 import type { Repository } from "@/lib/types/http";
 import type { WorkflowsState } from "@/lib/state/slices";
@@ -25,9 +27,9 @@ function getRepositoryPlaceholder(
   repositoriesLoading: boolean,
   repositoriesEmpty: boolean,
 ): string {
-  if (repositoriesLoading) return "Loading repositories...";
-  if (repositoriesEmpty) return "No repositories";
-  return "Select repository";
+  if (repositoriesLoading) return t`Loading repositories...`;
+  if (repositoriesEmpty) return t`No repositories`;
+  return t`Select repository`;
 }
 
 function WorkflowSection({
@@ -39,18 +41,23 @@ function WorkflowSection({
   workflows: WorkflowsState["items"];
   onWorkflowChange: (id: string | null) => void;
 }) {
+  const { t } = useLingui();
   return (
     <div className="space-y-1.5">
-      <DropdownMenuLabel className="px-0 text-foreground">Workflow</DropdownMenuLabel>
+      <DropdownMenuLabel className="px-0 text-foreground">
+        <Trans>Workflow</Trans>
+      </DropdownMenuLabel>
       <Select
         value={activeWorkflowId ?? "all"}
         onValueChange={(value) => onWorkflowChange(value === "all" ? null : value)}
       >
         <SelectTrigger data-testid="display-workflow-filter" className="w-full border-border">
-          <SelectValue placeholder="Select workflow" />
+          <SelectValue placeholder={t`Select workflow`} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Workflows</SelectItem>
+          <SelectItem value="all">
+            <Trans>All Workflows</Trans>
+          </SelectItem>
           {workflows.map((workflow: WorkflowsState["items"][number]) => (
             <SelectItem key={workflow.id} value={workflow.id}>
               {workflow.name}
@@ -75,7 +82,9 @@ function RepositorySection({
 }) {
   return (
     <div className="space-y-1.5">
-      <DropdownMenuLabel className="px-0 text-foreground">Repository</DropdownMenuLabel>
+      <DropdownMenuLabel className="px-0 text-foreground">
+        <Trans>Repository</Trans>
+      </DropdownMenuLabel>
       <Select
         value={repositoryValue}
         onValueChange={(value) => onRepositoryChange(value as string | "all")}
@@ -87,7 +96,9 @@ function RepositorySection({
           />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All repositories</SelectItem>
+          <SelectItem value="all">
+            <Trans>All repositories</Trans>
+          </SelectItem>
           {repositories.map((repo: Repository) => (
             <SelectItem key={repo.id} value={repo.id}>
               {repo.name}
@@ -148,7 +159,9 @@ export function KanbanDisplayDropdown({
           />
           <DropdownMenuSeparator />
           <div className="space-y-1.5">
-            <DropdownMenuLabel className="px-0 text-foreground">Preview Panel</DropdownMenuLabel>
+            <DropdownMenuLabel className="px-0 text-foreground">
+              <Trans>Preview Panel</Trans>
+            </DropdownMenuLabel>
             <label className="flex items-center gap-2 cursor-pointer">
               <Checkbox
                 checked={enablePreviewOnClick ?? false}
@@ -156,27 +169,37 @@ export function KanbanDisplayDropdown({
                   onTogglePreviewOnClick?.(!!checked);
                 }}
               />
-              <span className="text-sm text-foreground">Open preview on click</span>
+              <span className="text-sm text-foreground">
+                <Trans>Open preview on click</Trans>
+              </span>
             </label>
             <p className="text-xs text-muted-foreground pl-6">
-              When enabled, clicking a task opens the preview panel. When disabled, clicking
-              navigates directly to the session.
+              <Trans>
+                When enabled, clicking a task opens the preview panel. When disabled, clicking
+                navigates directly to the session.
+              </Trans>
             </p>
           </div>
           {currentPage === "tasks" && (
             <>
               <DropdownMenuSeparator />
               <div className="space-y-1.5">
-                <DropdownMenuLabel className="px-0 text-foreground">List rows</DropdownMenuLabel>
+                <DropdownMenuLabel className="px-0 text-foreground">
+                  <Trans>List rows</Trans>
+                </DropdownMenuLabel>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <Checkbox
                     checked={tasksListShowDetails}
                     onCheckedChange={(checked) => onToggleTasksListShowDetails(checked === true)}
                   />
-                  <span className="text-sm text-foreground">Show task details</span>
+                  <span className="text-sm text-foreground">
+                    <Trans>Show task details</Trans>
+                  </span>
                 </label>
                 <p className="pl-6 text-xs text-muted-foreground">
-                  Add repository, pull request, session, parent, and review context to List rows.
+                  <Trans>
+                    Add repository, pull request, session, parent, and review context to List rows.
+                  </Trans>
                 </p>
               </div>
             </>

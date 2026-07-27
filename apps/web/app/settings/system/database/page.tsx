@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { StateProvider } from "@/components/state-provider";
 import { SystemPageShell } from "@/components/settings/system/system-page-shell";
 import { DatabaseStatsCard } from "@/components/settings/system/database-stats-card";
@@ -15,8 +16,8 @@ export default async function SystemDatabasePage() {
   return (
     <StateProvider initialState={initialState}>
       <SystemPageShell
-        title="Database"
-        description="Database driver, size, and available maintenance controls."
+        title={t`Database`}
+        description={t`Database driver, size, and available maintenance controls.`}
       >
         <DatabaseStatsCard />
       </SystemPageShell>

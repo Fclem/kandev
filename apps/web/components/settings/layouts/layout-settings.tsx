@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import {
   IconAlertTriangle,
   IconLayoutDashboard,
@@ -32,10 +34,10 @@ type Controller = ReturnType<typeof useLayoutSettings>;
 
 function defaultActionHelp(selectedSavedDefault: boolean, selectedIsDefault: boolean) {
   if (selectedSavedDefault) {
-    return "Make the original Default layout the starting layout for new tasks.";
+    return t`Make the original Default layout the starting layout for new tasks.`;
   }
-  if (selectedIsDefault) return "This layout is used as the starting layout for new tasks.";
-  return "Use this layout as the starting layout for new tasks.";
+  if (selectedIsDefault) return t`This layout is used as the starting layout for new tasks.`;
+  return t`Use this layout as the starting layout for new tasks.`;
 }
 
 function LayoutSettingsHeader() {
@@ -44,10 +46,10 @@ function LayoutSettingsHeader() {
       <div className="min-w-0">
         <h2 className="flex items-center gap-2 text-2xl font-bold">
           <IconLayoutDashboard className="h-5 w-5" />
-          Layouts
+          <Trans>Layouts</Trans>
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure the initial desktop task workbench.
+          <Trans>Configure the initial desktop task workbench.</Trans>
         </p>
       </div>
       <Separator />
@@ -56,6 +58,7 @@ function LayoutSettingsHeader() {
 }
 
 function ResetBuiltInButton({ onClick }: { onClick: () => void }) {
+  const { t } = useLingui();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -64,20 +67,21 @@ function ResetBuiltInButton({ onClick }: { onClick: () => void }) {
           size="sm"
           variant="outline"
           className="min-h-11 cursor-pointer sm:min-h-8"
-          aria-label="Reset built-in layout"
+          aria-label={t`Reset built-in layout`}
           onClick={onClick}
         >
-          <IconRestore className="h-4 w-4" /> Reset
+          <IconRestore className="h-4 w-4" /> <Trans>Reset</Trans>
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        Restore the original built-in layout and discard its override.
+        <Trans>Restore the original built-in layout and discard its override.</Trans>
       </TooltipContent>
     </Tooltip>
   );
 }
 
 function DeleteProfileButton({ onClick }: { onClick: () => void }) {
+  const { t } = useLingui();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -86,13 +90,15 @@ function DeleteProfileButton({ onClick }: { onClick: () => void }) {
           size="icon-sm"
           variant="outline"
           className="min-h-11 min-w-11 cursor-pointer sm:min-h-8 sm:min-w-8"
-          aria-label="Delete layout profile"
+          aria-label={t`Delete layout profile`}
           onClick={onClick}
         >
           <IconTrash className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Delete this custom layout after confirmation.</TooltipContent>
+      <TooltipContent>
+        <Trans>Delete this custom layout after confirmation.</Trans>
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -104,12 +110,13 @@ function SelectedLayoutHeader({
   controller: Controller;
   onDelete: () => void;
 }) {
+  const { t } = useLingui();
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 flex-1">
         {controller.selectedCustom ? (
           <Input
-            aria-label="Layout profile name"
+            aria-label={t`Layout profile name`}
             value={controller.selectedCustom.name}
             onChange={(event) => controller.updateSelected({ name: event.target.value })}
             className="min-h-11 max-w-md sm:min-h-9"
@@ -117,8 +124,14 @@ function SelectedLayoutHeader({
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-lg font-semibold">{controller.selectedName}</h3>
-            <Badge variant="outline">Built-in</Badge>
-            {controller.selectedBuiltInOverride && <Badge variant="secondary">Customized</Badge>}
+            <Badge variant="outline">
+              <Trans>Built-in</Trans>
+            </Badge>
+            {controller.selectedBuiltInOverride && (
+              <Badge variant="secondary">
+                <Trans>Customized</Trans>
+              </Badge>
+            )}
           </div>
         )}
       </div>
@@ -157,7 +170,9 @@ function SelectedLayoutEditor({ controller }: { controller: Controller }) {
     return (
       <Alert>
         <IconAlertTriangle className="h-4 w-4" />
-        <AlertTitle>Visual editor unavailable</AlertTitle>
+        <AlertTitle>
+          <Trans>Visual editor unavailable</Trans>
+        </AlertTitle>
         <AlertDescription>
           {controller.compatibility?.issues.map((issue) => issue.message).join(". ")}
         </AlertDescription>
@@ -183,27 +198,31 @@ function DeleteProfileDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useLingui();
   const confirm = () => {
     controller.deleteSelected();
     onOpenChange(false);
   };
+  const profileName = controller.selectedCustom?.name ?? t`layout profile`;
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            Delete {controller.selectedCustom?.name ?? "layout profile"}?
+            <Trans>Delete {profileName}?</Trans>
           </AlertDialogTitle>
           <AlertDialogDescription>
             {controller.selectedCustom?.is_default
-              ? "The built-in Default layout will become the default."
-              : "This profile will be removed when you save."}
+              ? t`The built-in Default layout will become the default.`
+              : t`This profile will be removed when you save.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">
+            <Trans>Cancel</Trans>
+          </AlertDialogCancel>
           <AlertDialogAction className="cursor-pointer" onClick={confirm}>
-            Delete
+            <Trans>Delete</Trans>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -213,6 +232,7 @@ function DeleteProfileDialog({
 
 export function LayoutSettings() {
   const controller = useLayoutSettings();
+  const { t } = useLingui();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const invalidName = controller.profiles.some((profile) => !profile.name.trim());
   useSettingsSaveContributor({
@@ -220,7 +240,7 @@ export function LayoutSettings() {
     revision: controller.profilesKey,
     isDirty: controller.isDirty,
     canSave: !invalidName,
-    invalidReason: invalidName ? "Layout profile names must not be empty" : undefined,
+    invalidReason: invalidName ? t`Layout profile names must not be empty` : undefined,
     save: controller.save,
     discard: controller.cancel,
   });
@@ -230,7 +250,9 @@ export function LayoutSettings() {
       {controller.error && (
         <Alert variant="destructive">
           <IconAlertTriangle className="h-4 w-4" />
-          <AlertTitle>Layout profiles were not saved</AlertTitle>
+          <AlertTitle>
+            <Trans>Layout profiles were not saved</Trans>
+          </AlertTitle>
           <AlertDescription>{controller.error}</AlertDescription>
         </Alert>
       )}
@@ -242,7 +264,7 @@ export function LayoutSettings() {
           onCreate={controller.create}
           onDuplicate={controller.duplicate}
         />
-        <section className="min-w-0 space-y-3" aria-label={`${controller.selectedName} editor`}>
+        <section className="min-w-0 space-y-3" aria-label={t`${controller.selectedName} editor`}>
           <SelectedLayoutHeader controller={controller} onDelete={() => setDeleteOpen(true)} />
           <SelectedLayoutEditor controller={controller} />
         </section>

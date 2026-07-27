@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
@@ -9,6 +10,7 @@ import { useSettingsSaveContributor } from "./settings-save-provider";
 import { SettingsCard } from "./settings-card";
 
 export function ConfigChatAgentSection() {
+  const { t } = useLingui();
   const workspace = useAppStore(
     (s) => s.workspaces.items.find((w) => w.id === s.workspaces.activeId) ?? null,
   );
@@ -62,23 +64,29 @@ export function ConfigChatAgentSection() {
     <SettingsCard isDirty={isDirty} data-testid="config-chat-agent-card">
       <CardHeader>
         <CardTitle className="text-base">
-          <h3>Configuration Chat Agent</h3>
+          <h3>
+            <Trans>Configuration Chat Agent</Trans>
+          </h3>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Choose which agent profile to use for the Configuration Chat. This agent can manage your
-          workflows, agent profiles, and MCP configuration.
+          <Trans>
+            Choose which agent profile to use for the Configuration Chat. This agent can manage your
+            workflows, agent profiles, and MCP configuration.
+          </Trans>
         </p>
         <Select
           value={draftProfileId || "none"}
           onValueChange={(value) => setDraftProfileId(value === "none" ? "" : value)}
         >
           <SelectTrigger className="w-full max-w-sm cursor-pointer" data-settings-dirty={isDirty}>
-            <SelectValue placeholder="Choose an agent profile..." />
+            <SelectValue placeholder={t`Choose an agent profile...`} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="none">No default</SelectItem>
+            <SelectItem value="none">
+              <Trans>No default</Trans>
+            </SelectItem>
             {profiles.map((p) => (
               <SelectItem key={p.id} value={p.id} className="cursor-pointer">
                 {p.label}

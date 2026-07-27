@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import { Label } from "@kandev/ui/label";
 import { Input } from "@kandev/ui/input";
@@ -30,15 +31,20 @@ export function ImportWorkflowsDialog({
   onImport,
   importLoading,
 }: ImportWorkflowsDialogProps) {
+  const { t } = useLingui();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Import Workflows</DialogTitle>
+          <DialogTitle>
+            <Trans>Import Workflows</Trans>
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Upload YAML file</Label>
+            <Label>
+              <Trans>Upload YAML file</Trans>
+            </Label>
             <input
               ref={fileInputRef}
               type="file"
@@ -48,7 +54,9 @@ export function ImportWorkflowsDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>Or paste YAML</Label>
+            <Label>
+              <Trans>Or paste YAML</Trans>
+            </Label>
             <Textarea
               placeholder={
                 "version: 1\ntype: kandev_workflow\nworkflows:\n  - name: My Workflow\n    steps: [...]"
@@ -61,14 +69,14 @@ export function ImportWorkflowsDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button
             onClick={onImport}
             disabled={!importYaml.trim() || importLoading}
             className="cursor-pointer"
           >
-            {importLoading ? "Importing..." : "Import"}
+            {importLoading ? t`Importing...` : t`Import`}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -127,6 +135,59 @@ type CreateWorkflowDialogProps = {
   createLoading?: boolean;
 };
 
+/** Template radio list for the create-workflow dialog. Extracted to keep
+ *  CreateWorkflowDialog under the 100-line function limit. */
+function WorkflowTemplatePicker({
+  workflowTemplates,
+  selectedTemplateId,
+  onSelectedTemplateChange,
+}: Pick<
+  CreateWorkflowDialogProps,
+  "workflowTemplates" | "selectedTemplateId" | "onSelectedTemplateChange"
+>) {
+  if (workflowTemplates.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <Label>
+        <Trans>Template</Trans>
+      </Label>
+      <RadioGroup
+        value={selectedTemplateId ?? "custom"}
+        onValueChange={(v) => onSelectedTemplateChange(v === "custom" ? null : v)}
+      >
+        <div className="grid gap-3">
+          {workflowTemplates.map((template) => (
+            <TemplateRadioItem
+              key={template.id}
+              template={template}
+              isSelected={selectedTemplateId === template.id}
+            />
+          ))}
+          <label
+            htmlFor="custom"
+            className={cn(
+              "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+              selectedTemplateId === null
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-primary/50",
+            )}
+          >
+            <RadioGroupItem value="custom" id="custom" className="mt-0.5" />
+            <div className="flex flex-col gap-1.5">
+              <span className="font-medium">
+                <Trans>Custom</Trans>
+              </span>
+              <span className="text-sm text-muted-foreground">
+                <Trans>Create your own agentic workflow from scratch.</Trans>
+              </span>
+            </div>
+          </label>
+        </div>
+      </RadioGroup>
+    </div>
+  );
+}
+
 export function CreateWorkflowDialog({
   open,
   onOpenChange,
@@ -138,6 +199,7 @@ export function CreateWorkflowDialog({
   onCreate,
   createLoading = false,
 }: CreateWorkflowDialogProps) {
+  const { t } = useLingui();
   const handleOpenChange = (nextOpen: boolean) => {
     if (createLoading && !nextOpen) return;
     onOpenChange(nextOpen);
@@ -150,55 +212,28 @@ export function CreateWorkflowDialog({
         data-testid="create-workflow-dialog"
       >
         <DialogHeader>
-          <DialogTitle>Add Workflow</DialogTitle>
+          <DialogTitle>
+            <Trans>Add Workflow</Trans>
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-6 overflow-y-auto">
           <div className="space-y-2">
-            <Label htmlFor="workflowName">Name</Label>
+            <Label htmlFor="workflowName">
+              <Trans>Name</Trans>
+            </Label>
             <Input
               id="workflowName"
-              placeholder="My Project Workflow"
+              placeholder={t`My Project Workflow`}
               value={workflowName}
               onChange={(e) => onWorkflowNameChange(e.target.value)}
               data-testid="workflow-name-input"
             />
           </div>
-          {workflowTemplates.length > 0 && (
-            <div className="space-y-2">
-              <Label>Template</Label>
-              <RadioGroup
-                value={selectedTemplateId ?? "custom"}
-                onValueChange={(v) => onSelectedTemplateChange(v === "custom" ? null : v)}
-              >
-                <div className="grid gap-3">
-                  {workflowTemplates.map((template) => (
-                    <TemplateRadioItem
-                      key={template.id}
-                      template={template}
-                      isSelected={selectedTemplateId === template.id}
-                    />
-                  ))}
-                  <label
-                    htmlFor="custom"
-                    className={cn(
-                      "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                      selectedTemplateId === null
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50",
-                    )}
-                  >
-                    <RadioGroupItem value="custom" id="custom" className="mt-0.5" />
-                    <div className="flex flex-col gap-1.5">
-                      <span className="font-medium">Custom</span>
-                      <span className="text-sm text-muted-foreground">
-                        Create your own agentic workflow from scratch.
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              </RadioGroup>
-            </div>
-          )}
+          <WorkflowTemplatePicker
+            workflowTemplates={workflowTemplates}
+            selectedTemplateId={selectedTemplateId}
+            onSelectedTemplateChange={onSelectedTemplateChange}
+          />
         </div>
         <DialogFooter>
           <Button
@@ -207,7 +242,7 @@ export function CreateWorkflowDialog({
             disabled={createLoading}
             className="cursor-pointer"
           >
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button
             onClick={onCreate}
@@ -216,7 +251,7 @@ export function CreateWorkflowDialog({
             data-testid="confirm-create-workflow"
             data-dialog-default-action
           >
-            {createLoading ? "Adding..." : "Add Workflow"}
+            {createLoading ? t`Adding...` : t`Add Workflow`}
           </Button>
         </DialogFooter>
       </DialogContent>

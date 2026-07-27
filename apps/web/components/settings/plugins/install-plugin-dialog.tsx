@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Trans } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -79,9 +80,11 @@ export function InstallPluginDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" data-testid="install-plugin-dialog">
         <DialogHeader>
-          <DialogTitle>Install plugin</DialogTitle>
+          <DialogTitle>
+            <Trans>Install plugin</Trans>
+          </DialogTitle>
           <DialogDescription>
-            Install a plugin package from a URL, or upload a .tar.gz file directly.
+            <Trans>Install a plugin package from a URL, or upload a .tar.gz file directly.</Trans>
           </DialogDescription>
         </DialogHeader>
 
@@ -92,14 +95,14 @@ export function InstallPluginDialog({
               className="cursor-pointer"
               data-testid="install-plugin-tab-url"
             >
-              From URL
+              <Trans>From URL</Trans>
             </TabsTrigger>
             <TabsTrigger
               value="upload"
               className="cursor-pointer"
               data-testid="install-plugin-tab-upload"
             >
-              Upload file
+              <Trans>Upload file</Trans>
             </TabsTrigger>
           </TabsList>
           <TabsContent value="url" className="pt-3">
@@ -123,7 +126,7 @@ export function InstallPluginDialog({
             onClick={() => onOpenChange(false)}
             className="cursor-pointer"
           >
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button
             type="button"
@@ -132,7 +135,7 @@ export function InstallPluginDialog({
             disabled={install.disabled}
             className="cursor-pointer"
           >
-            Install
+            <Trans>Install</Trans>
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -143,7 +146,9 @@ export function InstallPluginDialog({
 function UrlTab({ url, setUrl }: { url: string; setUrl: (v: string) => void }) {
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="install-plugin-url">Package URL</Label>
+      <Label htmlFor="install-plugin-url">
+        <Trans>Package URL</Trans>
+      </Label>
       <Input
         id="install-plugin-url"
         data-testid="install-plugin-url-input"
@@ -202,7 +207,7 @@ function UploadTab({ file, setFile }: { file: File | null; setFile: (file: File 
         {file ? (
           <span className="font-mono text-foreground">{file.name}</span>
         ) : (
-          "Drag and drop a .tar.gz package here, or click to browse"
+          <Trans>Drag and drop a .tar.gz package here, or click to browse</Trans>
         )}
       </span>
       <input

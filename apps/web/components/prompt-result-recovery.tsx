@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 
 import type { UtilityGenerationResult } from "@/hooks/use-utility-agent-generator";
@@ -25,7 +26,9 @@ export function PromptResultRecovery({
       data-testid="prompt-result-recovery"
       className="flex flex-col gap-2 rounded-md border border-border/60 bg-muted/30 p-3"
     >
-      <p className="text-sm text-muted-foreground">An enhanced prompt is available.</p>
+      <p className="text-sm text-muted-foreground">
+        <Trans>An enhanced prompt is available.</Trans>
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -33,10 +36,10 @@ export function PromptResultRecovery({
           className="cursor-pointer"
           onClick={() => void onCopy()}
         >
-          Copy
+          <Trans>Copy</Trans>
         </Button>
         <Button type="button" className="cursor-pointer" onClick={onApply}>
-          Apply
+          <Trans>Apply</Trans>
         </Button>
       </div>
     </div>

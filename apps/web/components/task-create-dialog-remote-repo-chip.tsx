@@ -10,6 +10,8 @@ import {
   IconLink,
   IconX,
 } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { cn } from "@/lib/utils";
 import type { Branch } from "@/lib/types/http";
 import { Badge } from "@kandev/ui/badge";
@@ -130,20 +132,22 @@ export function RemoteRepoChip({
 }
 
 function RemoteResolutionError({ error, onRetry }: { error: Error; onRetry: () => void }) {
+  const { t } = useLingui();
+  const errorMessage = error.message;
   return (
     <span className="flex max-w-full items-center gap-2 text-xs text-destructive" role="alert">
       <span className="min-w-0 break-words">
-        Could not resolve remote repository: {error.message}
+        <Trans>Could not resolve remote repository: {errorMessage}</Trans>
       </span>
       <Button
         type="button"
         variant="outline"
         size="sm"
         className="h-11 sm:h-9 cursor-pointer"
-        aria-label="Retry remote repository resolution"
+        aria-label={t`Retry remote repository resolution`}
         onClick={onRetry}
       >
-        Retry
+        <Trans>Retry</Trans>
       </Button>
     </span>
   );
@@ -299,7 +303,7 @@ function RepoTriggerIcon({ row }: { row: TaskRemoteRepoRow }) {
 }
 
 export function computeTriggerLabel(row: TaskRemoteRepoRow): string {
-  if (!row.url) return "Pick or paste a repo";
+  if (!row.url) return t`Pick or paste a repo`;
   if (row.source === "picker" && row.fullName) return row.fullName;
   return truncateMiddle(stripScheme(row.url), TRUNCATE_THRESHOLD);
 }
@@ -327,6 +331,7 @@ function RemoteRepoPopoverContent({
   onPick: (repo: RemoteRepository) => void;
   onPaste: (value: string) => void;
 }) {
+  const { t } = useLingui();
   const [value, setValue] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<RemoteRepositoryProvider | null>(null);
@@ -338,7 +343,7 @@ function RemoteRepoPopoverContent({
     const trimmed = candidate.trim();
     if (!isSupportedRemoteURL(trimmed)) {
       if (looksLikeURL(trimmed)) {
-        setUrlError("Enter a GitHub, GitLab, or Azure DevOps repository URL.");
+        setUrlError(t`Enter a GitHub, GitLab, or Azure DevOps repository URL.`);
       }
       return false;
     }
@@ -382,8 +387,8 @@ function RemoteRepoPopoverContent({
           const isURL = looksLikeURL(value.trim());
           if (commitURL(value) || isURL) event.preventDefault();
         }}
-        placeholder="Search repositories or paste a remote URL"
-        aria-label="Search repositories or paste a remote URL"
+        placeholder={t`Search repositories or paste a remote URL`}
+        aria-label={t`Search repositories or paste a remote URL`}
         aria-invalid={visibleUrlError ? true : undefined}
         data-testid="remote-repo-input"
         data-legacy-testid="remote-paste-url-input"
@@ -393,12 +398,7 @@ function RemoteRepoPopoverContent({
           visibleUrlError && "border-destructive focus:border-destructive",
         )}
       />
-      {hasStagedURL ? (
-        <div className="px-2 pt-1 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Remote URL</span> — press Enter to submit
-          it.
-        </div>
-      ) : null}
+      {hasStagedURL ? <StagedRemoteURLHint /> : null}
       <PickerList
         accessible={{ ...accessible, repos: visibleRepos }}
         selectedRepositoryIdentities={selectedRepositoryIdentities}
@@ -412,6 +412,17 @@ function RemoteRepoPopoverContent({
           onChange={setActiveProvider}
         />
       ) : null}
+    </div>
+  );
+}
+
+/** Hint shown under the input when the typed value is a submittable remote URL. */
+function StagedRemoteURLHint() {
+  return (
+    <div className="px-2 pt-1 text-xs text-muted-foreground">
+      <Trans>
+        <span className="font-medium text-foreground">Remote URL</span> — press Enter to submit it.
+      </Trans>
     </div>
   );
 }
@@ -445,6 +456,7 @@ function PickerList({
   urlError: string | null;
 }) {
   const { repos, loading, error } = accessible;
+  const errorMessage = error?.message ?? "";
   return (
     <div className="h-56 max-h-[calc(100vh-16rem)] overflow-y-auto p-1">
       {urlError ? (
@@ -459,15 +471,19 @@ function PickerList({
           data-testid="remote-repo-picker-loading"
         >
           <Spinner className="size-3" />
-          <span>Loading repositories…</span>
+          <span>
+            <Trans>Loading repositories…</Trans>
+          </span>
         </div>
       ) : null}
       {!accessible.unavailable && !loading && repos.length === 0 && !error ? (
-        <div className="px-2 py-3 text-xs text-muted-foreground">No repositories found.</div>
+        <div className="px-2 py-3 text-xs text-muted-foreground">
+          <Trans>No repositories found.</Trans>
+        </div>
       ) : null}
       {error ? (
         <div className="px-2 py-3 text-xs text-destructive">
-          Could not load repositories: {error.message}
+          <Trans>Could not load repositories: {errorMessage}</Trans>
         </div>
       ) : null}
       {repos.map((repo) => (
@@ -511,7 +527,7 @@ function RepoOption({
         {alreadyAdded ? <AlreadyAddedMarker /> : null}
         {repo.private ? (
           <Badge variant="outline" className="text-[10px] text-muted-foreground">
-            private
+            <Trans>private</Trans>
           </Badge>
         ) : null}
       </span>
@@ -520,10 +536,11 @@ function RepoOption({
 }
 
 function AlreadyAddedMarker() {
+  const { t } = useLingui();
   return (
     <span
       role="img"
-      aria-label="Already added"
+      aria-label={t`Already added`}
       data-testid="already-added-repository-marker"
       className="text-primary"
     >
@@ -535,14 +552,16 @@ function AlreadyAddedMarker() {
 function ConnectProvidersBanner() {
   return (
     <div className="px-3 py-3 text-xs text-muted-foreground">
-      Connect a source control provider in{" "}
-      <Link
-        href="/settings/integrations"
-        className="text-foreground underline underline-offset-2 cursor-pointer"
-      >
-        Settings
-      </Link>{" "}
-      to pick from your repositories.
+      <Trans>
+        Connect a source control provider in{" "}
+        <Link
+          href="/settings/integrations"
+          className="text-foreground underline underline-offset-2 cursor-pointer"
+        >
+          Settings
+        </Link>{" "}
+        to pick from your repositories.
+      </Trans>
     </div>
   );
 }
@@ -562,6 +581,7 @@ function RemoteBranchPill({
   branchesLoading: boolean;
   onBranchChange: (branch: string) => void;
 }) {
+  const { t } = useLingui();
   const hasUrl = !!url.trim();
   const hasBranch = !!branch.trim();
   const branchOptions = useMemo(() => sortBranches(branches).map(branchToOption), [branches]);
@@ -586,11 +606,11 @@ function RemoteBranchPill({
         branchesLoading,
         branchOptions.length,
       )}
-      searchPlaceholder="Search branches..."
-      emptyMessage={branchesLoading ? "Loading branches…" : "No branches"}
+      searchPlaceholder={t`Search branches...`}
+      emptyMessage={branchesLoading ? t`Loading branches…` : t`No branches`}
       testId="remote-branch-chip-trigger"
       filter={scoreBranch}
-      tooltip="Base branch"
+      tooltip={t`Base branch`}
       flat
     />
   );
@@ -602,31 +622,34 @@ function computeRemoteBranchDisabledReason(
   branchesLoading: boolean,
   optionCount: number,
 ): string | undefined {
-  if (!hasUrl) return "Select or enter a remote repository first.";
+  if (!hasUrl) return t`Select or enter a remote repository first.`;
   // If a branch is already set the pill is enabled; no disabled reason needed.
   if (hasBranch) return undefined;
-  if (branchesLoading) return "Loading branches…";
-  if (optionCount === 0) return "No branches available for this URL.";
+  if (branchesLoading) return t`Loading branches…`;
+  if (optionCount === 0) return t`No branches available for this URL.`;
   return undefined;
 }
 
 // --- Remove button -----------------------------------------------------------
 
 function RemoveButton({ onRemove }: { onRemove: () => void }) {
+  const { t } = useLingui();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           onClick={onRemove}
-          aria-label="Remove repository"
+          aria-label={t`Remove repository`}
           data-testid="remote-chip-remove"
           className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-muted/60 cursor-pointer"
         >
           <IconX className="h-3 w-3" />
         </button>
       </TooltipTrigger>
-      <TooltipContent>Remove repository</TooltipContent>
+      <TooltipContent>
+        <Trans>Remove repository</Trans>
+      </TooltipContent>
     </Tooltip>
   );
 }

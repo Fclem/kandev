@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import {
   AlertDialog,
@@ -61,19 +62,20 @@ export function AgentHeader({
   savedAgent,
   onDelete,
 }: AgentHeaderProps) {
+  const { t } = useLingui();
   return (
     <div className="flex items-start justify-between gap-6">
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-2xl font-bold">{displayName}</h2>
           <span className="text-xs text-muted-foreground border border-muted-foreground/30 rounded-full px-2 py-1">
-            {matchedPath ?? "Installation not detected"}
+            {matchedPath ?? t`Installation not detected`}
           </span>
         </div>
         <p className="text-sm text-muted-foreground mt-1">
           {isCreateMode
-            ? "Create a new profile for this agent."
-            : "Configure profiles and defaults for this agent."}
+            ? t`Create a new profile for this agent.`
+            : t`Configure profiles and defaults for this agent.`}
         </p>
       </div>
       {savedAgent?.tui_config && onDelete && (
@@ -81,21 +83,27 @@ export function AgentHeader({
           <AlertDialogTrigger asChild>
             <Button variant="destructive" size="sm" className="cursor-pointer">
               <IconTrash className="h-4 w-4 mr-2" />
-              Delete Agent
+              <Trans>Delete Agent</Trans>
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete {displayName}?</AlertDialogTitle>
+              <AlertDialogTitle>
+                <Trans>Delete {displayName}?</Trans>
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently remove the agent and all its profiles. This action cannot be
-                undone.
+                <Trans>
+                  This will permanently remove the agent and all its profiles. This action cannot be
+                  undone.
+                </Trans>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+              <AlertDialogCancel className="cursor-pointer">
+                <Trans>Cancel</Trans>
+              </AlertDialogCancel>
               <AlertDialogAction onClick={onDelete} className="cursor-pointer">
-                Delete
+                <Trans>Delete</Trans>
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -221,15 +229,16 @@ export function ProfilesCard({
   onRemoveProfile,
   onToastError,
 }: ProfilesCardProps) {
+  const { t } = useLingui();
   return (
     <SettingsCard isDirty={isAgentDirty}>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>
-          {isCreateMode ? `Create ${displayName} Profile` : `${displayName} Profiles`}
+          {isCreateMode ? t`Create ${displayName} Profile` : t`${displayName} Profiles`}
         </CardTitle>
         <Button size="sm" variant="outline" onClick={onAddProfile} className="cursor-pointer">
           <IconPlus className="h-4 w-4 mr-2" />
-          Add profile
+          <Trans>Add profile</Trans>
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -2,6 +2,7 @@
 
 import { memo, useState } from "react";
 import { IconCheck, IconChevronDown, IconLoader2 } from "@tabler/icons-react";
+import { useLingui } from "@lingui/react/macro";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@kandev/ui/button";
@@ -144,9 +145,9 @@ export const Combobox = memo(function Combobox({
   onValueChange,
   ariaLabel,
   dropdownLabel,
-  placeholder = "Select option...",
-  searchPlaceholder = "Search...",
-  emptyMessage = "No option found.",
+  placeholder,
+  searchPlaceholder,
+  emptyMessage,
   disabled = false,
   className,
   triggerClassName,
@@ -161,8 +162,10 @@ export const Combobox = memo(function Combobox({
   headerAction,
   loading = false,
 }: ComboboxProps) {
+  const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const portalContainer = useTaskCreateDialogPopoverContainer();
+  const searchPlaceholderText = searchPlaceholder ?? t`Search...`;
   // Track the highlighted item. Defaults to the selected value so the current
   // selection is highlighted when the popover opens (not the first item).
   const [highlighted, setHighlighted] = useState("");
@@ -191,7 +194,7 @@ export const Combobox = memo(function Combobox({
             <TriggerLabel
               selectedOption={selectedOption}
               plainTrigger={plainTrigger}
-              placeholder={placeholder}
+              placeholder={placeholder ?? t`Select option...`}
             />
           </div>
           {loading ? (
@@ -223,9 +226,9 @@ export const Combobox = memo(function Combobox({
               {headerAction}
             </div>
           ) : null}
-          {showSearch && <CommandInput placeholder={searchPlaceholder} className="h-9" />}
+          {showSearch && <CommandInput placeholder={searchPlaceholderText} className="h-9" />}
           <CommandList>
-            <CommandEmpty>{emptyMessage}</CommandEmpty>
+            <CommandEmpty>{emptyMessage ?? t`No option found.`}</CommandEmpty>
             <OptionsList
               options={options}
               value={value}

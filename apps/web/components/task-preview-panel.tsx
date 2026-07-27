@@ -1,6 +1,7 @@
 "use client";
 
 import { IconArrowsMaximize, IconX } from "@tabler/icons-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import { useAppStore } from "@/components/state-provider";
 import type { UseEnsureTaskSessionResult } from "@/hooks/domains/session/use-ensure-task-session";
@@ -24,6 +25,7 @@ export function TaskPreviewPanel({
   onMaximize,
   onSessionChange,
 }: TaskPreviewPanelProps) {
+  const { t } = useLingui();
   const activeWorkspaceId = useAppStore((s) => s.workspaces.activeId);
   return (
     <div
@@ -32,7 +34,7 @@ export function TaskPreviewPanel({
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
-        <h2 className="text-sm font-semibold truncate">{task?.title ?? "Task Chat"}</h2>
+        <h2 className="text-sm font-semibold truncate">{task?.title ?? t`Task Chat`}</h2>
         <div className="flex items-center gap-1">
           {onMaximize && task && (
             <Button
@@ -40,15 +42,19 @@ export function TaskPreviewPanel({
               size="icon"
               className="h-8 w-8 cursor-pointer"
               onClick={() => onMaximize(task)}
-              title="Open full page"
+              title={t`Open full page`}
             >
               <IconArrowsMaximize className="h-4 w-4" />
-              <span className="sr-only">Open full page</span>
+              <span className="sr-only">
+                <Trans>Open full page</Trans>
+              </span>
             </Button>
           )}
           <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer" onClick={onClose}>
             <IconX className="h-4 w-4" />
-            <span className="sr-only">Close preview</span>
+            <span className="sr-only">
+              <Trans>Close preview</Trans>
+            </span>
           </Button>
         </div>
       </div>
@@ -65,7 +71,7 @@ export function TaskPreviewPanel({
           />
         ) : (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Select a task to start chatting
+            <Trans>Select a task to start chatting</Trans>
           </div>
         )}
       </div>

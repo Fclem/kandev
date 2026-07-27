@@ -9,6 +9,8 @@ import {
   IconFolderPlus,
   IconCheck,
 } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Badge } from "@kandev/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useBranches, type BranchSource } from "@/hooks/domains/workspace/use-repository-branches";
@@ -88,6 +90,7 @@ export function WorkspaceRepoChips({
   lastUsedBranch,
   userSettingsLoaded,
 }: WorkspaceRepoChipsProps) {
+  const { t } = useLingui();
   return (
     <>
       {rows.map((row) => (
@@ -134,7 +137,7 @@ export function WorkspaceRepoChips({
               type="button"
               onClick={onAdd}
               disabled={!canAddMore}
-              aria-label="Add repository"
+              aria-label={t`Add repository`}
               data-testid="add-repository"
               className={cn(
                 "inline-flex items-center justify-center gap-1.5 rounded-md text-muted-foreground",
@@ -149,7 +152,7 @@ export function WorkspaceRepoChips({
             </button>
           </span>
         </TooltipTrigger>
-        <TooltipContent>{addHint ?? "Add another repository"}</TooltipContent>
+        <TooltipContent>{addHint ?? t`Add another repository`}</TooltipContent>
       </Tooltip>
     </>
   );
@@ -368,14 +371,15 @@ function computeRepoChipDisplay(
   const discoveredRepo = discoveredRepositories.find((r) => r.path === row.localPath);
   const repoLabel = workspaceRepo?.name ?? (discoveredRepo ? leafSegment(discoveredRepo.path) : "");
   const repoPath = workspaceRepo?.local_path || discoveredRepo?.path || "";
-  const repoTooltip = repoPath ? `Repository · ${formatUserHomePath(repoPath)}` : "Repository";
+  const displayPath = formatUserHomePath(repoPath);
+  const repoTooltip = repoPath ? t`Repository · ${displayPath}` : t`Repository`;
   return { repoLabel, repoTooltip };
 }
 
 function buildCreateRepositoryAction(onSelect?: () => void): PillAction | undefined {
   if (!onSelect) return undefined;
   return {
-    label: "Create new repository",
+    label: t`Create new repository`,
     icon: <IconFolderPlus className="h-3.5 w-3.5" />,
     onSelect,
   };
@@ -401,6 +405,7 @@ function RepoChip({
   onRefreshRepositories,
   repositoriesRefreshing,
 }: RepoChipProps) {
+  const { t } = useLingui();
   const { repoOptions, branchOptions, branchesLoading, refreshBranches } = useRepoChipData({
     row,
     workspaceId,
@@ -436,18 +441,18 @@ function RepoChip({
       <Pill
         icon={<IconCode className="h-3 w-3 shrink-0 text-muted-foreground" />}
         value={repoLabel}
-        placeholder="repository"
+        placeholder={t`repository`}
         options={repoOptions}
         onSelect={onRepositoryChange}
-        searchPlaceholder="Search repositories..."
-        emptyMessage="No repositories"
+        searchPlaceholder={t`Search repositories...`}
+        emptyMessage={t`No repositories`}
         testId="repo-chip-trigger"
         tooltip={repoTooltip}
         filter={scoreRepo}
         action={buildCreateRepositoryAction(onCreateRepository)}
         onRefresh={onRefreshRepositories}
         refreshing={repositoriesRefreshing}
-        refreshLabel="repositories"
+        refreshLabel={t`repositories`}
         flat
       />
       <Pill
@@ -464,8 +469,8 @@ function RepoChip({
           branchesLoading,
           optionCount: branchOptions.length,
         })}
-        searchPlaceholder="Search branches..."
-        emptyMessage="No branches"
+        searchPlaceholder={t`Search branches...`}
+        emptyMessage={t`No branches`}
         testId="branch-chip-trigger"
         tooltip={computeBranchTooltip(branchPrefix)}
         onRefresh={refreshBranches}
@@ -479,20 +484,23 @@ function RepoChip({
 }
 
 function RepoChipRemoveButton({ onRemove }: { onRemove: () => void }) {
+  const { t } = useLingui();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           onClick={onRemove}
-          aria-label="Remove repository"
+          aria-label={t`Remove repository`}
           className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-muted/60 cursor-pointer"
           data-testid="remove-repo-chip"
         >
           <IconX className="h-3 w-3" />
         </button>
       </TooltipTrigger>
-      <TooltipContent>Remove repository</TooltipContent>
+      <TooltipContent>
+        <Trans>Remove repository</Trans>
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -528,7 +536,7 @@ function renderDiscoveredRepoOption(path: string, alreadyAdded: boolean) {
         <span className="truncate text-[11px] text-muted-foreground">{display}</span>
       </span>
       <Badge variant="outline" className="text-[10px] text-muted-foreground shrink-0">
-        on disk
+        <Trans>on disk</Trans>
       </Badge>
       {alreadyAdded ? <AlreadyAddedMarker /> : null}
     </span>
@@ -536,10 +544,11 @@ function renderDiscoveredRepoOption(path: string, alreadyAdded: boolean) {
 }
 
 function AlreadyAddedMarker() {
+  const { t } = useLingui();
   return (
     <span
       role="img"
-      aria-label="Already added"
+      aria-label={t`Already added`}
       data-testid="already-added-repository-marker"
       className="shrink-0 text-primary"
     >

@@ -1,5 +1,6 @@
 "use client";
 
+import { useLingui } from "@lingui/react/macro";
 import { useEffect, useMemo, useRef } from "react";
 import {
   DndContext,
@@ -72,9 +73,10 @@ function getTasksForStep(tasks: Task[], stepId: string) {
 }
 
 function EmptyState({ showLoading }: { showLoading: boolean }) {
+  const { t } = useLingui();
   return (
     <div className="h-full rounded-lg border border-dashed border-border/60 flex items-center justify-center text-sm text-muted-foreground mx-4">
-      {showLoading ? "Loading..." : "No workflows available yet."}
+      {showLoading ? t`Loading...` : t`No workflows available yet.`}
     </div>
   );
 }

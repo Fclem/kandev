@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t as globalT } from "@lingui/core/macro";
 import { IconBell, IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@kandev/ui/hover-card";
@@ -23,9 +25,9 @@ type DesktopNotificationsSectionProps = {
 };
 
 function permissionActionLabel(permission: NotificationPermissionState) {
-  if (permission === "granted") return "Enabled";
-  if (permission === "error") return "Retry";
-  return "Enable";
+  if (permission === "granted") return globalT`Enabled`;
+  if (permission === "error") return globalT`Retry`;
+  return globalT`Enable`;
 }
 
 export function DesktopNotificationsSection({
@@ -34,18 +36,23 @@ export function DesktopNotificationsSection({
   onRefreshPermission,
   onTestNotification,
 }: DesktopNotificationsSectionProps) {
+  const { t } = useLingui();
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-base font-medium">Desktop Notifications</div>
+          <div className="text-base font-medium">
+            <Trans>Desktop Notifications</Trans>
+          </div>
           <p className="text-sm text-muted-foreground">
-            Notify this device when a selected agent turn, question, or Office event occurs.
+            <Trans>
+              Notify this device when a selected agent turn, question, or Office event occurs.
+            </Trans>
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
-            title="Enable desktop notifications"
+            title={t`Enable desktop notifications`}
             variant="default"
             size="sm"
             onClick={() => void onRequestPermission()}
@@ -66,20 +73,22 @@ export function DesktopNotificationsSection({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Refresh notification permission"
+                  aria-label={t`Refresh notification permission`}
                   className="cursor-pointer"
                   onClick={() => void onRefreshPermission()}
                 >
                   <IconRefresh className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Refresh permission status</TooltipContent>
+              <TooltipContent>
+                <Trans>Refresh permission status</Trans>
+              </TooltipContent>
             </Tooltip>
           </TooltipProvider>
           <HoverCard>
             <HoverCardTrigger asChild>
               <Button
-                title="Send test notification"
+                title={t`Send test notification`}
                 variant="outline"
                 className="cursor-pointer"
                 size="icon"
@@ -91,7 +100,9 @@ export function DesktopNotificationsSection({
               </Button>
             </HoverCardTrigger>
             <HoverCardContent side="top" className="text-sm">
-              If you do not see notifications, check your OS settings and allow this browser.
+              <Trans>
+                If you do not see notifications, check your OS settings and allow this browser.
+              </Trans>
             </HoverCardContent>
           </HoverCard>
         </div>
@@ -100,19 +111,21 @@ export function DesktopNotificationsSection({
       {notificationPermission === "denied" && (
         <p className="text-sm text-amber-600">
           {nativeNotifications.isAvailable()
-            ? "Notifications are blocked in your OS app notification settings. Enable them there, then click Refresh."
-            : "Notifications are blocked in your browser. Enable them in site settings, then click Refresh."}
+            ? t`Notifications are blocked in your OS app notification settings. Enable them there, then click Refresh.`
+            : t`Notifications are blocked in your browser. Enable them in site settings, then click Refresh.`}
         </p>
       )}
       {notificationPermission === "unsupported" && (
         <p className="text-sm text-amber-600">
-          This browser does not support desktop notifications.
+          <Trans>This browser does not support desktop notifications.</Trans>
         </p>
       )}
       {notificationPermission === "error" && (
         <p className="text-sm text-amber-600">
-          Kandev could not check notification permission. Try again, then check your browser or OS
-          notification settings.
+          <Trans>
+            Kandev could not check notification permission. Try again, then check your browser or OS
+            notification settings.
+          </Trans>
         </p>
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
@@ -84,7 +85,7 @@ export function ProfileHeader({
             onClick={() => router.push(EXECUTORS_ROUTE)}
             className="w-full cursor-pointer sm:w-auto"
           >
-            Back to Executors
+            <Trans>Back to Executors</Trans>
           </Button>
         </div>
       </div>
@@ -99,14 +100,14 @@ export function ProfileFormActions({ onDelete }: { onDelete: () => void }) {
     <div className="flex items-center justify-between">
       <Button variant="destructive" size="sm" onClick={onDelete} className="cursor-pointer">
         <IconTrash className="mr-1 h-4 w-4" />
-        Delete Profile
+        <Trans>Delete Profile</Trans>
       </Button>
       <Button
         variant="outline"
         onClick={() => router.push(EXECUTORS_ROUTE)}
         className="cursor-pointer"
       >
-        Cancel
+        <Trans>Cancel</Trans>
       </Button>
     </div>
   );
@@ -125,6 +126,7 @@ export function DeleteProfileDialog({
   deleting: boolean;
   relatedDockerContainerCount?: number;
 }) {
+  const { t } = useLingui();
   const [removeRelatedContainers, setRemoveRelatedContainers] = useState<boolean | null>(null);
   const hasRelatedContainers = relatedDockerContainerCount > 0;
   const shouldRemoveRelatedContainers = hasRelatedContainers && (removeRelatedContainers ?? true);
@@ -138,14 +140,21 @@ export function DeleteProfileDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete Profile</DialogTitle>
-          <DialogDescription>Are you sure? This action cannot be undone.</DialogDescription>
+          <DialogTitle>
+            <Trans>Delete Profile</Trans>
+          </DialogTitle>
+          <DialogDescription>
+            <Trans>Are you sure? This action cannot be undone.</Trans>
+          </DialogDescription>
         </DialogHeader>
         {hasRelatedContainers && (
           <div className="space-y-3 rounded-md border p-3">
             <p className="text-sm text-muted-foreground">
-              {relatedDockerContainerCount} related Docker{" "}
-              {relatedDockerContainerCount === 1 ? "container" : "containers"} will also be removed.
+              <Plural
+                value={relatedDockerContainerCount}
+                one="# related Docker container will also be removed."
+                other="# related Docker containers will also be removed."
+              />
             </p>
             <div className="flex items-center gap-2">
               <Checkbox
@@ -154,14 +163,14 @@ export function DeleteProfileDialog({
                 onCheckedChange={(checked) => setRemoveRelatedContainers(checked === true)}
               />
               <Label htmlFor="remove-related-docker-containers" className="cursor-pointer text-sm">
-                Remove related Docker containers
+                <Trans>Remove related Docker containers</Trans>
               </Label>
             </div>
           </div>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button
             variant="destructive"
@@ -171,7 +180,7 @@ export function DeleteProfileDialog({
             disabled={deleting}
             className="cursor-pointer"
           >
-            {deleting ? "Deleting..." : "Delete"}
+            {deleting ? t`Deleting...` : t`Delete`}
           </Button>
         </DialogFooter>
       </DialogContent>

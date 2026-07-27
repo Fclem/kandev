@@ -1,6 +1,7 @@
 "use client";
 
 import { IconLogout } from "@tabler/icons-react";
+import { Trans } from "@lingui/react/macro";
 import { Avatar, AvatarFallback } from "@kandev/ui/avatar";
 import {
   DropdownMenu,
@@ -70,7 +71,7 @@ export function CurrentUserChip({
           className="cursor-pointer"
         >
           <IconLogout className="h-4 w-4" />
-          Log out
+          <Trans>Log out</Trans>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

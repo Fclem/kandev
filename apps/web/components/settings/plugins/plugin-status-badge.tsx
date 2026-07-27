@@ -1,14 +1,17 @@
 "use client";
 
+import { useLingui } from "@lingui/react/macro";
+import { msg } from "@lingui/core/macro";
+import type { MessageDescriptor } from "@lingui/core";
 import { Badge } from "@kandev/ui/badge";
 import type { PluginStatus } from "@/lib/types/plugins";
 
-const STATUS_LABEL: Record<PluginStatus, string> = {
-  active: "Active",
-  error: "Error",
-  disabled: "Disabled",
-  registered: "Registered",
-  uninstalled: "Uninstalled",
+const STATUS_LABEL: Record<PluginStatus, MessageDescriptor> = {
+  active: msg`Active`,
+  error: msg`Error`,
+  disabled: msg`Disabled`,
+  registered: msg`Registered`,
+  uninstalled: msg`Uninstalled`,
 };
 
 // green=active, red=error, gray=disabled, amber=registered, per task-20 acceptance.
@@ -21,9 +24,10 @@ const STATUS_CLASS: Record<PluginStatus, string> = {
 };
 
 export function PluginStatusBadge({ status }: { status: PluginStatus }) {
+  const { t } = useLingui();
   return (
     <Badge variant="outline" className={STATUS_CLASS[status]}>
-      {STATUS_LABEL[status]}
+      {t(STATUS_LABEL[status])}
     </Badge>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans } from "@lingui/react/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "@/lib/routing/client-router";
 import { Task } from "./kanban-card";
@@ -564,14 +565,18 @@ function ApprovalWarningDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <IconAlertTriangle className="h-5 w-5 text-amber-500" />
-            Approval Required
+            <Trans>Approval Required</Trans>
           </AlertDialogTitle>
           <AlertDialogDescription>{moveError?.message}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Dismiss</AlertDialogCancel>
+          <AlertDialogCancel>
+            <Trans>Dismiss</Trans>
+          </AlertDialogCancel>
           {moveError?.taskId && (
-            <AlertDialogAction onClick={handleGoToTask}>Go to Task</AlertDialogAction>
+            <AlertDialogAction onClick={handleGoToTask}>
+              <Trans>Go to Task</Trans>
+            </AlertDialogAction>
           )}
         </AlertDialogFooter>
       </AlertDialogContent>

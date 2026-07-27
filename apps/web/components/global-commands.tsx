@@ -17,6 +17,8 @@ import {
   IconSparkles,
   IconBrandGithub,
 } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useRegisterCommands } from "@/hooks/use-register-commands";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
@@ -32,7 +34,7 @@ function buildNavigationCommands(push: PushFn): CommandItem[] {
   return [
     {
       id: "nav-home",
-      label: "Go to Home",
+      label: t`Go to Home`,
       group: "Navigation",
       icon: <IconHome className="size-3.5" />,
       keywords: ["home", "kanban", "board"],
@@ -40,7 +42,7 @@ function buildNavigationCommands(push: PushFn): CommandItem[] {
     },
     {
       id: "nav-tasks",
-      label: "Go to All Tasks",
+      label: t`Go to All Tasks`,
       group: "Navigation",
       icon: <IconList className="size-3.5" />,
       keywords: ["tasks", "list", "all"],
@@ -48,7 +50,7 @@ function buildNavigationCommands(push: PushFn): CommandItem[] {
     },
     {
       id: "nav-settings",
-      label: "Go to Settings",
+      label: t`Go to Settings`,
       group: "Navigation",
       icon: <IconSettings className="size-3.5" />,
       keywords: ["settings", "preferences", "config", "general settings"],
@@ -56,7 +58,7 @@ function buildNavigationCommands(push: PushFn): CommandItem[] {
     },
     {
       id: "nav-stats",
-      label: "Go to Stats",
+      label: t`Go to Stats`,
       group: "Navigation",
       icon: <IconChartBar className="size-3.5" />,
       keywords: ["stats", "statistics", "analytics", "metrics"],
@@ -64,7 +66,7 @@ function buildNavigationCommands(push: PushFn): CommandItem[] {
     },
     {
       id: "nav-github",
-      label: "Go to GitHub Dashboard",
+      label: t`Go to GitHub Dashboard`,
       group: "Navigation",
       icon: <IconBrandGithub className="size-3.5" />,
       keywords: ["github", "dashboard", "pr", "pull request", "code review", "issues", "review"],
@@ -72,7 +74,7 @@ function buildNavigationCommands(push: PushFn): CommandItem[] {
     },
     {
       id: "settings-agents",
-      label: "Agents Settings",
+      label: t`Agents Settings`,
       group: "Settings",
       icon: <IconRobot className="size-3.5" />,
       keywords: ["agents", "agent settings", "agent profiles", "installed agents", "claude"],
@@ -80,7 +82,7 @@ function buildNavigationCommands(push: PushFn): CommandItem[] {
     },
     {
       id: "settings-executors",
-      label: "Executors Settings",
+      label: t`Executors Settings`,
       group: "Settings",
       icon: <IconCpu className="size-3.5" />,
       keywords: [
@@ -95,7 +97,7 @@ function buildNavigationCommands(push: PushFn): CommandItem[] {
     },
     {
       id: "settings-workspace",
-      label: "Workspace Settings",
+      label: t`Workspace Settings`,
       group: "Settings",
       icon: <IconFolder className="size-3.5" />,
       keywords: ["workspace", "workspaces"],
@@ -103,7 +105,7 @@ function buildNavigationCommands(push: PushFn): CommandItem[] {
     },
     {
       id: "settings-prompts",
-      label: "Prompts Settings",
+      label: t`Prompts Settings`,
       group: "Settings",
       icon: <IconMessageCircle className="size-3.5" />,
       keywords: [
@@ -126,7 +128,7 @@ function buildThemeCommand(
   const destinationTheme = isDark ? "light" : "dark";
   return {
     id: "pref-theme",
-    label: isDark ? "Switch to Light Mode" : "Switch to Dark Mode",
+    label: isDark ? t`Switch to Light Mode` : t`Switch to Dark Mode`,
     group: "Preferences",
     icon: isDark ? <IconSun className="size-3.5" /> : <IconMoon className="size-3.5" />,
     keywords: ["theme", "color theme", "appearance"],
@@ -135,6 +137,7 @@ function buildThemeCommand(
 }
 
 export function GlobalCommands() {
+  const { t } = useLingui();
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const activeWorkspaceId = useAppStore((s) => s.workspaces.activeId);
@@ -147,20 +150,20 @@ export function GlobalCommands() {
   const quickChatCommand: CommandItem = useMemo(
     () => ({
       id: "quick-chat",
-      label: "Quick Chat",
+      label: t`Quick Chat`,
       group: "Actions",
       icon: <IconMessageCircle className="size-3.5" />,
       keywords: ["quick chat", "new quick chat", "quick question", "ask agent"],
       shortcut: quickChatShortcut,
       action: handleOpenQuickChat,
     }),
-    [handleOpenQuickChat, quickChatShortcut],
+    [handleOpenQuickChat, quickChatShortcut, t],
   );
 
   const configChatCommand: CommandItem = useMemo(
     () => ({
       id: "config-chat",
-      label: "Configuration Chat",
+      label: t`Configuration Chat`,
       group: "Actions",
       icon: <IconSparkles className="size-3.5" />,
       keywords: [
@@ -172,7 +175,7 @@ export function GlobalCommands() {
       ],
       action: handleOpenConfigChat,
     }),
-    [handleOpenConfigChat],
+    [handleOpenConfigChat, t],
   );
 
   const commands = useMemo<CommandItem[]>(

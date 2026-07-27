@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import { Trans } from "@lingui/react/macro";
 import dynamic from "@/lib/routing/client-dynamic";
 import type { BeforeMount, OnMount } from "@monaco-editor/react";
 import { KANDEV_MONACO_DARK } from "@/lib/theme/editor-theme";
@@ -15,7 +16,7 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((m) => m.
   ssr: false,
   loading: () => (
     <div className="h-full w-full flex items-center justify-center text-muted-foreground text-xs border rounded-md bg-muted/20">
-      Loading editor...
+      <Trans>Loading editor...</Trans>
     </div>
   ),
 });

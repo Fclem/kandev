@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { Trans } from "@lingui/react/macro";
 import { useRouter } from "@/lib/routing/client-router";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -87,13 +88,15 @@ function SSHCreateHeader() {
         <div>
           <div className="flex items-center gap-2">
             <IconTerminal2 className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-2xl font-bold">New SSH Executor</h2>
+            <h2 className="text-2xl font-bold">
+              <Trans>New SSH Executor</Trans>
+            </h2>
             <Badge variant="outline" className="text-xs">
               {getExecutorLabel("ssh")}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Connect to a remote Linux amd64 or macOS host and run agentctl there.
+            <Trans>Connect to a remote Linux amd64 or macOS host and run agentctl there.</Trans>
           </p>
         </div>
         <Button
@@ -102,7 +105,7 @@ function SSHCreateHeader() {
           onClick={() => router.push(EXECUTORS_ROUTE)}
           className="cursor-pointer"
         >
-          Back to Executors
+          <Trans>Back to Executors</Trans>
         </Button>
       </div>
       <Separator />

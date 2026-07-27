@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import Link from "@/components/routing/app-link";
 import type { AgentProfileOption } from "@/lib/state/slices";
 import type { WorkflowSnapshotData } from "@/lib/state/slices/kanban/types";
@@ -81,7 +82,8 @@ function NoCompatibleAgentState({
   executorProfileName: string | null;
   executorProfileId: string;
 }) {
-  const target = executorProfileName ? `“${executorProfileName}”` : "this executor";
+  const { t } = useLingui();
+  const target = executorProfileName ? `“${executorProfileName}”` : t`this executor`;
   const href = executorProfileId
     ? `/settings/executors/${executorProfileId}`
     : "/settings/executors";
@@ -90,9 +92,11 @@ function NoCompatibleAgentState({
       className="flex h-auto min-h-7 items-center justify-between gap-3 rounded-sm border border-input px-3 py-1.5 text-xs text-muted-foreground"
       data-testid="agent-profile-empty-state"
     >
-      <span>No compatible agent profiles for {target}.</span>
+      <span>
+        <Trans>No compatible agent profiles for {target}.</Trans>
+      </span>
       <Link href={href} className="shrink-0 cursor-pointer text-primary hover:underline">
-        Configure credentials
+        <Trans>Configure credentials</Trans>
       </Link>
     </div>
   );
@@ -111,15 +115,18 @@ function AgentColumn({
   executorProfileName,
   executorProfileId,
 }: AgentColumnProps) {
+  const { t } = useLingui();
   if (agentProfiles.length === 0 && !agentProfilesLoading) {
     return (
       <div
         className="flex h-7 items-center justify-center gap-2 rounded-sm border border-input px-3 text-xs text-muted-foreground"
         data-testid="agent-profile-empty-state"
       >
-        <span>No agents found.</span>
+        <span>
+          <Trans>No agents found.</Trans>
+        </span>
         <Link href="/settings/agents" className="cursor-pointer text-primary hover:underline">
-          Add agent
+          <Trans>Add agent</Trans>
         </Link>
       </div>
     );
@@ -132,7 +139,7 @@ function AgentColumn({
       />
     );
   }
-  const placeholder = agentProfilesLoading ? "Loading agents..." : "Select agent";
+  const placeholder = agentProfilesLoading ? t`Loading agents...` : t`Select agent`;
   return (
     <>
       <AgentSelectorComponent
@@ -144,7 +151,9 @@ function AgentColumn({
         popoverPortal
       />
       {workflowAgentLocked && (
-        <p className="text-[11px] text-muted-foreground mt-1">Agent set by workflow</p>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          <Trans>Agent set by workflow</Trans>
+        </p>
       )}
     </>
   );
@@ -153,6 +162,7 @@ function AgentColumn({
 export const CreateEditSelectors = memo(function CreateEditSelectors(
   props: CreateEditSelectorsProps,
 ) {
+  const { t } = useLingui();
   if (props.isTaskStarted) return null;
   const {
     executorProfileOptions,
@@ -175,7 +185,7 @@ export const CreateEditSelectors = memo(function CreateEditSelectors(
           options={executorProfileOptions}
           value={executorProfileId}
           onValueChange={onExecutorProfileChange}
-          placeholder={executorsLoading ? "Loading profiles..." : "Select profile"}
+          placeholder={executorsLoading ? t`Loading profiles...` : t`Select profile`}
           disabled={executorsLoading}
           popoverPortal
         />
@@ -231,13 +241,14 @@ export const SessionSelectors = memo(function SessionSelectors({
   AgentSelectorComponent,
   ExecutorProfileSelectorComponent,
 }: SessionSelectorsProps) {
+  const { t } = useLingui();
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
       <AgentSelectorComponent
         options={agentProfileOptions}
         value={agentProfileId}
         onValueChange={onAgentProfileChange}
-        placeholder={agentProfilesLoading ? "Loading agent profiles..." : "Select agent profile"}
+        placeholder={agentProfilesLoading ? t`Loading agent profiles...` : t`Select agent profile`}
         disabled={agentProfilesLoading || isCreatingSession}
         popoverPortal
       />
@@ -245,7 +256,7 @@ export const SessionSelectors = memo(function SessionSelectors({
         options={executorProfileOptions}
         value={executorProfileId}
         onValueChange={onExecutorProfileChange}
-        placeholder={executorsLoading ? "Loading profiles..." : "Select profile"}
+        placeholder={executorsLoading ? t`Loading profiles...` : t`Select profile`}
         disabled={executorsLoading || isCreatingSession}
         popoverPortal
       />

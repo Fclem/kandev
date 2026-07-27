@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import Link from "@/components/routing/app-link";
 import { useParams } from "@/lib/routing/client-router";
 import { IconTrash } from "@tabler/icons-react";
@@ -80,7 +82,9 @@ function ProfileEditorHeader({
           <AgentLogo agentName={agentName} size={28} className="shrink-0" />
           {agentDisplayName} • {savedProfileName}
         </h2>
-        <p className="text-sm text-muted-foreground mt-1">{agentDisplayName} profile settings</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          <Trans>{agentDisplayName} profile settings</Trans>
+        </p>
       </div>
     </div>
   );
@@ -94,16 +98,22 @@ function DeleteProfileCard({ onDelete }: DeleteProfileCardProps) {
   return (
     <Card className="border-destructive">
       <CardHeader>
-        <CardTitle className="text-destructive">Delete profile</CardTitle>
+        <CardTitle className="text-destructive">
+          <Trans>Delete profile</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium">Remove this profile</p>
-          <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
+          <p className="text-sm font-medium">
+            <Trans>Remove this profile</Trans>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <Trans>This action cannot be undone.</Trans>
+          </p>
         </div>
         <Button variant="destructive" onClick={onDelete}>
           <IconTrash className="h-4 w-4 mr-2" />
-          Delete
+          <Trans>Delete</Trans>
         </Button>
       </CardContent>
     </Card>
@@ -141,7 +151,9 @@ function ProfileSettingsCard({
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <span>Profile settings</span>
+          <span>
+            <Trans>Profile settings</Trans>
+          </span>
           {agent.supports_mcp && <Badge variant="secondary">MCP</Badge>}
         </CardTitle>
       </CardHeader>
@@ -226,10 +238,8 @@ function useProfileEditorState(
   return { draft, setDraft, savedProfile, setSavedProfile, saveStatus, setSaveStatus, isDirty };
 }
 
-const FALLBACK_ERROR = "Request failed";
-
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : FALLBACK_ERROR;
+  return error instanceof Error ? error.message : t`Request failed`;
 }
 
 type ProfileEditorActionsOptions = {
@@ -256,8 +266,8 @@ function useProfileSave({
   return async () => {
     if (!draft.name.trim()) {
       toast({
-        title: "Profile name is required",
-        description: "Please enter a profile name before saving.",
+        title: t`Profile name is required`,
+        description: t`Please enter a profile name before saving.`,
         variant: "error",
       });
       return;
@@ -294,7 +304,7 @@ function useProfileSave({
     } catch (error) {
       setSaveStatus("error");
       toast({
-        title: "Failed to save profile",
+        title: t`Failed to save profile`,
         description: errorMessage(error),
         variant: "error",
       });
@@ -309,6 +319,10 @@ export function preserveNewerProfileDraft(
   saved: AgentProfile,
 ): AgentProfile {
   return current === submitted ? saved : current;
+}
+
+function conflictFromResult(r: AgentProfileDeleteConflict): AgentProfileDeleteConflict {
+  return { activeSessions: r.activeSessions, watchers: r.watchers, routingTiers: r.routingTiers };
 }
 
 function useProfileDelete(
@@ -344,13 +358,9 @@ function useProfileDelete(
     if (result.status === "ok") {
       removeProfileFromStore();
     } else if (result.status === "conflict") {
-      setConflict({
-        activeSessions: result.activeSessions,
-        watchers: result.watchers,
-        routingTiers: result.routingTiers,
-      });
+      setConflict(conflictFromResult(result));
     } else {
-      toast({ title: "Failed to delete profile", description: result.message, variant: "error" });
+      toast({ title: t`Failed to delete profile`, description: result.message, variant: "error" });
     }
   };
 
@@ -360,13 +370,9 @@ function useProfileDelete(
     if (result.status === "ok") {
       removeProfileFromStore();
     } else if (result.status === "conflict") {
-      setConflict({
-        activeSessions: result.activeSessions,
-        watchers: result.watchers,
-        routingTiers: result.routingTiers,
-      });
+      setConflict(conflictFromResult(result));
     } else if (result.status === "error") {
-      toast({ title: "Failed to delete profile", description: result.message, variant: "error" });
+      toast({ title: t`Failed to delete profile`, description: result.message, variant: "error" });
     }
   };
 
@@ -538,7 +544,7 @@ function ProfileEditor({
     revision: JSON.stringify(draft),
     isDirty,
     canSave: Boolean(draft.name.trim()),
-    invalidReason: draft.name.trim() ? undefined : "Profile name is required.",
+    invalidReason: draft.name.trim() ? undefined : t`Profile name is required.`,
     save: handleSave,
     discard: () => setDraft(savedProfile),
   });
@@ -575,7 +581,7 @@ function ProfileEditor({
         initialMcpConfig={initialMcpConfig}
         onToastError={(error) =>
           toast({
-            title: "Failed to save MCP config",
+            title: t`Failed to save MCP config`,
             description: errorMessage(error),
             variant: "error",
           })
@@ -613,9 +619,13 @@ export function AgentProfilePage({ initialMcpConfig }: AgentProfilePageClientPro
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-sm text-muted-foreground">Profile not found.</p>
+          <p className="text-sm text-muted-foreground">
+            <Trans>Profile not found.</Trans>
+          </p>
           <Button className="mt-4" asChild>
-            <Link href="/settings/agents">Back to Agents</Link>
+            <Link href="/settings/agents">
+              <Trans>Back to Agents</Trans>
+            </Link>
           </Button>
         </CardContent>
       </Card>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trans } from "@lingui/react/macro";
 import { IconArrowUpCircle, IconCheck, IconStar } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -50,7 +51,11 @@ export function MarketplaceEntryRow({ entry, busy, onInstall }: MarketplaceEntry
           <IconStar className="h-3.5 w-3.5" />
           {entry.stars === null ? "—" : entry.stars.toLocaleString()}
         </span>
-        {entry.author && <span>by {entry.author}</span>}
+        {entry.author && (
+          <span>
+            <Trans>by {entry.author}</Trans>
+          </span>
+        )}
         {entry.categories.map((cat) => (
           <Badge key={cat} variant="secondary" className="text-[10px] font-normal">
             {cat}
@@ -100,7 +105,7 @@ function MarketplaceEntryAction({ entry, busy, onInstall }: MarketplaceEntryRowP
         className="shrink-0 gap-1 text-muted-foreground"
       >
         <IconCheck className="h-3.5 w-3.5" />
-        Installed
+        <Trans>Installed</Trans>
       </Badge>
     );
   }
@@ -115,7 +120,7 @@ function MarketplaceEntryAction({ entry, busy, onInstall }: MarketplaceEntryRowP
         className="shrink-0 gap-1 cursor-pointer"
       >
         <IconArrowUpCircle className="h-4 w-4" />
-        {busy ? "Updating…" : "Update"}
+        {busy ? <Trans>Updating…</Trans> : <Trans>Update</Trans>}
       </Button>
     );
   }
@@ -128,7 +133,7 @@ function MarketplaceEntryAction({ entry, busy, onInstall }: MarketplaceEntryRowP
       data-testid={`marketplace-install-${entry.id}`}
       className="shrink-0 cursor-pointer"
     >
-      {busy ? "Installing…" : "Install"}
+      {busy ? <Trans>Installing…</Trans> : <Trans>Install</Trans>}
     </Button>
   );
 }

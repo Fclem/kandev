@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ export function ExecutorProfileDialog({
   executorId,
   onSaved,
 }: ExecutorProfileDialogProps) {
+  const { t } = useLingui();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function ExecutorProfileDialog({
       onOpenChange(false);
       onSaved?.(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create profile");
+      setError(err instanceof Error ? err.message : t`Failed to create profile`);
     } finally {
       setSaving(false);
     }
@@ -60,21 +62,27 @@ export function ExecutorProfileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>New Profile</DialogTitle>
+          <DialogTitle>
+            <Trans>New Profile</Trans>
+          </DialogTitle>
           <DialogDescription>
-            Create a new profile for this executor. You can configure scripts and environment
-            variables on the profile page.
+            <Trans>
+              Create a new profile for this executor. You can configure scripts and environment
+              variables on the profile page.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="profile-name">Name</Label>
+            <Label htmlFor="profile-name">
+              <Trans>Name</Trans>
+            </Label>
             <Input
               id="profile-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Production, Development"
+              placeholder={t`e.g. Production, Development`}
               autoFocus
             />
           </div>
@@ -83,10 +91,10 @@ export function ExecutorProfileDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button onClick={handleSave} disabled={!name.trim() || saving} className="cursor-pointer">
-            {saving ? "Creating..." : "Create Profile"}
+            {saving ? t`Creating...` : t`Create Profile`}
           </Button>
         </DialogFooter>
       </DialogContent>

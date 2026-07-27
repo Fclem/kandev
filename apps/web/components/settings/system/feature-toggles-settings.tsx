@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import { Alert, AlertDescription, AlertTitle } from "@kandev/ui/alert";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent } from "@kandev/ui/card";
@@ -88,7 +90,7 @@ function useRuntimeFlagsDraft(initialFlags: RuntimeFlagState[]) {
         }
       } catch (err) {
         toast({
-          title: "Failed to load feature toggles",
+          title: t`Failed to load feature toggles`,
           description: errorMessage(err),
           variant: "error",
         });
@@ -144,7 +146,7 @@ function useRuntimeFlagsDraft(initialFlags: RuntimeFlagState[]) {
       }
       setSavedFlags(persisted);
       setFlags((current) => (current === submitted ? persisted : current));
-      toast({ title: "Feature toggles saved", variant: "success" });
+      toast({ title: t`Feature toggles saved`, variant: "success" });
     },
     discard: () => setFlags(savedFlags),
   });
@@ -174,7 +176,7 @@ function FeatureTogglesEmptyState({
       <Card>
         <CardContent className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
           <Spinner className="size-4" />
-          Loading feature toggles...
+          <Trans>Loading feature toggles...</Trans>
         </CardContent>
       </Card>
     );
@@ -182,9 +184,9 @@ function FeatureTogglesEmptyState({
   return (
     <Card>
       <CardContent className="py-6 text-sm text-muted-foreground">
-        Feature toggles could not be loaded.
+        <Trans>Feature toggles could not be loaded.</Trans>
         <Button variant="link" className="h-auto px-1 cursor-pointer" onClick={onRetry}>
-          Retry
+          <Trans>Retry</Trans>
         </Button>
       </CardContent>
     </Card>
@@ -205,13 +207,18 @@ function RestartRequiredAlert({
     <Alert className="border-border/70 bg-muted/30">
       <IconRotateClockwise className="h-4 w-4 text-muted-foreground" />
       <AlertTitle className="flex items-center gap-2">
-        Restart required
+        <Trans>Restart required</Trans>
         <RestartSupportInfo supported={supported} reason={capability?.reason} />
       </AlertTitle>
       <AlertDescription className="flex flex-col gap-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <span>
-          Saved toggle changes will apply the next time Kandev starts.
-          {!supported && " Restart it from your terminal or service manager when convenient."}
+          <Trans>Saved toggle changes will apply the next time Kandev starts.</Trans>
+          {!supported && (
+            <>
+              {" "}
+              <Trans>Restart it from your terminal or service manager when convenient.</Trans>
+            </>
+          )}
         </span>
         {supported && (
           <Button
@@ -221,7 +228,7 @@ function RestartRequiredAlert({
             className="w-full cursor-pointer sm:w-auto"
           >
             <IconPower className="mr-1 h-3.5 w-3.5" />
-            Restart
+            <Trans>Restart</Trans>
           </Button>
         )}
       </AlertDescription>
@@ -241,7 +248,7 @@ function RestartSupportInfo({
       <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label="Restart support details"
+          aria-label={t`Restart support details`}
           className="inline-flex h-6 w-6 cursor-help items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <IconInfoCircle className="h-4 w-4" />
@@ -256,11 +263,11 @@ function RestartSupportInfo({
 
 function restartSupportMessage(supported: boolean, reason: string | undefined): string {
   if (supported) {
-    return "Restart from this page is available when Kandev is running under a supported local supervisor.";
+    return t`Restart from this page is available when Kandev is running under a supported local supervisor.`;
   }
   return (
     reason ??
-    "Automatic restart is not available in deploy previews, unmanaged terminal runs, or launch modes without a restart supervisor."
+    t`Automatic restart is not available in deploy previews, unmanaged terminal runs, or launch modes without a restart supervisor.`
   );
 }
 

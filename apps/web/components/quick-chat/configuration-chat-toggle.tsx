@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Switch } from "@kandev/ui/switch";
 
 export function ConfigurationChatToggle({
@@ -11,6 +12,7 @@ export function ConfigurationChatToggle({
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) {
+  const { t } = useLingui();
   return (
     <section
       className="flex min-h-11 items-center justify-between gap-4"
@@ -18,14 +20,16 @@ export function ConfigurationChatToggle({
     >
       <div className="min-w-0">
         <h3 id="config-chat-mode-label" className="text-sm font-medium">
-          Configuration chat
+          <Trans>Configuration chat</Trans>
         </h3>
         <p className="text-xs text-muted-foreground">
-          Let the agent update Kandev settings, workflows, agent profiles, and MCP configuration.
+          <Trans>
+            Let the agent update Kandev settings, workflows, agent profiles, and MCP configuration.
+          </Trans>
         </p>
       </div>
       <Switch
-        aria-label="Configuration chat"
+        aria-label={t`Configuration chat`}
         checked={checked}
         disabled={disabled}
         onCheckedChange={onCheckedChange}

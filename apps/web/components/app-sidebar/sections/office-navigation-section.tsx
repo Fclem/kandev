@@ -9,6 +9,7 @@ import {
   IconRoute,
   IconSettings,
 } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
 import { useAppStore } from "@/components/state-provider";
 import { APP_SIDEBAR_SECTION_IDS } from "../app-sidebar-constants";
 import { AppSidebarNavItem } from "../app-sidebar-nav-item";
@@ -19,18 +20,20 @@ type OfficeNavigationSectionProps = {
   section?: "all" | "work" | "office";
 };
 
-const workItems = [
-  { icon: IconCircleDot, label: "Tasks", href: "/office/tasks" },
-  { icon: IconRepeat, label: "Routines", href: "/office/routines" },
-] as const;
+const workItems = () =>
+  [
+    { icon: IconCircleDot, label: t`Tasks`, href: "/office/tasks" },
+    { icon: IconRepeat, label: t`Routines`, href: "/office/routines" },
+  ] as const;
 
-const workspaceItems = [
-  { icon: IconBoxMultiple, label: "Skills", href: "/office/workspace/skills" },
-  { icon: IconCurrencyDollar, label: "Costs", href: "/office/workspace/costs" },
-  { icon: IconHistory, label: "Activity", href: "/office/workspace/activity" },
-  { icon: IconRoute, label: "Routing", href: "/office/workspace/routing" },
-  { icon: IconSettings, label: "Preferences", href: "/office/workspace/settings" },
-] as const;
+const workspaceItems = () =>
+  [
+    { icon: IconBoxMultiple, label: t`Skills`, href: "/office/workspace/skills" },
+    { icon: IconCurrencyDollar, label: t`Costs`, href: "/office/workspace/costs" },
+    { icon: IconHistory, label: t`Activity`, href: "/office/workspace/activity" },
+    { icon: IconRoute, label: t`Routing`, href: "/office/workspace/routing" },
+    { icon: IconSettings, label: t`Preferences`, href: "/office/workspace/settings" },
+  ] as const;
 
 export function OfficeNavigationSection({
   collapsed,
@@ -46,12 +49,12 @@ export function OfficeNavigationSection({
       {(section === "all" || section === "work") && (
         <AppSidebarSection
           id={APP_SIDEBAR_SECTION_IDS.officeWork}
-          label="Work"
+          label={t`Work`}
           collapsed={collapsed}
           icon={IconCircleDot}
           defaultExpanded
         >
-          {workItems.map((item) => (
+          {workItems().map((item) => (
             <AppSidebarNavItem
               key={item.href}
               icon={item.icon}
@@ -66,12 +69,12 @@ export function OfficeNavigationSection({
       {(section === "all" || section === "office") && (
         <AppSidebarSection
           id={APP_SIDEBAR_SECTION_IDS.officeWorkspace}
-          label="Office"
+          label={t`Office`}
           collapsed={collapsed}
           icon={IconSettings}
           defaultExpanded
         >
-          {workspaceItems.map((item) => (
+          {workspaceItems().map((item) => (
             <AppSidebarNavItem
               key={item.href}
               icon={item.icon}
@@ -89,7 +92,7 @@ export function OfficeNavigationSection({
 }
 
 function getWorkBadge(
-  href: (typeof workItems)[number]["href"],
+  href: ReturnType<typeof workItems>[number]["href"],
   taskCount: number,
   routineCount: number,
 ): number | undefined {
@@ -99,7 +102,7 @@ function getWorkBadge(
 }
 
 function getWorkspaceBadge(
-  href: (typeof workspaceItems)[number]["href"],
+  href: ReturnType<typeof workspaceItems>[number]["href"],
   skillCount: number,
 ): number | undefined {
   if (href === "/office/workspace/skills" && skillCount > 0) return skillCount;

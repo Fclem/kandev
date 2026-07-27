@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { t } from "@lingui/core/macro";
 import { useRouter, usePathname } from "@/lib/routing/client-router";
 import {
   IconBuildings,
@@ -136,7 +137,7 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
     >
       <FooterIconButton
         icon={IconSettings}
-        label={settingsMode ? "Close settings" : "Settings"}
+        label={settingsMode ? t`Close settings` : t`Settings`}
         collapsed={collapsed}
         onClick={enterSettings}
         active={settingsMode}
@@ -144,14 +145,14 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
       />
       <FooterIconButton
         icon={IconChartBar}
-        label="Stats"
+        label={t`Stats`}
         collapsed={collapsed}
         onClick={() => router.push("/stats")}
         testId="sidebar-stats-button"
       />
       <FooterIconButton
         icon={IconStethoscope}
-        label="Improve Kandev"
+        label={t`Improve Kandev`}
         collapsed={collapsed}
         onClick={() => setImproveOpen(true)}
         testId="sidebar-improve-kandev-button"
@@ -159,7 +160,7 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
       {releaseNotes.showTopbarButton && (
         <FooterIconButton
           icon={IconSparkles}
-          label="What's new"
+          label={t`What's new`}
           collapsed={collapsed}
           onClick={releaseNotes.openDialog}
           badge={releaseNotes.hasUnseen}
@@ -169,7 +170,7 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
       {officeEnabled && (
         <FooterIconButton
           icon={activeIsOffice ? IconLayoutKanban : IconBuildings}
-          label={activeIsOffice ? "Kanban" : "Office"}
+          label={activeIsOffice ? t`Kanban` : t`Office`}
           collapsed={collapsed}
           onClick={() => {
             if (!activeIsOffice) rememberLastKanbanWorkspace(activeWorkspace);

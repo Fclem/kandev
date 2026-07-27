@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t as globalT } from "@lingui/core/macro";
 import { IconPlus, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
@@ -28,7 +30,7 @@ export function InlineSecretSelect({
   onSecretIdChange,
   secrets,
   label,
-  placeholder = "Select a secret...",
+  placeholder = globalT`Select a secret...`,
   isDirty = false,
 }: InlineSecretSelectProps) {
   const [creating, setCreating] = useState(false);
@@ -49,7 +51,9 @@ export function InlineSecretSelect({
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={NONE_VALUE}>None</SelectItem>
+          <SelectItem value={NONE_VALUE}>
+            <Trans>None</Trans>
+          </SelectItem>
           {secrets.map((s) => (
             <SelectItem key={s.id} value={s.id}>
               {s.name}
@@ -58,7 +62,7 @@ export function InlineSecretSelect({
           <SelectItem value={CREATE_VALUE}>
             <span className="flex items-center gap-1">
               <IconPlus className="h-3.5 w-3.5" />
-              Create new secret...
+              <Trans>Create new secret...</Trans>
             </span>
           </SelectItem>
         </SelectContent>
@@ -83,6 +87,7 @@ function InlineCreateForm({
   onCreated: (item: SecretListItem) => void;
   onCancel: () => void;
 }) {
+  const { t } = useLingui();
   const addSecret = useAppStore((state) => state.addSecret);
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
@@ -98,7 +103,7 @@ function InlineCreateForm({
       addSecret(item);
       onCreated(item);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create secret");
+      setError(err instanceof Error ? err.message : globalT`Failed to create secret`);
       setSaving(false);
     }
   }, [name, value, addSecret, onCreated]);
@@ -106,20 +111,24 @@ function InlineCreateForm({
   return (
     <div className="rounded-md border p-3 space-y-3 bg-muted/30">
       <div className="space-y-1.5">
-        <Label className="text-xs">Name</Label>
+        <Label className="text-xs">
+          <Trans>Name</Trans>
+        </Label>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. my-api-token"
+          placeholder={t`e.g. my-api-token`}
           className="h-8 text-sm"
         />
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">Value</Label>
+        <Label className="text-xs">
+          <Trans>Value</Trans>
+        </Label>
         <Textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Paste your secret value..."
+          placeholder={t`Paste your secret value...`}
           className="text-sm min-h-[60px]"
         />
       </div>
@@ -132,7 +141,7 @@ function InlineCreateForm({
           disabled={saving}
           className="cursor-pointer"
         >
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
         <Button
           size="sm"
@@ -141,7 +150,7 @@ function InlineCreateForm({
           className="cursor-pointer"
         >
           {saving ? <IconLoader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-          Save
+          <Trans>Save</Trans>
         </Button>
       </div>
     </div>

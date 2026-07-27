@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconTrash } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Button } from "@kandev/ui/button";
@@ -43,10 +44,14 @@ export function MarketplaceSourcesDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Marketplace sources</DialogTitle>
+          <DialogTitle>
+            <Trans>Marketplace sources</Trans>
+          </DialogTitle>
           <DialogDescription>
-            Add a team or corporate registry to browse its plugins alongside the official catalog.
-            Each source serves an index.json document.
+            <Trans>
+              Add a team or corporate registry to browse its plugins alongside the official catalog.
+              Each source serves an index.json document.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
 
@@ -63,6 +68,7 @@ export function MarketplaceSourcesDialog({
 }
 
 function SourceItem({ source, onChanged }: { source: MarketplaceSource; onChanged: () => void }) {
+  const { t } = useLingui();
   const [busy, setBusy] = useState(false);
 
   const toggle = async (enabled: boolean) => {
@@ -71,7 +77,7 @@ function SourceItem({ source, onChanged }: { source: MarketplaceSource; onChange
       await updateMarketplaceSource(source.id, { enabled });
       onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update source");
+      toast.error(err instanceof Error ? err.message : t`Failed to update source`);
     } finally {
       setBusy(false);
     }
@@ -83,7 +89,7 @@ function SourceItem({ source, onChanged }: { source: MarketplaceSource; onChange
       await deleteMarketplaceSource(source.id);
       onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove source");
+      toast.error(err instanceof Error ? err.message : t`Failed to remove source`);
     } finally {
       setBusy(false);
     }
@@ -99,12 +105,12 @@ function SourceItem({ source, onChanged }: { source: MarketplaceSource; onChange
           <span className="text-sm font-medium truncate">{source.name}</span>
           {source.builtin && (
             <Badge variant="outline" className="text-[10px]">
-              Official
+              <Trans>Official</Trans>
             </Badge>
           )}
           {source.healthy === false && (
             <Badge variant="destructive" className="text-[10px]">
-              Unreachable
+              <Trans>Unreachable</Trans>
             </Badge>
           )}
         </div>
@@ -119,7 +125,7 @@ function SourceItem({ source, onChanged }: { source: MarketplaceSource; onChange
             disabled={busy}
             onClick={remove}
             className="cursor-pointer"
-            aria-label={`Remove ${source.name}`}
+            aria-label={t`Remove ${source.name}`}
           >
             <IconTrash className="h-4 w-4" />
           </Button>
@@ -130,6 +136,7 @@ function SourceItem({ source, onChanged }: { source: MarketplaceSource; onChange
 }
 
 function AddSourceForm({ onChanged }: { onChanged: () => void }) {
+  const { t } = useLingui();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -143,7 +150,7 @@ function AddSourceForm({ onChanged }: { onChanged: () => void }) {
       setUrl("");
       onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add source");
+      toast.error(err instanceof Error ? err.message : t`Failed to add source`);
     } finally {
       setBusy(false);
     }
@@ -152,7 +159,7 @@ function AddSourceForm({ onChanged }: { onChanged: () => void }) {
   return (
     <div className="space-y-2 border-t border-border/60 pt-3">
       <Input
-        placeholder="Source name (e.g. Acme Internal)"
+        placeholder={t`Source name (e.g. Acme Internal)`}
         value={name}
         onChange={(e) => setName(e.target.value)}
         data-testid="marketplace-add-source-name"
@@ -170,7 +177,7 @@ function AddSourceForm({ onChanged }: { onChanged: () => void }) {
           className="cursor-pointer shrink-0"
           data-testid="marketplace-add-source-submit"
         >
-          Add
+          <Trans>Add</Trans>
         </Button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
 import { IconArrowUpCircle } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -67,7 +68,7 @@ export function PluginRow({
                 variant="outline"
                 className="border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px]"
               >
-                unsigned
+                <Trans>unsigned</Trans>
               </Badge>
             )}
           </div>
@@ -132,16 +133,19 @@ function PluginAutoUpdateRow({
   busy: boolean;
   onSetAutoUpdate: (plugin: PluginRecord, value: boolean | null) => void;
 }) {
+  const { t } = useLingui();
   const isOverridden = plugin.auto_update !== null && plugin.auto_update !== undefined;
   const effective = isOverridden ? (plugin.auto_update as boolean) : autoUpdateDefault;
 
   return (
     <div className="flex items-center justify-between gap-3 border-t border-border/50 pt-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>Auto-update</span>
+        <span>
+          <Trans>Auto-update</Trans>
+        </span>
         {isOverridden && (
           <Badge variant="outline" className="text-[11px]">
-            override
+            <Trans>override</Trans>
           </Badge>
         )}
       </div>
@@ -150,17 +154,17 @@ function PluginAutoUpdateRow({
           <button
             type="button"
             data-testid={`plugin-auto-update-reset-${plugin.id}`}
-            aria-label={`Reset auto-update for ${plugin.display_name} to the default`}
+            aria-label={t`Reset auto-update for ${plugin.display_name} to the default`}
             className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline cursor-pointer disabled:opacity-50"
             disabled={busy}
             onClick={() => onSetAutoUpdate(plugin, null)}
           >
-            Reset
+            <Trans>Reset</Trans>
           </button>
         )}
         <Switch
           data-testid={`plugin-auto-update-${plugin.id}`}
-          aria-label={`Auto-update for ${plugin.display_name}`}
+          aria-label={t`Auto-update for ${plugin.display_name}`}
           checked={effective}
           disabled={busy}
           onCheckedChange={(value) => onSetAutoUpdate(plugin, value)}
@@ -198,6 +202,7 @@ function PluginRowActions({
   onUninstall,
   onUpdate,
 }: PluginRowActionsProps) {
+  const { t } = useLingui();
   return (
     <div className="flex flex-wrap items-center gap-2 shrink-0">
       {update && onUpdate && (
@@ -210,7 +215,7 @@ function PluginRowActions({
           onClick={() => onUpdate(update)}
         >
           <IconArrowUpCircle className="h-4 w-4" />
-          {busy ? "Updating…" : `Update to v${update.version}`}
+          {busy ? t`Updating…` : t`Update to v${update.version}`}
         </Button>
       )}
       {canEnable && (
@@ -221,7 +226,7 @@ function PluginRowActions({
           disabled={busy}
           onClick={() => onEnable(plugin)}
         >
-          Enable
+          <Trans>Enable</Trans>
         </Button>
       )}
       {canDisable && (
@@ -232,7 +237,7 @@ function PluginRowActions({
           disabled={busy}
           onClick={() => onDisable(plugin)}
         >
-          Disable
+          <Trans>Disable</Trans>
         </Button>
       )}
       <Button
@@ -242,7 +247,7 @@ function PluginRowActions({
         disabled={busy}
         onClick={() => onUninstall(plugin)}
       >
-        Uninstall
+        <Trans>Uninstall</Trans>
       </Button>
     </div>
   );

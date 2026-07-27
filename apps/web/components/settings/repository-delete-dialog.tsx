@@ -1,5 +1,7 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
+import { plural } from "@lingui/core/macro";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -25,18 +27,22 @@ export function DeleteRepositoryDialog({
   activeSessionCount,
   deleteLoading,
 }: DeleteRepositoryDialogProps) {
+  const { t } = useLingui();
   const hasActiveSessions = activeSessionCount > 0;
-  const isOne = activeSessionCount === 1;
-  const sessionWord = isOne ? "session" : "sessions";
-  const pronoun = isOne ? "it" : "them";
   const description = hasActiveSessions
-    ? `This repository is used by ${activeSessionCount} active agent ${sessionWord}. Stop or finish ${pronoun} before deleting the repository.`
-    : "This will remove the repository and its scripts. This action cannot be undone.";
+    ? plural(activeSessionCount, {
+        one: "This repository is used by # active agent session. Stop or finish it before deleting the repository.",
+        other:
+          "This repository is used by # active agent sessions. Stop or finish them before deleting the repository.",
+      })
+    : t`This will remove the repository and its scripts. This action cannot be undone.`;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete repository</DialogTitle>
+          <DialogTitle>
+            <Trans>Delete repository</Trans>
+          </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -46,7 +52,7 @@ export function DeleteRepositoryDialog({
             className="cursor-pointer"
             onClick={() => onOpenChange(false)}
           >
-            {hasActiveSessions ? "Close" : "Cancel"}
+            {hasActiveSessions ? t`Close` : t`Cancel`}
           </Button>
           {!hasActiveSessions && (
             <Button
@@ -56,7 +62,7 @@ export function DeleteRepositoryDialog({
               onClick={onDelete}
               disabled={deleteLoading}
             >
-              Delete Repository
+              <Trans>Delete Repository</Trans>
             </Button>
           )}
         </DialogFooter>

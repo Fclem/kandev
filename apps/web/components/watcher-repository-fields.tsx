@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { Label } from "@kandev/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { useRepositories } from "@/hooks/domains/workspace/use-repositories";
@@ -86,11 +87,12 @@ export function WatcherRepositoryFields({
   // renders every matching item's text in the trigger ("mainmain") and React
   // warns on duplicate keys. Dedupe by name so each branch is one option.
   const uniqueBranchNames = Array.from(new Set(branches.map((b) => b.name)));
+  const { t } = useLingui();
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <PickSelect
-        label="Repository"
-        description="Optional — the repository the agent works in."
+        label={t`Repository`}
+        description={t`Optional — the repository the agent works in.`}
         value={repositoryId || NO_REPOSITORY}
         onChange={(v) => onRepositoryChange(resolveRepositoryId(v))}
         placeholder={NO_REPOSITORY_LABEL}
@@ -100,8 +102,8 @@ export function WatcherRepositoryFields({
         ]}
       />
       <PickSelect
-        label="Base Branch"
-        description="The base branch the agent starts from."
+        label={t`Base Branch`}
+        description={t`The base branch the agent starts from.`}
         value={baseBranch || DEFAULT_BRANCH}
         onChange={(v) => onBaseBranchChange(resolveBaseBranch(v))}
         placeholder={branchPlaceholder(repositoryId, branchesLoading)}

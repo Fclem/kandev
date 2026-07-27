@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { toast } from "sonner";
 import type { StoreApi } from "zustand";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
@@ -71,6 +72,7 @@ async function loadIfActive(
  * revoke its nav items/routes/slots immediately.
  */
 function useEnableDisableActions(upsertPlugin: (p: PluginRecord) => void) {
+  const { t } = useLingui();
   const storeApi = useAppStoreApi();
   const { resolvedTheme } = useTheme();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -83,7 +85,7 @@ function useEnableDisableActions(upsertPlugin: (p: PluginRecord) => void) {
       upsertPlugin(updated);
       await loadIfActive(updated, storeApi, resolvedTheme, false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Failed to enable ${plugin.display_name}`);
+      toast.error(err instanceof Error ? err.message : t`Failed to enable ${plugin.display_name}`);
     } finally {
       setBusyId(null);
     }
@@ -96,7 +98,7 @@ function useEnableDisableActions(upsertPlugin: (p: PluginRecord) => void) {
       unloadPlugin(plugin.id);
       upsertPlugin(withStatus(plugin, "disabled"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Failed to disable ${plugin.display_name}`);
+      toast.error(err instanceof Error ? err.message : t`Failed to disable ${plugin.display_name}`);
     } finally {
       setBusyId(null);
     }
@@ -112,6 +114,7 @@ function useEnableDisableActions(upsertPlugin: (p: PluginRecord) => void) {
  * clear the override and inherit the instance-wide default again.
  */
 function useAutoUpdateAction(upsertPlugin: (p: PluginRecord) => void) {
+  const { t } = useLingui();
   const [autoUpdateBusyId, setAutoUpdateBusyId] = useState<string | null>(null);
 
   const handleSetAutoUpdate = async (plugin: PluginRecord, value: boolean | null) => {
@@ -123,7 +126,7 @@ function useAutoUpdateAction(upsertPlugin: (p: PluginRecord) => void) {
       toast.error(
         err instanceof Error
           ? err.message
-          : `Failed to update auto-update for ${plugin.display_name}`,
+          : t`Failed to update auto-update for ${plugin.display_name}`,
       );
     } finally {
       setAutoUpdateBusyId(null);
@@ -134,6 +137,7 @@ function useAutoUpdateAction(upsertPlugin: (p: PluginRecord) => void) {
 }
 
 function useUninstallAction(removePlugin: (id: string) => void) {
+  const { t } = useLingui();
   const [uninstallTarget, setUninstallTarget] = useState<PluginRecord | null>(null);
   const [uninstallBusy, setUninstallBusy] = useState(false);
 
@@ -148,7 +152,7 @@ function useUninstallAction(removePlugin: (id: string) => void) {
       setUninstallTarget(null);
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : `Failed to uninstall ${target.display_name}`,
+        err instanceof Error ? err.message : t`Failed to uninstall ${target.display_name}`,
       );
     } finally {
       setUninstallBusy(false);
@@ -172,6 +176,7 @@ function useUninstallAction(removePlugin: (id: string) => void) {
  * the enable path.
  */
 function useInstallAction(upsertPlugin: (p: PluginRecord) => void) {
+  const { t } = useLingui();
   const storeApi = useAppStoreApi();
   const { resolvedTheme } = useTheme();
   const [installOpen, setInstallOpenState] = useState(false);
@@ -192,7 +197,7 @@ function useInstallAction(upsertPlugin: (p: PluginRecord) => void) {
     if (warning) {
       toast.warning(warning);
     } else {
-      toast.success(`${plugin.display_name} installed`);
+      toast.success(t`${plugin.display_name} installed`);
     }
     closeInstallDialog();
   };
@@ -204,7 +209,7 @@ function useInstallAction(upsertPlugin: (p: PluginRecord) => void) {
       const result = await install();
       await afterInstall(result);
     } catch (err) {
-      setInstallError(err instanceof Error ? err.message : "Failed to install plugin");
+      setInstallError(err instanceof Error ? err.message : t`Failed to install plugin`);
     } finally {
       setInstallBusy(false);
     }
@@ -221,7 +226,7 @@ function useInstallAction(upsertPlugin: (p: PluginRecord) => void) {
       const result = await installPluginFromUrl(url);
       await afterInstall(result);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to install plugin");
+      toast.error(err instanceof Error ? err.message : t`Failed to install plugin`);
     }
   };
 
@@ -251,6 +256,7 @@ function useInstallAction(upsertPlugin: (p: PluginRecord) => void) {
  * silent hot-load here is out of scope for the sync button itself.
  */
 function useSyncAction(setPlugins: (plugins: PluginRecord[]) => void) {
+  const { t } = useLingui();
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncErrors, setSyncErrors] = useState<SyncError[]>([]);
 
@@ -263,7 +269,7 @@ function useSyncAction(setPlugins: (plugins: PluginRecord[]) => void) {
       setSyncErrors(result.errors ?? []);
       toast.success(summarizeSyncResult(result));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to sync plugins");
+      toast.error(err instanceof Error ? err.message : t`Failed to sync plugins`);
     } finally {
       setSyncBusy(false);
     }

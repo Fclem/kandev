@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useAppStore } from "@/components/state-provider";
 import { useEditors } from "@/hooks/domains/settings/use-editors";
 import { createEditor, deleteEditor, updateEditor, updateUserSettings } from "@/lib/api";
@@ -109,6 +110,7 @@ export function useLspConfigActions(
   setLspConfigStrings: (updater: (prev: Record<string, string>) => Record<string, string>) => void,
   setLspConfigErrors: (updater: (prev: Record<string, string>) => Record<string, string>) => void,
 ) {
+  const { t } = useLingui();
   const clearLspConfigError = useCallback(
     (langId: string) => {
       setLspConfigErrors((prev) => {
@@ -137,15 +139,15 @@ export function useLspConfigActions(
       try {
         const parsed = JSON.parse(value);
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          setLspConfigErrors((prev) => ({ ...prev, [langId]: "Must be a JSON object" }));
+          setLspConfigErrors((prev) => ({ ...prev, [langId]: t`Must be a JSON object` }));
         } else {
           clearLspConfigError(langId);
         }
       } catch {
-        setLspConfigErrors((prev) => ({ ...prev, [langId]: "Invalid JSON" }));
+        setLspConfigErrors((prev) => ({ ...prev, [langId]: t`Invalid JSON` }));
       }
     },
-    [setLspConfigStrings, setLspConfigErrors, clearLspConfigError],
+    [setLspConfigStrings, setLspConfigErrors, clearLspConfigError, t],
   );
 
   return { updateLspConfigString };
@@ -184,7 +186,7 @@ export function buildDefaultEditorOptions(
         <span className="truncate">{editor.name}</span>
         {editor.kind === "built_in" ? (
           <Badge variant={editor.installed ? "secondary" : "outline"} className="ml-auto">
-            {editor.installed ? "Installed" : "Not installed"}
+            {editor.installed ? <Trans>Installed</Trans> : <Trans>Not installed</Trans>}
           </Badge>
         ) : (
           <Badge variant="secondary" className="ml-auto">

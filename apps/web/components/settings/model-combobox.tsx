@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { IconSelector } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
@@ -33,9 +34,10 @@ export function ModelCombobox({
   onChange,
   models,
   currentModelId,
-  placeholder = "Select a model",
+  placeholder,
   disabled,
 }: ModelComboboxProps) {
+  const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const effectiveValue = value || currentModelId || "";
   const selectedModel = models.find((m) => m.id === effectiveValue);
@@ -60,7 +62,7 @@ export function ModelCombobox({
             <span className="flex items-center gap-2 truncate">
               {selectedModel.name}
               {selectedModel.id === currentModelId && (
-                <span className="text-muted-foreground">(default)</span>
+                <span className="text-muted-foreground">{t`(default)`}</span>
               )}
               {copilotUsage(selectedModel) && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">
@@ -69,7 +71,7 @@ export function ModelCombobox({
               )}
             </span>
           ) : (
-            <span className="text-muted-foreground">{placeholder}</span>
+            <span className="text-muted-foreground">{placeholder ?? t`Select a model`}</span>
           )}
           <IconSelector className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -80,12 +82,12 @@ export function ModelCombobox({
         onWheel={(e) => e.stopPropagation()}
       >
         <Command>
-          <CommandInput placeholder="Search models..." />
+          <CommandInput placeholder={t`Search models...`} />
           <CommandList
             className="max-h-[min(60vh,24rem)] overflow-y-auto overscroll-contain"
             onWheel={(e) => e.stopPropagation()}
           >
-            <CommandEmpty>No model found.</CommandEmpty>
+            <CommandEmpty>{t`No model found.`}</CommandEmpty>
             <CommandGroup>
               {models.map((model) => {
                 const usage = copilotUsage(model);
@@ -104,7 +106,7 @@ export function ModelCombobox({
                       <div className="flex items-center gap-2 truncate">
                         <span className="truncate">{model.name}</span>
                         {model.id === currentModelId && (
-                          <span className="text-muted-foreground text-xs">(default)</span>
+                          <span className="text-muted-foreground text-xs">{t`(default)`}</span>
                         )}
                       </div>
                       {model.description && model.description !== model.name && (

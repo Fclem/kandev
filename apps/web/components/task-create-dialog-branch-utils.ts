@@ -6,6 +6,8 @@
  * directly in `task-create-dialog-branch-utils.test.ts`.
  */
 
+import { t } from "@lingui/core/macro";
+
 /**
  * Decide the muted text shown before the branch value to qualify intent.
  *   "current: "        — local exec, picked branch matches the current checkout
@@ -50,15 +52,15 @@ export function computeBranchPrefix({
  */
 export function computeBranchTooltip(branchPrefix: string | undefined): string {
   if (branchPrefix === "current: ") {
-    return "Your repository's current checkout. The agent runs against it as-is, no git operations.";
+    return t`Your repository's current checkout. The agent runs against it as-is, no git operations.`;
   }
   if (branchPrefix === "will switch to: ") {
-    return "The backend will run `git checkout` to switch your repository to this branch before the agent starts.";
+    return t`The backend will run \`git checkout\` to switch your repository to this branch before the agent starts.`;
   }
   if (branchPrefix === "from: ") {
-    return "Base branch. A new branch (or worktree) is forked from here and the agent runs there.";
+    return t`Base branch. A new branch (or worktree) is forked from here and the agent runs there.`;
   }
-  return "Branch the agent will run against.";
+  return t`Branch the agent will run against.`;
 }
 
 export function computeBranchDisabledReason({
@@ -73,10 +75,10 @@ export function computeBranchDisabledReason({
   optionCount: number;
 }): string | undefined {
   if (branchLocked) {
-    return "The local executor uses your repository's current checkout, so the branch can't change here. Toggle 'Fork a new branch' to pick a different base.";
+    return t`The local executor uses your repository's current checkout, so the branch can't change here. Toggle 'Fork a new branch' to pick a different base.`;
   }
-  if (!hasRepo) return "Select a repository first.";
-  if (branchesLoading) return "Loading branches…";
-  if (optionCount === 0) return "No branches available for this repository.";
+  if (!hasRepo) return t`Select a repository first.`;
+  if (branchesLoading) return t`Loading branches…`;
+  if (optionCount === 0) return t`No branches available for this repository.`;
   return undefined;
 }

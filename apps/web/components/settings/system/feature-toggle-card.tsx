@@ -1,5 +1,7 @@
 "use client";
 
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -23,6 +25,7 @@ export function FeatureToggleCard({
   onChange,
   onReset,
 }: FeatureToggleCardProps) {
+  const { t } = useLingui();
   const disabled = saving || flag.env_locked || !flag.mutable;
   return (
     <SettingsCard isDirty={isDirty} data-testid={`feature-toggle-${flag.key}`}>
@@ -39,7 +42,7 @@ export function FeatureToggleCard({
           data-settings-dirty={isDirty}
           disabled={disabled}
           onCheckedChange={onChange}
-          aria-label={`Toggle ${flag.label}`}
+          aria-label={t`Toggle ${flag.label}`}
           className="cursor-pointer disabled:cursor-not-allowed"
         />
       </CardHeader>
@@ -57,12 +60,12 @@ export function FeatureToggleCard({
             className="cursor-pointer disabled:cursor-not-allowed"
           >
             <IconRefresh className="mr-1 h-3.5 w-3.5" />
-            Use default
+            <Trans>Use default</Trans>
           </Button>
           {flag.env_locked && (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <IconLock className="h-3.5 w-3.5" />
-              Controlled by launch environment
+              <Trans>Controlled by launch environment</Trans>
             </span>
           )}
         </div>
@@ -77,29 +80,44 @@ function FlagBadges({ flag }: { flag: RuntimeFlagState }) {
       {flag.stability === "experimental" && (
         <Badge variant="secondary" className="gap-1">
           <IconFlask className="h-3 w-3" />
-          Experimental
+          <Trans>Experimental</Trans>
         </Badge>
       )}
-      {flag.kind === "debug" && <Badge variant="outline">Debug</Badge>}
+      {flag.kind === "debug" && (
+        <Badge variant="outline">
+          <Trans>Debug</Trans>
+        </Badge>
+      )}
     </>
   );
 }
 
 function FlagMetadata({ flag }: { flag: RuntimeFlagState }) {
+  const source = sourceLabel(flag);
   return (
     <div className="flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center">
-      <span>Source: {sourceLabel(flag)}</span>
-      <span>Env: {flag.env_var}</span>
-      {flag.restart_required && <span>Requires restart</span>}
+      <span>
+        <Trans>Source: {source}</Trans>
+      </span>
+      <span>
+        <Trans>Env: {flag.env_var}</Trans>
+      </span>
+      {flag.restart_required && (
+        <span>
+          <Trans>Requires restart</Trans>
+        </span>
+      )}
       {flag.requires_restart_to_apply && (
-        <span className="font-medium text-amber-700">Pending restart</span>
+        <span className="font-medium text-amber-700">
+          <Trans>Pending restart</Trans>
+        </span>
       )}
     </div>
   );
 }
 
 function sourceLabel(flag: RuntimeFlagState): string {
-  if (flag.source === "env") return "Environment";
-  if (flag.source === "override") return "Saved override";
-  return "Default";
+  if (flag.source === "env") return t`Environment`;
+  if (flag.source === "override") return t`Saved override`;
+  return t`Default`;
 }

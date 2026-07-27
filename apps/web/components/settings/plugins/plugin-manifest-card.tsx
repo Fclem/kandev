@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -12,34 +13,37 @@ import type { PluginRecord } from "@/lib/types/plugins";
  * rows don't surface.
  */
 export function PluginManifestCard({ plugin }: { plugin: PluginRecord }) {
+  const { t } = useLingui();
   const [showRaw, setShowRaw] = useState(false);
 
   return (
     <Card data-testid="plugin-manifest-card">
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Manifest</CardTitle>
+        <CardTitle className="text-base">
+          <Trans>Manifest</Trans>
+        </CardTitle>
         <Button
           variant="ghost"
           size="sm"
           className="cursor-pointer"
           onClick={() => setShowRaw((v) => !v)}
         >
-          {showRaw ? "Hide raw" : "View raw"}
+          {showRaw ? <Trans>Hide raw</Trans> : <Trans>View raw</Trans>}
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <ManifestRow label="ID" value={plugin.id} mono />
-          <ManifestRow label="Version" value={plugin.version} mono />
-          <ManifestRow label="API version" value={String(plugin.api_version)} />
-          <ManifestRow label="Author" value={plugin.author || "—"} />
-          <ManifestRow label="Signed" value={plugin.signed ? "yes" : "no"} />
-          <ManifestRow label="Installed" value={formatInstalledAt(plugin.installed_at)} />
+          <ManifestRow label={t`ID`} value={plugin.id} mono />
+          <ManifestRow label={t`Version`} value={plugin.version} mono />
+          <ManifestRow label={t`API version`} value={String(plugin.api_version)} />
+          <ManifestRow label={t`Author`} value={plugin.author || "—"} />
+          <ManifestRow label={t`Signed`} value={plugin.signed ? t`yes` : t`no`} />
+          <ManifestRow label={t`Installed`} value={formatInstalledAt(plugin.installed_at)} />
         </div>
 
         <CapabilityBadges plugin={plugin} />
         <DeclarationList
-          label="Webhooks"
+          label={t`Webhooks`}
           items={(plugin.webhooks ?? []).map((w) => ({ key: w.key, text: w.key }))}
         />
 
@@ -77,7 +81,9 @@ function CapabilityBadges({ plugin }: { plugin: PluginRecord }) {
   if (badges.length === 0) return null;
   return (
     <div className="space-y-1.5">
-      <div className="text-sm text-muted-foreground">Capabilities</div>
+      <div className="text-sm text-muted-foreground">
+        <Trans>Capabilities</Trans>
+      </div>
       <div className="flex flex-wrap gap-1">
         {badges.map((badge) => (
           <Badge key={badge} variant="secondary" className="text-[11px] font-mono">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ComponentType } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   IconArrowsShuffle,
   IconBolt,
@@ -41,13 +42,13 @@ const INTEGRATIONS: Array<{ slug: string; label: string; icon: IntegrationIcon }
 
 const ACTIVE_WORKSPACE_LABEL = (
   <span className="shrink-0 rounded-full border border-primary/35 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
-    Active
+    <Trans>Active</Trans>
   </span>
 );
 
 const ENABLED_LABEL = (
   <span className="shrink-0 rounded border border-emerald-500/30 bg-emerald-500/10 px-1 py-0.5 text-[9px] font-medium leading-none text-emerald-600 dark:text-emerald-400">
-    Enabled
+    <Trans>Enabled</Trans>
   </span>
 );
 
@@ -122,6 +123,7 @@ function activeWorkspaceFirst<T extends { id: string }>(workspaces: T[], activeI
 }
 
 export function WorkspacesGroup({ pathname, expanded, onToggle }: WorkspacesGroupProps) {
+  const { t } = useLingui();
   const workspaces = useAppStore((s) => s.workspaces.items);
   const storeActiveWorkspaceId = useAppStore((s) => s.workspaces.activeId);
   const routeWorkspaceId =
@@ -143,7 +145,7 @@ export function WorkspacesGroup({ pathname, expanded, onToggle }: WorkspacesGrou
 
   return (
     <SettingsGroup
-      label="Workspaces"
+      label={t`Workspaces`}
       icon={IconFolder}
       href={ROOT_HREF}
       isActive={pathname === ROOT_HREF}
@@ -172,20 +174,20 @@ export function WorkspacesGroup({ pathname, expanded, onToggle }: WorkspacesGrou
           >
             <SettingsLeaf
               href={repositoriesPath}
-              label="Repositories"
+              label={t`Repositories`}
               icon={IconGitBranch}
               isActive={pathname === repositoriesPath}
               depth={2}
             />
             <SettingsLeaf
               href={workflowsPath}
-              label="Workflows"
+              label={t`Workflows`}
               icon={IconArrowsShuffle}
               isActive={pathname === workflowsPath}
               depth={2}
             />
             <SettingsGroup
-              label="Integrations"
+              label={t`Integrations`}
               icon={IconPlugConnected}
               href={integrationsPath}
               isActive={pathname === integrationsPath}
@@ -200,7 +202,7 @@ export function WorkspacesGroup({ pathname, expanded, onToggle }: WorkspacesGrou
             </SettingsGroup>
             <SettingsLeaf
               href={automationsPath}
-              label="Automations"
+              label={t`Automations`}
               icon={IconBolt}
               isActive={pathname === automationsPath}
               depth={2}

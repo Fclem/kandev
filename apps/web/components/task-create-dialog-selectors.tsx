@@ -5,6 +5,8 @@ import { useEffect, useLayoutEffect, useRef, useState, memo, useCallback, useMem
 import { Textarea } from "@kandev/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconPaperclip } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Combobox } from "./combobox";
 import { scoreBranch } from "@/lib/utils/branch-filter";
 import { BranchRefreshButton } from "./branch-refresh-button";
@@ -90,6 +92,7 @@ export const RepositorySelector = memo(function RepositorySelector({
   emptyMessage,
   triggerClassName,
 }: RepositorySelectorProps) {
+  const { t } = useLingui();
   return (
     <Combobox
       options={options}
@@ -99,7 +102,7 @@ export const RepositorySelector = memo(function RepositorySelector({
       searchPlaceholder={searchPlaceholder}
       emptyMessage={emptyMessage}
       disabled={disabled}
-      dropdownLabel="Repository"
+      dropdownLabel={t`Repository`}
       className={disabled ? undefined : CURSOR_POINTER_CLASS}
       triggerClassName={triggerClassName}
       testId="repository-selector"
@@ -145,6 +148,7 @@ export const BranchSelector = memo(function BranchSelector({
   fetchError,
   loading,
 }: BranchSelectorProps) {
+  const { t } = useLingui();
   const headerAction = onRefresh ? (
     <BranchRefreshButton
       onRefresh={onRefresh}
@@ -162,7 +166,7 @@ export const BranchSelector = memo(function BranchSelector({
       searchPlaceholder={searchPlaceholder}
       emptyMessage={emptyMessage}
       disabled={disabled}
-      dropdownLabel="Base Branch"
+      dropdownLabel={t`Base Branch`}
       className={disabled ? undefined : CURSOR_POINTER_CLASS}
       triggerClassName={triggerClassName}
       testId="branch-selector"
@@ -192,16 +196,17 @@ export const AgentSelector = memo(function AgentSelector({
   triggerClassName,
   popoverPortal,
 }: AgentSelectorProps) {
+  const { t } = useLingui();
   return (
     <Combobox
       options={options}
       value={value}
       onValueChange={onValueChange}
       placeholder={placeholder}
-      searchPlaceholder="Search agents..."
-      emptyMessage="No agent found."
+      searchPlaceholder={t`Search agents...`}
+      emptyMessage={t`No agent found.`}
       disabled={disabled}
-      dropdownLabel="Agent Profile"
+      dropdownLabel={t`Agent Profile`}
       className={disabled ? undefined : CURSOR_POINTER_CLASS}
       triggerClassName={cn("min-w-0", triggerClassName)}
       popoverPortal={popoverPortal}
@@ -229,15 +234,16 @@ export const ExecutorSelector = memo(function ExecutorSelector({
   triggerClassName,
   popoverPortal,
 }: ExecutorSelectorProps) {
+  const { t } = useLingui();
   return (
     <Combobox
       options={options}
       value={value}
       onValueChange={onValueChange}
       placeholder={placeholder}
-      emptyMessage="No executor found."
+      emptyMessage={t`No executor found.`}
       disabled={disabled}
-      dropdownLabel="Executor"
+      dropdownLabel={t`Executor`}
       className={disabled ? undefined : CURSOR_POINTER_CLASS}
       triggerClassName={triggerClassName}
       popoverPortal={popoverPortal}
@@ -265,16 +271,17 @@ export const ExecutorProfileSelector = memo(function ExecutorProfileSelector({
   triggerClassName,
   popoverPortal,
 }: ExecutorProfileSelectorProps) {
+  const { t } = useLingui();
   return (
     <Combobox
       options={options}
       value={value}
       onValueChange={onValueChange}
       placeholder={placeholder}
-      searchPlaceholder="Search profiles..."
-      emptyMessage="No profile found."
+      searchPlaceholder={t`Search profiles...`}
+      emptyMessage={t`No profile found.`}
       disabled={disabled}
-      dropdownLabel="Executor Profile"
+      dropdownLabel={t`Executor Profile`}
       className={disabled ? undefined : CURSOR_POINTER_CLASS}
       triggerClassName={cn("min-w-0", triggerClassName)}
       popoverPortal={popoverPortal}
@@ -294,6 +301,7 @@ export const InlineTaskName = memo(function InlineTaskName({
   onChange,
   autoFocus,
 }: InlineTaskNameProps) {
+  const { t } = useLingui();
   const inputRef = useRef<HTMLInputElement>(null);
   const hasFocusedRef = useRef(false);
 
@@ -311,7 +319,7 @@ export const InlineTaskName = memo(function InlineTaskName({
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      placeholder="Task name"
+      placeholder={t`Task name`}
       data-testid="task-title-input"
       className="w-full min-w-0 max-w-full border border-input bg-input/20 dark:bg-input/30 text-sm font-medium rounded-md px-3 py-2 placeholder:text-muted-foreground/70 outline-none focus-visible:border-ring transition-colors"
     />
@@ -470,12 +478,13 @@ function toContextItems(
   attachments: FileAttachment[],
   onRemove: (id: string) => void,
 ): ContextItem[] {
-  return attachments.map((att) =>
-    att.isImage
+  return attachments.map((att) => {
+    const attachmentSize = formatBytes(att.size);
+    return att.isImage
       ? ({
           kind: "image" as const,
           id: `image:${att.id}`,
-          label: `Image (${formatBytes(att.size)})`,
+          label: t`Image (${attachmentSize})`,
           attachment: att,
           onRemove: () => onRemove(att.id),
         } as ImageContextItem)
@@ -485,18 +494,19 @@ function toContextItems(
           label: att.fileName,
           attachment: att,
           onRemove: () => onRemove(att.id),
-        } as FileAttachmentContextItem),
-  );
+        } as FileAttachmentContextItem);
+  });
 }
 
 function AttachButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  const { t } = useLingui();
   return (
     <div className="flex items-center px-1 pb-1">
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
-            aria-label="Attach files"
+            aria-label={t`Attach files`}
             className={`h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/40 hover:text-foreground ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
             onClick={onClick}
             disabled={disabled}
@@ -504,7 +514,9 @@ function AttachButton({ onClick, disabled }: { onClick: () => void; disabled?: b
             <IconPaperclip className="h-4 w-4" />
           </button>
         </TooltipTrigger>
-        <TooltipContent>Attach files</TooltipContent>
+        <TooltipContent>
+          <Trans>Attach files</Trans>
+        </TooltipContent>
       </Tooltip>
     </div>
   );
@@ -730,7 +742,9 @@ function DraggingOverlay({ isDragging }: { isDragging: boolean }) {
   if (!isDragging) return null;
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-md pointer-events-none">
-      <span className="text-sm text-primary font-medium">Drop files here</span>
+      <span className="text-sm text-primary font-medium">
+        <Trans>Drop files here</Trans>
+      </span>
     </div>
   );
 }
@@ -751,6 +765,7 @@ export const TaskFormInputs = memo(function TaskFormInputs({
   linearImport,
   onVoiceAutoSend,
 }: TaskFormInputsProps) {
+  const { t } = useLingui();
   const { attachments, isDragging, setIsDragging, addFiles, handleRemoveAttachment } =
     useFileAttachments();
   const { handlePaste, handleDragOver, handleDragLeave, handleDrop } = useAttachmentHandlers(
@@ -797,8 +812,8 @@ export const TaskFormInputs = memo(function TaskFormInputs({
           placeholder={
             placeholder ??
             (isSessionMode
-              ? "Describe what you want the agent to do... (@ to insert a saved prompt)"
-              : "Write a prompt for the agent... (@ to insert a saved prompt)")
+              ? t`Describe what you want the agent to do... (@ to insert a saved prompt)`
+              : t`Write a prompt for the agent... (@ to insert a saved prompt)`)
           }
           value={description}
           onChange={handleChange}

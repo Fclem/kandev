@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -42,13 +43,14 @@ function useDialogHandlers({
   onOpenChange,
   reset,
 }: DialogHandlersParams) {
+  const { t } = useLingui();
   const handleSubmit = async () => {
     if (!displayName.trim()) {
-      setError("Display name is required");
+      setError(t`Display name is required`);
       return;
     }
     if (!command.trim()) {
-      setError("Command is required");
+      setError(t`Command is required`);
       return;
     }
     setError(null);
@@ -62,7 +64,7 @@ function useDialogHandlers({
       reset();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create agent");
+      setError(err instanceof Error ? err.message : t`Failed to create agent`);
     } finally {
       setLoading(false);
     }
@@ -77,6 +79,7 @@ function useDialogHandlers({
 }
 
 export function AddTUIAgentDialog({ open, onOpenChange, onSubmit }: AddTUIAgentDialogProps) {
+  const { t } = useLingui();
   const [displayName, setDisplayName] = useState("");
   const [model, setModel] = useState("");
   const [command, setCommand] = useState("");
@@ -106,36 +109,46 @@ export function AddTUIAgentDialog({ open, onOpenChange, onSubmit }: AddTUIAgentD
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add TUI Agent</DialogTitle>
+          <DialogTitle>
+            <Trans>Add TUI Agent</Trans>
+          </DialogTitle>
           <DialogDescription>
-            Register a CLI tool as a TUI agent. It will appear in the agent list with a default
-            passthrough profile.
+            <Trans>
+              Register a CLI tool as a TUI agent. It will appear in the agent list with a default
+              passthrough profile.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="tui-display-name">Display Name</Label>
+            <Label htmlFor="tui-display-name">
+              <Trans>Display Name</Trans>
+            </Label>
             <Input
               id="tui-display-name"
-              placeholder="e.g. superclaude"
+              placeholder={t`e.g. superclaude`}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tui-model">Model</Label>
+            <Label htmlFor="tui-model">
+              <Trans>Model</Trans>
+            </Label>
             <Input
               id="tui-model"
-              placeholder="e.g. best"
+              placeholder={t`e.g. best`}
               value={model}
               onChange={(e) => setModel(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Profile label shown in the agent selector dropdown
+              <Trans>Profile label shown in the agent selector dropdown</Trans>
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tui-command">Command</Label>
+            <Label htmlFor="tui-command">
+              <Trans>Command</Trans>
+            </Label>
             <Input
               id="tui-command"
               placeholder="e.g. superclaude --yolo --model {{model}}"
@@ -143,19 +156,21 @@ export function AddTUIAgentDialog({ open, onOpenChange, onSubmit }: AddTUIAgentD
               onChange={(e) => setCommand(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Binary name looked up on PATH. Use{" "}
-              <code className="rounded bg-muted px-1 py-0.5">{"{{model}}"}</code> to insert the
-              model value.
+              <Trans>
+                Binary name looked up on PATH. Use{" "}
+                <code className="rounded bg-muted px-1 py-0.5">{"{{model}}"}</code> to insert the
+                model value.
+              </Trans>
             </p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button onClick={handleSubmit} disabled={loading} className="cursor-pointer">
-            {loading ? "Creating..." : "Create"}
+            {loading ? t`Creating...` : t`Create`}
           </Button>
         </DialogFooter>
       </DialogContent>

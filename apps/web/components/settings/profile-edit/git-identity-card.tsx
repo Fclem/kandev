@@ -1,5 +1,6 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@kandev/ui/card";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
@@ -17,26 +18,33 @@ export function GitIdentityCard({
   onNameChange,
   onEmailChange,
 }: GitIdentityCardProps) {
+  const { t } = useLingui();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Git Identity</CardTitle>
+        <CardTitle>
+          <Trans>Git Identity</Trans>
+        </CardTitle>
         <CardDescription>
-          Optional author identity applied in remote executor environments.
+          <Trans>Optional author identity applied in remote executor environments.</Trans>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="git-user-name">Git User Name</Label>
+          <Label htmlFor="git-user-name">
+            <Trans>Git User Name</Trans>
+          </Label>
           <Input
             id="git-user-name"
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
-            placeholder="Jane Developer"
+            placeholder={t`Jane Developer`}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="git-user-email">Git User Email</Label>
+          <Label htmlFor="git-user-email">
+            <Trans>Git User Email</Trans>
+          </Label>
           <Input
             id="git-user-email"
             value={email}

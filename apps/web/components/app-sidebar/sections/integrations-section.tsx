@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "@/components/routing/app-link";
+import { useLingui } from "@lingui/react/macro";
 import { usePathname } from "@/lib/routing/client-router";
 import type { ComponentType } from "react";
 import {
@@ -92,6 +93,7 @@ function IntegrationRow({ href, label, icon: Icon, active, testId }: Integration
 }
 
 export function IntegrationsSection({ collapsed }: IntegrationsSectionProps) {
+  const { t } = useLingui();
   const pathname = usePathname();
   const links = useConfiguredIntegrationLinks();
   // Plugin-registered nav items that target this section
@@ -109,7 +111,7 @@ export function IntegrationsSection({ collapsed }: IntegrationsSectionProps) {
   return (
     <AppSidebarSection
       id={APP_SIDEBAR_SECTION_IDS.integrations}
-      label="Integrations"
+      label={t`Integrations`}
       collapsed={collapsed}
       icon={IconPlugConnected}
       headerAction={links.length > 0 ? <IntegrationHeaderShortcuts links={links} /> : undefined}

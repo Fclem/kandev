@@ -11,6 +11,9 @@ import {
   IconGitPullRequest,
   IconLoader2,
 } from "@tabler/icons-react";
+import { msg } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import type { MessageDescriptor } from "@lingui/core";
 import { Button } from "@kandev/ui/button";
 import {
   DropdownMenu,
@@ -58,7 +61,7 @@ type ActionKey = "commit" | "push" | "pr" | "pull" | "rebase" | "merge" | "force
 
 type ActionDef = {
   key: ActionKey;
-  label: string;
+  label: MessageDescriptor;
   icon: ReactNode;
   /** Returns true when this action should be disabled for a given repo. */
   disabledFor: (status: PerRepoStatus | undefined) => boolean;
@@ -68,49 +71,49 @@ type ActionDef = {
 const ACTION_DEFS: ActionDef[] = [
   {
     key: "commit",
-    label: "Commit",
+    label: msg`Commit`,
     icon: <IconGitCommit className={ICON_CLASS} />,
     disabledFor: (s) => !((s?.hasStaged ?? false) || (s?.hasUnstaged ?? false)),
     invoke: (repo, cb) => cb.onCommit(repo),
   },
   {
     key: "push",
-    label: "Push",
+    label: msg`Push`,
     icon: <IconCloudUpload className={ICON_CLASS} />,
     disabledFor: (s) => (s?.ahead ?? 0) === 0,
     invoke: (repo, cb) => cb.onPush(false, repo),
   },
   {
     key: "pr",
-    label: "Create PR",
+    label: msg`Create PR`,
     icon: <IconGitPullRequest className={ICON_CLASS} />,
     disabledFor: () => false,
     invoke: (repo, cb) => cb.onPR(repo),
   },
   {
     key: "pull",
-    label: "Pull",
+    label: msg`Pull`,
     icon: <IconCloudDownload className={ICON_CLASS} />,
     disabledFor: () => false,
     invoke: (repo, cb) => cb.onPull(repo),
   },
   {
     key: "rebase",
-    label: "Rebase",
+    label: msg`Rebase`,
     icon: <IconGitCherryPick className={ICON_CLASS} />,
     disabledFor: () => false,
     invoke: (repo, cb) => cb.onRebase(repo),
   },
   {
     key: "merge",
-    label: "Merge",
+    label: msg`Merge`,
     icon: <IconGitMerge className={ICON_CLASS} />,
     disabledFor: () => false,
     invoke: (repo, cb) => cb.onMerge(repo),
   },
   {
     key: "force-push",
-    label: "Force Push",
+    label: msg`Force Push`,
     icon: <IconAlertTriangle className={ICON_CLASS} />,
     disabledFor: (s) => (s?.ahead ?? 0) === 0,
     invoke: (repo, cb) => cb.onPush(true, repo),
@@ -138,19 +141,20 @@ function PerRepoActionSub({
   repoDisplayName: (repositoryName: string) => string | undefined;
   callbacks: PerRepoCallbacks;
 }) {
+  const { t } = useLingui();
   const statusByName = new Map(perRepoStatus.map((s) => [s.repository_name, s]));
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger className={ITEM_CLASS} disabled={disabled}>
         {action.icon}
-        <span className="flex-1">{action.label}</span>
+        <span className="flex-1">{t(action.label)}</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-52">
         {repoNames.map((repo) => {
           const status = statusByName.get(repo);
           const ahead = status?.ahead ?? 0;
           const behind = status?.behind ?? 0;
-          const label = repoDisplayName(repo) || repo || "Repository";
+          const label = repoDisplayName(repo) || repo || t`Repository`;
           return (
             <DropdownMenuItem
               key={repo || "__no_repo__"}
@@ -197,7 +201,7 @@ function MultiRepoVcsDropdown({
   return (
     <DropdownMenuContent align="end" className="w-56">
       <DropdownMenuLabel className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">
-        Pick action, then repo
+        <Trans>Pick action, then repo</Trans>
       </DropdownMenuLabel>
       {ACTION_DEFS.map((action, idx) => (
         <div key={action.key}>
@@ -224,7 +228,7 @@ function MultiRepoVcsDropdown({
 function RebaseMergeFootnote({ target, type }: { target: string; type: "onto" | "from" }) {
   return (
     <div className="px-3 py-0.5 text-[10px] text-muted-foreground/60">
-      {type} {target}
+      {type === "onto" ? <Trans>onto {target}</Trans> : <Trans>from {target}</Trans>}
     </div>
   );
 }
@@ -256,6 +260,7 @@ export function MultiRepoVcsButton({
   repoDisplayName: (repositoryName: string) => string | undefined;
   callbacks: PerRepoCallbacks;
 }) {
+  const primaryLabel = primaryButtonConfig.label;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -294,7 +299,9 @@ export function MultiRepoVcsButton({
           </DropdownMenu>
         </span>
       </TooltipTrigger>
-      <TooltipContent>Pick a repository for {primaryButtonConfig.label}</TooltipContent>
+      <TooltipContent>
+        <Trans>Pick a repository for {primaryLabel}</Trans>
+      </TooltipContent>
     </Tooltip>
   );
 }

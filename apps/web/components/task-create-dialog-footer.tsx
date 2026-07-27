@@ -8,6 +8,8 @@ import {
   IconChevronDown,
   IconPlus,
 } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@kandev/ui/button";
 import { DialogClose } from "@kandev/ui/dialog";
 import {
@@ -37,10 +39,10 @@ function UpdateButton({ isCreatingTask, hasTitle, onUpdate }: UpdateButtonProps)
       {isCreatingTask ? (
         <>
           <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-          Updating...
+          <Trans>Updating...</Trans>
         </>
       ) : (
-        "Update"
+        <Trans>Update</Trans>
       )}
     </Button>
   );
@@ -63,7 +65,8 @@ function StartTaskSplitButton({
   onAltAction,
   onPlanModeAction,
 }: StartTaskSplitButtonProps) {
-  const altLabel = isEditMode ? "Update task" : "Create only";
+  const { t } = useLingui();
+  const altLabel = isEditMode ? t`Update task` : t`Create only`;
 
   return (
     <div className="flex flex-col w-full sm:w-auto gap-2 sm:gap-0">
@@ -80,7 +83,7 @@ function StartTaskSplitButton({
           ) : (
             <IconSend className="h-3.5 w-3.5" />
           )}
-          {isCreatingTask ? "Starting..." : "Start task"}
+          {isCreatingTask ? t`Starting...` : t`Start task`}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -102,7 +105,7 @@ function StartTaskSplitButton({
                 data-testid="submit-plan-mode"
               >
                 <IconFileInvoice className="h-3.5 w-3.5 mr-1.5" />
-                Start task in plan mode
+                <Trans>Start task in plan mode</Trans>
               </DropdownMenuItem>
             )}
             <DropdownMenuItem
@@ -111,7 +114,7 @@ function StartTaskSplitButton({
               data-testid="submit-create-without-agent"
             >
               <IconPlus className="h-3.5 w-3.5 mr-1.5" />
-              {isEditMode ? "Update task" : "Create without starting agent"}
+              {isEditMode ? t`Update task` : t`Create without starting agent`}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -127,7 +130,7 @@ function StartTaskSplitButton({
           data-testid="mobile-plan-mode"
         >
           <IconFileInvoice className="h-3.5 w-3.5" />
-          Plan mode
+          <Trans>Plan mode</Trans>
         </Button>
       )}
       <Button
@@ -163,6 +166,7 @@ function DefaultSubmitButton({
   hasDescription,
   disabled,
 }: DefaultSubmitButtonProps) {
+  const { t } = useLingui();
   const planModeStyle =
     isCreateMode && !hasDescription
       ? "bg-blue-600 border-blue-500 text-white hover:bg-blue-700 hover:text-white"
@@ -182,20 +186,20 @@ function DefaultSubmitButton({
           return (
             <>
               <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-              {isEditMode ? "Updating..." : "Starting..."}
+              {isEditMode ? t`Updating...` : t`Starting...`}
             </>
           );
         }
-        if (isSessionMode) return "Create Session";
+        if (isSessionMode) return t`Create Session`;
         if (isCreateMode) {
           return (
             <>
               <IconFileInvoice className="h-3.5 w-3.5" />
-              Start Plan Mode
+              <Trans>Start Plan Mode</Trans>
             </>
           );
         }
-        return "Update task";
+        return t`Update task`;
       })()}
     </Button>
   );
@@ -262,17 +266,17 @@ function computeBaseDisabled(props: TaskCreateDialogFooterProps) {
 
 export type ButtonKind = "update" | "start-task" | "default";
 
-export const REASON_TITLE = "Add a task title";
-export const REASON_REPO = "Select a repository";
-export const REASON_BRANCH = "Select a branch";
-export const REASON_WORKSPACE = "Select a workspace";
-export const REASON_WORKFLOW = "Select a workflow";
-export const REASON_AGENT = "Select an agent";
-export const REASON_DESCRIPTION = "Add a session description";
+export const REASON_TITLE = t`Add a task title`;
+export const REASON_REPO = t`Select a repository`;
+export const REASON_BRANCH = t`Select a branch`;
+export const REASON_WORKSPACE = t`Select a workspace`;
+export const REASON_WORKFLOW = t`Select a workflow`;
+export const REASON_AGENT = t`Select an agent`;
+export const REASON_DESCRIPTION = t`Add a session description`;
 
 function noCompatibleAgentReason(executorProfileName: string | null): string {
-  const target = executorProfileName ? `“${executorProfileName}”` : "this executor";
-  return `No compatible agent profile is configured for ${target}. Configure agent credentials in Settings → Executors.`;
+  const target = executorProfileName ? `“${executorProfileName}”` : t`this executor`;
+  return t`No compatible agent profile is configured for ${target}. Configure agent credentials in Settings → Executors.`;
 }
 
 function baseReason(props: TaskCreateDialogFooterProps): string | null {
@@ -368,7 +372,7 @@ export const TaskCreateDialogFooter = memo(function TaskCreateDialogFooter(
           disabled={isCreatingSession || isCreatingTask}
           className="w-full h-10 border-0 cursor-pointer sm:w-auto sm:h-7 sm:border"
         >
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
       </DialogClose>
       <KeyboardShortcutTooltip

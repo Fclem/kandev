@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Trans } from "@lingui/react/macro";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Label } from "@kandev/ui/label";
 import { Switch } from "@kandev/ui/switch";
@@ -42,14 +43,18 @@ export function ArchiveConfirmationSettings() {
   return (
     <SettingsCard isDirty={isDirty} data-testid="archive-confirmation-card">
       <CardHeader>
-        <CardTitle className="text-base">Archive Confirmation</CardTitle>
+        <CardTitle className="text-base">
+          <Trans>Archive Confirmation</Trans>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex min-h-11 items-center justify-between gap-4">
           <div className="min-w-0 space-y-0.5">
-            <Label htmlFor="confirm-task-archive">Confirm before archiving tasks</Label>
+            <Label htmlFor="confirm-task-archive">
+              <Trans>Confirm before archiving tasks</Trans>
+            </Label>
             <p className="text-xs text-muted-foreground">
-              Show cleanup details and subtask options before an archive starts.
+              <Trans>Show cleanup details and subtask options before an archive starts.</Trans>
             </p>
           </div>
           <Switch

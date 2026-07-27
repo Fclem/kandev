@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { t } from "@lingui/core/macro";
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/components/state-provider";
 import { useToast } from "@/components/toast-provider";
@@ -121,8 +122,8 @@ export function useAgentSelection(workspaceId: string, store: QuickChatStore) {
       } catch (error) {
         if (latestRequestId.current !== requestId) return;
         toast({
-          title: "Failed to start quick chat",
-          description: error instanceof Error ? error.message : "Unknown error",
+          title: t`Failed to start quick chat`,
+          description: error instanceof Error ? error.message : t`Unknown error`,
           variant: "error",
         });
       } finally {
@@ -166,8 +167,8 @@ function useQuickChatSessionClose(store: QuickChatStore, resetPendingStarts: () 
     } catch (error) {
       console.error("Failed to delete quick chat task:", error);
       toast({
-        title: "Failed to delete quick chat",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: t`Failed to delete quick chat`,
+        description: error instanceof Error ? error.message : t`Unknown error`,
         variant: "error",
       });
     }

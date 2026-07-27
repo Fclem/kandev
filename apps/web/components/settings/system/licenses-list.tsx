@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Input } from "@kandev/ui/input";
 import { Badge } from "@kandev/ui/badge";
@@ -69,7 +70,7 @@ function LicenseRow({ entry }: { entry: LicenseEntry }) {
                 className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 cursor-pointer"
                 data-testid="system-license-repo"
               >
-                source <IconExternalLink className="h-3 w-3" />
+                <Trans>source</Trans> <IconExternalLink className="h-3 w-3" />
               </a>
             )}
           </div>
@@ -100,18 +101,21 @@ function filterEntries(entries: LicenseEntry[], query: string): LicenseEntry[] {
 }
 
 export function LicensesList({ entries }: Props) {
+  const { t } = useLingui();
   const [query, setQuery] = useState("");
   const visible = useMemo(() => filterEntries(entries, query), [entries, query]);
   const hasStaleGoEntries = useMemo(
     () => entries.some((entry) => entry.ecosystem === "go" && entry.stale),
     [entries],
   );
+  const visibleCount = visible.length;
+  const totalCount = entries.length;
 
   return (
     <Card data-testid="system-licenses-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <IconScale className="h-4 w-4" /> Third-party licenses
+          <IconScale className="h-4 w-4" /> <Trans>Third-party licenses</Trans>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -119,14 +123,17 @@ export function LicensesList({ entries }: Props) {
           <Alert data-testid="system-licenses-stale-warning">
             <IconAlertTriangle className="h-3.5 w-3.5" />
             <AlertDescription>
-              Go license entries were reused from the committed manifest because generation failed.
-              Regenerate licenses when go-licenses is healthy to refresh Go dependency data.
+              <Trans>
+                Go license entries were reused from the committed manifest because generation
+                failed. Regenerate licenses when go-licenses is healthy to refresh Go dependency
+                data.
+              </Trans>
             </AlertDescription>
           </Alert>
         )}
         <div className="flex items-center justify-between gap-3">
           <Input
-            placeholder="Filter by name, license, or ecosystem..."
+            placeholder={t`Filter by name, license, or ecosystem...`}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             data-testid="system-licenses-filter"
@@ -135,7 +142,9 @@ export function LicensesList({ entries }: Props) {
             className="text-xs text-muted-foreground whitespace-nowrap"
             data-testid="system-licenses-count"
           >
-            {visible.length} of {entries.length}
+            <Trans>
+              {visibleCount} of {totalCount}
+            </Trans>
           </p>
         </div>
         <div
@@ -150,7 +159,7 @@ export function LicensesList({ entries }: Props) {
               className="py-6 text-center text-sm text-muted-foreground"
               data-testid="system-licenses-empty"
             >
-              No entries match the filter.
+              <Trans>No entries match the filter.</Trans>
             </p>
           )}
         </div>

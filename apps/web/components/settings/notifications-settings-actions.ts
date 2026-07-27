@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { t } from "@lingui/core/macro";
 import {
   createNotificationProvider,
   deleteNotificationProvider,
@@ -273,7 +274,7 @@ export function useSaveRequest(state: NotificationsState) {
         ? { name: appriseName, urls: parseAppriseUrls(appriseUrls) }
         : null;
     if (createDraft && createDraft.urls.length === 0) {
-      throw new Error("At least one Apprise service URL is required.");
+      throw new Error(t`At least one Apprise service URL is required.`);
     }
     const updates: Array<Promise<NotificationProvider>> = [];
     for (const provider of providers) {
@@ -511,8 +512,8 @@ export function useNotificationsActions(
       bumpPermission();
     }
     if (permission !== "granted") return;
-    new Notification("Test notification", {
-      body: "If you can read this, browser notifications are working.",
+    new Notification(t`Test notification`, {
+      body: t`If you can read this, browser notifications are working.`,
     });
   };
 

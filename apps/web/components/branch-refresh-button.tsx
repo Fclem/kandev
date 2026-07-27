@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { IconRefresh } from "@tabler/icons-react";
+import { t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 
 type BranchRefreshButtonProps = {
@@ -26,6 +28,7 @@ export function BranchRefreshButton({
   // Controlled open so the tooltip only reacts to hover, not focus.
   // Radix Popover auto-focuses the first focusable child when it opens, which
   // would otherwise trigger this tooltip the moment the dropdown is opened.
+  const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const hasError = Boolean(fetchError);
   const tooltip = formatRefreshTooltip(label, fetchedAt, refreshing, fetchError);
@@ -34,7 +37,7 @@ export function BranchRefreshButton({
       <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label={`Refresh ${label}`}
+          aria-label={t`Refresh ${label}`}
           data-testid={testId}
           onClick={(e) => {
             e.preventDefault();
@@ -64,14 +67,16 @@ function formatRefreshTooltip(
   refreshing: boolean | undefined,
   fetchError: string | undefined,
 ) {
-  if (refreshing) return `Refreshing ${label}...`;
-  if (fetchError) return `Last refresh failed: ${fetchError}`;
+  if (refreshing) return t`Refreshing ${label}...`;
+  if (fetchError) return t`Last refresh failed: ${fetchError}`;
   if (!fetchedAt) return initialRefreshTooltip(label);
   const date = new Date(fetchedAt);
   if (Number.isNaN(date.getTime())) return initialRefreshTooltip(label);
-  return `Refresh ${label} (last fetched ${date.toLocaleTimeString()})`;
+  const fetchedTime = date.toLocaleTimeString();
+  return t`Refresh ${label} (last fetched ${fetchedTime})`;
 }
 
 function initialRefreshTooltip(label: string) {
-  return label === "branches" ? "Refresh branches (git fetch)" : `Refresh ${label}`;
+  // "branches" is a logic sentinel for the default label, not display copy.
+  return label === "branches" ? t`Refresh branches (git fetch)` : t`Refresh ${label}`;
 }

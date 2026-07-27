@@ -1,5 +1,7 @@
 "use client";
 
+import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@lingui/core/macro";
 import { Button } from "@kandev/ui/button";
 import { Spinner } from "@kandev/ui/spinner";
 import { IconCheck, IconAlertTriangle } from "@tabler/icons-react";
@@ -13,14 +15,14 @@ type SelfUpdateProgressProps = {
 };
 
 function activeText(phase: SelfUpdatePhase, target: string | null): string {
-  const version = target ?? "the new version";
+  const version = target ?? t`the new version`;
   switch (phase) {
     case "starting":
-      return `Starting update to ${version}…`;
+      return t`Starting update to ${version}…`;
     case "installing":
-      return `Downloading and installing ${version}…`;
+      return t`Downloading and installing ${version}…`;
     case "restarting":
-      return "Restarting Kandev — this can take up to a minute.";
+      return t`Restarting Kandev — this can take up to a minute.`;
     default:
       return "";
   }
@@ -40,18 +42,22 @@ function ActiveRow({
         <span>{activeText(phase, targetVersion)}</span>
       </div>
       <p className="text-xs text-muted-foreground">
-        Keep this page open. It will refresh automatically when the update finishes.
+        <Trans>Keep this page open. It will refresh automatically when the update finishes.</Trans>
       </p>
     </div>
   );
 }
 
 function DoneRow({ targetVersion }: { targetVersion: string | null }) {
+  const { t } = useLingui();
+  const version = targetVersion ?? t`the latest version`;
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-2 text-sm">
         <IconCheck className="size-4 text-emerald-500" />
-        <span>Updated to {targetVersion ?? "the latest version"}.</span>
+        <span>
+          <Trans>Updated to {version}.</Trans>
+        </span>
       </div>
       <Button
         variant="outline"
@@ -60,18 +66,19 @@ function DoneRow({ targetVersion }: { targetVersion: string | null }) {
         onClick={() => window.location.reload()}
         data-testid="system-updates-progress-reload"
       >
-        Reload page
+        <Trans>Reload page</Trans>
       </Button>
     </div>
   );
 }
 
 function ErrorRow({ message, onDismiss }: { message: string | null; onDismiss: () => void }) {
+  const { t } = useLingui();
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-2 text-sm text-destructive">
         <IconAlertTriangle className="size-4 shrink-0" />
-        <span>{message ?? "The update failed."}</span>
+        <span>{message ?? t`The update failed.`}</span>
       </div>
       <Button
         variant="outline"
@@ -80,7 +87,7 @@ function ErrorRow({ message, onDismiss }: { message: string | null; onDismiss: (
         onClick={onDismiss}
         data-testid="system-updates-progress-dismiss"
       >
-        Dismiss
+        <Trans>Dismiss</Trans>
       </Button>
     </div>
   );

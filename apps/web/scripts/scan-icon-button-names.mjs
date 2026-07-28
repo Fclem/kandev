@@ -50,8 +50,10 @@ function findTagEnd(src, start) {
 // Find the end of the element body for a non-self-closing tag, tracking
 // nesting of same-named elements.
 function findElementEnd(src, tagName, bodyStart) {
-  const open = new RegExp(`<${tagName}[\\s/>]`, "g");
-  const close = new RegExp(`</${tagName}\\s*>`, "g");
+  // Dotted components (<Menu.Trigger>) would otherwise turn `.` into a wildcard.
+  const tag = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const open = new RegExp(`<${tag}[\\s/>]`, "g");
+  const close = new RegExp(`</${tag}\\s*>`, "g");
   let depth = 1;
   let i = bodyStart;
   while (i < src.length) {

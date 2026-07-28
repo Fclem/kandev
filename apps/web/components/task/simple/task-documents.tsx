@@ -167,20 +167,20 @@ function AttachmentBody({ doc }: { doc: TaskDocument }) {
         {doc.filename ?? doc.key}
         {doc.size !== undefined && <span className="ml-1">({Math.round(doc.size / 1024)} KB)</span>}
       </span>
-      <a
-        href={`/api/v1/office/tasks/${doc.taskId}/documents/${encodeURIComponent(doc.key)}/download`}
-        download={doc.filename ?? doc.key}
-        className="cursor-pointer"
+      <Button
+        asChild
+        aria-label="Download attachment"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 cursor-pointer"
       >
-        <Button
-          aria-label="Download attachment"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 cursor-pointer"
+        <a
+          href={`/api/v1/office/tasks/${doc.taskId}/documents/${encodeURIComponent(doc.key)}/download`}
+          download={doc.filename ?? doc.key}
         >
           <IconDownload className="h-3.5 w-3.5" />
-        </Button>
-      </a>
+        </a>
+      </Button>
     </div>
   );
 }

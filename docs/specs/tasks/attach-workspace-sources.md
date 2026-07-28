@@ -60,6 +60,13 @@ manually moving files into the task workspace.
   reachable so **Open workspace folder** still works. The repository action is disabled and shows
   the reason in touch-visible text rather than relying on a tooltip.
 - Existing conversations, task state, plan, sessions, and repository attachments remain intact.
+- Launching or resuming a Local task whose workspace is its primary repository does not create a
+  repository-named link inside that repository. If an earlier Kandev version created that exact
+  self-referential directory link, the next reconciliation removes only the link and leaves the
+  repository contents unchanged.
+- Reconciliation treats an existing owned directory link as unchanged when it resolves to the same
+  filesystem directory as its configured target, including Windows directory junctions and path
+  aliases.
 - Agents receive a batch `add_workspace_sources_kandev` MCP tool that uses the same validation and
   materialization path.
 - The existing worktree-only `add_branch_to_task_kandev` tool remains a live compatibility path
@@ -178,6 +185,8 @@ persisted in source URLs or copied into agent-visible metadata.
 | An idle agent must restart to adopt the promoted root          | The intentional stop is not shown as a prior agent failure; the replacement agent uses the promoted task root.                                      |
 | A requested file move or rename crosses canonical source roots | The request is rejected before either source is mutated.                                                                                            |
 | A persisted local folder later disappears                      | The current live environment keeps its existing materialization; a new/reset environment surfaces the missing source and does not silently omit it. |
+| A Local task workspace is the primary repository itself        | Reconciliation skips the primary repository entry and removes only an existing self-referential Kandev directory link.                              |
+| An owned directory link already targets the configured source  | Relaunch and resume accept the link by filesystem identity instead of replacing or rejecting it.                                                    |
 | The client disconnects during materialization                  | Rollback runs on a detached bounded context and the eventual task event reflects durable state.                                                     |
 
 ## Persistence guarantees
@@ -220,6 +229,14 @@ must be retried.
 - **GIVEN** a repository-backed local task, **WHEN** the user adds a local Git repository and an
   arbitrary folder in one submission, **THEN** both live sources appear under one task workspace and
   the folder does not appear in Git-only controls.
+- **GIVEN** a single-repository Local task whose workspace path is the repository itself, **WHEN**
+  the task launches or resumes, **THEN** Kandev does not create a repository-named entry inside the
+  repository.
+- **GIVEN** an earlier Kandev version created a directory link inside a Local task repository that
+  points back to that repository, **WHEN** workspace repositories reconcile, **THEN** Kandev
+  removes only that self-referential link and leaves every repository file unchanged.
+- **GIVEN** an owned Windows directory junction already targets the configured workspace source,
+  **WHEN** the task relaunches or resumes, **THEN** reconciliation accepts the unchanged junction.
 - **GIVEN** a Docker, SSH, or Sprites task, **WHEN** the user opens **Add sources**, **THEN** the
   workspace, local-Git, and remote repository choices are available from **Add repository**, and
   the local-folder affordance is not offered.

@@ -40,6 +40,10 @@ func reconcileWorkspaceRepositories(root string, repositories []WorkspaceReposit
 	if root == "" {
 		return fmt.Errorf("workspace root is required for durable repositories")
 	}
+	rootInfo, err := os.Stat(root)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("inspect workspace root: %w", err)
+	}
 	for _, repository := range repositories {
 		if repository.RepoName == "" || filepath.Base(repository.RepoName) != repository.RepoName || repository.RepositoryPath == "" {
 			return fmt.Errorf("invalid durable workspace repository")
@@ -47,6 +51,12 @@ func reconcileWorkspaceRepositories(root string, repositories []WorkspaceReposit
 		info, err := os.Stat(repository.RepositoryPath)
 		if err != nil || !info.IsDir() {
 			return fmt.Errorf("workspace repository %q target is missing: %s", repository.RepoName, repository.RepositoryPath)
+		}
+		if rootInfo != nil && os.SameFile(rootInfo, info) {
+			if _, err := worktree.RemoveSelfReferentialDirectoryLink(root, repository.RepoName); err != nil {
+				return fmt.Errorf("remove self-referential workspace repository %q: %w", repository.RepoName, err)
+			}
+			continue
 		}
 		if _, _, err := worktree.EnsureOwnedDirectoryLink(root, repository.RepoName, repository.RepositoryPath); err != nil {
 			return fmt.Errorf("link workspace repository %q: %w", repository.RepoName, err)

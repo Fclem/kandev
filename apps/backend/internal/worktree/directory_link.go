@@ -88,15 +88,15 @@ func EnsureOwnedDirectoryLink(root, name, target string) (string, bool, error) {
 		if !isPlatformDirectoryLink(info, link) {
 			return "", false, fmt.Errorf("owned link entry already exists: %s", name)
 		}
-		actual, err := filepath.EvalSymlinks(link)
+		actual, err := os.Stat(link)
 		if err != nil {
 			return "", false, fmt.Errorf("resolve owned link: %w", err)
 		}
-		expected, err := filepath.EvalSymlinks(target)
+		expected, err := os.Stat(target)
 		if err != nil {
 			return "", false, fmt.Errorf("canonicalize link target: %w", err)
 		}
-		if filepath.Clean(actual) != filepath.Clean(expected) {
+		if !os.SameFile(actual, expected) {
 			return "", false, fmt.Errorf("owned link target mismatch: %s", name)
 		}
 		return link, false, nil
@@ -106,6 +106,43 @@ func EnsureOwnedDirectoryLink(root, name, target string) (string, bool, error) {
 	}
 	created, err := CreateOwnedDirectoryLink(root, name, target)
 	return created, err == nil, err
+}
+
+// RemoveSelfReferentialDirectoryLink removes name only when it is a platform
+// directory link whose target is root. It never recursively removes entries.
+func RemoveSelfReferentialDirectoryLink(root, name string) (bool, error) {
+	if !isOwnedDirectoryLinkPath(root, name) {
+		return false, fmt.Errorf("invalid owned link path")
+	}
+	link, err := ownedDirectoryLinkPath(root, name)
+	if err != nil {
+		return false, err
+	}
+	linkInfo, err := os.Lstat(link)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("inspect owned link entry: %w", err)
+	}
+	if !isPlatformDirectoryLink(linkInfo, link) {
+		return false, nil
+	}
+	rootInfo, err := os.Stat(root)
+	if err != nil {
+		return false, fmt.Errorf("inspect owned root: %w", err)
+	}
+	targetInfo, err := os.Stat(link)
+	if err != nil {
+		return false, fmt.Errorf("resolve owned link: %w", err)
+	}
+	if !os.SameFile(rootInfo, targetInfo) {
+		return false, nil
+	}
+	if err := os.Remove(link); err != nil {
+		return false, fmt.Errorf("remove self-referential owned link: %w", err)
+	}
+	return true, nil
 }
 
 func mkdirOwned(root string) error {

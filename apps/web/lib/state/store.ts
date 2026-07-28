@@ -226,6 +226,7 @@ export type AppState = KanbanSlice & {
   systemHealth: (typeof defaultUIState)["systemHealth"];
   quickChat: (typeof defaultUIState)["quickChat"];
   sessionFailureNotification: (typeof defaultUIState)["sessionFailureNotification"];
+  systemErrorNotification: (typeof defaultUIState)["systemErrorNotification"];
   taskDeletedNotification: (typeof defaultUIState)["taskDeletedNotification"];
   updateAvailableNotification: (typeof defaultUIState)["updateAvailableNotification"];
   bottomTerminal: (typeof defaultUIState)["bottomTerminal"];
@@ -335,6 +336,7 @@ export type AppState = KanbanSlice & {
   renameQuickChatSession: (sessionId: string, name: string) => void;
   setQuickChatInitialPrompt: UIA["setQuickChatInitialPrompt"];
   setSessionFailureNotification: (n: UISliceTypes.SessionFailureNotification | null) => void;
+  setSystemErrorNotification: (n: UISliceTypes.SystemErrorNotification | null) => void;
   setTaskDeletedNotification: (n: UISliceTypes.TaskDeletedNotification | null) => void;
   setUpdateAvailableNotification: (n: UISliceTypes.UpdateAvailableNotification | null) => void;
   toggleBottomTerminal: () => void;

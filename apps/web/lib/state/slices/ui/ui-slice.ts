@@ -83,6 +83,7 @@ export const defaultUIState: UISliceState = {
   systemHealth: { issues: [], checks: [], healthy: true, loaded: false, loading: false },
   quickChat: { isOpen: false, sessions: [], activeSessionId: null },
   sessionFailureNotification: null,
+  systemErrorNotification: null,
   taskDeletedNotification: null,
   updateAvailableNotification: null,
   bottomTerminal: { isOpen: false, pendingCommand: null },
@@ -252,6 +253,10 @@ function buildNotificationActions(set: ImmerSet) {
     setSessionFailureNotification: (n: UISlice["sessionFailureNotification"]) =>
       set((draft) => {
         draft.sessionFailureNotification = n;
+      }),
+    setSystemErrorNotification: (n: UISlice["systemErrorNotification"]) =>
+      set((draft) => {
+        draft.systemErrorNotification = n;
       }),
     setTaskDeletedNotification: (n: UISlice["taskDeletedNotification"]) =>
       set((draft) => {

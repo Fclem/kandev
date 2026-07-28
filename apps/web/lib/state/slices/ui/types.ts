@@ -96,6 +96,13 @@ export type SessionFailureNotification = {
   message: string;
 };
 
+export type SystemErrorNotification = {
+  /** Display text, already normalized to a non-empty string by the WS handler. */
+  message: string;
+  /** Backend error code, when the frame carried one. */
+  code?: string;
+};
+
 export type TaskDeletedNotification = {
   taskId: string;
   /** Task title, when known, so the toast can name it. */
@@ -160,6 +167,8 @@ export type UISliceState = {
   systemHealth: SystemHealthState;
   quickChat: QuickChatState;
   sessionFailureNotification: SessionFailureNotification | null;
+  /** Set when the backend broadcasts a `system.error` frame, so a toast can surface it. */
+  systemErrorNotification: SystemErrorNotification | null;
   /** Set when the focused task is deleted live, so a toast can explain why. */
   taskDeletedNotification: TaskDeletedNotification | null;
   /** Set when the background updates poller reports a newly detected release. */
@@ -228,6 +237,7 @@ export type UISliceActions = {
   renameQuickChatSession: (sessionId: string, name: string) => void;
   setQuickChatInitialPrompt: (sessionId: string, prompt?: string) => void;
   setSessionFailureNotification: (n: SessionFailureNotification | null) => void;
+  setSystemErrorNotification: (n: SystemErrorNotification | null) => void;
   setTaskDeletedNotification: (n: TaskDeletedNotification | null) => void;
   setUpdateAvailableNotification: (n: UpdateAvailableNotification | null) => void;
   toggleBottomTerminal: () => void;

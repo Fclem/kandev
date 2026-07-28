@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
-import { IconCode, IconChevronDown, IconSend, IconPaperclip, IconUser } from "@tabler/icons-react";
+import { IconCode, IconChevronDown, IconPaperclip, IconUser } from "@tabler/icons-react";
 import { AgentAvatar } from "@/app/office/components/agent-avatar";
 import { Button } from "@kandev/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kandev/ui/
 import { EnhancePromptButton } from "@/components/enhance-prompt-button";
 import { useIsUtilityConfigured } from "@/hooks/use-is-utility-configured";
 import { PromptResultRecovery } from "@/components/prompt-result-recovery";
+import { SendCommentButton } from "./components/send-comment-button";
 import { usePromptResultDelivery } from "@/hooks/use-prompt-result-delivery";
 import { useUtilityAgentGenerator } from "@/hooks/use-utility-agent-generator";
 import { useAppStore } from "@/components/state-provider";
@@ -342,23 +343,7 @@ function CommentComposerFooter({
           isConfigured={isUtilityConfigured}
         />
         <span className="flex-1" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={isSendDisabled ? 0 : -1} className="inline-flex">
-              <Button
-                aria-label="Send comment"
-                type="button"
-                size="icon"
-                className="h-7 w-7 cursor-pointer"
-                disabled={isSendDisabled}
-                onClick={() => void handleSubmit()}
-              >
-                <IconSend className="h-3.5 w-3.5" />
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>Send comment</TooltipContent>
-        </Tooltip>
+        <SendCommentButton disabled={isSendDisabled} onSubmit={handleSubmit} />
       </div>
       <div className="px-2 pb-2">
         <PromptResultRecovery

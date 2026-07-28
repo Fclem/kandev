@@ -11,6 +11,7 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ROOTS = ["app", "components", "hooks", "lib"];
 const CWD = process.cwd();
@@ -27,7 +28,7 @@ function walk(dir, out = []) {
 
 // Walk forward from the `<` of an opening tag to its closing `>`, skipping
 // over strings, template literals, and balanced braces (JSX expressions).
-function findTagEnd(src, start) {
+export function findTagEnd(src, start) {
   let i = start;
   let depth = 0;
   while (i < src.length) {
@@ -49,7 +50,7 @@ function findTagEnd(src, start) {
 
 // Find the end of the element body for a non-self-closing tag, tracking
 // nesting of same-named elements.
-function findElementEnd(src, tagName, bodyStart) {
+export function findElementEnd(src, tagName, bodyStart) {
   // Dotted components (<Menu.Trigger>) would otherwise turn `.` into a wildcard.
   const tag = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const open = new RegExp(`<${tag}[\\s/>]`, "g");
@@ -63,8 +64,19 @@ function findElementEnd(src, tagName, bodyStart) {
     const c = close.exec(src);
     if (!c) return src.length;
     if (o && o.index < c.index) {
-      depth += 1;
-      i = o.index + 1;
+      // A self-closing `<Button />` has no matching `</Button>`, so counting it
+      // as a nested open would leave depth permanently short and run the body
+      // to end-of-file — which reads as "has text" and hides a nameless button.
+      const openEnd = findTagEnd(src, o.index);
+      if (openEnd === -1) return src.length;
+      if (
+        !src
+          .slice(o.index, openEnd + 1)
+          .trimEnd()
+          .endsWith("/>")
+      )
+        depth += 1;
+      i = openEnd + 1;
       continue;
     }
     depth -= 1;
@@ -79,7 +91,7 @@ const SPREAD = /\{\.\.\./;
 
 // Children that count as an accessible name: literal text, or an `sr-only`
 // span. Icon components (<Trash2 />) and bare expressions do not.
-function hasTextualChild(body) {
+export function hasTextualChild(body) {
   if (/\bsr-only\b/.test(body)) return true;
   const stripped = body
     .replace(/<[^>]*>/g, " ") // elements
@@ -88,54 +100,67 @@ function hasTextualChild(body) {
   return /[A-Za-z0-9]/.test(stripped.replace(/ /g, ""));
 }
 
-const findings = [];
+// Report every icon-sized element in one file's source that has no obvious
+// accessible name. `file` is only used to label the findings.
+export function scanSource(src, file = "<source>") {
+  const findings = [];
+  const sizeRe = /size="icon(?:-xs|-sm|-lg)?"/g;
+  let m;
+  while ((m = sizeRe.exec(src)) !== null) {
+    // Scan back to the `<` that opens this element.
+    const tagStart = src.lastIndexOf("<", m.index);
+    if (tagStart === -1) continue;
+    const tagName = /^<([A-Za-z][\w.]*)/.exec(src.slice(tagStart))?.[1];
+    if (!tagName) continue;
+    const tagEnd = findTagEnd(src, tagStart);
+    if (tagEnd === -1) continue;
+    const openTag = src.slice(tagStart, tagEnd + 1);
+    const selfClosing = openTag.trimEnd().endsWith("/>");
 
-for (const root of ROOTS) {
-  for (const file of walk(join(CWD, root))) {
-    const src = readFileSync(file, "utf8");
-    const sizeRe = /size="icon(?:-xs|-sm|-lg)?"/g;
-    let m;
-    while ((m = sizeRe.exec(src)) !== null) {
-      // Scan back to the `<` that opens this element.
-      const tagStart = src.lastIndexOf("<", m.index);
-      if (tagStart === -1) continue;
-      const tagName = /^<([A-Za-z][\w.]*)/.exec(src.slice(tagStart))?.[1];
-      if (!tagName) continue;
-      const tagEnd = findTagEnd(src, tagStart);
-      if (tagEnd === -1) continue;
-      const openTag = src.slice(tagStart, tagEnd + 1);
-      const selfClosing = openTag.trimEnd().endsWith("/>");
+    const body = selfClosing ? "" : src.slice(tagEnd + 1, findElementEnd(src, tagName, tagEnd + 1));
 
-      const body = selfClosing
-        ? ""
-        : src.slice(tagEnd + 1, findElementEnd(src, tagName, tagEnd + 1));
+    const named = NAME_ATTRS.test(openTag);
+    const spread = SPREAD.test(openTag);
+    const asChild = /\basChild\b/.test(openTag);
+    const textChild = !selfClosing && hasTextualChild(body);
 
-      const named = NAME_ATTRS.test(openTag);
-      const spread = SPREAD.test(openTag);
-      const asChild = /\basChild\b/.test(openTag);
-      const textChild = !selfClosing && hasTextualChild(body);
+    if (named || textChild) continue;
 
-      if (named || textChild) continue;
-
-      findings.push({
-        file: relative(CWD, file),
-        line: src.slice(0, tagStart).split("\n").length,
-        tag: tagName,
-        size: m[0],
-        asChild,
-        spread,
-        snippet: openTag.replace(/\s+/g, " ").slice(0, 120),
-      });
-    }
+    findings.push({
+      file,
+      line: src.slice(0, tagStart).split("\n").length,
+      tag: tagName,
+      size: m[0],
+      asChild,
+      spread,
+      snippet: openTag.replace(/\s+/g, " ").slice(0, 120),
+    });
   }
+  return findings;
 }
 
-if (process.argv.includes("--json")) {
-  console.log(JSON.stringify(findings, null, 2));
-} else {
+export function scanRepo(roots = ROOTS, cwd = CWD) {
+  const findings = [];
+  for (const root of roots) {
+    for (const file of walk(join(cwd, root))) {
+      findings.push(...scanSource(readFileSync(file, "utf8"), relative(cwd, file)));
+    }
+  }
+  return findings;
+}
+
+function main() {
+  const findings = scanRepo();
+  if (process.argv.includes("--json")) {
+    console.log(JSON.stringify(findings, null, 2));
+    return;
+  }
   for (const f of findings) {
     const flags = [f.asChild && "asChild", f.spread && "spread"].filter(Boolean).join(",");
     console.log(`${f.file}:${f.line}\t<${f.tag}> ${f.size}${flags ? ` [${flags}]` : ""}`);
   }
   console.log(`\n${findings.length} icon button(s) with no obvious accessible name`);
 }
+
+// Only run the scan when invoked as a script, so tests can import the helpers.
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

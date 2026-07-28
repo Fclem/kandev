@@ -100,6 +100,47 @@ Note: passthrough-only agents provide terminal interaction only. There are no st
 
 ---
 
+## Native-Binary ACP Agent - Recommended for non-npm ACP CLIs
+
+If the agent ships a standalone binary (not npm) that speaks ACP over stdin/stdout on a fixed argv, use the shared scaffold in [`native_acp.go`](../apps/backend/internal/agent/agents/native_acp.go) rather than reimplementing the `Agent` interface. Cursor, Kimi, Kiro, Qoder, Trae, Omp, Devin, and Grok are all defined this way — the whole agent file is its own values:
+
+```go
+type MyAgentACP struct {
+    nativeACPPassthroughAgent
+}
+
+func NewMyAgentACP() *MyAgentACP {
+    return &MyAgentACP{newNativeACPPassthrough(
+        nativeACPSpec{
+            id:            "myagent-acp",
+            name:          "MyAgent ACP Agent",
+            displayName:   "MyAgent",
+            description:   "MyAgent coding agent using the ACP protocol.",
+            displayOrder:  21,
+            bin:           "myagent",
+            args:          []string{"acp"},
+            logoLight:     myagentACPLogoLight,
+            logoDark:      myagentACPLogoDark,
+            installScript: "Install MyAgent CLI from https://myagent.example",
+            permSettings:  emptyPermSettings,
+            runtime: nativeACPRuntimeSpec{
+                userSkillDir:       ".myagent/skills",
+                sessionDirTemplate: "{home}/.myagent",
+            },
+        },
+        nativeACPPassthroughSpec{modelFlag: nativeACPModelFlag()},
+    )}
+}
+```
+
+`nativeACPSpec` covers identity, logos, launch argv, install script, remote auth, and permission settings; `nativeACPRuntimeSpec` covers the `RuntimeConfig` fields that vary (skill dirs, session dir, MCP overrides, `StripEnv`, `RequiredEnv`). Everything else — `WorkingDir`, resource limits, `ProtocolACP`, native session resume, `IsInstalled` via `WithCommand(bin)`, `InferenceConfig`, and billing — is filled in by the scaffold, and `BuildCommand`, `Runtime().Cmd` and `InferenceConfig().Command` all derive from the same `bin` + `args`.
+
+Embed the bare `nativeACPAgent` instead of `nativeACPPassthroughAgent` when the CLI must **not** offer raw terminal passthrough (Grok does this). Add per-agent methods on your own type for anything the spec can't express — Grok's `LoginCommand()` is the example. Register the agent in `LoadDefaults()` as below, and add a case to `nativeACPCases` in [`native_acp_test.go`](../apps/backend/internal/agent/agents/native_acp_test.go) to pin its definition.
+
+Reach for the full manual implementation below only when the agent diverges from this shape (as `claude_acp.go`, `codex_acp.go`, `copilot_acp.go`, and `opencode_acp.go` do).
+
+---
+
 ## Adding a New Agent (Full Integration)
 
 For agents with a structured protocol (JSON-RPC, streaming JSON, etc.), implement the full [`Agent`](../apps/backend/internal/agent/agents/agent.go) interface.
@@ -240,4 +281,6 @@ Start the dev server and verify:
 | `apps/backend/internal/agentctl/server/adapter/factory.go` | Only if adding a new protocol |
 | `apps/backend/internal/agentctl/server/adapter/transport/{proto}/` | Only if adding a new protocol |
 | `apps/backend/internal/agent/agents/passthrough.go` | Never - provides `StandardPassthrough` (read-only reference) |
+| `apps/backend/internal/agent/agents/native_acp.go` | Never - provides the `nativeACPSpec` scaffold for native-binary ACP agents (read-only reference) |
+| `apps/backend/internal/agent/agents/native_acp_test.go` | Always for a native-binary ACP agent - add a `nativeACPCases` entry pinning its definition |
 | `apps/backend/internal/agent/agents/agent.go` | Never - defines the `Agent` interface (read-only reference) |

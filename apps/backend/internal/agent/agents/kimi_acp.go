@@ -1,13 +1,7 @@
-//nolint:dupl // Native-binary ACP agents (Cursor, Kimi, Kiro, Qoder, Trae) follow the same minimal scaffold; differences are the binary name and subcommand.
 package agents
 
 import (
-	"context"
 	_ "embed"
-	"time"
-
-	"github.com/kandev/kandev/internal/agent/usage"
-	"github.com/kandev/kandev/pkg/agent"
 )
 
 //go:embed logos/kimi_acp_light.svg
@@ -27,89 +21,27 @@ var (
 // KimiACP implements Agent for Moonshot's Kimi CLI using ACP.
 // Not on npm — users must install the kimi binary from Moonshot AI.
 type KimiACP struct {
-	StandardPassthrough
+	nativeACPPassthroughAgent
 }
 
 func NewKimiACP() *KimiACP {
-	return &KimiACP{
-		StandardPassthrough: StandardPassthrough{
-			PermSettings: emptyPermSettings,
-			Cfg: PassthroughConfig{
-				Supported:      true,
-				Label:          "CLI Passthrough",
-				Description:    "Show terminal directly instead of chat interface",
-				PassthroughCmd: NewCommand(kimiACPBin),
-				ModelFlag:      NewParam("--model", "{model}"),
-				IdleTimeout:    3 * time.Second,
-				BufferMaxBytes: DefaultBufferMaxBytes,
+	return &KimiACP{newNativeACPPassthrough(
+		nativeACPSpec{
+			id:            "kimi-acp",
+			name:          "Kimi ACP Agent",
+			displayName:   "Kimi",
+			description:   "Moonshot AI Kimi coding agent using the ACP protocol over stdin/stdout.",
+			displayOrder:  14,
+			bin:           kimiACPBin,
+			args:          []string{"acp"},
+			logoLight:     kimiACPLogoLight,
+			logoDark:      kimiACPLogoDark,
+			installScript: "Install Kimi CLI from Moonshot AI",
+			permSettings:  emptyPermSettings,
+			runtime: nativeACPRuntimeSpec{
+				sessionDirTemplate: "{home}/.kimi",
 			},
 		},
-	}
+		nativeACPPassthroughSpec{modelFlag: nativeACPModelFlag()},
+	)}
 }
-
-func (a *KimiACP) ID() string          { return "kimi-acp" }
-func (a *KimiACP) Name() string        { return "Kimi ACP Agent" }
-func (a *KimiACP) DisplayName() string { return "Kimi" }
-func (a *KimiACP) Description() string {
-	return "Moonshot AI Kimi coding agent using the ACP protocol over stdin/stdout."
-}
-func (a *KimiACP) Enabled() bool     { return true }
-func (a *KimiACP) DisplayOrder() int { return 14 }
-
-func (a *KimiACP) Logo(v LogoVariant) []byte {
-	if v == LogoDark {
-		return kimiACPLogoDark
-	}
-	return kimiACPLogoLight
-}
-
-func (a *KimiACP) IsInstalled(ctx context.Context) (*DiscoveryResult, error) {
-	result, err := Detect(ctx, WithCommand(kimiACPBin))
-	if err != nil {
-		return result, err
-	}
-	result.SupportsMCP = true
-	result.Capabilities = DiscoveryCapabilities{
-		SupportsSessionResume: true,
-	}
-	return result, nil
-}
-
-func (a *KimiACP) BuildCommand(opts CommandOptions) Command {
-	return Cmd(kimiACPBin, "acp").Build()
-}
-
-func (a *KimiACP) Runtime() *RuntimeConfig {
-	canRecover := true
-	return &RuntimeConfig{
-		Cmd:            Cmd(kimiACPBin, "acp").Build(),
-		WorkingDir:     "{workspace}",
-		Env:            map[string]string{},
-		ResourceLimits: ResourceLimits{MemoryMB: 4096, CPUCores: 2.0, Timeout: time.Hour},
-		Protocol:       agent.ProtocolACP,
-		SessionConfig: SessionConfig{
-			NativeSessionResume: true,
-			CanRecover:          &canRecover,
-			SessionDirTemplate:  "{home}/.kimi",
-		},
-	}
-}
-
-func (a *KimiACP) RemoteAuth() *RemoteAuth { return nil }
-
-func (a *KimiACP) InstallScript() string {
-	return "Install Kimi CLI from Moonshot AI"
-}
-
-func (a *KimiACP) PermissionSettings() map[string]PermissionSetting {
-	return emptyPermSettings
-}
-
-func (a *KimiACP) InferenceConfig() *InferenceConfig {
-	return &InferenceConfig{
-		Supported: true,
-		Command:   NewCommand(kimiACPBin, "acp"),
-	}
-}
-
-func (a *KimiACP) BillingType() usage.BillingType { return defaultBillingType() }

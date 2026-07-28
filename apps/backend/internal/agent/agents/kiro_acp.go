@@ -1,13 +1,7 @@
-//nolint:dupl // Native-binary ACP agents (Cursor, Kimi, Kiro, Qoder, Trae) follow the same minimal scaffold; differences are the binary name and subcommand.
 package agents
 
 import (
-	"context"
 	_ "embed"
-	"time"
-
-	"github.com/kandev/kandev/internal/agent/usage"
-	"github.com/kandev/kandev/pkg/agent"
 )
 
 //go:embed logos/kiro_acp_light.svg
@@ -27,97 +21,35 @@ var (
 // KiroACP implements Agent for AWS Kiro using ACP. The CLI binary
 // (kiro-cli-chat) is installed via AWS-provided tooling.
 type KiroACP struct {
-	StandardPassthrough
+	nativeACPPassthroughAgent
 }
 
 func NewKiroACP() *KiroACP {
-	return &KiroACP{
-		StandardPassthrough: StandardPassthrough{
-			PermSettings: emptyPermSettings,
-			Cfg: PassthroughConfig{
-				Supported:      true,
-				Label:          "CLI Passthrough",
-				Description:    "Show terminal directly instead of chat interface",
-				PassthroughCmd: NewCommand(kiroACPBin),
-				ModelFlag:      NewParam("--model", "{model}"),
-				IdleTimeout:    3 * time.Second,
-				BufferMaxBytes: DefaultBufferMaxBytes,
+	return &KiroACP{newNativeACPPassthrough(
+		nativeACPSpec{
+			id:            "kiro-acp",
+			name:          "Kiro ACP Agent",
+			displayName:   "Kiro",
+			description:   "AWS Kiro coding agent using the ACP protocol via kiro-cli-chat.",
+			displayOrder:  15,
+			bin:           kiroACPBin,
+			args:          []string{"acp"},
+			logoLight:     kiroACPLogoLight,
+			logoDark:      kiroACPLogoDark,
+			installScript: "Install Kiro CLI from AWS",
+			permSettings:  emptyPermSettings,
+			runtime: nativeACPRuntimeSpec{
+				userSkillDir: ".kiro/skills",
+				// Verified against Kiro CLI 2.15.0 by driving `kiro-cli-chat acp`
+				// through session/new: each ACP session is persisted as
+				// ~/.kiro/sessions/cli/<sessionId>.{json,jsonl}. KIRO_HOME
+				// relocates the directory. Note ~/.kiro carries config + sessions
+				// only — the login token lives in the separate
+				// ~/.local/share/kiro-cli/data.sqlite3 (auth_kv table), so this
+				// mount persists resumable sessions but not authentication.
+				sessionDirTemplate: "{home}/.kiro",
 			},
 		},
-	}
+		nativeACPPassthroughSpec{modelFlag: nativeACPModelFlag()},
+	)}
 }
-
-func (a *KiroACP) ID() string          { return "kiro-acp" }
-func (a *KiroACP) Name() string        { return "Kiro ACP Agent" }
-func (a *KiroACP) DisplayName() string { return "Kiro" }
-func (a *KiroACP) Description() string {
-	return "AWS Kiro coding agent using the ACP protocol via kiro-cli-chat."
-}
-func (a *KiroACP) Enabled() bool     { return true }
-func (a *KiroACP) DisplayOrder() int { return 15 }
-
-func (a *KiroACP) Logo(v LogoVariant) []byte {
-	if v == LogoDark {
-		return kiroACPLogoDark
-	}
-	return kiroACPLogoLight
-}
-
-func (a *KiroACP) IsInstalled(ctx context.Context) (*DiscoveryResult, error) {
-	result, err := Detect(ctx, WithCommand(kiroACPBin))
-	if err != nil {
-		return result, err
-	}
-	result.SupportsMCP = true
-	result.Capabilities = DiscoveryCapabilities{
-		SupportsSessionResume: true,
-	}
-	return result, nil
-}
-
-func (a *KiroACP) BuildCommand(opts CommandOptions) Command {
-	return Cmd(kiroACPBin, "acp").Build()
-}
-
-func (a *KiroACP) Runtime() *RuntimeConfig {
-	canRecover := true
-	return &RuntimeConfig{
-		Cmd:            Cmd(kiroACPBin, "acp").Build(),
-		WorkingDir:     "{workspace}",
-		Env:            map[string]string{},
-		ResourceLimits: ResourceLimits{MemoryMB: 4096, CPUCores: 2.0, Timeout: time.Hour},
-		Protocol:       agent.ProtocolACP,
-		UserSkillDir:   ".kiro/skills",
-		SessionConfig: SessionConfig{
-			// Verified against Kiro CLI 2.15.0 by driving `kiro-cli-chat acp`
-			// through session/new: each ACP session is persisted as
-			// ~/.kiro/sessions/cli/<sessionId>.{json,jsonl}. KIRO_HOME
-			// relocates the directory. Note ~/.kiro carries config + sessions
-			// only — the login token lives in the separate
-			// ~/.local/share/kiro-cli/data.sqlite3 (auth_kv table), so this
-			// mount persists resumable sessions but not authentication.
-			SessionDirTemplate:  "{home}/.kiro",
-			NativeSessionResume: true,
-			CanRecover:          &canRecover,
-		},
-	}
-}
-
-func (a *KiroACP) RemoteAuth() *RemoteAuth { return nil }
-
-func (a *KiroACP) InstallScript() string {
-	return "Install Kiro CLI from AWS"
-}
-
-func (a *KiroACP) PermissionSettings() map[string]PermissionSetting {
-	return emptyPermSettings
-}
-
-func (a *KiroACP) InferenceConfig() *InferenceConfig {
-	return &InferenceConfig{
-		Supported: true,
-		Command:   NewCommand(kiroACPBin, "acp"),
-	}
-}
-
-func (a *KiroACP) BillingType() usage.BillingType { return defaultBillingType() }

@@ -1,6 +1,5 @@
 "use client";
-
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Spinner } from "@kandev/ui/spinner";
 import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import type { ReactNode } from "react";
@@ -34,12 +33,12 @@ export function ActionButtonContent({
   successLabel,
   errorLabel,
 }: Props) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (state === "pending") {
     return (
       <>
         <Spinner className="size-3.5 mr-1" />
-        {pendingLabel ?? t`Running...`}
+        {pendingLabel ?? t("settings:running2")}
       </>
     );
   }
@@ -47,7 +46,7 @@ export function ActionButtonContent({
     return (
       <>
         <IconCheck className="h-3.5 w-3.5 mr-1 text-emerald-500" />
-        {successLabel ?? t`Done`}
+        {successLabel ?? t("settings:done")}
       </>
     );
   }
@@ -55,7 +54,7 @@ export function ActionButtonContent({
     return (
       <>
         <IconAlertTriangle className="h-3.5 w-3.5 mr-1 text-red-500" />
-        {errorLabel ?? t`Failed`}
+        {errorLabel ?? t("settings:failed")}
       </>
     );
   }

@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconSelector } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
@@ -29,6 +28,12 @@ type ModelComboboxProps = {
  * advertised model list — custom model IDs are not allowed for ACP agents
  * since the agent CLI is authoritative for what it will accept.
  */
+/** Copilot surfaces a per-model usage hint in `meta`; ignore non-string values. */
+function copilotUsage(model: ModelEntry): string | undefined {
+  const raw = model.meta?.copilotUsage;
+  return typeof raw === "string" ? raw : undefined;
+}
+
 export function ModelCombobox({
   value,
   onChange,
@@ -37,15 +42,10 @@ export function ModelCombobox({
   placeholder,
   disabled,
 }: ModelComboboxProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const effectiveValue = value || currentModelId || "";
   const selectedModel = models.find((m) => m.id === effectiveValue);
-
-  const copilotUsage = (model: ModelEntry): string | undefined => {
-    const raw = model.meta?.copilotUsage;
-    return typeof raw === "string" ? raw : undefined;
-  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -62,7 +62,7 @@ export function ModelCombobox({
             <span className="flex items-center gap-2 truncate">
               {selectedModel.name}
               {selectedModel.id === currentModelId && (
-                <span className="text-muted-foreground">{t`(default)`}</span>
+                <span className="text-muted-foreground">{t("settings:default")}</span>
               )}
               {copilotUsage(selectedModel) && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">
@@ -71,7 +71,9 @@ export function ModelCombobox({
               )}
             </span>
           ) : (
-            <span className="text-muted-foreground">{placeholder ?? t`Select a model`}</span>
+            <span className="text-muted-foreground">
+              {placeholder ?? t("settings:selectAModel")}
+            </span>
           )}
           <IconSelector className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -82,12 +84,12 @@ export function ModelCombobox({
         onWheel={(e) => e.stopPropagation()}
       >
         <Command>
-          <CommandInput placeholder={t`Search models...`} />
+          <CommandInput placeholder={t("settings:searchModels")} />
           <CommandList
             className="max-h-[min(60vh,24rem)] overflow-y-auto overscroll-contain"
             onWheel={(e) => e.stopPropagation()}
           >
-            <CommandEmpty>{t`No model found.`}</CommandEmpty>
+            <CommandEmpty>{t("settings:noModelFound")}</CommandEmpty>
             <CommandGroup>
               {models.map((model) => {
                 const usage = copilotUsage(model);
@@ -106,7 +108,9 @@ export function ModelCombobox({
                       <div className="flex items-center gap-2 truncate">
                         <span className="truncate">{model.name}</span>
                         {model.id === currentModelId && (
-                          <span className="text-muted-foreground text-xs">{t`(default)`}</span>
+                          <span className="text-muted-foreground text-xs">
+                            {t("settings:default")}
+                          </span>
                         )}
                       </div>
                       {model.description && model.description !== model.name && (

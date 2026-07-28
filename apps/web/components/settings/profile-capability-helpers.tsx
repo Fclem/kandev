@@ -1,4 +1,4 @@
-import { Trans } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import { IconTerminal2 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import {
@@ -13,6 +13,7 @@ import type { CommandEntry, ModeEntry } from "@/lib/types/http";
 import type { ProfileFormData } from "./profile-form-fields";
 
 export function CommandsButton({ commands }: { commands: CommandEntry[] }) {
+  const { t } = useTranslation();
   if (commands.length === 0) return null;
   const commandCount = commands.length;
   return (
@@ -26,16 +27,14 @@ export function CommandsButton({ commands }: { commands: CommandEntry[] }) {
           data-testid="profile-commands-button"
         >
           <IconTerminal2 className="mr-2 h-4 w-4" />
-          <Trans>Available commands ({commandCount})</Trans>
+          {t("settings:availableCommands", { commandCount })}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Available slash commands</Trans>
-          </DialogTitle>
+          <DialogTitle>{t("settings:availableSlashCommands")}</DialogTitle>
           <DialogDescription>
-            <Trans>
+            <Trans i18nKey="settings:typeTheseDuringASessionChat">
               Type these during a session chat to invoke them - e.g. <code>/init</code>.
             </Trans>
           </DialogDescription>

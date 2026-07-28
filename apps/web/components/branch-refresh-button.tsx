@@ -1,9 +1,8 @@
 "use client";
-
 import { useState } from "react";
 import { IconRefresh } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
-import { useLingui } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 
 type BranchRefreshButtonProps = {
@@ -28,7 +27,7 @@ export function BranchRefreshButton({
   // Controlled open so the tooltip only reacts to hover, not focus.
   // Radix Popover auto-focuses the first focusable child when it opens, which
   // would otherwise trigger this tooltip the moment the dropdown is opened.
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const hasError = Boolean(fetchError);
   const tooltip = formatRefreshTooltip(label, fetchedAt, refreshing, fetchError);
@@ -37,7 +36,7 @@ export function BranchRefreshButton({
       <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label={t`Refresh ${label}`}
+          aria-label={t("common:refresh", { label })}
           data-testid={testId}
           onClick={(e) => {
             e.preventDefault();
@@ -67,16 +66,18 @@ function formatRefreshTooltip(
   refreshing: boolean | undefined,
   fetchError: string | undefined,
 ) {
-  if (refreshing) return t`Refreshing ${label}...`;
-  if (fetchError) return t`Last refresh failed: ${fetchError}`;
+  if (refreshing) return t("common:refreshing", { label });
+  if (fetchError) return t("common:lastRefreshFailed", { fetchError });
   if (!fetchedAt) return initialRefreshTooltip(label);
   const date = new Date(fetchedAt);
   if (Number.isNaN(date.getTime())) return initialRefreshTooltip(label);
   const fetchedTime = date.toLocaleTimeString();
-  return t`Refresh ${label} (last fetched ${fetchedTime})`;
+  return t("common:refreshLastFetched", { label, fetchedTime });
 }
 
 function initialRefreshTooltip(label: string) {
   // "branches" is a logic sentinel for the default label, not display copy.
-  return label === "branches" ? t`Refresh branches (git fetch)` : t`Refresh ${label}`;
+  return label === "branches"
+    ? t("common:refreshBranchesGitFetch")
+    : t("common:refresh", { label });
 }

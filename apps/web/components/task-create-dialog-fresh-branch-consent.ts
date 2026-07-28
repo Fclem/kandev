@@ -1,11 +1,10 @@
 "use client";
-
-import { t } from "@lingui/core/macro";
 import { useCallback, useState } from "react";
 import { getLocalRepositoryStatusAction } from "@/app/actions/workspaces";
 import { ApiError } from "@/lib/api/client";
 import { createTask } from "@/lib/api";
 import type { useToast } from "@/components/toast-provider";
+import { useTranslation } from "react-i18next";
 
 type CreateTaskParams = Parameters<typeof createTask>[0];
 type CreateTaskResponse = Awaited<ReturnType<typeof createTask>>;
@@ -57,6 +56,7 @@ export function useFreshBranchConsent({
   repositoryLocalPath,
   toast,
 }: Args) {
+  const { t } = useTranslation();
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscard | null>(null);
 
   const promptForList = useCallback(
@@ -82,8 +82,8 @@ export function useFreshBranchConsent({
       return await promptForList(status.dirty_files);
     } catch (error) {
       toast({
-        title: t`Failed to check local repository status`,
-        description: error instanceof Error ? error.message : t`Request failed`,
+        title: t("task:failedToCheckLocalRepositoryStatus"),
+        description: error instanceof Error ? error.message : t("common:requestFailed"),
         variant: "error",
       });
       return null;

@@ -1,6 +1,5 @@
 "use client";
-
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconPlus, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
@@ -24,10 +23,10 @@ export function KeyValueInput({
   addButtonLabel,
   masked = false,
 }: KeyValueInputProps) {
-  const { t } = useLingui();
-  const keyPlaceholderLabel = keyPlaceholder ?? t`Key`;
-  const valuePlaceholderLabel = valuePlaceholder ?? t`Value`;
-  const addLabel = addButtonLabel ?? t`Add Item`;
+  const { t } = useTranslation();
+  const keyPlaceholderLabel = keyPlaceholder ?? t("settings:key");
+  const valuePlaceholderLabel = valuePlaceholder ?? t("settings:value2");
+  const addLabel = addButtonLabel ?? t("settings:addItem");
 
   const handleAdd = () => {
     onChange([...items, { id: generateUUID(), key: "", value: "" }]);

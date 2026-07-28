@@ -1,13 +1,12 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t as globalT } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { IconBell } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Checkbox } from "@kandev/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { EVENT_LABELS } from "@/lib/notifications/events";
 import type { NotificationProvider } from "@/lib/types/http";
+import { t as globalT } from "@/lib/i18n";
 
 type Props = {
   tableProviders: NotificationProvider[];
@@ -21,7 +20,7 @@ function eventMeta(eventType: string) {
   return (
     EVENT_LABELS[eventType] ?? {
       title: eventType,
-      description: globalT`Notify when this event occurs.`,
+      description: globalT("settings:notifyWhenThisEventOccurs"),
     }
   );
 }
@@ -39,7 +38,7 @@ function EventCheckbox({
   onToggleEvent: Props["onToggleEvent"];
   mobile?: boolean;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const meta = eventMeta(eventType);
   const checked = (provider.events ?? []).includes(eventType);
   const baselineChecked = (
@@ -49,7 +48,7 @@ function EventCheckbox({
   const providerName = provider.name;
   const checkbox = (
     <Checkbox
-      aria-label={t`${eventTitle} for ${providerName}`}
+      aria-label={t("settings:for", { eventTitle, providerName })}
       checked={checked}
       data-settings-dirty={checked !== baselineChecked}
       onCheckedChange={() => onToggleEvent(provider, eventType)}
@@ -74,7 +73,7 @@ function TestProviderButton({
   provider: NotificationProvider;
   mobile?: boolean;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (provider.type === "local") return null;
   const providerName = provider.name;
   return (
@@ -85,15 +84,13 @@ function TestProviderButton({
             variant="ghost"
             size="icon"
             className={mobile ? "h-11 w-11 shrink-0 cursor-pointer" : "h-6 w-6 cursor-pointer"}
-            aria-label={t`Send test notification for ${providerName}`}
+            aria-label={t("settings:sendTestNotificationFor", { providerName })}
             onClick={() => void onTestProvider(provider.id)}
           >
             <IconBell className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>
-          <Trans>Send test notification</Trans>
-        </TooltipContent>
+        <TooltipContent>{t("settings:sendTestNotification")}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
@@ -150,6 +147,7 @@ function DesktopEventTable({
   onToggleEvent,
   onTestProvider,
 }: Props) {
+  const { t } = useTranslation();
   return (
     <div
       className="hidden overflow-auto rounded-lg border border-muted md:block"
@@ -158,9 +156,7 @@ function DesktopEventTable({
       <table className="min-w-full text-sm">
         <thead className="bg-muted/40">
           <tr>
-            <th className="px-4 py-3 text-left font-medium">
-              <Trans>Notification type</Trans>
-            </th>
+            <th className="px-4 py-3 text-left font-medium">{t("settings:notificationType")}</th>
             {tableProviders.map((provider) => (
               <th key={provider.id} className="px-4 py-3 text-center font-medium">
                 <div className="flex items-center justify-center gap-1.5">
@@ -202,11 +198,10 @@ function DesktopEventTable({
 }
 
 export function NotificationEventsTable(props: Props) {
+  const { t } = useTranslation();
   if (props.tableProviders.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        <Trans>No providers configured yet.</Trans>
-      </p>
+      <p className="text-sm text-muted-foreground">{t("settings:noProvidersConfiguredYet")}</p>
     );
   }
 

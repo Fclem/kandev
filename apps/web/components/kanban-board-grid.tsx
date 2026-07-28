@@ -1,6 +1,5 @@
 "use client";
-
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useRef } from "react";
 import {
   DndContext,
@@ -73,10 +72,10 @@ function getTasksForStep(tasks: Task[], stepId: string) {
 }
 
 function EmptyState({ showLoading }: { showLoading: boolean }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="h-full rounded-lg border border-dashed border-border/60 flex items-center justify-center text-sm text-muted-foreground mx-4">
-      {showLoading ? t`Loading...` : t`No workflows available yet.`}
+      {showLoading ? t("common:loading2") : t("kanban:noWorkflowsAvailableYet")}
     </div>
   );
 }

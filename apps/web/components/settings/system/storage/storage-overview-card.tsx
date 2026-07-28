@@ -1,5 +1,5 @@
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@kandev/ui/accordion";
 import { Badge } from "@kandev/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -27,10 +27,10 @@ interface StorageResource {
 function goCacheDisabledReason(overview: StorageOverviewResponse, pendingReason?: string) {
   if (pendingReason) return pendingReason;
   if (overview.summary.go_cache.owned !== true) {
-    return t`Only a Kandev-owned Go build cache can be cleaned.`;
+    return t("settings:onlyAKandevOwnedGoBuild");
   }
   if ((overview.summary.go_cache.size_bytes ?? 0) <= overview.settings.go_cache.max_bytes) {
-    return t`The Go build cache is below its configured size limit.`;
+    return t("settings:theGoBuildCacheIsBelow");
   }
   return undefined;
 }
@@ -39,18 +39,18 @@ function quarantineResource(summary: StorageQuarantineSummary): StorageResource 
   if (summary.available === false) {
     return {
       id: "quarantine",
-      label: t`Quarantined resources`,
-      value: t`Unavailable`,
-      detail: t`Quarantine usage could not be measured`,
+      label: t("settings:quarantinedResources"),
+      value: t("settings:unavailable"),
+      detail: t("settings:quarantineUsageCouldNotBeMeasured"),
       warning: summary.warning,
     };
   }
   const count = summary.count;
   return {
     id: "quarantine",
-    label: t`Quarantined resources`,
+    label: t("settings:quarantinedResources"),
     value: formatGigabytes(summary.size_bytes),
-    detail: t`${count} items moved aside for recovery before permanent deletion`,
+    detail: t("settings:itemsMovedAsideForRecoveryBefore", { count }),
   };
 }
 
@@ -60,7 +60,10 @@ function dockerMeasurement(
   detail: string,
 ): Pick<StorageResource, "value" | "detail"> {
   if (!available) {
-    return { value: t`Unavailable`, detail: t`Docker usage could not be measured` };
+    return {
+      value: t("settings:unavailable"),
+      detail: t("settings:dockerUsageCouldNotBeMeasured"),
+    };
   }
   return { value, detail };
 }
@@ -74,25 +77,25 @@ function storageResources(overview: StorageOverviewResponse): StorageResource[] 
   return [
     {
       id: "workspaces",
-      label: t`Task workspaces`,
+      label: t("settings:taskWorkspaces"),
       value: formatGigabytes(summary.workspaces.total_bytes ?? 0),
-      detail: t`${reclaimable} reclaimable after the grace period · ${active} active`,
+      detail: t("settings:reclaimableAfterTheGracePeriodActive", { reclaimable, active }),
       warning: summary.workspaces.warning,
     },
     quarantineResource(summary.quarantine),
     {
       id: "managed-containers",
-      label: t`Kandev containers`,
+      label: t("settings:kandevContainers"),
       ...dockerMeasurement(
         summary.docker.available,
         formatGigabytes(summary.docker.managed_container_bytes ?? 0),
-        t`${managedContainers} managed containers`,
+        t("settings:managedContainers", { managedContainers }),
       ),
       warning: dockerWarning,
     },
     {
       id: "go-cache",
-      label: t`Go build cache`,
+      label: t("settings:goBuildCache"),
       value: formatGigabytes(summary.go_cache.size_bytes ?? 0),
       detail: summary.go_cache.path ?? overview.capabilities.managed_go_cache_path,
       warning: summary.go_cache.warning,
@@ -101,7 +104,7 @@ function storageResources(overview: StorageOverviewResponse): StorageResource[] 
       ? [
           {
             id: "unmanaged-go-cache",
-            label: t`User Go build cache`,
+            label: t("settings:userGoBuildCache"),
             value: formatGigabytes(summary.go_cache.unmanaged_size_bytes ?? 0),
             detail: summary.go_cache.unmanaged_path,
           },
@@ -109,31 +112,31 @@ function storageResources(overview: StorageOverviewResponse): StorageResource[] 
       : []),
     {
       id: "docker-image-layers",
-      label: t`Docker image layers`,
+      label: t("settings:dockerImageLayers"),
       ...dockerMeasurement(
         summary.docker.available,
         formatGigabytes(summary.docker.image_layer_bytes ?? 0),
-        overview.capabilities.docker_host || t`Default Docker host`,
+        overview.capabilities.docker_host || t("settings:defaultDockerHost"),
       ),
       warning: dockerWarning,
     },
     {
       id: "docker-build-cache",
-      label: t`Docker build cache`,
+      label: t("settings:dockerBuildCache"),
       ...dockerMeasurement(
         summary.docker.available,
         formatGigabytes(summary.docker.build_cache_bytes),
-        overview.capabilities.docker_host || t`Default Docker host`,
+        overview.capabilities.docker_host || t("settings:defaultDockerHost"),
       ),
       warning: dockerWarning,
     },
     {
       id: "docker-unused-images",
-      label: t`Unused Docker images`,
+      label: t("settings:unusedDockerImages"),
       ...dockerMeasurement(
         summary.docker.available,
         formatGigabytes(summary.docker.unused_image_bytes),
-        t`Unused by every container and older than the configured age`,
+        t("settings:unusedByEveryContainerAndOlder"),
       ),
       warning: dockerWarning,
     },
@@ -147,6 +150,7 @@ interface ResourceRowProps {
 }
 
 function ResourceRow({ resource, goCacheCleanupDisabledReason, onRunGoCache }: ResourceRowProps) {
+  const { t } = useTranslation();
   return (
     <AccordionItem value={resource.id} data-testid={`storage-resource-${resource.id}`}>
       <AccordionTrigger
@@ -169,7 +173,7 @@ function ResourceRow({ resource, goCacheCleanupDisabledReason, onRunGoCache }: R
             onClick={onRunGoCache}
             data-testid="storage-go-cache-clean"
           >
-            <IconTrash className="size-4" /> <Trans>Clean Go cache</Trans>
+            <IconTrash className="size-4" /> {t("settings:cleanGoCache")}
           </StorageActionButton>
         )}
       </AccordionContent>
@@ -178,13 +182,13 @@ function ResourceRow({ resource, goCacheCleanupDisabledReason, onRunGoCache }: R
 }
 
 export function StorageOverviewCard({ overview, disabledReason, onRunGoCache }: Props) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (!overview) {
     return (
       <Card data-testid="storage-overview-card">
         <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
           <Spinner className="size-4" data-testid="storage-overview-spinner" />
-          <Trans>Loading storage data…</Trans>
+          {t("settings:loadingStorageData")}
         </CardContent>
       </Card>
     );
@@ -198,26 +202,19 @@ export function StorageOverviewCard({ overview, disabledReason, onRunGoCache }: 
     <Card className="min-w-0" data-testid="storage-overview-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <IconChartPie className="size-4" /> <Trans>Storage analysis</Trans>
+          <IconChartPie className="size-4" /> {t("settings:storageAnalysis")}
           {!summary.docker.available && (
-            <Badge variant="outline">
-              <Trans>Docker unavailable</Trans>
-            </Badge>
+            <Badge variant="outline">{t("settings:dockerUnavailable")}</Badge>
           )}
         </CardTitle>
-        <CardDescription>
-          <Trans>
-            A read-only breakdown of current usage and reclaimable space. Run Analyze occasionally
-            to refresh these estimates; it never deletes or moves anything.
-          </Trans>
-        </CardDescription>
+        <CardDescription>{t("settings:aReadOnlyBreakdownOfCurrent")}</CardDescription>
         <time
           className="text-xs text-muted-foreground"
           dateTime={overview.analyzed_at}
           title={analyzedAt}
-          aria-label={t`Last analyzed ${analyzedAt}`}
+          aria-label={t("settings:lastAnalyzed", { analyzedAt })}
         >
-          <Trans>Last analyzed {relativeTime}</Trans>
+          {t("settings:lastAnalyzed2", { relativeTime })}
         </time>
       </CardHeader>
       <CardContent className="min-w-0">

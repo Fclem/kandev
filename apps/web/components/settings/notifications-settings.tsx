@@ -1,7 +1,6 @@
 "use client";
-
 import { useMemo, useState, type FormEvent } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import { IconBell } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
@@ -37,7 +36,7 @@ function AppriseProviderCardActions({
   onDeleteProvider: (providerId: string) => void;
   onTestProvider: (providerId: string) => Promise<void>;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const providerName = provider.name;
   return (
     <div className="flex items-center gap-2">
@@ -48,15 +47,13 @@ function AppriseProviderCardActions({
               variant="outline"
               size="icon"
               className="h-8 w-8 cursor-pointer"
-              aria-label={t`Send test notification for ${providerName}`}
+              aria-label={t("settings:sendTestNotificationFor", { providerName })}
               onClick={() => void onTestProvider(provider.id)}
             >
               <IconBell className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
-            <Trans>Send test notification</Trans>
-          </TooltipContent>
+          <TooltipContent>{t("settings:sendTestNotification")}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
       <Button
@@ -65,7 +62,7 @@ function AppriseProviderCardActions({
         className="cursor-pointer"
         onClick={() => onOpenForm("edit", provider)}
       >
-        <Trans>Edit</Trans>
+        {t("common:edit")}
       </Button>
       <Button
         variant="outline"
@@ -73,7 +70,7 @@ function AppriseProviderCardActions({
         className="cursor-pointer"
         onClick={() => onDeleteProvider(provider.id)}
       >
-        <Trans>Remove</Trans>
+        {t("settings:remove")}
       </Button>
     </div>
   );
@@ -211,19 +208,18 @@ function ExternalProvidersSection({
   onTestProvider,
   onTextareaInput,
 }: ExternalProvidersSectionProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div>
-        <div className="text-base font-medium">
-          <Trans>External Providers</Trans>
-        </div>
+        <div className="text-base font-medium">{t("settings:externalProviders")}</div>
         <p className="text-sm text-muted-foreground">
-          <Trans>Configure external providers for remote notifications.</Trans>
+          {t("settings:configureExternalProvidersForRemoteNotifications")}
         </p>
       </div>
       {!appriseAvailable && (
         <p className="text-sm text-muted-foreground">
-          <Trans>
+          <Trans i18nKey="settings:appriseIsNotInstalledYetYou">
             Apprise is not installed yet. You can add it later to enable remote notifications.{" "}
             <a
               className="underline"
@@ -239,7 +235,7 @@ function ExternalProvidersSection({
       )}
       {appriseProviders.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          <Trans>No Apprise providers configured yet.</Trans>
+          {t("settings:noAppriseProvidersConfiguredYet")}
         </p>
       )}
       <AppriseProviderList
@@ -268,7 +264,7 @@ function ExternalProvidersSection({
             onClick={() => onOpenForm("create")}
             disabled={showAppriseForm}
           >
-            <Trans>Add Apprise Provider</Trans>
+            {t("settings:addAppriseProvider")}
           </Button>
           {showAppriseForm && appriseFormMode === "create" && (
             <AppriseProviderForm
@@ -316,7 +312,7 @@ function useTableData(state: NotificationsState) {
 }
 
 function useNotificationPageSaveState(state: NotificationsState, soundIsDirty: boolean) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const providerIsDirty = useIsDirty(state);
   const creatingApprise = state.showAppriseForm && state.appriseFormMode === "create";
   const canSave = !creatingApprise || state.appriseUrls.trim().length > 0;
@@ -343,13 +339,13 @@ function useNotificationPageSaveState(state: NotificationsState, soundIsDirty: b
     providerIsDirty,
     cardIsDirty: providerIsDirty || soundIsDirty,
     canSave,
-    invalidReason: canSave ? undefined : t`At least one Apprise service URL is required.`,
+    invalidReason: canSave ? undefined : t("settings:atLeastOneAppriseServiceUrl"),
     revision,
   };
 }
 
 export function NotificationsSettings() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const state = useNotificationsState();
   const { notificationPermission, refreshPermission } = useNotificationPermission();
   const saveRequest = useSaveRequest(state);
@@ -372,8 +368,8 @@ export function NotificationsSettings() {
   const appriseProviders = providers.filter((provider) => provider.type === "apprise");
   return (
     <SettingsPageTemplate
-      title={t`Notifications`}
-      description={t`Configure providers and choose which events should alert you.`}
+      title={t("settings:notifications")}
+      description={t("settings:configureProvidersAndChooseWhichEvents")}
       isDirty={saveState.providerIsDirty}
       cardIsDirty={saveState.cardIsDirty}
       saveStatus={saveRequest.status}
@@ -415,11 +411,9 @@ export function NotificationsSettings() {
       <Separator className="my-4" />
       <div className="space-y-4">
         <div>
-          <div className="text-base font-medium">
-            <Trans>Notification Events</Trans>
-          </div>
+          <div className="text-base font-medium">{t("settings:notificationEvents")}</div>
           <p className="text-sm text-muted-foreground">
-            <Trans>Select which providers should receive each notification type.</Trans>
+            {t("settings:selectWhichProvidersShouldReceiveEach")}
           </p>
         </div>
         {tableProviders.length > 0 && (
@@ -465,27 +459,25 @@ function AppriseProviderForm({
   formIsDirty = nameIsDirty || urlsIsDirty,
   showSubmit = true,
 }: AppriseProviderFormProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div
       className="rounded-lg border border-dashed border-muted p-4 space-y-3"
       data-settings-dirty={formIsDirty}
       data-settings-dirty-level="container"
     >
-      <div className="text-base font-medium">
-        <Trans>Apprise Provider</Trans>
-      </div>
+      <div className="text-base font-medium">{t("settings:appriseProvider")}</div>
       <Input
         value={name}
         onChange={(event) => onNameChange(event.target.value)}
-        placeholder={t`Provider name`}
+        placeholder={t("settings:providerName")}
         data-settings-dirty={nameIsDirty}
       />
       <Textarea
         value={urls}
         onChange={(event) => onUrlsChange(event.target.value)}
         onInput={onInput}
-        placeholder={t`Service URL(s)`}
+        placeholder={t("settings:serviceUrlS")}
         rows={1}
         className="min-h-0 h-auto"
         data-settings-dirty={urlsIsDirty}
@@ -493,11 +485,11 @@ function AppriseProviderForm({
       <div className="flex items-center gap-2">
         {showSubmit && (
           <Button className="cursor-pointer" onClick={onSubmit}>
-            {mode === "create" ? t`Add provider` : t`Done`}
+            {mode === "create" ? t("settings:addProvider") : t("settings:done")}
           </Button>
         )}
         <Button variant="ghost" className="cursor-pointer" onClick={onCancel}>
-          <Trans>Cancel</Trans>
+          {t("common:cancel")}
         </Button>
       </div>
     </div>

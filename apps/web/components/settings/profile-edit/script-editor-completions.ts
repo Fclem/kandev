@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import type { languages, editor, IRange } from "monaco-editor";
 import type { PromptReference } from "@/lib/prompts/expand-prompt-references";
 
@@ -56,7 +56,7 @@ export function createPlaceholderCompletionProvider(
         },
         kind: monaco.languages.CompletionItemKind.Variable,
         detail: p.description,
-        documentation: p.example ? t`Example: ${p.example}` : undefined,
+        documentation: p.example ? t("settings:example", { example: p.example }) : undefined,
         insertText: `${p.key}}}`,
         range,
         sortText: String(i).padStart(3, "0"),

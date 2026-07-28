@@ -1,16 +1,23 @@
-import { i18n, type Messages } from "@lingui/core";
+import i18next from "i18next";
+import { initReactI18next } from "react-i18next";
 
 import { writeLocaleCookie } from "./cookie";
 
 /**
- * i18n runtime for the Kandev web SPA (Lingui).
+ * i18n runtime for the Kandev web SPA (i18next).
  *
  * `en` is the source locale; `pseudo` is a QA-only accented/padded locale used
- * to visually prove every string was externalized. `pseudo` is filtered out of
- * the language switcher in production builds (see LanguageSettings), but the
- * runtime can still activate it if a `kandev_locale=pseudo` cookie is present.
+ * to visually prove every string was externalized (any plain-ASCII text on
+ * screen under `pseudo` is a literal that was never routed through `t`).
+ * `pseudo` is filtered out of the language switcher in production builds, but
+ * the runtime can still activate it if a `kandev_locale=pseudo` cookie is set.
+ *
+ * Catalogs live at `src/locales/<locale>/<namespace>.json` and are loaded
+ * eagerly per locale via Vite's glob import, so a locale switch needs no
+ * network round-trip.
  */
 export const DEFAULT_LOCALE = "en";
+export const DEFAULT_NAMESPACE = "common";
 export const SUPPORTED_LOCALES = ["en", "pseudo"] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
@@ -37,27 +44,68 @@ export function selectableLocales(isProd: boolean): SupportedLocale[] {
   return SUPPORTED_LOCALES.filter((locale) => locale !== "pseudo" || !isProd);
 }
 
-/**
- * Catalog loader. The Vite plugin compiles `.po` imports on the fly; the glob
- * template import lets the pseudo catalog be code-split out of production. A
- * fake loader can be injected in tests.
- */
-export type CatalogLoader = (locale: SupportedLocale) => Promise<{ messages: Messages }>;
+type CatalogModule = Record<string, unknown>;
 
-const defaultLoader: CatalogLoader = (locale) => import(`../../src/locales/${locale}/messages.po`);
+// Vite resolves this at build time; each entry is `../../src/locales/<locale>/<ns>.json`.
+const catalogModules = import.meta.glob<CatalogModule>("../../src/locales/*/*.json", {
+  eager: true,
+  import: "default",
+});
+
+function localeResources(locale: SupportedLocale): Record<string, CatalogModule> {
+  const resources: Record<string, CatalogModule> = {};
+  for (const [path, messages] of Object.entries(catalogModules)) {
+    const match = /\/locales\/([^/]+)\/([^/]+)\.json$/.exec(path);
+    if (!match) continue;
+    const [, fileLocale, namespace] = match;
+    if (fileLocale === locale) resources[namespace] = messages;
+  }
+  return resources;
+}
+
+/** Namespaces present in the source catalog; used to seed i18next. */
+export function knownNamespaces(): string[] {
+  const names = new Set<string>([DEFAULT_NAMESPACE]);
+  for (const path of Object.keys(catalogModules)) {
+    const match = /\/locales\/[^/]+\/([^/]+)\.json$/.exec(path);
+    if (match) names.add(match[1]);
+  }
+  return [...names];
+}
+
+let initialized = false;
+
+function ensureInitialized(locale: SupportedLocale) {
+  if (initialized) return;
+  void i18next.use(initReactI18next).init({
+    lng: locale,
+    fallbackLng: DEFAULT_LOCALE,
+    defaultNS: DEFAULT_NAMESPACE,
+    ns: knownNamespaces(),
+    resources: Object.fromEntries(
+      SUPPORTED_LOCALES.map((candidate) => [candidate, localeResources(candidate)]),
+    ),
+    interpolation: {
+      // React already escapes rendered output; double-escaping mangles copy.
+      escapeValue: false,
+    },
+    // Missing keys fall back to the key itself rather than throwing, so a
+    // missed extraction degrades to visible-but-wrong instead of a crash.
+    returnNull: false,
+  });
+  initialized = true;
+}
 
 /**
- * Load and activate a locale: fetch its compiled catalog, activate it on the
- * shared `i18n` instance, reflect it on `<html lang>`, and persist the cookie.
- * Unknown locales coerce to `en`. Returns the locale actually activated.
+ * Activate a locale: switch i18next, reflect it on `<html lang>`, and persist
+ * the cookie. Unknown locales coerce to `en`. Returns the locale activated.
  */
-export async function activateLocale(
-  locale: string,
-  loader: CatalogLoader = defaultLoader,
-): Promise<SupportedLocale> {
+export async function activateLocale(locale: string): Promise<SupportedLocale> {
   const normalized = normalizeLocale(locale);
-  const { messages } = await loader(normalized);
-  i18n.loadAndActivate({ locale: normalized, messages });
+  ensureInitialized(normalized);
+  if (i18next.language !== normalized) {
+    await i18next.changeLanguage(normalized);
+  }
   if (typeof document !== "undefined") {
     document.documentElement.lang = normalized;
   }
@@ -65,4 +113,23 @@ export async function activateLocale(
   return normalized;
 }
 
-export { i18n };
+/**
+ * Initialize i18next synchronously for unit tests. Tests never render the app
+ * shell, so nothing else would set the instance up; react-i18next's
+ * `useTranslation` then resolves against this default instance with no provider
+ * required. Not used by the app itself (see `activateLocale`).
+ */
+export function initI18nForTests(locale: SupportedLocale = DEFAULT_LOCALE): void {
+  ensureInitialized(locale);
+}
+
+/**
+ * Translate outside React (plain helpers, `.ts` modules). Inside components
+ * prefer `useTranslation()` so the tree re-renders on a locale switch.
+ */
+export function t(key: string, options?: Record<string, unknown>): string {
+  ensureInitialized(DEFAULT_LOCALE);
+  return i18next.t(key, options) as string;
+}
+
+export { i18next as i18n };

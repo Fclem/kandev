@@ -1,7 +1,6 @@
 "use client";
-
-import { Trans } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -26,6 +25,7 @@ export function RestartProgressDialog({
   errorMessage,
   onDismiss,
 }: RestartProgressDialogProps) {
+  const { t } = useTranslation();
   if (phase === "idle") return null;
   const done = phase === "done";
   const failed = phase === "error";
@@ -50,7 +50,7 @@ export function RestartProgressDialog({
               className="w-full cursor-pointer sm:w-auto"
               onClick={done ? () => window.location.reload() : onDismiss}
             >
-              {done ? <Trans>Reload page</Trans> : <Trans>Dismiss</Trans>}
+              {done ? t("settings:reloadPage") : t("common:dismiss")}
             </Button>
           </DialogFooter>
         )}
@@ -68,28 +68,28 @@ function RestartStatusIcon({ phase }: { phase: KandevRestartPhase }) {
 function restartTitle(phase: KandevRestartPhase): string {
   switch (phase) {
     case "starting":
-      return t`Requesting restart`;
+      return t("settings:requestingRestart");
     case "restarting":
-      return t`Restarting Kandev`;
+      return t("settings:restartingKandev");
     case "done":
-      return t`Kandev restarted`;
+      return t("settings:kandevRestarted");
     case "error":
-      return t`Restart failed`;
+      return t("settings:restartFailed");
     default:
-      return t`Restarting Kandev`;
+      return t("settings:restartingKandev");
   }
 }
 
 function restartDescription(phase: KandevRestartPhase, errorMessage: string | null): string {
   switch (phase) {
     case "starting":
-      return t`Preparing the local supervisor restart request.`;
+      return t("settings:preparingTheLocalSupervisorRestartRequest");
     case "restarting":
-      return t`Kandev is stopping and starting again. This page will detect the new process automatically.`;
+      return t("settings:kandevIsStoppingAndStartingAgain");
     case "done":
-      return t`The backend is running again. Reload the page to reconnect with the latest feature toggle state.`;
+      return t("settings:theBackendIsRunningAgainReload");
     case "error":
-      return errorMessage ?? t`The restart could not be completed.`;
+      return errorMessage ?? t("settings:theRestartCouldNotBeCompleted");
     default:
       return "";
   }

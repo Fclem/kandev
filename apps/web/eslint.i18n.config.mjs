@@ -1,32 +1,13 @@
 // Standalone i18n lint config — the anti-regression guard for hardcoded UI
-// strings. Kept SEPARATE from eslint.config.mjs during the migration because
-// the main lint runs with `--max-warnings 0`, which would fail on every
-// not-yet-migrated literal. Run it non-blocking with `pnpm lint:i18n`.
+// strings. Kept SEPARATE from eslint.config.mjs while the full-sweep migration
+// is in flight, because the main lint runs with `--max-warnings 0` and would
+// fail on every not-yet-migrated literal. Run it non-blocking: `pnpm lint:i18n`.
 //
-// Close-out (docs/plans/i18n task-40) folds `lingui/no-unlocalized-strings`
-// into the main config as an ERROR once every batch reports clean.
+// Close-out (docs/plans/i18n task-40) folds `i18next/no-literal-string` into the
+// main config as an ERROR once every batch reports clean.
 import { defineConfig, globalIgnores } from "eslint/config";
 import tseslint from "typescript-eslint";
-import lingui from "eslint-plugin-lingui";
-
-// Proper nouns / brand names / code identifiers that must NOT be translated.
-const ALLOWED_LITERALS = [
-  "^use client$",
-  "^use strict$",
-  "^Kandev$",
-  "^GitHub$",
-  "^GitLab$",
-  "^Jira$",
-  "^Linear$",
-  "^Slack$",
-  "^Sentry$",
-  "^Azure DevOps$",
-  "^ACP$",
-  "^MCP$",
-  "^SSH$",
-  "^URL$",
-  "^ID$",
-];
+import i18next from "eslint-plugin-i18next";
 
 export default defineConfig([
   globalIgnores([
@@ -38,58 +19,72 @@ export default defineConfig([
     "**/*.test.tsx",
     "e2e/**",
     "src/locales/**",
+    "scripts/**",
   ]),
   ...tseslint.configs.recommended,
   {
     files: ["components/**/*.{ts,tsx}", "app/**/*.{ts,tsx}"],
-    plugins: { lingui },
+    plugins: { i18next },
     rules: {
-      "lingui/no-unlocalized-strings": [
+      "i18next/no-literal-string": [
         "warn",
         {
-          ignore: ALLOWED_LITERALS,
-          // JSX attribute / object-property names that never hold display copy.
-          ignoreNames: [
-            "data-testid",
-            "data-legacy-testid",
-            "className",
-            "class",
-            "id",
-            "key",
-            "type",
-            "name",
-            "role",
-            "href",
-            "src",
-            "to",
-            "d",
-            "fill",
-            "stroke",
-            "viewBox",
-            "data-slot",
-            "data-variant",
-            "data-side",
-            "testId",
-            "displayName",
-            "slot",
-            "htmlFor",
-            "aria-labelledby",
-            "aria-controls",
-            "aria-describedby",
-          ],
-          // Function/method calls whose string args are identifiers, not copy.
-          ignoreFunctions: [
-            "cn",
-            "clsx",
-            "cva",
-            "tv",
-            "console.*",
-            "*.getAttribute",
-            "*.setAttribute",
-            "*.matches",
-            "*.closest",
-            "*.querySelector",
-          ],
+          // Only flag text that actually reaches the user.
+          mode: "jsx-text-only",
+          "should-validate-template": false,
+          message: {
+            // Brand/proper nouns and short symbols are not translatable copy.
+            exclude: [
+              "^\\s*$",
+              "^Kandev$",
+              "^GitHub$",
+              "^GitLab$",
+              "^Jira$",
+              "^Linear$",
+              "^Slack$",
+              "^Sentry$",
+              "^Azure DevOps$",
+              "^ACP$",
+              "^MCP$",
+              "^SSH$",
+              "^[^A-Za-z]*$",
+            ],
+          },
+          "jsx-attributes": {
+            // Attributes that carry display copy and must be translated.
+            include: ["placeholder", "aria-label", "aria-description", "title", "alt"],
+            exclude: [
+              "className",
+              "class",
+              "id",
+              "key",
+              "type",
+              "name",
+              "role",
+              "href",
+              "src",
+              "to",
+              "htmlFor",
+              "data-.*",
+              "aria-labelledby",
+              "aria-controls",
+              "aria-describedby",
+            ],
+          },
+          callees: {
+            // String args to these are identifiers/classnames, not copy.
+            exclude: [
+              "cn",
+              "clsx",
+              "cva",
+              "tv",
+              "t",
+              "i18n(ext)?.*",
+              "require",
+              "console\\.\\w+",
+              ".*\\.(getAttribute|setAttribute|matches|closest|querySelector)",
+            ],
+          },
         },
       ],
     },

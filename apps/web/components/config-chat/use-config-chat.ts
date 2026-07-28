@@ -1,7 +1,7 @@
 "use client";
-
+import { useTranslation } from "react-i18next";
 import { useCallback, useRef, useState } from "react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { updateWorkspaceAction } from "@/app/actions/workspaces";
@@ -89,7 +89,7 @@ function registerStartedSession({
   } else {
     store.addQuickChatSession(response.session_id, workspaceId, agentProfileId, "config");
   }
-  store.renameQuickChatSession(response.session_id, prompt.slice(0, 40) || t`Config Chat`);
+  store.renameQuickChatSession(response.session_id, prompt.slice(0, 40) || t("chat:configChat"));
   if (!isPassthrough) store.setQuickChatInitialPrompt(response.session_id, prompt);
 }
 
@@ -110,6 +110,7 @@ async function saveDefaultConfigProfile(
 }
 
 export function useConfigChat(workspaceId: string) {
+  const { t } = useTranslation();
   const store = useConfigChatStore();
   const storeApi = useAppStoreApi();
   const updateWorkspaceInStore = useUpdateWorkspaceInStore();
@@ -141,7 +142,7 @@ export function useConfigChat(workspaceId: string) {
         .getState()
         .agentProfiles.items.find((item) => item.id === agentProfileId);
       if (!profile) {
-        setError(t`The selected agent profile is not available yet. Try again shortly.`);
+        setError(t("chat:theSelectedAgentProfileIsNot"));
         return undefined;
       }
       if (activeWorkspaceStarts.has(workspaceId)) return undefined;
@@ -182,7 +183,7 @@ export function useConfigChat(workspaceId: string) {
         return response.session_id;
       } catch (err) {
         if (latestRequestId.current !== requestId) return undefined;
-        setError(err instanceof Error ? err.message : t`Unknown error`);
+        setError(err instanceof Error ? err.message : t("common:unknownError"));
         return undefined;
       } finally {
         if (activeWorkspaceStarts.get(workspaceId) === workspaceStart) {

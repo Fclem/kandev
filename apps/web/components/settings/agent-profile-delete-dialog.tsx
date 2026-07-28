@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,26 +35,23 @@ export function AgentProfileDeleteConfirmDialog({
   onOpenChange,
   onConfirm,
 }: AgentProfileDeleteConfirmDialogProps) {
+  const { t } = useTranslation();
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            <Trans>Delete agent profile?</Trans>
-          </AlertDialogTitle>
+          <AlertDialogTitle>{t("settings:deleteAgentProfile")}</AlertDialogTitle>
           <AlertDialogDescription>
-            <Trans>This will permanently delete this profile. This action cannot be undone.</Trans>
+            {t("settings:thisWillPermanentlyDeleteThisProfile")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">
-            <Trans>Cancel</Trans>
-          </AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">{t("common:cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            <Trans>Delete</Trans>
+            {t("common:delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -83,7 +79,7 @@ export function AgentProfileDeleteConflictDialog({
   onOpenChange,
   onConfirm,
 }: AgentProfileDeleteConflictDialogProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const tasks = conflict?.activeSessions.filter((s) => !s.is_ephemeral) ?? [];
   const quickChats = conflict?.activeSessions.filter((s) => s.is_ephemeral) ?? [];
   const watchers = conflict?.watchers ?? [];
@@ -98,24 +94,22 @@ export function AgentProfileDeleteConflictDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {hasHardBlockers ? t`Cannot delete agent profile` : t`Delete agent profile?`}
+            {hasHardBlockers
+              ? t("settings:cannotDeleteAgentProfile")
+              : t("settings:deleteAgentProfile")}
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div>
-              <p>
-                <Trans>
-                  This profile is currently in use. Deleting it will affect the following:
-                </Trans>
-              </p>
+              <p>{t("settings:thisProfileIsCurrentlyInUse")}</p>
               <SessionConflictSection
-                title={t`Tasks:`}
+                title={t("settings:tasks")}
                 sessions={tasks}
-                fallback={t`Untitled task`}
+                fallback={t("settings:untitledTask")}
               />
               <SessionConflictSection
-                title={t`Quick Chats:`}
+                title={t("settings:quickChats")}
                 sessions={quickChats}
-                fallback={t`Untitled quick chat`}
+                fallback={t("settings:untitledQuickChat")}
               />
               <WatcherConflictSection watchersByKind={watchersByKind} />
               <RoutingTierConflictSection
@@ -124,30 +118,21 @@ export function AgentProfileDeleteConflictDialog({
                 providerLabels={new Map(providers.map((p) => [p.id, p.name]))}
               />
               {hasHardBlockers ? (
-                <p className="mt-2">
-                  <Trans>Change these workspace tier mappings before deleting this profile.</Trans>
-                </p>
+                <p className="mt-2">{t("settings:changeTheseWorkspaceTierMappingsBefore")}</p>
               ) : (
-                <p className="mt-2">
-                  <Trans>
-                    These sessions will no longer be able to use this profile and the listed
-                    watchers will be disabled. This action cannot be undone.
-                  </Trans>
-                </p>
+                <p className="mt-2">{t("settings:theseSessionsWillNoLongerBe")}</p>
               )}
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">
-            <Trans>Cancel</Trans>
-          </AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">{t("common:cancel")}</AlertDialogCancel>
           {hasHardBlockers ? null : (
             <AlertDialogAction
               onClick={onConfirm}
               className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              <Trans>Delete Anyway</Trans>
+              {t("settings:deleteAnyway")}
             </AlertDialogAction>
           )}
         </AlertDialogFooter>
@@ -185,13 +170,12 @@ function WatcherConflictSection({
 }: {
   watchersByKind: Record<string, WatcherReference[]>;
 }) {
+  const { t } = useTranslation();
   const entries = Object.entries(watchersByKind);
   if (entries.length === 0) return null;
   return (
     <div className="mt-2">
-      <p className="font-medium text-sm">
-        <Trans>Watchers (will be disabled):</Trans>
-      </p>
+      <p className="font-medium text-sm">{t("settings:watchersWillBeDisabled")}</p>
       <ul className="list-disc list-inside mt-1 space-y-0.5">
         {entries.map(([kind, items]) => (
           <li key={kind} className="text-sm">
@@ -215,12 +199,11 @@ function RoutingTierConflictSection({
   workspaceLabels: Map<string, string>;
   providerLabels: Map<string, string>;
 }) {
+  const { t } = useTranslation();
   if (routingTiers.length === 0) return null;
   return (
     <div className="mt-2">
-      <p className="font-medium text-sm">
-        <Trans>Workspace tier mappings:</Trans>
-      </p>
+      <p className="font-medium text-sm">{t("settings:workspaceTierMappings")}</p>
       <ul className="list-disc list-inside mt-1 space-y-0.5">
         {routingTiers.map((ref) => {
           const tierLabel = formatRoutingTier(ref.tier);
@@ -228,7 +211,10 @@ function RoutingTierConflictSection({
           const providerLabel = formatLookupLabel(providerLabels, ref.provider_id);
           return (
             <li key={`${ref.workspace_id}-${ref.provider_id}-${ref.tier}`} className="text-sm">
-              <Trans>
+              <Trans
+                i18nKey="settings:tierInFor"
+                values={{ providerLabel, tierLabel, workspaceLabel }}
+              >
                 <span className="font-medium">{tierLabel}</span> tier in {workspaceLabel} for{" "}
                 {providerLabel}
               </Trans>

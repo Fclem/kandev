@@ -1,7 +1,6 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconAlertTriangle, IconRotate, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -26,6 +25,7 @@ import {
   type ShortcutConflictGroup,
 } from "@/lib/keyboard/shortcut-conflicts";
 import { SettingsCard } from "./settings-card";
+import { t } from "@/lib/i18n";
 
 type ShortcutRecorderProps = {
   shortcutId: string;
@@ -133,7 +133,7 @@ function ShortcutRecorderLabel({
   label: string;
   conflictsWith?: string[];
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const conflictNames = conflictsWith?.join(", ") ?? "";
   return (
     <span className="text-sm flex items-center gap-1.5">
@@ -141,7 +141,7 @@ function ShortcutRecorderLabel({
       {conflictsWith && conflictsWith.length > 0 && (
         <span
           className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-500"
-          title={t`Same shortcut as: ${conflictNames}`}
+          title={t("settings:sameShortcutAs", { conflictNames })}
         >
           <IconAlertTriangle className="size-3.5" />
         </span>
@@ -165,7 +165,7 @@ function ShortcutRecorderActions({
   onReset: (id: string) => void;
   onClear?: (id: string) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       {onClear && !isUnbound && !defaultIsUnbound && (
@@ -174,8 +174,8 @@ function ShortcutRecorderActions({
           size="icon"
           className="h-8 w-8 cursor-pointer"
           onClick={() => onClear(shortcutId)}
-          aria-label={t`Clear shortcut`}
-          title={t`Clear shortcut`}
+          aria-label={t("settings:clearShortcut")}
+          title={t("settings:clearShortcut")}
         >
           <IconX className="size-3.5" />
         </Button>
@@ -186,8 +186,10 @@ function ShortcutRecorderActions({
           size="icon"
           className="h-8 w-8 cursor-pointer"
           onClick={() => onReset(shortcutId)}
-          aria-label={defaultIsUnbound ? t`Reset (clear shortcut)` : t`Reset to default`}
-          title={defaultIsUnbound ? t`Reset (clear shortcut)` : t`Reset to default`}
+          aria-label={
+            defaultIsUnbound ? t("settings:resetClearShortcut") : t("settings:resetToDefault")
+          }
+          title={defaultIsUnbound ? t("settings:resetClearShortcut") : t("settings:resetToDefault")}
         >
           <IconRotate className="size-3.5" />
         </Button>
@@ -205,18 +207,9 @@ function renderRecorderLabel({
   current: KeyboardShortcut;
   isUnbound: boolean;
 }) {
-  if (recording)
-    return (
-      <span className="animate-pulse">
-        <Trans>Press a key combo...</Trans>
-      </span>
-    );
+  if (recording) return <span className="animate-pulse">{t("settings:pressAKeyCombo")}</span>;
   if (isUnbound)
-    return (
-      <span className="text-muted-foreground italic">
-        <Trans>Unbound</Trans>
-      </span>
-    );
+    return <span className="text-muted-foreground italic">{t("settings:unbound")}</span>;
   return <Kbd>{formatShortcut(current)}</Kbd>;
 }
 
@@ -246,6 +239,7 @@ export function KeyboardShortcutsCard({
   /** Dynamic plugin-declared shortcuts (see `lib/keyboard/plugin-shortcuts.ts`). */
   pluginEntries?: ShortcutEntry[];
 }) {
+  const { t } = useTranslation();
   const shortcuts = resolveAllShortcuts(overrides);
   const baselineShortcuts = resolveAllShortcuts(baselineOverrides);
 
@@ -287,9 +281,7 @@ export function KeyboardShortcutsCard({
   return (
     <SettingsCard isDirty={JSON.stringify(overrides) !== JSON.stringify(baselineOverrides)}>
       <CardHeader>
-        <CardTitle className="text-base">
-          <Trans>Keyboard Shortcuts</Trans>
-        </CardTitle>
+        <CardTitle className="text-base">{t("settings:keyboardShortcuts")}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="divide-y divide-border">
@@ -311,7 +303,7 @@ export function KeyboardShortcutsCard({
         {pluginEntries.length > 0 && (
           <div className="mt-4">
             <p className="text-xs font-medium text-muted-foreground mb-1">
-              <Trans>Plugin Shortcuts</Trans>
+              {t("settings:pluginShortcuts")}
             </p>
             <div className="divide-y divide-border">
               {pluginEntries.map((entry) => (
@@ -335,7 +327,7 @@ export function KeyboardShortcutsCard({
           </div>
         )}
         <p className="text-xs text-muted-foreground mt-3">
-          <Trans>Click a shortcut to record a new key combination.</Trans>
+          {t("settings:clickAShortcutToRecordA")}
         </p>
       </CardContent>
     </SettingsCard>

@@ -1,7 +1,6 @@
 "use client";
-
-import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@kandev/ui/lib/utils";
 import { useAppStore } from "@/components/state-provider";
@@ -21,36 +20,38 @@ export function connectionStatusDetails(
   switch (status) {
     case "connected":
       return {
-        label: t`Connected`,
-        description: t`Connected to Kandev`,
+        label: t("common:connected"),
+        description: t("statusBar:connectedToKandev"),
         dotClass: "bg-success",
         animate: false,
       };
     case "connecting":
       return {
-        label: t`Connecting`,
-        description: t`Connecting to Kandev`,
+        label: t("statusBar:connecting"),
+        description: t("statusBar:connectingToKandev"),
         dotClass: "bg-muted-foreground",
         animate: true,
       };
     case "reconnecting":
       return {
-        label: t`Reconnecting`,
-        description: t`Reconnecting to Kandev`,
+        label: t("statusBar:reconnecting"),
+        description: t("statusBar:reconnectingToKandev"),
         dotClass: "bg-amber-500",
         animate: true,
       };
     case "error":
       return {
-        label: t`Connection error`,
-        description: error ? t`Connection error: ${error}` : t`Connection error`,
+        label: t("common:connectionError"),
+        description: error
+          ? t("statusBar:connectionError", { error })
+          : t("common:connectionError"),
         dotClass: "bg-destructive",
         animate: false,
       };
     case "disconnected":
       return {
-        label: t`Offline`,
-        description: t`Connection unavailable`,
+        label: t("statusBar:offline"),
+        description: t("statusBar:connectionUnavailable"),
         dotClass: "bg-muted-foreground/50",
         animate: false,
       };
@@ -58,6 +59,7 @@ export function connectionStatusDetails(
 }
 
 export function ConnectionStatusItem({ presentation }: { presentation: "bar" | "mobile-drawer" }) {
+  const { t } = useTranslation();
   const status = useAppStore((state) => state.connection.status);
   const error = useAppStore((state) => state.connection.error);
   const details = connectionStatusDetails(status, error);
@@ -83,7 +85,7 @@ export function ConnectionStatusItem({ presentation }: { presentation: "bar" | "
           ) : (
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                <Trans>Connection</Trans>
+                {t("statusBar:connection")}
               </span>
               <span className="text-sm font-medium text-foreground">{details.description}</span>
             </span>

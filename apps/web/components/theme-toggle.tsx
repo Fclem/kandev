@@ -1,12 +1,12 @@
 "use client";
-
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "@/components/theme/app-theme";
 import { IconMoon, IconSun } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { useSyncExternalStore } from "react";
 
 export function ThemeToggle() {
+  const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -26,9 +26,7 @@ export function ThemeToggle() {
       className="h-9 w-9 p-0"
     >
       {theme === "dark" ? <IconSun className="h-4 w-4" /> : <IconMoon className="h-4 w-4" />}
-      <span className="sr-only">
-        <Trans>Toggle theme</Trans>
-      </span>
+      <span className="sr-only">{t("common:toggleTheme")}</span>
     </Button>
   );
 }

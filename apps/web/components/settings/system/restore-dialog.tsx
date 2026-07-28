@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -44,24 +43,24 @@ function ConfirmView({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <IconAlertTriangle className="h-5 w-5 text-destructive" />
-          <Trans>Restore snapshot</Trans>
+          {t("settings:restoreSnapshot")}
         </DialogTitle>
         <DialogDescription className="space-y-2">
           <span>
-            <Trans>
+            <Trans i18nKey="settings:restoreOverTheCurrentDatabaseAfter" values={{ name }}>
               Restore <code className="font-mono">{name}</code> over the current database. After the
               staged copy is in place you will be asked to quit and relaunch Kandev so the new data
               is loaded fresh - the backend does not auto-restart.
             </Trans>
           </span>
           <span className="block font-medium text-foreground">
-            <Trans>
+            <Trans i18nKey="settings:typeToEnableTheConfirmButton" values={{ CONFIRM_TOKEN }}>
               Type <code>{CONFIRM_TOKEN}</code> to enable the confirm button.
             </Trans>
           </span>
@@ -71,7 +70,7 @@ function ConfirmView({
       <div className="space-y-3">
         <Input
           autoFocus
-          placeholder={t`Type ${CONFIRM_TOKEN} to confirm`}
+          placeholder={t("settings:typeToConfirm", { CONFIRM_TOKEN })}
           value={typed}
           onChange={(e) => onTyped(e.target.value)}
           disabled={submitting}
@@ -87,8 +86,7 @@ function ConfirmView({
             className="flex items-center gap-2 text-sm text-muted-foreground"
             data-testid="system-restore-pending"
           >
-            <Spinner className="size-4" />{" "}
-            <Trans>Writing the snapshot over the live database...</Trans>
+            <Spinner className="size-4" /> {t("settings:writingTheSnapshotOverTheLive")}
           </div>
         )}
       </div>
@@ -101,7 +99,7 @@ function ConfirmView({
           className="cursor-pointer"
           data-testid="system-restore-cancel"
         >
-          <Trans>Cancel</Trans>
+          {t("common:cancel")}
         </Button>
         <Button
           variant="destructive"
@@ -110,7 +108,7 @@ function ConfirmView({
           className="cursor-pointer"
           data-testid="system-restore-confirm"
         >
-          <Trans>Restore</Trans>
+          {t("settings:restore")}
         </Button>
       </DialogFooter>
     </>
@@ -118,16 +116,17 @@ function ConfirmView({
 }
 
 function SuccessView({ name, onClose }: { name: string; onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <IconCircleCheck className="h-5 w-5 text-emerald-500" />
-          <Trans>Restore complete</Trans>
+          {t("settings:restoreComplete")}
         </DialogTitle>
         <DialogDescription>
           <span>
-            <Trans>
+            <Trans i18nKey="settings:hasBeenWrittenOverTheCurrent" values={{ name }}>
               <code className="font-mono">{name}</code> has been written over the current database.
               Quit and relaunch Kandev to load the restored data - the running backend still holds
               connections to the previous version and will serve stale rows until you restart.
@@ -142,7 +141,7 @@ function SuccessView({ name, onClose }: { name: string; onClose: () => void }) {
           className="cursor-pointer"
           data-testid="system-restore-close"
         >
-          <Trans>Close</Trans>
+          {t("common:close")}
         </Button>
       </DialogFooter>
     </>
@@ -150,7 +149,7 @@ function SuccessView({ name, onClose }: { name: string; onClose: () => void }) {
 }
 
 export function RestoreDialog({ open, onOpenChange, name }: Props) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [typed, setTyped] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [requestPending, setRequestPending] = useState(false);
@@ -161,7 +160,7 @@ export function RestoreDialog({ open, onOpenChange, name }: Props) {
   const failed = job?.state === "failed";
   // submitting spans both the HTTP roundtrip and the in-flight backend job.
   const submitting = requestPending || (jobId !== null && !succeeded && !failed);
-  const error = requestError ?? (failed ? (job?.message ?? t`Restore failed`) : null);
+  const error = requestError ?? (failed ? (job?.message ?? t("settings:restoreFailed")) : null);
   const enabled = typed === CONFIRM_TOKEN && !submitting && !succeeded;
 
   const handleClose = (next: boolean) => {
@@ -182,7 +181,7 @@ export function RestoreDialog({ open, onOpenChange, name }: Props) {
       const res = await restoreBackup(name, CONFIRM_TOKEN);
       setJobId(res.job_id);
     } catch (err) {
-      setRequestError(err instanceof Error ? err.message : t`Restore request failed`);
+      setRequestError(err instanceof Error ? err.message : t("settings:restoreRequestFailed"));
     } finally {
       setRequestPending(false);
     }

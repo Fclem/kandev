@@ -1,7 +1,6 @@
 "use client";
-
 import { useState, useEffect } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -29,7 +28,7 @@ export function ExecutorProfileDialog({
   executorId,
   onSaved,
 }: ExecutorProfileDialogProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +51,7 @@ export function ExecutorProfileDialog({
       onOpenChange(false);
       onSaved?.(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Failed to create profile`);
+      setError(err instanceof Error ? err.message : t("settings:failedToCreateProfile"));
     } finally {
       setSaving(false);
     }
@@ -62,27 +61,18 @@ export function ExecutorProfileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>
-            <Trans>New Profile</Trans>
-          </DialogTitle>
-          <DialogDescription>
-            <Trans>
-              Create a new profile for this executor. You can configure scripts and environment
-              variables on the profile page.
-            </Trans>
-          </DialogDescription>
+          <DialogTitle>{t("settings:newProfile2")}</DialogTitle>
+          <DialogDescription>{t("settings:createANewProfileForThis2")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="profile-name">
-              <Trans>Name</Trans>
-            </Label>
+            <Label htmlFor="profile-name">{t("settings:name")}</Label>
             <Input
               id="profile-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t`e.g. Production, Development`}
+              placeholder={t("settings:eGProductionDevelopment")}
               autoFocus
             />
           </div>
@@ -91,10 +81,10 @@ export function ExecutorProfileDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button onClick={handleSave} disabled={!name.trim() || saving} className="cursor-pointer">
-            {saving ? t`Creating...` : t`Create Profile`}
+            {saving ? t("settings:creating") : t("settings:createProfile2")}
           </Button>
         </DialogFooter>
       </DialogContent>

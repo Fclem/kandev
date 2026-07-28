@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,44 +22,31 @@ export function QuickChatDeleteDialog({
   onOpenChange,
   onConfirm,
 }: QuickChatDeleteDialogProps) {
+  const { t } = useTranslation();
   return (
     <AlertDialog open={!!sessionToDelete} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            <Trans>Delete Quick Chat?</Trans>
-          </AlertDialogTitle>
+          <AlertDialogTitle>{t("chat:deleteQuickChat")}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div>
-              <p>
-                <Trans>This will permanently delete this quick chat session, including:</Trans>
-              </p>
+              <p>{t("chat:thisWillPermanentlyDeleteThisQuick")}</p>
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>
-                  <Trans>All conversation history</Trans>
-                </li>
-                <li>
-                  <Trans>The task and its data</Trans>
-                </li>
-                <li>
-                  <Trans>The associated worktree</Trans>
-                </li>
+                <li>{t("chat:allConversationHistory")}</li>
+                <li>{t("chat:theTaskAndItsData")}</li>
+                <li>{t("chat:theAssociatedWorktree")}</li>
               </ul>
-              <p className="mt-2">
-                <Trans>This action cannot be undone.</Trans>
-              </p>
+              <p className="mt-2">{t("common:thisActionCannotBeUndone")}</p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">
-            <Trans>Cancel</Trans>
-          </AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">{t("common:cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            <Trans>Delete</Trans>
+            {t("common:delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

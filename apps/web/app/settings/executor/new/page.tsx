@@ -1,7 +1,6 @@
 "use client";
-
 import { Suspense, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter, useSearchParams } from "@/lib/routing/client-router";
 import { IconCloud, IconServer } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -19,14 +18,9 @@ const EXECUTOR_TYPES = ["local_docker", "remote_docker"] as const;
 type ExecutorType = (typeof EXECUTOR_TYPES)[number];
 
 export default function ExecutorCreatePage() {
+  const { t } = useTranslation();
   return (
-    <Suspense
-      fallback={
-        <div className="p-4">
-          <Trans>Loading...</Trans>
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="p-4">{t("common:loading2")}</div>}>
       <ExecutorCreatePageContent />
     </Suspense>
   );
@@ -49,45 +43,33 @@ function RemoteDockerFields({
   gitToken,
   onGitTokenChange,
 }: RemoteDockerFieldsProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor="docker-tls-verify">
-          <Trans>TLS verify</Trans>
-        </Label>
+        <Label htmlFor="docker-tls-verify">{t("settings:tlsVerify")}</Label>
         <Select value={dockerTlsVerify} onValueChange={onDockerTlsVerifyChange}>
           <SelectTrigger id="docker-tls-verify">
-            <SelectValue placeholder={t`Default (no TLS)`} />
+            <SelectValue placeholder={t("settings:defaultNoTls")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="1">
-              <Trans>Enabled</Trans>
-            </SelectItem>
-            <SelectItem value="0">
-              <Trans>Disabled</Trans>
-            </SelectItem>
+            <SelectItem value="1">{t("common:enabled")}</SelectItem>
+            <SelectItem value="0">{t("settings:disabled")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="docker-cert-path">
-          <Trans>TLS certificate path</Trans>
-        </Label>
+        <Label htmlFor="docker-cert-path">{t("settings:tlsCertificatePath")}</Label>
         <Input
           id="docker-cert-path"
           value={dockerCertPath}
           onChange={(event) => onDockerCertPathChange(event.target.value)}
           placeholder="/path/to/certs"
         />
-        <p className="text-xs text-muted-foreground">
-          <Trans>Path to TLS certificates for the Docker host.</Trans>
-        </p>
+        <p className="text-xs text-muted-foreground">{t("settings:pathToTlsCertificatesForThe")}</p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="git-token">
-          <Trans>Git token (optional)</Trans>
-        </Label>
+        <Label htmlFor="git-token">{t("settings:gitTokenOptional")}</Label>
         <Input
           id="git-token"
           type="password"
@@ -96,10 +78,7 @@ function RemoteDockerFields({
           placeholder="ghp_..."
         />
         <p className="text-xs text-muted-foreground">
-          <Trans>
-            Personal access token for cloning repositories inside the container. Auto-detected from
-            host environment if not set.
-          </Trans>
+          {t("settings:personalAccessTokenForCloningRepositories")}
         </p>
       </div>
     </>
@@ -135,44 +114,36 @@ function ExecutorFormCard({
   onDockerCertPathChange,
   onGitTokenChange,
 }: ExecutorFormCardProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const isRemoteDocker = type === "remote_docker";
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {isRemoteDocker ? <IconCloud className="h-4 w-4" /> : <IconServer className="h-4 w-4" />}
-          {isRemoteDocker ? t`Remote Docker Executor` : t`Local Docker Executor`}
+          {isRemoteDocker ? t("settings:remoteDockerExecutor") : t("settings:localDockerExecutor")}
         </CardTitle>
         <CardDescription>
           {isRemoteDocker
-            ? t`Connects to a remote Docker host. The repository will be cloned inside the container.`
-            : t`Uses the local Docker daemon on this machine.`}
+            ? t("settings:connectsToARemoteDockerHost2")
+            : t("settings:usesTheLocalDockerDaemonOn")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="executor-type">
-            <Trans>Executor type</Trans>
-          </Label>
+          <Label htmlFor="executor-type">{t("settings:executorType")}</Label>
           <Select value={type} onValueChange={(value) => onTypeChange(value as ExecutorType)}>
             <SelectTrigger id="executor-type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="local_docker">
-                <Trans>Local Docker</Trans>
-              </SelectItem>
-              <SelectItem value="remote_docker">
-                <Trans>Remote Docker</Trans>
-              </SelectItem>
+              <SelectItem value="local_docker">{t("settings:localDocker")}</SelectItem>
+              <SelectItem value="remote_docker">{t("settings:remoteDocker")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="executor-name">
-            <Trans>Executor name</Trans>
-          </Label>
+          <Label htmlFor="executor-name">{t("settings:executorName")}</Label>
           <Input
             id="executor-name"
             value={name}
@@ -180,9 +151,7 @@ function ExecutorFormCard({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="docker-host">
-            <Trans>Docker host</Trans>
-          </Label>
+          <Label htmlFor="docker-host">{t("settings:dockerHost")}</Label>
           <Input
             id="docker-host"
             value={dockerHost}
@@ -195,8 +164,8 @@ function ExecutorFormCard({
           />
           <p className="text-xs text-muted-foreground">
             {isRemoteDocker
-              ? t`The remote Docker host URL (tcp://, ssh://).`
-              : t`Repositories will be mounted as volumes at runtime.`}
+              ? t("settings:theRemoteDockerHostUrlTcp")
+              : t("settings:repositoriesWillBeMountedAsVolumes")}
           </p>
         </div>
         {isRemoteDocker && (
@@ -231,7 +200,7 @@ function buildExecutorConfig(
 }
 
 function ExecutorCreatePageContent() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialType = searchParams.get("type");
@@ -288,11 +257,9 @@ function ExecutorCreatePageContent() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">
-          <Trans>Create Executor</Trans>
-        </h2>
+        <h2 className="text-2xl font-bold">{t("settings:createExecutor")}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          <Trans>Choose an executor type to run environments on your infrastructure.</Trans>
+          {t("settings:chooseAnExecutorTypeToRun")}
         </p>
       </div>
       <Separator />
@@ -312,10 +279,10 @@ function ExecutorCreatePageContent() {
       />
       <div className="flex items-center justify-end gap-2">
         <Button variant="outline" onClick={() => router.push("/settings/executors")}>
-          <Trans>Cancel</Trans>
+          {t("common:cancel")}
         </Button>
         <Button onClick={handleCreate} disabled={isCreating}>
-          {isCreating ? t`Creating...` : t`Create Executor`}
+          {isCreating ? t("settings:creating") : t("settings:createExecutor")}
         </Button>
       </div>
     </div>

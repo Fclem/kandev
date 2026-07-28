@@ -1,7 +1,6 @@
 "use client";
-
 import { useCallback } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -25,7 +24,7 @@ function PolicyRuleRow({
   onUpdate: (index: number, field: keyof NetworkPolicyRule, val: string) => void;
   onRemove: (index: number) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <TableRow
       data-settings-dirty={!baselineRule || JSON.stringify(rule) !== JSON.stringify(baselineRule)}
@@ -51,13 +50,11 @@ function PolicyRuleRow({
           <SelectContent>
             <SelectItem value="allow">
               <Badge variant="default" className="bg-green-600">
-                <Trans>Allow</Trans>
+                {t("settings:allow")}
               </Badge>
             </SelectItem>
             <SelectItem value="deny">
-              <Badge variant="destructive">
-                <Trans>Deny</Trans>
-              </Badge>
+              <Badge variant="destructive">{t("settings:deny")}</Badge>
             </SelectItem>
           </SelectContent>
         </Select>
@@ -66,7 +63,7 @@ function PolicyRuleRow({
         <Input
           value={rule.include ?? ""}
           onChange={(e) => onUpdate(index, "include", e.target.value)}
-          placeholder={t`Optional pattern`}
+          placeholder={t("settings:optionalPattern")}
           className="text-sm"
           data-settings-dirty={!baselineRule || rule.include !== baselineRule.include}
         />
@@ -96,19 +93,14 @@ function PolicyRulesTable({
   onUpdate: (index: number, field: keyof NetworkPolicyRule, val: string) => void;
   onRemove: (index: number) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>
-            <Trans>Domain</Trans>
-          </TableHead>
-          <TableHead className="w-[120px]">
-            <Trans>Action</Trans>
-          </TableHead>
-          <TableHead>
-            <Trans>Include</Trans>
-          </TableHead>
+          <TableHead>{t("settings:domain")}</TableHead>
+          <TableHead className="w-[120px]">{t("settings:action")}</TableHead>
+          <TableHead>{t("settings:include")}</TableHead>
           <TableHead className="w-[60px]" />
         </TableRow>
       </TableHeader>
@@ -139,6 +131,7 @@ export function NetworkPoliciesCard({
   baselineRules,
   onRulesChange,
 }: NetworkPoliciesCardProps) {
+  const { t } = useTranslation();
   const addRule = useCallback(() => {
     onRulesChange([...rules, { domain: "", action: "allow" }]);
   }, [rules, onRulesChange]);
@@ -164,14 +157,8 @@ export function NetworkPoliciesCard({
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>
-              <Trans>Network Policies</Trans>
-            </CardTitle>
-            <CardDescription>
-              <Trans>
-                Define network access rules applied when a sprite is created for this profile.
-              </Trans>
-            </CardDescription>
+            <CardTitle>{t("settings:networkPolicies")}</CardTitle>
+            <CardDescription>{t("settings:defineNetworkAccessRulesAppliedWhen")}</CardDescription>
           </div>
           <Button
             type="button"
@@ -181,14 +168,14 @@ export function NetworkPoliciesCard({
             className="cursor-pointer"
           >
             <IconPlus className="mr-1 h-3.5 w-3.5" />
-            <Trans>Add Rule</Trans>
+            {t("settings:addRule")}
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         {rules.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            <Trans>No network policy rules configured.</Trans>
+            {t("settings:noNetworkPolicyRulesConfigured")}
           </p>
         ) : (
           <PolicyRulesTable

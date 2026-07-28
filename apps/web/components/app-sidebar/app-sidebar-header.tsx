@@ -1,7 +1,6 @@
 "use client";
-
 import Link from "@/components/routing/app-link";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
@@ -18,7 +17,7 @@ type AppSidebarHeaderProps = {
 const COLLAPSE_BUTTON_CLASS = "h-7 w-7 shrink-0 cursor-pointer";
 
 export function AppSidebarHeader({ collapsed, onToggleCollapse }: AppSidebarHeaderProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces);
   const activeWorkspace = workspaces.items.find(
     (workspace) => workspace.id === workspaces.activeId,
@@ -34,7 +33,7 @@ export function AppSidebarHeader({ collapsed, onToggleCollapse }: AppSidebarHead
           <TooltipTrigger asChild>
             <Link
               href={homeHref}
-              aria-label={t`Kandev home`}
+              aria-label={t("common:kandevHome")}
               className="flex h-7 w-7 items-center justify-center rounded-md text-foreground/80 hover:bg-muted/60 cursor-pointer"
             >
               <span className="text-base font-bold tracking-tight">K</span>
@@ -49,14 +48,12 @@ export function AppSidebarHeader({ collapsed, onToggleCollapse }: AppSidebarHead
               size="icon"
               className={COLLAPSE_BUTTON_CLASS}
               onClick={onToggleCollapse}
-              aria-label={t`Expand sidebar`}
+              aria-label={t("sidebar:expandSidebar")}
             >
               <IconLayoutSidebarLeftExpand className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">
-            <Trans>Expand sidebar</Trans>
-          </TooltipContent>
+          <TooltipContent side="right">{t("sidebar:expandSidebar")}</TooltipContent>
         </Tooltip>
       </div>
     );
@@ -73,7 +70,7 @@ export function AppSidebarHeader({ collapsed, onToggleCollapse }: AppSidebarHead
     >
       <Link
         href={homeHref}
-        aria-label={t`Kandev home`}
+        aria-label={t("common:kandevHome")}
         className={cn(
           "shrink-0 cursor-pointer text-sm font-semibold tracking-tight",
           "text-foreground hover:text-foreground/80 transition-colors",
@@ -92,14 +89,12 @@ export function AppSidebarHeader({ collapsed, onToggleCollapse }: AppSidebarHead
             size="icon"
             className={COLLAPSE_BUTTON_CLASS}
             onClick={onToggleCollapse}
-            aria-label={t`Collapse sidebar`}
+            aria-label={t("sidebar:collapseSidebar")}
           >
             <IconLayoutSidebarLeftCollapse className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="top">
-          <Trans>Collapse sidebar</Trans>
-        </TooltipContent>
+        <TooltipContent side="top">{t("sidebar:collapseSidebar")}</TooltipContent>
       </Tooltip>
     </div>
   );

@@ -1,4 +1,4 @@
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@kandev/ui/accordion";
 import { Badge } from "@kandev/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -10,17 +10,16 @@ function dateLabel(value: string): string {
 }
 
 export function StorageRunHistory({ runs }: { runs: StorageMaintenanceRun[] }) {
+  const { t } = useTranslation();
   return (
     <Card className="min-w-0" data-testid="storage-run-history">
       <CardHeader>
-        <CardTitle className="text-base">
-          <Trans>Maintenance history</Trans>
-        </CardTitle>
+        <CardTitle className="text-base">{t("settings:maintenanceHistory")}</CardTitle>
       </CardHeader>
       <CardContent>
         {runs.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            <Trans>No storage maintenance runs yet.</Trans>
+            {t("settings:noStorageMaintenanceRunsYet")}
           </p>
         ) : (
           <Accordion type="multiple">

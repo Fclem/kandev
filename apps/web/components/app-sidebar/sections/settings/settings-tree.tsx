@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useState } from "react";
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import {
   IconKey,
   IconMessageCircle,
@@ -59,7 +58,7 @@ export function settingsOpenGroupIdForPath(pathname: string): string {
  * footer gear is active, as the full-height sidebar takeover.
  */
 export function SettingsTree({ pathname }: { pathname: string }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const pluginsEnabled = useFeature("plugins");
   const authEnabled = useFeature("auth");
   const authMode = useAppStore((s) => s.auth.mode);
@@ -86,19 +85,19 @@ export function SettingsTree({ pathname }: { pathname: string }) {
       <AgentsGroup pathname={pathname} {...groupProps("agents")} />
       <SettingsLeaf
         href={PROMPTS_HREF}
-        label={t`Prompts`}
+        label={t("common:prompts")}
         icon={IconMessageCircle}
         isActive={pathname === PROMPTS_HREF}
       />
       <SettingsLeaf
         href={VOICE_MODE_HREF}
-        label={t`Voice Mode`}
+        label={t("sidebar:voiceMode")}
         icon={IconMicrophone}
         isActive={pathname === VOICE_MODE_HREF}
       />
       <SettingsLeaf
         href={UTILITY_HREF}
-        label={t`Utility Agents`}
+        label={t("sidebar:utilityAgents")}
         icon={IconWand}
         isActive={pathname === UTILITY_HREF}
       />
@@ -106,13 +105,13 @@ export function SettingsTree({ pathname }: { pathname: string }) {
       {/* Editors lives under General (see GeneralGroup) — no duplicate top-level leaf. */}
       <SettingsLeaf
         href={SECRETS_HREF}
-        label={t`Secrets`}
+        label={t("sidebar:secrets")}
         icon={IconKey}
         isActive={pathname === SECRETS_HREF}
       />
       <SettingsLeaf
         href={EXT_MCP_HREF}
-        label={t`External MCP`}
+        label={t("common:externalMcp")}
         icon={IconPlugConnected}
         isActive={pathname === EXT_MCP_HREF}
       />
@@ -120,7 +119,7 @@ export function SettingsTree({ pathname }: { pathname: string }) {
       {pluginsEnabled && (
         <SettingsLeaf
           href={PLUGINS_HREF}
-          label={t`Plugins`}
+          label={t("common:plugins")}
           icon={IconPuzzle}
           isActive={pathname === PLUGINS_HREF}
         />

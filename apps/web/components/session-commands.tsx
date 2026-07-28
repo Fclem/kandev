@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useMemo, useState } from "react";
 import {
   IconPlayerStop,
@@ -17,7 +16,7 @@ import {
   IconMessagePlus,
   IconSubtask,
 } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { useRegisterCommands } from "@/hooks/use-register-commands";
 import { useGitOperations } from "@/hooks/use-git-operations";
 import { useGitWithFeedback } from "@/hooks/use-git-with-feedback";
@@ -54,7 +53,7 @@ function buildSessionCommands(
   if (isAgentRunning)
     items.push({
       id: "session-cancel",
-      label: t`Cancel Turn`,
+      label: t("common:cancelTurn"),
       group: "Agent",
       icon: <IconPlayerStop className="size-3.5" />,
       keywords: ["cancel", "stop", "turn", "cancel agent", "stop agent", "interrupt agent"],
@@ -73,7 +72,7 @@ function buildGitCommands(
   return [
     {
       id: "git-commit",
-      label: t`Commit Changes`,
+      label: t("common:commitChanges"),
       group: "Git",
       icon: <IconGitCommit className="size-3.5" />,
       keywords: ["commit", "git", "save changes", "git commit"],
@@ -81,7 +80,7 @@ function buildGitCommands(
     },
     {
       id: "git-push",
-      label: t`Push`,
+      label: t("common:push"),
       group: "Git",
       icon: <IconArrowUp className="size-3.5" />,
       keywords: ["push", "git", "push changes", "push to remote", "upload changes"],
@@ -89,7 +88,7 @@ function buildGitCommands(
     },
     {
       id: "git-pull",
-      label: t`Pull`,
+      label: t("common:pull"),
       group: "Git",
       icon: <IconArrowDown className="size-3.5" />,
       keywords: ["pull", "git", "pull changes", "download changes"],
@@ -97,7 +96,7 @@ function buildGitCommands(
     },
     {
       id: "git-create-pr",
-      label: t`Create PR`,
+      label: t("common:createPr"),
       group: "Git",
       icon: <IconGitPullRequest className="size-3.5" />,
       keywords: ["pull request", "pr", "open pull request", "submit pull request", "git"],
@@ -105,7 +104,7 @@ function buildGitCommands(
     },
     {
       id: "git-rebase",
-      label: t`Rebase`,
+      label: t("common:rebase"),
       group: "Git",
       icon: <IconGitBranch className="size-3.5" />,
       keywords: ["rebase", "git", "branch"],
@@ -116,7 +115,7 @@ function buildGitCommands(
     },
     {
       id: "git-merge",
-      label: t`Merge`,
+      label: t("common:merge"),
       group: "Git",
       icon: <IconGitMerge className="size-3.5" />,
       keywords: ["merge", "git", "branch"],
@@ -132,12 +131,12 @@ function buildWorkspaceCommands(sessionId: string): CommandItem[] {
   return [
     {
       id: "workspace-create-file",
-      label: t`Create File`,
+      label: t("common:createFile"),
       group: "Workspace",
       icon: <IconFilePlus className="size-3.5" />,
       keywords: ["create", "new", "file", "add"],
       enterMode: "input",
-      inputPlaceholder: t`File path relative to workspace root...`,
+      inputPlaceholder: t("common:filePathRelativeToWorkspaceRoot"),
       onInputSubmit: async (path) => {
         const client = getWebSocketClient();
         if (!client) return;
@@ -164,7 +163,7 @@ function buildTaskCommands(
   return [
     {
       id: "agent-new",
-      label: t`New Agent`,
+      label: t("common:newAgent"),
       group: "Agent",
       icon: <IconMessagePlus className="size-3.5" />,
       keywords: ["new", "agent", "session", "start agent", "new session"],
@@ -172,7 +171,7 @@ function buildTaskCommands(
     },
     {
       id: "subtask-create",
-      label: t`Create Subtask`,
+      label: t("common:createSubtask"),
       group: "Tasks",
       icon: <IconSubtask className="size-3.5" />,
       keywords: ["subtask", "create", "new subtask", "new sub-task", "child task"],
@@ -188,7 +187,7 @@ function buildPanelCommands(
   const items: CommandItem[] = [
     {
       id: "panel-browser",
-      label: t`Add Browser Panel`,
+      label: t("common:addBrowserPanel"),
       group: "Panels",
       icon: <IconBrowser className="size-3.5" />,
       keywords: ["browser", "preview", "web", "open browser preview", "web preview", "app preview"],
@@ -196,7 +195,7 @@ function buildPanelCommands(
     },
     {
       id: "panel-terminal",
-      label: t`Add Terminal Panel`,
+      label: t("common:addTerminalPanel"),
       group: "Panels",
       icon: <IconTerminal2 className="size-3.5" />,
       keywords: ["terminal", "shell", "console", "new terminal", "open terminal", "command line"],
@@ -206,7 +205,7 @@ function buildPanelCommands(
   if (!isPassthrough)
     items.push({
       id: "panel-plan",
-      label: t`Add Plan Panel`,
+      label: t("common:addPlanPanel"),
       group: "Panels",
       icon: <IconFileText className="size-3.5" />,
       keywords: ["plan", "document", "task plan", "implementation plan", "plan details"],
@@ -214,7 +213,7 @@ function buildPanelCommands(
     });
   items.push({
     id: "panel-changes",
-    label: t`Add Changes Panel`,
+    label: t("common:addChangesPanel"),
     group: "Panels",
     icon: <IconFileDiff className="size-3.5" />,
     keywords: [

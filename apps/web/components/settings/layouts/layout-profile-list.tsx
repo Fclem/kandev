@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconCopy, IconPlus } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -86,10 +85,11 @@ function BuiltInProfileList({
   effectiveBuiltInId: BuiltInLayoutProfileId | null;
   onSelect: (selection: LayoutProfileSelection) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
       <h4 className="text-xs font-medium uppercase text-muted-foreground">
-        <Trans>Built-in</Trans>
+        {t("settings:builtIn")}
       </h4>
       {BUILT_IN_LAYOUT_PROFILES.map((profile) => {
         const override = getBuiltInLayoutOverride(profiles, profile.id);
@@ -110,18 +110,10 @@ function BuiltInProfileList({
               <span className="flex min-w-0 flex-wrap items-center justify-between gap-1">
                 <span className="text-sm font-medium">{profile.name}</span>
                 <span className="flex flex-wrap justify-end gap-1">
-                  <Badge variant="outline">
-                    <Trans>Built-in</Trans>
-                  </Badge>
-                  {override && (
-                    <Badge variant="secondary">
-                      <Trans>Customized</Trans>
-                    </Badge>
-                  )}
+                  <Badge variant="outline">{t("settings:builtIn")}</Badge>
+                  {override && <Badge variant="secondary">{t("settings:customized")}</Badge>}
                   {effectiveBuiltInId === profile.id && (
-                    <Badge variant="secondary">
-                      <Trans>Default</Trans>
-                    </Badge>
+                    <Badge variant="secondary">{t("common:default")}</Badge>
                   )}
                 </span>
               </span>
@@ -147,26 +139,26 @@ export function LayoutProfileList({
       ? effectiveDefault.profile.id
       : getBuiltInLayoutOverrideSourceId(effectiveDefault.profile);
   const customProfiles = profiles.filter((profile) => !isBuiltInLayoutOverride(profile));
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
-    <aside className="min-w-0 space-y-3" aria-label={t`Layout profiles`}>
+    <aside className="min-w-0 space-y-3" aria-label={t("settings:layoutProfiles")}>
       <div className="flex flex-wrap gap-2">
         <ProfileAction
-          label={t`New layout`}
-          help={t`Create a new editable layout based on Default.`}
+          label={t("settings:newLayout")}
+          help={t("settings:createANewEditableLayoutBased")}
           onClick={onCreate}
           testId="layout-profile-create"
         >
-          <IconPlus className="mr-1.5 h-4 w-4" /> <Trans>New</Trans>
+          <IconPlus className="mr-1.5 h-4 w-4" /> {t("settings:new")}
         </ProfileAction>
         <ProfileAction
-          label={t`Duplicate layout`}
-          help={t`Create a separate custom copy of the selected layout.`}
+          label={t("settings:duplicateLayout")}
+          help={t("settings:createASeparateCustomCopyOf")}
           variant="outline"
           onClick={onDuplicate}
           testId="layout-profile-duplicate"
         >
-          <IconCopy className="mr-1.5 h-4 w-4" /> <Trans>Duplicate</Trans>
+          <IconCopy className="mr-1.5 h-4 w-4" /> {t("settings:duplicate")}
         </ProfileAction>
       </div>
 
@@ -179,12 +171,10 @@ export function LayoutProfileList({
 
       <div className="space-y-1.5">
         <h4 className="text-xs font-medium uppercase text-muted-foreground">
-          <Trans>Custom</Trans>
+          {t("settings:custom2")}
         </h4>
         {customProfiles.length === 0 && (
-          <p className="py-3 text-sm text-muted-foreground">
-            <Trans>No custom profiles</Trans>
-          </p>
+          <p className="py-3 text-sm text-muted-foreground">{t("settings:noCustomProfiles")}</p>
         )}
         {customProfiles.map((profile) => {
           const compatibility = getLayoutProfileCompatibility(profile);
@@ -205,14 +195,10 @@ export function LayoutProfileList({
               <span className="flex shrink-0 gap-1">
                 {effectiveDefault.source === "custom" &&
                   effectiveDefault.profile.id === profile.id && (
-                    <Badge variant="secondary">
-                      <Trans>Default</Trans>
-                    </Badge>
+                    <Badge variant="secondary">{t("common:default")}</Badge>
                   )}
                 {compatibility.status === "legacy" && (
-                  <Badge variant="outline">
-                    <Trans>Unavailable</Trans>
-                  </Badge>
+                  <Badge variant="outline">{t("settings:unavailable")}</Badge>
                 )}
               </span>
             </button>

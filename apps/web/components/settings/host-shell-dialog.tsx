@@ -1,6 +1,5 @@
 "use client";
-
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { startHostShell } from "@/lib/api";
 import { PtyTerminalDialog } from "@/components/settings/pty-terminal-dialog";
 
@@ -21,13 +20,13 @@ type Props = {
  * Used for ad-hoc setup commands that don't fit the install/login flows.
  */
 export function HostShellDialog({ open, onOpenChange, onClose, initialInput }: Props) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <PtyTerminalDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={t`Host terminal`}
-      description={t`Runs a shell on the kandev host. Use it to install or configure agents manually.`}
+      title={t("settings:hostTerminal")}
+      description={t("settings:runsAShellOnTheKandev")}
       testIdPrefix="host-shell"
       startSession={startHostShell}
       onDone={onClose}

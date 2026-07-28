@@ -1,9 +1,7 @@
 "use client";
-
 import { memo, useState } from "react";
 import { IconCheck, IconChevronDown, IconLoader2 } from "@tabler/icons-react";
-import { useLingui } from "@lingui/react/macro";
-
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Button } from "@kandev/ui/button";
 import {
@@ -162,10 +160,10 @@ export const Combobox = memo(function Combobox({
   headerAction,
   loading = false,
 }: ComboboxProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const portalContainer = useTaskCreateDialogPopoverContainer();
-  const searchPlaceholderText = searchPlaceholder ?? t`Search...`;
+  const searchPlaceholderText = searchPlaceholder ?? t("common:search");
   // Track the highlighted item. Defaults to the selected value so the current
   // selection is highlighted when the popover opens (not the first item).
   const [highlighted, setHighlighted] = useState("");
@@ -194,7 +192,7 @@ export const Combobox = memo(function Combobox({
             <TriggerLabel
               selectedOption={selectedOption}
               plainTrigger={plainTrigger}
-              placeholder={placeholder ?? t`Select option...`}
+              placeholder={placeholder ?? t("common:selectOption")}
             />
           </div>
           {loading ? (
@@ -228,7 +226,7 @@ export const Combobox = memo(function Combobox({
           ) : null}
           {showSearch && <CommandInput placeholder={searchPlaceholderText} className="h-9" />}
           <CommandList>
-            <CommandEmpty>{emptyMessage ?? t`No option found.`}</CommandEmpty>
+            <CommandEmpty>{emptyMessage ?? t("common:noOptionFound")}</CommandEmpty>
             <OptionsList
               options={options}
               value={value}

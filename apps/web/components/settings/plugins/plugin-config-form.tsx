@@ -1,7 +1,6 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
@@ -90,7 +89,7 @@ function ConfigFieldControl({
   disabled,
   onChange,
 }: ConfigFieldControlProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (field.type === "boolean") {
     return (
       <div>
@@ -120,7 +119,7 @@ function ConfigFieldControl({
           className="max-w-md cursor-pointer"
           data-settings-dirty={isDirty}
         >
-          <SelectValue placeholder={t`Select...`} />
+          <SelectValue placeholder={t("settings:select2")} />
         </SelectTrigger>
         <SelectContent>
           {!field.required && (
@@ -128,7 +127,7 @@ function ConfigFieldControl({
               value={ENUM_UNSET_SENTINEL}
               className="cursor-pointer text-muted-foreground"
             >
-              <Trans>Not set</Trans>
+              {t("settings:notSet")}
             </SelectItem>
           )}
           {(field.enumValues ?? []).map((option) => (
@@ -179,6 +178,7 @@ function UtilityAgentSelect({
   disabled,
   onChange,
 }: ConfigFieldControlProps) {
+  const { t } = useTranslation();
   const { agents, loading, error } = useUtilityAgents();
   const selectedID = typeof value === "string" ? value : "";
   const selectedAgent = agents.find((agent) => agent.id === selectedID);
@@ -202,7 +202,7 @@ function UtilityAgentSelect({
             value={UTILITY_AGENT_UNSET_SENTINEL}
             className="cursor-pointer text-muted-foreground"
           >
-            <Trans>Not set</Trans>
+            {t("settings:notSet")}
           </SelectItem>
         )}
         {agents.map((agent) => (
@@ -222,13 +222,15 @@ function UtilityAgentSelect({
 
 function selectedUtilityAgentFallback(selectedID: string, loading: boolean): string | undefined {
   if (selectedID === "") return undefined;
-  return loading ? t`Loading selected utility agent...` : t`Selected utility agent unavailable`;
+  return loading
+    ? t("settings:loadingSelectedUtilityAgent")
+    : t("settings:selectedUtilityAgentUnavailable");
 }
 
 function utilityAgentPlaceholder(loading: boolean, error: Error | null): string {
-  if (loading) return t`Loading utility agents...`;
-  if (error) return t`Utility agents unavailable`;
-  return t`Select a utility agent...`;
+  if (loading) return t("settings:loadingUtilityAgents");
+  if (error) return t("settings:utilityAgentsUnavailable");
+  return t("settings:selectAUtilityAgent");
 }
 
 function inputType(field: PluginConfigField): string {

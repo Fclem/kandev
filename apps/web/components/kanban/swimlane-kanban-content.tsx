@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useMemo, useState } from "react";
 import {
   DndContext,
@@ -11,8 +10,8 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { Trans } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { KanbanColumn } from "@/components/kanban-column";
 import { type Task } from "@/components/kanban-card";
 import { KanbanCardPreview } from "@/components/kanban-card-preview";
@@ -42,7 +41,7 @@ export const ORPHAN_STEP_ID = "__kandev_orphan__";
 
 export const ORPHAN_STEP: WorkflowStep = {
   id: ORPHAN_STEP_ID,
-  title: t`Needs Reassignment`,
+  title: t("kanban:needsReassignment"),
   color: "#f59e0b",
 };
 
@@ -82,6 +81,7 @@ type SwimlaneKanbanDndOptions = {
 };
 
 function useSwimlaneKanbanDnd({ tasks, workflowId, onMoveError }: SwimlaneKanbanDndOptions) {
+  const { t } = useTranslation();
   const store = useAppStoreApi();
   const { moveTaskById } = useTaskActions();
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -138,7 +138,7 @@ function useSwimlaneKanbanDnd({ tasks, workflowId, onMoveError }: SwimlaneKanban
             .getState()
             .setWorkflowSnapshot(workflowId, { ...currentSnapshot, tasks: originalTasks });
         }
-        const message = error instanceof Error ? error.message : t`Failed to move task`;
+        const message = error instanceof Error ? error.message : t("kanban:failedToMoveTask");
         onMoveError?.({ message, taskId, sessionId: task.primarySessionId ?? null });
       }
     },
@@ -276,6 +276,7 @@ function MobileKanbanLayout({
   activeTask: Task | null;
   mobileWorkflowNavigation?: MobileWorkflowNavigation;
 }) {
+  const { t } = useTranslation();
   const taskCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const step of steps) {
@@ -305,7 +306,7 @@ function MobileKanbanLayout({
           className="mx-4 my-3 flex flex-1 items-center justify-center rounded-xl border border-dashed border-border/70 px-6 text-center text-sm text-muted-foreground"
           data-testid="mobile-kanban-no-steps"
         >
-          <Trans>No steps configured. Choose another workflow or add steps in Settings.</Trans>
+          {t("kanban:noStepsConfiguredChooseAnotherWorkflow")}
         </div>
       ) : (
         <SwipeableColumns

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t as globalT } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { IconBell, IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@kandev/ui/hover-card";
@@ -10,6 +9,7 @@ import {
   type NativeNotificationPermission,
 } from "@/lib/desktop/native-notification-client";
 import type { PermissionRefresh } from "./notifications-settings-actions";
+import { t as globalT } from "@/lib/i18n";
 
 type NotificationPermissionState =
   | NativeNotificationPermission
@@ -25,9 +25,9 @@ type DesktopNotificationsSectionProps = {
 };
 
 function permissionActionLabel(permission: NotificationPermissionState) {
-  if (permission === "granted") return globalT`Enabled`;
-  if (permission === "error") return globalT`Retry`;
-  return globalT`Enable`;
+  if (permission === "granted") return globalT("common:enabled");
+  if (permission === "error") return globalT("common:retry");
+  return globalT("settings:enable");
 }
 
 export function DesktopNotificationsSection({
@@ -36,23 +36,19 @@ export function DesktopNotificationsSection({
   onRefreshPermission,
   onTestNotification,
 }: DesktopNotificationsSectionProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-base font-medium">
-            <Trans>Desktop Notifications</Trans>
-          </div>
+          <div className="text-base font-medium">{t("settings:desktopNotifications")}</div>
           <p className="text-sm text-muted-foreground">
-            <Trans>
-              Notify this device when a selected agent turn, question, or Office event occurs.
-            </Trans>
+            {t("settings:notifyThisDeviceWhenASelected")}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
-            title={t`Enable desktop notifications`}
+            title={t("settings:enableDesktopNotifications")}
             variant="default"
             size="sm"
             onClick={() => void onRequestPermission()}
@@ -73,22 +69,20 @@ export function DesktopNotificationsSection({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label={t`Refresh notification permission`}
+                  aria-label={t("settings:refreshNotificationPermission")}
                   className="cursor-pointer"
                   onClick={() => void onRefreshPermission()}
                 >
                   <IconRefresh className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                <Trans>Refresh permission status</Trans>
-              </TooltipContent>
+              <TooltipContent>{t("settings:refreshPermissionStatus")}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
           <HoverCard>
             <HoverCardTrigger asChild>
               <Button
-                title={t`Send test notification`}
+                title={t("settings:sendTestNotification")}
                 variant="outline"
                 className="cursor-pointer"
                 size="icon"
@@ -100,9 +94,7 @@ export function DesktopNotificationsSection({
               </Button>
             </HoverCardTrigger>
             <HoverCardContent side="top" className="text-sm">
-              <Trans>
-                If you do not see notifications, check your OS settings and allow this browser.
-              </Trans>
+              {t("settings:ifYouDoNotSeeNotifications")}
             </HoverCardContent>
           </HoverCard>
         </div>
@@ -111,21 +103,16 @@ export function DesktopNotificationsSection({
       {notificationPermission === "denied" && (
         <p className="text-sm text-amber-600">
           {nativeNotifications.isAvailable()
-            ? t`Notifications are blocked in your OS app notification settings. Enable them there, then click Refresh.`
-            : t`Notifications are blocked in your browser. Enable them in site settings, then click Refresh.`}
+            ? t("settings:notificationsAreBlockedInYourOs")
+            : t("settings:notificationsAreBlockedInYourBrowser")}
         </p>
       )}
       {notificationPermission === "unsupported" && (
-        <p className="text-sm text-amber-600">
-          <Trans>This browser does not support desktop notifications.</Trans>
-        </p>
+        <p className="text-sm text-amber-600">{t("settings:thisBrowserDoesNotSupportDesktop")}</p>
       )}
       {notificationPermission === "error" && (
         <p className="text-sm text-amber-600">
-          <Trans>
-            Kandev could not check notification permission. Try again, then check your browser or OS
-            notification settings.
-          </Trans>
+          {t("settings:kandevCouldNotCheckNotificationPermission")}
         </p>
       )}
     </div>

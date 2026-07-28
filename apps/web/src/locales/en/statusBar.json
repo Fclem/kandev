@@ -1,0 +1,15 @@
+{
+  "applicationStatus": "Application status",
+  "applicationStatusItems": "Application status items",
+  "connectedToKandev": "Connected to Kandev",
+  "connecting": "Connecting",
+  "connectingToKandev": "Connecting to Kandev",
+  "connection": "Connection",
+  "connectionError": "Connection error: {{error}}",
+  "connectionUnavailable": "Connection unavailable",
+  "couldNotSaveStatusBarOrder": "Could not save status bar order",
+  "offline": "Offline",
+  "openStatus": "Open status",
+  "reconnecting": "Reconnecting",
+  "reconnectingToKandev": "Reconnecting to Kandev"
+}

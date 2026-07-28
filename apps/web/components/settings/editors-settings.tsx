@@ -1,8 +1,6 @@
 "use client";
-
 import { useCallback, useEffect, useMemo } from "react";
-import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconEdit, IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -70,6 +68,7 @@ function CustomEditorRow({
   updateRequest,
   deleteRequest,
 }: CustomEditorRowProps) {
+  const { t } = useTranslation();
   const editorName = editor.name;
   return (
     <EditableCard
@@ -80,12 +79,12 @@ function CustomEditorRow({
       onClose={() => setEditingId(null)}
       renderEdit={({ close }) => (
         <EditorForm
-          title={t`Edit ${editorName}`}
+          title={t("settings:edit", { editorName })}
           initialState={formStateFromEditor(editor)}
           onCancel={close}
           onSave={(state) => updateRequest.run(editor.id, state)}
           onSaved={close}
-          submitLabel={t`Save changes`}
+          submitLabel={t("settings:saveChanges")}
           isSaving={updateRequest.isLoading}
           coordinatedSaveId={`custom-editor:${editor.id}`}
         />
@@ -113,7 +112,7 @@ function CustomEditorRow({
               }}
             >
               <IconEdit className="h-4 w-4" />
-              <Trans>Edit</Trans>
+              {t("common:edit")}
             </Button>
             <Button
               type="button"
@@ -126,7 +125,7 @@ function CustomEditorRow({
               }}
             >
               <IconTrash className="h-4 w-4" />
-              <Trans>Remove</Trans>
+              {t("settings:remove")}
             </Button>
           </div>
         </div>
@@ -145,24 +144,23 @@ function CustomEditorsList({
   updateRequest,
   deleteRequest,
 }: CustomEditorsListProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-medium text-foreground">
-          <Trans>Custom Editors</Trans>
-        </div>
+        <div className="text-sm font-medium text-foreground">{t("settings:customEditors")}</div>
         <Button type="button" variant="outline" onClick={() => setIsAdding(true)}>
-          <Trans>Add custom editor</Trans>
+          {t("settings:addCustomEditor")}
         </Button>
       </div>
       {isAdding && (
         <EditorForm
-          title={t`New custom editor`}
+          title={t("settings:newCustomEditor")}
           initialState={defaultFormState()}
           onCancel={() => setIsAdding(false)}
           onSave={(state) => createRequest.run(state)}
           onSaved={() => setIsAdding(false)}
-          submitLabel={t`Add editor`}
+          submitLabel={t("settings:addEditor")}
           isSaving={createRequest.isLoading}
           coordinatedSaveId="custom-editor:new"
           dirtyWhenMounted
@@ -171,7 +169,7 @@ function CustomEditorsList({
       <div className="space-y-3">
         {customEditors.length === 0 && !isAdding && (
           <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground">
-            <Trans>No custom editors yet.</Trans>
+            {t("settings:noCustomEditorsYet")}
           </div>
         )}
         {customEditors.map((editor) => (
@@ -222,15 +220,14 @@ function EditorsSection({
   updateRequest,
   deleteRequest,
 }: EditorsSectionProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-6">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        <Trans>Editors</Trans>
+        {t("settings:editors")}
       </div>
       <div className="space-y-2">
-        <div className="text-sm font-medium text-foreground">
-          <Trans>Default</Trans>
-        </div>
+        <div className="text-sm font-medium text-foreground">{t("common:default")}</div>
         <div
           className="min-w-[280px] rounded-md border border-transparent"
           data-settings-dirty={defaultEditorId !== baselineDefaultId}
@@ -242,9 +239,9 @@ function EditorsSection({
               if (!value) return;
               onDefaultEditorChange(value);
             }}
-            placeholder={t`Select a default editor`}
-            searchPlaceholder={t`Search editors...`}
-            emptyMessage={t`No editor found.`}
+            placeholder={t("settings:selectADefaultEditor")}
+            searchPlaceholder={t("settings:searchEditors")}
+            emptyMessage={t("settings:noEditorFound")}
             disabled={availableEditors.length === 0}
           />
         </div>
@@ -262,7 +259,7 @@ function EditorsSection({
       {builtInEditors.length > 0 && (
         <div className="space-y-2">
           <div className="text-sm font-medium text-foreground">
-            <Trans>Supported Editors</Trans>
+            {t("settings:supportedEditors")}
           </div>
           <div className="grid gap-2 md:grid-cols-2">
             {builtInEditors.map((editor) => (
@@ -272,7 +269,7 @@ function EditorsSection({
               >
                 <span className="text-sm text-foreground truncate">{editor.name}</span>
                 <Badge variant={editor.installed ? "secondary" : "outline"}>
-                  {editor.installed ? <Trans>Installed</Trans> : <Trans>Not installed</Trans>}
+                  {editor.installed ? t("settings:installed2") : t("settings:notInstalled")}
                 </Badge>
               </div>
             ))}
@@ -296,7 +293,32 @@ function useSyncEditors(editors: EditorOption[], setEditors: (editors: EditorOpt
   useEffect(() => setEditors(editors), [editors, setEditors]);
 }
 
+/** Add/remove a language id in the LSP auto-start and auto-install lists. */
+function useLspLanguageToggles(
+  setLspAutoStartLanguages: (fn: (prev: string[]) => string[]) => void,
+  setLspAutoInstallLanguages: (fn: (prev: string[]) => string[]) => void,
+) {
+  const toggleAutoStart = useCallback(
+    (langId: string, checked: boolean) => {
+      setLspAutoStartLanguages((prev) =>
+        checked ? [...prev, langId] : prev.filter((id) => id !== langId),
+      );
+    },
+    [setLspAutoStartLanguages],
+  );
+  const toggleAutoInstall = useCallback(
+    (langId: string, checked: boolean) => {
+      setLspAutoInstallLanguages((prev) =>
+        checked ? [...prev, langId] : prev.filter((id) => id !== langId),
+      );
+    },
+    [setLspAutoInstallLanguages],
+  );
+  return { toggleAutoStart, toggleAutoInstall };
+}
+
 export function EditorsSettings() {
+  const { t } = useTranslation();
   const state = useEditorsSettingsState();
   const {
     setLspAutoStartLanguages,
@@ -314,21 +336,9 @@ export function EditorsSettings() {
   const saveRevision = getEditorsSaveRevision(state);
   const hasInvalidConfig = Object.keys(state.lspConfigErrors).length > 0;
 
-  const toggleAutoStart = useCallback(
-    (langId: string, checked: boolean) => {
-      setLspAutoStartLanguages((prev) =>
-        checked ? [...prev, langId] : prev.filter((id) => id !== langId),
-      );
-    },
-    [setLspAutoStartLanguages],
-  );
-  const toggleAutoInstall = useCallback(
-    (langId: string, checked: boolean) => {
-      setLspAutoInstallLanguages((prev) =>
-        checked ? [...prev, langId] : prev.filter((id) => id !== langId),
-      );
-    },
-    [setLspAutoInstallLanguages],
+  const { toggleAutoStart, toggleAutoInstall } = useLspLanguageToggles(
+    setLspAutoStartLanguages,
+    setLspAutoInstallLanguages,
   );
 
   const customEditors = useMemo(() => sortCustomEditors(editors.filter(isCustomEditor)), [editors]);
@@ -346,21 +356,21 @@ export function EditorsSettings() {
 
   return (
     <SettingsPageTemplate
-      title={t`Editors`}
-      description={t`Configure the included code editor and external editors`}
+      title={t("settings:editors")}
+      description={t("settings:configureTheIncludedCodeEditorAnd")}
       isDirty={isDirty}
       saveStatus={saveDefaultRequest.status}
       saveRevision={saveRevision}
       canSave={!hasInvalidConfig}
       invalidReason={
-        hasInvalidConfig ? t`Fix invalid LSP server configuration before saving.` : undefined
+        hasInvalidConfig ? t("settings:fixInvalidLspServerConfigurationBefore") : undefined
       }
       onSave={() => saveDefaultRequest.run()}
     >
       <div className="space-y-6">
         <div className="space-y-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <Trans>File Editor</Trans>
+            {t("settings:fileEditor")}
           </div>
           <LspLanguageCards
             lspAutoStartLanguages={state.lspAutoStartLanguages}

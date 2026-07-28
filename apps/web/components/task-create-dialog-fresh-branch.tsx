@@ -1,14 +1,12 @@
 "use client";
-
 import { IconGitFork } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
-import { useLingui } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { Toggle } from "@kandev/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 
 // Lazily evaluated so the active locale is resolved at render time.
-const freshBranchTooltip = () =>
-  t`Create a new branch from the selected base. Any uncommitted changes in your local clone will be discarded; you'll be asked to confirm if there are any.`;
+const freshBranchTooltip = () => t("task:createANewBranchFromThe");
 
 export type FreshBranchToggleProps = {
   enabled: boolean;
@@ -22,13 +20,13 @@ export type FreshBranchToggleProps = {
  * attach-file button in the prompt input).
  */
 export function FreshBranchToggle({ enabled, onToggle }: FreshBranchToggleProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Toggle
           variant="outline"
-          aria-label={t`Create a new branch`}
+          aria-label={t("task:createANewBranch")}
           pressed={enabled}
           onPressedChange={onToggle}
           data-testid="fresh-branch-toggle"
@@ -57,8 +55,8 @@ export function computeBranchPlaceholder({
   loading,
   optionCount,
 }: BranchPlaceholderArgs) {
-  if (lockedToCurrentBranch) return currentLocalBranch || t`Uses current branch`;
-  if (!hasRepositorySelection) return t`Select repository first`;
-  if (loading) return t`Loading branches...`;
-  return optionCount > 0 ? t`Select branch` : t`No branches found`;
+  if (lockedToCurrentBranch) return currentLocalBranch || t("task:usesCurrentBranch");
+  if (!hasRepositorySelection) return t("task:selectRepositoryFirst");
+  if (loading) return t("task:loadingBranches");
+  return optionCount > 0 ? t("task:selectBranch") : t("task:noBranchesFound");
 }

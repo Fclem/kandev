@@ -1,8 +1,7 @@
 "use client";
-
+import { t as globalT } from "@/lib/i18n";
 import { forwardRef, useCallback, useState, type ComponentPropsWithoutRef } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t as globalT } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import {
   IconBriefcase,
@@ -40,13 +39,13 @@ const WorkspaceTrigger = forwardRef<
   HTMLButtonElement,
   ComponentPropsWithoutRef<"button"> & { activeName: string; chevronTestId: string }
 >(function WorkspaceTrigger({ activeName, chevronTestId, className, ...props }, ref) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <button
       ref={ref}
       type="button"
       data-testid="sidebar-workspace-trigger"
-      aria-label={t`Switch workspace`}
+      aria-label={t("sidebar:switchWorkspace")}
       className={cn(
         "group/ws flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border/70 bg-background px-2.5 text-sm font-medium text-foreground shadow-sm cursor-pointer transition-colors hover:border-border hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         className,
@@ -86,7 +85,7 @@ function workspaceType(workspace: WorkspaceItem | undefined): WorkspaceType {
 }
 
 function workspaceTypeLabel(type: WorkspaceType) {
-  return type === "office" ? globalT`Office` : globalT`Kanban`;
+  return type === "office" ? globalT("sidebar:office") : globalT("common:kanban");
 }
 
 function WorkspaceTypeIcon({ type, className }: { type: WorkspaceType; className: string }) {
@@ -144,12 +143,9 @@ function WorkspaceList({
   WorkspacePickerContentProps,
   "workspaces" | "activeId" | "itemTestIdPrefix" | "onWorkspaceSelect"
 >) {
+  const { t } = useTranslation();
   if (workspaces.length === 0) {
-    return (
-      <DropdownMenuItem disabled>
-        <Trans>No workspaces</Trans>
-      </DropdownMenuItem>
-    );
+    return <DropdownMenuItem disabled>{t("sidebar:noWorkspaces")}</DropdownMenuItem>;
   }
 
   return workspaces.map((ws) => {
@@ -176,6 +172,7 @@ function WorkspaceCreateItems({
   officeEnabled,
   onNavigate,
 }: Pick<WorkspacePickerContentProps, "officeEnabled" | "onNavigate">) {
+  const { t } = useTranslation();
   if (!officeEnabled) {
     return (
       <DropdownMenuItem
@@ -183,9 +180,7 @@ function WorkspaceCreateItems({
         onSelect={() => onNavigate("/settings/workspace")}
       >
         <IconPlus className="h-3.5 w-3.5" />
-        <span>
-          <Trans>Add workspace</Trans>
-        </span>
+        <span>{t("sidebar:addWorkspace")}</span>
       </DropdownMenuItem>
     );
   }
@@ -197,18 +192,14 @@ function WorkspaceCreateItems({
         onSelect={() => onNavigate("/settings/workspace")}
       >
         <IconLayoutKanban className="h-3.5 w-3.5" />
-        <span>
-          <Trans>New kanban workspace</Trans>
-        </span>
+        <span>{t("sidebar:newKanbanWorkspace")}</span>
       </DropdownMenuItem>
       <DropdownMenuItem
         className="cursor-pointer gap-2"
         onSelect={() => onNavigate("/office/setup?mode=new")}
       >
         <IconBriefcase className="h-3.5 w-3.5" />
-        <span>
-          <Trans>New office workspace</Trans>
-        </span>
+        <span>{t("sidebar:newOfficeWorkspace")}</span>
       </DropdownMenuItem>
     </>
   );
@@ -224,7 +215,7 @@ export function AppSidebarWorkspacePicker({
   modal = true,
   onActionComplete,
 }: WorkspacePickerProps = {}) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const router = useRouter();
   const officeEnabled = useFeature("office");
   const workspaces = useAppStore((s) => s.workspaces);
@@ -234,7 +225,7 @@ export function AppSidebarWorkspacePicker({
 
   const activeWorkspace = workspaces.items.find((w) => w.id === workspaces.activeId);
   const activeId = activeWorkspace?.id ?? null;
-  const activeName = activeWorkspace?.name ?? t`Workspace`;
+  const activeName = activeWorkspace?.name ?? t("common:workspace");
 
   const handleSelect = useCallback(
     (workspace: WorkspaceItem) => {

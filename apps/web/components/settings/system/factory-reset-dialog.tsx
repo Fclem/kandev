@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -41,29 +40,24 @@ function ConfirmView({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <IconAlertTriangle className="h-5 w-5 text-destructive" />
-          <Trans>Factory Reset</Trans>
+          {t("settings:factoryReset2")}
         </DialogTitle>
         <DialogDescription className="space-y-2">
-          <span>
-            <Trans>
-              This wipes the entire kandev install: database, worktrees, repo clones, sessions,
-              tasks, and quick-chat sessions.
-            </Trans>
-          </span>
+          <span>{t("settings:thisWipesTheEntireKandevInstall")}</span>
           <span className="block">
-            <Trans>
+            <Trans i18nKey="settings:aSnapshotIsCreatedAutomaticallyUnder">
               A snapshot is created automatically under <code>{`<data-dir>/backups/`}</code> before
               the wipe runs, so you can restore from the Backups page if you change your mind.
             </Trans>
           </span>
           <span className="block font-medium text-foreground">
-            <Trans>
+            <Trans i18nKey="settings:typeResetToEnableTheConfirm">
               Type <code>RESET</code> to enable the confirm button. After the wipe completes
               you&apos;ll be asked to quit and relaunch Kandev - the backend does not auto-restart.
             </Trans>
@@ -74,7 +68,7 @@ function ConfirmView({
       <div className="space-y-3">
         <Input
           autoFocus
-          placeholder={t`Type RESET to confirm`}
+          placeholder={t("settings:typeResetToConfirm")}
           value={typed}
           onChange={(e) => onTyped(e.target.value)}
           disabled={submitting}
@@ -90,7 +84,7 @@ function ConfirmView({
             className="flex items-center gap-2 text-sm text-muted-foreground"
             data-testid="system-factory-reset-pending"
           >
-            <Spinner className="size-4" /> <Trans>Wiping data...</Trans>
+            <Spinner className="size-4" /> {t("settings:wipingData")}
           </div>
         )}
       </div>
@@ -103,7 +97,7 @@ function ConfirmView({
           className="cursor-pointer"
           data-testid="system-factory-reset-cancel"
         >
-          <Trans>Cancel</Trans>
+          {t("common:cancel")}
         </Button>
         <Button
           variant="destructive"
@@ -112,7 +106,7 @@ function ConfirmView({
           className="cursor-pointer"
           data-testid="system-factory-reset-confirm"
         >
-          <Trans>Factory Reset</Trans>
+          {t("settings:factoryReset2")}
         </Button>
       </DialogFooter>
     </>
@@ -120,22 +114,16 @@ function ConfirmView({
 }
 
 function SuccessView({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <IconCircleCheck className="h-5 w-5 text-emerald-500" />
-          <Trans>Factory reset complete</Trans>
+          {t("settings:factoryResetComplete")}
         </DialogTitle>
         <DialogDescription>
-          <span>
-            <Trans>
-              Kandev&apos;s data has been wiped. Quit and relaunch the app to start fresh - the
-              running backend still holds connections to the now-empty database and will not rebuild
-              its caches until you restart. The pre-reset snapshot is available on the Backups page
-              if you need to roll back.
-            </Trans>
-          </span>
+          <span>{t("settings:kandevSDataHasBeenWiped")}</span>
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>
@@ -145,7 +133,7 @@ function SuccessView({ onClose }: { onClose: () => void }) {
           className="cursor-pointer"
           data-testid="system-factory-reset-close"
         >
-          <Trans>Close</Trans>
+          {t("common:close")}
         </Button>
       </DialogFooter>
     </>
@@ -153,7 +141,7 @@ function SuccessView({ onClose }: { onClose: () => void }) {
 }
 
 export function FactoryResetDialog({ open, onOpenChange }: Props) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [typed, setTyped] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [requestPending, setRequestPending] = useState(false);
@@ -163,7 +151,7 @@ export function FactoryResetDialog({ open, onOpenChange }: Props) {
   const succeeded = job?.state === "succeeded";
   const failed = job?.state === "failed";
   const submitting = requestPending || (jobId !== null && !succeeded && !failed);
-  const error = requestError ?? (failed ? (job?.message ?? t`Reset failed`) : null);
+  const error = requestError ?? (failed ? (job?.message ?? t("settings:resetFailed")) : null);
   const enabled = typed === CONFIRM_TOKEN && !submitting && !succeeded;
 
   const handleClose = (next: boolean) => {
@@ -184,7 +172,7 @@ export function FactoryResetDialog({ open, onOpenChange }: Props) {
       const res = await resetDatabase(CONFIRM_TOKEN);
       setJobId(res.job_id);
     } catch (err) {
-      setRequestError(err instanceof Error ? err.message : t`Reset request failed`);
+      setRequestError(err instanceof Error ? err.message : t("settings:resetRequestFailed"));
     } finally {
       setRequestPending(false);
     }

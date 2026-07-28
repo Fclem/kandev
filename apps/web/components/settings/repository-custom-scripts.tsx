@@ -1,4 +1,4 @@
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconPlus, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
@@ -26,25 +26,22 @@ export function RepositoryCustomScripts({
   onUpdateScript,
   onDeleteScript,
 }: RepositoryCustomScriptsProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <Label className="flex items-center gap-2">
-          <span>
-            <Trans>Custom Scripts</Trans>
-          </span>
+          <span>{t("settings:customScripts")}</span>
           {areScriptsDirty && <UnsavedChangesBadge />}
         </Label>
         <Button type="button" variant="outline" size="sm" onClick={() => onAddScript(repositoryId)}>
           <IconPlus className="h-4 w-4 mr-1" />
-          <Trans>Add Script</Trans>
+          {t("settings:addScript")}
         </Button>
       </div>
       <div className="space-y-3">
         {scripts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            <Trans>No scripts yet.</Trans>
-          </p>
+          <p className="text-sm text-muted-foreground">{t("settings:noScriptsYet")}</p>
         ) : (
           scripts.map((script) => (
             <RepositoryCustomScript
@@ -75,7 +72,7 @@ function RepositoryCustomScript({
   onUpdate: RepositoryCustomScriptsProps["onUpdateScript"];
   onDelete: RepositoryCustomScriptsProps["onDeleteScript"];
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const nameIsDirty = !savedScript || script.name !== savedScript.name;
   const commandIsDirty = !savedScript || script.command !== savedScript.command;
   return (
@@ -88,7 +85,7 @@ function RepositoryCustomScript({
         <Input
           value={script.name ?? ""}
           onChange={(event) => onUpdate(repositoryId, script.id, { name: event.target.value })}
-          placeholder={t`Script name`}
+          placeholder={t("settings:scriptName")}
           data-settings-dirty={nameIsDirty}
         />
         <Button

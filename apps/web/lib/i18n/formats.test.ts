@@ -1,12 +1,12 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { formatDate, formatNumber, formatRelative } from "./formats";
-import { i18n } from "./index";
+import { activateLocale } from "./index";
 
-beforeAll(() => {
-  // Activate en with an empty catalog; the `t` macro then falls back to its
-  // baked-in English source, matching the former timeAgo behavior.
-  i18n.loadAndActivate({ locale: "en", messages: {} });
+beforeAll(async () => {
+  // Activate en so the relative-time buckets resolve from the real catalog,
+  // matching the former timeAgo behavior byte-for-byte.
+  await activateLocale("en");
 });
 
 describe("formatRelative (en, timeAgo-compatible)", () => {
@@ -30,16 +30,16 @@ describe("formatRelative (en, timeAgo-compatible)", () => {
 });
 
 describe("locale-aware Intl wrappers", () => {
-  it("formats numbers using the active locale", () => {
-    i18n.loadAndActivate({ locale: "en", messages: {} });
+  it("formats numbers using the active locale", async () => {
+    await activateLocale("en");
     expect(formatNumber(1234567.89)).toBe("1,234,567.89");
   });
 
-  it("maps the pseudo locale to en for Intl", () => {
-    i18n.loadAndActivate({ locale: "pseudo", messages: {} });
+  it("maps the pseudo locale to en for Intl", async () => {
+    await activateLocale("pseudo");
     // pseudo has no CLDR data; wrappers fall back to en formatting.
     expect(formatNumber(1000)).toBe("1,000");
     expect(formatDate("2026-07-27T00:00:00Z", { year: "numeric" })).toBe("2026");
-    i18n.loadAndActivate({ locale: "en", messages: {} });
+    await activateLocale("en");
   });
 });

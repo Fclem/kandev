@@ -1,8 +1,6 @@
 "use client";
-
 import { useCallback, useEffect, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Input } from "@kandev/ui/input";
@@ -24,7 +22,7 @@ function ChangePasswordCard() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const { t } = useLingui();
+  const { t } = useTranslation();
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +35,7 @@ function ChangePasswordCard() {
       setNext("");
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t`Could not change password.`);
+      setError(err instanceof ApiError ? err.message : t("settings:couldNotChangePassword"));
     } finally {
       setSubmitting(false);
     }
@@ -47,14 +45,14 @@ function ChangePasswordCard() {
     <Card data-testid="account-security-password-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <IconKey className="h-4 w-4" /> <Trans>Password</Trans>
+          <IconKey className="h-4 w-4" /> {t("settings:password")}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <form className="flex flex-col gap-3 max-w-sm" onSubmit={(e) => void onSubmit(e)}>
           <div className="flex flex-col gap-1">
             <label htmlFor="account-current-password" className="text-xs text-muted-foreground">
-              <Trans>Current password</Trans>
+              {t("settings:currentPassword")}
             </label>
             <Input
               id="account-current-password"
@@ -66,7 +64,7 @@ function ChangePasswordCard() {
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="account-new-password" className="text-xs text-muted-foreground">
-              <Trans>New password</Trans>
+              {t("settings:newPassword")}
             </label>
             <Input
               id="account-new-password"
@@ -84,7 +82,7 @@ function ChangePasswordCard() {
           )}
           {success && (
             <p className="text-xs text-muted-foreground" data-testid="account-password-success">
-              <Trans>Password updated.</Trans>
+              {t("settings:passwordUpdated")}
             </p>
           )}
           <Button
@@ -93,7 +91,7 @@ function ChangePasswordCard() {
             disabled={submitting}
             data-testid="account-password-submit"
           >
-            {submitting ? t`Saving...` : t`Change password`}
+            {submitting ? t("settings:saving") : t("settings:changePassword")}
           </Button>
         </form>
       </CardContent>
@@ -102,6 +100,7 @@ function ChangePasswordCard() {
 }
 
 function useSessionsList() {
+  const { t } = useTranslation();
   const [sessions, setSessions] = useState<AuthSession[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +112,7 @@ function useSessionsList() {
       setSessions(res.sessions);
       setLoaded(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t`Failed to load sessions.`);
+      setError(err instanceof ApiError ? err.message : t("settings:failedToLoadSessions"));
     }
   }, []);
 
@@ -125,6 +124,7 @@ function useSessionsList() {
 }
 
 function SessionsCard() {
+  const { t } = useTranslation();
   const { sessions, loaded, error, reload } = useSessionsList();
 
   const onRevoke = async (id: string) => {
@@ -136,7 +136,7 @@ function SessionsCard() {
     <Card data-testid="account-sessions-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <IconDevices className="h-4 w-4" /> <Trans>Active sessions</Trans>
+          <IconDevices className="h-4 w-4" /> {t("settings:activeSessions")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -147,25 +147,17 @@ function SessionsCard() {
         )}
         {!loaded && !error && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-4" /> <Trans>Loading sessions...</Trans>
+            <Spinner className="size-4" /> {t("settings:loadingSessions")}
           </div>
         )}
         {loaded && sessions.length > 0 && (
           <Table data-testid="account-sessions-table">
             <TableHeader>
               <TableRow>
-                <TableHead>
-                  <Trans>Device</Trans>
-                </TableHead>
-                <TableHead>
-                  <Trans>IP</Trans>
-                </TableHead>
-                <TableHead>
-                  <Trans>Last seen</Trans>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Trans>Actions</Trans>
-                </TableHead>
+                <TableHead>{t("settings:device")}</TableHead>
+                <TableHead>{t("settings:ip")}</TableHead>
+                <TableHead>{t("settings:lastSeen")}</TableHead>
+                <TableHead className="text-right">{t("settings:actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -175,7 +167,7 @@ function SessionsCard() {
                     {session.user_agent}
                     {session.current && (
                       <Badge variant="default" className="ml-2 text-[10px]">
-                        <Trans>This device</Trans>
+                        {t("settings:thisDevice")}
                       </Badge>
                     )}
                   </TableCell>
@@ -192,7 +184,7 @@ function SessionsCard() {
                         onClick={() => void onRevoke(session.id)}
                         data-testid="account-sessions-revoke"
                       >
-                        <Trans>Sign out</Trans>
+                        {t("settings:signOut")}
                       </Button>
                     )}
                   </TableCell>

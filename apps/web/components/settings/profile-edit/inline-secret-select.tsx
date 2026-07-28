@@ -1,8 +1,6 @@
 "use client";
-
 import { useState, useCallback } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t as globalT } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { IconPlus, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
@@ -12,6 +10,7 @@ import { Textarea } from "@kandev/ui/textarea";
 import { createSecret } from "@/lib/api/domains/secrets-api";
 import { useAppStore } from "@/components/state-provider";
 import type { SecretListItem } from "@/lib/types/http-secrets";
+import { t as globalT } from "@/lib/i18n";
 
 const NONE_VALUE = "__none__";
 const CREATE_VALUE = "__create__";
@@ -30,9 +29,10 @@ export function InlineSecretSelect({
   onSecretIdChange,
   secrets,
   label,
-  placeholder = globalT`Select a secret...`,
+  placeholder = globalT("settings:selectASecret"),
   isDirty = false,
 }: InlineSecretSelectProps) {
+  const { t } = useTranslation();
   const [creating, setCreating] = useState(false);
 
   const handleValueChange = (v: string) => {
@@ -51,9 +51,7 @@ export function InlineSecretSelect({
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={NONE_VALUE}>
-            <Trans>None</Trans>
-          </SelectItem>
+          <SelectItem value={NONE_VALUE}>{t("common:none")}</SelectItem>
           {secrets.map((s) => (
             <SelectItem key={s.id} value={s.id}>
               {s.name}
@@ -62,7 +60,7 @@ export function InlineSecretSelect({
           <SelectItem value={CREATE_VALUE}>
             <span className="flex items-center gap-1">
               <IconPlus className="h-3.5 w-3.5" />
-              <Trans>Create new secret...</Trans>
+              {t("settings:createNewSecret")}
             </span>
           </SelectItem>
         </SelectContent>
@@ -87,7 +85,7 @@ function InlineCreateForm({
   onCreated: (item: SecretListItem) => void;
   onCancel: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const addSecret = useAppStore((state) => state.addSecret);
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
@@ -103,7 +101,7 @@ function InlineCreateForm({
       addSecret(item);
       onCreated(item);
     } catch (err) {
-      setError(err instanceof Error ? err.message : globalT`Failed to create secret`);
+      setError(err instanceof Error ? err.message : globalT("settings:failedToCreateSecret"));
       setSaving(false);
     }
   }, [name, value, addSecret, onCreated]);
@@ -111,24 +109,20 @@ function InlineCreateForm({
   return (
     <div className="rounded-md border p-3 space-y-3 bg-muted/30">
       <div className="space-y-1.5">
-        <Label className="text-xs">
-          <Trans>Name</Trans>
-        </Label>
+        <Label className="text-xs">{t("settings:name")}</Label>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={t`e.g. my-api-token`}
+          placeholder={t("settings:eGMyApiToken")}
           className="h-8 text-sm"
         />
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">
-          <Trans>Value</Trans>
-        </Label>
+        <Label className="text-xs">{t("settings:value2")}</Label>
         <Textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder={t`Paste your secret value...`}
+          placeholder={t("settings:pasteYourSecretValue")}
           className="text-sm min-h-[60px]"
         />
       </div>
@@ -141,7 +135,7 @@ function InlineCreateForm({
           disabled={saving}
           className="cursor-pointer"
         >
-          <Trans>Cancel</Trans>
+          {t("common:cancel")}
         </Button>
         <Button
           size="sm"
@@ -150,7 +144,7 @@ function InlineCreateForm({
           className="cursor-pointer"
         >
           {saving ? <IconLoader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-          <Trans>Save</Trans>
+          {t("settings:save")}
         </Button>
       </div>
     </div>

@@ -1,10 +1,8 @@
 "use client";
-
-import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { IconLoader2, IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
-
 import type { AgentUpdateJob, InstallJob } from "@/lib/api";
 import type { RuntimeUpdate } from "@/lib/types/http";
 
@@ -18,13 +16,13 @@ const ACTIVE_UPDATE_STATUSES = new Set<AgentUpdateJob["status"]>([
 function updatePhase(status: AgentUpdateJob["status"] | undefined): string | null {
   switch (status) {
     case "queued":
-      return t`Update queued…`;
+      return t("settings:updateQueued2");
     case "resolving":
-      return t`Checking latest version…`;
+      return t("settings:checkingLatestVersion");
     case "updating":
-      return t`Updating runtime…`;
+      return t("settings:updatingRuntime");
     case "refreshing":
-      return t`Refreshing models…`;
+      return t("settings:refreshingModels");
     default:
       return null;
   }
@@ -33,17 +31,17 @@ function updatePhase(status: AgentUpdateJob["status"] | undefined): string | nul
 function updateButtonLabel(status: AgentUpdateJob["status"] | undefined) {
   switch (status) {
     case "queued":
-      return t`Update queued`;
+      return t("settings:updateQueued");
     case "resolving":
-      return t`Resolving update`;
+      return t("settings:resolvingUpdate");
     case "updating":
-      return t`Updating agent`;
+      return t("settings:updatingAgent");
     case "refreshing":
-      return t`Refreshing agent capabilities`;
+      return t("settings:refreshingAgentCapabilities");
     case "failed":
-      return t`Retry update`;
+      return t("settings:retryUpdate");
     default:
-      return t`Update agent`;
+      return t("settings:updateAgent");
   }
 }
 
@@ -54,21 +52,25 @@ function VersionSummary({
   runtimeUpdate: RuntimeUpdate;
   job?: AgentUpdateJob;
 }) {
-  const current = job?.current_version || runtimeUpdate.current_version || t`Unknown`;
+  const { t } = useTranslation();
+  const current = job?.current_version || runtimeUpdate.current_version || t("settings:unknown");
   if (job?.target_version) {
     return <p className="break-words font-mono text-xs">{`${current} → ${job.target_version}`}</p>;
   }
   if (job?.status === "resolving") {
-    return <p className="break-words font-mono text-xs">{t`${current} → Checking latest…`}</p>;
+    return (
+      <p className="break-words font-mono text-xs">{t("settings:checkingLatest", { current })}</p>
+    );
   }
   return (
     <p className="break-words text-xs text-muted-foreground">
-      <Trans>Current version: {current}</Trans>
+      {t("settings:currentVersion2", { current })}
     </p>
   );
 }
 
 function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdateJob }) {
+  const { t } = useTranslation();
   if (!job) return null;
   if (job.status === "succeeded" && job.refresh_error) {
     return (
@@ -77,7 +79,7 @@ function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdate
         role="alert"
         data-testid={`agent-update-result-${agentName}`}
       >
-        <Trans>Runtime updated, but capabilities could not be refreshed: {job.refresh_error}</Trans>
+        {t("settings:runtimeUpdatedButCapabilitiesCouldNot", { refresh_error: job.refresh_error })}
       </p>
     );
   }
@@ -88,7 +90,7 @@ function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdate
         role="status"
         data-testid={`agent-update-result-${agentName}`}
       >
-        <Trans>Runtime updated successfully.</Trans>
+        {t("settings:runtimeUpdatedSuccessfully")}
       </p>
     );
   }
@@ -99,7 +101,7 @@ function UpdateResult({ agentName, job }: { agentName: string; job?: AgentUpdate
         role="alert"
         data-testid={`agent-update-result-${agentName}`}
       >
-        {job.error || t`The runtime update failed.`}
+        {job.error || t("settings:theRuntimeUpdateFailed")}
       </p>
     );
   }
@@ -119,6 +121,7 @@ export function AgentRuntimeUpdateControl({
   installJob?: InstallJob;
   onUpdate: (agentName: string) => void;
 }) {
+  const { t } = useTranslation();
   if (!runtimeUpdate.supported) return null;
 
   const updateInFlight = Boolean(job && ACTIVE_UPDATE_STATUSES.has(job.status));
@@ -142,7 +145,7 @@ export function AgentRuntimeUpdateControl({
       )}
       {installInFlight && (
         <p className="break-words text-xs text-muted-foreground">
-          <Trans>Agent installation is in progress.</Trans>
+          {t("settings:agentInstallationIsInProgress")}
         </p>
       )}
       {job?.output && (

@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Button } from "@kandev/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
@@ -17,21 +16,19 @@ function resetBrowserStorage() {
 }
 
 export function UIStateCard() {
-  const { t } = useLingui();
-  const help = t`Clears layout and UI preferences saved in your browser (panel sizes, pinned tasks, expanded groups, etc.). Use this if the app looks broken, panels are stuck, or the layout feels wrong. Your tasks, sessions, and server data are not affected - only the per-browser UI state. The page reloads after the reset.`;
+  const { t } = useTranslation();
+  const help = t("settings:clearsLayoutAndUiPreferencesSaved");
   return (
     <Card data-testid="system-ui-state-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <IconLayoutDashboard className="h-4 w-4" /> <Trans>UI state</Trans>
+          <IconLayoutDashboard className="h-4 w-4" /> {t("settings:uiState")}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-start justify-between gap-3 rounded-md border p-3">
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">
-              <Trans>Reset browser layout</Trans>
-            </p>
+            <p className="text-sm font-medium">{t("settings:resetBrowserLayout")}</p>
             <p className="text-xs text-muted-foreground mt-1">{help}</p>
           </div>
           <Tooltip>
@@ -44,7 +41,7 @@ export function UIStateCard() {
                 data-testid="system-ui-state-reset"
               >
                 <IconRefresh className="h-3.5 w-3.5 mr-1" />
-                <Trans>Reset</Trans>
+                {t("settings:reset")}
               </Button>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">{help}</TooltipContent>

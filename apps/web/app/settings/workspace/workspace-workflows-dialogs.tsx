@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import { Label } from "@kandev/ui/label";
 import { Input } from "@kandev/ui/input";
@@ -31,20 +30,16 @@ export function ImportWorkflowsDialog({
   onImport,
   importLoading,
 }: ImportWorkflowsDialogProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Import Workflows</Trans>
-          </DialogTitle>
+          <DialogTitle>{t("settings:importWorkflows")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>
-              <Trans>Upload YAML file</Trans>
-            </Label>
+            <Label>{t("settings:uploadYamlFile")}</Label>
             <input
               ref={fileInputRef}
               type="file"
@@ -54,9 +49,7 @@ export function ImportWorkflowsDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>
-              <Trans>Or paste YAML</Trans>
-            </Label>
+            <Label>{t("settings:orPasteYaml")}</Label>
             <Textarea
               placeholder={
                 "version: 1\ntype: kandev_workflow\nworkflows:\n  - name: My Workflow\n    steps: [...]"
@@ -69,14 +62,14 @@ export function ImportWorkflowsDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button
             onClick={onImport}
             disabled={!importYaml.trim() || importLoading}
             className="cursor-pointer"
           >
-            {importLoading ? t`Importing...` : t`Import`}
+            {importLoading ? t("settings:importing") : t("settings:import")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -145,12 +138,11 @@ function WorkflowTemplatePicker({
   CreateWorkflowDialogProps,
   "workflowTemplates" | "selectedTemplateId" | "onSelectedTemplateChange"
 >) {
+  const { t } = useTranslation();
   if (workflowTemplates.length === 0) return null;
   return (
     <div className="space-y-2">
-      <Label>
-        <Trans>Template</Trans>
-      </Label>
+      <Label>{t("settings:template")}</Label>
       <RadioGroup
         value={selectedTemplateId ?? "custom"}
         onValueChange={(v) => onSelectedTemplateChange(v === "custom" ? null : v)}
@@ -174,11 +166,9 @@ function WorkflowTemplatePicker({
           >
             <RadioGroupItem value="custom" id="custom" className="mt-0.5" />
             <div className="flex flex-col gap-1.5">
-              <span className="font-medium">
-                <Trans>Custom</Trans>
-              </span>
+              <span className="font-medium">{t("settings:custom2")}</span>
               <span className="text-sm text-muted-foreground">
-                <Trans>Create your own agentic workflow from scratch.</Trans>
+                {t("settings:createYourOwnAgenticWorkflowFrom")}
               </span>
             </div>
           </label>
@@ -199,7 +189,7 @@ export function CreateWorkflowDialog({
   onCreate,
   createLoading = false,
 }: CreateWorkflowDialogProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const handleOpenChange = (nextOpen: boolean) => {
     if (createLoading && !nextOpen) return;
     onOpenChange(nextOpen);
@@ -212,18 +202,14 @@ export function CreateWorkflowDialog({
         data-testid="create-workflow-dialog"
       >
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Add Workflow</Trans>
-          </DialogTitle>
+          <DialogTitle>{t("settings:addWorkflow")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-6 overflow-y-auto">
           <div className="space-y-2">
-            <Label htmlFor="workflowName">
-              <Trans>Name</Trans>
-            </Label>
+            <Label htmlFor="workflowName">{t("settings:name")}</Label>
             <Input
               id="workflowName"
-              placeholder={t`My Project Workflow`}
+              placeholder={t("settings:myProjectWorkflow")}
               value={workflowName}
               onChange={(e) => onWorkflowNameChange(e.target.value)}
               data-testid="workflow-name-input"
@@ -242,7 +228,7 @@ export function CreateWorkflowDialog({
             disabled={createLoading}
             className="cursor-pointer"
           >
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button
             onClick={onCreate}
@@ -251,7 +237,7 @@ export function CreateWorkflowDialog({
             data-testid="confirm-create-workflow"
             data-dialog-default-action
           >
-            {createLoading ? t`Adding...` : t`Add Workflow`}
+            {createLoading ? t("settings:adding") : t("settings:addWorkflow")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,8 +1,6 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
-import { Trans } from "@lingui/react/macro";
-import { t as globalT } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -24,6 +22,7 @@ import {
 } from "@/lib/api";
 import type { ApiRequestOptions } from "@/lib/api";
 import { openExternalLink } from "@/lib/desktop/external-links";
+import { t as globalT } from "@/lib/i18n";
 
 type SessionStatus = "connecting" | "running" | "exited" | "error";
 
@@ -148,7 +147,7 @@ function openSessionWebSocket(
   ws.binaryType = "arraybuffer";
   ws.onmessage = makeWsMessageHandler(term, setters);
   ws.onerror = () => {
-    setters.setError(globalT`Connection error`);
+    setters.setError(globalT("common:connectionError"));
     setters.setStatus("error");
   };
   if (initialInput) {
@@ -253,6 +252,7 @@ function PtySessionView({
   initialInput?: string;
   onDone: () => void;
 }) {
+  const { t } = useTranslation();
   const termContainerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -285,17 +285,13 @@ function PtySessionView({
         className="h-[420px] rounded-md bg-[#0b0b0c] p-2 overflow-hidden"
       />
       {status === "connecting" && (
-        <p className="text-xs text-muted-foreground">
-          <Trans>Starting session…</Trans>
-        </p>
+        <p className="text-xs text-muted-foreground">{t("settings:startingSession")}</p>
       )}
       {status === "exited" && (
         <p className="text-xs text-muted-foreground">
-          {exitCode != null ? (
-            <Trans>Session ended (exit {exitCode}).</Trans>
-          ) : (
-            <Trans>Session ended.</Trans>
-          )}
+          {exitCode != null
+            ? t("settings:sessionEndedExit", { exitCode })
+            : t("settings:sessionEnded")}
         </p>
       )}
       {status === "error" && error && <p className="text-xs text-destructive">{error}</p>}
@@ -306,7 +302,7 @@ function PtySessionView({
           className="cursor-pointer"
           data-testid={`${testIdPrefix ?? "pty"}-done`}
         >
-          <Trans>Done</Trans>
+          {t("settings:done")}
         </Button>
       </DialogFooter>
     </>

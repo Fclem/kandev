@@ -1,7 +1,5 @@
 import Link from "@/components/routing/app-link";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { msg } from "@lingui/core/macro";
-import type { MessageDescriptor } from "@lingui/core";
+import { useTranslation } from "react-i18next";
 import {
   IconBrandGithub,
   IconBrandGitlab,
@@ -16,7 +14,7 @@ import { Card, CardContent } from "@kandev/ui/card";
 type IntegrationEntry = {
   slug: string;
   label: string;
-  description: MessageDescriptor;
+  description: string;
   Icon: typeof IconBrandAzure;
 };
 
@@ -24,43 +22,43 @@ const INTEGRATIONS: IntegrationEntry[] = [
   {
     slug: "azure-devops",
     label: "Azure DevOps",
-    description: msg`Azure Boards work items and Azure Repos pull requests.`,
+    description: "settings:azureBoardsWorkItemsAndAzure",
     Icon: IconBrandAzure,
   },
   {
     slug: "github",
     label: "GitHub",
-    description: msg`PR review queues, issue watchers, and OAuth credentials.`,
+    description: "settings:prReviewQueuesIssueWatchersAnd",
     Icon: IconBrandGithub,
   },
   {
     slug: "gitlab",
     label: "GitLab",
-    description: msg`Merge request creation, discussion replies, and self-managed hosts.`,
+    description: "settings:mergeRequestCreationDiscussionRepliesAnd",
     Icon: IconBrandGitlab,
   },
   {
     slug: "jira",
     label: "Jira",
-    description: msg`Atlassian Cloud credentials and JQL issue watchers.`,
+    description: "settings:atlassianCloudCredentialsAndJqlIssue",
     Icon: IconTicket,
   },
   {
     slug: "linear",
     label: "Linear",
-    description: msg`Personal API key and team defaults.`,
+    description: "settings:personalApiKeyAndTeamDefaults",
     Icon: IconHexagon,
   },
   {
     slug: "sentry",
     label: "Sentry",
-    description: msg`Auth token, org/project defaults, and issue browsing.`,
+    description: "settings:authTokenOrgProjectDefaultsAnd",
     Icon: IconBrandSentry,
   },
   {
     slug: "slack",
     label: "Slack",
-    description: msg`Browser-session credentials and !kandev triage agent.`,
+    description: "settings:browserSessionCredentialsAndKandevTriage",
     Icon: IconBrandSlack,
   },
 ];
@@ -70,7 +68,7 @@ type IntegrationsIndexPageProps = {
 };
 
 export default function IntegrationsIndexPage({ workspaceId }: IntegrationsIndexPageProps = {}) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const rootHref = workspaceId
     ? `/settings/workspace/${encodeURIComponent(workspaceId)}/integrations`
     : "/settings/integrations";
@@ -78,14 +76,9 @@ export default function IntegrationsIndexPage({ workspaceId }: IntegrationsIndex
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">
-          <Trans>Integrations</Trans>
-        </h2>
+        <h2 className="text-2xl font-bold">{t("common:integrations")}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          <Trans>
-            Connect Kandev to third-party services. Connection scope and available settings are
-            shown on each integration page.
-          </Trans>
+          {t("settings:connectKandevToThirdPartyServices")}
         </p>
       </div>
       <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-3">

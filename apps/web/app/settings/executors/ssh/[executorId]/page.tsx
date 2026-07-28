@@ -1,8 +1,6 @@
 "use client";
-
 import { use, useCallback, useEffect, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -33,29 +31,30 @@ type LoadedExecutor = {
 
 export default function SSHExecutorPage({ params }: { params: Promise<{ executorId: string }> }) {
   const { executorId } = use(params);
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { executor, loading, error, reload } = useExecutor(executorId);
 
   if (loading) {
     return (
       <Card>
         <CardContent className="py-12 text-center text-sm text-muted-foreground">
-          <Trans>Loading executor...</Trans>
+          {t("settings:loadingExecutor")}
         </CardContent>
       </Card>
     );
   }
   if (error || !executor) {
-    return <NotFoundCard message={error ?? t`Executor not found`} />;
+    return <NotFoundCard message={error ?? t("settings:executorNotFound")} />;
   }
   if (executor.type !== "ssh") {
     const executorIdLabel = executor.id;
-    return <NotFoundCard message={t`Executor ${executorIdLabel} is not an SSH executor`} />;
+    return <NotFoundCard message={t("settings:executorIsNotAnSshExecutor", { executorIdLabel })} />;
   }
   return <SSHExecutorView executor={executor} onSaved={reload} />;
 }
 
 function useExecutor(executorId: string) {
+  const { t } = useTranslation();
   const [executor, setExecutor] = useState<LoadedExecutor | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +66,7 @@ function useExecutor(executorId: string) {
       const res = await fetchExecutor(executorId);
       setExecutor(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t`Failed to load executor`);
+      setError(e instanceof Error ? e.message : t("settings:failedToLoadExecutor"));
     } finally {
       setLoading(false);
     }
@@ -81,13 +80,14 @@ function useExecutor(executorId: string) {
 }
 
 function NotFoundCard({ message }: { message: string }) {
+  const { t } = useTranslation();
   const router = useRouter();
   return (
     <Card>
       <CardContent className="py-12 text-center">
         <p className="text-muted-foreground">{message}</p>
         <Button className="mt-4 cursor-pointer" onClick={() => router.push(EXECUTORS_ROUTE)}>
-          <Trans>Back to Executors</Trans>
+          {t("settings:backToExecutors")}
         </Button>
       </CardContent>
     </Card>
@@ -123,6 +123,7 @@ function SSHExecutorView({
 }
 
 function SSHExecutorHeader({ executorName }: { executorName: string }) {
+  const { t } = useTranslation();
   const router = useRouter();
   return (
     <>
@@ -136,10 +137,7 @@ function SSHExecutorHeader({ executorName }: { executorName: string }) {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            <Trans>
-              Edit the connection settings or re-trust the host. Existing sessions keep their
-              snapshot of the previous config.
-            </Trans>
+            {t("settings:editTheConnectionSettingsOrRe")}
           </p>
         </div>
         <Button
@@ -148,7 +146,7 @@ function SSHExecutorHeader({ executorName }: { executorName: string }) {
           onClick={() => router.push(EXECUTORS_ROUTE)}
           className="cursor-pointer"
         >
-          <Trans>Back to Executors</Trans>
+          {t("settings:backToExecutors")}
         </Button>
       </div>
       <Separator />

@@ -1,7 +1,7 @@
 "use client";
-
+import { useTranslation } from "react-i18next";
 import { useCallback, FormEvent } from "react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { useRouter } from "@/lib/routing/client-router";
 import { updateTask } from "@/lib/api";
 import { useAppStore } from "@/components/state-provider";
@@ -12,7 +12,6 @@ import { linkToTask } from "@/lib/links";
 import type { SubmitHandlersDeps } from "@/components/task-create-dialog-types";
 import { useFreshBranchConsent } from "@/components/task-create-dialog-fresh-branch-consent";
 import { queueTaskCreateLastUsedFromPayload } from "@/components/task-create-dialog-handlers";
-
 import {
   activatePlanMode,
   buildCreateTaskPayload,
@@ -25,8 +24,8 @@ import {
 
 // Lazily evaluated so the active locale is resolved when the toast fires, not
 // at module-import time.
-const genericErrorMessage = () => t`An error occurred`;
-const duplicateRepoTitle = () => t`Duplicate repository`;
+const genericErrorMessage = () => t("task:anErrorOccurred");
+const duplicateRepoTitle = () => t("task:duplicateRepository");
 
 // eslint-disable-next-line max-lines-per-function
 export function useTaskSubmitHandlers({
@@ -74,6 +73,7 @@ export function useTaskSubmitHandlers({
   workspacePath,
   transformDescriptionBeforeSubmit,
 }: SubmitHandlersDeps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { toast } = useToast();
   const setActiveDocument = useAppStore((state) => state.setActiveDocument);
@@ -125,7 +125,7 @@ export function useTaskSubmitHandlers({
     if (!duplicate) return false;
     toast({
       title: duplicateRepoTitle(),
-      description: t`${duplicate} is added more than once — remove the duplicate row.`,
+      description: t("task:isAddedMoreThanOnceRemove", { duplicate }),
       variant: "error",
     });
     return true;
@@ -213,7 +213,7 @@ export function useTaskSubmitHandlers({
       router.push(linkToTask(taskId));
     } catch (error) {
       toast({
-        title: t`Failed to create session`,
+        title: t("task:failedToCreateSession"),
         description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
@@ -278,7 +278,7 @@ export function useTaskSubmitHandlers({
       onSuccess?.(updatedTask, "edit", { taskSessionId });
     } catch (error) {
       toast({
-        title: t`Failed to update task`,
+        title: t("task:failedToUpdateTask"),
         description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
@@ -305,7 +305,7 @@ export function useTaskSubmitHandlers({
       onSuccess?.(result.updatedTask, "edit");
     } catch (error) {
       toast({
-        title: t`Failed to update task`,
+        title: t("task:failedToUpdateTask"),
         description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
@@ -447,7 +447,7 @@ export function useTaskSubmitHandlers({
         await performEditWithPlanMode();
       } catch (error) {
         toast({
-          title: t`Failed to start task in plan mode`,
+          title: t("task:failedToStartTaskInPlan"),
           description: error instanceof Error ? error.message : genericErrorMessage(),
           variant: "error",
         });
@@ -476,7 +476,7 @@ export function useTaskSubmitHandlers({
       });
     } catch (error) {
       toast({
-        title: t`Failed to start task in plan mode`,
+        title: t("task:failedToStartTaskInPlan"),
         description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
@@ -523,7 +523,7 @@ export function useTaskSubmitHandlers({
       }
     } catch (error) {
       toast({
-        title: t`Failed to create task`,
+        title: t("task:failedToCreateTask"),
         description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });
@@ -582,7 +582,7 @@ export function useTaskSubmitHandlers({
       onOpenChange(false);
     } catch (error) {
       toast({
-        title: t`Failed to create task`,
+        title: t("task:failedToCreateTask"),
         description: error instanceof Error ? error.message : genericErrorMessage(),
         variant: "error",
       });

@@ -1,5 +1,4 @@
 "use client";
-
 import { memo, useCallback, type ComponentProps, type ReactNode } from "react";
 import {
   IconGitCommit,
@@ -12,8 +11,8 @@ import {
   IconCloudUpload,
   IconAlertTriangle,
 } from "@tabler/icons-react";
-import { plural, t } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
   DropdownMenu,
@@ -63,15 +62,12 @@ function buildCommitConfig(
 ): PrimaryButtonConfig {
   return {
     icon: <IconGitCommit className="h-4 w-4" />,
-    label: t`Commit`,
+    label: t("common:commit"),
     badge: uncommittedFileCount > 0 ? uncommittedFileCount : null,
     tooltip:
       uncommittedFileCount > 0
-        ? plural(uncommittedFileCount, {
-            one: "Commit # changed file",
-            other: "Commit # changed files",
-          })
-        : t`No changes to commit`,
+        ? t("common:commitChangedFiles", { count: uncommittedFileCount })
+        : t("common:noChangesToCommit"),
     onClick: openCommitDialog,
   };
 }
@@ -79,12 +75,9 @@ function buildCommitConfig(
 function buildPrConfig(aheadCount: number, openPRDialog: () => void): PrimaryButtonConfig {
   return {
     icon: <IconGitPullRequest className="h-4 w-4" />,
-    label: t`Create PR`,
+    label: t("common:createPr"),
     badge: null,
-    tooltip: plural(aheadCount, {
-      one: "Create PR (# commit ahead)",
-      other: "Create PR (# commits ahead)",
-    }),
+    tooltip: t("common:createPrCommitsAhead", { count: aheadCount }),
     onClick: openPRDialog,
   };
 }
@@ -92,12 +85,9 @@ function buildPrConfig(aheadCount: number, openPRDialog: () => void): PrimaryBut
 function buildPushConfig(aheadCount: number, handlePush: () => void): PrimaryButtonConfig {
   return {
     icon: <IconCloudUpload className="h-4 w-4" />,
-    label: t`Push`,
+    label: t("common:push"),
     badge: null,
-    tooltip: plural(aheadCount, {
-      one: "Push # commit to remote",
-      other: "Push # commits to remote",
-    }),
+    tooltip: t("common:pushCommitsToRemote", { count: aheadCount }),
     onClick: handlePush,
   };
 }
@@ -110,9 +100,9 @@ function buildRebaseConfig(
   const targetBranch = baseBranch || DEFAULT_BASE_BRANCH;
   return {
     icon: <IconGitCherryPick className="h-4 w-4" />,
-    label: t`Rebase`,
+    label: t("common:rebase"),
     badge: behindCount > 0 ? behindCount : null,
-    tooltip: t`Rebase onto ${targetBranch} (${behindCount} behind)`,
+    tooltip: t("common:rebaseOntoBehind", { targetBranch, behindCount }),
     onClick: handleRebase,
   };
 }
@@ -179,13 +169,13 @@ function DivergencePill({
 }
 
 function GitDivergencePills({ ahead, behind }: { ahead: number; behind: number }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (ahead <= 0 && behind <= 0) return null;
 
   return (
     <span className="ml-1 inline-flex items-center gap-1">
-      <DivergencePill tone="ahead" value={ahead} label={t`commits ahead`} />
-      <DivergencePill tone="behind" value={behind} label={t`commits behind`} />
+      <DivergencePill tone="ahead" value={ahead} label={t("common:commitsAhead")} />
+      <DivergencePill tone="behind" value={behind} label={t("common:commitsBehind")} />
     </span>
   );
 }
@@ -215,21 +205,18 @@ function VcsDropdownItems({
   onRebase,
   onMerge,
 }: VcsDropdownItemsProps) {
+  const { t } = useTranslation();
   const targetBranch = baseBranch || DEFAULT_BASE_BRANCH;
   return (
     <DropdownMenuContent align="end" className="w-56">
       <DropdownMenuItem className="cursor-pointer gap-3" onClick={onPR} disabled={disabled}>
         <IconGitPullRequest className="h-4 w-4 text-muted-foreground" />
-        <span className="flex-1">
-          <Trans>Create PR</Trans>
-        </span>
+        <span className="flex-1">{t("common:createPr")}</span>
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem className="cursor-pointer gap-3" onClick={onPull} disabled={disabled}>
         <IconCloudDownload className="h-4 w-4 text-muted-foreground" />
-        <span className="flex-1">
-          <Trans>Pull</Trans>
-        </span>
+        <span className="flex-1">{t("common:pull")}</span>
         {hasMatchingUpstream && behindCount > 0 && (
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
             ↓{behindCount}
@@ -239,9 +226,7 @@ function VcsDropdownItems({
       <DropdownMenuSub>
         <DropdownMenuSubTrigger className="cursor-pointer gap-3" disabled={disabled}>
           <IconCloudUpload className="h-4 w-4 text-muted-foreground" />
-          <span className="flex-1">
-            <Trans>Push</Trans>
-          </span>
+          <span className="flex-1">{t("common:push")}</span>
           {hasMatchingUpstream && aheadCount > 0 && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
               ↑{aheadCount}
@@ -255,9 +240,7 @@ function VcsDropdownItems({
             disabled={disabled}
           >
             <IconCloudUpload className="h-4 w-4 text-muted-foreground" />
-            <span>
-              <Trans>Push</Trans>
-            </span>
+            <span>{t("common:push")}</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer gap-3"
@@ -265,30 +248,20 @@ function VcsDropdownItems({
             disabled={disabled}
           >
             <IconAlertTriangle className="h-4 w-4 text-muted-foreground" />
-            <span>
-              <Trans>Force Push</Trans>
-            </span>
+            <span>{t("common:forcePush")}</span>
           </DropdownMenuItem>
         </DropdownMenuSubContent>
       </DropdownMenuSub>
       <DropdownMenuSeparator />
       <DropdownMenuItem className="cursor-pointer gap-3" onClick={onRebase} disabled={disabled}>
         <IconGitCherryPick className="h-4 w-4 text-muted-foreground" />
-        <span className="flex-1">
-          <Trans>Rebase</Trans>
-        </span>
-        <span className="text-xs text-muted-foreground">
-          <Trans>onto {targetBranch}</Trans>
-        </span>
+        <span className="flex-1">{t("common:rebase")}</span>
+        <span className="text-xs text-muted-foreground">{t("common:onto2", { targetBranch })}</span>
       </DropdownMenuItem>
       <DropdownMenuItem className="cursor-pointer gap-3" onClick={onMerge} disabled={disabled}>
         <IconGitMerge className="h-4 w-4 text-muted-foreground" />
-        <span className="flex-1">
-          <Trans>Merge</Trans>
-        </span>
-        <span className="text-xs text-muted-foreground">
-          <Trans>from {targetBranch}</Trans>
-        </span>
+        <span className="flex-1">{t("common:merge")}</span>
+        <span className="text-xs text-muted-foreground">{t("common:from2", { targetBranch })}</span>
       </DropdownMenuItem>
     </DropdownMenuContent>
   );
@@ -467,7 +440,7 @@ function SingleRepoVcsButton({
   buttonSize?: ComponentProps<typeof Button>["size"];
   showDivergencePills?: boolean;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className={cn("inline-flex", className)}>
       <Tooltip>
@@ -498,7 +471,7 @@ function SingleRepoVcsButton({
             size={buttonSize}
             variant="outline"
             className="-ml-px rounded-l-none px-2 cursor-pointer"
-            aria-label={t`Open VCS options`}
+            aria-label={t("common:openVcsOptions")}
             disabled={isDisabled}
           >
             {isGitLoading ? (

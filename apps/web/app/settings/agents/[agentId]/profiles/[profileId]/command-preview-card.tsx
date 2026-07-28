@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useState, useMemo, useRef } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import { IconCopy, IconCheck, IconTerminal2 } from "@tabler/icons-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Button } from "@kandev/ui/button";
@@ -65,11 +64,10 @@ function CommandPreviewError({ error }: { error: string }) {
 }
 
 function CommandPreviewEmpty() {
+  const { t } = useTranslation();
   return (
     <div className="rounded-md border border-muted p-4">
-      <p className="text-sm text-muted-foreground">
-        <Trans>No command preview available.</Trans>
-      </p>
+      <p className="text-sm text-muted-foreground">{t("settings:noCommandPreviewAvailable")}</p>
     </div>
   );
 }
@@ -83,7 +81,7 @@ type CommandPreviewContentProps = {
 const PROMPT_TOKEN = "{prompt}";
 
 function CommandPreviewContent({ preview, cliPassthrough, envPrefix }: CommandPreviewContentProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const displayCommand = `${envPrefix}${preview.command_string ?? ""}`;
 
@@ -117,7 +115,7 @@ function CommandPreviewContent({ preview, cliPassthrough, envPrefix }: CommandPr
           size="sm"
           className="absolute right-2 top-2"
           onClick={handleCopy}
-          title={t`Copy to clipboard`}
+          title={t("settings:copyToClipboard")}
         >
           {copied ? (
             <IconCheck className="h-4 w-4 text-green-500" />
@@ -129,7 +127,7 @@ function CommandPreviewContent({ preview, cliPassthrough, envPrefix }: CommandPr
 
       {!cliPassthrough && (
         <p className="text-xs text-muted-foreground">
-          <Trans>
+          <Trans i18nKey="settings:willBeReplacedWithYourTask" values={{ PROMPT_TOKEN }}>
             <code className="rounded bg-muted px-1 py-0.5">{PROMPT_TOKEN}</code> will be replaced
             with your task description or follow-up message.
           </Trans>
@@ -149,7 +147,7 @@ export function CommandPreviewCard({
   envVars,
   secrets,
 }: CommandPreviewCardProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const envPrefix = useMemo(() => buildEnvPrefix(envVars, secrets), [envVars, secrets]);
   const [preview, setPreview] = useState<CommandPreviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -184,7 +182,7 @@ export function CommandPreviewCard({
         setError(null);
       } catch (err) {
         if (requestId !== latestRequestId.current) return;
-        setError(err instanceof Error ? err.message : t`Failed to load command preview`);
+        setError(err instanceof Error ? err.message : t("settings:failedToLoadCommandPreview"));
         setPreview(null);
       } finally {
         if (requestId === latestRequestId.current) setLoading(false);
@@ -200,15 +198,11 @@ export function CommandPreviewCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <IconTerminal2 className="h-5 w-5" />
-          <span>
-            <Trans>Command Preview</Trans>
-          </span>
+          <span>{t("settings:commandPreview")}</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-xs text-muted-foreground">
-          <Trans>The CLI command that will be executed based on the current settings.</Trans>
-        </p>
+        <p className="text-xs text-muted-foreground">{t("settings:theCliCommandThatWillBe")}</p>
 
         {loading && <CommandPreviewLoading />}
         {error && <CommandPreviewError error={error} />}

@@ -1,8 +1,6 @@
 "use client";
-
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
-
 import type { UtilityGenerationResult } from "@/hooks/use-utility-agent-generator";
 
 type PromptResultRecoveryProps = {
@@ -16,6 +14,7 @@ export function PromptResultRecovery({
   onApply,
   onCopy,
 }: PromptResultRecoveryProps) {
+  const { t } = useTranslation();
   if (!pendingResult) {
     return null;
   }
@@ -26,9 +25,7 @@ export function PromptResultRecovery({
       data-testid="prompt-result-recovery"
       className="flex flex-col gap-2 rounded-md border border-border/60 bg-muted/30 p-3"
     >
-      <p className="text-sm text-muted-foreground">
-        <Trans>An enhanced prompt is available.</Trans>
-      </p>
+      <p className="text-sm text-muted-foreground">{t("common:anEnhancedPromptIsAvailable")}</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -36,10 +33,10 @@ export function PromptResultRecovery({
           className="cursor-pointer"
           onClick={() => void onCopy()}
         >
-          <Trans>Copy</Trans>
+          {t("common:copy")}
         </Button>
         <Button type="button" className="cursor-pointer" onClick={onApply}>
-          <Trans>Apply</Trans>
+          {t("common:apply")}
         </Button>
       </div>
     </div>

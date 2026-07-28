@@ -1,7 +1,6 @@
 "use client";
-
 import { useCallback, useEffect, useRef } from "react";
-import { Plural, Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
 import { usePathname, useRouter } from "@/lib/routing/client-router";
 import { IconPlus, IconRobot, IconSitemap } from "@tabler/icons-react";
@@ -48,7 +47,7 @@ function isCurrentWorkspaceResponse(
 }
 
 function AgentsSectionHeaderAction({ router }: { router: { push: (path: string) => void } }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-0.5">
       <Tooltip>
@@ -58,16 +57,14 @@ function AgentsSectionHeaderAction({ router }: { router: { push: (path: string) 
             variant="ghost"
             size="icon"
             className="h-5 w-5 cursor-pointer"
-            aria-label={t`Agent topology`}
+            aria-label={t("sidebar:agentTopology")}
           >
             <Link href="/office/workspace/org">
               <IconSitemap className="h-3 w-3 text-muted-foreground/60" />
             </Link>
           </Button>
         </TooltipTrigger>
-        <TooltipContent>
-          <Trans>Agent topology</Trans>
-        </TooltipContent>
+        <TooltipContent>{t("sidebar:agentTopology")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -75,22 +72,20 @@ function AgentsSectionHeaderAction({ router }: { router: { push: (path: string) 
             variant="ghost"
             size="icon"
             className="h-5 w-5 cursor-pointer"
-            aria-label={t`Add agent`}
+            aria-label={t("common:addAgent")}
             onClick={() => router.push("/office/agents")}
           >
             <IconPlus className="h-3 w-3 text-muted-foreground/60" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>
-          <Trans>Add agent</Trans>
-        </TooltipContent>
+        <TooltipContent>{t("common:addAgent")}</TooltipContent>
       </Tooltip>
     </div>
   );
 }
 
 export function AgentsSection({ collapsed }: AgentsSectionProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const router = useRouter();
   const inOffice = useInOffice();
   const store = useAppStoreApi();
@@ -156,7 +151,7 @@ export function AgentsSection({ collapsed }: AgentsSectionProps) {
   return (
     <AppSidebarSection
       id={APP_SIDEBAR_SECTION_IDS.agents}
-      label={t`Agents`}
+      label={t("common:agents")}
       collapsed={collapsed}
       icon={IconRobot}
       headerAction={<AgentsSectionHeaderAction router={router} />}
@@ -164,9 +159,7 @@ export function AgentsSection({ collapsed }: AgentsSectionProps) {
       defaultExpanded
     >
       {visibleAgents.length === 0 ? (
-        <p className="px-3 py-2 text-xs text-muted-foreground">
-          <Trans>No agents yet</Trans>
-        </p>
+        <p className="px-3 py-2 text-xs text-muted-foreground">{t("sidebar:noAgentsYet")}</p>
       ) : (
         visibleAgents.map((agent) => <AgentRow key={agent.id} agent={agent} />)
       )}
@@ -175,6 +168,7 @@ export function AgentsSection({ collapsed }: AgentsSectionProps) {
 }
 
 function AgentRow({ agent }: { agent: AgentProfile }) {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const href = `/office/agents/${agent.id}`;
   const isActive = pathname === href;
@@ -205,12 +199,12 @@ function AgentRow({ agent }: { agent: AgentProfile }) {
           title={agent.pauseReason}
           className="rounded-full bg-red-500/15 text-red-600 dark:text-red-400 px-1.5 py-0.5 text-[10px] font-medium"
         >
-          <Trans>paused</Trans>
+          {t("sidebar:paused")}
         </span>
       ) : null}
       {!isAutoPaused && errorCount > 0 ? (
         <span className="rounded-full bg-red-500/15 text-red-600 dark:text-red-400 px-1.5 py-0.5 text-[10px] font-medium">
-          <Plural value={errorCount} one="# error" other="# errors" />
+          {t("sidebar:errors", { count: errorCount })}
         </span>
       ) : null}
       {liveCount > 0 && <LiveAgentIndicator count={liveCount} />}

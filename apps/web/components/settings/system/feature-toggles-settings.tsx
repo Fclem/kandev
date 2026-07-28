@@ -1,8 +1,7 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription, AlertTitle } from "@kandev/ui/alert";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent } from "@kandev/ui/card";
@@ -71,6 +70,7 @@ export function FeatureTogglesSettings({ initialFlags, restartCapability }: Prop
 }
 
 function useRuntimeFlagsDraft(initialFlags: RuntimeFlagState[]) {
+  const { t } = useTranslation();
   const [flags, setFlags] = useState(initialFlags);
   const [savedFlags, setSavedFlags] = useState(initialFlags);
   const [isLoadingFlags, setIsLoadingFlags] = useState(initialFlags.length === 0);
@@ -90,7 +90,7 @@ function useRuntimeFlagsDraft(initialFlags: RuntimeFlagState[]) {
         }
       } catch (err) {
         toast({
-          title: t`Failed to load feature toggles`,
+          title: t("settings:failedToLoadFeatureToggles"),
           description: errorMessage(err),
           variant: "error",
         });
@@ -146,7 +146,7 @@ function useRuntimeFlagsDraft(initialFlags: RuntimeFlagState[]) {
       }
       setSavedFlags(persisted);
       setFlags((current) => (current === submitted ? persisted : current));
-      toast({ title: t`Feature toggles saved`, variant: "success" });
+      toast({ title: t("settings:featureTogglesSaved"), variant: "success" });
     },
     discard: () => setFlags(savedFlags),
   });
@@ -171,12 +171,13 @@ function FeatureTogglesEmptyState({
   isLoading: boolean;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   if (isLoading) {
     return (
       <Card>
         <CardContent className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
           <Spinner className="size-4" />
-          <Trans>Loading feature toggles...</Trans>
+          {t("settings:loadingFeatureToggles")}
         </CardContent>
       </Card>
     );
@@ -184,9 +185,9 @@ function FeatureTogglesEmptyState({
   return (
     <Card>
       <CardContent className="py-6 text-sm text-muted-foreground">
-        <Trans>Feature toggles could not be loaded.</Trans>
+        {t("settings:featureTogglesCouldNotBeLoaded")}
         <Button variant="link" className="h-auto px-1 cursor-pointer" onClick={onRetry}>
-          <Trans>Retry</Trans>
+          {t("common:retry")}
         </Button>
       </CardContent>
     </Card>
@@ -202,23 +203,19 @@ function RestartRequiredAlert({
   restarting: boolean;
   onRestart: () => void;
 }) {
+  const { t } = useTranslation();
   const supported = capability?.supported === true;
   return (
     <Alert className="border-border/70 bg-muted/30">
       <IconRotateClockwise className="h-4 w-4 text-muted-foreground" />
       <AlertTitle className="flex items-center gap-2">
-        <Trans>Restart required</Trans>
+        {t("settings:restartRequired")}
         <RestartSupportInfo supported={supported} reason={capability?.reason} />
       </AlertTitle>
       <AlertDescription className="flex flex-col gap-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <span>
-          <Trans>Saved toggle changes will apply the next time Kandev starts.</Trans>
-          {!supported && (
-            <>
-              {" "}
-              <Trans>Restart it from your terminal or service manager when convenient.</Trans>
-            </>
-          )}
+          {t("settings:savedToggleChangesWillApplyThe")}
+          {!supported && <> {t("settings:restartItFromYourTerminalOr")}</>}
         </span>
         {supported && (
           <Button
@@ -228,7 +225,7 @@ function RestartRequiredAlert({
             className="w-full cursor-pointer sm:w-auto"
           >
             <IconPower className="mr-1 h-3.5 w-3.5" />
-            <Trans>Restart</Trans>
+            {t("settings:restart")}
           </Button>
         )}
       </AlertDescription>
@@ -243,12 +240,13 @@ function RestartSupportInfo({
   supported: boolean;
   reason: string | undefined;
 }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label={t`Restart support details`}
+          aria-label={t("settings:restartSupportDetails")}
           className="inline-flex h-6 w-6 cursor-help items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <IconInfoCircle className="h-4 w-4" />
@@ -263,12 +261,9 @@ function RestartSupportInfo({
 
 function restartSupportMessage(supported: boolean, reason: string | undefined): string {
   if (supported) {
-    return t`Restart from this page is available when Kandev is running under a supported local supervisor.`;
+    return t("settings:restartFromThisPageIsAvailable");
   }
-  return (
-    reason ??
-    t`Automatic restart is not available in deploy previews, unmanaged terminal runs, or launch modes without a restart supervisor.`
-  );
+  return reason ?? t("settings:automaticRestartIsNotAvailableIn");
 }
 
 function errorMessage(err: unknown): string {

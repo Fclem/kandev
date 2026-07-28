@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -25,8 +24,8 @@ export function UninstallPluginDialog({
   onClose,
   onConfirm,
 }: UninstallPluginDialogProps) {
-  const { t } = useLingui();
-  const pluginName = target?.display_name ?? t`this plugin`;
+  const { t } = useTranslation();
+  const pluginName = target?.display_name ?? t("settings:thisPlugin");
   return (
     <Dialog
       open={Boolean(target)}
@@ -36,11 +35,9 @@ export function UninstallPluginDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Uninstall plugin</Trans>
-          </DialogTitle>
+          <DialogTitle>{t("settings:uninstallPlugin")}</DialogTitle>
           <DialogDescription>
-            <Trans>
+            <Trans i18nKey="settings:thisWillPermanentlyRemoveAndRevoke" values={{ pluginName }}>
               This will permanently remove{" "}
               <span className="font-medium text-foreground">{pluginName}</span> and revoke its API
               key. This action cannot be undone.
@@ -49,7 +46,7 @@ export function UninstallPluginDialog({
         </DialogHeader>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose} className="cursor-pointer">
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button
             type="button"
@@ -58,7 +55,7 @@ export function UninstallPluginDialog({
             disabled={busy}
             className="cursor-pointer"
           >
-            <Trans>Confirm uninstall</Trans>
+            {t("settings:confirmUninstall")}
           </Button>
         </DialogFooter>
       </DialogContent>

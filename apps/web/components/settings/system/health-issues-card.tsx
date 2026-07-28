@@ -1,6 +1,5 @@
 "use client";
-
-import { Plural, Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Button } from "@kandev/ui/button";
@@ -65,14 +64,14 @@ function HealthIssueRow({ issue }: { issue: HealthIssue }) {
 }
 
 function ChecksPopover({ checks }: { checks: HealthCheckSummary[] }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (checks.length === 0) return null;
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={t`What's monitored`}
+          aria-label={t("settings:whatSMonitored")}
           className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
           data-testid="system-health-checks-trigger"
         >
@@ -80,9 +79,7 @@ function ChecksPopover({ checks }: { checks: HealthCheckSummary[] }) {
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72" data-testid="system-health-checks-popover">
-        <p className="text-xs font-medium mb-2">
-          <Trans>System checks</Trans>
-        </p>
+        <p className="text-xs font-medium mb-2">{t("settings:systemChecks")}</p>
         <ul className="space-y-1.5">
           {checks.map((c) => (
             <li
@@ -97,7 +94,7 @@ function ChecksPopover({ checks }: { checks: HealthCheckSummary[] }) {
               )}
               <span>{c.name}</span>
               <span className="ml-auto text-[10px] text-muted-foreground">
-                {c.passing ? <Trans>Passing</Trans> : <Trans>Issue</Trans>}
+                {c.passing ? t("settings:passing") : t("settings:issue")}
               </span>
             </li>
           ))}
@@ -108,6 +105,7 @@ function ChecksPopover({ checks }: { checks: HealthCheckSummary[] }) {
 }
 
 export function HealthIssuesCard() {
+  const { t } = useTranslation();
   const { issues, checks, loaded } = useSystemHealth();
   const nonInfo = issues.filter((i) => i.severity !== "info");
   const hasIssues = nonInfo.length > 0;
@@ -117,14 +115,10 @@ export function HealthIssuesCard() {
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base flex items-center gap-2">
           <IconActivity className="h-4 w-4" />
-          <Trans>Health</Trans>
+          {t("settings:health")}
           {loaded && (
             <Badge variant={hasIssues ? "destructive" : "secondary"} className="text-[10px]">
-              {hasIssues ? (
-                <Plural value={nonInfo.length} one="# issue" other="# issues" />
-              ) : (
-                <Trans>Healthy</Trans>
-              )}
+              {hasIssues ? t("settings:issues", { count: nonInfo.length }) : t("settings:healthy")}
             </Badge>
           )}
         </CardTitle>
@@ -133,7 +127,7 @@ export function HealthIssuesCard() {
       <CardContent className="space-y-3">
         {!loaded && (
           <p className="text-xs text-muted-foreground" data-testid="system-health-loading">
-            <Trans>Loading health checks...</Trans>
+            {t("settings:loadingHealthChecks")}
           </p>
         )}
         {loaded && issues.length === 0 && (
@@ -142,7 +136,7 @@ export function HealthIssuesCard() {
             data-testid="system-health-empty"
           >
             <IconCircleCheck className="h-4 w-4 text-emerald-500" />
-            <Trans>All system checks pass.</Trans>
+            {t("settings:allSystemChecksPass")}
           </div>
         )}
         {loaded && issues.map((issue) => <HealthIssueRow key={issue.id} issue={issue} />)}

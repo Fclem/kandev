@@ -1,7 +1,6 @@
 "use client";
-
 import { useCallback, useId, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -52,13 +51,13 @@ function ValueOrSecretInput({
   onUpdate: (index: number, field: keyof EnvVarRow, val: string) => void;
   baselineRow?: EnvVarRow;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (row.mode === "value") {
     return (
       <Input
         value={row.value}
         onChange={(e) => onUpdate(index, "value", e.target.value)}
-        placeholder={t`value`}
+        placeholder={t("settings:value")}
         className="flex-[3] font-mono text-xs"
         data-settings-dirty={!baselineRow || row.value !== baselineRow.value}
       />
@@ -70,7 +69,7 @@ function ValueOrSecretInput({
         className="flex-[3] text-xs"
         data-settings-dirty={!baselineRow || row.secretId !== baselineRow.secretId}
       >
-        <SelectValue placeholder={t`Select secret...`} />
+        <SelectValue placeholder={t("settings:selectSecret")} />
       </SelectTrigger>
       <SelectContent>
         {secrets.map((s) => (
@@ -98,8 +97,8 @@ function EnvVarRowComponent({
   onRemove: (index: number) => void;
   baselineRow?: EnvVarRow;
 }) {
-  const { t } = useLingui();
-  const removeTarget = row.key || t`env var`;
+  const { t } = useTranslation();
+  const removeTarget = row.key || t("settings:envVar");
   return (
     <li
       className="flex items-center gap-2"
@@ -122,12 +121,8 @@ function EnvVarRowComponent({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="value">
-            <Trans>Value</Trans>
-          </SelectItem>
-          <SelectItem value="secret">
-            <Trans>Secret</Trans>
-          </SelectItem>
+          <SelectItem value="value">{t("settings:value2")}</SelectItem>
+          <SelectItem value="secret">{t("settings:secret")}</SelectItem>
         </SelectContent>
       </Select>
       <ValueOrSecretInput
@@ -144,7 +139,7 @@ function EnvVarRowComponent({
         onClick={() => onRemove(index)}
         className="h-8 w-8 shrink-0 cursor-pointer"
         data-testid={`env-var-remove-${index}`}
-        aria-label={t`Remove ${removeTarget}`}
+        aria-label={t("settings:remove3", { removeTarget })}
       >
         <IconTrash className="h-3.5 w-3.5 text-muted-foreground" />
       </Button>
@@ -165,14 +160,14 @@ function DraftValueInput({
   onEnter: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   setDraft: React.Dispatch<React.SetStateAction<EnvVarRow>>;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (draft.mode === "value") {
     return (
       <Input
         id={valueId}
         value={draft.value}
         onChange={(e) => setDraft((d) => ({ ...d, value: e.target.value }))}
-        placeholder={t`value`}
+        placeholder={t("settings:value")}
         className="font-mono text-xs"
         data-testid="env-var-new-value-input"
         onKeyDown={onEnter}
@@ -182,7 +177,7 @@ function DraftValueInput({
   return (
     <Select value={draft.secretId} onValueChange={(v) => setDraft((d) => ({ ...d, secretId: v }))}>
       <SelectTrigger id={valueId} className="text-xs" data-testid="env-var-new-secret-select">
-        <SelectValue placeholder={t`Select secret...`} />
+        <SelectValue placeholder={t("settings:selectSecret")} />
       </SelectTrigger>
       <SelectContent>
         {secrets.map((s) => (
@@ -202,7 +197,7 @@ function EnvVarAddForm({
   onAdd: (row: EnvVarRow) => void;
   secrets: { id: string; name: string }[];
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const uid = useId();
   const keyId = `${uid}-key`;
   const modeId = `${uid}-mode`;
@@ -234,7 +229,7 @@ function EnvVarAddForm({
     <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
       <div className="flex-[2] space-y-1">
         <Label className="text-xs" htmlFor={keyId}>
-          <Trans>Key</Trans>
+          {t("settings:key")}
         </Label>
         <Input
           id={keyId}
@@ -248,7 +243,7 @@ function EnvVarAddForm({
       </div>
       <div className="space-y-1">
         <Label className="text-xs" htmlFor={modeId}>
-          <Trans>Mode</Trans>
+          {t("settings:mode")}
         </Label>
         <Select
           value={draft.mode}
@@ -260,18 +255,14 @@ function EnvVarAddForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="value">
-              <Trans>Value</Trans>
-            </SelectItem>
-            <SelectItem value="secret">
-              <Trans>Secret</Trans>
-            </SelectItem>
+            <SelectItem value="value">{t("settings:value2")}</SelectItem>
+            <SelectItem value="secret">{t("settings:secret")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
       <div className="flex-[3] space-y-1">
         <Label className="text-xs" htmlFor={valueId}>
-          {draft.mode === "value" ? t`Value` : t`Secret`}
+          {draft.mode === "value" ? t("settings:value2") : t("settings:secret")}
         </Label>
         <DraftValueInput
           draft={draft}
@@ -291,7 +282,7 @@ function EnvVarAddForm({
         data-testid="env-var-add-button"
       >
         <IconPlus className="h-3.5 w-3.5 mr-1" />
-        <Trans>Add</Trans>
+        {t("settings:add")}
       </Button>
     </div>
   );
@@ -314,11 +305,12 @@ function EnvVarsFieldBody({
   onUpdate,
   onRemove,
 }: EnvVarsFieldProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3" data-testid="env-vars-field">
       {rows.length === 0 ? (
         <p className="text-xs italic text-muted-foreground" data-testid="env-vars-empty">
-          <Trans>No environment variables configured. Add one below.</Trans>
+          {t("settings:noEnvironmentVariablesConfiguredAddOne")}
         </p>
       ) : (
         <ul className="space-y-2" data-testid="env-vars-list">
@@ -359,6 +351,7 @@ export function useEnvVarRows(initialEnvVars?: ProfileEnvVar[]) {
 }
 
 export function EnvVarsCard(props: EnvVarsFieldProps) {
+  const { t } = useTranslation();
   const isDirty =
     props.baselineRows !== undefined &&
     JSON.stringify(rowsToEnvVars(props.rows)) !== JSON.stringify(rowsToEnvVars(props.baselineRows));
@@ -368,19 +361,14 @@ export function EnvVarsCard(props: EnvVarsFieldProps) {
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <CardTitle>
-              <Trans>Environment Variables</Trans>
-            </CardTitle>
+            <CardTitle>{t("settings:environmentVariables")}</CardTitle>
             <CardDescription>
-              <Trans>
-                Injected into the execution environment. Use Secret mode for tokens and API keys;
-                literal values are stored in the profile JSON.
-              </Trans>
+              {t("settings:injectedIntoTheExecutionEnvironmentUse")}
             </CardDescription>
           </div>
           {configuredCount > 0 && (
             <span className="text-[10px] text-muted-foreground" data-testid="env-vars-count">
-              <Trans>{configuredCount} configured</Trans>
+              {t("settings:configured", { configuredCount })}
             </span>
           )}
         </div>

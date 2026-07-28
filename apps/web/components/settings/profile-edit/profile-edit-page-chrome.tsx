@@ -1,8 +1,7 @@
 "use client";
-
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Plural, Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
@@ -63,6 +62,7 @@ export function ProfileHeader({
   description: string;
   actions?: ReactNode;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   return (
     <>
@@ -85,7 +85,7 @@ export function ProfileHeader({
             onClick={() => router.push(EXECUTORS_ROUTE)}
             className="w-full cursor-pointer sm:w-auto"
           >
-            <Trans>Back to Executors</Trans>
+            {t("settings:backToExecutors")}
           </Button>
         </div>
       </div>
@@ -95,19 +95,20 @@ export function ProfileHeader({
 }
 
 export function ProfileFormActions({ onDelete }: { onDelete: () => void }) {
+  const { t } = useTranslation();
   const router = useRouter();
   return (
     <div className="flex items-center justify-between">
       <Button variant="destructive" size="sm" onClick={onDelete} className="cursor-pointer">
         <IconTrash className="mr-1 h-4 w-4" />
-        <Trans>Delete Profile</Trans>
+        {t("settings:deleteProfile2")}
       </Button>
       <Button
         variant="outline"
         onClick={() => router.push(EXECUTORS_ROUTE)}
         className="cursor-pointer"
       >
-        <Trans>Cancel</Trans>
+        {t("common:cancel")}
       </Button>
     </div>
   );
@@ -126,7 +127,7 @@ export function DeleteProfileDialog({
   deleting: boolean;
   relatedDockerContainerCount?: number;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [removeRelatedContainers, setRemoveRelatedContainers] = useState<boolean | null>(null);
   const hasRelatedContainers = relatedDockerContainerCount > 0;
   const shouldRemoveRelatedContainers = hasRelatedContainers && (removeRelatedContainers ?? true);
@@ -140,21 +141,15 @@ export function DeleteProfileDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Delete Profile</Trans>
-          </DialogTitle>
-          <DialogDescription>
-            <Trans>Are you sure? This action cannot be undone.</Trans>
-          </DialogDescription>
+          <DialogTitle>{t("settings:deleteProfile2")}</DialogTitle>
+          <DialogDescription>{t("settings:areYouSureThisActionCannot")}</DialogDescription>
         </DialogHeader>
         {hasRelatedContainers && (
           <div className="space-y-3 rounded-md border p-3">
             <p className="text-sm text-muted-foreground">
-              <Plural
-                value={relatedDockerContainerCount}
-                one="# related Docker container will also be removed."
-                other="# related Docker containers will also be removed."
-              />
+              {t("settings:relatedDockerContainersWillAlsoBe", {
+                count: relatedDockerContainerCount,
+              })}
             </p>
             <div className="flex items-center gap-2">
               <Checkbox
@@ -163,14 +158,14 @@ export function DeleteProfileDialog({
                 onCheckedChange={(checked) => setRemoveRelatedContainers(checked === true)}
               />
               <Label htmlFor="remove-related-docker-containers" className="cursor-pointer text-sm">
-                <Trans>Remove related Docker containers</Trans>
+                {t("settings:removeRelatedDockerContainers")}
               </Label>
             </div>
           </div>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -180,7 +175,7 @@ export function DeleteProfileDialog({
             disabled={deleting}
             className="cursor-pointer"
           >
-            {deleting ? t`Deleting...` : t`Delete`}
+            {deleting ? t("settings:deleting") : t("common:delete")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,5 +1,4 @@
 "use client";
-
 import { useMemo, type ReactNode } from "react";
 import {
   IconArchive,
@@ -16,7 +15,7 @@ import {
   IconTrash,
   IconUnlink,
 } from "@tabler/icons-react";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import {
   ContextMenuItem,
   ContextMenuSeparator,
@@ -40,6 +39,7 @@ import {
   type TaskMoveWorkflow,
 } from "@/components/task/task-move-context-menu";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 type ItemEntry = {
   kind: "item";
@@ -100,20 +100,17 @@ type BuildKanbanCardMenuEntriesArgs = {
 };
 
 function StepBadges({ step, isCurrent }: { step: TaskMoveStep; isCurrent: boolean }) {
+  const { t } = useTranslation();
   const hasAutoStart = stepHasAutoStart(step);
   if (!isCurrent && !hasAutoStart) return null;
 
   return (
     <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
       {isCurrent && (
-        <span data-testid={`task-context-step-current-${step.id}`}>
-          <Trans>Current</Trans>
-        </span>
+        <span data-testid={`task-context-step-current-${step.id}`}>{t("common:current")}</span>
       )}
       {hasAutoStart && (
-        <span data-testid={`task-context-step-autostart-${step.id}`}>
-          <Trans>Auto-start</Trans>
-        </span>
+        <span data-testid={`task-context-step-autostart-${step.id}`}>{t("common:autoStart")}</span>
       )}
     </span>
   );
@@ -156,7 +153,7 @@ function buildMoveToCurrentWorkflowSubmenu({
     key: "move-to",
     testId: "task-context-move-to",
     icon: <IconArrowRight className="mr-2 h-4 w-4" />,
-    label: <Trans>Move to</Trans>,
+    label: t("kanban:moveTo"),
     disabled,
     className: "w-48",
     children: steps.map((step) => buildStepEntry(step, currentStepId, onMoveToStep)),
@@ -183,7 +180,7 @@ function buildWorkflowTargetEntry({
       label: <span className="flex-1 truncate">{workflow.name}</span>,
       trailing: (
         <span data-testid="task-context-disabled-reason" className="ml-2 text-[10px]">
-          <Trans>No steps</Trans>
+          {t("kanban:noSteps")}
         </span>
       ),
     };
@@ -222,7 +219,7 @@ function buildSendToWorkflowSubmenu({
     key: "send-to-workflow",
     testId: "task-context-send-to-workflow",
     icon: <IconLogicBuffer className="mr-2 h-4 w-4" />,
-    label: <Trans>Send to workflow</Trans>,
+    label: t("kanban:sendToWorkflow"),
     disabled,
     className: "w-56",
     children: targets.map((workflow) =>
@@ -249,7 +246,7 @@ function buildGitLabMergeRequestLinkEntry({
     key: "link-gitlab-merge-request",
     testId: "task-context-link-gitlab-merge-request",
     icon: <IconBrandGitlab className="mr-2 h-4 w-4" />,
-    label: <Trans>GitLab Merge Request</Trans>,
+    label: t("kanban:gitlabMergeRequest"),
     disabled,
     onSelect: onLinkMergeRequest,
   };
@@ -289,7 +286,7 @@ function buildLinkSubmenu({
       key: "link-github-pull-request",
       testId: "task-context-link-github-pull-request",
       icon: <IconGitPullRequest className="mr-2 h-4 w-4" />,
-      label: <Trans>GitHub Pull Request</Trans>,
+      label: t("kanban:githubPullRequest"),
       disabled,
       onSelect: onLinkPullRequest,
     });
@@ -300,7 +297,7 @@ function buildLinkSubmenu({
       key: "link-github-issue",
       testId: "task-context-link-github-issue",
       icon: <IconCircleDot className="mr-2 h-4 w-4" />,
-      label: <Trans>GitHub Issue</Trans>,
+      label: t("kanban:githubIssue"),
       disabled,
       onSelect: onLinkIssue,
     });
@@ -313,7 +310,7 @@ function buildLinkSubmenu({
       key: "link-jira-ticket",
       testId: "task-context-link-jira-ticket",
       icon: <IconTicket className="mr-2 h-4 w-4" />,
-      label: <Trans>Jira Ticket</Trans>,
+      label: t("kanban:jiraTicket"),
       disabled,
       onSelect: onLinkJiraTicket,
     });
@@ -324,7 +321,7 @@ function buildLinkSubmenu({
       key: "link-linear-issue",
       testId: "task-context-link-linear-issue",
       icon: <IconCircleDot className="mr-2 h-4 w-4" />,
-      label: <Trans>Linear Issue</Trans>,
+      label: t("kanban:linearIssue"),
       disabled,
       onSelect: onLinkLinearIssue,
     });
@@ -335,7 +332,7 @@ function buildLinkSubmenu({
       key: "link-sentry-issue",
       testId: "task-context-link-sentry-issue",
       icon: <IconBrandSentry className="mr-2 h-4 w-4" />,
-      label: <Trans>Sentry Issue</Trans>,
+      label: t("kanban:sentryIssue"),
       disabled,
       onSelect: onLinkSentryIssue,
     });
@@ -345,7 +342,7 @@ function buildLinkSubmenu({
     key: "link",
     testId: "task-context-link",
     icon: <IconLink className="mr-2 h-4 w-4" />,
-    label: <Trans>Link</Trans>,
+    label: t("kanban:link"),
     disabled,
     className: "w-56",
     children,
@@ -383,7 +380,7 @@ export function buildKanbanCardMenuEntries({
       kind: "item",
       key: "edit",
       icon: <IconPencil className="mr-2 h-4 w-4" />,
-      label: <Trans>Edit</Trans>,
+      label: t("common:edit"),
       disabled: isProcessing || !onEdit,
       onSelect: onEdit,
     },
@@ -425,7 +422,7 @@ export function buildKanbanCardMenuEntries({
     ) : (
       <IconArchive className="mr-2 h-4 w-4" />
     ),
-    label: <Trans>Archive</Trans>,
+    label: t("kanban:archive"),
     disabled: isProcessing || !onArchive,
     onSelect: onArchive,
   });
@@ -442,7 +439,7 @@ export function buildKanbanCardMenuEntries({
     ) : (
       <IconTrash className="mr-2 h-4 w-4" />
     ),
-    label: <Trans>Delete</Trans>,
+    label: t("common:delete"),
     destructive: true,
     disabled: isProcessing || !onDelete,
     onSelect: onDelete,
@@ -469,7 +466,7 @@ function buildDetachEntry({
     ) : (
       <IconUnlink className="mr-2 h-4 w-4" />
     ),
-    label: <Trans>Detach from parent</Trans>,
+    label: t("kanban:detachFromParent"),
     disabled: isProcessing,
     onSelect: onDetach,
   };

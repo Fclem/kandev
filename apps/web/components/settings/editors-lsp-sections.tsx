@@ -1,7 +1,6 @@
 "use client";
-
-import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { Trans, useTranslation } from "react-i18next";
 import { IconChevronDown, IconExternalLink, IconInfoCircle } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Checkbox } from "@kandev/ui/checkbox";
@@ -43,13 +42,13 @@ const LSP_LANGUAGE_OPTIONS = [
 function lspInstallHint(langId: string): string {
   switch (langId) {
     case "typescript":
-      return t`Installs typescript-language-server and typescript via npm into ~/.kandev/lsp-servers/`;
+      return t("settings:installsTypescriptLanguageServerAndTypescript");
     case "go":
-      return t`Runs "go install golang.org/x/tools/gopls@latest". Requires Go to be installed.`;
+      return t("settings:runsGoInstallGolangOrgX");
     case "rust":
-      return t`Downloads the rust-analyzer binary from GitHub releases into ~/.kandev/lsp-servers/`;
+      return t("settings:downloadsTheRustAnalyzerBinaryFrom");
     case "python":
-      return t`Installs pyright via npm into ~/.kandev/lsp-servers/`;
+      return t("settings:installsPyrightViaNpmIntoKandev");
     default:
       return "";
   }
@@ -72,14 +71,13 @@ export function LspLanguageCards({
   toggleAutoStart,
   toggleAutoInstall,
 }: LspLanguageCardsProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div>
-        <div className="text-sm font-medium text-foreground">
-          <Trans>Language Servers</Trans>
-        </div>
+        <div className="text-sm font-medium text-foreground">{t("settings:languageServers")}</div>
         <div className="text-xs text-muted-foreground">
-          <Trans>
+          <Trans i18nKey="settings:autoStartLanguageServersWhenOpening">
             Auto-start language servers when opening files to get diagnostics, hover info, and
             go-to-definition. You can also toggle each server on/off per file.
             <br />
@@ -106,9 +104,7 @@ export function LspLanguageCards({
                 <div className="text-xs text-muted-foreground">{lang.binary}</div>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  <Trans>Auto-start</Trans>
-                </span>
+                <span className="text-xs text-muted-foreground">{t("common:autoStart")}</span>
                 <Switch
                   checked={lspAutoStartLanguages.includes(lang.id)}
                   onCheckedChange={(checked) => toggleAutoStart(lang.id, checked === true)}
@@ -127,7 +123,7 @@ export function LspLanguageCards({
                   htmlFor={`lsp-install-${lang.id}`}
                   className="text-xs text-muted-foreground cursor-pointer"
                 >
-                  <Trans>Auto-install if not found</Trans>
+                  {t("settings:autoInstallIfNotFound")}
                 </label>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -163,14 +159,15 @@ export function LspServerConfigSection({
   setExpandedConfigLang,
   updateLspConfigString,
 }: LspServerConfigSectionProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div>
         <div className="text-sm font-medium text-foreground">
-          <Trans>Server Configuration</Trans>
+          {t("settings:serverConfiguration")}
         </div>
         <div className="text-xs text-muted-foreground">
-          <Trans>
+          <Trans i18nKey="settings:overrideSettingsSentToEachLanguage">
             Override settings sent to each language server via{" "}
             <code className="text-[11px] bg-muted px-1 rounded">workspace/configuration</code>. JSON
             format.
@@ -200,7 +197,7 @@ export function LspServerConfigSection({
                 <span className="text-sm text-foreground">{lang.label}</span>
                 {configStr.trim() && (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                    <Trans>custom</Trans>
+                    {t("settings:custom")}
                   </Badge>
                 )}
               </div>
@@ -212,7 +209,7 @@ export function LspServerConfigSection({
               <div className="border-t border-border/60 px-4 py-3 space-y-2">
                 {hasDefaults && (
                   <div className="text-[11px] text-muted-foreground">
-                    <Trans>
+                    <Trans i18nKey="settings:defaults" values={{ defaultConfigJson }}>
                       Defaults: <code className="bg-muted px-1 rounded">{defaultConfigJson}</code>
                     </Trans>
                   </div>
@@ -223,7 +220,7 @@ export function LspServerConfigSection({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <Trans>View available settings</Trans>
+                  {t("settings:viewAvailableSettings")}
                   <IconExternalLink className="h-3 w-3" />
                 </a>
                 <Textarea

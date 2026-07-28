@@ -1,7 +1,5 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
-import { t } from "@lingui/core/macro";
 import {
   createNotificationProvider,
   deleteNotificationProvider,
@@ -14,6 +12,7 @@ import { nativeNotifications } from "@/lib/desktop/native-notification-client";
 import { useNotificationProviders } from "@/hooks/domains/settings/use-notification-providers";
 import { useAppStore } from "@/components/state-provider";
 import type { NotificationProvider } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 type ProviderUpdatePayload = {
   enabled?: boolean;
@@ -249,6 +248,7 @@ export type { AppriseFormMode };
 export type PermissionRefresh = (error?: unknown) => void | Promise<void>;
 
 export function useSaveRequest(state: NotificationsState) {
+  const { t } = useTranslation();
   const {
     providers,
     baselineProviders,
@@ -274,7 +274,7 @@ export function useSaveRequest(state: NotificationsState) {
         ? { name: appriseName, urls: parseAppriseUrls(appriseUrls) }
         : null;
     if (createDraft && createDraft.urls.length === 0) {
-      throw new Error(t`At least one Apprise service URL is required.`);
+      throw new Error(t("settings:atLeastOneAppriseServiceUrl"));
     }
     const updates: Array<Promise<NotificationProvider>> = [];
     for (const provider of providers) {
@@ -459,6 +459,7 @@ export function useNotificationsActions(
   state: NotificationsState,
   bumpPermission: PermissionRefresh,
 ) {
+  const { t } = useTranslation();
   const { setProviders } = state;
   const appriseActions = useAppriseProviderActions(state);
 
@@ -512,8 +513,8 @@ export function useNotificationsActions(
       bumpPermission();
     }
     if (permission !== "granted") return;
-    new Notification(t`Test notification`, {
-      body: t`If you can read this, browser notifications are working.`,
+    new Notification(t("settings:testNotification"), {
+      body: t("settings:ifYouCanReadThisBrowser"),
     });
   };
 

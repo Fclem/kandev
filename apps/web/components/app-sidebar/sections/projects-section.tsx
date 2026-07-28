@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconBoxMultiple, IconPlus } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
@@ -17,7 +16,7 @@ type ProjectsSectionProps = {
 };
 
 export function ProjectsSection({ collapsed }: ProjectsSectionProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const router = useRouter();
   const inOffice = useInOffice();
   const projects = useAppStore((s) => s.office.projects);
@@ -32,22 +31,20 @@ export function ProjectsSection({ collapsed }: ProjectsSectionProps) {
           variant="ghost"
           size="icon"
           className="h-5 w-5 cursor-pointer"
-          aria-label={t`Add project`}
+          aria-label={t("sidebar:addProject")}
           onClick={() => router.push("/office/projects")}
         >
           <IconPlus className="h-3 w-3 text-muted-foreground/60" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>
-        <Trans>Add project</Trans>
-      </TooltipContent>
+      <TooltipContent>{t("sidebar:addProject")}</TooltipContent>
     </Tooltip>
   );
 
   return (
     <AppSidebarSection
       id={APP_SIDEBAR_SECTION_IDS.projects}
-      label={t`Projects`}
+      label={t("sidebar:projects")}
       collapsed={collapsed}
       icon={IconBoxMultiple}
       headerAction={headerAction}
@@ -55,9 +52,7 @@ export function ProjectsSection({ collapsed }: ProjectsSectionProps) {
       defaultExpanded
     >
       {activeProjects.length === 0 ? (
-        <p className="px-3 py-2 text-xs text-muted-foreground">
-          <Trans>No projects yet</Trans>
-        </p>
+        <p className="px-3 py-2 text-xs text-muted-foreground">{t("sidebar:noProjectsYet")}</p>
       ) : (
         activeProjects.map((project) => {
           const taskCount = project.taskCounts?.total ?? 0;

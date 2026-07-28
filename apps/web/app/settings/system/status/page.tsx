@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { StateProvider } from "@/components/state-provider";
 import { SystemPageShell } from "@/components/settings/system/system-page-shell";
 import { HealthIssuesCard } from "@/components/settings/system/health-issues-card";
@@ -9,6 +9,7 @@ import { fetchSystemHealth } from "@/lib/api/domains/health-api";
 import { fetchUpdates } from "@/lib/api/domains/system-api";
 
 export default async function SystemStatusPage() {
+  const { t } = useTranslation();
   let initialState: Record<string, unknown> = {};
   try {
     const [health, updates] = await Promise.all([
@@ -34,8 +35,8 @@ export default async function SystemStatusPage() {
   return (
     <StateProvider initialState={initialState}>
       <SystemPageShell
-        title={t`Status`}
-        description={t`Health checks, disk usage, and version summary.`}
+        title={t("common:status")}
+        description={t("settings:healthChecksDiskUsageAndVersion")}
       >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <HealthIssuesCard />

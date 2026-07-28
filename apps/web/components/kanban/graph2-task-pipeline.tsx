@@ -1,8 +1,7 @@
 "use client";
-
 import { useMemo, useState } from "react";
-import { Trans, Plural, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { IconArchive, IconDots, IconTrash } from "@tabler/icons-react";
 import {
   DropdownMenu,
@@ -29,15 +28,15 @@ function formatRelativeTime(dateStr: string): string {
   const then = new Date(dateStr).getTime();
   const diff = now - then;
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return t`just now`;
+  if (seconds < 60) return t("common:justNow");
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return t`${minutes}m ago`;
+  if (minutes < 60) return t("kanban:mAgo", { minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return t`${hours}h ago`;
+  if (hours < 24) return t("kanban:hAgo", { hours });
   const days = Math.floor(hours / 24);
-  if (days < 30) return t`${days}d ago`;
+  if (days < 30) return t("kanban:dAgo", { days });
   const months = Math.floor(days / 30);
-  return t`${months}mo ago`;
+  return t("kanban:moAgo", { months });
 }
 
 export type Graph2TaskPipelineProps = {
@@ -155,6 +154,7 @@ function TaskActions({
   Graph2TaskPipelineProps,
   "task" | "onDeleteTask" | "onArchiveTask" | "isDeleting" | "isArchiving"
 >) {
+  const { t } = useTranslation();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
@@ -177,7 +177,7 @@ function TaskActions({
               className="cursor-pointer"
             >
               <IconArchive className="h-3.5 w-3.5 mr-2" />
-              <Trans>Archive task</Trans>
+              {t("kanban:archiveTask")}
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
@@ -186,7 +186,7 @@ function TaskActions({
             className="text-destructive focus:text-destructive cursor-pointer"
           >
             <IconTrash className="h-3.5 w-3.5 mr-2" />
-            <Trans>Delete task</Trans>
+            {t("kanban:deleteTask")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -223,6 +223,7 @@ function TaskButton({
   isSelected?: boolean;
   onClick: () => void;
 }) {
+  const { t } = useTranslation();
   const hasAction = needsAction(task);
   const sessionCount = task.sessionCount ?? 0;
   return (
@@ -254,7 +255,7 @@ function TaskButton({
         )}
         {sessionCount > 0 && (
           <span className="text-[10px] text-muted-foreground/60">
-            <Plural value={sessionCount} one="# session" other="# sessions" />
+            {t("kanban:sessions", { count: sessionCount })}
           </span>
         )}
       </div>
@@ -290,7 +291,7 @@ export function Graph2TaskPipeline({
   onToggleSelect,
   isMultiSelectMode,
 }: Graph2TaskPipelineProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const currentStepIndex = useMemo(
     () => steps.findIndex((s) => s.id === task.workflowStepId),
     [steps, task.workflowStepId],
@@ -325,7 +326,7 @@ export function Graph2TaskPipeline({
           >
             <Checkbox
               checked={!!isSelected}
-              aria-label={t`Select task ${task.title}`}
+              aria-label={t("kanban:selectTask2", { title: task.title })}
               className="cursor-pointer border-muted-foreground/50"
             />
           </div>

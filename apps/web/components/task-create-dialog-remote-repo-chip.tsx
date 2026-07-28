@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "@/components/routing/app-link";
 import {
@@ -10,8 +9,8 @@ import {
   IconLink,
   IconX,
 } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { Trans, useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { Branch } from "@/lib/types/http";
 import { Badge } from "@kandev/ui/badge";
@@ -132,22 +131,22 @@ export function RemoteRepoChip({
 }
 
 function RemoteResolutionError({ error, onRetry }: { error: Error; onRetry: () => void }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const errorMessage = error.message;
   return (
     <span className="flex max-w-full items-center gap-2 text-xs text-destructive" role="alert">
       <span className="min-w-0 break-words">
-        <Trans>Could not resolve remote repository: {errorMessage}</Trans>
+        {t("task:couldNotResolveRemoteRepository", { errorMessage })}
       </span>
       <Button
         type="button"
         variant="outline"
         size="sm"
         className="h-11 sm:h-9 cursor-pointer"
-        aria-label={t`Retry remote repository resolution`}
+        aria-label={t("task:retryRemoteRepositoryResolution")}
         onClick={onRetry}
       >
-        <Trans>Retry</Trans>
+        {t("common:retry")}
       </Button>
     </span>
   );
@@ -303,7 +302,7 @@ function RepoTriggerIcon({ row }: { row: TaskRemoteRepoRow }) {
 }
 
 export function computeTriggerLabel(row: TaskRemoteRepoRow): string {
-  if (!row.url) return t`Pick or paste a repo`;
+  if (!row.url) return t("task:pickOrPasteARepo");
   if (row.source === "picker" && row.fullName) return row.fullName;
   return truncateMiddle(stripScheme(row.url), TRUNCATE_THRESHOLD);
 }
@@ -331,7 +330,7 @@ function RemoteRepoPopoverContent({
   onPick: (repo: RemoteRepository) => void;
   onPaste: (value: string) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [value, setValue] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<RemoteRepositoryProvider | null>(null);
@@ -343,7 +342,7 @@ function RemoteRepoPopoverContent({
     const trimmed = candidate.trim();
     if (!isSupportedRemoteURL(trimmed)) {
       if (looksLikeURL(trimmed)) {
-        setUrlError(t`Enter a GitHub, GitLab, or Azure DevOps repository URL.`);
+        setUrlError(t("task:enterAGithubGitlabOrAzure"));
       }
       return false;
     }
@@ -387,8 +386,8 @@ function RemoteRepoPopoverContent({
           const isURL = looksLikeURL(value.trim());
           if (commitURL(value) || isURL) event.preventDefault();
         }}
-        placeholder={t`Search repositories or paste a remote URL`}
-        aria-label={t`Search repositories or paste a remote URL`}
+        placeholder={t("task:searchRepositoriesOrPasteARemote")}
+        aria-label={t("task:searchRepositoriesOrPasteARemote")}
         aria-invalid={visibleUrlError ? true : undefined}
         data-testid="remote-repo-input"
         data-legacy-testid="remote-paste-url-input"
@@ -420,7 +419,7 @@ function RemoteRepoPopoverContent({
 function StagedRemoteURLHint() {
   return (
     <div className="px-2 pt-1 text-xs text-muted-foreground">
-      <Trans>
+      <Trans i18nKey="task:remoteUrlPressEnterToSubmit">
         <span className="font-medium text-foreground">Remote URL</span> — press Enter to submit it.
       </Trans>
     </div>
@@ -455,6 +454,7 @@ function PickerList({
   onPick: (repo: RemoteRepository) => void;
   urlError: string | null;
 }) {
+  const { t } = useTranslation();
   const { repos, loading, error } = accessible;
   const errorMessage = error?.message ?? "";
   return (
@@ -471,19 +471,17 @@ function PickerList({
           data-testid="remote-repo-picker-loading"
         >
           <Spinner className="size-3" />
-          <span>
-            <Trans>Loading repositories…</Trans>
-          </span>
+          <span>{t("task:loadingRepositories")}</span>
         </div>
       ) : null}
       {!accessible.unavailable && !loading && repos.length === 0 && !error ? (
         <div className="px-2 py-3 text-xs text-muted-foreground">
-          <Trans>No repositories found.</Trans>
+          {t("common:noRepositoriesFound")}
         </div>
       ) : null}
       {error ? (
         <div className="px-2 py-3 text-xs text-destructive">
-          <Trans>Could not load repositories: {errorMessage}</Trans>
+          {t("task:couldNotLoadRepositories", { errorMessage })}
         </div>
       ) : null}
       {repos.map((repo) => (
@@ -509,6 +507,7 @@ function RepoOption({
   alreadyAdded: boolean;
   onPick: (repo: RemoteRepository) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
@@ -527,7 +526,7 @@ function RepoOption({
         {alreadyAdded ? <AlreadyAddedMarker /> : null}
         {repo.private ? (
           <Badge variant="outline" className="text-[10px] text-muted-foreground">
-            <Trans>private</Trans>
+            {t("task:private")}
           </Badge>
         ) : null}
       </span>
@@ -536,11 +535,11 @@ function RepoOption({
 }
 
 function AlreadyAddedMarker() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <span
       role="img"
-      aria-label={t`Already added`}
+      aria-label={t("task:alreadyAdded")}
       data-testid="already-added-repository-marker"
       className="text-primary"
     >
@@ -552,7 +551,7 @@ function AlreadyAddedMarker() {
 function ConnectProvidersBanner() {
   return (
     <div className="px-3 py-3 text-xs text-muted-foreground">
-      <Trans>
+      <Trans i18nKey="task:connectASourceControlProviderIn">
         Connect a source control provider in{" "}
         <Link
           href="/settings/integrations"
@@ -581,7 +580,7 @@ function RemoteBranchPill({
   branchesLoading: boolean;
   onBranchChange: (branch: string) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const hasUrl = !!url.trim();
   const hasBranch = !!branch.trim();
   const branchOptions = useMemo(() => sortBranches(branches).map(branchToOption), [branches]);
@@ -606,11 +605,11 @@ function RemoteBranchPill({
         branchesLoading,
         branchOptions.length,
       )}
-      searchPlaceholder={t`Search branches...`}
-      emptyMessage={branchesLoading ? t`Loading branches…` : t`No branches`}
+      searchPlaceholder={t("task:searchBranches")}
+      emptyMessage={branchesLoading ? t("task:loadingBranches2") : t("task:noBranches2")}
       testId="remote-branch-chip-trigger"
       filter={scoreBranch}
-      tooltip={t`Base branch`}
+      tooltip={t("task:baseBranch")}
       flat
     />
   );
@@ -622,34 +621,32 @@ function computeRemoteBranchDisabledReason(
   branchesLoading: boolean,
   optionCount: number,
 ): string | undefined {
-  if (!hasUrl) return t`Select or enter a remote repository first.`;
+  if (!hasUrl) return t("task:selectOrEnterARemoteRepository");
   // If a branch is already set the pill is enabled; no disabled reason needed.
   if (hasBranch) return undefined;
-  if (branchesLoading) return t`Loading branches…`;
-  if (optionCount === 0) return t`No branches available for this URL.`;
+  if (branchesLoading) return t("task:loadingBranches2");
+  if (optionCount === 0) return t("task:noBranchesAvailableForThisUrl");
   return undefined;
 }
 
 // --- Remove button -----------------------------------------------------------
 
 function RemoveButton({ onRemove }: { onRemove: () => void }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           onClick={onRemove}
-          aria-label={t`Remove repository`}
+          aria-label={t("task:removeRepository")}
           data-testid="remote-chip-remove"
           className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-muted/60 cursor-pointer"
         >
           <IconX className="h-3 w-3" />
         </button>
       </TooltipTrigger>
-      <TooltipContent>
-        <Trans>Remove repository</Trans>
-      </TooltipContent>
+      <TooltipContent>{t("task:removeRepository")}</TooltipContent>
     </Tooltip>
   );
 }

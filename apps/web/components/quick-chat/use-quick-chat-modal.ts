@@ -1,13 +1,12 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { t } from "@lingui/core/macro";
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/components/state-provider";
 import { useToast } from "@/components/toast-provider";
 import { startQuickChat, type QuickChatRepositoryInput } from "@/lib/api/domains/workspace-api";
 import { isQuickChatSetupSessionId } from "@/lib/state/slices/ui/quick-chat-session";
 import type { QuickChatSessionKind } from "@/lib/state/slices/ui/types";
+import { useTranslation } from "react-i18next";
 
 const noop = () => {};
 
@@ -88,6 +87,7 @@ async function startQuickChatForAgent(
  *
  * Exported for unit testing — see `use-quick-chat-modal.test.ts`. */
 export function useAgentSelection(workspaceId: string, store: QuickChatStore) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
   // Monotonic request id; the latest click "wins" — older responses get
@@ -122,8 +122,8 @@ export function useAgentSelection(workspaceId: string, store: QuickChatStore) {
       } catch (error) {
         if (latestRequestId.current !== requestId) return;
         toast({
-          title: t`Failed to start quick chat`,
-          description: error instanceof Error ? error.message : t`Unknown error`,
+          title: t("chat:failedToStartQuickChat"),
+          description: error instanceof Error ? error.message : t("common:unknownError"),
           variant: "error",
         });
       } finally {
@@ -139,6 +139,7 @@ export function useAgentSelection(workspaceId: string, store: QuickChatStore) {
 }
 
 function useQuickChatSessionClose(store: QuickChatStore, resetPendingStarts: () => void) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [sessionToClose, setSessionToClose] = useState<string | null>(null);
   const handleCloseTab = useCallback(
@@ -167,8 +168,8 @@ function useQuickChatSessionClose(store: QuickChatStore, resetPendingStarts: () 
     } catch (error) {
       console.error("Failed to delete quick chat task:", error);
       toast({
-        title: t`Failed to delete quick chat`,
-        description: error instanceof Error ? error.message : t`Unknown error`,
+        title: t("chat:failedToDeleteQuickChat"),
+        description: error instanceof Error ? error.message : t("common:unknownError"),
         variant: "error",
       });
     }

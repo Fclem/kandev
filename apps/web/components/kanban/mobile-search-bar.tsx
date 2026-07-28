@@ -1,6 +1,5 @@
 "use client";
-
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { TaskSearchInput } from "./task-search-input";
 
 type MobileSearchBarProps = {
@@ -9,13 +8,13 @@ type MobileSearchBarProps = {
 };
 
 export function MobileSearchBar({ searchQuery, onSearchChange }: MobileSearchBarProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="border-b border-border px-4 py-2" data-testid="mobile-search-bar">
       <TaskSearchInput
         value={searchQuery}
         onChange={onSearchChange}
-        placeholder={t`Search tasks...`}
+        placeholder={t("kanban:searchTasks2")}
         className="w-full"
         autoFocus
       />

@@ -1,8 +1,7 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +34,7 @@ interface ApplyGate {
 }
 
 function formatChecked(value: string | number | null | undefined): string {
-  if (!value) return t`never`;
+  if (!value) return t("settings:never");
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
   return d.toLocaleString();
@@ -66,7 +65,7 @@ function getApplyGate(updates: UpdatesResponse | null | undefined): ApplyGate {
 }
 
 export function UpdatesCard() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { updates, check, reload } = useUpdates();
   const selfUpdate = useSelfUpdate({ latestVersion: updates?.latest, onComplete: reload });
   const desktopUpdater = useDesktopUpdater();
@@ -85,7 +84,7 @@ export function UpdatesCard() {
     try {
       await check();
     } catch (err) {
-      const message = errorMessage(err, t`Update check failed`);
+      const message = errorMessage(err, t("settings:updateCheckFailed"));
       setError(message);
       setRetryAfter(retryAfterSeconds(message));
     } finally {
@@ -193,10 +192,11 @@ function desktopCardView(updater: DesktopUpdaterController) {
 }
 
 function DesktopCurrentStatus({ phase }: { phase: string | undefined }) {
+  const { t } = useTranslation();
   if (phase !== "up-to-date") return null;
   return (
     <p className="text-xs text-muted-foreground" data-testid="system-updates-current-status">
-      <Trans>Kandev is up to date.</Trans>
+      {t("settings:kandevIsUpToDate")}
     </p>
   );
 }
@@ -206,16 +206,16 @@ async function ignoreFailure(operation: Promise<void>): Promise<void> {
 }
 
 function DesktopUpdateProgress({ updater }: { updater: DesktopUpdaterController }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const state = updater.state;
   if (state?.phase !== "downloading" && state?.phase !== "installing") return null;
-  let detail = t`Installing update...`;
+  let detail = t("settings:installingUpdate");
   if (state.phase === "downloading") {
     const downloaded = state.downloadedBytes ?? 0;
     const total = state.totalBytes;
     detail = total
-      ? t`Downloading update (${downloaded} of ${total} bytes)...`
-      : t`Downloading update (${downloaded} bytes)...`;
+      ? t("settings:downloadingUpdateOfBytes", { downloaded, total })
+      : t("settings:downloadingUpdateBytes", { downloaded });
   }
   return (
     <div
@@ -230,13 +230,14 @@ function DesktopUpdateProgress({ updater }: { updater: DesktopUpdaterController 
 }
 
 function UpdatesHeader({ available }: { available: boolean }) {
+  const { t } = useTranslation();
   return (
     <CardTitle className="text-base flex items-center gap-2">
       <IconRefresh className="h-4 w-4" />
-      <Trans>Updates</Trans>
+      {t("common:updates")}
       {available && (
         <Badge variant="default" className="text-[10px]" data-testid="system-updates-badge">
-          <Trans>Update available</Trans>
+          {t("settings:updateAvailable")}
         </Badge>
       )}
     </CardTitle>
@@ -244,11 +245,19 @@ function UpdatesHeader({ available }: { available: boolean }) {
 }
 
 function VersionGrid({ current, latest }: { current: string; latest: string }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-3 text-sm">
-      <VersionValue label={t`Current version`} value={current} testId="system-updates-current" />
-      <VersionValue label={t`Latest release`} value={latest} testId="system-updates-latest" />
+      <VersionValue
+        label={t("settings:currentVersion")}
+        value={current}
+        testId="system-updates-current"
+      />
+      <VersionValue
+        label={t("settings:latestRelease")}
+        value={latest}
+        testId="system-updates-latest"
+      />
     </div>
   );
 }
@@ -265,10 +274,11 @@ function VersionValue({ label, value, testId }: { label: string; value: string; 
 }
 
 function LastChecked({ checkedAt }: { checkedAt?: string | number | null }) {
+  const { t } = useTranslation();
   const checked = formatChecked(checkedAt);
   return (
     <div className="text-xs text-muted-foreground" data-testid="system-updates-checked-at">
-      <Trans>Last checked {checked}</Trans>
+      {t("settings:lastChecked", { checked })}
     </div>
   );
 }
@@ -308,6 +318,7 @@ function CheckNowButton({
   checking: boolean;
   onCheck: () => Promise<void>;
 }) {
+  const { t } = useTranslation();
   return (
     <Button
       variant="outline"
@@ -322,12 +333,13 @@ function CheckNowButton({
       ) : (
         <IconRefresh className="h-3.5 w-3.5 mr-1" />
       )}
-      <Trans>Check now</Trans>
+      {t("settings:checkNow")}
     </Button>
   );
 }
 
 function ReleaseNotesLink({ url }: { url?: string }) {
+  const { t } = useTranslation();
   if (!url) return null;
   return (
     <Button
@@ -338,7 +350,7 @@ function ReleaseNotesLink({ url }: { url?: string }) {
       data-testid="system-updates-release-link"
     >
       <a href={url} target="_blank" rel="noreferrer">
-        <Trans>Release notes</Trans>
+        {t("settings:releaseNotes")}
         <IconExternalLink className="h-3.5 w-3.5 ml-1" />
       </a>
     </Button>
@@ -353,37 +365,33 @@ interface ApplyUpdateDialogProps {
 }
 
 function ApplyUpdateDialog({ showApply, latest, onApply, desktop }: ApplyUpdateDialogProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (!showApply) return null;
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button size="sm" className="cursor-pointer" data-testid="system-updates-apply">
           <IconDownload className="h-3.5 w-3.5 mr-1" />
-          <Trans>Apply update</Trans>
+          {t("settings:applyUpdate")}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            <Trans>Apply update?</Trans>
-          </AlertDialogTitle>
+          <AlertDialogTitle>{t("settings:applyUpdate2")}</AlertDialogTitle>
           <AlertDialogDescription className="text-left">
             {desktop
-              ? t`Kandev will install ${latest} and restart the desktop app.`
-              : t`Kandev will update to ${latest}, reinstall the user service, and restart it.`}
+              ? t("settings:kandevWillInstallAndRestartThe", { latest })
+              : t("settings:kandevWillUpdateToReinstallThe", { latest })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">
-            <Trans>Cancel</Trans>
-          </AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">{t("common:cancel")}</AlertDialogCancel>
           <AlertDialogAction
             className="cursor-pointer"
             onClick={() => void onApply()}
             data-testid="system-updates-apply-confirm"
           >
-            <Trans>Apply update</Trans>
+            {t("settings:applyUpdate")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -423,11 +431,11 @@ function ManualCommands({ commands }: { commands: string[] }) {
 }
 
 function UpdateError({ error, retryAfter }: { error: string | null; retryAfter: number | null }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (!error) return null;
   return (
     <p className="text-xs text-destructive" data-testid="system-updates-error">
-      {retryAfter ? t`Already checked. Try again in ${retryAfter}s.` : error}
+      {retryAfter ? t("settings:alreadyCheckedTryAgainInS", { retryAfter }) : error}
     </p>
   );
 }

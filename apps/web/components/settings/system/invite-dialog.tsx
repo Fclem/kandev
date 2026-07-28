@@ -1,8 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -43,23 +41,17 @@ function InviteForm({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
-        <DialogTitle>
-          <Trans>Invite a user</Trans>
-        </DialogTitle>
-        <DialogDescription>
-          <Trans>
-            Generates a one-time invite link. Leave the email blank to create a link anyone can use
-            to sign up with the selected role; set an email to pin the invite to that address.
-          </Trans>
-        </DialogDescription>
+        <DialogTitle>{t("settings:inviteAUser")}</DialogTitle>
+        <DialogDescription>{t("settings:generatesAOneTimeInviteLink")}</DialogDescription>
       </DialogHeader>
       <div className="space-y-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="invite-dialog-email" className="text-xs text-muted-foreground">
-            <Trans>Email (optional)</Trans>
+            {t("settings:emailOptional")}
           </label>
           <Input
             id="invite-dialog-email"
@@ -71,19 +63,15 @@ function InviteForm({
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="invite-dialog-role" className="text-xs text-muted-foreground">
-            <Trans>Role</Trans>
+            {t("settings:role")}
           </label>
           <Select value={role} onValueChange={setRole}>
             <SelectTrigger id="invite-dialog-role" data-testid="invite-dialog-role">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="member">
-                <Trans>Member</Trans>
-              </SelectItem>
-              <SelectItem value="admin">
-                <Trans>Admin</Trans>
-              </SelectItem>
+              <SelectItem value="member">{t("settings:member")}</SelectItem>
+              <SelectItem value="admin">{t("settings:admin")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -95,7 +83,7 @@ function InviteForm({
       </div>
       <DialogFooter>
         <Button variant="outline" className="cursor-pointer" onClick={onCancel}>
-          <Trans>Cancel</Trans>
+          {t("common:cancel")}
         </Button>
         <Button
           className="cursor-pointer"
@@ -103,7 +91,7 @@ function InviteForm({
           onClick={onSubmit}
           data-testid="invite-dialog-submit"
         >
-          {submitting ? <Trans>Creating...</Trans> : <Trans>Create invite link</Trans>}
+          {submitting ? t("settings:creating") : t("settings:createInviteLink")}
         </Button>
       </DialogFooter>
     </>
@@ -111,6 +99,7 @@ function InviteForm({
 }
 
 function InviteLinkResult({ url, onDone }: { url: string; onDone: () => void }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
     await navigator.clipboard.writeText(url);
@@ -119,12 +108,8 @@ function InviteLinkResult({ url, onDone }: { url: string; onDone: () => void }) 
   return (
     <>
       <DialogHeader>
-        <DialogTitle>
-          <Trans>Invite link ready</Trans>
-        </DialogTitle>
-        <DialogDescription>
-          <Trans>Share this link with the invitee. It is shown only once — copy it now.</Trans>
-        </DialogDescription>
+        <DialogTitle>{t("settings:inviteLinkReady")}</DialogTitle>
+        <DialogDescription>{t("settings:shareThisLinkWithTheInvitee")}</DialogDescription>
       </DialogHeader>
       <div className="flex items-center gap-2">
         <Input readOnly value={url} data-testid="invite-dialog-url" className="font-mono text-xs" />
@@ -140,7 +125,7 @@ function InviteLinkResult({ url, onDone }: { url: string; onDone: () => void }) 
       </div>
       <DialogFooter>
         <Button className="cursor-pointer" onClick={onDone} data-dialog-default-action>
-          <Trans>Done</Trans>
+          {t("settings:done")}
         </Button>
       </DialogFooter>
     </>
@@ -148,6 +133,7 @@ function InviteLinkResult({ url, onDone }: { url: string; onDone: () => void }) 
 }
 
 export function InviteDialog({ open, onOpenChange, onCreated }: Props) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +155,7 @@ export function InviteDialog({ open, onOpenChange, onCreated }: Props) {
       setResultUrl(`${window.location.origin}${url}`);
       onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t`Could not create invite.`);
+      setError(err instanceof ApiError ? err.message : t("settings:couldNotCreateInvite"));
     } finally {
       setSubmitting(false);
     }

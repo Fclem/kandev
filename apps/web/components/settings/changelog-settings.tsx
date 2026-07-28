@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconBell } from "@tabler/icons-react";
 import { Separator } from "@kandev/ui/separator";
 import { SettingsSection } from "@/components/settings/settings-section";
@@ -8,15 +7,13 @@ import { ChangelogNotificationCard } from "@/components/settings/changelog-notif
 import { ChangelogList } from "@/components/settings/changelog-list";
 
 export function ChangelogSettings() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">
-          <Trans>Changelog</Trans>
-        </h2>
+        <h2 className="text-2xl font-bold">{t("settings:changelog")}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          <Trans>View all releases and manage notification preferences</Trans>
+          {t("settings:viewAllReleasesAndManageNotification")}
         </p>
       </div>
 
@@ -24,8 +21,8 @@ export function ChangelogSettings() {
 
       <SettingsSection
         icon={<IconBell className="h-5 w-5" />}
-        title={t`Notifications`}
-        description={t`Control the release notes notification in the topbar`}
+        title={t("settings:notifications")}
+        description={t("settings:controlTheReleaseNotesNotificationIn")}
       >
         <ChangelogNotificationCard />
       </SettingsSection>
@@ -33,8 +30,8 @@ export function ChangelogSettings() {
       <Separator />
 
       <SettingsSection
-        title={t`Release History`}
-        description={t`All versions and their release notes`}
+        title={t("settings:releaseHistory")}
+        description={t("settings:allVersionsAndTheirReleaseNotes")}
       >
         <ChangelogList />
       </SettingsSection>

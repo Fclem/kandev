@@ -1,6 +1,5 @@
 "use client";
-
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { JiraTicket } from "@/lib/types/jira";
 import type { LinearIssue } from "@/lib/types/linear";
@@ -50,7 +49,7 @@ import { TaskCreateDialogPopoverContainerProvider } from "@/hooks/use-task-creat
 import { shouldShowTaskTitleField } from "@/components/task-create-dialog-helpers";
 import { usePromptResultDelivery } from "@/hooks/use-prompt-result-delivery";
 
-const promptInsertedMessage = () => t`Enhanced prompt inserted.`;
+const promptInsertedMessage = () => t("task:enhancedPromptInserted");
 
 export interface TaskCreateDialogProps {
   open: boolean;

@@ -1,6 +1,5 @@
 "use client";
-
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 export type SourceMode = "workspace" | "remote" | "scratch";
@@ -38,11 +37,11 @@ export function ControlledSourceModeSwitch<T extends string>({
   onModeChange,
   touchSized = false,
 }: ControlledSourceModeSwitchProps<T>) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div
       role="radiogroup"
-      aria-label={t`Source`}
+      aria-label={t("task:source")}
       className="inline-flex items-center rounded-md border border-border/60 bg-muted/20 p-0.5"
     >
       {options.map((option) => {
@@ -88,7 +87,7 @@ export function SourceModeSwitch({
   onToggleRemote,
   onToggleNoRepository,
 }: SourceModeSwitchProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (!onToggleRemote && !onToggleNoRepository) return null;
   const mode = resolveMode(useRemote, noRepository);
   const setMode = (next: SourceMode) =>
@@ -104,19 +103,25 @@ export function SourceModeSwitch({
         mode={mode}
         onModeChange={setMode}
         options={[
-          { value: "workspace", label: t`Repo`, testId: "source-mode-workspace" },
+          { value: "workspace", label: t("common:repo"), testId: "source-mode-workspace" },
           ...(onToggleRemote
             ? [
                 {
                   value: "remote" as const,
-                  label: t`Remote`,
+                  label: t("common:remote"),
                   testId: "source-mode-remote",
                   legacyTestId: "toggle-github-url",
                 },
               ]
             : []),
           ...(onToggleNoRepository
-            ? [{ value: "scratch" as const, label: t`None`, testId: "source-mode-scratch" }]
+            ? [
+                {
+                  value: "scratch" as const,
+                  label: t("common:none"),
+                  testId: "source-mode-scratch",
+                },
+              ]
             : []),
         ]}
       />

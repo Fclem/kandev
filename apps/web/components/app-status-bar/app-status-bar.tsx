@@ -1,7 +1,6 @@
 "use client";
-
 import { useMemo } from "react";
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { cn } from "@kandev/ui/lib/utils";
 import { useAppStatusItems, type AppStatusItem } from "./app-status-items";
 import { useAppStatusBarDrag } from "./use-app-status-bar-drag";
@@ -26,7 +25,7 @@ export function AppStatusBar({
   activeSessionId,
   density,
 }: AppStatusBarProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const context = useMemo(
     () => ({ pathname, activeWorkspaceId, activeTaskId, activeSessionId }),
     [pathname, activeWorkspaceId, activeTaskId, activeSessionId],
@@ -44,7 +43,7 @@ export function AppStatusBar({
         drag.draggingId && "cursor-grabbing",
       )}
       data-testid="app-status-bar"
-      aria-label={t`Application status`}
+      aria-label={t("statusBar:applicationStatus")}
     >
       <StatusItemGroup side="left" testId="app-status-bar-left-plugins">
         {projected.left.map((item) => (

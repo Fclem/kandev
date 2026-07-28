@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { DialogTitle } from "@kandev/ui/dialog";
 
 export type DialogHeaderContentProps = {
@@ -22,9 +21,13 @@ export function DialogHeaderContent({
   sessionRepoName,
   initialTitle,
 }: DialogHeaderContentProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (isCreateMode || isEditMode) {
-    return <DialogTitle className="sr-only">{isEditMode ? t`Edit task` : t`New task`}</DialogTitle>;
+    return (
+      <DialogTitle className="sr-only">
+        {isEditMode ? t("task:editTask") : t("task:newTask")}
+      </DialogTitle>
+    );
   }
   return (
     <DialogTitle asChild>
@@ -35,11 +38,9 @@ export function DialogHeaderContent({
             <span className="text-muted-foreground mx-0.5">/</span>
           </>
         )}
-        <span className="truncate">{initialTitle || t`Task`}</span>
+        <span className="truncate">{initialTitle || t("common:task")}</span>
         <span className="text-muted-foreground mx-0.5">/</span>
-        <span className="text-muted-foreground whitespace-nowrap">
-          <Trans>new session</Trans>
-        </span>
+        <span className="text-muted-foreground whitespace-nowrap">{t("task:newSession")}</span>
       </div>
     </DialogTitle>
   );

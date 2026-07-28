@@ -1,7 +1,6 @@
 "use client";
-
 import { useMemo, useRef } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconChevronDown, IconAdjustments, IconCheck, IconPlus } from "@tabler/icons-react";
 import {
   DropdownMenu,
@@ -21,7 +20,7 @@ const TRIGGER_BUTTON_CLASS = cn(
 );
 
 export function TasksViewPicker() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const views = useAppStore((s) => s.sidebarViews.views);
   const activeViewId = useAppStore((s) => s.sidebarViews.activeViewId);
   const draft = useAppStore((s) => s.sidebarViews.draft);
@@ -41,7 +40,7 @@ export function TasksViewPicker() {
     [views, activeViewId],
   );
   const hasDraft = !!draft && draft.baseViewId === activeViewId;
-  const activeLabel = activeView?.name ?? t`All`;
+  const activeLabel = activeView?.name ?? t("sidebar:all");
 
   return (
     <div className="flex items-center gap-0.5">
@@ -51,7 +50,7 @@ export function TasksViewPicker() {
             type="button"
             data-testid="tasks-view-picker"
             className={cn(TRIGGER_BUTTON_CLASS, "max-w-[120px] gap-0.5")}
-            aria-label={t`View: ${activeLabel}`}
+            aria-label={t("sidebar:view", { activeLabel })}
           >
             <span className="truncate">{activeLabel}</span>
             <IconChevronDown className="h-3 w-3 shrink-0 opacity-70" />
@@ -103,14 +102,14 @@ export function TasksViewPicker() {
           <button
             type="button"
             data-testid="sidebar-filter-gear"
-            aria-label={t`Filters and sort`}
+            aria-label={t("sidebar:filtersAndSort")}
             className={cn(TRIGGER_BUTTON_CLASS, "relative h-5 w-5 px-0")}
           >
             <IconAdjustments className="h-3.5 w-3.5" />
             {hasDraft && (
               <span
                 data-testid="sidebar-filter-gear-indicator"
-                aria-label={t`Unsaved filter changes`}
+                aria-label={t("sidebar:unsavedFilterChanges")}
                 className="absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-amber-500"
               />
             )}
@@ -130,23 +129,23 @@ function NewViewMenuItem({
   hasDraft: boolean;
   onSelect: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <DropdownMenuItem
       disabled={!!disabledReason}
       onSelect={onSelect}
       data-testid="sidebar-new-view"
-      aria-label={disabledReason ? t`New view unavailable. ${disabledReason}` : t`New view`}
+      aria-label={
+        disabledReason ? t("sidebar:newViewUnavailable", { disabledReason }) : t("sidebar:newView")
+      }
       title={disabledReason ?? undefined}
       className="cursor-pointer gap-2"
     >
       <IconPlus className="h-3.5 w-3.5" />
-      <span>
-        <Trans>New view</Trans>
-      </span>
+      <span>{t("sidebar:newView")}</span>
       {disabledReason && (
         <span className="ml-auto text-[10px] text-muted-foreground" aria-hidden="true">
-          {hasDraft ? t`Save/discard first` : t`50 max`}
+          {hasDraft ? t("sidebar:saveDiscardFirst") : t("sidebar:50Max")}
         </span>
       )}
     </DropdownMenuItem>

@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -43,14 +42,14 @@ function useDialogHandlers({
   onOpenChange,
   reset,
 }: DialogHandlersParams) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const handleSubmit = async () => {
     if (!displayName.trim()) {
-      setError(t`Display name is required`);
+      setError(t("settings:displayNameIsRequired"));
       return;
     }
     if (!command.trim()) {
-      setError(t`Command is required`);
+      setError(t("settings:commandIsRequired"));
       return;
     }
     setError(null);
@@ -64,7 +63,7 @@ function useDialogHandlers({
       reset();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Failed to create agent`);
+      setError(err instanceof Error ? err.message : t("settings:failedToCreateAgent"));
     } finally {
       setLoading(false);
     }
@@ -79,7 +78,7 @@ function useDialogHandlers({
 }
 
 export function AddTUIAgentDialog({ open, onOpenChange, onSubmit }: AddTUIAgentDialogProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [displayName, setDisplayName] = useState("");
   const [model, setModel] = useState("");
   const [command, setCommand] = useState("");
@@ -109,46 +108,33 @@ export function AddTUIAgentDialog({ open, onOpenChange, onSubmit }: AddTUIAgentD
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Add TUI Agent</Trans>
-          </DialogTitle>
-          <DialogDescription>
-            <Trans>
-              Register a CLI tool as a TUI agent. It will appear in the agent list with a default
-              passthrough profile.
-            </Trans>
-          </DialogDescription>
+          <DialogTitle>{t("settings:addTuiAgent")}</DialogTitle>
+          <DialogDescription>{t("settings:registerACliToolAsA")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="tui-display-name">
-              <Trans>Display Name</Trans>
-            </Label>
+            <Label htmlFor="tui-display-name">{t("settings:displayName2")}</Label>
             <Input
               id="tui-display-name"
-              placeholder={t`e.g. superclaude`}
+              placeholder={t("settings:eGSuperclaude")}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tui-model">
-              <Trans>Model</Trans>
-            </Label>
+            <Label htmlFor="tui-model">{t("common:model")}</Label>
             <Input
               id="tui-model"
-              placeholder={t`e.g. best`}
+              placeholder={t("settings:eGBest")}
               value={model}
               onChange={(e) => setModel(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              <Trans>Profile label shown in the agent selector dropdown</Trans>
+              {t("settings:profileLabelShownInTheAgent")}
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tui-command">
-              <Trans>Command</Trans>
-            </Label>
+            <Label htmlFor="tui-command">{t("settings:command")}</Label>
             <Input
               id="tui-command"
               placeholder="e.g. superclaude --yolo --model {{model}}"
@@ -156,7 +142,7 @@ export function AddTUIAgentDialog({ open, onOpenChange, onSubmit }: AddTUIAgentD
               onChange={(e) => setCommand(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              <Trans>
+              <Trans i18nKey="settings:binaryNameLookedUpOnPath" values={{ model }}>
                 Binary name looked up on PATH. Use{" "}
                 <code className="rounded bg-muted px-1 py-0.5">{"{{model}}"}</code> to insert the
                 model value.
@@ -167,10 +153,10 @@ export function AddTUIAgentDialog({ open, onOpenChange, onSubmit }: AddTUIAgentD
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={loading} className="cursor-pointer">
-            {loading ? t`Creating...` : t`Create`}
+            {loading ? t("settings:creating") : t("settings:create")}
           </Button>
         </DialogFooter>
       </DialogContent>

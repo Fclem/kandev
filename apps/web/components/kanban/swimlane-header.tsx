@@ -1,7 +1,6 @@
 "use client";
-
 import type { HTMLAttributes } from "react";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@kandev/ui/badge";
 import { Checkbox } from "@kandev/ui/checkbox";
 import { IconChevronRight, IconGripVertical } from "@tabler/icons-react";
@@ -26,6 +25,7 @@ export function SwimlaneHeader({
   onToggleMultiSelect,
   isMultiSelectMode,
 }: SwimlaneHeaderProps) {
+  const { t } = useTranslation();
   return (
     <div
       className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 py-1.5 w-full"
@@ -57,7 +57,7 @@ export function SwimlaneHeader({
               tabIndex={-1}
               aria-hidden
             />
-            <Trans>Multi-select</Trans>
+            {t("kanban:multiSelect")}
           </div>
         )}
         <div className="flex-1 border-t border-dashed border-border/50" />

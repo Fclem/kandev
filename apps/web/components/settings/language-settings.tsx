@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconLanguage } from "@tabler/icons-react";
 import { Label } from "@kandev/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
@@ -23,8 +22,8 @@ import {
  * The pseudo QA locale is hidden in production builds.
  */
 export function LanguageSettings() {
-  const { t } = useLingui();
-  const [locale, setLocale] = useState<SupportedLocale>(() => normalizeLocale(i18n.locale));
+  const { t } = useTranslation();
+  const [locale, setLocale] = useState<SupportedLocale>(() => normalizeLocale(i18n.language));
 
   const options = selectableLocales(import.meta.env.PROD);
 
@@ -36,16 +35,18 @@ export function LanguageSettings() {
   return (
     <SettingsSection
       icon={<IconLanguage className="h-5 w-5" />}
-      title={t`Language`}
-      description={t`Choose the language used across the Kandev interface`}
+      title={t("settings:language")}
+      description={t("settings:chooseTheLanguageUsedAcrossThe")}
     >
       <SettingsCard>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="language-select">
-            <Trans>Display language</Trans>
-          </Label>
+          <Label htmlFor="language-select">{t("settings:displayLanguage")}</Label>
           <Select value={locale} onValueChange={handleChange}>
-            <SelectTrigger id="language-select" className="w-64" aria-label={t`Display language`}>
+            <SelectTrigger
+              id="language-select"
+              className="w-64"
+              aria-label={t("settings:displayLanguage")}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -57,10 +58,7 @@ export function LanguageSettings() {
             </SelectContent>
           </Select>
           <p className="text-sm text-muted-foreground">
-            <Trans>
-              Changes the language of the Kandev interface. Applies immediately and is remembered on
-              this device. Task titles, chat, and other content you create are not translated.
-            </Trans>
+            {t("settings:changesTheLanguageOfTheKandev")}
           </p>
         </div>
       </SettingsCard>

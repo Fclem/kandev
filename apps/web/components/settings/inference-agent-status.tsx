@@ -1,10 +1,10 @@
 "use client";
-
 import { useState } from "react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import type { InferenceAgent, InferenceAgentStatus } from "@/lib/api/domains/utility-api";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   /**
@@ -34,22 +34,23 @@ type Note = { text: string; refreshable: boolean };
 function noteForStatus(status: InferenceAgentStatus | undefined, name: string): Note {
   switch (status) {
     case "probing":
-      return { text: t`Setting up ${name}…`, refreshable: true };
+      return { text: t("settings:settingUp", { name }), refreshable: true };
     case "auth_required":
-      return { text: t`Sign in to ${name} to load models.`, refreshable: true };
+      return { text: t("settings:signInToToLoadModels", { name }), refreshable: true };
     case "not_installed":
-      return { text: t`${name} CLI is not installed on this machine.`, refreshable: true };
+      return { text: t("settings:cliIsNotInstalledOnThis", { name }), refreshable: true };
     case "not_configured":
-      return { text: t`${name} is not configured for inference.`, refreshable: false };
+      return { text: t("settings:isNotConfiguredForInference", { name }), refreshable: false };
     case "failed":
-      return { text: t`Probe failed for ${name}.`, refreshable: true };
+      return { text: t("settings:probeFailedFor", { name }), refreshable: true };
     case "ok":
     default:
-      return { text: t`${name} advertised no models.`, refreshable: true };
+      return { text: t("settings:advertisedNoModels", { name }), refreshable: true };
   }
 }
 
 function RefreshButton({ onRefresh }: { onRefresh: () => Promise<unknown> | void }) {
+  const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
   const handleClick = async () => {
     if (refreshing) return;
@@ -71,7 +72,7 @@ function RefreshButton({ onRefresh }: { onRefresh: () => Promise<unknown> | void
       data-testid="inference-agent-refresh"
     >
       <IconRefresh className={refreshing ? "h-3 w-3 animate-spin" : "h-3 w-3"} />
-      <span className="ml-1">{refreshing ? t`Refreshing…` : t`Refresh`}</span>
+      <span className="ml-1">{refreshing ? t("settings:refreshing2") : t("settings:refresh")}</span>
     </Button>
   );
 }
@@ -86,14 +87,15 @@ function isAgentHealthy(agent: InferenceAgent | null | undefined): boolean {
 }
 
 export function InferenceAgentStatusNote({ agent, fallbackName, onRefresh }: Props) {
+  const { t } = useTranslation();
   if (isAgentHealthy(agent)) {
     return null;
   }
 
-  const name = agent?.display_name ?? fallbackName ?? t`this agent`;
+  const name = agent?.display_name ?? fallbackName ?? t("settings:thisAgent");
   const note: Note = agent
     ? noteForStatus(agent.status, name)
-    : { text: t`${name} is no longer available.`, refreshable: true };
+    : { text: t("settings:isNoLongerAvailable", { name }), refreshable: true };
   const detail = agent?.status_message?.trim();
 
   return (

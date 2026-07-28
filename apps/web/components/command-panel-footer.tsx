@@ -1,9 +1,8 @@
 "use client";
-
 import type { Dispatch, SetStateAction } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { t } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { IconArchive, IconArrowRight, IconHammer, IconLoader2 } from "@tabler/icons-react";
 import {
   Command,
@@ -161,24 +160,25 @@ function CommandsListContent({
   repoMap,
   onTaskSelect,
 }: CommandsListContentProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const hasInlineResults = taskResults.length > 0 || isSearching;
   return (
     <>
       {!hasInlineResults && !isSearching && (
-        <CommandEmpty>
-          <Trans>No commands found.</Trans>
-        </CommandEmpty>
+        <CommandEmpty>{t("common:noCommandsFound")}</CommandEmpty>
       )}
       {isSearching && taskResults.length === 0 && (
-        <CommandGroup heading={t`Active Tasks`} forceMount>
+        <CommandGroup heading={t("common:activeTasks")} forceMount>
           <div className="flex items-center justify-center py-3">
             <IconLoader2 className="size-3.5 animate-spin text-muted-foreground" />
           </div>
         </CommandGroup>
       )}
       {taskResults.length > 0 && (
-        <CommandGroup heading={search.trim() ? t`Tasks` : t`Active Tasks`} forceMount>
+        <CommandGroup
+          heading={search.trim() ? t("common:tasks") : t("common:activeTasks")}
+          forceMount
+        >
           {taskResults.map((task) => (
             <TaskResultItem
               key={task.id}
@@ -191,7 +191,7 @@ function CommandsListContent({
         </CommandGroup>
       )}
       {search.trim() ? (
-        <CommandGroup heading={t`Commands`}>
+        <CommandGroup heading={t("common:commands")}>
           {/* cmdk preserves this priority pre-sort when filter scores tie. */}
           {sortCommandsForSearch(commands, search).map((cmd) => (
             <CommandItemRow key={cmd.id} cmd={cmd} onSelect={onSelect} />
@@ -218,7 +218,7 @@ type FileSearchContentProps = {
 };
 
 function FileSearchContent({ files, isSearching, search, onSelect }: FileSearchContentProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (isSearching && files.length === 0) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -227,21 +227,13 @@ function FileSearchContent({ files, isSearching, search, onSelect }: FileSearchC
     );
   }
   if (search.trim() && files.length === 0) {
-    return (
-      <CommandEmpty>
-        <Trans>No files found.</Trans>
-      </CommandEmpty>
-    );
+    return <CommandEmpty>{t("common:noFilesFound")}</CommandEmpty>;
   }
   if (!search.trim()) {
-    return (
-      <CommandEmpty>
-        <Trans>Type to search files...</Trans>
-      </CommandEmpty>
-    );
+    return <CommandEmpty>{t("common:typeToSearchFiles")}</CommandEmpty>;
   }
   return (
-    <CommandGroup heading={t`Files`} forceMount>
+    <CommandGroup heading={t("common:files")} forceMount>
       {files.map((filePath) => {
         const fileName = getFileName(filePath);
         const lastSlash = filePath.lastIndexOf("/");
@@ -264,26 +256,27 @@ function FileSearchContent({ files, isSearching, search, onSelect }: FileSearchC
 }
 
 function getInputPlaceholder(mode: CommandPanelMode, inputCommand: CommandItemType | null) {
-  if (mode === "input") return inputCommand?.inputPlaceholder ?? t`Enter value...`;
-  if (mode === "search-tasks") return t`Search for tasks...`;
-  if (mode === MODE_SEARCH_FILES) return t`Search for files...`;
-  return t`Type a command...`;
+  if (mode === "input") return inputCommand?.inputPlaceholder ?? t("common:enterValue");
+  if (mode === "search-tasks") return t("common:searchForTasks");
+  if (mode === MODE_SEARCH_FILES) return t("common:searchForFiles");
+  return t("common:typeACommand");
 }
 
 function getEnterLabel(mode: CommandPanelMode) {
-  if (mode === "input") return t`Confirm`;
-  if (mode === "search-tasks" || mode === MODE_SEARCH_FILES) return t`Open`;
-  return t`Select`;
+  if (mode === "input") return t("common:confirm");
+  if (mode === "search-tasks" || mode === MODE_SEARCH_FILES) return t("common:open");
+  return t("common:select");
 }
 
 function getModeLabel(mode: CommandPanelMode, inputCommand: CommandItemType | null) {
   if (mode === "input") return inputCommand?.label;
-  if (mode === "search-tasks") return t`Tasks`;
-  if (mode === MODE_SEARCH_FILES) return t`Files`;
+  if (mode === "search-tasks") return t("common:tasks");
+  if (mode === MODE_SEARCH_FILES) return t("common:files");
   return null;
 }
 
 function CommandPanelFooter({ mode }: { mode: CommandPanelMode }) {
+  const { t } = useTranslation();
   const keyboardShortcuts = useAppStore((s) => s.userSettings.keyboardShortcuts);
   return (
     <div className="border-t border-border px-3 py-1.5 flex items-center gap-3 text-[0.6rem] text-muted-foreground">
@@ -292,15 +285,11 @@ function CommandPanelFooter({ mode }: { mode: CommandPanelMode }) {
           <KbdGroup>
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd>
-            <span>
-              <Trans>Navigate</Trans>
-            </span>
+            <span>{t("common:navigate")}</span>
           </KbdGroup>
           <KbdGroup>
             <Kbd>{formatShortcut(getShortcut("FILE_SEARCH", keyboardShortcuts))}</Kbd>
-            <span>
-              <Trans>File Search</Trans>
-            </span>
+            <span>{t("common:fileSearch")}</span>
           </KbdGroup>
         </>
       )}
@@ -311,16 +300,12 @@ function CommandPanelFooter({ mode }: { mode: CommandPanelMode }) {
       {mode !== MODE_COMMANDS && (
         <KbdGroup>
           <Kbd>⌫</Kbd>
-          <span>
-            <Trans>Back</Trans>
-          </span>
+          <span>{t("common:back")}</span>
         </KbdGroup>
       )}
       <KbdGroup>
         <Kbd>esc</Kbd>
-        <span>
-          <Trans>Close</Trans>
-        </span>
+        <span>{t("common:close")}</span>
       </KbdGroup>
     </div>
   );
@@ -373,6 +358,7 @@ export function CommandPanelView({
   repoMap,
   handleTaskSelect,
 }: CommandPanelViewProps) {
+  const { t } = useTranslation();
   const modeLabel = getModeLabel(mode, inputCommand);
   return (
     <CommandDialog
@@ -442,11 +428,11 @@ export function CommandPanelView({
           )}
           {mode === "input" &&
             (!search.trim() ? (
-              <CommandEmpty>{inputCommand?.inputPlaceholder ?? t`Enter a value...`}</CommandEmpty>
-            ) : (
               <CommandEmpty>
-                <Trans>Press Enter to confirm</Trans>
+                {inputCommand?.inputPlaceholder ?? t("common:enterAValue")}
               </CommandEmpty>
+            ) : (
+              <CommandEmpty>{t("common:pressEnterToConfirm")}</CommandEmpty>
             ))}
         </CommandList>
         <CommandPanelFooter mode={mode} />

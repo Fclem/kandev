@@ -1,7 +1,6 @@
 "use client";
-
 import { IconCpu } from "@tabler/icons-react";
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/components/state-provider";
 import { getExecutorIcon } from "@/lib/executor-icons";
 import { SettingsGroup, SettingsLeaf } from "./settings-nav-primitives";
@@ -15,7 +14,7 @@ type ExecutorsGroupProps = {
 };
 
 export function ExecutorsGroup({ pathname, expanded, onToggle }: ExecutorsGroupProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const executors = useAppStore((s) => s.executors.items);
   const allProfiles = executors.flatMap((executor) =>
     (executor.profiles ?? []).map((profile) => ({ ...profile, executorType: executor.type })),
@@ -23,7 +22,7 @@ export function ExecutorsGroup({ pathname, expanded, onToggle }: ExecutorsGroupP
 
   return (
     <SettingsGroup
-      label={t`Executors`}
+      label={t("common:executors")}
       icon={IconCpu}
       href={ROOT_HREF}
       isActive={pathname === ROOT_HREF}

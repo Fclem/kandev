@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
 import { IconFolder, IconPlus, IconChevronRight } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -35,32 +34,30 @@ function AddWorkspaceForm({
   isLoading,
   status,
 }: AddWorkspaceFormProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Card>
       <CardContent className="pt-6">
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="workspace-name">
-              <Trans>Workspace Name</Trans>
-            </Label>
+            <Label htmlFor="workspace-name">{t("settings:workspaceName")}</Label>
             <Input
               id="workspace-name"
               value={newWorkspaceName}
               onChange={(e) => onNameChange(e.target.value)}
-              placeholder={t`My Workspace`}
+              placeholder={t("settings:myWorkspace")}
               required
               autoFocus
             />
           </div>
           <div className="flex gap-2 justify-end">
             <Button type="button" variant="outline" onClick={onCancel}>
-              <Trans>Cancel</Trans>
+              {t("common:cancel")}
             </Button>
             <div className="flex items-center gap-2">
               <RequestIndicator status={status} />
               <Button type="submit" disabled={isLoading}>
-                <Trans>Add Workspace</Trans>
+                {t("settings:addWorkspace")}
               </Button>
             </div>
           </div>
@@ -71,6 +68,7 @@ function AddWorkspaceForm({
 }
 
 function WorkspaceListItem({ workspace }: { workspace: Workspace }) {
+  const { t } = useTranslation();
   return (
     <Link href={`/settings/workspace/${workspace.id}`}>
       <Card className="hover:bg-accent transition-colors cursor-pointer">
@@ -83,9 +81,7 @@ function WorkspaceListItem({ workspace }: { workspace: Workspace }) {
               <div className="flex-1 min-w-0">
                 <h4 className="font-medium">{workspace.name}</h4>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                  <span>
-                    <Trans>Workflows managed in this workspace</Trans>
-                  </span>
+                  <span>{t("settings:workflowsManagedInThisWorkspace")}</span>
                 </div>
               </div>
             </div>
@@ -104,7 +100,7 @@ export function WorkspacesPageClient() {
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const createRequest = useRequest(createWorkspaceAction);
   const { toast } = useToast();
-  const { t } = useLingui();
+  const { t } = useTranslation();
 
   const handleAddWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,8 +135,8 @@ export function WorkspacesPageClient() {
       setIsAdding(false);
     } catch (error) {
       toast({
-        title: t`Failed to create workspace`,
-        description: error instanceof Error ? error.message : t`Request failed`,
+        title: t("settings:failedToCreateWorkspace"),
+        description: error instanceof Error ? error.message : t("common:requestFailed"),
         variant: "error",
       });
     }
@@ -150,16 +146,14 @@ export function WorkspacesPageClient() {
     <div className="space-y-8">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold">
-            <Trans>Workspaces</Trans>
-          </h2>
+          <h2 className="text-2xl font-bold">{t("common:workspaces")}</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            <Trans>Manage your workspaces and workflows</Trans>
+            {t("settings:manageYourWorkspacesAndWorkflows")}
           </p>
         </div>
         <Button size="sm" onClick={() => setIsAdding(true)}>
           <IconPlus className="h-4 w-4 mr-2" />
-          <Trans>Add Workspace</Trans>
+          {t("settings:addWorkspace")}
         </Button>
       </div>
 
@@ -186,7 +180,7 @@ export function WorkspacesPageClient() {
             <Card>
               <CardContent className="py-8 text-center">
                 <p className="text-sm text-muted-foreground">
-                  <Trans>No workspaces configured. Add your first workspace to get started.</Trans>
+                  {t("settings:noWorkspacesConfiguredAddYourFirst")}
                 </p>
               </CardContent>
             </Card>

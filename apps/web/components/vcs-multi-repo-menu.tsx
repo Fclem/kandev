@@ -1,5 +1,4 @@
 "use client";
-
 import {
   IconAlertTriangle,
   IconCloudDownload,
@@ -11,9 +10,7 @@ import {
   IconGitPullRequest,
   IconLoader2,
 } from "@tabler/icons-react";
-import { msg } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
-import type { MessageDescriptor } from "@lingui/core";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
   DropdownMenu,
@@ -61,7 +58,7 @@ type ActionKey = "commit" | "push" | "pr" | "pull" | "rebase" | "merge" | "force
 
 type ActionDef = {
   key: ActionKey;
-  label: MessageDescriptor;
+  label: string;
   icon: ReactNode;
   /** Returns true when this action should be disabled for a given repo. */
   disabledFor: (status: PerRepoStatus | undefined) => boolean;
@@ -71,49 +68,49 @@ type ActionDef = {
 const ACTION_DEFS: ActionDef[] = [
   {
     key: "commit",
-    label: msg`Commit`,
+    label: "common:commit",
     icon: <IconGitCommit className={ICON_CLASS} />,
     disabledFor: (s) => !((s?.hasStaged ?? false) || (s?.hasUnstaged ?? false)),
     invoke: (repo, cb) => cb.onCommit(repo),
   },
   {
     key: "push",
-    label: msg`Push`,
+    label: "common:push",
     icon: <IconCloudUpload className={ICON_CLASS} />,
     disabledFor: (s) => (s?.ahead ?? 0) === 0,
     invoke: (repo, cb) => cb.onPush(false, repo),
   },
   {
     key: "pr",
-    label: msg`Create PR`,
+    label: "common:createPr",
     icon: <IconGitPullRequest className={ICON_CLASS} />,
     disabledFor: () => false,
     invoke: (repo, cb) => cb.onPR(repo),
   },
   {
     key: "pull",
-    label: msg`Pull`,
+    label: "common:pull",
     icon: <IconCloudDownload className={ICON_CLASS} />,
     disabledFor: () => false,
     invoke: (repo, cb) => cb.onPull(repo),
   },
   {
     key: "rebase",
-    label: msg`Rebase`,
+    label: "common:rebase",
     icon: <IconGitCherryPick className={ICON_CLASS} />,
     disabledFor: () => false,
     invoke: (repo, cb) => cb.onRebase(repo),
   },
   {
     key: "merge",
-    label: msg`Merge`,
+    label: "common:merge",
     icon: <IconGitMerge className={ICON_CLASS} />,
     disabledFor: () => false,
     invoke: (repo, cb) => cb.onMerge(repo),
   },
   {
     key: "force-push",
-    label: msg`Force Push`,
+    label: "common:forcePush",
     icon: <IconAlertTriangle className={ICON_CLASS} />,
     disabledFor: (s) => (s?.ahead ?? 0) === 0,
     invoke: (repo, cb) => cb.onPush(true, repo),
@@ -141,7 +138,7 @@ function PerRepoActionSub({
   repoDisplayName: (repositoryName: string) => string | undefined;
   callbacks: PerRepoCallbacks;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const statusByName = new Map(perRepoStatus.map((s) => [s.repository_name, s]));
   return (
     <DropdownMenuSub>
@@ -154,7 +151,7 @@ function PerRepoActionSub({
           const status = statusByName.get(repo);
           const ahead = status?.ahead ?? 0;
           const behind = status?.behind ?? 0;
-          const label = repoDisplayName(repo) || repo || t`Repository`;
+          const label = repoDisplayName(repo) || repo || t("common:repository");
           return (
             <DropdownMenuItem
               key={repo || "__no_repo__"}
@@ -198,10 +195,11 @@ function MultiRepoVcsDropdown({
   repoDisplayName: (repositoryName: string) => string | undefined;
   callbacks: PerRepoCallbacks;
 }) {
+  const { t } = useTranslation();
   return (
     <DropdownMenuContent align="end" className="w-56">
       <DropdownMenuLabel className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">
-        <Trans>Pick action, then repo</Trans>
+        {t("common:pickActionThenRepo")}
       </DropdownMenuLabel>
       {ACTION_DEFS.map((action, idx) => (
         <div key={action.key}>
@@ -226,9 +224,10 @@ function MultiRepoVcsDropdown({
 
 /** Inline footnote under Rebase/Merge showing the target branch. */
 function RebaseMergeFootnote({ target, type }: { target: string; type: "onto" | "from" }) {
+  const { t } = useTranslation();
   return (
     <div className="px-3 py-0.5 text-[10px] text-muted-foreground/60">
-      {type === "onto" ? <Trans>onto {target}</Trans> : <Trans>from {target}</Trans>}
+      {type === "onto" ? t("common:onto", { target }) : t("common:from", { target })}
     </div>
   );
 }
@@ -260,6 +259,7 @@ export function MultiRepoVcsButton({
   repoDisplayName: (repositoryName: string) => string | undefined;
   callbacks: PerRepoCallbacks;
 }) {
+  const { t } = useTranslation();
   const primaryLabel = primaryButtonConfig.label;
   return (
     <Tooltip>
@@ -299,9 +299,7 @@ export function MultiRepoVcsButton({
           </DropdownMenu>
         </span>
       </TooltipTrigger>
-      <TooltipContent>
-        <Trans>Pick a repository for {primaryLabel}</Trans>
-      </TooltipContent>
+      <TooltipContent>{t("common:pickARepositoryFor", { primaryLabel })}</TooltipContent>
     </Tooltip>
   );
 }

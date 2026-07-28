@@ -1,7 +1,6 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
 import {
   IconAlertTriangle,
@@ -77,14 +76,14 @@ function CopyButton({
   copiedValue: string | null;
   onCopy: (text: string) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const isCopied = copiedValue === text;
   return (
     <Button
       variant="ghost"
       size="sm"
       className="h-7 w-7 p-0 cursor-pointer shrink-0"
-      aria-label={isCopied ? t`Copied` : t`Copy install command`}
+      aria-label={isCopied ? t("settings:copied") : t("settings:copyInstallCommand")}
       onClick={() => onCopy(text)}
     >
       {isCopied ? (
@@ -135,6 +134,7 @@ function ToolInstallCard({
   copiedValue: string | null;
   onCopy: (text: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Card className="border-dashed">
       <CardContent className="py-4 flex flex-col gap-2">
@@ -144,7 +144,7 @@ function ToolInstallCard({
           {tool.available && (
             <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
               <IconCheck className="h-3.5 w-3.5" />
-              <Trans>Installed</Trans>
+              {t("settings:installed2")}
             </span>
           )}
         </div>
@@ -222,14 +222,13 @@ function InstalledAgentsHeader({
   onOpenTuiDialog: () => void;
   onRescan: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <h3 className="text-lg font-semibold">
-          <Trans>Installed Agents</Trans>
-        </h3>
+        <h3 className="text-lg font-semibold">{t("settings:installedAgents")}</h3>
         <p className="text-sm text-muted-foreground">
-          <Trans>Agents detected on this machine are ready to configure.</Trans>
+          {t("settings:agentsDetectedOnThisMachineAre")}
         </p>
       </div>
       <div className="flex w-full flex-wrap gap-2 sm:w-auto">
@@ -241,11 +240,11 @@ function InstalledAgentsHeader({
           data-testid="open-host-shell"
         >
           <IconTerminal2 className="h-4 w-4 mr-2" />
-          <Trans>Terminal</Trans>
+          {t("settings:terminal")}
         </Button>
         <Button variant="outline" size="sm" onClick={onOpenTuiDialog} className="cursor-pointer">
           <IconPlus className="h-4 w-4 mr-2" />
-          <Trans>Add TUI Agent</Trans>
+          {t("settings:addTuiAgent")}
         </Button>
         <Button
           variant="outline"
@@ -259,7 +258,7 @@ function InstalledAgentsHeader({
           ) : (
             <IconRefresh className="h-4 w-4 mr-2" />
           )}
-          <Trans>Rescan</Trans>
+          {t("settings:rescan")}
         </Button>
       </div>
     </div>
@@ -280,6 +279,7 @@ function InstalledAgentsSection({
   setTuiDialogOpen,
   handleRescan,
 }: InstalledAgentsSectionProps) {
+  const { t } = useTranslation();
   const [shellOpen, setShellOpen] = useState(false);
 
   return (
@@ -305,15 +305,11 @@ function InstalledAgentsSection({
           <CardContent className="py-8 text-center">
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               {discoveryLoading ? (
-                <span>
-                  <Trans>Scanning for installed agents...</Trans>
-                </span>
+                <span>{t("settings:scanningForInstalledAgents")}</span>
               ) : (
                 <>
                   <IconAlertTriangle className="h-4 w-4" />
-                  <Trans>
-                    No installed agents were detected. Install one below, then click Rescan.
-                  </Trans>
+                  {t("settings:noInstalledAgentsWereDetectedInstall")}
                 </>
               )}
             </div>
@@ -356,6 +352,7 @@ function SuggestInstallSection({
   installJobs: Record<string, InstallJob>;
   onInstall: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   const notInstalledTools = tools.filter((t) => !t.available);
   if (notInstalledAgents.length === 0 && notInstalledTools.length === 0) return null;
 
@@ -363,15 +360,8 @@ function SuggestInstallSection({
     <div className="space-y-4">
       <Separator />
       <div>
-        <h3 className="text-lg font-semibold">
-          <Trans>Available to Install</Trans>
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          <Trans>
-            Click Install to run the agent&apos;s install script on the kandev host. Progress
-            streams live; you can start multiple installs in parallel.
-          </Trans>
-        </p>
+        <h3 className="text-lg font-semibold">{t("settings:availableToInstall")}</h3>
+        <p className="text-sm text-muted-foreground">{t("settings:clickInstallToRunTheAgent")}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
@@ -398,6 +388,7 @@ type AgentProfilesSectionProps = {
 };
 
 function AgentProfilesSection({ savedAgents }: AgentProfilesSectionProps) {
+  const { t } = useTranslation();
   if (!savedAgents.some((agent: Agent) => agent.profiles.length > 0)) {
     return null;
   }
@@ -406,11 +397,9 @@ function AgentProfilesSection({ savedAgents }: AgentProfilesSectionProps) {
     <div className="space-y-4">
       <Separator />
       <div>
-        <h3 className="text-lg font-semibold">
-          <Trans>Agent Profiles</Trans>
-        </h3>
+        <h3 className="text-lg font-semibold">{t("settings:agentProfiles")}</h3>
         <p className="text-sm text-muted-foreground">
-          <Trans>Manage existing profiles by agent.</Trans>
+          {t("settings:manageExistingProfilesByAgent")}
         </p>
       </div>
 
@@ -586,6 +575,7 @@ function useAgentPageState() {
 }
 
 export default function AgentsSettingsPage() {
+  const { t } = useTranslation();
   const {
     savedAgents,
     installedAgents,
@@ -611,11 +601,9 @@ export default function AgentsSettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">
-          <Trans>Agents</Trans>
-        </h2>
+        <h2 className="text-2xl font-bold">{t("common:agents")}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          <Trans>Discover installed agents, install new ones, and manage their profiles.</Trans>
+          {t("settings:discoverInstalledAgentsInstallNewOnes")}
         </p>
       </div>
 

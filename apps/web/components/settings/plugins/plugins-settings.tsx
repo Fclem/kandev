@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Switch } from "@kandev/ui/switch";
@@ -23,7 +22,7 @@ import { usePluginActions } from "./use-plugin-actions";
  * flag by the page-level default export.
  */
 export function PluginsSettings() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const list = usePlugins();
   const actions = usePluginActions();
   const autoUpdate = useAutoUpdateSettings();
@@ -45,8 +44,8 @@ export function PluginsSettings() {
 
   return (
     <SettingsPageTemplate
-      title={t`Plugins`}
-      description={t`Browse the marketplace, then install, enable, disable, and uninstall kandev plugins.`}
+      title={t("common:plugins")}
+      description={t("settings:browseTheMarketplaceThenInstallEnable")}
       isDirty={false}
       saveStatus="idle"
       onSave={() => undefined}
@@ -59,10 +58,10 @@ export function PluginsSettings() {
             data-testid="plugins-tab-installed"
             className="cursor-pointer"
           >
-            <Trans>Installed</Trans>
+            {t("settings:installed2")}
           </TabsTrigger>
           <TabsTrigger value="browse" data-testid="plugins-tab-browse" className="cursor-pointer">
-            <Trans>Browse</Trans>
+            {t("settings:browse")}
           </TabsTrigger>
         </TabsList>
 
@@ -118,14 +117,13 @@ function InstalledTab({
   updatingId,
   onUpdate,
 }: InstalledTabProps) {
+  const { t } = useTranslation();
   return (
     <>
       <GlobalAutoUpdateToggle settings={autoUpdate} />
 
       <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-medium text-foreground">
-          <Trans>Installed plugins</Trans>
-        </div>
+        <div className="text-sm font-medium text-foreground">{t("settings:installedPlugins")}</div>
         <div className="flex items-center gap-2">
           <Button
             data-testid="plugins-sync-button"
@@ -135,14 +133,14 @@ function InstalledTab({
             className="cursor-pointer"
           >
             <IconRefresh className={`h-4 w-4 ${actions.syncBusy ? "animate-spin" : ""}`} />
-            <Trans>Sync</Trans>
+            {t("settings:sync")}
           </Button>
           <Button
             data-testid="install-plugin-trigger"
             onClick={actions.openInstall}
             className="cursor-pointer"
           >
-            <Trans>Install plugin</Trans>
+            {t("settings:installPlugin")}
           </Button>
         </div>
       </div>
@@ -182,6 +180,7 @@ function GlobalAutoUpdateToggle({
 }: {
   settings: ReturnType<typeof useAutoUpdateSettings>;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-background p-4">
       <div className="min-w-0 space-y-1">
@@ -189,13 +188,10 @@ function GlobalAutoUpdateToggle({
           htmlFor="plugins-auto-update-default"
           className="text-sm font-medium text-foreground cursor-pointer"
         >
-          <Trans>Automatically update plugins</Trans>
+          {t("settings:automaticallyUpdatePlugins")}
         </label>
         <p className="text-xs text-muted-foreground">
-          <Trans>
-            Check the marketplace periodically and install newer versions of active plugins. Applies
-            to every plugin unless overridden per plugin below.
-          </Trans>
+          {t("settings:checkTheMarketplacePeriodicallyAndInstall")}
         </p>
       </div>
       <Switch
@@ -227,6 +223,7 @@ function PluginList({
   updatingId,
   onUpdate,
 }: PluginListProps) {
+  const { t } = useTranslation();
   const { items, loaded, loading, error } = list;
 
   if (error) {
@@ -240,7 +237,7 @@ function PluginList({
   if (!loaded && loading) {
     return (
       <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-        <Trans>Loading plugins...</Trans>
+        {t("settings:loadingPlugins")}
       </div>
     );
   }
@@ -248,7 +245,7 @@ function PluginList({
   if (loaded && items.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-        <Trans>No plugins yet. Install one from the Browse tab, or upload a package.</Trans>
+        {t("settings:noPluginsYetInstallOneFrom")}
       </div>
     );
   }

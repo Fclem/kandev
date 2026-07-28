@@ -1,7 +1,6 @@
 "use client";
-
 import { memo, useCallback, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
 import type { AgentProfileOption } from "@/lib/state/slices";
 import type { WorkflowSnapshotData } from "@/lib/state/slices/kanban/types";
@@ -82,8 +81,8 @@ function NoCompatibleAgentState({
   executorProfileName: string | null;
   executorProfileId: string;
 }) {
-  const { t } = useLingui();
-  const target = executorProfileName ? `“${executorProfileName}”` : t`this executor`;
+  const { t } = useTranslation();
+  const target = executorProfileName ? `“${executorProfileName}”` : t("task:thisExecutor");
   const href = executorProfileId
     ? `/settings/executors/${executorProfileId}`
     : "/settings/executors";
@@ -92,11 +91,9 @@ function NoCompatibleAgentState({
       className="flex h-auto min-h-7 items-center justify-between gap-3 rounded-sm border border-input px-3 py-1.5 text-xs text-muted-foreground"
       data-testid="agent-profile-empty-state"
     >
-      <span>
-        <Trans>No compatible agent profiles for {target}.</Trans>
-      </span>
+      <span>{t("task:noCompatibleAgentProfilesFor", { target })}</span>
       <Link href={href} className="shrink-0 cursor-pointer text-primary hover:underline">
-        <Trans>Configure credentials</Trans>
+        {t("task:configureCredentials")}
       </Link>
     </div>
   );
@@ -115,18 +112,16 @@ function AgentColumn({
   executorProfileName,
   executorProfileId,
 }: AgentColumnProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (agentProfiles.length === 0 && !agentProfilesLoading) {
     return (
       <div
         className="flex h-7 items-center justify-center gap-2 rounded-sm border border-input px-3 text-xs text-muted-foreground"
         data-testid="agent-profile-empty-state"
       >
-        <span>
-          <Trans>No agents found.</Trans>
-        </span>
+        <span>{t("task:noAgentsFound")}</span>
         <Link href="/settings/agents" className="cursor-pointer text-primary hover:underline">
-          <Trans>Add agent</Trans>
+          {t("common:addAgent")}
         </Link>
       </div>
     );
@@ -139,7 +134,7 @@ function AgentColumn({
       />
     );
   }
-  const placeholder = agentProfilesLoading ? t`Loading agents...` : t`Select agent`;
+  const placeholder = agentProfilesLoading ? t("task:loadingAgents") : t("common:selectAgent");
   return (
     <>
       <AgentSelectorComponent
@@ -151,9 +146,7 @@ function AgentColumn({
         popoverPortal
       />
       {workflowAgentLocked && (
-        <p className="text-[11px] text-muted-foreground mt-1">
-          <Trans>Agent set by workflow</Trans>
-        </p>
+        <p className="text-[11px] text-muted-foreground mt-1">{t("task:agentSetByWorkflow")}</p>
       )}
     </>
   );
@@ -162,7 +155,7 @@ function AgentColumn({
 export const CreateEditSelectors = memo(function CreateEditSelectors(
   props: CreateEditSelectorsProps,
 ) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (props.isTaskStarted) return null;
   const {
     executorProfileOptions,
@@ -185,7 +178,7 @@ export const CreateEditSelectors = memo(function CreateEditSelectors(
           options={executorProfileOptions}
           value={executorProfileId}
           onValueChange={onExecutorProfileChange}
-          placeholder={executorsLoading ? t`Loading profiles...` : t`Select profile`}
+          placeholder={executorsLoading ? t("task:loadingProfiles") : t("task:selectProfile")}
           disabled={executorsLoading}
           popoverPortal
         />
@@ -241,14 +234,16 @@ export const SessionSelectors = memo(function SessionSelectors({
   AgentSelectorComponent,
   ExecutorProfileSelectorComponent,
 }: SessionSelectorsProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
       <AgentSelectorComponent
         options={agentProfileOptions}
         value={agentProfileId}
         onValueChange={onAgentProfileChange}
-        placeholder={agentProfilesLoading ? t`Loading agent profiles...` : t`Select agent profile`}
+        placeholder={
+          agentProfilesLoading ? t("task:loadingAgentProfiles") : t("task:selectAgentProfile")
+        }
         disabled={agentProfilesLoading || isCreatingSession}
         popoverPortal
       />
@@ -256,7 +251,7 @@ export const SessionSelectors = memo(function SessionSelectors({
         options={executorProfileOptions}
         value={executorProfileId}
         onValueChange={onExecutorProfileChange}
-        placeholder={executorsLoading ? t`Loading profiles...` : t`Select profile`}
+        placeholder={executorsLoading ? t("task:loadingProfiles") : t("task:selectProfile")}
         disabled={executorsLoading || isCreatingSession}
         popoverPortal
       />

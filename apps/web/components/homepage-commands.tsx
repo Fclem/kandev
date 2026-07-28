@@ -1,9 +1,8 @@
 "use client";
-
 import { useMemo } from "react";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconLayoutKanban, IconGitBranch, IconList, IconPlus } from "@tabler/icons-react";
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useRegisterCommands } from "@/hooks/use-register-commands";
 import { useKanbanDisplaySettings } from "@/hooks/use-kanban-display-settings";
 import { linkToTasks } from "@/lib/links";
@@ -17,7 +16,7 @@ type HomepageCommandsProps = {
 };
 
 export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const router = useRouter();
   const { onViewModeChange } = useKanbanDisplaySettings();
   const { isMobile } = useResponsiveBreakpoint();
@@ -28,7 +27,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
     const items: CommandItem[] = [
       {
         id: "task-create",
-        label: t`Create New Task`,
+        label: t("common:createNewTask"),
         group: "Tasks",
         icon: <IconPlus className="size-3.5" />,
         shortcut: newTaskShortcut,
@@ -38,7 +37,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
       },
       {
         id: "view-kanban",
-        label: t`Switch to Kanban View`,
+        label: t("common:switchToKanbanView"),
         group: "View",
         icon: <IconLayoutKanban className="size-3.5" />,
         keywords: ["kanban", "board", "view"],
@@ -53,7 +52,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
     if (!isMobile) {
       items.push({
         id: "view-pipeline",
-        label: t`Switch to Pipeline View`,
+        label: t("common:switchToPipelineView"),
         group: "View",
         icon: <IconGitBranch className="size-3.5" />,
         keywords: ["pipeline", "graph", "view"],
@@ -67,7 +66,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
 
     items.push({
       id: "view-list",
-      label: t`Switch to List View`,
+      label: t("common:switchToListView"),
       group: "View",
       icon: <IconList className="size-3.5" />,
       keywords: ["list", "table", "view"],

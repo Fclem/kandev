@@ -1,6 +1,5 @@
 "use client";
-
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { Badge } from "@kandev/ui/badge";
 import { Spinner } from "@kandev/ui/spinner";
 import { IconCheck, IconAlertTriangle } from "@tabler/icons-react";
@@ -38,13 +37,13 @@ function badgeVariant(state: SystemJob["state"]): "destructive" | "secondary" | 
 function stateLabel(state: SystemJob["state"]): string {
   switch (state) {
     case "queued":
-      return t`Queued`;
+      return t("settings:queued");
     case "running":
-      return t`Running`;
+      return t("settings:running");
     case "succeeded":
-      return t`Done`;
+      return t("settings:done");
     case "failed":
-      return t`Failed`;
+      return t("settings:failed");
     default:
       return state;
   }

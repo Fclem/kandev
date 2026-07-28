@@ -1,8 +1,7 @@
 "use client";
-
 import { use, useMemo, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -31,6 +30,7 @@ import { EXECUTOR_ICON_MAP } from "@/lib/executor-icons";
 const EXECUTORS_ROUTE = "/settings/executors";
 
 export default function ExecutorEditPage({ params }: { params: Promise<{ id: string }> }) {
+  const { t } = useTranslation();
   const { id } = use(params);
   const router = useRouter();
   const executor = useAppStore(
@@ -42,11 +42,9 @@ export default function ExecutorEditPage({ params }: { params: Promise<{ id: str
       <div>
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">
-              <Trans>Executor not found</Trans>
-            </p>
+            <p className="text-muted-foreground">{t("settings:executorNotFound")}</p>
             <Button className="mt-4 cursor-pointer" onClick={() => router.push(EXECUTORS_ROUTE)}>
-              <Trans>Go to Executors</Trans>
+              {t("settings:goToExecutors")}
             </Button>
           </CardContent>
         </Card>
@@ -58,12 +56,12 @@ export default function ExecutorEditPage({ params }: { params: Promise<{ id: str
 }
 
 function getExecutorDescription(type: ExecutorType): string {
-  if (type === "local_pc") return t`Runs agents directly in the repository folder.`;
-  if (type === "worktree") return t`Creates git worktrees for isolated agent sessions.`;
-  if (type === "local_docker") return t`Runs Docker containers on this machine.`;
-  if (type === "remote_docker") return t`Connects to a remote Docker host.`;
-  if (type === "sprites") return t`Runs agents in Sprites.dev cloud sandboxes.`;
-  return t`Custom executor.`;
+  if (type === "local_pc") return t("settings:runsAgentsDirectlyInTheRepository");
+  if (type === "worktree") return t("settings:createsGitWorktreesForIsolatedAgent");
+  if (type === "local_docker") return t("settings:runsDockerContainersOnThisMachine");
+  if (type === "remote_docker") return t("settings:connectsToARemoteDockerHost");
+  if (type === "sprites") return t("settings:runsAgentsInSpritesDevCloud");
+  return t("settings:customExecutor");
 }
 
 function parseMcpPolicyJson(currentPolicy: string | undefined): Record<string, unknown> {
@@ -101,7 +99,7 @@ function McpPolicyCard({
   mcpPolicyError: string | null;
   onPolicyChange: (value: string) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const applyPreset = (updater: (parsed: Record<string, unknown>) => Record<string, unknown>) => {
     const parsed = parseMcpPolicyJson(mcpPolicy);
     const next = updater(parsed);
@@ -112,19 +110,15 @@ function McpPolicyCard({
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Trans>MCP Policy</Trans>
+          {t("settings:mcpPolicy")}
           <span className="rounded-full border border-muted-foreground/30 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-            <Trans>Advanced</Trans>
+            {t("settings:advanced")}
           </span>
         </CardTitle>
-        <CardDescription>
-          <Trans>JSON policy overrides for MCP servers on this executor.</Trans>
-        </CardDescription>
+        <CardDescription>{t("settings:jsonPolicyOverridesForMcpServers")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
-        <Label htmlFor="mcp-policy">
-          <Trans>MCP policy JSON</Trans>
-        </Label>
+        <Label htmlFor="mcp-policy">{t("settings:mcpPolicyJson")}</Label>
         <Textarea
           id="mcp-policy"
           value={mcpPolicy}
@@ -135,23 +129,21 @@ function McpPolicyCard({
         />
         {mcpPolicyError && <p className="text-xs text-destructive">{mcpPolicyError}</p>}
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-xs font-medium text-muted-foreground">
-            <Trans>Quick presets</Trans>
-          </p>
+          <p className="text-xs font-medium text-muted-foreground">{t("settings:quickPresets")}</p>
           <McpPresetButton
-            label={t`Only HTTP/SSE`}
+            label={t("settings:onlyHttpSse")}
             onClick={() =>
               applyPreset((p) => ({ ...p, allow_stdio: false, allow_http: true, allow_sse: true }))
             }
           />
           <McpPresetButton
-            label={t`Only stdio`}
+            label={t("settings:onlyStdio")}
             onClick={() =>
               applyPreset((p) => ({ ...p, allow_stdio: true, allow_http: false, allow_sse: false }))
             }
           />
           <McpPresetButton
-            label={t`Allowlist GitHub + Playwright`}
+            label={t("settings:allowlistGithubPlaywright")}
             onClick={() =>
               applyPreset((p) => {
                 const existing = Array.isArray(p.allowlist_servers)
@@ -165,7 +157,7 @@ function McpPolicyCard({
             }
           />
           <McpPresetButton
-            label={t`Rewrite localhost for Docker`}
+            label={t("settings:rewriteLocalhostForDocker")}
             onClick={() =>
               applyPreset((p) => {
                 const existing =
@@ -194,15 +186,15 @@ function validateMcpPolicy(value: string | undefined): string | null {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return t`MCP policy must be a JSON object`;
+      return t("settings:mcpPolicyMustBeAJson");
   } catch {
-    return t`Invalid JSON`;
+    return t("settings:invalidJson");
   }
   return null;
 }
 
 function DeleteExecutorSection({ executor }: { executor: Executor }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const router = useRouter();
   const executors = useAppStore((state) => state.executors.items);
   const setExecutors = useAppStore((state) => state.setExecutors);
@@ -232,18 +224,12 @@ function DeleteExecutorSection({ executor }: { executor: Executor }) {
     <>
       <Card className="border-destructive">
         <CardHeader>
-          <CardTitle className="text-destructive">
-            <Trans>Delete Executor</Trans>
-          </CardTitle>
+          <CardTitle className="text-destructive">{t("settings:deleteExecutor")}</CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">
-              <Trans>Remove this executor</Trans>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              <Trans>This action cannot be undone.</Trans>
-            </p>
+            <p className="text-sm font-medium">{t("settings:removeThisExecutor")}</p>
+            <p className="text-xs text-muted-foreground">{t("common:thisActionCannotBeUndone")}</p>
           </div>
           <Button
             variant="destructive"
@@ -251,26 +237,18 @@ function DeleteExecutorSection({ executor }: { executor: Executor }) {
             className="cursor-pointer"
           >
             <IconTrash className="h-4 w-4 mr-2" />
-            <Trans>Delete</Trans>
+            {t("common:delete")}
           </Button>
         </CardContent>
       </Card>
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              <Trans>Delete Executor</Trans>
-            </DialogTitle>
-            <DialogDescription>
-              <Trans>
-                Type &quot;delete&quot; to confirm deletion. This action cannot be undone.
-              </Trans>
-            </DialogDescription>
+            <DialogTitle>{t("settings:deleteExecutor")}</DialogTitle>
+            <DialogDescription>{t("settings:typeDeleteToConfirmDeletionThis")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="confirm-delete">
-              <Trans>Confirm Delete</Trans>
-            </Label>
+            <Label htmlFor="confirm-delete">{t("settings:confirmDelete")}</Label>
             <Input
               id="confirm-delete"
               value={deleteConfirmText}
@@ -284,7 +262,7 @@ function DeleteExecutorSection({ executor }: { executor: Executor }) {
               onClick={() => setDeleteDialogOpen(false)}
               className="cursor-pointer"
             >
-              <Trans>Cancel</Trans>
+              {t("common:cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -292,7 +270,7 @@ function DeleteExecutorSection({ executor }: { executor: Executor }) {
               disabled={deleteConfirmText !== "delete" || isDeleting}
               className="cursor-pointer"
             >
-              {isDeleting ? t`Deleting...` : t`Delete`}
+              {isDeleting ? t("settings:deleting") : t("common:delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -302,6 +280,7 @@ function DeleteExecutorSection({ executor }: { executor: Executor }) {
 }
 
 function ExecutorEditForm({ executor }: { executor: Executor }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const executors = useAppStore((state) => state.executors.items);
   const setExecutors = useAppStore((state) => state.setExecutors);
@@ -353,7 +332,7 @@ function ExecutorEditForm({ executor }: { executor: Executor }) {
           onClick={() => router.push(EXECUTORS_ROUTE)}
           className="cursor-pointer"
         >
-          <Trans>Back to Executors</Trans>
+          {t("settings:backToExecutors")}
         </Button>
       </div>
       <Separator />

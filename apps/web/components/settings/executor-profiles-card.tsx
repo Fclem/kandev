@@ -1,7 +1,6 @@
 "use client";
-
 import { useState, useCallback } from "react";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconTrash, IconPlus, IconChevronRight } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
@@ -26,6 +25,7 @@ function ExecutorProfileRow({
   onOpen: () => void;
   onDelete: (e: React.MouseEvent) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="flex items-center justify-between rounded-md border px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors"
@@ -35,7 +35,7 @@ function ExecutorProfileRow({
         <span className="text-sm font-medium truncate">{profile.name}</span>
         {profile.prepare_script && (
           <Badge variant="outline" className="text-xs flex-shrink-0">
-            <Trans>Prepare script</Trans>
+            {t("settings:prepareScript")}
           </Badge>
         )}
       </div>
@@ -55,6 +55,7 @@ function ExecutorProfileRow({
 }
 
 export function ExecutorProfilesCard({ executorId, profiles }: ExecutorProfilesCardProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const executors = useAppStore((state) => state.executors.items);
@@ -102,27 +103,20 @@ export function ExecutorProfilesCard({ executorId, profiles }: ExecutorProfilesC
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>
-                <Trans>Profiles</Trans>
-              </CardTitle>
+              <CardTitle>{t("settings:profiles2")}</CardTitle>
               <CardDescription>
-                <Trans>
-                  Different configurations for this executor. Each profile can have its own prepare
-                  script, environment variables, and settings.
-                </Trans>
+                {t("settings:differentConfigurationsForThisExecutorEach")}
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={handleCreate} className="cursor-pointer">
               <IconPlus className="h-4 w-4 mr-1" />
-              <Trans>Add</Trans>
+              {t("settings:add")}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {profiles.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              <Trans>No profiles configured.</Trans>
-            </p>
+            <p className="text-sm text-muted-foreground">{t("settings:noProfilesConfigured")}</p>
           ) : (
             <div className="space-y-2">
               {profiles.map((profile) => (

@@ -1,7 +1,6 @@
 "use client";
-
 import { useMemo, useRef, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconGripVertical, IconArrowsShuffle } from "@tabler/icons-react";
@@ -88,7 +87,7 @@ function useWorkflowImportExport(
   const [importYaml, setImportYaml] = useState("");
   const [importLoading, setImportLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { t } = useLingui();
+  const { t } = useTranslation();
 
   const handleExportAll = async () => {
     if (!workspace) return;
@@ -102,8 +101,8 @@ function useWorkflowImportExport(
       setIsExportDialogOpen(true);
     } catch (error) {
       toast({
-        title: t`Failed to export workflows`,
-        description: error instanceof Error ? error.message : t`Request failed`,
+        title: t("settings:failedToExportWorkflows"),
+        description: error instanceof Error ? error.message : t("common:requestFailed"),
         variant: "error",
       });
     }
@@ -130,16 +129,16 @@ function useWorkflowImportExport(
       const parts: string[] = [];
       const createdNames = created.join(", ");
       const skippedNames = skipped.join(", ");
-      if (created.length > 0) parts.push(t`Created: ${createdNames}`);
-      if (skipped.length > 0) parts.push(t`Skipped (already exist): ${skippedNames}`);
-      toast({ title: t`Import complete`, description: parts.join(". ") });
+      if (created.length > 0) parts.push(t("settings:created2", { createdNames }));
+      if (skipped.length > 0) parts.push(t("settings:skippedAlreadyExist", { skippedNames }));
+      toast({ title: t("settings:importComplete"), description: parts.join(". ") });
       setIsImportDialogOpen(false);
       setImportYaml("");
       if (created.length > 0) router.refresh();
     } catch (error) {
       toast({
-        title: t`Failed to import workflows`,
-        description: error instanceof Error ? error.message : t`Invalid YAML`,
+        title: t("settings:failedToImportWorkflows"),
+        description: error instanceof Error ? error.message : t("settings:invalidYaml"),
         variant: "error",
       });
     } finally {
@@ -409,13 +408,13 @@ function WorkflowList({
 }
 
 function WorkflowDialogs({ page }: { page: ReturnType<typeof useWorkspaceWorkflowsPage> }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       <WorkflowExportDialog
         open={page.isExportDialogOpen}
         onOpenChange={page.setIsExportDialogOpen}
-        title={t`Export Workflows`}
+        title={t("settings:exportWorkflows")}
         content={page.exportYaml}
       />
       <ImportWorkflowsDialog
@@ -450,7 +449,7 @@ export function WorkspaceWorkflowsClient({
 }: WorkspaceWorkflowsClientProps) {
   const page = useWorkspaceWorkflowsPage(workspace, workflows, workflowTemplates);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const { t } = useLingui();
+  const { t } = useTranslation();
 
   if (!workspace)
     return <WorkspaceNotFoundCard onBack={() => page.router.push("/settings/workspace")} />;
@@ -461,20 +460,20 @@ export function WorkspaceWorkflowsClient({
         <div>
           <h2 className="text-2xl font-bold">{workspace.name}</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            <Trans>Manage workflows for this workspace.</Trans>
+            {t("settings:manageWorkflowsForThisWorkspace")}
           </p>
         </div>
         <Button asChild variant="outline" size="sm">
           <Link href={`/settings/workspace/${workspace.id}`}>
-            <Trans>Workspace settings</Trans>
+            {t("settings:workspaceSettings")}
           </Link>
         </Button>
       </div>
       <Separator />
       <SettingsSection
         icon={<IconArrowsShuffle className="h-5 w-5" />}
-        title={t`Workflows`}
-        description={t`Create autonomous pipelines with automated transitions or manual workflows where you move tasks yourself`}
+        title={t("common:workflows")}
+        description={t("settings:createAutonomousPipelinesWithAutomatedTransitions")}
         action={
           <WorkflowSectionActions
             onExport={page.handleExportAll}
@@ -538,7 +537,7 @@ function useWorkflowOrderDraft({
   setSavedWorkflowItems,
   idMappings,
 }: WorkflowOrderDraftArgs) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const currentOrder = workflowItems.map((workflow) => workflow.id);
   const savedOrder = savedWorkflowItems.map((workflow) => workflow.id);
   const dirtyIds = getWorkflowOrderDirtyIds(workflowItems, savedWorkflowItems);
@@ -551,7 +550,7 @@ function useWorkflowOrderDraft({
       if (!workspace) return;
       const persistedOrder = currentOrder.map((id) => idMappings.current.get(id) ?? id);
       if (persistedOrder.some((id) => id.startsWith(TEMP_WORKFLOW_PREFIX))) {
-        throw new Error(t`Save workflows before ordering them`);
+        throw new Error(t("settings:saveWorkflowsBeforeOrderingThem"));
       }
       if (persistedOrder.length > 0) {
         await reorderWorkflowsAction(workspace.id, persistedOrder);

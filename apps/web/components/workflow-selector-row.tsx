@@ -1,7 +1,6 @@
 "use client";
-
 import { Fragment, memo, useMemo, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconCheck, IconChevronDown, IconLogicBuffer } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
@@ -26,6 +25,7 @@ function InlineSteps({
   steps: StepItem[];
   agentProfiles: AgentProfileOption[];
 }) {
+  const { t } = useTranslation();
   if (steps.length === 0) return null;
   return (
     <div className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
@@ -48,9 +48,7 @@ function InlineSteps({
                     <TooltipTrigger asChild>
                       <span className="text-[10px] text-muted-foreground/60 leading-none">*</span>
                     </TooltipTrigger>
-                    <TooltipContent>
-                      <Trans>Start step</Trans>
-                    </TooltipContent>
+                    <TooltipContent>{t("common:startStep")}</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}
@@ -100,7 +98,7 @@ export const WorkflowSelectorRow = memo(function WorkflowSelectorRow({
   lastUsedWorkflowId,
   agentProfiles,
 }: WorkflowSelectorRowProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   const selectedWorkflow = useMemo(
@@ -128,13 +126,13 @@ export const WorkflowSelectorRow = memo(function WorkflowSelectorRow({
           data-testid="workflow-selector-trigger"
         >
           <IconLogicBuffer className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate">{selectedWorkflow?.name ?? t`Select workflow`}</span>
+          <span className="truncate">{selectedWorkflow?.name ?? t("common:selectWorkflow")}</span>
           <IconChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto min-w-[300px] max-w-none p-1" align="start">
         <div className="text-muted-foreground px-2 py-1.5 text-xs border-b">
-          <Trans>Workflow</Trans>
+          {t("common:workflow")}
         </div>
         {sortedWorkflows.map((wf) => {
           const isSelected = wf.id === selectedWorkflowId;

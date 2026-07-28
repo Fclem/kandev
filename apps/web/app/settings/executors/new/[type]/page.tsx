@@ -1,9 +1,7 @@
 "use client";
-
 import { use, useCallback, useEffect, useMemo, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
-import type { MessageDescriptor } from "@lingui/core";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { useRouter } from "@/lib/routing/client-router";
 import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
 import { Badge } from "@kandev/ui/badge";
@@ -46,7 +44,6 @@ import {
 } from "@/components/settings/profile-edit/remote-credentials-card";
 import type { NetworkPolicyRule } from "@/lib/api/domains/settings-api";
 import type { Executor, ExecutorType, ProfileEnvVar } from "@/lib/types/http";
-
 import { EXECUTOR_TYPE_MAP } from "./executor-types";
 import { SSHCreatePage } from "./ssh-create-page";
 
@@ -76,15 +73,14 @@ export default function CreateProfilePage({ params }: { params: Promise<{ type: 
 }
 
 function InvalidTypeFallback() {
+  const { t } = useTranslation();
   const router = useRouter();
   return (
     <Card>
       <CardContent className="py-12 text-center">
-        <p className="text-muted-foreground">
-          <Trans>Unknown executor type</Trans>
-        </p>
+        <p className="text-muted-foreground">{t("settings:unknownExecutorType")}</p>
         <Button className="mt-4 cursor-pointer" onClick={() => router.push(EXECUTORS_ROUTE)}>
-          <Trans>Back to Executors</Trans>
+          {t("settings:backToExecutors")}
         </Button>
       </CardContent>
     </Card>
@@ -100,6 +96,7 @@ function CreateProfileHeader({
   label: string;
   description: string;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   return (
     <>
@@ -107,9 +104,7 @@ function CreateProfileHeader({
         <div>
           <div className="flex items-center gap-2">
             <ExecutorTypeIcon type={type} />
-            <h2 className="text-2xl font-bold">
-              <Trans>New {label} Profile</Trans>
-            </h2>
+            <h2 className="text-2xl font-bold">{t("settings:newProfile", { label })}</h2>
             <Badge variant="outline" className="text-xs">
               {getExecutorLabel(type)}
             </Badge>
@@ -122,7 +117,7 @@ function CreateProfileHeader({
           onClick={() => router.push(EXECUTORS_ROUTE)}
           className="cursor-pointer"
         >
-          <Trans>Back to Executors</Trans>
+          {t("settings:backToExecutors")}
         </Button>
       </div>
       <Separator />
@@ -288,7 +283,7 @@ function useCreateGitIdentityState(isRemote: boolean) {
 }
 
 function useCreateProfileFormState(executorType: ExecutorType) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [name, setName] = useState(() => (executorType === "local_docker" ? "Docker" : ""));
   const [mcpPolicy, setMcpPolicy] = useState("");
   const [prepareScript, setPrepareScript] = useState("");
@@ -335,8 +330,8 @@ function useCreateProfileFormState(executorType: ExecutorType) {
   // extracted ICU message doesn't contain unescaped braces.
   const placeholderToken = "{{";
   const prepareDesc = flags.isRemote
-    ? t`Runs inside the execution environment before the agent starts. Type ${placeholderToken} to see available placeholders.`
-    : t`Runs on the host machine before the agent starts.`;
+    ? t("settings:runsInsideTheExecutionEnvironmentBefore", { placeholderToken })
+    : t("settings:runsOnTheHostMachineBefore");
 
   return {
     name,
@@ -383,6 +378,7 @@ function useCreateProfileFormState(executorType: ExecutorType) {
 }
 
 function useCreateProfileSave(executorId: string) {
+  const { t } = useTranslation();
   const router = useRouter();
   const executors = useAppStore((state) => state.executors.items);
   const setExecutors = useAppStore((state) => state.setExecutors);
@@ -402,7 +398,7 @@ function useCreateProfileSave(executorId: string) {
         );
         runWithNavigationBlockerBypassed(() => router.push(`/settings/executors/${profile.id}`));
       } catch (err) {
-        setError(err instanceof Error ? err.message : t`Failed to create profile`);
+        setError(err instanceof Error ? err.message : t("settings:failedToCreateProfile"));
         throw err;
       } finally {
         setSaving(false);
@@ -423,7 +419,7 @@ function CreateProfileSections({
   form: ReturnType<typeof useCreateProfileFormState>;
   secrets: ReturnType<typeof useSecrets>["items"];
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       <ProfileDetailsCard name={form.name} baselineName="" onNameChange={form.setName} />
@@ -484,7 +480,7 @@ function CreateProfileSections({
         onRemove={form.removeEnvVar}
       />
       <ScriptCard
-        title={t`Prepare Script`}
+        title={t("settings:prepareScript2")}
         description={form.prepareDesc}
         value={form.prepareScript}
         baselineValue=""
@@ -495,8 +491,8 @@ function CreateProfileSections({
       />
       {form.isRemote && (
         <ScriptCard
-          title={t`Cleanup Script`}
-          description={t`Runs after the agent session ends for cleanup tasks.`}
+          title={t("settings:cleanupScript2")}
+          description={t("settings:runsAfterTheAgentSessionEnds")}
           value={form.cleanupScript}
           baselineValue=""
           onChange={form.setCleanupScript}
@@ -520,14 +516,14 @@ function getCreateDisabledReason(
   spritesTokenMissing: boolean,
   saving: boolean,
 ) {
-  if (saving) return t`Creating profile...`;
-  if (!form.name.trim()) return t`Enter a profile name.`;
+  if (saving) return t("settings:creatingProfile");
+  if (!form.name.trim()) return t("settings:enterAProfileName");
   if (form.mcpPolicyError) return form.mcpPolicyError;
-  if (spritesTokenMissing) return t`Add a Sprites API key before creating the profile.`;
+  if (spritesTokenMissing) return t("settings:addASpritesApiKeyBefore");
   if (form.isDocker) {
-    if (!form.imageTag.trim()) return t`Enter an image tag before creating the profile.`;
-    if (!form.dockerfile.trim()) return t`Add Dockerfile content before creating the profile.`;
-    if (!form.dockerImageBuilt) return t`Build this Docker image before creating the profile.`;
+    if (!form.imageTag.trim()) return t("settings:enterAnImageTagBeforeCreating");
+    if (!form.dockerfile.trim()) return t("settings:addDockerfileContentBeforeCreatingThe");
+    if (!form.dockerImageBuilt) return t("settings:buildThisDockerImageBeforeCreating");
   }
   return null;
 }
@@ -561,9 +557,9 @@ function CreateProfileForm({
   typeInfo,
 }: {
   executorType: ExecutorType;
-  typeInfo: { executorId: string; label: MessageDescriptor; description: MessageDescriptor };
+  typeInfo: { executorId: string; label: string; description: string };
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { items: secrets } = useSecrets();
   const form = useCreateProfileFormState(executorType);
   const { saving, error, handleSave } = useCreateProfileSave(typeInfo.executorId);
@@ -592,9 +588,7 @@ function CreateProfileForm({
         <CreateProfileSections executorType={executorType} form={form} secrets={secrets} />
       </fieldset>
       {spritesTokenMissing && (
-        <p className="text-sm text-destructive">
-          <Trans>Sprites API key is required.</Trans>
-        </p>
+        <p className="text-sm text-destructive">{t("settings:spritesApiKeyIsRequired")}</p>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>

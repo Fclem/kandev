@@ -1,5 +1,4 @@
 "use client";
-
 import { FormEvent, useEffect, useState } from "react";
 import {
   IconAlertCircle,
@@ -8,8 +7,8 @@ import {
   IconFolderPlus,
   IconInfoCircle,
 } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -35,10 +34,10 @@ import type { Repository } from "@/lib/types/http";
 
 export function validateLocalRepositoryName(name: string): string | null {
   const trimmed = name.trim();
-  if (!trimmed) return t`Enter a repository name.`;
-  if (trimmed === "." || trimmed === "..") return t`Choose a different repository name.`;
+  if (!trimmed) return t("common:enterARepositoryName");
+  if (trimmed === "." || trimmed === "..") return t("common:chooseADifferentRepositoryName");
   if (trimmed.includes("/") || trimmed.includes("\\") || trimmed.includes("\0")) {
-    return t`The repository name must be one folder name.`;
+    return t("common:theRepositoryNameMustBeOne");
   }
   return null;
 }
@@ -64,16 +63,16 @@ function executorNotice(
   context: NonNullable<CreateLocalRepositorySurfaceProps["context"]>,
 ): string {
   if (context === "workspace") {
-    return t`Creates an empty Git repository and registers it in this workspace.`;
+    return t("common:createsAnEmptyGitRepositoryAnd");
   }
   if (!selection) {
-    return t`A direct local executor profile is required to create and use an empty repository.`;
+    return t("common:aDirectLocalExecutorProfileIs");
   }
   const executorProfileName = selection.executorProfileName;
   if (selection.requiresSwitch) {
-    return t`Empty repositories run directly on this machine. This task will switch to “${executorProfileName}”.`;
+    return t("common:emptyRepositoriesRunDirectlyOnThis", { executorProfileName });
   }
-  return t`This empty repository will run with “${executorProfileName}” on this machine.`;
+  return t("common:thisEmptyRepositoryWillRunWith", { executorProfileName });
 }
 
 type RepositoryLocationFieldsProps = {
@@ -93,13 +92,11 @@ function RepositoryLocationFields({
   onParentPathChange,
   onLoadTypedDirectory,
 }: RepositoryLocationFieldsProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       <label className="block space-y-1.5 text-xs font-medium">
-        <span>
-          <Trans>Repository name</Trans>
-        </span>
+        <span>{t("common:repositoryName")}</span>
         <Input
           value={name}
           onChange={(event) => onNameChange(event.target.value)}
@@ -110,7 +107,7 @@ function RepositoryLocationFields({
       </label>
       <div className="space-y-1.5">
         <label htmlFor="local-repository-parent" className="text-xs font-medium">
-          <Trans>Parent directory</Trans>
+          {t("common:parentDirectory")}
         </label>
         <div className="flex min-w-0 items-center gap-2">
           <Input
@@ -132,8 +129,8 @@ function RepositoryLocationFields({
             className="size-11 sm:size-8"
             onClick={onLoadTypedDirectory}
             disabled={!parentPath}
-            aria-label={t`Browse parent directory`}
-            title={t`Browse parent directory`}
+            aria-label={t("common:browseParentDirectory")}
+            title={t("common:browseParentDirectory")}
           >
             <IconFolderOpen />
           </Button>
@@ -141,11 +138,9 @@ function RepositoryLocationFields({
       </div>
       <div className="flex min-w-0 items-center gap-2 border-t border-border/70 pt-2 sm:col-span-2">
         <IconFolder className="size-4 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 text-xs text-muted-foreground">
-          <Trans>Destination</Trans>
-        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">{t("common:destination")}</span>
         <span className="truncate font-mono text-xs" title={targetPath || parentPath}>
-          {targetPath || parentPath || t`Loading folder…`}
+          {targetPath || parentPath || t("common:loadingFolder")}
         </span>
       </div>
     </>
@@ -199,7 +194,7 @@ function CreateRepositoryFooter({
   canSubmit: boolean;
   submitting: boolean;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="flex shrink-0 justify-end border-t border-border px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <Button
@@ -208,7 +203,7 @@ function CreateRepositoryFooter({
         disabled={!canSubmit}
       >
         <IconFolderPlus className="h-4 w-4" />
-        {submitting ? t`Creating…` : t`Create repository`}
+        {submitting ? t("common:creating") : t("common:createRepository")}
       </Button>
     </div>
   );
@@ -222,6 +217,7 @@ function CreateRepositoryForm({
   onCreated,
   onDismiss,
 }: CreateLocalRepositorySurfaceProps & { onDismiss: () => void }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [parentPath, setParentPath] = useState("");
   const [editingParentPath, setEditingParentPath] = useState(false);
@@ -259,7 +255,7 @@ function CreateRepositoryForm({
       setName("");
       onDismiss();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : t`Failed to create repository`);
+      setSubmitError(err instanceof Error ? err.message : t("common:failedToCreateRepository"));
     } finally {
       setSubmitting(false);
     }
@@ -322,6 +318,7 @@ function CreateRepositoryForm({
 }
 
 export function CreateLocalRepositorySurface(props: CreateLocalRepositorySurfaceProps) {
+  const { t } = useTranslation();
   const { isMobile } = useResponsiveBreakpoint();
   const handleOpenChange = (open: boolean) => props.onOpenChange(open);
   const form = <CreateRepositoryForm {...props} onDismiss={() => handleOpenChange(false)} />;
@@ -334,12 +331,8 @@ export function CreateLocalRepositorySurface(props: CreateLocalRepositorySurface
           className="h-[88dvh] max-h-[88dvh] min-w-0 overflow-hidden pb-0"
         >
           <DrawerHeader className="shrink-0 border-b border-border text-left">
-            <DrawerTitle>
-              <Trans>Create new repository</Trans>
-            </DrawerTitle>
-            <DrawerDescription>
-              <Trans>Choose a folder or enter a new path on this machine.</Trans>
-            </DrawerDescription>
+            <DrawerTitle>{t("common:createNewRepository")}</DrawerTitle>
+            <DrawerDescription>{t("common:chooseAFolderOrEnterA")}</DrawerDescription>
           </DrawerHeader>
           {form}
         </DrawerContent>
@@ -354,12 +347,8 @@ export function CreateLocalRepositorySurface(props: CreateLocalRepositorySurface
         className="flex h-[min(640px,85dvh)] max-w-xl min-w-0 flex-col overflow-hidden p-0"
       >
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12">
-          <DialogTitle>
-            <Trans>Create new repository</Trans>
-          </DialogTitle>
-          <DialogDescription>
-            <Trans>Choose a folder or enter a new path on this machine.</Trans>
-          </DialogDescription>
+          <DialogTitle>{t("common:createNewRepository")}</DialogTitle>
+          <DialogDescription>{t("common:chooseAFolderOrEnterA")}</DialogDescription>
         </DialogHeader>
         {form}
       </DialogContent>

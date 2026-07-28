@@ -1,7 +1,6 @@
 "use client";
-
 import { useMemo, useState } from "react";
-import { Plural, Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import { IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
@@ -108,11 +107,11 @@ type ToolbarProps = {
 };
 
 function MarketplaceToolbar(props: ToolbarProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Input
-        placeholder={t`Search plugins…`}
+        placeholder={t("settings:searchPlugins")}
         value={props.text}
         onChange={(e) => props.onText(e.target.value)}
         className="max-w-xs"
@@ -120,12 +119,10 @@ function MarketplaceToolbar(props: ToolbarProps) {
       />
       <Select value={props.category} onValueChange={props.onCategory}>
         <SelectTrigger className="w-40" data-testid="marketplace-category">
-          <SelectValue placeholder={t`Category`} />
+          <SelectValue placeholder={t("settings:category")} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL_CATEGORIES}>
-            <Trans>All categories</Trans>
-          </SelectItem>
+          <SelectItem value={ALL_CATEGORIES}>{t("settings:allCategories")}</SelectItem>
           {props.categories.map((cat) => (
             <SelectItem key={cat} value={cat}>
               {cat}
@@ -138,21 +135,15 @@ function MarketplaceToolbar(props: ToolbarProps) {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="stars">
-            <Trans>Most stars</Trans>
-          </SelectItem>
-          <SelectItem value="recent">
-            <Trans>Recently updated</Trans>
-          </SelectItem>
-          <SelectItem value="name">
-            <Trans>Name</Trans>
-          </SelectItem>
+          <SelectItem value="stars">{t("settings:mostStars")}</SelectItem>
+          <SelectItem value="recent">{t("settings:recentlyUpdated")}</SelectItem>
+          <SelectItem value="name">{t("settings:name")}</SelectItem>
         </SelectContent>
       </Select>
       <div className="ml-auto flex items-center gap-2">
         <Button variant="secondary" onClick={props.onRefresh} className="cursor-pointer">
           <IconRefresh className="h-4 w-4" />
-          <Trans>Refresh</Trans>
+          {t("settings:refresh")}
         </Button>
         <Button
           variant="outline"
@@ -160,7 +151,7 @@ function MarketplaceToolbar(props: ToolbarProps) {
           className="cursor-pointer"
           data-testid="marketplace-manage-sources"
         >
-          <Trans>Sources</Trans>
+          {t("settings:sources")}
         </Button>
       </div>
     </div>
@@ -179,7 +170,7 @@ function DegradedSourcesBanner({ catalog }: { catalog: MarketplaceCatalog }) {
         const detail = s.error ? `: ${s.error}` : "";
         return (
           <div key={s.id}>
-            <Trans>
+            <Trans i18nKey="settings:isUnreachableItsPluginsAreHidden" values={{ detail, name }}>
               <span className="font-medium">{s.name}</span> is unreachable
               {detail} — its plugins are hidden.
             </Trans>
@@ -207,6 +198,7 @@ function MarketplaceList({
   installingId,
   onInstall,
 }: ListProps) {
+  const { t } = useTranslation();
   if (error) {
     return (
       <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive">
@@ -217,27 +209,23 @@ function MarketplaceList({
   if (loading && entries.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-        <Trans>Loading marketplace…</Trans>
+        {t("settings:loadingMarketplace")}
       </div>
     );
   }
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border/70 p-10 text-center text-sm text-muted-foreground">
-        {filtered ? (
-          <Trans>No plugins match your search. Try clearing the filters.</Trans>
-        ) : (
-          <Trans>
-            No plugins available yet. Check back soon, or add a marketplace source with your own.
-          </Trans>
-        )}
+        {filtered
+          ? t("settings:noPluginsMatchYourSearchTry")
+          : t("settings:noPluginsAvailableYetCheckBack")}
       </div>
     );
   }
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        <Plural value={entries.length} one="# plugin available" other="# plugins available" />
+        {t("settings:pluginsAvailable", { count: entries.length })}
       </p>
       <div className="grid gap-3 md:grid-cols-2">
         {entries.map((entry) => (

@@ -1,8 +1,6 @@
 "use client";
-
 import { useId } from "react";
-import { useLingui } from "@lingui/react/macro";
-import { t as globalT } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { IconAlertCircle, IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
 import { NoAuthPanel, ProbingPanel } from "@/components/settings/profile-status-panels";
 import { Button } from "@kandev/ui/button";
@@ -34,6 +32,7 @@ import {
   profileModeIsDirty,
   profileModelIsDirty,
 } from "@/components/settings/profile-capability-helpers";
+import { t as globalT } from "@/lib/i18n";
 import type {
   CLIFlag,
   CommandEntry,
@@ -250,13 +249,13 @@ function PermissionToggles({
 function capabilityStatusMessage(status: ModelConfig["status"]): string | null {
   switch (status) {
     case "probing":
-      return globalT`Checking agent capabilities…`;
+      return globalT("settings:checkingAgentCapabilities");
     case "auth_required":
-      return globalT`Authentication required. Run the agent CLI in your terminal to authenticate, then refresh.`;
+      return globalT("settings:authenticationRequiredRunTheAgentCli");
     case "not_installed":
-      return globalT`Agent CLI not installed.`;
+      return globalT("settings:agentCliNotInstalled");
     case "failed":
-      return globalT`Probe failed. Check agent logs for details.`;
+      return globalT("settings:probeFailedCheckAgentLogsFor");
     default:
       return null;
   }
@@ -285,7 +284,7 @@ function RefreshCapabilitiesButton({
   isLoading: boolean;
   error: string | null;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2">
       <Tooltip>
@@ -302,7 +301,7 @@ function RefreshCapabilitiesButton({
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          <p>{t`Refresh agent capabilities (models + modes)`}</p>
+          <p>{t("settings:refreshAgentCapabilitiesModelsModes")}</p>
         </TooltipContent>
       </Tooltip>
       {error && (
@@ -313,7 +312,7 @@ function RefreshCapabilitiesButton({
             </div>
           </TooltipTrigger>
           <TooltipContent>
-            <p className="max-w-xs">{t`Failed to refresh: ${error}`}</p>
+            <p className="max-w-xs">{t("settings:failedToRefresh", { error })}</p>
           </TooltipContent>
         </Tooltip>
       )}
@@ -334,7 +333,7 @@ function ModelPicker({
   configOptions: SelectConfigOption[];
   onChange: (patch: Partial<ProfileFormData>) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const modelConfig = configOptions.find(isModelConfigOption);
   const modelOptions = modelConfig
     ? configOptionToModelOptions(modelConfig)
@@ -362,8 +361,8 @@ function ModelPicker({
       onConfigChange={(configId, value) =>
         onChange({ config_options: { ...(profile.config_options ?? {}), [configId]: value } })
       }
-      placeholder={t`Select a model...`}
-      ariaLabel={t`Profile start model settings`}
+      placeholder={t("settings:selectAModel2")}
+      ariaLabel={t("settings:profileStartModelSettings")}
     />
   );
 }
@@ -437,7 +436,7 @@ function CapabilitiesRow({
   agentName,
   baselineProfile,
 }: CapabilitiesRowProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const hasModes = modes.length > 0;
   const configOptions = modelConfigOptions(modelConfig);
   const activeMode = findActiveMode(modes, profile.mode, currentModeId);
@@ -447,7 +446,7 @@ function CapabilitiesRow({
   if (isLoading && models.length === 0) {
     return (
       <div className={gapCls}>
-        <Label className={labelCls}>{t`Start model`}</Label>
+        <Label className={labelCls}>{t("settings:startModel")}</Label>
         <Skeleton className="h-7 w-full" />
       </div>
     );
@@ -477,7 +476,7 @@ function CapabilitiesRow({
           data-settings-dirty={profileModelIsDirty(profile, baselineProfile)}
           data-settings-dirty-level="container"
         >
-          <Label className={labelCls}>{t`Start model`}</Label>
+          <Label className={labelCls}>{t("settings:startModel")}</Label>
           <ModelPicker
             profile={profile}
             models={models}
@@ -493,7 +492,7 @@ function CapabilitiesRow({
             data-settings-dirty={profileModeIsDirty(profile, baselineProfile)}
             data-settings-dirty-level="container"
           >
-            <Label className={labelCls}>{t`Start mode`}</Label>
+            <Label className={labelCls}>{t("settings:startMode")}</Label>
             <ModePicker
               profile={profile}
               modes={modes}
@@ -526,22 +525,22 @@ function NameField({
   onRemove?: () => void;
   baselineName?: string;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="flex-1 space-y-2">
-        <Label>{t`Profile name`}</Label>
+        <Label>{t("settings:profileName")}</Label>
         <Input
           data-testid="profile-name-input"
           value={profile.name}
           onChange={(event) => onChange({ name: event.target.value })}
-          placeholder={t`Default profile`}
+          placeholder={t("settings:defaultProfile")}
           data-settings-dirty={baselineName !== undefined && profile.name !== baselineName}
         />
       </div>
       {canRemove && onRemove && (
         <Button size="sm" variant="ghost" className="cursor-pointer" onClick={onRemove}>
-          {t`Remove`}
+          {t("settings:remove")}
         </Button>
       )}
     </div>

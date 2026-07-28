@@ -1,8 +1,7 @@
 "use client";
-
 import { useMemo } from "react";
 import { IconGitBranch, IconTerminal2 } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { Badge } from "@kandev/ui/badge";
 import { ScrollOnOverflow } from "@kandev/ui/scroll-on-overflow";
 import type {
@@ -18,6 +17,7 @@ import { getExecutorIcon } from "@/lib/executor-icons";
 import { AgentLogo } from "@/components/agent-logo";
 import { getCapabilityWarning } from "@/lib/capability-warning";
 import { buildBranchKeywords } from "./task-create-dialog-pill";
+import { useTranslation } from "react-i18next";
 
 type OptionItem = {
   value: string;
@@ -87,6 +87,7 @@ export function useRepositoryOptions(
 }
 
 export function useBranchOptions(branchOptionsRaw: Branch[]) {
+  const { t } = useTranslation();
   return useMemo(() => {
     return branchOptionsRaw.map((branchObj: Branch) => {
       const displayName =
@@ -109,7 +110,7 @@ export function useBranchOptions(branchOptionsRaw: Branch[]) {
               </span>
             </span>
             <Badge variant="outline" className="text-xs">
-              {branchObj.type === "local" ? t`local` : branchObj.remote || t`remote`}
+              {branchObj.type === "local" ? t("task:local") : branchObj.remote || t("task:remote")}
             </Badge>
           </span>
         ),
@@ -119,6 +120,7 @@ export function useBranchOptions(branchOptionsRaw: Branch[]) {
 }
 
 export function useAgentProfileOptions(agentProfiles: AgentProfileOption[]): OptionItem[] {
+  const { t } = useTranslation();
   return useMemo(() => {
     return agentProfiles.map((profile: AgentProfileOption) => {
       const parts = profile.label.split(" \u2022 ");
@@ -142,7 +144,7 @@ export function useAgentProfileOptions(agentProfiles: AgentProfileOption[]): Opt
               {isPassthrough && (
                 <IconTerminal2
                   className="size-3.5 text-muted-foreground"
-                  title={t`CLI mode - your prompt will be auto-injected into the terminal`}
+                  title={t("task:cliModeYourPromptWillBe")}
                 />
               )}
               {profileLabel ? (
@@ -191,15 +193,15 @@ export function computeExecutorHint(
   const selectedExecutor = executors.find((e: Executor) => e.id === executorId);
   if (selectedExecutor?.type === "worktree") {
     if (repoCount > 1) {
-      return t`A git worktree will be created for each repository in a parent folder. The agent runs in that parent folder so it can see every worktree side by side.`;
+      return t("task:aGitWorktreeWillBeCreated");
     }
-    return t`A git worktree will be created from the base branch.`;
+    return t("task:aGitWorktreeWillBeCreated2");
   }
   if (selectedExecutor?.type === "local_docker" || selectedExecutor?.type === "remote_docker") {
-    return t`A Docker container will be created from the selected base branch and checked out on a task branch.`;
+    return t("task:aDockerContainerWillBeCreated");
   }
   if (selectedExecutor?.type === "local" || selectedExecutor?.type === "local_pc")
-    return t`The agent will run directly on the repository.`;
+    return t("task:theAgentWillRunDirectlyOn");
   return null;
 }
 

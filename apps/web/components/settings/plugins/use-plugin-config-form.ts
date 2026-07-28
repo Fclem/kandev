@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { getPluginConfig, updatePluginConfig } from "@/lib/api/domains/plugins-api";
 import {
@@ -38,7 +37,7 @@ function maskSecretsIn(
  * then re-fetches the masked config so the form reflects what is stored.
  */
 export function usePluginConfigForm(plugin: PluginRecord | null) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const fields = useMemo(() => parseConfigSchema(plugin?.config_schema), [plugin?.config_schema]);
   const [values, setValues] = useState<FormValues>({});
   const [initialValues, setInitialValues] = useState<FormValues>({});
@@ -63,7 +62,9 @@ export function usePluginConfigForm(plugin: PluginRecord | null) {
       })
       .catch((err) => {
         if (!cancelled) {
-          setConfigError(err instanceof Error ? err.message : t`Failed to load plugin settings`);
+          setConfigError(
+            err instanceof Error ? err.message : t("settings:failedToLoadPluginSettings"),
+          );
         }
       })
       .finally(() => {
@@ -92,7 +93,7 @@ export function usePluginConfigForm(plugin: PluginRecord | null) {
   const handleSave = async () => {
     if (!pluginId) return;
     if (missing.length > 0) {
-      const message = t`Required: ${missingLabel}`;
+      const message = t("settings:required", { missingLabel });
       toast.error(message);
       throw new Error(message);
     }
@@ -101,7 +102,7 @@ export function usePluginConfigForm(plugin: PluginRecord | null) {
       await updatePluginConfig(pluginId, serializeConfigValues(fields, values));
     } catch (err) {
       setSaveStatus("error");
-      toast.error(err instanceof Error ? err.message : t`Failed to save plugin settings`);
+      toast.error(err instanceof Error ? err.message : t("settings:failedToSavePluginSettings"));
       throw err;
     }
     // The config IS persisted from here on — a refetch failure (e.g. a
@@ -112,12 +113,12 @@ export function usePluginConfigForm(plugin: PluginRecord | null) {
       const initial = buildInitialValues(fields, refreshed);
       setValues(initial);
       setInitialValues(initial);
-      toast.success(t`Plugin settings saved`);
+      toast.success(t("settings:pluginSettingsSaved"));
     } catch {
       const masked = maskSecretsIn(values, fields);
       setValues(masked);
       setInitialValues(masked);
-      toast.warning(t`Settings saved, but reloading them failed — refresh to confirm.`);
+      toast.warning(t("settings:settingsSavedButReloadingThemFailed"));
     }
     setSaveStatus("success");
   };
@@ -131,7 +132,7 @@ export function usePluginConfigForm(plugin: PluginRecord | null) {
     saveStatus,
     isDirty,
     canSave: missing.length === 0,
-    invalidReason: missing.length > 0 ? t`Required: ${missingLabel}` : undefined,
+    invalidReason: missing.length > 0 ? t("settings:required", { missingLabel }) : undefined,
     revision: JSON.stringify(values),
     handleChange,
     handleSave,

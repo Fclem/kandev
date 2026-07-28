@@ -1,8 +1,7 @@
 "use client";
-
 import { useEffect, useMemo, useRef, useState } from "react";
-import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
@@ -33,13 +32,13 @@ const PLACEHOLDER_HINT = "{cwd} {file} {rel} {line} {column}";
 export function getCustomKindLabel(kind: string) {
   switch (kind) {
     case "custom_command":
-      return t`Command`;
+      return t("settings:command");
     case "custom_remote_ssh":
-      return t`VS Code Remote SSH`;
+      return t("settings:vsCodeRemoteSsh");
     case "custom_hosted_url":
-      return t`Hosted URL`;
+      return t("settings:hostedUrl");
     default:
-      return t`Custom`;
+      return t("settings:custom2");
   }
 }
 
@@ -177,6 +176,7 @@ function EditorKindFields({
   baseline: EditorFormState;
   setField: <K extends keyof EditorFormState>(key: K, value: EditorFormState[K]) => void;
 }) {
+  const { t } = useTranslation();
   if (state.kind === "custom_command") {
     return (
       <div className="space-y-2">
@@ -187,7 +187,7 @@ function EditorKindFields({
           placeholder="code --goto {file}:{line}"
         />
         <p className="text-xs text-muted-foreground">
-          <Trans>Supports placeholders: {PLACEHOLDER_HINT}</Trans>
+          {t("settings:supportsPlaceholders", { PLACEHOLDER_HINT })}
         </p>
       </div>
     );
@@ -205,20 +205,15 @@ function EditorKindFields({
           value={state.user}
           data-settings-dirty={state.user !== baseline.user}
           onChange={(event) => setField("user", event.target.value)}
-          placeholder={t`optional username`}
+          placeholder={t("settings:optionalUsername")}
         />
         <Input
           value={state.scheme}
           data-settings-dirty={state.scheme !== baseline.scheme}
           onChange={(event) => setField("scheme", event.target.value)}
-          placeholder={t`optional scheme (vscode, cursor)`}
+          placeholder={t("settings:optionalSchemeVscodeCursor")}
         />
-        <p className="text-xs text-muted-foreground">
-          <Trans>
-            Opens a VS Code Remote SSH URL using the scheme (example:{" "}
-            vscode://vscode-remote/ssh-remote+user@host:/path/file:line).
-          </Trans>
-        </p>
+        <p className="text-xs text-muted-foreground">{t("settings:opensAVsCodeRemoteSsh")}</p>
       </div>
     );
   }
@@ -244,14 +239,15 @@ function EditorKindSelect({
   isDirty: boolean;
   onChange: (kind: CustomKind) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Select value={value} onValueChange={(next) => onChange(next as CustomKind)}>
       <SelectTrigger data-settings-dirty={isDirty}>
-        <SelectValue placeholder={t`Editor type`} />
+        <SelectValue placeholder={t("settings:editorType")} />
       </SelectTrigger>
       <SelectContent>
         <div className="px-2 py-1.5 text-xs text-muted-foreground border-b">
-          <Trans>Editor type</Trans>
+          {t("settings:editorType")}
         </div>
         {CUSTOM_KIND_VALUES.map((kind) => (
           <SelectItem key={kind} value={kind}>
@@ -274,6 +270,7 @@ export function EditorForm({
   coordinatedSaveId,
   dirtyWhenMounted = false,
 }: EditorFormProps) {
+  const { t } = useTranslation();
   const [state, setState] = useState<EditorFormState>(initialState);
   const [baseline, setBaseline] = useState<EditorFormState>(initialState);
   const stateRef = useRef(state);
@@ -314,7 +311,7 @@ export function EditorForm({
     revision,
     isDirty: isCoordinatedDirty,
     canSave: isValid,
-    invalidReason: isValid ? undefined : t`Complete the required editor fields before saving.`,
+    invalidReason: isValid ? undefined : t("settings:completeTheRequiredEditorFieldsBefore"),
     save: async () => {
       const submitted = normalizedState;
       await onSave(submitted);
@@ -334,7 +331,7 @@ export function EditorForm({
         value={state.name}
         data-settings-dirty={state.name !== baseline.name}
         onChange={(event) => setField("name", event.target.value)}
-        placeholder={t`Editor name`}
+        placeholder={t("settings:editorName")}
       />
       <EditorKindSelect
         value={state.kind}
@@ -344,7 +341,7 @@ export function EditorForm({
       <EditorKindFields state={state} baseline={baseline} setField={setField} />
       <div className="flex items-center justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>
-          <Trans>Cancel</Trans>
+          {t("common:cancel")}
         </Button>
         {!coordinatedSaveId && (
           <Button

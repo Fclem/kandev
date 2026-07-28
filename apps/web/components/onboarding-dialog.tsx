@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
@@ -27,9 +26,7 @@ import {
   IconArrowDown,
   IconCloud,
 } from "@tabler/icons-react";
-import { msg } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
-import type { MessageDescriptor } from "@lingui/core";
+import { useTranslation } from "react-i18next";
 import { Kbd } from "@kandev/ui/kbd";
 import { type ProfileFormData } from "@/components/settings/profile-form-fields";
 import { permissionsToProfilePatch, profilePermissionValues } from "@/lib/agent-permissions";
@@ -47,49 +44,49 @@ const TOTAL_STEPS = 4;
 
 const RUNTIMES: Array<{
   id: string;
-  name: MessageDescriptor;
-  description: MessageDescriptor;
+  name: string;
+  description: string;
   icon: typeof IconFolder;
   href?: string;
 }> = [
   {
     id: "local",
-    name: msg`Local`,
-    description: msg`Run agents directly on your machine with full access to your local filesystem.`,
+    name: "common:local",
+    description: "common:runAgentsDirectlyOnYourMachine",
     icon: IconFolder,
   },
   {
     id: "worktree",
-    name: msg`Git Worktree`,
-    description: msg`Isolated branch environment under a worktree root for parallel work.`,
+    name: "common:gitWorktree",
+    description: "common:isolatedBranchEnvironmentUnderAWorktree",
     icon: IconFolders,
   },
   {
     id: "docker",
-    name: msg`Docker`,
-    description: msg`Containerized execution for full isolation and reproducibility.`,
+    name: "common:docker",
+    description: "common:containerizedExecutionForFullIsolationAnd",
     icon: IconBrandDocker,
   },
   {
     id: "sprites",
-    name: msg`Sprites (Remote sprites.dev)`,
-    description: msg`Hardware-isolated execution environment for arbitrary code.`,
+    name: "common:spritesRemoteSpritesDev",
+    description: "common:hardwareIsolatedExecutionEnvironmentForArbitrary",
     icon: IconCloud,
     href: "https://sprites.dev",
   },
 ];
 
-const STEP_TITLES: MessageDescriptor[] = [
-  msg`AI Agents`,
-  msg`Executors`,
-  msg`Agentic Workflows`,
-  msg`Command Panel`,
+const STEP_TITLES: string[] = [
+  "common:aiAgents",
+  "common:executors",
+  "common:agenticWorkflows",
+  "common:commandPanel",
 ];
-const STEP_DESCRIPTIONS: MessageDescriptor[] = [
-  msg`Manage discovered agents and install new ones.`,
-  msg`Agents can run in different executor environments — local, containerized, or remote.`,
-  msg`Workflows define the steps and automation for your tasks.`,
-  msg`Quick access to actions from anywhere with a keyboard shortcut.`,
+const STEP_DESCRIPTIONS: string[] = [
+  "common:manageDiscoveredAgentsAndInstallNew",
+  "common:agentsCanRunInDifferentExecutor",
+  "common:workflowsDefineTheStepsAndAutomation",
+  "common:quickAccessToActionsFromAnywhere",
 ];
 
 function buildAgentSettings(
@@ -233,29 +230,30 @@ function useOnboardingResources(open: boolean) {
 }
 
 function OnboardingFooter({ step, onSkip, onBack, onNext, onGetStarted }: OnboardingFooterProps) {
+  const { t } = useTranslation();
   return (
     <DialogFooter>
       <div className="flex w-full items-center justify-between">
         <Button variant="ghost" size="sm" onClick={onSkip} className="cursor-pointer">
           <IconX className="mr-1.5 h-3.5 w-3.5" />
-          <Trans>Skip</Trans>
+          {t("common:skip")}
         </Button>
         <div className="flex gap-2">
           {step > 0 && (
             <Button variant="outline" onClick={onBack} className="cursor-pointer">
               <IconArrowLeft className="mr-1.5 h-4 w-4" />
-              <Trans>Back</Trans>
+              {t("common:back")}
             </Button>
           )}
           {step < TOTAL_STEPS - 1 ? (
             <Button onClick={onNext} className="cursor-pointer">
-              <Trans>Next</Trans>
+              {t("common:next")}
               <IconArrowRight className="ml-1.5 h-4 w-4" />
             </Button>
           ) : (
             <Button onClick={onGetStarted} className="cursor-pointer">
               <IconCheck className="mr-1.5 h-4 w-4" />
-              <Trans>Get Started</Trans>
+              {t("common:getStarted")}
             </Button>
           )}
         </div>
@@ -266,7 +264,7 @@ function OnboardingFooter({ step, onSkip, onBack, onNext, onGetStarted }: Onboar
 
 export function OnboardingDialog({ open, onComplete }: OnboardingDialogProps) {
   const [step, setStep] = useState(0);
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const {
     availableAgents,
     tools,
@@ -357,7 +355,7 @@ export function OnboardingDialog({ open, onComplete }: OnboardingDialogProps) {
 }
 
 function StepEnvironments() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div className="grid gap-2">
@@ -390,7 +388,7 @@ function StepEnvironments() {
         })}
       </div>
       <p className="text-xs text-muted-foreground">
-        <Trans>Configure executors in Settings to control where agents execute.</Trans>
+        {t("common:configureExecutorsInSettingsToControl")}
       </p>
     </div>
   );
@@ -403,11 +401,12 @@ function StepWorkflows({
   templates: WorkflowTemplate[];
   loading: boolean;
 }) {
+  const { t } = useTranslation();
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-sm text-muted-foreground">
         <IconLoader2 className="h-6 w-6 animate-spin" />
-        <Trans>Loading workflow templates...</Trans>
+        {t("common:loadingWorkflowTemplates")}
       </div>
     );
   }
@@ -421,9 +420,7 @@ function StepWorkflows({
         {defaultTemplate && <TemplateCard template={defaultTemplate} isDefault />}
         {otherTemplates.length > 0 && (
           <>
-            <p className="text-xs text-muted-foreground mt-1">
-              <Trans>Available templates</Trans>
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">{t("common:availableTemplates")}</p>
             {otherTemplates.map((template) => (
               <TemplateCard key={template.id} template={template} />
             ))}
@@ -431,10 +428,7 @@ function StepWorkflows({
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        <Trans>
-          Workflows control the steps, automation, and agent behavior for your tasks. You can add
-          more workflows from Settings.
-        </Trans>
+        {t("common:workflowsControlTheStepsAutomationAnd")}
       </p>
     </div>
   );
@@ -443,18 +437,18 @@ function StepWorkflows({
 const COMMAND_PANEL_PREVIEW_ITEMS: Array<{
   id: string;
   icon: typeof IconSearch;
-  label: MessageDescriptor;
+  label: string;
   trailing?: string;
 }> = [
-  { id: "search-tasks", icon: IconSearch, label: msg`Search Tasks`, trailing: "→" },
-  { id: "go-home", icon: IconHome, label: msg`Go to Home` },
-  { id: "commit-changes", icon: IconGitCommit, label: msg`Commit Changes` },
-  { id: "pull", icon: IconArrowDown, label: msg`Pull` },
-  { id: "add-terminal-panel", icon: IconTerminal2, label: msg`Add Terminal Panel` },
+  { id: "search-tasks", icon: IconSearch, label: "common:searchTasks", trailing: "→" },
+  { id: "go-home", icon: IconHome, label: "common:goToHome" },
+  { id: "commit-changes", icon: IconGitCommit, label: "common:commitChanges" },
+  { id: "pull", icon: IconArrowDown, label: "common:pull" },
+  { id: "add-terminal-panel", icon: IconTerminal2, label: "common:addTerminalPanel" },
 ];
 
 function StepCommandPanel() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       {/* Mock command panel preview */}
@@ -462,9 +456,7 @@ function StepCommandPanel() {
         {/* Search input */}
         <div className="flex items-center gap-2 px-3 py-2 border-b">
           <IconSearch className="h-3.5 w-3.5 text-muted-foreground/50" />
-          <span className="text-xs text-muted-foreground/50">
-            <Trans>Type a command...</Trans>
-          </span>
+          <span className="text-xs text-muted-foreground/50">{t("common:typeACommand")}</span>
         </div>
         {/* Sample commands */}
         <div className="py-1">
@@ -489,46 +481,33 @@ function StepCommandPanel() {
           <span className="inline-flex items-center gap-1">
             <Kbd>↑</Kbd>
             <Kbd>↓</Kbd>
-            <span className="text-[0.6rem]">
-              <Trans>Navigate</Trans>
-            </span>
+            <span className="text-[0.6rem]">{t("common:navigate")}</span>
           </span>
           <span className="inline-flex items-center gap-1">
             <Kbd>↵</Kbd>
-            <span className="text-[0.6rem]">
-              <Trans>Select</Trans>
-            </span>
+            <span className="text-[0.6rem]">{t("common:select")}</span>
           </span>
           <span className="inline-flex items-center gap-1">
             <Kbd>esc</Kbd>
-            <span className="text-[0.6rem]">
-              <Trans>Close</Trans>
-            </span>
+            <span className="text-[0.6rem]">{t("common:close")}</span>
           </span>
         </div>
       </div>
 
       {/* Shortcut hint */}
       <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-        <span>
-          <Trans>Press</Trans>
-        </span>
+        <span>{t("common:press")}</span>
         <span className="inline-flex items-center gap-0.5">
           <Kbd>
             <IconCommand className="size-3" />
           </Kbd>
           <Kbd>K</Kbd>
         </span>
-        <span>
-          <Trans>to open it anytime</Trans>
-        </span>
+        <span>{t("common:toOpenItAnytime")}</span>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        <Trans>
-          Navigate between pages, search tasks, trigger git operations, and manage panels — all
-          without leaving the keyboard. Context-aware commands appear based on the active page.
-        </Trans>
+        {t("common:navigateBetweenPagesSearchTasksTrigger")}
       </p>
     </div>
   );
@@ -541,6 +520,7 @@ function TemplateCard({
   template: WorkflowTemplate;
   isDefault?: boolean;
 }) {
+  const { t } = useTranslation();
   const steps = (template.default_steps ?? []).slice().sort((a, b) => a.position - b.position);
 
   return (
@@ -552,7 +532,7 @@ function TemplateCard({
         {isDefault && (
           <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
             <IconCheck className="h-3.5 w-3.5" />
-            <Trans>Default</Trans>
+            {t("common:default")}
           </span>
         )}
       </div>

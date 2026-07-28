@@ -1,7 +1,6 @@
 "use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
@@ -597,7 +596,7 @@ export function branchToOption(b: Branch): PillOption {
   // `||` (not `??`) so an empty-string `remote` falls back too. Provider-backed
   // workspace repos (URL-added) list branches without a tracking remote, so the
   // backend sends `remote: ""`; `??` would render an invisible empty badge.
-  const badge = b.type === "local" ? t`local` : b.remote || t`remote`;
+  const badge = b.type === "local" ? t("task:local") : b.remote || t("task:remote");
   return {
     value: display,
     label: display,
@@ -620,8 +619,8 @@ export function computeBranchPlaceholder(
   loading: boolean,
   optionCount: number,
 ): string {
-  if (!hasRepo) return t`branch`;
-  if (loading) return t`loading…`;
-  if (optionCount === 0) return t`no branches`;
-  return t`branch`;
+  if (!hasRepo) return t("task:branch");
+  if (loading) return t("task:loading");
+  if (optionCount === 0) return t("task:noBranches");
+  return t("task:branch");
 }

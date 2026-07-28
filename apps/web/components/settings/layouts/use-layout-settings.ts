@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { useAppStore } from "@/components/state-provider";
 import { updateUserSettings } from "@/lib/api";
 import {
@@ -22,6 +21,7 @@ import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
 import type { LayoutState } from "@/lib/state/layout-manager";
 import type { SavedLayout } from "@/lib/types/http";
 import type { LayoutProfileSelection } from "./layout-profile-list";
+import { useTranslation } from "react-i18next";
 
 export type SaveStatus = "idle" | "loading" | "success" | "error";
 
@@ -35,13 +35,13 @@ function defaultSelection(profiles: SavedLayout[]): LayoutProfileSelection {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : t`Failed to save layout profiles`;
+  return error instanceof Error ? error.message : t("settings:failedToSaveLayoutProfiles");
 }
 
 function getDefaultActionLabel(isCustomDefault: boolean, selectedIsDefault: boolean) {
-  if (isCustomDefault) return t`Use built-in Default`;
-  if (selectedIsDefault) return t`Default`;
-  return t`Use as default`;
+  if (isCustomDefault) return t("settings:useBuiltInDefault");
+  if (selectedIsDefault) return t("common:default");
+  return t("settings:useAsDefault");
 }
 
 function attempt(setError: Dispatch<SetStateAction<string | null>>, action: () => void) {
@@ -151,7 +151,9 @@ function updateBuiltInDefault(drafts: Drafts, selected: SelectedState) {
 }
 
 function useProfileActions(drafts: Drafts, selected: SelectedState) {
-  const selectedName = selected.selectedBuiltIn?.name ?? selected.selectedCustom?.name ?? t`Layout`;
+  const { t } = useTranslation();
+  const selectedName =
+    selected.selectedBuiltIn?.name ?? selected.selectedCustom?.name ?? t("settings:layout");
   const duplicate = () =>
     attempt(drafts.setError, () => {
       const id = createLayoutProfileId();
@@ -248,11 +250,12 @@ function useProfileActions(drafts: Drafts, selected: SelectedState) {
 }
 
 function useSaveProfiles(drafts: Drafts) {
+  const { t } = useTranslation();
   const setUserSettings = useAppStore((state) => state.setUserSettings);
   return async () => {
     if (!drafts.isDirty || drafts.saveStatus === "loading") return;
     if (drafts.profiles.some((profile) => !profile.name.trim())) {
-      drafts.setError(t`Layout profile names must not be empty`);
+      drafts.setError(t("settings:layoutProfileNamesMustNotBe"));
       drafts.setSaveStatus("error");
       return;
     }
@@ -303,7 +306,7 @@ function getDefaultActionState(drafts: Drafts, selected: SelectedState) {
     drafts.selection.kind === "built-in" && drafts.selection.id === "default";
   const label =
     builtInDefaultSelected && selectedIsDefault
-      ? t`Default`
+      ? t("common:default")
       : getDefaultActionLabel(selectedSavedDefault, selectedIsDefault);
   return { disabled, label, selectedIsDefault, selectedSavedDefault };
 }

@@ -1,5 +1,4 @@
 "use client";
-
 import { useCallback, useMemo, useState } from "react";
 import {
   DndContext,
@@ -14,8 +13,8 @@ import {
   type Modifier,
 } from "@dnd-kit/core";
 import { cn } from "@kandev/ui/lib/utils";
-import { Trans } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { Badge } from "@kandev/ui/badge";
 import { getTaskStateIcon } from "@/lib/ui/state-icons";
 import { needsAction } from "@/lib/utils/needs-action";
@@ -202,7 +201,7 @@ async function moveTaskAcrossSwimlaneSteps({
         .getState()
         .setWorkflowSnapshot(workflowId, { ...currentSnapshot, tasks: originalTasks });
     }
-    const message = error instanceof Error ? error.message : t`Failed to move task`;
+    const message = error instanceof Error ? error.message : t("kanban:failedToMoveTask");
     onMoveError?.({ message, taskId, sessionId: task.primarySessionId ?? null });
   }
 }
@@ -297,6 +296,7 @@ export function SwimlaneGraphContent({
   onPreviewTask,
   onMoveError,
 }: SwimlaneGraphContentProps) {
+  const { t } = useTranslation();
   const {
     sensors,
     clampVertical,
@@ -311,9 +311,7 @@ export function SwimlaneGraphContent({
   if (tasks.length === 0) {
     return (
       <div className="px-3 pb-3">
-        <div className="text-xs text-muted-foreground text-center py-4">
-          <Trans>No tasks</Trans>
-        </div>
+        <div className="text-xs text-muted-foreground text-center py-4">{t("kanban:noTasks")}</div>
       </div>
     );
   }

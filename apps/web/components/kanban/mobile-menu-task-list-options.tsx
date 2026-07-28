@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Checkbox } from "@kandev/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import {
@@ -23,18 +22,15 @@ const fieldClass = "space-y-1.5";
 const fieldLabelClass = "text-xs font-medium text-muted-foreground";
 
 export function MobileTasksListOptions({ options }: { options: TasksListDisplayOptions }) {
+  const { t } = useTranslation();
   return (
     <div className={fieldClass}>
-      <label className={fieldLabelClass}>
-        <Trans>Task list</Trans>
-      </label>
-      <p className="text-xs text-muted-foreground">
-        <Trans>These options affect this task list only.</Trans>
-      </p>
+      <label className={fieldLabelClass}>{t("kanban:taskList")}</label>
+      <p className="text-xs text-muted-foreground">{t("kanban:theseOptionsAffectThisTaskList")}</p>
       <div className="space-y-3">
         <div className={fieldClass}>
           <label id="mobile-tasks-list-sort-label" className={fieldLabelClass}>
-            <Trans>Sort</Trans>
+            {t("kanban:sort")}
           </label>
           <Select
             value={options.sort}
@@ -56,13 +52,11 @@ export function MobileTasksListOptions({ options }: { options: TasksListDisplayO
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            <Trans>Choose how tasks are ordered in this list.</Trans>
-          </p>
+          <p className="text-xs text-muted-foreground">{t("kanban:chooseHowTasksAreOrderedIn")}</p>
         </div>
         <div className={fieldClass}>
           <label id="mobile-tasks-list-group-label" className={fieldLabelClass}>
-            <Trans>Group</Trans>
+            {t("kanban:group")}
           </label>
           <Select
             value={options.group}
@@ -85,7 +79,7 @@ export function MobileTasksListOptions({ options }: { options: TasksListDisplayO
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            <Trans>Group tasks into sections by state, workflow, repository, or none.</Trans>
+            {t("kanban:groupTasksIntoSectionsByState")}
           </p>
         </div>
         <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-0 text-sm font-medium">
@@ -94,9 +88,7 @@ export function MobileTasksListOptions({ options }: { options: TasksListDisplayO
             onCheckedChange={(checked) => options.onShowArchivedChange(checked === true)}
             data-testid="mobile-tasks-list-show-archived"
           />
-          <span>
-            <Trans>Show archived</Trans>
-          </span>
+          <span>{t("kanban:showArchived")}</span>
         </label>
       </div>
     </div>

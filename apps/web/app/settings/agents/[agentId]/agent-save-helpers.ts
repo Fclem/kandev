@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import {
   createAgentAction,
   createAgentProfileAction,
@@ -83,12 +83,12 @@ export const parseProfileMcpServers = (raw: string): Record<string, McpServerDef
   if (!raw.trim()) return {};
   const parsed = JSON.parse(raw) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(t`MCP servers config must be a JSON object`);
+    throw new Error(t("settings:mcpServersConfigMustBeA"));
   }
   if ("mcpServers" in parsed) {
     const nested = (parsed as { mcpServers?: unknown }).mcpServers;
     if (!nested || typeof nested !== "object" || Array.isArray(nested)) {
-      throw new Error(t`mcpServers must be a JSON object`);
+      throw new Error(t("settings:mcpserversMustBeAJsonObject"));
     }
     return nested as Record<string, McpServerDef>;
   }

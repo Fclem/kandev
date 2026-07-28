@@ -1,12 +1,13 @@
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { StorageMaintenanceSettings } from "@/components/settings/system/storage/storage-maintenance-settings";
 import { SystemPageShell } from "@/components/settings/system/system-page-shell";
 
 export default function StoragePage() {
+  const { t } = useTranslation();
   return (
     <SystemPageShell
-      title={t`Storage`}
-      description={t`Review disk use and reclaim space from Kandev-owned workspaces, caches, and Docker resources whenever your installation needs it.`}
+      title={t("common:storage")}
+      description={t("settings:reviewDiskUseAndReclaimSpace")}
     >
       <StorageMaintenanceSettings />
     </SystemPageShell>

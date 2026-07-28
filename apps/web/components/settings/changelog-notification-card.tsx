@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Label } from "@kandev/ui/label";
@@ -13,6 +12,7 @@ import { useSettingsSaveContributor } from "./settings-save-provider";
 import { SettingsCard } from "./settings-card";
 
 export function ChangelogNotificationCard() {
+  const { t } = useTranslation();
   const userSettings = useAppStore((state) => state.userSettings);
   const setUserSettings = useAppStore((state) => state.setUserSettings);
   const storeApi = useAppStoreApi();
@@ -51,20 +51,16 @@ export function ChangelogNotificationCard() {
   return (
     <SettingsCard isDirty={draft !== saved}>
       <CardHeader>
-        <CardTitle className="text-base">
-          <Trans>Topbar Release Notification</Trans>
-        </CardTitle>
+        <CardTitle className="text-base">{t("settings:topbarReleaseNotification")}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label htmlFor="release-notification-toggle">
-              <Trans>Show notification for new releases</Trans>
+              {t("settings:showNotificationForNewReleases")}
             </Label>
             <p className="text-xs text-muted-foreground">
-              <Trans>
-                When enabled, a sparkle icon appears in the topbar when a new version is released
-              </Trans>
+              {t("settings:whenEnabledASparkleIconAppears")}
             </p>
           </div>
           <Switch
@@ -78,11 +74,9 @@ export function ChangelogNotificationCard() {
         <Separator className="my-4" />
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label>
-              <Trans>Reset seen releases</Trans>
-            </Label>
+            <Label>{t("settings:resetSeenReleases")}</Label>
             <p className="text-xs text-muted-foreground">
-              <Trans>Clear your last seen version so the topbar notification appears again</Trans>
+              {t("settings:clearYourLastSeenVersionSo")}
             </p>
           </div>
           <Button
@@ -92,7 +86,7 @@ export function ChangelogNotificationCard() {
             disabled={isResetting || !userSettings.releaseNotesLastSeenVersion}
             className="cursor-pointer"
           >
-            <Trans>Reset</Trans>
+            {t("settings:reset")}
           </Button>
         </div>
       </CardContent>

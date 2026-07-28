@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +27,7 @@ type ConfirmationDialogProps = {
 };
 
 function ConfirmationDialog(props: ConfirmationDialogProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [confirmation, setConfirmation] = useState("");
   useEffect(() => {
     if (!props.open) setConfirmation("");
@@ -39,7 +38,10 @@ function ConfirmationDialog(props: ConfirmationDialogProps) {
         <AlertDialogHeader>
           <AlertDialogTitle>{props.title}</AlertDialogTitle>
           <AlertDialogDescription className="text-left">
-            <Trans>
+            <Trans
+              i18nKey="settings:typeToContinue"
+              values={{ description: props.description, phrase: props.phrase }}
+            >
               {props.description} Type <strong>{props.phrase}</strong> to continue.
             </Trans>
           </AlertDialogDescription>
@@ -48,12 +50,12 @@ function ConfirmationDialog(props: ConfirmationDialogProps) {
           value={confirmation}
           onChange={(event) => setConfirmation(event.target.value)}
           className="h-11"
-          aria-label={t`Type ${props.phrase} to confirm`}
+          aria-label={t("settings:typeToConfirm2", { phrase: props.phrase })}
           data-testid={`${props.actionTestId}-confirmation`}
         />
         <AlertDialogFooter>
           <AlertDialogCancel className="min-h-11 cursor-pointer">
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             variant={props.destructive ? "destructive" : "default"}
@@ -73,14 +75,14 @@ function ConfirmationDialog(props: ConfirmationDialogProps) {
 export function DedicatedDockerDialog(
   props: Pick<ConfirmationDialogProps, "open" | "onOpenChange" | "onConfirm">,
 ) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <ConfirmationDialog
       {...props}
-      title={t`Use this dedicated Docker daemon`}
-      description={t`Build-cache and unused-image cleanup affect the entire configured daemon, including resources created outside Kandev. Only acknowledge a daemon dedicated to this installation.`}
+      title={t("settings:useThisDedicatedDockerDaemon")}
+      description={t("settings:buildCacheAndUnusedImageCleanup")}
       phrase="DEDICATED"
-      actionLabel={t`Acknowledge daemon`}
+      actionLabel={t("settings:acknowledgeDaemon")}
       actionTestId="storage-docker-confirm"
     />
   );
@@ -90,15 +92,15 @@ export function ExternalGoCacheDialog({
   path,
   ...props
 }: Pick<ConfirmationDialogProps, "open" | "onOpenChange" | "onConfirm"> & { path: string }) {
-  const { t } = useLingui();
-  const target = path || t`the selected path`;
+  const { t } = useTranslation();
+  const target = path || t("settings:theSelectedPath");
   return (
     <ConfirmationDialog
       {...props}
-      title={t`Adopt an external Go build cache`}
-      description={t`Kandev will be allowed to rotate and quarantine the existing cache at ${target}. This path must be absolute and on the same filesystem as Kandev trash.`}
+      title={t("settings:adoptAnExternalGoBuildCache")}
+      description={t("settings:kandevWillBeAllowedToRotate", { target })}
       phrase="ADOPT"
-      actionLabel={t`Adopt cache`}
+      actionLabel={t("settings:adoptCache")}
       actionTestId="storage-go-cache-adopt-confirm"
     />
   );
@@ -110,15 +112,15 @@ export function PermanentDeleteDialog({
 }: Pick<ConfirmationDialogProps, "open" | "onOpenChange" | "onConfirm"> & {
   entry: StorageQuarantineEntry | null;
 }) {
-  const { t } = useLingui();
-  const target = entry?.quarantine_path ?? t`the selected quarantine entry`;
+  const { t } = useTranslation();
+  const target = entry?.quarantine_path ?? t("settings:theSelectedQuarantineEntry");
   return (
     <ConfirmationDialog
       {...props}
-      title={t`Permanently delete quarantined data`}
-      description={t`This cannot be undone. Kandev will permanently remove ${target}.`}
+      title={t("settings:permanentlyDeleteQuarantinedData")}
+      description={t("settings:thisCannotBeUndoneKandevWill", { target })}
       phrase="DELETE"
-      actionLabel={t`Delete permanently`}
+      actionLabel={t("settings:deletePermanently")}
       actionTestId="storage-quarantine-delete-confirm"
       destructive
     />

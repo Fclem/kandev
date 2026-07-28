@@ -1,7 +1,6 @@
 "use client";
-
 import { useMemo, useState } from "react";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useSwimlaneMove } from "@/hooks/domains/kanban/use-swimlane-move";
 import { Graph2TaskPipeline } from "./graph2-task-pipeline";
 import { ORPHAN_STEP, ORPHAN_STEP_ID, remapOrphanTasks } from "./swimlane-kanban-content";
@@ -36,6 +35,7 @@ export function SwimlaneGraph2Content({
   onToggleSelect,
   isMultiSelectMode,
 }: ViewContentProps) {
+  const { t } = useTranslation();
   const { moveTask } = useSwimlaneMove(workflowId, {
     onMoveError,
   });
@@ -68,9 +68,7 @@ export function SwimlaneGraph2Content({
   if (displayTasks.length === 0) {
     return (
       <div className="px-3 pb-3">
-        <div className="text-xs text-muted-foreground text-center py-4">
-          <Trans>No tasks</Trans>
-        </div>
+        <div className="text-xs text-muted-foreground text-center py-4">{t("kanban:noTasks")}</div>
       </div>
     );
   }

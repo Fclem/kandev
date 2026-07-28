@@ -1,7 +1,6 @@
 "use client";
-
 import { useCallback, useMemo } from "react";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { usePathname, useRouter, useSearchParams } from "@/lib/routing/client-router";
 import ReactMarkdown from "react-markdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
@@ -32,6 +31,7 @@ function parsePageParam(raw: string | null, totalPages: number): number {
 }
 
 function ChangelogEntryCard({ entry }: { entry: ChangelogEntry }) {
+  const { t } = useTranslation();
   const releaseUrl = getReleaseUrl(entry.version);
 
   return (
@@ -50,7 +50,7 @@ function ChangelogEntryCard({ entry }: { entry: ChangelogEntry }) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
-            <Trans>View on GitHub</Trans>
+            {t("settings:viewOnGithub")}
             <IconExternalLink className="h-3 w-3" />
           </a>
         </div>
@@ -83,6 +83,7 @@ function buildPageNumbers(currentPage: number, totalPages: number): (number | "e
 }
 
 export function ChangelogList() {
+  const { t } = useTranslation();
   const changelog = getChangelog();
   const router = useRouter();
   const pathname = usePathname();
@@ -113,9 +114,7 @@ export function ChangelogList() {
 
   if (changelog.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        <Trans>No changelog entries available.</Trans>
-      </p>
+      <p className="text-sm text-muted-foreground">{t("settings:noChangelogEntriesAvailable")}</p>
     );
   }
 

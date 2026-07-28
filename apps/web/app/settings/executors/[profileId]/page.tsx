@@ -1,8 +1,6 @@
 "use client";
-
 import { use, useCallback, useEffect, useMemo, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
 import { Button } from "@kandev/ui/button";
@@ -174,6 +172,7 @@ function useGitIdentityState(isRemote: boolean, profile: ExecutorProfile) {
 }
 
 export default function ProfileEditPage({ params }: { params: Promise<{ profileId: string }> }) {
+  const { t } = useTranslation();
   const { profileId } = use(params);
   const router = useRouter();
   const result = useProfileFromStore(profileId);
@@ -182,11 +181,9 @@ export default function ProfileEditPage({ params }: { params: Promise<{ profileI
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground">
-            <Trans>Profile not found</Trans>
-          </p>
+          <p className="text-muted-foreground">{t("settings:profileNotFound")}</p>
           <Button className="mt-4 cursor-pointer" onClick={() => router.push(EXECUTORS_ROUTE)}>
-            <Trans>Back to Executors</Trans>
+            {t("settings:backToExecutors")}
           </Button>
         </CardContent>
       </Card>
@@ -199,6 +196,7 @@ export default function ProfileEditPage({ params }: { params: Promise<{ profileI
 }
 
 function useProfilePersistence(executor: Executor, profile: ExecutorProfile) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { toast } = useToast();
   const executors = useAppStore((state) => state.executors.items);
@@ -222,14 +220,14 @@ function useProfilePersistence(executor: Executor, profile: ExecutorProfile) {
       try {
         const updated = await updateExecutorProfile(executor.id, profile.id, data);
         setSaveStatus("success");
-        toast({ title: t`Profile saved`, variant: "success" });
+        toast({ title: t("settings:profileSaved"), variant: "success" });
         setExecutors(upsertExecutorProfile(executors, executor, updated));
         window.setTimeout(() => setSaveStatus("idle"), 1500);
       } catch (err) {
-        const message = err instanceof Error ? err.message : t`Failed to save profile`;
+        const message = err instanceof Error ? err.message : t("settings:failedToSaveProfile");
         setError(message);
         setSaveStatus("error");
-        toast({ title: t`Failed to save profile`, description: message, variant: "error" });
+        toast({ title: t("settings:failedToSaveProfile"), description: message, variant: "error" });
         throw err;
       }
     },
@@ -262,7 +260,7 @@ function useProfilePersistence(executor: Executor, profile: ExecutorProfile) {
 }
 
 function useProfileFormState(executor: Executor, profile: ExecutorProfile) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [name, setName] = useState(profile.name);
   const [mcpPolicy, setMcpPolicy] = useState(profile.mcp_policy ?? "");
   const [prepareScript, setPrepareScript] = useState(profile.prepare_script ?? "");
@@ -298,8 +296,8 @@ function useProfileFormState(executor: Executor, profile: ExecutorProfile) {
   // extracted ICU message doesn't contain unescaped braces.
   const placeholderToken = "{{";
   const prepareDesc = flags.isRemote
-    ? t`Runs inside the execution environment before the agent starts. Type ${placeholderToken} to see available placeholders.`
-    : t`Runs on the host machine before the agent starts.`;
+    ? t("settings:runsInsideTheExecutionEnvironmentBefore", { placeholderToken })
+    : t("settings:runsOnTheHostMachineBefore");
 
   return {
     name,
@@ -420,15 +418,12 @@ type ProfileEditSectionsProps = {
 
 // Uses the global `t` macro rather than `useLingui()` so this stays under the
 // 100-line function cap; it re-renders with its `useLingui`-subscribed parent.
-function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSectionsProps) {
+/** Executor-type-specific cards (SSH / Sprites / Docker / remote). Extracted to
+ *  keep ProfileEditSections under the 100-line function limit. */
+function ProfileExecutorSections({ executor, profile, form, secrets }: ProfileEditSectionsProps) {
   const gitIdentityBaseline = getGitIdentityBaseline(profile, form.localGitIdentity);
   return (
     <>
-      <ProfileDetailsCard
-        name={form.name}
-        baselineName={profile.name}
-        onNameChange={form.setName}
-      />
       {executor.type === "ssh" && (
         <SSHAgentReadinessCard
           executorId={executor.id}
@@ -481,6 +476,25 @@ function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSe
           secrets={secrets}
         />
       )}
+    </>
+  );
+}
+
+function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSectionsProps) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <ProfileDetailsCard
+        name={form.name}
+        baselineName={profile.name}
+        onNameChange={form.setName}
+      />
+      <ProfileExecutorSections
+        executor={executor}
+        profile={profile}
+        form={form}
+        secrets={secrets}
+      />
       <EnvVarsCard
         rows={form.envVarRows}
         baselineRows={envVarsToRows(profile.env_vars)}
@@ -490,7 +504,7 @@ function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSe
         onRemove={form.removeEnvVar}
       />
       <ScriptCard
-        title={t`Prepare Script`}
+        title={t("settings:prepareScript2")}
         description={form.prepareDesc}
         value={form.prepareScript}
         baselineValue={profile.prepare_script ?? ""}
@@ -501,8 +515,8 @@ function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSe
       />
       {form.isRemote && (
         <ScriptCard
-          title={t`Cleanup Script`}
-          description={t`Runs after the agent session ends for cleanup tasks.`}
+          title={t("settings:cleanupScript2")}
+          description={t("settings:runsAfterTheAgentSessionEnds")}
           value={form.cleanupScript}
           baselineValue={profile.cleanup_script ?? ""}
           onChange={form.setCleanupScript}
@@ -522,7 +536,7 @@ function ProfileEditSections({ executor, profile, form, secrets }: ProfileEditSe
 }
 
 function ProfileEditForm({ executor, profile }: { executor: Executor; profile: ExecutorProfile }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const router = useRouter();
   const { items: secrets } = useSecrets();
   const persistence = useProfilePersistence(executor, profile);
@@ -539,7 +553,7 @@ function ProfileEditForm({ executor, profile }: { executor: Executor; profile: E
         data-testid="ssh-connection-settings-link"
       >
         <IconShieldLock className="mr-1.5 h-4 w-4" />
-        <Trans>Connection Settings</Trans>
+        {t("settings:connectionSettings")}
       </Button>
     ) : undefined;
 
@@ -567,9 +581,9 @@ function ProfileEditForm({ executor, profile }: { executor: Executor; profile: E
     setSavedRevision(submittedRevision);
   };
   let invalidReason: string | undefined;
-  if (!form.name.trim()) invalidReason = t`Profile name is required.`;
+  if (!form.name.trim()) invalidReason = t("settings:profileNameIsRequired2");
   else if (form.mcpPolicyError) invalidReason = form.mcpPolicyError;
-  else if (spritesTokenMissing) invalidReason = t`Sprites token is required.`;
+  else if (spritesTokenMissing) invalidReason = t("settings:spritesTokenIsRequired");
   useSettingsSaveContributor({
     id: `executor-profile:${profile.id}`,
     revision: saveRevision,
@@ -608,9 +622,7 @@ function ProfileEditForm({ executor, profile }: { executor: Executor; profile: E
         <ProfileEditSections executor={executor} profile={profile} form={form} secrets={secrets} />
       </fieldset>
       {spritesTokenMissing && (
-        <p className="text-sm text-destructive">
-          <Trans>Sprites API key is required.</Trans>
-        </p>
+        <p className="text-sm text-destructive">{t("settings:spritesApiKeyIsRequired")}</p>
       )}
       {persistence.error && <p className="text-sm text-destructive">{persistence.error}</p>}
       <ProfileFormActions onDelete={() => persistence.setDeleteDialogOpen(true)} />

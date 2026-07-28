@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Button } from "@kandev/ui/button";
 import { Spinner } from "@kandev/ui/spinner";
@@ -30,17 +29,18 @@ function TailContent({
   loading: boolean;
   inMemoryOnly: boolean;
 }) {
+  const { t } = useTranslation();
   if (loading && tail.length === 0) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Spinner className="size-4" /> <Trans>Loading log...</Trans>
+        <Spinner className="size-4" /> {t("settings:loadingLog")}
       </div>
     );
   }
   if (tail.length === 0) {
     return (
       <p className="text-sm text-muted-foreground" data-testid="system-log-tail-empty">
-        <Trans>No recent log activity captured yet. Logs will appear as Kandev does work.</Trans>
+        {t("settings:noRecentLogActivityCapturedYet")}
       </p>
     );
   }
@@ -48,7 +48,7 @@ function TailContent({
     <div className="space-y-2">
       {inMemoryOnly && (
         <p className="text-xs text-muted-foreground" data-testid="system-log-tail-source">
-          <Trans>
+          <Trans i18nKey="settings:showingTheInMemoryLogBuffer">
             Showing the in-memory log buffer (last ~2000 entries). Kandev is currently logging to
             the terminal, not to a file - file rotation is disabled. Set{" "}
             <code>logging.outputPath</code> in <code>config.yaml</code> to a file path to enable
@@ -101,7 +101,7 @@ function TailHeader({
   onRefresh: () => void;
   onCopy: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const hasTail = tail.length > 0;
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -117,9 +117,9 @@ function TailHeader({
         <ActionButtonContent
           state={copyState}
           idleIcon={<IconCopy className="h-3.5 w-3.5 mr-1" />}
-          idleLabel={t`Copy`}
-          pendingLabel={t`Copying...`}
-          successLabel={t`Copied`}
+          idleLabel={t("common:copy")}
+          pendingLabel={t("settings:copying")}
+          successLabel={t("settings:copied")}
         />
       </Button>
       {current ? (
@@ -132,7 +132,7 @@ function TailHeader({
         >
           <a href={buildLogDownloadUrl(current.name)} download>
             <IconDownload className="h-3.5 w-3.5 mr-1" />
-            <Trans>Download file</Trans>
+            {t("settings:downloadFile")}
           </a>
         </Button>
       ) : (
@@ -145,7 +145,7 @@ function TailHeader({
           data-testid="system-log-tail-download"
         >
           <IconDownload className="h-3.5 w-3.5 mr-1" />
-          <Trans>Download tail</Trans>
+          {t("settings:downloadTail")}
         </Button>
       )}
       <Button
@@ -160,9 +160,9 @@ function TailHeader({
         <ActionButtonContent
           state={refreshState}
           idleIcon={<IconRefresh className="h-3.5 w-3.5 mr-1" />}
-          idleLabel={t`Refresh`}
-          pendingLabel={t`Refreshing...`}
-          successLabel={t`Refreshed`}
+          idleLabel={t("settings:refresh")}
+          pendingLabel={t("settings:refreshing")}
+          successLabel={t("settings:refreshed")}
         />
       </Button>
     </div>
@@ -170,6 +170,7 @@ function TailHeader({
 }
 
 export function LogViewer() {
+  const { t } = useTranslation();
   const { files, isLoading: filesLoading } = useLogFiles();
   const { tail, isLoading: tailLoading, reload: reloadTail } = useLogTail(1000);
   const refreshFeedback = useActionFeedback();
@@ -196,7 +197,7 @@ export function LogViewer() {
       <Card data-testid="system-log-tail-card">
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base flex items-center gap-2">
-            <IconFileText className="h-4 w-4" /> <Trans>Recent log output</Trans>
+            <IconFileText className="h-4 w-4" /> {t("settings:recentLogOutput")}
           </CardTitle>
           <TailHeader
             tail={tail}
@@ -224,38 +225,27 @@ function LogFilesCard({
   files: ReturnType<typeof useLogFiles>["files"];
   filesLoading: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Card data-testid="system-log-files-card">
       <CardHeader>
-        <CardTitle className="text-base">
-          <Trans>Log files</Trans>
-        </CardTitle>
+        <CardTitle className="text-base">{t("settings:logFiles")}</CardTitle>
       </CardHeader>
       <CardContent>
         {!files.length && filesLoading && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-4" /> <Trans>Loading files...</Trans>
+            <Spinner className="size-4" /> {t("settings:loadingFiles")}
           </div>
         )}
         {files.length > 0 && (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>
-                  <Trans>Name</Trans>
-                </TableHead>
-                <TableHead>
-                  <Trans>Kind</Trans>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Trans>Size</Trans>
-                </TableHead>
-                <TableHead>
-                  <Trans>Modified</Trans>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Trans>Actions</Trans>
-                </TableHead>
+                <TableHead>{t("settings:name")}</TableHead>
+                <TableHead>{t("settings:kind")}</TableHead>
+                <TableHead className="text-right">{t("settings:size")}</TableHead>
+                <TableHead>{t("settings:modified")}</TableHead>
+                <TableHead className="text-right">{t("settings:actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,7 +254,7 @@ function LogFilesCard({
                   <TableCell className="font-mono text-xs break-all">{f.name}</TableCell>
                   <TableCell>
                     <Badge variant={f.current ? "default" : "secondary"} className="text-[10px]">
-                      {f.current ? <Trans>current</Trans> : <Trans>rotated</Trans>}
+                      {f.current ? t("settings:current") : t("settings:rotated")}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-right">{formatBytes(f.size)}</TableCell>
@@ -289,9 +279,7 @@ function LogFilesCard({
         )}
         {!filesLoading && files.length === 0 && (
           <p className="text-sm text-muted-foreground" data-testid="system-log-files-empty">
-            <Trans>
-              No log files found. Kandev may be logging to stdout (no file rotation configured).
-            </Trans>
+            {t("settings:noLogFilesFoundKandevMay")}
           </p>
         )}
       </CardContent>

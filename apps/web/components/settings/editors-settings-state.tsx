@@ -1,7 +1,6 @@
 "use client";
-
 import { useCallback, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/components/state-provider";
 import { useEditors } from "@/hooks/domains/settings/use-editors";
 import { createEditor, deleteEditor, updateEditor, updateUserSettings } from "@/lib/api";
@@ -28,6 +27,7 @@ import {
   isCustomEditor,
 } from "@/components/settings/editor-form";
 import { Badge } from "@kandev/ui/badge";
+import { t } from "@/lib/i18n";
 
 export function useEditorsSettingsState() {
   const setEditors = useAppStore((state) => state.setEditors);
@@ -110,7 +110,7 @@ export function useLspConfigActions(
   setLspConfigStrings: (updater: (prev: Record<string, string>) => Record<string, string>) => void,
   setLspConfigErrors: (updater: (prev: Record<string, string>) => Record<string, string>) => void,
 ) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const clearLspConfigError = useCallback(
     (langId: string) => {
       setLspConfigErrors((prev) => {
@@ -139,12 +139,12 @@ export function useLspConfigActions(
       try {
         const parsed = JSON.parse(value);
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          setLspConfigErrors((prev) => ({ ...prev, [langId]: t`Must be a JSON object` }));
+          setLspConfigErrors((prev) => ({ ...prev, [langId]: t("settings:mustBeAJsonObject") }));
         } else {
           clearLspConfigError(langId);
         }
       } catch {
-        setLspConfigErrors((prev) => ({ ...prev, [langId]: t`Invalid JSON` }));
+        setLspConfigErrors((prev) => ({ ...prev, [langId]: t("settings:invalidJson") }));
       }
     },
     [setLspConfigStrings, setLspConfigErrors, clearLspConfigError, t],
@@ -186,7 +186,7 @@ export function buildDefaultEditorOptions(
         <span className="truncate">{editor.name}</span>
         {editor.kind === "built_in" ? (
           <Badge variant={editor.installed ? "secondary" : "outline"} className="ml-auto">
-            {editor.installed ? <Trans>Installed</Trans> : <Trans>Not installed</Trans>}
+            {editor.installed ? t("settings:installed2") : t("settings:notInstalled")}
           </Badge>
         ) : (
           <Badge variant="secondary" className="ml-auto">

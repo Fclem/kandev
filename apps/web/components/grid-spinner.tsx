@@ -1,15 +1,18 @@
 "use client";
-
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 
 type GridSpinnerProps = {
   className?: string;
 };
 
 export function GridSpinner({ className }: GridSpinnerProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
-    <span className={`spinner-grid ${className ?? ""}`} role="status" aria-label={t`Loading`}>
+    <span
+      className={`spinner-grid ${className ?? ""}`}
+      role="status"
+      aria-label={t("common:loading")}
+    >
       <span className="spinner-grid-cube" />
       <span className="spinner-grid-cube" />
       <span className="spinner-grid-cube" />

@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconArrowUpCircle } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -43,6 +42,7 @@ export function PluginRow({
   onUpdate,
   onSetAutoUpdate,
 }: PluginRowProps) {
+  const { t } = useTranslation();
   const canEnable = plugin.status === "disabled" || plugin.status === "registered";
   const canDisable = plugin.status === "active" || plugin.status === "error";
 
@@ -68,7 +68,7 @@ export function PluginRow({
                 variant="outline"
                 className="border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px]"
               >
-                <Trans>unsigned</Trans>
+                {t("settings:unsigned")}
               </Badge>
             )}
           </div>
@@ -133,19 +133,17 @@ function PluginAutoUpdateRow({
   busy: boolean;
   onSetAutoUpdate: (plugin: PluginRecord, value: boolean | null) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const isOverridden = plugin.auto_update !== null && plugin.auto_update !== undefined;
   const effective = isOverridden ? (plugin.auto_update as boolean) : autoUpdateDefault;
 
   return (
     <div className="flex items-center justify-between gap-3 border-t border-border/50 pt-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>
-          <Trans>Auto-update</Trans>
-        </span>
+        <span>{t("settings:autoUpdate")}</span>
         {isOverridden && (
           <Badge variant="outline" className="text-[11px]">
-            <Trans>override</Trans>
+            {t("settings:override")}
           </Badge>
         )}
       </div>
@@ -154,17 +152,19 @@ function PluginAutoUpdateRow({
           <button
             type="button"
             data-testid={`plugin-auto-update-reset-${plugin.id}`}
-            aria-label={t`Reset auto-update for ${plugin.display_name} to the default`}
+            aria-label={t("settings:resetAutoUpdateForToThe", {
+              display_name: plugin.display_name,
+            })}
             className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline cursor-pointer disabled:opacity-50"
             disabled={busy}
             onClick={() => onSetAutoUpdate(plugin, null)}
           >
-            <Trans>Reset</Trans>
+            {t("settings:reset")}
           </button>
         )}
         <Switch
           data-testid={`plugin-auto-update-${plugin.id}`}
-          aria-label={t`Auto-update for ${plugin.display_name}`}
+          aria-label={t("settings:autoUpdateFor", { display_name: plugin.display_name })}
           checked={effective}
           disabled={busy}
           onCheckedChange={(value) => onSetAutoUpdate(plugin, value)}
@@ -202,7 +202,7 @@ function PluginRowActions({
   onUninstall,
   onUpdate,
 }: PluginRowActionsProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-2 shrink-0">
       {update && onUpdate && (
@@ -215,7 +215,7 @@ function PluginRowActions({
           onClick={() => onUpdate(update)}
         >
           <IconArrowUpCircle className="h-4 w-4" />
-          {busy ? t`Updating…` : t`Update to v${update.version}`}
+          {busy ? t("settings:updating") : t("settings:updateToV", { version: update.version })}
         </Button>
       )}
       {canEnable && (
@@ -226,7 +226,7 @@ function PluginRowActions({
           disabled={busy}
           onClick={() => onEnable(plugin)}
         >
-          <Trans>Enable</Trans>
+          {t("settings:enable")}
         </Button>
       )}
       {canDisable && (
@@ -237,7 +237,7 @@ function PluginRowActions({
           disabled={busy}
           onClick={() => onDisable(plugin)}
         >
-          <Trans>Disable</Trans>
+          {t("settings:disable")}
         </Button>
       )}
       <Button
@@ -247,7 +247,7 @@ function PluginRowActions({
         disabled={busy}
         onClick={() => onUninstall(plugin)}
       >
-        <Trans>Uninstall</Trans>
+        {t("settings:uninstall")}
       </Button>
     </div>
   );

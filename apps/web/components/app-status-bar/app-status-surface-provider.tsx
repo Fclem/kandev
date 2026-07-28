@@ -1,5 +1,4 @@
 "use client";
-
 import {
   createContext,
   useContext,
@@ -8,7 +7,7 @@ import {
   type ComponentProps,
   type ReactNode,
 } from "react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { IconActivity } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { cn } from "@kandev/ui/lib/utils";
@@ -46,7 +45,7 @@ type AppStatusDrawerTriggerProps = Omit<ComponentProps<typeof Button>, "onClick"
 export function AppStatusDrawerTrigger({
   className,
   children,
-  label = t`Open status`,
+  label = t("statusBar:openStatus"),
   ...buttonProps
 }: AppStatusDrawerTriggerProps) {
   const drawer = useContext(AppStatusDrawerContext);

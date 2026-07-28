@@ -146,20 +146,11 @@ jobs:
       - name: Run lint
         run: pnpm --filter @kandev/web lint
 
-      # The i18n message catalog is a committed build input. Re-extracting must
-      # be a no-op; a diff means source copy changed without running
-      # `pnpm --filter @kandev/web extract`. See docs/i18n.md.
-      - name: Verify i18n catalog is current
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm --filter @kandev/web extract
-          if ! git diff --quiet --exit-code web/src/locales; then
-            echo "::error::i18n catalog is out of date."
-            echo "::error::Run 'cd apps/web && pnpm extract' and commit src/locales."
-            git --no-pager diff --stat web/src/locales
-            exit 1
-          fi
+      # With key-based i18next the English copy lives only in the catalog and
+      # cannot be regenerated from source, so the gate is a drift check: every
+      # key used in code must exist, and pseudo must match en. See docs/i18n.md.
+      - name: Verify i18n keys and catalogs
+        run: pnpm --filter @kandev/web i18n:check
 
       # Anti-regression guard for hardcoded UI strings. Reported as a warning
       # while the full-sweep migration is in flight; docs/plans/i18n task-40

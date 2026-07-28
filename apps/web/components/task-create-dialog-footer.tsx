@@ -1,5 +1,4 @@
 "use client";
-
 import { memo } from "react";
 import {
   IconLoader2,
@@ -8,8 +7,8 @@ import {
   IconChevronDown,
   IconPlus,
 } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import { DialogClose } from "@kandev/ui/dialog";
 import {
@@ -28,6 +27,7 @@ type UpdateButtonProps = {
 };
 
 function UpdateButton({ isCreatingTask, hasTitle, onUpdate }: UpdateButtonProps) {
+  const { t } = useTranslation();
   return (
     <Button
       type="button"
@@ -39,10 +39,10 @@ function UpdateButton({ isCreatingTask, hasTitle, onUpdate }: UpdateButtonProps)
       {isCreatingTask ? (
         <>
           <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-          <Trans>Updating...</Trans>
+          {t("task:updating")}
         </>
       ) : (
-        <Trans>Update</Trans>
+        t("common:update")
       )}
     </Button>
   );
@@ -65,8 +65,8 @@ function StartTaskSplitButton({
   onAltAction,
   onPlanModeAction,
 }: StartTaskSplitButtonProps) {
-  const { t } = useLingui();
-  const altLabel = isEditMode ? t`Update task` : t`Create only`;
+  const { t } = useTranslation();
+  const altLabel = isEditMode ? t("task:updateTask") : t("task:createOnly");
 
   return (
     <div className="flex flex-col w-full sm:w-auto gap-2 sm:gap-0">
@@ -83,7 +83,7 @@ function StartTaskSplitButton({
           ) : (
             <IconSend className="h-3.5 w-3.5" />
           )}
-          {isCreatingTask ? t`Starting...` : t`Start task`}
+          {isCreatingTask ? t("common:starting") : t("task:startTask")}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -105,7 +105,7 @@ function StartTaskSplitButton({
                 data-testid="submit-plan-mode"
               >
                 <IconFileInvoice className="h-3.5 w-3.5 mr-1.5" />
-                <Trans>Start task in plan mode</Trans>
+                {t("task:startTaskInPlanMode")}
               </DropdownMenuItem>
             )}
             <DropdownMenuItem
@@ -114,7 +114,7 @@ function StartTaskSplitButton({
               data-testid="submit-create-without-agent"
             >
               <IconPlus className="h-3.5 w-3.5 mr-1.5" />
-              {isEditMode ? t`Update task` : t`Create without starting agent`}
+              {isEditMode ? t("task:updateTask") : t("task:createWithoutStartingAgent")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -130,7 +130,7 @@ function StartTaskSplitButton({
           data-testid="mobile-plan-mode"
         >
           <IconFileInvoice className="h-3.5 w-3.5" />
-          <Trans>Plan mode</Trans>
+          {t("common:planMode")}
         </Button>
       )}
       <Button
@@ -166,7 +166,7 @@ function DefaultSubmitButton({
   hasDescription,
   disabled,
 }: DefaultSubmitButtonProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const planModeStyle =
     isCreateMode && !hasDescription
       ? "bg-blue-600 border-blue-500 text-white hover:bg-blue-700 hover:text-white"
@@ -186,20 +186,20 @@ function DefaultSubmitButton({
           return (
             <>
               <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-              {isEditMode ? t`Updating...` : t`Starting...`}
+              {isEditMode ? t("task:updating") : t("common:starting")}
             </>
           );
         }
-        if (isSessionMode) return t`Create Session`;
+        if (isSessionMode) return t("task:createSession");
         if (isCreateMode) {
           return (
             <>
               <IconFileInvoice className="h-3.5 w-3.5" />
-              <Trans>Start Plan Mode</Trans>
+              {t("task:startPlanMode")}
             </>
           );
         }
-        return t`Update task`;
+        return t("task:updateTask");
       })()}
     </Button>
   );
@@ -266,17 +266,17 @@ function computeBaseDisabled(props: TaskCreateDialogFooterProps) {
 
 export type ButtonKind = "update" | "start-task" | "default";
 
-export const REASON_TITLE = t`Add a task title`;
-export const REASON_REPO = t`Select a repository`;
-export const REASON_BRANCH = t`Select a branch`;
-export const REASON_WORKSPACE = t`Select a workspace`;
-export const REASON_WORKFLOW = t`Select a workflow`;
-export const REASON_AGENT = t`Select an agent`;
-export const REASON_DESCRIPTION = t`Add a session description`;
+export const REASON_TITLE = t("task:addATaskTitle");
+export const REASON_REPO = t("task:selectARepository");
+export const REASON_BRANCH = t("task:selectABranch");
+export const REASON_WORKSPACE = t("task:selectAWorkspace");
+export const REASON_WORKFLOW = t("task:selectAWorkflow");
+export const REASON_AGENT = t("task:selectAnAgent");
+export const REASON_DESCRIPTION = t("task:addASessionDescription");
 
 function noCompatibleAgentReason(executorProfileName: string | null): string {
-  const target = executorProfileName ? `“${executorProfileName}”` : t`this executor`;
-  return t`No compatible agent profile is configured for ${target}. Configure agent credentials in Settings → Executors.`;
+  const target = executorProfileName ? `“${executorProfileName}”` : t("task:thisExecutor");
+  return t("task:noCompatibleAgentProfileIsConfigured", { target });
 }
 
 function baseReason(props: TaskCreateDialogFooterProps): string | null {
@@ -339,6 +339,7 @@ function computeFooterState(props: TaskCreateDialogFooterProps) {
 export const TaskCreateDialogFooter = memo(function TaskCreateDialogFooter(
   props: TaskCreateDialogFooterProps,
 ) {
+  const { t } = useTranslation();
   const {
     isSessionMode,
     isCreateMode,
@@ -372,7 +373,7 @@ export const TaskCreateDialogFooter = memo(function TaskCreateDialogFooter(
           disabled={isCreatingSession || isCreatingTask}
           className="w-full h-10 border-0 cursor-pointer sm:w-auto sm:h-7 sm:border"
         >
-          <Trans>Cancel</Trans>
+          {t("common:cancel")}
         </Button>
       </DialogClose>
       <KeyboardShortcutTooltip

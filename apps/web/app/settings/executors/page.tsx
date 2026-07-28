@@ -1,8 +1,6 @@
 "use client";
-
 import { useState, useMemo } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { msg } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
@@ -49,28 +47,28 @@ const DefaultIcon = EXECUTOR_ICON_MAP.local;
 const EXECUTOR_TYPES = [
   {
     type: "local",
-    label: msg`Local`,
-    description: msg`Run agents directly in the repository folder.`,
+    label: "common:local",
+    description: "settings:runAgentsDirectlyInTheRepository",
   },
   {
     type: "worktree",
-    label: msg`Worktree`,
-    description: msg`Create git worktrees for isolated agent sessions.`,
+    label: "settings:worktree",
+    description: "settings:createGitWorktreesForIsolatedAgent",
   },
   {
     type: "local_docker",
-    label: msg`Docker`,
-    description: msg`Run Docker containers on this machine.`,
+    label: "common:docker",
+    description: "settings:runDockerContainersOnThisMachine",
   },
   {
     type: "sprites",
-    label: msg`Sprites.dev`,
-    description: msg`Run agents in Sprites.dev cloud sandboxes.`,
+    label: "settings:spritesDev",
+    description: "settings:runAgentsInSpritesDevCloud",
   },
   {
     type: "ssh",
-    label: msg`SSH`,
-    description: msg`Connect to a remote host over SSH and run agentctl there.`,
+    label: "settings:ssh",
+    description: "settings:connectToARemoteHostOver",
   },
 ] as const;
 
@@ -127,7 +125,7 @@ function CreateTypeCard({
   execType: (typeof EXECUTOR_TYPES)[number];
   onClick: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Card
       className="cursor-pointer ring-primary/40 transition-colors hover:bg-muted/50"
@@ -158,24 +156,19 @@ function DeleteProfileDialog({
   onDelete: () => void;
   deleting: boolean;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Delete Profile</Trans>
-          </DialogTitle>
+          <DialogTitle>{t("settings:deleteProfile2")}</DialogTitle>
           <DialogDescription>
-            <Trans>
-              Are you sure you want to delete &quot;{profileName}&quot;? This action cannot be
-              undone.
-            </Trans>
+            {t("settings:areYouSureYouWantTo", { profileName })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -183,7 +176,7 @@ function DeleteProfileDialog({
             disabled={deleting}
             className="cursor-pointer"
           >
-            {deleting ? t`Deleting...` : t`Delete`}
+            {deleting ? t("settings:deleting") : t("common:delete")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -192,6 +185,7 @@ function DeleteProfileDialog({
 }
 
 export default function ExecutorsHubPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const allProfiles = useAllProfiles();
   const executors = useAppStore((state) => state.executors.items);
@@ -224,21 +218,14 @@ export default function ExecutorsHubPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">
-          <Trans>Executors</Trans>
-        </h2>
+        <h2 className="text-2xl font-bold">{t("common:executors")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          <Trans>
-            Executor profiles define how and where agents run. Each profile configures an execution
-            environment with scripts, environment variables, and MCP policies.
-          </Trans>
+          {t("settings:executorProfilesDefineHowAndWhere")}
         </p>
       </div>
       <Separator />
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">
-          <Trans>Create New Profile</Trans>
-        </h3>
+        <h3 className="text-lg font-semibold">{t("settings:createNewProfile2")}</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {EXECUTOR_TYPES.map((execType) => (
             <CreateTypeCard
@@ -251,9 +238,7 @@ export default function ExecutorsHubPage() {
       </div>
       {allProfiles.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">
-            <Trans>Profiles</Trans>
-          </h3>
+          <h3 className="text-lg font-semibold">{t("settings:profiles2")}</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {allProfiles.map((profile) => (
               <ProfileCard key={profile.id} profile={profile} onDelete={setDeleteProfileId} />

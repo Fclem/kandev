@@ -1,6 +1,5 @@
 "use client";
-
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/components/state-provider";
 import { PassthroughTerminal } from "@/components/task/passthrough-terminal";
 import type { QuickChatSession } from "@/lib/state/slices/ui/types";
@@ -24,7 +23,7 @@ type QuickChatSessionViewProps = {
 };
 
 export function QuickChatSessionView({ session, onInitialPromptSent }: QuickChatSessionViewProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const isPassthrough = useIsQuickChatPassthrough(session.sessionId);
   if (isPassthrough) {
     return (
@@ -38,7 +37,7 @@ export function QuickChatSessionView({ session, onInitialPromptSent }: QuickChat
     <QuickChatContent
       sessionId={session.sessionId}
       minimalToolbar={isConfig}
-      placeholderOverride={isConfig ? t`Ask anything about your configuration...` : undefined}
+      placeholderOverride={isConfig ? t("chat:askAnythingAboutYourConfiguration") : undefined}
       initialPrompt={session.initialPrompt}
       onInitialPromptSent={onInitialPromptSent}
     />

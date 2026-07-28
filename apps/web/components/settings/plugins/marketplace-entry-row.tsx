@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconArrowUpCircle, IconCheck, IconStar } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -20,6 +19,7 @@ type MarketplaceEntryRowProps = {
 
 /** One catalog card: a neutral tile, metadata, stars, and an install-state action. */
 export function MarketplaceEntryRow({ entry, busy, onInstall }: MarketplaceEntryRowProps) {
+  const { t } = useTranslation();
   return (
     <div
       data-testid={`marketplace-entry-${entry.id}`}
@@ -51,11 +51,7 @@ export function MarketplaceEntryRow({ entry, busy, onInstall }: MarketplaceEntry
           <IconStar className="h-3.5 w-3.5" />
           {entry.stars === null ? "—" : entry.stars.toLocaleString()}
         </span>
-        {entry.author && (
-          <span>
-            <Trans>by {entry.author}</Trans>
-          </span>
-        )}
+        {entry.author && <span>{t("settings:by", { author: entry.author })}</span>}
         {entry.categories.map((cat) => (
           <Badge key={cat} variant="secondary" className="text-[10px] font-normal">
             {cat}
@@ -97,6 +93,7 @@ function PluginTile({ entry }: { entry: MarketplaceEntry }) {
 }
 
 function MarketplaceEntryAction({ entry, busy, onInstall }: MarketplaceEntryRowProps) {
+  const { t } = useTranslation();
   if (entry.install_state === "installed") {
     return (
       <Badge
@@ -105,7 +102,7 @@ function MarketplaceEntryAction({ entry, busy, onInstall }: MarketplaceEntryRowP
         className="shrink-0 gap-1 text-muted-foreground"
       >
         <IconCheck className="h-3.5 w-3.5" />
-        <Trans>Installed</Trans>
+        {t("settings:installed2")}
       </Badge>
     );
   }
@@ -120,7 +117,7 @@ function MarketplaceEntryAction({ entry, busy, onInstall }: MarketplaceEntryRowP
         className="shrink-0 gap-1 cursor-pointer"
       >
         <IconArrowUpCircle className="h-4 w-4" />
-        {busy ? <Trans>Updating…</Trans> : <Trans>Update</Trans>}
+        {busy ? t("settings:updating") : t("common:update")}
       </Button>
     );
   }
@@ -133,7 +130,7 @@ function MarketplaceEntryAction({ entry, busy, onInstall }: MarketplaceEntryRowP
       data-testid={`marketplace-install-${entry.id}`}
       className="shrink-0 cursor-pointer"
     >
-      {busy ? <Trans>Installing…</Trans> : <Trans>Install</Trans>}
+      {busy ? t("settings:installing") : t("settings:install")}
     </Button>
   );
 }

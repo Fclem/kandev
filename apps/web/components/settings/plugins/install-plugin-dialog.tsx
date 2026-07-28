@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -41,6 +40,7 @@ export function InstallPluginDialog({
   onSubmitUrl,
   onSubmitFile,
 }: InstallPluginDialogProps) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<InstallTab>("url");
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -80,12 +80,8 @@ export function InstallPluginDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" data-testid="install-plugin-dialog">
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Install plugin</Trans>
-          </DialogTitle>
-          <DialogDescription>
-            <Trans>Install a plugin package from a URL, or upload a .tar.gz file directly.</Trans>
-          </DialogDescription>
+          <DialogTitle>{t("settings:installPlugin")}</DialogTitle>
+          <DialogDescription>{t("settings:installAPluginPackageFromA")}</DialogDescription>
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as InstallTab)}>
@@ -95,14 +91,14 @@ export function InstallPluginDialog({
               className="cursor-pointer"
               data-testid="install-plugin-tab-url"
             >
-              <Trans>From URL</Trans>
+              {t("settings:fromUrl")}
             </TabsTrigger>
             <TabsTrigger
               value="upload"
               className="cursor-pointer"
               data-testid="install-plugin-tab-upload"
             >
-              <Trans>Upload file</Trans>
+              {t("settings:uploadFile")}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="url" className="pt-3">
@@ -126,7 +122,7 @@ export function InstallPluginDialog({
             onClick={() => onOpenChange(false)}
             className="cursor-pointer"
           >
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button
             type="button"
@@ -135,7 +131,7 @@ export function InstallPluginDialog({
             disabled={install.disabled}
             className="cursor-pointer"
           >
-            <Trans>Install</Trans>
+            {t("settings:install")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -144,11 +140,10 @@ export function InstallPluginDialog({
 }
 
 function UrlTab({ url, setUrl }: { url: string; setUrl: (v: string) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="install-plugin-url">
-        <Trans>Package URL</Trans>
-      </Label>
+      <Label htmlFor="install-plugin-url">{t("settings:packageUrl")}</Label>
       <Input
         id="install-plugin-url"
         data-testid="install-plugin-url-input"
@@ -162,6 +157,7 @@ function UrlTab({ url, setUrl }: { url: string; setUrl: (v: string) => void }) {
 }
 
 function UploadTab({ file, setFile }: { file: File | null; setFile: (file: File | null) => void }) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -207,7 +203,7 @@ function UploadTab({ file, setFile }: { file: File | null; setFile: (file: File 
         {file ? (
           <span className="font-mono text-foreground">{file.name}</span>
         ) : (
-          <Trans>Drag and drop a .tar.gz package here, or click to browse</Trans>
+          t("settings:dragAndDropATarGz")
         )}
       </span>
       <input

@@ -1,12 +1,12 @@
 "use client";
-
 import { useEffect } from "react";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { Card, CardContent } from "@kandev/ui/card";
 import { Button } from "@kandev/ui/button";
 
 export default function AgentEditPage() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   useEffect(() => {
@@ -17,10 +17,10 @@ export default function AgentEditPage() {
     <Card>
       <CardContent className="py-12 text-center">
         <p className="text-sm text-muted-foreground">
-          <Trans>Manage agents from the main Agents page.</Trans>
+          {t("settings:manageAgentsFromTheMainAgents")}
         </p>
         <Button className="mt-4" onClick={() => router.push("/settings/agents")}>
-          <Trans>Go to Agents</Trans>
+          {t("settings:goToAgents")}
         </Button>
       </CardContent>
     </Card>

@@ -1,5 +1,4 @@
 "use client";
-
 import { Fragment, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@kandev/ui/dialog";
 import { Button } from "@kandev/ui/button";
@@ -17,9 +16,8 @@ import {
   IconGitFork,
   IconStethoscope,
 } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
-
+import { t } from "@/lib/i18n";
+import { Trans, useTranslation } from "react-i18next";
 import { TaskCreateDialog } from "@/components/task-create-dialog";
 import type { ImproveKandevBootstrapResponse } from "@/lib/api/domains/improve-kandev-api";
 import { cn } from "@/lib/utils";
@@ -39,7 +37,7 @@ type ImproveKind = "bug" | "feature";
 // instead of the usual missing-field reasons.
 function bootstrapBlockedReason(bootstrap: BootstrapState): string | null {
   if (bootstrap.kind === "loading" || bootstrap.kind === "idle") {
-    return t`Preparing kandev repository…`;
+    return t("common:preparingKandevRepository");
   }
   return null;
 }
@@ -47,9 +45,9 @@ function bootstrapBlockedReason(bootstrap: BootstrapState): string | null {
 // Resolved per render (not a module-level const) so the active locale applies.
 function descriptionPlaceholder(kind: ImproveKind): string {
   if (kind === "bug") {
-    return t`E.g. When I open the kanban board, the column header text overlaps the task count badge on screens narrower than 1200px...`;
+    return t("common:eGWhenIOpenThe");
   }
-  return t`E.g. Add a keyboard shortcut to mark a task as Done from the task detail view, and show the shortcut in the task action menu...`;
+  return t("common:eGAddAKeyboardShortcut");
 }
 
 type CreateModeViewProps = {
@@ -131,24 +129,25 @@ export function CreateModeView(props: CreateModeViewProps) {
 // descriptions are user-facing copy.
 function stepDescription(stepName: string): string | undefined {
   if (stepName === "improve") {
-    return t`Agent reads the report, explores the codebase, and implements the change with TDD. Runs make fmt, typecheck, test, lint, then commits.`;
+    return t("common:agentReadsTheReportExploresThe");
   }
   if (stepName === "test") {
-    return t`Agent boots a secondary kandev instance with make dev and tells you what to verify. You confirm the change works in the running app.`;
+    return t("common:agentBootsASecondaryKandevInstance");
   }
   if (stepName === "pr") {
-    return t`Agent runs the pr skill: pushes the branch and opens a pull request to kdlbs/kandev for the maintainers to review.`;
+    return t("common:agentRunsThePrSkillPushes");
   }
   return undefined;
 }
 
 function WorkflowStepsPreview({ steps }: { steps: WorkflowStep[] }) {
+  const { t } = useTranslation();
   if (steps.length === 0) return null;
   const ordered = [...steps].sort((a, b) => a.position - b.position);
   return (
     <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
       <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/80">
-        <Trans>Workflow</Trans>
+        {t("common:workflow")}
       </p>
       <TooltipProvider delayDuration={150}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
@@ -180,6 +179,7 @@ function WorkflowStepsPreview({ steps }: { steps: WorkflowStep[] }) {
 }
 
 function UsefulInfoCollapsible() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -189,7 +189,7 @@ function UsefulInfoCollapsible() {
           className="group flex w-full cursor-pointer items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2 text-left text-xs hover:bg-muted/50"
         >
           <span className="font-medium text-muted-foreground">
-            <Trans>Useful commands &amp; agent skills</Trans>
+            {t("common:usefulCommandsAgentSkills")}
           </span>
           <IconChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
         </button>
@@ -197,42 +197,33 @@ function UsefulInfoCollapsible() {
       <CollapsibleContent>
         <div className="mt-2 space-y-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
           <p>
-            <Trans>
+            <Trans i18nKey="common:shellCommandYouCanRunIn">
               Shell command you can run in the secondary instance, plus slash-command{" "}
               <em>skills</em> you can ask the agent to run during the workflow.
             </Trans>
           </p>
           <div className="space-y-2">
             <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
-              <Trans>Shell</Trans>
+              {t("common:shell")}
             </p>
             <UsefulInfoItem cmd="make install && make dev">
-              <Trans>
-                Boots a secondary kandev dev instance with a clean DB so you can verify the change
-                without touching your main one.
-              </Trans>
+              {t("common:bootsASecondaryKandevDevInstance")}
             </UsefulInfoItem>
           </div>
           <div className="space-y-2">
             <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
-              <Trans>Agent skills (ask the agent to run)</Trans>
+              {t("common:agentSkillsAskTheAgentTo")}
             </p>
             <UsefulInfoItem cmd="/commit">
-              <Trans>Stages and commits changes using Conventional Commits.</Trans>
+              {t("common:stagesAndCommitsChangesUsingConventional")}
             </UsefulInfoItem>
-            <UsefulInfoItem cmd="/push">
-              <Trans>Commits and pushes to the current branch.</Trans>
-            </UsefulInfoItem>
+            <UsefulInfoItem cmd="/push">{t("common:commitsAndPushesToTheCurrent")}</UsefulInfoItem>
             <UsefulInfoItem cmd="/verify">
-              <Trans>Runs format, typecheck, test, and lint across the monorepo.</Trans>
+              {t("common:runsFormatTypecheckTestAndLint")}
             </UsefulInfoItem>
-            <UsefulInfoItem cmd="/pr">
-              <Trans>Commits, pushes, and opens a pull request.</Trans>
-            </UsefulInfoItem>
+            <UsefulInfoItem cmd="/pr">{t("common:commitsPushesAndOpensAPull")}</UsefulInfoItem>
             <UsefulInfoItem cmd="/pr-fixup">
-              <Trans>
-                Waits for CI and automated reviews, then fixes failures and addresses comments.
-              </Trans>
+              {t("common:waitsForCiAndAutomatedReviews")}
             </UsefulInfoItem>
           </div>
         </div>
@@ -257,14 +248,15 @@ function KindTabs({
   kind: ImproveKind;
   onChange: (next: ImproveKind) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Tabs value={kind} onValueChange={(v) => onChange(v as ImproveKind)}>
       <TabsList>
         <TabsTrigger value="bug" className="cursor-pointer">
-          <Trans>Bug fix</Trans>
+          {t("common:bugFix")}
         </TabsTrigger>
         <TabsTrigger value="feature" className="cursor-pointer">
-          <Trans>Feature request</Trans>
+          {t("common:featureRequest")}
         </TabsTrigger>
       </TabsList>
     </Tabs>
@@ -280,33 +272,28 @@ function BootstrapStatusSlot({
   captureLogs: boolean;
   setCaptureLogs: (v: boolean) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <BootstrapBanner bootstrap={bootstrap} />
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <label className="flex cursor-pointer items-center gap-2">
           <Checkbox checked={captureLogs} onCheckedChange={(v) => setCaptureLogs(v === true)} />
-          <Trans>Include recent backend &amp; browser logs as context for the agent</Trans>
+          {t("common:includeRecentBackendBrowserLogsAs")}
         </label>
         <TooltipProvider delayDuration={150}>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label={t`How log context works`}
+                aria-label={t("common:howLogContextWorks")}
                 className="cursor-help text-muted-foreground/70 hover:text-muted-foreground"
               >
                 <IconInfoCircle className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">
-              <Trans>
-                Kandev keeps a small in-memory ring buffer of the most recent backend logs and
-                browser console events. When enabled, those logs are written to a temporary folder
-                on your machine, and the file paths are appended to the task description so the
-                agent can read them while investigating.
-              </Trans>
+              {t("common:kandevKeepsASmallInMemory")}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -316,13 +303,12 @@ function BootstrapStatusSlot({
 }
 
 function BootstrapBanner({ bootstrap }: { bootstrap: BootstrapState }) {
+  const { t } = useTranslation();
   if (bootstrap.kind === "loading" || bootstrap.kind === "idle") {
     return (
       <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-        <Trans>
-          Preparing kandev repository in background. Fill in the details, submit when ready.
-        </Trans>
+        {t("common:preparingKandevRepositoryInBackgroundFill")}
       </div>
     );
   }
@@ -349,13 +335,14 @@ function BlockedDialog({
   onOpenChange: (open: boolean) => void;
   message: string;
 }) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconStethoscope className="h-5 w-5" />
-            <Trans>Improve Kandev</Trans>
+            {t("common:improveKandev")}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
@@ -370,7 +357,7 @@ function BlockedDialog({
               onClick={() => onOpenChange(false)}
               className="cursor-pointer"
             >
-              <Trans>Close</Trans>
+              {t("common:close")}
             </Button>
           </div>
         </div>
@@ -380,18 +367,16 @@ function BlockedDialog({
 }
 
 function ContributorBanner({ data }: { data: ImproveKandevBootstrapResponse }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { github_login: login, has_write_access: hasWrite } = data;
   const account = login ? (
     <code className="font-mono text-foreground">@{login}</code>
   ) : (
-    <span>
-      <Trans>your GitHub account</Trans>
-    </span>
+    <span>{t("common:yourGithubAccount")}</span>
   );
   const accessNote = hasWrite
-    ? t`You have write access to kdlbs/kandev, so the agent will push directly to a branch on the upstream repo.`
-    : t`The agent will fork kdlbs/kandev to your account during the PR step and open a pull request from your fork.`;
+    ? t("common:youHaveWriteAccessToKdlbs")
+    : t("common:theAgentWillForkKdlbsKandev");
   return (
     <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
       {hasWrite ? (
@@ -399,11 +384,7 @@ function ContributorBanner({ data }: { data: ImproveKandevBootstrapResponse }) {
       ) : (
         <IconGitFork className="h-3.5 w-3.5 mt-0.5 shrink-0" />
       )}
-      <span>
-        <Trans>
-          Contributing as {account}. {accessNote}
-        </Trans>
-      </span>
+      <span>{t("common:contributingAs", { account, accessNote })}</span>
     </div>
   );
 }

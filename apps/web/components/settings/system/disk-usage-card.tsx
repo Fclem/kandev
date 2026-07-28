@@ -1,7 +1,6 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Button } from "@kandev/ui/button";
 import { Spinner } from "@kandev/ui/spinner";
@@ -17,7 +16,7 @@ import { formatBytes } from "@/lib/utils/format-bytes";
 import { ActionButtonContent } from "./action-button-content";
 import { JobProgressIndicator } from "./job-progress-indicator";
 
-const REFRESH_HELP = t`Walks every directory inside the data folder and adds up the file sizes. Results are cached for a couple of hours; click to compute fresh numbers right now. Can take a few seconds on large workspaces.`;
+const REFRESH_HELP = t("settings:walksEveryDirectoryInsideTheData");
 
 type Row = {
   key: keyof Omit<DiskBreakdown, "warnings" | "computed_at" | "total">;
@@ -25,13 +24,13 @@ type Row = {
 };
 
 const ROWS: Row[] = [
-  { key: "data_dir", label: t`Data directory` },
-  { key: "worktrees", label: t`Worktrees` },
-  { key: "repos", label: t`Repositories` },
-  { key: "sessions", label: t`Sessions` },
-  { key: "tasks", label: t`Tasks` },
-  { key: "quick_chat", label: t`Quick chat` },
-  { key: "backups", label: t`Backups` },
+  { key: "data_dir", label: t("settings:dataDirectory") },
+  { key: "worktrees", label: t("settings:worktrees") },
+  { key: "repos", label: t("common:repositories") },
+  { key: "sessions", label: t("settings:sessions") },
+  { key: "tasks", label: t("common:tasks") },
+  { key: "quick_chat", label: t("settings:quickChat") },
+  { key: "backups", label: t("common:backups") },
 ];
 
 function formatComputedAt(iso: string): string {
@@ -41,6 +40,7 @@ function formatComputedAt(iso: string): string {
 }
 
 function HomeDirRow({ homeDir }: { homeDir: string }) {
+  const { t } = useTranslation();
   return (
     <div
       className="mb-3 flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2"
@@ -48,7 +48,7 @@ function HomeDirRow({ homeDir }: { homeDir: string }) {
     >
       <div className="min-w-0 flex-1">
         <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-          <Trans>Data directory</Trans>
+          {t("settings:dataDirectory")}
         </p>
         <p className="text-xs font-mono break-all">{homeDir}</p>
       </div>
@@ -62,13 +62,14 @@ function HomeDirRow({ homeDir }: { homeDir: string }) {
         data-testid="system-disk-usage-open"
       >
         <IconFolderOpen className="h-3.5 w-3.5 mr-1" />
-        <Trans>Open</Trans>
+        {t("common:open")}
       </Button>
     </div>
   );
 }
 
 function WarningsBlock({ warnings }: { warnings: string[] }) {
+  const { t } = useTranslation();
   if (warnings.length === 0) return null;
   return (
     <div
@@ -77,9 +78,7 @@ function WarningsBlock({ warnings }: { warnings: string[] }) {
     >
       <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
       <div>
-        <div className="font-medium">
-          <Trans>Some directories could not be measured:</Trans>
-        </div>
+        <div className="font-medium">{t("settings:someDirectoriesCouldNotBeMeasured")}</div>
         <ul className="list-disc pl-4 mt-1">
           {warnings.map((w, i) => (
             <li key={i}>{w}</li>
@@ -91,24 +90,22 @@ function WarningsBlock({ warnings }: { warnings: string[] }) {
 }
 
 function ComputedAtLine({ computedAt }: { computedAt: string }) {
+  const { t } = useTranslation();
   return (
     <p className="text-xs text-muted-foreground" data-testid="system-disk-usage-computed-at">
-      <Trans>Computed at {computedAt}</Trans>
+      {t("settings:computedAt", { computedAt })}
     </p>
   );
 }
 
 function BreakdownTable({ data }: { data: DiskBreakdown }) {
+  const { t } = useTranslation();
   return (
     <Table data-testid="system-disk-usage-table">
       <TableHeader>
         <TableRow>
-          <TableHead>
-            <Trans>Path</Trans>
-          </TableHead>
-          <TableHead className="text-right">
-            <Trans>Size</Trans>
-          </TableHead>
+          <TableHead>{t("settings:path")}</TableHead>
+          <TableHead className="text-right">{t("settings:size")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -119,9 +116,7 @@ function BreakdownTable({ data }: { data: DiskBreakdown }) {
           </TableRow>
         ))}
         <TableRow className="font-semibold">
-          <TableCell>
-            <Trans>Total</Trans>
-          </TableCell>
+          <TableCell>{t("settings:total")}</TableCell>
           <TableCell className="text-right tabular-nums" data-testid="system-disk-usage-total">
             {formatBytes(data.total)}
           </TableCell>
@@ -132,7 +127,7 @@ function BreakdownTable({ data }: { data: DiskBreakdown }) {
 }
 
 export function DiskUsageCard() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { diskUsage, isLoading, error, refresh } = useDiskUsage();
   const refreshFeedback = useActionFeedback();
   const data = diskUsage?.data ?? null;
@@ -149,10 +144,10 @@ export function DiskUsageCard() {
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base flex items-center gap-2">
           <IconDatabase className="h-4 w-4" />
-          <Trans>Disk Usage</Trans>
+          {t("settings:diskUsage")}
           {computing && data && (
             <Badge variant="outline" className="text-[10px]">
-              <Trans>Refreshing...</Trans>
+              {t("settings:refreshing")}
             </Badge>
           )}
         </CardTitle>
@@ -172,9 +167,9 @@ export function DiskUsageCard() {
                 <ActionButtonContent
                   state={refreshFeedback.state}
                   idleIcon={<IconRefresh className="h-3.5 w-3.5 mr-1" />}
-                  idleLabel={t`Refresh`}
-                  pendingLabel={t`Refreshing...`}
-                  successLabel={t`Refreshed`}
+                  idleLabel={t("settings:refresh")}
+                  pendingLabel={t("settings:refreshing")}
+                  successLabel={t("settings:refreshed")}
                 />
               </Button>
             </TooltipTrigger>
@@ -195,7 +190,7 @@ export function DiskUsageCard() {
             data-testid="system-disk-usage-spinner"
           >
             <Spinner className="size-4" />
-            <Trans>Calculating...</Trans>
+            {t("settings:calculating")}
           </div>
         )}
         {data && (

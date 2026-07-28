@@ -1,7 +1,6 @@
 "use client";
-
 import { Button } from "@kandev/ui/button";
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { IconPlus } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +10,7 @@ type MobileFabProps = {
 };
 
 export function MobileFab({ onClick, isDragging = false }: MobileFabProps) {
+  const { t } = useTranslation();
   return (
     <Button
       onClick={onClick}
@@ -30,9 +30,7 @@ export function MobileFab({ onClick, isDragging = false }: MobileFabProps) {
       }}
     >
       <IconPlus className="h-6 w-6" />
-      <span className="sr-only">
-        <Trans>Add task</Trans>
-      </span>
+      <span className="sr-only">{t("kanban:addTask")}</span>
     </Button>
   );
 }

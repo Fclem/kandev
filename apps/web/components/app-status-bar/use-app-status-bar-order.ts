@@ -1,7 +1,6 @@
 "use client";
-
+import { useTranslation } from "react-i18next";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { t } from "@lingui/core/macro";
 import { toast } from "sonner";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { createQueuedUserSettingsSync } from "@/lib/user-settings-sync";
@@ -22,6 +21,7 @@ const syncAppStatusBarOrder = createQueuedUserSettingsSync<AppStatusBarOrderStat
 }));
 
 export function useAppStatusBarOrder<T extends AppStatusItemDescriptor>(activeItems: T[]) {
+  const { t } = useTranslation();
   const savedOrder = useAppStore((state) => state.userSettings.appStatusBarOrder);
   const store = useAppStoreApi();
   const [optimisticOrder, setOptimisticOrder] = useState<AppStatusBarOrderState | null>(null);
@@ -50,7 +50,7 @@ export function useAppStatusBarOrder<T extends AppStatusItemDescriptor>(activeIt
         .catch(() => {
           if (latestRevision.current !== revision) return;
           setOptimisticOrder(null);
-          toast.error(t`Could not save status bar order`);
+          toast.error(t("statusBar:couldNotSaveStatusBarOrder"));
         });
     },
     [activeItems, order, store],

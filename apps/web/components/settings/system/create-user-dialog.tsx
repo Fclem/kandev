@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -45,11 +44,12 @@ function CreateUserFields({
   setRole,
   error,
 }: FormFields) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-1">
         <label htmlFor="create-user-display-name" className="text-xs text-muted-foreground">
-          <Trans>Display name</Trans>
+          {t("settings:displayName")}
         </label>
         <Input
           id="create-user-display-name"
@@ -60,7 +60,7 @@ function CreateUserFields({
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor="create-user-email" className="text-xs text-muted-foreground">
-          <Trans>Email</Trans>
+          {t("settings:email")}
         </label>
         <Input
           id="create-user-email"
@@ -72,7 +72,7 @@ function CreateUserFields({
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor="create-user-password" className="text-xs text-muted-foreground">
-          <Trans>Password</Trans>
+          {t("settings:password")}
         </label>
         <Input
           id="create-user-password"
@@ -85,19 +85,15 @@ function CreateUserFields({
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor="create-user-role" className="text-xs text-muted-foreground">
-          <Trans>Role</Trans>
+          {t("settings:role")}
         </label>
         <Select value={role} onValueChange={setRole}>
           <SelectTrigger id="create-user-role" data-testid="create-user-role">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="member">
-              <Trans>Member</Trans>
-            </SelectItem>
-            <SelectItem value="admin">
-              <Trans>Admin</Trans>
-            </SelectItem>
+            <SelectItem value="member">{t("settings:member")}</SelectItem>
+            <SelectItem value="admin">{t("settings:admin")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -111,7 +107,7 @@ function CreateUserFields({
 }
 
 export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -136,7 +132,7 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
       onOpenChange(false);
       reset();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t`Could not create user.`);
+      setError(err instanceof ApiError ? err.message : t("settings:couldNotCreateUser"));
     } finally {
       setSubmitting(false);
     }
@@ -152,15 +148,8 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
     >
       <DialogContent data-testid="create-user-dialog">
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Add a user</Trans>
-          </DialogTitle>
-          <DialogDescription>
-            <Trans>
-              Creates an account directly with a password you set. Prefer an invite link when the
-              user should choose their own password.
-            </Trans>
-          </DialogDescription>
+          <DialogTitle>{t("settings:addAUser")}</DialogTitle>
+          <DialogDescription>{t("settings:createsAnAccountDirectlyWithA")}</DialogDescription>
         </DialogHeader>
         <CreateUserFields
           displayName={displayName}
@@ -175,7 +164,7 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
         />
         <DialogFooter>
           <Button variant="outline" className="cursor-pointer" onClick={() => onOpenChange(false)}>
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button
             className="cursor-pointer"
@@ -183,7 +172,7 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: Props) {
             onClick={() => void onSubmit()}
             data-testid="create-user-submit"
           >
-            {submitting ? t`Creating...` : t`Create user`}
+            {submitting ? t("settings:creating") : t("settings:createUser")}
           </Button>
         </DialogFooter>
       </DialogContent>

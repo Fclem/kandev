@@ -1,12 +1,12 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import {
   getAgentProfileMcpConfigAction,
   updateAgentProfileMcpConfigAction,
 } from "@/app/actions/agents";
 import type { AgentProfileMcpConfig, McpServerDef } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 type McpStatus = "idle" | "loading" | "success" | "error";
 
@@ -52,12 +52,12 @@ function serializeServers(config: AgentProfileMcpConfig | null): string {
 
 function normalizeServers(value: unknown): Record<string, McpServerDef> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(t`MCP servers config must be a JSON object`);
+    throw new Error(t("settings:mcpServersConfigMustBeA"));
   }
   if ("mcpServers" in value) {
     const nested = (value as { mcpServers?: unknown }).mcpServers;
     if (!nested || typeof nested !== "object" || Array.isArray(nested)) {
-      throw new Error(t`mcpServers must be a JSON object`);
+      throw new Error(t("settings:mcpserversMustBeAJsonObject"));
     }
     return nested as Record<string, McpServerDef>;
   }
@@ -95,6 +95,7 @@ function useFetchConfig(
   hasInitialConfig: boolean,
   setters: McpStateSetters,
 ) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!supportsMcp || !isEditableProfile || hasInitialConfig) return;
     let active = true;
@@ -114,7 +115,9 @@ function useFetchConfig(
       })
       .catch((error) => {
         if (!active) return;
-        setters.setMcpError(error instanceof Error ? error.message : t`Failed to load MCP config`);
+        setters.setMcpError(
+          error instanceof Error ? error.message : t("settings:failedToLoadMcpConfig"),
+        );
         setters.setMcpStatus("error");
       });
 
@@ -152,10 +155,10 @@ export function useProfileMcpConfig({
   initialConfig,
   onToastError,
 }: UseProfileMcpConfigParams): UseProfileMcpConfigResult {
-  const initialServers = serializeServers(initialConfig ?? null);
+  const { t } = useTranslation();
   const [mcpConfig, setMcpConfig] = useState<AgentProfileMcpConfig | null>(initialConfig ?? null);
   const [mcpEnabled, setMcpEnabledState] = useState(initialConfig?.enabled ?? false);
-  const [mcpServers, setMcpServers] = useState(initialServers);
+  const [mcpServers, setMcpServers] = useState(serializeServers(initialConfig ?? null));
   const [mcpError, setMcpError] = useState<string | null>(null);
   const [mcpDirty, setMcpDirty] = useState(false);
   const [mcpStatus, setMcpStatus] = useState<McpStatus>("idle");
@@ -197,7 +200,7 @@ export function useProfileMcpConfig({
       normalizeServers(parsed);
       setMcpError(null);
     } catch {
-      setMcpError(t`Invalid JSON`);
+      setMcpError(t("settings:invalidJson"));
     }
   };
 
@@ -214,7 +217,7 @@ export function useProfileMcpConfig({
       servers = normalizeServers(parsed);
     } catch (error) {
       setMcpStatus("error");
-      setMcpError(error instanceof Error ? error.message : t`Invalid MCP config`);
+      setMcpError(error instanceof Error ? error.message : t("settings:invalidMcpConfig"));
       throw error;
     }
 

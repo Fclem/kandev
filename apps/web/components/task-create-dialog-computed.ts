@@ -1,6 +1,5 @@
 "use client";
-
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { useMemo } from "react";
 import type { ExecutorProfile } from "@/lib/types/http";
 import type {
@@ -32,7 +31,7 @@ import { getMultiRepoExecutorDisabledReason } from "@/components/task-create-dia
  */
 function worktreeDisabledReason(profile: ExecutorProfile): string | null {
   if ((profile.executor_type ?? "") !== "worktree") return null;
-  return t`Worktree executor requires a repository.`;
+  return t("task:worktreeExecutorRequiresARepository");
 }
 
 /**

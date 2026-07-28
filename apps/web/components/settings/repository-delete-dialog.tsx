@@ -1,7 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
-import { plural } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
   Dialog,
@@ -27,22 +25,16 @@ export function DeleteRepositoryDialog({
   activeSessionCount,
   deleteLoading,
 }: DeleteRepositoryDialogProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const hasActiveSessions = activeSessionCount > 0;
   const description = hasActiveSessions
-    ? plural(activeSessionCount, {
-        one: "This repository is used by # active agent session. Stop or finish it before deleting the repository.",
-        other:
-          "This repository is used by # active agent sessions. Stop or finish them before deleting the repository.",
-      })
-    : t`This will remove the repository and its scripts. This action cannot be undone.`;
+    ? t("settings:repositoryUsedByActiveSessions", { count: activeSessionCount })
+    : t("settings:thisWillRemoveTheRepositoryAnd");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Delete repository</Trans>
-          </DialogTitle>
+          <DialogTitle>{t("settings:deleteRepository")}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -52,7 +44,7 @@ export function DeleteRepositoryDialog({
             className="cursor-pointer"
             onClick={() => onOpenChange(false)}
           >
-            {hasActiveSessions ? t`Close` : t`Cancel`}
+            {hasActiveSessions ? t("common:close") : t("common:cancel")}
           </Button>
           {!hasActiveSessions && (
             <Button
@@ -62,7 +54,7 @@ export function DeleteRepositoryDialog({
               onClick={onDelete}
               disabled={deleteLoading}
             >
-              <Trans>Delete Repository</Trans>
+              {t("settings:deleteRepository2")}
             </Button>
           )}
         </DialogFooter>

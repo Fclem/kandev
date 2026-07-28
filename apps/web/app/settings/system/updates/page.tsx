@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { Suspense } from "react";
 import { StateProvider } from "@/components/state-provider";
 import { SystemPageShell } from "@/components/settings/system/system-page-shell";
@@ -7,6 +7,7 @@ import { ChangelogList } from "@/components/settings/changelog-list";
 import { fetchUpdates } from "@/lib/api/domains/system-api";
 
 export default async function SystemUpdatesPage() {
+  const { t } = useTranslation();
   let initialState: Record<string, unknown> = {};
   try {
     const updates = await fetchUpdates({ cache: "no-store" }).catch(() => null);
@@ -18,8 +19,8 @@ export default async function SystemUpdatesPage() {
   return (
     <StateProvider initialState={initialState}>
       <SystemPageShell
-        title={t`Updates`}
-        description={t`Current vs latest release plus the full kandev changelog.`}
+        title={t("common:updates")}
+        description={t("settings:currentVsLatestReleasePlusThe")}
       >
         <UpdatesCard />
         {/*

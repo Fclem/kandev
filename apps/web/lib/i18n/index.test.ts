@@ -11,11 +11,11 @@ import {
 } from "./index";
 import { LOCALE_COOKIE, readLocaleCookie } from "./cookie";
 
-const noopLoader = vi.fn(async () => ({ messages: {} }));
-
-afterEach(() => {
+afterEach(async () => {
   document.cookie = `${LOCALE_COOKIE}=; path=/; max-age=0`;
   vi.clearAllMocks();
+  // Leave the shared instance on the default locale for other suites.
+  await activateLocale(DEFAULT_LOCALE);
 });
 
 describe("locale predicates", () => {
@@ -45,18 +45,27 @@ describe("locale predicates", () => {
 
 describe("activateLocale", () => {
   it("activates the locale, sets <html lang>, and writes the cookie", async () => {
-    const result = await activateLocale("pseudo", noopLoader);
+    const result = await activateLocale("pseudo");
     expect(result).toBe("pseudo");
-    expect(noopLoader).toHaveBeenCalledWith("pseudo");
-    expect(i18n.locale).toBe("pseudo");
+    expect(i18n.language).toBe("pseudo");
     expect(document.documentElement.lang).toBe("pseudo");
     expect(readLocaleCookie()).toBe("pseudo");
   });
 
   it("coerces an invalid locale to en", async () => {
-    const result = await activateLocale("klingon", noopLoader);
+    const result = await activateLocale("klingon");
     expect(result).toBe("en");
-    expect(noopLoader).toHaveBeenCalledWith("en");
+    expect(i18n.language).toBe("en");
     expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("resolves real catalog messages for the active locale", async () => {
+    await activateLocale("en");
+    expect(i18n.t("common:cancel")).toBe("Cancel");
+    // The pseudo catalog is generated from `en`, so the same key is accented —
+    // this is the completeness oracle the QA locale exists for.
+    await activateLocale("pseudo");
+    expect(i18n.t("common:cancel")).not.toBe("Cancel");
+    expect(i18n.t("common:cancel")).toMatch(/[À-ɏ]/);
   });
 });

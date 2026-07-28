@@ -1,8 +1,7 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Button } from "@kandev/ui/button";
 import { Badge } from "@kandev/ui/badge";
@@ -93,25 +92,16 @@ function BackupsList({
   onRestore: (name: string) => void;
   onDelete: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Table data-testid="system-backups-table">
       <TableHeader>
         <TableRow>
-          <TableHead>
-            <Trans>Name</Trans>
-          </TableHead>
-          <TableHead>
-            <Trans>Kind</Trans>
-          </TableHead>
-          <TableHead className="text-right">
-            <Trans>Size</Trans>
-          </TableHead>
-          <TableHead>
-            <Trans>Created</Trans>
-          </TableHead>
-          <TableHead className="text-right">
-            <Trans>Actions</Trans>
-          </TableHead>
+          <TableHead>{t("settings:name")}</TableHead>
+          <TableHead>{t("settings:kind")}</TableHead>
+          <TableHead className="text-right">{t("settings:size")}</TableHead>
+          <TableHead>{t("settings:created")}</TableHead>
+          <TableHead className="text-right">{t("settings:actions")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -139,11 +129,11 @@ async function waitForCreatedBackup(
     }
     await sleep(BACKUP_CREATE_POLL_MS);
   }
-  throw new Error(t`Create snapshot did not finish within 15s`);
+  throw new Error(t("settings:createSnapshotDidNotFinishWithin"));
 }
 
 export function BackupsTable() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { backups, loaded, isLoading, reload } = useBackups();
   const [creating, setCreating] = useState(false);
   const [restoreName, setRestoreName] = useState<string | null>(null);
@@ -157,7 +147,7 @@ export function BackupsTable() {
       await createBackup();
       await waitForCreatedBackup(reload, previousNames);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Create snapshot failed`);
+      setError(err instanceof Error ? err.message : t("settings:createSnapshotFailed"));
     } finally {
       setCreating(false);
     }
@@ -169,7 +159,7 @@ export function BackupsTable() {
       await deleteBackup(name);
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Delete failed`);
+      setError(err instanceof Error ? err.message : t("settings:deleteFailed"));
     }
   };
 
@@ -179,7 +169,7 @@ export function BackupsTable() {
     <Card data-testid="system-backups-card">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-base flex items-center gap-2">
-          <IconArchive className="h-4 w-4" /> <Trans>Backups</Trans>
+          <IconArchive className="h-4 w-4" /> {t("common:backups")}
         </CardTitle>
         <Button
           size="sm"
@@ -188,17 +178,12 @@ export function BackupsTable() {
           className="cursor-pointer"
           data-testid="system-backups-create"
         >
-          {creating ? t`Creating...` : t`Create snapshot`}
+          {creating ? t("settings:creating") : t("settings:createSnapshot")}
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground" data-testid="system-backups-help">
-          <Trans>
-            A backup is a full copy of Kandev&apos;s database (tasks, sessions, settings). Kandev
-            automatically creates one before every version upgrade so you can roll back if something
-            goes wrong. You can also create one manually before risky operations like factory reset.
-            Only the latest 2 backups are kept on disk.
-          </Trans>
+          {t("settings:aBackupIsAFullCopy")}
         </p>
         {error && (
           <p className="text-xs text-destructive" data-testid="system-backups-error">
@@ -207,15 +192,12 @@ export function BackupsTable() {
         )}
         {!loaded && isLoading && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-4" /> <Trans>Loading backups...</Trans>
+            <Spinner className="size-4" /> {t("settings:loadingBackups")}
           </div>
         )}
         {loaded && items.length === 0 && (
           <p className="text-sm text-muted-foreground" data-testid="system-backups-empty">
-            <Trans>
-              No backups yet. Snapshots created automatically on version upgrade or manually via the
-              button above will appear here.
-            </Trans>
+            {t("settings:noBackupsYetSnapshotsCreatedAutomatically")}
           </p>
         )}
         {items.length > 0 && (

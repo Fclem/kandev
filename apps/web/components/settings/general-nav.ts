@@ -1,4 +1,4 @@
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import {
   IconArchive,
   IconBell,
@@ -68,35 +68,35 @@ export const GENERAL_NAV_ITEMS: GeneralNavItem[] = [
  * resolved at render time through this hook instead of baked into the const.
  */
 export function useGeneralNavItems(): GeneralNavItem[] {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const copy: Record<string, { label: string; description: string }> = {
     "/settings/general/appearance": {
-      label: t`Appearance`,
-      description: t`Theme, metrics, and changes panel preferences`,
+      label: t("settings:appearance"),
+      description: t("settings:themeMetricsAndChangesPanelPreferences"),
     },
     "/settings/general/layouts": {
-      label: t`Layouts`,
-      description: t`Task workbench layout profiles and defaults`,
+      label: t("settings:layouts"),
+      description: t("settings:taskWorkbenchLayoutProfilesAndDefaults"),
     },
     "/settings/general/terminal": {
-      label: t`Terminal`,
-      description: t`Shell, terminal fonts, and link behavior`,
+      label: t("settings:terminal"),
+      description: t("settings:shellTerminalFontsAndLinkBehavior"),
     },
     "/settings/general/notifications": {
-      label: t`Notifications`,
-      description: t`Providers and notification events`,
+      label: t("settings:notifications"),
+      description: t("settings:providersAndNotificationEvents"),
     },
     "/settings/general/editors": {
-      label: t`Editors`,
-      description: t`Editor integrations and defaults`,
+      label: t("settings:editors"),
+      description: t("settings:editorIntegrationsAndDefaults"),
     },
     "/settings/general/keyboard-shortcuts": {
-      label: t`Keyboard Shortcuts`,
-      description: t`Chat input and command shortcuts`,
+      label: t("settings:keyboardShortcuts"),
+      description: t("settings:chatInputAndCommandShortcuts"),
     },
     "/settings/general/task-actions": {
-      label: t`Task Actions`,
-      description: t`MCP task defaults and archive safeguards`,
+      label: t("settings:taskActions"),
+      description: t("settings:mcpTaskDefaultsAndArchiveSafeguards"),
     },
   };
   return GENERAL_NAV_ITEMS.map((item) => ({ ...item, ...copy[item.href] }));

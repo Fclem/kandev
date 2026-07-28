@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useState, type ReactNode } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import { IconLoader2 } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
@@ -73,6 +72,7 @@ export function RemoteCredentialsCard({
   onGitUserEmailChange,
   localGitIdentity,
 }: RemoteCredentialsCardProps) {
+  const { t } = useTranslation();
   const [authSpecs, setAuthSpecs] = useState<RemoteAuthSpec[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -100,12 +100,8 @@ export function RemoteCredentialsCard({
   return (
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
-        <CardTitle>
-          <Trans>Remote Credentials</Trans>
-        </CardTitle>
-        <CardDescription>
-          <Trans>Configure authentication for tools and agents in the remote environment.</Trans>
-        </CardDescription>
+        <CardTitle>{t("settings:remoteCredentials")}</CardTitle>
+        <CardDescription>{t("settings:configureAuthenticationForToolsAndAgents")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {authSpecs.length > 0 || isRemote ? (
@@ -146,7 +142,7 @@ export function RemoteCredentialsCard({
           </Accordion>
         ) : (
           <p className="text-sm text-muted-foreground">
-            <Trans>No transferable credentials found.</Trans>
+            {t("settings:noTransferableCredentialsFound")}
           </p>
         )}
       </CardContent>
@@ -155,17 +151,16 @@ export function RemoteCredentialsCard({
 }
 
 function RemoteCredentialsLoading({ isDirty }: { isDirty: boolean }) {
+  const { t } = useTranslation();
   return (
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
-        <CardTitle>
-          <Trans>Remote Credentials</Trans>
-        </CardTitle>
+        <CardTitle>{t("settings:remoteCredentials")}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <IconLoader2 className="h-4 w-4 animate-spin" />
-          <Trans>Loading...</Trans>
+          {t("common:loading2")}
         </div>
       </CardContent>
     </SettingsCard>
@@ -316,7 +311,7 @@ function EnvOnlySection({
   onSecretIdChange: (id: string | null) => void;
   secrets: SecretListItem[];
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       {envMethod.setup_hint && (
@@ -329,7 +324,7 @@ function EnvOnlySection({
         onSecretIdChange={onSecretIdChange}
         secrets={secrets}
         label={envMethod.env_var}
-        placeholder={t`Select or create a secret...`}
+        placeholder={t("settings:selectOrCreateASecret")}
         isDirty={secretId !== baselineSecretId}
       />
     </>
@@ -349,10 +344,10 @@ function FileOption({
   filesAvailable: boolean;
   onSelect: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const filesLabel = method.source_files?.join(", ") ?? "";
-  const optionLabel = method.label ?? t`Copy auth files`;
-  const filesMissingNote = t`files not found on this machine`;
+  const optionLabel = method.label ?? t("settings:copyAuthFiles");
+  const filesMissingNote = t("settings:filesNotFoundOnThisMachine");
   return (
     <AuthOptionButton
       selected={isSelected}
@@ -390,21 +385,19 @@ function EnvOption({
   secrets: SecretListItem[];
   onSelect: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div>
       <AuthOptionButton
         selected={isSelected}
         isDirty={isDirty}
         onSelect={onSelect}
-        label={t`Provide secret`}
+        label={t("settings:provideSecret")}
       >
         <div className="flex flex-col gap-0.5">
-          <span className="text-sm font-medium">
-            <Trans>Provide secret</Trans>
-          </span>
+          <span className="text-sm font-medium">{t("settings:provideSecret")}</span>
           <span className="text-xs text-muted-foreground">
-            <Trans>
+            <Trans i18nKey="settings:setViaAStoredSecret" values={{ env_var: method.env_var }}>
               Set <code className="text-[11px] bg-muted px-1 rounded">{method.env_var}</code> via a
               stored secret
             </Trans>
@@ -422,7 +415,7 @@ function EnvOption({
             secretId={secretId}
             onSecretIdChange={onSecretIdChange}
             secrets={secrets}
-            placeholder={t`Select or create a secret...`}
+            placeholder={t("settings:selectOrCreateASecret")}
             isDirty={secretId !== baselineSecretId}
           />
         </div>
@@ -452,9 +445,9 @@ function AuthChoiceRadio({
   onSecretIdChange: (id: string | null) => void;
   secrets: SecretListItem[];
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
-    <div role="radiogroup" aria-label={t`Remote auth method`} className="grid gap-0">
+    <div role="radiogroup" aria-label={t("settings:remoteAuthMethod")} className="grid gap-0">
       {fileMethod && (
         <FileOption
           method={fileMethod}
@@ -523,23 +516,24 @@ function setMethodSelected(selectedIds: Set<string>, methodId: string, selected:
 }
 
 function AuthStatusBadge({ choice, hasSecret }: { choice: AuthChoice; hasSecret: boolean }) {
+  const { t } = useTranslation();
   if (choice === "env" && hasSecret) {
     return (
       <Badge variant="default" className="bg-green-600 text-[10px] px-1.5 py-0">
-        <Trans>Configured</Trans>
+        {t("settings:configured2")}
       </Badge>
     );
   }
   if (choice === "files") {
     return (
       <Badge variant="default" className="bg-green-600 text-[10px] px-1.5 py-0">
-        <Trans>Files Selected</Trans>
+        {t("settings:filesSelected")}
       </Badge>
     );
   }
   return (
     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-      <Trans>Not Configured</Trans>
+      {t("settings:notConfigured")}
     </Badge>
   );
 }

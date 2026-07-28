@@ -1,7 +1,6 @@
 "use client";
-
 import { useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@kandev/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@kandev/ui/card";
 import { IconRestore, IconTrash } from "@tabler/icons-react";
@@ -27,36 +26,31 @@ export function StorageQuarantineCard({
   onRestore,
   onDelete,
 }: Props) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [deleteEntry, setDeleteEntry] = useState<StorageQuarantineEntry | null>(null);
   return (
     <Card className="min-w-0" data-testid="storage-quarantine-card">
       <CardHeader>
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-1 text-base">
-            <Trans>Quarantine</Trans>
-            <StorageSettingHelp label={t`Quarantine`}>
-              {t`Quarantine is Kandev's recoverable holding area. Orphan task workspaces and rotated Go caches are moved here before deletion. You can restore an item during its retention period; after the deadline, a later maintenance run may permanently delete it.`}
+            {t("settings:quarantine")}
+            <StorageSettingHelp label={t("settings:quarantine")}>
+              {t("settings:quarantineIsKandevSRecoverableHolding")}
             </StorageSettingHelp>
           </CardTitle>
           <JobProgressIndicator
             kind="storage-quarantine-delete"
             jobId={deleteJobId}
-            successLabel={t`Deletion complete`}
+            successLabel={t("settings:deletionComplete")}
             testId="storage-delete-job"
           />
         </div>
-        <CardDescription>
-          <Trans>
-            Cleanup moves recoverable data here first instead of deleting it immediately. Restore an
-            item if you still need it, or delete it permanently when you are certain.
-          </Trans>
-        </CardDescription>
+        <CardDescription>{t("settings:cleanupMovesRecoverableDataHereFirst")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {entries.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            <Trans>No restorable quarantined resources.</Trans>
+            {t("settings:noRestorableQuarantinedResources")}
           </p>
         )}
         {entries.map((entry) => (
@@ -75,7 +69,7 @@ export function StorageQuarantineCard({
                 </div>
                 <p className="break-all font-mono text-xs">{entry.original_path}</p>
                 <p className="break-all text-[11px] text-muted-foreground">
-                  <Trans>Trash: {entry.quarantine_path}</Trans>
+                  {t("settings:trash", { quarantine_path: entry.quarantine_path })}
                 </p>
                 {entry.last_error && (
                   <p className="break-words text-xs text-red-500">{entry.last_error}</p>
@@ -88,7 +82,7 @@ export function StorageQuarantineCard({
                   onClick={() => void onRestore(entry.id)}
                   data-testid={`storage-quarantine-${entry.id}-restore`}
                 >
-                  <IconRestore className="size-4" /> <Trans>Restore</Trans>
+                  <IconRestore className="size-4" /> {t("settings:restore")}
                 </StorageActionButton>
                 <StorageActionButton
                   variant="destructive"
@@ -96,7 +90,7 @@ export function StorageQuarantineCard({
                   onClick={() => setDeleteEntry(entry)}
                   data-testid={`storage-quarantine-${entry.id}-delete`}
                 >
-                  <IconTrash className="size-4" /> <Trans>Delete</Trans>
+                  <IconTrash className="size-4" /> {t("common:delete")}
                 </StorageActionButton>
               </div>
             </div>

@@ -1,8 +1,6 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { t as globalT } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans, useTranslation } from "react-i18next";
 import { IconInfoCircle, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
@@ -17,6 +15,7 @@ import type { AgentProfileOption } from "@/lib/state/slices";
 import type { Repository } from "@/lib/types/http";
 import type { QuickChatSessionKind } from "@/lib/state/slices/ui/types";
 import { ConfigurationChatToggle } from "./configuration-chat-toggle";
+import { t as globalT } from "@/lib/i18n";
 
 type QuickChatSetupProps = {
   workspaceId: string;
@@ -28,25 +27,25 @@ type QuickChatSetupProps = {
 };
 
 function repositoryAddState(isLoading: boolean, repositoryCount: number, rowCount: number) {
-  if (isLoading) return { canAddMore: false, addHint: globalT`Loading repositories` };
+  if (isLoading) return { canAddMore: false, addHint: globalT("chat:loadingRepositories") };
   if (repositoryCount === 0) {
-    return { canAddMore: false, addHint: globalT`No repositories available in this workspace` };
+    return { canAddMore: false, addHint: globalT("common:noRepositoriesAvailableInThisWorkspace") };
   }
   if (rowCount >= repositoryCount) {
-    return { canAddMore: false, addHint: globalT`All workspace repositories are already added` };
+    return {
+      canAddMore: false,
+      addHint: globalT("common:allWorkspaceRepositoriesAreAlreadyAdded"),
+    };
   }
   return { canAddMore: true, addHint: undefined };
 }
 
 function QuickChatIntroduction() {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1" data-testid="quick-chat-introduction">
-      <p className="text-sm text-foreground">
-        <Trans>Chat with an agent about an idea, question, or codebase.</Trans>
-      </p>
-      <p className="text-sm text-muted-foreground">
-        <Trans>Quick chats stay outside your task board.</Trans>
-      </p>
+      <p className="text-sm text-foreground">{t("chat:chatWithAnAgentAboutAn")}</p>
+      <p className="text-sm text-muted-foreground">{t("chat:quickChatsStayOutsideYourTask")}</p>
     </div>
   );
 }
@@ -62,16 +61,16 @@ function AgentField({
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const options = useAgentProfileOptions(profiles);
   return (
     <section className="space-y-2" aria-labelledby="quick-chat-agent-label">
       <div>
         <h3 id="quick-chat-agent-label" className="text-sm font-medium">
-          <Trans>Agent profile</Trans>
+          {t("chat:agentProfile")}
         </h3>
         <p id="quick-chat-agent-help" className="text-xs text-muted-foreground">
-          <Trans>Choose the agent for this conversation.</Trans>
+          {t("chat:chooseTheAgentForThisConversation")}
         </p>
       </div>
       <AgentSelector
@@ -79,7 +78,7 @@ function AgentField({
         value={value}
         onValueChange={onChange}
         disabled={disabled}
-        placeholder={profiles.length > 0 ? t`Select agent` : t`No agents available`}
+        placeholder={profiles.length > 0 ? t("common:selectAgent") : t("chat:noAgentsAvailable")}
         triggerClassName="h-11 w-full justify-between border border-input bg-background px-3 shadow-xs hover:bg-accent/50 data-[state=open]:border-ring data-[state=open]:ring-[2px] data-[state=open]:ring-ring/35"
         popoverPortal
       />
@@ -100,18 +99,18 @@ type RepositoryFieldProps = {
 };
 
 function RepositoryField(props: RepositoryFieldProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <section className="space-y-3" aria-labelledby="quick-chat-repositories-label">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <h3 id="quick-chat-repositories-label" className="text-sm font-medium">
-            <Trans>
+            <Trans i18nKey="chat:repositoriesOptional">
               Repositories <span className="font-normal text-muted-foreground">(optional)</span>
             </Trans>
           </h3>
           <p id="quick-chat-repositories-help" className="text-xs text-muted-foreground">
-            <Trans>Add repository context to focus on specific code and branches.</Trans>
+            {t("chat:addRepositoryContextToFocusOn")}
           </p>
         </div>
         <RepositoryContextHelp />
@@ -126,7 +125,7 @@ function RepositoryField(props: RepositoryFieldProps) {
           workspaceId={props.workspaceId}
           canAddMore={props.canAddMore}
           addHint={props.addHint}
-          addLabel={t`Add repository`}
+          addLabel={t("common:addRepository")}
           allowDuplicateRepositories={false}
           onAdd={props.onAdd}
           onRemove={props.onRemove}
@@ -139,23 +138,20 @@ function RepositoryField(props: RepositoryFieldProps) {
 }
 
 function RepositoryContextHelp() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label={t`About repository context`}
+          aria-label={t("chat:aboutRepositoryContext")}
           className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <IconInfoCircle className="h-4 w-4" />
         </button>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs">
-        <Trans>
-          Kandev uses an isolated worktree from the selected branch. Uncommitted local changes are
-          not included.
-        </Trans>
+        {t("chat:kandevUsesAnIsolatedWorktreeFrom")}
       </TooltipContent>
     </Tooltip>
   );
@@ -172,14 +168,14 @@ function SetupFooter({
   onCancel: () => void;
   onStart: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <footer
       className="flex shrink-0 items-center justify-end gap-2 border-t bg-popover px-4 py-3 sm:px-8"
       data-testid="quick-chat-setup-footer"
     >
       <Button variant="outline" onClick={onCancel} disabled={isStarting} className="cursor-pointer">
-        <Trans>Cancel</Trans>
+        {t("common:cancel")}
       </Button>
       <Button
         onClick={onStart}
@@ -189,7 +185,7 @@ function SetupFooter({
         data-dialog-default-action
       >
         {isStarting ? <IconLoader2 className="h-4 w-4 animate-spin" /> : null}
-        {isStarting ? t`Starting chat...` : t`Start chat`}
+        {isStarting ? t("chat:startingChat") : t("chat:startChat")}
       </Button>
     </footer>
   );
@@ -203,6 +199,7 @@ export function QuickChatSetup({
   onCancel,
   onKindChange,
 }: QuickChatSetupProps) {
+  const { t } = useTranslation();
   const agentProfiles = useAppStore((state) => state.agentProfiles.items ?? []);
   const defaultAgentId = useAppStore(
     (state) =>
@@ -246,9 +243,7 @@ export function QuickChatSetup({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
         <div className="mx-auto w-full max-w-2xl space-y-7">
           <header className="space-y-1">
-            <h2 className="text-lg font-semibold">
-              <Trans>Quick Chat</Trans>
-            </h2>
+            <h2 className="text-lg font-semibold">{t("common:quickChat")}</h2>
             <QuickChatIntroduction />
           </header>
           {canCreateConfigurationChat && (

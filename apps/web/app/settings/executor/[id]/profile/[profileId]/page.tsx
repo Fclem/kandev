@@ -1,7 +1,6 @@
 "use client";
-
 import { use, useCallback, useEffect, useMemo, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
 import { Button } from "@kandev/ui/button";
@@ -75,6 +74,7 @@ export default function ProfileDetailPage({
 }: {
   params: Promise<{ id: string; profileId: string }>;
 }) {
+  const { t } = useTranslation();
   const { id: executorId, profileId } = use(params);
   const router = useRouter();
   const executor = useAppStore(
@@ -86,14 +86,12 @@ export default function ProfileDetailPage({
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground">
-            <Trans>Profile not found</Trans>
-          </p>
+          <p className="text-muted-foreground">{t("settings:profileNotFound")}</p>
           <Button
             className="mt-4 cursor-pointer"
             onClick={() => router.push(`/settings/executor/${executorId}`)}
           >
-            <Trans>Back to Executor</Trans>
+            {t("settings:backToExecutor")}
           </Button>
         </CardContent>
       </Card>
@@ -112,19 +110,16 @@ function ProfileDetailsCard({
   baselineName: string;
   onNameChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   const isDirty = name.trim() !== baselineName.trim();
   return (
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
-        <CardTitle>
-          <Trans>Profile Details</Trans>
-        </CardTitle>
+        <CardTitle>{t("settings:profileDetails")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="profile-name">
-            <Trans>Name</Trans>
-          </Label>
+          <Label htmlFor="profile-name">{t("settings:name")}</Label>
           <Input
             id="profile-name"
             value={name}
@@ -152,7 +147,7 @@ function EnvVarRow({
   onRemove: (index: number) => void;
   baselineRow?: EnvVarRow;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const isDirty = !baselineRow || JSON.stringify(row) !== JSON.stringify(baselineRow);
   return (
     <div
@@ -163,7 +158,7 @@ function EnvVarRow({
       <Input
         value={row.key}
         onChange={(e) => onUpdate(index, "key", e.target.value)}
-        placeholder={t`KEY`}
+        placeholder={t("settings:key2")}
         className="font-mono text-xs flex-[2]"
         data-settings-dirty={!baselineRow || row.key !== baselineRow.key}
       />
@@ -175,19 +170,15 @@ function EnvVarRow({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="value">
-            <Trans>Value</Trans>
-          </SelectItem>
-          <SelectItem value="secret">
-            <Trans>Secret</Trans>
-          </SelectItem>
+          <SelectItem value="value">{t("settings:value2")}</SelectItem>
+          <SelectItem value="secret">{t("settings:secret")}</SelectItem>
         </SelectContent>
       </Select>
       {row.mode === "value" ? (
         <Input
           value={row.value}
           onChange={(e) => onUpdate(index, "value", e.target.value)}
-          placeholder={t`value`}
+          placeholder={t("settings:value")}
           className="font-mono text-xs flex-[3]"
           data-settings-dirty={!baselineRow || row.value !== baselineRow.value}
         />
@@ -197,7 +188,7 @@ function EnvVarRow({
             className="flex-[3] text-xs"
             data-settings-dirty={!baselineRow || row.secretId !== baselineRow.secretId}
           >
-            <SelectValue placeholder={t`Select secret...`} />
+            <SelectValue placeholder={t("settings:selectSecret")} />
           </SelectTrigger>
           <SelectContent>
             {secrets.map((s) => (
@@ -236,6 +227,7 @@ function EnvVarsCard({
   onUpdate: (index: number, field: keyof EnvVarRow, val: string) => void;
   onRemove: (index: number) => void;
 }) {
+  const { t } = useTranslation();
   const isDirty =
     JSON.stringify(rowsToEnvVars(rows)) !== JSON.stringify(rowsToEnvVars(baselineRows));
   return (
@@ -243,14 +235,9 @@ function EnvVarsCard({
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>
-              <Trans>Environment Variables</Trans>
-            </CardTitle>
+            <CardTitle>{t("settings:environmentVariables")}</CardTitle>
             <CardDescription>
-              <Trans>
-                Injected into the execution environment. Variables can reference secrets for
-                sensitive values.
-              </Trans>
+              {t("settings:injectedIntoTheExecutionEnvironmentVariables")}
             </CardDescription>
           </div>
           <Button
@@ -261,14 +248,14 @@ function EnvVarsCard({
             className="cursor-pointer"
           >
             <IconPlus className="h-3.5 w-3.5 mr-1" />
-            <Trans>Add</Trans>
+            {t("settings:add")}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
         {rows.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            <Trans>No environment variables configured.</Trans>
+            {t("settings:noEnvironmentVariablesConfigured")}
           </p>
         )}
         {rows.map((row, idx) => (
@@ -294,19 +281,20 @@ function ProfileActions({
   executorId: string;
   onRequestDelete: () => void;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   return (
     <div className="flex items-center justify-between">
       <Button variant="destructive" size="sm" onClick={onRequestDelete} className="cursor-pointer">
         <IconTrash className="h-4 w-4 mr-1" />
-        <Trans>Delete Profile</Trans>
+        {t("settings:deleteProfile2")}
       </Button>
       <Button
         variant="outline"
         onClick={() => router.push(`/settings/executor/${executorId}`)}
         className="cursor-pointer"
       >
-        <Trans>Cancel</Trans>
+        {t("common:cancel")}
       </Button>
     </div>
   );
@@ -323,26 +311,20 @@ function DeleteProfileDialog({
   onDelete: () => void;
   deleting: boolean;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            <Trans>Delete Profile</Trans>
-          </DialogTitle>
-          <DialogDescription>
-            <Trans>
-              Are you sure you want to delete this profile? This action cannot be undone.
-            </Trans>
-          </DialogDescription>
+          <DialogTitle>{t("settings:deleteProfile2")}</DialogTitle>
+          <DialogDescription>{t("settings:areYouSureYouWantTo2")}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            <Trans>Cancel</Trans>
+            {t("common:cancel")}
           </Button>
           <Button variant="destructive" onClick={onDelete} disabled={deleting}>
-            {deleting ? t`Deleting...` : t`Delete`}
+            {deleting ? t("settings:deleting") : t("common:delete")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -351,7 +333,7 @@ function DeleteProfileDialog({
 }
 
 function useProfilePersistence(executor: Executor, profile: ExecutorProfile) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const router = useRouter();
   const { toast } = useToast();
   const executors = useAppStore((state) => state.executors.items);
@@ -373,14 +355,14 @@ function useProfilePersistence(executor: Executor, profile: ExecutorProfile) {
       try {
         const updated = await updateExecutorProfile(executor.id, profile.id, data);
         setSaveStatus("success");
-        toast({ title: t`Profile saved`, variant: "success" });
+        toast({ title: t("settings:profileSaved"), variant: "success" });
         setExecutors(upsertExecutorProfile(executors, executor, updated));
         window.setTimeout(() => setSaveStatus("idle"), 1500);
       } catch (err) {
-        const message = err instanceof Error ? err.message : t`Failed to save profile`;
+        const message = err instanceof Error ? err.message : t("settings:failedToSaveProfile");
         setError(message);
         setSaveStatus("error");
-        toast({ title: t`Failed to save profile`, description: message, variant: "error" });
+        toast({ title: t("settings:failedToSaveProfile"), description: message, variant: "error" });
         throw err;
       }
     },
@@ -409,7 +391,7 @@ function useProfilePersistence(executor: Executor, profile: ExecutorProfile) {
 }
 
 function useProfileFormState(executor: Executor, profile: ExecutorProfile) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [name, setName] = useState(profile.name);
   const [prepareScript, setPrepareScript] = useState(profile.prepare_script ?? "");
   const [cleanupScript, setCleanupScript] = useState(profile.cleanup_script ?? "");
@@ -446,8 +428,8 @@ function useProfileFormState(executor: Executor, profile: ExecutorProfile) {
   // The literal "{{" is interpolated so it is not parsed as ICU syntax in the catalog message.
   const placeholderToken = "{{";
   const prepareDesc = isRemote
-    ? t`Runs inside the execution environment before the agent starts. Type ${placeholderToken} to see available placeholders.`
-    : t`Runs on the host machine before the agent starts.`;
+    ? t("settings:runsInsideTheExecutionEnvironmentBefore", { placeholderToken })
+    : t("settings:runsOnTheHostMachineBefore");
 
   return {
     name,
@@ -477,13 +459,14 @@ function ProfileEditHeader({
   executor: Executor;
   profile: ExecutorProfile;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   return (
     <div className="flex items-start justify-between flex-wrap gap-3">
       <div>
         <h2 className="text-2xl font-bold">{profile.name}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          <Trans>Profile for {executor.name}</Trans>
+          {t("settings:profileFor", { name: executor.name })}
         </p>
       </div>
       <Button
@@ -492,14 +475,14 @@ function ProfileEditHeader({
         className="cursor-pointer"
         onClick={() => router.push(`/settings/executor/${executor.id}`)}
       >
-        <Trans>Back to Executor</Trans>
+        {t("settings:backToExecutor")}
       </Button>
     </div>
   );
 }
 
 function ProfileEditForm({ executor, profile }: { executor: Executor; profile: ExecutorProfile }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { items: secrets } = useSecrets();
   const persistence = useProfilePersistence(executor, profile);
   const form = useProfileFormState(executor, profile);
@@ -521,7 +504,7 @@ function ProfileEditForm({ executor, profile }: { executor: Executor; profile: E
     revision: saveRevision,
     isDirty: saveRevision !== savedRevision,
     canSave: Boolean(form.name.trim()),
-    invalidReason: form.name.trim() ? undefined : t`Profile name is required.`,
+    invalidReason: form.name.trim() ? undefined : t("settings:profileNameIsRequired2"),
     save: handleSave,
     discard: () => undefined,
   });
@@ -550,7 +533,7 @@ function ProfileEditForm({ executor, profile }: { executor: Executor; profile: E
         onRemove={form.removeEnvVar}
       />
       <ScriptCard
-        title={t`Prepare Script`}
+        title={t("settings:prepareScript2")}
         description={form.prepareDesc}
         value={form.prepareScript}
         baselineValue={profile.prepare_script ?? ""}
@@ -561,8 +544,8 @@ function ProfileEditForm({ executor, profile }: { executor: Executor; profile: E
       />
       {form.isRemote && (
         <ScriptCard
-          title={t`Cleanup Script`}
-          description={t`Runs after the agent session ends for cleanup tasks.`}
+          title={t("settings:cleanupScript2")}
+          description={t("settings:runsAfterTheAgentSessionEnds")}
           value={form.cleanupScript}
           baselineValue={profile.cleanup_script ?? ""}
           onChange={form.setCleanupScript}

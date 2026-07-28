@@ -1,8 +1,6 @@
 "use client";
-
 import { useCallback, useEffect, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import {
@@ -21,6 +19,7 @@ import { ApiError } from "@/lib/api/client";
 import { listTokens, mintToken, revokeToken, type ApiToken } from "@/lib/api/domains/auth-api";
 
 function useTokensList() {
+  const { t } = useTranslation();
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +31,7 @@ function useTokensList() {
       setTokens(res.tokens);
       setLoaded(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t`Failed to load tokens.`);
+      setError(err instanceof ApiError ? err.message : t("settings:failedToLoadTokens"));
     }
   }, []);
 
@@ -54,15 +53,12 @@ function MintTokenResult({
   onCopy: () => void;
   onDone: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
-        <DialogTitle>
-          <Trans>Token created</Trans>
-        </DialogTitle>
-        <DialogDescription>
-          <Trans>This is shown only once — copy it now and store it securely.</Trans>
-        </DialogDescription>
+        <DialogTitle>{t("settings:tokenCreated")}</DialogTitle>
+        <DialogDescription>{t("settings:thisIsShownOnlyOnceCopy")}</DialogDescription>
       </DialogHeader>
       <div className="flex items-center gap-2">
         <Input
@@ -83,7 +79,7 @@ function MintTokenResult({
       </div>
       <DialogFooter>
         <Button className="cursor-pointer" onClick={onDone} data-dialog-default-action>
-          <Trans>Done</Trans>
+          {t("settings:done")}
         </Button>
       </DialogFooter>
     </>
@@ -105,23 +101,16 @@ function MintTokenForm({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
-        <DialogTitle>
-          <Trans>Create API token</Trans>
-        </DialogTitle>
-        <DialogDescription>
-          <Trans>
-            Grants the same access as your account to any script or CLI that uses it. Give it a name
-            so you can recognize it later.
-          </Trans>
-        </DialogDescription>
+        <DialogTitle>{t("settings:createApiToken")}</DialogTitle>
+        <DialogDescription>{t("settings:grantsTheSameAccessAsYour")}</DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-1">
         <label htmlFor="api-tokens-name" className="text-xs text-muted-foreground">
-          <Trans>Name</Trans>
+          {t("settings:name")}
         </label>
         <Input
           id="api-tokens-name"
@@ -137,7 +126,7 @@ function MintTokenForm({
       )}
       <DialogFooter>
         <Button variant="outline" className="cursor-pointer" onClick={onCancel}>
-          <Trans>Cancel</Trans>
+          {t("common:cancel")}
         </Button>
         <Button
           className="cursor-pointer"
@@ -145,7 +134,7 @@ function MintTokenForm({
           onClick={onSubmit}
           data-testid="api-tokens-mint-submit"
         >
-          {submitting ? t`Creating...` : t`Create token`}
+          {submitting ? t("settings:creating") : t("settings:createToken")}
         </Button>
       </DialogFooter>
     </>
@@ -166,7 +155,7 @@ function MintTokenDialog({
   const [submitting, setSubmitting] = useState(false);
   const [rawToken, setRawToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const { t } = useLingui();
+  const { t } = useTranslation();
 
   const reset = () => {
     setName("");
@@ -183,7 +172,7 @@ function MintTokenDialog({
       setRawToken(res.token);
       onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t`Could not create token.`);
+      setError(err instanceof ApiError ? err.message : t("settings:couldNotCreateToken"));
     } finally {
       setSubmitting(false);
     }
@@ -226,7 +215,7 @@ function MintTokenDialog({
 export function ApiTokens() {
   const { tokens, loaded, error, reload } = useTokensList();
   const [mintOpen, setMintOpen] = useState(false);
-  const { t } = useLingui();
+  const { t } = useTranslation();
 
   const onRevoke = async (id: string) => {
     await revokeToken(id);
@@ -237,7 +226,7 @@ export function ApiTokens() {
     <Card data-testid="api-tokens-card">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-base flex items-center gap-2">
-          <IconKey className="h-4 w-4" /> <Trans>API tokens</Trans>
+          <IconKey className="h-4 w-4" /> {t("settings:apiTokens")}
         </CardTitle>
         <Button
           size="sm"
@@ -245,15 +234,12 @@ export function ApiTokens() {
           onClick={() => setMintOpen(true)}
           data-testid="api-tokens-create"
         >
-          <Trans>New token</Trans>
+          {t("settings:newToken")}
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          <Trans>
-            Personal access tokens authenticate scripts and CLIs as you. Revoke a token immediately
-            if it may have leaked.
-          </Trans>
+          {t("settings:personalAccessTokensAuthenticateScriptsAnd")}
         </p>
         {error && (
           <p className="text-xs text-destructive" data-testid="api-tokens-error">
@@ -262,25 +248,17 @@ export function ApiTokens() {
         )}
         {!loaded && !error && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-4" /> <Trans>Loading tokens...</Trans>
+            <Spinner className="size-4" /> {t("settings:loadingTokens")}
           </div>
         )}
         {loaded && tokens.length > 0 && (
           <Table data-testid="api-tokens-table">
             <TableHeader>
               <TableRow>
-                <TableHead>
-                  <Trans>Name</Trans>
-                </TableHead>
-                <TableHead>
-                  <Trans>Created</Trans>
-                </TableHead>
-                <TableHead>
-                  <Trans>Last used</Trans>
-                </TableHead>
-                <TableHead className="text-right">
-                  <Trans>Actions</Trans>
-                </TableHead>
+                <TableHead>{t("settings:name")}</TableHead>
+                <TableHead>{t("settings:created")}</TableHead>
+                <TableHead>{t("settings:lastUsed")}</TableHead>
+                <TableHead className="text-right">{t("settings:actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -291,7 +269,9 @@ export function ApiTokens() {
                     {new Date(token.created_at).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-xs">
-                    {token.last_used_at ? new Date(token.last_used_at).toLocaleString() : t`Never`}
+                    {token.last_used_at
+                      ? new Date(token.last_used_at).toLocaleString()
+                      : t("settings:never2")}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -301,7 +281,7 @@ export function ApiTokens() {
                       onClick={() => void onRevoke(token.id)}
                       data-testid="api-tokens-revoke"
                     >
-                      <Trans>Revoke</Trans>
+                      {t("settings:revoke")}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -311,7 +291,7 @@ export function ApiTokens() {
         )}
         {loaded && tokens.length === 0 && !error && (
           <p className="text-sm text-muted-foreground" data-testid="api-tokens-empty">
-            <Trans>No tokens yet.</Trans>
+            {t("settings:noTokensYet")}
           </p>
         )}
       </CardContent>

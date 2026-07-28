@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
@@ -13,19 +12,16 @@ type ProfileDetailsCardProps = {
 };
 
 export function ProfileDetailsCard({ name, baselineName, onNameChange }: ProfileDetailsCardProps) {
+  const { t } = useTranslation();
   const isDirty = baselineName !== undefined && name.trim() !== baselineName.trim();
   return (
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
-        <CardTitle>
-          <Trans>Profile Details</Trans>
-        </CardTitle>
+        <CardTitle>{t("settings:profileDetails")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="profile-name">
-            <Trans>Name</Trans>
-          </Label>
+          <Label htmlFor="profile-name">{t("settings:name")}</Label>
           <Input
             id="profile-name"
             value={name}

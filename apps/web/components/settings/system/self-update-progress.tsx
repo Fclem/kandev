@@ -1,7 +1,6 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { Button } from "@kandev/ui/button";
 import { Spinner } from "@kandev/ui/spinner";
 import { IconCheck, IconAlertTriangle } from "@tabler/icons-react";
@@ -15,14 +14,14 @@ type SelfUpdateProgressProps = {
 };
 
 function activeText(phase: SelfUpdatePhase, target: string | null): string {
-  const version = target ?? t`the new version`;
+  const version = target ?? t("settings:theNewVersion");
   switch (phase) {
     case "starting":
-      return t`Starting update to ${version}…`;
+      return t("settings:startingUpdateTo", { version });
     case "installing":
-      return t`Downloading and installing ${version}…`;
+      return t("settings:downloadingAndInstalling", { version });
     case "restarting":
-      return t`Restarting Kandev — this can take up to a minute.`;
+      return t("settings:restartingKandevThisCanTakeUp");
     default:
       return "";
   }
@@ -35,29 +34,26 @@ function ActiveRow({
   phase: SelfUpdatePhase;
   targetVersion: string | null;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2 text-sm">
         <Spinner className="size-4" />
         <span>{activeText(phase, targetVersion)}</span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        <Trans>Keep this page open. It will refresh automatically when the update finishes.</Trans>
-      </p>
+      <p className="text-xs text-muted-foreground">{t("settings:keepThisPageOpenItWill")}</p>
     </div>
   );
 }
 
 function DoneRow({ targetVersion }: { targetVersion: string | null }) {
-  const { t } = useLingui();
-  const version = targetVersion ?? t`the latest version`;
+  const { t } = useTranslation();
+  const version = targetVersion ?? t("settings:theLatestVersion");
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-2 text-sm">
         <IconCheck className="size-4 text-emerald-500" />
-        <span>
-          <Trans>Updated to {version}.</Trans>
-        </span>
+        <span>{t("settings:updatedTo", { version })}</span>
       </div>
       <Button
         variant="outline"
@@ -66,19 +62,19 @@ function DoneRow({ targetVersion }: { targetVersion: string | null }) {
         onClick={() => window.location.reload()}
         data-testid="system-updates-progress-reload"
       >
-        <Trans>Reload page</Trans>
+        {t("settings:reloadPage")}
       </Button>
     </div>
   );
 }
 
 function ErrorRow({ message, onDismiss }: { message: string | null; onDismiss: () => void }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-2 text-sm text-destructive">
         <IconAlertTriangle className="size-4 shrink-0" />
-        <span>{message ?? t`The update failed.`}</span>
+        <span>{message ?? t("settings:theUpdateFailed")}</span>
       </div>
       <Button
         variant="outline"
@@ -87,7 +83,7 @@ function ErrorRow({ message, onDismiss }: { message: string | null; onDismiss: (
         onClick={onDismiss}
         data-testid="system-updates-progress-dismiss"
       >
-        <Trans>Dismiss</Trans>
+        {t("common:dismiss")}
       </Button>
     </div>
   );

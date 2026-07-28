@@ -1,7 +1,6 @@
 "use client";
-
 import { IconHome, IconInbox, IconMessageCircle } from "@tabler/icons-react";
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/components/state-provider";
 import { useInOffice } from "@/hooks/use-in-office";
 import { useQuickChatLauncher } from "@/hooks/use-quick-chat-launcher";
@@ -13,7 +12,7 @@ type AppSidebarPrimaryNavProps = {
 };
 
 export function AppSidebarPrimaryNav({ collapsed }: AppSidebarPrimaryNavProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const inboxCount = useAppStore((s) => s.office.inboxCount);
   const inOffice = useInOffice();
@@ -23,7 +22,7 @@ export function AppSidebarPrimaryNav({ collapsed }: AppSidebarPrimaryNavProps) {
     <div className="flex flex-col gap-0.5">
       <AppSidebarNavItem
         icon={IconHome}
-        label={t`Home`}
+        label={t("sidebar:home")}
         href={inOffice ? "/office" : "/"}
         collapsed={collapsed}
         exactMatch
@@ -31,7 +30,7 @@ export function AppSidebarPrimaryNav({ collapsed }: AppSidebarPrimaryNavProps) {
       {inOffice && (
         <AppSidebarNavItem
           icon={IconInbox}
-          label={t`Inbox`}
+          label={t("sidebar:inbox")}
           href="/office/inbox"
           badge={inboxCount}
           collapsed={collapsed}
@@ -40,7 +39,7 @@ export function AppSidebarPrimaryNav({ collapsed }: AppSidebarPrimaryNavProps) {
       {workspaceId && collapsed && (
         <AppSidebarNavItem
           icon={IconMessageCircle}
-          label={t`Quick Chat`}
+          label={t("common:quickChat")}
           onClick={handleOpenQuickChat}
           collapsed={collapsed}
         />

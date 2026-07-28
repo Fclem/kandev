@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
 import { useParams, useRouter, useSearchParams } from "@/lib/routing/client-router";
 import { Button } from "@kandev/ui/button";
@@ -208,18 +207,18 @@ function useAgentSaveHandlers({
   onToastError,
   replaceRoute,
 }: AgentSaveHandlersProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const handleSave = async () => {
     if (draftAgent.profiles.some((p) => !p.name.trim())) {
-      onToastError(new Error(t`Profile name is required.`));
+      onToastError(new Error(t("settings:profileNameIsRequired2")));
       return;
     }
     if (draftAgent.profiles.some((p) => !p.model.trim())) {
-      onToastError(new Error(t`Model is required for all profiles.`));
+      onToastError(new Error(t("settings:modelIsRequiredForAllProfiles")));
       return;
     }
     if (hasInvalidMcpConfig) {
-      onToastError(new Error(t`Fix invalid MCP JSON before saving.`));
+      onToastError(new Error(t("settings:fixInvalidMcpJsonBeforeSaving")));
       return;
     }
     setSaveStatus("loading");
@@ -369,7 +368,7 @@ function AgentSetupForm({
   onToastError,
   isCreateMode = false,
 }: AgentSetupFormProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const router = useRouter();
   const availableAgents = useAvailableAgents().items;
   const { upsertAgent } = useAgentStoreSync();
@@ -420,8 +419,9 @@ function AgentSetupForm({
   };
   const profilesValid = areAgentProfilesValid(draftAgent);
   let saveInvalidReason: string | undefined;
-  if (!profilesValid) saveInvalidReason = t`Every profile needs a name and model.`;
-  else if (hasInvalidMcpConfig) saveInvalidReason = t`Fix invalid MCP configuration before saving.`;
+  if (!profilesValid) saveInvalidReason = t("settings:everyProfileNeedsANameAnd");
+  else if (hasInvalidMcpConfig)
+    saveInvalidReason = t("settings:fixInvalidMcpConfigurationBeforeSaving");
   useSettingsSaveContributor({
     id: `agent:${draftAgent.id}`,
     revision: saveRevision.revision,
@@ -465,7 +465,7 @@ function AgentSetupForm({
 }
 
 export default function AgentSetupPage() {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { toast } = useToast();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -535,13 +535,9 @@ export default function AgentSetupPage() {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            <Trans>Agent not found.</Trans>
-          </p>
+          <p className="text-sm text-muted-foreground">{t("settings:agentNotFound")}</p>
           <Button className="mt-4" asChild>
-            <Link href="/settings/agents">
-              <Trans>Back to Agents</Trans>
-            </Link>
+            <Link href="/settings/agents">{t("settings:backToAgents")}</Link>
           </Button>
         </CardContent>
       </Card>
@@ -552,8 +548,8 @@ export default function AgentSetupPage() {
 
   const handleToastError = (error: unknown) => {
     toast({
-      title: t`Failed to save agent`,
-      description: error instanceof Error ? error.message : t`Request failed`,
+      title: t("settings:failedToSaveAgent"),
+      description: error instanceof Error ? error.message : t("common:requestFailed"),
       variant: "error",
     });
   };

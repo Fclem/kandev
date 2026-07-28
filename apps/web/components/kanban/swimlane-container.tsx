@@ -1,5 +1,4 @@
 "use client";
-
 import { type ComponentType, type HTMLAttributes, useCallback, useEffect, useMemo } from "react";
 import {
   DndContext,
@@ -16,7 +15,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { useAppStore } from "@/components/state-provider";
 import { useSwimlaneCollapse } from "@/hooks/domains/kanban/use-swimlane-collapse";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
@@ -73,12 +72,12 @@ function getEmptyMessage({
   getFilteredTasks,
   showEmptyBoard,
 }: EmptyMessageOptions): string | null {
-  if (isLoading && Object.keys(snapshots).length === 0) return t`Loading...`;
-  if (orderedWorkflows.length === 0) return t`No workflows available yet.`;
+  if (isLoading && Object.keys(snapshots).length === 0) return t("common:loading2");
+  if (orderedWorkflows.length === 0) return t("kanban:noWorkflowsAvailableYet");
   const visible = workflowFilter
     ? orderedWorkflows
     : orderedWorkflows.filter((wf) => getFilteredTasks(wf.id).length > 0);
-  if (visible.length === 0 && !showEmptyBoard) return t`No tasks yet`;
+  if (visible.length === 0 && !showEmptyBoard) return t("kanban:noTasksYet");
   return null;
 }
 

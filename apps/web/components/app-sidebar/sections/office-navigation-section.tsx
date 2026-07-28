@@ -1,5 +1,4 @@
 "use client";
-
 import {
   IconBoxMultiple,
   IconCircleDot,
@@ -9,11 +8,12 @@ import {
   IconRoute,
   IconSettings,
 } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
+import { t } from "@/lib/i18n";
 import { useAppStore } from "@/components/state-provider";
 import { APP_SIDEBAR_SECTION_IDS } from "../app-sidebar-constants";
 import { AppSidebarNavItem } from "../app-sidebar-nav-item";
 import { AppSidebarSection } from "../app-sidebar-section";
+import { useTranslation } from "react-i18next";
 
 type OfficeNavigationSectionProps = {
   collapsed: boolean;
@@ -22,23 +22,24 @@ type OfficeNavigationSectionProps = {
 
 const workItems = () =>
   [
-    { icon: IconCircleDot, label: t`Tasks`, href: "/office/tasks" },
-    { icon: IconRepeat, label: t`Routines`, href: "/office/routines" },
+    { icon: IconCircleDot, label: t("common:tasks"), href: "/office/tasks" },
+    { icon: IconRepeat, label: t("sidebar:routines"), href: "/office/routines" },
   ] as const;
 
 const workspaceItems = () =>
   [
-    { icon: IconBoxMultiple, label: t`Skills`, href: "/office/workspace/skills" },
-    { icon: IconCurrencyDollar, label: t`Costs`, href: "/office/workspace/costs" },
-    { icon: IconHistory, label: t`Activity`, href: "/office/workspace/activity" },
-    { icon: IconRoute, label: t`Routing`, href: "/office/workspace/routing" },
-    { icon: IconSettings, label: t`Preferences`, href: "/office/workspace/settings" },
+    { icon: IconBoxMultiple, label: t("sidebar:skills"), href: "/office/workspace/skills" },
+    { icon: IconCurrencyDollar, label: t("sidebar:costs"), href: "/office/workspace/costs" },
+    { icon: IconHistory, label: t("sidebar:activity"), href: "/office/workspace/activity" },
+    { icon: IconRoute, label: t("sidebar:routing"), href: "/office/workspace/routing" },
+    { icon: IconSettings, label: t("sidebar:preferences"), href: "/office/workspace/settings" },
   ] as const;
 
 export function OfficeNavigationSection({
   collapsed,
   section = "all",
 }: OfficeNavigationSectionProps) {
+  const { t } = useTranslation();
   const dashboard = useAppStore((s) => s.office.dashboard);
   const taskCount = dashboard?.task_count ?? 0;
   const routineCount = dashboard?.routine_count ?? 0;
@@ -49,7 +50,7 @@ export function OfficeNavigationSection({
       {(section === "all" || section === "work") && (
         <AppSidebarSection
           id={APP_SIDEBAR_SECTION_IDS.officeWork}
-          label={t`Work`}
+          label={t("sidebar:work")}
           collapsed={collapsed}
           icon={IconCircleDot}
           defaultExpanded
@@ -69,7 +70,7 @@ export function OfficeNavigationSection({
       {(section === "all" || section === "office") && (
         <AppSidebarSection
           id={APP_SIDEBAR_SECTION_IDS.officeWorkspace}
-          label={t`Office`}
+          label={t("sidebar:office")}
           collapsed={collapsed}
           icon={IconSettings}
           defaultExpanded

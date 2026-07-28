@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { CSS, type Transform } from "@dnd-kit/utilities";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
@@ -10,7 +9,7 @@ import {
   IconLoader2,
   IconSubtask,
 } from "@tabler/icons-react";
-import { Plural, Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@kandev/ui/badge";
 import { Card, CardContent } from "@kandev/ui/card";
 import { Checkbox } from "@kandev/ui/checkbox";
@@ -169,7 +168,7 @@ export function KanbanCardBody({
 }
 
 function KanbanCardBadges({ task }: { task: Task }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const parentTitle = useAppStore((s) => {
     if (!task.parentTaskId) return null;
     return s.kanban.tasks.find((t) => t.id === task.parentTaskId)?.title ?? null;
@@ -188,20 +187,18 @@ function KanbanCardBadges({ task }: { task: Task }) {
       {task.parentTaskId && (
         <Badge variant="outline" className="text-xs h-5 gap-1 max-w-[160px] min-w-0">
           <IconSubtask className="h-3 w-3 shrink-0" />
-          <span className="truncate">{parentTitle ?? t`Subtask`}</span>
+          <span className="truncate">{parentTitle ?? t("kanban:subtask")}</span>
         </Badge>
       )}
       {task.sessionCount && task.sessionCount > 1 && (
         <Badge variant="secondary" className="text-xs h-5">
-          <Plural value={task.sessionCount} one="# session" other="# sessions" />
+          {t("kanban:sessions", { count: task.sessionCount })}
         </Badge>
       )}
       {task.reviewStatus === "pending" && task.state !== "IN_PROGRESS" && (
         <div className="flex items-center gap-1 text-amber-700 dark:text-amber-600">
           <IconAlertCircle className="h-3.5 w-3.5" />
-          <span className="text-[10px] font-medium">
-            <Trans>Approval Required</Trans>
-          </span>
+          <span className="text-[10px] font-medium">{t("kanban:approvalRequired")}</span>
         </div>
       )}
       {task.reviewStatus === "changes_requested" && (
@@ -209,7 +206,7 @@ function KanbanCardBadges({ task }: { task: Task }) {
           variant="outline"
           className="border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-950/50 text-xs h-5"
         >
-          <Trans>Changes Requested</Trans>
+          {t("kanban:changesRequested")}
         </Badge>
       )}
     </div>
@@ -350,7 +347,7 @@ function KanbanCardActions({
 }
 
 function OpenFullPageButton({ onOpen }: { onOpen: () => void }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <button
       type="button"
@@ -360,8 +357,8 @@ function OpenFullPageButton({ onOpen }: { onOpen: () => void }) {
         onOpen();
       }}
       onPointerDown={(event) => event.stopPropagation()}
-      aria-label={t`Open full page`}
-      title={t`Open full page`}
+      aria-label={t("common:openFullPage")}
+      title={t("common:openFullPage")}
     >
       <IconArrowsMaximize className="h-4 w-4" />
     </button>
@@ -374,7 +371,7 @@ type KanbanCardMenuProps = KanbanCardActionProps & {
 };
 
 function KanbanCardMenu(props: KanbanCardMenuProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { effectiveMenuOpen, setMenuOpen, isDeleting, isArchiving } = props;
   const { menuEntries } = props;
   const isProcessing = isDeleting || isArchiving;
@@ -393,7 +390,7 @@ function KanbanCardMenu(props: KanbanCardMenuProps) {
           className="text-muted-foreground hover:text-foreground hover:bg-muted rounded-sm p-1 -m-1 transition-colors cursor-pointer"
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          aria-label={t`More options`}
+          aria-label={t("kanban:moreOptions")}
         >
           <IconDots className="h-4 w-4" />
         </button>
@@ -416,7 +413,7 @@ function KanbanCardCheckbox({
   isSelected?: boolean;
   onCheckboxClick: (e: React.MouseEvent) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <div
       className="mt-0.5 shrink-0"
@@ -426,7 +423,7 @@ function KanbanCardCheckbox({
     >
       <Checkbox
         checked={!!isSelected}
-        aria-label={t`Select task ${taskTitle}`}
+        aria-label={t("kanban:selectTask", { taskTitle })}
         className="cursor-pointer border-muted-foreground/50"
       />
     </div>

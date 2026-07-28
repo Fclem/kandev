@@ -1,8 +1,6 @@
 "use client";
-
 import { memo, type CSSProperties } from "react";
-import { t as globalT } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogTitle } from "@kandev/ui/dialog";
 import { Button } from "@kandev/ui/button";
 import { IconPlus, IconX } from "@tabler/icons-react";
@@ -17,6 +15,7 @@ import { ConfigChatSetup } from "@/components/config-chat/config-chat-setup";
 import { useConfigChat } from "@/components/config-chat/use-config-chat";
 import type { QuickChatSession } from "@/lib/state/slices/ui/types";
 import { isQuickChatSetupSessionId } from "@/lib/state/slices/ui/quick-chat-session";
+import { t as globalT } from "@/lib/i18n";
 
 type QuickChatModalProps = {
   workspaceId: string;
@@ -25,8 +24,8 @@ type QuickChatModalProps = {
 function quickChatTabName(session: QuickChatSession, index: number) {
   const position = index + 1;
   if (!isQuickChatSetupSessionId(session.sessionId))
-    return session.name || globalT`Chat ${position}`;
-  return session.kind === "config" ? globalT`Configuration Chat` : globalT`New Chat`;
+    return session.name || globalT("chat:chat", { position });
+  return session.kind === "config" ? globalT("common:configurationChat") : globalT("chat:newChat");
 }
 
 function QuickChatTabs({
@@ -46,7 +45,7 @@ function QuickChatTabs({
   onRename: (sessionId: string, name: string) => void;
   onCloseModal: () => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   if (sessions.length === 0) return null;
 
   return (
@@ -72,7 +71,7 @@ function QuickChatTabs({
           variant="ghost"
           className="h-11 w-11 shrink-0 cursor-pointer sm:h-6 sm:w-6"
           onClick={onNewChat}
-          aria-label={t`Start new chat`}
+          aria-label={t("chat:startNewChat")}
         >
           <IconPlus className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
         </Button>
@@ -84,7 +83,7 @@ function QuickChatTabs({
         variant="ghost"
         className="h-11 w-11 shrink-0 cursor-pointer p-0 sm:hidden"
         onClick={onCloseModal}
-        aria-label={t`Close quick chat`}
+        aria-label={t("chat:closeQuickChat")}
         data-testid="quick-chat-close"
       >
         <IconX className="h-3.5 w-3.5" />
@@ -100,12 +99,12 @@ function QuickChatResizeHandle({
   edge: "left" | "right";
   onMouseDown: (event: React.MouseEvent) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <button
       type="button"
       tabIndex={-1}
-      aria-label={t`Resize quick chat from ${edge}`}
+      aria-label={t("chat:resizeQuickChatFrom", { edge })}
       data-testid={`quick-chat-resize-${edge}`}
       onMouseDown={onMouseDown}
       className={`group absolute inset-y-0 z-20 hidden w-2 cursor-ew-resize items-center justify-center sm:flex ${
@@ -122,6 +121,7 @@ function QuickChatResizeHandle({
 }
 
 export const QuickChatModal = memo(function QuickChatModal({ workspaceId }: QuickChatModalProps) {
+  const { t } = useTranslation();
   const configChat = useConfigChat(workspaceId);
   const {
     isOpen,
@@ -156,9 +156,7 @@ export const QuickChatModal = memo(function QuickChatModal({ workspaceId }: Quic
           showCloseButton={false}
           overlayClassName="bg-transparent"
         >
-          <DialogTitle className="sr-only">
-            <Trans>Quick Chat</Trans>
-          </DialogTitle>
+          <DialogTitle className="sr-only">{t("common:quickChat")}</DialogTitle>
           <QuickChatResizeHandle edge="left" {...leftResizeHandleProps} />
           <QuickChatResizeHandle edge="right" {...rightResizeHandleProps} />
           <QuickChatTabs

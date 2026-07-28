@@ -1,7 +1,5 @@
 "use client";
-
 import { useEffect, useMemo, useRef } from "react";
-import { t } from "@lingui/core/macro";
 import type { Repository, Executor, ExecutorProfile } from "@/lib/types/http";
 import { DEFAULT_LOCAL_EXECUTOR_TYPE } from "@/lib/utils";
 import { useToast } from "@/components/toast-provider";
@@ -22,6 +20,7 @@ import {
 } from "@/components/task-create-dialog-autopick";
 import { useRepositoryAutoSelectEffect } from "@/components/task-create-dialog-repository-autopick";
 import { createDebugLogger, isDebug } from "@/lib/debug/log";
+import { useTranslation } from "react-i18next";
 
 // Re-export autopick hooks for callers that imported them from this module.
 export { useWorkflowAgentProfileEffect };
@@ -61,6 +60,7 @@ export function useDiscoverReposEffect(
   repositoriesLoading: boolean,
   toast: ReturnType<typeof useToast>["toast"],
 ) {
+  const { t } = useTranslation();
   const {
     discoverReposLoaded,
     discoverReposLoading,
@@ -79,8 +79,8 @@ export function useDiscoverReposEffect(
       })
       .catch((e) => {
         toast({
-          title: t`Failed to discover repositories`,
-          description: e instanceof Error ? e.message : t`Request failed`,
+          title: t("common:failedToDiscoverRepositories"),
+          description: e instanceof Error ? e.message : t("common:requestFailed"),
           variant: "error",
         });
         setDiscoveredRepositories([]);
@@ -508,6 +508,7 @@ export function useDefaultSelectionsEffect(
  * in sync with the first row's URL.
  */
 export function useGitHubUrlErrorEffect(fs: DialogFormState, open: boolean) {
+  const { t } = useTranslation();
   const { useRemote, setGitHubUrlError } = fs;
   const firstUrl = fs.remoteRepos[0]?.url ?? "";
   useEffect(() => {
@@ -529,7 +530,7 @@ export function useGitHubUrlErrorEffect(fs: DialogFormState, open: boolean) {
     }
     const parsed = parseGitHubAnyUrl(trimmed);
     if (!parsed) {
-      setGitHubUrlError(t`Invalid GitHub URL — expected github.com/owner/repo or .../pull/123`);
+      setGitHubUrlError(t("task:invalidGithubUrlExpectedGithubCom"));
       return;
     }
     setGitHubUrlError(null);

@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "@/lib/routing/client-router";
 import { Task } from "./kanban-card";
@@ -559,24 +558,21 @@ function ApprovalWarningDialog({
   setMoveError: (error: MoveTaskError | null) => void;
   handleGoToTask: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <AlertDialog open={!!moveError} onOpenChange={(open) => !open && setMoveError(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <IconAlertTriangle className="h-5 w-5 text-amber-500" />
-            <Trans>Approval Required</Trans>
+            {t("kanban:approvalRequired")}
           </AlertDialogTitle>
           <AlertDialogDescription>{moveError?.message}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>
-            <Trans>Dismiss</Trans>
-          </AlertDialogCancel>
+          <AlertDialogCancel>{t("common:dismiss")}</AlertDialogCancel>
           {moveError?.taskId && (
-            <AlertDialogAction onClick={handleGoToTask}>
-              <Trans>Go to Task</Trans>
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleGoToTask}>{t("kanban:goToTask")}</AlertDialogAction>
           )}
         </AlertDialogFooter>
       </AlertDialogContent>

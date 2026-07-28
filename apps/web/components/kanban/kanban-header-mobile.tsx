@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import { IconMenu2, IconMessageCircle, IconSearch } from "@tabler/icons-react";
 import Link from "@/components/routing/app-link";
@@ -28,11 +27,11 @@ type KanbanHeaderMobileProps = {
 };
 
 function MobileBrandLink({ workspaceId }: Pick<KanbanHeaderMobileProps, "workspaceId">) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Link
       href={workspaceHomeHref(workspaceId ? { id: workspaceId } : undefined)}
-      aria-label={t`Kandev home`}
+      aria-label={t("common:kandevHome")}
       className="relative z-10 shrink-0 cursor-pointer text-[15px] font-semibold leading-none transition-colors hover:text-foreground/80"
     >
       Kandev
@@ -59,7 +58,7 @@ function MobileHeaderActions({
   toggleSearch: () => void;
   setMenuOpen: (open: boolean) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <>
       <MainTopBarPluginActions
@@ -74,7 +73,7 @@ function MobileHeaderActions({
           size="icon-lg"
           onClick={handleOpenQuickChat}
           className="cursor-pointer"
-          aria-label={t`Quick Chat`}
+          aria-label={t("common:quickChat")}
           data-testid="mobile-quick-chat-button"
         >
           <IconMessageCircle className="h-4 w-4" />
@@ -87,7 +86,7 @@ function MobileHeaderActions({
           onClick={toggleSearch}
           className="cursor-pointer"
           aria-pressed={isSearchOpen}
-          aria-label={t`Search tasks`}
+          aria-label={t("kanban:searchTasks")}
           data-testid="mobile-search-toggle"
         >
           <IconSearch className="h-4 w-4" />
@@ -100,9 +99,7 @@ function MobileHeaderActions({
         className="cursor-pointer"
       >
         <IconMenu2 className="h-4 w-4" />
-        <span className="sr-only">
-          <Trans>Open menu</Trans>
-        </span>
+        <span className="sr-only">{t("kanban:openMenu")}</span>
       </Button>
     </>
   );

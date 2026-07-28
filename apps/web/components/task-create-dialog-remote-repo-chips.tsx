@@ -1,6 +1,5 @@
 "use client";
-
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
 import { IconPlus } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
@@ -142,14 +141,14 @@ function makeURLChange(
 }
 
 function AddRowButton({ onAddRow }: { onAddRow: () => void }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           onClick={onAddRow}
-          aria-label={t`Add remote repository`}
+          aria-label={t("task:addRemoteRepository")}
           data-testid="remote-add-row"
           className={cn(
             "h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground",
@@ -159,9 +158,7 @@ function AddRowButton({ onAddRow }: { onAddRow: () => void }) {
           <IconPlus className="h-3.5 w-3.5" />
         </button>
       </TooltipTrigger>
-      <TooltipContent>
-        <Trans>Add another remote repository</Trans>
-      </TooltipContent>
+      <TooltipContent>{t("task:addAnotherRemoteRepository")}</TooltipContent>
     </Tooltip>
   );
 }

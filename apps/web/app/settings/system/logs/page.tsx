@@ -1,10 +1,11 @@
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
 import { StateProvider } from "@/components/state-provider";
 import { SystemPageShell } from "@/components/settings/system/system-page-shell";
 import { LogViewer } from "@/components/settings/system/log-viewer";
 import { fetchLogFiles } from "@/lib/api/domains/system-api";
 
 export default async function SystemLogsPage() {
+  const { t } = useTranslation();
   let initialState: Record<string, unknown> = {};
   try {
     const files = await fetchLogFiles({ cache: "no-store" }).catch(() => null);
@@ -22,8 +23,8 @@ export default async function SystemLogsPage() {
   return (
     <StateProvider initialState={initialState}>
       <SystemPageShell
-        title={t`Logs`}
-        description={t`Tail of the active backend log file plus rotated downloads.`}
+        title={t("common:logs")}
+        description={t("settings:tailOfTheActiveBackendLog")}
       >
         <LogViewer />
       </SystemPageShell>

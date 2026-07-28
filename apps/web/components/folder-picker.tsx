@@ -1,5 +1,4 @@
 "use client";
-
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   IconBox,
@@ -9,8 +8,7 @@ import {
   IconFolderPlus,
   IconX,
 } from "@tabler/icons-react";
-import { t } from "@lingui/core/macro";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
@@ -32,11 +30,11 @@ type FolderPickerProps = {
  * trigger lives in the chip row and the popover handles browse + commit.
  */
 export function FolderPicker({ value, onChange, placeholder }: FolderPickerProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { listing, loading, error, load } = useDirectoryListing(open, value);
   const leaf = leafName(value);
-  const triggerLabel = leaf || placeholder || t`scratch workspace`;
+  const triggerLabel = leaf || placeholder || t("common:scratchWorkspace");
   const hasValue = !!value;
 
   const triggerClass = cn(
@@ -109,6 +107,7 @@ function leafName(path: string): string {
 }
 
 export function useDirectoryListing(open: boolean, value: string) {
+  const { t } = useTranslation();
   const [listing, setListing] = useState<DirectoryListing | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +124,7 @@ export function useDirectoryListing(open: boolean, value: string) {
       setListing(nextListing);
     } catch (err) {
       if (generation !== requestGeneration.current) return;
-      setError(err instanceof Error ? err.message : t`Failed to load directory`);
+      setError(err instanceof Error ? err.message : t("common:failedToLoadDirectory"));
     } finally {
       if (generation === requestGeneration.current) setLoading(false);
     }
@@ -200,13 +199,12 @@ function Breadcrumb({
   onNavigate: (p: string) => void;
   touchRows?: boolean;
 }) {
+  const { t } = useTranslation();
   const segs = pathSegments(path);
   return (
     <div className="flex items-center gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border bg-muted/30 px-2 py-1.5">
       {segs.length === 0 && (
-        <span className="text-[11px] text-muted-foreground italic">
-          <Trans>Loading…</Trans>
-        </span>
+        <span className="text-[11px] text-muted-foreground italic">{t("common:loading3")}</span>
       )}
       {segs.map((seg, i) => {
         const last = i === segs.length - 1;
@@ -285,7 +283,7 @@ function DirectoryBrowserToolbar({
   onCreateDirectory: (name: string) => Promise<void>;
   touchRows: boolean;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -300,7 +298,7 @@ function DirectoryBrowserToolbar({
       await onCreateDirectory(trimmedName);
       setEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Failed to create folder`);
+      setError(err instanceof Error ? err.message : t("common:failedToCreateFolder"));
     } finally {
       setCreating(false);
     }
@@ -313,7 +311,7 @@ function DirectoryBrowserToolbar({
           <div className="flex min-w-0 items-center gap-2">
             <IconFolderPlus className="size-4 shrink-0 text-muted-foreground" />
             <Input
-              aria-label={t`New folder name`}
+              aria-label={t("common:newFolderName")}
               value={name}
               onChange={(event) => {
                 setName(event.target.value);
@@ -327,7 +325,7 @@ function DirectoryBrowserToolbar({
                   setEditing(false);
                 }
               }}
-              placeholder={t`Folder name`}
+              placeholder={t("common:folderName")}
               autoFocus
               className={cn("min-w-0 flex-1", touchRows && "h-10")}
             />
@@ -337,8 +335,8 @@ function DirectoryBrowserToolbar({
               className={touchRows ? "size-11" : undefined}
               onClick={() => void createFolder()}
               disabled={!name.trim() || creating}
-              aria-label={t`Create folder`}
-              title={t`Create folder`}
+              aria-label={t("common:createFolder")}
+              title={t("common:createFolder")}
             >
               <IconCheck />
             </Button>
@@ -348,8 +346,8 @@ function DirectoryBrowserToolbar({
               size={touchRows ? "icon-lg" : "icon"}
               className={touchRows ? "size-11" : undefined}
               onClick={() => setEditing(false)}
-              aria-label={t`Cancel new folder`}
-              title={t`Cancel`}
+              aria-label={t("common:cancelNewFolder")}
+              title={t("common:cancel")}
             >
               <IconX />
             </Button>
@@ -376,11 +374,10 @@ function NewFolderRow({
   touchRows: boolean;
   onStart: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-xs font-medium text-muted-foreground">
-        <Trans>Folders</Trans>
-      </span>
+      <span className="text-xs font-medium text-muted-foreground">{t("common:folders")}</span>
       <Button
         type="button"
         variant="ghost"
@@ -390,7 +387,7 @@ function NewFolderRow({
         disabled={disabled}
       >
         <IconFolderPlus />
-        <Trans>New folder</Trans>
+        {t("common:newFolder")}
       </Button>
     </div>
   );
@@ -411,11 +408,11 @@ function Entries({
   touchRows?: boolean;
   fillAvailableHeight?: boolean;
 }) {
-  const { t } = useLingui();
-  if (loading) return <EmptyRow text={t`Loading…`} />;
+  const { t } = useTranslation();
+  if (loading) return <EmptyRow text={t("common:loading3")} />;
   if (error) return <EmptyRow text={error} variant="error" testId="folder-picker-error" />;
   if (!listing || listing.entries.length === 0) {
-    return <EmptyRow text={t`No folders here — pick this one or go up`} />;
+    return <EmptyRow text={t("common:noFoldersHerePickThisOne")} />;
   }
   return (
     <div
@@ -468,6 +465,7 @@ function Footer({
   onUseScratch: () => void;
   onChoose: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/20 px-2 py-1.5">
       <button
@@ -477,7 +475,7 @@ function Footer({
         className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
       >
         <IconBox className="h-3 w-3" />
-        <Trans>Use scratch instead</Trans>
+        {t("common:useScratchInstead")}
       </button>
       <button
         type="button"
@@ -491,7 +489,7 @@ function Footer({
         )}
       >
         <IconFolder className="h-3 w-3" />
-        <Trans>Use this folder</Trans>
+        {t("common:useThisFolder")}
       </button>
     </div>
   );

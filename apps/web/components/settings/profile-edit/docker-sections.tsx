@@ -1,8 +1,7 @@
 "use client";
-
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
-import { t } from "@lingui/core/macro";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { IconPlayerPlay, IconLoader2, IconCheck, IconX, IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -62,25 +61,21 @@ function parseDockerLine(raw: string): string | null {
 }
 
 function BuildStatusBadge({ status }: { status: BuildStatus }) {
+  const { t } = useTranslation();
   if (status === "idle") return null;
-  if (status === "building")
-    return (
-      <Badge variant="secondary">
-        <Trans>Building...</Trans>
-      </Badge>
-    );
+  if (status === "building") return <Badge variant="secondary">{t("settings:building")}</Badge>;
   if (status === "success") {
     return (
       <Badge variant="default" className="bg-green-600">
         <IconCheck className="mr-1 h-3 w-3" />
-        <Trans>Success</Trans>
+        {t("settings:success")}
       </Badge>
     );
   }
   return (
     <Badge variant="destructive">
       <IconX className="mr-1 h-3 w-3" />
-      <Trans>Failed</Trans>
+      {t("settings:failed")}
     </Badge>
   );
 }
@@ -113,6 +108,7 @@ async function readDockerStream(
 }
 
 function useBuildStream(onBuildSuccess?: (result: DockerBuildSuccess) => void) {
+  const { t } = useTranslation();
   const [buildStatus, setBuildStatus] = useState<BuildStatus>("idle");
   const [buildLog, setBuildLog] = useState("");
 
@@ -130,13 +126,13 @@ function useBuildStream(onBuildSuccess?: (result: DockerBuildSuccess) => void) {
           const text = await response.text();
           const status = response.status;
           setBuildStatus("failed");
-          setBuildLog(t`Build failed (${status}): ${text}`);
+          setBuildLog(t("settings:buildFailed", { status, text }));
           return;
         }
         const reader = response.body?.getReader();
         if (!reader) {
           setBuildStatus("failed");
-          setBuildLog(t`No response body`);
+          setBuildLog(t("settings:noResponseBody"));
           return;
         }
         const hasError = await readDockerStream(reader, appendLog);
@@ -147,8 +143,8 @@ function useBuildStream(onBuildSuccess?: (result: DockerBuildSuccess) => void) {
         }
       } catch (err) {
         setBuildStatus("failed");
-        const msg = err instanceof Error ? err.message : t`Unknown error`;
-        const failure = t`Build failed: ${msg}`;
+        const msg = err instanceof Error ? err.message : t("common:unknownError");
+        const failure = t("settings:buildFailed2", { msg });
         setBuildLog((prev) => prev + `\n${failure}`);
       }
     },
@@ -175,16 +171,13 @@ function DockerfileBuildHeader({
   canFillDefaults: boolean;
   onFillDefaults: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <CardHeader>
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <CardTitle>
-            <Trans>Dockerfile</Trans>
-          </CardTitle>
-          <CardDescription>
-            <Trans>Define the Docker image. Build and test it here.</Trans>
-          </CardDescription>
+          <CardTitle>{t("settings:dockerfile")}</CardTitle>
+          <CardDescription>{t("settings:defineTheDockerImageBuildAnd")}</CardDescription>
         </div>
         {canFillDefaults && (
           <Button
@@ -193,7 +186,7 @@ function DockerfileBuildHeader({
             onClick={onFillDefaults}
             className="cursor-pointer text-xs text-muted-foreground"
           >
-            <Trans>Use defaults</Trans>
+            {t("settings:useDefaults")}
           </Button>
         )}
       </div>
@@ -210,6 +203,7 @@ export function DockerfileBuildCard({
   onImageTagChange,
   onBuildSuccess,
 }: DockerfileBuildCardProps) {
+  const { t } = useTranslation();
   const { buildStatus, buildLog, runBuild } = useBuildStream(onBuildSuccess);
   const logRef = useRef<HTMLPreElement>(null);
 
@@ -235,9 +229,7 @@ export function DockerfileBuildCard({
       <DockerfileBuildHeader canFillDefaults={canFillDefaults} onFillDefaults={fillDefaults} />
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="image-tag">
-            <Trans>Image Tag</Trans>
-          </Label>
+          <Label htmlFor="image-tag">{t("settings:imageTag")}</Label>
           <Input
             id="image-tag"
             value={imageTag}
@@ -248,9 +240,7 @@ export function DockerfileBuildCard({
           />
         </div>
         <div className="space-y-2">
-          <Label>
-            <Trans>Dockerfile Content</Trans>
-          </Label>
+          <Label>{t("settings:dockerfileContent")}</Label>
           <div
             className="overflow-hidden rounded-md border"
             data-settings-dirty={dockerfileDirty}
@@ -275,7 +265,7 @@ export function DockerfileBuildCard({
             ) : (
               <IconPlayerPlay className="mr-1.5 h-4 w-4" />
             )}
-            <Trans>Build Image</Trans>
+            {t("settings:buildImage")}
           </Button>
           <BuildStatusBadge status={buildStatus} />
         </div>
@@ -293,19 +283,16 @@ export function DockerfileBuildCard({
 }
 
 function ContainersEmptyState({ loading }: { loading: boolean }) {
+  const { t } = useTranslation();
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
         <IconLoader2 className="h-4 w-4 animate-spin" />
-        <Trans>Loading...</Trans>
+        {t("common:loading2")}
       </div>
     );
   }
-  return (
-    <p className="py-4 text-sm text-muted-foreground">
-      <Trans>No Docker containers.</Trans>
-    </p>
-  );
+  return <p className="py-4 text-sm text-muted-foreground">{t("settings:noDockerContainers")}</p>;
 }
 
 export function useDockerProfileContainers(profileId: string, enabled = true) {
@@ -340,7 +327,7 @@ export function useDockerProfileContainers(profileId: string, enabled = true) {
 
 export function containerTaskLabel(container: DockerContainer) {
   const title = container.labels?.["kandev.task_title"]?.trim();
-  return title || container.labels?.["kandev.task_id"] || t`Untracked`;
+  return title || container.labels?.["kandev.task_id"] || t("settings:untracked");
 }
 
 function ContainerRow({
@@ -354,7 +341,7 @@ function ContainerRow({
   onStop: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const isLoading = actionLoading === container.id;
   return (
     <TableRow data-testid={`docker-container-row-${container.id}`}>
@@ -377,7 +364,7 @@ function ContainerRow({
               onClick={() => onStop(container.id)}
               disabled={isLoading}
               className="cursor-pointer"
-              title={t`Stop`}
+              title={t("settings:stop")}
             >
               {isLoading ? (
                 <IconLoader2 className="h-4 w-4 animate-spin" />
@@ -392,7 +379,7 @@ function ContainerRow({
             onClick={() => onRemove(container.id)}
             disabled={isLoading}
             className="cursor-pointer"
-            title={t`Remove`}
+            title={t("settings:remove")}
           >
             <IconTrash className="h-4 w-4" />
           </Button>
@@ -403,6 +390,7 @@ function ContainerRow({
 }
 
 export function DockerContainersCard({ profileId }: { profileId: string }) {
+  const { t } = useTranslation();
   const { containers, loading, refresh } = useDockerProfileContainers(profileId);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -422,12 +410,8 @@ export function DockerContainersCard({ profileId }: { profileId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          <Trans>Docker Containers</Trans>
-        </CardTitle>
-        <CardDescription>
-          <Trans>Docker containers created by this profile.</Trans>
-        </CardDescription>
+        <CardTitle>{t("settings:dockerContainers")}</CardTitle>
+        <CardDescription>{t("settings:dockerContainersCreatedByThisProfile")}</CardDescription>
       </CardHeader>
       <CardContent>
         {containers.length === 0 ? (
@@ -436,18 +420,10 @@ export function DockerContainersCard({ profileId }: { profileId: string }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>
-                  <Trans>Name</Trans>
-                </TableHead>
-                <TableHead>
-                  <Trans>Image</Trans>
-                </TableHead>
-                <TableHead>
-                  <Trans>Task</Trans>
-                </TableHead>
-                <TableHead>
-                  <Trans>Status</Trans>
-                </TableHead>
+                <TableHead>{t("settings:name")}</TableHead>
+                <TableHead>{t("settings:image")}</TableHead>
+                <TableHead>{t("common:task")}</TableHead>
+                <TableHead>{t("common:status")}</TableHead>
                 <TableHead className="w-[100px]" />
               </TableRow>
             </TableHeader>

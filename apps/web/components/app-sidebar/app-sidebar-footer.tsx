@@ -1,7 +1,5 @@
 "use client";
-
 import { useState } from "react";
-import { t } from "@lingui/core/macro";
 import { useRouter, usePathname } from "@/lib/routing/client-router";
 import {
   IconBuildings,
@@ -32,6 +30,7 @@ import {
   workspaceHomeHref,
 } from "./app-sidebar-workspace-navigation";
 import { isSettingsRoute } from "./app-sidebar-route";
+import { useTranslation } from "react-i18next";
 
 type AppSidebarFooterProps = {
   collapsed: boolean;
@@ -99,9 +98,11 @@ function FooterIconButton({
   );
 }
 
-export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebarFooterProps) {
-  const router = useRouter();
-  const pathname = usePathname();
+/**
+ * Resolves the workspace the Office/Kanban toggle should jump to: the last
+ * workspace of the *other* kind.
+ */
+function useWorkspaceSwitchTarget() {
   const workspaces = useAppStore((s) => s.workspaces);
   const workspaceId = workspaces.activeId;
   const activeWorkspace = workspaces.items.find((workspace) => workspace.id === workspaceId);
@@ -109,6 +110,15 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
   const targetWorkspace = activeIsOffice
     ? resolveLastKanbanWorkspace(workspaces.items)
     : resolveLastOfficeWorkspace(workspaces.items);
+  return { workspaceId, activeWorkspace, activeIsOffice, targetWorkspace };
+}
+
+export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebarFooterProps) {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { workspaceId, activeWorkspace, activeIsOffice, targetWorkspace } =
+    useWorkspaceSwitchTarget();
   const settingsMode = useAppStore((s) => s.appSidebar.settingsMode);
   const enterSettings = () => {
     // The gear only swaps the sidebar's own content; without also
@@ -137,7 +147,7 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
     >
       <FooterIconButton
         icon={IconSettings}
-        label={settingsMode ? t`Close settings` : t`Settings`}
+        label={settingsMode ? t("sidebar:closeSettings") : t("common:settings")}
         collapsed={collapsed}
         onClick={enterSettings}
         active={settingsMode}
@@ -145,14 +155,14 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
       />
       <FooterIconButton
         icon={IconChartBar}
-        label={t`Stats`}
+        label={t("sidebar:stats")}
         collapsed={collapsed}
         onClick={() => router.push("/stats")}
         testId="sidebar-stats-button"
       />
       <FooterIconButton
         icon={IconStethoscope}
-        label={t`Improve Kandev`}
+        label={t("common:improveKandev")}
         collapsed={collapsed}
         onClick={() => setImproveOpen(true)}
         testId="sidebar-improve-kandev-button"
@@ -160,7 +170,7 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
       {releaseNotes.showTopbarButton && (
         <FooterIconButton
           icon={IconSparkles}
-          label={t`What's new`}
+          label={t("sidebar:whatSNew")}
           collapsed={collapsed}
           onClick={releaseNotes.openDialog}
           badge={releaseNotes.hasUnseen}
@@ -170,7 +180,7 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
       {officeEnabled && (
         <FooterIconButton
           icon={activeIsOffice ? IconLayoutKanban : IconBuildings}
-          label={activeIsOffice ? t`Kanban` : t`Office`}
+          label={activeIsOffice ? t("common:kanban") : t("sidebar:office")}
           collapsed={collapsed}
           onClick={() => {
             if (!activeIsOffice) rememberLastKanbanWorkspace(activeWorkspace);

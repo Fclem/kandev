@@ -1,7 +1,6 @@
 "use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { Input } from "@kandev/ui/input";
 import { IconSearch, IconX, IconLoader2 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
@@ -25,8 +24,8 @@ export function TaskSearchInput({
   className,
   autoFocus = false,
 }: TaskSearchInputProps) {
-  const { t } = useLingui();
-  const resolvedPlaceholder = placeholder ?? t`Search tasks...`;
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? t("kanban:searchTasks2");
   const [localValue, setLocalValue] = useState(value);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);

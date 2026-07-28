@@ -1,8 +1,7 @@
 "use client";
-
 import { useMemo } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { useLingui } from "@lingui/react/macro";
+import { useTranslation } from "react-i18next";
 import { KanbanCard, resolveTaskRepositoryChips, Task } from "./kanban-card";
 import { Badge } from "@kandev/ui/badge";
 import { cn } from "@/lib/utils";
@@ -65,7 +64,7 @@ export function KanbanColumn({
   isMultiSelectMode,
   externalLinkAvailability,
 }: KanbanColumnProps) {
-  const { t } = useLingui();
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({
     id: step.id,
   });
@@ -107,8 +106,10 @@ export function KanbanColumn({
                 overWipLimit &&
                   "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300",
               )}
-              aria-label={overWipLimit ? t`${wipCountLabel} tasks, over WIP limit` : undefined}
-              title={overWipLimit ? t`Over WIP limit` : undefined}
+              aria-label={
+                overWipLimit ? t("kanban:tasksOverWipLimit2", { wipCountLabel }) : undefined
+              }
+              title={overWipLimit ? t("kanban:overWipLimit") : undefined}
             >
               {wipCountLabel}
             </Badge>

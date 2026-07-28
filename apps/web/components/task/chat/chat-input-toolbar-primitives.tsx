@@ -71,10 +71,8 @@ function SendSubmitButton({
         aria-label={isDisabled ? (tooltipDescription ?? "Submit unavailable") : undefined}
       >
         <Button
-          // The tooltip already describes the current action ("Queue message"
-          // while busy, "Request plan changes" in plan mode, or the disabled
-          // reason); keep the accessible name in step with it rather than
-          // always announcing "Send message".
+          // Must track the mode-specific tooltip so screen readers announce the
+          // current action rather than the default send action.
           aria-label={tooltipDescription ?? "Send message"}
           type="button"
           variant="default"

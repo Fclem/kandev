@@ -55,6 +55,7 @@ function ViewModeToggles({
         <TooltipTrigger asChild>
           <Button
             aria-label="List view"
+            aria-pressed={viewMode === "list"}
             variant={viewMode === "list" ? "secondary" : "ghost"}
             size="icon-sm"
             className="cursor-pointer"
@@ -69,6 +70,7 @@ function ViewModeToggles({
         <TooltipTrigger asChild>
           <Button
             aria-label="Board view"
+            aria-pressed={viewMode === "board"}
             variant={viewMode === "board" ? "secondary" : "ghost"}
             size="icon-sm"
             className="cursor-pointer"
@@ -85,6 +87,7 @@ function ViewModeToggles({
           <TooltipTrigger asChild>
             <Button
               aria-label="Toggle nesting"
+              aria-pressed={nestingEnabled}
               variant={nestingEnabled ? "secondary" : "ghost"}
               size="icon-sm"
               className="cursor-pointer"

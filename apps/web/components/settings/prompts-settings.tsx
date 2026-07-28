@@ -141,6 +141,7 @@ function PromptListItem({
         </div>
         <div className="flex items-center gap-2">
           <Button
+            aria-label="Edit prompt"
             variant="ghost"
             size="icon"
             onClick={() => onStartEditing(prompt)}
@@ -151,6 +152,7 @@ function PromptListItem({
             <IconEdit className="h-4 w-4" />
           </Button>
           <Button
+            aria-label="Delete prompt"
             variant="ghost"
             size="icon"
             onClick={() => onOpenDelete(prompt)}

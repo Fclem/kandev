@@ -156,6 +156,7 @@ function SecretListItemRow({
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <Button
+            aria-label={revealed ? "Hide secret value" : "Reveal secret value"}
             variant="ghost"
             size="icon"
             onClick={handleReveal}
@@ -165,6 +166,7 @@ function SecretListItemRow({
             {revealed ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
           </Button>
           <Button
+            aria-label="Edit secret"
             variant="ghost"
             size="icon"
             onClick={() => onEdit(secret)}
@@ -174,6 +176,7 @@ function SecretListItemRow({
             <IconEdit className="h-4 w-4" />
           </Button>
           <Button
+            aria-label="Delete secret"
             variant="ghost"
             size="icon"
             onClick={() => onDelete(secret)}

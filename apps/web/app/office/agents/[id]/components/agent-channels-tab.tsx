@@ -140,6 +140,7 @@ function ChannelRow({ channel, onDelete }: { channel: Channel; onDelete: () => v
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            aria-label="Delete channel"
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0 cursor-pointer"

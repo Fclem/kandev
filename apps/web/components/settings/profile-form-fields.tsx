@@ -288,6 +288,7 @@ function RefreshCapabilitiesButton({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            aria-label="Refresh agent capabilities"
             variant="outline"
             size="icon"
             onClick={onRefresh}

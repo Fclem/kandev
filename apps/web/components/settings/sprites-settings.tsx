@@ -270,6 +270,7 @@ function InstancesContent({
             </TableCell>
             <TableCell>
               <Button
+                aria-label="Destroy instance"
                 variant="ghost"
                 size="icon"
                 onClick={() => onDestroy(inst.name)}

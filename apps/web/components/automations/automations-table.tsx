@@ -65,6 +65,7 @@ function RowActions({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            aria-label="Trigger manually"
             variant="ghost"
             size="icon-sm"
             className="cursor-pointer"
@@ -78,6 +79,7 @@ function RowActions({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            aria-label="Delete automation"
             variant="ghost"
             size="icon-sm"
             className="cursor-pointer"

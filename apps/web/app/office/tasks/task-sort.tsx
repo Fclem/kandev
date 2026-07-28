@@ -28,7 +28,7 @@ export function TaskSort({ field, dir, onFieldChange, onDirChange }: IssueSortPr
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon-sm" className="cursor-pointer">
+            <Button aria-label="Sort" variant="ghost" size="icon-sm" className="cursor-pointer">
               <IconArrowsSort className="h-4 w-4" />
             </Button>
           </PopoverTrigger>

@@ -119,7 +119,7 @@ export function RoutineRow({
               className="h-8 w-8 cursor-pointer"
               onClick={(e) => e.stopPropagation()}
             >
-              <Link href={`/office/routines/${routine.id}`}>
+              <Link href={`/office/routines/${routine.id}`} aria-label="Edit routine">
                 <IconPencil className="h-4 w-4" />
               </Link>
             </Button>
@@ -145,6 +145,7 @@ function RoutineActions({ onRunNow, onDelete }: { onRunNow: () => void; onDelete
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
             <Button
+              aria-label="Routine actions"
               variant="ghost"
               size="icon"
               className="h-8 w-8 cursor-pointer"

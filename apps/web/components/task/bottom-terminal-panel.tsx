@@ -88,7 +88,13 @@ export function BottomTerminalPanel() {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1 border-b border-border bg-muted/30 shrink-0">
         <span className="text-xs font-medium text-muted-foreground">Terminal</span>
-        <Button variant="ghost" size="icon" className="h-5 w-5 cursor-pointer" onClick={toggle}>
+        <Button
+          aria-label="Hide terminal"
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5 cursor-pointer"
+          onClick={toggle}
+        >
           <IconMinus className="h-3 w-3" />
         </Button>
       </div>

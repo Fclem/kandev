@@ -54,7 +54,13 @@ export function ParticipantRow({
       </Popover>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-6 w-6 cursor-pointer" onClick={onHide}>
+          <Button
+            aria-label={`Remove ${label.toLowerCase()}`}
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 cursor-pointer"
+            onClick={onHide}
+          >
             <IconX className="h-3 w-3" />
           </Button>
         </TooltipTrigger>

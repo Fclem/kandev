@@ -86,6 +86,7 @@ function RepositoryCustomScript({
           data-settings-dirty={nameIsDirty}
         />
         <Button
+          aria-label="Remove script"
           type="button"
           variant="ghost"
           size="icon"

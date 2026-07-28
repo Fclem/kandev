@@ -46,6 +46,7 @@ export function InstructionFileList({
           Files
         </span>
         <Button
+          aria-label="Add instruction file"
           variant="ghost"
           size="icon"
           className="h-6 w-6 cursor-pointer"

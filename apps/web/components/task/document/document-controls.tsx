@@ -34,6 +34,7 @@ export function DocumentControls({ activeSessionId }: DocumentControlsProps) {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Show sidebar"
               size="icon-sm"
               variant="ghost"
               className="cursor-pointer rounded-none border-r border-border/70"
@@ -48,6 +49,7 @@ export function DocumentControls({ activeSessionId }: DocumentControlsProps) {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Hide sidebar"
               size="icon-sm"
               variant="ghost"
               className="cursor-pointer rounded-none border-r border-border/70"
@@ -63,6 +65,7 @@ export function DocumentControls({ activeSessionId }: DocumentControlsProps) {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Show right panel"
               size="icon-sm"
               variant="ghost"
               className="cursor-pointer rounded-none"
@@ -77,6 +80,7 @@ export function DocumentControls({ activeSessionId }: DocumentControlsProps) {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Hide right panel"
               size="icon-sm"
               variant="ghost"
               className="cursor-pointer rounded-none"

@@ -68,6 +68,7 @@ function MintTokenResult({
           data-testid="api-tokens-raw-value"
         />
         <Button
+          aria-label="Copy token"
           size="icon"
           variant="outline"
           className="cursor-pointer"

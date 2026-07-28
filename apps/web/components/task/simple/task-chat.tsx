@@ -324,6 +324,7 @@ function CommentComposerFooter({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Attach files"
               type="button"
               size="icon"
               variant="ghost"
@@ -345,6 +346,7 @@ function CommentComposerFooter({
           <TooltipTrigger asChild>
             <span tabIndex={isSendDisabled ? 0 : -1} className="inline-flex">
               <Button
+                aria-label="Send comment"
                 type="button"
                 size="icon"
                 className="h-7 w-7 cursor-pointer"

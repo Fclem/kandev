@@ -71,6 +71,7 @@ function SendSubmitButton({
         aria-label={isDisabled ? (tooltipDescription ?? "Submit unavailable") : undefined}
       >
         <Button
+          aria-label="Send message"
           type="button"
           variant="default"
           size="icon"
@@ -131,6 +132,7 @@ export function SubmitButton({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Cancel agent"
               type="button"
               variant="secondary"
               size="icon"

@@ -28,6 +28,7 @@ export function TaskGroup({ groupBy, onGroupByChange }: IssueGroupProps) {
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
             <Button
+              aria-label="Group by"
               variant={groupBy !== "none" ? "secondary" : "ghost"}
               size="icon-sm"
               className="cursor-pointer"

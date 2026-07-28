@@ -117,6 +117,7 @@ function InviteLinkResult({ url, onDone }: { url: string; onDone: () => void }) 
       <div className="flex items-center gap-2">
         <Input readOnly value={url} data-testid="invite-dialog-url" className="font-mono text-xs" />
         <Button
+          aria-label="Copy invite link"
           size="icon"
           variant="outline"
           className="cursor-pointer"

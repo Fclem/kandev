@@ -69,6 +69,7 @@ function PolicyRuleRow({
       </TableCell>
       <TableCell>
         <Button
+          aria-label="Remove rule"
           variant="ghost"
           size="icon"
           onClick={() => onRemove(index)}

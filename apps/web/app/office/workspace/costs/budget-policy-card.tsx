@@ -61,6 +61,7 @@ export function BudgetPolicyCard({ policy, spentSubcents = 0, onDelete }: Props)
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
+                aria-label="Delete policy"
                 variant="ghost"
                 size="icon-sm"
                 className="cursor-pointer"

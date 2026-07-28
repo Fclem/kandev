@@ -197,6 +197,7 @@ function EnvVarRow({
         </Select>
       )}
       <Button
+        aria-label="Remove secret"
         type="button"
         variant="ghost"
         size="icon"

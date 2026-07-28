@@ -321,7 +321,7 @@ export const SessionMobileTopBar = memo(function SessionMobileTopBar(
     <header className="flex items-center justify-between px-2 py-2 bg-background">
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <Button variant="ghost" size="icon-sm" asChild>
-          <Link href="/">
+          <Link href="/" aria-label="Back to home">
             <IconArrowLeft className="h-4 w-4" />
           </Link>
         </Button>

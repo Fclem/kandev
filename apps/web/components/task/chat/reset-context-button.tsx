@@ -40,6 +40,7 @@ export function ResetContextButton({ sessionId }: { sessionId: string }) {
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            aria-label="Reset agent context"
             type="button"
             variant="ghost"
             size="icon"

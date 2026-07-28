@@ -321,6 +321,7 @@ function MemoryEntryRow({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Delete entry"
               variant="ghost"
               size="icon"
               className="h-6 w-6 shrink-0 cursor-pointer"

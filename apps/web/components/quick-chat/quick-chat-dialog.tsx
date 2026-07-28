@@ -142,6 +142,7 @@ export const QuickChatPickerDialog = memo(function QuickChatPickerDialog({
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h2 className="text-lg font-semibold">New Quick Chat</h2>
           <Button
+            aria-label="Close quick chat"
             variant="ghost"
             size="icon"
             onClick={() => onOpenChange(false)}

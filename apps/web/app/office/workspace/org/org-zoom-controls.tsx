@@ -17,6 +17,7 @@ export function OrgZoomControls({ onZoomIn, onZoomOut, onFit, onExport }: OrgZoo
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            aria-label="Zoom in"
             variant="outline"
             size="icon"
             className="h-8 w-8 cursor-pointer"
@@ -30,6 +31,7 @@ export function OrgZoomControls({ onZoomIn, onZoomOut, onFit, onExport }: OrgZoo
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            aria-label="Zoom out"
             variant="outline"
             size="icon"
             className="h-8 w-8 cursor-pointer"
@@ -42,7 +44,13 @@ export function OrgZoomControls({ onZoomIn, onZoomOut, onFit, onExport }: OrgZoo
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="outline" size="icon" className="h-8 w-8 cursor-pointer" onClick={onFit}>
+          <Button
+            aria-label="Fit to screen"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 cursor-pointer"
+            onClick={onFit}
+          >
             <IconArrowsMaximize className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
@@ -52,6 +60,7 @@ export function OrgZoomControls({ onZoomIn, onZoomOut, onFit, onExport }: OrgZoo
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Export SVG"
               variant="outline"
               size="icon"
               className="h-8 w-8 cursor-pointer"

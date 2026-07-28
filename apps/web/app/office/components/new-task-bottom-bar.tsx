@@ -138,11 +138,16 @@ export function NewTaskBottomBar({ draft, onUpdate }: Props) {
       </Button>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7 cursor-pointer">
+          <Button
+            aria-label="More task options"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 cursor-pointer"
+          >
             <IconDotsVertical className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>More options</TooltipContent>
+        <TooltipContent>More task options</TooltipContent>
       </Tooltip>
     </div>
   );

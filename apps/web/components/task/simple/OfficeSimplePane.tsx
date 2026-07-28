@@ -136,6 +136,7 @@ function TaskHeaderRow({ task, activeHold }: { task: Task; activeHold: TreeHold 
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Copy identifier"
               variant="ghost"
               size="icon"
               className="h-8 w-8 cursor-pointer"

@@ -95,6 +95,7 @@ function ProfileCard({
           {getExecutorLabel(profile.executor_type)}
         </Badge>
         <Button
+          aria-label="Delete executor profile"
           variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0 cursor-pointer opacity-0 group-hover:opacity-100"

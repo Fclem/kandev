@@ -52,7 +52,12 @@ export function KeyValueInput({
             onChange={(e) => handleChange(item.id, "value", e.target.value)}
             className="flex-1"
           />
-          <Button variant="ghost" size="icon" onClick={() => handleRemove(item.id)}>
+          <Button
+            aria-label="Remove entry"
+            variant="ghost"
+            size="icon"
+            onClick={() => handleRemove(item.id)}
+          >
             <IconX className="h-4 w-4" />
           </Button>
         </div>

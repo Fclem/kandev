@@ -123,6 +123,7 @@ export function TriggerCard({
           <TooltipContent>{TRIGGER_INFO[trigger.type]}</TooltipContent>
         </Tooltip>
         <Button
+          aria-label={expanded ? "Collapse trigger" : "Expand trigger"}
           variant="ghost"
           size="icon-sm"
           className="cursor-pointer"
@@ -141,7 +142,13 @@ export function TriggerCard({
           onCheckedChange={onToggleEnabled}
           className="cursor-pointer"
         />
-        <Button variant="ghost" size="icon-sm" className="cursor-pointer" onClick={onDelete}>
+        <Button
+          aria-label="Delete trigger"
+          variant="ghost"
+          size="icon-sm"
+          className="cursor-pointer"
+          onClick={onDelete}
+        >
           <IconTrash className="h-3.5 w-3.5 text-destructive" />
         </Button>
       </div>

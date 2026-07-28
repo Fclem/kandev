@@ -261,6 +261,7 @@ function ChatInput({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
+              aria-label="Send message"
               size="icon"
               className="h-9 w-9 cursor-pointer shrink-0"
               disabled={disabled || !message.trim()}

@@ -162,6 +162,7 @@ make -C apps/backend test
 From `apps/`:
 
 ```bash
+pnpm install --frozen-lockfile
 pnpm --filter @kandev/web test -- src/boot-payload.test.ts components/task/editors-menu-availability.test.ts
 pnpm --filter @kandev/web e2e:run -- tests/task/windows-host-embedded-vscode-availability.spec.ts -- --project=chromium
 pnpm --filter @kandev/web e2e:run -- tests/task/mobile-windows-host-embedded-vscode-availability.spec.ts -- --project=mobile-chrome

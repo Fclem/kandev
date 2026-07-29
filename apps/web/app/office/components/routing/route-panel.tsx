@@ -14,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kandev/ui/
 import { useRunAttempts } from "@/hooks/domains/office/use-run-attempts";
 import type { RouteAttempt, RouteAttemptOutcome } from "@/lib/state/slices/office/types";
 import { providerLabel } from "../../workspace/routing/components/provider-order-editor";
+import { useTranslation } from "react-i18next";
 
 type Props = { runId: string };
 
@@ -31,14 +32,15 @@ const OUTCOME_VARIANT: Record<
 };
 
 export function RoutePanel({ runId }: Props) {
+  const { t } = useTranslation();
   const { attempts, isLoading } = useRunAttempts(runId);
   if (!isLoading && attempts.length === 0) return null;
   return (
     <div className="rounded-lg border border-border" data-testid="route-panel">
       <div className="px-4 py-3 border-b border-border">
-        <p className="text-sm font-medium">Route attempts</p>
+        <p className="text-sm font-medium">{t("office:routeAttempts")}</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Provider candidates tried for this run, in order.
+          {t("office:providerCandidatesTriedForThisRun")}
         </p>
       </div>
       <ul className="divide-y divide-border">

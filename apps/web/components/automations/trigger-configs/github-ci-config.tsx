@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Checkbox } from "@kandev/ui/checkbox";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
+import { useTranslation } from "react-i18next";
 
 type GitHubCIConfigProps = {
   config: Record<string, unknown>;
@@ -17,6 +18,7 @@ const CI_CONCLUSIONS = [
 ] as const;
 
 export function GitHubCIConfig({ config, onUpdate }: GitHubCIConfigProps) {
+  const { t } = useTranslation();
   const conclusions = (config.conclusions as string[]) ?? [];
   const configCheckNames = ((config.check_names as string[]) ?? []).join(", ");
   const [checkNames, setCheckNames] = useState(configCheckNames);
@@ -42,7 +44,7 @@ export function GitHubCIConfig({ config, onUpdate }: GitHubCIConfigProps) {
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <Label className="text-xs">Conclusions</Label>
+        <Label className="text-xs">{t("automations:conclusions")}</Label>
         <div className="flex flex-wrap gap-3">
           {CI_CONCLUSIONS.map((c) => (
             <label key={c.value} className="flex items-center gap-1.5 cursor-pointer">
@@ -57,12 +59,12 @@ export function GitHubCIConfig({ config, onUpdate }: GitHubCIConfigProps) {
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">Check names (comma-separated, optional)</Label>
+        <Label className="text-xs">{t("automations:checkNamesCommaSeparatedOptional")}</Label>
         <Input
           value={checkNames}
           onChange={(e) => setCheckNames(e.target.value)}
           onBlur={handleCheckNamesBlur}
-          placeholder="build, test, lint"
+          placeholder={t("automations:buildTestLint")}
         />
       </div>
     </div>

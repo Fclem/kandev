@@ -4,6 +4,7 @@ import { Button } from "@kandev/ui/button";
 import { IconTrash, IconEdit, IconMessage, IconPlayerPlay } from "@tabler/icons-react";
 import type { DiffComment } from "@/lib/diff/types";
 import { formatLineRange } from "@/lib/diff";
+import { useTranslation } from "react-i18next";
 
 interface CommentDisplayProps {
   /** The comment to display */
@@ -35,6 +36,7 @@ function CommentActionButtons({
   size,
   stopPropagation,
 }: ActionButtonsProps) {
+  const { t } = useTranslation();
   const btnClass = size === "compact" ? "h-4 w-4 p-0" : "h-5 w-5 p-0";
   const wrap = (fn?: () => void) =>
     stopPropagation
@@ -51,8 +53,8 @@ function CommentActionButtons({
           size="sm"
           variant="ghost"
           onClick={wrap(onRun)}
-          aria-label="Run comment"
-          title="Run comment"
+          aria-label={t("diff:runComment")}
+          title={t("diff:runComment")}
           className={`cursor-pointer ${btnClass} text-emerald-600 hover:text-emerald-500 dark:text-emerald-400`}
         >
           <IconPlayerPlay className="h-3 w-3" />
@@ -63,8 +65,8 @@ function CommentActionButtons({
           size="sm"
           variant="ghost"
           onClick={wrap(onEdit)}
-          aria-label="Edit comment"
-          title="Edit comment"
+          aria-label={t("diff:editComment")}
+          title={t("diff:editComment")}
           className={`cursor-pointer ${btnClass}`}
         >
           <IconEdit className="h-3 w-3" />
@@ -75,8 +77,8 @@ function CommentActionButtons({
           size="sm"
           variant="ghost"
           onClick={wrap(onDelete)}
-          aria-label="Delete comment"
-          title="Delete comment"
+          aria-label={t("diff:deleteComment")}
+          title={t("diff:deleteComment")}
           className={`cursor-pointer ${btnClass} hover:text-destructive`}
         >
           <IconTrash className="h-3 w-3" />

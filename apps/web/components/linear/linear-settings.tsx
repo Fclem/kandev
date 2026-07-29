@@ -30,6 +30,7 @@ import {
 } from "@/lib/api/domains/linear-api";
 import type { LinearConfig, LinearTeam, TestLinearConnectionResult } from "@/lib/types/linear";
 import { LinearIssueWatchersSection } from "./linear-issue-watchers-section";
+import { useTranslation } from "react-i18next";
 
 type FormState = {
   defaultTeamKey: string;
@@ -60,13 +61,14 @@ function SecretField({
   update,
   hasSavedSecret,
 }: Omit<FieldsRowProps, "teams" | "loadingTeams">) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
       <Label htmlFor="linear-secret">
         API key
         {hasSavedSecret && (
           <span className="text-xs text-muted-foreground ml-2">
-            (saved — leave blank to keep the current value)
+            {t("linear:savedLeaveBlankToKeepThe")}
           </span>
         )}
       </Label>
@@ -88,7 +90,7 @@ function SecretField({
           target="_blank"
           rel="noreferrer"
         >
-          linear.app/settings/account/security
+          {t("linear:linearAppSettingsAccountSecurity")}
         </a>
       </p>
     </div>
@@ -96,9 +98,10 @@ function SecretField({
 }
 
 function TeamSelector({ form, baseline, loading, update, teams, loadingTeams }: FieldsRowProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="linear-team">Default team (optional)</Label>
+      <Label htmlFor="linear-team">{t("linear:defaultTeamOptional")}</Label>
       <Select
         value={form.defaultTeamKey || "__none__"}
         onValueChange={(v) => update("defaultTeamKey", v === "__none__" ? "" : v)}
@@ -112,7 +115,7 @@ function TeamSelector({ form, baseline, loading, update, teams, loadingTeams }: 
           <SelectValue placeholder={loadingTeams ? "Loading teams…" : "Choose a team"} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="__none__">No default</SelectItem>
+          <SelectItem value="__none__">{t("linear:noDefault")}</SelectItem>
           {teams.map((t) => (
             <SelectItem key={t.id} value={t.key}>
               {t.name} ({t.key})
@@ -157,6 +160,7 @@ type ActionBarProps = {
 };
 
 function ActionBar({ testing, loading, hasConfig, disableTest, onTest, onDelete }: ActionBarProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button
@@ -178,7 +182,7 @@ function ActionBar({ testing, loading, hasConfig, disableTest, onTest, onDelete 
           className="ml-auto cursor-pointer"
           data-testid="linear-delete-button"
         >
-          Remove configuration
+          {t("linear:removeConfiguration")}
         </Button>
       )}
     </div>
@@ -381,6 +385,7 @@ function EnabledPill() {
 }
 
 export function LinearConnectionSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const s = useLinearSettings(workspaceId);
   const baseline = configToForm(s.baselineConfig);
   const missingSecret = !s.config?.hasSecret && !s.form.secret;
@@ -402,7 +407,7 @@ export function LinearConnectionSection({ workspaceId }: { workspaceId: string }
   return (
     <SettingsSection
       icon={<IconHexagon className="h-5 w-5" />}
-      title="Linear integration"
+      title={t("linear:linearIntegration")}
       description="Connect this workspace to Linear with a personal API key. Credentials are stored encrypted server-side for the selected workspace."
       action={<EnabledPill />}
     >

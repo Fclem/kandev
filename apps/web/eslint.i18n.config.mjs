@@ -32,22 +32,13 @@ export default defineConfig([
           // Only flag text that actually reaches the user.
           mode: "jsx-text-only",
           "should-validate-template": false,
-          message: {
-            // Brand/proper nouns and short symbols are not translatable copy.
+          // Brand/proper nouns and symbol-only strings are not translatable copy.
+          words: {
             exclude: [
               "^\\s*$",
-              "^Kandev$",
-              "^GitHub$",
-              "^GitLab$",
-              "^Jira$",
-              "^Linear$",
-              "^Slack$",
-              "^Sentry$",
-              "^Azure DevOps$",
-              "^ACP$",
-              "^MCP$",
-              "^SSH$",
               "^[^A-Za-z]*$",
+              "^(Kandev|GitHub|GitLab|Jira|Linear|Slack|Sentry|Azure DevOps)$",
+              "^(ACP|MCP|SSH|URL|ID|PR|CI|AI|API|JSON|YAML|LSP|TLS|SQL)$",
             ],
           },
           "jsx-attributes": {

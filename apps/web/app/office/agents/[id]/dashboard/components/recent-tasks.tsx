@@ -3,6 +3,7 @@ import { Badge } from "@kandev/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import type { AgentRecentTask } from "@/lib/api/domains/office-extended-api";
 import { formatShortDate } from "./format-date";
+import { useTranslation } from "react-i18next";
 
 type Props = { tasks: AgentRecentTask[] };
 
@@ -27,14 +28,15 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "dest
 };
 
 export function RecentTasks({ tasks }: Props) {
+  const { t } = useTranslation();
   return (
     <Card data-testid="recent-tasks-card">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Recent tasks</CardTitle>
+        <CardTitle className="text-sm">{t("office:recentTasks")}</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
         {tasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No tasks touched yet.</p>
+          <p className="text-sm text-muted-foreground">{t("office:noTasksTouchedYet")}</p>
         ) : (
           <ul className="space-y-1">
             {tasks.map((t) => (

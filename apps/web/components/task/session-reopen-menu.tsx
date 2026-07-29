@@ -17,6 +17,7 @@ import { markSessionTabUserActivationIntent } from "@/components/task/session-ta
 import { useSessionPendingInput } from "@/hooks/use-task-pending-input";
 import type { ForegroundActivity, TaskSession, TaskSessionState } from "@/lib/types/http";
 import type { AgentProfileOption } from "@/lib/state/slices";
+import { useTranslation } from "react-i18next";
 
 type AgentInfo = { label: string; agentName: string };
 
@@ -75,6 +76,7 @@ export function SessionReopenMenuItems({
    */
   onNewSession?: () => void;
 }) {
+  const { t } = useTranslation();
   const { sessions } = useTaskSessions(taskId);
   const api = useDockviewStore((s) => s.api);
   const centerGroupId = useDockviewStore((s) => s.centerGroupId);
@@ -116,7 +118,9 @@ export function SessionReopenMenuItems({
 
   return (
     <>
-      <DropdownMenuLabel className="text-xs text-muted-foreground">Agents</DropdownMenuLabel>
+      <DropdownMenuLabel className="text-xs text-muted-foreground">
+        {t("common:agents")}
+      </DropdownMenuLabel>
       {onNewSession && (
         <DropdownMenuItem
           onClick={onNewSession}
@@ -124,7 +128,7 @@ export function SessionReopenMenuItems({
           data-testid="new-session-button"
         >
           <IconMessagePlus className="h-3.5 w-3.5 shrink-0" />
-          <span className="flex-1 truncate">New Agent</span>
+          <span className="flex-1 truncate">{t("common:newAgent")}</span>
         </DropdownMenuItem>
       )}
       {sortedSessions.map((session, index) => (

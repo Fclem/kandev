@@ -9,12 +9,14 @@ import {
 } from "@/components/settings/profile-edit/script-editor";
 import { REVIEW_WATCH_PLACEHOLDERS } from "@/components/github/review-watch-placeholders";
 import { useCustomPrompts } from "@/hooks/domains/settings/use-custom-prompts";
+import { useTranslation } from "react-i18next";
 
 // Pulled out of review-watch-dialog.tsx to keep that file under the 600-line
 // linter cap; the prompt editor + its placeholder help bubble are co-owned by
 // this single screen and aren't reused elsewhere.
 
 function PlaceholdersHelp() {
+  const { t } = useTranslation();
   return (
     <TooltipProvider>
       <Tooltip>
@@ -22,7 +24,7 @@ function PlaceholdersHelp() {
           <IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help shrink-0" />
         </TooltipTrigger>
         <TooltipContent className="max-w-xs" align="start">
-          <p className="text-xs font-medium mb-1">Available placeholders:</p>
+          <p className="text-xs font-medium mb-1">{t("github:availablePlaceholders")}</p>
           <ul className="text-xs space-y-0.5">
             {REVIEW_WATCH_PLACEHOLDERS.map((p) => (
               <li key={p.key}>
@@ -44,11 +46,12 @@ export function ReviewWatchPromptField({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   const { prompts } = useCustomPrompts();
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1.5">
-        <Label>Task Prompt</Label>
+        <Label>{t("github:taskPrompt")}</Label>
         <PlaceholdersHelp />
       </div>
       <p className="text-xs text-muted-foreground">

@@ -2,6 +2,7 @@ import { IconBrandGithub, IconKey, IconTerminal2 } from "@tabler/icons-react";
 import { Label } from "@kandev/ui/label";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 export type GitHubAutomationMethod = "pat" | "cli" | "app";
 
@@ -36,12 +37,13 @@ export function GitHubAuthMethodList({
   value: GitHubAutomationMethod;
   onChange: (value: GitHubAutomationMethod) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <RadioGroup
       value={value}
       onValueChange={(next) => onChange(next as GitHubAutomationMethod)}
       className="grid gap-2 sm:grid-cols-3"
-      aria-label="Connection method"
+      aria-label={t("github:connectionMethod")}
     >
       {methods.map((method) => {
         const Icon = method.icon;

@@ -29,6 +29,7 @@ import type {
   RepoFilter,
   UpdateGitHubWorkspaceSettingsRequest,
 } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 function splitCSV(value: string): string[] {
   return value
@@ -55,6 +56,7 @@ const repositoryScopeHelp =
   "Limits the GitHub pull requests and issues Kandev discovers for this workspace, including My GitHub results and review and issue watches. It does not change GitHub permissions or repository access.";
 
 function RepositoryScopeHelp() {
+  const { t } = useTranslation();
   const usesTouchDrawer = useTouchDrawer();
   const [open, setOpen] = useState(false);
   const button = (
@@ -65,7 +67,7 @@ function RepositoryScopeHelp() {
       className="h-11 w-11 cursor-pointer text-muted-foreground sm:h-7 sm:w-7"
       aria-haspopup="dialog"
       aria-expanded={open}
-      aria-label="Explain repository scope"
+      aria-label={t("github:explainRepositoryScope")}
     >
       <IconInfoCircle className="h-4 w-4" />
     </Button>
@@ -87,7 +89,7 @@ function RepositoryScopeHelp() {
       {trigger}
       <DrawerContent>
         <DrawerHeader>
-          <DrawerTitle>Repository Scope</DrawerTitle>
+          <DrawerTitle>{t("github:repositoryScope")}</DrawerTitle>
           <DrawerDescription>{repositoryScopeHelp}</DrawerDescription>
         </DrawerHeader>
       </DrawerContent>
@@ -118,6 +120,7 @@ function RepositoryScopeFields({
   onOrgsChange,
   onReposChange,
 }: ScopeFieldsProps) {
+  const { t } = useTranslation();
   return (
     <SettingsCard
       isDirty={mode !== baseline.mode || orgs !== baseline.orgs || repos !== baseline.repos}
@@ -125,7 +128,7 @@ function RepositoryScopeFields({
       <CardContent className="grid gap-4 py-4 md:grid-cols-[220px_minmax(0,1fr)]">
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="github-scope-mode">
-            Mode
+            {t("github:mode")}
           </label>
           <Select
             value={mode}
@@ -140,16 +143,16 @@ function RepositoryScopeFields({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All repositories</SelectItem>
-              <SelectItem value="orgs">Organizations</SelectItem>
-              <SelectItem value="repos">Selected repositories</SelectItem>
+              <SelectItem value="all">{t("github:allRepositories")}</SelectItem>
+              <SelectItem value="orgs">{t("github:organizations")}</SelectItem>
+              <SelectItem value="repos">{t("github:selectedRepositories")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="grid gap-3">
           <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="github-scope-orgs">
-              Organizations
+              {t("github:organizations")}
             </label>
             <Input
               id="github-scope-orgs"
@@ -157,13 +160,13 @@ function RepositoryScopeFields({
               data-settings-dirty={orgs !== baseline.orgs}
               onChange={(event) => onOrgsChange(event.target.value)}
               disabled={loading || mode !== "orgs"}
-              placeholder="kdlbs, example-org"
+              placeholder={t("github:kdlbsExampleOrg")}
               data-testid="github-scope-orgs-input"
             />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="github-scope-repos">
-              Repositories
+              {t("common:repositories")}
             </label>
             <Input
               id="github-scope-repos"
@@ -172,11 +175,13 @@ function RepositoryScopeFields({
               onChange={(event) => onReposChange(event.target.value)}
               disabled={loading || mode !== "repos"}
               aria-invalid={invalidRepos}
-              placeholder="kdlbs/kandev, example/api"
+              placeholder={t("github:kdlbsKandevExampleApi")}
               data-testid="github-scope-repos-input"
             />
             {invalidRepos && (
-              <p className="text-xs text-destructive">Use comma-separated owner/repo values.</p>
+              <p className="text-xs text-destructive">
+                {t("github:useCommaSeparatedOwnerRepoValues")}
+              </p>
             )}
           </div>
         </div>
@@ -291,11 +296,12 @@ function useGitHubRepoScopeDraft(workspaceId: string) {
 }
 
 export function GitHubRepoScopeSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const draft = useGitHubRepoScopeDraft(workspaceId);
 
   return (
     <SettingsSection
-      title="Repository Scope"
+      title={t("github:repositoryScope")}
       titleAccessory={<RepositoryScopeHelp />}
       description="Limits GitHub pull requests and issues shown or imported in this workspace."
     >

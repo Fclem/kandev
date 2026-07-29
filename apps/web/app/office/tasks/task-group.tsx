@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { TaskGroupBy } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 const GROUP_OPTIONS: { value: TaskGroupBy; label: string }[] = [
   { value: "none", label: "No grouping" },
@@ -22,6 +23,7 @@ type IssueGroupProps = {
 };
 
 export function TaskGroup({ groupBy, onGroupByChange }: IssueGroupProps) {
+  const { t } = useTranslation();
   return (
     <Popover>
       <Tooltip>
@@ -36,10 +38,10 @@ export function TaskGroup({ groupBy, onGroupByChange }: IssueGroupProps) {
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Group by</TooltipContent>
+        <TooltipContent>{t("office:groupBy")}</TooltipContent>
       </Tooltip>
       <PopoverContent className="w-44 p-2" align="end">
-        <p className="text-xs font-medium px-2 mb-1">Group by</p>
+        <p className="text-xs font-medium px-2 mb-1">{t("office:groupBy")}</p>
         <div className="flex flex-col gap-0.5">
           {GROUP_OPTIONS.map((opt) => (
             <button

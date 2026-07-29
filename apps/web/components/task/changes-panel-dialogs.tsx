@@ -26,6 +26,7 @@ import { Label } from "@kandev/ui/label";
 import { Input } from "@kandev/ui/input";
 import { Textarea } from "@kandev/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
+import { useTranslation } from "react-i18next";
 
 // --- Discard Confirmation Dialog ---
 
@@ -44,6 +45,7 @@ export function DiscardDialog({
   filesToDiscard,
   onConfirm,
 }: DiscardDialogProps) {
+  const { t } = useTranslation();
   const isBulk = filesToDiscard && filesToDiscard.length > 1;
   const displayFile = fileToDiscard ?? (filesToDiscard?.length === 1 ? filesToDiscard[0] : null);
   const description = isBulk
@@ -54,7 +56,7 @@ export function DiscardDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+          <AlertDialogTitle>{t("task:discardChanges")}</AlertDialogTitle>
           <AlertDialogDescription className="break-words">
             {description ?? (
               <>
@@ -66,12 +68,12 @@ export function DiscardDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common:cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Discard
+            {t("task:discard")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -98,6 +100,7 @@ export function AmendDialog({
   onAmend,
   isLoading,
 }: AmendDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -108,11 +111,9 @@ export function AmendDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <p className="text-sm text-muted-foreground">
-            Edit the message for the most recent commit.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("task:editTheMessageForTheMost")}</p>
           <Textarea
-            placeholder="Enter new commit message..."
+            placeholder={t("task:enterNewCommitMessage")}
             value={amendMessage}
             onChange={(e) => onAmendMessageChange(e.target.value)}
             rows={4}
@@ -123,7 +124,7 @@ export function AmendDialog({
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline" className="cursor-pointer">
-              Cancel
+              {t("common:cancel")}
             </Button>
           </DialogClose>
           <Button
@@ -159,6 +160,45 @@ type ResetDialogProps = {
   isLoading: boolean;
 };
 
+/** Soft/hard radio picker for the reset-to-commit dialog. */
+function ResetModeOptions({
+  mode,
+  onModeChange,
+}: {
+  mode: "soft" | "hard";
+  onModeChange: (mode: "soft" | "hard") => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <RadioGroup
+      value={mode}
+      onValueChange={(v) => onModeChange(v as "soft" | "hard")}
+      className="space-y-3"
+    >
+      <div className="flex items-start space-x-3">
+        <RadioGroupItem value="soft" id="reset-soft" className="mt-1" />
+        <div className="flex-1">
+          <Label htmlFor="reset-soft" className="font-medium cursor-pointer">
+            {t("task:softReset")}
+          </Label>
+          <p className="text-sm text-muted-foreground">{t("task:moveHeadToThisCommitKeep")}</p>
+        </div>
+      </div>
+      <div className="flex items-start space-x-3">
+        <RadioGroupItem value="hard" id="reset-hard" className="mt-1" />
+        <div className="flex-1">
+          <Label htmlFor="reset-hard" className="font-medium cursor-pointer text-destructive">
+            {t("task:hardReset")}
+          </Label>
+          <p className="text-sm text-muted-foreground">
+            {t("task:discardAllChangesPermanentlyThisCannot")}
+          </p>
+        </div>
+      </div>
+    </RadioGroup>
+  );
+}
+
 export function ResetDialog({
   open,
   onOpenChange,
@@ -166,6 +206,7 @@ export function ResetDialog({
   onReset,
   isLoading,
 }: ResetDialogProps) {
+  const { t } = useTranslation();
   const shortSha = commitSha?.slice(0, 7) ?? "";
   const [mode, setMode] = useState<"soft" | "hard">("soft");
   const [confirmation, setConfirmation] = useState("");
@@ -195,34 +236,7 @@ export function ResetDialog({
           <DialogTitle>Reset to commit {shortSha}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <RadioGroup
-            value={mode}
-            onValueChange={(v) => setMode(v as "soft" | "hard")}
-            className="space-y-3"
-          >
-            <div className="flex items-start space-x-3">
-              <RadioGroupItem value="soft" id="reset-soft" className="mt-1" />
-              <div className="flex-1">
-                <Label htmlFor="reset-soft" className="font-medium cursor-pointer">
-                  Soft Reset
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Move HEAD to this commit. Keep all changes staged.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start space-x-3">
-              <RadioGroupItem value="hard" id="reset-hard" className="mt-1" />
-              <div className="flex-1">
-                <Label htmlFor="reset-hard" className="font-medium cursor-pointer text-destructive">
-                  Hard Reset
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Discard all changes permanently. This cannot be undone.
-                </p>
-              </div>
-            </div>
-          </RadioGroup>
+          <ResetModeOptions mode={mode} onModeChange={setMode} />
 
           {mode === "hard" && (
             <div className="space-y-2 p-3 border border-destructive/50 rounded-md bg-destructive/5">
@@ -242,7 +256,7 @@ export function ResetDialog({
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline" disabled={isLoading} className="cursor-pointer">
-              Cancel
+              {t("common:cancel")}
             </Button>
           </DialogClose>
           <Button
@@ -257,7 +271,7 @@ export function ResetDialog({
                 Resetting...
               </>
             ) : (
-              <>Reset</>
+              <>{t("task:reset")}</>
             )}
           </Button>
         </DialogFooter>

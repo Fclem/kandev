@@ -23,6 +23,7 @@ import { useLazyLoadMessages } from "@/hooks/use-lazy-load-messages";
 import { useAppStore } from "@/components/state-provider";
 import type { Message } from "@/lib/types/http";
 import { routePanelMouseDown } from "./chat/route-panel-mouse-down";
+import { useTranslation } from "react-i18next";
 
 function useClarificationKey(agentMessageCount: number) {
   const lastCountRef = useRef(agentMessageCount);
@@ -330,10 +331,11 @@ function ChatFooter({
   isSending,
   hideSessionsDropdown,
 }: ChatFooterProps) {
+  const { t } = useTranslation();
   if (isArchived) {
     return (
       <div className="bg-muted/50 flex-shrink-0 px-4 py-3 text-center text-sm text-muted-foreground border-t">
-        This task is archived and read-only.
+        {t("task:thisTaskIsArchivedAndRead")}
       </div>
     );
   }

@@ -29,6 +29,7 @@ import {
 } from "./task-changes-panel-state";
 import type { SelectedDiff } from "./task-layout";
 import { useIsTaskArchived, ArchivedPanelPlaceholder } from "./task-archived-context";
+import { useTranslation } from "react-i18next";
 
 type TaskChangesPanelProps = {
   mode?: "all" | "file";
@@ -458,17 +459,18 @@ function ChangesPanelContent({
   onPreviewMarkdown?: (path: string) => void;
   fileRefs: Map<string, React.RefObject<HTMLDivElement | null>>;
 }) {
+  const { t } = useTranslation();
   if (isLoading && files.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        Loading changes...
+        {t("task:loadingChanges")}
       </div>
     );
   }
   if (files.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        No changes
+        {t("task:noChanges")}
       </div>
     );
   }

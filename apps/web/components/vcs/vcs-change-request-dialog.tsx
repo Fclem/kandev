@@ -19,6 +19,7 @@ import {
   PRDescriptionField,
   PRTitleField,
 } from "./vcs-dialog-fields";
+import { useTranslation } from "react-i18next";
 
 type VcsChangeRequestDialogProps = {
   open: boolean;
@@ -44,6 +45,7 @@ type VcsChangeRequestDialogProps = {
 };
 
 export function VcsChangeRequestDialog(props: VcsChangeRequestDialogProps) {
+  const { t } = useTranslation();
   const terms = props.terminology;
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -86,14 +88,14 @@ export function VcsChangeRequestDialog(props: VcsChangeRequestDialogProps) {
               onCheckedChange={(checked) => props.onDraftChange(checked === true)}
             />
             <Label htmlFor="vcs-pr-draft" className="text-sm cursor-pointer">
-              Create as draft
+              {t("integrations:createAsDraft")}
             </Label>
           </div>
         </div>
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline" className="cursor-pointer">
-              Cancel
+              {t("common:cancel")}
             </Button>
           </DialogClose>
           <Button onClick={props.onCreate} disabled={!props.title.trim() || props.loading}>

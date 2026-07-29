@@ -17,6 +17,7 @@ import type {
 } from "@/lib/state/slices/office/types";
 import { ProviderOrderEditor } from "../../../workspace/routing/components/provider-order-editor";
 import { AgentWakeReasonOverrides } from "./agent-wake-reason-overrides";
+import { useTranslation } from "react-i18next";
 
 const TIERS: Tier[] = ["frontier", "balanced", "economy"];
 
@@ -36,6 +37,7 @@ const DEFAULT_INHERIT: AgentRoutingOverrides = {
 };
 
 export function AgentRoutingCard({ agentId, initial }: Props) {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const workspace = useWorkspaceRouting(workspaceId);
   const route = useAgentRoute(agentId);
@@ -66,7 +68,7 @@ export function AgentRoutingCard({ agentId, initial }: Props) {
     setSaving(true);
     try {
       await route.updateOverrides(overrides);
-      toast.success("Routing overrides saved");
+      toast.success(t("office:routingOverridesSaved"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
     } finally {
@@ -139,11 +141,12 @@ function tierMissingMappingWarning(
 }
 
 function Header() {
+  const { t } = useTranslation();
   return (
     <CardHeader>
-      <CardTitle className="text-sm">Provider routing</CardTitle>
+      <CardTitle className="text-sm">{t("office:providerRouting")}</CardTitle>
       <p className="text-xs text-muted-foreground">
-        Override the workspace tier or provider order for this agent.
+        {t("office:overrideTheWorkspaceTierOrProvider")}
       </p>
     </CardHeader>
   );

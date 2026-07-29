@@ -24,11 +24,13 @@ import {
   updateGitHubWorkspaceSettings,
 } from "@/lib/api/domains/github-api";
 import type { TaskGitCredentialsMode } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 const deliveryHelp =
   "PAT, named GitHub CLI, and GitHub App connections choose Kandev's workspace automation identity. In managed mode Kandev brokers that identity to the task for GitHub HTTPS and gh. Inherit executor credentials leaves task Git and gh to the selected executor. An explicit executor-profile GH_TOKEN or GITHUB_TOKEN takes precedence in managed mode.";
 
 function TaskCredentialsHelp() {
+  const { t } = useTranslation();
   const usesDrawer = useTouchDrawer();
   const [open, setOpen] = useState(false);
   const button = (
@@ -37,7 +39,7 @@ function TaskCredentialsHelp() {
       variant="ghost"
       size="icon"
       className="h-11 w-11 cursor-pointer text-muted-foreground sm:h-7 sm:w-7"
-      aria-label="Explain task Git credentials"
+      aria-label={t("github:explainTaskGitCredentials")}
     >
       <IconInfoCircle className="h-4 w-4" />
     </Button>
@@ -57,7 +59,7 @@ function TaskCredentialsHelp() {
       )}
       <DrawerContent>
         <DrawerHeader>
-          <DrawerTitle>How task Git credentials work</DrawerTitle>
+          <DrawerTitle>{t("github:howTaskGitCredentialsWork")}</DrawerTitle>
           <DrawerDescription>{deliveryHelp}</DrawerDescription>
         </DrawerHeader>
       </DrawerContent>
@@ -66,6 +68,7 @@ function TaskCredentialsHelp() {
 }
 
 export function GitHubTaskCredentialsSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [mode, setMode] = useState<TaskGitCredentialsMode>("managed");
   const [baseline, setBaseline] = useState<TaskGitCredentialsMode>("managed");
@@ -118,7 +121,7 @@ export function GitHubTaskCredentialsSection({ workspaceId }: { workspaceId: str
   });
   return (
     <SettingsSection
-      title="Task Git credentials"
+      title={t("github:taskGitCredentials")}
       description="Choose how task processes authenticate to GitHub. This does not change Kandev's workspace automation identity."
       action={<TaskCredentialsHelp />}
     >
@@ -133,28 +136,23 @@ export function GitHubTaskCredentialsSection({ workspaceId }: { workspaceId: str
             <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
               <RadioGroupItem value="managed" className="mt-0.5" />
               <span>
-                <span className="font-medium">Managed workspace credentials</span>
+                <span className="font-medium">{t("github:managedWorkspaceCredentials")}</span>
                 <span className="mt-1 block text-sm text-muted-foreground">
-                  Kandev brokers the workspace PAT, named GitHub CLI account, or App identity to
-                  this task for GitHub HTTPS and gh.
+                  {t("github:kandevBrokersTheWorkspacePatNamed")}
                 </span>
               </span>
             </label>
             <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
               <RadioGroupItem value="executor" className="mt-0.5" />
               <span>
-                <span className="font-medium">Inherit executor Git credentials</span>
+                <span className="font-medium">{t("github:inheritExecutorGitCredentials")}</span>
                 <span className="mt-1 block text-sm text-muted-foreground">
-                  Local and Worktree tasks use host-visible Git or SSH credentials. Docker, SSH, and
-                  cloud tasks use credentials configured in that executor.
+                  {t("github:localAndWorktreeTasksUseHost")}
                 </span>
               </span>
             </label>
           </RadioGroup>
-          <p className="text-xs text-muted-foreground">
-            An executor-profile GH_TOKEN or GITHUB_TOKEN overrides managed workspace credentials for
-            that task.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("github:anExecutorProfileGhTokenOr")}</p>
         </CardContent>
       </SettingsCard>
     </SettingsSection>

@@ -2,6 +2,7 @@
 
 import { Card } from "@kandev/ui/card";
 import type { RunActivityDay } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 function formatDateLabel(dateStr: string): string {
   const date = new Date(`${dateStr}T00:00:00`);
@@ -51,13 +52,14 @@ function ChartXAxis({ dates }: ChartXAxisProps) {
 }
 
 export function RunActivityChart({ data }: { data: RunActivityDay[] }) {
+  const { t } = useTranslation();
   const maxTotal = Math.max(...data.map((d) => d.succeeded + d.failed + d.other), 1);
 
   return (
     <Card className="p-4">
       <div className="mb-3">
-        <h3 className="text-sm font-semibold">Run Activity</h3>
-        <p className="text-xs text-muted-foreground">Last 14 days</p>
+        <h3 className="text-sm font-semibold">{t("office:runActivity2")}</h3>
+        <p className="text-xs text-muted-foreground">{t("office:last14Days")}</p>
       </div>
       <div className="h-28 flex items-end gap-[2px]">
         {data.map((day, i) => (
@@ -99,11 +101,12 @@ function successRateColor(rate: number, hasRuns: boolean): string {
 }
 
 export function SuccessRateChart({ data }: { data: RunActivityDay[] }) {
+  const { t } = useTranslation();
   return (
     <Card className="p-4">
       <div className="mb-3">
-        <h3 className="text-sm font-semibold">Success Rate</h3>
-        <p className="text-xs text-muted-foreground">Last 14 days</p>
+        <h3 className="text-sm font-semibold">{t("office:successRate2")}</h3>
+        <p className="text-xs text-muted-foreground">{t("office:last14Days")}</p>
       </div>
       <div className="h-28 flex items-end gap-[2px]">
         {data.map((day, i) => {

@@ -38,6 +38,7 @@ import {
 } from "@/components/gitlab/my-gitlab/quick-task-launcher";
 import { toGitLabTaskPreset } from "@/components/gitlab/my-gitlab/task-presets";
 import { useAppStore } from "@/components/state-provider";
+import { useTranslation } from "react-i18next";
 
 type GitLabPageClientProps = {
   workspaceId?: string;
@@ -53,6 +54,7 @@ function PageHeader({
   host: string;
   onOpenMobileSidebar?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <PageTopbar
       title="GitLab"
@@ -66,7 +68,7 @@ function PageHeader({
             onClick={onOpenMobileSidebar}
             className="h-11 w-11 md:hidden cursor-pointer"
             data-testid="gitlab-mobile-menu-button"
-            aria-label="Open GitLab filters"
+            aria-label={t("gitlab:openGitlabFilters")}
           >
             <IconMenu2 className="h-4 w-4" />
           </Button>
@@ -77,6 +79,7 @@ function PageHeader({
 }
 
 function NotConnectedNotice({ reconnect }: { reconnect?: boolean }) {
+  const { t } = useTranslation();
   return (
     <Alert>
       <AlertDescription>
@@ -84,7 +87,7 @@ function NotConnectedNotice({ reconnect }: { reconnect?: boolean }) {
           ? "GitLab credentials are configured, but authentication failed. Reconnect in "
           : "GitLab is not connected. Configure GitLab authentication in "}
         <Link href="/settings/integrations/gitlab" className="underline font-medium cursor-pointer">
-          Settings → GitLab
+          {t("gitlab:settingsGitlab")}
         </Link>{" "}
         to see your merge requests and issues.
       </AlertDescription>
@@ -402,8 +405,11 @@ function GitLabPageBody({
   onStartTask: (payload: GitLabLaunchPayload) => void;
   host: string;
 }) {
+  const { t } = useTranslation();
   if (statusLoading) {
-    return <div className="p-6 text-sm text-muted-foreground">Checking GitLab status…</div>;
+    return (
+      <div className="p-6 text-sm text-muted-foreground">{t("gitlab:checkingGitlabStatus")}</div>
+    );
   }
   if (!connected) {
     return (
@@ -447,6 +453,7 @@ function GitLabPageOverlays({
   launchPayload: GitLabLaunchPayload | null;
   setLaunchPayload: (payload: GitLabLaunchPayload | null) => void;
 }) {
+  const { t } = useTranslation();
   const onMobileSidebarSelect = (selection: Parameters<typeof state.onSelect>[0]) => {
     state.onSelect(selection);
     setMobileSidebarOpen(false);
@@ -464,7 +471,7 @@ function GitLabPageOverlays({
           data-testid="gitlab-mobile-sidebar"
         >
           <SheetHeader className="px-4 pt-4 pb-2">
-            <SheetTitle>Filters</SheetTitle>
+            <SheetTitle>{t("gitlab:filters")}</SheetTitle>
           </SheetHeader>
           <PresetsSidebar
             selected={state.selection}

@@ -11,6 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@kandev/ui/alert-dialog";
+import { useTranslation } from "react-i18next";
 
 export function DeleteWatchDialog({
   open,
@@ -23,6 +24,7 @@ export function DeleteWatchDialog({
   watchLabel: string;
   onConfirm: () => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -34,8 +36,7 @@ export function DeleteWatchDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {watchLabel}?</AlertDialogTitle>
           <AlertDialogDescription>
-            This will delete every task created by this watch, including archived tasks, and remove
-            its polling history. This cannot be undone.
+            {t("gitlab:thisWillDeleteEveryTaskCreated")}
           </AlertDialogDescription>
           {error && (
             <p className="text-sm text-destructive" role="alert">
@@ -45,7 +46,7 @@ export function DeleteWatchDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleting} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             disabled={deleting}

@@ -29,6 +29,7 @@ import { resolvePluginIcon } from "@/lib/plugins/icons";
 import { usePluginRegistry } from "@/lib/plugins/registry";
 import type { GitHubStatus } from "@/lib/types/github";
 import { AzureDevOpsIcon } from "@/components/icons/azure-devops-icon";
+import { useTranslation } from "react-i18next";
 
 type MobileIntegrationsSectionProps = {
   onNavigate: () => void;
@@ -127,6 +128,7 @@ export function useConfiguredIntegrationLinks(): IntegrationLink[] {
 }
 
 export function IntegrationsMenu() {
+  const { t } = useTranslation();
   const links = useConfiguredIntegrationLinks();
   const [open, setOpen] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,7 +169,7 @@ export function IntegrationsMenu() {
           variant="ghost"
           size="icon-lg"
           className="cursor-pointer text-muted-foreground hover:text-foreground"
-          aria-label="Integrations"
+          aria-label={t("common:integrations")}
           onPointerEnter={openOnHover}
           onPointerLeave={closeAfterHover}
         >
@@ -180,7 +182,7 @@ export function IntegrationsMenu() {
         onPointerEnter={openOnHover}
         onPointerLeave={closeAfterHover}
       >
-        <DropdownMenuLabel>Integrations</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("common:integrations")}</DropdownMenuLabel>
         {links.map((link) => {
           const Icon = INTEGRATION_ICONS[link.id];
           return (
@@ -253,6 +255,7 @@ function MobileIntegrationRow({
  * the "plugins" feature flag, matching the desktop `IntegrationsSection`.
  */
 export function MobileIntegrationsSection({ onNavigate }: MobileIntegrationsSectionProps) {
+  const { t } = useTranslation();
   const links = useConfiguredIntegrationLinks();
   const pluginsEnabled = useFeature("plugins");
   const registry = usePluginRegistry();
@@ -264,7 +267,7 @@ export function MobileIntegrationsSection({ onNavigate }: MobileIntegrationsSect
 
   return (
     <div className="space-y-3">
-      <div className="text-sm font-medium">Integrations</div>
+      <div className="text-sm font-medium">{t("common:integrations")}</div>
       {links.map((link) => (
         <MobileIntegrationRow
           key={link.id}

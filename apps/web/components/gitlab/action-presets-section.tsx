@@ -13,6 +13,7 @@ import { useSettingsSaveContributor } from "@/components/settings/settings-save-
 import { useToast } from "@/components/toast-provider";
 import { useGitLabActionPresets } from "@/hooks/domains/gitlab/use-gitlab-action-presets";
 import type { GitLabActionPreset, GitLabActionPresets } from "@/lib/types/gitlab";
+import { useTranslation } from "react-i18next";
 
 function newPreset(): GitLabActionPreset {
   return {
@@ -33,6 +34,7 @@ function PresetList({
   onChange: (next: GitLabActionPreset[]) => void;
   addLabel: string;
 }) {
+  const { t } = useTranslation();
   const patch = (index: number, change: Partial<GitLabActionPreset>) =>
     onChange(
       presets.map((preset, current) => (current === index ? { ...preset, ...change } : preset)),
@@ -45,13 +47,13 @@ function PresetList({
             <Input
               aria-label={`Action label ${index + 1}`}
               value={preset.label}
-              placeholder="Label"
+              placeholder={t("gitlab:label")}
               onChange={(event) => patch(index, { label: event.target.value })}
             />
             <Input
               aria-label={`Action hint ${index + 1}`}
               value={preset.hint}
-              placeholder="Short hint"
+              placeholder={t("gitlab:shortHint")}
               onChange={(event) => patch(index, { hint: event.target.value })}
             />
             <Button
@@ -68,7 +70,7 @@ function PresetList({
           <Textarea
             aria-label={`Action prompt ${index + 1}`}
             value={preset.prompt_template}
-            placeholder="Prompt using {{url}} and {{title}}"
+            placeholder={t("gitlab:promptUsingAnd")}
             className="min-h-24 font-mono text-xs"
             onChange={(event) => patch(index, { prompt_template: event.target.value })}
           />
@@ -112,6 +114,7 @@ export function validActionPresets(presets: GitLabActionPreset[]): boolean {
 }
 
 export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const { presets, loading, update, reset } = useGitLabActionPresets(workspaceId);
   const drafts = usePresetDrafts(presets);
   const { toast } = useToast();
@@ -160,7 +163,7 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
   };
   return (
     <SettingsSection
-      title="Quick actions"
+      title={t("gitlab:quickActions")}
       description="Task prompts shown on the GitLab browse page for merge requests and issues."
       action={
         <Button
@@ -169,7 +172,7 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
           variant="outline"
           className="h-11 cursor-pointer sm:h-8"
           disabled={loading}
-          aria-label="Reset quick actions to defaults"
+          aria-label={t("gitlab:resetQuickActionsToDefaults")}
           onClick={() => void resetDefaults()}
         >
           <IconRefresh className="h-4 w-4" /> Reset
@@ -181,10 +184,10 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
           <Tabs defaultValue="mr">
             <TabsList className="w-full sm:w-auto">
               <TabsTrigger value="mr" className="flex-1 cursor-pointer sm:flex-none">
-                Merge requests
+                {t("gitlab:mergeRequests")}
               </TabsTrigger>
               <TabsTrigger value="issue" className="flex-1 cursor-pointer sm:flex-none">
-                Issues
+                {t("gitlab:issues")}
               </TabsTrigger>
             </TabsList>
             <TabsContent value="mr">

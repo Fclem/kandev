@@ -23,6 +23,7 @@ import {
   resolveAgentLabelFor,
   sortSessions,
 } from "./session-sort";
+import { useTranslation } from "react-i18next";
 
 const LABEL_SEPARATOR = " \u2022 ";
 
@@ -191,13 +192,14 @@ function PreviewLoadingState({ label }: { label: string }) {
 }
 
 function PreviewEmptyState() {
+  const { t } = useTranslation();
   return (
     <div className="flex h-full flex-col">
       <div
         className="flex flex-1 items-center justify-center text-sm text-muted-foreground"
         data-testid="preview-empty-state"
       >
-        No agents yet.
+        {t("task:noAgentsYet")}
       </div>
     </div>
   );

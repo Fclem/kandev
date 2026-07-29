@@ -15,6 +15,7 @@ import { createUserShell } from "@/lib/api/domains/user-shell-api";
 import { AddPanelMenuItems } from "./dockview-add-panel-items";
 import { NewSessionDialog } from "./new-session-dialog";
 import { useActiveSessionDevScript } from "./repository-scripts-menu";
+import { useTranslation } from "react-i18next";
 
 /**
  * Watermark rendered by Dockview when a group becomes empty (e.g. after
@@ -28,6 +29,7 @@ import { useActiveSessionDevScript } from "./repository-scripts-menu";
  * never appeared in the user-shell list at all.
  */
 export function DockviewWatermark({ containerApi, group }: IWatermarkPanelProps) {
+  const { t } = useTranslation();
   const groupId = group?.id;
   const environmentId = useEnvironmentId();
   const taskID = useAppStore((s) => s.tasks?.activeTaskId ?? null);
@@ -47,7 +49,7 @@ export function DockviewWatermark({ containerApi, group }: IWatermarkPanelProps)
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
       <IconLayoutSidebarRightCollapse className="h-5 w-5 opacity-50" />
-      <p className="text-xs">Empty group</p>
+      <p className="text-xs">{t("task:emptyGroup")}</p>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

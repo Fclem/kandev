@@ -16,6 +16,7 @@ import { useOpenSessionInEditor } from "@/hooks/use-open-session-in-editor";
 import { useOpenSessionFolder } from "@/hooks/use-open-session-folder";
 import { useAppStore } from "@/components/state-provider";
 import type { EditorOption } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 type FileActionsDropdownProps = {
   /** File path to open / copy */
@@ -34,6 +35,7 @@ export function FileActionsDropdown({
   size = "xs",
   onCopied,
 }: FileActionsDropdownProps) {
+  const { t } = useTranslation();
   const storeSessionId = useAppStore((state) => state.tasks.activeSessionId);
   const sessionId = sessionIdProp ?? storeSessionId ?? null;
   const worktreePath = useAppStore((state) => {
@@ -97,7 +99,7 @@ export function FileActionsDropdown({
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>Open with...</TooltipContent>
+        <TooltipContent>{t("editors:openWith")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-44">
         {enabledEditors.map((editor: EditorOption) => (
@@ -108,13 +110,15 @@ export function FileActionsDropdown({
           >
             {editor.name}
             {editor.id === defaultEditorId && (
-              <span className="ml-auto text-[10px] text-muted-foreground">default</span>
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                {t("editors:default")}
+              </span>
             )}
           </DropdownMenuItem>
         ))}
         {enabledEditors.length === 0 && (
           <DropdownMenuItem disabled className="text-xs">
-            No editors configured
+            {t("editors:noEditorsConfigured")}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

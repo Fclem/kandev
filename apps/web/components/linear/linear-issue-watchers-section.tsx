@@ -12,6 +12,7 @@ import { ResetWatchDialog, useWatchResetController } from "@/components/watches/
 import { LinearIssueWatchTable } from "./linear-issue-watch-table";
 import { LinearIssueWatchDialog } from "./linear-issue-watch-dialog";
 import type { LinearIssueWatch } from "@/lib/types/linear";
+import { useTranslation } from "react-i18next";
 
 // LinearIssueWatchersSection lists watches across every workspace in a single
 // flat table on the install-wide settings page. The dialog's create flow asks
@@ -122,6 +123,7 @@ function useEnabledDrafts(items: LinearIssueWatch[], update: RawActions["update"
 }
 
 export function LinearIssueWatchersSection() {
+  const { t } = useTranslation();
   const { items, loading, create, update, remove, trigger, previewReset, reset } =
     useLinearIssueWatches();
   const actions = useToastedActions({ create, update, remove, trigger, reset });
@@ -175,7 +177,7 @@ export function LinearIssueWatchersSection() {
   return (
     <SettingsSection
       icon={<IconBellRinging className="h-5 w-5" />}
-      title="Linear watchers"
+      title={t("linear:linearWatchers")}
       description="Poll a Linear filter and auto-create a Kandev task for each newly-matching issue."
       action={
         <Button size="sm" onClick={openCreate} className="cursor-pointer">

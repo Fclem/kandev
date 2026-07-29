@@ -38,6 +38,7 @@ import { getSessionStateIcon } from "@/lib/ui/state-icons";
 import { useSessionPendingInput, type PendingInput } from "@/hooks/use-task-pending-input";
 import type { ForegroundActivity, TaskSession, TaskSessionState } from "@/lib/types/http";
 import type { AgentProfileOption } from "@/lib/state/slices";
+import { useTranslation } from "react-i18next";
 
 type SessionRow = {
   id: string;
@@ -151,6 +152,7 @@ function SessionActionsMenu({
   onAskDelete: () => void;
   onHandoffProfile: (profileId: string) => void;
 }) {
+  const { t } = useTranslation();
   const hasLifecycleAction =
     !!state &&
     (isSessionStoppable(state) || isSessionResumable(state) || isSessionDeletable(state));
@@ -163,7 +165,7 @@ function SessionActionsMenu({
           size="icon-sm"
           className="cursor-pointer h-7 w-7"
           onClick={(e) => e.stopPropagation()}
-          aria-label="Session actions"
+          aria-label={t("task:sessionActions")}
         >
           <IconDotsVertical className="h-4 w-4" />
         </Button>
@@ -174,17 +176,17 @@ function SessionActionsMenu({
           onSelect={onSetPrimary}
           disabled={isPrimary || !state}
         >
-          Set as Primary
+          {t("task:setAsPrimary")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {state && isSessionStoppable(state) && (
           <DropdownMenuItem className="cursor-pointer" onSelect={onStop}>
-            Stop
+            {t("task:stop")}
           </DropdownMenuItem>
         )}
         {state && isSessionResumable(state) && (
           <DropdownMenuItem className="cursor-pointer" onSelect={onResume}>
-            Resume
+            {t("task:resume")}
           </DropdownMenuItem>
         )}
         {state && isSessionDeletable(state) && (
@@ -192,7 +194,7 @@ function SessionActionsMenu({
             className="cursor-pointer text-destructive focus:text-destructive"
             onSelect={onAskDelete}
           >
-            Delete
+            {t("common:delete")}
           </DropdownMenuItem>
         )}
         {hasLifecycleAction && <DropdownMenuSeparator />}
@@ -215,27 +217,26 @@ function DeleteSessionConfirmDialog({
   isOnlySession: boolean;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete session?</AlertDialogTitle>
+          <AlertDialogTitle>{t("task:deleteSession")}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div>
-              <p>This will permanently delete the conversation history with this session.</p>
+              <p>{t("task:thisWillPermanentlyDeleteTheConversation")}</p>
               {isPrimary && !isOnlySession && (
-                <p className="mt-2 font-medium">
-                  This is the primary session. Another session will be set as primary.
-                </p>
+                <p className="mt-2 font-medium">{t("task:thisIsThePrimarySessionAnother")}</p>
               )}
               {isOnlySession && (
-                <p className="mt-2 font-medium">This is the only session for this task.</p>
+                <p className="mt-2 font-medium">{t("task:thisIsTheOnlySessionFor")}</p>
               )}
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">{t("common:cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
               onOpenChange(false);
@@ -243,7 +244,7 @@ function DeleteSessionConfirmDialog({
             }}
             className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Delete
+            {t("common:delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -369,6 +370,7 @@ const MobileSessionsList = memo(function MobileSessionsList({
   activeSessionId: string | null;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const { rows, isLoading } = useSessionRows(taskId);
   const [launchOpen, setLaunchOpen] = useState(false);
@@ -384,7 +386,9 @@ const MobileSessionsList = memo(function MobileSessionsList({
 
   if (!taskId) {
     return (
-      <div className="text-xs text-muted-foreground px-2 py-6 text-center">No active task</div>
+      <div className="text-xs text-muted-foreground px-2 py-6 text-center">
+        {t("task:noActiveTask")}
+      </div>
     );
   }
 
@@ -408,12 +412,12 @@ const MobileSessionsList = memo(function MobileSessionsList({
       <div className="flex flex-col gap-0.5">
         {isLoading && rows.length === 0 && (
           <div className="text-xs text-muted-foreground px-2 py-4 text-center">
-            Loading sessions…
+            {t("task:loadingSessions")}
           </div>
         )}
         {!isLoading && rows.length === 0 && (
           <div className="text-xs text-muted-foreground px-2 py-4 text-center">
-            No sessions yet. Launch one to get started.
+            {t("task:noSessionsYetLaunchOneTo")}
           </div>
         )}
         {rows.map((row) => (
@@ -471,6 +475,7 @@ export const MobileSessionsPicker = memo(function MobileSessionsPicker({
   compact?: boolean;
   fullWidth?: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { label, count, agentName, effectiveSessionId } = useActiveSessionPillLabel(
     taskId,
@@ -500,7 +505,7 @@ export const MobileSessionsPicker = memo(function MobileSessionsPicker({
         data-testid="mobile-sessions-pill"
         ariaLabel={`Active session: ${label}. Tap to switch.`}
       />
-      <MobilePickerSheet open={open} onOpenChange={setOpen} title="Sessions">
+      <MobilePickerSheet open={open} onOpenChange={setOpen} title={t("task:sessions")}>
         <MobileSessionsList
           taskId={taskId}
           activeSessionId={effectiveSessionId}

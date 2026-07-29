@@ -22,6 +22,7 @@ import {
   buildWorktreeOptions,
   type WorktreeOption,
 } from "@/components/task/editor-worktree-options";
+import { useTranslation } from "react-i18next";
 
 const menuItemClass = "cursor-pointer";
 
@@ -168,6 +169,7 @@ function EditorMenuEntry({
 }
 
 export function EditorsMenu({ activeSessionId }: EditorsMenuProps) {
+  const { t } = useTranslation();
   const openEditor = useOpenSessionInEditor(activeSessionId ?? null);
   const { editors } = useEditors();
   const defaultEditorId = useAppStore((state) => state.userSettings.defaultEditorId);
@@ -221,7 +223,7 @@ export function EditorsMenu({ activeSessionId }: EditorsMenuProps) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {enabledEditors.length === 0 ? (
-            <DropdownMenuItem disabled>No editors available</DropdownMenuItem>
+            <DropdownMenuItem disabled>{t("task:noEditorsAvailable")}</DropdownMenuItem>
           ) : (
             enabledEditors.map((editor: EditorOption) => (
               <EditorMenuEntry

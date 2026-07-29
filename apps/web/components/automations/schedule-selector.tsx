@@ -6,6 +6,7 @@ import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconInfoCircle } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 
 type ScheduleSelectorProps = {
   config: Record<string, unknown> | null;
@@ -37,6 +38,7 @@ const PRESETS = [
 ] as const;
 
 export function ScheduleSelector({ config, isDirty = false, onChange }: ScheduleSelectorProps) {
+  const { t } = useTranslation();
   const configExpr = (config?.cron_expression as string) ?? "";
   const [customInput, setCustomInput] = useState(configExpr);
   const [error, setError] = useState<string | null>(null);
@@ -92,13 +94,12 @@ export function ScheduleSelector({ config, isDirty = false, onChange }: Schedule
             <IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground ml-1" />
           </TooltipTrigger>
           <TooltipContent className="max-w-[280px]">
-            How often to check for matching events. Checked every 30 seconds by a background
-            process. Schedules persist across backend restarts.
+            {t("automations:howOftenToCheckForMatching")}
           </TooltipContent>
         </Tooltip>
       </div>
       <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">Custom interval</Label>
+        <Label className="text-xs text-muted-foreground">{t("automations:customInterval")}</Label>
         <Input
           value={customInput}
           onChange={(e) => {
@@ -108,15 +109,15 @@ export function ScheduleSelector({ config, isDirty = false, onChange }: Schedule
           onBlur={handleCustomBlur}
           data-testid="schedule-custom-input"
           data-settings-dirty={isDirty}
-          placeholder="@every 2h30m"
+          placeholder={t("automations:every2h30m")}
           className={`font-mono text-sm max-w-xs ${error ? "border-destructive" : ""}`}
         />
         {error && <p className="text-xs text-destructive">{error}</p>}
         <p className="text-xs text-muted-foreground">
-          Use <code className="bg-muted px-1 rounded">@every</code> with a duration (e.g.,{" "}
-          <code className="bg-muted px-1 rounded">@every 10m</code>,{" "}
-          <code className="bg-muted px-1 rounded">@every 2h30m</code>) or shorthands like{" "}
-          <code className="bg-muted px-1 rounded">@hourly</code>,{" "}
+          Use <code className="bg-muted px-1 rounded">{t("automations:every")}</code> with a
+          duration (e.g., <code className="bg-muted px-1 rounded">{t("automations:every10m")}</code>
+          , <code className="bg-muted px-1 rounded">{t("automations:every2h30m")}</code>) or
+          shorthands like <code className="bg-muted px-1 rounded">@hourly</code>,{" "}
           <code className="bg-muted px-1 rounded">@daily</code>,{" "}
           <code className="bg-muted px-1 rounded">@weekly</code>.
         </p>

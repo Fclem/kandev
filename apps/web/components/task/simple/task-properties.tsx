@@ -17,6 +17,7 @@ import { SubIssuesRow } from "./components/sub-issues-row";
 import { ReviewersPicker } from "./components/reviewers-picker";
 import { ApproversPicker } from "./components/approvers-picker";
 import { PendingApprovalBadge } from "./components/pending-approval-badge";
+import { t } from "@/lib/i18n";
 
 type TaskPropertiesProps = {
   task: Task;
@@ -43,7 +44,7 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value);
 }
 
-const NONE_LABEL = <span className="text-muted-foreground">None</span>;
+const NONE_LABEL = <span className="text-muted-foreground">{t("common:none")}</span>;
 
 function IdentitySection({ task }: { task: Task }) {
   return (

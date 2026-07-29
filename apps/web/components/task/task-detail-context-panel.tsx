@@ -3,6 +3,7 @@
 import { Badge } from "@kandev/ui/badge";
 import { IconAlertTriangle, IconFileText, IconUsersGroup } from "@tabler/icons-react";
 import type { TaskContextDTO, TaskRefDTO } from "@/lib/api/domains/office-task-context-api";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   /**
@@ -50,6 +51,7 @@ export function TaskDetailContextPanel({ context }: Props) {
 }
 
 function WorkspaceStatusBanner({ context }: { context: TaskContextDTO }) {
+  const { t } = useTranslation();
   if (context.workspace_status !== "requires_configuration") return null;
   return (
     <div
@@ -59,11 +61,8 @@ function WorkspaceStatusBanner({ context }: { context: TaskContextDTO }) {
     >
       <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="space-y-1">
-        <div className="text-xs font-medium">Workspace requires configuration</div>
-        <div className="text-[11px]">
-          Restoring this task&apos;s materialized workspace failed. Reconfigure the workspace before
-          launching.
-        </div>
+        <div className="text-xs font-medium">{t("task:workspaceRequiresConfiguration")}</div>
+        <div className="text-[11px]">{t("task:restoringThisTaskSMaterializedWorkspace")}</div>
       </div>
     </div>
   );
@@ -107,9 +106,10 @@ function WorkspaceSection({
 }
 
 function RelationsSection({ context }: { context: TaskContextDTO }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
-      <div className="text-xs font-medium text-muted-foreground">Related tasks</div>
+      <div className="text-xs font-medium text-muted-foreground">{t("task:relatedTasks")}</div>
       <div className="space-y-1 text-xs">
         {context.parent && <Relation label="Parent" task={context.parent} />}
         {context.siblings.map((t) => (

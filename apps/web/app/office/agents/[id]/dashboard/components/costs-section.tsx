@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kandev/ui/table";
 import type { AgentCostAggregate, AgentRunCost } from "@/lib/api/domains/office-extended-api";
 import { formatSubcents, formatShortDate } from "./format-date";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   agentId: string;
@@ -23,10 +24,11 @@ function formatTokens(n: number): string {
 }
 
 export function CostsSection({ agentId, aggregate, recent }: Props) {
+  const { t } = useTranslation();
   return (
     <Card data-testid="costs-section">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Costs</CardTitle>
+        <CardTitle className="text-sm">{t("office:costs")}</CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
         <CostAggregateRow aggregate={aggregate} />
@@ -71,10 +73,11 @@ function Stat({ label, value, testId }: { label: string; value: string; testId: 
 }
 
 function RecentRunCostsTable({ agentId, recent }: { agentId: string; recent: AgentRunCost[] }) {
+  const { t } = useTranslation();
   if (recent.length === 0) {
     return (
       <p className="text-sm text-muted-foreground" data-testid="cost-recent-empty">
-        No runs with cost data yet.
+        {t("office:noRunsWithCostDataYet")}
       </p>
     );
   }
@@ -82,11 +85,11 @@ function RecentRunCostsTable({ agentId, recent }: { agentId: string; recent: Age
     <Table data-testid="recent-run-costs-table">
       <TableHeader>
         <TableRow>
-          <TableHead>Date</TableHead>
-          <TableHead>Run</TableHead>
-          <TableHead className="text-right">Input</TableHead>
-          <TableHead className="text-right">Output</TableHead>
-          <TableHead className="text-right">Cost</TableHead>
+          <TableHead>{t("office:date")}</TableHead>
+          <TableHead>{t("office:run")}</TableHead>
+          <TableHead className="text-right">{t("office:input")}</TableHead>
+          <TableHead className="text-right">{t("office:output")}</TableHead>
+          <TableHead className="text-right">{t("office:cost")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

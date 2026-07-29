@@ -6,6 +6,7 @@ import { useAppStore } from "@/components/state-provider";
 import { useToast } from "@/components/toast-provider";
 import type { Repository, TaskSession } from "@/lib/types/http";
 import type { KanbanState } from "@/lib/state/slices";
+import { useTranslation } from "react-i18next";
 
 type RepoRow = {
   taskRepositoryId: string;
@@ -136,6 +137,7 @@ export const MobileReposSection = memo(function MobileReposSection({
   workspaceId: string | null;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const activeSessionId = useAppStore((s) => s.tasks.activeSessionId);
   const activeRepoId = useAppStore((s) =>
@@ -165,13 +167,15 @@ export const MobileReposSection = memo(function MobileReposSection({
 
   if (!taskId) {
     return (
-      <div className="text-xs text-muted-foreground px-2 py-6 text-center">No active task</div>
+      <div className="text-xs text-muted-foreground px-2 py-6 text-center">
+        {t("task:noActiveTask")}
+      </div>
     );
   }
   if (rows.length === 0) {
     return (
       <div className="text-xs text-muted-foreground px-2 py-6 text-center">
-        This task has no repositories.
+        {t("task:thisTaskHasNoRepositories")}
       </div>
     );
   }

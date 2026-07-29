@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { JiraProject, JiraStatus } from "@/lib/types/jira";
 import { type AssigneeFilter } from "./filter-model";
+import { useTranslation } from "react-i18next";
 
 type PillShellProps = {
   label: string;
@@ -117,6 +118,7 @@ type ProjectPillProps = {
 };
 
 export function ProjectPill({ projects, value, onChange }: ProjectPillProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -143,13 +145,13 @@ export function ProjectPill({ projects, value, onChange }: ProjectPillProps) {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search projects…"
+          placeholder={t("jira:searchProjects")}
           className="h-7 text-xs"
         />
       </div>
       <div className="max-h-64 overflow-y-auto py-1">
         {filtered.length === 0 && (
-          <div className="px-3 py-2 text-xs text-muted-foreground">No projects match.</div>
+          <div className="px-3 py-2 text-xs text-muted-foreground">{t("jira:noProjectsMatch")}</div>
         )}
         {filtered.map((p) => (
           <label
@@ -184,6 +186,7 @@ const NO_PROJECT_HINT = "Select a project to filter by status";
 const NO_STATUSES_HINT = "No statuses available for the selected project";
 
 export function StatusPill({ options, value, onChange, hasProjectSelected }: StatusPillProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -211,13 +214,13 @@ export function StatusPill({ options, value, onChange, hasProjectSelected }: Sta
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search statuses…"
+          placeholder={t("jira:searchStatuses")}
           className="h-7 text-xs"
         />
       </div>
       <div className="max-h-64 overflow-y-auto py-1">
         {filtered.length === 0 && (
-          <div className="px-3 py-2 text-xs text-muted-foreground">No statuses match.</div>
+          <div className="px-3 py-2 text-xs text-muted-foreground">{t("jira:noStatusesMatch")}</div>
         )}
         {filtered.map((o) => (
           <label

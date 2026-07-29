@@ -9,6 +9,7 @@ import { Badge } from "@kandev/ui/badge";
 import { listProjectMembers } from "@/lib/api/domains/gitlab-api";
 import type { GitLabMRUser, GitLabProjectMember } from "@/lib/types/gitlab";
 import { isCurrentIdentityRequest } from "@/hooks/domains/gitlab/request-identity";
+import { useTranslation } from "react-i18next";
 
 export function toggleMemberId(ids: number[], id: number): number[] {
   return ids.includes(id) ? ids.filter((candidate) => candidate !== id) : [...ids, id];
@@ -33,8 +34,9 @@ function SelectedMemberBadges({
   label: Props["label"];
   onRemove: (id: number) => void;
 }) {
+  const { t } = useTranslation();
   if (members.length === 0)
-    return <span className="text-xs text-muted-foreground">None assigned</span>;
+    return <span className="text-xs text-muted-foreground">{t("gitlab:noneAssigned")}</span>;
   return members.map((member) => (
     <Badge key={member.id} variant="secondary" className="gap-1">
       {member.username}
@@ -107,6 +109,7 @@ export function MRReviewerControl({
   busy,
   onSave,
 }: Props) {
+  const { t } = useTranslation();
   const initialIds = useMemo(() => current.map((member) => member.id), [current]);
   const [selectedIds, setSelectedIds] = useState(initialIds);
   const { query, setQuery, members, searching, error, search } = useProjectMemberSearch({
@@ -154,7 +157,7 @@ export function MRReviewerControl({
               void search();
             }
           }}
-          placeholder="Search project members"
+          placeholder={t("gitlab:searchProjectMembers")}
           aria-label={`Search ${label.toLowerCase()}`}
         />
         <Button

@@ -9,12 +9,14 @@ import type { Project } from "@/lib/state/slices/office/types";
 import { ProjectRepositoryPicker } from "../project-repository-picker";
 import { RepoChip } from "../repo-chip";
 import { normalizeRepos } from "../normalize-repos";
+import { useTranslation } from "react-i18next";
 
 type ProjectReposSectionProps = {
   project: Project;
 };
 
 export function ProjectReposSection({ project }: ProjectReposSectionProps) {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const updateProjectStore = useAppStore((s) => s.updateProject);
   const { repositories } = useRepositories(workspaceId);
@@ -56,10 +58,8 @@ export function ProjectReposSection({ project }: ProjectReposSectionProps) {
   return (
     <div className="space-y-3">
       <div>
-        <h2 className="text-sm font-semibold">Repositories</h2>
-        <p className="text-xs text-muted-foreground">
-          Git URLs or local paths where agents will work on this project.
-        </p>
+        <h2 className="text-sm font-semibold">{t("common:repositories")}</h2>
+        <p className="text-xs text-muted-foreground">{t("office:gitUrlsOrLocalPathsWhere")}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2" data-testid="project-repo-chips">
         {repos.map((repo) => (
@@ -78,7 +78,7 @@ export function ProjectReposSection({ project }: ProjectReposSectionProps) {
         />
       </div>
       {repos.length === 0 && (
-        <p className="text-xs text-muted-foreground">No repositories added yet.</p>
+        <p className="text-xs text-muted-foreground">{t("office:noRepositoriesAddedYet")}</p>
       )}
     </div>
   );

@@ -4,16 +4,23 @@ import { IconExternalLink, IconMessageCircle, IconPlus } from "@tabler/icons-rea
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import type { AzureDevOpsPullRequest, AzureDevOpsWorkItem } from "@/lib/types/azure-devops";
+import { useTranslation } from "react-i18next";
 
 function EmptyResult({ loading, error }: { loading: boolean; error: string | null }) {
-  if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading results...</div>;
+  const { t } = useTranslation();
+  if (loading)
+    return (
+      <div className="p-6 text-sm text-muted-foreground">{t("azureDevops:loadingResults")}</div>
+    );
   if (error)
     return (
       <div className="p-6 text-sm text-destructive" role="alert">
         {error}
       </div>
     );
-  return <div className="p-6 text-sm text-muted-foreground">No matching results.</div>;
+  return (
+    <div className="p-6 text-sm text-muted-foreground">{t("azureDevops:noMatchingResults")}</div>
+  );
 }
 
 export function AzureDevOpsWorkItemResults({
@@ -92,6 +99,7 @@ export function AzureDevOpsPullRequestResults({
   onFeedback: (pullRequest: AzureDevOpsPullRequest) => void;
   onStartTask: (pullRequest: AzureDevOpsPullRequest) => void;
 }) {
+  const { t } = useTranslation();
   if (loading || error || items.length === 0)
     return <EmptyResult loading={loading} error={error} />;
   return (
@@ -105,7 +113,7 @@ export function AzureDevOpsPullRequestResults({
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span className="font-mono">PR {pullRequest.id}</span>
               <Badge variant="outline">{pullRequest.status}</Badge>
-              {pullRequest.isDraft && <Badge variant="secondary">Draft</Badge>}
+              {pullRequest.isDraft && <Badge variant="secondary">{t("azureDevops:draft")}</Badge>}
               <span>{pullRequest.repositoryName}</span>
             </div>
             <div className="break-words text-sm font-medium">{pullRequest.title}</div>

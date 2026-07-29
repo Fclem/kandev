@@ -21,6 +21,7 @@ import {
   computeEditorHeight,
 } from "@/components/settings/profile-edit/script-editor";
 import type { ScriptPlaceholder } from "@/components/settings/profile-edit/script-editor-completions";
+import { useTranslation } from "react-i18next";
 
 const JIRA_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
   {
@@ -60,9 +61,10 @@ function newPreset(): JiraStoredPreset {
 }
 
 function IconSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="!h-8 py-0.5 text-sm cursor-pointer" aria-label="Icon">
+      <SelectTrigger className="!h-8 py-0.5 text-sm cursor-pointer" aria-label={t("jira:icon")}>
         <SelectValue>
           {createElement(iconForPresetKey(value), { className: "h-4 w-4" })}
         </SelectValue>
@@ -99,6 +101,7 @@ function PresetRow({
   onPatch: (patch: Partial<JiraStoredPreset>) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   const fieldIsDirty = <K extends keyof JiraStoredPreset>(field: K) =>
     !savedPreset || preset[field] !== savedPreset[field];
   const isDirty = !savedPreset || JSON.stringify(preset) !== JSON.stringify(savedPreset);
@@ -111,7 +114,7 @@ function PresetRow({
     >
       <div className="flex items-end gap-2 p-2">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-muted-foreground">Icon</span>
+          <span className="text-[10px] text-muted-foreground">{t("jira:icon")}</span>
           <div
             data-settings-dirty={fieldIsDirty("icon")}
             className="rounded-md border border-transparent"
@@ -120,22 +123,22 @@ function PresetRow({
           </div>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-muted-foreground">Label</span>
+          <span className="text-[10px] text-muted-foreground">{t("jira:label")}</span>
           <Input
             className="h-8 w-40"
             value={preset.label}
             data-settings-dirty={fieldIsDirty("label")}
-            placeholder="Label"
+            placeholder={t("jira:label")}
             onChange={(e) => onPatch({ label: e.target.value })}
           />
         </div>
         <div className="flex flex-col gap-0.5 flex-1">
-          <span className="text-[10px] text-muted-foreground">Hint</span>
+          <span className="text-[10px] text-muted-foreground">{t("jira:hint")}</span>
           <Input
             className="h-8"
             value={preset.hint}
             data-settings-dirty={fieldIsDirty("hint")}
-            placeholder="Hint (optional)"
+            placeholder={t("jira:hintOptional")}
             onChange={(e) => onPatch({ hint: e.target.value })}
           />
         </div>
@@ -152,36 +155,52 @@ function PresetRow({
           size="icon"
           className="h-8 w-8 cursor-pointer text-destructive"
           onClick={onRemove}
-          aria-label="Remove"
+          aria-label={t("jira:remove")}
         >
           <IconTrash className="h-3.5 w-3.5" />
         </Button>
       </div>
       {expanded && (
-        <div className="px-2 pb-2 space-y-1">
-          <div
-            className="rounded-md border overflow-hidden"
-            data-settings-dirty={fieldIsDirty("prompt_template")}
-          >
-            <ScriptEditor
-              value={preset.prompt_template}
-              onChange={(v) => onPatch({ prompt_template: v })}
-              language="markdown"
-              height={computeEditorHeight(preset.prompt_template)}
-              lineNumbers="off"
-              placeholders={JIRA_PROMPT_PLACEHOLDERS}
-            />
-          </div>
-          <p className="text-[11px] text-muted-foreground/60">
-            Type {"{{"} to see available placeholders.{" "}
-            <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{key}}"}</code>,{" "}
-            <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{url}}"}</code>,{" "}
-            <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{title}}"}</code>, and{" "}
-            <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{description}}"}</code>{" "}
-            are substituted when the action runs.
-          </p>
-        </div>
+        <PresetPromptEditor
+          value={preset.prompt_template}
+          isDirty={fieldIsDirty("prompt_template")}
+          onChange={(v) => onPatch({ prompt_template: v })}
+        />
       )}
+    </div>
+  );
+}
+
+/** Expanded prompt-template editor for a single Jira task preset row. */
+function PresetPromptEditor({
+  value,
+  isDirty,
+  onChange,
+}: {
+  value: string;
+  isDirty: boolean;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="px-2 pb-2 space-y-1">
+      <div className="rounded-md border overflow-hidden" data-settings-dirty={isDirty}>
+        <ScriptEditor
+          value={value}
+          onChange={onChange}
+          language="markdown"
+          height={computeEditorHeight(value)}
+          lineNumbers="off"
+          placeholders={JIRA_PROMPT_PLACEHOLDERS}
+        />
+      </div>
+      <p className="text-[11px] text-muted-foreground/60">
+        Type {"{{"} to see available placeholders.{" "}
+        <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{key}}"}</code>,{" "}
+        <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{url}}"}</code>,{" "}
+        <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{title}}"}</code>, and{" "}
+        <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{description}}"}</code> are
+        substituted when the action runs.
+      </p>
     </div>
   );
 }
@@ -220,6 +239,7 @@ function usePresetDraft() {
 }
 
 export function TaskPresetsSection() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { draft, baseline, setDraft, dirty, save, reset, discard, loaded } = usePresetDraft();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -261,7 +281,7 @@ export function TaskPresetsSection() {
 
   return (
     <SettingsSection
-      title="Task presets"
+      title={t("jira:taskPresets")}
       description="Prompts shown on /jira when starting a task from a ticket."
       action={
         <div className="flex gap-2">

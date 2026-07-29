@@ -10,6 +10,7 @@ import {
 } from "@kandev/ui/dialog";
 import { Separator } from "@kandev/ui/separator";
 import type { AzureDevOpsPullRequestFeedback } from "@/lib/types/azure-devops";
+import { useTranslation } from "react-i18next";
 
 function voteLabel(vote: number): string {
   if (vote >= 10) return "Approved";
@@ -30,11 +31,12 @@ function Summary({ feedback }: { feedback: AzureDevOpsPullRequestFeedback }) {
 }
 
 function Reviewers({ feedback }: { feedback: AzureDevOpsPullRequestFeedback }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-semibold">Reviewers</h3>
+      <h3 className="text-sm font-semibold">{t("azureDevops:reviewers")}</h3>
       {feedback.reviewers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No reviewers.</p>
+        <p className="text-sm text-muted-foreground">{t("azureDevops:noReviewers")}</p>
       ) : (
         <div className="space-y-2">
           {feedback.reviewers.map((reviewer) => (
@@ -52,11 +54,12 @@ function Reviewers({ feedback }: { feedback: AzureDevOpsPullRequestFeedback }) {
 }
 
 function Policies({ feedback }: { feedback: AzureDevOpsPullRequestFeedback }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-semibold">Branch policies</h3>
+      <h3 className="text-sm font-semibold">{t("azureDevops:branchPolicies")}</h3>
       {feedback.policies.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No policy evaluations.</p>
+        <p className="text-sm text-muted-foreground">{t("azureDevops:noPolicyEvaluations")}</p>
       ) : (
         <div className="space-y-2">
           {feedback.policies.map((policy) => (
@@ -74,14 +77,15 @@ function Policies({ feedback }: { feedback: AzureDevOpsPullRequestFeedback }) {
 }
 
 function Threads({ feedback }: { feedback: AzureDevOpsPullRequestFeedback }) {
+  const { t } = useTranslation();
   const comments = feedback.threads.flatMap((thread) =>
     thread.comments.map((comment) => ({ ...comment, threadId: thread.id })),
   );
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-semibold">Discussion</h3>
+      <h3 className="text-sm font-semibold">{t("azureDevops:discussion")}</h3>
       {comments.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No comments.</p>
+        <p className="text-sm text-muted-foreground">{t("azureDevops:noComments")}</p>
       ) : (
         <div className="space-y-3">
           {comments.map((comment) => (
@@ -111,6 +115,7 @@ export function AzureDevOpsFeedbackDialog({
   feedback: AzureDevOpsPullRequestFeedback | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] max-w-2xl overflow-y-auto">
@@ -124,7 +129,9 @@ export function AzureDevOpsFeedbackDialog({
               : "Azure DevOps review and policy state"}
           </DialogDescription>
         </DialogHeader>
-        {loading && <p className="text-sm text-muted-foreground">Loading feedback...</p>}
+        {loading && (
+          <p className="text-sm text-muted-foreground">{t("azureDevops:loadingFeedback")}</p>
+        )}
         {error && (
           <p className="text-sm text-destructive" role="alert">
             {error}

@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { PopupMenu, PopupMenuItem, useMenuItemRefs } from "@/components/task/chat/popup-menu";
 import type { MenuState } from "@/components/task/chat/tiptap-suggestion";
 import type { PlanSlashCommand } from "./plan-slash-commands";
+import { useTranslation } from "react-i18next";
 
 type PlanSlashMenuProps = {
   menuState: MenuState<PlanSlashCommand>;
@@ -12,6 +13,7 @@ type PlanSlashMenuProps = {
 };
 
 export function PlanSlashMenu({ menuState, selectedIndex, setSelectedIndex }: PlanSlashMenuProps) {
+  const { t } = useTranslation();
   const { setItemRef } = useMenuItemRefs(selectedIndex);
 
   if (!menuState.isOpen || menuState.items.length === 0) return null;
@@ -34,7 +36,7 @@ export function PlanSlashMenu({ menuState, selectedIndex, setSelectedIndex }: Pl
       isOpen={menuState.isOpen}
       position={null}
       clientRect={menuState.clientRect}
-      title="Insert block"
+      title={t("editors:insertBlock")}
       selectedIndex={selectedIndex}
       onClose={() => menuState.command?.(menuState.items[0]!)}
       hasItems={menuState.items.length > 0}

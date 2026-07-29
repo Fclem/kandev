@@ -1,0 +1,14 @@
+{
+  "addAComment": "Add a comment...",
+  "addComment": "Add comment",
+  "closeWalkthrough": "Close walkthrough",
+  "deleteComment": "Delete comment",
+  "editComment": "Edit comment",
+  "noDiffAvailable": "No diff available",
+  "runComment": "Run comment",
+  "stale": "Stale",
+  "suggestedChangeNotAppliedAutomatically": "Suggested change — not applied automatically",
+  "unableToRenderDiffForThis": "Unable to render diff for this file. The cached diff may be out of sync with the working tree — refresh to retry.",
+  "undo": "Undo",
+  "walkthrough": "Walkthrough"
+}

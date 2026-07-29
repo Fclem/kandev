@@ -10,30 +10,36 @@ import {
   ImagePreviewContent,
 } from "@/components/task/chat/image-preview-dialog";
 import { ContextChip } from "./context-chip";
+import { useTranslation } from "react-i18next";
 
-export const ImageItem = memo(function ImageItem({ item }: { item: ImageContextItem }) {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const previewSrc = item.attachment.preview;
-  const deliveryMode = item.attachment.deliveryMode;
+/** Hover preview for an image chip: the thumbnail plus the prompt/file delivery toggle. */
+function ImageChipPreview({
+  previewSrc,
+  deliveryMode,
+  onDeliveryModeChange,
+}: {
+  previewSrc: string;
+  deliveryMode: ImageContextItem["attachment"]["deliveryMode"];
+  onDeliveryModeChange?: (mode: "prompt" | "path") => void;
+}) {
+  const { t } = useTranslation();
   const deliveryDescription =
     deliveryMode === "path"
       ? "Upload into the workspace so the agent can read or edit the file."
       : "Send as prompt context for visual understanding. The agent will not get a file path.";
-  let leadingIcon;
-
-  const handleClick = useCallback(() => {
-    setDialogOpen(true);
-  }, []);
-
-  const preview = previewSrc ? (
+  return (
     <div className="space-y-1.5">
-      <img src={previewSrc} alt="Preview" className="max-w-full max-h-48 rounded object-contain" />
-      {item.onDeliveryModeChange && (
+      <img
+        src={previewSrc}
+        alt={t("task:preview")}
+        className="max-w-full max-h-48 rounded object-contain"
+      />
+      {onDeliveryModeChange && (
         <div className="space-y-1.5">
           <div
             className="flex items-center gap-1"
             role="group"
-            aria-label="Attachment delivery mode"
+            aria-label={t("task:attachmentDeliveryMode")}
           >
             <Button
               type="button"
@@ -45,10 +51,10 @@ export const ImageItem = memo(function ImageItem({ item }: { item: ImageContextI
               aria-pressed={deliveryMode === "prompt"}
               onClick={(event) => {
                 event.stopPropagation();
-                item.onDeliveryModeChange?.("prompt");
+                onDeliveryModeChange("prompt");
               }}
             >
-              Prompt
+              {t("task:prompt")}
             </Button>
             <Button
               type="button"
@@ -60,16 +66,36 @@ export const ImageItem = memo(function ImageItem({ item }: { item: ImageContextI
               aria-pressed={deliveryMode === "path"}
               onClick={(event) => {
                 event.stopPropagation();
-                item.onDeliveryModeChange?.("path");
+                onDeliveryModeChange("path");
               }}
             >
-              File
+              {t("task:file")}
             </Button>
           </div>
           <p className="text-[11px] leading-snug text-muted-foreground">{deliveryDescription}</p>
         </div>
       )}
     </div>
+  );
+}
+
+export const ImageItem = memo(function ImageItem({ item }: { item: ImageContextItem }) {
+  const { t } = useTranslation();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const previewSrc = item.attachment.preview;
+  const deliveryMode = item.attachment.deliveryMode;
+  let leadingIcon;
+
+  const handleClick = useCallback(() => {
+    setDialogOpen(true);
+  }, []);
+
+  const preview = previewSrc ? (
+    <ImageChipPreview
+      previewSrc={previewSrc}
+      deliveryMode={deliveryMode}
+      onDeliveryModeChange={item.onDeliveryModeChange}
+    />
   ) : undefined;
   if (deliveryMode === "path") {
     leadingIcon = (
@@ -105,7 +131,7 @@ export const ImageItem = memo(function ImageItem({ item }: { item: ImageContextI
             aria-describedby={undefined}
             className={IMAGE_PREVIEW_DIALOG_CONTENT_CLASSNAME}
           >
-            <ImagePreviewContent src={previewSrc} alt="Full size preview" />
+            <ImagePreviewContent src={previewSrc} alt={t("task:fullSizePreview")} />
           </DialogContent>
         </Dialog>
       )}

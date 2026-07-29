@@ -8,6 +8,7 @@ import { useProviderHealth } from "@/hooks/domains/office/use-provider-health";
 import { useWorkspaceRouting } from "@/hooks/domains/office/use-workspace-routing";
 import type { ProviderHealth, ProviderHealthState } from "@/lib/state/slices/office/types";
 import { providerLabel } from "../../workspace/routing/components/provider-order-editor";
+import { useTranslation } from "react-i18next";
 
 const STATE_PILL: Record<
   ProviderHealthState,
@@ -19,6 +20,7 @@ const STATE_PILL: Record<
 };
 
 export function ProviderHealthCard() {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const workspace = useWorkspaceRouting(workspaceId);
   const { health } = useProviderHealth(workspaceId);
@@ -34,18 +36,18 @@ export function ProviderHealthCard() {
   return (
     <Card>
       <div className="p-4 border-b border-border flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Provider Health</h2>
+        <h2 className="text-sm font-semibold">{t("office:providerHealth")}</h2>
         <Link
           href="/office/workspace/routing"
           className="text-xs underline-offset-4 hover:underline cursor-pointer text-muted-foreground"
         >
-          Manage
+          {t("office:manage")}
         </Link>
       </div>
       <div className="divide-y divide-border">
         {rows.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-            No providers configured.
+            {t("office:noProvidersConfigured")}
           </div>
         ) : (
           rows.map((h) => <ProviderHealthRow key={h.provider_id} h={h} />)

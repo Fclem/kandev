@@ -27,6 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { RemoteCloudTooltip } from "./remote-cloud-tooltip";
 import { classifyTask } from "./task-classify";
 import { ScrollOnOverflow } from "@kandev/ui/scroll-on-overflow";
+import { useTranslation } from "react-i18next";
 
 type DiffStats = {
   additions: number;
@@ -167,11 +168,12 @@ function taskItemRowClick(
 }
 
 function BackgroundWorkTaskIcon() {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          aria-label="Background work is running"
+          aria-label={t("task:backgroundWorkIsRunning")}
           tabIndex={0}
           className="mt-[1px] flex shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
         >
@@ -182,7 +184,7 @@ function BackgroundWorkTaskIcon() {
           />
         </span>
       </TooltipTrigger>
-      <TooltipContent side="right">Background work is running</TooltipContent>
+      <TooltipContent side="right">{t("task:backgroundWorkIsRunning")}</TooltipContent>
     </Tooltip>
   );
 }
@@ -390,6 +392,7 @@ function TaskItemContent({
   issueInfo?: { url: string; number: number };
   agentErrorMessage?: string | null;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <span className="flex items-center gap-1 min-w-0 text-[13px] font-medium text-foreground leading-tight">
@@ -414,7 +417,7 @@ function TaskItemContent({
         )}
         {isArchived && (
           <span className="rounded px-1 py-px text-[10px] bg-amber-500/15 text-amber-500">
-            Archived
+            {t("task:archived")}
           </span>
         )}
       </span>
@@ -429,13 +432,14 @@ function TaskItemContent({
 }
 
 function TaskAgentErrorIcon({ message }: { message: string }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span
           data-testid="task-agent-error-icon"
           className="inline-flex shrink-0 cursor-help text-destructive"
-          aria-label="Task has an agent error"
+          aria-label={t("task:taskHasAnAgentError")}
         >
           <IconAlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
@@ -611,6 +615,7 @@ function SubtaskToggle({
 }
 
 function TaskMenuButton({ visible, expanded }: { visible: boolean; expanded: boolean }) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -639,7 +644,7 @@ function TaskMenuButton({ visible, expanded }: { visible: boolean; expanded: boo
             }),
           );
         }}
-        aria-label="Task actions"
+        aria-label={t("task:taskActions")}
         aria-haspopup="menu"
         aria-expanded={expanded}
       >

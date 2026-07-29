@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ScriptEditor } from "@/components/settings/profile-edit/script-editor";
 import type { InstructionFile } from "./agent-instructions-tab";
 import { createInstructionFileCompletionProvider } from "./instruction-file-completions";
+import { useTranslation } from "react-i18next";
 
 type InstructionEditorProps = {
   file: InstructionFile | null;
@@ -21,6 +22,7 @@ export function InstructionEditor({
   onSave,
   onDelete,
 }: InstructionEditorProps) {
+  const { t } = useTranslation();
   const [content, setContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -63,7 +65,7 @@ export function InstructionEditor({
   if (!file) {
     return (
       <div className="flex-1 border border-border rounded-lg flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Select a file to view or edit.</p>
+        <p className="text-sm text-muted-foreground">{t("office:selectAFileToViewOr")}</p>
       </div>
     );
   }
@@ -125,6 +127,7 @@ function DeleteConfirmDialog({
   filename: string;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -132,14 +135,14 @@ function DeleteConfirmDialog({
           <DialogTitle>Delete {filename}?</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          This will permanently delete this instruction file. This action cannot be undone.
+          {t("office:thisWillPermanentlyDeleteThisInstruction")}
         </p>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button variant="destructive" onClick={onConfirm} className="cursor-pointer">
-            Delete
+            {t("common:delete")}
           </Button>
         </DialogFooter>
       </DialogContent>

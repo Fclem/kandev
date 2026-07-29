@@ -6,6 +6,7 @@ import { Button } from "@kandev/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@kandev/ui/dialog";
 import { MemoizedMarkdown } from "@/components/shared/memoized-markdown";
 import type { Message } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 function parsePlanContent(text: string): { title: string; body: string } {
   const lines = text.split("\n");
@@ -47,6 +48,7 @@ export const AgentPlanMessage = memo(function AgentPlanMessage({
   worktreePath?: string;
   onOpenFile?: (path: string) => void;
 }) {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const text = comment.content;
@@ -73,7 +75,7 @@ export const AgentPlanMessage = memo(function AgentPlanMessage({
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Open plan details"
+              aria-label={t("task:openPlanDetails")}
               className="h-7 w-7 cursor-pointer"
               onClick={() => setDialogOpen(true)}
             >

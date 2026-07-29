@@ -9,6 +9,7 @@ import { ReviewDiffList } from "./review-diff-list";
 import { ReviewFileTree } from "./review-file-tree";
 import { ReviewPRDiffBoundary, shouldBlockReviewForPR } from "./review-dialog-pr-state";
 import { ReviewTopBar } from "./review-top-bar";
+import { useTranslation } from "react-i18next";
 
 type ReviewDialogSurfaceProps = {
   open: boolean;
@@ -76,6 +77,7 @@ function ReviewDialogDiffContent({
 }
 
 export function ReviewDialogSurface(props: ReviewDialogSurfaceProps) {
+  const { t } = useTranslation();
   const { open, onOpenChange, sessionId, state } = props;
   const splitRowRef = useRef<HTMLDivElement>(null);
   const sidebar = useReviewSidebarResize(splitRowRef, open, state.reviewSourceKey);
@@ -99,7 +101,7 @@ export function ReviewDialogSurface(props: ReviewDialogSurfaceProps) {
         showCloseButton={false}
         overlayClassName="bg-black/40"
       >
-        <DialogTitle className="sr-only">Review Changes</DialogTitle>
+        <DialogTitle className="sr-only">{t("review:reviewChanges")}</DialogTitle>
         <ReviewTopBar
           sessionId={sessionId}
           reviewedCount={state.reviewedFiles.size}
@@ -144,7 +146,7 @@ export function ReviewDialogSurface(props: ReviewDialogSurfaceProps) {
             data-testid="review-dialog-sidebar-resize"
             type="button"
             tabIndex={-1}
-            aria-label="Resize file list"
+            aria-label={t("review:resizeFileList")}
             className="group relative hidden w-1 flex-shrink-0 cursor-col-resize bg-border p-0 transition-colors hover:bg-primary sm:block"
             {...sidebar.resizeHandleProps}
           >

@@ -17,6 +17,7 @@ import { mergePR } from "@/lib/api/domains/github-api";
 import { getGitHubMutationActor } from "@/lib/github-auth";
 import type { MergeMethod, TaskPR } from "@/lib/types/github";
 import { isPRReadyToMerge } from "./pr-task-icon";
+import { useTranslation } from "react-i18next";
 
 function MutationActor({ actor }: { actor: string | null }) {
   if (!actor) return null;
@@ -31,6 +32,7 @@ function CompactMergeButton({
   extraMethods,
   onPickMethod,
 }: Omit<MergeButtonShellProps, "compact">) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-1.5">
       <button
@@ -45,7 +47,7 @@ function CompactMergeButton({
       </button>
       {extraMethods.length > 0 && (
         <div className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
-          <span>or</span>
+          <span>{t("github:or")}</span>
           {extraMethods.map((method) => (
             <button
               key={method}
@@ -170,6 +172,7 @@ function MergeButtonShell({
   extraMethods,
   onPickMethod,
 }: MergeButtonShellProps) {
+  const { t } = useTranslation();
   // Compact (hover popover): a single full-width primary button plus quiet
   // "or <method>" links for the alternates. Deliberately avoids a dropdown —
   // its menu renders in a detached portal that closes the hover popover the
@@ -220,7 +223,7 @@ function MergeButtonShell({
             <button
               type="button"
               data-testid="pr-merge-button-more"
-              aria-label="Choose merge method"
+              aria-label={t("github:chooseMergeMethod")}
               disabled={disabled}
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center rounded-r-md border-l border-green-700/40 bg-green-600 px-2 text-white hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-500 disabled:opacity-60 cursor-pointer"

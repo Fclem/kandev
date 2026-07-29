@@ -4,6 +4,7 @@ import { useState } from "react";
 import { IconChevronDown } from "@tabler/icons-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kandev/ui/collapsible";
 import type { RunSessionDetail } from "@/lib/api/domains/office-extended-api";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   session: RunSessionDetail;
@@ -17,6 +18,7 @@ type Props = {
  * tasks" action is out of scope for v1.
  */
 export function SessionCollapsible({ session }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const hasAny = Boolean(
     session.session_id || session.session_id_before || session.session_id_after,
@@ -28,7 +30,7 @@ export function SessionCollapsible({ session }: Props) {
         className="w-full flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-muted/40"
         data-testid="run-session-collapsible-trigger"
       >
-        <span className="text-sm font-medium">Session</span>
+        <span className="text-sm font-medium">{t("office:session")}</span>
         <IconChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
       </CollapsibleTrigger>
       <CollapsibleContent className="px-4 py-3 space-y-1.5 border-t border-border text-xs">

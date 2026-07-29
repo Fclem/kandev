@@ -11,6 +11,7 @@ import { ContextZone } from "./context-items/context-zone";
 import type { ContextItem } from "@/lib/types/context";
 import type { ContextFile } from "@/lib/state/context-files-store";
 import type { ImagePasteIssue } from "./clipboard-attachments";
+import { useTranslation } from "react-i18next";
 
 export type ChatInputEditorAreaProps = {
   inputRef: React.RefObject<import("./tiptap-input").TipTapInputHandle | null>;
@@ -73,6 +74,7 @@ function EditorWithTooltip({
   className?: string;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <Tooltip open={showTooltip}>
       <TooltipTrigger asChild>
@@ -87,7 +89,7 @@ function EditorWithTooltip({
         </div>
       </TooltipTrigger>
       <TooltipContent side="top" className="bg-orange-600 text-white border-orange-700">
-        <p className="font-medium">Write your changes here</p>
+        <p className="font-medium">{t("task:writeYourChangesHere")}</p>
       </TooltipContent>
     </Tooltip>
   );

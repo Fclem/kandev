@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { IconArrowLeft, IconArrowRight } from "@tabler/icons-react";
 import type { AgentProfile } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 type CreateRoutineDialogProps = {
   open: boolean;
@@ -89,21 +90,22 @@ function StepDetails({
   agents: AgentProfile[];
   onUpdate: (patch: Partial<RoutineFormState>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div>
-        <Label htmlFor="routine-name">Name</Label>
+        <Label htmlFor="routine-name">{t("office:name")}</Label>
         <Input
           id="routine-name"
           value={state.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
-          placeholder="Daily Dep Update"
+          placeholder={t("office:dailyDepUpdate")}
           className="mt-1.5"
           autoFocus
         />
       </div>
       <div>
-        <Label htmlFor="routine-description">Description</Label>
+        <Label htmlFor="routine-description">{t("office:description")}</Label>
         <Textarea
           id="routine-description"
           value={state.description}
@@ -113,10 +115,10 @@ function StepDetails({
         />
       </div>
       <div>
-        <Label>Assignee</Label>
+        <Label>{t("office:assignee")}</Label>
         <Select value={state.assignee} onValueChange={(v) => onUpdate({ assignee: v })}>
           <SelectTrigger className="cursor-pointer mt-1.5">
-            <SelectValue placeholder="Select agent" />
+            <SelectValue placeholder={t("common:selectAgent")} />
           </SelectTrigger>
           <SelectContent>
             {agents.map((a) => (
@@ -127,7 +129,7 @@ function StepDetails({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground mt-1.5">
-          Agent that picks up runs triggered by this routine
+          {t("office:agentThatPicksUpRunsTriggered")}
         </p>
       </div>
     </div>
@@ -141,24 +143,24 @@ function StepTaskTemplate({
   state: RoutineFormState;
   onUpdate: (patch: Partial<RoutineFormState>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div>
-        <Label htmlFor="routine-task-title">Task Title Template</Label>
+        <Label htmlFor="routine-task-title">{t("office:taskTitleTemplate")}</Label>
         <Input
           id="routine-task-title"
           value={state.taskTitle}
           onChange={(e) => onUpdate({ taskTitle: e.target.value })}
-          placeholder="{{name}} - {{date}}"
+          placeholder={t("office:text")}
           className="mt-1.5"
         />
         <p className="text-xs text-muted-foreground mt-1.5">
-          Title for auto-created tasks. Use &#123;&#123;name&#125;&#125; and
-          &#123;&#123;date&#125;&#125; as placeholders.
+          {t("office:titleForAutoCreatedTasksUse")}
         </p>
       </div>
       <div>
-        <Label htmlFor="routine-task-desc">Task Description Template</Label>
+        <Label htmlFor="routine-task-desc">{t("office:taskDescriptionTemplate")}</Label>
         <Textarea
           id="routine-task-desc"
           value={state.taskDesc}
@@ -167,7 +169,7 @@ function StepTaskTemplate({
           className="mt-1.5"
         />
         <p className="text-xs text-muted-foreground mt-1.5">
-          Instructions the agent receives when this routine triggers
+          {t("office:instructionsTheAgentReceivesWhenThis")}
         </p>
       </div>
     </div>
@@ -181,28 +183,29 @@ function TriggerFields({
   state: RoutineFormState;
   onUpdate: (patch: Partial<RoutineFormState>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label>Trigger Type</Label>
+          <Label>{t("office:triggerType")}</Label>
           <Select value={state.triggerKind} onValueChange={(v) => onUpdate({ triggerKind: v })}>
             <SelectTrigger className="cursor-pointer mt-1.5">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="cron" className="cursor-pointer">
-                Cron
+                {t("office:cron")}
               </SelectItem>
               <SelectItem value="webhook" className="cursor-pointer">
-                Webhook
+                {t("office:webhook")}
               </SelectItem>
             </SelectContent>
           </Select>
         </div>
         {state.triggerKind === "cron" && (
           <div>
-            <Label htmlFor="routine-cron">Cron Expression</Label>
+            <Label htmlFor="routine-cron">{t("office:cronExpression")}</Label>
             <Input
               id="routine-cron"
               value={state.cronExpr}
@@ -216,10 +219,10 @@ function TriggerFields({
       {state.triggerKind === "cron" && (
         <>
           <p className="text-xs text-muted-foreground -mt-2">
-            Standard cron expression (e.g. 0 9 * * MON for every Monday at 9am)
+            {t("office:standardCronExpressionEG0")}
           </p>
           <div>
-            <Label htmlFor="routine-timezone">Timezone</Label>
+            <Label htmlFor="routine-timezone">{t("office:timezone")}</Label>
             <Input
               id="routine-timezone"
               value={state.timezone}
@@ -241,52 +244,53 @@ function PolicyFields({
   state: RoutineFormState;
   onUpdate: (patch: Partial<RoutineFormState>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
       <div>
-        <Label>Concurrency</Label>
+        <Label>{t("office:concurrency")}</Label>
         <Select value={state.concurrency} onValueChange={(v) => onUpdate({ concurrency: v })}>
           <SelectTrigger className="cursor-pointer mt-1.5">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="skip_if_active" className="cursor-pointer">
-              Skip if active
+              {t("office:skipIfActive")}
             </SelectItem>
             <SelectItem value="coalesce_if_active" className="cursor-pointer">
-              Coalesce
+              {t("office:coalesce")}
             </SelectItem>
             <SelectItem value="always_create" className="cursor-pointer">
-              Always create
+              {t("office:alwaysCreate")}
             </SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground mt-1.5">
-          What happens if the previous run is still active
+          {t("office:whatHappensIfThePreviousRun")}
         </p>
       </div>
       <div>
-        <Label>Catch-up policy</Label>
+        <Label>{t("office:catchUpPolicy")}</Label>
         <Select value={state.catchUpPolicy} onValueChange={(v) => onUpdate({ catchUpPolicy: v })}>
           <SelectTrigger className="cursor-pointer mt-1.5">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="enqueue_missed_with_cap" className="cursor-pointer">
-              Enqueue missed (with cap)
+              {t("office:enqueueMissedWithCap")}
             </SelectItem>
             <SelectItem value="skip_missed" className="cursor-pointer">
-              Skip missed
+              {t("office:skipMissed")}
             </SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground mt-1.5">
-          What happens to ticks missed while the backend was offline
+          {t("office:whatHappensToTicksMissedWhile")}
         </p>
       </div>
       {state.catchUpPolicy === "enqueue_missed_with_cap" && (
         <div className="col-span-2">
-          <Label htmlFor="routine-catchup-max">Catch-up max</Label>
+          <Label htmlFor="routine-catchup-max">{t("office:catchUpMax")}</Label>
           <Input
             id="routine-catchup-max"
             type="number"
@@ -296,7 +300,7 @@ function PolicyFields({
             className="mt-1.5"
           />
           <p className="text-xs text-muted-foreground mt-1.5">
-            Beyond this count, missed ticks are dropped (default 25)
+            {t("office:beyondThisCountMissedTicksAre")}
           </p>
         </div>
       )}
@@ -347,6 +351,7 @@ export function CreateRoutineDialog({
   agents,
   onSubmit,
 }: CreateRoutineDialogProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [state, setState] = useState<RoutineFormState>(INITIAL_ROUTINE_STATE);
   const update = (patch: Partial<RoutineFormState>) => setState((prev) => ({ ...prev, ...patch }));
@@ -385,7 +390,7 @@ export function CreateRoutineDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create Routine</DialogTitle>
+          <DialogTitle>{t("office:createRoutine")}</DialogTitle>
           <p className="text-sm text-muted-foreground">
             Step {step + 1} of {STEP_COUNT} — {STEP_TITLES[step]}
           </p>
@@ -413,11 +418,11 @@ export function CreateRoutineDialog({
               onClick={() => handleOpenChange(false)}
               className="cursor-pointer"
             >
-              Cancel
+              {t("common:cancel")}
             </Button>
             {isLast ? (
               <Button onClick={handleSubmit} disabled={!advanceEnabled} className="cursor-pointer">
-                Create
+                {t("office:create")}
               </Button>
             ) : (
               <Button

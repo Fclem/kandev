@@ -42,6 +42,7 @@ import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
 import { autoFixRoundForState, findCIAutomationStateForPR } from "@/lib/github/ci-automation";
 import type { AutoFixRoundInfo } from "@/lib/github/ci-automation";
 import type { TaskCIAutomationOptions, TaskPR } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 const HOVER_OPEN_DELAY_MS = 150;
 const HOVER_CLOSE_DELAY_MS = 150;
@@ -292,6 +293,7 @@ function chipButtonAttrs(
 }
 
 function AutomationFlagBadges({ automation }: { automation: AutomationFlags }) {
+  const { t } = useTranslation();
   if (!automation.autoFix && !automation.autoMerge) return null;
   const autoFixRound = automation.autoFixRound;
   return (
@@ -315,7 +317,7 @@ function AutomationFlagBadges({ automation }: { automation: AutomationFlags }) {
           data-testid="pr-status-auto-merge-chip"
           className="rounded-sm bg-sky-500/15 px-1 py-0.5 text-[9px] font-medium leading-none text-sky-500"
         >
-          Auto-merge
+          {t("github:autoMerge")}
         </span>
       )}
     </>
@@ -464,6 +466,7 @@ function PRStatusChipMultiHoverCard({ prs, automation, refreshTaskPR }: MultiChi
 }
 
 function PRStatusChipMultiDrawer({ prs, automation, refreshTaskPR }: MultiChipProps) {
+  const { t } = useTranslation();
   const status = aggregateChipStatus(prs);
   const [open, setOpen] = useState(false);
   return (
@@ -481,14 +484,14 @@ function PRStatusChipMultiDrawer({ prs, automation, refreshTaskPR }: MultiChipPr
         <DrawerHeader className="flex flex-row items-center justify-between border-b py-2">
           <DrawerTitle className="text-sm">{prs.length} pull requests</DrawerTitle>
           <DrawerDescription className="sr-only">
-            Pull request CI status, reviews, and checks summary.
+            {t("github:pullRequestCiStatusReviewsAnd")}
           </DrawerDescription>
           <DrawerClose asChild>
             <Button
               data-testid="pr-status-chip-drawer-close"
               variant="ghost"
               size="icon-sm"
-              aria-label="Close PR status"
+              aria-label={t("github:closePrStatus")}
               className="cursor-pointer"
             >
               <IconX className="h-4 w-4" />
@@ -504,6 +507,7 @@ function PRStatusChipMultiDrawer({ prs, automation, refreshTaskPR }: MultiChipPr
 }
 
 function PRStatusChipDrawer({ pr, automation, refreshTaskPR }: SingleChipProps) {
+  const { t } = useTranslation();
   const status = chipStatus(pr);
   const [open, setOpen] = useState(false);
   return (
@@ -523,14 +527,14 @@ function PRStatusChipDrawer({ pr, automation, refreshTaskPR }: SingleChipProps) 
         <DrawerHeader className="flex flex-row items-center justify-between border-b py-2">
           <DrawerTitle className="text-sm">PR #{pr.pr_number}</DrawerTitle>
           <DrawerDescription className="sr-only">
-            Pull request CI status, reviews, and checks summary.
+            {t("github:pullRequestCiStatusReviewsAnd")}
           </DrawerDescription>
           <DrawerClose asChild>
             <Button
               data-testid="pr-status-chip-drawer-close"
               variant="ghost"
               size="icon-sm"
-              aria-label="Close PR status"
+              aria-label={t("github:closePrStatus")}
               className="cursor-pointer"
             >
               <IconX className="h-4 w-4" />

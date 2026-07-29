@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { dispatchSidebarRowClick } from "./task-switcher";
+import { dispatchSidebarRowClick } from "./task-switcher-tree";
 
 function fakeEvent(mods: Partial<MouseEvent> = {}) {
   return {

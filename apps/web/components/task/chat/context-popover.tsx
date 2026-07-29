@@ -10,6 +10,7 @@ import { searchWorkspaceFiles } from "@/lib/ws/workspace-files";
 import { useCustomPrompts } from "@/hooks/domains/settings/use-custom-prompts";
 import { isDirectory, getFileName } from "@/lib/utils/file-path";
 import type { ContextFile } from "@/lib/state/context-files-store";
+import { useTranslation } from "react-i18next";
 
 type ContextPopoverProps = {
   open: boolean;
@@ -41,12 +42,19 @@ function FileResultsList({
   isFileSelected: (path: string) => boolean;
   onToggle: (filePath: string) => void;
 }) {
+  const { t } = useTranslation();
   if (isLoading) {
-    return <div className="px-3 py-3 text-center text-xs text-muted-foreground">Loading...</div>;
+    return (
+      <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+        {t("common:loading2")}
+      </div>
+    );
   }
   if (fileResults.length === 0 && query && filteredPromptsEmpty) {
     return (
-      <div className="px-3 py-3 text-center text-xs text-muted-foreground">No results found</div>
+      <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+        {t("task:noResultsFound")}
+      </div>
     );
   }
   return (
@@ -92,13 +100,14 @@ type PromptsSectionProps = {
 };
 
 function PromptsSection({ query, prompts, contextFiles, onToggleFile }: PromptsSectionProps) {
+  const { t } = useTranslation();
   if (prompts.length === 0) return null;
   return (
     <>
       {!query && (
         <div className="px-3 pt-2 pb-1">
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-            Prompts
+            {t("common:prompts")}
           </p>
         </div>
       )}
@@ -205,6 +214,7 @@ function ContextPopoverList({
   isFileSelected: (path: string) => boolean;
   handleToggleFile: (filePath: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="max-h-60 overflow-y-auto border-t border-border">
       {!query && (
@@ -218,7 +228,7 @@ function ContextPopoverList({
             className="h-3.5 w-3.5"
           />
           <IconListCheck className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span className="text-xs flex-1 truncate">Plan</span>
+          <span className="text-xs flex-1 truncate">{t("task:plan")}</span>
           {planContextEnabled && (
             <span className="text-[9px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">
               ACTIVE
@@ -235,7 +245,7 @@ function ContextPopoverList({
       {!query && fileResults.length > 0 && (
         <div className="px-3 pt-2 pb-1">
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-            Files
+            {t("common:files")}
           </p>
         </div>
       )}
@@ -260,6 +270,7 @@ export function ContextPopover({
   contextFiles,
   onToggleFile,
 }: ContextPopoverProps) {
+  const { t } = useTranslation();
   const { query, setQuery, fileResults, isLoading, inputRef } = useContextPopoverState(
     open,
     sessionId,
@@ -293,8 +304,10 @@ export function ContextPopover({
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <div className="px-3 pt-3 pb-2 flex items-baseline gap-1.5">
-          <p className="text-xs font-medium">Context</p>
-          <p className="text-[10px] text-muted-foreground">· Select files and prompts to include</p>
+          <p className="text-xs font-medium">{t("task:context")}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {t("task:selectFilesAndPromptsToInclude")}
+          </p>
         </div>
         <div className="px-3 pb-2">
           <div className="relative">
@@ -303,7 +316,7 @@ export function ContextPopover({
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search files and prompts..."
+              placeholder={t("task:searchFilesAndPrompts")}
               className="h-7 pl-7 text-xs"
             />
           </div>

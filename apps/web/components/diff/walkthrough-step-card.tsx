@@ -20,6 +20,7 @@ import {
 import type { TaskWalkthrough, WalkthroughStep } from "@/lib/types/http";
 import type { WalkthroughComment } from "@/lib/state/slices/comments";
 import { CommentForm } from "./comment-form";
+import { useTranslation } from "react-i18next";
 
 export const WALKTHROUGH_STEP_BODY_CLASS =
   "prose prose-sm dark:prose-invert max-w-none text-left text-sm leading-6 [overflow-wrap:anywhere] [text-align:left] [&_li]:text-left [&_p]:my-2 [&_p]:text-left";
@@ -65,6 +66,7 @@ function StepHeader({
   lineLabel: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="flex cursor-move touch-none items-center gap-2 border-b border-border px-3 pt-2 pb-1.5"
@@ -72,7 +74,7 @@ function StepHeader({
       data-walkthrough-drag-handle
     >
       <Badge variant="secondary" data-testid="walkthrough-badge">
-        Walkthrough
+        {t("diff:walkthrough")}
       </Badge>
       <span className="text-xs text-muted-foreground" data-testid="walkthrough-step-header">
         Step {activeStep + 1} / {stepCount} · {lineLabel}
@@ -81,7 +83,7 @@ function StepHeader({
         variant="ghost"
         size="icon"
         className="ml-auto size-6 cursor-pointer"
-        aria-label="Close walkthrough"
+        aria-label={t("diff:closeWalkthrough")}
         data-testid="walkthrough-close"
         onClick={onClose}
       >
@@ -102,6 +104,7 @@ function StepNavigation({
   onPrevious: () => void;
   onNext: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 px-4 py-2 border-t border-border">
       <Button
@@ -112,7 +115,7 @@ function StepNavigation({
         data-testid="walkthrough-prev"
         onClick={onPrevious}
       >
-        Previous
+        {t("common:previous")}
       </Button>
       <Button
         size="sm"
@@ -121,7 +124,7 @@ function StepNavigation({
         data-testid="walkthrough-next"
         onClick={onNext}
       >
-        Next
+        {t("common:next")}
       </Button>
     </div>
   );

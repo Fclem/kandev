@@ -30,6 +30,7 @@ import {
   treeContainsPath,
   countFilesInTree,
 } from "./file-tree-utils";
+import { useTranslation } from "react-i18next";
 
 type GitFileStatus = FileInfo["status"] | undefined;
 
@@ -61,6 +62,7 @@ function DeleteConfirmDialog({
   fileCount: number;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
   const title = isBulk ? `Delete ${selectedCount} items?` : "Delete folder?";
   return (
     <AlertDialogContent>
@@ -85,9 +87,9 @@ function DeleteConfirmDialog({
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+        <AlertDialogCancel className="cursor-pointer">{t("common:cancel")}</AlertDialogCancel>
         <AlertDialogAction onClick={onConfirm} variant="destructive" className="cursor-pointer">
-          Delete
+          {t("common:delete")}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>

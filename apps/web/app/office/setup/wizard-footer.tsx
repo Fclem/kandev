@@ -3,6 +3,7 @@
 import { Button } from "@kandev/ui/button";
 import { IconArrowLeft, IconArrowRight, IconRocket } from "@tabler/icons-react";
 import { SETUP_WIZARD_STEP_COUNT, SETUP_WIZARD_STEPS } from "./setup-wizard-steps";
+import { useTranslation } from "react-i18next";
 
 type WizardFooterProps = {
   step: number;
@@ -23,6 +24,7 @@ export function WizardFooter({
   onSkip,
   onSubmit,
 }: WizardFooterProps) {
+  const { t } = useTranslation();
   const isLast = step === SETUP_WIZARD_STEP_COUNT - 1;
   const isTaskStep = step === SETUP_WIZARD_STEPS.TASK;
 
@@ -39,7 +41,7 @@ export function WizardFooter({
       <div className="flex items-center gap-2">
         {isTaskStep && (
           <Button variant="ghost" onClick={onSkip} className="cursor-pointer">
-            Skip
+            {t("common:skip")}
           </Button>
         )}
         {isLast ? (

@@ -6,6 +6,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type { SnapshotPreview, SnapshotPreviewMessage } from "@/lib/api/domains/share-api";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   snapshot: SnapshotPreview;
@@ -39,6 +40,7 @@ const previewMarkdownComponents: Components = {
  * exactly what will be published" easy to verify at a glance.
  */
 export function ShareSnapshotPreview({ snapshot }: Props) {
+  const { t } = useTranslation();
   const slices = previewSlices(snapshot.messages);
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -59,7 +61,7 @@ export function ShareSnapshotPreview({ snapshot }: Props) {
         <div className="flex flex-col gap-3 p-3">
           {snapshot.messages.length === 0 && (
             <p className="text-sm text-muted-foreground italic">
-              This conversation has no shareable content.
+              {t("task:thisConversationHasNoShareableContent")}
             </p>
           )}
           {slices.head.map((msg, idx) => (

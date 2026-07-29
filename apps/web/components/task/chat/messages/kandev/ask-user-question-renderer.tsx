@@ -12,6 +12,7 @@ import {
 } from "./shared";
 import { pickArray, pickString, shortId } from "./parse";
 import type { KandevRenderer } from "./types";
+import { useTranslation } from "react-i18next";
 
 type QuestionOption = { label?: string; description?: string };
 type Question = {
@@ -79,6 +80,7 @@ function readResponses(result: unknown): unknown {
 }
 
 export const AskUserQuestionRenderer: KandevRenderer = ({ args, result, status }) => {
+  const { t } = useTranslation();
   const questions = pickArray<Question>(args, "questions") ?? [];
   const context = pickString(args, "context");
   const responses = readResponses(result);
@@ -92,7 +94,7 @@ export const AskUserQuestionRenderer: KandevRenderer = ({ args, result, status }
   return (
     <KandevRow
       Icon={IconHelpHexagon}
-      title="Kandev: Ask User Question"
+      title={t("task:kandevAskUserQuestion")}
       summary={
         <span className="inline-flex items-center gap-1.5 min-w-0">
           <span>{pluralCount(questions.length, "question")}</span>

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { updateProject } from "@/lib/api/domains/office-api";
 import { useAppStore } from "@/components/state-provider";
 import type { Project, ProjectStatus } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
   { value: "active", label: "Active" },
@@ -23,6 +24,7 @@ type ProjectHeaderProps = {
 };
 
 export function ProjectHeader({ project }: ProjectHeaderProps) {
+  const { t } = useTranslation();
   const updateProjectStore = useAppStore((s) => s.updateProject);
 
   const [name, setName] = useState(project.name);
@@ -44,7 +46,7 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
         updateProjectStore(project.id, patch);
       }
       setDirty(false);
-      toast.success("Project saved");
+      toast.success(t("office:projectSaved"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save project");
     } finally {
@@ -98,7 +100,7 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
           setDescription(e.target.value);
           setDirty(true);
         }}
-        placeholder="Add a description..."
+        placeholder={t("office:addADescription")}
         className="min-h-[60px] text-sm resize-none"
       />
     </div>

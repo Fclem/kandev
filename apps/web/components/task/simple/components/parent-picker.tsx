@@ -10,6 +10,8 @@ import { TaskDetachConfirmDialog } from "@/components/task/task-detach-confirm-d
 import type { OfficeTask } from "@/lib/state/slices/office/types";
 import type { Task } from "@/app/office/tasks/[id]/types";
 import { workspaceModeFromMetadata, type WorkspaceMode } from "@/lib/kanban/map-task";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 type ParentPickerProps = {
   task: Task;
@@ -47,7 +49,7 @@ function buildOptions(candidates: OfficeTask[], currentTaskId: string): Combobox
     value: NO_PARENT,
     label: "No parent",
     keywords: ["none"],
-    renderLabel: () => <span className="text-muted-foreground">No parent</span>,
+    renderLabel: () => <span className="text-muted-foreground">{t("task:noParent")}</span>,
   };
   const taskOpts = candidates
     .filter((t) => t.id !== currentTaskId)
@@ -66,6 +68,7 @@ function buildOptions(candidates: OfficeTask[], currentTaskId: string): Combobox
 }
 
 export function ParentPicker({ task }: ParentPickerProps) {
+  const { t } = useTranslation();
   const storeTasks = useAppStore((s) => s.office.tasks.items);
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const [fetched, setFetched] = useState<OfficeTask[]>([]);
@@ -146,7 +149,7 @@ export function ParentPicker({ task }: ParentPickerProps) {
         options={options}
         value={currentValue}
         onValueChange={handleSelect}
-        placeholder="No parent"
+        placeholder={t("task:noParent")}
         searchPlaceholder="Search tasks..."
         emptyMessage="No tasks found."
         disabled={isDetaching}

@@ -18,6 +18,7 @@ import {
   EMPTY_STAGES,
   type StagesDraft,
 } from "./new-task-stages";
+import { useTranslation } from "react-i18next";
 
 function buildMetadata(draft: IssueDraft): Record<string, unknown> | undefined {
   const meta: Record<string, unknown> = {};
@@ -41,6 +42,7 @@ export function NewTaskDialog({
   defaultProjectId,
   defaultAssigneeId,
 }: NewIssueDialogProps) {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const [submitting, setSubmitting] = useState(false);
   const [stages, setStages] = useState<StagesDraft>(EMPTY_STAGES);
@@ -74,7 +76,7 @@ export function NewTaskDialog({
       clearDraft();
       setStages(EMPTY_STAGES);
       onOpenChange(false);
-      toast.success("Task created");
+      toast.success(t("office:taskCreated"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create issue");
     } finally {
@@ -127,15 +129,16 @@ function NewIssueDialogBody({
   onDiscard: () => void;
   onCreate: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
-        <DialogTitle className="sr-only">New issue</DialogTitle>
+        <DialogTitle className="sr-only">{t("office:newIssue")}</DialogTitle>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="font-mono text-xs">
             KAN
           </Badge>
-          <span className="text-sm text-muted-foreground">New issue</span>
+          <span className="text-sm text-muted-foreground">{t("office:newIssue")}</span>
           {parentTaskId && (
             <Badge variant="secondary" className="text-xs">
               Sub-issue of {parentTaskId}
@@ -146,7 +149,7 @@ function NewIssueDialogBody({
 
       <div className="space-y-4">
         <Textarea
-          placeholder="Task title"
+          placeholder={t("office:taskTitle")}
           value={draft.title}
           onChange={(e) => updateDraft({ title: e.target.value })}
           className="text-lg font-medium border-0 resize-none focus-visible:ring-0 min-h-[40px]"
@@ -155,7 +158,7 @@ function NewIssueDialogBody({
         />
         <NewTaskSelectorRow draft={draft} onUpdate={updateDraft} />
         <Textarea
-          placeholder="Add description..."
+          placeholder={t("office:addDescription")}
           value={draft.description}
           onChange={(e) => updateDraft({ description: e.target.value })}
           className="min-h-[120px] text-sm"
@@ -170,7 +173,7 @@ function NewIssueDialogBody({
           className="text-muted-foreground cursor-pointer"
           onClick={onDiscard}
         >
-          Discard Draft
+          {t("office:discardDraft")}
         </Button>
         <CreateTaskButton draft={draft} submitting={submitting} onCreate={onCreate} />
       </DialogFooter>

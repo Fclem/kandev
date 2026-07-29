@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { AgentLogo } from "@/components/agent-logo";
 import { ProfileFormFields, type ProfileFormData } from "@/components/settings/profile-form-fields";
 import type { AvailableAgent, ToolStatus } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 export type AgentSetting = {
   profileId: string;
@@ -58,6 +59,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 function StatusPill({ status, error }: { status: string; error?: string }) {
+  const { t } = useTranslation();
   switch (status) {
     case "auth_required": {
       const pill = (
@@ -76,7 +78,9 @@ function StatusPill({ status, error }: { status: string; error?: string }) {
     }
     case "not_installed":
       return (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">Not installed</span>
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          {t("common:notInstalled")}
+        </span>
       );
     case "failed": {
       const pill = (
@@ -101,7 +105,11 @@ function StatusPill({ status, error }: { status: string; error?: string }) {
         </span>
       );
     case "not_configured":
-      return <span className="flex items-center gap-1 text-xs text-muted-foreground">Pending</span>;
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          {t("common:pending")}
+        </span>
+      );
     default:
       return (
         <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
@@ -181,10 +189,13 @@ function NotInstalledItems({
   tools: ToolStatus[];
   showLabel: boolean;
 }) {
+  const { t } = useTranslation();
   if (agents.length === 0 && tools.length === 0) return null;
   return (
     <>
-      {showLabel && <p className="text-xs text-muted-foreground mt-1">Not yet installed</p>}
+      {showLabel && (
+        <p className="text-xs text-muted-foreground mt-1">{t("common:notYetInstalled")}</p>
+      )}
       {agents.map((agent) => (
         <div
           key={agent.name}
@@ -256,6 +267,7 @@ export function StepAgents({
   loading: boolean;
   onUpdateSetting: (agentName: string, formPatch: Partial<ProfileFormData>) => void;
 }) {
+  const { t } = useTranslation();
   const [openAgent, setOpenAgent] = useState<string | null>(null);
 
   if (loading) {
@@ -290,13 +302,10 @@ export function StepAgents({
           showLabel={installedAgents.length > 0}
         />
       </div>
+      <p className="text-xs text-muted-foreground">{t("common:expandAnAgentToConfigureIts")}</p>
       <p className="text-xs text-muted-foreground">
-        Expand an agent to configure its model and permissions. Changes are saved when you proceed.
-        You can also add custom TUI agents later in Settings &gt; Agents.
-      </p>
-      <p className="text-xs text-muted-foreground">
-        <span className="text-yellow-500 font-medium">Careful:</span> The default Agent Profiles run
-        with Auto Approve enabled (YOLO mode).
+        <span className="text-yellow-500 font-medium">{t("common:careful")}</span> The default Agent
+        Profiles run with Auto Approve enabled (YOLO mode).
       </p>
     </div>
   );

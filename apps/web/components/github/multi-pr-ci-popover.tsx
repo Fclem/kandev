@@ -9,6 +9,7 @@ import { prIdentitySlug } from "@/components/github/pr-utils";
 import { usePRFeedbackBackgroundSync } from "@/hooks/domains/github/use-pr-ci-popover";
 import { useAppStore } from "@/components/state-provider";
 import type { TaskPR } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 /**
  * Renders nothing — just keeps one PR's feedback cache warm while the popover
@@ -89,6 +90,7 @@ export function MultiPRCIPopover({
   onOpenDetailPanel?: (pr: TaskPR) => void;
   refreshTaskPR?: () => void;
 }) {
+  const { t } = useTranslation();
   // `overrideId` is only set when the user activates a tab. The displayed PR is
   // derived: honour the override while it still exists, otherwise fall back to
   // the worst-status PR. This keeps the selection valid as the list changes
@@ -123,7 +125,7 @@ export function MultiPRCIPopover({
         ))}
       <div
         role="tablist"
-        aria-label="Pull requests"
+        aria-label={t("github:pullRequests")}
         data-testid="pr-multi-popover-tabs"
         className="flex gap-1 overflow-x-auto border-b border-border/50 pb-2"
         onKeyDown={onTablistKeyDown}

@@ -5,6 +5,7 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@kan
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { Input } from "@kandev/ui/input";
 import { useTaskActions } from "@/hooks/use-task-actions";
+import { useTranslation } from "react-i18next";
 
 type TaskTopBarTitleProps = {
   taskId?: string | null;
@@ -13,6 +14,7 @@ type TaskTopBarTitleProps = {
 };
 
 export function TaskTopBarTitle({ taskId, taskTitle, isArchived }: TaskTopBarTitleProps) {
+  const { t } = useTranslation();
   const { renameTaskById } = useTaskActions();
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -78,7 +80,7 @@ export function TaskTopBarTitle({ taskId, taskTitle, isArchived }: TaskTopBarTit
     return (
       <Input
         data-testid="task-title-rename-input"
-        aria-label="Task title"
+        aria-label={t("task:taskTitle")}
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -113,7 +115,7 @@ export function TaskTopBarTitle({ taskId, taskTitle, isArchived }: TaskTopBarTit
             <TooltipContent className="max-w-sm whitespace-normal break-words">
               <span className="block">{taskTitle ?? "Task details"}</span>
               {canRename && (
-                <span className="mt-1 block">Double-click to edit (or press Enter)</span>
+                <span className="mt-1 block">{t("task:doubleClickToEditOrPress")}</span>
               )}
             </TooltipContent>
           </Tooltip>

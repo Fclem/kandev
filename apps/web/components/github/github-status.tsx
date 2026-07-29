@@ -30,6 +30,7 @@ import type {
 } from "@/lib/types/github";
 import { GitHubConnectionDialog } from "./github-connection-dialog";
 import { GitHubPermissionsDialog } from "./github-permissions-dialog";
+import { useTranslation } from "react-i18next";
 
 const sourceLabels: Record<GitHubConnectionSource, string> = {
   pat: "Personal access token",
@@ -55,12 +56,13 @@ function automationActor(status: GitHubStatus): string | null {
 }
 
 function StatusLine({ status }: { status: GitHubStatus }) {
+  const { t } = useTranslation();
   const connection = status.automation;
   if (!connection) {
     return (
       <div className="flex items-center gap-2 text-sm">
         <IconX className="h-4 w-4 shrink-0 text-destructive" />
-        <span>No automation connection</span>
+        <span>{t("github:noAutomationConnection")}</span>
       </div>
     );
   }
@@ -158,11 +160,10 @@ function AppRegistrationDetails({ app }: { app?: GitHubAppRegistrationCatalogIte
 }
 
 function HumanIdentityExplanation({ status }: { status: GitHubStatus }) {
+  const { t } = useTranslation();
   if (status.effective_personal_actor?.kind !== "human") return null;
   return (
-    <p className="text-xs text-muted-foreground">
-      This account also powers My GitHub and user-triggered actions.
-    </p>
+    <p className="text-xs text-muted-foreground">{t("github:thisAccountAlsoPowersMyGithub")}</p>
   );
 }
 
@@ -184,6 +185,7 @@ function AutomationActions({
   onDisconnect: () => void;
   onRefresh: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-2">
       <GitHubPermissionsDialog status={status} />
@@ -193,7 +195,7 @@ function AutomationActions({
         size="icon"
         onClick={onRefresh}
         className="h-11 w-11 cursor-pointer"
-        aria-label="Refresh GitHub connection"
+        aria-label={t("github:refreshGithubConnection")}
       >
         <IconRefresh className="h-4 w-4" />
       </Button>
@@ -271,6 +273,7 @@ function personalIdentityView(status: GitHubStatus): PersonalIdentityView {
 }
 
 function PersonalIdentityStatus({ view }: { view: PersonalIdentityView }) {
+  const { t } = useTranslation();
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
       {view.active ? (
@@ -279,7 +282,7 @@ function PersonalIdentityStatus({ view }: { view: PersonalIdentityView }) {
         <IconX className="h-4 w-4 text-destructive" />
       )}
       <span className="break-words font-medium">{view.actor}</span>
-      {view.personalActive && <Badge variant="secondary">Personal OAuth</Badge>}
+      {view.personalActive && <Badge variant="secondary">{t("github:personalOauth")}</Badge>}
       {view.status && view.status !== "active" && (
         <Badge variant="destructive">{view.status}</Badge>
       )}
@@ -323,13 +326,14 @@ function PersonalIdentityActions({
 }
 
 export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const { status, loaded, loading, refresh } = useGitHubStatus(workspaceId);
   const [busy, setBusy] = useState(false);
   const { toast } = useToast();
   if (!loaded || loading || !status) {
     return (
       <SettingsSection
-        title="My GitHub identity"
+        title={t("github:myGithubIdentity")}
         description="Connect your GitHub user for My GitHub and human-attributed actions. Without it, automation continues as the App."
       >
         <LoadingStatus />
@@ -342,13 +346,13 @@ export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string })
   if (!appAutomation) {
     return (
       <SettingsSection
-        title="My GitHub identity"
+        title={t("github:myGithubIdentity")}
         description="My GitHub and human-attributed actions use the same human account selected for workspace access. Choose a different PAT or GitHub CLI account by changing the workspace connection."
       >
         <div className="space-y-2" data-testid="github-personal-identity">
           <PersonalIdentityStatus view={view} />
           <p className="text-xs text-muted-foreground">
-            A separate personal identity is only needed when workspace automation uses a GitHub App.
+            {t("github:aSeparatePersonalIdentityIsOnly")}
           </p>
         </div>
       </SettingsSection>
@@ -379,7 +383,7 @@ export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string })
   };
   return (
     <SettingsSection
-      title="My GitHub identity"
+      title={t("github:myGithubIdentity")}
       description="Optionally connect your GitHub user for My GitHub and human-attributed actions. This identity is never given to managed agents; workspace automation continues as the App."
     >
       <div className="space-y-4" data-testid="github-personal-identity">

@@ -6,6 +6,7 @@ import { useAppStore } from "@/components/state-provider";
 import { updateTask } from "@/lib/api/domains/office-extended-api";
 import { useOptimisticTaskMutation } from "@/hooks/use-optimistic-task-mutation";
 import type { Task } from "@/app/office/tasks/[id]/types";
+import { useTranslation } from "react-i18next";
 
 type ProjectPickerProps = {
   task: Task;
@@ -14,6 +15,7 @@ type ProjectPickerProps = {
 const NO_PROJECT = "__none__";
 
 export function ProjectPicker({ task }: ProjectPickerProps) {
+  const { t } = useTranslation();
   const projects = useAppStore((s) => s.office.projects);
   const mutate = useOptimisticTaskMutation();
 
@@ -22,7 +24,7 @@ export function ProjectPicker({ task }: ProjectPickerProps) {
       value: NO_PROJECT,
       label: "No project",
       keywords: ["none"],
-      renderLabel: () => <span className="text-muted-foreground">No project</span>,
+      renderLabel: () => <span className="text-muted-foreground">{t("task:noProject")}</span>,
     };
     const projectOpts = projects.map<ComboboxOption>((p) => ({
       value: p.id,
@@ -69,7 +71,7 @@ export function ProjectPicker({ task }: ProjectPickerProps) {
       options={options}
       value={currentValue}
       onValueChange={handleSelect}
-      placeholder="No project"
+      placeholder={t("task:noProject")}
       searchPlaceholder="Search projects..."
       emptyMessage="No projects found."
       triggerClassName="h-7 w-full justify-end px-2"

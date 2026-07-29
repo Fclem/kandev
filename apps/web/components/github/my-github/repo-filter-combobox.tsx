@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Combobox, type ComboboxOption } from "@/components/combobox";
+import { useTranslation } from "react-i18next";
 
 const ALL_REPOS = "__all__";
 
@@ -33,6 +34,7 @@ export function RepoFilterCombobox({
   triggerClassName,
   className,
 }: RepoFilterComboboxProps) {
+  const { t } = useTranslation();
   const options = useMemo(() => buildRepoFilterOptions(repoOptions), [repoOptions]);
 
   return (
@@ -45,7 +47,7 @@ export function RepoFilterCombobox({
       }}
       options={options}
       ariaLabel={ariaLabel}
-      placeholder="All repos"
+      placeholder={t("github:allRepos")}
       searchPlaceholder="Filter repositories..."
       emptyMessage="No repositories found."
       triggerClassName={triggerClassName}

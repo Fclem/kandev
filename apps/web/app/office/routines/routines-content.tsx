@@ -26,6 +26,7 @@ import { RoutineRow } from "./routine-row";
 import { RunRow } from "./run-row";
 import { CreateRoutineDialog } from "./create-routine-dialog";
 import { EmptyState } from "../components/shared/empty-state";
+import { useTranslation } from "react-i18next";
 
 type RoutineFormData = {
   name: string;
@@ -42,6 +43,7 @@ type RoutineFormData = {
 };
 
 function useRoutineActions(workspaceId: string | null, fetchRoutines: () => Promise<void>) {
+  const { t } = useTranslation();
   const handleToggle = useCallback(
     async (id: string, active: boolean) => {
       try {
@@ -63,7 +65,7 @@ function useRoutineActions(workspaceId: string | null, fetchRoutines: () => Prom
       try {
         await deleteRoutine(id);
         await fetchRoutines();
-        toast.success("Routine deleted");
+        toast.success(t("office:routineDeleted"));
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to delete routine");
       }
@@ -101,7 +103,7 @@ function useRoutineActions(workspaceId: string | null, fetchRoutines: () => Prom
         }
         onDone();
         await fetchRoutines();
-        toast.success("Routine created");
+        toast.success(t("office:routineCreated"));
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to create routine");
       }
@@ -182,6 +184,7 @@ function useRoutinesData(workspaceId: string | null) {
 }
 
 export function RoutinesContent() {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const agents = useAppStore((s) => s.office.agentProfiles);
   const [showCreate, setShowCreate] = useState(false);
@@ -198,7 +201,7 @@ export function RoutinesContent() {
       try {
         await runRoutine(id);
         setRuns(await fetchRuns());
-        toast.success("Routine started");
+        toast.success(t("office:routineStarted"));
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to run routine");
       }
@@ -217,10 +220,10 @@ export function RoutinesContent() {
       <Tabs defaultValue="routines">
         <TabsList>
           <TabsTrigger value="routines" className="cursor-pointer">
-            All
+            {t("office:all")}
           </TabsTrigger>
           <TabsTrigger value="runs" className="cursor-pointer">
-            Runs
+            {t("office:runs")}
           </TabsTrigger>
         </TabsList>
 

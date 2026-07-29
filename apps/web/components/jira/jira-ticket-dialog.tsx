@@ -21,6 +21,7 @@ import {
   type TicketState,
 } from "./jira-ticket-common";
 import type { JiraTaskPreset } from "./my-jira/presets";
+import { useTranslation } from "react-i18next";
 
 type JiraTicketDialogProps = {
   open: boolean;
@@ -101,6 +102,7 @@ function DialogBody({
   state: TicketState;
   ticketKey: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex-1 overflow-y-auto">
       {state.error && ticket && (
@@ -109,7 +111,9 @@ function DialogBody({
         </div>
       )}
       {!ticket && state.loading && (
-        <div className="text-sm text-muted-foreground py-16 text-center">Loading ticket…</div>
+        <div className="text-sm text-muted-foreground py-16 text-center">
+          {t("jira:loadingTicket")}
+        </div>
       )}
       {ticket && <TicketBody ticket={ticket} state={state} ticketKey={ticketKey} />}
     </div>
@@ -164,6 +168,7 @@ type TopBarProps = {
 };
 
 function TicketTopBar({ ticket, loading, onRefresh }: TopBarProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-1 pl-4 pr-12 py-2 border-b shrink-0">
       {ticket?.url && (
@@ -172,7 +177,7 @@ function TicketTopBar({ ticket, loading, onRefresh }: TopBarProps) {
           variant="ghost"
           size="icon-sm"
           className="cursor-pointer"
-          title="Open in Atlassian"
+          title={t("jira:openInAtlassian")}
         >
           <a href={ticket.url} target="_blank" rel="noreferrer">
             <IconExternalLink className="h-4 w-4" />
@@ -185,7 +190,7 @@ function TicketTopBar({ ticket, loading, onRefresh }: TopBarProps) {
         className="cursor-pointer"
         onClick={onRefresh}
         disabled={loading}
-        title="Refresh"
+        title={t("jira:refresh")}
       >
         <IconRefresh className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
       </Button>
@@ -244,14 +249,15 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 function DescriptionSection({ description }: { description: string }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-2">
-      <SectionHeading>Description</SectionHeading>
+      <SectionHeading>{t("jira:description")}</SectionHeading>
       <div className="rounded-md border bg-muted/30 px-4 py-3">
         {description ? (
           <div className="text-sm whitespace-pre-wrap leading-relaxed">{description}</div>
         ) : (
-          <div className="text-sm text-muted-foreground italic">No description.</div>
+          <div className="text-sm text-muted-foreground italic">{t("jira:noDescription")}</div>
         )}
       </div>
     </section>
@@ -301,10 +307,11 @@ function StatusBlock({ ticket, transitions, pending, onTransition }: StatusBlock
 }
 
 function DetailsCard({ ticket }: { ticket: JiraTicket }) {
+  const { t } = useTranslation();
   return (
     <section className="rounded-md border bg-background overflow-hidden">
       <div className="px-4 py-3 border-b bg-muted/30">
-        <SectionHeading>Details</SectionHeading>
+        <SectionHeading>{t("jira:details")}</SectionHeading>
       </div>
       <div className="px-4 py-3 space-y-3 text-sm">
         <DetailRow label="Assignee">

@@ -1,5 +1,6 @@
 import { IconMessage } from "@tabler/icons-react";
 import type { MessageCommentDecoration } from "@/lib/chat/agent-message-comments";
+import { useTranslation } from "react-i18next";
 
 function MessageCommentBadges({
   decorations,
@@ -8,6 +9,7 @@ function MessageCommentBadges({
   decorations: MessageCommentDecoration[];
   onOpen: (commentId: string, position: { x: number; y: number }) => void;
 }) {
+  const { t } = useTranslation();
   return decorations.map((decoration) => (
     <button
       key={decoration.comment.id}
@@ -16,7 +18,7 @@ function MessageCommentBadges({
       style={{ position: "absolute", left: decoration.left, top: decoration.top }}
       data-agent-message-comment-id={decoration.comment.id}
       data-comment-id={decoration.comment.id}
-      aria-label="Edit comment"
+      aria-label={t("task:editComment")}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();

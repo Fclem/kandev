@@ -7,6 +7,7 @@ import type { Message } from "@/lib/types/http";
 import type { RichMetadata, TodoMetadata, TodoSnapshot } from "@/components/task/chat/types";
 import { ExpandableRow } from "./expandable-row";
 import { StatusIcon, resolveStatus } from "../todo-indicator";
+import { useTranslation } from "react-i18next";
 
 type TodoItem = {
   text: string;
@@ -84,6 +85,7 @@ export function TodoMessage({
   comment: Message;
   defaultExpanded?: boolean;
 }) {
+  const { t } = useTranslation();
   const todoItems = parseTodos(comment);
   const snapshots = parseSnapshots(comment);
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
@@ -100,7 +102,7 @@ export function TodoMessage({
       header={
         <div className="flex items-center gap-2 text-xs min-w-0">
           <span className="text-muted-foreground text-[11px] uppercase tracking-wide shrink-0">
-            Updated Todos
+            {t("task:updatedTodos")}
           </span>
           <span className="text-muted-foreground text-[11px] shrink-0">
             ({completed}/{todoItems.length})

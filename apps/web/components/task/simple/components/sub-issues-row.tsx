@@ -7,19 +7,21 @@ import { Button } from "@kandev/ui/button";
 import { NewTaskDialog } from "@/app/office/components/new-task-dialog";
 import { StatusIcon } from "@/app/office/tasks/[id]/status-icon";
 import type { Task } from "@/app/office/tasks/[id]/types";
+import { useTranslation } from "react-i18next";
 
 type SubIssuesRowProps = {
   task: Task;
 };
 
 export function SubIssuesRow({ task }: SubIssuesRowProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <div className="flex flex-col gap-1 ml-auto items-end">
         {task.children.length === 0 ? (
-          <span className="text-muted-foreground text-xs">No sub-issues</span>
+          <span className="text-muted-foreground text-xs">{t("task:noSubIssues")}</span>
         ) : (
           <ul className="flex flex-col gap-1 w-full" data-testid="sub-issues-list">
             {task.children.map((child) => (

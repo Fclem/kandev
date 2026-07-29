@@ -1,0 +1,21 @@
+{
+  "autoMarkReviewedOnScroll": "Auto-mark reviewed on scroll",
+  "closeReview": "Close review",
+  "diffTruncatedShowingFirst256Kb": "Diff truncated — showing first 256 KB",
+  "discardWalkthrough": "Discard walkthrough",
+  "discardWalkthrough2": "Discard walkthrough?",
+  "filterChangedFiles": "Filter changed files",
+  "newWalkthrough": "New walkthrough",
+  "noChangesToReviewYet": "No changes to review yet.",
+  "noCommentsToFixYet": "No comments to fix yet.",
+  "noOpenFindings": "No open findings.",
+  "resizeFileList": "Resize file list",
+  "reviewChanges": "Review Changes",
+  "reviewChanges2": "Review changes",
+  "reviewPullRequest": "Review pull request",
+  "reviewTheseChangesWithAnAgent": "Review these changes with an agent",
+  "settingsUtilityAgents": "Settings → Utility Agents",
+  "thisRemovesTheSavedWalkthroughFrom": "This removes the saved walkthrough from this task. The agent can create a new one later.",
+  "toggleWordWrap": "Toggle word wrap",
+  "walkMeThroughTheseReviewChanges": "Walk me through these review changes"
+}

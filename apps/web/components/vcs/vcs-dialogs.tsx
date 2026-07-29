@@ -36,6 +36,7 @@ import { useToast } from "@/components/toast-provider";
 import { openExternalLink } from "@/lib/desktop/external-links";
 import type { FileInfo } from "@/lib/state/slices";
 import { getChangeRequestFailureFeedback } from "./change-request-feedback";
+import { useTranslation } from "react-i18next";
 
 type VcsDialogsContextValue = {
   /** When `repo` is provided, the commit is scoped to that repo only. */
@@ -86,7 +87,8 @@ function computeFileSummary(
 }
 
 function FileSummaryText({ count, additions, deletions }: FileSummary) {
-  if (count === 0) return <span>No changes to commit</span>;
+  const { t } = useTranslation();
+  if (count === 0) return <span>{t("common:noChangesToCommit")}</span>;
   return (
     <span>
       <span className="font-medium text-foreground">{count}</span> file{count !== 1 ? "s" : ""}{" "}
@@ -142,6 +144,7 @@ function CommitDialog({
   isGeneratingDescription,
   isUtilityConfigured,
 }: CommitDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -158,7 +161,7 @@ function CommitDialog({
           <div className="relative min-w-0">
             <Input
               data-testid="commit-title-input"
-              placeholder="Enter commit message..."
+              placeholder={t("integrations:enterCommitMessage")}
               value={commitMessage}
               onChange={(e) => onCommitMessageChange(e.target.value)}
               className="pr-10"
@@ -189,14 +192,14 @@ function CommitDialog({
               onCheckedChange={(checked) => onStageAllChange(checked === true)}
             />
             <Label htmlFor="vcs-stage-all" className="text-sm text-muted-foreground cursor-pointer">
-              Stage all changes before committing
+              {t("integrations:stageAllChangesBeforeCommitting")}
             </Label>
           </div>
         </div>
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline" className="cursor-pointer">
-              Cancel
+              {t("common:cancel")}
             </Button>
           </DialogClose>
           <Button onClick={onCommit} disabled={!commitMessage.trim() || isGitLoading}>

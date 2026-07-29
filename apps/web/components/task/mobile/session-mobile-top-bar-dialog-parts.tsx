@@ -2,6 +2,7 @@
 
 import { IconGitPullRequest, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
+import { useTranslation } from "react-i18next";
 
 export function MobilePRBranchSummary({
   displayBranch,
@@ -39,7 +40,8 @@ export function CommitSummary({
   uncommittedAdditions: number;
   uncommittedDeletions: number;
 }) {
-  if (uncommittedCount <= 0) return <span>No changes to commit</span>;
+  const { t } = useTranslation();
+  if (uncommittedCount <= 0) return <span>{t("common:noChangesToCommit")}</span>;
   return (
     <span>
       <span className="font-medium text-foreground">{uncommittedCount}</span> file

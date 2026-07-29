@@ -5,6 +5,7 @@ import { ReviewFindingSeverityBadge } from "@/components/diff/review-finding-sev
 import { findingFileKey, sortFindings } from "@/lib/review/findings";
 import { formatLineRange } from "@/lib/diff";
 import type { TaskReviewFinding } from "@/lib/types/review";
+import { useTranslation } from "react-i18next";
 
 type FindingFileGroup = { key: string; filePath: string; findings: TaskReviewFinding[] };
 
@@ -60,12 +61,15 @@ export function ReviewFindingsOverview({
   findings: TaskReviewFinding[];
   onNavigate: (finding: TaskReviewFinding) => void;
 }) {
+  const { t } = useTranslation();
   const groups = groupOpenFindingsByFile(findings);
   const total = groups.reduce((sum, g) => sum + g.findings.length, 0);
 
   if (total === 0) {
     return (
-      <div className="px-3 py-4 text-center text-xs text-muted-foreground">No open findings.</div>
+      <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+        {t("review:noOpenFindings")}
+      </div>
     );
   }
 

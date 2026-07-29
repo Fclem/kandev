@@ -30,6 +30,7 @@ import {
 } from "./session-dialog-shared";
 import { SessionPromptField } from "./new-session-form-prompt";
 import { useSessionContextChange, useSessionLaunchSubmit } from "./new-session-form-actions";
+import { useTranslation } from "react-i18next";
 
 export type { HandoffPreset } from "./handoff-types";
 
@@ -303,6 +304,7 @@ function SessionFormHeader({
   isCreating: boolean;
   onProfileChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <EnvironmentBadges executorLabel={executorLabel} worktreeBranch={worktreeBranch} />
@@ -313,13 +315,15 @@ function SessionFormHeader({
       />
       {showAgentSelector && (
         <div className="min-w-0 space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Agent Profile</label>
+          <label className="text-xs font-medium text-muted-foreground">
+            {t("task:agentProfile")}
+          </label>
           <AgentSelector
             options={profileOptions}
             value={selectedProfileId}
             onValueChange={onProfileChange}
             disabled={isCreating}
-            placeholder="Select agent profile"
+            placeholder={t("task:selectAgentProfile")}
             popoverPortal
           />
         </div>
@@ -356,6 +360,7 @@ function NewSessionForm({
   handoff?: HandoffPreset;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const handoffInitial = handoff ? buildHandoffInitialState(handoff) : null;
   const { toast } = useToast();
   const setActiveSession = useAppStore((state) => state.setActiveSession);
@@ -508,7 +513,7 @@ function NewSessionForm({
           disabled={isCreating}
           className="cursor-pointer"
         >
-          Cancel
+          {t("common:cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitDisabled} className="cursor-pointer">
           {isCreating ? "Creating..." : "Start Agent"}
@@ -527,6 +532,7 @@ function NoAgentBanner({
   hasProfiles: boolean;
   executorProfileName: string | null;
 }) {
+  const { t } = useTranslation();
   if (noCompatibleProfiles) {
     return (
       <p className="text-xs text-center text-muted-foreground">
@@ -539,7 +545,7 @@ function NoAgentBanner({
   if (!hasProfiles) {
     return (
       <p className="text-xs text-center text-muted-foreground">
-        No agent profiles configured. Add one in Settings → Agents first.
+        {t("task:noAgentProfilesConfiguredAddOne")}
       </p>
     );
   }

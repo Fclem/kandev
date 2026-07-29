@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api/client";
 import { login } from "@/lib/api/domains/auth-api";
 import { useAppStore } from "@/components/state-provider";
 import type { SsoProvider } from "@/lib/state/slices/auth/types";
+import { useTranslation } from "react-i18next";
 
 // LoginSsoButtons renders one "Continue with <provider>" button per
 // plugin-contributed SSO provider, below a divider. Each button is a plain
@@ -38,6 +39,7 @@ function LoginSsoButtons({ providers }: { providers: SsoProvider[] }) {
 }
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -74,13 +76,13 @@ export function LoginPage() {
           <CardTitle className="flex items-center gap-2 text-base">
             <IconLock className="h-4 w-4" /> Sign in
           </CardTitle>
-          <CardDescription>Sign in to your Kandev account to continue.</CardDescription>
+          <CardDescription>{t("auth:signInToYourKandevAccount")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="flex flex-col gap-3" onSubmit={(e) => void onSubmit(e)}>
             <div className="flex flex-col gap-1">
               <label htmlFor="login-email" className="text-xs text-muted-foreground">
-                Email
+                {t("auth:email")}
               </label>
               <Input
                 id="login-email"
@@ -94,7 +96,7 @@ export function LoginPage() {
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="login-password" className="text-xs text-muted-foreground">
-                Password
+                {t("auth:password")}
               </label>
               <Input
                 id="login-password"

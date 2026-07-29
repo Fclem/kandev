@@ -4,6 +4,7 @@ import { Label } from "@kandev/ui/label";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import type { GitHubAppRegistrationCatalogItem } from "@/lib/types/github";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 export function GitHubAppRegistrationList({
   registrations,
@@ -14,10 +15,11 @@ export function GitHubAppRegistrationList({
   value: string;
   onChange: (registrationId: string) => void;
 }) {
+  const { t } = useTranslation();
   if (!registrations.length) {
     return (
       <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-        No GitHub Apps are registered yet. Add an existing App or create one below.
+        {t("github:noGithubAppsAreRegisteredYet")}
       </div>
     );
   }
@@ -44,7 +46,7 @@ export function GitHubAppRegistrationList({
                 {registration.visibility}
               </Badge>
               {registration.status === "invalid" && (
-                <Badge variant="destructive">Needs attention</Badge>
+                <Badge variant="destructive">{t("github:needsAttention")}</Badge>
               )}
               {registration.selected && (
                 <Badge variant="secondary">

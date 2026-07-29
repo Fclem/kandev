@@ -22,6 +22,7 @@ import {
 } from "@kandev/ui/dropdown-menu";
 import type { SavedView } from "./use-saved-views";
 import type { SortKey } from "./filter-model";
+import { useTranslation } from "react-i18next";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "updated", label: "Updated" },
@@ -62,6 +63,7 @@ export function ListToolbar({
   showJqlEditor,
   onToggleJqlEditor,
 }: ListToolbarProps) {
+  const { t } = useTranslation();
   const activeView = views.find((v) => v.id === activeViewId);
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sort)?.label ?? "Updated";
   return (
@@ -86,7 +88,7 @@ export function ListToolbar({
           onClick={onRefresh}
           disabled={loading}
           className="cursor-pointer h-7 w-7"
-          title="Refresh"
+          title={t("jira:refresh")}
         >
           <IconRefresh className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
         </Button>
@@ -95,7 +97,7 @@ export function ListToolbar({
           size="sm"
           onClick={onToggleJqlEditor}
           className="cursor-pointer h-7 text-xs gap-1.5"
-          title="Toggle raw JQL editor"
+          title={t("jira:toggleRawJqlEditor")}
         >
           <IconCode className="h-3.5 w-3.5" />
           JQL
@@ -139,13 +141,14 @@ function SortDropdown({
 }
 
 function SearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="relative flex-1 max-w-md min-w-[200px]">
       <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search ticket key or text…"
+        placeholder={t("jira:searchTicketKeyOrText")}
         className="h-8 text-xs pl-8"
       />
     </div>
@@ -249,6 +252,7 @@ function ViewRow({
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="group flex items-center px-2">
       <button
@@ -267,7 +271,7 @@ function ViewRow({
             onDelete(view.id);
           }}
           className="cursor-pointer opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-muted"
-          title="Delete view"
+          title={t("jira:deleteView")}
         >
           <IconTrash className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
@@ -277,6 +281,7 @@ function ViewRow({
 }
 
 function SaveViewButton({ onSave }: { onSave: (name: string) => void }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const submit = () => {
@@ -293,14 +298,14 @@ function SaveViewButton({ onSave }: { onSave: (name: string) => void }) {
           variant="ghost"
           size="sm"
           className="cursor-pointer h-8 text-xs gap-1.5"
-          title="Save current filters as a view"
+          title={t("jira:saveCurrentFiltersAsAView")}
         >
           <IconPlus className="h-3.5 w-3.5" />
           Save view
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-3 space-y-2">
-        <div className="text-xs font-semibold">Save current filters as…</div>
+        <div className="text-xs font-semibold">{t("jira:saveCurrentFiltersAs")}</div>
         <Input
           autoFocus
           value={name}
@@ -308,7 +313,7 @@ function SaveViewButton({ onSave }: { onSave: (name: string) => void }) {
           onKeyDown={(e) => {
             if (e.key === "Enter") submit();
           }}
-          placeholder="My open bugs"
+          placeholder={t("jira:myOpenBugs")}
           className="h-8 text-xs"
         />
         <div className="flex justify-end gap-1">
@@ -318,7 +323,7 @@ function SaveViewButton({ onSave }: { onSave: (name: string) => void }) {
             onClick={() => setOpen(false)}
             className="cursor-pointer h-7 text-xs"
           >
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button
             size="sm"
@@ -326,7 +331,7 @@ function SaveViewButton({ onSave }: { onSave: (name: string) => void }) {
             disabled={!name.trim()}
             className="cursor-pointer h-7 text-xs"
           >
-            Save
+            {t("jira:save")}
           </Button>
         </div>
       </PopoverContent>

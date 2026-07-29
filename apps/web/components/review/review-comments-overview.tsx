@@ -3,6 +3,7 @@
 import { IconMessage } from "@tabler/icons-react";
 import type { DiffComment } from "@/lib/diff/types";
 import { formatLineRange } from "@/lib/diff";
+import { useTranslation } from "react-i18next";
 
 type FileGroup = { key: string; filePath: string; comments: DiffComment[] };
 
@@ -51,13 +52,14 @@ function fileName(filePath: string): string {
  * inside the "Fix Comments" hover popover on the review top bar.
  */
 export function ReviewCommentsOverview({ comments }: { comments: DiffComment[] }) {
+  const { t } = useTranslation();
   const groups = groupCommentsByFile(comments);
   const total = comments.length;
 
   if (total === 0) {
     return (
       <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-        No comments to fix yet.
+        {t("review:noCommentsToFixYet")}
       </div>
     );
   }

@@ -15,6 +15,7 @@ import { Label } from "@kandev/ui/label";
 import { useToast } from "@/components/toast-provider";
 import { linkTaskIssue, unlinkTaskIssue } from "@/lib/api/domains/github-api";
 import type { Repository } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 type TaskIssue = {
   id: string;
@@ -82,12 +83,13 @@ function TaskGitHubIssueFields({
   submitting,
   error,
 }: DialogFieldsProps) {
+  const { t } = useTranslation();
   const placeholder = inferredRepo
     ? "#1470 or github.com/owner/repo/issues/1470"
     : "github.com/owner/repo/issues/1470";
   return (
     <div className="space-y-2">
-      <Label htmlFor="task-github-issue-input">Issue</Label>
+      <Label htmlFor="task-github-issue-input">{t("task:issue")}</Label>
       <Input
         id="task-github-issue-input"
         data-testid="task-github-issue-input"
@@ -112,6 +114,7 @@ function TaskGitHubIssueActions({
   onSubmit,
   onUnlink,
 }: DialogActionsProps) {
+  const { t } = useTranslation();
   return (
     <DialogFooter className="gap-2 sm:justify-between">
       {currentLabel ? (
@@ -122,7 +125,7 @@ function TaskGitHubIssueActions({
           onClick={onUnlink}
           disabled={submitting}
         >
-          Unlink
+          {t("task:unlink")}
         </Button>
       ) : (
         <span />
@@ -135,7 +138,7 @@ function TaskGitHubIssueActions({
           onClick={onCancel}
           disabled={submitting}
         >
-          Cancel
+          {t("common:cancel")}
         </Button>
         <Button
           type="button"

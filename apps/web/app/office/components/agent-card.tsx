@@ -8,6 +8,7 @@ import type { AgentSummary, SessionSummary } from "@/lib/api/domains/office-api"
 import { AgentAvatar as RoleAwareAgentAvatar } from "./agent-avatar";
 import { timeAgo } from "@/lib/utils/time";
 import { useNow } from "./shared/use-now";
+import { useTranslation } from "react-i18next";
 
 type Props = { summary: AgentSummary };
 
@@ -147,6 +148,7 @@ function StatusDot({ isLive, isErrored }: { isLive: boolean; isErrored: boolean 
 type ActivePill = { taskId: string; identifier: string; title: string };
 
 function TaskPill({ pill, isLive }: { pill: ActivePill; isLive: boolean }) {
+  const { t } = useTranslation();
   return (
     <Link
       href={`/office/tasks/${pill.taskId}`}
@@ -157,7 +159,7 @@ function TaskPill({ pill, isLive }: { pill: ActivePill; isLive: boolean }) {
         <IconLoader2
           data-testid="agent-card-task-pill-spinner"
           className="h-3.5 w-3.5 shrink-0 animate-spin text-primary"
-          aria-label="being worked on"
+          aria-label={t("office:beingWorkedOn")}
         />
       ) : null}
       {pill.identifier ? (

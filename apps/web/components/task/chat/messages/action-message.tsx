@@ -24,6 +24,7 @@ import { AuthMethodsPanel, GenericAuthPanel } from "./auth-methods-panel";
 import { HostShellDialog } from "@/components/settings/host-shell-dialog";
 import type { Message, TaskSessionState } from "@/lib/types/http";
 import type { MessageAction, RecoveryAuthMethod } from "@/components/task/chat/types";
+import { useTranslation } from "react-i18next";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   archive: IconArchive,
@@ -126,6 +127,7 @@ function MissingBranchRecovery({
   fallbackMessage: string;
   technicalDetails?: string;
 }) {
+  const { t } = useTranslation();
   const branch = metadata.missing_branch?.trim();
   return (
     <section
@@ -139,7 +141,9 @@ function MissingBranchRecovery({
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium text-foreground">Branch is no longer available</h3>
+          <h3 className="text-sm font-medium text-foreground">
+            {t("task:branchIsNoLongerAvailable")}
+          </h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {branch ? (
               <>

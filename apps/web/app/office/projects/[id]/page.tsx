@@ -15,12 +15,14 @@ import { ProjectHeader } from "./project-header";
 import { ProjectReposSection } from "./project-repos-section";
 import { ProjectExecutorSection } from "./project-executor-section";
 import { ProjectTasksSection } from "./project-tasks-section";
+import { useTranslation } from "react-i18next";
 
 type PageProps = {
   params: Promise<{ id: string }>;
 };
 
 export default function ProjectDetailPage({ params }: PageProps) {
+  const { t } = useTranslation();
   const { id } = use(params);
   const router = useRouter();
   const removeProject = useAppStore((s) => s.removeProject);
@@ -50,7 +52,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
     try {
       await deleteProject(project.id);
       removeProject(project.id);
-      toast.success("Project deleted");
+      toast.success(t("office:projectDeleted"));
       router.push("/office/projects");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete project");
@@ -60,7 +62,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
   if (!project) {
     return (
       <div className="p-6">
-        <p className="text-muted-foreground">Loading project...</p>
+        <p className="text-muted-foreground">{t("office:loadingProject")}</p>
       </div>
     );
   }
@@ -72,7 +74,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           href="/office/projects"
           className="text-sm text-muted-foreground hover:text-foreground cursor-pointer"
         >
-          Projects
+          {t("office:projects")}
         </Link>
         <IconChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
         <span className="text-sm font-medium truncate">{project.name}</span>

@@ -38,6 +38,7 @@ import type { KeyboardShortcut } from "@/lib/keyboard/constants";
 import type { DiffComment } from "@/lib/diff/types";
 import { PassthroughTerminal } from "./passthrough-terminal";
 import { PassthroughComposerPanel, useSendPassthroughMessage } from "./passthrough-chat-composer";
+import { useTranslation } from "react-i18next";
 
 function isEditableElement(element: Element | null) {
   if (element instanceof HTMLElement && element.closest(".xterm")) return false;
@@ -218,6 +219,7 @@ function ChatToggleButton({
   focusShortcut: KeyboardShortcut;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -242,8 +244,8 @@ function ChatToggleButton({
         {composerOpen ? (
           <div className="space-y-1">
             <p>
-              Close the compose box (or press <kbd>Esc</kbd> inside it). The CLI agent terminal
-              keeps focus.
+              Close the compose box (or press <kbd>{t("task:esc")}</kbd> inside it). The CLI agent
+              terminal keeps focus.
             </p>
             <PassthroughChatShortcutHint shortcut={focusShortcut} />
           </div>
@@ -251,13 +253,11 @@ function ChatToggleButton({
           <div className="space-y-1">
             <p>
               Open a kandev-controlled compose box above the terminal to type a follow-up message.
-              Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for a newline.
+              Press <kbd>{t("task:enter")}</kbd> to send, <kbd>{t("task:shiftEnter")}</kbd> for a
+              newline.
             </p>
             <PassthroughChatShortcutHint shortcut={focusShortcut} />
-            <p className="text-muted-foreground">
-              The text is delivered straight to the CLI agent&apos;s stdin — pending review comments
-              (if any) are prepended automatically.
-            </p>
+            <p className="text-muted-foreground">{t("task:theTextIsDeliveredStraightTo")}</p>
           </div>
         )}
       </TooltipContent>
@@ -329,23 +329,17 @@ function CommentsToggleButton({
 }
 
 function CommentsTooltipBody({ commentsOpen, count }: { commentsOpen: boolean; count: number }) {
+  const { t } = useTranslation();
   if (count === 0) {
     return (
       <div className="space-y-1">
-        <p>No pending review comments.</p>
-        <p className="text-muted-foreground">
-          Add a comment from the diff or file view, then come back here to review and send it.
-        </p>
+        <p>{t("task:noPendingReviewComments")}</p>
+        <p className="text-muted-foreground">{t("task:addACommentFromTheDiff")}</p>
       </div>
     );
   }
   if (commentsOpen) {
-    return (
-      <p>
-        Hide the comment list. The comments stay queued and will still be sent next time you submit
-        (here or from the chat box).
-      </p>
-    );
+    return <p>{t("task:hideTheCommentListTheComments")}</p>;
   }
   const plural = count === 1 ? "" : "s";
   return (
@@ -355,8 +349,9 @@ function CommentsTooltipBody({ commentsOpen, count }: { commentsOpen: boolean; c
         comment, click the file path to jump to the source, or remove a comment with the trash icon.
       </p>
       <p className="text-muted-foreground">
-        Hit <strong>Send to agent</strong> inside the panel to deliver them to the CLI agent right
-        away, or just open the chat box and type a follow-up — the comments will be prepended.
+        Hit <strong>{t("task:sendToAgent")}</strong> inside the panel to deliver them to the CLI
+        agent right away, or just open the chat box and type a follow-up — the comments will be
+        prepended.
       </p>
     </div>
   );
@@ -371,6 +366,7 @@ function CommentsPanel({
   openFile: (path: string) => void;
   onSend: () => Promise<void> | void;
 }) {
+  const { t } = useTranslation();
   const [isSending, setIsSending] = useState(false);
   const handleSend = useCallback(async () => {
     if (isSending) return;
@@ -411,11 +407,7 @@ function CommentsPanel({
             </Button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs">
-            <p>
-              Deliver these comments to the CLI agent&apos;s stdin as a single message — no need to
-              open the chat box. The agent receives the same markdown that prepending to a typed
-              message would produce.
-            </p>
+            <p>{t("task:deliverTheseCommentsToTheCli")}</p>
           </TooltipContent>
         </Tooltip>
       </div>
@@ -441,6 +433,7 @@ function CommentCard({
   comment: DiffComment;
   openFile: (path: string) => void;
 }) {
+  const { t } = useTranslation();
   const updateComment = useCommentsStore((s) => s.updateComment);
   const removeComment = useCommentsStore((s) => s.removeComment);
   const lineRange = formatLineRange(comment);
@@ -468,7 +461,7 @@ function CommentCard({
           type="button"
           onClick={() => removeComment(comment.id)}
           className="rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer"
-          aria-label="Remove comment"
+          aria-label={t("task:removeComment")}
           data-testid="passthrough-comment-remove"
         >
           <IconTrash className="h-3.5 w-3.5" />
@@ -484,7 +477,7 @@ function CommentCard({
         onChange={(e) => updateComment(comment.id, { text: e.target.value })}
         className="min-h-[2rem] resize-none text-xs"
         rows={Math.min(4, Math.max(1, comment.text.split("\n").length))}
-        placeholder="Write a comment…"
+        placeholder={t("task:writeAComment")}
         data-testid="passthrough-comment-textarea"
       />
     </div>
@@ -518,6 +511,7 @@ function PassthroughStatusRow({
   onToggleComments,
   pendingCommentsCount,
 }: StatusRowProps) {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="passthrough-status-row"
@@ -554,7 +548,7 @@ function PassthroughStatusRow({
                 <IconArrowRight className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Move task to the next workflow step</TooltipContent>
+            <TooltipContent>{t("task:moveTaskToTheNextWorkflow")}</TooltipContent>
           </Tooltip>
         )}
       </div>

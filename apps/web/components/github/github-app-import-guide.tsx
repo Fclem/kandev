@@ -6,6 +6,7 @@ import { Button } from "@kandev/ui/button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import type { PrepareGitHubAppImportResponse } from "@/lib/types/github";
 import { GitHubAppPolicyDialog } from "./github-app-policy-dialog";
+import { useTranslation } from "react-i18next";
 
 const urlLabels: [keyof PrepareGitHubAppImportResponse, string][] = [
   ["public_base_url", "Homepage URL"],
@@ -21,6 +22,7 @@ export function GitHubAppImportGuide({
   preparation: PrepareGitHubAppImportResponse;
   settingsUrl?: string;
 }) {
+  const { t } = useTranslation();
   const { copy } = useCopyToClipboard();
   const [copied, setCopied] = useState("");
   async function copyValue(value: string) {
@@ -28,16 +30,16 @@ export function GitHubAppImportGuide({
     setCopied(value);
   }
   return (
-    <section className="space-y-3" aria-label="GitHub App configuration instructions">
+    <section className="space-y-3" aria-label={t("github:githubAppConfigurationInstructions")}>
       <div className="space-y-1">
-        <h3 className="text-sm font-medium">Configure the existing App on GitHub</h3>
+        <h3 className="text-sm font-medium">{t("github:configureTheExistingAppOnGithub")}</h3>
         <p className="text-xs leading-5 text-muted-foreground">
           Set these exact URLs, create a client secret and webhook secret, and download a private
           key. This one-time setup expires {new Date(preparation.expires_at).toLocaleString()}.
         </p>
         <p className="text-xs leading-5 text-muted-foreground">
-          For webhooks, choose <strong>application/json</strong> as the content type and keep SSL
-          verification enabled.
+          For webhooks, choose <strong>{t("github:applicationJson")}</strong> as the content type
+          and keep SSL verification enabled.
         </p>
       </div>
       <div className="divide-y rounded-md border">

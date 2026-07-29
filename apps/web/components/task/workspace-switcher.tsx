@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@kandev/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 type Workspace = {
   id: string;
@@ -25,6 +26,7 @@ export function WorkspaceSwitcher({
   activeWorkspaceId,
   onSelect,
 }: WorkspaceSwitcherProps) {
+  const { t } = useTranslation();
   const selectedWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
 
   // If only one workspace, show just the name without dropdown
@@ -41,7 +43,7 @@ export function WorkspaceSwitcher({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          title="Switch Workspace"
+          title={t("task:switchWorkspace")}
           className={cn(
             "group flex h-8 min-w-0 items-center gap-1.5 rounded-md border bg-background px-2.5 text-sm font-medium cursor-pointer",
             "text-muted-foreground hover:text-foreground transition-colors duration-150",

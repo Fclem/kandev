@@ -6,6 +6,7 @@ import type { AgentProfile } from "@/lib/state/slices/office/types";
 import * as officeApi from "@/lib/api/domains/office-api";
 import { InstructionFileList } from "./instruction-file-list";
 import { InstructionEditor } from "./instruction-editor";
+import { useTranslation } from "react-i18next";
 
 export type InstructionFile = {
   id: string;
@@ -21,6 +22,7 @@ type AgentInstructionsTabProps = {
 };
 
 export function AgentInstructionsTab({ agent }: AgentInstructionsTabProps) {
+  const { t } = useTranslation();
   const [files, setFiles] = useState<InstructionFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -89,7 +91,7 @@ export function AgentInstructionsTab({ agent }: AgentInstructionsTabProps) {
   if (isLoading) {
     return (
       <div className="mt-4 flex items-center justify-center py-12">
-        <p className="text-sm text-muted-foreground">Loading instructions...</p>
+        <p className="text-sm text-muted-foreground">{t("office:loadingInstructions")}</p>
       </div>
     );
   }

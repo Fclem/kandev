@@ -28,6 +28,7 @@ import type {
 } from "./types";
 import type { ActivityEntry, OfficeTask } from "@/lib/state/slices/office/types";
 import type { TaskSession as ApiTaskSession } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 type IssueDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -421,6 +422,7 @@ export default function IssueDetailPage({ params }: IssueDetailPageProps) {
 }
 
 function IssueDetailContent({ params }: IssueDetailPageProps) {
+  const { t } = useTranslation();
   const { id } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -469,7 +471,7 @@ function IssueDetailContent({ params }: IssueDetailPageProps) {
             className="mt-2 text-sm text-primary underline cursor-pointer"
             onClick={() => router.push("/office/tasks")}
           >
-            Back to tasks
+            {t("office:backToTasks")}
           </button>
         </div>
       </div>

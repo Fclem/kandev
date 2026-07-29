@@ -39,6 +39,7 @@ import { PR_CI_DESKTOP_POPOVER_SCROLL_CLASS, PRCIPopover } from "@/components/gi
 import { MultiPRCIPopover } from "@/components/github/multi-pr-ci-popover";
 import { useAppStore } from "@/components/state-provider";
 import type { TaskPR } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 const POPOVER_OPEN_DELAY_MS = 150;
 const POPOVER_CLOSE_DELAY_MS = 150;
@@ -301,11 +302,12 @@ function PRMultiButton({ prs, refreshTaskPR }: { prs: TaskPR[]; refreshTaskPR: (
 }
 
 function MultiPRMenuContent({ prs }: { prs: TaskPR[] }) {
+  const { t } = useTranslation();
   const addPRPanel = useDockviewStore((s) => s.addPRPanel);
   const activeSessionId = useAppStore((s) => s.tasks.activeSessionId);
   return (
     <DropdownMenuContent align="end" className="w-72">
-      <DropdownMenuLabel className="text-xs">Pull requests</DropdownMenuLabel>
+      <DropdownMenuLabel className="text-xs">{t("github:pullRequests")}</DropdownMenuLabel>
       <DropdownMenuSeparator />
       {prs.map((pr) => (
         <DropdownMenuItem

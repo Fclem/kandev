@@ -28,6 +28,7 @@ import type {
   useSessionPanelState,
   useMergedAgentState,
 } from "./task-page-content";
+import { useTranslation } from "react-i18next";
 
 export type TaskPageInnerProps = {
   task: Task | null;
@@ -218,6 +219,7 @@ export function TaskPageInner({
   ensureSession,
   onTaskUnarchived,
 }: TaskPageInnerProps) {
+  const { t } = useTranslation();
   const taskProps = resolveTaskProps(task, repository);
   const remote = resolveRemoteExecutor(resumption.sessionStatus as RemoteExecutorStatus | null);
   const activeSessionMetadata = useAppStore((state) =>
@@ -277,7 +279,7 @@ export function TaskPageInner({
             isPassthrough={sessionPanel.isSessionPassthrough}
           />
           <TaskPRShortcut taskId={taskProps.taskId} />
-          {debugEntries && <DebugOverlay title="Task Debug" entries={debugEntries} />}
+          {debugEntries && <DebugOverlay title={t("task:taskDebug")} entries={debugEntries} />}
           {!isMobile && <TaskTopBar {...topBarProps} />}
           {ensureSession.status === "error" && (
             <EnsureSessionErrorBanner

@@ -31,6 +31,7 @@ import {
   DrawerTrigger,
 } from "@kandev/ui/drawer";
 import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
+import { useTranslation } from "react-i18next";
 
 const ACTION_BUTTON_SIZE = "h-5 w-5 p-1";
 const ACTION_BUTTON_HOVER = "hover:bg-muted rounded";
@@ -53,6 +54,7 @@ type MessageActionsProps = {
 };
 
 function CopyButton({ copied, onCopy }: { copied: boolean; onCopy: () => void }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onCopy}
@@ -62,8 +64,8 @@ function CopyButton({ copied, onCopy }: { copied: boolean; onCopy: () => void })
         ACTION_BUTTON_TRANSITION,
         copied && "text-green-400",
       )}
-      title="Copy message"
-      aria-label="Copy message to clipboard"
+      title={t("task:copyMessage")}
+      aria-label={t("task:copyMessageToClipboard")}
     >
       {copied ? <IconCheck className="h-full w-full" /> : <IconCopy className="h-full w-full" />}
     </button>
@@ -81,6 +83,7 @@ function NavigationButtons({
   onNavigatePrev?: () => void;
   onNavigateNext?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <button
@@ -92,8 +95,8 @@ function NavigationButtons({
           ACTION_BUTTON_TRANSITION,
           "disabled:opacity-30 disabled:cursor-not-allowed",
         )}
-        title="Previous message"
-        aria-label="Go to previous message"
+        title={t("task:previousMessage")}
+        aria-label={t("task:goToPreviousMessage")}
       >
         <IconChevronLeft className="h-full w-full" />
       </button>
@@ -106,8 +109,8 @@ function NavigationButtons({
           ACTION_BUTTON_TRANSITION,
           "disabled:opacity-30 disabled:cursor-not-allowed",
         )}
-        title="Next message"
-        aria-label="Go to next message"
+        title={t("task:nextMessage")}
+        aria-label={t("task:goToNextMessage")}
       >
         <IconChevronRight className="h-full w-full" />
       </button>
@@ -144,7 +147,8 @@ function RawToggleButton({
 }
 
 function MetadataValue({ value }: { value: unknown }) {
-  if (value == null) return <span className="text-muted-foreground">null</span>;
+  const { t } = useTranslation();
+  if (value == null) return <span className="text-muted-foreground">{t("task:null")}</span>;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return <span className="font-mono text-muted-foreground">{String(value)}</span>;
   }
@@ -164,6 +168,7 @@ function MessageDebugDialog({
   turn: Turn | null;
   usageMultiplier?: string | null;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const context = { usageMultiplier };
   if (!hasMessageDebugMetadata(message, turn, context)) return null;
@@ -173,15 +178,15 @@ function MessageDebugDialog({
       <DialogTrigger asChild>
         <button
           className={cn(ACTION_BUTTON_SIZE, ACTION_BUTTON_HOVER, ACTION_BUTTON_TRANSITION)}
-          title="Message metadata"
-          aria-label="Show message metadata"
+          title={t("task:messageMetadata")}
+          aria-label={t("task:showMessageMetadata")}
         >
           <IconInfoCircle className="h-full w-full" />
         </button>
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Message Metadata</DialogTitle>
+          <DialogTitle>{t("task:messageMetadata2")}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3 overflow-auto pr-1">
           {Object.entries(entries).map(([key, value]) => (
@@ -197,6 +202,7 @@ function MessageDebugDialog({
 }
 
 function MessageTimestamp({ createdAt }: { createdAt: string }) {
+  const { t } = useTranslation();
   const usesTouchDrawer = useTouchDrawer();
   const [open, setOpen] = useState(false);
   const absoluteTime = new Date(createdAt).toLocaleString();
@@ -230,7 +236,7 @@ function MessageTimestamp({ createdAt }: { createdAt: string }) {
       </DrawerTrigger>
       <DrawerContent data-testid="message-timestamp-drawer">
         <DrawerHeader>
-          <DrawerTitle>Message time</DrawerTitle>
+          <DrawerTitle>{t("task:messageTime")}</DrawerTitle>
           <DrawerDescription>{absoluteTime}</DrawerDescription>
         </DrawerHeader>
       </DrawerContent>

@@ -25,6 +25,7 @@ import { DIMENSION_METAS, getDimensionMeta, getOpLabel } from "./filter-dimensio
 import { useFilterValueOptions } from "./use-filter-value-options";
 import { FilterMultiSelect } from "./filter-multi-select";
 import { buildOptionGroups, hasGroupedOptions } from "./filter-option-groups";
+import { useTranslation } from "react-i18next";
 
 type ValueOption = { value: string; label: string; color?: string; group?: string };
 
@@ -64,6 +65,7 @@ function normaliseValueForDimension(
 }
 
 export function FilterClauseEditor({ clause, onChange, onRemove }: Props) {
+  const { t } = useTranslation();
   const meta = getDimensionMeta(clause.dimension);
   const enumOptions = useFilterValueOptions(clause.dimension);
   const availableOptions = meta.enumOptions ?? enumOptions;
@@ -142,7 +144,7 @@ export function FilterClauseEditor({ clause, onChange, onRemove }: Props) {
         className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-foreground"
         onClick={onRemove}
         data-testid="filter-clause-remove"
-        aria-label="Remove filter"
+        aria-label={t("task:removeFilter")}
       >
         <IconX className="h-3.5 w-3.5" />
       </Button>
@@ -159,6 +161,7 @@ function ValueInput({
   options: ValueOption[];
   onChange: (v: FilterValue) => void;
 }) {
+  const { t } = useTranslation();
   const meta = getDimensionMeta(clause.dimension);
 
   if (meta.valueKind === "boolean") {
@@ -195,12 +198,12 @@ function ValueInput({
         className="h-7 min-w-0 flex-1 text-xs"
         data-testid="filter-value-select"
       >
-        <SelectValue placeholder="Select value" />
+        <SelectValue placeholder={t("task:selectValue")} />
       </SelectTrigger>
       <SelectContent>
         {options.length === 0 ? (
           <SelectItem value="__empty__" disabled className="text-xs">
-            No options
+            {t("task:noOptions")}
           </SelectItem>
         ) : (
           <GroupedSelectItems options={options} />

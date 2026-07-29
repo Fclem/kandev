@@ -18,6 +18,7 @@
 
 import dynamic from "@/lib/routing/client-dynamic";
 import { IconClock } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 
 const OfficeDockviewLayout = dynamic(
   () =>
@@ -47,6 +48,7 @@ export function isDormant(executionId: string | null | undefined): boolean {
 }
 
 function DormantPanel({ kind }: { kind: DockviewLayoutKind }) {
+  const { t } = useTranslation();
   const verb = kind === "office" ? "Routine" : "Agent";
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-background min-h-0 p-8">
@@ -56,12 +58,9 @@ function DormantPanel({ kind }: { kind: DockviewLayoutKind }) {
       >
         <IconClock className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
         <h2 className="text-base font-semibold">{verb} is dormant</h2>
-        <p className="text-sm text-muted-foreground">
-          The agent has finished its last turn and is waiting for the next eligible trigger. The
-          file tree below is read from the worktree on disk; the previous chat history is preserved.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("task:theAgentHasFinishedItsLast")}</p>
         <p className="text-xs text-muted-foreground">
-          Terminal &amp; prompt input are disabled until the next run starts.
+          {t("task:terminalPromptInputAreDisabledUntil")}
         </p>
       </div>
     </div>

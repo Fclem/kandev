@@ -7,6 +7,7 @@ import { Input } from "@kandev/ui/input";
 import { Textarea } from "@kandev/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { getChangeRequestTerminology } from "@/hooks/use-git-operations";
+import { useTranslation } from "react-i18next";
 
 type ChangeRequestTerminology = ReturnType<typeof getChangeRequestTerminology>;
 
@@ -71,16 +72,17 @@ export function CommitBodyField({
   isUtilityConfigured: boolean;
   disabled: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <Label htmlFor="vcs-commit-body" className="text-sm">
-        Description
+        {t("integrations:description")}
       </Label>
       <div className="relative min-w-0">
         <Textarea
           id="vcs-commit-body"
           data-testid="commit-body-input"
-          placeholder="Add details about this change..."
+          placeholder={t("integrations:addDetailsAboutThisChange")}
           value={commitBody}
           onChange={(e) => onCommitBodyChange(e.target.value)}
           rows={3}
@@ -153,15 +155,16 @@ export function PRDescriptionField({
   isUtilityConfigured: boolean;
   terminology: ChangeRequestTerminology;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <Label htmlFor="vcs-pr-body" className="text-sm">
-        Description
+        {t("integrations:description")}
       </Label>
       <div className="relative min-w-0">
         <Textarea
           id="vcs-pr-body"
-          placeholder="Describe your changes..."
+          placeholder={t("integrations:describeYourChanges")}
           value={prBody}
           onChange={(e) => onPrBodyChange(e.target.value)}
           rows={6}

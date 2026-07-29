@@ -12,6 +12,8 @@ import {
   visibleEntityReferenceGroups,
 } from "./entity-reference-groups";
 import { PopupMenu, PopupMenuItem, useMenuItemRefs } from "./popup-menu";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 export {
   selectableEntityReferences,
@@ -66,7 +68,7 @@ function entityReferenceEmptyState(
           className="min-h-11 shrink-0 cursor-pointer px-2 font-medium text-primary"
           onClick={onRetry}
         >
-          Retry
+          {t("common:retry")}
         </button>
       </div>
     );
@@ -87,6 +89,7 @@ export function EntityReferenceMenu({
   onClose,
   setSelectedIndex,
 }: EntityReferenceMenuProps) {
+  const { t } = useTranslation();
   const { setItemRef } = useMenuItemRefs(selectedIndex);
   const selectable = selectableEntityReferences(groups);
   let itemIndex = 0;
@@ -98,7 +101,7 @@ export function EntityReferenceMenu({
       testId="entity-reference-menu"
       position={null}
       clientRect={clientRect}
-      title="Reference work items"
+      title={t("task:referenceWorkItems")}
       selectedIndex={selectedIndex}
       onClose={onClose}
       hasItems={hasContent}
@@ -138,7 +141,7 @@ export function EntityReferenceMenu({
         </div>
       ))}
       {isSearching && selectable.length > 0 && (
-        <div className="px-3 py-1 text-[11px] text-muted-foreground">Updating…</div>
+        <div className="px-3 py-1 text-[11px] text-muted-foreground">{t("task:updating2")}</div>
       )}
     </PopupMenu>
   );

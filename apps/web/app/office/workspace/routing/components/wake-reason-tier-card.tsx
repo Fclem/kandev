@@ -13,6 +13,7 @@ import type {
 } from "@/lib/state/slices/office/types";
 import { providerLabel } from "./provider-order-editor";
 import { USE_AGENT_TIER, WAKE_REASONS, type WakeReasonCopy } from "./wake-reason-info";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   config: WorkspaceRouting;
@@ -26,6 +27,7 @@ type Props = {
 // text so a new user understands what the row controls before touching
 // the dropdown.
 export function WakeReasonTierCard({ config, value, onChange, disabled }: Props) {
+  const { t } = useTranslation();
   const handleRowChange = (reason: WakeReason, tier: Tier | typeof USE_AGENT_TIER) => {
     const next: TierPerReason = { ...value };
     if (tier === USE_AGENT_TIER) {
@@ -38,13 +40,9 @@ export function WakeReasonTierCard({ config, value, onChange, disabled }: Props)
   return (
     <Card>
       <CardHeader className="space-y-1">
-        <CardTitle className="text-sm">Wake-reason tier policy</CardTitle>
+        <CardTitle className="text-sm">{t("office:wakeReasonTierPolicy")}</CardTitle>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Override which model tier runs for specific kinds of agent work. Most users leave this on
-          the workspace defaults — Economy for background tasks, Balanced for normal runs.
-          Heartbeats, scheduled routines, and budget alerts run constantly in the background, so
-          using a cheaper tier here can dramatically reduce cost without affecting the work that
-          matters.
+          {t("office:overrideWhichModelTierRunsFor")}
         </p>
       </CardHeader>
       <CardContent className="divide-y divide-border">
@@ -124,6 +122,7 @@ function TierSelect({
   onChange: (tier: Tier | typeof USE_AGENT_TIER) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const selected = tier ?? USE_AGENT_TIER;
   return (
     <Select
@@ -136,7 +135,7 @@ function TierSelect({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={USE_AGENT_TIER} className="cursor-pointer">
-          Use agent&apos;s normal tier
+          {t("office:useAgentSNormalTier")}
         </SelectItem>
         {TIER_OPTIONS.map((opt) => (
           <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
@@ -153,6 +152,7 @@ function TierSelect({
 // selected tier is not mapped on any provider in the order we surface a
 // warning chip directing them to the provider tier mapping section.
 function ResolvedRow({ tier, config }: { tier: Tier | undefined; config: WorkspaceRouting }) {
+  const { t } = useTranslation();
   if (!tier) return null;
   const match = firstProviderWithTier(tier, config);
   if (!match) {
@@ -174,9 +174,7 @@ function ResolvedRow({ tier, config }: { tier: Tier | undefined; config: Workspa
           </Badge>
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-xs text-xs leading-relaxed">
-          Typical mapping. At launch time the router walks the provider order and picks the first
-          healthy provider, so a degraded primary may cause this run to use a different
-          provider/model than shown here.
+          {t("office:typicalMappingAtLaunchTimeThe")}
         </TooltipContent>
       </Tooltip>
     </p>

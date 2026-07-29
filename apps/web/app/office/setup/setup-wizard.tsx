@@ -23,6 +23,7 @@ import {
 import { SETUP_WIZARD_STEP_COUNT, SETUP_WIZARD_STEPS } from "./setup-wizard-steps";
 import type { AgentProfileOption } from "@/lib/state/slices/settings/types";
 import type { Tier } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 export { DEFAULT_ONBOARDING_TASK_DESCRIPTION, DEFAULT_ONBOARDING_TASK_TITLE };
 
@@ -189,6 +190,7 @@ export function SetupWizard({
   defaultAgentProfileId,
   suggestedWorkspaceName,
 }: SetupWizardProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   // mode === "new" means the user explicitly asked for a fresh workspace
   // (e.g. clicked "Add workspace" on the dashboard) — skip the FS import
@@ -214,7 +216,7 @@ export function SetupWizard({
     setSubmitting(true);
     try {
       const result = await submitOnboarding(data);
-      toast.success("Workspace created successfully");
+      toast.success(t("office:workspaceCreatedSuccessfully"));
       document.cookie = `office-active-workspace=${result.workspaceId}; path=/; max-age=86400; samesite=strict; secure`;
       router.push(`/office?workspaceId=${result.workspaceId}`);
       router.refresh();

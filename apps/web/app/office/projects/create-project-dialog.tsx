@@ -14,6 +14,7 @@ import { createProject } from "@/lib/api/domains/office-api";
 import type { AgentProfile } from "@/lib/state/slices/office/types";
 import { ProjectRepositoryPicker } from "./project-repository-picker";
 import { RepoChip } from "./repo-chip";
+import { useTranslation } from "react-i18next";
 
 const COLOR_OPTIONS = [
   "#ef4444",
@@ -33,9 +34,10 @@ type CreateProjectDialogProps = {
 };
 
 function ColorPicker({ color, onChange }: { color: string; onChange: (c: string) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
-      <Label>Color</Label>
+      <Label>{t("office:color")}</Label>
       <div className="flex gap-2">
         {COLOR_OPTIONS.map((c) => (
           <button
@@ -64,13 +66,12 @@ function ReposField({
   onAddRepo: (repo: string) => void;
   onRemoveRepo: (r: string) => void;
 }) {
+  const { t } = useTranslation();
   const { repositories } = useRepositories(workspaceId);
   return (
     <div className="space-y-2">
-      <Label>Repositories</Label>
-      <p className="text-xs text-muted-foreground">
-        Git URLs or local paths where agents will work
-      </p>
+      <Label>{t("common:repositories")}</Label>
+      <p className="text-xs text-muted-foreground">{t("office:gitUrlsOrLocalPathsWhere2")}</p>
       <div className="flex flex-wrap items-center gap-2" data-testid="project-repo-chips">
         {repos.map((repo) => (
           <RepoChip
@@ -111,19 +112,18 @@ function ExecutorField({
   onExecutorTypeChange: (v: string) => void;
   onDockerImageChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
-      <Label>Executor Type</Label>
-      <p className="text-xs text-muted-foreground">
-        How agent sessions run (inherit uses workspace default)
-      </p>
+      <Label>{t("office:executorType")}</Label>
+      <p className="text-xs text-muted-foreground">{t("office:howAgentSessionsRunInheritUses2")}</p>
       <Select value={executorType} onValueChange={onExecutorTypeChange}>
         <SelectTrigger className="cursor-pointer">
-          <SelectValue placeholder="Inherit from workspace" />
+          <SelectValue placeholder={t("office:inheritFromWorkspace")} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="inherit" className="cursor-pointer">
-            Inherit from workspace
+            {t("office:inheritFromWorkspace")}
           </SelectItem>
           {executorTypes.map((et) => (
             <SelectItem key={et.id} value={et.id} className="cursor-pointer">
@@ -134,7 +134,7 @@ function ExecutorField({
       </Select>
       {(executorType === "local_docker" || executorType === "remote_docker") && (
         <Input
-          placeholder="Docker image (e.g. node:20-slim)"
+          placeholder={t("office:dockerImageEGNode20")}
           value={dockerImage}
           onChange={(e) => onDockerImageChange(e.target.value)}
           className="mt-2"
@@ -165,6 +165,7 @@ const INITIAL_PROJECT_STATE: ProjectFormState = {
 };
 
 function useProjectForm(workspaceId: string, onClose: () => void) {
+  const { t } = useTranslation();
   const addProject = useAppStore((s) => s.addProject);
   const [form, setForm] = useState<ProjectFormState>(INITIAL_PROJECT_STATE);
   const [submitting, setSubmitting] = useState(false);
@@ -206,7 +207,7 @@ function useProjectForm(workspaceId: string, onClose: () => void) {
       if (result) addProject(result);
       onClose();
       setForm(INITIAL_PROJECT_STATE);
-      toast.success("Project created");
+      toast.success(t("office:projectCreated"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create project");
     } finally {
@@ -234,23 +235,24 @@ function ProjectFormBody({
   onAddRepo: (repo: string) => void;
   onRemoveRepo: (r: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="project-name">Name</Label>
+        <Label htmlFor="project-name">{t("office:name")}</Label>
         <Input
           id="project-name"
-          placeholder="Project name"
+          placeholder={t("office:projectName")}
           value={form.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
           autoFocus
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="project-desc">Description</Label>
+        <Label htmlFor="project-desc">{t("office:description")}</Label>
         <Textarea
           id="project-desc"
-          placeholder="Project description..."
+          placeholder={t("office:projectDescription")}
           value={form.description}
           onChange={(e) => onUpdate({ description: e.target.value })}
           className="min-h-[80px]"
@@ -264,17 +266,17 @@ function ProjectFormBody({
         onRemoveRepo={onRemoveRepo}
       />
       <div className="space-y-2">
-        <Label>Lead Agent</Label>
+        <Label>{t("office:leadAgent")}</Label>
         <p className="text-xs text-muted-foreground">
-          The agent responsible for managing this project
+          {t("office:theAgentResponsibleForManagingThis")}
         </p>
         <Select value={form.leadAgentId} onValueChange={(v) => onUpdate({ leadAgentId: v })}>
           <SelectTrigger className="cursor-pointer">
-            <SelectValue placeholder="Select agent (optional)" />
+            <SelectValue placeholder={t("office:selectAgentOptional")} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none" className="cursor-pointer">
-              None
+              {t("common:none")}
             </SelectItem>
             {agents.map((a) => (
               <SelectItem key={a.id} value={a.id} className="cursor-pointer">
@@ -296,6 +298,7 @@ function ProjectFormBody({
 }
 
 export function CreateProjectDialog({ open, onOpenChange, workspaceId }: CreateProjectDialogProps) {
+  const { t } = useTranslation();
   const agents = useAppStore((s) => s.office.agentProfiles);
   const meta = useAppStore((s) => s.office.meta);
   const executorTypes =
@@ -307,7 +310,7 @@ export function CreateProjectDialog({ open, onOpenChange, workspaceId }: CreateP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>New Project</DialogTitle>
+          <DialogTitle>{t("office:newProject")}</DialogTitle>
         </DialogHeader>
 
         <ProjectFormBody
@@ -321,7 +324,7 @@ export function CreateProjectDialog({ open, onOpenChange, workspaceId }: CreateP
         />
         <div className="flex justify-end gap-2 pt-4 border-t border-border">
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button
             onClick={handleCreate}

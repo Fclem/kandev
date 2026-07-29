@@ -14,6 +14,7 @@ import {
 } from "@kandev/ui/command";
 import { cn } from "@/lib/utils";
 import { buildOptionGroups, hasGroupedOptions } from "./filter-option-groups";
+import { useTranslation } from "react-i18next";
 
 export type MultiSelectOption = { value: string; label: string; color?: string; group?: string };
 
@@ -32,6 +33,7 @@ export function FilterMultiSelect({
   placeholder = "Select values",
   searchPlaceholder = "Search…",
 }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const selectedSet = new Set(selected);
   const labelByValue = new Map(options.map((o) => [o.value, o.label]));
@@ -69,7 +71,7 @@ export function FilterMultiSelect({
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
-            <CommandEmpty>No options.</CommandEmpty>
+            <CommandEmpty>{t("task:noOptions2")}</CommandEmpty>
             <GroupedOptions options={options} selectedSet={selectedSet} onToggle={toggle} />
           </CommandList>
         </Command>

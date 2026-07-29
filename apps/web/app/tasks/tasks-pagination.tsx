@@ -16,6 +16,7 @@ import {
   IconChevronsLeft,
   IconChevronsRight,
 } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 
 type TasksPaginationProps = {
   total: number;
@@ -103,9 +104,10 @@ function RowsPerPageSelect({
   pagination,
   onPaginationChange,
 }: Pick<TasksPaginationProps, "pagination" | "onPaginationChange">) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2">
-      <p className="text-sm font-medium whitespace-nowrap">Rows per page</p>
+      <p className="text-sm font-medium whitespace-nowrap">{t("common:rowsPerPage")}</p>
       <Select
         value={`${pagination.pageSize}`}
         onValueChange={(value) => {

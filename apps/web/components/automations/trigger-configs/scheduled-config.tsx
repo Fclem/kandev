@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@kandev/ui/button";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
+import { useTranslation } from "react-i18next";
 
 type ScheduledConfigProps = {
   config: Record<string, unknown>;
@@ -17,6 +18,7 @@ const PRESETS = [
 ] as const;
 
 export function ScheduledConfig({ config, onUpdate }: ScheduledConfigProps) {
+  const { t } = useTranslation();
   const configExpr = (config.cron_expression as string) ?? "";
   const [cronExpression, setCronExpression] = useState(configExpr);
   useEffect(() => {
@@ -52,7 +54,7 @@ export function ScheduledConfig({ config, onUpdate }: ScheduledConfigProps) {
         ))}
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">Cron expression</Label>
+        <Label className="text-xs">{t("automations:cronExpression")}</Label>
         <Input
           value={cronExpression}
           onChange={(e) => handleCustomChange(e.target.value)}
@@ -61,7 +63,7 @@ export function ScheduledConfig({ config, onUpdate }: ScheduledConfigProps) {
           className="font-mono text-sm"
         />
         <p className="text-xs text-muted-foreground">
-          Standard 5-field cron or shortcuts (@hourly, @daily, @weekly, @every 5m)
+          {t("automations:standard5FieldCronOrShortcuts")}
         </p>
       </div>
     </div>

@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconPlayerPlay, IconTrash } from "@tabler/icons-react";
 import type { Automation, TriggerType } from "@/lib/types/automation";
 import { formatRelativeTime } from "./format-utils";
+import { useTranslation } from "react-i18next";
 
 type AutomationsTableProps = {
   automations: Automation[];
@@ -36,9 +37,10 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
 };
 
 function TriggerBadges({ triggers }: { triggers: Automation["triggers"] }) {
+  const { t } = useTranslation();
   const items = triggers ?? [];
   if (items.length === 0) {
-    return <span className="text-xs text-muted-foreground">None</span>;
+    return <span className="text-xs text-muted-foreground">{t("common:none")}</span>;
   }
   return (
     <div className="flex flex-wrap gap-1">
@@ -60,6 +62,7 @@ function RowActions({
   onTrigger: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-0.5">
       <Tooltip>
@@ -73,7 +76,7 @@ function RowActions({
             <IconPlayerPlay className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Trigger manually</TooltipContent>
+        <TooltipContent>{t("automations:triggerManually")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -86,7 +89,7 @@ function RowActions({
             <IconTrash className="h-3.5 w-3.5 text-destructive" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Delete</TooltipContent>
+        <TooltipContent>{t("common:delete")}</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -100,6 +103,7 @@ export function AutomationsTable({
   onTrigger,
   onDelete,
 }: AutomationsTableProps) {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
@@ -112,11 +116,11 @@ export function AutomationsTable({
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent focus-within:bg-transparent">
-            <TableHead>Name</TableHead>
-            <TableHead>Mode</TableHead>
-            <TableHead>Triggers</TableHead>
-            <TableHead>Enabled</TableHead>
-            <TableHead>Last Triggered</TableHead>
+            <TableHead>{t("automations:name")}</TableHead>
+            <TableHead>{t("automations:mode")}</TableHead>
+            <TableHead>{t("automations:triggers")}</TableHead>
+            <TableHead>{t("common:enabled")}</TableHead>
+            <TableHead>{t("automations:lastTriggered")}</TableHead>
             <TableHead className="w-[100px]" />
           </TableRow>
         </TableHeader>
@@ -128,7 +132,7 @@ export function AutomationsTable({
                 className="text-center text-muted-foreground py-8"
                 data-testid="automations-empty"
               >
-                No automations yet
+                {t("automations:noAutomationsYet")}
               </TableCell>
             </TableRow>
           ) : (

@@ -9,6 +9,7 @@ import type { Issue } from "@/lib/types/gitlab";
 import type { GitLabLaunchPayload, GitLabTaskPreset } from "./quick-task-launcher";
 import { StartTaskMenu } from "./start-task-menu";
 import { SubscriptionToggle } from "../subscription-toggle";
+import { useTranslation } from "react-i18next";
 
 type IssueListProps = {
   items: Issue[];
@@ -114,6 +115,7 @@ function IssueListBody({
   workspaceId,
   host,
 }: IssueListProps) {
+  const { t } = useTranslation();
   if (loading) {
     return (
       <div className="flex justify-center py-10">
@@ -127,7 +129,7 @@ function IssueListBody({
   if (items.length === 0) {
     return (
       <div className="text-center py-10 text-muted-foreground text-sm">
-        No issues match this filter.
+        {t("gitlab:noIssuesMatchThisFilter")}
       </div>
     );
   }

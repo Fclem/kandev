@@ -22,6 +22,7 @@ import {
   buildDefaultPermissions,
   PERMISSION_APPLY_AGENTCTL_AUTO_APPROVE,
 } from "@/lib/agent-permissions";
+import { useTranslation } from "react-i18next";
 
 export type CliProfileEditorMode = "create" | "edit";
 
@@ -102,6 +103,17 @@ function initialState(
   return fromDefaultAgent(defaultName, defaultAgent);
 }
 
+/** Form patch applied when the user picks a different CLI client in create mode. */
+function agentSelectionPatch(installed: AvailableAgent[], name: string): Partial<FormState> {
+  const agent = installed.find((a) => a.name === name);
+  return {
+    agentName: name,
+    model: agent?.model_config.default_model ?? "",
+    mode: agent?.model_config.current_mode_id ?? "",
+    cliFlags: seedDefaultCLIFlags(agent?.permission_settings ?? {}),
+  };
+}
+
 export function CliProfileEditor({
   mode,
   profile,
@@ -111,6 +123,7 @@ export function CliProfileEditor({
   showAdvanced = false,
   allowCliPassthrough = true,
 }: CliProfileEditorProps) {
+  const { t } = useTranslation();
   const availableAgents = useAvailableAgents();
   const settingsAgents = useAppStore((s) => s.settingsAgents.items);
   const installed = useMemo(
@@ -153,26 +166,17 @@ export function CliProfileEditor({
         <CliClientPicker
           installed={installed}
           value={form.agentName}
-          onChange={(name) =>
-            patch({
-              agentName: name,
-              model: installed.find((a) => a.name === name)?.model_config.default_model ?? "",
-              mode: installed.find((a) => a.name === name)?.model_config.current_mode_id ?? "",
-              cliFlags: seedDefaultCLIFlags(
-                installed.find((a) => a.name === name)?.permission_settings ?? {},
-              ),
-            })
-          }
+          onChange={(name) => patch(agentSelectionPatch(installed, name))}
         />
       )}
 
       <div>
-        <Label htmlFor="cli-profile-name">Profile name</Label>
+        <Label htmlFor="cli-profile-name">{t("common:profileName")}</Label>
         <Input
           id="cli-profile-name"
           value={form.profileName}
           onChange={(e) => patch({ profileName: e.target.value })}
-          placeholder="default"
+          placeholder={t("common:default2")}
           className="mt-1"
         />
       </div>
@@ -230,6 +234,7 @@ function EditorFooter({
   onSave: () => void;
   onCancel?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-2 pt-2">
       {onCancel && (
@@ -240,7 +245,7 @@ function EditorFooter({
           disabled={saving}
           className="cursor-pointer"
         >
-          Cancel
+          {t("common:cancel")}
         </Button>
       )}
       <Button
@@ -264,12 +269,13 @@ function CliClientPicker({
   value: string;
   onChange: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div>
-      <Label>CLI client</Label>
+      <Label>{t("common:cliClient")}</Label>
       <Select value={value} onValueChange={onChange} disabled={installed.length === 0}>
         <SelectTrigger className="mt-1 cursor-pointer">
-          <SelectValue placeholder="Pick a CLI client" />
+          <SelectValue placeholder={t("common:pickACliClient")} />
         </SelectTrigger>
         <SelectContent>
           {installed.map((agent) => (
@@ -281,8 +287,7 @@ function CliClientPicker({
       </Select>
       {installed.length === 0 && (
         <p className="text-xs text-muted-foreground mt-1">
-          No CLI clients installed yet. Install Claude / Codex / OpenCode / Amp to enable this
-          picker.
+          {t("common:noCliClientsInstalledYetInstall")}
         </p>
       )}
     </div>
@@ -304,17 +309,14 @@ function ModelModeFields({
   onModelChange,
   onModeChange,
 }: ModelModeFieldsProps) {
+  const { t } = useTranslation();
   if (!modelConfig) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        Pick a CLI client to load its available models and modes.
-      </p>
-    );
+    return <p className="text-xs text-muted-foreground">{t("common:pickACliClientToLoad")}</p>;
   }
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
-        <Label>Model</Label>
+        <Label>{t("common:model")}</Label>
         <ModelCombobox
           value={model}
           onChange={onModelChange}
@@ -324,7 +326,7 @@ function ModelModeFields({
       </div>
       {(modelConfig.available_modes ?? []).length > 0 && (
         <div>
-          <Label>Mode</Label>
+          <Label>{t("common:mode")}</Label>
           <ModeCombobox
             value={mode}
             onChange={onModeChange}

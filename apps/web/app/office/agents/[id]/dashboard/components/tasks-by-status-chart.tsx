@@ -3,6 +3,7 @@ import { StackedBars, type StackedBarRow } from "./stacked-bars";
 import { ChartLegend } from "./run-activity-chart";
 import type { AgentTaskStatusDay } from "@/lib/api/domains/office-extended-api";
 import { formatBarLabel } from "./format-date";
+import { useTranslation } from "react-i18next";
 
 type Props = { days: AgentTaskStatusDay[] };
 
@@ -23,10 +24,11 @@ function rowsFromDays(days: AgentTaskStatusDay[]): StackedBarRow[] {
 }
 
 export function TasksByStatusChart({ days }: Props) {
+  const { t } = useTranslation();
   return (
     <Card data-testid="tasks-by-status-card">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Tasks by status</CardTitle>
+        <CardTitle className="text-sm">{t("office:tasksByStatus")}</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
         <StackedBars

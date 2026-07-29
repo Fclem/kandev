@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { ReviewPRSelector } from "@/components/review/review-pr-selector";
 import type { TaskPR } from "@/lib/types/github";
 import { PanelHeaderBar, PanelHeaderBarSplit } from "./panel-primitives";
+import { useTranslation } from "react-i18next";
 
 export type ChangesTopBarProps = {
   autoMarkOnScroll: boolean;
@@ -52,6 +53,7 @@ function ChangesTopBarLeft({
   ChangesTopBarProps,
   "autoMarkOnScroll" | "totalCount" | "reviewedCount" | "progressPercent" | "handleToggleAutoMark"
 >) {
+  const { t } = useTranslation();
   return (
     <>
       <DropdownMenu>
@@ -69,7 +71,7 @@ function ChangesTopBarLeft({
             }}
           >
             <Checkbox checked={autoMarkOnScroll} className="pointer-events-none" />
-            <span className="text-sm flex-1">Auto-mark reviewed on scroll</span>
+            <span className="text-sm flex-1">{t("task:autoMarkReviewedOnScroll")}</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -94,6 +96,7 @@ function ReviewWalkthroughRequestButton({
   handleRequestWalkthrough,
   requestWalkthroughDisabled,
 }: Pick<ChangesTopBarProps, "handleRequestWalkthrough" | "requestWalkthroughDisabled">) {
+  const { t } = useTranslation();
   if (!handleRequestWalkthrough) return null;
   const tooltip = requestWalkthroughDisabled
     ? "Loading changed files..."
@@ -110,7 +113,7 @@ function ReviewWalkthroughRequestButton({
             size="sm"
             variant="ghost"
             className="px-1.5 h-5 cursor-pointer"
-            aria-label="Walk me through these review changes"
+            aria-label={t("task:walkMeThroughTheseReviewChanges")}
             data-testid="review-request-walkthrough"
             disabled={requestWalkthroughDisabled}
             onClick={handleRequestWalkthrough}
@@ -144,6 +147,7 @@ function ChangesTopBarRight({
   | "handleRequestWalkthrough"
   | "requestWalkthroughDisabled"
 >) {
+  const { t } = useTranslation();
   return (
     <>
       <ReviewWalkthroughRequestButton
@@ -156,13 +160,13 @@ function ChangesTopBarRight({
             size="sm"
             variant="ghost"
             className="px-1.5 h-5 cursor-pointer"
-            aria-label="Expand review"
+            aria-label={t("task:expandReview")}
             onClick={() => window.dispatchEvent(new CustomEvent("open-review-dialog"))}
           >
             <IconArrowsMaximize className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Expand review</TooltipContent>
+        <TooltipContent>{t("task:expandReview")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -175,7 +179,7 @@ function ChangesTopBarRight({
             <IconTextWrap className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Toggle word wrap</TooltipContent>
+        <TooltipContent>{t("task:toggleWordWrap")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>

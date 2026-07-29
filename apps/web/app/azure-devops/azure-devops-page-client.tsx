@@ -41,6 +41,7 @@ import {
 import { useAzureDevOpsSavedViews } from "@/hooks/domains/azure-devops/use-azure-devops-saved-views";
 import type { Repository, Workflow, WorkflowStep } from "@/lib/types/http";
 import type { AzureDevOpsPullRequest, AzureDevOpsSavedView } from "@/lib/types/azure-devops";
+import { useTranslation } from "react-i18next";
 
 const PAGE_SIZE = 25;
 const WORK_ITEMS_MODE: AzureDevOpsBrowseMode = "work-items";
@@ -66,6 +67,7 @@ type PageProps = {
 };
 
 function NotConfigured({ workspaceId }: { workspaceId?: string }) {
+  const { t } = useTranslation();
   const href = workspaceId
     ? `/settings/workspace/${encodeURIComponent(workspaceId)}/integrations/azure-devops`
     : "/settings/integrations/azure-devops";
@@ -75,7 +77,7 @@ function NotConfigured({ workspaceId }: { workspaceId?: string }) {
         <AlertDescription>
           Azure DevOps is not connected for this workspace.{" "}
           <Link href={href} className="cursor-pointer font-medium underline">
-            Configure Azure DevOps
+            {t("azureDevops:configureAzureDevops")}
           </Link>
         </AlertDescription>
       </Alert>
@@ -114,6 +116,7 @@ function PullRequestPagination({
   loading: boolean;
   onPage: (skip: number) => void;
 }) {
+  const { t } = useTranslation();
   if (skip === 0 && count < PAGE_SIZE) return null;
   return (
     <div className="flex items-center justify-between border-t px-4 py-2">
@@ -128,7 +131,7 @@ function PullRequestPagination({
           onClick={() => onPage(Math.max(0, skip - PAGE_SIZE))}
           disabled={loading || skip === 0}
           className="cursor-pointer"
-          aria-label="Previous pull request page"
+          aria-label={t("azureDevops:previousPullRequestPage")}
         >
           <IconChevronLeft className="h-4 w-4" />
         </Button>
@@ -139,7 +142,7 @@ function PullRequestPagination({
           onClick={() => onPage(skip + PAGE_SIZE)}
           disabled={loading || count < PAGE_SIZE}
           className="cursor-pointer"
-          aria-label="Next pull request page"
+          aria-label={t("azureDevops:nextPullRequestPage")}
         >
           <IconChevronRight className="h-4 w-4" />
         </Button>
@@ -484,11 +487,12 @@ function MobileFilters({
   state: PageState;
   filterProps: Omit<ComponentProps<typeof AzureDevOpsFilters>, "idSuffix">;
 }) {
+  const { t } = useTranslation();
   return (
     <Sheet open={state.mobileFiltersOpen} onOpenChange={state.setMobileFiltersOpen}>
       <SheetContent side="left" className="w-80 max-w-[90vw] overflow-y-auto">
         <SheetHeader className="mb-5 text-left">
-          <SheetTitle>Azure DevOps filters</SheetTitle>
+          <SheetTitle>{t("azureDevops:azureDevopsFilters")}</SheetTitle>
         </SheetHeader>
         <AzureDevOpsFilters {...filterProps} idSuffix="-mobile" />
       </SheetContent>
@@ -497,6 +501,7 @@ function MobileFilters({
 }
 
 function AzureDevOpsPageContent({ workspaceId, workflows, steps, repositories }: PageProps) {
+  const { t } = useTranslation();
   const state = useAzureDevOpsPageState(workspaceId);
 
   if (state.connection.loading) return null;
@@ -527,7 +532,7 @@ function AzureDevOpsPageContent({ workspaceId, workflows, steps, repositories }:
             size="icon-lg"
             onClick={() => state.setMobileFiltersOpen(true)}
             className="cursor-pointer md:hidden"
-            aria-label="Open Azure DevOps filters"
+            aria-label={t("azureDevops:openAzureDevopsFilters")}
             data-testid="azure-devops-mobile-filter-button"
           >
             <IconAdjustments className="h-4 w-4" />

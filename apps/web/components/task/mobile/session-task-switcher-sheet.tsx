@@ -28,6 +28,7 @@ import { useSidebarTaskLinking } from "../task-session-sidebar-task-linking";
 import { useSheetData, useSheetActions } from "./session-task-switcher-sheet-hooks";
 import { useQuickChatLauncher } from "@/hooks/use-quick-chat-launcher";
 import { useMobileTaskRename } from "./use-mobile-task-rename";
+import { useTranslation } from "react-i18next";
 
 type SessionTaskSwitcherSheetProps = {
   open: boolean;
@@ -165,13 +166,14 @@ function TaskSwitcherSurfaceHeader({
   onNewTask: () => void;
   presentation: "sheet" | "drawer";
 }) {
+  const { t } = useTranslation();
   const content = (
     <>
       <div className="flex items-center justify-between">
         {presentation === "drawer" ? (
-          <DrawerTitle className="text-base">Tasks</DrawerTitle>
+          <DrawerTitle className="text-base">{t("common:tasks")}</DrawerTitle>
         ) : (
-          <SheetTitle className="text-base">Tasks</SheetTitle>
+          <SheetTitle className="text-base">{t("common:tasks")}</SheetTitle>
         )}
         <div className="flex items-center gap-2">
           {workspaceId && (

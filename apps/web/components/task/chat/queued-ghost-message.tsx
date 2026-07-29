@@ -45,6 +45,7 @@ import {
   survivingEntityReferences,
 } from "@/lib/entity-references/message-references";
 import { buildEntityReferenceMarkdownComponents } from "@/components/task/chat/messages/entity-reference-chip";
+import { useTranslation } from "react-i18next";
 
 type QueuedAttachment = NonNullable<QueuedMessage["attachments"]>[number];
 
@@ -199,6 +200,7 @@ function EditView({
   onCancel,
   textareaRef,
 }: EditViewProps) {
+  const { t } = useTranslation();
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -216,7 +218,7 @@ function EditView({
         data-testid="queue-edit-textarea"
         value={value}
         disabled={saving}
-        placeholder="Enter message content..."
+        placeholder={t("task:enterMessageContent")}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         className={cn(
@@ -241,10 +243,10 @@ function EditView({
           disabled={saving}
           className="h-7 cursor-pointer"
         >
-          Cancel
+          {t("common:cancel")}
         </Button>
         <span className="ml-auto text-xs text-muted-foreground">
-          Press Esc to cancel, Cmd+Enter to save
+          {t("task:pressEscToCancelCmdEnter")}
         </span>
       </div>
     </div>
@@ -320,55 +322,84 @@ function DisplayView({
         )}
         <AttachmentRow attachments={attachments} interactive={true} />
       </div>
-      <div
-        className={cn(
-          "flex items-center gap-0.5 flex-shrink-0 transition-opacity",
-          // Hover-reveal on devices that support hover (desktop); always
-          // visible on touch surfaces where there's no hover affordance.
-          "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
-          "[@media(hover:none)]:opacity-100",
-        )}
-      >
-        {canExpand && (
+      <QueuedRowActions
+        canExpand={canExpand}
+        expanded={expanded}
+        onToggleExpand={() => setExpanded((v) => !v)}
+        canEdit={canEdit}
+        onStartEdit={onStartEdit}
+        onRemove={onRemove}
+      />
+    </div>
+  );
+}
+
+/** Hover-revealed expand/edit/remove controls for a queued ghost row. */
+function QueuedRowActions({
+  canExpand,
+  expanded,
+  onToggleExpand,
+  canEdit,
+  onStartEdit,
+  onRemove,
+}: {
+  canExpand: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  canEdit: boolean;
+  onStartEdit: () => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-0.5 flex-shrink-0 transition-opacity",
+        // Hover-reveal on devices that support hover (desktop); always
+        // visible on touch surfaces where there's no hover affordance.
+        "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
+        "[@media(hover:none)]:opacity-100",
+      )}
+    >
+      {canExpand && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 cursor-pointer p-0 text-muted-foreground hover:text-foreground"
+          onClick={onToggleExpand}
+          title={expanded ? "Collapse message" : "Expand message"}
+          data-testid="queue-entry-expand"
+          aria-expanded={expanded}
+        >
+          {expanded ? (
+            <IconChevronUp className="h-3.5 w-3.5" />
+          ) : (
+            <IconChevronDown className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      )}
+      {canEdit && (
+        <>
           <Button
             variant="ghost"
             size="sm"
             className="h-6 w-6 cursor-pointer p-0 text-muted-foreground hover:text-foreground"
-            onClick={() => setExpanded((v) => !v)}
-            title={expanded ? "Collapse message" : "Expand message"}
-            data-testid="queue-entry-expand"
-            aria-expanded={expanded}
+            onClick={onStartEdit}
+            title={t("task:editQueuedMessage")}
           >
-            {expanded ? (
-              <IconChevronUp className="h-3.5 w-3.5" />
-            ) : (
-              <IconChevronDown className="h-3.5 w-3.5" />
-            )}
+            <IconEdit className="h-3.5 w-3.5" />
           </Button>
-        )}
-        {canEdit && (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 cursor-pointer p-0 text-muted-foreground hover:text-foreground"
-              onClick={onStartEdit}
-              title="Edit queued message"
-            >
-              <IconEdit className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 cursor-pointer p-0 text-muted-foreground hover:text-foreground"
-              onClick={onRemove}
-              title="Remove queued message"
-            >
-              <IconX className="h-4 w-4" />
-            </Button>
-          </>
-        )}
-      </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 cursor-pointer p-0 text-muted-foreground hover:text-foreground"
+            onClick={onRemove}
+            title={t("task:removeQueuedMessage")}
+          >
+            <IconX className="h-4 w-4" />
+          </Button>
+        </>
+      )}
     </div>
   );
 }
@@ -390,6 +421,7 @@ type QueuedGhostMessageProps = {
 
 export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGhostMessageProps>(
   function QueuedGhostMessage({ entry, index, canEdit, onSave, onRemove, onEditComplete }, ref) {
+    const { t } = useTranslation();
     const [editing, setEditing] = useState(false);
     const [value, setValue] = useState(entry.content);
     const [saving, setSaving] = useState(false);
@@ -443,9 +475,9 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
         // stuck in a textarea with no signal that the save failed (drain race
         // or transient network error).
         if (err instanceof QueueEntryNotFoundError) {
-          toast.error("Message already sent — agent picked it up before your edit landed.");
+          toast.error(t("task:messageAlreadySentAgentPickedIt"));
         } else {
-          toast.error("Failed to save edit. Please try again.");
+          toast.error(t("task:failedToSaveEditPleaseTry"));
         }
         setEditing(false);
         onEditComplete?.();

@@ -2,6 +2,7 @@
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { ProviderUsage } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   usage: ProviderUsage;
@@ -59,8 +60,11 @@ function WindowBar({ label, pct, resetAt }: { label: string; pct: number; resetA
 }
 
 export function UtilizationBars({ usage }: Props) {
+  const { t } = useTranslation();
   if (!usage || usage.windows.length === 0) {
-    return <p className="text-xs text-muted-foreground">No utilization data available.</p>;
+    return (
+      <p className="text-xs text-muted-foreground">{t("office:noUtilizationDataAvailable")}</p>
+    );
   }
 
   return (

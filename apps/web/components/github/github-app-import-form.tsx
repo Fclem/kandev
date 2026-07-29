@@ -24,6 +24,7 @@ import {
   type GitHubAppImportValues,
 } from "./github-app-import-fields";
 import { GitHubAppVisibilityField } from "./github-app-visibility-field";
+import { useTranslation } from "react-i18next";
 
 type RegistrationHook = ReturnType<typeof useGitHubAppRegistrations>;
 
@@ -136,13 +137,13 @@ function PrepareImportForm(props: {
   onPublicBaseUrl: (value: string) => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <form onSubmit={props.onSubmit} className="space-y-3">
       <div className="space-y-1">
-        <h3 className="text-sm font-medium">Add an existing GitHub App</h3>
+        <h3 className="text-sm font-medium">{t("github:addAnExistingGithubApp")}</h3>
         <p className="text-xs leading-5 text-muted-foreground">
-          Kandev first reserves exact callback and webhook URLs, then guides you through GitHub's
-          App settings. Existing workspace access is unchanged until you install the imported App.
+          {t("github:kandevFirstReservesExactCallbackAnd")}
         </p>
       </div>
       <Field label="Public Kandev URL" error={props.error}>
@@ -175,6 +176,7 @@ type PreparedImportProps = {
 };
 
 function PreparedImportForm(props: PreparedImportProps) {
+  const { t } = useTranslation();
   return (
     <form onSubmit={props.onSubmit} className="space-y-5">
       <GitHubAppImportIdentityFields
@@ -200,7 +202,7 @@ function PreparedImportForm(props: PreparedImportProps) {
           className="h-11 cursor-pointer"
           onClick={props.onStartOver}
         >
-          Start over
+          {t("github:startOver")}
         </Button>
       </div>
     </form>

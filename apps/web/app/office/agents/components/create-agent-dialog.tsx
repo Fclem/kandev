@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useAppStore } from "@/components/state-provider";
 import { createAgentProfile } from "@/lib/api/domains/office-api";
 import type { AgentRole, AgentProfile } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 type CreateAgentDialogProps = {
   open: boolean;
@@ -35,19 +36,18 @@ const INITIAL_STATE: FormState = {
 };
 
 function NameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   return (
     <div>
-      <Label>Name</Label>
+      <Label>{t("office:name")}</Label>
       <Input
-        placeholder="e.g. Frontend Worker"
+        placeholder={t("office:eGFrontendWorker")}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1"
         autoFocus
       />
-      <p className="text-xs text-muted-foreground mt-1">
-        A unique name for this agent (e.g. CEO, Frontend Worker)
-      </p>
+      <p className="text-xs text-muted-foreground mt-1">{t("office:aUniqueNameForThisAgent")}</p>
     </div>
   );
 }
@@ -65,10 +65,11 @@ function RoleAndReports({
   roles: Array<{ id: string; label: string }>;
   onChange: (patch: Partial<FormState>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex gap-4">
       <div className="flex-1">
-        <Label>Role</Label>
+        <Label>{t("office:role")}</Label>
         <Select value={role} onValueChange={(v) => onChange({ role: v as AgentRole })}>
           <SelectTrigger className="mt-1 cursor-pointer">
             <SelectValue />
@@ -82,21 +83,21 @@ function RoleAndReports({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground mt-1">
-          CEO manages other agents, workers execute tasks
+          {t("office:ceoManagesOtherAgentsWorkersExecute")}
         </p>
       </div>
       <div className="flex-1">
-        <Label>Reports to</Label>
+        <Label>{t("office:reportsTo")}</Label>
         <Select
           value={reportsTo || "__none__"}
           onValueChange={(v) => onChange({ reportsTo: v === "__none__" ? "" : v })}
         >
           <SelectTrigger className="mt-1 cursor-pointer">
-            <SelectValue placeholder="None (top-level)" />
+            <SelectValue placeholder={t("office:noneTopLevel")} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__none__" className="cursor-pointer">
-              None
+              {t("common:none")}
             </SelectItem>
             {agents.map((a) => (
               <SelectItem key={a.id} value={a.id} className="cursor-pointer">
@@ -105,7 +106,7 @@ function RoleAndReports({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground mt-1">Which agent manages this one</p>
+        <p className="text-xs text-muted-foreground mt-1">{t("office:whichAgentManagesThisOne")}</p>
       </div>
     </div>
   );
@@ -120,10 +121,11 @@ function BudgetAndConcurrency({
   maxConcurrent: number;
   onChange: (patch: Partial<FormState>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex gap-4">
       <div className="flex-1">
-        <Label>Monthly budget ($)</Label>
+        <Label>{t("office:monthlyBudget")}</Label>
         <Input
           type="number"
           min={0}
@@ -132,11 +134,11 @@ function BudgetAndConcurrency({
           className="mt-1"
         />
         <p className="text-xs text-muted-foreground mt-1">
-          Monthly spending limit ($0 = unlimited)
+          {t("office:monthlySpendingLimit0Unlimited")}
         </p>
       </div>
       <div className="flex-1">
-        <Label>Max concurrent</Label>
+        <Label>{t("office:maxConcurrent")}</Label>
         <Input
           type="number"
           min={1}
@@ -145,9 +147,7 @@ function BudgetAndConcurrency({
           onChange={(e) => onChange({ maxConcurrent: Number(e.target.value) })}
           className="mt-1"
         />
-        <p className="text-xs text-muted-foreground mt-1">
-          How many tasks this agent can run at once
-        </p>
+        <p className="text-xs text-muted-foreground mt-1">{t("office:howManyTasksThisAgentCan")}</p>
       </div>
     </div>
   );
@@ -162,19 +162,20 @@ function ExecutorPreferenceField({
   executorTypes: Array<{ id: string; label: string }>;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div>
-      <Label>Executor preference</Label>
+      <Label>{t("office:executorPreference")}</Label>
       <Select
         value={value || "__inherit__"}
         onValueChange={(v) => onChange(v === "__inherit__" ? "" : v)}
       >
         <SelectTrigger className="mt-1 cursor-pointer">
-          <SelectValue placeholder="Inherit from project/workspace" />
+          <SelectValue placeholder={t("office:inheritFromProjectWorkspace")} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="__inherit__" className="cursor-pointer">
-            Inherit
+            {t("office:inherit")}
           </SelectItem>
           {executorTypes.map((et) => (
             <SelectItem key={et.id} value={et.id} className="cursor-pointer">
@@ -184,7 +185,7 @@ function ExecutorPreferenceField({
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground mt-1">
-        How agent sessions run (inherit uses project/workspace default)
+        {t("office:howAgentSessionsRunInheritUses")}
       </p>
     </div>
   );
@@ -207,6 +208,7 @@ const FALLBACK_EXECUTOR_TYPES = [
 ];
 
 export function CreateAgentDialog({ open, onOpenChange }: CreateAgentDialogProps) {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const agents = useAppStore((s) => s.office.agentProfiles);
   const meta = useAppStore((s) => s.office.meta);
@@ -255,7 +257,7 @@ export function CreateAgentDialog({ open, onOpenChange }: CreateAgentDialogProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create Agent</DialogTitle>
+          <DialogTitle>{t("office:createAgent")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <NameField value={state.name} onChange={(v) => handleChange({ name: v })} />
@@ -279,7 +281,7 @@ export function CreateAgentDialog({ open, onOpenChange }: CreateAgentDialogProps
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button
             onClick={handleCreate}

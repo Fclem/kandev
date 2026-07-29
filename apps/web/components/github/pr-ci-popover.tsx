@@ -30,6 +30,7 @@ import type { CheckRun, TaskPR } from "@/lib/types/github";
 import { PRCIAutomationControls } from "./pr-ci-automation-controls";
 import { PRMergeButton } from "./pr-merge-button";
 import { PRMergeabilityRow } from "./pr-mergeability-row";
+import { useTranslation } from "react-i18next";
 
 type CountsView = {
   passed: number;
@@ -121,6 +122,7 @@ function PRCIPopoverHeader({
   pr: TaskPR;
   onOpenDetailPanel?: () => void;
 }) {
+  const { t } = useTranslation();
   const title = `#${pr.pr_number} ${pr.pr_title || "Untitled PR"}`;
   return (
     <div
@@ -136,7 +138,7 @@ function PRCIPopoverHeader({
         target="_blank"
         rel="noopener noreferrer"
         className="cursor-pointer text-muted-foreground hover:text-foreground"
-        aria-label="View pull request on GitHub"
+        aria-label={t("github:viewPullRequestOnGithub")}
         onClick={(e) => e.stopPropagation()}
       >
         <IconGitPullRequest className="h-3.5 w-3.5" />
@@ -309,6 +311,7 @@ function PRCheckGroup({
  * picture: how close are we to "all green".
  */
 function PRChecksProgressBar({ counts }: { counts: CountsView }) {
+  const { t } = useTranslation();
   const total = counts.passed + counts.inProgress + counts.failed;
   if (total === 0) return null;
   const pct = (n: number) => (n / total) * 100;
@@ -319,7 +322,7 @@ function PRChecksProgressBar({ counts }: { counts: CountsView }) {
   return (
     <div data-testid="pr-checks-progress" className="flex flex-col gap-1.5 px-1 pt-1 pb-1.5">
       <div className="flex items-center justify-between text-xs">
-        <span className="font-medium text-foreground">Pass rate</span>
+        <span className="font-medium text-foreground">{t("github:passRate")}</span>
         <span className="text-muted-foreground tabular-nums">
           {counts.passed}/{total} ({completePct}%)
         </span>
@@ -362,6 +365,7 @@ function PRChecksSection({
   isFetching: boolean;
   onAddAsContext: ((message: string) => void) | null;
 }) {
+  const { t } = useTranslation();
   const aggregateCounts = useMemo(() => deriveAggregateCounts(pr), [pr]);
 
   const { precise, byBucket } = useMemo(() => {
@@ -393,7 +397,7 @@ function PRChecksSection({
     return (
       <div data-testid="pr-checks-section" className="flex flex-col">
         <div data-testid="pr-checks-empty" className="px-1 py-2 text-xs text-muted-foreground">
-          No checks have started
+          {t("github:noChecksHaveStarted")}
         </div>
       </div>
     );
@@ -519,18 +523,19 @@ function formatElapsedShort(seconds: number): string {
 }
 
 function ReconnectGitHubBlock() {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="pr-popover-auth-error"
       className="flex flex-col items-start gap-1 px-1 py-2 text-xs"
     >
-      <span className="text-foreground">GitHub authentication lost.</span>
+      <span className="text-foreground">{t("github:githubAuthenticationLost")}</span>
       <a
         data-testid="pr-popover-reconnect-link"
         href="/settings#github"
         className="cursor-pointer text-primary hover:underline"
       >
-        Reconnect GitHub
+        {t("github:reconnectGithub")}
       </a>
     </div>
   );

@@ -20,6 +20,7 @@ import {
   pullRequestPayload,
   type TaskPullRequestLinkTarget,
 } from "./task-github-pr-url";
+import { useTranslation } from "react-i18next";
 
 type TaskGitHubPRDialogProps = {
   workspaceId: string | null;
@@ -29,22 +30,24 @@ type TaskGitHubPRDialogProps = {
   repositories: Repository[];
 };
 
-export function TaskGitHubPRDialog({
-  workspaceId,
+/** Owns the link-PR field state, reset-on-open, and the create-PR submit flow. */
+function useLinkPullRequestForm({
   open,
-  onOpenChange,
-  task,
-  repositories,
-}: TaskGitHubPRDialogProps) {
+  workspaceId,
+  taskId,
+  githubRepos,
+  onLinked,
+}: {
+  open: boolean;
+  workspaceId: string | null;
+  taskId: string;
+  githubRepos: ReturnType<typeof githubReposForTask>;
+  onLinked: () => void;
+}) {
   const { toast } = useToast();
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const githubRepos = useMemo(() => githubReposForTask(task, repositories), [task, repositories]);
-  const inferredRepo = githubRepos.length === 1 ? githubRepos[0] : null;
-  const placeholder = inferredRepo
-    ? "#1471 or github.com/owner/repo/pull/1471"
-    : "github.com/owner/repo/pull/1471";
 
   useEffect(() => {
     if (open) {
@@ -68,12 +71,12 @@ export function TaskGitHubPRDialog({
       const payload = pullRequestPayload(input, githubRepos);
       await createTaskPR({
         workspace_id: workspaceId,
-        task_id: task.id,
+        task_id: taskId,
         pr_url: payload.pr_url,
         ...(payload.repository_id ? { repository_id: payload.repository_id } : {}),
       });
       toast({ description: "GitHub pull request linked", variant: "success" });
-      onOpenChange(false);
+      onLinked();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to link GitHub pull request.");
     } finally {
@@ -81,11 +84,35 @@ export function TaskGitHubPRDialog({
     }
   };
 
+  return { input, setInput, submitting, error, submit };
+}
+
+export function TaskGitHubPRDialog({
+  workspaceId,
+  open,
+  onOpenChange,
+  task,
+  repositories,
+}: TaskGitHubPRDialogProps) {
+  const { t } = useTranslation();
+  const githubRepos = useMemo(() => githubReposForTask(task, repositories), [task, repositories]);
+  const inferredRepo = githubRepos.length === 1 ? githubRepos[0] : null;
+  const placeholder = inferredRepo
+    ? "#1471 or github.com/owner/repo/pull/1471"
+    : "github.com/owner/repo/pull/1471";
+  const { input, setInput, submitting, error, submit } = useLinkPullRequestForm({
+    open,
+    workspaceId,
+    taskId: task.id,
+    githubRepos,
+    onLinked: () => onOpenChange(false),
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Link GitHub pull request</DialogTitle>
+          <DialogTitle>{t("task:linkGithubPullRequest")}</DialogTitle>
           <DialogDescription>
             {inferredRepo
               ? `Use a full pull request URL or number for ${inferredRepo.owner}/${inferredRepo.repo}.`
@@ -93,7 +120,7 @@ export function TaskGitHubPRDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="task-github-pr-input">Pull request</Label>
+          <Label htmlFor="task-github-pr-input">{t("task:pullRequest")}</Label>
           <Input
             id="task-github-pr-input"
             data-testid="task-github-pr-input"
@@ -116,7 +143,7 @@ export function TaskGitHubPRDialog({
             onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button
             type="button"

@@ -23,6 +23,7 @@ import type { LaunchPayload, TaskPreset } from "./quick-task-launcher";
 import { PRStatusBadges } from "./pr-status-badges";
 import { prStatusKey, usePRStatuses } from "./use-pr-statuses";
 import { PRRowTaskIndicator } from "./pr-row-task-indicator";
+import { useTranslation } from "react-i18next";
 
 type PRListProps = {
   workspaceId: string | null;
@@ -160,6 +161,7 @@ function PRListBody({
   onStartTask,
   prKeyToTasks,
 }: PRListProps) {
+  const { t } = useTranslation();
   const statuses = usePRStatuses(workspaceId, items);
   if (loading) {
     return (
@@ -174,7 +176,7 @@ function PRListBody({
   if (items.length === 0) {
     return (
       <div className="text-center py-10 text-muted-foreground text-sm">
-        No pull requests match this filter.
+        {t("github:noPullRequestsMatchThisFilter")}
       </div>
     );
   }

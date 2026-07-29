@@ -11,6 +11,7 @@ import type {
   TierMap,
 } from "@/lib/state/slices/office/types";
 import { providerLabel } from "./provider-order-editor";
+import { useTranslation } from "react-i18next";
 
 const UNMAPPED = "__unmapped__";
 const TIERS: Array<{ key: keyof TierMap; label: Tier }> = [
@@ -29,6 +30,7 @@ type Props = {
 };
 
 export function ProviderTierMapping(props: Props) {
+  const { t } = useTranslation();
   const fieldsetId = useId();
   const available = profilesForProvider(props.executionProfiles, props.providerId);
   const selectedIDs = props.profile.execution_profile_ids ?? props.profile.tier_profile_ids ?? {};
@@ -55,7 +57,7 @@ export function ProviderTierMapping(props: Props) {
                 </Label>
                 {label === props.defaultTier && value === UNMAPPED && (
                   <Badge variant="destructive" className="text-[10px]">
-                    Required
+                    {t("office:required")}
                   </Badge>
                 )}
               </div>
@@ -69,10 +71,10 @@ export function ProviderTierMapping(props: Props) {
                   className="w-full cursor-pointer"
                   data-testid={`tier-profile-${props.providerId}-${label}`}
                 >
-                  <SelectValue placeholder="Select execution profile" />
+                  <SelectValue placeholder={t("office:selectExecutionProfile")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={UNMAPPED}>Not configured</SelectItem>
+                  <SelectItem value={UNMAPPED}>{t("office:notConfigured")}</SelectItem>
                   {available.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
                       {item.name} · {item.model}
@@ -87,7 +89,7 @@ export function ProviderTierMapping(props: Props) {
       </div>
       {available.length === 0 && (
         <p className="text-xs text-destructive">
-          No active execution profiles are available for this provider.
+          {t("office:noActiveExecutionProfilesAreAvailable")}
         </p>
       )}
     </div>

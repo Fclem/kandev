@@ -23,6 +23,7 @@ import {
   type TasksListGroup,
   type TasksListSort,
 } from "@/lib/tasks/tasks-list-options";
+import { useTranslation } from "react-i18next";
 
 export type TasksListViewProps = {
   total: number;
@@ -216,6 +217,7 @@ function TaskRows({
   onDelete: (taskId: string, opts?: { cascade?: boolean }) => Promise<void>;
   onRowClick: (task: Task) => void;
 }) {
+  const { t } = useTranslation();
   const workflowMap = useMemo(() => new Map(workflows.map((w) => [w.id, w.name])), [workflows]);
   const repoMap = useMemo(() => new Map(repositories.map((r) => [r.id, r.name])), [repositories]);
   const sections = useMemo(
@@ -226,14 +228,14 @@ function TaskRows({
   if (isLoading) {
     return (
       <div className="rounded-lg border border-border p-8 text-center text-sm text-muted-foreground">
-        Loading tasks...
+        {t("common:loadingTasks")}
       </div>
     );
   }
   if (tasks.length === 0) {
     return (
       <div className="rounded-lg border border-border p-8 text-center text-sm text-muted-foreground">
-        No tasks found.
+        {t("common:noTasksFound")}
       </div>
     );
   }
@@ -497,6 +499,7 @@ function UnarchiveRowAction({
   taskId: string;
   onUnarchive: (taskId: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [isPending, setIsPending] = useState(false);
   return (
     <Tooltip>
@@ -522,11 +525,11 @@ function UnarchiveRowAction({
             ) : (
               <IconArchiveOff className="h-4 w-4 text-muted-foreground" />
             )}
-            <span className="sr-only">Unarchive task</span>
+            <span className="sr-only">{t("common:unarchiveTask")}</span>
           </Button>
         </span>
       </TooltipTrigger>
-      <TooltipContent>Unarchive</TooltipContent>
+      <TooltipContent>{t("common:unarchive")}</TooltipContent>
     </Tooltip>
   );
 }
@@ -554,6 +557,7 @@ function TaskRowActions({
   onUnarchive: (taskId: string) => Promise<void>;
   onDelete: (taskId: string, opts?: { cascade?: boolean }) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
       {!isArchived && (
@@ -566,10 +570,10 @@ function TaskRowActions({
               onClick={() => onArchiveOpenChange(true)}
             >
               <IconArchive className="h-4 w-4 text-muted-foreground" />
-              <span className="sr-only">Archive task</span>
+              <span className="sr-only">{t("common:archiveTask")}</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Archive</TooltipContent>
+          <TooltipContent>{t("common:archive")}</TooltipContent>
         </Tooltip>
       )}
       {isArchived && <UnarchiveRowAction taskId={task.id} onUnarchive={onUnarchive} />}
@@ -588,11 +592,11 @@ function TaskRowActions({
               ) : (
                 <IconTrash className="h-4 w-4 text-destructive" />
               )}
-              <span className="sr-only">Delete task</span>
+              <span className="sr-only">{t("common:deleteTask")}</span>
             </Button>
           </span>
         </TooltipTrigger>
-        <TooltipContent>Delete</TooltipContent>
+        <TooltipContent>{t("common:delete")}</TooltipContent>
       </Tooltip>
       <TaskDeleteConfirmDialog
         open={showDeleteConfirm}

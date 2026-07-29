@@ -17,6 +17,7 @@ import {
   USE_AGENT_TIER,
   WAKE_REASONS,
 } from "../../../workspace/routing/components/wake-reason-info";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   overrides: AgentRoutingOverrides;
@@ -29,6 +30,7 @@ type Props = {
 // the workspace policy. When expanded, the user can flip a switch to
 // override and pick a tier (or "use agent's normal tier") per reason.
 export function AgentWakeReasonOverrides({ overrides, setOverrides, workspaceConfig }: Props) {
+  const { t } = useTranslation();
   const isOverriding = overrides.tier_per_reason_source === "override";
   const [open, setOpen] = useState(isOverriding);
   const wsPolicy = workspaceConfig?.tier_per_reason ?? {};
@@ -65,7 +67,7 @@ export function AgentWakeReasonOverrides({ overrides, setOverrides, workspaceCon
           className="flex w-full items-center justify-between p-3 cursor-pointer hover:bg-muted/50"
         >
           <div className="text-left space-y-0.5">
-            <p className="text-sm font-medium">Override wake-reason tiers</p>
+            <p className="text-sm font-medium">{t("office:overrideWakeReasonTiers")}</p>
             <InheritedSummary wsPolicy={wsPolicy} overriding={isOverriding} />
           </div>
           <IconChevronDown
@@ -91,16 +93,15 @@ export function AgentWakeReasonOverrides({ overrides, setOverrides, workspaceCon
 }
 
 function ToggleHeader({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-sm">Override workspace policy for this agent</span>
+        <span className="text-sm">{t("office:overrideWorkspacePolicyForThisAgent")}</span>
         <Switch checked={checked} onCheckedChange={onChange} className="cursor-pointer" />
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">
-        This is rare. Override only if this agent specifically needs different behaviour for its
-        background work — for example, a security-critical agent that must use Frontier even for
-        routine checks. Most agents should inherit the workspace policy.
+        {t("office:thisIsRareOverrideOnlyIf")}
       </p>
     </div>
   );
@@ -113,12 +114,9 @@ function InheritedSummary({
   wsPolicy: TierPerReason;
   overriding: boolean;
 }) {
+  const { t } = useTranslation();
   if (overriding) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        Using this agent&apos;s wake-reason overrides.
-      </p>
-    );
+    return <p className="text-xs text-muted-foreground">{t("office:usingThisAgentSWakeReason")}</p>;
   }
   const parts = WAKE_REASONS.map((r) => {
     const t = wsPolicy[r.id];
@@ -128,7 +126,7 @@ function InheritedSummary({
   if (parts.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        Inherits workspace policy (no wake-reason tiers set yet).
+        {t("office:inheritsWorkspacePolicyNoWakeReason")}
       </p>
     );
   }
@@ -151,6 +149,7 @@ type OverrideTableProps = {
 };
 
 function OverrideTable({ wsPolicy, agentMap, workspaceConfig, onChange }: OverrideTableProps) {
+  const { t } = useTranslation();
   return (
     <div className="divide-y divide-border">
       {WAKE_REASONS.map((row) => {
@@ -165,11 +164,11 @@ function OverrideTable({ wsPolicy, agentMap, workspaceConfig, onChange }: Overri
                 onValueChange={(v) => onChange(row.id, v as Tier | typeof USE_AGENT_TIER)}
               >
                 <SelectTrigger className="w-[220px] cursor-pointer">
-                  <SelectValue placeholder="Use agent's normal tier" />
+                  <SelectValue placeholder={t("office:useAgentSNormalTier")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={USE_AGENT_TIER} className="cursor-pointer">
-                    Use agent&apos;s normal tier
+                    {t("office:useAgentSNormalTier")}
                   </SelectItem>
                   {TIER_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">

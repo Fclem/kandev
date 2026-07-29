@@ -20,6 +20,7 @@ import {
   ClarificationOptions,
   ClarificationStepper,
 } from "./clarification-overlay-parts";
+import { useTranslation } from "react-i18next";
 
 type ClarificationInputOverlayProps = {
   messages: readonly Message[] | null | undefined;
@@ -464,6 +465,7 @@ function ClarificationHeaderActions({
   onSubmit: () => void;
   onSkip: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2">
       {total > 1 && (
@@ -507,7 +509,7 @@ function ClarificationHeaderActions({
             disabled={isSubmitting}
             className="text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-50"
             data-testid="clarification-skip"
-            aria-label="Skip all questions"
+            aria-label={t("task:skipAllQuestions")}
           >
             <IconX className="h-4 w-4" />
           </button>

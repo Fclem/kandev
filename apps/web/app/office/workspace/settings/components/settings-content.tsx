@@ -13,6 +13,7 @@ import type { WorkspaceState } from "@/lib/state/slices/workspace/types";
 import { ConfigSection } from "./config-section";
 import { DangerZoneSection } from "./danger-zone-section";
 import { GitSection } from "./git-section";
+import { useTranslation } from "react-i18next";
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
@@ -76,6 +77,7 @@ function AppearanceSection({
   onLogoChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSave: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <SettingCard>
       <div className="flex items-center gap-4">
@@ -83,7 +85,7 @@ function AppearanceSection({
           {logoPreview ? (
             <Image
               src={logoPreview}
-              alt="Logo"
+              alt={t("office:logo")}
               width={56}
               height={56}
               className="h-full w-full object-cover"
@@ -94,7 +96,7 @@ function AppearanceSection({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-muted-foreground mb-2">Logo</p>
+          <p className="text-sm text-muted-foreground mb-2">{t("office:logo")}</p>
           <Button
             variant="outline"
             size="sm"
@@ -114,20 +116,20 @@ function AppearanceSection({
         </div>
       </div>
       <div>
-        <label className="text-sm text-muted-foreground">Name</label>
+        <label className="text-sm text-muted-foreground">{t("office:name")}</label>
         <Input
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
-          placeholder="Workspace name"
+          placeholder={t("office:workspaceName")}
           className="mt-1"
         />
       </div>
       <div>
-        <label className="text-sm text-muted-foreground">Description</label>
+        <label className="text-sm text-muted-foreground">{t("office:description")}</label>
         <Input
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
-          placeholder="Optional description"
+          placeholder={t("office:optionalDescription")}
           className="mt-1"
         />
       </div>
@@ -209,14 +211,13 @@ function RecoverySection({
   onLookbackChange: (v: number) => void;
   onSave: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <SettingCard>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm">Recovery lookback window</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            How far back to look for unstarted tasks during recovery sweeps
-          </p>
+          <p className="text-sm">{t("office:recoveryLookbackWindow")}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("office:howFarBackToLookFor")}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Input
@@ -230,7 +231,7 @@ function RecoverySection({
             }}
             className="w-20 text-right"
           />
-          <span className="text-sm text-muted-foreground">hours</span>
+          <span className="text-sm text-muted-foreground">{t("office:hours")}</span>
         </div>
       </div>
       {dirty && (
@@ -248,6 +249,7 @@ function RecoverySection({
 type Workspace = WorkspaceState["items"][number];
 
 function useRecoveryState(activeWorkspace: Workspace | undefined) {
+  const { t } = useTranslation();
   const [lookbackHours, setLookbackHours] = useState(24);
   const [origLookbackHours, setOrigLookbackHours] = useState(24);
   const [savingRecovery, setSavingRecovery] = useState(false);
@@ -274,7 +276,7 @@ function useRecoveryState(activeWorkspace: Workspace | undefined) {
       await updateWorkspaceSettings(activeWorkspace.id, { recovery_lookback_hours: clamped });
       setLookbackHours(clamped);
       setOrigLookbackHours(clamped);
-      toast.success("Recovery settings saved");
+      toast.success(t("office:recoverySettingsSaved"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
@@ -292,6 +294,7 @@ function useRecoveryState(activeWorkspace: Workspace | undefined) {
 }
 
 function useSettingsState(activeWorkspace: Workspace | undefined) {
+  const { t } = useTranslation();
   const [name, setName] = useState(activeWorkspace?.name ?? "");
   const [description, setDescription] = useState(activeWorkspace?.description ?? "");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -339,7 +342,7 @@ function useSettingsState(activeWorkspace: Workspace | undefined) {
     setSavingAppearance(true);
     try {
       await updateWorkspaceSettings(activeWorkspace.id, { name, description });
-      toast.success("Appearance settings saved");
+      toast.success(t("office:appearanceSettingsSaved"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
@@ -359,7 +362,7 @@ function useSettingsState(activeWorkspace: Workspace | undefined) {
       setOrigApprovalNewAgents(approvalNewAgents);
       setOrigApprovalTaskCompletion(approvalTaskCompletion);
       setOrigApprovalSkillChanges(approvalSkillChanges);
-      toast.success("Permission settings saved");
+      toast.success(t("office:permissionSettingsSaved"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
@@ -398,6 +401,7 @@ function useSettingsState(activeWorkspace: Workspace | undefined) {
 }
 
 export function SettingsContent() {
+  const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces);
   const setWorkspaces = useAppStore((s) => s.setWorkspaces);
   const setActiveWorkspace = useAppStore((s) => s.setActiveWorkspace);
@@ -408,7 +412,7 @@ export function SettingsContent() {
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-8">
       <div>
-        <SectionHeader>Appearance</SectionHeader>
+        <SectionHeader>{t("office:appearance")}</SectionHeader>
         <AppearanceSection
           name={s.name}
           description={s.description}
@@ -425,14 +429,14 @@ export function SettingsContent() {
       </div>
 
       <div>
-        <SectionHeader>Repository</SectionHeader>
+        <SectionHeader>{t("common:repository")}</SectionHeader>
         <SettingCard>
           <GitSection />
         </SettingCard>
       </div>
 
       <div>
-        <SectionHeader>Permissions</SectionHeader>
+        <SectionHeader>{t("office:permissions")}</SectionHeader>
         <PermissionsSection
           approvalNewAgents={s.approvalNewAgents}
           approvalTaskCompletion={s.approvalTaskCompletion}
@@ -447,7 +451,7 @@ export function SettingsContent() {
       </div>
 
       <div>
-        <SectionHeader>Recovery</SectionHeader>
+        <SectionHeader>{t("office:recovery")}</SectionHeader>
         <RecoverySection
           lookbackHours={s.lookbackHours}
           dirty={s.recoveryDirty}
@@ -458,7 +462,7 @@ export function SettingsContent() {
       </div>
 
       <div>
-        <SectionHeader>Configuration</SectionHeader>
+        <SectionHeader>{t("office:configuration")}</SectionHeader>
         <SettingCard>
           <ConfigSection />
         </SettingCard>
@@ -466,7 +470,7 @@ export function SettingsContent() {
 
       {activeWorkspace && (
         <div>
-          <SectionHeader>Danger Zone</SectionHeader>
+          <SectionHeader>{t("office:dangerZone")}</SectionHeader>
           <DangerZoneSection
             workspace={activeWorkspace}
             workspaces={workspaces.items}

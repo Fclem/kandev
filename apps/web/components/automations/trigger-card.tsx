@@ -19,6 +19,7 @@ import { GitHubPRConfig } from "./trigger-configs/github-pr-config";
 import { GitHubPushConfig } from "./trigger-configs/github-push-config";
 import { GitHubCIConfig } from "./trigger-configs/github-ci-config";
 import { WebhookConfig } from "./trigger-configs/webhook-config";
+import { useTranslation } from "react-i18next";
 
 type TriggerCardProps = {
   trigger: AutomationTrigger;
@@ -170,6 +171,7 @@ function TriggerConfigForm({
   workspaceId: string;
   onUpdate: (config: Record<string, unknown>) => void;
 }) {
+  const { t } = useTranslation();
   switch (trigger.type) {
     case "scheduled":
       return <ScheduledConfig config={trigger.config} onUpdate={onUpdate} />;
@@ -182,6 +184,6 @@ function TriggerConfigForm({
     case "webhook":
       return <WebhookConfig automationId={automationId} workspaceId={workspaceId} />;
     default:
-      return <p className="text-sm text-muted-foreground">Unknown trigger type</p>;
+      return <p className="text-sm text-muted-foreground">{t("automations:unknownTriggerType")}</p>;
   }
 }

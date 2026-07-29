@@ -3,6 +3,7 @@
 import { PanelLoadingState } from "@/components/panel-loading-state";
 import type { FileTreeNode } from "@/lib/types/backend";
 import { WorkspaceUnavailable } from "./workspace-unavailable";
+import { t } from "@/lib/i18n";
 
 type RenderSessionOrLoadStateInput = {
   isSessionFailed: boolean;
@@ -41,7 +42,7 @@ export function renderSessionOrLoadState({
           className="text-xs text-foreground underline cursor-pointer"
           onClick={onRetry}
         >
-          Retry
+          {t("common:retry")}
         </button>
       </div>
     );

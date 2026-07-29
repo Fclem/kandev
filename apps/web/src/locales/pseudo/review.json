@@ -1,0 +1,21 @@
+{
+  "autoMarkReviewedOnScroll": "Àũţō-ḿàŕķ ŕēvĩēŵēď ōń śćŕōĺĺ",
+  "closeReview": "Ćĺōśē ŕēvĩēŵ",
+  "diffTruncatedShowingFirst256Kb": "Ďĩƒƒ ţŕũńćàţēď — śĥōŵĩńĝ ƒĩŕśţ 256 ĶƁ",
+  "discardWalkthrough": "Ďĩśćàŕď ŵàĺķţĥŕōũĝĥ",
+  "discardWalkthrough2": "Ďĩśćàŕď ŵàĺķţĥŕōũĝĥ?",
+  "filterChangedFiles": "Ƒĩĺţēŕ ćĥàńĝēď ƒĩĺēś",
+  "newWalkthrough": "Ńēŵ ŵàĺķţĥŕōũĝĥ",
+  "noChangesToReviewYet": "Ńō ćĥàńĝēś ţō ŕēvĩēŵ ŷēţ.",
+  "noCommentsToFixYet": "Ńō ćōḿḿēńţś ţō ƒĩx ŷēţ.",
+  "noOpenFindings": "Ńō ōƥēń ƒĩńďĩńĝś.",
+  "resizeFileList": "Ŕēśĩźē ƒĩĺē ĺĩśţ",
+  "reviewChanges": "Ŕēvĩēŵ Ćĥàńĝēś",
+  "reviewChanges2": "Ŕēvĩēŵ ćĥàńĝēś",
+  "reviewPullRequest": "Ŕēvĩēŵ ƥũĺĺ ŕē qũēśţ",
+  "reviewTheseChangesWithAnAgent": "Ŕēvĩēŵ ţĥēśē ćĥàńĝēś ŵĩţĥ àń àĝēńţ",
+  "settingsUtilityAgents": "Śēţţĩńĝś → Ũţĩĺĩţŷ Àĝēńţś",
+  "thisRemovesTheSavedWalkthroughFrom": "Ţĥĩś ŕēḿōvēś ţĥē śàvēď ŵàĺķţĥŕōũĝĥ ƒŕōḿ ţĥĩś ţàśķ. Ţĥē àĝēńţ ćàń ćŕēàţē à ńēŵ ōńē ĺàţēŕ.",
+  "toggleWordWrap": "Ţōĝĝĺē ŵōŕď ŵŕàƥ",
+  "walkMeThroughTheseReviewChanges": "Ŵàĺķ ḿē ţĥŕōũĝĥ ţĥēśē ŕēvĩēŵ ćĥàńĝēś"
+}

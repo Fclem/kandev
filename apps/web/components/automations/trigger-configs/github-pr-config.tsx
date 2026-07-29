@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { RepoFilterSelector } from "@/components/github/repo-filter-selector";
 import type { RepoFilter } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 type GitHubPRConfigProps = {
   config: Record<string, unknown>;
@@ -25,6 +26,7 @@ const PR_EVENTS = [
 ] as const;
 
 export function GitHubPRConfig({ config, onUpdate }: GitHubPRConfigProps) {
+  const { t } = useTranslation();
   const events = (config.events as string[]) ?? [];
   const repos = (config.repos as RepoFilter[]) ?? [];
   const allRepos = (config.all_repos as boolean) ?? true;
@@ -74,21 +76,21 @@ export function GitHubPRConfig({ config, onUpdate }: GitHubPRConfigProps) {
       />
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label className="text-xs">Base branches (comma-separated)</Label>
+          <Label className="text-xs">{t("automations:baseBranchesCommaSeparated")}</Label>
           <Input
             value={branches}
             onChange={(e) => setBranches(e.target.value)}
             onBlur={handleBranchesBlur}
-            placeholder="main, develop"
+            placeholder={t("automations:mainDevelop")}
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Authors (comma-separated)</Label>
+          <Label className="text-xs">{t("automations:authorsCommaSeparated")}</Label>
           <Input
             value={authors}
             onChange={(e) => setAuthors(e.target.value)}
             onBlur={handleAuthorsBlur}
-            placeholder="alice, bob"
+            placeholder={t("automations:aliceBob")}
           />
         </div>
       </div>
@@ -99,7 +101,7 @@ export function GitHubPRConfig({ config, onUpdate }: GitHubPRConfigProps) {
           onCheckedChange={(checked) => onUpdate({ ...config, exclude_draft: checked })}
           className="cursor-pointer"
         />
-        <Label className="text-xs">Exclude draft PRs</Label>
+        <Label className="text-xs">{t("automations:excludeDraftPrs")}</Label>
       </div>
     </div>
   );
@@ -112,9 +114,10 @@ function EventsSection({
   events: string[];
   onToggle: (event: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
-      <Label className="text-xs">Events</Label>
+      <Label className="text-xs">{t("automations:events")}</Label>
       <div className="flex flex-wrap gap-3">
         {PR_EVENTS.map((evt) => (
           <label key={evt.value} className="flex items-center gap-1.5 cursor-pointer">

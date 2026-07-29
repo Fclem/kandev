@@ -12,6 +12,7 @@ import { Card, CardContent } from "@kandev/ui/card";
 import { Spinner } from "@kandev/ui/spinner";
 import { fetchGitHubStats } from "@/lib/api/domains/github-api";
 import type { PRStats } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 type StatCardProps = {
   icon: React.ReactNode;
@@ -119,12 +120,13 @@ function StatsGrid({ stats }: { stats: PRStats }) {
 }
 
 function PRsByDayChart({ prsByDay }: { prsByDay: PRStats["prs_by_day"] }) {
+  const { t } = useTranslation();
   if (!prsByDay || prsByDay.length === 0) return null;
   const maxCount = Math.max(...prsByDay.map((d) => d.count), 1);
   return (
     <Card>
       <CardContent className="p-4">
-        <h4 className="text-sm font-medium mb-3">PRs by Day</h4>
+        <h4 className="text-sm font-medium mb-3">{t("github:prsByDay")}</h4>
         <div className="flex items-end gap-1 h-24">
           {prsByDay.map((day) => {
             const height = Math.max((day.count / maxCount) * 100, 4);
@@ -150,6 +152,7 @@ function PRsByDayChart({ prsByDay }: { prsByDay: PRStats["prs_by_day"] }) {
 }
 
 export function PRStatsPanel({ workspaceId }: { workspaceId: string | null }) {
+  const { t } = useTranslation();
   const { stats, loading } = usePRStats(workspaceId);
 
   if (loading) {
@@ -162,7 +165,9 @@ export function PRStatsPanel({ workspaceId }: { workspaceId: string | null }) {
 
   if (!stats) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-4">No stats available yet.</p>
+      <p className="text-sm text-muted-foreground text-center py-4">
+        {t("github:noStatsAvailableYet")}
+      </p>
     );
   }
 

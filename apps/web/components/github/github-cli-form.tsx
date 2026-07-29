@@ -8,6 +8,7 @@ import { Spinner } from "@kandev/ui/spinner";
 import { useToast } from "@/components/toast-provider";
 import { fetchGitHubCLIAccounts, setGitHubWorkspaceConnection } from "@/lib/api/domains/github-api";
 import type { GitHubCLIAccount } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 function GitHubCLIAccountNotice({
   loadError,
@@ -18,6 +19,7 @@ function GitHubCLIAccountNotice({
   loading: boolean;
   hasAccounts: boolean;
 }) {
+  const { t } = useTranslation();
   if (loading || hasAccounts) return null;
   if (loadError) {
     return (
@@ -28,7 +30,7 @@ function GitHubCLIAccountNotice({
   }
   return (
     <p className="text-xs text-muted-foreground">
-      Sign in with <code>gh auth login</code>, then reopen this dialog.
+      Sign in with <code>{t("github:ghAuthLogin")}</code>, then reopen this dialog.
     </p>
   );
 }
@@ -46,6 +48,7 @@ export function GitHubCLIForm({
   workspaceId: string;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const [accounts, setAccounts] = useState<GitHubCLIAccount[]>([]);
   const [selected, setSelected] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -110,9 +113,9 @@ export function GitHubCLIForm({
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <Label htmlFor="github-cli-account">GitHub CLI account</Label>
+        <Label htmlFor="github-cli-account">{t("github:githubCliAccount")}</Label>
         <p className="text-xs text-muted-foreground">
-          Choose the exact account. Kandev does not silently follow the CLI's active-account change.
+          {t("github:chooseTheExactAccountKandevDoes")}
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">

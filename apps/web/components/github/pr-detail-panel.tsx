@@ -40,6 +40,7 @@ import { ChecksSection } from "./pr-checks-section";
 import { ReviewsSection } from "./pr-reviews-section";
 import { CommentsSection } from "./pr-comments-section";
 import { usePRScopedReviewRequest } from "./use-pr-scoped-review-request";
+import { useTranslation } from "react-i18next";
 
 // --- Dockview panel wrapper ---
 
@@ -50,6 +51,7 @@ type PRDetailPanelProps = {
 };
 
 export function PRDetailPanelComponent({ panelId, params }: PRDetailPanelProps) {
+  const { t } = useTranslation();
   const activeTaskId = useAppStore((s) => s.tasks.activeTaskId);
   const { prs } = useTaskPR(activeTaskId);
   const activePR = useActiveTaskPR();
@@ -68,7 +70,7 @@ export function PRDetailPanelComponent({ panelId, params }: PRDetailPanelProps) 
   if (!pr || !sessionId) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        No pull request linked to this session.
+        {t("github:noPullRequestLinkedToThis")}
       </div>
     );
   }
@@ -218,9 +220,10 @@ function derivePanelMetrics(taskPR: TaskPR, feedback: PRFeedback | null): PRPane
 }
 
 function DescriptionSection({ body }: { body: string }) {
+  const { t } = useTranslation();
   if (!body) return null;
   return (
-    <CollapsibleSection title="Description" count={1} defaultOpen={false}>
+    <CollapsibleSection title={t("github:description")} count={1} defaultOpen={false}>
       <div className="px-2">
         <PRMarkdownBody body={body} />
       </div>
@@ -446,6 +449,7 @@ function HeaderTitleRow({
   loading: boolean;
   onRefresh: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start justify-between gap-2">
       <a
@@ -468,7 +472,7 @@ function HeaderTitleRow({
             <IconRefresh className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Refresh</TooltipContent>
+        <TooltipContent>{t("github:refresh")}</TooltipContent>
       </Tooltip>
     </div>
   );

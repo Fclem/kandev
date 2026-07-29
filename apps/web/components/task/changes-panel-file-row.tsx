@@ -18,6 +18,7 @@ import { FileIcon } from "@/components/ui/file-icon";
 import { getFileCategory } from "@/lib/utils/file-types";
 import type { ChangedFile } from "./changes-panel-helpers";
 import type { OpenDiffOptions } from "./changes-diff-target";
+import { useTranslation } from "react-i18next";
 
 const splitPath = (path: string) => {
   const lastSlash = path.lastIndexOf("/");
@@ -207,6 +208,7 @@ function StageButton({
   onStage: (path: string, repo?: string) => void;
   onUnstage: (path: string, repo?: string) => void;
 }) {
+  const { t } = useTranslation();
   if (isPending) {
     return (
       <div className="flex-shrink-0 flex items-center justify-center size-4">
@@ -218,7 +220,7 @@ function StageButton({
     return (
       <button
         type="button"
-        title="Unstage file"
+        title={t("task:unstageFile")}
         className="group/unstage flex-shrink-0 flex items-center justify-center size-4 rounded bg-emerald-500/20 text-emerald-600 hover:bg-rose-500/20 hover:text-rose-600 cursor-pointer"
         onClick={(e) => {
           e.stopPropagation();
@@ -233,7 +235,7 @@ function StageButton({
   return (
     <button
       type="button"
-      title="Stage file"
+      title={t("task:stageFile")}
       className="flex-shrink-0 flex items-center justify-center size-4 rounded border border-dashed border-muted-foreground/50 text-muted-foreground hover:border-emerald-500 hover:text-emerald-500 hover:bg-emerald-500/10 cursor-pointer"
       onClick={(e) => {
         e.stopPropagation();
@@ -256,6 +258,7 @@ function FileRowActions({
   onDiscard: (path: string, repo?: string) => void;
   onEditFile: (path: string, repo?: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="file-row-hover-actions"
@@ -274,7 +277,7 @@ function FileRowActions({
             <IconArrowBackUp className="h-3.5 w-3.5" />
           </button>
         </TooltipTrigger>
-        <TooltipContent>Discard changes</TooltipContent>
+        <TooltipContent>{t("task:discardChanges2")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -289,7 +292,7 @@ function FileRowActions({
             <IconPencil className="h-3.5 w-3.5" />
           </button>
         </TooltipTrigger>
-        <TooltipContent>Edit</TooltipContent>
+        <TooltipContent>{t("common:edit")}</TooltipContent>
       </Tooltip>
     </div>
   );

@@ -15,10 +15,12 @@ import { MetricCard } from "../../components/metric-card";
 import type { CostBreakdownItem } from "@/lib/state/slices/office/types";
 import { CostBreakdownTable } from "./cost-breakdown-table";
 import { formatDollars } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 type DateRange = "mtd" | "30d";
 
 export function CostOverview({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const [range, setRange] = useState<DateRange>("mtd");
   const [totalSubcents, setTotalSubcents] = useState(0);
   const [byAgent, setByAgent] = useState<CostBreakdownItem[]>([]);
@@ -59,7 +61,7 @@ export function CostOverview({ workspaceId }: { workspaceId: string }) {
           className="cursor-pointer"
           onClick={() => setRange("30d")}
         >
-          Last 30 days
+          {t("office:last30Days")}
         </Button>
       </div>
 
@@ -76,10 +78,14 @@ export function CostOverview({ workspaceId }: { workspaceId: string }) {
       </div>
 
       <div className="space-y-6">
-        <CostBreakdownTable title="By Agent" items={byAgent} labelPrefix="Agent" />
-        <CostBreakdownTable title="By Project" items={byProject} labelPrefix="Project" />
-        <CostBreakdownTable title="By Provider" items={byProvider} labelPrefix="Provider" />
-        <CostBreakdownTable title="By Model" items={byModel} labelPrefix="Model" />
+        <CostBreakdownTable title={t("office:byAgent")} items={byAgent} labelPrefix="Agent" />
+        <CostBreakdownTable title={t("office:byProject")} items={byProject} labelPrefix="Project" />
+        <CostBreakdownTable
+          title={t("office:byProvider")}
+          items={byProvider}
+          labelPrefix="Provider"
+        />
+        <CostBreakdownTable title={t("office:byModel")} items={byModel} labelPrefix="Model" />
       </div>
     </div>
   );

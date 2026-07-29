@@ -11,8 +11,10 @@ import { cn } from "@/lib/utils";
 import { SidebarViewChips } from "./sidebar-view-chips";
 import { SidebarFilterPopover } from "./sidebar-filter-popover";
 import { useSidebarViewPopover } from "./use-sidebar-view-popover";
+import { useTranslation } from "react-i18next";
 
 export function SidebarFilterBar() {
+  const { t } = useTranslation();
   const filterTriggerRef = useRef<HTMLButtonElement>(null);
   const draft = useAppStore((s) => s.sidebarViews.draft);
   const activeViewId = useAppStore((s) => s.sidebarViews.activeViewId);
@@ -104,7 +106,7 @@ export function SidebarFilterBar() {
             size="icon"
             className="h-10 w-10 shrink-0 cursor-pointer md:h-6 md:w-6"
             data-testid="sidebar-filter-gear"
-            aria-label="Sidebar filters"
+            aria-label={t("task:sidebarFilters")}
           >
             <IconAdjustments className="h-4 w-4" />
             {hasDraft && (

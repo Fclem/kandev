@@ -9,6 +9,7 @@ import type { UtilityGenerationResult } from "@/hooks/use-utility-agent-generato
 import { ContextZone } from "./chat/context-items/context-zone";
 import { AttachButton } from "./session-dialog-shared";
 import type { ContextItem } from "@/lib/types/context";
+import { useTranslation } from "react-i18next";
 
 type SessionPromptFieldProps = {
   promptRef: RefObject<HTMLTextAreaElement | null>;
@@ -61,6 +62,7 @@ export function SessionPromptField({
   onDrop,
   onFileInputChange,
 }: SessionPromptFieldProps) {
+  const { t } = useTranslation();
   return (
     <div
       className="relative min-w-0 max-w-full"
@@ -73,7 +75,7 @@ export function SessionPromptField({
         <Textarea
           ref={promptRef}
           value={promptValue}
-          placeholder="What should the agent work on?"
+          placeholder={t("task:whatShouldTheAgentWorkOn")}
           className="min-w-0 max-w-full field-sizing-fixed wrap-anywhere border-0 focus-visible:ring-0 focus-visible:ring-offset-0 min-h-[120px] max-h-[240px] resize-none overflow-auto text-[13px]"
           autoFocus
           disabled={isBusy}
@@ -116,14 +118,14 @@ export function SessionPromptField({
       />
       {isDragging && (
         <div className="absolute inset-0 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-md pointer-events-none">
-          <span className="text-sm text-primary font-medium">Drop files here</span>
+          <span className="text-sm text-primary font-medium">{t("task:dropFilesHere")}</span>
         </div>
       )}
       {isSummarizing && (
         <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/80">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <IconLoader2 className="h-4 w-4 animate-spin" />
-            <span>Generating summary...</span>
+            <span>{t("task:generatingSummary")}</span>
           </div>
         </div>
       )}

@@ -7,6 +7,7 @@ import { useAppStore } from "@/components/state-provider";
 import { useAgentRoute } from "@/hooks/domains/office/use-agent-route";
 import { useWorkspaceRouting } from "@/hooks/domains/office/use-workspace-routing";
 import { providerLabel } from "../../../workspace/routing/components/provider-order-editor";
+import { useTranslation } from "react-i18next";
 
 const CONFIGURED_TOOLTIP = "Primary route from workspace + agent overrides.";
 const CURRENT_TOOLTIP =
@@ -48,19 +49,20 @@ export function AgentRouteStrip({ agentId }: Props) {
 const LABEL_CLASS = "text-muted-foreground uppercase tracking-wide";
 
 function ConfiguredRow({ preview }: { preview: AgentRoutePreview }) {
+  const { t } = useTranslation();
   const primaryProvider = preview.primary_provider_id ?? "";
   const primaryModel = preview.primary_model ?? "";
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className={`${LABEL_CLASS} cursor-help`}>Configured</span>
+          <span className={`${LABEL_CLASS} cursor-help`}>{t("office:configured")}</span>
         </TooltipTrigger>
         <TooltipContent>{CONFIGURED_TOOLTIP}</TooltipContent>
       </Tooltip>
       <span className="font-mono">
         {primaryProvider === "" ? (
-          <span className="italic">none</span>
+          <span className="italic">{t("office:none")}</span>
         ) : (
           <>
             {providerLabel(primaryProvider)}/{primaryModel || "?"}
@@ -89,11 +91,12 @@ function CurrentRow({
   model: string;
   failureCode?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className={`${LABEL_CLASS} cursor-help`}>Current</span>
+          <span className={`${LABEL_CLASS} cursor-help`}>{t("common:current")}</span>
         </TooltipTrigger>
         <TooltipContent>{CURRENT_TOOLTIP}</TooltipContent>
       </Tooltip>

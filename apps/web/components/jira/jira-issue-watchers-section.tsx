@@ -12,6 +12,7 @@ import { ResetWatchDialog, useWatchResetController } from "@/components/watches/
 import { JiraIssueWatchTable } from "./jira-issue-watch-table";
 import { JiraIssueWatchDialog } from "./jira-issue-watch-dialog";
 import type { JiraIssueWatch } from "@/lib/types/jira";
+import { useTranslation } from "react-i18next";
 
 // JiraIssueWatchersSection lists watches across every workspace in a single
 // flat table on the install-wide settings page. The dialog's create flow asks
@@ -127,6 +128,7 @@ function useEnabledDrafts(items: JiraIssueWatch[], update: RawActions["update"])
 }
 
 export function JiraIssueWatchersSection() {
+  const { t } = useTranslation();
   // Pass undefined to fetch every watch across every workspace.
   const { items, loading, create, update, remove, trigger, previewReset, reset } =
     useJiraIssueWatches();
@@ -182,7 +184,7 @@ export function JiraIssueWatchersSection() {
   return (
     <SettingsSection
       icon={<IconBellRinging className="h-5 w-5" />}
-      title="JIRA watchers"
+      title={t("jira:jiraWatchers")}
       description="Poll a JQL query and auto-create a Kandev task for each newly-matching ticket."
       action={
         <Button size="sm" onClick={openCreate} className="cursor-pointer">

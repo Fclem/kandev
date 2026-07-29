@@ -12,6 +12,7 @@ import {
   type DiscoveredFile,
 } from "@/lib/api/domains/debug-api";
 import { IconChevronDown, IconChevronRight, IconRefresh } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 
 type ToolFilter = "all" | "tool_edit" | "tool_read" | "tool_execute" | "tool_call";
 type ViewMode = "fixtures" | "events";
@@ -192,6 +193,7 @@ function JsonPanel({
 }
 
 function FixtureCard({ fixture, index }: { fixture: NormalizedFixture; index: number }) {
+  const { t } = useTranslation();
   const message = fixtureToMessage(fixture, index);
 
   return (
@@ -208,13 +210,15 @@ function FixtureCard({ fixture, index }: { fixture: NormalizedFixture; index: nu
         </div>
       </div>
       <div className="p-4 border-b">
-        <div className="text-xs text-muted-foreground mb-2 font-medium">Rendered Output:</div>
+        <div className="text-xs text-muted-foreground mb-2 font-medium">
+          {t("common:renderedOutput")}
+        </div>
         <MessageRenderer comment={message} isTaskDescription={false} taskId="demo-task" />
       </div>
       <div className="p-4 space-y-2">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <JsonPanel title="Raw Input" data={fixture.input} />
-          <JsonPanel title="Normalized Payload" data={fixture.payload} />
+          <JsonPanel title={t("common:rawInput")} data={fixture.input} />
+          <JsonPanel title={t("common:normalizedPayload")} data={fixture.payload} />
         </div>
       </div>
     </div>
@@ -222,6 +226,7 @@ function FixtureCard({ fixture, index }: { fixture: NormalizedFixture; index: nu
 }
 
 function MessageCard({ message }: { message: Message }) {
+  const { t } = useTranslation();
   const toolName = message.metadata?.tool_name as string | undefined;
   const status = message.metadata?.status as string | undefined;
 
@@ -241,7 +246,9 @@ function MessageCard({ message }: { message: Message }) {
         </div>
       </div>
       <div className="p-4 border-b">
-        <div className="text-xs text-muted-foreground mb-2 font-medium">Rendered Output:</div>
+        <div className="text-xs text-muted-foreground mb-2 font-medium">
+          {t("common:renderedOutput")}
+        </div>
         <MessageRenderer
           comment={message}
           isTaskDescription={false}
@@ -249,7 +256,7 @@ function MessageCard({ message }: { message: Message }) {
         />
       </div>
       <div className="p-4">
-        <JsonPanel title="Message Data" data={message} />
+        <JsonPanel title={t("common:messageData")} data={message} />
       </div>
     </div>
   );
@@ -298,6 +305,7 @@ function FiltersBar({
   toolFilter: ToolFilter;
   setToolFilter: (v: ToolFilter) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-6 space-y-4">
       <div className="flex items-center gap-2">
@@ -309,7 +317,7 @@ function FiltersBar({
           onChange={(e) => setSelectedFile(e.target.value)}
           className="px-3 py-1.5 text-sm rounded-md border bg-background hover:bg-muted/50 transition-colors min-w-[300px]"
         >
-          {currentFiles.length === 0 && <option value="">No files found</option>}
+          {currentFiles.length === 0 && <option value="">{t("common:noFilesFound2")}</option>}
           {currentFiles.map((file) => (
             <option key={file.path} value={file.path}>
               {file.protocol} - {file.agent || "unknown"} ({file.message_count} messages)
@@ -319,7 +327,7 @@ function FiltersBar({
       </div>
       {viewMode === "fixtures" && (
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-muted-foreground">Tool Type:</span>
+          <span className="text-sm font-medium text-muted-foreground">{t("common:toolType")}</span>
           <div className="flex gap-1">
             {TOOL_TABS.map((tab) => (
               <button
@@ -405,6 +413,7 @@ function ContentArea({
 // --- Page ---
 
 export default function AgentMessagesPage() {
+  const { t } = useTranslation();
   const data = useAgentMessages();
 
   return (
@@ -412,7 +421,7 @@ export default function AgentMessagesPage() {
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            <h1 className="text-2xl font-bold">Agent Messages QA</h1>
+            <h1 className="text-2xl font-bold">{t("common:agentMessagesQa")}</h1>
             <button
               onClick={data.loadContent}
               disabled={data.loading || !data.selectedFile}
@@ -423,8 +432,7 @@ export default function AgentMessagesPage() {
             </button>
           </div>
           <p className="text-muted-foreground">
-            Visual inspection of agent message normalization. Each card shows the rendered output
-            alongside raw JSON.
+            {t("common:visualInspectionOfAgentMessageNormalization")}
           </p>
         </div>
         <ViewModeTabs viewMode={data.viewMode} setViewMode={data.setViewMode} />

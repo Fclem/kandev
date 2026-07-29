@@ -15,6 +15,7 @@ import { useAppStore } from "@/components/state-provider";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useSystemMetricsSubscription } from "@/hooks/use-system-metrics-subscription";
 import type { SystemMetricSample, SystemMetricsSource } from "@/lib/types/system";
+import { useTranslation } from "react-i18next";
 
 type StatusSurfaceMetricsProps = {
   presentation: "bar" | "mobile-drawer";
@@ -27,6 +28,7 @@ export function StatusSurfaceMetrics({
   density,
   drawerOpen,
 }: StatusSurfaceMetricsProps) {
+  const { t } = useTranslation();
   // Wire/storage name stays stable for existing user settings and API payloads.
   const enabled = useAppStore((state) => state.userSettings.systemMetricsDisplay.showInTopbar);
   const simplified = useAppStore((state) => state.userSettings.systemMetricsDisplay.simplified);
@@ -43,10 +45,10 @@ export function StatusSurfaceMetrics({
       <section
         data-testid="app-status-metrics"
         className="space-y-2 py-0.5"
-        aria-label="System metrics"
+        aria-label={t("common:systemMetrics")}
       >
         <h3 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          System metrics
+          {t("common:systemMetrics")}
         </h3>
         {!host ? (
           <EmptyMetrics drawer />
@@ -65,7 +67,7 @@ export function StatusSurfaceMetrics({
     <div
       data-testid="app-status-metrics"
       className="flex h-full max-w-[52vw] items-center overflow-hidden leading-none text-current"
-      aria-label="System metrics"
+      aria-label={t("common:systemMetrics")}
     >
       {!host ? (
         <EmptyMetrics />
@@ -83,6 +85,7 @@ export function StatusSurfaceMetrics({
 }
 
 function EmptyMetrics({ drawer = false }: { drawer?: boolean }) {
+  const { t } = useTranslation();
   return (
     <div
       className={
@@ -92,7 +95,7 @@ function EmptyMetrics({ drawer = false }: { drawer?: boolean }) {
       }
     >
       <IconActivity className="h-3.5 w-3.5" />
-      <span>Metrics unavailable</span>
+      <span>{t("common:metricsUnavailable")}</span>
     </div>
   );
 }
@@ -153,17 +156,21 @@ function SourceBadge({
   updatedAt?: string;
   showLabel: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="flex shrink-0 items-center gap-1.5 text-current" aria-label="Host metrics">
+        <span
+          className="flex shrink-0 items-center gap-1.5 text-current"
+          aria-label={t("common:hostMetrics")}
+        >
           <IconServer className="size-3.5" stroke={1.6} />
-          {showLabel ? <span className="max-w-20 truncate">Host</span> : null}
+          {showLabel ? <span className="max-w-20 truncate">{t("common:host")}</span> : null}
         </span>
       </TooltipTrigger>
       <TooltipContent>
         <div className="space-y-1">
-          <div className="font-medium">Host</div>
+          <div className="font-medium">{t("common:host")}</div>
           <div className="text-xs text-muted-foreground">{source.label}</div>
           <div className="text-xs text-muted-foreground">{lastUpdatedText(updatedAt)}</div>
         </div>

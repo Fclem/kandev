@@ -4,6 +4,7 @@ import { IconAlertTriangle } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { cn } from "@/lib/utils";
 import type { MergeableState } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 // --- Pure descriptor (unit-tested) ---
 
@@ -75,6 +76,7 @@ function ConflictBanner({
   resolveDisabled?: boolean;
   popover?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="pr-conflict-banner"
@@ -89,7 +91,7 @@ function ConflictBanner({
           Merge conflicts with <code className="font-mono">{baseBranch}</code>
         </div>
         <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-          This branch can&apos;t be merged automatically. Resolve the conflicts before merging.
+          {t("github:thisBranchCanTBeMerged")}
         </p>
         {onResolveConflicts && (
           <Button

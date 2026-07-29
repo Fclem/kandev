@@ -25,6 +25,7 @@ import { timeAgo } from "@/lib/utils/time";
 
 import { UtilizationBars } from "./components/utilization-bars";
 import { formatDollars } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 // formatMonthSpend renders the subcents value from /office dashboard
 // as USD. The shared formatDollars helper owns the unit boundary; this
@@ -109,15 +110,16 @@ function RecentActivityCard({
 }: {
   entries: ReturnType<typeof extractMetrics>["recentActivity"];
 }) {
+  const { t } = useTranslation();
   return (
     <Card>
       <div className="p-4 border-b border-border">
-        <h2 className="text-sm font-semibold">Recent Activity</h2>
+        <h2 className="text-sm font-semibold">{t("office:recentActivity")}</h2>
       </div>
       <div className="divide-y divide-border">
         {entries.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-            No recent activity. Actions by agents and users will appear here.
+            {t("office:noRecentActivityActionsByAgents")}
           </div>
         ) : (
           entries.map((entry) => <ActivityRow key={entry.id} entry={entry} />)
@@ -159,15 +161,16 @@ function RecentTaskRow({ task, agents }: { task: RecentTask; agents: AgentProfil
 }
 
 function RecentTasksCard({ tasks, agents }: { tasks: RecentTask[]; agents: AgentProfile[] }) {
+  const { t } = useTranslation();
   return (
     <Card>
       <div className="p-4 border-b border-border">
-        <h2 className="text-sm font-semibold">Recent Tasks</h2>
+        <h2 className="text-sm font-semibold">{t("office:recentTasks2")}</h2>
       </div>
       <div className="divide-y divide-border">
         {tasks.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-            No recent tasks.
+            {t("office:noRecentTasks")}
           </div>
         ) : (
           tasks.map((task) => <RecentTaskRow key={task.id} task={task} agents={agents} />)
@@ -189,6 +192,7 @@ function maxUtilization(agents: AgentProfile[]): number {
 }
 
 function SubscriptionUsageCard({ agents }: { agents: AgentProfile[] }) {
+  const { t } = useTranslation();
   const subscriptionAgents = agents.filter(
     (a) => a.billingType === "subscription" && a.utilization,
   );
@@ -198,7 +202,7 @@ function SubscriptionUsageCard({ agents }: { agents: AgentProfile[] }) {
   return (
     <Card>
       <div className="p-4 border-b border-border">
-        <h2 className="text-sm font-semibold">Subscription Quota</h2>
+        <h2 className="text-sm font-semibold">{t("office:subscriptionQuota")}</h2>
       </div>
       <div className="divide-y divide-border">
         {subscriptionAgents.map((agent) => (

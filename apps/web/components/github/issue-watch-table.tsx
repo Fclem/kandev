@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useToast } from "@/components/toast-provider";
 import { useAppStore } from "@/components/state-provider";
 import type { IssueWatch } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 type IssueWatchTableProps = {
   watches: IssueWatch[];
@@ -59,6 +60,7 @@ type WatchActionsProps = {
 };
 
 function WatchActions({ watch, onToggleEnabled, onTrigger, onReset, onDelete }: WatchActionsProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   return (
     <div className="flex items-center justify-end gap-1">
@@ -97,7 +99,7 @@ function WatchActions({ watch, onToggleEnabled, onTrigger, onReset, onDelete }: 
             <IconRefresh className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Check now</TooltipContent>
+        <TooltipContent>{t("github:checkNow")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -106,7 +108,7 @@ function WatchActions({ watch, onToggleEnabled, onTrigger, onReset, onDelete }: 
             size="sm"
             className="h-7 w-7 p-0 cursor-pointer"
             data-testid="watch-reset-button"
-            aria-label="Reset watch"
+            aria-label={t("github:resetWatch")}
             onClick={(e) => {
               e.stopPropagation();
               onReset(watch.id);
@@ -115,7 +117,7 @@ function WatchActions({ watch, onToggleEnabled, onTrigger, onReset, onDelete }: 
             <IconRestore className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Reset</TooltipContent>
+        <TooltipContent>{t("github:reset")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -131,7 +133,7 @@ function WatchActions({ watch, onToggleEnabled, onTrigger, onReset, onDelete }: 
             <IconTrash className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Delete</TooltipContent>
+        <TooltipContent>{t("common:delete")}</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -146,13 +148,14 @@ export function IssueWatchTable({
   onReset,
   onToggleEnabled,
 }: IssueWatchTableProps) {
+  const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces.items);
   const workspaceName = (id: string) => workspaces.find((w) => w.id === id)?.name ?? id;
 
   if (watches.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-4 text-center">
-        No issue watches configured. Create one to start monitoring GitHub issues.
+        {t("github:noIssueWatchesConfiguredCreateOne")}
       </p>
     );
   }
@@ -161,13 +164,13 @@ export function IssueWatchTable({
     <Table>
       <TableHeader>
         <TableRow>
-          {showWorkspace && <TableHead>Workspace</TableHead>}
-          <TableHead>Repository</TableHead>
-          <TableHead>Labels</TableHead>
-          <TableHead>Interval</TableHead>
-          <TableHead>Last Polled</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          {showWorkspace && <TableHead>{t("common:workspace")}</TableHead>}
+          <TableHead>{t("common:repository")}</TableHead>
+          <TableHead>{t("github:labels")}</TableHead>
+          <TableHead>{t("github:interval")}</TableHead>
+          <TableHead>{t("github:lastPolled")}</TableHead>
+          <TableHead>{t("common:status")}</TableHead>
+          <TableHead className="text-right">{t("github:actions")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

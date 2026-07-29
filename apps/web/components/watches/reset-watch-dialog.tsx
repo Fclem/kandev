@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@kandev/ui/alert-dialog";
 import { Button } from "@kandev/ui/button";
+import { useTranslation } from "react-i18next";
 
 // previewLoader fetches the count of tasks that would be deleted. The
 // dialog calls it once when it opens; the result is cached for the
@@ -50,6 +51,7 @@ export function ResetWatchDialog({
   onConfirm,
   requirePreviewSuccess = false,
 }: ResetWatchDialogProps) {
+  const { t } = useTranslation();
   const [count, setCount] = useState<number | null>(null);
   const [previewError, setPreviewError] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -113,11 +115,11 @@ export function ResetWatchDialog({
               className="cursor-pointer"
               onClick={() => setPreviewAttempt((attempt) => attempt + 1)}
             >
-              Retry preview
+              {t("common:retryPreview")}
             </Button>
           )}
           <AlertDialogCancel className="cursor-pointer" disabled={confirming}>
-            Cancel
+            {t("common:cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             data-testid="reset-watch-dialog-confirm"

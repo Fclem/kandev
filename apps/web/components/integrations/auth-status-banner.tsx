@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import { Alert, AlertDescription } from "@kandev/ui/alert";
+import { useTranslation } from "react-i18next";
 
 // AuthHealth captures everything every integration's config row tells us
 // about the most-recent backend health probe. Each integration's settings
@@ -40,12 +41,13 @@ function LastCheckedLabel({ checkedAt }: { checkedAt: Date | null }) {
 // settings page. Returns null when health is null (config not yet loaded or
 // no secret configured) so the caller doesn't have to guard.
 export function IntegrationAuthStatusBanner({ health }: { health: IntegrationAuthHealth | null }) {
+  const { t } = useTranslation();
   if (!health) return null;
   if (!health.checkedAt) {
     return (
       <Alert data-testid="integration-auth-status-banner" data-state="waiting">
         <AlertDescription className="text-sm">
-          Waiting for the next backend health check…
+          {t("integrations:waitingForTheNextBackendHealth")}
         </AlertDescription>
       </Alert>
     );

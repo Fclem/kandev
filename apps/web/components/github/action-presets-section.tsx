@@ -24,6 +24,7 @@ import {
   computeEditorHeight,
 } from "@/components/settings/profile-edit/script-editor";
 import type { ScriptPlaceholder } from "@/components/settings/profile-edit/script-editor-completions";
+import { useTranslation } from "react-i18next";
 
 const ACTION_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
   {
@@ -59,11 +60,12 @@ function PresetIconSelect({
   isDirty: boolean;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
         className="!h-8 py-0.5 text-sm cursor-pointer"
-        aria-label="Icon"
+        aria-label={t("github:icon")}
         data-settings-dirty={isDirty}
       >
         <SelectValue>
@@ -102,6 +104,7 @@ function PresetRow({
   onPatch: (patch: Partial<GitHubActionPreset>) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="rounded-md border"
@@ -110,7 +113,7 @@ function PresetRow({
     >
       <div className="flex items-end gap-2 p-2">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-muted-foreground">Icon</span>
+          <span className="text-[10px] text-muted-foreground">{t("github:icon")}</span>
           <PresetIconSelect
             value={preset.icon}
             isDirty={preset.icon !== baseline?.icon}
@@ -118,22 +121,22 @@ function PresetRow({
           />
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-muted-foreground">Label</span>
+          <span className="text-[10px] text-muted-foreground">{t("github:label")}</span>
           <Input
             className="h-8 w-40"
             value={preset.label}
             data-settings-dirty={preset.label !== baseline?.label}
-            placeholder="Label"
+            placeholder={t("github:label")}
             onChange={(e) => onPatch({ label: e.target.value })}
           />
         </div>
         <div className="flex flex-col gap-0.5 flex-1">
-          <span className="text-[10px] text-muted-foreground">Hint</span>
+          <span className="text-[10px] text-muted-foreground">{t("github:hint")}</span>
           <Input
             className="h-8"
             value={preset.hint}
             data-settings-dirty={preset.hint !== baseline?.hint}
-            placeholder="Hint (optional)"
+            placeholder={t("github:hintOptional")}
             onChange={(e) => onPatch({ hint: e.target.value })}
           />
         </div>
@@ -150,7 +153,7 @@ function PresetRow({
           size="icon"
           className="h-8 w-8 cursor-pointer text-destructive"
           onClick={onRemove}
-          aria-label="Remove"
+          aria-label={t("github:remove")}
         >
           <IconTrash className="h-3.5 w-3.5" />
         </Button>
@@ -315,6 +318,7 @@ function usePresetDrafts(workspaceId: string): {
 }
 
 export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const {
     prDraft,
@@ -350,7 +354,7 @@ export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
 
   return (
     <SettingsSection
-      title="Quick actions"
+      title={t("github:quickActions")}
       description="Prompts shown on /github when starting a task from a PR or issue."
       action={
         <div className="flex gap-2">
@@ -373,10 +377,10 @@ export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
             <Tabs defaultValue="pr">
               <TabsList>
                 <TabsTrigger value="pr" className="cursor-pointer">
-                  Pull requests
+                  {t("github:pullRequests")}
                 </TabsTrigger>
                 <TabsTrigger value="issue" className="cursor-pointer">
-                  Issues
+                  {t("github:issues")}
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="pr">

@@ -7,6 +7,7 @@ import { Command, CommandInput, CommandList, CommandGroup, CommandItem } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconPlus, IconBrandGithub, IconWebhook, IconInfoCircle } from "@tabler/icons-react";
 import type { TriggerType, TriggerTypeInfo } from "@/lib/types/automation";
+import { useTranslation } from "react-i18next";
 
 type TriggerPickerProps = {
   triggerTypes: TriggerTypeInfo[];
@@ -25,6 +26,7 @@ const CATEGORY_META: Record<string, CategoryMeta> = {
 };
 
 export function TriggerPicker({ triggerTypes, onSelect }: TriggerPickerProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   // Only show condition types (not schedule — that's handled separately).
@@ -64,7 +66,7 @@ export function TriggerPicker({ triggerTypes, onSelect }: TriggerPickerProps) {
       </PopoverTrigger>
       <PopoverContent className="w-[320px] p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search conditions..." />
+          <CommandInput placeholder={t("automations:searchConditions")} />
           <CommandList>
             {groups.map(([category, items]) => {
               const meta = CATEGORY_META[category];

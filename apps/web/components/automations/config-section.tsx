@@ -12,6 +12,7 @@ import { listWorkflowSteps } from "@/lib/api/domains/workflow-api";
 import type { LocalRepository, Repository } from "@/lib/types/http";
 import type { ExecutionMode, TriggerType } from "@/lib/types/automation";
 import { RequiredFieldLabel } from "./required-field-label";
+import { useTranslation } from "react-i18next";
 
 // RepositorySelection mirrors the task-create dialog's two-tier model: a
 // registered workspace repository (keyed by id) OR a filesystem-discovered
@@ -184,6 +185,7 @@ export function ConfigSection({
   onRepositoryChange,
   onExecutionModeChange,
 }: ConfigSectionProps) {
+  const { t } = useTranslation();
   useSettingsData(true);
   useWorkflows(workspaceId, true);
   const { repositories } = useRepositories(workspaceId, true);
@@ -208,7 +210,7 @@ export function ConfigSection({
   return (
     <div className="space-y-3">
       <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-        Configuration
+        {t("automations:configuration")}
       </Label>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <SelectField
@@ -217,7 +219,7 @@ export function ConfigSection({
           value={executionMode}
           isDirty={dirtyFields.executionMode}
           onChange={(v) => onExecutionModeChange(v as ExecutionMode)}
-          placeholder="Select mode"
+          placeholder={t("automations:selectMode")}
           items={EXECUTION_MODE_ITEMS}
         />
         {!isRunMode && (
@@ -237,7 +239,7 @@ export function ConfigSection({
           value={agentProfileId}
           isDirty={dirtyFields.agentProfileId}
           onChange={onAgentProfileChange}
-          placeholder="Select agent"
+          placeholder={t("common:selectAgent")}
           items={filteredAgentProfiles.map((p) => ({
             id: p.id,
             label: p.label,
@@ -248,7 +250,7 @@ export function ConfigSection({
           value={executorProfileId}
           isDirty={dirtyFields.executorProfileId}
           onChange={onExecutorProfileChange}
-          placeholder="Select executor"
+          placeholder={t("automations:selectExecutor")}
           items={allExecutorProfiles.map((p) => ({ id: p.id, label: p.name }))}
         />
         <SelectField
@@ -259,7 +261,7 @@ export function ConfigSection({
           onChange={(v) =>
             onRepositoryChange(pickSelectionFromOptionId(v, repositories, discoveredRepos))
           }
-          placeholder="Auto"
+          placeholder={t("automations:auto")}
           items={repositoryItems}
           disabled={isPRTrigger}
           helpText={isPRTrigger ? "PR triggers always use the PR's own repository." : undefined}
@@ -288,6 +290,7 @@ function WorkflowFields({
   onWorkflowChange: (id: string) => void;
   onStepChange: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   // The step list is empty until a workflow is picked. Showing an empty
   // dropdown next to the workflow select invites users to click it first
   // and bounce off — keep the field in the DOM (so its testid is stable
@@ -303,7 +306,7 @@ function WorkflowFields({
         value={workflowId}
         isDirty={workflowDirty}
         onChange={onWorkflowChange}
-        placeholder="Select workflow"
+        placeholder={t("common:selectWorkflow")}
         items={workflows.map((w) => ({ id: w.id, label: w.name }))}
         helpText={!hasWorkflow ? "Select a workflow to enable saving." : undefined}
       />

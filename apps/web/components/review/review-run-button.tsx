@@ -8,6 +8,7 @@ import Link from "@/components/routing/app-link";
 import { cancelTaskReview, runTaskReview } from "@/lib/api/domains/review-api";
 import { isRunActive } from "@/lib/review/findings";
 import type { TaskReviewRun } from "@/lib/types/review";
+import { useTranslation } from "react-i18next";
 
 export type ReviewRunButtonProps = {
   taskId: string | null | undefined;
@@ -23,12 +24,13 @@ export type ReviewRunButtonProps = {
  * showing a dead-end error.
  */
 function RunNotice({ code, message }: { code: string; message: string }) {
+  const { t } = useTranslation();
   if (code === "review_agent_unavailable") {
     return (
       <p className="text-xs text-muted-foreground" data-testid="review-agent-unavailable">
         No inference-capable agent is configured for review.{" "}
         <Link href="/settings/utility-agents" className="cursor-pointer underline">
-          Settings → Utility Agents
+          {t("review:settingsUtilityAgents")}
         </Link>
       </p>
     );
@@ -36,7 +38,7 @@ function RunNotice({ code, message }: { code: string; message: string }) {
   if (code === "review_no_changes") {
     return (
       <p className="text-xs text-muted-foreground" data-testid="review-no-changes">
-        No changes to review yet.
+        {t("review:noChangesToReviewYet")}
       </p>
     );
   }
@@ -85,6 +87,7 @@ function RunTrigger({
   compact: boolean;
   onStart: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -94,7 +97,7 @@ function RunTrigger({
           className="cursor-pointer gap-1 px-2"
           onClick={onStart}
           disabled={disabled}
-          aria-label="Review these changes with an agent"
+          aria-label={t("review:reviewTheseChangesWithAnAgent")}
           data-testid="review-run-changes"
         >
           {busy ? (
@@ -102,7 +105,7 @@ function RunTrigger({
           ) : (
             <IconSparkles className="h-4 w-4" />
           )}
-          {!compact && <span className="text-xs">Review changes</span>}
+          {!compact && <span className="text-xs">{t("review:reviewChanges2")}</span>}
         </Button>
       </TooltipTrigger>
       <TooltipContent>

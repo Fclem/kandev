@@ -39,6 +39,7 @@ import type {
   JiraIssueWatch,
   UpdateJiraIssueWatchInput,
 } from "@/lib/types/jira";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   open: boolean;
@@ -192,6 +193,7 @@ function JQLField({
   jql: string;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const handleTest = useCallback(async () => {
@@ -225,13 +227,11 @@ function JQLField({
       <Textarea
         value={jql}
         onChange={(e) => onChange(e.target.value)}
-        placeholder='project = PROJ AND status = "Open"'
+        placeholder={t("jira:projectProjAndStatusOpen")}
         rows={3}
         className="font-mono text-xs resize-y"
       />
-      <p className="text-xs text-muted-foreground">
-        Atlassian JQL. The watcher polls this query and creates one task per newly-matching ticket.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("jira:atlassianJqlTheWatcherPollsThis")}</p>
       {result && (
         <p className={`text-xs ${result.ok ? "text-emerald-600" : "text-destructive"}`}>
           {result.message}
@@ -242,6 +242,7 @@ function JQLField({
 }
 
 function PlaceholdersHelp() {
+  const { t } = useTranslation();
   return (
     <TooltipProvider>
       <Tooltip>
@@ -249,7 +250,7 @@ function PlaceholdersHelp() {
           <IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help shrink-0" />
         </TooltipTrigger>
         <TooltipContent className="max-w-xs" align="start">
-          <p className="text-xs font-medium mb-1">Available placeholders:</p>
+          <p className="text-xs font-medium mb-1">{t("jira:availablePlaceholders")}</p>
           <ul className="text-xs space-y-0.5">
             {JIRA_ISSUE_WATCH_PLACEHOLDERS.map((p) => (
               <li key={p.key}>
@@ -265,10 +266,11 @@ function PlaceholdersHelp() {
 }
 
 function PromptField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1.5">
-        <Label>Task Prompt</Label>
+        <Label>{t("jira:taskPrompt")}</Label>
         <PlaceholdersHelp />
       </div>
       <p className="text-xs text-muted-foreground">
@@ -297,6 +299,7 @@ function WorkspacePicker({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
     <SelectField
@@ -304,7 +307,7 @@ function WorkspacePicker({
       description="Tasks created by this watcher land in the selected workspace."
       value={value}
       onChange={onChange}
-      placeholder="Select workspace"
+      placeholder={t("jira:selectWorkspace")}
       items={workspaces.map((w) => ({ id: w.id, label: w.name }))}
       disabled={disabled}
     />
@@ -318,6 +321,7 @@ function AutomationFields({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const { t } = useTranslation();
   const { workflows, agentProfiles, allExecutorProfiles } = useFormData(form.workspaceId);
   const { steps, loading: stepsLoading } = useWorkflowSteps(form.workflowId);
   return (
@@ -328,7 +332,7 @@ function AutomationFields({
           description="Tasks are created in this workflow."
           value={form.workflowId}
           onChange={(v) => setForm((p) => ({ ...p, workflowId: v, workflowStepId: "" }))}
-          placeholder="Select workflow"
+          placeholder={t("common:selectWorkflow")}
           items={workflows.map((w) => ({ id: w.id, label: w.name }))}
         />
         <SelectField
@@ -389,26 +393,24 @@ function MaxInflightTasksField({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const { t } = useTranslation();
   const parsed = parseMaxInflightTasks(form.maxInflightTasks);
   const invalid = parsed === "invalid";
   return (
     <div className="space-y-1.5">
-      <Label>Max in-flight tasks</Label>
-      <p className="text-xs text-muted-foreground">
-        Cap on open tasks created by this watcher. Leave blank for no cap. New matches are deferred
-        to the next poll when the cap is reached.
-      </p>
+      <Label>{t("jira:maxInFlightTasks")}</Label>
+      <p className="text-xs text-muted-foreground">{t("jira:capOnOpenTasksCreatedBy")}</p>
       <Input
         type="number"
         value={form.maxInflightTasks}
         onChange={(e) => setForm((p) => ({ ...p, maxInflightTasks: e.target.value }))}
         min={1}
         step={1}
-        placeholder="(no cap)"
+        placeholder={t("jira:noCap")}
         aria-invalid={invalid}
       />
       {invalid && (
-        <p className="text-xs text-destructive">Enter a positive integer or leave blank.</p>
+        <p className="text-xs text-destructive">{t("jira:enterAPositiveIntegerOrLeave")}</p>
       )}
     </div>
   );
@@ -421,13 +423,12 @@ function SettingsFields({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="space-y-1.5">
-        <Label>Poll Interval (seconds)</Label>
-        <p className="text-xs text-muted-foreground">
-          How often to re-run the JQL. Minimum 60s, maximum 3600s.
-        </p>
+        <Label>{t("jira:pollIntervalSeconds")}</Label>
+        <p className="text-xs text-muted-foreground">{t("jira:howOftenToReRunThe")}</p>
         <Input
           type="number"
           value={form.pollInterval}
@@ -439,8 +440,8 @@ function SettingsFields({
       <MaxInflightTasksField form={form} setForm={setForm} />
       <div className="flex items-center justify-between">
         <div>
-          <Label>Enabled</Label>
-          <p className="text-xs text-muted-foreground">Pause or resume polling.</p>
+          <Label>{t("common:enabled")}</Label>
+          <p className="text-xs text-muted-foreground">{t("jira:pauseOrResumePolling")}</p>
         </div>
         <Switch
           checked={form.enabled}
@@ -465,6 +466,7 @@ export function JiraIssueWatchDialog({
   onCreate,
   onUpdate,
 }: Props) {
+  const { t } = useTranslation();
   const activeWorkspaceId = useAppStore((s) => s.workspaces.activeId);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>(() => makeEmptyForm(workspaceId ?? ""));
@@ -535,11 +537,7 @@ export function JiraIssueWatchDialog({
       <DialogContent className="w-full max-w-full sm:w-[800px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{watch ? "Edit JIRA Watcher" : "Create JIRA Watcher"}</DialogTitle>
-          <DialogDescription>
-            Poll a JQL query and auto-create a Kandev task for each newly-matching ticket.
-            Optionally bind a repository so each task runs against that codebase, or leave it unset
-            to run with no repository.
-          </DialogDescription>
+          <DialogDescription>{t("jira:pollAJqlQueryAndAuto")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-5">
           <WorkspacePicker
@@ -561,7 +559,7 @@ export function JiraIssueWatchDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button onClick={handleSave} disabled={saving || !canSave} className="cursor-pointer">
             {savingLabel(saving, !!watch)}

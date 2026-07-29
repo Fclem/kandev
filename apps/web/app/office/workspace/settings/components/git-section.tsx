@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { useAppStore } from "@/components/state-provider";
 import * as officeApi from "@/lib/api/domains/office-api";
 import type { GitStatusData } from "@/lib/api/domains/office-api";
+import { useTranslation } from "react-i18next";
 
 function useGitOperations(activeWorkspaceId: string) {
   const [gitStatus, setGitStatus] = useState<GitStatusData | null>(null);
@@ -159,13 +160,12 @@ function CloneForm({
   onBranchChange: (v: string) => void;
   onClone: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        Connect a git repository to version-control this workspace configuration.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("office:connectAGitRepositoryToVersion")}</p>
       <div>
-        <label className="text-sm text-muted-foreground">Repository URL</label>
+        <label className="text-sm text-muted-foreground">{t("office:repositoryUrl")}</label>
         <Input
           value={repoUrl}
           onChange={(e) => onRepoUrlChange(e.target.value)}
@@ -174,11 +174,11 @@ function CloneForm({
         />
       </div>
       <div>
-        <label className="text-sm text-muted-foreground">Branch</label>
+        <label className="text-sm text-muted-foreground">{t("office:branch")}</label>
         <Input
           value={branch}
           onChange={(e) => onBranchChange(e.target.value)}
-          placeholder="main"
+          placeholder={t("office:main")}
           className="mt-1"
         />
       </div>
@@ -207,6 +207,7 @@ function GitStatusDisplay({
   onPush: () => void;
   onRefresh: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -215,7 +216,7 @@ function GitStatusDisplay({
           <span className="text-sm font-mono">{status.branch}</span>
           {status.is_dirty ? (
             <Badge variant="outline" className="text-yellow-600 border-yellow-300 text-[10px]">
-              dirty
+              {t("office:dirty")}
             </Badge>
           ) : (
             <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">
@@ -270,11 +271,11 @@ function GitStatusDisplay({
       </div>
 
       <div>
-        <label className="text-sm text-muted-foreground">Commit message</label>
+        <label className="text-sm text-muted-foreground">{t("office:commitMessage")}</label>
         <Input
           value={commitMessage}
           onChange={(e) => onCommitMessageChange(e.target.value)}
-          placeholder="Update workspace configuration"
+          placeholder={t("office:updateWorkspaceConfiguration")}
           className="mt-1"
         />
       </div>

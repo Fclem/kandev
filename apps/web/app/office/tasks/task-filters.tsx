@@ -13,6 +13,7 @@ import type {
   OfficeTaskPriority,
 } from "@/lib/state/slices/office/types";
 import { StatusIcon } from "./status-icon";
+import { useTranslation } from "react-i18next";
 
 const FALLBACK_STATUSES: { value: OfficeTaskStatus; label: string }[] = [
   { value: "backlog", label: "Backlog" },
@@ -42,6 +43,7 @@ function toggleInArray<T>(arr: T[], value: T): T[] {
 }
 
 export function TaskFilters({ filters, onFilterChange }: IssueFiltersProps) {
+  const { t } = useTranslation();
   const meta = useAppStore((s) => s.office.meta);
   const STATUSES = meta
     ? meta.statuses.map((s) => ({ value: s.id as OfficeTaskStatus, label: s.label }))
@@ -75,10 +77,10 @@ export function TaskFilters({ filters, onFilterChange }: IssueFiltersProps) {
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Filter</TooltipContent>
+        <TooltipContent>{t("office:filter")}</TooltipContent>
       </Tooltip>
       <PopoverContent className="w-56 p-3" align="end">
-        <p className="text-xs font-medium mb-2">Status</p>
+        <p className="text-xs font-medium mb-2">{t("common:status")}</p>
         <div className="flex flex-col gap-1.5">
           {STATUSES.map((s) => (
             <label key={s.value} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -95,7 +97,7 @@ export function TaskFilters({ filters, onFilterChange }: IssueFiltersProps) {
           ))}
         </div>
         <Separator className="my-2" />
-        <p className="text-xs font-medium mb-2">Priority</p>
+        <p className="text-xs font-medium mb-2">{t("office:priority")}</p>
         <div className="flex flex-col gap-1.5">
           {PRIORITIES.map((p) => (
             <label key={p.value} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -121,7 +123,7 @@ export function TaskFilters({ filters, onFilterChange }: IssueFiltersProps) {
                 onFilterChange({ statuses: [], priorities: [], assigneeIds: [], projectIds: [] })
               }
             >
-              Clear filters
+              {t("office:clearFilters")}
             </Button>
           </>
         )}

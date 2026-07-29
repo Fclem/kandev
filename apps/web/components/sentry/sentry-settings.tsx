@@ -20,6 +20,7 @@ import type { SentryConfig } from "@/lib/types/sentry";
 import { SentryInstanceCard } from "./sentry-instance-card";
 import { SentryInstanceForm } from "./sentry-instance-form";
 import { SentryIssueWatchersSection } from "./sentry-issue-watchers-section";
+import { useTranslation } from "react-i18next";
 
 // EditMode is the mutually-exclusive form state: at most one add-or-edit form
 // is open at a time.
@@ -89,10 +90,11 @@ function InstanceList({
   onCancel,
   onDirtyChange,
 }: InstanceListProps) {
+  const { t } = useTranslation();
   if (instances.length === 0 && mode.kind !== "add") {
     return (
       <p className="text-sm text-muted-foreground py-2" data-testid="sentry-no-instances">
-        No Sentry instances yet. Add one to connect this workspace.
+        {t("sentry:noSentryInstancesYetAddOne")}
       </p>
     );
   }
@@ -128,6 +130,7 @@ function EnabledPill() {
 }
 
 export function SentryConnectionSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const { instances, loading, reload } = useInstanceList(workspaceId);
   const { toast } = useToast();
   const [mode, setMode] = useState<EditMode>({ kind: "none" });
@@ -173,17 +176,17 @@ export function SentryConnectionSection({ workspaceId }: { workspaceId: string }
   return (
     <SettingsSection
       icon={<IconBrandSentry className="h-5 w-5" />}
-      title="Sentry integration"
+      title={t("sentry:sentryIntegration")}
       description="Connect this workspace to Sentry. Add a named instance for each Sentry org or self-hosted host; credentials are stored encrypted server-side."
       action={<EnabledPill />}
     >
       <SettingsCard isDirty={formDirty}>
         <CardContent className="space-y-3 pt-6">
           <h3 className="text-sm font-semibold" data-testid="sentry-instances-heading">
-            Instances
+            {t("sentry:instances")}
           </h3>
           {loading && instances.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Loading…</p>
+            <p className="text-sm text-muted-foreground py-4 text-center">{t("common:loading3")}</p>
           ) : (
             <InstanceList
               instances={instances}

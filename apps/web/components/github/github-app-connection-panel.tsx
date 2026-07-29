@@ -9,11 +9,13 @@ import { useGitHubAppRegistrations } from "@/hooks/domains/github/use-github-app
 import { GitHubAppCreateForm } from "./github-app-create-form";
 import { GitHubAppImportForm } from "./github-app-import-form";
 import { GitHubAppRegistrationList } from "./github-app-registration-list";
+import { useTranslation } from "react-i18next";
 
 type AppView = "choose" | "import" | "create";
 type RegistrationHook = ReturnType<typeof useGitHubAppRegistrations>;
 
 export function GitHubAppConnectionPanel({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const registrations = useGitHubAppRegistrations(workspaceId);
   const [view, setView] = useState<AppView>("choose");
   const { selectedId, setSelectedId, selectedRegistration } = useAppRegistrationSelection(
@@ -67,11 +69,9 @@ export function GitHubAppConnectionPanel({ workspaceId }: { workspaceId: string 
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <h3 className="text-sm font-medium">Choose a GitHub App</h3>
+        <h3 className="text-sm font-medium">{t("github:chooseAGithubApp")}</h3>
         <p className="text-xs leading-5 text-muted-foreground">
-          Use an App when automation needs its own identity, short-lived tokens, and
-          repository-level installation control. Setup is more involved and requires a publicly
-          reachable HTTPS URL.
+          {t("github:useAnAppWhenAutomationNeeds")}
         </p>
       </div>
       {registrations.loading ? (
@@ -105,8 +105,7 @@ export function GitHubAppConnectionPanel({ workspaceId }: { workspaceId: string 
         </Button>
       </div>
       <p className="text-xs leading-5 text-muted-foreground">
-        A registration can be reused across workspaces, or you can keep work and personal Apps
-        separate. Each workspace selects and installs its own credential.
+        {t("github:aRegistrationCanBeReusedAcross")}
       </p>
     </div>
   );
@@ -129,9 +128,10 @@ function useAppRegistrationSelection(workspaceId: string, registrations: Registr
 }
 
 function BackButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <Button variant="ghost" className="h-11 cursor-pointer px-2" onClick={onClick}>
-      Back to registered Apps
+      {t("github:backToRegisteredApps")}
     </Button>
   );
 }

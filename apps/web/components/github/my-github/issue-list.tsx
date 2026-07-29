@@ -16,6 +16,7 @@ import { formatRelativeTime } from "@/lib/utils";
 import type { GitHubIssue, TaskIssueLink } from "@/lib/types/github";
 import type { LaunchPayload, TaskPreset } from "./quick-task-launcher";
 import { TaskRowIndicator } from "./task-row-indicator";
+import { useTranslation } from "react-i18next";
 
 type IssueListProps = {
   items: GitHubIssue[];
@@ -149,6 +150,7 @@ function IssueListBody({
   onStartTask,
   issueKeyToTasks,
 }: IssueListProps) {
+  const { t } = useTranslation();
   if (loading) {
     return (
       <div className="flex justify-center py-10">
@@ -162,7 +164,7 @@ function IssueListBody({
   if (items.length === 0) {
     return (
       <div className="text-center py-10 text-muted-foreground text-sm">
-        No issues match this filter.
+        {t("github:noIssuesMatchThisFilter")}
       </div>
     );
   }

@@ -8,6 +8,7 @@ import { useOfficeRefetch } from "@/hooks/use-office-refetch";
 import { listRuns } from "@/lib/api/domains/office-api";
 import type { AgentProfile, Run } from "@/lib/state/slices/office/types";
 import { timeAgo } from "@/lib/utils/time";
+import { useTranslation } from "react-i18next";
 
 type AgentRunsTabProps = {
   agent: AgentProfile;
@@ -55,6 +56,7 @@ function CancelReasonBadge({ reason }: { reason: string }) {
 }
 
 export function AgentRunsTab({ agent }: AgentRunsTabProps) {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const [runs, setRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +87,7 @@ export function AgentRunsTab({ agent }: AgentRunsTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-sm text-muted-foreground">Loading runs...</p>
+        <p className="text-sm text-muted-foreground">{t("office:loadingRuns")}</p>
       </div>
     );
   }
@@ -94,10 +96,8 @@ export function AgentRunsTab({ agent }: AgentRunsTabProps) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <IconRun className="h-10 w-10 text-muted-foreground/30 mb-3" />
-        <p className="text-sm text-muted-foreground">No runs yet.</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Assign a task to this agent to see execution history.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("office:noRunsYet")}</p>
+        <p className="text-xs text-muted-foreground mt-1">{t("office:assignATaskToThisAgent")}</p>
       </div>
     );
   }
@@ -105,9 +105,9 @@ export function AgentRunsTab({ agent }: AgentRunsTabProps) {
   return (
     <div className="mt-4 border border-border rounded-lg divide-y divide-border">
       <div className="grid grid-cols-[1fr_160px_140px] gap-4 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        <span>Reason</span>
-        <span>Status</span>
-        <span>Requested</span>
+        <span>{t("office:reason")}</span>
+        <span>{t("common:status")}</span>
+        <span>{t("office:requested")}</span>
       </div>
       {runs.map((run) => (
         <div key={run.id} className="grid grid-cols-[1fr_160px_140px] gap-4 px-4 py-2.5 text-sm">

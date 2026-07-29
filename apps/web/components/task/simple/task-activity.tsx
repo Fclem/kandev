@@ -4,6 +4,7 @@ import { useAppStore } from "@/components/state-provider";
 import { formatRelativeTime } from "@/lib/utils";
 import { AgentAvatar } from "@/app/office/components/agent-avatar";
 import type { TaskActivityEntry } from "@/app/office/tasks/[id]/types";
+import { useTranslation } from "react-i18next";
 
 type TaskActivityProps = {
   taskId: string;
@@ -44,10 +45,11 @@ function ActivityRow({ entry }: { entry: TaskActivityEntry }) {
 }
 
 export function TaskActivity({ taskId, entries }: TaskActivityProps) {
+  const { t } = useTranslation();
   void taskId;
 
   if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground py-4">No activity yet</p>;
+    return <p className="text-sm text-muted-foreground py-4">{t("task:noActivityYet")}</p>;
   }
 
   return (

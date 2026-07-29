@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { ClarificationOption } from "@/lib/types/http";
 import { KeyboardShortcutTooltip } from "@/components/keyboard-shortcut-tooltip";
 import { KEYS } from "@/lib/keyboard/constants";
+import { useTranslation } from "react-i18next";
 
 // Grow the custom-answer box up to ~6 lines, then scroll internally so the
 // clarification overlay stays compact.
@@ -179,6 +180,7 @@ function CustomInputControls({
   isSubmitting: boolean;
   onSubmit: (text: string) => void;
 }) {
+  const { t } = useTranslation();
   if (isFinePointer) {
     return (
       <div className="flex flex-shrink-0 items-center gap-1">
@@ -190,7 +192,7 @@ function CustomInputControls({
           Enter
         </kbd>
         <span aria-hidden="true" className="select-none text-[10px] text-muted-foreground/60">
-          ⇧↵ newline
+          {t("task:newline")}
         </span>
       </div>
     );
@@ -202,7 +204,7 @@ function CustomInputControls({
       onClick={() => onSubmit(trimmed)}
       disabled={!canSend}
       data-testid="clarification-custom-submit"
-      aria-label="Send answer"
+      aria-label={t("task:sendAnswer")}
       className={cn(
         "flex flex-shrink-0 items-center gap-1 text-xs px-2 py-1 rounded font-medium transition-colors",
         canSend

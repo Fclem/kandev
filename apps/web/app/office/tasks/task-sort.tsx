@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { TaskSortField, TaskSortDir } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 const SORT_FIELDS: { value: TaskSortField; label: string }[] = [
   { value: "updated", label: "Updated" },
@@ -23,6 +24,7 @@ type IssueSortProps = {
 };
 
 export function TaskSort({ field, dir, onFieldChange, onDirChange }: IssueSortProps) {
+  const { t } = useTranslation();
   return (
     <Popover>
       <Tooltip>
@@ -33,10 +35,10 @@ export function TaskSort({ field, dir, onFieldChange, onDirChange }: IssueSortPr
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Sort</TooltipContent>
+        <TooltipContent>{t("office:sort")}</TooltipContent>
       </Tooltip>
       <PopoverContent className="w-48 p-2" align="end">
-        <p className="text-xs font-medium px-2 mb-1">Sort by</p>
+        <p className="text-xs font-medium px-2 mb-1">{t("office:sortBy")}</p>
         <div className="flex flex-col gap-0.5">
           {SORT_FIELDS.map((f) => (
             <button

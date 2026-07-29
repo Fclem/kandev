@@ -3,6 +3,7 @@
 import { Badge } from "@kandev/ui/badge";
 import { Card } from "@kandev/ui/card";
 import { useAppStore } from "@/components/state-provider";
+import { useTranslation } from "react-i18next";
 
 type StepReviewProps = {
   workspaceName: string;
@@ -28,6 +29,7 @@ export function StepReview({
   executorPreference,
   taskTitle,
 }: StepReviewProps) {
+  const { t } = useTranslation();
   const meta = useAppStore((s) => s.office.meta);
 
   const executorLabel =
@@ -38,9 +40,9 @@ export function StepReview({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Review and launch</h2>
+        <h2 className="text-xl font-semibold">{t("office:reviewAndLaunch")}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Confirm the details below. Everything can be changed later.
+          {t("office:confirmTheDetailsBelowEverythingCan")}
         </p>
       </div>
       <Card className="divide-y divide-border">

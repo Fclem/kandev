@@ -6,6 +6,7 @@ import type { JiraTicket } from "@/lib/types/jira";
 import { JIRA_KEY_RE } from "./jira-ticket-common";
 import { useJiraAvailable } from "@/hooks/domains/jira/use-jira-availability";
 import { ValidatedPopover } from "@/components/integrations/validated-popover";
+import { useTranslation } from "react-i18next";
 
 type JiraImportBarProps = {
   workspaceId: string | null;
@@ -14,6 +15,7 @@ type JiraImportBarProps = {
 };
 
 export function JiraImportBar({ workspaceId, disabled, onImport }: JiraImportBarProps) {
+  const { t } = useTranslation();
   const available = useJiraAvailable(workspaceId);
   if (!available || !workspaceId) return null;
 
@@ -27,7 +29,7 @@ export function JiraImportBar({ workspaceId, disabled, onImport }: JiraImportBar
       tooltip="Import from Jira ticket URL or key"
       align="start"
       headline="Import Jira ticket"
-      placeholder="PROJ-123 or paste ticket URL"
+      placeholder={t("jira:proj123OrPasteTicketUrl")}
       extractKey={(raw) => raw.toUpperCase().match(JIRA_KEY_RE)?.[0] ?? null}
       validationHint="Paste a Jira ticket URL or key (PROJ-123)"
       fetch={(key) => getJiraTicket(key, { workspaceId })}

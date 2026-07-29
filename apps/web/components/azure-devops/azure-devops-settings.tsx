@@ -37,6 +37,7 @@ import type {
   SetAzureDevOpsConfigRequest,
   TestAzureDevOpsConnectionResult,
 } from "@/lib/types/azure-devops";
+import { useTranslation } from "react-i18next";
 
 type FormState = {
   organizationUrl: string;
@@ -251,6 +252,7 @@ type SettingsState = ReturnType<typeof useAzureDevOpsSettings>;
 type ProjectsState = ReturnType<typeof useAzureDevOpsProjects>;
 
 function PATSetupHelp({ organizationUrl }: { organizationUrl: string }) {
+  const { t } = useTranslation();
   const patURL = azureDevOpsPATURL(organizationUrl);
   const [open, setOpen] = useState(false);
 
@@ -263,7 +265,7 @@ function PATSetupHelp({ organizationUrl }: { organizationUrl: string }) {
             variant="ghost"
             size="icon-sm"
             className="size-11 shrink-0 cursor-help text-muted-foreground sm:size-7"
-            aria-label="How to create a personal access token"
+            aria-label={t("azureDevops:howToCreateAPersonalAccess")}
             onClick={() => setOpen((current) => !current)}
           >
             <IconInfoCircle className="size-4" />
@@ -276,16 +278,20 @@ function PATSetupHelp({ organizationUrl }: { organizationUrl: string }) {
           className="pointer-events-auto max-w-sm space-y-2 p-3 text-left text-xs leading-relaxed"
           data-testid="azure-devops-pat-help"
         >
-          <p className="font-medium text-foreground">Create a read-only personal access token</p>
+          <p className="font-medium text-foreground">
+            {t("azureDevops:createAReadOnlyPersonalAccess")}
+          </p>
           <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
-            <li>Open token settings and select New Token.</li>
-            <li>Choose this organization, a short expiration, and Custom defined scopes.</li>
+            <li>{t("azureDevops:openTokenSettingsAndSelectNew")}</li>
+            <li>{t("azureDevops:chooseThisOrganizationAShortExpiration")}</li>
             <li>
-              Under <span className="font-medium text-foreground">Work Items</span>, check Read.
-              Under <span className="font-medium text-foreground">Code</span>, check Read. Leave all
-              other scopes unchecked.
+              Under{" "}
+              <span className="font-medium text-foreground">{t("azureDevops:workItems")}</span>,
+              check Read. Under{" "}
+              <span className="font-medium text-foreground">{t("azureDevops:code")}</span>, check
+              Read. Leave all other scopes unchecked.
             </li>
-            <li>Create the token, copy it, and paste it into this field.</li>
+            <li>{t("azureDevops:createTheTokenCopyItAnd")}</li>
           </ol>
           {patURL ? (
             <a
@@ -298,9 +304,7 @@ function PATSetupHelp({ organizationUrl }: { organizationUrl: string }) {
               Create personal access token
             </a>
           ) : (
-            <p className="text-muted-foreground">
-              Enter a valid organization URL to open its token settings.
-            </p>
+            <p className="text-muted-foreground">{t("azureDevops:enterAValidOrganizationUrlTo")}</p>
           )}
         </TooltipContent>
       </Tooltip>
@@ -319,12 +323,13 @@ function ConnectionFields({
   canReusePAT: boolean;
   projectSelectionEnabled: boolean;
 }) {
+  const { t } = useTranslation();
   const projectPlaceholder = projects.loading ? "Loading projects..." : "Optional";
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="azure-devops-organization">Organization URL</Label>
+          <Label htmlFor="azure-devops-organization">{t("azureDevops:organizationUrl")}</Label>
           <Input
             id="azure-devops-organization"
             value={state.form.organizationUrl}
@@ -337,7 +342,7 @@ function ConnectionFields({
         </div>
         <div className="space-y-1.5">
           <div className="sm:flex sm:min-h-7 sm:items-center">
-            <Label htmlFor="azure-devops-project">Default project</Label>
+            <Label htmlFor="azure-devops-project">{t("azureDevops:defaultProject")}</Label>
           </div>
           <Select
             value={state.form.defaultProjectId || undefined}
@@ -367,7 +372,7 @@ function ConnectionFields({
         </div>
         <div className="space-y-1.5">
           <div className="flex items-center gap-1 sm:min-h-7">
-            <Label htmlFor="azure-devops-pat">Personal Access Token</Label>
+            <Label htmlFor="azure-devops-pat">{t("azureDevops:personalAccessToken")}</Label>
             <PATSetupHelp organizationUrl={state.form.organizationUrl} />
           </div>
           <Input
@@ -438,6 +443,7 @@ function ConnectionActions({ state, disabled }: { state: SettingsState; disabled
 }
 
 export function AzureDevOpsConnectionSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const state = useAzureDevOpsSettings(workspaceId);
   const projects = useAzureDevOpsProjects(workspaceId, !!state.config?.hasSecret);
   const canReusePAT = savedPATMatches(state.config, state.form);
@@ -451,7 +457,7 @@ export function AzureDevOpsConnectionSection({ workspaceId }: { workspaceId: str
   return (
     <SettingsSection
       icon={<IconBrandAzure className="h-5 w-5" />}
-      title="Azure DevOps integration"
+      title={t("azureDevops:azureDevopsIntegration")}
       description="Azure DevOps Services organization, project, and read-only PAT for this workspace."
     >
       <Card>

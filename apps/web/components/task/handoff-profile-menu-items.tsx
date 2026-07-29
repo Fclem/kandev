@@ -19,6 +19,7 @@ import { useRemoteAuthSpecs } from "@/hooks/domains/settings/use-remote-auth-spe
 import { useTaskExecutorProfile } from "@/hooks/domains/session/use-task-executor-profile";
 import { isAgentConfiguredOnExecutor } from "@/lib/agent-executor-compat";
 import type { AgentProfileOption } from "@/lib/state/slices";
+import { useTranslation } from "react-i18next";
 
 export type HandoffProfile = {
   id: string;
@@ -63,10 +64,11 @@ function HandoffProfileList({
   onSelectProfile: (profileId: string) => void;
   Item: typeof ContextMenuItem | typeof DropdownMenuItem;
 }) {
+  const { t } = useTranslation();
   if (profiles.length === 0) {
     return (
       <Item disabled className="text-xs text-muted-foreground">
-        No agent profiles configured
+        {t("task:noAgentProfilesConfigured")}
       </Item>
     );
   }
@@ -96,6 +98,7 @@ type HandoffMenuProps = {
 };
 
 export function HandoffContextMenuSub({ taskId, disabled, onSelectProfile }: HandoffMenuProps) {
+  const { t } = useTranslation();
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const profiles = useHandoffProfiles(taskId, submenuOpen);
   const submenuDisabled = disabled || (profiles.length > 0 && profiles.every((p) => p.disabled));
@@ -107,7 +110,7 @@ export function HandoffContextMenuSub({ taskId, disabled, onSelectProfile }: Han
         disabled={submenuDisabled}
         data-testid="session-handoff-submenu"
       >
-        Handoff
+        {t("task:handoff")}
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-48">
         <HandoffProfileList
@@ -121,6 +124,7 @@ export function HandoffContextMenuSub({ taskId, disabled, onSelectProfile }: Han
 }
 
 export function HandoffDropdownMenuSub({ taskId, disabled, onSelectProfile }: HandoffMenuProps) {
+  const { t } = useTranslation();
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const profiles = useHandoffProfiles(taskId, submenuOpen);
   const submenuDisabled = disabled || (profiles.length > 0 && profiles.every((p) => p.disabled));
@@ -132,7 +136,7 @@ export function HandoffDropdownMenuSub({ taskId, disabled, onSelectProfile }: Ha
         disabled={submenuDisabled}
         data-testid="session-handoff-submenu"
       >
-        Handoff
+        {t("task:handoff")}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-48">
         <HandoffProfileList

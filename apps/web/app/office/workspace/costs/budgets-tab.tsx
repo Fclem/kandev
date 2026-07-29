@@ -8,8 +8,10 @@ import { listBudgets, deleteBudget } from "@/lib/api/domains/office-api";
 import type { BudgetPolicy } from "@/lib/state/slices/office/types";
 import { BudgetPolicyCard } from "./budget-policy-card";
 import { CreateBudgetForm } from "./create-budget-form";
+import { useTranslation } from "react-i18next";
 
 export function BudgetsTab({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const [policies, setPolicies] = useState<BudgetPolicy[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -26,7 +28,7 @@ export function BudgetsTab({ workspaceId }: { workspaceId: string }) {
     try {
       await deleteBudget(id);
       setPolicies((prev) => prev.filter((p) => p.id !== id));
-      toast.success("Budget policy deleted");
+      toast.success(t("office:budgetPolicyDeleted"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete budget policy");
     }
@@ -41,9 +43,9 @@ export function BudgetsTab({ workspaceId }: { workspaceId: string }) {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-sm font-semibold">Budget Policies</h2>
+          <h2 className="text-sm font-semibold">{t("office:budgetPolicies")}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Set spending limits per agent or project. Agents pause when limits are exceeded.
+            {t("office:setSpendingLimitsPerAgentOr")}
           </p>
         </div>
         <Button
@@ -67,7 +69,7 @@ export function BudgetsTab({ workspaceId }: { workspaceId: string }) {
 
       {policies.length === 0 && !showCreate && (
         <p className="text-sm text-muted-foreground">
-          No budget policies configured. Add one to enforce spending limits.
+          {t("office:noBudgetPoliciesConfiguredAddOne")}
         </p>
       )}
 

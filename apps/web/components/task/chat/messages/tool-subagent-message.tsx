@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { Message } from "@/lib/types/http";
 import type { SubagentTaskPayload, ToolCallMetadata } from "@/components/task/chat/types";
 import { SubagentMetaRow } from "@/components/task/chat/messages/subagent-meta-row";
+import { useTranslation } from "react-i18next";
 
 type ToolSubagentMessageProps = {
   comment: Message;
@@ -101,6 +102,7 @@ function SubagentHeader({
   hasExpandableContent,
   onToggle,
 }: SubagentHeaderProps) {
+  const { t } = useTranslation();
   const showDescription = !labelsMatch(subagentType, description);
   const showInlineWorking = isActive && !hasExpandableContent;
   const content = (
@@ -133,7 +135,7 @@ function SubagentHeader({
         </span>
       )}
       {showInlineWorking && (
-        <span className="text-xs text-muted-foreground italic">Working...</span>
+        <span className="text-xs text-muted-foreground italic">{t("task:working")}</span>
       )}
       {isActive && <GridSpinner className="text-muted-foreground shrink-0" />}
       {childCount > 0 && (

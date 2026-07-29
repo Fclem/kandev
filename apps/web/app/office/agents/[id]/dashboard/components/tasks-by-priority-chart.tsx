@@ -3,6 +3,7 @@ import { StackedBars, type StackedBarRow } from "./stacked-bars";
 import { ChartLegend } from "./run-activity-chart";
 import type { AgentTaskPriorityDay } from "@/lib/api/domains/office-extended-api";
 import { formatBarLabel } from "./format-date";
+import { useTranslation } from "react-i18next";
 
 type Props = { days: AgentTaskPriorityDay[] };
 
@@ -20,10 +21,11 @@ function rowsFromDays(days: AgentTaskPriorityDay[]): StackedBarRow[] {
 }
 
 export function TasksByPriorityChart({ days }: Props) {
+  const { t } = useTranslation();
   return (
     <Card data-testid="tasks-by-priority-card">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Tasks by priority</CardTitle>
+        <CardTitle className="text-sm">{t("office:tasksByPriority")}</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
         <StackedBars

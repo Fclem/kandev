@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { IconX } from "@tabler/icons-react";
 import { cn, generateUUID } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 export type ImageAttachment = {
   id: string;
@@ -41,6 +42,7 @@ export const ImageAttachmentPreview = memo(function ImageAttachmentPreview({
   onRemove,
   disabled = false,
 }: ImageAttachmentPreviewProps) {
+  const { t } = useTranslation();
   if (attachments.length === 0) return null;
 
   return (
@@ -55,7 +57,7 @@ export const ImageAttachmentPreview = memo(function ImageAttachmentPreview({
         >
           <img
             src={attachment.preview}
-            alt="Attachment preview"
+            alt={t("task:attachmentPreview")}
             className="h-10 w-10 object-cover"
           />
 
@@ -71,7 +73,7 @@ export const ImageAttachmentPreview = memo(function ImageAttachmentPreview({
                 "hover:bg-black/90 cursor-pointer",
                 "focus:outline-none focus:ring-1 focus:ring-white/50",
               )}
-              aria-label="Remove image"
+              aria-label={t("task:removeImage")}
             >
               <IconX className="h-2.5 w-2.5" />
             </button>

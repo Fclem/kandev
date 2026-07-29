@@ -5,6 +5,7 @@ import { IconCheck, IconCopy, IconTrash, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import type { Annotation } from "@/lib/preview-inspect-bridge";
 import { formatAnnotations } from "@/lib/preview-inspect-bridge";
+import { useTranslation } from "react-i18next";
 
 interface AnnotationsPanelProps {
   annotations: Annotation[];
@@ -26,6 +27,7 @@ function describeAnnotation(a: Annotation): string {
 }
 
 export function AnnotationsPanel({ annotations, onRemove, onClear }: AnnotationsPanelProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   if (annotations.length === 0) return null;
 
@@ -66,8 +68,8 @@ export function AnnotationsPanel({ annotations, onRemove, onClear }: Annotations
             className="h-6 px-2 cursor-pointer"
             onClick={onClear}
             data-testid="preview-annotations-clear"
-            aria-label="Clear all annotations"
-            title="Clear all annotations"
+            aria-label={t("task:clearAllAnnotations")}
+            title={t("task:clearAllAnnotations")}
           >
             <IconTrash className="h-3 w-3" />
           </Button>

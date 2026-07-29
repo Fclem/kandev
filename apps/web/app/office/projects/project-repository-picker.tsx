@@ -17,6 +17,7 @@ import { cn, formatUserHomePath } from "@/lib/utils";
 import type { Repository } from "@/lib/types/http";
 import { normalizeRepoValue, shouldShowCustomEntry } from "./repo-entry";
 import { useDiscoveredRepositories } from "./use-discovered-repositories";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   workspaceId: string | null;
@@ -55,6 +56,7 @@ export function ProjectRepositoryPicker({
   onSelect,
   triggerLabel,
 }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const discovered = useDiscoveredRepositories(open, workspaceId);
@@ -112,14 +114,12 @@ export function ProjectRepositoryPicker({
             <PickerTriggerButton label={triggerLabel ?? "Add repository"} />
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>
-          Pick a workspace repo, a discovered local path, or paste a URL.
-        </TooltipContent>
+        <TooltipContent>{t("office:pickAWorkspaceRepoADiscovered")}</TooltipContent>
       </Tooltip>
       <PopoverContent className="w-[420px] p-0" align="start" portal={false}>
         <Command>
           <CommandInput
-            placeholder="Search or paste a URL or path…"
+            placeholder={t("office:searchOrPasteAUrlOr")}
             value={query}
             onValueChange={setQuery}
             className="h-9"

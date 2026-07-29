@@ -19,6 +19,7 @@ import { getShortcut } from "@/lib/keyboard/shortcut-overrides";
 import { SHORTCUTS } from "@/lib/keyboard/constants";
 import { formatShortcut } from "@/lib/keyboard/utils";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 type SubmitButtonProps = {
   isAgentBusy: boolean;
@@ -226,6 +227,7 @@ export function McpIndicator({ mcpServers }: { mcpServers: string[] }) {
 }
 
 export function AttachFilesButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -240,7 +242,7 @@ export function AttachFilesButton({ onClick }: { onClick: () => void }) {
           <IconPaperclip className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Attach files</TooltipContent>
+      <TooltipContent>{t("task:attachFiles")}</TooltipContent>
     </Tooltip>
   );
 }

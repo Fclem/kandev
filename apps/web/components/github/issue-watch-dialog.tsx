@@ -39,6 +39,7 @@ import type {
   UpdateIssueWatchRequest,
   CleanupPolicy,
 } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 type IssueWatchDialogProps = {
   open: boolean;
@@ -155,6 +156,7 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 }
 
 function PlaceholdersHelp() {
+  const { t } = useTranslation();
   return (
     <TooltipProvider>
       <Tooltip>
@@ -162,7 +164,7 @@ function PlaceholdersHelp() {
           <IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help shrink-0" />
         </TooltipTrigger>
         <TooltipContent className="max-w-xs" align="start">
-          <p className="text-xs font-medium mb-1">Available placeholders:</p>
+          <p className="text-xs font-medium mb-1">{t("github:availablePlaceholders")}</p>
           <ul className="text-xs space-y-0.5">
             {ISSUE_WATCH_PLACEHOLDERS.map((p) => (
               <li key={p.key}>
@@ -229,9 +231,10 @@ function IssueFilterFields({
   onAllReposChange: (checked: boolean) => void;
   onSelectedReposChange: (repos: RepoFilter[]) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <SectionHeader>Filter</SectionHeader>
+      <SectionHeader>{t("github:filter")}</SectionHeader>
       <RepoFilterSelector
         allRepos={form.allRepos}
         selectedRepos={form.selectedRepos}
@@ -240,27 +243,27 @@ function IssueFilterFields({
         workspaceId={form.workspaceId}
       />
       <div className="space-y-1.5">
-        <Label>Labels (comma-separated)</Label>
+        <Label>{t("github:labelsCommaSeparated")}</Label>
         <Input
           value={form.labels}
           onChange={(e) => setForm((prev) => ({ ...prev, labels: e.target.value }))}
-          placeholder="e.g. bug, enhancement, priority:high"
+          placeholder={t("github:eGBugEnhancementPriorityHigh")}
         />
         <p className="text-xs text-muted-foreground">
-          Only match issues with these labels. Leave empty for all issues.
+          {t("github:onlyMatchIssuesWithTheseLabels")}
         </p>
       </div>
       <div className="space-y-1.5">
-        <Label>Custom Query</Label>
+        <Label>{t("github:customQuery")}</Label>
         <Textarea
           value={form.customQuery}
           onChange={(e) => setForm((prev) => ({ ...prev, customQuery: e.target.value }))}
-          placeholder="e.g. type:issue state:open label:bug"
+          placeholder={t("github:eGTypeIssueStateOpen")}
           rows={1}
           className="font-mono text-xs resize-y"
         />
         <p className="text-xs text-muted-foreground">
-          GitHub search query. When set, overrides the label filter above.
+          {t("github:githubSearchQueryWhenSetOverrides")}
         </p>
       </div>
     </>
@@ -274,19 +277,20 @@ function IssueAutomationFields({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const { t } = useTranslation();
   const { workflows, agentProfiles, allExecutorProfiles } = useWatchFormData(form.workspaceId);
   const { steps: workflowSteps, loading: stepsLoading } = useWorkflowSteps(form.workflowId);
 
   return (
     <>
-      <SectionHeader>Automation</SectionHeader>
+      <SectionHeader>{t("github:automation")}</SectionHeader>
       <div className="grid grid-cols-2 gap-4">
         <SelectField
           label="Workflow"
           description="The workflow to create tasks in."
           value={form.workflowId}
           onChange={(v) => setForm((prev) => ({ ...prev, workflowId: v, workflowStepId: "" }))}
-          placeholder="Select workflow"
+          placeholder={t("common:selectWorkflow")}
           items={workflows.map((w) => ({ id: w.id, label: w.name }))}
         />
         <SelectField
@@ -329,7 +333,7 @@ function IssueAutomationFields({
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center gap-1.5">
-          <Label>Task Prompt</Label>
+          <Label>{t("github:taskPrompt")}</Label>
           <PlaceholdersHelp />
         </div>
         <p className="text-xs text-muted-foreground">
@@ -357,14 +361,13 @@ function IssueSettingsFields({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <SectionHeader>Settings</SectionHeader>
+      <SectionHeader>{t("common:settings")}</SectionHeader>
       <div className="space-y-1.5">
-        <Label>Poll Interval (seconds)</Label>
-        <p className="text-xs text-muted-foreground">
-          How often to check for new issues. Minimum 60s, maximum 3600s.
-        </p>
+        <Label>{t("github:pollIntervalSeconds")}</Label>
+        <p className="text-xs text-muted-foreground">{t("github:howOftenToCheckForNew")}</p>
         <Input
           type="number"
           value={form.pollInterval}
@@ -375,8 +378,8 @@ function IssueSettingsFields({
       </div>
       <div className="flex items-center justify-between">
         <div>
-          <Label>Enabled</Label>
-          <p className="text-xs text-muted-foreground">Pause or resume polling.</p>
+          <Label>{t("common:enabled")}</Label>
+          <p className="text-xs text-muted-foreground">{t("github:pauseOrResumePolling")}</p>
         </div>
         <Switch
           checked={form.enabled}
@@ -391,7 +394,7 @@ function IssueSettingsFields({
         }
         value={form.cleanupPolicy}
         onChange={(v) => setForm((prev) => ({ ...prev, cleanupPolicy: v as CleanupPolicy }))}
-        placeholder="Auto"
+        placeholder={t("github:auto")}
         items={CLEANUP_POLICY_OPTIONS.map((p) => ({ id: p.id, label: p.label }))}
       />
     </>
@@ -417,6 +420,7 @@ export function IssueWatchDialog({
   onCreate,
   onUpdate,
 }: IssueWatchDialogProps) {
+  const { t } = useTranslation();
   const activeWorkspaceId = useAppStore((s) => s.workspaces.activeId);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>(() => makeDefaultForm(workspaceId ?? ""));
@@ -484,9 +488,7 @@ export function IssueWatchDialog({
       <DialogContent className="w-full max-w-full sm:w-[900px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{watch ? "Edit Issue Watch" : "Create Issue Watch"}</DialogTitle>
-          <DialogDescription>
-            Automatically create tasks when new GitHub issues match your criteria.
-          </DialogDescription>
+          <DialogDescription>{t("github:automaticallyCreateTasksWhenNewGithub")}</DialogDescription>
         </DialogHeader>
         <IssueWatchFormFields
           form={form}
@@ -497,7 +499,7 @@ export function IssueWatchDialog({
         />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button onClick={handleSave} disabled={saving || !canSave} className="cursor-pointer">
             {saving ? "Saving..." : getSaveLabel(watch)}
@@ -559,6 +561,7 @@ function WorkspacePicker({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
     <SelectField
@@ -566,7 +569,7 @@ function WorkspacePicker({
       description="Tasks created by this watcher land in the selected workspace."
       value={value}
       onChange={onChange}
-      placeholder="Select workspace"
+      placeholder={t("github:selectWorkspace")}
       items={workspaces.map((w) => ({ id: w.id, label: w.name }))}
       disabled={disabled}
     />

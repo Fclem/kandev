@@ -20,6 +20,7 @@ import { Input } from "@kandev/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Skill, SkillSourceType } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 interface SkillListProps {
   skills: Skill[];
@@ -43,6 +44,7 @@ function sourceIcon(sourceType: SkillSourceType) {
 }
 
 export function SkillList(props: SkillListProps) {
+  const { t } = useTranslation();
   const { skills, selectedId, onSelect, onAdd, onRefresh, onImport } = props;
   const [search, setSearch] = useState("");
   const [importSource, setImportSource] = useState("");
@@ -81,7 +83,7 @@ export function SkillList(props: SkillListProps) {
       />
       <div className="px-4 pb-2">
         <Input
-          placeholder="Filter skills..."
+          placeholder={t("office:filterSkills")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-8 text-xs"
@@ -112,10 +114,11 @@ function SkillListHeader({
   onRefresh: () => void;
   onAdd: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between px-4 pt-4 pb-2">
       <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold">Skills</h3>
+        <h3 className="text-sm font-semibold">{t("office:skills")}</h3>
         <Badge variant="secondary" className="text-xs">
           {count} available
         </Badge>
@@ -132,7 +135,7 @@ function SkillListHeader({
               <IconRefresh className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Refresh skills</TooltipContent>
+          <TooltipContent>{t("office:refreshSkills")}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -145,7 +148,7 @@ function SkillListHeader({
               <IconPlus className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Create new skill</TooltipContent>
+          <TooltipContent>{t("office:createNewSkill")}</TooltipContent>
         </Tooltip>
       </div>
     </div>
@@ -163,11 +166,12 @@ function SkillImportInput({
   onImport: () => void;
   importing: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="px-4 pb-2">
       <div className="flex gap-1">
         <Input
-          placeholder="Path, GitHub URL, or skills.sh"
+          placeholder={t("office:pathGithubUrlOrSkillsSh")}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && onImport()}
@@ -257,6 +261,7 @@ function SkillItemsGroup({
   defaultCollapsed?: boolean;
   forceExpanded?: boolean;
 }) {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   // Always show items when the selected skill lives inside this group
   // — collapsing it would hide the active selection from the user.
@@ -300,7 +305,7 @@ function SkillItemsGroup({
             <span className="truncate flex-1">{s.name}</span>
             {s.isSystem ? (
               <Badge variant="outline" className="text-[10px] text-muted-foreground shrink-0">
-                System
+                {t("common:system")}
               </Badge>
             ) : (
               sourceIcon(s.sourceType)

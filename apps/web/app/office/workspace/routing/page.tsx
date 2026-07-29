@@ -25,6 +25,7 @@ import {
   RoutingEnableCard,
   WakeReasonTierCard,
 } from "./components";
+import { useTranslation } from "react-i18next";
 
 const DEFAULT_PROFILE: ProviderProfile = { tier_map: {} };
 
@@ -39,6 +40,7 @@ function emptyConfig(): WorkspaceRouting {
 }
 
 export default function ProviderRoutingPage() {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const routing = useWorkspaceRouting(workspaceId);
   const health = useProviderHealth(workspaceId);
@@ -65,7 +67,7 @@ export default function ProviderRoutingPage() {
     try {
       await routing.update(draft);
       void preview.refresh();
-      toast.success("Routing settings saved");
+      toast.success(t("office:routingSettingsSaved"));
     } catch (err) {
       const errs = extractValidationDetails(err);
       if (errs.length > 0) setFieldErrors(errs);
@@ -76,7 +78,7 @@ export default function ProviderRoutingPage() {
   }, [draft, workspaceId, routing, preview]);
 
   if (!workspaceId || !draft) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
+    return <div className="p-6 text-sm text-muted-foreground">{t("common:loading3")}</div>;
   }
 
   return (
@@ -126,6 +128,7 @@ function PageBody({
   previewAgents,
   previewLoading,
 }: PageBodyProps) {
+  const { t } = useTranslation();
   const setEnabled = (v: boolean) => setDraft({ ...draft, enabled: v });
   const setTier = (t: Tier) => setDraft({ ...draft, default_tier: t });
   const setTierPerReason = (m: TierPerReason) => setDraft({ ...draft, tier_per_reason: m });
@@ -144,11 +147,8 @@ function PageBody({
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">Provider routing</h1>
-        <p className="text-sm text-muted-foreground">
-          Map Office agents to providers and tiers with controlled fallback. Advanced; off by
-          default.
-        </p>
+        <h1 className="text-lg font-semibold">{t("office:providerRouting")}</h1>
+        <p className="text-sm text-muted-foreground">{t("office:mapOfficeAgentsToProvidersAnd")}</p>
       </div>
 
       <RoutingEnableCard enabled={draft.enabled} onChange={setEnabled} disabled={saving} />

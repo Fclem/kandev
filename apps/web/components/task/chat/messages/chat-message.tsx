@@ -35,6 +35,8 @@ import { AgentMessageContent } from "./agent-message-content";
 import { buildEntityReferenceMarkdownComponents } from "./entity-reference-chip";
 import { entityReferencesFromMetadata } from "@/lib/entity-references/message-references";
 import type { EntityReference } from "@/lib/types/entity-reference";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 type ChatMessageProps = {
   comment: Message;
@@ -129,7 +131,9 @@ function renderUserMessageBody({
     );
   }
   if (!hasAttachments) {
-    return <p className="whitespace-pre-wrap break-words overflow-wrap-anywhere">(empty)</p>;
+    return (
+      <p className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{t("task:empty")}</p>
+    );
   }
   return null;
 }
@@ -505,6 +509,7 @@ export const ChatMessage = memo(function ChatMessage({
   onScrollToMessage,
   isTurnActive = false,
 }: ChatMessageProps) {
+  const { t } = useTranslation();
   const [showRaw, setShowRaw] = useState(false);
   const toggleRaw = useCallback(() => setShowRaw((v) => !v), []);
 
@@ -516,7 +521,7 @@ export const ChatMessage = memo(function ChatMessage({
           <p className="text-[11px] uppercase tracking-wide opacity-70">
             {comment.requests_input ? (
               <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">
-                Needs input
+                {t("task:needsInput")}
               </span>
             ) : null}
           </p>

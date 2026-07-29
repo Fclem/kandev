@@ -5,6 +5,7 @@ import type { Icon } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { MR_PRESETS, ISSUE_PRESETS, type PresetOption, type PresetGroup } from "./presets";
 import type { SavedPreset } from "./use-saved-presets";
+import { useTranslation } from "react-i18next";
 
 export type SidebarSelection = {
   kind: "mr" | "issue";
@@ -156,12 +157,13 @@ function SavedSection({
   canSaveCurrent: boolean;
   onSaveCurrent: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <SectionHeader title="Saved" />
+      <SectionHeader title={t("gitlab:saved")} />
       {saved.length === 0 && (
         <div className="mx-2 px-2 py-1 text-xs text-muted-foreground/80 italic">
-          No saved queries yet.
+          {t("gitlab:noSavedQueriesYet")}
         </div>
       )}
       {saved.map((s) => (
@@ -179,7 +181,7 @@ function SavedSection({
                 onDelete(s.id);
               }}
               className="opacity-0 group-hover/item:opacity-100 transition-opacity text-muted-foreground hover:text-foreground cursor-pointer"
-              title="Delete saved query"
+              title={t("gitlab:deleteSavedQuery")}
               aria-label={`Delete saved query ${s.label}`}
               data-testid={`gitlab-saved-delete-${s.id}`}
             >
@@ -202,7 +204,7 @@ function SavedSection({
         data-testid="gitlab-save-current-query"
       >
         <IconDeviceFloppy className="h-4 w-4 shrink-0" />
-        <span>Save current query</span>
+        <span>{t("gitlab:saveCurrentQuery")}</span>
       </button>
     </>
   );

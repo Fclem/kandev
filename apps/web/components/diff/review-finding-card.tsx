@@ -12,6 +12,7 @@ import {
 import { findingLocation } from "@/lib/review/format";
 import type { TaskReviewFinding } from "@/lib/types/review";
 import { ReviewFindingSeverityBadge } from "./review-finding-severity";
+import { useTranslation } from "react-i18next";
 
 export type ReviewFindingCardProps = {
   finding: TaskReviewFinding;
@@ -93,10 +94,11 @@ function FindingActions({
  * offering an action the feature does not have.
  */
 function FindingSuggestion({ suggestion }: { suggestion: string }) {
+  const { t } = useTranslation();
   return (
     <div className="mt-2">
       <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        Suggested change — not applied automatically
+        {t("diff:suggestedChangeNotAppliedAutomatically")}
       </p>
       <pre className="overflow-x-auto rounded bg-muted p-1.5 text-[11px] leading-tight">
         <code>{suggestion}</code>
@@ -113,6 +115,7 @@ function FindingSuggestion({ suggestion }: { suggestion: string }) {
  * dealt with while still letting them change their mind.
  */
 export function ReviewFindingCard(props: ReviewFindingCardProps) {
+  const { t } = useTranslation();
   const { finding, staleReason, showLocation = false } = props;
   const isOpen = finding.status === "open";
 
@@ -134,7 +137,7 @@ export function ReviewFindingCard(props: ReviewFindingCardProps) {
             onClick={() => props.onReopen?.(finding)}
             data-testid="review-finding-reopen"
           >
-            Undo
+            {t("diff:undo")}
           </Button>
         )}
       </div>
@@ -162,7 +165,7 @@ export function ReviewFindingCard(props: ReviewFindingCardProps) {
             title={staleReason}
             data-testid="review-finding-stale"
           >
-            Stale
+            {t("diff:stale")}
           </Badge>
         )}
       </div>

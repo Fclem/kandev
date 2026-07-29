@@ -7,6 +7,7 @@ import { IconTrash } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { BudgetPolicy } from "@/lib/state/slices/office/types";
 import { cn, formatDollars } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   policy: BudgetPolicy;
@@ -40,6 +41,7 @@ function getBudgetStatus(pct: number): { label: string; className: string } {
 }
 
 export function BudgetPolicyCard({ policy, spentSubcents = 0, onDelete }: Props) {
+  const { t } = useTranslation();
   const pct =
     policy.limitSubcents > 0
       ? Math.min(100, Math.round((spentSubcents / policy.limitSubcents) * 100))
@@ -69,14 +71,14 @@ export function BudgetPolicyCard({ policy, spentSubcents = 0, onDelete }: Props)
                 <IconTrash className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Delete policy</TooltipContent>
+            <TooltipContent>{t("office:deletePolicy")}</TooltipContent>
           </Tooltip>
         )}
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span>Observed</span>
+            <span>{t("office:observed")}</span>
             <span>
               {formatDollars(spentSubcents)} ({pct}%)
             </span>

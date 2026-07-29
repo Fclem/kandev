@@ -54,6 +54,7 @@ import {
   MobilePRBranchSummary,
   PRSubmitButton,
 } from "./session-mobile-top-bar-dialog-parts";
+import { useTranslation } from "react-i18next";
 
 export function computeUncommittedStats(files: Record<string, FileInfo> | undefined) {
   let additions = 0;
@@ -154,6 +155,7 @@ export function CommitDialog({
   isGitLoading: boolean;
   onCommit: (message: string, stageAll: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const form = useCommitDialogForm(onOpenChange, onCommit);
 
   return (
@@ -175,19 +177,19 @@ export function CommitDialog({
           </div>
           <Input
             data-testid="commit-title-input"
-            placeholder="Enter commit message..."
+            placeholder={t("task:enterCommitMessage")}
             value={form.commitMessage}
             onChange={(e) => form.setCommitMessage(e.target.value)}
             autoFocus
           />
           <div className="space-y-2">
             <Label htmlFor="commit-body-mobile" className="text-sm">
-              Description
+              {t("task:description")}
             </Label>
             <Textarea
               id="commit-body-mobile"
               data-testid="commit-body-input"
-              placeholder="Add details about this change..."
+              placeholder={t("task:addDetailsAboutThisChange")}
               value={form.commitBody}
               onChange={(e) => form.setCommitBody(e.target.value)}
               rows={3}
@@ -204,14 +206,14 @@ export function CommitDialog({
               htmlFor="stage-all-mobile"
               className="text-sm text-muted-foreground cursor-pointer"
             >
-              Stage all changes before committing
+              {t("task:stageAllChangesBeforeCommitting")}
             </Label>
           </div>
         </div>
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline">
-              Cancel
+              {t("common:cancel")}
             </Button>
           </DialogClose>
           <Button
@@ -260,6 +262,7 @@ export function PRDialog({
   onCreatePR,
   branchPushed,
 }: PRDialogProps) {
+  const { t } = useTranslation();
   const [prTitle, setPrTitle] = useState("");
   const [prBody, setPrBody] = useState("");
   const [prDraft, setPrDraft] = useState(true);
@@ -291,7 +294,7 @@ export function PRDialog({
           />
           <div className="space-y-2">
             <Label htmlFor="pr-title-mobile" className="text-sm">
-              Title
+              {t("task:title")}
             </Label>
             <input
               id="pr-title-mobile"
@@ -306,11 +309,11 @@ export function PRDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="pr-body-mobile" className="text-sm">
-              Description
+              {t("task:description")}
             </Label>
             <Textarea
               id="pr-body-mobile"
-              placeholder="Describe your changes..."
+              placeholder={t("task:describeYourChanges")}
               value={prBody}
               onChange={(e) => setPrBody(e.target.value)}
               rows={4}
@@ -324,14 +327,14 @@ export function PRDialog({
               onCheckedChange={(checked) => setPrDraft(checked === true)}
             />
             <Label htmlFor="pr-draft-mobile" className="text-sm cursor-pointer">
-              Create as draft
+              {t("task:createAsDraft")}
             </Label>
           </div>
         </div>
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline">
-              Cancel
+              {t("common:cancel")}
             </Button>
           </DialogClose>
           <PRSubmitButton
@@ -374,6 +377,7 @@ export function GitActionsDropdown({
   onRebase,
   onMerge,
 }: GitActionsDropdownProps) {
+  const { t } = useTranslation();
   const disabled = isGitLoading || !sessionId;
   const terminology = useChangeRequestTerminology(sessionId);
   return (
@@ -383,7 +387,7 @@ export function GitActionsDropdown({
           size="icon-sm"
           variant="ghost"
           className="h-11 w-11 cursor-pointer"
-          aria-label="Git actions"
+          aria-label={t("task:gitActions")}
           data-testid="mobile-git-actions"
         >
           {isGitLoading ? (
@@ -400,7 +404,7 @@ export function GitActionsDropdown({
           disabled={disabled}
         >
           <IconGitCommit className={`h-4 w-4 ${uncommittedCount > 0 ? "text-amber-500" : ""}`} />
-          <span className="flex-1">Commit</span>
+          <span className="flex-1">{t("common:commit")}</span>
           {uncommittedCount > 0 && (
             <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-xs font-medium text-amber-600">
               {uncommittedCount}
@@ -414,12 +418,12 @@ export function GitActionsDropdown({
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer gap-3" onClick={onPull} disabled={disabled}>
           <IconCloudDownload className="h-4 w-4 text-blue-500" />
-          <span className="flex-1">Pull</span>
+          <span className="flex-1">{t("common:pull")}</span>
         </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger className="cursor-pointer gap-3" disabled={disabled}>
             <IconCloudUpload className="h-4 w-4 text-green-500" />
-            <span className="flex-1">Push</span>
+            <span className="flex-1">{t("common:push")}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuItem
@@ -428,7 +432,7 @@ export function GitActionsDropdown({
               disabled={disabled}
             >
               <IconCloudUpload className="h-4 w-4 text-green-500" />
-              <span>Push</span>
+              <span>{t("common:push")}</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer gap-3"
@@ -436,19 +440,19 @@ export function GitActionsDropdown({
               disabled={disabled}
             >
               <IconAlertTriangle className="h-4 w-4 text-orange-500" />
-              <span>Force Push</span>
+              <span>{t("common:forcePush")}</span>
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer gap-3" onClick={onRebase} disabled={disabled}>
           <IconGitCherryPick className="h-4 w-4 text-orange-500" />
-          <span className="flex-1">Rebase</span>
+          <span className="flex-1">{t("common:rebase")}</span>
           <span className="text-xs text-muted-foreground">onto {baseBranch || "main"}</span>
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer gap-3" onClick={onMerge} disabled={disabled}>
           <IconGitMerge className="h-4 w-4 text-purple-500" />
-          <span className="flex-1">Merge</span>
+          <span className="flex-1">{t("common:merge")}</span>
           <span className="text-xs text-muted-foreground">from {baseBranch || "main"}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>

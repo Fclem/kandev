@@ -8,6 +8,7 @@ import { Label } from "@kandev/ui/label";
 import { Spinner } from "@kandev/ui/spinner";
 import { useToast } from "@/components/toast-provider";
 import { setGitHubWorkspaceConnection } from "@/lib/api/domains/github-api";
+import { useTranslation } from "react-i18next";
 
 export function GitHubPATForm({
   workspaceId,
@@ -16,6 +17,7 @@ export function GitHubPATForm({
   workspaceId: string;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const [token, setToken] = useState("");
   const [visible, setVisible] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -52,10 +54,8 @@ export function GitHubPATForm({
   return (
     <form onSubmit={submit} className="space-y-3">
       <div className="space-y-1">
-        <Label htmlFor="github-workspace-token">Personal access token</Label>
-        <p className="text-xs text-muted-foreground">
-          Kandev stores this token for this workspace. GitHub records actions as the token owner.
-        </p>
+        <Label htmlFor="github-workspace-token">{t("github:personalAccessToken")}</Label>
+        <p className="text-xs text-muted-foreground">{t("github:kandevStoresThisTokenForThis")}</p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
         <div className="relative min-w-0 flex-1">

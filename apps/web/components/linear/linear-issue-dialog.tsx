@@ -14,6 +14,7 @@ import {
   useIssueState,
   type IssueState,
 } from "./linear-issue-common";
+import { useTranslation } from "react-i18next";
 
 type LinearIssueDialogProps = {
   open: boolean;
@@ -109,6 +110,7 @@ function DialogBody({
   state: IssueState;
   identifier: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex-1 overflow-y-auto">
       {state.error && issue && (
@@ -117,7 +119,9 @@ function DialogBody({
         </div>
       )}
       {!issue && state.loading && (
-        <div className="text-sm text-muted-foreground py-16 text-center">Loading issue…</div>
+        <div className="text-sm text-muted-foreground py-16 text-center">
+          {t("linear:loadingIssue")}
+        </div>
       )}
       {issue && <IssueBody issue={issue} state={state} identifier={identifier} />}
     </div>
@@ -131,6 +135,7 @@ type TopBarProps = {
 };
 
 function IssueTopBar({ issue, loading, onRefresh }: TopBarProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-1 pl-4 pr-12 py-2 border-b shrink-0">
       {issue?.url && (
@@ -139,7 +144,7 @@ function IssueTopBar({ issue, loading, onRefresh }: TopBarProps) {
           variant="ghost"
           size="icon-sm"
           className="cursor-pointer"
-          title="Open in Linear"
+          title={t("linear:openInLinear")}
         >
           <a href={issue.url} target="_blank" rel="noreferrer">
             <IconExternalLink className="h-4 w-4" />
@@ -152,7 +157,7 @@ function IssueTopBar({ issue, loading, onRefresh }: TopBarProps) {
         className="cursor-pointer"
         onClick={onRefresh}
         disabled={loading}
-        title="Refresh"
+        title={t("linear:refresh")}
       >
         <IconRefresh className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
       </Button>
@@ -211,14 +216,15 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 function DescriptionSection({ description }: { description: string }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-2">
-      <SectionHeading>Description</SectionHeading>
+      <SectionHeading>{t("linear:description")}</SectionHeading>
       <div className="rounded-md border bg-muted/30 px-4 py-3">
         {description ? (
           <div className="text-sm whitespace-pre-wrap leading-relaxed">{description}</div>
         ) : (
-          <div className="text-sm text-muted-foreground italic">No description.</div>
+          <div className="text-sm text-muted-foreground italic">{t("linear:noDescription")}</div>
         )}
       </div>
     </section>
@@ -274,10 +280,11 @@ function StateBlock({ issue, states, pending, onChange }: StateBlockProps) {
 }
 
 function DetailsCard({ issue }: { issue: LinearIssue }) {
+  const { t } = useTranslation();
   return (
     <section className="rounded-md border bg-background overflow-hidden">
       <div className="px-4 py-3 border-b bg-muted/30">
-        <SectionHeading>Details</SectionHeading>
+        <SectionHeading>{t("linear:details")}</SectionHeading>
       </div>
       <div className="px-4 py-3 space-y-3 text-sm">
         <DetailRow label="Assignee">

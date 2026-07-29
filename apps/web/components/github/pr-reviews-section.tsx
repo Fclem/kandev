@@ -3,6 +3,7 @@ import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import type { PRReview, RequestedReviewer } from "@/lib/types/github";
 import { CollapsibleSection, FeedbackItemRow } from "./pr-shared";
+import { useTranslation } from "react-i18next";
 
 function ReviewStateIcon({ state }: { state: string }) {
   if (state === "APPROVED") return <IconCheck className="h-3.5 w-3.5 text-green-500 shrink-0" />;
@@ -177,6 +178,7 @@ function SubmittedReviewRow({
 }
 
 function PendingReviewRow({ reviewer }: { reviewer: RequestedReviewer }) {
+  const { t } = useTranslation();
   return (
     <div
       className="px-2.5 py-1.5 rounded-md border border-border bg-muted/30"
@@ -185,7 +187,9 @@ function PendingReviewRow({ reviewer }: { reviewer: RequestedReviewer }) {
       <div className="flex items-center gap-2">
         <IconClock className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
         <span className="text-xs font-medium">{formatPendingReviewer(reviewer)}</span>
-        <span className="text-[10px] text-muted-foreground truncate">Pending review</span>
+        <span className="text-[10px] text-muted-foreground truncate">
+          {t("github:pendingReview")}
+        </span>
       </div>
     </div>
   );
@@ -212,6 +216,7 @@ export function ReviewsSection({
   requestingReviewers?: string[];
   onReRequest?: (reviewer: string) => void;
 }) {
+  const { t } = useTranslation();
   const { reviews: reconciledReviews, pendingReviewers } = reconcileReviews(
     reviews,
     requestedReviewers,
@@ -246,7 +251,7 @@ export function ReviewsSection({
       addAllLabel="Add all reviews to chat context"
     >
       {reconciledReviews.length === 0 && pendingCount === 0 && (
-        <p className="text-xs text-muted-foreground px-2 py-2">No reviews yet</p>
+        <p className="text-xs text-muted-foreground px-2 py-2">{t("github:noReviewsYet")}</p>
       )}
       {reconciledReviews.map((review) => (
         <SubmittedReviewRow

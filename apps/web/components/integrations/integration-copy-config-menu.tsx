@@ -19,6 +19,7 @@ import {
   integrationLabel,
   type IntegrationSlug,
 } from "./integration-copy-config";
+import { useTranslation } from "react-i18next";
 
 type Workspace = { id: string; name: string };
 
@@ -53,6 +54,7 @@ function CopyConfigDialogBody({
   onCopy: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <DialogContent className="sm:max-w-md">
       <DialogHeader>
@@ -67,7 +69,7 @@ function CopyConfigDialogBody({
       </DialogHeader>
       <div className="space-y-2">
         <label htmlFor="copy-config-target" className="text-xs font-medium text-muted-foreground">
-          Target workspace
+          {t("integrations:targetWorkspace")}
         </label>
         <Select value={targetId ?? undefined} onValueChange={setTargetId}>
           <SelectTrigger
@@ -75,7 +77,7 @@ function CopyConfigDialogBody({
             className="w-full"
             data-testid="integration-copy-config-target"
           >
-            <SelectValue placeholder="Select a workspace…" />
+            <SelectValue placeholder={t("integrations:selectAWorkspace")} />
           </SelectTrigger>
           <SelectContent>
             {targets.map((workspace) => (
@@ -88,7 +90,7 @@ function CopyConfigDialogBody({
       </div>
       <DialogFooter>
         <Button type="button" variant="outline" className="cursor-pointer" onClick={onCancel}>
-          Cancel
+          {t("common:cancel")}
         </Button>
         <Button
           type="button"
@@ -115,6 +117,7 @@ export function IntegrationCopyConfigMenu({
   sourceWorkspaceId,
   workspaces,
 }: IntegrationCopyConfigMenuProps) {
+  const { t } = useTranslation();
   const { toast, updateToast } = useToast();
   const [open, setOpen] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -180,14 +183,14 @@ export function IntegrationCopyConfigMenu({
             variant="outline"
             size="icon-lg"
             className="cursor-pointer"
-            aria-label="Copy config to another workspace"
+            aria-label={t("integrations:copyConfigToAnotherWorkspace")}
             data-testid="integration-copy-config-trigger"
             onClick={() => setOpen(true)}
           >
             <IconCopy className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Copy config to another workspace</TooltipContent>
+        <TooltipContent>{t("integrations:copyConfigToAnotherWorkspace")}</TooltipContent>
       </Tooltip>
       <CopyConfigDialogBody
         label={label}

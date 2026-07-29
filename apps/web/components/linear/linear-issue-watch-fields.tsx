@@ -20,6 +20,7 @@ import {
   type LinearPriority,
 } from "./linear-issue-watch-form";
 import type { LinearLabel, LinearTeam, LinearUser, LinearWorkflowState } from "@/lib/types/linear";
+import { useTranslation } from "react-i18next";
 
 // useTeamsAndStates loads the team list once Linear is configured, plus the
 // states, labels, and users for the currently-selected team. Each per-team
@@ -128,16 +129,17 @@ export function StateMultiSelect({
   onToggle: (id: string) => void;
   disabled: boolean;
 }) {
+  const { t } = useTranslation();
   if (disabled) {
     // Caller's row description already explains the disabled state — render
     // nothing here to avoid duplicate prose.
     return null;
   }
   if (loading) {
-    return <p className="text-xs text-muted-foreground">Loading states…</p>;
+    return <p className="text-xs text-muted-foreground">{t("linear:loadingStates")}</p>;
   }
   if (states.length === 0) {
-    return <p className="text-xs text-muted-foreground">No workflow states available.</p>;
+    return <p className="text-xs text-muted-foreground">{t("linear:noWorkflowStatesAvailable")}</p>;
   }
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -199,16 +201,19 @@ export function LabelMultiSelect({
   onToggle: (id: string) => void;
   disabled: boolean;
 }) {
+  const { t } = useTranslation();
   if (disabled) {
     // Caller's row description already explains the disabled state — render
     // nothing here to avoid duplicate prose.
     return null;
   }
   if (loading) {
-    return <p className="text-xs text-muted-foreground">Loading labels…</p>;
+    return <p className="text-xs text-muted-foreground">{t("linear:loadingLabels")}</p>;
   }
   if (labels.length === 0) {
-    return <p className="text-xs text-muted-foreground">No labels available for this team.</p>;
+    return (
+      <p className="text-xs text-muted-foreground">{t("linear:noLabelsAvailableForThisTeam")}</p>
+    );
   }
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -238,13 +243,11 @@ type FormSetter = Dispatch<SetStateAction<FormState>>;
 const SORT_BY_DEFAULT_SENTINEL = "__default__";
 
 export function SortByField({ form, setForm }: { form: FormState; setForm: FormSetter }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
-      <Label>Dispatch order</Label>
-      <p className="text-xs text-muted-foreground">
-        When the in-flight cap is reached, issues are dispatched in this order so the most important
-        ones run first.
-      </p>
+      <Label>{t("linear:dispatchOrder")}</Label>
+      <p className="text-xs text-muted-foreground">{t("linear:whenTheInFlightCapIs")}</p>
       <Select
         value={form.sortBy || SORT_BY_DEFAULT_SENTINEL}
         onValueChange={(v) =>
@@ -276,26 +279,24 @@ export function SortByField({ form, setForm }: { form: FormState; setForm: FormS
 // validation. Lives here (rather than the dialog) to keep the dialog file under
 // its line ceiling.
 export function MaxInflightTasksField({ form, setForm }: { form: FormState; setForm: FormSetter }) {
+  const { t } = useTranslation();
   const parsed = parseMaxInflightTasks(form.maxInflightTasks);
   const invalid = parsed === "invalid";
   return (
     <div className="space-y-1.5">
-      <Label>Max in-flight tasks</Label>
-      <p className="text-xs text-muted-foreground">
-        Cap on open tasks created by this watcher. Leave blank for no cap. New matches are deferred
-        to the next poll when the cap is reached.
-      </p>
+      <Label>{t("linear:maxInFlightTasks")}</Label>
+      <p className="text-xs text-muted-foreground">{t("linear:capOnOpenTasksCreatedBy")}</p>
       <Input
         type="number"
         value={form.maxInflightTasks}
         onChange={(e) => setForm((p) => ({ ...p, maxInflightTasks: e.target.value }))}
         min={1}
         step={1}
-        placeholder="(no cap)"
+        placeholder={t("linear:noCap")}
         aria-invalid={invalid}
       />
       {invalid && (
-        <p className="text-xs text-destructive">Enter a positive integer or leave blank.</p>
+        <p className="text-xs text-destructive">{t("linear:enterAPositiveIntegerOrLeave")}</p>
       )}
     </div>
   );
@@ -304,13 +305,12 @@ export function MaxInflightTasksField({ form, setForm }: { form: FormState; setF
 // SettingsFields renders the poll-interval, throttle-cap, and enabled toggle —
 // the trailing "Settings" block of the watcher dialog.
 export function SettingsFields({ form, setForm }: { form: FormState; setForm: FormSetter }) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="space-y-1.5">
-        <Label>Poll Interval (seconds)</Label>
-        <p className="text-xs text-muted-foreground">
-          How often to re-run the search. Minimum 60s, maximum 3600s.
-        </p>
+        <Label>{t("linear:pollIntervalSeconds")}</Label>
+        <p className="text-xs text-muted-foreground">{t("linear:howOftenToReRunThe")}</p>
         <Input
           type="number"
           value={form.pollInterval}
@@ -323,8 +323,8 @@ export function SettingsFields({ form, setForm }: { form: FormState; setForm: Fo
       <SortByField form={form} setForm={setForm} />
       <div className="flex items-center justify-between">
         <div>
-          <Label>Enabled</Label>
-          <p className="text-xs text-muted-foreground">Pause or resume polling.</p>
+          <Label>{t("common:enabled")}</Label>
+          <p className="text-xs text-muted-foreground">{t("linear:pauseOrResumePolling")}</p>
         </div>
         <Switch
           checked={form.enabled}

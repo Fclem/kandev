@@ -36,6 +36,7 @@ import {
   ExternalVcsFileLink,
   useExternalVcsFileStatus,
 } from "@/components/editors/external-vcs-file-link";
+import { useTranslation } from "react-i18next";
 
 interface MarkdownPreviewToolbarProps {
   path: string;
@@ -62,13 +63,14 @@ function MarkdownPreviewToolbar({
   showExternalVcsLink,
   onTogglePreview,
 }: MarkdownPreviewToolbarProps) {
+  const { t } = useTranslation();
   const fileStatus = useExternalVcsFileStatus(path, sessionId, repositoryName);
   return (
     <PanelHeaderBarSplit
       left={
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-mono">{toRelativePath(path, worktreePath)}</span>
-          <span className="text-xs text-muted-foreground/60">Preview</span>
+          <span className="text-xs text-muted-foreground/60">{t("task:preview")}</span>
         </div>
       }
       right={
@@ -105,7 +107,7 @@ function MarkdownPreviewToolbar({
                 <IconCode className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Show code</TooltipContent>
+            <TooltipContent>{t("common:showCode")}</TooltipContent>
           </Tooltip>
         </div>
       }
@@ -175,12 +177,13 @@ function CommentBadge({
 }: {
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
       className="markdown-preview-comment-badge"
       data-testid="markdown-preview-comment-badge"
-      aria-label="Edit markdown comment"
+      aria-label={t("task:editMarkdownComment")}
       onClick={onClick}
     >
       <IconMessagePlus className="h-3 w-3" />

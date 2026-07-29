@@ -5,6 +5,7 @@ import { Button } from "@kandev/ui/button";
 import { Textarea } from "@kandev/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconPlayerPlay, IconSend, IconX } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 
 interface CommentFormProps {
   initialContent?: string;
@@ -94,6 +95,7 @@ export function CommentForm({
   isEditing = false,
   autoFocus = true,
 }: CommentFormProps) {
+  const { t } = useTranslation();
   const [content, setContent] = useState(initialContent);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -141,7 +143,7 @@ export function CommentForm({
         value={content}
         onChange={(e) => setContent(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Add a comment..."
+        placeholder={t("diff:addAComment")}
         className="min-h-[60px] resize-none text-xs"
         rows={2}
       />

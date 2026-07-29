@@ -17,6 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@kandev/ui/dropdown-menu";
+import { useTranslation } from "react-i18next";
 
 const ACTION_BTN =
   "h-5 w-5 inline-flex items-center justify-center rounded-[5px] text-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer";
@@ -96,6 +97,7 @@ function InlineSplitClose({
   onSplitDown,
   onCloseGroup,
 }: SplitCloseHandlers) {
+  const { t } = useTranslation();
   return (
     <>
       <Tooltip>
@@ -109,7 +111,7 @@ function InlineSplitClose({
             <IconLayoutColumns className="h-3 w-3" />
           </button>
         </TooltipTrigger>
-        <TooltipContent>Split right</TooltipContent>
+        <TooltipContent>{t("task:splitRight")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -122,7 +124,7 @@ function InlineSplitClose({
             <IconLayoutRows className="h-3 w-3" />
           </button>
         </TooltipTrigger>
-        <TooltipContent>Split down</TooltipContent>
+        <TooltipContent>{t("task:splitDown")}</TooltipContent>
       </Tooltip>
       {!isChatGroup && (
         <Tooltip>
@@ -136,7 +138,7 @@ function InlineSplitClose({
               <IconX className="h-3 w-3" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>Close group</TooltipContent>
+          <TooltipContent>{t("task:closeGroup")}</TooltipContent>
         </Tooltip>
       )}
     </>

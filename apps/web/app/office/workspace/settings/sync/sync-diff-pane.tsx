@@ -3,6 +3,7 @@
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import type { ImportDiff, SyncDiff } from "@/lib/api/domains/office-api";
+import { useTranslation } from "react-i18next";
 
 type SyncDiffPaneProps = {
   title: string;
@@ -63,11 +64,12 @@ function DiffBody({
   loading: boolean;
   totalChanges: number;
 }) {
+  const { t } = useTranslation();
   if (loading && !diff) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <p className="text-sm text-muted-foreground">{t("common:loading2")}</p>;
   }
   if (!diff || totalChanges === 0) {
-    return <p className="text-sm text-muted-foreground">No changes detected.</p>;
+    return <p className="text-sm text-muted-foreground">{t("office:noChangesDetected")}</p>;
   }
   return (
     <>

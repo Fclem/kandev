@@ -8,6 +8,7 @@ import { listAgentProfiles } from "@/lib/api/domains/office-api";
 import { useOptimisticTaskMutation } from "@/hooks/use-optimistic-task-mutation";
 import { AgentAvatar } from "@/app/office/components/agent-avatar";
 import type { Task } from "@/app/office/tasks/[id]/types";
+import { useTranslation } from "react-i18next";
 
 type AssigneePickerProps = {
   task: Task;
@@ -16,6 +17,7 @@ type AssigneePickerProps = {
 const NO_ASSIGNEE = "__none__";
 
 export function AssigneePicker({ task }: AssigneePickerProps) {
+  const { t } = useTranslation();
   const agents = useAppStore((s) => s.office.agentProfiles);
   const setOfficeAgentProfiles = useAppStore((s) => s.setOfficeAgentProfiles);
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
@@ -45,7 +47,7 @@ export function AssigneePicker({ task }: AssigneePickerProps) {
       value: NO_ASSIGNEE,
       label: "No assignee",
       keywords: ["none", "unassigned"],
-      renderLabel: () => <span className="text-muted-foreground">No assignee</span>,
+      renderLabel: () => <span className="text-muted-foreground">{t("task:noAssignee")}</span>,
     };
     const agentOpts = agents.map<ComboboxOption>((a) => ({
       value: a.id,
@@ -86,7 +88,7 @@ export function AssigneePicker({ task }: AssigneePickerProps) {
       options={options}
       value={currentValue}
       onValueChange={handleSelect}
-      placeholder="No assignee"
+      placeholder={t("task:noAssignee")}
       searchPlaceholder="Search agents..."
       emptyMessage="No agents found."
       triggerClassName="h-7 w-full justify-end px-2"

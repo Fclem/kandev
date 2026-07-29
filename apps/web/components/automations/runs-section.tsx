@@ -21,6 +21,7 @@ import { IconChevronDown, IconChevronUp, IconRefresh, IconTrash } from "@tabler/
 import { useAutomationRuns } from "@/hooks/domains/settings/use-automation-runs";
 import type { AutomationRun, ExecutionMode, RunStatus } from "@/lib/types/automation";
 import { formatRelativeTime } from "./format-utils";
+import { useTranslation } from "react-i18next";
 
 type RunsSectionProps = {
   automationId: string | null;
@@ -56,6 +57,7 @@ type RunRowProps = {
 };
 
 function RunRow({ run, taskClickable, onDelete, onNavigate }: RunRowProps) {
+  const { t } = useTranslation();
   const badge = STATUS_BADGE[run.status] ?? STATUS_BADGE.triggered;
   const rowClickable = taskClickable && !!run.task_id;
   return (
@@ -90,7 +92,7 @@ function RunRow({ run, taskClickable, onDelete, onNavigate }: RunRowProps) {
             e.preventDefault();
             onDelete(run.id);
           }}
-          title="Delete run"
+          title={t("automations:deleteRun")}
           data-testid="delete-run"
         >
           <IconTrash className="h-3.5 w-3.5" />
@@ -103,6 +105,7 @@ function RunRow({ run, taskClickable, onDelete, onNavigate }: RunRowProps) {
 type DeleteAllButtonProps = { disabled: boolean; onConfirm: () => void };
 
 function DeleteAllButton({ disabled, onConfirm }: DeleteAllButtonProps) {
+  const { t } = useTranslation();
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -111,7 +114,7 @@ function DeleteAllButton({ disabled, onConfirm }: DeleteAllButtonProps) {
           size="icon-sm"
           className="cursor-pointer text-destructive hover:text-destructive"
           disabled={disabled}
-          title="Delete all runs"
+          title={t("automations:deleteAllRuns")}
           data-testid="delete-all-runs"
         >
           <IconTrash className="h-3.5 w-3.5" />
@@ -119,20 +122,19 @@ function DeleteAllButton({ disabled, onConfirm }: DeleteAllButtonProps) {
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete all runs?</AlertDialogTitle>
+          <AlertDialogTitle>{t("automations:deleteAllRuns2")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This will permanently remove all run records for this automation — including any not
-            currently loaded — and their associated tasks. This cannot be undone.
+            {t("automations:thisWillPermanentlyRemoveAllRun")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">{t("common:cancel")}</AlertDialogCancel>
           <AlertDialogAction
             className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={onConfirm}
             data-testid="delete-all-runs-confirm"
           >
-            Delete all
+            {t("automations:deleteAll")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -141,6 +143,7 @@ function DeleteAllButton({ disabled, onConfirm }: DeleteAllButtonProps) {
 }
 
 export function RunsSection({ automationId, executionMode, workspaceId }: RunsSectionProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const { runs, loading, refresh, deleteRun, deleteAllRuns } = useAutomationRuns(
     automationId,
@@ -174,7 +177,7 @@ export function RunsSection({ automationId, executionMode, workspaceId }: RunsSe
               className="cursor-pointer"
               onClick={refresh}
               disabled={loading}
-              title="Refresh"
+              title={t("automations:refresh")}
             >
               <IconRefresh className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             </Button>
@@ -187,11 +190,11 @@ export function RunsSection({ automationId, executionMode, workspaceId }: RunsSe
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent focus-within:bg-transparent">
-                <TableHead>Trigger</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Task</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead>Error</TableHead>
+                <TableHead>{t("automations:trigger")}</TableHead>
+                <TableHead>{t("common:status")}</TableHead>
+                <TableHead>{t("common:task")}</TableHead>
+                <TableHead>{t("automations:time")}</TableHead>
+                <TableHead>{t("automations:error")}</TableHead>
                 <TableHead className="w-8" />
               </TableRow>
             </TableHeader>

@@ -12,6 +12,7 @@ import { formatDistanceToNow } from "date-fns";
 import { TaskDeleteConfirmDialog } from "@/components/task/task-delete-confirm-dialog";
 import { TaskArchiveConfirmDialog } from "@/components/task/task-archive-confirm-dialog";
 import { linkToTask } from "@/lib/links";
+import { useTranslation } from "react-i18next";
 
 type TaskWithResolution = Task & {
   workflowName?: string;
@@ -35,6 +36,7 @@ function TitleCell({
   row: Row<TaskWithResolution>;
   repoMap: Map<string, string>;
 }) {
+  const { t } = useTranslation();
   const task = row.original;
   const isArchived = !!task.archived_at;
   const repoName = task.repositories?.[0]
@@ -51,7 +53,7 @@ function TitleCell({
             variant="outline"
             className="text-[10px] px-1.5 py-0 text-amber-500 border-amber-500/30"
           >
-            Archived
+            {t("common:archived")}
           </Badge>
         )}
       </div>
@@ -67,6 +69,7 @@ type ActionsCtx = {
 };
 
 function ActionsCell({ row, ctx }: { row: Row<TaskWithResolution>; ctx: ActionsCtx }) {
+  const { t } = useTranslation();
   const task = row.original;
   const isDeleting = ctx.deletingTaskId === task.id;
   const isArchived = !!task.archived_at;
@@ -89,7 +92,7 @@ function ActionsCell({ row, ctx }: { row: Row<TaskWithResolution>; ctx: ActionsC
               <IconArchive className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Archive</TooltipContent>
+          <TooltipContent>{t("common:archive")}</TooltipContent>
         </Tooltip>
       )}
       <Tooltip>
@@ -111,7 +114,7 @@ function ActionsCell({ row, ctx }: { row: Row<TaskWithResolution>; ctx: ActionsC
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Delete</TooltipContent>
+        <TooltipContent>{t("common:delete")}</TooltipContent>
       </Tooltip>
       <TaskDeleteConfirmDialog
         open={showDeleteConfirm}

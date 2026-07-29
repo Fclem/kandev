@@ -6,6 +6,7 @@ import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import type { ProviderHealth } from "@/lib/state/slices/office/types";
 import { providerLabel } from "./provider-order-editor";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   health: ProviderHealth[];
@@ -21,12 +22,13 @@ const STATE_BADGE: Record<ProviderHealth["state"], { label: string; variant: Bad
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
 export function ProviderHealthBanner({ health, onRetry }: Props) {
+  const { t } = useTranslation();
   const nonHealthy = health.filter((h) => h.state !== "healthy");
   if (nonHealthy.length === 0) {
     return (
       <div className="rounded-lg border border-border p-3 flex items-center gap-2 text-sm">
         <IconCircleCheck className="h-4 w-4 text-emerald-600" />
-        <span>All providers healthy.</span>
+        <span>{t("office:allProvidersHealthy")}</span>
       </div>
     );
   }

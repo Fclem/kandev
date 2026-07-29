@@ -5,6 +5,7 @@ import { IconTerminal2, IconCopy, IconCheck } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { RecoveryAuthMethod } from "@/components/task/chat/types";
+import { useTranslation } from "react-i18next";
 
 function buildFullCommand(termAuth: RecoveryAuthMethod["terminal_auth"]): string | null {
   if (!termAuth) return null;
@@ -21,10 +22,11 @@ export function AuthMethodsPanel({
   methods: RecoveryAuthMethod[];
   onOpenTerminal: (command: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2">
       <div className="text-xs font-medium text-amber-600 dark:text-amber-400">
-        Authentication required, log in before resuming
+        {t("task:authenticationRequiredLogInBeforeResuming")}
       </div>
       {methods.map((method) => (
         <AuthMethodRow key={method.id} method={method} onOpenTerminal={onOpenTerminal} />
@@ -34,10 +36,11 @@ export function AuthMethodsPanel({
 }
 
 export function GenericAuthPanel({ onOpenTerminal }: { onOpenTerminal: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2">
       <div className="text-xs font-medium text-amber-600 dark:text-amber-400">
-        Authentication required — please log in via the terminal
+        {t("task:authenticationRequiredPleaseLogInVia")}
       </div>
       <Button
         variant="outline"
@@ -59,6 +62,7 @@ function AuthMethodRow({
   method: RecoveryAuthMethod;
   onOpenTerminal: (command: string) => void;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const termAuth = method.terminal_auth;
   const fullCommand = buildFullCommand(termAuth);
@@ -99,7 +103,7 @@ function AuthMethodRow({
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Copy command</TooltipContent>
+            <TooltipContent side="top">{t("task:copyCommand")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -113,9 +117,7 @@ function AuthMethodRow({
                 Run in terminal
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">
-              Open the bottom terminal and paste this command
-            </TooltipContent>
+            <TooltipContent side="top">{t("task:openTheBottomTerminalAndPaste")}</TooltipContent>
           </Tooltip>
         </div>
       ) : (

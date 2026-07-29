@@ -30,6 +30,7 @@ import { clearGitLabToken, fetchGitLabStatus, setGitLabConfig } from "@/lib/api/
 import type { GitLabConfig, GitLabStatus } from "@/lib/types/gitlab";
 import { GitLabWatchSettings } from "./watch-settings";
 import { GitLabActionPresetsSection } from "./action-presets-section";
+import { useTranslation } from "react-i18next";
 
 const DEFAULT_HOST = "https://gitlab.com";
 
@@ -77,6 +78,7 @@ function StatusBadge({ status }: { status: GitLabStatus | null }) {
 // of "your token is broken" during an outage. Hidden when the probe succeeded
 // or when no token is configured (nothing to probe).
 function ConnectionErrorAlert({ status }: { status: GitLabStatus | null }) {
+  const { t } = useTranslation();
   if (!status?.connection_error) return null;
   return (
     <Alert variant="destructive">
@@ -85,7 +87,7 @@ function ConnectionErrorAlert({ status }: { status: GitLabStatus | null }) {
         Couldn&apos;t reach <code className="font-mono text-xs">{status.host}</code>:{" "}
         {status.connection_error}
         <span className="block text-xs opacity-80 mt-1">
-          Your token may still be valid — this looks like a network or upstream issue.
+          {t("gitlab:yourTokenMayStillBeValid")}
         </span>
       </AlertDescription>
     </Alert>
@@ -235,17 +237,15 @@ function useGitLabCredentialDraft({
 }
 
 export function GitLabCredentialsForm(props: GitLabCredentialsFormProps) {
+  const { t } = useTranslation();
   const draft = useGitLabCredentialDraft(props);
   const [showToken, setShowToken] = useState(false);
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">
-        Choose a workspace PAT, the local glab CLI login, or an environment-provided token. CLI and
-        environment credentials must already be available to the kandev backend.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("gitlab:chooseAWorkspacePatTheLocal")}</p>
       <Select value={draft.method} onValueChange={draft.selectMethod}>
         <SelectTrigger
-          aria-label="Authentication method"
+          aria-label={t("gitlab:authenticationMethod")}
           className="w-full cursor-pointer sm:w-64"
           data-settings-dirty={draft.isDirty}
         >
@@ -253,13 +253,13 @@ export function GitLabCredentialsForm(props: GitLabCredentialsFormProps) {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="pat" className="cursor-pointer">
-            Personal access token
+            {t("gitlab:personalAccessToken")}
           </SelectItem>
           <SelectItem value="glab_cli" className="cursor-pointer">
-            glab CLI
+            {t("gitlab:glabCli")}
           </SelectItem>
           <SelectItem value="environment" className="cursor-pointer">
-            Environment token
+            {t("gitlab:environmentToken")}
           </SelectItem>
         </SelectContent>
       </Select>
@@ -388,6 +388,7 @@ function ConnectionStatusRow({ status }: { status: GitLabStatus | null }) {
 }
 
 function GitLabConnectionCard(props: ConnectionCardProps) {
+  const { t } = useTranslation();
   const {
     workspaceId,
     status,
@@ -424,8 +425,7 @@ function GitLabConnectionCard(props: ConnectionCardProps) {
           <Separator />
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">
-              GitLab host URL. Override for self-managed instances; leave at the default for
-              gitlab.com.
+              {t("gitlab:gitlabHostUrlOverrideForSelf")}
             </p>
             <HostForm
               host={hostDraft}

@@ -9,8 +9,10 @@ import { ExportFileTree } from "./export-file-tree";
 import { ExportFilePreview } from "./export-file-preview";
 import { buildFileTree, bundleToExportFiles, countSelectedFiles } from "./export-utils";
 import type { ExportFile } from "./export-types";
+import { useTranslation } from "react-i18next";
 
 export function ExportPreview() {
+  const { t } = useTranslation();
   const activeWorkspaceId = useAppStore((s) => s.workspaces?.activeId ?? "");
   const workspaces = useAppStore((s) => s.workspaces);
   const activeWorkspace = workspaces.items.find((w) => w.id === workspaces.activeId);
@@ -62,7 +64,7 @@ export function ExportPreview() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-        Loading export bundle...
+        {t("office:loadingExportBundle")}
       </div>
     );
   }

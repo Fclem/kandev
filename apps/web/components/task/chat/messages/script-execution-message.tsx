@@ -8,6 +8,7 @@ import { stripAnsi } from "@/lib/utils/ansi";
 import { Badge } from "@kandev/ui/badge";
 import { ExpandableRow } from "./expandable-row";
 import { useExpandState } from "./use-expand-state";
+import { useTranslation } from "react-i18next";
 
 interface ScriptExecutionMetadata {
   script_type: "setup" | "cleanup" | "agent_boot";
@@ -150,12 +151,13 @@ function ScriptExpandedContent({
   metadata,
   exitCode,
 }: ScriptBodyProps) {
+  const { t } = useTranslation();
   return (
     <div className="pl-4 border-l-2 border-border/30 space-y-2">
       {isAgentBoot && command && (
         <div>
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60 mb-1">
-            Command
+            {t("task:command")}
           </div>
           <pre className="font-mono text-xs bg-muted/30 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words">
             {command}
@@ -165,7 +167,7 @@ function ScriptExpandedContent({
       {content && content.trim() !== "" && (
         <div>
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60 mb-1">
-            Output
+            {t("task:output")}
           </div>
           <pre className="font-mono text-xs bg-muted/30 rounded px-3 py-2 overflow-x-auto max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words">
             {stripAnsi(content)}
@@ -175,7 +177,7 @@ function ScriptExpandedContent({
       {error && (
         <div>
           <div className="text-[10px] uppercase tracking-wide text-red-600/70 dark:text-red-400/70 mb-1">
-            Error
+            {t("task:error")}
           </div>
           <div className="text-xs text-red-600 dark:text-red-400 bg-red-500/10 rounded px-2 py-1.5">
             {error}
@@ -207,6 +209,7 @@ export const ScriptExecutionMessage = memo(function ScriptExecutionMessage({
 }: {
   comment: Message;
 }) {
+  const { t } = useTranslation();
   const { metadata, status, scriptType, isRunning, isSuccess } = parseScriptMetadata(comment);
   const autoExpanded = isRunning;
   const { isExpanded, handleToggle } = useExpandState(status, autoExpanded);
@@ -220,7 +223,7 @@ export const ScriptExecutionMessage = memo(function ScriptExecutionMessage({
         header={
           <div className="flex items-center gap-2 text-xs">
             <span className="text-xs font-mono text-yellow-600 dark:text-yellow-400">
-              Script Execution (metadata unavailable)
+              {t("task:scriptExecutionMetadataUnavailable")}
             </span>
           </div>
         }

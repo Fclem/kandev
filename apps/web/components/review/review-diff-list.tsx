@@ -22,6 +22,7 @@ import { RepoGroupHeader } from "./review-diff-list-groups";
 import { ReviewDiffHeader, type ReviewExternalLinkContext } from "./review-diff-header";
 import { groupByRepositoryName } from "@/lib/group-by-repo";
 import { useActiveTaskPR } from "@/hooks/domains/github/use-task-pr";
+import { t } from "@/lib/i18n";
 
 type ReviewDiffListProps = {
   files: ReviewFile[];
@@ -394,7 +395,7 @@ function renderDiffContent(opts: {
         </DiffErrorBoundary>
         {file.diff_skip_reason === "truncated" && (
           <div className="py-1 text-center text-xs text-muted-foreground border-t">
-            Diff truncated — showing first 256 KB
+            {t("review:diffTruncatedShowingFirst256Kb")}
           </div>
         )}
       </>

@@ -23,6 +23,7 @@ import { useUtilityAgentGenerator } from "@/hooks/use-utility-agent-generator";
 import { useIsUtilityConfigured } from "@/hooks/use-is-utility-configured";
 import { usePromptResultDelivery } from "@/hooks/use-prompt-result-delivery";
 import { PromptResultRecovery } from "@/components/prompt-result-recovery";
+import { useTranslation } from "react-i18next";
 
 // Re-export ImageAttachment type for consumers
 export type { ImageAttachment } from "./image-attachment-preview";
@@ -143,6 +144,7 @@ function FailedSessionBanner({
   resumeLabel?: string;
   resumingLabel?: string;
 }) {
+  const { t } = useTranslation();
   const [isResuming, setIsResuming] = useState(false);
   const [isStartingFresh, setIsStartingFresh] = useState(false);
 
@@ -202,7 +204,9 @@ function FailedSessionBanner({
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {!profileExists && <TooltipContent>Agent profile no longer exists</TooltipContent>}
+                {!profileExists && (
+                  <TooltipContent>{t("task:agentProfileNoLongerExists")}</TooltipContent>
+                )}
               </Tooltip>
             )}
             <Button

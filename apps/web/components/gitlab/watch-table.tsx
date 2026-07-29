@@ -13,6 +13,7 @@ import { Button } from "@kandev/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kandev/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { IssueWatch, ReviewWatch } from "@/lib/types/gitlab";
+import { useTranslation } from "react-i18next";
 
 type Watch = ReviewWatch | IssueWatch;
 
@@ -47,12 +48,13 @@ function CheckNowButton({
   disabledReason?: string;
   onClick: (event: React.MouseEvent) => void;
 }) {
+  const { t } = useTranslation();
   const button = (
     <Button
       variant="ghost"
       size="sm"
       className={`${size} p-0 cursor-pointer`}
-      aria-label="Check now"
+      aria-label={t("gitlab:checkNow")}
       aria-description={disabledReason}
       title={disabledReason ? undefined : "Check now"}
       disabled={Boolean(disabledReason)}
@@ -85,6 +87,7 @@ function WatchActions<TWatch extends Watch>({
   onToggleEnabled,
   mobile,
 }: ActionProps<TWatch>) {
+  const { t } = useTranslation();
   const size = mobile ? "h-11 w-11" : "h-8 w-8";
   const dirty = dirtyIds.has(watch.id);
   const authoritativeEnabled = authoritativeEnabledById.get(watch.id) ?? watch.enabled;
@@ -99,7 +102,7 @@ function WatchActions<TWatch extends Watch>({
         variant="ghost"
         size="sm"
         className={`${size} p-0 cursor-pointer`}
-        aria-label="Edit watch"
+        aria-label={t("gitlab:editWatch")}
         onClick={stop(() => onEdit(watch))}
       >
         <IconEdit className="h-4 w-4" />
@@ -127,7 +130,7 @@ function WatchActions<TWatch extends Watch>({
         variant="ghost"
         size="sm"
         className={`${size} p-0 cursor-pointer`}
-        aria-label="Reset watch"
+        aria-label={t("gitlab:resetWatch")}
         onClick={stop(() => onReset(watch.id))}
       >
         <IconRestore className="h-4 w-4" />
@@ -136,7 +139,7 @@ function WatchActions<TWatch extends Watch>({
         variant="ghost"
         size="sm"
         className={`${size} p-0 text-destructive hover:text-destructive cursor-pointer`}
-        aria-label="Delete watch"
+        aria-label={t("gitlab:deleteWatch")}
         onClick={stop(() => onDelete(watch.id))}
       >
         <IconTrash className="h-4 w-4" />
@@ -195,8 +198,13 @@ function MobileWatchCard<TWatch extends Watch>(props: ActionProps<TWatch>) {
 }
 
 export function GitLabWatchTable<TWatch extends Watch>(props: WatchTableProps<TWatch>) {
+  const { t } = useTranslation();
   if (props.watches.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted-foreground">No watches configured.</p>;
+    return (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        {t("gitlab:noWatchesConfigured")}
+      </p>
+    );
   }
   return (
     <>
@@ -212,11 +220,11 @@ export function GitLabWatchTable<TWatch extends Watch>(props: WatchTableProps<TW
         <Table className="min-w-[680px]">
           <TableHeader>
             <TableRow>
-              <TableHead>Projects</TableHead>
-              <TableHead>Interval</TableHead>
-              <TableHead>Last checked</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("gitlab:projects")}</TableHead>
+              <TableHead>{t("gitlab:interval")}</TableHead>
+              <TableHead>{t("gitlab:lastChecked")}</TableHead>
+              <TableHead>{t("common:status")}</TableHead>
+              <TableHead className="text-right">{t("gitlab:actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

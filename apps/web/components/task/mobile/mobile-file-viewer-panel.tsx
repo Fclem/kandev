@@ -15,6 +15,7 @@ import {
   ExternalVcsFileLink,
   useExternalVcsFileStatus,
 } from "@/components/editors/external-vcs-file-link";
+import { useTranslation } from "react-i18next";
 
 type MobileFileViewerPanelProps = {
   file: OpenFileTab;
@@ -81,6 +82,7 @@ function MobileViewerBody({
 }
 
 export function MobileFileViewerPanel({ file, sessionId, onClose }: MobileFileViewerPanelProps) {
+  const { t } = useTranslation();
   const activeSession = useAppStore((state) =>
     sessionId ? (state.taskSessions.items[sessionId] ?? null) : null,
   );
@@ -126,13 +128,13 @@ export function MobileFileViewerPanel({ file, sessionId, onClose }: MobileFileVi
                 className="cursor-pointer px-2"
                 onClick={() => setMarkdownPreview(true)}
                 data-testid="markdown-preview-toggle"
-                aria-label="Open markdown preview"
+                aria-label={t("task:openMarkdownPreview")}
               >
                 <IconEye className="h-4 w-4" />
               </Button>
             )}
             <Button variant="ghost" size="sm" className="cursor-pointer px-2" onClick={onClose}>
-              Close
+              {t("common:close")}
             </Button>
           </div>
         }

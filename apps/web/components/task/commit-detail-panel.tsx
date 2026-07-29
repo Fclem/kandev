@@ -11,6 +11,7 @@ import { useCommitDiff } from "@/hooks/domains/session/use-commit-diff";
 import { usePanelActions } from "@/hooks/use-panel-actions";
 import { setPanelTitle } from "@/lib/layout/panel-portal-manager";
 import type { FileInfo } from "@/lib/state/store";
+import { useTranslation } from "react-i18next";
 
 type CommitDetailPanelProps = {
   panelId: string;
@@ -197,9 +198,12 @@ function CommitFileList({
   repo?: string;
   wordWrap?: boolean;
 }) {
+  const { t } = useTranslation();
   if (fileEntries.length === 0 && !loading) {
     return (
-      <div className="text-sm text-muted-foreground text-center py-8">No files in this commit</div>
+      <div className="text-sm text-muted-foreground text-center py-8">
+        {t("task:noFilesInThisCommit")}
+      </div>
     );
   }
 

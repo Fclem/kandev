@@ -20,6 +20,7 @@ import type {
   ConfigOptionEntry,
   SessionModelEntry,
 } from "@/lib/state/slices/session-runtime/types";
+import { useTranslation } from "react-i18next";
 
 type SessionModelsEntry = {
   currentModelId: string;
@@ -308,6 +309,7 @@ export const ModelSelector = memo(function ModelSelector({
   sessionId,
   triggerClassName,
 }: ModelSelectorProps) {
+  const { t } = useTranslation();
   const {
     currentModel,
     modelOptions,
@@ -343,7 +345,7 @@ export const ModelSelector = memo(function ModelSelector({
       configOptions={configOptions}
       onModelChange={onModelChange}
       onConfigChange={onConfigChange}
-      placeholder="Model"
+      placeholder={t("common:model")}
       ariaLabel="Session model settings"
       variant="compact"
       popoverSide="top"

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { IconChevronDown } from "@tabler/icons-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kandev/ui/collapsible";
 import type { RunInvocationDetail } from "@/lib/api/domains/office-extended-api";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   invocation: RunInvocationDetail;
@@ -16,6 +17,7 @@ type Props = {
  * runs where the orchestrator didn't capture them.
  */
 export function InvocationPanel({ invocation }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const hasDetails = Boolean(
     invocation.command || (invocation.env && Object.keys(invocation.env).length > 0),
@@ -42,7 +44,7 @@ export function InvocationPanel({ invocation }: Props) {
             className="w-full flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-muted/40"
             data-testid="invocation-details-trigger"
           >
-            <span className="text-sm font-medium">Details</span>
+            <span className="text-sm font-medium">{t("common:details")}</span>
             <IconChevronDown
               className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
             />

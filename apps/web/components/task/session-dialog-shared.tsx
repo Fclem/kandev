@@ -29,6 +29,7 @@ import {
   useUnreadablePastedImageFeedback,
 } from "./chat/use-attachment-file-feedback";
 import type { ContextItem, ImageContextItem, FileAttachmentContextItem } from "@/lib/types/context";
+import { useTranslation } from "react-i18next";
 
 export function EnvironmentBadges({
   executorLabel,
@@ -113,6 +114,7 @@ export function ContextSelect({
   sessionOptions: SessionOption[];
   isSummarizing: boolean;
 }) {
+  const { t } = useTranslation();
   const displayLabel = useMemo(() => {
     if (value === "blank") return "Blank";
     if (value === "copy_prompt") return "Copy initial prompt";
@@ -126,7 +128,7 @@ export function ContextSelect({
 
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium text-muted-foreground">Context</label>
+      <label className="text-xs font-medium text-muted-foreground">{t("task:context")}</label>
       <div className="flex min-w-0 items-center gap-2">
         <Select value={value} onValueChange={onValueChange} disabled={isSummarizing}>
           <SelectTrigger className="w-full min-w-0 text-xs">
@@ -134,19 +136,19 @@ export function ContextSelect({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="blank" className="text-xs cursor-pointer">
-              Blank
+              {t("task:blank")}
             </SelectItem>
             <SelectItem
               value="copy_prompt"
               disabled={!hasInitialPrompt}
               className="text-xs cursor-pointer"
             >
-              Copy initial prompt
+              {t("task:copyInitialPrompt")}
             </SelectItem>
             {sessionOptions.length > 0 && (
               <SelectGroup>
                 <SelectLabel className="text-[11px] text-muted-foreground/70">
-                  Summarize session
+                  {t("task:summarizeSession")}
                 </SelectLabel>
                 {sessionOptions.map((opt) => (
                   <SelectItem
@@ -280,13 +282,14 @@ export function useDialogAttachments(disabled: boolean) {
 }
 
 export function AttachButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center px-1 pb-1">
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
-            aria-label="Attach files"
+            aria-label={t("task:attachFiles")}
             className={`h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/40 hover:text-foreground ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
             onClick={onClick}
             disabled={disabled}
@@ -294,7 +297,7 @@ export function AttachButton({ onClick, disabled }: { onClick: () => void; disab
             <IconPaperclip className="h-4 w-4" />
           </button>
         </TooltipTrigger>
-        <TooltipContent>Attach files</TooltipContent>
+        <TooltipContent>{t("task:attachFiles")}</TooltipContent>
       </Tooltip>
     </div>
   );

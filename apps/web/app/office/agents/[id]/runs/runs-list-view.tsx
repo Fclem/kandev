@@ -19,6 +19,7 @@ import {
   type AgentRunSummary,
 } from "@/lib/api/domains/office-extended-api";
 import { timeAgo } from "@/lib/utils/time";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   initial: AgentRunsListPage;
@@ -54,6 +55,7 @@ function formatReason(reason: string): string {
  * preserved when a new page is appended.
  */
 export function RunsListView({ initial, agentId }: Props) {
+  const { t } = useTranslation();
   const [pages, setPages] = useState<AgentRunsListPage[]>([initial]);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -90,10 +92,8 @@ export function RunsListView({ initial, agentId }: Props) {
         data-testid="agent-runs-empty"
       >
         <IconRun className="h-10 w-10 text-muted-foreground/30 mb-3" />
-        <p className="text-sm text-muted-foreground">No runs yet.</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Assign a task to this agent to see execution history.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("office:noRunsYet")}</p>
+        <p className="text-xs text-muted-foreground mt-1">{t("office:assignATaskToThisAgent")}</p>
       </div>
     );
   }
@@ -105,11 +105,11 @@ export function RunsListView({ initial, agentId }: Props) {
       data-testid="agent-runs-list"
     >
       <div className="grid grid-cols-[120px_140px_1fr_120px_120px] gap-4 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        <span>Run</span>
-        <span>Reason</span>
-        <span>Linked</span>
-        <span>Status</span>
-        <span>Requested</span>
+        <span>{t("office:run")}</span>
+        <span>{t("office:reason")}</span>
+        <span>{t("office:linked")}</span>
+        <span>{t("common:status")}</span>
+        <span>{t("office:requested")}</span>
       </div>
       {runs.map((run) => (
         <RunRow key={run.id} run={run} agentId={agentId} />
@@ -215,6 +215,7 @@ type LoadMoreFooterProps = {
 };
 
 function LoadMoreFooter({ hasMore, loading, onLoadMore }: LoadMoreFooterProps) {
+  const { t } = useTranslation();
   if (hasMore) {
     return (
       <div className="flex items-center justify-center py-3">
@@ -244,7 +245,7 @@ function LoadMoreFooter({ hasMore, loading, onLoadMore }: LoadMoreFooterProps) {
       className="flex items-center justify-center py-3 text-muted-foreground text-xs"
       data-testid="agent-runs-end-of-list"
     >
-      No more runs
+      {t("office:noMoreRuns")}
     </div>
   );
 }

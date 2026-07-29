@@ -14,6 +14,7 @@ import { useAppStore } from "@/components/state-provider";
 import type { AgentProfile, Project } from "@/lib/state/slices/office/types";
 import type { IssueDraft } from "./new-task-draft";
 import { ParticipantRow } from "./new-task-participant-row";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   draft: IssueDraft;
@@ -29,6 +30,7 @@ function AgentPickerPopover({
   selectedId: string;
   onSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const selected = agents.find((a) => a.id === selectedId);
   return (
     <Popover>
@@ -43,7 +45,7 @@ function AgentPickerPopover({
           className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-accent cursor-pointer"
           onClick={() => onSelect("")}
         >
-          Unassigned
+          {t("office:unassigned")}
         </button>
         {agents.map((agent) => (
           <button
@@ -69,6 +71,7 @@ function ProjectPickerPopover({
   selectedId: string;
   onSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const selected = projects.find((p) => p.id === selectedId);
   return (
     <Popover>
@@ -83,7 +86,7 @@ function ProjectPickerPopover({
           className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-accent cursor-pointer"
           onClick={() => onSelect("")}
         >
-          No project
+          {t("office:noProject")}
         </button>
         {projects.map((project) => (
           <button
@@ -107,19 +110,20 @@ function ProjectPickerPopover({
 }
 
 export function NewTaskSelectorRow({ draft, onUpdate }: Props) {
+  const { t } = useTranslation();
   const agents = useAppStore((s) => s.office.agentProfiles);
   const projects = useAppStore((s) => s.office.projects);
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span>For</span>
+        <span>{t("office:for")}</span>
         <AgentPickerPopover
           agents={agents}
           selectedId={draft.assigneeId}
           onSelect={(id) => onUpdate({ assigneeId: id })}
         />
-        <span>in</span>
+        <span>{t("office:in2")}</span>
         <ProjectPickerPopover
           projects={projects}
           selectedId={draft.projectId}
@@ -134,7 +138,7 @@ export function NewTaskSelectorRow({ draft, onUpdate }: Props) {
                 </Button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
-            <TooltipContent>More options</TooltipContent>
+            <TooltipContent>{t("office:moreOptions")}</TooltipContent>
           </Tooltip>
           <DropdownMenuContent align="start">
             <DropdownMenuItem

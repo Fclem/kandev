@@ -18,6 +18,7 @@ import { useToast } from "@/components/toast-provider";
 import { getShortcut } from "@/lib/keyboard/shortcut-overrides";
 import { whisperModelConfig } from "@/lib/voice/whisper-web-models";
 import { VoiceModelLoadIndicator } from "./voice-model-load-indicator";
+import { useTranslation } from "react-i18next";
 
 type VoiceInputButtonProps = {
   /** Inserts the recognized transcript at the current cursor position. */
@@ -208,6 +209,7 @@ function buildUnsupportedReason(): string {
 }
 
 function UnsupportedVoiceButton({ disabled }: { disabled?: boolean }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const handleClick = () => {
     toast({
@@ -223,7 +225,7 @@ function UnsupportedVoiceButton({ disabled }: { disabled?: boolean }) {
           type="button"
           variant="ghost"
           size="icon"
-          aria-label="Voice input unavailable"
+          aria-label={t("task:voiceInputUnavailable")}
           data-testid="voice-input-button"
           data-state="unsupported"
           disabled={!!disabled}
@@ -233,7 +235,7 @@ function UnsupportedVoiceButton({ disabled }: { disabled?: boolean }) {
           <IconMicrophone className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Voice input unavailable — tap for details</TooltipContent>
+      <TooltipContent>{t("task:voiceInputUnavailableTapForDetails")}</TooltipContent>
     </Tooltip>
   );
 }

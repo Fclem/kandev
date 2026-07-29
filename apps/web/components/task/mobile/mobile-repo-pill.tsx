@@ -6,6 +6,7 @@ import { useAppStore } from "@/components/state-provider";
 import { MobilePillButton } from "./mobile-pill-button";
 import { MobilePickerSheet } from "./mobile-picker-sheet";
 import { MobileReposSection, useTaskRepoCount } from "./mobile-repos-section";
+import { useTranslation } from "react-i18next";
 
 const COMPACT_VIEWPORT_PX = 360;
 const EMPTY_REPOSITORIES = Object.freeze([]);
@@ -61,6 +62,7 @@ export const MobileRepoPill = memo(function MobileRepoPill({
   taskId: string | null;
   workspaceId: string | null;
 }) {
+  const { t } = useTranslation();
   const repoCount = useTaskRepoCount(taskId);
   const activeName = useTaskActiveRepoName(taskId, workspaceId);
   const isCompact = useIsCompactViewport();
@@ -80,7 +82,7 @@ export const MobileRepoPill = memo(function MobileRepoPill({
         data-testid="mobile-repo-pill"
         ariaLabel={`Active repository: ${label}. Tap to switch.`}
       />
-      <MobilePickerSheet open={open} onOpenChange={setOpen} title="Repositories">
+      <MobilePickerSheet open={open} onOpenChange={setOpen} title={t("common:repositories")}>
         <MobileReposSection
           taskId={taskId}
           workspaceId={workspaceId}

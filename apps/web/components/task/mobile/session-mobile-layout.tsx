@@ -33,6 +33,7 @@ import {
   mrTaskKey,
   selectExplicitPanelMR,
 } from "@/components/gitlab/mr-detail-panel";
+import { useTranslation } from "react-i18next";
 
 export type MobileReviewSource = "github" | "gitlab" | null;
 
@@ -76,10 +77,11 @@ function MobileChatPanelContent({
   effectiveSessionId: string | null;
   onOpenFile: (path: string, repo?: string) => void;
 }) {
+  const { t } = useTranslation();
   if (!activeTaskId) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        No task selected
+        {t("task:noTaskSelected")}
       </div>
     );
   }

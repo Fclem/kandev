@@ -13,6 +13,7 @@ import {
   wasPRClosedBannerDismissed,
   wasPRMergedBannerDismissed,
 } from "@/lib/local-storage";
+import { useTranslation } from "react-i18next";
 
 type ArchiveTarget = { title: string; executorType?: string | null };
 
@@ -74,6 +75,7 @@ function ArchiveDismissBanner({
   taskId: string;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation();
   const { target, requestArchive, closeConfirm, confirmArchive, isPending } =
     useBannerArchiveConfirm(taskId);
   return (
@@ -87,11 +89,11 @@ function ArchiveDismissBanner({
           onClick={requestArchive}
           className={archiveClass}
         >
-          Archive
+          {t("task:archive")}
         </button>
         <button
           type="button"
-          aria-label="Dismiss"
+          aria-label={t("common:dismiss")}
           data-testid={`${testIdPrefix}-dismiss-button`}
           onClick={onDismiss}
           className={dismissClass}

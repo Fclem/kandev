@@ -14,6 +14,7 @@ import { getWebSocketClient } from "@/lib/ws/connection";
 import { formatRelativeTime } from "@/lib/utils";
 import { AgentAvatar } from "@/app/office/components/agent-avatar";
 import type { RunError } from "@/app/office/tasks/[id]/types";
+import { useTranslation } from "react-i18next";
 
 type RunErrorEntryProps = {
   taskId: string;
@@ -29,6 +30,7 @@ type RunErrorEntryProps = {
  * request so the recovery semantics are unchanged.
  */
 export function RunErrorEntry({ taskId, error }: RunErrorEntryProps) {
+  const { t } = useTranslation();
   const agentName = useAppStore((s) =>
     error.agentProfileId
       ? (s.office.agentProfiles.find((a) => a.id === error.agentProfileId)?.name ?? "Agent")
@@ -64,10 +66,7 @@ export function RunErrorEntry({ taskId, error }: RunErrorEntryProps) {
             {formatRelativeTime(error.failedAt)}
           </span>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The agent stopped with an error. Resume to retry the same conversation, or start a fresh
-          session.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{t("task:theAgentStoppedWithAnError")}</p>
         {error.rawPayload && (
           <Collapsible open={showDetails} onOpenChange={setShowDetails} className="mt-2">
             <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">

@@ -1,17 +1,19 @@
 "use client";
 
 import { IconAlertCircle, IconChevronDown } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 
 type WorkspaceUnavailableProps = {
   error?: string | null;
 };
 
 export function WorkspaceUnavailable({ error }: WorkspaceUnavailableProps) {
+  const { t } = useTranslation();
   return (
     <div
       data-testid="workspace-unavailable"
       role="status"
-      aria-label="Workspace unavailable"
+      aria-label={t("task:workspaceUnavailable")}
       className="h-full w-full min-w-0 p-4"
     >
       <div className="flex min-w-0 items-start gap-2">
@@ -20,9 +22,11 @@ export function WorkspaceUnavailable({ error }: WorkspaceUnavailableProps) {
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-foreground">Workspace unavailable</div>
+          <div className="text-sm font-medium text-foreground">
+            {t("task:workspaceUnavailable")}
+          </div>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            This session did not finish setting up its workspace.
+            {t("task:thisSessionDidNotFinishSetting")}
           </p>
           {error && (
             <details className="mt-2 min-w-0 text-xs text-muted-foreground">

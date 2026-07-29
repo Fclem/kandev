@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 export type ContextMenuState = {
   x: number;
   y: number;
@@ -31,6 +32,7 @@ export function DiffViewerContextMenu({
   onRevert,
   filePath,
 }: DiffViewerContextMenuProps) {
+  const { t } = useTranslation();
   return (
     <div
       role="menu"
@@ -39,7 +41,7 @@ export function DiffViewerContextMenu({
       onMouseDown={(e) => e.stopPropagation()}
     >
       <button role="menuitem" className={itemCls} onClick={onCopyAllChanged}>
-        Copy all changed lines
+        {t("editors:copyAllChangedLines")}
       </button>
       {contextMenu.isChangedLine && (
         <button
@@ -64,7 +66,7 @@ export function DiffViewerContextMenu({
               onClose();
             }}
           >
-            Revert all changes
+            {t("editors:revertAllChanges")}
           </button>
         </>
       )}

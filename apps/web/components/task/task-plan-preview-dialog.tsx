@@ -15,6 +15,7 @@ import { Button } from "@kandev/ui/button";
 import { Badge } from "@kandev/ui/badge";
 import type { TaskPlanRevision } from "@/lib/types/http";
 import { formatPreciseTime } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const PlanReadOnlyMarkdown = dynamic(
   () =>
@@ -53,6 +54,7 @@ export function PlanRevisionPreviewDialog({
   onCompareWithCurrent,
   isCurrent,
 }: Props): ReactNode {
+  const { t } = useTranslation();
   const open = revision !== null;
   return (
     <Dialog
@@ -70,7 +72,7 @@ export function PlanRevisionPreviewDialog({
             <span>Version {revision?.revision_number}</span>
             {isCurrent && (
               <Badge variant="secondary" className="h-4 text-[10px] px-1.5">
-                current
+                {t("task:current")}
               </Badge>
             )}
           </DialogTitle>
@@ -95,7 +97,7 @@ export function PlanRevisionPreviewDialog({
             className="cursor-pointer"
             data-testid="plan-revision-preview-close"
           >
-            Close
+            {t("common:close")}
           </Button>
           {!isCurrent && revision && (
             <>
@@ -106,7 +108,7 @@ export function PlanRevisionPreviewDialog({
                   className="cursor-pointer"
                   data-testid="plan-revision-preview-compare-with-previous"
                 >
-                  Compare with previous
+                  {t("task:compareWithPrevious")}
                 </Button>
               )}
               <Button
@@ -115,14 +117,14 @@ export function PlanRevisionPreviewDialog({
                 className="cursor-pointer"
                 data-testid="plan-revision-preview-compare-with-current"
               >
-                Compare with current
+                {t("task:compareWithCurrent")}
               </Button>
               <Button
                 onClick={onRestore}
                 className="cursor-pointer"
                 data-testid="plan-revision-preview-restore"
               >
-                Restore this version
+                {t("task:restoreThisVersion")}
               </Button>
             </>
           )}
@@ -170,6 +172,7 @@ function PreviewBody({
 }
 
 function PreviewBodyInner({ content, error }: { content: string | null; error: string | null }) {
+  const { t } = useTranslation();
   if (error) {
     return <div className="text-destructive text-xs">{error}</div>;
   }
@@ -182,7 +185,7 @@ function PreviewBodyInner({ content, error }: { content: string | null; error: s
     );
   }
   if (content.trim() === "") {
-    return <div className="text-xs text-muted-foreground italic">(empty plan)</div>;
+    return <div className="text-xs text-muted-foreground italic">{t("task:emptyPlan")}</div>;
   }
   return <PlanReadOnlyMarkdown content={content} />;
 }

@@ -10,6 +10,7 @@ import {
 } from "./changes-panel-timeline";
 import { mergeCommits, firstVisibleSection } from "./changes-panel-helpers";
 import type { ChangesPanelBodyProps } from "./changes-panel-data";
+import { useTranslation } from "react-i18next";
 
 function ChangesPanelDialogsSection({
   dialogs,
@@ -161,10 +162,11 @@ function WorkingTreeSections(props: WorkingTreeProps) {
 }
 
 function ChangesPanelTimeline(props: TimelineProps) {
+  const { t } = useTranslation();
   if (!props.hasAnything) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
-        Your changed files will appear here
+        {t("task:yourChangedFilesWillAppearHere")}
       </div>
     );
   }

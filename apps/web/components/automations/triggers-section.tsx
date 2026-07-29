@@ -7,6 +7,7 @@ import type { AutomationTrigger, TriggerType, TriggerTypeInfo } from "@/lib/type
 import { ScheduleSelector } from "./schedule-selector";
 import { TriggerCard } from "./trigger-card";
 import { TriggerPicker } from "./trigger-picker";
+import { useTranslation } from "react-i18next";
 
 type TriggersSectionProps = {
   triggers: AutomationTrigger[];
@@ -122,9 +123,10 @@ function ScheduleArea({
   savedScheduleTrigger: AutomationTrigger | undefined;
   onScheduleChange: (config: Record<string, unknown>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-medium">Schedule</Label>
+      <Label className="text-xs font-medium">{t("automations:schedule")}</Label>
       <ScheduleSelector
         config={scheduleTrigger?.config ?? null}
         isDirty={
@@ -158,9 +160,10 @@ function ConditionArea({
   onToggleTrigger: (triggerId: string, enabled: boolean) => void;
   onDeleteTrigger: (triggerId: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-medium">Watch for</Label>
+      <Label className="text-xs font-medium">{t("automations:watchFor")}</Label>
       {trigger ? (
         <div className="space-y-2">
           <TriggerCard

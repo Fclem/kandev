@@ -21,6 +21,7 @@ import {
 import type { Routine, RoutineTrigger } from "@/lib/state/slices/office/types";
 import { timeAgo } from "@/lib/utils/time";
 import { OfficeTopbarPortal } from "../../components/office-topbar-portal";
+import { useTranslation } from "react-i18next";
 
 // Lift the form state out of the component so the file stays under the
 // 100-line per-function ceiling and the helpers can render typed slices
@@ -69,6 +70,7 @@ type RoutineDetailViewProps = {
 };
 
 export function RoutineDetailView({ initialRoutine, initialTriggers }: RoutineDetailViewProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const agents = useAppStore((s) => s.office.agentProfiles);
   const [routine] = useState(initialRoutine);
@@ -97,7 +99,7 @@ export function RoutineDetailView({ initialRoutine, initialTriggers }: RoutineDe
       } as Record<string, unknown>);
       const nextTriggers = await syncCronTrigger(routine.id, draft, triggers);
       setTriggers(nextTriggers);
-      toast.success("Routine saved");
+      toast.success(t("office:routineSaved"));
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save routine");
@@ -109,7 +111,7 @@ export function RoutineDetailView({ initialRoutine, initialTriggers }: RoutineDe
   const handleRunNow = useCallback(async () => {
     try {
       await runRoutine(routine.id);
-      toast.success("Routine fired");
+      toast.success(t("office:routineFired"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to run routine");
     }
@@ -122,7 +124,7 @@ export function RoutineDetailView({ initialRoutine, initialTriggers }: RoutineDe
           href="/office/routines"
           className="text-sm text-muted-foreground hover:text-foreground cursor-pointer"
         >
-          Routines
+          {t("office:routines")}
         </Link>
         <IconChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
         <span className="text-sm font-medium truncate">{routine.name}</span>
@@ -154,10 +156,11 @@ function DetailGeneralCard({
   update: (patch: Partial<DraftState>) => void;
   agents: Array<{ id: string; name: string }>;
 }) {
+  const { t } = useTranslation();
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-medium">General</CardTitle>
+        <CardTitle className="text-sm font-medium">{t("office:general")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <BasicGeneralFields draft={draft} update={update} />
@@ -210,6 +213,7 @@ function StatusAndAssigneeFields({
   update: (patch: Partial<DraftState>) => void;
   agents: Array<{ id: string; name: string }>;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
       <Field label="Status">
@@ -222,13 +226,13 @@ function StatusAndAssigneeFields({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="active" className="cursor-pointer">
-              Active
+              {t("common:active")}
             </SelectItem>
             <SelectItem value="paused" className="cursor-pointer">
-              Paused
+              {t("office:paused")}
             </SelectItem>
             <SelectItem value="archived" className="cursor-pointer">
-              Archived
+              {t("office:archived")}
             </SelectItem>
           </SelectContent>
         </Select>
@@ -239,7 +243,7 @@ function StatusAndAssigneeFields({
           onValueChange={(v) => update({ assigneeAgentProfileId: v })}
         >
           <SelectTrigger className="cursor-pointer">
-            <SelectValue placeholder="Unassigned" />
+            <SelectValue placeholder={t("office:unassigned")} />
           </SelectTrigger>
           <SelectContent>
             {agents.map((a) => (
@@ -261,6 +265,7 @@ function PolicyFields({
   draft: DraftState;
   update: (patch: Partial<DraftState>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
       <Field label="Concurrency policy">
@@ -273,13 +278,13 @@ function PolicyFields({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="skip_if_active" className="cursor-pointer">
-              Skip if active
+              {t("office:skipIfActive")}
             </SelectItem>
             <SelectItem value="coalesce_if_active" className="cursor-pointer">
-              Coalesce if active
+              {t("office:coalesceIfActive")}
             </SelectItem>
             <SelectItem value="always_create" className="cursor-pointer">
-              Always create
+              {t("office:alwaysCreate")}
             </SelectItem>
           </SelectContent>
         </Select>
@@ -291,10 +296,10 @@ function PolicyFields({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="enqueue_missed_with_cap" className="cursor-pointer">
-              Enqueue missed (with cap)
+              {t("office:enqueueMissedWithCap")}
             </SelectItem>
             <SelectItem value="skip_missed" className="cursor-pointer">
-              Skip missed
+              {t("office:skipMissed")}
             </SelectItem>
           </SelectContent>
         </Select>
@@ -310,10 +315,11 @@ function DetailTriggerCard({
   draft: DraftState;
   update: (patch: Partial<DraftState>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-medium">Trigger</CardTitle>
+        <CardTitle className="text-sm font-medium">{t("office:trigger")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -327,10 +333,10 @@ function DetailTriggerCard({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="cron" className="cursor-pointer">
-                  Cron
+                  {t("office:cron")}
                 </SelectItem>
                 <SelectItem value="webhook" className="cursor-pointer">
-                  Webhook
+                  {t("office:webhook")}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -366,10 +372,11 @@ function DetailReadOnlyCard({
   lastFiredAt: string | null;
   nextRunAt: string | null;
 }) {
+  const { t } = useTranslation();
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-medium">Schedule</CardTitle>
+        <CardTitle className="text-sm font-medium">{t("office:schedule")}</CardTitle>
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground space-y-1">
         <div>Last fired: {lastFiredAt ? timeAgo(lastFiredAt) : "never"}</div>

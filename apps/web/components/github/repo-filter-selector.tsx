@@ -27,6 +27,7 @@ import type {
   GitHubRepoInfo,
   GitHubWorkspaceSettings,
 } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 type RepoFilterSelectorProps = {
   allRepos: boolean;
@@ -244,6 +245,7 @@ function RepoSearchCombobox({
   scope: GitHubWorkspaceSettings | null;
   onAdd: (owner: string, name: string) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
 
@@ -285,7 +287,11 @@ function RepoSearchCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start" portal={false}>
         <Command shouldFilter={false}>
-          <CommandInput value={value} onValueChange={setValue} placeholder="owner/repo" />
+          <CommandInput
+            value={value}
+            onValueChange={setValue}
+            placeholder={t("github:ownerRepo")}
+          />
           <CommandList>
             {searchLoading && (
               <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
@@ -297,7 +303,7 @@ function RepoSearchCombobox({
               <CommandEmpty>No repos found for &quot;{org}&quot;</CommandEmpty>
             )}
             {!searchLoading && !org && value.length > 0 && (
-              <CommandEmpty>Type owner/repo to search</CommandEmpty>
+              <CommandEmpty>{t("github:typeOwnerRepoToSearch")}</CommandEmpty>
             )}
             {filteredResults.length > 0 && (
               <CommandGroup>
@@ -310,7 +316,9 @@ function RepoSearchCombobox({
                   >
                     {repo.full_name}
                     {repo.private && (
-                      <span className="ml-auto text-xs text-muted-foreground">private</span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {t("github:private")}
+                      </span>
                     )}
                   </CommandItem>
                 ))}
@@ -330,6 +338,7 @@ export function RepoFilterSelector({
   onSelectedReposChange,
   workspaceId,
 }: RepoFilterSelectorProps) {
+  const { t } = useTranslation();
   const { orgs, loading: orgsLoading } = useGitHubOrgs(workspaceId);
   const scope = useWorkspaceRepoScope(workspaceId);
   const scopedOrgs = useMemo(
@@ -372,9 +381,9 @@ export function RepoFilterSelector({
   return (
     <div className="space-y-3">
       <div>
-        <Label>Repositories</Label>
+        <Label>{t("common:repositories")}</Label>
         <p className="text-xs text-muted-foreground">
-          Which allowed GitHub repositories to monitor for this watch.
+          {t("github:whichAllowedGithubRepositoriesToMonitor")}
         </p>
       </div>
 
@@ -386,7 +395,7 @@ export function RepoFilterSelector({
           className="cursor-pointer"
         />
         <Label htmlFor="all-repos-toggle" className="font-normal cursor-pointer">
-          All repositories allowed by this workspace
+          {t("github:allRepositoriesAllowedByThisWorkspace")}
         </Label>
       </div>
 
@@ -394,7 +403,9 @@ export function RepoFilterSelector({
         <>
           {showOrgBadges && (
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground font-normal">Organizations</Label>
+              <Label className="text-xs text-muted-foreground font-normal">
+                {t("github:organizations")}
+              </Label>
               <OrgBadges
                 orgs={scopedOrgs}
                 loading={orgsLoading}

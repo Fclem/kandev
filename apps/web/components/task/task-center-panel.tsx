@@ -39,6 +39,7 @@ import { MRDetailPanelComponent, mrTaskKey } from "@/components/gitlab/mr-detail
 import { useTaskMRs } from "@/hooks/domains/gitlab/use-task-mr";
 
 import type { SelectedDiff } from "./task-layout";
+import { useTranslation } from "react-i18next";
 
 type TaskCenterPanelProps = {
   selectedDiff: SelectedDiff | null;
@@ -524,6 +525,7 @@ function ChatTabContent({
   onDismissTooltip: () => void;
   onOpenFile: (filePath: string) => void;
 }) {
+  const { t } = useTranslation();
   if (!activeTaskId) {
     return (
       <TabsContent
@@ -532,7 +534,7 @@ function ChatTabContent({
         style={{ minHeight: "200px" }}
       >
         <div className="flex items-center justify-center h-full text-muted-foreground">
-          No task selected
+          {t("task:noTaskSelected")}
         </div>
       </TabsContent>
     );

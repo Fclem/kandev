@@ -13,6 +13,7 @@ import {
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { useTranslation } from "react-i18next";
 
 type WebhookCreatedDialogProps = {
   open: boolean;
@@ -27,15 +28,16 @@ export function WebhookCreatedDialog({
   webhookSecret,
   onClose,
 }: WebhookCreatedDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-xl" data-testid="webhook-created-dialog">
         <DialogHeader>
-          <DialogTitle>Automation created</DialogTitle>
+          <DialogTitle>{t("automations:automationCreated")}</DialogTitle>
           <DialogDescription>
             Configure your external system to POST to this URL with the secret in the{" "}
-            <code className="bg-muted px-1 rounded">X-Webhook-Secret</code> header. You can come
-            back to this automation any time to copy these values again.
+            <code className="bg-muted px-1 rounded">{t("automations:xWebhookSecret")}</code> header.
+            You can come back to this automation any time to copy these values again.
           </DialogDescription>
         </DialogHeader>
         <CopyableField label="Webhook URL" value={webhookUrl} />
@@ -46,7 +48,7 @@ export function WebhookCreatedDialog({
             className="cursor-pointer"
             data-testid="webhook-created-dialog-close"
           >
-            Done
+            {t("automations:done")}
           </Button>
         </DialogFooter>
       </DialogContent>

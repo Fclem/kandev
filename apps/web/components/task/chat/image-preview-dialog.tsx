@@ -2,6 +2,7 @@
 
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@kandev/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 type ImagePreviewDialogProps = {
   src: string;
@@ -22,9 +23,10 @@ type ImagePreviewContentProps = {
 };
 
 export function ImagePreviewContent({ src, alt }: ImagePreviewContentProps) {
+  const { t } = useTranslation();
   return (
     <>
-      <DialogTitle className="sr-only">Image preview</DialogTitle>
+      <DialogTitle className="sr-only">{t("task:imagePreview")}</DialogTitle>
       <img src={src} alt={alt} className={IMAGE_PREVIEW_IMAGE_CLASSNAME} />
     </>
   );

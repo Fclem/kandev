@@ -37,6 +37,7 @@ import type { AgentMessageComment } from "@/lib/state/slices/comments";
 import type { useChatPanelState } from "./use-chat-panel-state";
 import { cn } from "@/lib/utils";
 import { resolveComposerWorkspaceId } from "./composer-workspace";
+import { useTranslation } from "react-i18next";
 
 const PLAN_CONTEXT_PATH = "plan:context";
 
@@ -319,6 +320,7 @@ function ChatStatusBar({
   isMoving: boolean;
   queueChip?: ReactNode;
 }) {
+  const { t } = useTranslation();
   const showTodos = todoItems.length > 0;
   const showProceed = !!nextStepName && !isAgentBusy;
   const canShare = !!taskId && !!sessionId && shareableSessionStateClient(sessionState);
@@ -358,7 +360,7 @@ function ChatStatusBar({
               <IconArrowRight className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Move task to the next workflow step</TooltipContent>
+          <TooltipContent>{t("task:moveTaskToTheNextWorkflow")}</TooltipContent>
         </Tooltip>
       )}
     </div>

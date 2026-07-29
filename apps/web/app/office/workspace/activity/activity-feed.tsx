@@ -8,6 +8,7 @@ import type { ActivityEntry } from "@/lib/state/slices/office/types";
 import { ActivityRow } from "./activity-row";
 import { EmptyState } from "../../components/shared/empty-state";
 import { PageHeader } from "../../components/shared/page-header";
+import { useTranslation } from "react-i18next";
 
 const FILTER_OPTIONS = [
   { value: "all", label: "All types" },
@@ -20,6 +21,7 @@ const FILTER_OPTIONS = [
 ];
 
 export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [filterType, setFilterType] = useState("all");
 
@@ -34,7 +36,7 @@ export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Activity"
+        title={t("office:activity")}
         action={
           <Select value={filterType} onValueChange={setFilterType}>
             <SelectTrigger className="w-[140px] h-8 text-xs cursor-pointer">

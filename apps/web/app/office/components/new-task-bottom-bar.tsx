@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useAppStore } from "@/components/state-provider";
 import type { IssueDraft } from "./new-task-draft";
+import { useTranslation } from "react-i18next";
 
 type StatusOption = { value: string; label: string; className: string };
 type PriorityOption = { value: string; label: string; icon: typeof IconMinus; className: string };
@@ -128,6 +129,7 @@ function PriorityChip({ draft, onUpdate }: Props) {
 }
 
 export function NewTaskBottomBar({ draft, onUpdate }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 pt-2 border-t border-border">
       <StatusChip draft={draft} onUpdate={onUpdate} />
@@ -142,7 +144,7 @@ export function NewTaskBottomBar({ draft, onUpdate }: Props) {
             <IconDotsVertical className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>More options</TooltipContent>
+        <TooltipContent>{t("office:moreOptions")}</TooltipContent>
       </Tooltip>
     </div>
   );

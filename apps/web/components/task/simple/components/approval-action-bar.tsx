@@ -11,6 +11,7 @@ import {
   type TaskDecisionDTO,
 } from "@/lib/api/domains/office-extended-api";
 import type { Task, TaskDecision, TaskDecisionRole } from "@/app/office/tasks/[id]/types";
+import { useTranslation } from "react-i18next";
 
 // USER_VIEWER is the synthetic decider id we use for the singleton human
 // user. Mirrors the backend's `userSentinel` — the approval endpoints
@@ -90,6 +91,7 @@ type ApprovalActionBarProps = {
 type Mode = "idle" | "approve" | "request_changes";
 
 export function ApprovalActionBar({ task }: ApprovalActionBarProps) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("idle");
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -141,7 +143,7 @@ export function ApprovalActionBar({ task }: ApprovalActionBarProps) {
       {mode === "idle" && (
         <div className="flex items-center gap-2">
           <p className="text-sm text-muted-foreground flex-1">
-            Your review is requested on this task.
+            {t("task:yourReviewIsRequestedOnThis")}
           </p>
           <Button
             type="button"
@@ -202,6 +204,7 @@ function ApprovalCommentForm({
   onCancel,
   onSubmit,
 }: ApprovalCommentFormProps) {
+  const { t } = useTranslation();
   const required = mode === "request_changes";
   const placeholder =
     mode === "approve" ? "Add an optional comment" : "Describe what needs to change";
@@ -225,7 +228,7 @@ function ApprovalCommentForm({
           onClick={onCancel}
           disabled={submitting}
         >
-          Cancel
+          {t("common:cancel")}
         </Button>
         <Button
           type="button"

@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@kandev/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 /**
  * Shared, domain-agnostic scope bar for the integration dashboards (/github,
@@ -118,6 +119,7 @@ function SavedMenu<K extends string>({
   canSaveCurrent: boolean;
   onSaveCurrent: () => void;
 }) {
+  const { t } = useTranslation();
   const activeSaved = selected.source === "saved";
   const activeLabel = activeSaved ? saved.find((s) => s.id === selected.id)?.label : null;
   return (
@@ -135,7 +137,7 @@ function SavedMenu<K extends string>({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         {saved.length === 0 ? (
-          <DropdownMenuItem disabled>No saved queries yet</DropdownMenuItem>
+          <DropdownMenuItem disabled>{t("integrations:noSavedQueriesYet")}</DropdownMenuItem>
         ) : (
           saved.map((s) => (
             <DropdownMenuItem
@@ -155,7 +157,7 @@ function SavedMenu<K extends string>({
                   onDeleteSaved(s.id);
                 }}
                 className="pointer-events-none cursor-pointer text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/saved:pointer-events-auto group-hover/saved:opacity-100"
-                title="Delete saved query"
+                title={t("integrations:deleteSavedQuery")}
               >
                 <IconX className="h-3.5 w-3.5" />
               </button>
@@ -169,7 +171,7 @@ function SavedMenu<K extends string>({
           className={cn("gap-2", canSaveCurrent && "cursor-pointer")}
         >
           <IconDeviceFloppy className="h-3.5 w-3.5 shrink-0" />
-          <span>Save current query</span>
+          <span>{t("integrations:saveCurrentQuery")}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

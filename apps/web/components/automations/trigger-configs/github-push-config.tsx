@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
+import { useTranslation } from "react-i18next";
 
 type GitHubPushConfigProps = {
   config: Record<string, unknown>;
@@ -10,6 +11,7 @@ type GitHubPushConfigProps = {
 };
 
 export function GitHubPushConfig({ config, onUpdate }: GitHubPushConfigProps) {
+  const { t } = useTranslation();
   const configBranches = ((config.branches as string[]) ?? []).join(", ");
   const [branches, setBranches] = useState(configBranches);
   useEffect(() => {
@@ -27,15 +29,17 @@ export function GitHubPushConfig({ config, onUpdate }: GitHubPushConfigProps) {
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <Label className="text-xs">Branch patterns (comma-separated, supports globs)</Label>
+        <Label className="text-xs">
+          {t("automations:branchPatternsCommaSeparatedSupportsGlobs")}
+        </Label>
         <Input
           value={branches}
           onChange={(e) => setBranches(e.target.value)}
           onBlur={handleBlur}
-          placeholder="main, release/*"
+          placeholder={t("automations:mainRelease")}
         />
         <p className="text-xs text-muted-foreground">
-          Triggers when code is pushed to matching branches
+          {t("automations:triggersWhenCodeIsPushedTo")}
         </p>
       </div>
     </div>

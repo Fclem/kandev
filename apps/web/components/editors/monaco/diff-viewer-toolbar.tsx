@@ -15,6 +15,7 @@ import type { FileDiffData } from "@/lib/diff/types";
 import type { ViewMode } from "@/hooks/use-global-view-mode";
 import { ExternalVcsFileLink } from "@/components/editors/external-vcs-file-link";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
+import { useTranslation } from "react-i18next";
 
 interface DiffViewerToolbarProps {
   data: FileDiffData;
@@ -57,6 +58,7 @@ function DiffViewerToggleButtons({
   | "globalViewMode"
   | "setGlobalViewMode"
 >) {
+  const { t } = useTranslation();
   return (
     <>
       <Tooltip>
@@ -87,7 +89,7 @@ function DiffViewerToggleButtons({
             <IconTextWrap className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Toggle word wrap</TooltipContent>
+        <TooltipContent>{t("editors:toggleWordWrap")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -132,6 +134,7 @@ function DiffViewerActions({
   publishedBranch,
   baseBranch,
 }: DiffViewerActionsProps) {
+  const { t } = useTranslation();
   const { isMobile } = useResponsiveBreakpoint();
   return (
     <div className="flex items-center gap-1">
@@ -153,7 +156,7 @@ function DiffViewerActions({
             <IconCopy className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Copy diff</TooltipContent>
+        <TooltipContent>{t("editors:copyDiff")}</TooltipContent>
       </Tooltip>
       <DiffViewerToggleButtons
         foldUnchanged={foldUnchanged}
@@ -175,7 +178,7 @@ function DiffViewerActions({
               <IconArrowBackUp className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Revert changes</TooltipContent>
+          <TooltipContent>{t("editors:revertChanges")}</TooltipContent>
         </Tooltip>
       )}
       {onOpenFile && (
@@ -190,7 +193,7 @@ function DiffViewerActions({
               <IconPencil className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Edit</TooltipContent>
+          <TooltipContent>{t("common:edit")}</TooltipContent>
         </Tooltip>
       )}
     </div>

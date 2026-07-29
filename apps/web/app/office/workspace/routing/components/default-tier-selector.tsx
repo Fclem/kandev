@@ -2,6 +2,7 @@
 
 import { ToggleGroup, ToggleGroupItem } from "@kandev/ui/toggle-group";
 import type { Tier } from "@/lib/state/slices/office/types";
+import { useTranslation } from "react-i18next";
 
 const TIER_OPTIONS: Array<{ value: Tier; label: string; hint: string }> = [
   { value: "frontier", label: "Frontier", hint: "Best capability per provider" },
@@ -16,13 +17,13 @@ type Props = {
 };
 
 export function DefaultTierSelector({ value, onChange, disabled }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-lg border border-border p-4 space-y-3">
       <div>
-        <p className="text-sm font-medium">Default tier</p>
+        <p className="text-sm font-medium">{t("office:defaultTier")}</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Agents inherit this tier unless they override it. Every routed provider must map this tier
-          to a model.
+          {t("office:agentsInheritThisTierUnlessThey")}
         </p>
       </div>
       <ToggleGroup

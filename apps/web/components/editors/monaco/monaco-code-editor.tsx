@@ -15,6 +15,7 @@ import { useMonacoEditorComments } from "./use-monaco-editor-state";
 import { useMonacoEditorLsp, useMonacoDiffDecorations } from "./use-monaco-editor-lsp";
 import { useMonacoWalkthroughRange } from "./use-monaco-walkthrough-range";
 import { initMonacoThemes } from "./monaco-init";
+import { useTranslation } from "react-i18next";
 
 initMonacoThemes();
 
@@ -170,6 +171,7 @@ function useMonacoCodeEditorSetup(props: MonacoCodeEditorProps) {
 }
 
 export function MonacoCodeEditor(props: MonacoCodeEditorProps) {
+  const { t } = useTranslation();
   const {
     path,
     content,
@@ -231,7 +233,7 @@ export function MonacoCodeEditor(props: MonacoCodeEditorProps) {
           options={options}
           loading={
             <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-              Loading editor...
+              {t("editors:loadingEditor")}
             </div>
           }
         />

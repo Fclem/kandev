@@ -35,6 +35,7 @@ import {
   mergeChatEntries,
   type ChatEntry,
 } from "./chat-entries";
+import { useTranslation } from "react-i18next";
 
 const MAX_INLINE_SESSIONS = 50;
 const AUTOSCROLL_THRESHOLD_PX = 80;
@@ -88,6 +89,7 @@ function CommentEntry({
   turn?: CommentTurnContext;
   hasLaterAgentReply?: boolean;
 }) {
+  const { t } = useTranslation();
   const isAgent = comment.authorType === "agent";
   // Resolve the agent name from the office agents store so renames
   // flow through automatically. Backend session-bridged comments don't
@@ -116,7 +118,7 @@ function CommentEntry({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm">{displayName}</span>
           {isAgent && comment.source === "session" && (
-            <span className="text-xs text-muted-foreground">via session</span>
+            <span className="text-xs text-muted-foreground">{t("task:viaSession")}</span>
           )}
           {comment.status && (
             <span className="text-xs text-muted-foreground">
@@ -309,6 +311,7 @@ function CommentComposerFooter({
   applyPending,
   copyPending,
 }: CommentComposerFooterProps) {
+  const { t } = useTranslation();
   const isSendDisabled = submitting || !input.trim();
 
   return (
@@ -333,7 +336,7 @@ function CommentComposerFooter({
               <IconPaperclip className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Attach files</TooltipContent>
+          <TooltipContent>{t("task:attachFiles")}</TooltipContent>
         </Tooltip>
         <EnhancePromptButton
           onClick={handleEnhance}
@@ -355,7 +358,7 @@ function CommentComposerFooter({
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>Send comment</TooltipContent>
+          <TooltipContent>{t("task:sendComment")}</TooltipContent>
         </Tooltip>
       </div>
       <div className="px-2 pb-2">
@@ -370,6 +373,7 @@ function CommentComposerFooter({
 }
 
 function ChatInput({ taskId, taskTitle, taskDescription, onSubmitted }: ChatInputProps) {
+  const { t } = useTranslation();
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -436,7 +440,7 @@ function ChatInput({ taskId, taskTitle, taskDescription, onSubmitted }: ChatInpu
             }
           }}
           onPaste={handlePaste}
-          placeholder="Add a comment..."
+          placeholder={t("task:addAComment")}
           rows={2}
           className="w-full bg-transparent px-3 py-2 text-sm outline-none resize-none"
         />
@@ -598,6 +602,7 @@ export function TaskChat({
   taskTitle,
   taskDescription,
 }: TaskChatProps) {
+  const { t } = useTranslation();
   const [showOlder, setShowOlder] = useState(false);
   const groups = useMemo(
     () => groupSessionsForTimeline(sessions, reviewers, approvers),
@@ -653,7 +658,7 @@ export function TaskChat({
         </button>
       )}
       {isEmpty ? (
-        <p className="text-sm text-muted-foreground py-4">No comments yet</p>
+        <p className="text-sm text-muted-foreground py-4">{t("task:noCommentsYet")}</p>
       ) : (
         <div data-testid="task-chat-entries">
           <ChatEntries taskId={taskId} entries={entries} />

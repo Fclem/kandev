@@ -20,6 +20,7 @@ import {
   PR_PRESETS as BUILTIN_PR_PRESETS,
   ISSUE_PRESETS as BUILTIN_ISSUE_PRESETS,
 } from "@/components/github/my-github/search-bar";
+import { useTranslation } from "react-i18next";
 
 function newPreset(): StoredQueryPreset {
   return {
@@ -41,6 +42,7 @@ function QueryRow({
   onPatch: (patch: Partial<StoredQueryPreset>) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="flex items-center gap-2 rounded-md border p-2"
@@ -48,27 +50,27 @@ function QueryRow({
       data-settings-dirty-level="container"
     >
       <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] text-muted-foreground">Label</span>
+        <span className="text-[10px] text-muted-foreground">{t("github:label")}</span>
         <Input
           className="h-8 w-36"
           value={preset.label}
           data-settings-dirty={preset.label !== baseline?.label}
-          placeholder="Label"
+          placeholder={t("github:label")}
           onChange={(e) => onPatch({ label: e.target.value })}
         />
       </div>
       <div className="flex flex-col gap-0.5 flex-1">
-        <span className="text-[10px] text-muted-foreground">Query</span>
+        <span className="text-[10px] text-muted-foreground">{t("github:query")}</span>
         <Input
           className="h-8 font-mono text-xs"
           value={preset.filter}
           data-settings-dirty={preset.filter !== baseline?.filter}
-          placeholder="e.g. review-requested:@me is:open"
+          placeholder={t("github:eGReviewRequestedMeIs")}
           onChange={(e) => onPatch({ filter: e.target.value })}
         />
       </div>
       <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] text-muted-foreground">Group</span>
+        <span className="text-[10px] text-muted-foreground">{t("github:group")}</span>
         <Select
           value={preset.group}
           onValueChange={(v) => onPatch({ group: v as "inbox" | "created" })}
@@ -81,10 +83,10 @@ function QueryRow({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="inbox" className="cursor-pointer">
-              Inbox
+              {t("github:inbox")}
             </SelectItem>
             <SelectItem value="created" className="cursor-pointer">
-              Created
+              {t("github:created")}
             </SelectItem>
           </SelectContent>
         </Select>
@@ -94,7 +96,7 @@ function QueryRow({
         size="icon"
         className="h-8 w-8 cursor-pointer text-destructive mt-3.5"
         onClick={onRemove}
-        aria-label="Remove"
+        aria-label={t("github:remove")}
       >
         <IconTrash className="h-3.5 w-3.5" />
       </Button>
@@ -247,11 +249,12 @@ function useDefaultQueryDrafts(workspaceId?: string) {
 }
 
 export function DefaultQueriesSection({ workspaceId }: { workspaceId?: string }) {
+  const { t } = useTranslation();
   const drafts = useDefaultQueryDrafts(workspaceId);
 
   return (
     <SettingsSection
-      title="Default queries"
+      title={t("github:defaultQueries")}
       description="Sidebar queries shown on /github for pull requests and issues."
       action={
         <div className="flex gap-2">
@@ -273,10 +276,10 @@ export function DefaultQueriesSection({ workspaceId }: { workspaceId?: string })
           <Tabs defaultValue="pr">
             <TabsList>
               <TabsTrigger value="pr" className="cursor-pointer">
-                Pull requests
+                {t("github:pullRequests")}
               </TabsTrigger>
               <TabsTrigger value="issue" className="cursor-pointer">
-                Issues
+                {t("github:issues")}
               </TabsTrigger>
             </TabsList>
             <TabsContent value="pr">

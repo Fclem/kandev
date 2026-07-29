@@ -3,6 +3,8 @@
 import Link from "@/components/routing/app-link";
 import type { ActivityEntry } from "@/lib/state/slices/office/types";
 import { timeAgo } from "@/lib/utils/time";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 const CANCEL_REASON_LABEL: Record<string, string> = {
   assignee_changed: "assignee changed",
@@ -54,7 +56,7 @@ function renderAction(entry: ActivityEntry): React.ReactNode {
     const label = CANCEL_REASON_LABEL[reason] ?? reason.replace(/_/g, " ");
     return (
       <>
-        <span className="text-muted-foreground"> stale run cancelled</span>
+        <span className="text-muted-foreground"> {t("office:staleRunCancelled")}</span>
         {taskRefNode(d)}
         {label && <span className="text-muted-foreground"> — {truncate(label)}</span>}
       </>
@@ -64,7 +66,7 @@ function renderAction(entry: ActivityEntry): React.ReactNode {
   if (entry.action === "run_retry_cancelled") {
     return (
       <>
-        <span className="text-muted-foreground"> retry cancelled — reassigned</span>
+        <span className="text-muted-foreground"> {t("office:retryCancelledReassigned")}</span>
         {taskRefNode(d)}
       </>
     );
@@ -73,7 +75,7 @@ function renderAction(entry: ActivityEntry): React.ReactNode {
   if (entry.action === "recovery_dispatch") {
     return (
       <>
-        <span className="text-muted-foreground"> unstarted task recovered</span>
+        <span className="text-muted-foreground"> {t("office:unstartedTaskRecovered")}</span>
         {taskRefNode(d)}
       </>
     );
@@ -83,7 +85,7 @@ function renderAction(entry: ActivityEntry): React.ReactNode {
     const newStatus = typeof d?.new_status === "string" ? d.new_status.replace(/_/g, " ") : "";
     return (
       <>
-        <span className="text-muted-foreground"> status changed</span>
+        <span className="text-muted-foreground"> {t("office:statusChanged")}</span>
         {newStatus && <span className="text-muted-foreground"> to {newStatus}</span>}
         {taskRefNode(d)}
       </>
@@ -122,6 +124,7 @@ type Props = {
 };
 
 export function ActivityRow({ entry }: Props) {
+  const { t } = useTranslation();
   const href = runHref(entry);
   return (
     <div className="flex items-start gap-3 px-4 py-2.5 text-sm hover:bg-accent/50 transition-colors">
@@ -137,7 +140,7 @@ export function ActivityRow({ entry }: Props) {
           href={href}
           className="text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
         >
-          Run
+          {t("office:run")}
         </Link>
       )}
       <span className="text-xs text-muted-foreground shrink-0">{timeAgo(entry.createdAt)}</span>

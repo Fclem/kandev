@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useAppStore } from "@/components/state-provider";
 import type { LinearIssueWatch, LinearSearchFilter } from "@/lib/types/linear";
+import { useTranslation } from "react-i18next";
 
 type LinearIssueWatchTableProps = {
   watches: LinearIssueWatch[];
@@ -69,6 +70,7 @@ function WatchActions({
   onReset: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-1">
       <Tooltip>
@@ -107,7 +109,7 @@ function WatchActions({
             <IconRefresh className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Check now</TooltipContent>
+        <TooltipContent>{t("linear:checkNow")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -116,7 +118,7 @@ function WatchActions({
             size="sm"
             className="h-7 w-7 p-0 cursor-pointer"
             data-testid="watch-reset-button"
-            aria-label="Reset watch"
+            aria-label={t("linear:resetWatch")}
             onClick={(e) => {
               e.stopPropagation();
               onReset(watch.id);
@@ -125,7 +127,7 @@ function WatchActions({
             <IconRestore className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Reset</TooltipContent>
+        <TooltipContent>{t("linear:reset")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -141,7 +143,7 @@ function WatchActions({
             <IconTrash className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Delete</TooltipContent>
+        <TooltipContent>{t("common:delete")}</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -157,13 +159,14 @@ export function LinearIssueWatchTable({
   onReset,
   onToggleEnabled,
 }: LinearIssueWatchTableProps) {
+  const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces.items);
   const workspaceName = (id: string) => workspaces.find((w) => w.id === id)?.name ?? id;
 
   if (watches.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-4 text-center">
-        No Linear watchers configured. Create one to auto-create tasks from filtered issues.
+        {t("linear:noLinearWatchersConfiguredCreateOne")}
       </p>
     );
   }
@@ -172,12 +175,12 @@ export function LinearIssueWatchTable({
     <Table>
       <TableHeader>
         <TableRow>
-          {showWorkspace && <TableHead>Workspace</TableHead>}
-          <TableHead>Filter</TableHead>
-          <TableHead>Interval</TableHead>
-          <TableHead>Last Polled</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          {showWorkspace && <TableHead>{t("common:workspace")}</TableHead>}
+          <TableHead>{t("linear:filter")}</TableHead>
+          <TableHead>{t("linear:interval")}</TableHead>
+          <TableHead>{t("linear:lastPolled")}</TableHead>
+          <TableHead>{t("common:status")}</TableHead>
+          <TableHead className="text-right">{t("linear:actions")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

@@ -25,6 +25,7 @@ import {
   isOfficeWorkspace,
   workspaceHomeHref,
 } from "@/components/app-sidebar/app-sidebar-workspace-navigation";
+import { useTranslation } from "react-i18next";
 
 type Workspace = WorkspaceState["items"][number];
 
@@ -65,11 +66,12 @@ function DeleteWorkspaceDialog({
   onConfirmTextChange: (value: string) => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="workspace-delete-dialog">
         <DialogHeader>
-          <DialogTitle>Delete workspace</DialogTitle>
+          <DialogTitle>{t("office:deleteWorkspace")}</DialogTitle>
           <DialogDescription>
             This will permanently delete {summary?.agents ?? 0} agents, {summary?.tasks ?? 0} tasks,{" "}
             {summary?.skills ?? 0} skills, and the workspace folder.
@@ -92,7 +94,7 @@ function DeleteWorkspaceDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -120,6 +122,7 @@ export function DangerZoneSection({
   setWorkspaces: (items: Workspace[]) => void;
   setActiveWorkspace: (id: string | null) => void;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -153,7 +156,7 @@ export function DangerZoneSection({
       setWorkspaces(remaining);
       setActiveWorkspace(nextWorkspace?.id ?? null);
       router.push(postDeleteWorkspaceHref(nextWorkspace));
-      toast.success("Workspace deleted");
+      toast.success(t("office:workspaceDeleted"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete workspace");
     } finally {
@@ -165,9 +168,9 @@ export function DangerZoneSection({
     <SettingCard>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-destructive">Delete workspace</p>
+          <p className="text-sm font-medium text-destructive">{t("office:deleteWorkspace")}</p>
           <p className="text-xs text-muted-foreground mt-1">
-            This permanently deletes agents, tasks, skills, routines, and configuration.
+            {t("office:thisPermanentlyDeletesAgentsTasksSkills")}
           </p>
         </div>
         <Button

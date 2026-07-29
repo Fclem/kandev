@@ -23,6 +23,7 @@ import {
 } from "./shared";
 import { pickArray, pickNumber, pickString } from "./parse";
 import type { KandevRenderer } from "./types";
+import { useTranslation } from "react-i18next";
 
 // NamedListRow is the canonical row layout for entries with name + id +
 // optional description (workspaces, workflows, executor profiles). The id
@@ -57,12 +58,13 @@ type WorkspaceItem = {
 };
 
 export const ListWorkspacesRenderer: KandevRenderer = ({ result, status }) => {
+  const { t } = useTranslation();
   const items = pickArray<WorkspaceItem>(result, "workspaces") ?? [];
   const total = pickNumber(result, "total") ?? items.length;
   return (
     <KandevRow
       Icon={IconBriefcase}
-      title="Kandev: List Workspaces"
+      title={t("task:kandevListWorkspaces")}
       summary={pluralCount(total, "workspace")}
       status={status}
       hasExpandableContent={items.length > 0}
@@ -95,13 +97,14 @@ type WorkflowItem = {
 };
 
 export const ListWorkflowsRenderer: KandevRenderer = ({ args, result, status }) => {
+  const { t } = useTranslation();
   const items = pickArray<WorkflowItem>(result, "workflows") ?? [];
   const total = pickNumber(result, "total") ?? items.length;
   const workspaceId = pickString(args, "workspace_id");
   return (
     <KandevRow
       Icon={IconColumns3}
-      title="Kandev: List Workflows"
+      title={t("task:kandevListWorkflows")}
       summary={
         <span className="inline-flex items-center gap-1.5">
           {workspaceId && (
@@ -155,6 +158,7 @@ function StepColorDot({ color }: { color: string | undefined }) {
 }
 
 export const ListWorkflowStepsRenderer: KandevRenderer = ({ args, result, status }) => {
+  const { t } = useTranslation();
   const items = pickArray<WorkflowStep>(result, "steps") ?? [];
   const total = pickNumber(result, "total") ?? items.length;
   const sorted = [...items].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -162,7 +166,7 @@ export const ListWorkflowStepsRenderer: KandevRenderer = ({ args, result, status
   return (
     <KandevRow
       Icon={IconList}
-      title="Kandev: List Workflow Steps"
+      title={t("task:kandevListWorkflowSteps")}
       summary={
         <span className="inline-flex items-center gap-1.5">
           {workflowId && (
@@ -189,7 +193,7 @@ export const ListWorkflowStepsRenderer: KandevRenderer = ({ args, result, status
               <StepColorDot color={step.color} />
               <span>{step.name ?? "(unnamed)"}</span>
               {step.is_start_step && (
-                <span className="text-[10px] text-muted-foreground/60">start</span>
+                <span className="text-[10px] text-muted-foreground/60">{t("task:start")}</span>
               )}
               {step.stage_type && step.stage_type !== "custom" && (
                 <span className="text-[10px] text-muted-foreground/60">{step.stage_type}</span>
@@ -214,13 +218,14 @@ type TaskItem = {
 };
 
 export const ListTasksRenderer: KandevRenderer = ({ args, result, status }) => {
+  const { t } = useTranslation();
   const items = pickArray<TaskItem>(result, "tasks") ?? [];
   const total = pickNumber(result, "total") ?? items.length;
   const workflowId = pickString(args, "workflow_id");
   return (
     <KandevRow
       Icon={IconListCheck}
-      title="Kandev: List Tasks"
+      title={t("task:kandevListTasks")}
       summary={
         <span className="inline-flex items-center gap-1.5">
           {workflowId && (
@@ -289,6 +294,7 @@ function RelatedGroup({ label, items }: { label: string; items: RelatedTaskItem[
 }
 
 export const ListRelatedTasksRenderer: KandevRenderer = ({ args, result, status }) => {
+  const { t } = useTranslation();
   const groups = RELATED_GROUPS.map((g) => ({
     ...g,
     items: pickArray<RelatedTaskItem>(result, g.key) ?? [],
@@ -298,7 +304,7 @@ export const ListRelatedTasksRenderer: KandevRenderer = ({ args, result, status 
   return (
     <KandevRow
       Icon={IconLink}
-      title="Kandev: List Related Tasks"
+      title={t("task:kandevListRelatedTasks")}
       summary={
         <span className="inline-flex items-center gap-1.5">
           {taskId && (
@@ -335,12 +341,13 @@ type AgentItem = {
 };
 
 export const ListAgentsRenderer: KandevRenderer = ({ result, status }) => {
+  const { t } = useTranslation();
   const items = pickArray<AgentItem>(result, "agents") ?? [];
   const total = pickNumber(result, "total") ?? items.length;
   return (
     <KandevRow
       Icon={IconRobot}
-      title="Kandev: List Agents"
+      title={t("task:kandevListAgents")}
       summary={pluralCount(total, "agent")}
       status={status}
       hasExpandableContent={items.length > 0}
@@ -378,13 +385,14 @@ type ExecutorProfileItem = {
 };
 
 export const ListExecutorProfilesRenderer: KandevRenderer = ({ args, result, status }) => {
+  const { t } = useTranslation();
   const items = pickArray<ExecutorProfileItem>(result, "profiles") ?? [];
   const total = pickNumber(result, "total") ?? items.length;
   const executorId = pickString(args, "executor_id");
   return (
     <KandevRow
       Icon={IconServer}
-      title="Kandev: List Executor Profiles"
+      title={t("task:kandevListExecutorProfiles")}
       summary={
         <span className="inline-flex items-center gap-1.5">
           {executorId && (
@@ -432,13 +440,14 @@ type DocumentItem = {
 };
 
 export const ListTaskDocumentsRenderer: KandevRenderer = ({ args, result, status }) => {
+  const { t } = useTranslation();
   const items = pickArray<DocumentItem>(result, "documents") ?? [];
   const total = pickNumber(result, "total") ?? items.length;
   const taskId = pickString(args, "task_id") ?? pickString(result, "task_id");
   return (
     <KandevRow
       Icon={IconFiles}
-      title="Kandev: List Task Documents"
+      title={t("task:kandevListTaskDocuments")}
       summary={
         <span className="inline-flex items-center gap-1.5">
           {taskId && (

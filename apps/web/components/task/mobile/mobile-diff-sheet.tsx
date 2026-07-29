@@ -9,6 +9,7 @@ import { CommitDiffView } from "../commit-detail-panel";
 import type { ReviewSource, SourceCounts } from "@/hooks/domains/session/use-review-sources";
 import type { SelectedDiff } from "../task-layout";
 import type { DiffSheetMode } from "../changes-diff-target";
+import { useTranslation } from "react-i18next";
 
 const MOBILE_DIFF_SOURCE_FILTER_KEY = "mobile-diff-source-filter";
 
@@ -102,6 +103,7 @@ function SheetHeader({
   sourceLabel: string | null;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <DrawerHeader className="flex items-center justify-between py-2 px-4 border-b shrink-0">
       <DrawerTitle className="text-base flex items-center gap-2">
@@ -122,7 +124,7 @@ function SheetHeader({
         onClick={onClose}
         data-testid="mobile-diff-sheet-close"
       >
-        Close
+        {t("common:close")}
       </Button>
     </DrawerHeader>
   );

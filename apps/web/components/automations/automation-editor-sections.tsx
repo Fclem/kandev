@@ -17,6 +17,7 @@ import { PromptSection } from "./prompt-section";
 import { RequiredFieldLabel } from "./required-field-label";
 import { TriggersSection } from "./triggers-section";
 import { WebhookCreatedDialog } from "./webhook-created-dialog";
+import { useTranslation } from "react-i18next";
 
 type UpdateField = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 
@@ -29,26 +30,27 @@ export function NameField({
   isDirty: boolean;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="space-y-2 rounded-lg border bg-card p-4"
       data-settings-dirty={isDirty}
       data-settings-dirty-level="container"
     >
-      <RequiredFieldLabel htmlFor="automation-name">Name</RequiredFieldLabel>
+      <RequiredFieldLabel htmlFor="automation-name">{t("automations:name")}</RequiredFieldLabel>
       <Input
         id="automation-name"
         data-testid="automation-name-input"
         value={value}
         data-settings-dirty={isDirty}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Automation name"
+        placeholder={t("automations:automationName")}
         aria-describedby={!value.trim() ? "automation-name-help" : undefined}
         aria-invalid={!value.trim() ? true : undefined}
       />
       {!value.trim() && (
         <p id="automation-name-help" className="text-xs text-muted-foreground">
-          Enter an automation name to enable saving.
+          {t("automations:enterAnAutomationNameToEnable")}
         </p>
       )}
     </div>
@@ -90,11 +92,14 @@ export function WhenSection({
   savedTriggers: AutomationTrigger[];
   isDirty: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <div>
-        <h3 className="text-base font-medium">When</h3>
-        <p className="text-sm text-muted-foreground">What causes this automation to run</p>
+        <h3 className="text-base font-medium">{t("automations:when")}</h3>
+        <p className="text-sm text-muted-foreground">
+          {t("automations:whatCausesThisAutomationToRun")}
+        </p>
       </div>
       <div
         className="rounded-lg border bg-card p-4"
@@ -134,6 +139,7 @@ export function ThenSection({
   savedForm: FormState;
   updateField: UpdateField;
 }) {
+  const { t } = useTranslation();
   const dirtyFields: Array<keyof FormState> = [
     "taskTitleTemplate",
     "prompt",
@@ -148,10 +154,8 @@ export function ThenSection({
   return (
     <div className="space-y-2">
       <div>
-        <h3 className="text-base font-medium">Then</h3>
-        <p className="text-sm text-muted-foreground">
-          A new task will be created each time this automation triggers
-        </p>
+        <h3 className="text-base font-medium">{t("automations:then")}</h3>
+        <p className="text-sm text-muted-foreground">{t("automations:aNewTaskWillBeCreated")}</p>
       </div>
       <div
         className="rounded-lg border bg-card p-4 space-y-4"
@@ -159,7 +163,7 @@ export function ThenSection({
         data-settings-dirty-level="container"
       >
         <div className="space-y-1.5">
-          <Label className="text-xs">Task title</Label>
+          <Label className="text-xs">{t("automations:taskTitle")}</Label>
           <Input
             value={form.taskTitleTemplate}
             data-settings-dirty={isAutomationFieldDirty(form, savedForm, "taskTitleTemplate")}
@@ -167,7 +171,7 @@ export function ThenSection({
             placeholder={defaultTaskTitle || "[Auto] automation name"}
           />
           <p className="text-xs text-muted-foreground">
-            Leave empty to use the default. Supports placeholders.
+            {t("automations:leaveEmptyToUseTheDefault")}
           </p>
         </div>
         <PromptSection
@@ -218,6 +222,7 @@ export function SettingsSection({
   savedForm: FormState;
   updateField: UpdateField;
 }) {
+  const { t } = useTranslation();
   const enabledIsDirty = isAutomationFieldDirty(form, savedForm, "enabled");
   const maxRunsIsDirty = isAutomationFieldDirty(form, savedForm, "maxConcurrentRuns");
   return (
@@ -226,7 +231,9 @@ export function SettingsSection({
       data-settings-dirty={enabledIsDirty || maxRunsIsDirty}
       data-settings-dirty-level="container"
     >
-      <Label className="text-xs uppercase tracking-wider text-muted-foreground">Settings</Label>
+      <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+        {t("common:settings")}
+      </Label>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <Switch
@@ -235,10 +242,10 @@ export function SettingsSection({
             onCheckedChange={(value) => updateField("enabled", value)}
             className="cursor-pointer"
           />
-          <Label className="text-sm">Enabled</Label>
+          <Label className="text-sm">{t("common:enabled")}</Label>
         </div>
         <div className="flex items-center gap-2">
-          <Label className="text-sm">Max concurrent runs</Label>
+          <Label className="text-sm">{t("automations:maxConcurrentRuns")}</Label>
           <Input
             type="number"
             min={1}

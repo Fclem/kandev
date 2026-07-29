@@ -12,6 +12,7 @@ import { Badge } from "@kandev/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kandev/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { SentryIssueWatch, SentrySearchFilter } from "@/lib/types/sentry";
+import { useTranslation } from "react-i18next";
 
 type SentryIssueWatchTableProps = {
   watches: SentryIssueWatch[];
@@ -74,6 +75,7 @@ function WatchActions({
   onReset: (id: string, workspaceId: string) => void;
   onDelete: (id: string, workspaceId: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-1">
       <Tooltip>
@@ -112,7 +114,7 @@ function WatchActions({
             <IconRefresh className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Check now</TooltipContent>
+        <TooltipContent>{t("sentry:checkNow")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -121,7 +123,7 @@ function WatchActions({
             size="sm"
             className="h-7 w-7 p-0 cursor-pointer"
             data-testid="watch-reset-button"
-            aria-label="Reset watch"
+            aria-label={t("sentry:resetWatch")}
             onClick={(e) => {
               e.stopPropagation();
               onReset(watch.id, watch.workspaceId);
@@ -130,7 +132,7 @@ function WatchActions({
             <IconRestore className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Reset</TooltipContent>
+        <TooltipContent>{t("sentry:reset")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -146,7 +148,7 @@ function WatchActions({
             <IconTrash className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Delete</TooltipContent>
+        <TooltipContent>{t("common:delete")}</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -162,10 +164,11 @@ export function SentryIssueWatchTable({
   onReset,
   onToggleEnabled,
 }: SentryIssueWatchTableProps) {
+  const { t } = useTranslation();
   if (watches.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-4 text-center">
-        No Sentry watchers configured. Create one to auto-create tasks from filtered issues.
+        {t("sentry:noSentryWatchersConfiguredCreateOne")}
       </p>
     );
   }
@@ -174,12 +177,12 @@ export function SentryIssueWatchTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Instance</TableHead>
-          <TableHead>Filter</TableHead>
-          <TableHead>Interval</TableHead>
-          <TableHead>Last Polled</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          <TableHead>{t("sentry:instance")}</TableHead>
+          <TableHead>{t("sentry:filter")}</TableHead>
+          <TableHead>{t("sentry:interval")}</TableHead>
+          <TableHead>{t("sentry:lastPolled")}</TableHead>
+          <TableHead>{t("common:status")}</TableHead>
+          <TableHead className="text-right">{t("sentry:actions")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

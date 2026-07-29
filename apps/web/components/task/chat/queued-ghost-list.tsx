@@ -13,6 +13,7 @@ import { useQueue } from "@/hooks/domains/session/use-queue";
 import { isWorkflowQueuedMessage, QueuedGhostMessage } from "./queued-ghost-message";
 import type { QueuedMessage } from "@/lib/state/slices/session/types";
 import type { EntityReference } from "@/lib/types/entity-reference";
+import { useTranslation } from "react-i18next";
 
 const HEAD_PREVIEW_MAX = 80;
 
@@ -88,6 +89,7 @@ function useQueuePanelHandlers({
   editEntry,
   removeEntry,
 }: QueuePanelHandlerArgs) {
+  const { t } = useTranslation();
   const handleSave = useCallback(
     async (entryId: string, content: string, entityReferences: EntityReference[]) => {
       await editEntry(entryId, content, undefined, entityReferences);
@@ -100,7 +102,7 @@ function useQueuePanelHandlers({
         await removeEntry(entryId);
       } catch (err) {
         console.error("Failed to remove queued entry:", err);
-        toast.error("Failed to remove queued message.");
+        toast.error(t("task:failedToRemoveQueuedMessage"));
       }
     },
     [removeEntry],
@@ -108,13 +110,13 @@ function useQueuePanelHandlers({
   const handleClear = useCallback(() => {
     clearAll().catch((err) => {
       console.error("Failed to clear queued messages:", err);
-      toast.error("Failed to clear queued messages.");
+      toast.error(t("task:failedToClearQueuedMessages"));
     });
   }, [clearAll]);
   const handleDrain = useCallback(() => {
     drainNext().catch((err) => {
       console.error("Failed to run queued message:", err);
-      toast.error("Failed to run queued message.");
+      toast.error(t("task:failedToRunQueuedMessage"));
     });
   }, [drainNext]);
 
@@ -234,6 +236,7 @@ function chipPalette(isFull: boolean): string {
 }
 
 function QueueChip({ count, isFull, previewText, onToggle }: QueueChipProps) {
+  const { t } = useTranslation();
   // aria-expanded/aria-controls are intentionally omitted: the chip and the
   // expanded panel are mutually exclusive in the DOM (clicking the chip swaps
   // it for the panel header, which carries its own collapse controls). Pointing
@@ -254,7 +257,7 @@ function QueueChip({ count, isFull, previewText, onToggle }: QueueChipProps) {
     >
       <IconLayoutList className="h-3 w-3" />
       <span>{count} queued</span>
-      {isFull && <span className="opacity-80">· full</span>}
+      {isFull && <span className="opacity-80">{t("task:full")}</span>}
     </button>
   );
   if (!previewText) return button;
@@ -295,11 +298,12 @@ function QueuePanel({
   onSave,
   onRemove,
 }: QueuePanelProps) {
+  const { t } = useTranslation();
   return (
     <div
       id="queue-panel"
       role="region"
-      aria-label="Queued messages"
+      aria-label={t("task:queuedMessages")}
       data-testid="queued-ghost-list"
       className={cn(
         "flex max-h-[min(40dvh,32rem)] flex-shrink-0 flex-col px-3 pt-1.5 pb-1",
@@ -357,12 +361,13 @@ function QueuePanelHeader({
   onDrain,
   onClose,
 }: QueuePanelHeaderProps) {
+  const { t } = useTranslation();
   const capacityText = max > 0 ? `${count} of ${max}` : `${count}`;
   return (
     <div className="flex shrink-0 items-center justify-between gap-3 py-1">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <IconLayoutList className="h-3.5 w-3.5" />
-        <span className="uppercase tracking-wide">Queued</span>
+        <span className="uppercase tracking-wide">{t("task:queued")}</span>
         <span className={cn(isFull && "text-amber-600 dark:text-amber-400")}>
           {capacityText}
           {isFull ? " · full" : ""}
@@ -376,7 +381,7 @@ function QueuePanelHeader({
             className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
             onClick={onDrain}
             disabled={isLoading}
-            title="Run next queued message"
+            title={t("task:runNextQueuedMessage")}
             data-testid="queue-drain-next"
           >
             <IconPlayerPlay className="mr-1 h-3 w-3" />
@@ -388,7 +393,7 @@ function QueuePanelHeader({
           size="sm"
           className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
           onClick={onClear}
-          title="Clear all queued messages"
+          title={t("task:clearAllQueuedMessages")}
           data-testid="queue-clear-all"
         >
           <IconTrash className="mr-1 h-3 w-3" />
@@ -397,7 +402,7 @@ function QueuePanelHeader({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Collapse queued messages"
+          aria-label={t("task:collapseQueuedMessages")}
           data-testid="queue-close"
           className="text-muted-foreground hover:text-foreground cursor-pointer rounded p-1"
         >

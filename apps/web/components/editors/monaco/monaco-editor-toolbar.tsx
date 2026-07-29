@@ -24,6 +24,7 @@ import {
 import { PanelHeaderBarSplit } from "@/components/task/panel-primitives";
 import { LspStatusButton } from "@/components/editors/lsp-status-button";
 import type { LspStatus } from "@/lib/lsp/lsp-client-manager";
+import { useTranslation } from "react-i18next";
 
 const SAVE_SHORTCUT =
   typeof navigator !== "undefined" && navigator.platform.includes("Mac") ? "\u2318" : "Ctrl";
@@ -161,6 +162,7 @@ function ReloadFromAgentButton({
   hasRemoteUpdate?: boolean;
   onReloadFromAgent?: () => void;
 }) {
+  const { t } = useTranslation();
   if (!hasRemoteUpdate || !onReloadFromAgent) return null;
 
   return (
@@ -176,12 +178,13 @@ function ReloadFromAgentButton({
           Reload
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Apply latest agent changes to this file</TooltipContent>
+      <TooltipContent>{t("editors:applyLatestAgentChangesToThis")}</TooltipContent>
     </Tooltip>
   );
 }
 
 function DeleteButton({ onDelete }: { onDelete?: () => void }) {
+  const { t } = useTranslation();
   if (!onDelete) return null;
 
   return (
@@ -196,12 +199,13 @@ function DeleteButton({ onDelete }: { onDelete?: () => void }) {
           <IconTrash className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Delete file</TooltipContent>
+      <TooltipContent>{t("editors:deleteFile")}</TooltipContent>
     </Tooltip>
   );
 }
 
 function MarkdownPreviewButton({ onTogglePreview }: { onTogglePreview: () => void }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -215,7 +219,7 @@ function MarkdownPreviewButton({ onTogglePreview }: { onTogglePreview: () => voi
           <IconEye className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Preview markdown</TooltipContent>
+      <TooltipContent>{t("editors:previewMarkdown")}</TooltipContent>
     </Tooltip>
   );
 }

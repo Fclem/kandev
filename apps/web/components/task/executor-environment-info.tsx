@@ -11,6 +11,7 @@ import {
   type TaskEnvironment,
 } from "@/lib/api/domains/task-environment-api";
 import { resolveExecutorEnvironmentStatus, type StatusTone } from "./executor-environment-status";
+import { useTranslation } from "react-i18next";
 
 const TONE_CLASSES: Record<StatusTone, string> = {
   running: "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300",
@@ -31,6 +32,7 @@ export function EnvironmentInfo({
   ssh?: SSHLiveStatus | null;
   loading: boolean;
 }) {
+  const { t } = useTranslation();
   if (loading && !env) {
     return (
       <div className="flex items-center justify-center py-6 text-muted-foreground">
@@ -42,10 +44,8 @@ export function EnvironmentInfo({
   if (!env) {
     return (
       <div className="px-3 py-4 text-muted-foreground">
-        <p className="font-medium text-foreground">No environment yet</p>
-        <p className="text-xs mt-1">
-          An environment is created when you start a session on this task.
-        </p>
+        <p className="font-medium text-foreground">{t("task:noEnvironmentYet")}</p>
+        <p className="text-xs mt-1">{t("task:anEnvironmentIsCreatedWhenYou")}</p>
       </div>
     );
   }
@@ -88,9 +88,10 @@ function EnvironmentFields({
   container: ContainerLiveStatus | null;
   ssh: SSHLiveStatus | null;
 }) {
+  const { t } = useTranslation();
   const fields = useMemo(() => buildFields(env, container, ssh), [env, container, ssh]);
   if (fields.length === 0) {
-    return <p className="text-xs text-muted-foreground">No resource details available.</p>;
+    return <p className="text-xs text-muted-foreground">{t("task:noResourceDetailsAvailable")}</p>;
   }
   return (
     <dl className="space-y-1 text-xs">

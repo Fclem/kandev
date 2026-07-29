@@ -17,6 +17,7 @@ import { IssueWatchTable } from "./issue-watch-table";
 import { ReviewWatchDialog } from "./review-watch-dialog";
 import { ReviewWatchTable } from "./review-watch-table";
 import { DeleteWatchDialog } from "./delete-watch-dialog";
+import { useTranslation } from "react-i18next";
 
 type ReviewWatches = ReturnType<typeof useGitLabReviewWatches>;
 type IssueWatches = ReturnType<typeof useGitLabIssueWatches>;
@@ -173,6 +174,7 @@ function ReviewDialogs(props: {
 }
 
 function ReviewWatchSettings({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const watches = useGitLabReviewWatches(workspaceId);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ReviewWatch | null>(null);
@@ -189,7 +191,7 @@ function ReviewWatchSettings({ workspaceId }: { workspaceId: string }) {
   return (
     <SettingsSection
       icon={<IconGitMerge className="h-5 w-5" />}
-      title="Merge request review watches"
+      title={t("gitlab:mergeRequestReviewWatches")}
       description="Poll GitLab for merge requests awaiting review and create one task per new match."
       action={
         <NewWatchButton
@@ -370,6 +372,7 @@ function IssueDialogs(props: {
 }
 
 function IssueWatchSettings({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const watches = useGitLabIssueWatches(workspaceId);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<IssueWatch | null>(null);
@@ -386,7 +389,7 @@ function IssueWatchSettings({ workspaceId }: { workspaceId: string }) {
   return (
     <SettingsSection
       icon={<IconTicket className="h-5 w-5" />}
-      title="Issue watches"
+      title={t("gitlab:issueWatches")}
       description="Poll GitLab issues and create one task per new match."
       action={
         <NewWatchButton

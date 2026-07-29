@@ -21,6 +21,7 @@ import { useAppStore } from "@/components/state-provider";
 import type { Skill, SkillSourceType } from "@/lib/state/slices/office/types";
 import { FileTree, type FileTreeNode } from "@/components/shared/file-tree";
 import { ScriptEditor } from "@/components/settings/profile-edit/script-editor";
+import { useTranslation } from "react-i18next";
 
 interface SkillDetailProps {
   skill: Skill;
@@ -177,6 +178,7 @@ function SkillDetailHeader({
   // refresh from the kandev binary on every backend start.
   onDelete?: () => void;
 }) {
+  const { t } = useTranslation();
   const { copied, copy } = useCopyToClipboard();
 
   return (
@@ -195,7 +197,7 @@ function SkillDetailHeader({
       <div className="flex items-center gap-2 shrink-0">
         {readOnly && (
           <>
-            <Badge variant="outline">Read only</Badge>
+            <Badge variant="outline">{t("office:readOnly")}</Badge>
             {(readOnlyReason ?? FALLBACK_READ_ONLY_REASONS[skill.sourceType]) && (
               <span className="text-xs text-muted-foreground">
                 {readOnlyReason ?? FALLBACK_READ_ONLY_REASONS[skill.sourceType]}
@@ -222,7 +224,7 @@ function SkillDetailHeader({
         </Tooltip>
         {onEdit && (
           <Button variant="ghost" size="sm" onClick={onEdit} className="cursor-pointer">
-            Edit
+            {t("common:edit")}
           </Button>
         )}
         {onDelete && (
@@ -237,7 +239,7 @@ function SkillDetailHeader({
                 <IconTrash className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Remove skill</TooltipContent>
+            <TooltipContent>{t("office:removeSkill")}</TooltipContent>
           </Tooltip>
         )}
       </div>

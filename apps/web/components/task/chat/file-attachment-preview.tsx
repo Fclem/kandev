@@ -4,6 +4,7 @@ import { memo } from "react";
 import { IconFile, IconX } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { formatBytes, type FileAttachment } from "./file-attachment";
+import { useTranslation } from "react-i18next";
 
 type FileAttachmentPreviewProps = {
   attachments: FileAttachment[];
@@ -16,6 +17,7 @@ export const FileAttachmentPreview = memo(function FileAttachmentPreview({
   onRemove,
   disabled = false,
 }: FileAttachmentPreviewProps) {
+  const { t } = useTranslation();
   if (attachments.length === 0) return null;
 
   return (
@@ -31,7 +33,7 @@ export const FileAttachmentPreview = memo(function FileAttachmentPreview({
           {attachment.isImage && attachment.preview ? (
             <img
               src={attachment.preview}
-              alt="Attachment preview"
+              alt={t("task:attachmentPreview")}
               className="h-10 w-10 object-cover"
             />
           ) : (

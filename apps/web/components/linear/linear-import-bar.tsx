@@ -6,6 +6,7 @@ import type { LinearIssue } from "@/lib/types/linear";
 import { LINEAR_KEY_RE } from "./linear-issue-common";
 import { useLinearAvailable } from "@/hooks/domains/linear/use-linear-availability";
 import { ValidatedPopover } from "@/components/integrations/validated-popover";
+import { useTranslation } from "react-i18next";
 
 type LinearImportBarProps = {
   workspaceId: string | null;
@@ -14,6 +15,7 @@ type LinearImportBarProps = {
 };
 
 export function LinearImportBar({ workspaceId, disabled, onImport }: LinearImportBarProps) {
+  const { t } = useTranslation();
   const available = useLinearAvailable(workspaceId);
   if (!available || !workspaceId) return null;
 
@@ -27,7 +29,7 @@ export function LinearImportBar({ workspaceId, disabled, onImport }: LinearImpor
       tooltip="Import from Linear issue URL or identifier"
       align="start"
       headline="Import Linear issue"
-      placeholder="ENG-123 or paste issue URL"
+      placeholder={t("linear:eng123OrPasteIssueUrl")}
       extractKey={(raw) => raw.toUpperCase().match(LINEAR_KEY_RE)?.[0] ?? null}
       validationHint="Paste a Linear issue URL or identifier (ENG-123)"
       fetch={(key) => getLinearIssue(key, { workspaceId })}

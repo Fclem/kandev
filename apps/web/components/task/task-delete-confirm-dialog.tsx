@@ -17,6 +17,7 @@ import { useSubtaskCount } from "@/hooks/use-subtask-count";
 import { useTaskInFlight } from "@/hooks/use-task-in-flight";
 import { getCleanupSummary, getBulkCleanupSummary } from "./task-cleanup-summary";
 import { StillWorkingWarning } from "./task-still-working-warning";
+import { useTranslation } from "react-i18next";
 
 type TaskDeleteConfirmDialogProps = {
   open: boolean;
@@ -51,6 +52,7 @@ export function TaskDeleteConfirmDialog({
   onConfirm,
   confirmTestId,
 }: TaskDeleteConfirmDialogProps) {
+  const { t } = useTranslation();
   const safeCount = count ?? 0;
   const label = isBulkOperation ? `task${safeCount !== 1 ? "s" : ""}` : "task";
   const title = isBulkOperation ? `Delete ${safeCount} ${label}` : "Delete task";
@@ -100,13 +102,13 @@ export function TaskDeleteConfirmDialog({
             <span>
               Also delete {subtaskCount} subtask{subtaskCount === 1 ? "" : "s"}
               <span className="block text-xs text-muted-foreground">
-                Subtasks become root tasks unless you tick this. They may still be in progress.
+                {t("task:subtasksBecomeRootTasksUnlessYou")}
               </span>
             </span>
           </label>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">{t("common:cancel")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={isDeleting}
             className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"

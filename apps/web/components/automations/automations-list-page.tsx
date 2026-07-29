@@ -7,12 +7,14 @@ import { IconPlus, IconBolt } from "@tabler/icons-react";
 import { useAutomations } from "@/hooks/domains/settings/use-automations";
 import { AutomationsTable } from "./automations-table";
 import { useAutomationEnabledDrafts } from "./use-automation-enabled-drafts";
+import { useTranslation } from "react-i18next";
 
 type AutomationsListPageProps = {
   workspaceId: string;
 };
 
 export function AutomationsListPage({ workspaceId }: AutomationsListPageProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { items, loading, enable, disable, trigger, remove } = useAutomations(workspaceId);
   const enabledDrafts = useAutomationEnabledDrafts({ automations: items, enable, disable });
@@ -34,7 +36,7 @@ export function AutomationsListPage({ workspaceId }: AutomationsListPageProps) {
             Automations
           </h2>
           <p className="text-sm text-muted-foreground">
-            Create rules that automatically trigger agent tasks.
+            {t("automations:createRulesThatAutomaticallyTriggerAgent")}
           </p>
         </div>
         <Button
@@ -48,7 +50,9 @@ export function AutomationsListPage({ workspaceId }: AutomationsListPageProps) {
       </div>
       <Separator />
       {loading && items.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground">Loading automations...</div>
+        <div className="py-12 text-center text-muted-foreground">
+          {t("automations:loadingAutomations")}
+        </div>
       ) : (
         <AutomationsTable
           automations={enabledDrafts.automations}

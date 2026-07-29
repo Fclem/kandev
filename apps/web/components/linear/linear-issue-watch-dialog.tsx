@@ -55,6 +55,7 @@ import type {
   LinearUser,
   UpdateLinearIssueWatchInput,
 } from "@/lib/types/linear";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   open: boolean;
@@ -131,6 +132,7 @@ function FilterFields({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const { t } = useTranslation();
   const { teams, states, labels, users, loadingStates, loadingLabels, loadingUsers } =
     useTeamsAndStates(form.workspaceId, form.teamKey);
   const toggleState = useCallback(
@@ -174,14 +176,12 @@ function FilterFields({
         loadingUsers={loadingUsers}
       />
       <div className="space-y-1.5">
-        <Label>Priority</Label>
-        <p className="text-xs text-muted-foreground">
-          Click to toggle. Matches issues at ANY of the selected priorities.
-        </p>
+        <Label>{t("linear:priority")}</Label>
+        <p className="text-xs text-muted-foreground">{t("linear:clickToToggleMatchesIssuesAt")}</p>
         <PriorityMultiSelect selected={form.priorities} onToggle={togglePriority} />
       </div>
       <div className="space-y-1.5">
-        <Label>States</Label>
+        <Label>{t("linear:states")}</Label>
         <p className="text-xs text-muted-foreground">
           {form.teamKey
             ? "Click states to toggle. Empty matches every state on the team."
@@ -196,7 +196,7 @@ function FilterFields({
         />
       </div>
       <div className="space-y-1.5">
-        <Label>Labels</Label>
+        <Label>{t("linear:labels")}</Label>
         <p className="text-xs text-muted-foreground">
           {form.teamKey
             ? "Click to toggle. Matches ANY of the selected labels."
@@ -227,6 +227,7 @@ function TeamRow({
   setForm: FormSetter;
   teams: LinearTeam[];
 }) {
+  const { t } = useTranslation();
   return (
     <SelectField
       label="Team"
@@ -235,7 +236,7 @@ function TeamRow({
       onChange={(v) =>
         setForm((p) => ({ ...p, teamKey: v, stateIds: [], labelIds: [], creatorId: "" }))
       }
-      placeholder="(any team)"
+      placeholder={t("linear:anyTeam")}
       items={teams.map((t) => ({ id: t.key, label: `${t.name} (${t.key})` }))}
     />
   );
@@ -252,6 +253,7 @@ function AssigneeAndCreatorRow({
   users: LinearUser[];
   loadingUsers: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
       <SelectField
@@ -259,7 +261,7 @@ function AssigneeAndCreatorRow({
         description="Filter by who an issue is assigned to."
         value={form.assigned || ASSIGNED_ANY}
         onChange={(v) => setForm((p) => ({ ...p, assigned: v === ASSIGNED_ANY ? "" : v }))}
-        placeholder="(any)"
+        placeholder={t("linear:any")}
         items={[
           { id: ASSIGNED_ANY, label: "(any)" },
           { id: "me", label: "Me" },
@@ -283,11 +285,12 @@ function AssigneeAndCreatorRow({
 }
 
 function EstimateRow({ form, setForm }: { form: FormState; setForm: FormSetter }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
       <div className="space-y-1.5">
-        <Label>Estimate min</Label>
-        <p className="text-xs text-muted-foreground">Lower bound in points (optional).</p>
+        <Label>{t("linear:estimateMin")}</Label>
+        <p className="text-xs text-muted-foreground">{t("linear:lowerBoundInPointsOptional")}</p>
         <Input
           type="number"
           value={form.estimateMin}
@@ -298,8 +301,8 @@ function EstimateRow({ form, setForm }: { form: FormState; setForm: FormSetter }
         />
       </div>
       <div className="space-y-1.5">
-        <Label>Estimate max</Label>
-        <p className="text-xs text-muted-foreground">Upper bound in points (optional).</p>
+        <Label>{t("linear:estimateMax")}</Label>
+        <p className="text-xs text-muted-foreground">{t("linear:upperBoundInPointsOptional")}</p>
         <Input
           type="number"
           value={form.estimateMax}
@@ -314,22 +317,22 @@ function EstimateRow({ form, setForm }: { form: FormState; setForm: FormSetter }
 }
 
 function QueryField({ form, setForm }: { form: FormState; setForm: FormSetter }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
-      <Label>Query</Label>
-      <p className="text-xs text-muted-foreground">
-        Free-text match across title and description (optional).
-      </p>
+      <Label>{t("linear:query")}</Label>
+      <p className="text-xs text-muted-foreground">{t("linear:freeTextMatchAcrossTitleAnd")}</p>
       <Input
         value={form.query}
         onChange={(e) => setForm((p) => ({ ...p, query: e.target.value }))}
-        placeholder="auth bug"
+        placeholder={t("linear:authBug")}
       />
     </div>
   );
 }
 
 function PlaceholdersHelp() {
+  const { t } = useTranslation();
   return (
     <TooltipProvider>
       <Tooltip>
@@ -337,7 +340,7 @@ function PlaceholdersHelp() {
           <IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help shrink-0" />
         </TooltipTrigger>
         <TooltipContent className="max-w-xs" align="start">
-          <p className="text-xs font-medium mb-1">Available placeholders:</p>
+          <p className="text-xs font-medium mb-1">{t("linear:availablePlaceholders")}</p>
           <ul className="text-xs space-y-0.5">
             {LINEAR_ISSUE_WATCH_PLACEHOLDERS.map((p) => (
               <li key={p.key}>
@@ -353,10 +356,11 @@ function PlaceholdersHelp() {
 }
 
 function PromptField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1.5">
-        <Label>Task Prompt</Label>
+        <Label>{t("linear:taskPrompt")}</Label>
         <PlaceholdersHelp />
       </div>
       <p className="text-xs text-muted-foreground">
@@ -385,6 +389,7 @@ function WorkspacePicker({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
     <SelectField
@@ -392,7 +397,7 @@ function WorkspacePicker({
       description="Tasks created by this watcher land in the selected workspace."
       value={value}
       onChange={onChange}
-      placeholder="Select workspace"
+      placeholder={t("linear:selectWorkspace")}
       items={workspaces.map((w) => ({ id: w.id, label: w.name }))}
       disabled={disabled}
     />
@@ -406,6 +411,7 @@ function AutomationFields({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const { t } = useTranslation();
   const { workflows, agentProfiles, allExecutorProfiles } = useFormData(form.workspaceId);
   const { steps, loading: stepsLoading } = useWorkflowSteps(form.workflowId);
   return (
@@ -416,7 +422,7 @@ function AutomationFields({
           description="Tasks are created in this workflow."
           value={form.workflowId}
           onChange={(v) => setForm((p) => ({ ...p, workflowId: v, workflowStepId: "" }))}
-          placeholder="Select workflow"
+          placeholder={t("common:selectWorkflow")}
           items={workflows.map((w) => ({ id: w.id, label: w.name }))}
         />
         <SelectField
@@ -483,6 +489,7 @@ export function LinearIssueWatchDialog({
   onCreate,
   onUpdate,
 }: Props) {
+  const { t } = useTranslation();
   const activeWorkspaceId = useAppStore((s) => s.workspaces.activeId);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>(() => makeEmptyForm(workspaceId ?? ""));
@@ -521,11 +528,7 @@ export function LinearIssueWatchDialog({
       <DialogContent className="w-full max-w-full sm:w-[800px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{watch ? "Edit Linear Watcher" : "Create Linear Watcher"}</DialogTitle>
-          <DialogDescription>
-            Poll Linear with a structured filter and auto-create a Kandev task for each
-            newly-matching issue. Optionally bind a repository so each task runs against that
-            codebase, or leave it unset to run with no repository.
-          </DialogDescription>
+          <DialogDescription>{t("linear:pollLinearWithAStructuredFilter")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-5">
           <WorkspacePicker
@@ -551,7 +554,7 @@ export function LinearIssueWatchDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button onClick={handleSave} disabled={saving || !canSave} className="cursor-pointer">
             {savingLabel(saving, !!watch)}

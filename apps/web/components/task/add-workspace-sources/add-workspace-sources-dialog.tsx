@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type RefObject, type ReactNode } from "react";
+import { useCallback, useState, type RefObject, type ReactNode } from "react";
 import {
   IconChevronDown,
   IconCloudDownload,
@@ -8,7 +8,6 @@ import {
   IconGitBranch,
   IconPlus,
   IconStack2,
-  IconX,
 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import {
@@ -32,28 +31,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@kandev/ui/dropdown-menu";
-import { Input } from "@kandev/ui/input";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useAppStore } from "@/components/state-provider";
-import { useBranchesByURL } from "@/hooks/domains/github/use-branches-by-url";
-import { usePRInfoByURL } from "@/hooks/domains/github/use-pr-info-by-url";
-import { useRemoteRepositories } from "@/hooks/domains/integrations/use-remote-repositories";
-import { FolderPicker } from "@/components/folder-picker";
-import { RemoteRepoChip } from "@/components/task-create-dialog-remote-repo-chip";
-import type { TaskRemoteRepoRow } from "@/components/task-create-dialog-types";
 import type { LocalRepository, Repository } from "@/lib/types/http";
 import { type WorkspaceSourceRow } from "@/components/workspace-source-picker/workspace-source-state";
 import {
   getWorkspaceSourceCapabilities,
   hasCloneableSavedRepository,
 } from "@/components/workspace-source-picker/executor-capabilities";
-import { SavedRepositorySourceRow } from "./saved-repository-source-row";
+import { SourceRow } from "./workspace-source-row";
 import { useDialogOpenerFocus } from "./use-dialog-opener-focus";
 import { useSubmitWorkspaceSources } from "./use-submit-workspace-sources";
 import { useWorkspaceRepositoryOptions } from "./use-workspace-repository-options";
 import { useWorkspaceSourceRows } from "./use-workspace-source-rows";
 import { WorkspaceChangeConsequences } from "./workspace-change-consequences";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   open: boolean;
@@ -205,6 +198,7 @@ function AddWorkspaceSourcesSurface({
   onCancel,
   onSubmit,
 }: AddWorkspaceSourcesSurfaceProps) {
+  const { t } = useTranslation();
   const footer = (
     <div className="flex justify-end gap-2">
       <Button
@@ -214,7 +208,7 @@ function AddWorkspaceSourcesSurface({
         disabled={submitting}
         onClick={onCancel}
       >
-        Cancel
+        {t("common:cancel")}
       </Button>
       <Button
         type="button"
@@ -244,10 +238,8 @@ function AddWorkspaceSourcesSurface({
           className="h-dvh !max-h-dvh rounded-none flex flex-col overflow-hidden data-[vaul-drawer-direction=bottom]:!mt-0"
         >
           <DrawerHeader className="shrink-0 text-left">
-            <DrawerTitle>Add to workspace</DrawerTitle>
-            <DrawerDescription>
-              Choose repositories or folders to make available in this task.
-            </DrawerDescription>
+            <DrawerTitle>{t("task:addToWorkspace")}</DrawerTitle>
+            <DrawerDescription>{t("task:chooseRepositoriesOrFoldersToMake")}</DrawerDescription>
           </DrawerHeader>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
             {errorMessage}
@@ -268,10 +260,8 @@ function AddWorkspaceSourcesSurface({
         onCloseAutoFocus={onCloseAutoFocus}
       >
         <DialogHeader className="shrink-0">
-          <DialogTitle>Add to workspace</DialogTitle>
-          <DialogDescription>
-            Choose repositories or folders to make available in this task.
-          </DialogDescription>
+          <DialogTitle>{t("task:addToWorkspace")}</DialogTitle>
+          <DialogDescription>{t("task:chooseRepositoriesOrFoldersToMake")}</DialogDescription>
         </DialogHeader>
         <div
           data-testid="add-workspace-sources-dialog-scroll"
@@ -314,6 +304,7 @@ function SourceForm({
   onUpdate: (key: string, patch: Partial<WorkspaceSourceRow>) => void;
   isMobile: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4 py-1" data-testid="add-workspace-sources-form">
       <div className="flex flex-wrap items-center gap-2">
@@ -332,8 +323,7 @@ function SourceForm({
       </div>
       {capabilities.requiresCloneableLocalRepository && (
         <p className="text-sm text-muted-foreground">
-          Saved and local Git repositories must have a cloneable origin for this executor. Local
-          folders are unavailable.
+          {t("task:savedAndLocalGitRepositoriesMust")}
         </p>
       )}
       {rows.map((row) => (
@@ -424,189 +414,5 @@ function RepositorySourceMenuItem({
         <span className="block text-xs text-muted-foreground">{description}</span>
       </span>
     </DropdownMenuItem>
-  );
-}
-
-function SourceRow({
-  row,
-  repositories,
-  discoveredRepositories,
-  workspaceId,
-  repositoriesRefreshing,
-  onRefreshRepositories,
-  capabilities,
-  error,
-  onRemove,
-  onUpdate,
-}: {
-  row: WorkspaceSourceRow;
-  repositories: Repository[];
-  discoveredRepositories: LocalRepository[];
-  workspaceId: string | null;
-  repositoriesRefreshing: boolean;
-  onRefreshRepositories: () => void;
-  capabilities: ReturnType<typeof getWorkspaceSourceCapabilities>;
-  error?: string;
-  onRemove: (key: string) => void;
-  onUpdate: (key: string, patch: Partial<WorkspaceSourceRow>) => void;
-}) {
-  const type = row.sourceType ?? (row.kind === "folder" ? "folder" : "saved_repository");
-  return (
-    <fieldset className="space-y-2 rounded border p-3" data-testid="workspace-source-row">
-      <div className="flex items-center justify-between">
-        <legend className="text-sm font-medium">{labelFor(type)}</legend>
-        <button
-          type="button"
-          aria-label="Remove source"
-          className="min-h-11 min-w-11 cursor-pointer text-muted-foreground"
-          onClick={() => onRemove(row.key)}
-        >
-          <IconX className="mx-auto h-4 w-4" />
-        </button>
-      </div>
-      {type === "saved_repository" && (
-        <SavedRepositorySourceRow
-          row={row}
-          repositories={repositories}
-          discoveredRepositories={discoveredRepositories}
-          workspaceId={workspaceId}
-          canCreateRepository={!capabilities.requiresCloneableLocalRepository}
-          repositoriesRefreshing={repositoriesRefreshing}
-          onRefreshRepositories={onRefreshRepositories}
-          onUpdate={onUpdate}
-        />
-      )}
-      {type === "local_repository" && (
-        <LocalPathRow
-          row={row}
-          label="Choose local Git repository"
-          requiresCloneableOrigin={capabilities.requiresCloneableLocalRepository}
-          onUpdate={onUpdate}
-        />
-      )}
-      {type === "remote_repository" && (
-        <RemoteRepositoryRow row={row} workspaceId={workspaceId} onUpdate={onUpdate} />
-      )}
-      {type === "folder" && (
-        <LocalPathRow row={row} label="Choose local folder" onUpdate={onUpdate} />
-      )}
-      {error && (
-        <p role="alert" className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
-    </fieldset>
-  );
-}
-
-function labelFor(type: NonNullable<WorkspaceSourceRow["sourceType"]>) {
-  switch (type) {
-    case "saved_repository":
-      return "Workspace repository";
-    case "local_repository":
-      return "Local Git repository";
-    case "remote_repository":
-      return "Remote repository";
-    case "folder":
-      return "Folder";
-  }
-}
-
-function LocalPathRow({
-  row,
-  label,
-  requiresCloneableOrigin = false,
-  onUpdate,
-}: {
-  row: WorkspaceSourceRow;
-  label: string;
-  requiresCloneableOrigin?: boolean;
-  onUpdate: (key: string, patch: Partial<WorkspaceSourceRow>) => void;
-}) {
-  return (
-    <>
-      <FolderPicker
-        value={row.localPath ?? ""}
-        onChange={(localPath) =>
-          onUpdate(row.key, { localPath, repositoryId: undefined, remoteUrl: undefined })
-        }
-        placeholder={label}
-      />
-      {row.sourceType === "folder" && (
-        <Input
-          aria-label="Folder display name"
-          placeholder="Display name (optional)"
-          value={row.displayName ?? ""}
-          onChange={(event) => onUpdate(row.key, { displayName: event.target.value })}
-        />
-      )}
-      {row.sourceType === "local_repository" && (
-        <>
-          <Input
-            aria-label="Base branch"
-            placeholder="Base branch"
-            value={row.baseBranch ?? ""}
-            onChange={(event) => onUpdate(row.key, { baseBranch: event.target.value })}
-          />
-          <p className="text-sm text-muted-foreground">
-            {requiresCloneableOrigin
-              ? "This repository must have a cloneable origin; Kandev will verify it before adding."
-              : "Uses the current checkout. Kandev does not switch your local repository branch."}
-          </p>
-        </>
-      )}
-    </>
-  );
-}
-
-function RemoteRepositoryRow({
-  row,
-  workspaceId,
-  onUpdate,
-}: {
-  row: WorkspaceSourceRow;
-  workspaceId: string | null;
-  onUpdate: (key: string, patch: Partial<WorkspaceSourceRow>) => void;
-}) {
-  const branches = useBranchesByURL(workspaceId);
-  const prInfo = usePRInfoByURL(workspaceId);
-  const accessibleRepos = useRemoteRepositories(workspaceId ?? "");
-  useEffect(() => {
-    if (row.remoteUrl) branches.ensure(row.remoteUrl);
-  }, [branches, row.remoteUrl, workspaceId]);
-  const remoteRow: TaskRemoteRepoRow = {
-    key: row.key,
-    url: row.remoteUrl ?? "",
-    branch: row.baseBranch ?? "",
-    source: "paste",
-    provider: row.provider,
-    providerRepoId: row.providerRepoId,
-    providerOwner: row.providerOwner,
-    providerName: row.providerName,
-  };
-  return (
-    <>
-      <RemoteRepoChip
-        row={remoteRow}
-        branches={branches.branches(remoteRow.url)}
-        branchesLoading={branches.loading(remoteRow.url)}
-        prInfo={prInfo.info(remoteRow.url)}
-        accessibleRepos={accessibleRepos}
-        onURLChange={(remoteUrl, _, metadata) =>
-          onUpdate(row.key, {
-            remoteUrl,
-            repositoryId: undefined,
-            localPath: undefined,
-            provider: metadata?.provider,
-            providerRepoId: metadata?.providerRepoId,
-            providerOwner: metadata?.providerOwner,
-            providerName: metadata?.providerName,
-            baseBranch: metadata?.defaultBranch ?? "",
-          })
-        }
-        onBranchChange={(baseBranch) => onUpdate(row.key, { baseBranch })}
-        onRemove={() => {}}
-      />
-    </>
   );
 }

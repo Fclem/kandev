@@ -18,6 +18,7 @@ import {
 import { MobileRepoPill } from "./mobile-repo-pill";
 import { TaskTopBarPluginActions } from "@/components/task/task-top-bar-plugin-actions";
 import { MRTopbarButton } from "@/components/gitlab/mr-topbar-button";
+import { useTranslation } from "react-i18next";
 
 type SessionMobileTopBarProps = {
   taskId?: string | null;
@@ -234,6 +235,7 @@ function MobileTopBarActions({
   onMerge,
   onMenuClick,
 }: MobileTopBarActionsProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-1" data-testid="mobile-topbar-actions">
       <MobileRepoPill taskId={taskId ?? null} workspaceId={workspaceId ?? null} />
@@ -277,7 +279,7 @@ function MobileTopBarActions({
         className="cursor-pointer"
         onClick={onMenuClick}
         data-testid="mobile-session-menu"
-        aria-label="Open task switcher"
+        aria-label={t("task:openTaskSwitcher")}
       >
         <IconMenu2 className="h-4 w-4" />
       </Button>

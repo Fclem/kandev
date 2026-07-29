@@ -15,6 +15,7 @@ import {
 import type { TablerIcon } from "@tabler/icons-react";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@kandev/ui/hover-card";
 import type { ContextItemKind } from "@/lib/types/context";
+import { useTranslation } from "react-i18next";
 
 const ICON_BY_KIND: Record<ContextItemKind, TablerIcon> = {
   plan: IconListCheck,
@@ -53,6 +54,7 @@ export const ContextChip = memo(function ContextChip({
   onUnpin,
   onRemove,
 }: ContextChipProps) {
+  const { t } = useTranslation();
   const Icon = ICON_BY_KIND[kind];
   let iconNode: ReactNode;
   if (leadingIcon) {
@@ -77,7 +79,7 @@ export const ContextChip = memo(function ContextChip({
             onUnpin();
           }}
           className="ml-0.5 text-muted-foreground/70 hover:text-foreground cursor-pointer"
-          title="Unpin (will be removed after send)"
+          title={t("task:unpinWillBeRemovedAfterSend")}
         >
           <IconPinFilled className="h-2.5 w-2.5" />
         </button>

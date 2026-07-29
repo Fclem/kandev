@@ -22,6 +22,7 @@ import type {
   PrepareStepInfo,
   SessionPrepareState,
 } from "@/lib/state/slices/session-runtime/types";
+import { useTranslation } from "react-i18next";
 
 const debug = createDebugLogger("chat:prepare-progress");
 
@@ -87,6 +88,7 @@ function StepDetails({ step, blockCommand }: { step: PrepareStepInfo; blockComma
 }
 
 function StepWarning({ warning, warningDetail }: { warning: string; warningDetail?: string }) {
+  const { t } = useTranslation();
   const [detailExpanded, setDetailExpanded] = useState(false);
   return (
     <div data-testid="prepare-warning-banner">
@@ -98,7 +100,7 @@ function StepWarning({ warning, warningDetail }: { warning: string; warningDetai
             className="text-amber-500/70 hover:text-amber-500 mt-0.5 flex cursor-pointer items-center gap-0.5 text-xs"
             onClick={() => setDetailExpanded(!detailExpanded)}
           >
-            Details
+            {t("common:details")}
           </button>
           {detailExpanded && (
             <pre className="text-amber-500/60 mt-0.5 max-w-full whitespace-pre-wrap break-words text-xs">

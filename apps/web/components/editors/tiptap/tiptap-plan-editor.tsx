@@ -32,6 +32,7 @@ import { PlanDragHandle } from "./plan-drag-handle";
 import type { MenuState } from "@/components/task/chat/tiptap-suggestion";
 import { DOMParser as PmDOMParser } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/core";
+import { useTranslation } from "react-i18next";
 
 export type { CommentForEditor };
 
@@ -368,6 +369,7 @@ function usePlanEditor(props: TipTapPlanEditorProps): PlanEditorState {
 }
 
 export function TipTapPlanEditor(props: TipTapPlanEditorProps) {
+  const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { editor, editorRef, onSelectionChangeRef, onCommentClickRef, isReady, slash } =
@@ -404,7 +406,7 @@ export function TipTapPlanEditor(props: TipTapPlanEditorProps) {
       />
       {!isReady && (
         <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm bg-background/80">
-          Loading editor...
+          {t("editors:loadingEditor")}
         </div>
       )}
     </div>

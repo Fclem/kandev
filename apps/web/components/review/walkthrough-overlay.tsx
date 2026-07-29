@@ -19,6 +19,7 @@ import { WalkthroughFloatingWindow } from "@/components/diff/walkthrough-floatin
 import { clearOpenWalkthroughTaskId, setOpenWalkthroughTaskId } from "@/lib/walkthrough-open-state";
 import { cn } from "@kandev/ui/lib/utils";
 import type { TaskWalkthrough } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 type WalkthroughOverlayProps = {
   /** The task whose walkthrough launcher should be shown. */
@@ -45,6 +46,7 @@ function WalkthroughLauncher({
   onToggle,
   stepCount,
 }: WalkthroughLauncherProps) {
+  const { t } = useTranslation();
   return (
     <div className="group fixed bottom-[calc(1.5rem+var(--app-status-bar-height))] right-6 z-[41]">
       <button
@@ -63,7 +65,7 @@ function WalkthroughLauncher({
         Walkthrough
         {hasUnseen ? (
           <span
-            aria-label="New walkthrough"
+            aria-label={t("review:newWalkthrough")}
             className="size-1.5 rounded-full bg-primary"
             data-testid="walkthrough-unseen-dot"
           />
@@ -79,8 +81,8 @@ function WalkthroughLauncher({
       </button>
       <button
         type="button"
-        aria-label="Discard walkthrough"
-        title="Discard walkthrough"
+        aria-label={t("review:discardWalkthrough")}
+        title={t("review:discardWalkthrough")}
         data-testid="walkthrough-discard"
         onClick={onDiscardClick}
         className={cn(
@@ -111,25 +113,26 @@ function DiscardWalkthroughDialog({
   onOpenChange,
   open,
 }: DiscardWalkthroughDialogProps) {
+  const { t } = useTranslation();
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent data-testid="walkthrough-discard-dialog">
         <AlertDialogHeader>
-          <AlertDialogTitle>Discard walkthrough?</AlertDialogTitle>
+          <AlertDialogTitle>{t("review:discardWalkthrough2")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This removes the saved walkthrough from this task. The agent can create a new one later.
+            {t("review:thisRemovesTheSavedWalkthroughFrom")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel className="cursor-pointer" disabled={discarding}>
-            Cancel
+            {t("common:cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
             disabled={discarding}
             onClick={onConfirm}
           >
-            Discard walkthrough
+            {t("review:discardWalkthrough")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -4,6 +4,7 @@ import Link from "@/components/routing/app-link";
 import { IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
 import { Alert, AlertDescription, AlertTitle } from "@kandev/ui/alert";
 import { Button } from "@kandev/ui/button";
+import { useTranslation } from "react-i18next";
 
 // EnsureSessionErrorInfo wraps a parsed ensure error so UI can offer a targeted action for the missing-agent-profile case.
 export type EnsureSessionErrorInfo = {
@@ -88,6 +89,7 @@ export function EnsureSessionErrorBanner({ error, onRetry, workspaceId }: Banner
 
 /** Full-panel centered state for the kanban preview's empty-sessions slot. */
 export function EnsureSessionErrorEmptyState({ error, onRetry, workspaceId }: BannerProps) {
+  const { t } = useTranslation();
   const info = describeEnsureError(error, workspaceId);
   if (!info) return null;
   return (
@@ -114,7 +116,7 @@ export function EnsureSessionErrorEmptyState({ error, onRetry, workspaceId }: Ba
           onClick={onRetry}
           data-testid="ensure-session-error-retry"
         >
-          Retry
+          {t("common:retry")}
         </Button>
       </span>
     </div>

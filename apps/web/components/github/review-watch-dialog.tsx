@@ -37,6 +37,7 @@ import type {
   UpdateReviewWatchRequest,
   CleanupPolicy,
 } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 type ReviewWatchDialogProps = {
   open: boolean;
@@ -181,6 +182,7 @@ function WorkspacePicker({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
     <SelectField
@@ -188,7 +190,7 @@ function WorkspacePicker({
       description="Tasks created by this watcher land in the selected workspace."
       value={value}
       onChange={onChange}
-      placeholder="Select workspace"
+      placeholder={t("github:selectWorkspace")}
       items={workspaces.map((w) => ({ id: w.id, label: w.name }))}
       disabled={disabled}
     />
@@ -238,6 +240,7 @@ function QueryField({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const { t } = useTranslation();
   const current = form.customQuery.trim();
   const isMeAndTeams = current === QUERY_TEMPLATES.meAndTeams;
   const isMe = current === QUERY_TEMPLATES.me;
@@ -245,7 +248,7 @@ function QueryField({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <Label>Search Query</Label>
+        <Label>{t("github:searchQuery")}</Label>
         <div className="flex items-center gap-1.5">
           <TooltipProvider>
             <Tooltip>
@@ -259,11 +262,11 @@ function QueryField({
                     setForm((prev) => ({ ...prev, customQuery: QUERY_TEMPLATES.meAndTeams }))
                   }
                 >
-                  Me & my teams
+                  {t("github:meMyTeams")}
                 </Button>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs text-xs">
-                PRs where you or any of your teams are requested as reviewers
+                {t("github:prsWhereYouOrAnyOf")}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -277,11 +280,11 @@ function QueryField({
                   className="h-6 px-2 text-xs cursor-pointer"
                   onClick={() => setForm((prev) => ({ ...prev, customQuery: QUERY_TEMPLATES.me }))}
                 >
-                  Me
+                  {t("github:me")}
                 </Button>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs text-xs">
-                Only PRs where you are explicitly requested as a reviewer (not via team membership)
+                {t("github:onlyPrsWhereYouAreExplicitly")}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -290,12 +293,12 @@ function QueryField({
       <Textarea
         value={form.customQuery}
         onChange={(e) => setForm((prev) => ({ ...prev, customQuery: e.target.value }))}
-        placeholder="e.g. type:pr state:open review-requested:@me"
+        placeholder={t("github:eGTypePrStateOpen")}
         rows={1}
         className="font-mono text-xs resize-y"
       />
       <p className="text-xs text-muted-foreground">
-        GitHub search query. Supports full GitHub search syntax for maximum flexibility.
+        {t("github:githubSearchQuerySupportsFullGithub")}
       </p>
     </div>
   );
@@ -314,6 +317,7 @@ function WatchFormFields({
   onAllReposChange: (checked: boolean) => void;
   onSelectedReposChange: (repos: RepoFilter[]) => void;
 }) {
+  const { t } = useTranslation();
   const { workflows, agentProfiles, allExecutorProfiles } = useWatchFormData(form.workspaceId);
   const { steps: workflowSteps, loading: stepsLoading } = useWorkflowSteps(form.workflowId);
 
@@ -343,7 +347,7 @@ function WatchFormFields({
         }
         disabled={workspaceLocked}
       />
-      <SectionHeader>Filter</SectionHeader>
+      <SectionHeader>{t("github:filter")}</SectionHeader>
       <RepoFilterSelector
         allRepos={form.allRepos}
         selectedRepos={form.selectedRepos}
@@ -352,7 +356,7 @@ function WatchFormFields({
         workspaceId={form.workspaceId}
       />
       <QueryField form={form} setForm={setForm} />
-      <SectionHeader>Automation</SectionHeader>
+      <SectionHeader>{t("github:automation")}</SectionHeader>
       <WorkflowFields
         form={form}
         setForm={setForm}
@@ -371,7 +375,7 @@ function WatchFormFields({
         value={form.prompt}
         onChange={(v) => setForm((prev) => ({ ...prev, prompt: v }))}
       />
-      <SectionHeader>Settings</SectionHeader>
+      <SectionHeader>{t("common:settings")}</SectionHeader>
       <SettingsFields form={form} setForm={setForm} />
     </div>
   );
@@ -392,6 +396,7 @@ function WorkflowFields({
   stepsLoading: boolean;
   onWorkflowChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
       <SelectField
@@ -399,7 +404,7 @@ function WorkflowFields({
         description="The workflow to create tasks in."
         value={form.workflowId}
         onChange={onWorkflowChange}
-        placeholder="Select workflow"
+        placeholder={t("common:selectWorkflow")}
         items={workflows.map((w) => ({ id: w.id, label: w.name }))}
       />
       <SelectField
@@ -439,6 +444,7 @@ function ProfileFields({
   agentProfiles: Array<{ id: string; label: string; cli_passthrough?: boolean }>;
   executorProfiles: Array<{ id: string; name: string }>;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
       <SelectField
@@ -458,11 +464,11 @@ function ProfileFields({
       />
       <div className="space-y-1.5">
         <div className="flex items-center gap-1.5">
-          <Label>Executor Profile</Label>
+          <Label>{t("github:executorProfile")}</Label>
           <HelpTip text="The repository will be automatically cloned to ~/.kandev/repos/<owner>/<repo> if it is not already present in the workspace." />
         </div>
         <p className="text-xs text-muted-foreground">
-          Optional — falls back to step default. The executor environment where the agent will run.
+          {t("github:optionalFallsBackToStepDefault")}
         </p>
         <Select
           value={form.executorProfileId || STEP_DEFAULT}
@@ -494,13 +500,12 @@ function SettingsFields({
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="space-y-1.5">
-        <Label>Poll Interval (seconds)</Label>
-        <p className="text-xs text-muted-foreground">
-          How often to check for new PRs. Minimum 60s, maximum 3600s.
-        </p>
+        <Label>{t("github:pollIntervalSeconds")}</Label>
+        <p className="text-xs text-muted-foreground">{t("github:howOftenToCheckForNew2")}</p>
         <Input
           type="number"
           value={form.pollInterval}
@@ -511,8 +516,8 @@ function SettingsFields({
       </div>
       <div className="flex items-center justify-between">
         <div>
-          <Label>Enabled</Label>
-          <p className="text-xs text-muted-foreground">Pause or resume polling.</p>
+          <Label>{t("common:enabled")}</Label>
+          <p className="text-xs text-muted-foreground">{t("github:pauseOrResumePolling")}</p>
         </div>
         <Switch
           checked={form.enabled}
@@ -527,7 +532,7 @@ function SettingsFields({
         }
         value={form.cleanupPolicy}
         onChange={(v) => setForm((prev) => ({ ...prev, cleanupPolicy: v as CleanupPolicy }))}
-        placeholder="Auto"
+        placeholder={t("github:auto")}
         items={CLEANUP_POLICY_OPTIONS.map((p) => ({ id: p.id, label: p.label }))}
       />
     </>
@@ -547,6 +552,7 @@ export function ReviewWatchDialog({
   onCreate,
   onUpdate,
 }: ReviewWatchDialogProps) {
+  const { t } = useTranslation();
   const activeWorkspaceId = useAppStore((s) => s.workspaces.activeId);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>(() => makeDefaultForm(workspaceId ?? ""));
@@ -614,9 +620,7 @@ export function ReviewWatchDialog({
       <DialogContent className="w-full max-w-full sm:w-[900px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{watch ? "Edit Review Watch" : "Create Review Watch"}</DialogTitle>
-          <DialogDescription>
-            Automatically create tasks when new pull requests need your review.
-          </DialogDescription>
+          <DialogDescription>{t("github:automaticallyCreateTasksWhenNewPull")}</DialogDescription>
         </DialogHeader>
         <WatchFormFields
           form={form}
@@ -627,7 +631,7 @@ export function ReviewWatchDialog({
         />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button onClick={handleSave} disabled={saving || !canSave} className="cursor-pointer">
             {getSaveButtonLabel(saving, !!watch)}

@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useAppStore } from "@/components/state-provider";
 import type { JiraIssueWatch } from "@/lib/types/jira";
+import { useTranslation } from "react-i18next";
 
 type JiraIssueWatchTableProps = {
   watches: JiraIssueWatch[];
@@ -54,6 +55,7 @@ function WatchActions({
   onReset: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-1">
       <Tooltip>
@@ -94,7 +96,7 @@ function WatchActions({
             <IconRefresh className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Check now</TooltipContent>
+        <TooltipContent>{t("jira:checkNow")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -103,7 +105,7 @@ function WatchActions({
             size="sm"
             className="h-7 w-7 p-0 cursor-pointer"
             data-testid="watch-reset-button"
-            aria-label="Reset watch"
+            aria-label={t("jira:resetWatch")}
             onClick={(e) => {
               e.stopPropagation();
               onReset(watch.id);
@@ -112,7 +114,7 @@ function WatchActions({
             <IconRestore className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Reset</TooltipContent>
+        <TooltipContent>{t("jira:reset")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -128,7 +130,7 @@ function WatchActions({
             <IconTrash className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Delete</TooltipContent>
+        <TooltipContent>{t("common:delete")}</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -144,13 +146,14 @@ export function JiraIssueWatchTable({
   onReset,
   onToggleEnabled,
 }: JiraIssueWatchTableProps) {
+  const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces.items);
   const workspaceName = (id: string) => workspaces.find((w) => w.id === id)?.name ?? id;
 
   if (watches.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-4 text-center">
-        No JIRA watchers configured. Create one to auto-create tasks from JQL queries.
+        {t("jira:noJiraWatchersConfiguredCreateOne")}
       </p>
     );
   }
@@ -159,12 +162,12 @@ export function JiraIssueWatchTable({
     <Table>
       <TableHeader>
         <TableRow>
-          {showWorkspace && <TableHead>Workspace</TableHead>}
+          {showWorkspace && <TableHead>{t("common:workspace")}</TableHead>}
           <TableHead>JQL</TableHead>
-          <TableHead>Interval</TableHead>
-          <TableHead>Last Polled</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          <TableHead>{t("jira:interval")}</TableHead>
+          <TableHead>{t("jira:lastPolled")}</TableHead>
+          <TableHead>{t("common:status")}</TableHead>
+          <TableHead className="text-right">{t("jira:actions")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

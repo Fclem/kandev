@@ -20,6 +20,7 @@ import Link from "@/components/routing/app-link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { Routine, AgentProfile, RoutineTrigger } from "@/lib/state/slices/office/types";
 import { timeAgo } from "@/lib/utils/time";
+import { useTranslation } from "react-i18next";
 
 type RoutineRowProps = {
   routine: Routine;
@@ -61,6 +62,7 @@ export function RoutineRow({
   onDelete,
   onClick,
 }: RoutineRowProps) {
+  const { t } = useTranslation();
   // The API may return snake_case fields (assignee_agent_profile_id, concurrency_policy)
   // before any mapping layer converts them. Use both camelCase and snake_case lookups.
   const routineRaw = routine as unknown as Record<string, unknown>;
@@ -124,7 +126,7 @@ export function RoutineRow({
               </Link>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Edit routine</TooltipContent>
+          <TooltipContent>{t("office:editRoutine")}</TooltipContent>
         </Tooltip>
         <RoutineActions
           onRunNow={() => onRunNow(routine.id)}
@@ -139,6 +141,7 @@ export function RoutineRow({
 }
 
 function RoutineActions({ onRunNow, onDelete }: { onRunNow: () => void; onDelete: () => void }) {
+  const { t } = useTranslation();
   return (
     <DropdownMenu>
       <Tooltip>
@@ -154,7 +157,7 @@ function RoutineActions({ onRunNow, onDelete }: { onRunNow: () => void; onDelete
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>Actions</TooltipContent>
+        <TooltipContent>{t("office:actions")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end">
         <DropdownMenuItem
@@ -189,6 +192,7 @@ function RoutineExpandedDetail({
   assignee: AgentProfile | undefined;
   template: { title?: string; description?: string } | undefined;
 }) {
+  const { t } = useTranslation();
   const routineRaw = routine as unknown as Record<string, unknown>;
   const concurrencyPolicy =
     routine.concurrencyPolicy ?? (routineRaw.concurrency_policy as string | undefined) ?? "";
@@ -207,7 +211,7 @@ function RoutineExpandedDetail({
       <DetailField label="Concurrency" value={concurrencyPolicy.replace(/_/g, " ")} />
       {routine.variables && Object.keys(routine.variables).length > 0 && (
         <div>
-          <span className="text-xs font-medium text-muted-foreground">Variables</span>
+          <span className="text-xs font-medium text-muted-foreground">{t("office:variables")}</span>
           <div className="mt-1 space-y-0.5">
             {Object.entries(routine.variables).map(([key, val]) => (
               <div key={key} className="text-xs font-mono text-muted-foreground">

@@ -7,6 +7,7 @@ import { Textarea } from "@kandev/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useDraggablePopover, usePopoverDismiss } from "@/components/task/use-draggable-popover";
+import { useTranslation } from "react-i18next";
 
 type EditorCommentPopoverProps = {
   selectedText: string;
@@ -37,6 +38,7 @@ function PopoverBody({
   handleSubmitAndRun?: () => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
+  const { t } = useTranslation();
   const previewText =
     selectedText.length > 100 ? selectedText.slice(0, 100).trim() + "…" : selectedText;
   const isDisabled = !comment.trim();
@@ -67,7 +69,7 @@ function PopoverBody({
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Add your comment or instruction..."
+        placeholder={t("task:addYourCommentOrInstruction")}
         className="min-h-[72px] resize-none text-sm border-border/50 focus:border-primary/50"
       />
       <div className="mt-3 flex items-center justify-between">

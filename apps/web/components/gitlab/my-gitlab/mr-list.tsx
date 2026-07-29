@@ -15,6 +15,7 @@ import type { GitLabLaunchPayload, GitLabTaskPreset } from "./quick-task-launche
 import { gitLabMRKey } from "@/lib/gitlab-identity";
 import { MRRowTaskIndicator } from "./mr-row-task-indicator";
 import { StartTaskMenu } from "./start-task-menu";
+import { useTranslation } from "react-i18next";
 
 type MRListProps = {
   items: MR[];
@@ -99,6 +100,7 @@ function MRListBody({
   onStartTask,
   mrKeyToTasks,
 }: MRListProps) {
+  const { t } = useTranslation();
   if (loading) {
     return (
       <div className="flex justify-center py-10">
@@ -112,7 +114,7 @@ function MRListBody({
   if (items.length === 0) {
     return (
       <div className="text-center py-10 text-muted-foreground text-sm">
-        No merge requests match this filter.
+        {t("gitlab:noMergeRequestsMatchThisFilter")}
       </div>
     );
   }

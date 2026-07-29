@@ -25,6 +25,7 @@ import {
 import { type ChatInputToolbarProps } from "./chat-input-toolbar";
 import type { ContextFile } from "@/lib/state/context-files-store";
 import type { SHORTCUTS } from "@/lib/keyboard/constants";
+import { useTranslation } from "react-i18next";
 
 type ToolbarItemConfig = {
   id: string;
@@ -195,6 +196,7 @@ function DesktopRightSection(props: {
 }
 
 export function DesktopChatInputToolbar(props: DesktopToolbarProps) {
+  const { t } = useTranslation();
   const toolbarRef = useRef<HTMLDivElement>(null);
   const isCollapsed = useToolbarCollapsed(toolbarRef);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -232,7 +234,7 @@ export function DesktopChatInputToolbar(props: DesktopToolbarProps) {
               size="sm"
               className="h-7 gap-1.5 px-2 cursor-pointer hover:bg-muted/40 relative"
               data-testid="chat-context-button"
-              aria-label="Session context"
+              aria-label={t("task:sessionContext2")}
             >
               <IconAt className="h-4 w-4" />
               {props.contextCount > 0 && !isCollapsed && (

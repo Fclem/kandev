@@ -26,6 +26,7 @@ import { useWatcherEnabledDrafts } from "@/components/integrations/use-watcher-e
 import { ResetWatchDialog, useWatchResetController } from "@/components/watches/reset-watch-dialog";
 import { cleanupMergedReviewTasks, cleanupClosedIssueTasks } from "@/lib/api/domains/github-api";
 import type { ReviewWatch, IssueWatch } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 // CleanupNowButton runs a manual global sweep over the dedup tables. Useful
 // for users who upgraded with a pile of legacy merged-PR / closed-issue
@@ -239,6 +240,7 @@ function useIssueWatchActions(workspaceId?: string | null) {
 }
 
 export function GitHubConnectionSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   return (
     <>
       <div>
@@ -250,13 +252,13 @@ export function GitHubConnectionSection({ workspaceId }: { workspaceId: string }
           GitHub Integration
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Choose the automation and personal identities used by this workspace.
+          {t("github:chooseTheAutomationAndPersonalIdentities")}
         </p>
       </div>
       <Separator />
       <GitHubCallbackNotice workspaceId={workspaceId} />
       <SettingsSection
-        title="Workspace GitHub access"
+        title={t("github:workspaceGithubAccess")}
         description="Credential used for repository sync, watches, and managed agent git and gh commands. Executor profile tokens take precedence."
       >
         <GitHubAutomationSettings workspaceId={workspaceId} />
@@ -269,6 +271,7 @@ export function GitHubConnectionSection({ workspaceId }: { workspaceId: string }
 }
 
 function PerWorkspaceSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-8">
       <GitHubConnectionSection workspaceId={workspaceId} />
@@ -277,7 +280,10 @@ function PerWorkspaceSection({ workspaceId }: { workspaceId: string }) {
       <GitHubRepoScopeSection workspaceId={workspaceId} />
       <GitHubTaskCredentialsSection workspaceId={workspaceId} />
       <ActionPresetsSection workspaceId={workspaceId} />
-      <SettingsSection title="PR Analytics" description="Pull request activity for this workspace.">
+      <SettingsSection
+        title={t("github:prAnalytics")}
+        description="Pull request activity for this workspace."
+      >
         <PRStatsPanel workspaceId={workspaceId} />
       </SettingsSection>
       <DefaultQueriesSection workspaceId={workspaceId} />
@@ -302,6 +308,7 @@ export function GitHubIntegrationPage({ workspaceId }: GitHubIntegrationPageProp
 }
 
 function ReviewWatchSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const { watches, create, update, previewReset, handleDelete, handleTrigger, handleReset } =
     useWatchActions(workspaceId);
   const { toast } = useToast();
@@ -340,7 +347,7 @@ function ReviewWatchSection({ workspaceId }: { workspaceId: string }) {
   return (
     <>
       <SettingsSection
-        title="Review Watches"
+        title={t("github:reviewWatches")}
         description="Automatically create tasks for PRs that need your review."
         action={
           <div className="flex items-center gap-2">
@@ -405,6 +412,7 @@ function ReviewWatchSection({ workspaceId }: { workspaceId: string }) {
 }
 
 function IssueWatchSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const issueActions = useIssueWatchActions(workspaceId);
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -442,7 +450,7 @@ function IssueWatchSection({ workspaceId }: { workspaceId: string }) {
   return (
     <>
       <SettingsSection
-        title="Issue Watches"
+        title={t("github:issueWatches")}
         description="Automatically create tasks for GitHub issues matching your criteria."
         action={
           <div className="flex items-center gap-2">

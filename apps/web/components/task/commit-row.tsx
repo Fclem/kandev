@@ -16,6 +16,7 @@ import {
   ContextMenuTrigger,
 } from "@kandev/ui/context-menu";
 import { timeAgo } from "@/lib/utils/time";
+import { useTranslation } from "react-i18next";
 
 export type CommitItem = {
   commit_sha: string;
@@ -103,6 +104,7 @@ function CommitRowActions({
   onRevertCommit?: (sha: string, repo?: string) => void;
   onResetToCommit?: (sha: string, repo?: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <span className="hidden group-hover:flex items-center gap-1">
       {isLatest && onAmendCommit && (
@@ -110,7 +112,7 @@ function CommitRowActions({
           <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label="Amend commit message"
+              aria-label={t("task:amendCommitMessage")}
               className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
@@ -120,7 +122,7 @@ function CommitRowActions({
               <IconPencil className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>Amend commit message</TooltipContent>
+          <TooltipContent>{t("task:amendCommitMessage")}</TooltipContent>
         </Tooltip>
       )}
       {isLatest && onRevertCommit && (
@@ -128,7 +130,7 @@ function CommitRowActions({
           <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label="Revert commit"
+              aria-label={t("task:revertCommit")}
               className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
@@ -138,7 +140,7 @@ function CommitRowActions({
               <IconArrowBackUp className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>Revert commit</TooltipContent>
+          <TooltipContent>{t("task:revertCommit")}</TooltipContent>
         </Tooltip>
       )}
       {onResetToCommit && (
@@ -146,7 +148,7 @@ function CommitRowActions({
           <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label="Reset to this commit"
+              aria-label={t("task:resetToThisCommit")}
               className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
@@ -156,7 +158,7 @@ function CommitRowActions({
               <IconHistoryToggle className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>Reset to this commit</TooltipContent>
+          <TooltipContent>{t("task:resetToThisCommit")}</TooltipContent>
         </Tooltip>
       )}
     </span>

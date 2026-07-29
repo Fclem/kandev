@@ -7,6 +7,7 @@ import { Input } from "@kandev/ui/input";
 import { IconUserPlus } from "@tabler/icons-react";
 import { ApiError } from "@/lib/api/client";
 import { acceptInvite, previewInvite, type InvitePreview } from "@/lib/api/domains/auth-api";
+import { useTranslation } from "react-i18next";
 
 type InvitePageProps = {
   token?: string;
@@ -74,11 +75,12 @@ function AcceptForm({
   submitting,
   onSubmit,
 }: AcceptFormProps) {
+  const { t } = useTranslation();
   return (
     <form className="flex flex-col gap-3" onSubmit={onSubmit}>
       <div className="flex flex-col gap-1">
         <label htmlFor="invite-display-name" className="text-xs text-muted-foreground">
-          Display name
+          {t("auth:displayName")}
         </label>
         <Input
           id="invite-display-name"
@@ -91,7 +93,7 @@ function AcceptForm({
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor="invite-email" className="text-xs text-muted-foreground">
-          Email
+          {t("auth:email")}
         </label>
         <Input
           id="invite-email"
@@ -106,7 +108,7 @@ function AcceptForm({
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor="invite-password" className="text-xs text-muted-foreground">
-          Password
+          {t("auth:password")}
         </label>
         <Input
           id="invite-password"
@@ -137,6 +139,7 @@ function AcceptForm({
 }
 
 export function InvitePage({ token }: InvitePageProps) {
+  const { t } = useTranslation();
   const { preview, previewError, loading } = useInvitePreview(token);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -180,7 +183,7 @@ export function InvitePage({ token }: InvitePageProps) {
         <CardContent>
           {loading && (
             <p className="text-sm text-muted-foreground" data-testid="invite-loading">
-              Checking invite...
+              {t("auth:checkingInvite")}
             </p>
           )}
           {!loading && previewError && (

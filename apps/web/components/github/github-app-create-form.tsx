@@ -19,6 +19,7 @@ import {
 import { GitHubAppPolicyDialog } from "./github-app-policy-dialog";
 import { GitHubAppVisibilityField } from "./github-app-visibility-field";
 import type { useGitHubAppRegistrations } from "@/hooks/domains/github/use-github-app-registrations";
+import { useTranslation } from "react-i18next";
 
 type RegistrationHook = ReturnType<typeof useGitHubAppRegistrations>;
 
@@ -104,13 +105,13 @@ function ManifestHandoff({
   handoff: StartGitHubAppManifestResponse;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <h3 className="text-sm font-medium">GitHub is ready to create the App</h3>
+        <h3 className="text-sm font-medium">{t("github:githubIsReadyToCreateThe")}</h3>
         <p className="text-xs leading-5 text-muted-foreground">
-          GitHub will show the generated permissions and ask you to confirm. Returning from GitHub
-          adds the registration; installing it for this workspace remains an explicit step.
+          {t("github:githubWillShowTheGeneratedPermissions")}
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -122,7 +123,7 @@ function ManifestHandoff({
           <IconExternalLink className="ml-2 h-4 w-4" />
         </Button>
         <Button variant="outline" className="h-11 cursor-pointer" onClick={onEdit}>
-          Edit details
+          {t("github:editDetails")}
         </Button>
       </div>
     </div>
@@ -146,13 +147,13 @@ type CreateFieldsProps = {
 };
 
 function CreateAppFields(props: CreateFieldsProps) {
+  const { t } = useTranslation();
   return (
     <form onSubmit={props.onSubmit} className="space-y-4">
       <div className="space-y-1">
-        <h3 className="text-sm font-medium">Create a GitHub App</h3>
+        <h3 className="text-sm font-medium">{t("github:createAGithubApp")}</h3>
         <p className="text-xs leading-5 text-muted-foreground">
-          Kandev generates the exact App policy. You confirm creation on GitHub; Kandev then stores
-          this registration so it can be selected by a workspace.
+          {t("github:kandevGeneratesTheExactAppPolicy")}
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -192,9 +193,7 @@ function CreateAppFields(props: CreateFieldsProps) {
           onChange={(event) => props.onPublicBaseUrl(event.target.value)}
         />
       </Field>
-      <p className="text-xs text-muted-foreground">
-        GitHub must reach this HTTPS origin for signed webhooks and callbacks.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("github:githubMustReachThisHttpsOrigin")}</p>
       <GitHubAppVisibilityField value={props.visibility} onChange={props.onVisibility} />
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button type="submit" disabled={props.mutating} className="h-11 cursor-pointer">

@@ -14,6 +14,7 @@ import { useTaskEnvironment } from "@/hooks/domains/session/use-task-environment
 import { isPreparingPhase } from "@/lib/prepare/summarize";
 import { PrepareStatusSection } from "./executor-prepare-status";
 import { EnvironmentInfo } from "./executor-environment-info";
+import { useTranslation } from "react-i18next";
 
 type ExecutorSettingsButtonProps = {
   taskId?: string | null;
@@ -83,40 +84,11 @@ export function ExecutorSettingsButton({
         >
           <PrepareStatusSection summary={prepare} />
           <EnvironmentInfo env={env} container={container} ssh={ssh} loading={loading} />
-          <div className="border-t border-border px-2 py-1.5 flex items-center justify-end">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={!env || isResetting ? 0 : -1} aria-label="Reset environment">
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="cursor-pointer text-xs"
-                    disabled={!env || isResetting}
-                    data-testid="executor-settings-reset"
-                    onClick={() => setResetDialogOpen(true)}
-                  >
-                    <IconTrash className="h-3.5 w-3.5 mr-1" /> Reset environment
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <p className="font-medium">Reset environment</p>
-                <p className="mt-1 text-xs">
-                  Deletes the current task environment (container, sandbox, and/or worktree) and
-                  forces a fresh one to be created for your next run.
-                </p>
-                <p className="mt-1 text-xs text-destructive">
-                  Any uncommitted or unpushed changes are lost.
-                </p>
-                {hasWorktreePath && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Push your branch to its remote in the confirmation dialog to preserve committed
-                    work before resetting.
-                  </p>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </div>
+          <ResetEnvironmentAction
+            disabled={!env || isResetting}
+            hasWorktreePath={hasWorktreePath}
+            onRequestReset={() => setResetDialogOpen(true)}
+          />
         </HoverCardContent>
       </HoverCard>
 
@@ -128,6 +100,51 @@ export function ExecutorSettingsButton({
         onConfirm={handleReset}
       />
     </>
+  );
+}
+
+/** Popover footer: the destructive "Reset environment" button and its warning tooltip. */
+function ResetEnvironmentAction({
+  disabled,
+  hasWorktreePath,
+  onRequestReset,
+}: {
+  disabled: boolean;
+  hasWorktreePath: boolean;
+  onRequestReset: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="border-t border-border px-2 py-1.5 flex items-center justify-end">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span tabIndex={disabled ? 0 : -1} aria-label={t("task:resetEnvironment")}>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="cursor-pointer text-xs"
+              disabled={disabled}
+              data-testid="executor-settings-reset"
+              onClick={onRequestReset}
+            >
+              <IconTrash className="h-3.5 w-3.5 mr-1" /> Reset environment
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <p className="font-medium">{t("task:resetEnvironment")}</p>
+          <p className="mt-1 text-xs">{t("task:deletesTheCurrentTaskEnvironmentContainer")}</p>
+          <p className="mt-1 text-xs text-destructive">
+            {t("task:anyUncommittedOrUnpushedChangesAre")}
+          </p>
+          {hasWorktreePath && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("task:pushYourBranchToItsRemote")}
+            </p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </div>
   );
 }
 

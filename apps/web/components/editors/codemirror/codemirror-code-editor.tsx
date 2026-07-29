@@ -28,6 +28,7 @@ import {
 } from "@/components/editors/external-vcs-file-link";
 import { useCodeMirrorEditorState } from "./use-codemirror-editor-state";
 import { useCodeMirrorWalkthroughRange } from "./use-codemirror-walkthrough-range";
+import { useTranslation } from "react-i18next";
 
 const SAVE_SHORTCUT =
   typeof navigator !== "undefined" && navigator.platform.includes("Mac") ? "\u2318" : "Ctrl";
@@ -109,6 +110,7 @@ function CodeMirrorReloadButton({
   hasRemoteUpdate?: boolean;
   onReloadFromAgent?: () => void;
 }) {
+  const { t } = useTranslation();
   if (!hasRemoteUpdate || !onReloadFromAgent) return null;
 
   return (
@@ -124,12 +126,13 @@ function CodeMirrorReloadButton({
           Reload
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Apply latest agent changes to this file</TooltipContent>
+      <TooltipContent>{t("editors:applyLatestAgentChangesToThis")}</TooltipContent>
     </Tooltip>
   );
 }
 
 function CodeMirrorDeleteButton({ onDelete }: { onDelete?: () => void }) {
+  const { t } = useTranslation();
   if (!onDelete) return null;
 
   return (
@@ -144,7 +147,7 @@ function CodeMirrorDeleteButton({ onDelete }: { onDelete?: () => void }) {
           <IconTrash className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Delete file</TooltipContent>
+      <TooltipContent>{t("editors:deleteFile")}</TooltipContent>
     </Tooltip>
   );
 }
@@ -183,6 +186,7 @@ function CodeMirrorSaveButton({
 }
 
 function CodeMirrorMarkdownPreviewButton({ onToggle }: { onToggle: () => void }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -196,7 +200,7 @@ function CodeMirrorMarkdownPreviewButton({ onToggle }: { onToggle: () => void })
           <IconEye className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Preview markdown</TooltipContent>
+      <TooltipContent>{t("editors:previewMarkdown")}</TooltipContent>
     </Tooltip>
   );
 }

@@ -21,6 +21,7 @@ import { buildContextFilesContext, buildTaskMentionsContext } from "@/hooks/use-
 import { getWebSocketClient } from "@/lib/ws/connection";
 import { getTaskPlan } from "@/lib/api/domains/plan-api";
 import type { AppState } from "@/lib/state/store";
+import { useTranslation } from "react-i18next";
 
 const PLAN_CONTEXT_PATH = "plan:context";
 
@@ -45,6 +46,7 @@ export function PassthroughComposerPanel({
   isSending: boolean;
   onImplementPlan?: (fresh: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const hasContextComments =
     panelState.planComments.length > 0 ||
     panelState.pendingPRFeedback.length > 0 ||
@@ -76,7 +78,7 @@ export function PassthroughComposerPanel({
         isMoving={isMoving}
         isSending={isSending}
         onCancel={onCancel}
-        placeholder="Type a message, @mention files or prompts, Shift+Enter for newline"
+        placeholder={t("task:typeAMessageMentionFilesOr")}
         pendingCommentsByFile={panelState.pendingCommentsByFile}
         hasContextComments={hasContextComments}
         submitKey={panelState.chatSubmitKey}

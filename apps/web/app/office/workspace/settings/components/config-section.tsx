@@ -4,8 +4,10 @@ import { useCallback } from "react";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconArrowsLeftRight, IconDownload } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
+import { useTranslation } from "react-i18next";
 
 export function ConfigSection() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const handleSync = useCallback(() => {
@@ -18,10 +20,8 @@ export function ConfigSection() {
 
   return (
     <section className="space-y-4">
-      <h2 className="text-sm font-semibold">Configuration</h2>
-      <p className="text-xs text-muted-foreground">
-        Sync the workspace database with on-disk YAML files, or download a portable export bundle.
-      </p>
+      <h2 className="text-sm font-semibold">{t("office:configuration")}</h2>
+      <p className="text-xs text-muted-foreground">{t("office:syncTheWorkspaceDatabaseWithOn")}</p>
       <div className="flex gap-2">
         <Button variant="outline" onClick={handleSync} className="cursor-pointer">
           <IconArrowsLeftRight className="h-4 w-4 mr-1" />

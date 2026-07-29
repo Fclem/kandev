@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import type { PRComment } from "@/lib/types/github";
 import { CollapsibleSection, AddToContextButton, FeedbackItemRow } from "./pr-shared";
+import { useTranslation } from "react-i18next";
 
 function buildCommentMessage(comment: PRComment, prUrl: string): string {
   const location = comment.path
@@ -68,6 +69,7 @@ function buildThreads(comments: PRComment[]): CommentThread[] {
 }
 
 function CommentMetaBadge({ comment, isReply }: { comment: PRComment; isReply?: boolean }) {
+  const { t } = useTranslation();
   if (comment.path) {
     return (
       <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[180px]">
@@ -77,7 +79,7 @@ function CommentMetaBadge({ comment, isReply }: { comment: PRComment; isReply?: 
     );
   }
   if (!isReply) {
-    return <span className="text-[10px] text-muted-foreground">(general)</span>;
+    return <span className="text-[10px] text-muted-foreground">{t("github:general")}</span>;
   }
   return null;
 }
@@ -151,6 +153,7 @@ export function CommentsSection({
   prUrl: string;
   onAddAsContext: (message: string) => void;
 }) {
+  const { t } = useTranslation();
   const [showBotComments, setShowBotComments] = useState(false);
   const humanComments = useMemo(
     () => comments.filter((comment) => !comment.author_is_bot),
@@ -165,14 +168,14 @@ export function CommentsSection({
 
   return (
     <CollapsibleSection
-      title="Comments"
+      title={t("github:comments")}
       count={comments.length}
       defaultOpen
       onAddAll={() => onAddAsContext(buildAllCommentsMessage(comments, prUrl))}
       addAllLabel="Add all comments to chat context"
     >
       {comments.length === 0 && (
-        <p className="text-xs text-muted-foreground px-2 py-2">No comments yet</p>
+        <p className="text-xs text-muted-foreground px-2 py-2">{t("github:noCommentsYet")}</p>
       )}
       {humanThreads.map((thread) => (
         <ThreadBlock

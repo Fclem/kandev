@@ -24,6 +24,7 @@ import {
   type SentryConfig,
   type TestSentryConnectionResult,
 } from "@/lib/types/sentry";
+import { useTranslation } from "react-i18next";
 
 const FIELD = "space-y-1.5";
 const HELP = "text-xs text-muted-foreground";
@@ -43,27 +44,29 @@ type FieldProps = {
 };
 
 function NameField({ form, baseline, idPrefix, loading, update }: FieldProps) {
+  const { t } = useTranslation();
   return (
     <div className={FIELD}>
-      <Label htmlFor={`${idPrefix}-name`}>Name</Label>
+      <Label htmlFor={`${idPrefix}-name`}>{t("sentry:name")}</Label>
       <Input
         id={`${idPrefix}-name`}
         data-testid={`${idPrefix}-name-input`}
-        placeholder="Production, Self-hosted, …"
+        placeholder={t("sentry:productionSelfHosted")}
         value={form.name}
         data-settings-dirty={form.name !== baseline.name}
         onChange={(e) => update("name", e.target.value)}
         disabled={loading}
       />
-      <p className={HELP}>A label for this instance. Must be unique within the workspace.</p>
+      <p className={HELP}>{t("sentry:aLabelForThisInstanceMust")}</p>
     </div>
   );
 }
 
 function UrlField({ form, baseline, idPrefix, loading, update }: FieldProps) {
+  const { t } = useTranslation();
   return (
     <div className={FIELD}>
-      <Label htmlFor={`${idPrefix}-url`}>Instance URL</Label>
+      <Label htmlFor={`${idPrefix}-url`}>{t("sentry:instanceUrl")}</Label>
       <Input
         id={`${idPrefix}-url`}
         data-testid={`${idPrefix}-url-input`}
@@ -90,6 +93,7 @@ function SecretField({
   update,
   hasSavedSecret,
 }: FieldProps & { hasSavedSecret: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className={FIELD}>
       <div className="flex items-center gap-1.5">
@@ -97,7 +101,7 @@ function SecretField({
           Auth token
           {hasSavedSecret && (
             <span className="text-xs text-muted-foreground ml-2">
-              (saved — leave blank to keep the current value)
+              {t("sentry:savedLeaveBlankToKeepThe")}
             </span>
           )}
         </Label>
@@ -105,25 +109,29 @@ function SecretField({
           <TooltipTrigger asChild>
             <IconInfoCircle
               className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help shrink-0"
-              aria-label="Required token scopes"
+              aria-label={t("sentry:requiredTokenScopes")}
             />
           </TooltipTrigger>
           <TooltipContent className="max-w-xs" align="start">
-            <p className="text-xs font-medium mb-1">Grant Read access to these scopes:</p>
+            <p className="text-xs font-medium mb-1">{t("sentry:grantReadAccessToTheseScopes")}</p>
             <ul className="text-xs space-y-0.5">
               <li>
-                <code className="text-[10px] bg-white/15 px-1 rounded">org:read</code>{" "}
-                <span className="opacity-70">Organization — resolve the org and list issues</span>
+                <code className="text-[10px] bg-white/15 px-1 rounded">{t("sentry:orgRead")}</code>{" "}
+                <span className="opacity-70">{t("sentry:organizationResolveTheOrgAndList")}</span>
               </li>
               <li>
-                <code className="text-[10px] bg-white/15 px-1 rounded">project:read</code>{" "}
-                <span className="opacity-70">Project — list projects and scope searches</span>
-              </li>
-              <li>
-                <code className="text-[10px] bg-white/15 px-1 rounded">event:read</code>{" "}
+                <code className="text-[10px] bg-white/15 px-1 rounded">
+                  {t("sentry:projectRead")}
+                </code>{" "}
                 <span className="opacity-70">
-                  Issue &amp; Event — browse issues and run watchers
+                  {t("sentry:projectListProjectsAndScopeSearches")}
                 </span>
+              </li>
+              <li>
+                <code className="text-[10px] bg-white/15 px-1 rounded">
+                  {t("sentry:eventRead")}
+                </code>{" "}
+                <span className="opacity-70">{t("sentry:issueEventBrowseIssuesAndRun")}</span>
               </li>
             </ul>
           </TooltipContent>
@@ -294,6 +302,7 @@ function FormActions({
   onTest,
   onCancel,
 }: FormActionsProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button
@@ -314,7 +323,7 @@ function FormActions({
         className="ml-auto cursor-pointer"
         data-testid={`${idPrefix}-cancel-button`}
       >
-        Cancel
+        {t("common:cancel")}
       </Button>
     </div>
   );
@@ -328,6 +337,7 @@ export function SentryInstanceForm({
   onCancel,
   onDirtyChange,
 }: SentryInstanceFormProps) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<FormState>(() => instanceToForm(instance));
   const update = useCallback(
     <K extends keyof FormState>(key: K, value: FormState[K]) =>
@@ -365,7 +375,7 @@ export function SentryInstanceForm({
     >
       {instance === null && (
         <h4 data-testid={`${idPrefix}-form-heading`} className="text-sm font-semibold">
-          New Instance
+          {t("sentry:newInstance")}
         </h4>
       )}
       <NameField

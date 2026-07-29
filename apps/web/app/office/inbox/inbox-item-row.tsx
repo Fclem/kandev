@@ -16,6 +16,7 @@ import { useAppStore } from "@/components/state-provider";
 import { dismissInboxItem, retryProvider } from "@/lib/api/domains/office-extended-api";
 import type { InboxItem } from "@/lib/state/slices/office/types";
 import { timeAgo } from "@/lib/utils/time";
+import { useTranslation } from "react-i18next";
 
 const ICON_MAP: Record<string, typeof IconShieldCheck> = {
   "shield-check": IconShieldCheck,
@@ -94,6 +95,7 @@ function InboxRowBody({ item }: { item: InboxItem }) {
 }
 
 export function InboxItemRow({ item, onApprove, onReject, onChanged }: Props) {
+  const { t } = useTranslation();
   const taskHref = taskReviewHref(item);
   if (taskHref) {
     return (
@@ -119,7 +121,7 @@ export function InboxItemRow({ item, onApprove, onReject, onChanged }: Props) {
             className="bg-green-700 text-white hover:bg-green-800 cursor-pointer"
             onClick={() => onApprove?.(item.id)}
           >
-            Approve
+            {t("office:approve")}
           </Button>
           <Button
             size="sm"
@@ -127,7 +129,7 @@ export function InboxItemRow({ item, onApprove, onReject, onChanged }: Props) {
             className="cursor-pointer"
             onClick={() => onReject?.(item.id)}
           >
-            Reject
+            {t("office:reject")}
           </Button>
         </div>
       )}
@@ -142,6 +144,7 @@ export function InboxItemRow({ item, onApprove, onReject, onChanged }: Props) {
 }
 
 function ProviderDegradedActions({ item, onChanged }: { item: InboxItem; onChanged?: () => void }) {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const [busy, setBusy] = useState(false);
   const action = (item.payload?.action as string | undefined) ?? "configure";
@@ -162,7 +165,7 @@ function ProviderDegradedActions({ item, onChanged }: { item: InboxItem; onChang
     <div className="flex gap-2 shrink-0">
       {action === "wait_for_capacity" ? (
         <Button size="sm" variant="outline" disabled className="cursor-pointer">
-          Waiting…
+          {t("office:waiting")}
         </Button>
       ) : (
         <Link

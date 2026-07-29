@@ -34,6 +34,7 @@ import {
   ThenSection,
   WhenSection,
 } from "./automation-editor-sections";
+import { useTranslation } from "react-i18next";
 
 type AutomationEditorProps = {
   workspaceId: string;
@@ -123,6 +124,7 @@ type SaveHandlerOpts = {
 // function-length lint cap; the save flow has gotten chunky now that it
 // registers discovered repos before persisting the automation.
 function useSaveHandler(opts: SaveHandlerOpts): () => Promise<void> {
+  const { t } = useTranslation();
   const { isNew, workspaceId, form, currentId, create, update } = opts;
   const { setSaving, setCurrentId, setForm, setCreatedWebhook, triggerActions, router, onSaved } =
     opts;
@@ -162,7 +164,7 @@ function useSaveHandler(opts: SaveHandlerOpts): () => Promise<void> {
           setCurrentId(a.id);
           setCreatedWebhook({ url: buildWebhookUrl(a.id), secret: a.webhook_secret });
         } else {
-          toast.success("Automation created");
+          toast.success(t("automations:automationCreated"));
           runWithNavigationBlockerBypassed(() =>
             router.push(`/settings/workspace/${workspaceId}/automations`),
           );
@@ -296,6 +298,7 @@ type AutomationPersistenceOptions = SaveHandlerOpts & {
 };
 
 function useAutomationPersistence(options: AutomationPersistenceOptions) {
+  const { t } = useTranslation();
   const handleSave = useSaveHandler(options);
   const handleRemove = useRemoveAutomation(
     options.currentId,
@@ -303,7 +306,7 @@ function useAutomationPersistence(options: AutomationPersistenceOptions) {
     options.remove,
     options.router,
     (error) =>
-      toast.error("Failed to delete automation", {
+      toast.error(t("automations:failedToDeleteAutomation"), {
         description: error instanceof Error ? error.message : "Request failed",
       }),
   );

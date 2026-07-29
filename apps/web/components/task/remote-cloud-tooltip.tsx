@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { getWebSocketClient } from "@/lib/ws/connection";
 import { getExecutorStatusIcon } from "@/lib/executor-icons";
 import { formatRelativeTime } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 type RemoteStatusData = {
   remote_name?: string;
@@ -56,6 +57,7 @@ function RemoteCloudStatusContent({
   remoteStatusError?: string;
   loading: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <TooltipContent side="top" className="space-y-0.5">
       <div className="font-medium">{remoteName}</div>
@@ -65,7 +67,7 @@ function RemoteCloudStatusContent({
       {remoteStatusError && (
         <div className="text-destructive">Status failed: {remoteStatusError}</div>
       )}
-      {loading && <div>Loading status...</div>}
+      {loading && <div>{t("task:loadingStatus")}</div>}
     </TooltipContent>
   );
 }

@@ -21,10 +21,12 @@ import { useTaskCIAutomationOptions } from "@/hooks/domains/github/use-task-ci-o
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { autoFixRoundForState, findCIAutomationStateForPR } from "@/lib/github/ci-automation";
 import type { TaskCIAutomationPatch, TaskCIPRAutomationState, TaskPR } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 const PR_FEEDBACK_PLACEHOLDER = "{{pr.feedback}}";
 
 function CIAutomationInfoButton() {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -33,16 +35,13 @@ function CIAutomationInfoButton() {
           variant="ghost"
           size="icon"
           className="h-6 w-6 cursor-help text-muted-foreground hover:text-foreground"
-          aria-label="Explain CI automation options"
+          aria-label={t("github:explainCiAutomationOptions")}
         >
           <IconInfoCircle className="h-3.5 w-3.5" />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top" align="end" className="max-w-[280px] text-xs leading-relaxed">
-        Watches this task's linked pull request during the 1 minute PR refresh loop. Auto-fix queues
-        a task prompt for new failed checks and unresolved review comments when the prompt includes
-        the PR feedback placeholder, then snapshots what was handled so the next round only sends
-        newly observed issues. Auto-merge runs only after CI, review, and mergeability are ready.
+        {t("github:watchesThisTaskSLinkedPull")}
       </TooltipContent>
     </Tooltip>
   );
@@ -72,12 +71,13 @@ function CIAutomationPromptDialog({
   onSave: () => void;
   onReset: () => void;
 }) {
+  const { t } = useTranslation();
   const trimmed = prompt.trim();
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Auto-fix prompt</DialogTitle>
+          <DialogTitle>{t("github:autoFixPrompt")}</DialogTitle>
           <DialogDescription>
             This prompt is used only for this task. Leave it blank to use the default prompt. Add{" "}
             <code
@@ -92,7 +92,7 @@ function CIAutomationPromptDialog({
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Label htmlFor="task-ci-auto-fix-prompt" className="text-xs">
-              Task auto-fix prompt
+              {t("github:taskAutoFixPrompt")}
             </Label>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
               <Button
@@ -102,14 +102,14 @@ function CIAutomationPromptDialog({
                 className="h-7 cursor-pointer px-2 text-xs"
                 onClick={() => onPromptChange(insertPRFeedbackPlaceholder(prompt))}
               >
-                Insert PR feedback
+                {t("github:insertPrFeedback")}
               </Button>
               <a
                 href="/settings/prompts"
                 className="cursor-pointer text-xs text-primary hover:underline"
                 onClick={(e) => e.stopPropagation()}
               >
-                Edit default prompt
+                {t("github:editDefaultPrompt")}
               </a>
             </div>
           </div>
@@ -117,14 +117,8 @@ function CIAutomationPromptDialog({
             data-testid="ci-auto-fix-pr-feedback-help"
             className="rounded-md border border-border/70 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground"
           >
-            <p>
-              The placeholder inserts the current PR identifier, new or changed failing checks with
-              GitHub job links, and new or changed review comments with file, line, and body text.
-            </p>
-            <p className="mt-2">
-              Omit the placeholder if you want the agent to pull or fetch the branch and inspect
-              GitHub itself instead of receiving Kandev's snapshot.
-            </p>
+            <p>{t("github:thePlaceholderInsertsTheCurrentPr")}</p>
+            <p className="mt-2">{t("github:omitThePlaceholderIfYouWant")}</p>
           </div>
           <Textarea
             id="task-ci-auto-fix-prompt"
@@ -136,17 +130,17 @@ function CIAutomationPromptDialog({
         </div>
         <DialogFooter>
           <Button variant="ghost" className="cursor-pointer" disabled={saving} onClick={onClose}>
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button variant="outline" className="cursor-pointer" disabled={saving} onClick={onReset}>
-            Use default
+            {t("github:useDefault")}
           </Button>
           <Button
             className="cursor-pointer"
             disabled={saving || trimmed.length === 0}
             onClick={onSave}
           >
-            Save prompt
+            {t("github:savePrompt")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -222,6 +216,7 @@ function CIAutoFixRoundHelpButton({
   state: TaskCIPRAutomationState | undefined;
   maxRounds: number | null | undefined;
 }) {
+  const { t } = useTranslation();
   const round = autoFixRoundForState(state, maxRounds);
   const { isFinePointer } = useResponsiveBreakpoint();
   const [open, setOpen] = useState(false);
@@ -232,7 +227,7 @@ function CIAutoFixRoundHelpButton({
       size="icon"
       data-testid="ci-auto-fix-round-help"
       className="h-5 w-5 cursor-help text-muted-foreground hover:text-foreground"
-      aria-label="Explain auto-fix rounds"
+      aria-label={t("github:explainAutoFixRounds")}
     >
       <IconInfoCircle className="h-3.5 w-3.5" />
     </Button>
@@ -274,6 +269,7 @@ function CIAutoFixRoundHelpButton({
 }
 
 export function PRCIAutomationControls({ pr }: { pr: TaskPR }) {
+  const { t } = useTranslation();
   const { options, loading, saving, error, refresh, update, resetPrompt } =
     useTaskCIAutomationOptions(pr.task_id);
   const { toast } = useToast();
@@ -325,7 +321,7 @@ export function PRCIAutomationControls({ pr }: { pr: TaskPR }) {
       className="flex flex-col gap-1 border-t border-border/50 pt-2"
     >
       <div className="flex items-center justify-between gap-2 px-1">
-        <div className="text-xs font-medium text-foreground">Automation</div>
+        <div className="text-xs font-medium text-foreground">{t("github:automation")}</div>
         <div className="flex items-center gap-1">
           <CIAutomationInfoButton />
           <Button
@@ -333,7 +329,7 @@ export function PRCIAutomationControls({ pr }: { pr: TaskPR }) {
             variant="ghost"
             size="icon"
             className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-foreground"
-            aria-label="Edit auto-fix prompt for this task"
+            aria-label={t("github:editAutoFixPromptForThis")}
             disabled={!options}
             onClick={openPromptEditor}
           >

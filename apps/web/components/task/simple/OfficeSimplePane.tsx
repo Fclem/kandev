@@ -56,6 +56,7 @@ import type {
   TimelineEvent,
 } from "@/app/office/tasks/[id]/types";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 const COMMENTABLE_DONE_SESSION_STATES = new Set<TaskSession["state"]>([
   "CREATED",
@@ -97,12 +98,13 @@ function commentsReadOnly(task: Task, sessions: TaskSession[]): boolean {
 }
 
 function TaskBreadcrumb({ task }: { task: Task }) {
+  const { t } = useTranslation();
   return (
     <Breadcrumb>
       <BreadcrumbList className="text-sm">
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link href="/office/tasks">Tasks</Link>
+            <Link href="/office/tasks">{t("common:tasks")}</Link>
           </BreadcrumbLink>
         </BreadcrumbItem>
         {task.parentIdentifier && (
@@ -125,13 +127,14 @@ function TaskBreadcrumb({ task }: { task: Task }) {
 }
 
 function TaskHeaderRow({ task, activeHold }: { task: Task; activeHold: TreeHold | null }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2">
       <StatusIcon status={task.status} />
       <span className="text-sm font-mono text-muted-foreground">{task.identifier}</span>
       {task.projectName && <Badge variant="outline">{task.projectName}</Badge>}
-      {activeHold?.mode === "pause" && <Badge variant="outline">Paused</Badge>}
-      {activeHold?.mode === "cancel" && <Badge variant="outline">Cancelled (tree)</Badge>}
+      {activeHold?.mode === "pause" && <Badge variant="outline">{t("task:paused")}</Badge>}
+      {activeHold?.mode === "cancel" && <Badge variant="outline">{t("task:cancelledTree")}</Badge>}
       <div className="ml-auto">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -144,7 +147,7 @@ function TaskHeaderRow({ task, activeHold }: { task: Task; activeHold: TreeHold 
               <IconCopy className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Copy identifier</TooltipContent>
+          <TooltipContent>{t("task:copyIdentifier")}</TooltipContent>
         </Tooltip>
       </div>
     </div>
@@ -158,11 +161,12 @@ function ChildIssuesList({
   items: Task["children"];
   activeHold: TreeHold | null;
 }) {
+  const { t } = useTranslation();
   if (items.length === 0) return null;
   const holdLabel = activeHold?.mode === "pause" ? "Paused" : "Cancelled (tree)";
   return (
     <div className="mt-8" data-testid="child-issues-list">
-      <h2 className="text-sm font-semibold mb-4">Sub-tasks</h2>
+      <h2 className="text-sm font-semibold mb-4">{t("task:subTasks")}</h2>
       <div className="border border-border rounded-lg divide-y divide-border">
         {items.map((child) => (
           <Link
@@ -447,6 +451,7 @@ export function OfficeSimplePane({
   onToggleAdvanced,
   onCommentsChanged,
 }: OfficeSimplePaneProps) {
+  const { t } = useTranslation();
   const [subIssueOpen, setSubIssueOpen] = useState(false);
   const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null);
   const { treePreview, activeHold, refreshTreePreview } = useTaskTreePreview(task.id);
@@ -465,7 +470,7 @@ export function OfficeSimplePane({
                 htmlFor="advanced-toggle"
                 className="text-xs text-muted-foreground cursor-pointer"
               >
-                Advanced
+                {t("task:advanced")}
               </Label>
               <Switch
                 id="advanced-toggle"
@@ -479,7 +484,7 @@ export function OfficeSimplePane({
             className="text-xs text-muted-foreground underline-offset-2 hover:underline cursor-pointer whitespace-nowrap"
             data-testid="task-cross-link"
           >
-            Open in advanced view
+            {t("task:openInAdvancedView")}
           </Link>
         </OfficeTopbarPortal>
         <div ref={setScrollParent} className="flex-1 min-w-0 overflow-y-auto p-6">

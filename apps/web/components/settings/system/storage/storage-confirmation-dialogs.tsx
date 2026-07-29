@@ -40,7 +40,7 @@ function ConfirmationDialog(props: ConfirmationDialogProps) {
           <AlertDialogDescription className="text-left">
             <Trans
               i18nKey="settings:typeToContinue"
-              values={{ description: props.description, phrase: props.phrase }}
+              values={{ description: props.description, token: props.phrase }}
             >
               {props.description} Type <strong>{props.phrase}</strong> to continue.
             </Trans>
@@ -50,7 +50,7 @@ function ConfirmationDialog(props: ConfirmationDialogProps) {
           value={confirmation}
           onChange={(event) => setConfirmation(event.target.value)}
           className="h-11"
-          aria-label={t("settings:typeToConfirm2", { phrase: props.phrase })}
+          aria-label={t("settings:typeToConfirm", { token: props.phrase })}
           data-testid={`${props.actionTestId}-confirmation`}
         />
         <AlertDialogFooter>

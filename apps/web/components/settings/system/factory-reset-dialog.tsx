@@ -21,6 +21,9 @@ type Props = {
   onOpenChange: (open: boolean) => void;
 };
 
+// Sentinel: compared against the typed input AND sent to the backend, so it is
+// interpolated into the copy below rather than written inline — a translated
+// token would make the confirm button unreachable.
 const CONFIRM_TOKEN = "RESET";
 
 function ConfirmView({
@@ -57,9 +60,13 @@ function ConfirmView({
             </Trans>
           </span>
           <span className="block font-medium text-foreground">
-            <Trans i18nKey="settings:typeResetToEnableTheConfirm">
-              Type <code>RESET</code> to enable the confirm button. After the wipe completes
-              you&apos;ll be asked to quit and relaunch Kandev - the backend does not auto-restart.
+            <Trans
+              i18nKey="settings:typeTokenToEnableConfirmAndRelaunch"
+              values={{ token: CONFIRM_TOKEN }}
+            >
+              Type <code>{CONFIRM_TOKEN}</code> to enable the confirm button. After the wipe
+              completes you&apos;ll be asked to quit and relaunch Kandev - the backend does not
+              auto-restart.
             </Trans>
           </span>
         </DialogDescription>
@@ -68,7 +75,7 @@ function ConfirmView({
       <div className="space-y-3">
         <Input
           autoFocus
-          placeholder={t("settings:typeResetToConfirm")}
+          placeholder={t("settings:typeToConfirm", { token: CONFIRM_TOKEN })}
           value={typed}
           onChange={(e) => onTyped(e.target.value)}
           disabled={submitting}

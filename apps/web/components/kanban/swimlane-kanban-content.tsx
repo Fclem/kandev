@@ -39,11 +39,17 @@ import {
  */
 export const ORPHAN_STEP_ID = "__kandev_orphan__";
 
-export const ORPHAN_STEP: WorkflowStep = {
-  id: ORPHAN_STEP_ID,
-  title: t("kanban:needsReassignment"),
-  color: "#f59e0b",
-};
+/**
+ * Resolved at call time, not module load: a module-level `t()` would freeze the
+ * English title before a locale is active and never update on a locale switch.
+ */
+export function orphanStep(): WorkflowStep {
+  return {
+    id: ORPHAN_STEP_ID,
+    title: t("kanban:needsReassignment"),
+    color: "#f59e0b",
+  };
+}
 
 /**
  * The "Needs Reassignment" column is a display-only fallback, not a real
@@ -221,12 +227,12 @@ export function remapOrphanTasks(
 
 /**
  * useOrphanDisplay remaps tasks with an unknown workflowStepId to the sentinel
- * ORPHAN_STEP so they appear in a visible fallback column instead of being
+ * the orphan step so they appear in a visible fallback column instead of being
  * silently dropped from the board.
  *
  * Returns:
  *   displayTasks – all tasks, with orphaned ones keyed to ORPHAN_STEP_ID
- *   displaySteps – original steps plus ORPHAN_STEP when orphans are present
+ *   displaySteps – original steps plus the orphan step when orphans are present
  */
 function useOrphanDisplay(
   tasks: Task[],
@@ -235,7 +241,7 @@ function useOrphanDisplay(
   return useMemo(() => {
     const stepIds = new Set(steps.map((s) => s.id));
     const { tasks: displayTasks, hasOrphans } = remapOrphanTasks(tasks, stepIds, ORPHAN_STEP_ID);
-    const displaySteps = hasOrphans ? [...steps, ORPHAN_STEP] : steps;
+    const displaySteps = hasOrphans ? [...steps, orphanStep()] : steps;
     return { displayTasks, displaySteps };
   }, [tasks, steps]);
 }

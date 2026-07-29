@@ -60,7 +60,10 @@ function ConfirmView({
             </Trans>
           </span>
           <span className="block font-medium text-foreground">
-            <Trans i18nKey="settings:typeToEnableTheConfirmButton" values={{ CONFIRM_TOKEN }}>
+            <Trans
+              i18nKey="settings:typeToEnableTheConfirmButton"
+              values={{ token: CONFIRM_TOKEN }}
+            >
               Type <code>{CONFIRM_TOKEN}</code> to enable the confirm button.
             </Trans>
           </span>
@@ -70,7 +73,7 @@ function ConfirmView({
       <div className="space-y-3">
         <Input
           autoFocus
-          placeholder={t("settings:typeToConfirm", { CONFIRM_TOKEN })}
+          placeholder={t("settings:typeToConfirm", { token: CONFIRM_TOKEN })}
           value={typed}
           onChange={(e) => onTyped(e.target.value)}
           disabled={submitting}

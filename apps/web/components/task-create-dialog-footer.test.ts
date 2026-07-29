@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   computeDisabledReason,
-  REASON_TITLE,
-  REASON_REPO,
-  REASON_BRANCH,
-  REASON_WORKSPACE,
-  REASON_WORKFLOW,
-  REASON_AGENT,
-  REASON_DESCRIPTION,
+  reasonTitle,
+  reasonRepo,
+  reasonBranch,
+  reasonWorkspace,
+  reasonWorkflow,
+  reasonAgent,
+  reasonDescription,
 } from "./task-create-dialog-footer";
 import type { ButtonKind, TaskCreateDialogFooterProps } from "./task-create-dialog-footer";
 
@@ -60,30 +60,30 @@ describe("computeDisabledReason (start-task)", () => {
         makeProps({ hasTitle: false, hasRepositorySelection: false }),
         KIND_START,
       ),
-    ).toBe(REASON_TITLE);
+    ).toBe(reasonTitle());
   });
 
   it("flags missing repository selection", () => {
     expect(computeDisabledReason(makeProps({ hasRepositorySelection: false }), KIND_START)).toBe(
-      REASON_REPO,
+      reasonRepo(),
     );
   });
 
   it("flags missing branch", () => {
     expect(computeDisabledReason(makeProps({ hasAllBranches: false }), KIND_START)).toBe(
-      REASON_BRANCH,
+      reasonBranch(),
     );
   });
 
   it("flags missing workspace in create mode", () => {
     expect(computeDisabledReason(makeProps({ workspaceId: null }), KIND_START)).toBe(
-      REASON_WORKSPACE,
+      reasonWorkspace(),
     );
   });
 
   it("flags missing workflow in create mode", () => {
     expect(computeDisabledReason(makeProps({ effectiveWorkflowId: null }), KIND_START)).toBe(
-      REASON_WORKFLOW,
+      reasonWorkflow(),
     );
   });
 
@@ -97,7 +97,9 @@ describe("computeDisabledReason (start-task)", () => {
   });
 
   it("flags missing agent profile for start-task button", () => {
-    expect(computeDisabledReason(makeProps({ agentProfileId: "" }), KIND_START)).toBe(REASON_AGENT);
+    expect(computeDisabledReason(makeProps({ agentProfileId: "" }), KIND_START)).toBe(
+      reasonAgent(),
+    );
   });
 
   it("flags no compatible agent for the selected executor profile", () => {
@@ -121,7 +123,7 @@ describe("computeDisabledReason (update)", () => {
         makeProps({ hasTitle: false, hasRepositorySelection: false, agentProfileId: "" }),
         KIND_UPDATE,
       ),
-    ).toBe(REASON_TITLE);
+    ).toBe(reasonTitle());
   });
 
   it("returns null for update when title is present, even with other gaps", () => {
@@ -142,7 +144,7 @@ describe("computeDisabledReason (default)", () => {
   it("requires agent in session mode", () => {
     expect(
       computeDisabledReason(makeProps({ isSessionMode: true, agentProfileId: "" }), KIND_DEFAULT),
-    ).toBe(REASON_AGENT);
+    ).toBe(reasonAgent());
   });
 
   it("flags missing session description in session mode", () => {
@@ -151,7 +153,7 @@ describe("computeDisabledReason (default)", () => {
         makeProps({ isSessionMode: true, hasDescription: false }),
         KIND_DEFAULT,
       ),
-    ).toBe(REASON_DESCRIPTION);
+    ).toBe(reasonDescription());
   });
 
   it("requires description in session mode even for CLI/passthrough profiles", () => {
@@ -162,7 +164,7 @@ describe("computeDisabledReason (default)", () => {
         makeProps({ isSessionMode: true, hasDescription: false }),
         KIND_DEFAULT,
       ),
-    ).toBe(REASON_DESCRIPTION);
+    ).toBe(reasonDescription());
   });
 
   it("ignores base reasons in session mode to match DefaultSubmitButton disabled logic", () => {

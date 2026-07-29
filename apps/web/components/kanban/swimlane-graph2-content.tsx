@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSwimlaneMove } from "@/hooks/domains/kanban/use-swimlane-move";
 import { Graph2TaskPipeline } from "./graph2-task-pipeline";
-import { ORPHAN_STEP, ORPHAN_STEP_ID, remapOrphanTasks } from "./swimlane-kanban-content";
+import { orphanStep, ORPHAN_STEP_ID, remapOrphanTasks } from "./swimlane-kanban-content";
 import type { ViewContentProps } from "@/lib/kanban/view-registry";
 import type { Task } from "@/components/kanban-card";
 import type { WorkflowStep } from "@/components/kanban-column";
@@ -16,7 +16,7 @@ export function getGraph2DisplayState(
   const { tasks: displayTasks, hasOrphans } = remapOrphanTasks(tasks, stepIds, ORPHAN_STEP_ID);
   return {
     displayTasks,
-    displaySteps: hasOrphans ? [...steps, ORPHAN_STEP] : steps,
+    displaySteps: hasOrphans ? [...steps, orphanStep()] : steps,
   };
 }
 

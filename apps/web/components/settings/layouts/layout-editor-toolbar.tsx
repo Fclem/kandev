@@ -197,7 +197,7 @@ function SplitMenu({ state }: { state: ActionState }) {
           <DropdownMenuItem
             key={direction}
             className="cursor-pointer"
-            title={t("settings:createANewSplitOfThe", { direction })}
+            title={t("settings:createANewSplitOfThe", { direction: t(label) })}
             onSelect={() =>
               state.perform(() => splitPanel(state.api!, state.selectedPanelId!, direction))
             }
@@ -297,7 +297,7 @@ function ArrangeSplitMenu({ state }: { state: ActionState }) {
                 <DropdownMenuItem
                   key={`${target.id}-${direction}`}
                   className="cursor-pointer"
-                  title={t("settings:moveThisSplitOf", { direction, targetTitle })}
+                  title={t("settings:moveThisSplitOf", { direction: directionLabel, targetTitle })}
                   onSelect={() =>
                     state.perform(() =>
                       moveGroup(state.api!, state.selected!.group.id, target.id, direction),

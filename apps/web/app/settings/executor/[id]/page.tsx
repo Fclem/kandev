@@ -29,6 +29,11 @@ import { EXECUTOR_ICON_MAP } from "@/lib/executor-icons";
 
 const EXECUTORS_ROUTE = "/settings/executors";
 
+// Sentinel: the exact text the user must type to unlock deletion. It is
+// interpolated into the instruction copy so a translated locale cannot tell the
+// user to type a word the gate will never accept.
+const DELETE_CONFIRM_TOKEN = "delete";
+
 export default function ExecutorEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { t } = useTranslation();
   const { id } = use(params);
@@ -203,7 +208,7 @@ function DeleteExecutorSection({ executor }: { executor: Executor }) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
-    if (deleteConfirmText !== "delete") return;
+    if (deleteConfirmText !== DELETE_CONFIRM_TOKEN) return;
     setIsDeleting(true);
     try {
       const client = getWebSocketClient();
@@ -245,7 +250,9 @@ function DeleteExecutorSection({ executor }: { executor: Executor }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("settings:deleteExecutor")}</DialogTitle>
-            <DialogDescription>{t("settings:typeDeleteToConfirmDeletionThis")}</DialogDescription>
+            <DialogDescription>
+              {t("settings:typeTokenToConfirmDeletion", { token: DELETE_CONFIRM_TOKEN })}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="confirm-delete">{t("settings:confirmDelete")}</Label>
@@ -253,7 +260,7 @@ function DeleteExecutorSection({ executor }: { executor: Executor }) {
               id="confirm-delete"
               value={deleteConfirmText}
               onChange={(event) => setDeleteConfirmText(event.target.value)}
-              placeholder="delete"
+              placeholder={DELETE_CONFIRM_TOKEN}
             />
           </div>
           <DialogFooter>
@@ -267,7 +274,7 @@ function DeleteExecutorSection({ executor }: { executor: Executor }) {
             <Button
               variant="destructive"
               onClick={handleDelete}
-              disabled={deleteConfirmText !== "delete" || isDeleting}
+              disabled={deleteConfirmText !== DELETE_CONFIRM_TOKEN || isDeleting}
               className="cursor-pointer"
             >
               {isDeleting ? t("settings:deleting") : t("common:delete")}

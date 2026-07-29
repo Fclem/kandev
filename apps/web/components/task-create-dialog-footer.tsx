@@ -266,13 +266,15 @@ function computeBaseDisabled(props: TaskCreateDialogFooterProps) {
 
 export type ButtonKind = "update" | "start-task" | "default";
 
-export const REASON_TITLE = t("task:addATaskTitle");
-export const REASON_REPO = t("task:selectARepository");
-export const REASON_BRANCH = t("task:selectABranch");
-export const REASON_WORKSPACE = t("task:selectAWorkspace");
-export const REASON_WORKFLOW = t("task:selectAWorkflow");
-export const REASON_AGENT = t("task:selectAnAgent");
-export const REASON_DESCRIPTION = t("task:addASessionDescription");
+// Resolved at call time: a module-level `t()` would freeze the English copy
+// before a locale is active and never update on a locale switch.
+export const reasonTitle = () => t("task:addATaskTitle");
+export const reasonRepo = () => t("task:selectARepository");
+export const reasonBranch = () => t("task:selectABranch");
+export const reasonWorkspace = () => t("task:selectAWorkspace");
+export const reasonWorkflow = () => t("task:selectAWorkflow");
+export const reasonAgent = () => t("task:selectAnAgent");
+export const reasonDescription = () => t("task:addASessionDescription");
 
 function noCompatibleAgentReason(executorProfileName: string | null): string {
   const target = executorProfileName ? `“${executorProfileName}”` : t("task:thisExecutor");
@@ -280,19 +282,19 @@ function noCompatibleAgentReason(executorProfileName: string | null): string {
 }
 
 function baseReason(props: TaskCreateDialogFooterProps): string | null {
-  if (!props.hasTitle) return REASON_TITLE;
-  if (!props.hasRepositorySelection) return REASON_REPO;
-  if (!props.hasAllBranches) return REASON_BRANCH;
-  if (props.isCreateMode && !props.workspaceId) return REASON_WORKSPACE;
-  if (props.isCreateMode && !props.effectiveWorkflowId) return REASON_WORKFLOW;
+  if (!props.hasTitle) return reasonTitle();
+  if (!props.hasRepositorySelection) return reasonRepo();
+  if (!props.hasAllBranches) return reasonBranch();
+  if (props.isCreateMode && !props.workspaceId) return reasonWorkspace();
+  if (props.isCreateMode && !props.effectiveWorkflowId) return reasonWorkflow();
   if (props.noCompatibleAgent) return noCompatibleAgentReason(props.executorProfileName);
   return null;
 }
 
 function sessionDefaultReason(props: TaskCreateDialogFooterProps): string | null {
   if (props.noCompatibleAgent) return noCompatibleAgentReason(props.executorProfileName);
-  if (!props.agentProfileId) return REASON_AGENT;
-  if (!props.hasDescription) return REASON_DESCRIPTION;
+  if (!props.agentProfileId) return reasonAgent();
+  if (!props.hasDescription) return reasonDescription();
   return null;
 }
 
@@ -302,11 +304,11 @@ export function computeDisabledReason(
 ): string | null {
   if (props.isCreatingTask) return null;
   if (props.submitBlockedReason) return props.submitBlockedReason;
-  if (kind === "update") return props.hasTitle ? null : REASON_TITLE;
+  if (kind === "update") return props.hasTitle ? null : reasonTitle();
   if (kind === "default" && props.isSessionMode) return sessionDefaultReason(props);
   const base = baseReason(props);
   if (base) return base;
-  if (kind === "start-task" && !props.agentProfileId) return REASON_AGENT;
+  if (kind === "start-task" && !props.agentProfileId) return reasonAgent();
   return null;
 }
 

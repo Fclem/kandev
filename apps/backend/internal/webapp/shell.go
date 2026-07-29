@@ -5,34 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+
+	"github.com/kandev/kandev/internal/i18n"
 )
 
 const bootPayloadGlobal = "window.__KANDEV_BOOT_PAYLOAD__"
 const debugGlobalAssignment = "window.__KANDEV_DEBUG=true;"
 const maxInt = int(^uint(0) >> 1)
 
-// DefaultLocale is the source locale shipped as the message catalog.
-const DefaultLocale = "en"
-
-// supportedLocales enumerates the locales the shell will honor for <html lang>.
-// Unknown values coerce to DefaultLocale. Keep in sync with the frontend
-// SUPPORTED_LOCALES in apps/web/lib/i18n/index.ts.
-var supportedLocales = map[string]bool{
-	"en":     true,
-	"pseudo": true,
-}
-
 var headCloseTag = []byte("</head>")
 
 var htmlOpenTag = []byte("<html")
 
+// DefaultLocale is the source locale shipped as the message catalog.
+const DefaultLocale = i18n.DefaultLocale
+
 // NormalizeLocale returns locale if it is supported, otherwise DefaultLocale.
-func NormalizeLocale(locale string) string {
-	if supportedLocales[locale] {
-		return locale
-	}
-	return DefaultLocale
-}
+// Locale support lives in internal/i18n so `<html lang>` and message lookup can
+// never disagree.
+func NormalizeLocale(locale string) string { return i18n.Normalize(locale) }
 
 // RenderShell reads indexPath from assets and injects the boot payload before
 // </head>. The assets FS can be an embedded Vite dist in production or an

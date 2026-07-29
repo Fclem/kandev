@@ -49,6 +49,7 @@ import (
 	"github.com/kandev/kandev/internal/gitlab"
 	"github.com/kandev/kandev/internal/health"
 	"github.com/kandev/kandev/internal/health/oslimits"
+	"github.com/kandev/kandev/internal/i18n"
 	"github.com/kandev/kandev/internal/improvekandev"
 	"github.com/kandev/kandev/internal/jira"
 	"github.com/kandev/kandev/internal/linear"
@@ -704,18 +705,6 @@ func webAppHandlerOptions(p routeParams) []webapp.HandlerOption {
 	}
 }
 
-// localeCookieName is the source of truth for the active UI locale. Written by
-// the SPA when the user picks a language; read here to set <html lang> and the
-// boot payload so first paint matches without a flash.
-const localeCookieName = "kandev_locale"
-
-func localeFromRequest(req *http.Request) string {
-	if cookie, err := req.Cookie(localeCookieName); err == nil {
-		return webapp.NormalizeLocale(cookie.Value)
-	}
-	return webapp.DefaultLocale
-}
-
 func bootPayload(ctx context.Context, req *http.Request, p routeParams, route webapp.RouteClassification) webapp.BootPayload {
 	payload := webapp.NewBootPayload(
 		route,
@@ -723,7 +712,7 @@ func bootPayload(ctx context.Context, req *http.Request, p routeParams, route we
 			APIPrefix:     "/api/v1",
 			WebSocketPath: "/ws",
 			Debug:         p.devMode,
-			Locale:        localeFromRequest(req),
+			Locale:        i18n.FromRequest(req),
 		},
 		bootInitialState(ctx, req, p, route),
 	)

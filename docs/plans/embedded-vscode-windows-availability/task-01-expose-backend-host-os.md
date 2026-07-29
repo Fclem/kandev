@@ -22,8 +22,8 @@ Use TDD: add the Go serialization and frontend parsing assertions, observe them 
 boot contract, then rerun:
 
 ```bash
-cd apps/backend && go test ./internal/webapp ./internal/backendapp -run 'Test.*(Boot|Runtime|HostOS)'
-cd apps/web && pnpm test -- src/boot-payload.test.ts
+make -C apps/backend test
+cd apps && pnpm --filter @kandev/web test -- src/boot-payload.test.ts
 ```
 
 ## Files likely touched

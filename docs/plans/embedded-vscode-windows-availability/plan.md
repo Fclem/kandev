@@ -110,7 +110,8 @@ launching on a supported non-Windows host when code-server is installed.
 
 ## Public documentation
 
-- Update `docs/public/developer-tools.md` to explain that the task-detail topbar does not offer
+- Update `docs/public/developer-tools.md` to explain that Kandev lacks a supported standalone
+  Windows code-server installation for this integration, so the task-detail topbar does not offer
   **VS Code (Embedded)** when the Kandev backend is running on Windows, regardless of a visitor's
   browser platform, while other configured editors remain available.
 - Update the **Embedded VS Code** row in `docs/public/feature-status.md` with the same host-platform
@@ -152,18 +153,18 @@ subagents.
 
 ## Verification
 
-From `apps/backend`:
+From the repository root:
 
 ```bash
-go test ./internal/webapp ./internal/backendapp -run 'Test.*(Boot|Runtime|HostOS)'
+make -C apps/backend test
 ```
 
-From `apps/web`:
+From `apps/`:
 
 ```bash
-pnpm test -- src/boot-payload.test.ts components/task/editors-menu-availability.test.ts
-pnpm e2e:run tests/task/windows-host-embedded-vscode-availability.spec.ts -- --project=chromium
-pnpm e2e:run tests/task/mobile-windows-host-embedded-vscode-availability.spec.ts -- --project=mobile-chrome
+pnpm --filter @kandev/web test -- src/boot-payload.test.ts components/task/editors-menu-availability.test.ts
+pnpm --filter @kandev/web e2e:run -- tests/task/windows-host-embedded-vscode-availability.spec.ts -- --project=chromium
+pnpm --filter @kandev/web e2e:run -- tests/task/mobile-windows-host-embedded-vscode-availability.spec.ts -- --project=mobile-chrome
 ```
 
 From the repository root:

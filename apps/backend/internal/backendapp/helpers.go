@@ -698,7 +698,6 @@ func newWebDevHandler(p routeParams) (*webapp.DevHandler, error) {
 
 func webAppHandlerOptions(p routeParams) []webapp.HandlerOption {
 	return []webapp.HandlerOption{
-		webapp.WithRuntimeConfig(webRuntimeConfig(false)),
 		webapp.WithPayloadBuilder(func(req *http.Request, route webapp.RouteClassification) webapp.BootPayload {
 			return bootPayload(req.Context(), req, p, route)
 		}),

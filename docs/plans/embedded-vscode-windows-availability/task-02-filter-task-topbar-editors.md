@@ -25,7 +25,7 @@ Use TDD: add focused host-platform and default-fallback cases, run them to obser
 implement the helper and component wiring, then rerun:
 
 ```bash
-cd apps/web && pnpm test -- components/task/editors-menu-availability.test.ts
+cd apps && pnpm --filter @kandev/web test -- components/task/editors-menu-availability.test.ts
 ```
 
 ## Files likely touched

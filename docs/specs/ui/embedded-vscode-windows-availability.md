@@ -1,5 +1,5 @@
 ---
-status: draft
+status: shipped
 created: 2026-07-29
 owner: Kandev
 ---

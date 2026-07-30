@@ -122,6 +122,18 @@ export async function activateLocale(locale: string): Promise<SupportedLocale> {
 }
 
 /**
+ * Initialize the shared instance for the app. Idempotent.
+ *
+ * This must run before the first `useTranslation()`: react-i18next suspends on
+ * an uninitialized instance, and there is no Suspense boundary above the React
+ * root, so the tree never commits — a blank page with no error and no rejection.
+ * `I18nProvider` calls this at module load; nothing else may be relied on to.
+ */
+export function initI18n(locale: SupportedLocale): void {
+  ensureInitialized(locale);
+}
+
+/**
  * Initialize i18next synchronously for unit tests. Tests never render the app
  * shell, so nothing else would set the instance up; react-i18next's
  * `useTranslation` then resolves against this default instance with no provider

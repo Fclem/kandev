@@ -281,3 +281,53 @@ instead of duplicating copy across the UI.
 It is redundant, not broken: two keys hold the same English and can drift apart in
 translation. Left as-is deliberately — rewriting 340 render paths to remove dead
 arguments is churn with real regression risk and no user-visible change.
+
+## 9. i18n was initialized by accident — FIXED
+
+Removing the last module-scope `t()` call blanked the entire application. Every
+e2e test failed on an empty page.
+
+`activateLocale()` only runs from the language switcher, and `I18nProvider` only
+wrapped `<I18nextProvider>` — so **nothing in the boot path ever initialized
+i18next**. It worked because `t()` (the module-level helper) calls
+`ensureInitialized()` internally, so any module that happened to call `t()` while
+evaluating bootstrapped the instance as a side effect. Fixing section 3's
+module-scope `t()` calls removed the last such call, and with it the only thing
+initializing i18n.
+
+### Why it was hard to diagnose
+
+react-i18next suspends when `useTranslation()` runs against an uninitialized
+instance. There is no Suspense boundary above the React root, so the first render
+never commits. The result is a **silent** failure:
+
+| Signal | Value |
+|---|---|
+| Console errors | none |
+| `pageerror` / `unhandledrejection` | none |
+| Network | all 200, module script included |
+| `RootErrorBoundary` | never fires (nothing throws) |
+| `#root` | empty |
+| Main thread | responsive |
+
+`main.tsx` mounts inside `void loadBootPayload().then(...)`, which hid it further.
+Instrumenting the entry showed both the module-eval and payload-resolved markers
+firing, which is what narrowed it to a render that starts and never commits.
+
+The unit suite could not catch it: `vitest.setup.ts` calls `initI18nForTests()`
+for every suite, so the instance is always initialized there. `tsc`, ESLint,
+`i18n:check` and 7,394 unit tests were all green while the app was unusable.
+
+### Fix
+
+`I18nProvider` now calls `initI18n(resolveInitialLocale(readBootPayload()))` at
+module load — explicit, ordered by the import graph rather than by whichever
+module happens to call `t()` first.
+
+`lib/i18n/provider.test.tsx` pins it by mocking `./index` and asserting the
+import calls `initI18n`. A render-based assertion would be vacuous for the
+reason above; this was verified to fail when the boot call is deleted.
+
+**Lesson:** a green unit suite says nothing about whether the app boots. The
+`i18n/language-switch` e2e spec is what caught this, and it is the only thing
+that would have.

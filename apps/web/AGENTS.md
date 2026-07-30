@@ -190,6 +190,11 @@ union. When a prop is both display copy and logic (`label: "Reviewers" |
 "Assignees"`), split it into a `kind`/`origin` discriminant plus a translated
 label rather than translating in place.
 
+`lib/i18n/provider.tsx` initializes i18next at module load. Do not remove that
+call: react-i18next suspends on an uninitialized instance and there is no
+Suspense boundary above the root, so the app renders a blank page with no error
+of any kind. Unit tests cannot catch it — `vitest.setup.ts` pre-initializes.
+
 Never write a plural ending yourself: use `t(key, { count })` with `_one`/`_other`
 keys. Passing the morpheme as a value (`{ s: n === 1 ? "" : "s" }`) is
 untranslatable — the plural rule ends up at the call site.

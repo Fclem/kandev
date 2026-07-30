@@ -32,6 +32,7 @@ import {
 } from "./sentry-issue-watch-form";
 import type { SentryConfig, SentryLevel, SentryProject, SentryStatus } from "@/lib/types/sentry";
 import { Trans, useTranslation } from "react-i18next";
+import { placeholderDescription } from "@/components/settings/profile-edit/script-editor-completions";
 
 export type FormSetter = React.Dispatch<React.SetStateAction<FormState>>;
 
@@ -261,7 +262,7 @@ function PlaceholdersHelp() {
             {SENTRY_ISSUE_WATCH_PLACEHOLDERS.map((p) => (
               <li key={p.key}>
                 <code className="text-[10px] bg-white/15 px-1 rounded">{`{{${p.key}}}`}</code>{" "}
-                <span className="opacity-70">{p.description}</span>
+                <span className="opacity-70">{placeholderDescription(t, p)}</span>
               </li>
             ))}
           </ul>

@@ -27,6 +27,7 @@ import { findTaskInSnapshots } from "@/lib/kanban/find-task";
 import type { SentryIssue } from "@/lib/types/sentry";
 import { buildLinkedIssueTitle } from "./task-external-link-utils";
 import { useTranslation } from "react-i18next";
+import { placeholderDescription } from "@/components/settings/profile-edit/script-editor-completions";
 
 export type ExternalLinkProvider = "jira" | "linear" | "sentry";
 
@@ -260,7 +261,7 @@ export function TaskExternalLinkDialog({
       <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t(config.titleKey)}</DialogTitle>
-          <DialogDescription>{t(config.descriptionKey)}</DialogDescription>
+          <DialogDescription>{placeholderDescription(t, config)}</DialogDescription>
         </DialogHeader>
         {provider === "sentry" && (
           <SentryLinkInstanceField

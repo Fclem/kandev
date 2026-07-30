@@ -10,6 +10,7 @@ import {
 import { REVIEW_WATCH_PLACEHOLDERS } from "@/components/github/review-watch-placeholders";
 import { useCustomPrompts } from "@/hooks/domains/settings/use-custom-prompts";
 import { Trans, useTranslation } from "react-i18next";
+import { placeholderDescription } from "@/components/settings/profile-edit/script-editor-completions";
 
 // Pulled out of review-watch-dialog.tsx to keep that file under the 600-line
 // linter cap; the prompt editor + its placeholder help bubble are co-owned by
@@ -29,7 +30,7 @@ function PlaceholdersHelp() {
             {REVIEW_WATCH_PLACEHOLDERS.map((p) => (
               <li key={p.key}>
                 <code className="text-[10px] bg-white/15 px-1 rounded">{`{{${p.key}}}`}</code>{" "}
-                <span className="opacity-70">{p.description}</span>
+                <span className="opacity-70">{placeholderDescription(t, p)}</span>
               </li>
             ))}
           </ul>

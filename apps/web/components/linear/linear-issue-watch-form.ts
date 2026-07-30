@@ -5,6 +5,7 @@ import type {
   LinearUser,
 } from "@/lib/types/linear";
 import { DEFAULT_LINEAR_ISSUE_WATCH_PROMPT } from "./linear-issue-watch-placeholders";
+import type { OptionLabel } from "@/lib/i18n/option-label";
 
 export const ASSIGNED_ANY = "__any__";
 export const CREATOR_ANY = "__any__";
@@ -13,7 +14,7 @@ export type LinearPriority = 0 | 1 | 2 | 3 | 4;
 
 // Linear priorities: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low. Rendered as
 // toggle chips, mirroring the States and Labels multi-selects.
-export const PRIORITY_OPTIONS: { value: LinearPriority; labelKey: string }[] = [
+export const PRIORITY_OPTIONS: ({ value: LinearPriority } & OptionLabel)[] = [
   { value: 1, labelKey: "linear:urgent" },
   { value: 2, labelKey: "linear:high" },
   { value: 3, labelKey: "linear:medium" },
@@ -24,7 +25,7 @@ export const PRIORITY_OPTIONS: { value: LinearPriority; labelKey: string }[] = [
 // Dispatch order applied when the in-flight cap limits how many matched issues
 // run at once. Order matters — most useful first; the empty value is Linear's
 // natural (recently-updated) order.
-export const SORT_BY_OPTIONS: { value: LinearIssueSortBy; labelKey: string }[] = [
+export const SORT_BY_OPTIONS: ({ value: LinearIssueSortBy } & OptionLabel)[] = [
   { value: "priority", labelKey: "linear:priorityHighLow" },
   { value: "priority_asc", labelKey: "linear:priorityLowHigh" },
   { value: "created_desc", labelKey: "linear:createdNewestFirst" },

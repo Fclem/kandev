@@ -30,13 +30,13 @@ import { t } from "@/lib/i18n";
 const ACTION_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
   {
     key: "url",
-    description: "URL of the PR or issue",
+    descriptionKey: "github:urlOfThePrOrIssue",
     example: "https://github.com/org/repo/pull/42",
     executor_types: [],
   },
   {
     key: "title",
-    description: "Title of the PR or issue",
+    descriptionKey: "github:titleOfThePrOrIssue",
     example: "Fix login page crash",
     executor_types: [],
   },

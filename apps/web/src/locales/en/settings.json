@@ -1339,6 +1339,7 @@
   "theNewTaskUsesItsWorkflow": "The new task uses its workflow profile when one is set; otherwise it uses the default profile of the workspace receiving the task. Choose this to keep agent-created tasks on your standard workspace model and avoid accidentally reusing an expensive profile.",
   "theNewTaskUsesTheSame": "The new task uses the same profile as the task that created it. Choose this when follow-up work needs the same model and agent setup. This may reuse a more expensive profile.",
   "theNewVersion": "the new version",
+  "theOriginalTaskDescriptionProvidedBy": "The original task description provided by the user",
   "theRemoteDockerHostUrlTcp": "The remote Docker host URL (tcp://, ssh://).",
   "theRestartCouldNotBeCompleted": "The restart could not be completed.",
   "theRuntimeUpdateFailed": "The runtime update failed.",

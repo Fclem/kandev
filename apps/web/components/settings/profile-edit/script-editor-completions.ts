@@ -2,9 +2,22 @@ import { t } from "@/lib/i18n";
 import type { languages, editor, IRange } from "monaco-editor";
 import type { PromptReference } from "@/lib/prompts/expand-prompt-references";
 
+/** Display text for a placeholder: our copy translated, backend text verbatim. */
+export function placeholderDescription(
+  t: (key: string) => string,
+  placeholder: Pick<ScriptPlaceholder, "descriptionKey" | "description">,
+): string {
+  return placeholder.descriptionKey
+    ? t(placeholder.descriptionKey)
+    : (placeholder.description ?? "");
+}
+
 export type ScriptPlaceholder = {
   key: string;
-  description: string;
+  /** Catalog key for descriptions we author. */
+  descriptionKey?: string;
+  /** Verbatim description supplied by the backend; used when there is no key. */
+  description?: string;
   example: string;
   executor_types: string[];
 };
@@ -52,10 +65,10 @@ export function createPlaceholderCompletionProvider(
       const suggestions: languages.CompletionItem[] = filtered.map((p, i) => ({
         label: {
           label: `{{${p.key}}}`,
-          description: p.description,
+          description: placeholderDescription(t, p),
         },
         kind: monaco.languages.CompletionItemKind.Variable,
-        detail: p.description,
+        detail: placeholderDescription(t, p),
         documentation: p.example ? t("settings:example", { example: p.example }) : undefined,
         insertText: `${p.key}}}`,
         range,

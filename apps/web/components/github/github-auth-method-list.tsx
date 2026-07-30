@@ -3,6 +3,7 @@ import { Label } from "@kandev/ui/label";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { placeholderDescription } from "@/components/settings/profile-edit/script-editor-completions";
 
 export type GitHubAutomationMethod = "pat" | "cli" | "app";
 
@@ -65,7 +66,7 @@ export function GitHubAuthMethodList({
                 {t(method.labelKey)}
               </span>
               <span className="block text-xs font-normal leading-5 text-muted-foreground">
-                {t(method.descriptionKey)}
+                {placeholderDescription(t, method)}
               </span>
             </span>
           </Label>

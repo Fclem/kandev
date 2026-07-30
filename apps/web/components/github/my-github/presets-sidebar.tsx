@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { PR_PRESETS, ISSUE_PRESETS, type PresetOption, type PresetGroup } from "./search-bar";
 import type { SavedPreset } from "./use-saved-presets";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
 export type SidebarSelection = {
   kind: "pr" | "issue";
@@ -122,7 +123,7 @@ function PresetGroupList({
       {items.map((p) => (
         <PresetItem
           key={`${kind}-${p.value}`}
-          label={p.label}
+          label={resolveOptionLabel(t, p)}
           Icon={p.icon}
           active={selected.source === "preset" && selected.id === p.value}
           onClick={() => onSelect({ kind, source: "preset", id: p.value })}

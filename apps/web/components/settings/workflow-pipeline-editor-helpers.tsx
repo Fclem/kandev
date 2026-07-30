@@ -8,7 +8,7 @@ import type { ScriptPlaceholder } from "@/components/settings/profile-edit/scrip
 export const STEP_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
   {
     key: "task_prompt",
-    description: "The original task description provided by the user",
+    descriptionKey: "settings:theOriginalTaskDescriptionProvidedBy",
     example: "Implement user authentication with OAuth2",
     executor_types: [],
   },

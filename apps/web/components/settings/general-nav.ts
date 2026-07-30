@@ -9,6 +9,7 @@ import {
   IconTerminal2,
 } from "@tabler/icons-react";
 import type { Icon as TablerIcon } from "@tabler/icons-react";
+import { placeholderDescription } from "@/components/settings/profile-edit/script-editor-completions";
 
 export type GeneralNavItem = {
   href: string;
@@ -81,6 +82,6 @@ export function useGeneralNavItems(): ResolvedGeneralNavItem[] {
     href: item.href,
     icon: item.icon,
     label: t(item.labelKey),
-    description: t(item.descriptionKey),
+    description: placeholderDescription(t, item),
   }));
 }

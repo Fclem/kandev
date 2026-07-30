@@ -27,25 +27,25 @@ import { t } from "@/lib/i18n";
 const JIRA_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
   {
     key: "key",
-    description: "Jira ticket key",
+    descriptionKey: "jira:jiraTicketKey",
     example: "PROJ-123",
     executor_types: [],
   },
   {
     key: "url",
-    description: "URL of the Jira ticket",
+    descriptionKey: "jira:urlOfTheJiraTicket",
     example: "https://company.atlassian.net/browse/PROJ-123",
     executor_types: [],
   },
   {
     key: "title",
-    description: "Ticket summary",
+    descriptionKey: "jira:ticketSummary",
     example: "Login button broken on Safari",
     executor_types: [],
   },
   {
     key: "description",
-    description: "Ticket description",
+    descriptionKey: "jira:ticketDescription",
     example: "Repro: open Safari, click login…",
     executor_types: [],
   },

@@ -21,6 +21,7 @@ import {
 } from "./linear-issue-watch-form";
 import type { LinearLabel, LinearTeam, LinearUser, LinearWorkflowState } from "@/lib/types/linear";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
 // useTeamsAndStates loads the team list once Linear is configured, plus the
 // states, labels, and users for the currently-selected team. Each per-team
@@ -181,7 +182,7 @@ export function PriorityMultiSelect({
             aria-pressed={active}
             className="cursor-pointer"
           >
-            <Badge variant={active ? "default" : "outline"}>{t(opt.labelKey)}</Badge>
+            <Badge variant={active ? "default" : "outline"}>{resolveOptionLabel(t, opt)}</Badge>
           </button>
         );
       })}
@@ -267,7 +268,7 @@ export function SortByField({ form, setForm }: { form: FormState; setForm: FormS
               key={o.value || SORT_BY_DEFAULT_SENTINEL}
               value={o.value || SORT_BY_DEFAULT_SENTINEL}
             >
-              {t(o.labelKey)}
+              {resolveOptionLabel(t, o)}
             </SelectItem>
           ))}
         </SelectContent>

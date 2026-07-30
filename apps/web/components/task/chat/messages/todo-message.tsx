@@ -123,7 +123,7 @@ export function TodoMessage({
           </span>
           {totalUpdates > 1 && (
             <span className="text-muted-foreground/60 text-[10px] shrink-0 bg-muted/60 px-1.5 rounded">
-              {totalUpdates}x
+              {t("task:repeatCount", { count: totalUpdates })}
             </span>
           )}
           {currentTask && (

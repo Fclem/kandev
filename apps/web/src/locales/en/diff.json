@@ -20,10 +20,13 @@
   "sendToAgent": "<0></0> Send to agent",
   "sendToAgent2": "Send to agent",
   "stale": "Stale",
-  "step": "Step {{value1}} / {{stepCount}} · {{lineLabel}}",
+  "staleFindingReason": "The diff changed after this review and the code this finding describes is no longer in it.",
+  "staleFindingsForFile_one": "{{count}} stale finding for this file",
+  "staleFindingsForFile_other": "{{count}} stale findings for this file",
+  "step": "Step {{value1}} / {{stepCount}} \u00b7 {{lineLabel}}",
   "step2": "Step",
-  "suggestedChangeNotAppliedAutomatically": "Suggested change — not applied automatically",
-  "unableToRenderDiffForThis": "Unable to render diff for this file. The cached diff may be out of sync with the working tree — refresh to retry.",
+  "suggestedChangeNotAppliedAutomatically": "Suggested change \u2014 not applied automatically",
+  "unableToRenderDiffForThis": "Unable to render diff for this file. The cached diff may be out of sync with the working tree \u2014 refresh to retry.",
   "undo": "Undo",
   "walkthrough": "Walkthrough"
 }

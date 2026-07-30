@@ -7,11 +7,12 @@
   "azureDevopsIntegration": "Àźũŕē ĎēvŌƥś ĩńţēĝŕàţĩōń",
   "azureDevopsIsNotConnectedFor": "Àźũŕē ĎēvŌƥś ĩś ńōţ ćōńńēćţēď ƒōŕ ţĥĩś ŵōŕķśƥàćē. <2>{{value0}}</2>",
   "branchPolicies": "Ɓŕàńćĥ ƥōĺĩćĩēś",
+  "checkReadOnWorkItemsAndCode": "Ũńďēŕ <1>Ŵōŕķ Ĩţēḿś</1>, ćĥēćķ Ŕēàď. Ũńďēŕ <3>Ćōďē</3>, ćĥēćķ Ŕēàď. Ĺēàvē àĺĺ ōţĥēŕ śćōƥēś ũńćĥēćķēď.",
   "chooseThisOrganizationAShortExpiration": "Ćĥōōśē ţĥĩś ōŕĝàńĩźàţĩōń, à śĥōŕţ ēxƥĩŕàţĩōń, àńď Ćũśţōḿ ďēƒĩńēď śćōƥēś.",
-  "code": "Ćōďē",
   "completed": "Ćōḿƥĺēţēď",
   "configureAzureDevops": "Ćōńƒĩĝũŕē Àźũŕē ĎēvŌƥś",
   "createAReadOnlyPersonalAccess": "Ćŕēàţē à ŕēàď-ōńĺŷ ƥēŕśōńàĺ àććēśś ţōķēń",
+  "createPersonalAccessToken": "Ćŕēàţē ƥēŕśōńàĺ àććēśś ţōķēń",
   "createTheTokenCopyItAnd": "Ćŕēàţē ţĥē ţōķēń, ćōƥŷ ĩţ, àńď ƥàśţē ĩţ ĩńţō ţĥĩś ƒĩēĺď.",
   "creatorId": "Ćŕēàţōŕ ĨĎ",
   "defaultProject": "Ďēƒàũĺţ ƥŕōĵēćţ",
@@ -50,7 +51,5 @@
   "selectProject": "Śēĺēćţ ƥŕōĵēćţ",
   "selectRepository": "Śēĺēćţ ŕēƥōśĩţōŕŷ",
   "startTask": "<0></0> Śţàŕţ ţàśķ",
-  "startTask2": "Śţàŕţ ţàśķ",
-  "under": "Ũńďēŕ",
-  "workItems": "Ŵōŕķ Ĩţēḿś"
+  "startTask2": "Śţàŕţ ţàśķ"
 }

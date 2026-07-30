@@ -143,7 +143,7 @@ function SubagentHeader({
           data-testid="subagent-child-count"
           className="text-muted-foreground/60 text-xs px-1.5 rounded min-w-[20px] text-center font-mono whitespace-nowrap"
         >
-          {childCount} tool call{childCount !== 1 ? "s" : ""}
+          {t("task:toolCalls", { count: childCount })}
         </span>
       )}
     </>

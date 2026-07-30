@@ -37,7 +37,7 @@ import type {
   SetAzureDevOpsConfigRequest,
   TestAzureDevOpsConnectionResult,
 } from "@/lib/types/azure-devops";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type FormState = {
   organizationUrl: string;
@@ -285,11 +285,11 @@ function PATSetupHelp({ organizationUrl }: { organizationUrl: string }) {
             <li>{t("azureDevops:openTokenSettingsAndSelectNew")}</li>
             <li>{t("azureDevops:chooseThisOrganizationAShortExpiration")}</li>
             <li>
-              {t("azureDevops:under")}{" "}
-              <span className="font-medium text-foreground">{t("azureDevops:workItems")}</span>,
-              check Read. Under{" "}
-              <span className="font-medium text-foreground">{t("azureDevops:code")}</span>, check
-              Read. Leave all other scopes unchecked.
+              <Trans i18nKey="azureDevops:checkReadOnWorkItemsAndCode">
+                Under <span className="font-medium text-foreground">Work Items</span>, check Read.
+                Under <span className="font-medium text-foreground">Code</span>, check Read. Leave
+                all other scopes unchecked.
+              </Trans>
             </li>
             <li>{t("azureDevops:createTheTokenCopyItAnd")}</li>
           </ol>
@@ -301,7 +301,7 @@ function PATSetupHelp({ organizationUrl }: { organizationUrl: string }) {
               className="inline-flex cursor-pointer items-center gap-1 font-medium text-foreground underline underline-offset-4"
             >
               <IconExternalLink className="size-3.5" />
-              Create personal access token
+              {t("azureDevops:createPersonalAccessToken")}
             </a>
           ) : (
             <p className="text-muted-foreground">{t("azureDevops:enterAValidOrganizationUrlTo")}</p>

@@ -354,17 +354,14 @@ function CommentsTooltipBody({ commentsOpen, count }: { commentsOpen: boolean; c
   if (commentsOpen) {
     return <p>{t("task:hideTheCommentListTheComments")}</p>;
   }
-  const plural = count === 1 ? "" : "s";
   return (
     <div className="space-y-1">
-      <p>
-        {count} pending review comment{plural}. Click to expand the list — you can edit each
-        comment, click the file path to jump to the source, or remove a comment with the trash icon.
-      </p>
+      <p>{t("task:pendingReviewCommentsHint", { count })}</p>
       <p className="text-muted-foreground">
-        {t("task:hit")} <strong>{t("task:sendToAgent")}</strong> inside the panel to deliver them to
-        the CLI agent right away, or just open the chat box and type a follow-up — the comments will
-        be prepended.
+        <Trans i18nKey="task:hitSendToAgentHint">
+          Hit <strong>Send to agent</strong> inside the panel to deliver them to the CLI agent right
+          away, or just open the chat box and type a follow-up — the comments will be prepended.
+        </Trans>
       </p>
     </div>
   );
@@ -394,7 +391,6 @@ function CommentsPanel({
   }, [isSending, onSend]);
 
   const count = comments.length;
-  const plural = count === 1 ? "" : "s";
   return (
     <div
       data-testid="passthrough-comments-panel"
@@ -402,7 +398,7 @@ function CommentsPanel({
     >
       <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 bg-amber-500/10 px-2 py-1 text-xs">
         <span className="font-medium text-amber-700 dark:text-amber-300">
-          {count} review comment{plural} ready to send
+          {t("task:reviewCommentsReadyToSend", { count })}
         </span>
         <Tooltip>
           <TooltipTrigger asChild>

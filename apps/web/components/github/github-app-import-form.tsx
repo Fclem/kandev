@@ -194,7 +194,7 @@ function PreparedImportForm(props: PreparedImportProps) {
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button type="submit" disabled={props.mutating} className="h-11 cursor-pointer">
           {props.mutating && <Spinner className="mr-2 h-4 w-4" />}
-          Verify and import App
+          {t("github:verifyAndImportApp")}
         </Button>
         <Button
           type="button"

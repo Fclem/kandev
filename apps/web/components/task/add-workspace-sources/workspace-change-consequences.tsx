@@ -19,8 +19,8 @@ export function WorkspaceChangeConsequences({ restartsWorkspace }: { restartsWor
           <div className="space-y-1">
             <h3 id="workspace-change-consequences-title" className="font-medium text-foreground">
               {restartsWorkspace
-                ? "This restarts the task workspace"
-                : "This updates the live task workspace"}
+                ? t("task:thisRestartsTheTaskWorkspace")
+                : t("task:thisUpdatesTheLiveTaskWorkspace")}
             </h3>
             <p className="text-muted-foreground">
               {t("task:reviewTheseChangesBeforeAddingSources")}
@@ -103,7 +103,6 @@ function RestartConsequences() {
 }
 
 function LiveUpdateConsequences() {
-  const { t } = useTranslation();
   return (
     <ul className="list-disc space-y-1.5 pl-4 text-muted-foreground">
       <li>
@@ -114,9 +113,11 @@ function LiveUpdateConsequences() {
         </Trans>
       </li>
       <li>
-        <strong className="font-medium text-foreground">{t("task:sessionAndProcesses")}</strong> The
-        agent and running workspace processes continue while Kandev rescans the workspace. The task,
-        session, task state, messages, plan, attached sources, model, and mode remain in place.
+        <Trans i18nKey="task:liveSessionAndProcessesBullet">
+          <strong className="font-medium text-foreground">Session and processes</strong> The agent
+          and running workspace processes continue while Kandev rescans the workspace. The task,
+          session, task state, messages, plan, attached sources, model, and mode remain in place.
+        </Trans>
       </li>
     </ul>
   );

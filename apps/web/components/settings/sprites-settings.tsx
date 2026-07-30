@@ -74,15 +74,16 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
         <div className="text-sm text-muted-foreground">
           {status?.token_configured ? (
             <p>
-              API token is configured.
               {status.connected
-                ? ` ${status.instance_count} active sprite${status.instance_count !== 1 ? "s" : ""}.`
-                : " Unable to connect."}
+                ? t("settings:apiTokenConfiguredActiveSprites", {
+                    count: status.instance_count,
+                  })
+                : t("settings:apiTokenConfiguredUnableToConnect")}
             </p>
           ) : (
             <p>
               <Trans i18nKey="settings:configureASpritesApiTokenEnvironment">
-                {t("settings:configureA")} <code className="text-xs">SPRITES_API_TOKEN</code>{" "}
+                Configure a <code className="text-xs">SPRITES_API_TOKEN</code>{" "}
                 environment variable in the executor profile, referencing a secret with your
                 Sprites.dev API token.
               </Trans>

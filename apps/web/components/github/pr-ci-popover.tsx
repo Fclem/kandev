@@ -465,13 +465,13 @@ function PRReviewRow({ pr }: { pr: TaskPR }) {
 }
 
 function PRCommentsRow({ pr }: { pr: TaskPR }) {
+  const { t } = useTranslation();
   if (!pr.unresolved_review_threads || pr.unresolved_review_threads <= 0) return null;
   return (
     <div data-testid="pr-comments-row" className="flex items-center gap-1.5 px-1 py-1 text-xs">
       <IconMessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
       <span>
-        {pr.unresolved_review_threads} unresolved comment
-        {pr.unresolved_review_threads === 1 ? "" : "s"}
+        {t("github:unresolvedComments", { count: pr.unresolved_review_threads })}
       </span>
     </div>
   );

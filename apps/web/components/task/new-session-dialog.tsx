@@ -536,9 +536,11 @@ function NoAgentBanner({
   if (noCompatibleProfiles) {
     return (
       <p className="text-xs text-center text-muted-foreground">
-        No agent profile is configured for{" "}
-        <span className="text-foreground">“{executorProfileName}”</span>. Configure credentials in
-        Settings → Executors.
+        <Trans i18nKey="task:noAgentProfileConfiguredFor" values={{ executorProfileName }}>
+          No agent profile is configured for{" "}
+          <span className="text-foreground">“{executorProfileName}”</span>. Configure credentials in
+          Settings → Executors.
+        </Trans>
       </p>
     );
   }

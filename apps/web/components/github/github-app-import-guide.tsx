@@ -6,7 +6,7 @@ import { Button } from "@kandev/ui/button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import type { PrepareGitHubAppImportResponse } from "@/lib/types/github";
 import { GitHubAppPolicyDialog } from "./github-app-policy-dialog";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const urlLabels: [keyof PrepareGitHubAppImportResponse, string][] = [
   ["public_base_url", "Homepage URL"],
@@ -34,12 +34,15 @@ export function GitHubAppImportGuide({
       <div className="space-y-1">
         <h3 className="text-sm font-medium">{t("github:configureTheExistingAppOnGithub")}</h3>
         <p className="text-xs leading-5 text-muted-foreground">
-          Set these exact URLs, create a client secret and webhook secret, and download a private
-          key. This one-time setup expires {new Date(preparation.expires_at).toLocaleString()}.
+          {t("github:setExactUrlsAndSecrets", {
+            expiresAt: new Date(preparation.expires_at).toLocaleString(),
+          })}
         </p>
         <p className="text-xs leading-5 text-muted-foreground">
-          {t("github:forWebhooksChoose")} <strong>{t("github:applicationJson")}</strong> as the
-          content type and keep SSL verification enabled.
+          <Trans i18nKey="github:forWebhooksChooseContentType">
+            For webhooks, choose <strong>application/json</strong> as the content type and keep SSL
+            verification enabled.
+          </Trans>
         </p>
       </div>
       <div className="divide-y rounded-md border">
@@ -55,7 +58,7 @@ export function GitHubAppImportGuide({
                   variant="ghost"
                   size="icon"
                   className="h-11 w-11 shrink-0 cursor-pointer"
-                  aria-label={`Copy ${label}`}
+                  aria-label={t("github:copyField", { field: label })}
                   onClick={() => void copyValue(value)}
                 >
                   {copied === value ? (
@@ -73,13 +76,13 @@ export function GitHubAppImportGuide({
         {settingsUrl ? (
           <Button asChild variant="outline" className="h-11 cursor-pointer">
             <a href={settingsUrl} target="_blank" rel="noreferrer">
-              Open GitHub App settings
+              {t("github:openGithubAppSettings")}
               <IconExternalLink className="ml-2 h-4 w-4" />
             </a>
           </Button>
         ) : (
           <Button type="button" variant="outline" className="h-11" disabled>
-            Open GitHub App settings
+            {t("github:openGithubAppSettings")}
             <IconExternalLink className="ml-2 h-4 w-4" />
           </Button>
         )}

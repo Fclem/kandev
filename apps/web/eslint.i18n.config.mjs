@@ -47,6 +47,10 @@ export default defineConfig([
               // All-caps acronym badges (ENTRY, KAN, MTD, WIQL, JQL) label a
               // field or entity; they are identifiers, not prose.
               "^[A-Z][A-Z0-9_]{1,9}$",
+              // Terminal control glyphs (^C, ^D) and repeat counts (3x) are
+              // symbols, and "id · vN.N" is a version line, not prose.
+              "^\\^[A-Z]$",
+              "^·?\\s*v?$",
             ],
           },
           "jsx-attributes": {

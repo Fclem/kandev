@@ -61,8 +61,10 @@ export function ReviewCommentsAttachment({ comments, className }: ReviewComments
             <span className="text-sm font-medium">{t("task:reviewComments")}</span>
 
             <Badge variant="secondary" className="ml-auto text-xs">
-              {t("task:comments", { count: totalComments })} on{" "}
-              {t("task:files", { count: fileCount })}
+              {t("task:commentsOnFiles", {
+                comments: t("task:comments", { count: totalComments }),
+                files: t("task:files", { count: fileCount }),
+              })}
             </Badge>
           </Button>
         </CollapsibleTrigger>

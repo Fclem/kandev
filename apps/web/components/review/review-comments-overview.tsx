@@ -69,7 +69,7 @@ export function ReviewCommentsOverview({ comments }: { comments: DiffComment[] }
       <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
         <IconMessage className="h-4 w-4 shrink-0 text-blue-500" />
         <span className="text-sm font-medium">
-          {total} pending review comment{total !== 1 ? "s" : ""}
+          {t("review:pendingReviewComments", { count: total })}
         </span>
         <span className="text-xs text-muted-foreground">
           <Trans

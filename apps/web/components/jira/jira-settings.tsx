@@ -313,11 +313,9 @@ function SecretField({
       )}
       {method === "pat" && (
         <p className="text-xs text-muted-foreground">
-          Create a Personal Access Token from your Jira profile
           {patHref ? (
-            <>
-              {" "}
-              (
+            <Trans i18nKey="jira:createPatFromProfileWithLink" values={{ patHref }}>
+              Create a Personal Access Token from your Jira profile (
               <a
                 className="underline cursor-pointer"
                 href={patHref}
@@ -326,12 +324,11 @@ function SecretField({
               >
                 {patHref}
               </a>
-              ){" "}
-            </>
+              ) → Personal Access Tokens. Required scopes: read &amp; write.
+            </Trans>
           ) : (
-            " "
+            t("jira:createPatFromProfile")
           )}
-          → Personal Access Tokens. Required scopes: read & write.
         </p>
       )}
       {method === "session_cookie" && <SessionSnippet />}

@@ -36,7 +36,13 @@ the workflow permanently; retry only transient fetch failures after access is
 approved.
 
 Run `scripts/pr-state --summary <PR>` once. Record `checks_head_sha`,
-`checks_snapshot_complete`, `failed_checks`, `pending_checks`,
+`checks_snapshot_complete`, `failed_checks`, `pending_checks`, and the PR
+head delivery fields (`pr.head_repository_owner`, `pr.head_repository_name`,
+`pr.head_ref_name`, `pr.head_ref_oid`, and `pr.maintainer_can_modify`). For a
+cross-repository PR, those fields are the only authoritative push target; do
+not infer it from a local remote named `fork`, `contributor`, or similar.
+Linked worktrees share Git configuration and such remotes may belong to an
+unrelated task.
 `unresolved_review_thread_count`, `hidden_unresolved_threads`, and
 `actionable_issue_comment_count`. Inspect mergeability separately through
 `references/merge-conflicts.md`; it is not a `pr-state --summary` field. If a
@@ -65,8 +71,11 @@ the parent workflow/job status. A failed job can be visible while its workflow
 is still in progress; confirm its conclusion and failing step before treating
 it as reproducible code evidence. Use
 `scripts/run-quiet gh-run -- gh run view <run-id> --log-failed` so large logs do
-not flood the conversation. If logs are temporarily unavailable, use the
-fallback in `references/ci-troubleshooting.md`. Reproduce the exact failed command where possible;
+not flood the conversation. If logs are temporarily unavailable or only expose
+an aggregate report job, use `scripts/pr-state --job-log <job_id>` with the
+`job_id` in the summary; it handles GitHub's plain-text and ZIP job-log
+responses and emits bounded matching context. Follow the rest of the fallback
+in `references/ci-troubleshooting.md`. Reproduce the exact failed command where possible;
 CI-specific Go lint often needs `golangci-lint run ./... --new-from-rev=<base>
 --timeout=5m`.
 
@@ -98,8 +107,12 @@ genuinely addresses it.
 
 Commit through `/commit`, then rerun only the unit, integration, or E2E command
 affected by the remediation. Push when that targeted check passes for the exact
-current `HEAD`. Run broad `/verify` only if the user explicitly requests it or
-the PR/CI finding requires it.
+current `HEAD`. For a cross-repository PR, push the exact current `HEAD` to the
+summary's authoritative head repository and ref only when
+`pr.maintainer_can_modify` is true. Re-fetch the PR afterward and require its
+`pr.head_ref_oid` to equal local `HEAD`; an upstream remote comparison is not
+sufficient. Run broad `/verify` only if the user explicitly requests it or the
+PR/CI finding requires it.
 
 ## 5. Re-check
 

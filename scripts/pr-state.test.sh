@@ -92,6 +92,30 @@ JSON
   exit 0
 fi
 
+if [[ "$1" == "api" && "$2" == "repos/kdlbs/kandev/actions/jobs/55150000002/logs" ]]; then
+  log_file="$(mktemp)"
+  {
+    printf '%s\n' 'setup complete'
+    printf '%s\n' 'Test timeout: expected ready state'
+    printf '%s\n' 'stack frame one'
+    printf '%s\n' 'stack frame two'
+    printf '%s\n' 'stack frame three'
+    printf '%s\n' 'stack frame four'
+    printf '%s\n' 'stack frame five'
+    printf '%s\n' 'stack frame six'
+    printf '%s\n' 'unrelated tail line'
+  } >"$log_file"
+  if [[ "${GH_JOB_LOG_FORMAT:-plain}" == "zip" ]]; then
+    base64 -d <<'ZIP'
+UEsDBBQAAAAAALip/lxqPXj2qgAAAKoAAAAHAAAAam9iLmxvZ3NldHVwIGNvbXBsZXRlClRlc3QgdGltZW91dDogZXhwZWN0ZWQgcmVhZHkgc3RhdGUKc3RhY2sgZnJhbWUgb25lCnN0YWNrIGZyYW1lIHR3bwpzdGFjayBmcmFtZSB0aHJlZQpzdGFjayBmcmFtZSBmb3VyCnN0YWNrIGZyYW1lIGZpdmUKc3RhY2sgZnJhbWUgc2l4CnVucmVsYXRlZCB0YWlsIGxpbmUKUEsBAhQDFAAAAAAAuKn+XGo9ePaqAAAAqgAAAAcAAAAAAAAAAAAAAIABAAAAAGpvYi5sb2dQSwUGAAAAAAEAAQA1AAAAzwAAAAAA
+ZIP
+  else
+    cat "$log_file"
+  fi
+  rm -f "$log_file"
+  exit 0
+fi
+
 if [[ "$*" == *"actions/workflows/opencode-code-review.yml/runs"* ]]; then
   if [[ "${GH_FAIL_TRUSTED_WORKFLOW:-0}" == "1" ]]; then
     echo "workflow api failed" >&2
@@ -132,6 +156,9 @@ if [[ "$1" == "pr" && "$2" == "view" && "$4" == "--json" ]]; then
   "number": 123,
   "headRefName": "feat/pr-state",
   "headRefOid": "${GH_CHECKS_HEAD:-abc123}",
+  "headRepositoryOwner": { "login": "${GH_HEAD_REPOSITORY_OWNER:-kdlbs}" },
+  "headRepository": { "name": "${GH_HEAD_REPOSITORY_NAME:-kandev}" },
+  "maintainerCanModify": ${GH_MAINTAINER_CAN_MODIFY:-true},
   "isCrossRepository": ${GH_CROSS_REPOSITORY:-false},
   "url": $pr_url,
   "comments": [
@@ -657,6 +684,7 @@ test_snapshot_happy_path() {
 
   assert_jq "pr number" '.pr.number == 123' "$json"
   assert_jq "branch" '.pr.branch == "feat/pr-state"' "$json"
+  assert_jq "head delivery target" '.pr.head_repository_owner == "kdlbs" and .pr.head_repository_name == "kandev" and .pr.head_ref_name == "feat/pr-state" and .pr.head_ref_oid == "abc123" and .pr.maintainer_can_modify == true' "$json"
   assert_jq "since timestamp" '.since.committed_at == "2026-06-01T12:00:00Z"' "$json"
   assert_jq "checks collapse duplicate workflow attempts" '.checks | length < 10' "$json"
   assert_jq "latest duplicate check uses newest attempt" '[.checks[] | select(.name == "web lint")][0] | .conclusion == "success" and .run_id == "27340000001"' "$json"
@@ -1151,6 +1179,7 @@ test_summary_mode_returns_compact_fixup_state() {
   json="$(<"$tmp/out.json")"
 
   assert_jq "summary keeps pr" '.pr.number == 123' "$json"
+  assert_jq "summary keeps authoritative head delivery target" '.pr.head_repository_owner == "kdlbs" and .pr.head_repository_name == "kandev" and .pr.head_ref_name == "feat/pr-state" and .pr.head_ref_oid == "abc123" and .pr.maintainer_can_modify == true' "$json"
   assert_jq "summary keeps since" '.since.committed_at == "2026-06-01T12:00:00Z"' "$json"
   assert_jq "summary failed check count" '.failed_checks | length == 3' "$json"
   assert_jq "summary failed check" '.failed_checks[] | select(.name == "e2e") | .conclusion == "failure" and .run_id == "27340000002"' "$json"
@@ -1171,6 +1200,36 @@ test_summary_mode_returns_compact_fixup_state() {
   assert_jq "summary omits raw arrays" 'has("checks") | not' "$json"
   assert_jq "summary no errors" '.errors == []' "$json"
   pass "--summary returns compact fixup state"
+}
+
+test_job_log_mode_emits_bounded_failure_context() {
+  local tmp
+  make_tmp_dir tmp
+  make_mock_gh "$tmp/bin"
+
+  local output
+  output="$(PATH="$tmp/bin:$PATH" "$SCRIPT" --job-log 55150000002)"
+
+  if ! grep -q 'Test timeout: expected ready state' <<<"$output"; then
+    fail "--job-log emits matching failure context"
+  fi
+  if grep -q 'unrelated tail line' <<<"$output"; then
+    fail "--job-log keeps output bounded"
+  fi
+  pass "--job-log emits bounded failure context"
+}
+
+test_job_log_mode_unpacks_zip_responses() {
+  local tmp
+  make_tmp_dir tmp
+  make_mock_gh "$tmp/bin"
+
+  local output
+  output="$(GH_JOB_LOG_FORMAT=zip PATH="$tmp/bin:$PATH" "$SCRIPT" --job-log 55150000002)"
+  if ! grep -q 'Test timeout: expected ready state' <<<"$output"; then
+    fail "--job-log unpacks zip responses"
+  fi
+  pass "--job-log unpacks zip responses"
 }
 
 test_summary_all_flag_includes_historical_unresolved_threads() {
@@ -1335,6 +1394,8 @@ test_graphql_pagination_collects_all_threads
 test_all_flag_includes_historical_comments_and_reviews
 test_summary_mode_returns_compact_fixup_state
 test_summary_all_flag_includes_historical_unresolved_threads
+test_job_log_mode_emits_bounded_failure_context
+test_job_log_mode_unpacks_zip_responses
 test_comment_mode_returns_full_review_comment
 test_comment_mode_reports_fetch_failure
 test_comment_mode_rejects_incompatible_flags

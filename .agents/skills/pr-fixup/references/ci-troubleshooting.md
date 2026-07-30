@@ -28,7 +28,7 @@ when needed:
 ```bash
 gh api repos/<owner>/<repo>/actions/jobs/<job_id> \
   --jq '{status, conclusion, steps: [.steps[] | {name, status, conclusion}]}'
-gh api repos/<owner>/<repo>/actions/jobs/<job_id>/logs > /tmp/kandev-job-<job_id>.log
+scripts/pr-state --job-log <job_id>
 ```
 
 Treat an unavailable log stream as unknown evidence, not a product failure.
@@ -39,8 +39,7 @@ shard `job_id` from `scripts/pr-state --summary <PR>` and inspect at least one
 failure from each shard before changing code:
 
 ```bash
-gh api repos/<owner>/<repo>/actions/jobs/<job_id>/logs \
-  | rg -n -i -C 4 '(Test timeout|Error:|failed|Process completed)'
+scripts/pr-state --job-log <job_id>
 ```
 
 Verify the output names the actual failing spec or assertion, rather than only

@@ -20,7 +20,9 @@ delivery.
 
 - `--fixup` — after pushing, begin `/pr-fixup` in the same conversation.
 
-> **Note:** This skill only uses `git push`. GitHub CLI dependency is indirect via `/pr-fixup`.
+> **Note:** This skill normally uses `git push`. It uses `gh pr view` before a
+> no-upstream fallback so a checked-out fork PR is not accidentally pushed to
+> its base repository.
 
 ## Your task
 
@@ -43,8 +45,23 @@ Push the already committed branch to its remote.
    ```bash
    git push
    ```
-   If the branch has no upstream, use `git push -u origin HEAD` rather than
-   transcribing the branch name. Then verify
+   If the branch has no upstream, first check whether it is an open
+   cross-repository PR:
+   ```bash
+   gh pr view --json isCrossRepository,headRepositoryOwner,headRepository,headRefName,headRefOid,maintainerCanModify
+   ```
+   For a cross-repository PR, require `maintainerCanModify=true`; then push the
+   exact current commit to the reported head owner, repository, and ref (using
+   authenticated HTTPS through `gh` credentials if SSH lacks fork permission):
+   ```bash
+   git push "https://github.com/<head-owner>/<head-repository>.git" "HEAD:refs/heads/<head-ref>"
+   ```
+   Do not use a conveniently named local `fork`/`contributor` remote: linked
+   worktrees share remote configuration, so it can refer to another task.
+   Re-fetch the PR and require `headRefOid` to equal local `HEAD`.
+
+   Only for a non-PR or same-repository PR, use `git push -u origin HEAD`
+   rather than transcribing the branch name. Then verify
    `git rev-parse HEAD` equals `git rev-parse '@{upstream}'`, and report the
    branch from `git branch --show-current`.
    If the branch was rebased or history was rewritten, first confirm the current

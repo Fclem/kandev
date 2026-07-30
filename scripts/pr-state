@@ -4,10 +4,12 @@
 # Usage:
 #   scripts/pr-state [--summary] [--all] [--trusted-reviewer <login>] <PR>
 #   scripts/pr-state --comment <comment_id>
+#   scripts/pr-state --job-log <job_id>
 #
 # Raw output:
 #   JSON object with:
-#   - pr: { number, branch }
+#   - pr: { number, branch, is_cross_repository, head_repository_owner,
+#       head_repository_name, head_ref_name, head_ref_oid, maintainer_can_modify }
 #   - since: { head_oid, committed_at } or null
 #   - checks: [{ type, name, workflow, status, conclusion, details_url, target_url, run_id, job_id }]
 #   - checks_head_sha: <SHA or null>
@@ -27,7 +29,8 @@
 #
 # Summary output (--summary):
 #   JSON object with:
-#   - pr: { number, branch }
+#   - pr: { number, branch, is_cross_repository, head_repository_owner,
+#       head_repository_name, head_ref_name, head_ref_oid, maintainer_can_modify }
 #   - since: { head_oid, committed_at } or null
 #   - failed_checks: [{ name, workflow, status, conclusion, run_id, job_id, details_url, target_url }]
 #   - pending_checks: [{ name, workflow, status, run_id, job_id, details_url, target_url }]
@@ -52,6 +55,10 @@
 #   JSON object for one PR review comment:
 #   - comment_id, author, body, path, line, original_line, commit_id, html_url, created_at, updated_at
 #
+# Job-log output (--job-log):
+#   Bounded context around the most likely failing test or step. The GitHub
+#   endpoint may return either plain text or a ZIP archive.
+#
 # By default, comments/reviews/review threads are limited to items created after
 # the PR head commit. Checks are already scoped by GitHub to the current head.
 # Pass --all to include historical comments and reviews.
@@ -69,6 +76,7 @@ INCLUDE_ALL=0
 SUMMARY=0
 TRUSTED_REVIEWER=''
 COMMENT_ID=''
+JOB_LOG_ID=''
 PR=''
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -92,6 +100,13 @@ while [[ $# -gt 0 ]]; do
       [[ $# -gt 0 && -z "${COMMENT_ID:-}" && -z "${PR:-}" ]] || usage 1
       [[ "$1" =~ ^[0-9]+$ ]] || usage 1
       COMMENT_ID=$1
+      shift
+      ;;
+    --job-log)
+      shift
+      [[ $# -gt 0 && -z "${JOB_LOG_ID:-}" && -z "${PR:-}" ]] || usage 1
+      [[ "$1" =~ ^[0-9]+$ ]] || usage 1
+      JOB_LOG_ID=$1
       shift
       ;;
     -h | --help)
@@ -120,6 +135,8 @@ done
 [ $# -eq 0 ] || usage
 
 if [[ -n "${COMMENT_ID:-}" ]]; then
+  [[ -z "${PR:-}" && "$SUMMARY" == "0" && "$INCLUDE_ALL" == "0" ]] || usage
+elif [[ -n "${JOB_LOG_ID:-}" ]]; then
   [[ -z "${PR:-}" && "$SUMMARY" == "0" && "$INCLUDE_ALL" == "0" ]] || usage
 else
   [ -n "${PR:-}" ] || usage
@@ -187,8 +204,55 @@ emit_comment_json() {
   }' <<<"$comment_json"
 }
 
+emit_job_log() {
+  local job_id=$1
+  local repo_json owner repo archive_file log_file magic
+  archive_file="$(mktemp)"
+  log_file="$(mktemp)"
+
+  repo_json="$(gh_json repo view --json owner,name)" || {
+    rm -f "$archive_file" "$log_file"
+    printf 'failed to resolve repository identity\n' >&2
+    return 1
+  }
+  owner="$(jq -r '.owner.login // ""' <<<"$repo_json")"
+  repo="$(jq -r '.name // ""' <<<"$repo_json")"
+  if [[ -z "$owner" || -z "$repo" ]]; then
+    rm -f "$archive_file" "$log_file"
+    printf 'failed to resolve repository identity\n' >&2
+    return 1
+  fi
+  if ! gh_json api "repos/$owner/$repo/actions/jobs/$job_id/logs" >"$archive_file"; then
+    rm -f "$archive_file" "$log_file"
+    printf 'failed to fetch job log %s\n' "$job_id" >&2
+    return 1
+  fi
+
+  magic="$(head -c 4 "$archive_file" || true)"
+  if [[ "$magic" == $'PK\003\004' ]]; then
+    if ! unzip -p "$archive_file" >"$log_file"; then
+      rm -f "$archive_file" "$log_file"
+      printf 'failed to unpack job log %s\n' "$job_id" >&2
+      return 1
+    fi
+  else
+    mv "$archive_file" "$log_file"
+    archive_file=''
+  fi
+
+  if ! rg -n -i -C 4 '(Test timeout|Error:|FAIL|failed|Process completed)' "$log_file" | head -n 240; then
+    tail -n 80 "$log_file"
+  fi
+  rm -f "$archive_file" "$log_file"
+}
+
 if [[ -n "${COMMENT_ID:-}" ]]; then
   emit_comment_json "$COMMENT_ID"
+  exit $?
+fi
+
+if [[ -n "${JOB_LOG_ID:-}" ]]; then
+  emit_job_log "$JOB_LOG_ID"
   exit $?
 fi
 
@@ -658,13 +722,22 @@ comments_json='[]'
 status_json='[]'
 resolved_pr_number=''
 is_cross_repository=null
-if pr_view_json="$(gh_json pr view "$PR" --json number,headRefName,headRefOid,isCrossRepository,statusCheckRollup,comments,url)"; then
+if pr_view_json="$(gh_json pr view "$PR" --json number,headRefName,headRefOid,headRepositoryOwner,headRepository,maintainerCanModify,isCrossRepository,statusCheckRollup,comments,url)"; then
   resolved_pr_number="$(jq -r '.number // ""' <<<"$pr_view_json")"
   if pr_url_owner="$(jq -r '.url | capture("github.com/(?<owner>[^/]+)/(?<repo>[^/]+)/pull/[0-9]+").owner // ""' <<<"$pr_view_json" 2>/dev/null)" && [[ -n "$pr_url_owner" ]]; then
     repo_owner="$pr_url_owner"
     repo_name="$(jq -r '.url | capture("github.com/(?<owner>[^/]+)/(?<repo>[^/]+)/pull/[0-9]+").repo // ""' <<<"$pr_view_json")"
   fi
-  pr_json="$(jq -c '{number: .number, branch: (.headRefName // "unknown"), is_cross_repository: (if has("isCrossRepository") then .isCrossRepository else null end)}' <<<"$pr_view_json")"
+  pr_json="$(jq -c '{
+    number: .number,
+    branch: (.headRefName // "unknown"),
+    is_cross_repository: (if has("isCrossRepository") then .isCrossRepository else null end),
+    head_repository_owner: (.headRepositoryOwner.login // null),
+    head_repository_name: (.headRepository.name // null),
+    head_ref_name: (.headRefName // null),
+    head_ref_oid: (.headRefOid // null),
+    maintainer_can_modify: (.maintainerCanModify // null)
+  }' <<<"$pr_view_json")"
   is_cross_repository="$(jq -c 'if has("isCrossRepository") then .isCrossRepository else null end' <<<"$pr_view_json")"
   comments_json="$(jq -c '.comments // []' <<<"$pr_view_json")"
   status_json="$(jq -c '.statusCheckRollup // []' <<<"$pr_view_json")"

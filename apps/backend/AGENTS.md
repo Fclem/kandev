@@ -233,6 +233,13 @@ Client (WS) ← Orchestrator ← Lifecycle Manager ←──── stream update
     key first and restore it with `t.Cleanup`. Changing only the count can leave
     higher parent indexes behind and create a malformed Git config block.
   - **Full test output:** For local full-suite pass/fail validation, prefer plain `go test -race ./...`. `go test -json ./...` can emit very large JSONL streams; if a wrapper or tracing tool truncates the stream mid-record, downstream JSON parsing may fail even when Go tests passed. Use JSON output mainly for CI artifacts or test-report tooling that explicitly requires it.
+  - **Private executable helpers:** When library code starts `os.Executable()` in
+    a private helper mode, do not rely only on a command package's dispatch or
+    package-specific `TestMain`: an importing package's test binary can be the
+    executable and recursively run tests. Use either an explicitly marked
+    private env-and-argument trampoline that runs before normal test entry, or
+    inject a dedicated helper executable. Cover it from a different importing
+    package, not only the helper package.
 
 ### Goroutine ownership and leak testing
 

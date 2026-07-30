@@ -35,21 +35,63 @@ const FN_START =
 const canUseHooks = (name) => !!name && (/^[A-Z]/.test(name) || /^use[A-Z]/.test(name));
 
 /**
- * The line whose trailing `{` opens the function BODY — not the one that opens a
- * destructured parameter or its inline type. Tracks paren depth from the
- * signature, so the body brace is the first one seen after the params close.
+ * The line whose trailing `{` opens the function BODY.
+ *
+ * Two traps here, both of which produced real bugs:
+ *   - a destructured parameter or its inline type also ends in `{`
+ *   - an `if (...) {` inside the body looks identical to a signature's `) {`
+ *
+ * So this tracks BRACE depth as well as paren depth and only accepts a brace at
+ * depth 0 relative to the function start. Putting a hook inside an `if` block
+ * that early-returns makes React render a different number of hooks per pass
+ * (error #310) and blanks the page — and `react-hooks/rules-of-hooks` does not
+ * flag it, so the compiler and lint both stay silent.
  */
+/** Net paren change across a line. */
+function parenDelta(line) {
+  let d = 0;
+  for (const ch of line) {
+    if (ch === "(") d++;
+    else if (ch === ")") d--;
+  }
+  return d;
+}
+
+/**
+ * Net brace change for braces OUTSIDE the parameter list. A destructured
+ * parameter and its inline type contribute braces that say nothing about body
+ * depth, so those are skipped.
+ */
+function braceDelta(line, parensAtLineStart) {
+  let d = 0;
+  let p = parensAtLineStart;
+  for (const ch of line) {
+    if (ch === "(") p++;
+    else if (ch === ")") p--;
+    else if (p === 0 && ch === "{") d++;
+    else if (p === 0 && ch === "}") d--;
+  }
+  return d;
+}
+
+const OPENS_BODY = /\)\s*(:[^=]*)?\s*(=>\s*)?\{\s*$/;
+
 function findBodyLine(lines, fnLine) {
   let parens = 0;
+  let braces = 0;
   let seenParams = false;
   for (let i = fnLine; i < Math.min(fnLine + 60, lines.length); i++) {
-    for (const ch of lines[i]) {
-      if (ch === "(") {
-        parens++;
-        seenParams = true;
-      } else if (ch === ")") parens--;
-    }
-    if (seenParams && parens === 0 && /\)\s*(:[^=]*)?\s*(=>\s*)?\{\s*$/.test(lines[i])) return i;
+    const line = lines[i];
+    const before = parens;
+    if (line.includes("(")) seenParams = true;
+    // Parens first: a one-line signature opens and closes them on this line, so
+    // the check below has to see the closed state.
+    parens += parenDelta(line);
+    // `braces` is still at its pre-line depth, so the body's own opening brace
+    // has not been counted — depth 0 means we are still in the signature. An
+    // `if (...) {` inside the body is at depth 1 and is correctly rejected.
+    if (seenParams && parens === 0 && braces === 0 && OPENS_BODY.test(line)) return i;
+    braces += braceDelta(line, before);
   }
   return -1;
 }

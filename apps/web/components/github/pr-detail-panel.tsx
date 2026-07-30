@@ -60,6 +60,7 @@ export function PRDetailPanelComponent({ panelId, params }: PRDetailPanelProps) 
   // TaskPR. Falls back to the active (primary) PR for legacy single-repo
   // panels that pre-date the prKey param.
   const pr = (params?.prKey ? prs.find((p) => prTaskKey(p) === params.prKey) : null) ?? activePR;
+  const { t } = useTranslation();
 
   useEffect(() => {
     const title = pr ? prPanelLabel(pr.pr_number) : "Pull Request";
@@ -67,7 +68,6 @@ export function PRDetailPanelComponent({ panelId, params }: PRDetailPanelProps) 
   }, [pr, panelId]);
 
   if (!pr || !sessionId) {
-    const { t } = useTranslation();
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
         {t("github:noPullRequestLinkedToThis")}

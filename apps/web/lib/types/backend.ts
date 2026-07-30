@@ -1,4 +1,5 @@
 import type { TaskPlanEventPayload, TaskPlanRevisionEventPayload } from "./task-plan-events";
+import type { CaptureRequest } from "@/lib/logger/capture";
 
 export type BackendMessageType = keyof BackendMessageMap;
 
@@ -32,6 +33,7 @@ import type {
   SessionMCPStatusPayload,
   SessionPromptUsagePayload,
   SessionTodosPayload,
+  RunEventAppendedPayload,
 } from "./session-runtime-payloads";
 import type {
   ExecutorPayload,
@@ -511,6 +513,10 @@ export type BackendMessageMap = OfficeBackendMessageMap &
     "system.error": BackendMessage<"system.error", SystemErrorPayload>;
     "system.job.update": BackendMessage<"system.job.update", import("./system").SystemJob>;
     "system.metrics.updated": BackendMessage<"system.metrics.updated", SystemMetricsSnapshot>;
+    "system.logs.capture_requested": BackendMessage<
+      "system.logs.capture_requested",
+      CaptureRequest
+    >;
     "system.update_available": BackendMessage<"system.update_available", UpdateAvailablePayload>;
     "workspace.created": BackendMessage<"workspace.created", WorkspacePayload>;
     "workspace.updated": BackendMessage<"workspace.updated", WorkspacePayload>;

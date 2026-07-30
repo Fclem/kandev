@@ -504,12 +504,27 @@ func (s *Server) registerTools() {
 		// was bound to, so it has no meaningful semantics outside a task
 		// session.
 		s.registerStepCompleteTool()
-		count++
+		s.registerDiagnosticBundleTool()
+		count += 2
 	}
 	s.logger.Info("registered MCP tools",
 		zap.String("mode", s.mode),
 		zap.Int("count", count),
 		zap.Bool("disable_ask_question", s.disableAskQuestion))
+}
+
+func (s *Server) registerDiagnosticBundleTool() {
+	s.mcpServer.AddTool(
+		mcp.NewTool("get_diagnostic_bundle_kandev",
+			mcp.WithDescription("Collect a bounded diagnostic ZIP for the current task session and materialize it inside this execution workspace. Request backend first for backend/runtime issues, frontend for browser issues, or all only when correlation requires both."),
+			mcp.WithString("source",
+				mcp.Required(),
+				mcp.Enum("backend", "frontend", "all"),
+				mcp.Description("Diagnostic source to collect: backend, frontend, or all"),
+			),
+		),
+		s.wrapHandler("get_diagnostic_bundle_kandev", s.getDiagnosticBundleHandler()),
+	)
 }
 
 func (s *Server) registerKanbanTools() {

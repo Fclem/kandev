@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -42,6 +43,15 @@ func minimalValidConfig() *Config {
 		RepositoryDiscovery: RepositoryDiscoveryConfig{
 			MaxDepth: 5,
 		},
+	}
+}
+
+func TestLoggingConfigExposesOnlyLevelAndFormat(t *testing.T) {
+	cfgType := reflect.TypeOf(LoggingConfig{})
+	for _, field := range []string{"OutputPath", "MaxSizeMB", "MaxBackups", "MaxAgeDays", "Compress"} {
+		if _, exists := cfgType.FieldByName(field); exists {
+			t.Errorf("LoggingConfig still exposes legacy destination field %s", field)
+		}
 	}
 }
 

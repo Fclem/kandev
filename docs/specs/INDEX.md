@@ -42,6 +42,7 @@ Product-wide capabilities that are not tied to a single feature area.
 | [plugins — marketplace](plugins/marketplace.md) | building |
 | [semantic-notifications](platform/notifications.md) | shipped |
 | [workspace-git-status](platform/workspace-git-status.md) | shipped |
+| [diagnostic-logging](platform/diagnostic-logging.md) | approved |
 
 ## tasks/ — task & workflow model
 

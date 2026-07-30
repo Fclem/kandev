@@ -21,7 +21,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast/sonner";
 import { Button } from "@kandev/ui";
 import { Textarea } from "@kandev/ui/textarea";
 import { cn } from "@/lib/utils";

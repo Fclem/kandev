@@ -101,6 +101,7 @@
   "connectIdentity": "Ćōńńēćţ ĩďēńţĩţŷ",
   "connectionFailed": "Ćōńńēćţĩōń ƒàĩĺēď",
   "connectionMethod": "Ćōńńēćţĩōń ḿēţĥōď",
+  "connectPersonalIdentityNotice": "Ćōńńēćţ ŷōũŕ ƥēŕśōńàĺ ĜĩţĤũƀ ĩďēńţĩţŷ ţō śēē ƥũĺĺ ŕē qũēśţś àńď ĩśśũēś àśśĩĝńēď ţō ŷōũ. <2>Ōƥēń ĜĩţĤũƀ śēţţĩńĝś</2> ţō śēē ŷōũŕ ƥũĺĺ ŕē qũēśţś àńď ĩśśũēś.",
   "connectToken": "Ćōńńēćţ ţōķēń",
   "connectYourGithubUserForMy": "Ćōńńēćţ ŷōũŕ ĜĩţĤũƀ ũśēŕ ƒōŕ Ḿŷ ĜĩţĤũƀ àńď ĥũḿàń-àţţŕĩƀũţēď àćţĩōńś. Ŵĩţĥōũţ ĩţ, àũţōḿàţĩōń ćōńţĩńũēś àś ţĥē Àƥƥ.",
   "continueOnGithub": "Ćōńţĩńũē ōń ĜĩţĤũƀ <1></1>",
@@ -290,7 +291,6 @@
   "opened": "ōƥēńēď {{value1}}",
   "openGithubAppSettings": "Ōƥēń ĜĩţĤũƀ Àƥƥ śēţţĩńĝś",
   "openGithubFilters": "Ōƥēń ĜĩţĤũƀ ƒĩĺţēŕś",
-  "openGithubSettings": "Ōƥēń ĜĩţĤũƀ śēţţĩńĝś",
   "optionalFallsBackToStepDefault": "Ōƥţĩōńàĺ — ƒàĺĺś ƀàćķ ţō śţēƥ ďēƒàũĺţ. Ţĥē ēxēćũţōŕ ēńvĩŕōńḿēńţ ŵĥēŕē ţĥē àĝēńţ ŵĩĺĺ ŕũń.",
   "optionalFallsBackToStepDefault2": "Ōƥţĩōńàĺ — ƒàĺĺś ƀàćķ ţō śţēƥ ďēƒàũĺţ.",
   "optionallyConnectYourGithubUserFor": "Ōƥţĩōńàĺĺŷ ćōńńēćţ ŷōũŕ ĜĩţĤũƀ ũśēŕ ƒōŕ Ḿŷ ĜĩţĤũƀ àńď ĥũḿàń-àţţŕĩƀũţēď àćţĩōńś. Ţĥĩś ĩďēńţĩţŷ ĩś ńēvēŕ ĝĩvēń ţō ḿàńàĝēď àĝēńţś; ŵōŕķśƥàćē àũţōḿàţĩōń ćōńţĩńũēś àś ţĥē Àƥƥ.",
@@ -430,7 +430,6 @@
   "titleOfThePrOrIssue": "Ţĩţĺē ōƒ ţĥē ƤŔ ōŕ ĩśśũē",
   "toggleReviewFollowUpAutomation": "Ţōĝĝĺē ŕēvĩēŵ ƒōĺĺōŵ-ũƥ àũţōḿàţĩōń",
   "tool": "Ţōōĺ",
-  "toSeeYourPullRequestsAnd": "{{value0}} <2>{{value0}}</2> ţō śēē ŷōũŕ ƥũĺĺ ŕē qũēśţś àńď ĩśśũēś.",
   "type": "Ţŷƥē",
   "typeACustomQueryFirst": "Ţŷƥē à ćũśţōḿ  qũēŕŷ ƒĩŕśţ",
   "typeAndAreSubstitutedWhenThe": "Ţŷƥē {{ to see available placeholders. <5>{{url}}</5> àńď <8>{{title}}</8> àŕē śũƀśţĩţũţēď ŵĥēń ţĥē àćţĩōń ŕũńś.",
@@ -458,5 +457,6 @@
   "workspaceGithubAccess": "Ŵōŕķśƥàćē ĜĩţĤũƀ àććēśś",
   "workspaceGithubConnectionRemoved": "Ŵōŕķśƥàćē ĜĩţĤũƀ ćōńńēćţĩōń ŕēḿōvēď",
   "workspaceGithubTokenConnected": "Ŵōŕķśƥàćē ĜĩţĤũƀ ţōķēń ćōńńēćţēď",
+  "workspaceNotConnectedNotice": "ĜĩţĤũƀ ĩś ńōţ ćōńńēćţēď. Ćōńƒĩĝũŕē ŵōŕķśƥàćē àũţōḿàţĩōń ŵĩţĥ ĝĥ ĆĹĨ ōŕ à ƥēŕśōńàĺ àććēśś ţōķēń. <2>Ōƥēń ĜĩţĤũƀ śēţţĩńĝś</2> ţō śēē ŷōũŕ ƥũĺĺ ŕē qũēśţś àńď ĩśśũēś.",
   "yourReviewIsRequested": "Ŷōũŕ ŕēvĩēŵ ĩś ŕē qũēśţēď"
 }

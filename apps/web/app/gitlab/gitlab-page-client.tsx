@@ -81,29 +81,35 @@ function PageHeader({
 }
 
 function NotConnectedNotice({ reconnect }: { reconnect?: boolean }) {
-  const { t } = useTranslation();
   return (
     <Alert>
       <AlertDescription>
-        <Trans
-          i18nKey="gitlab:toSeeYourMergeRequestsAnd"
-          values={{
-            value0: reconnect
-              ? "GitLab credentials are configured, but authentication failed. Reconnect in "
-              : "GitLab is not connected. Configure GitLab authentication in ",
-          }}
-        >
-          {reconnect
-            ? "GitLab credentials are configured, but authentication failed. Reconnect in "
-            : "GitLab is not connected. Configure GitLab authentication in "}
-          <Link
-            href="/settings/integrations/gitlab"
-            className="underline font-medium cursor-pointer"
-          >
-            {t("gitlab:settingsGitlab")}
-          </Link>{" "}
-          to see your merge requests and issues.
-        </Trans>
+        {/* One whole message per branch. Passing the reason through `values`
+            left it in English in every locale and made the catalog interpolate it
+            twice — once as the notice, once as the link label. */}
+        {reconnect ? (
+          <Trans i18nKey="gitlab:reconnectNotice">
+            GitLab credentials are configured, but authentication failed. Reconnect in{" "}
+            <Link
+              href="/settings/integrations/gitlab"
+              className="underline font-medium cursor-pointer"
+            >
+              Settings → GitLab
+            </Link>{" "}
+            to see your merge requests and issues.
+          </Trans>
+        ) : (
+          <Trans i18nKey="gitlab:notConnectedNotice">
+            GitLab is not connected. Configure GitLab authentication in{" "}
+            <Link
+              href="/settings/integrations/gitlab"
+              className="underline font-medium cursor-pointer"
+            >
+              Settings → GitLab
+            </Link>{" "}
+            to see your merge requests and issues.
+          </Trans>
+        )}
       </AlertDescription>
     </Alert>
   );

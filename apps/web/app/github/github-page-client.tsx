@@ -91,30 +91,34 @@ function NotAuthenticatedNotice({
   workspaceId?: string;
   personalRequired: boolean;
 }) {
-  const { t } = useTranslation();
   const settingsHref = workspaceId
     ? `/settings/workspace/${workspaceId}/integrations/github`
     : "/settings/integrations/github";
   return (
     <Alert>
       <AlertDescription>
-        <Trans
-          i18nKey="github:toSeeYourPullRequestsAnd"
-          values={{
-            value0: personalRequired
-              ? "Connect your personal GitHub identity to see pull requests and issues assigned to you."
-              : "GitHub is not connected. Configure workspace automation with gh CLI or a personal access token.",
-            settingsHref,
-          }}
-        >
-          {personalRequired
-            ? "Connect your personal GitHub identity to see pull requests and issues assigned to you."
-            : "GitHub is not connected. Configure workspace automation with gh CLI or a personal access token."}{" "}
-          <Link href={settingsHref} className="underline font-medium cursor-pointer">
-            {t("github:openGithubSettings")}
-          </Link>{" "}
-          to see your pull requests and issues.
-        </Trans>
+        {/* One whole message per branch. The reason sentence used to be passed
+            through `values`, which left it in English in every locale AND had the
+            catalog interpolate it twice — once as the notice, once as the link
+            label. Only the link is a component slot. */}
+        {personalRequired ? (
+          <Trans i18nKey="github:connectPersonalIdentityNotice" values={{ settingsHref }}>
+            Connect your personal GitHub identity to see pull requests and issues assigned to you.{" "}
+            <Link href={settingsHref} className="underline font-medium cursor-pointer">
+              Open GitHub settings
+            </Link>{" "}
+            to see your pull requests and issues.
+          </Trans>
+        ) : (
+          <Trans i18nKey="github:workspaceNotConnectedNotice" values={{ settingsHref }}>
+            GitHub is not connected. Configure workspace automation with gh CLI or a personal access
+            token.{" "}
+            <Link href={settingsHref} className="underline font-medium cursor-pointer">
+              Open GitHub settings
+            </Link>{" "}
+            to see your pull requests and issues.
+          </Trans>
+        )}
       </AlertDescription>
     </Alert>
   );

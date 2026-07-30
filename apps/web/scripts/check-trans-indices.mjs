@@ -99,6 +99,26 @@ function checkValuesForElements(node, key, where) {
   }
 }
 
+/**
+ * An auto-named `{{valueN}}` used twice means one expression was folded into two
+ * places — typically a notice that then renders both as the sentence and as a
+ * link's label. Named placeholders (`{{count}}`) legitimately repeat.
+ */
+function checkDuplicatePlaceholders(msg, key, where) {
+  const seen = new Map();
+  for (const [, name] of msg.matchAll(/\{\{(value\d+)\}\}/g)) {
+    seen.set(name, (seen.get(name) ?? 0) + 1);
+  }
+  for (const [name, count] of seen) {
+    if (count > 1) {
+      problems.push(
+        `${where}  ${key}: {{${name}}} appears ${count} times — one expression cannot be two ` +
+          `different pieces of copy`,
+      );
+    }
+  }
+}
+
 /** Every `<n>` in the message must land on an element child. */
 function checkTagIndices(msg, children, key, where) {
   const indices = [...msg.matchAll(/<(\d+)>/g)].map((m) => Number(m[1]));
@@ -145,6 +165,7 @@ for (const dir of DIRS) {
       checked += 1;
       const where = `${path.relative(ROOT, file)}:${src.slice(0, node.start).split("\n").length}`;
       checkValuesForElements(node, key, where);
+      checkDuplicatePlaceholders(msg, key, where);
       checkTagIndices(msg, runtimeChildren(node), key, where);
     });
   }

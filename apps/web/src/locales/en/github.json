@@ -101,6 +101,7 @@
   "connectIdentity": "Connect identity",
   "connectionFailed": "Connection failed",
   "connectionMethod": "Connection method",
+  "connectPersonalIdentityNotice": "Connect your personal GitHub identity to see pull requests and issues assigned to you. <2>Open GitHub settings</2> to see your pull requests and issues.",
   "connectToken": "Connect token",
   "connectYourGithubUserForMy": "Connect your GitHub user for My GitHub and human-attributed actions. Without it, automation continues as the App.",
   "continueOnGithub": "Continue on GitHub <1></1>",
@@ -290,7 +291,6 @@
   "opened": "opened {{value1}}",
   "openGithubAppSettings": "Open GitHub App settings",
   "openGithubFilters": "Open GitHub filters",
-  "openGithubSettings": "Open GitHub settings",
   "optionalFallsBackToStepDefault": "Optional \u2014 falls back to step default. The executor environment where the agent will run.",
   "optionalFallsBackToStepDefault2": "Optional \u2014 falls back to step default.",
   "optionallyConnectYourGithubUserFor": "Optionally connect your GitHub user for My GitHub and human-attributed actions. This identity is never given to managed agents; workspace automation continues as the App.",
@@ -430,7 +430,6 @@
   "titleOfThePrOrIssue": "Title of the PR or issue",
   "toggleReviewFollowUpAutomation": "Toggle review follow-up automation",
   "tool": "Tool",
-  "toSeeYourPullRequestsAnd": "{{value0}} <2>{{value0}}</2> to see your pull requests and issues.",
   "type": "Type",
   "typeACustomQueryFirst": "Type a custom query first",
   "typeAndAreSubstitutedWhenThe": "Type {{ to see available placeholders. <5>{{url}}</5> and <8>{{title}}</8> are substituted when the action runs.",
@@ -458,5 +457,6 @@
   "workspaceGithubAccess": "Workspace GitHub access",
   "workspaceGithubConnectionRemoved": "Workspace GitHub connection removed",
   "workspaceGithubTokenConnected": "Workspace GitHub token connected",
+  "workspaceNotConnectedNotice": "GitHub is not connected. Configure workspace automation with gh CLI or a personal access token. <2>Open GitHub settings</2> to see your pull requests and issues.",
   "yourReviewIsRequested": "Your review is requested"
 }

@@ -59,6 +59,20 @@ scripts/pr-state --summary <PR>
 If a newer head has already been pushed, rely on its newly triggered CodeQL
 run. Report an unchanged upload failure rather than changing product code.
 
+**Go module-proxy transport failure:** If a Go test job fails during package
+setup while downloading from `proxy.golang.org` (for example, `stream error:
+stream ID ... INTERNAL_ERROR`), and has no test assertion or compile failure,
+treat it as proxy transport infrastructure. Rerun the failed job once, then
+re-check the current head:
+
+```bash
+gh run rerun <run-id> --failed
+scripts/pr-state --summary <PR>
+```
+
+Only investigate product code when the rerun exposes a repeatable test or build
+failure.
+
 **Third-party deployment fetch failure:** For a deployment action that cannot
 fetch its third-party resource, compare adjacent successful runs for the same
 branch/head and rerun the failed job once before changing workflow or product

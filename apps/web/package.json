@@ -10,7 +10,7 @@
     "build:vite": "vite build",
     "start": "vite preview --host 0.0.0.0",
     "lint": "eslint --max-warnings 0",
-    "lint:i18n": "eslint --config eslint.i18n.config.mjs",
+    "lint:i18n": "eslint components app",
     "pretypecheck": "node scripts/generate-release-notes.mjs && node scripts/generate-changelog.mjs",
     "typecheck": "tsc --noEmit",
     "pretest": "node scripts/generate-release-notes.mjs && node scripts/generate-changelog.mjs",

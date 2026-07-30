@@ -140,34 +140,34 @@ Wave 1 — Foundation (sequential):
 - [x] [task-03-formats](task-03-formats.md)
 - [x] [task-04-language-switcher-pseudo](task-04-language-switcher-pseudo.md)
 - [x] [task-05-ui-package-strings](task-05-ui-package-strings.md)
-- [x] [task-06-lint-guard-ci-docs](task-06-lint-guard-ci-docs.md)  (guard added as non-blocking `lint:i18n`; folded into main config at task-40)
+- [x] [task-06-lint-guard-ci-docs](task-06-lint-guard-ci-docs.md)  (guard added as non-blocking `lint:i18n`; folded into eslint.config.mjs as an error at task-40)
 - [x] [task-07-migration-playbook](task-07-migration-playbook.md)   (reference doc; macro/extract/pseudo pipeline validated by the foundation build)
 
 Wave 2 — Migration batch A (parallel candidates, disjoint dirs):
-- [ ] [task-10-mig-shared-toplevel](task-10-mig-shared-toplevel.md)        components/*.tsx (top-level) + shared/ + routing/ + theme/ + icons/
-- [ ] [task-11-mig-sidebar-statusbar](task-11-mig-sidebar-statusbar.md)    app-sidebar/ + app-status-bar/ + quick-chat/ + command-panel
-- [ ] [task-12-mig-settings-components](task-12-mig-settings-components.md) components/settings/ (221)
-- [ ] [task-13-mig-settings-app](task-13-mig-settings-app.md)              app/settings/ (90)
+- [x] [task-10-mig-shared-toplevel](task-10-mig-shared-toplevel.md)        components/*.tsx (top-level) + shared/ + routing/ + theme/ + icons/
+- [x] [task-11-mig-sidebar-statusbar](task-11-mig-sidebar-statusbar.md)    app-sidebar/ + app-status-bar/ + quick-chat/ + command-panel
+- [x] [task-12-mig-settings-components](task-12-mig-settings-components.md) components/settings/ (221)
+- [x] [task-13-mig-settings-app](task-13-mig-settings-app.md)              app/settings/ (90)
 - [x] [task-14-mig-kanban](task-14-mig-kanban.md)                          components/kanban/ (30)
 
 Wave 3 — Migration batch B (parallel candidates, disjoint dirs):
-- [ ] [task-20-mig-task-a](task-20-mig-task-a.md)                          components/task/ subset A
-- [ ] [task-21-mig-task-b](task-21-mig-task-b.md)                          components/task/ subset B
-- [ ] [task-22-mig-task-c](task-22-mig-task-c.md)                          components/task/ subset C
-- [ ] [task-23-mig-office-app](task-23-mig-office-app.md)                  app/office/ (210)
-- [ ] [task-24-mig-review-diff-editors](task-24-mig-review-diff-editors.md) review/ + diff/ + editors/
+- [x] [task-20-mig-task-a](task-20-mig-task-a.md)                          components/task/ subset A
+- [x] [task-21-mig-task-b](task-21-mig-task-b.md)                          components/task/ subset B
+- [x] [task-22-mig-task-c](task-22-mig-task-c.md)                          components/task/ subset C
+- [x] [task-23-mig-office-app](task-23-mig-office-app.md)                  app/office/ (210)
+- [x] [task-24-mig-review-diff-editors](task-24-mig-review-diff-editors.md) review/ + diff/ + editors/
 
 Wave 4 — Migration batch C (integrations + long tail, parallel candidates):
-- [ ] [task-30-mig-github](task-30-mig-github.md)                          components/github/ + app/github/
-- [ ] [task-31-mig-gitlab](task-31-mig-gitlab.md)                          components/gitlab/ + app/gitlab/
-- [ ] [task-32-mig-jira-linear](task-32-mig-jira-linear.md)                jira/ linear/ + app/jira app/linear
-- [ ] [task-33-mig-azure-sentry-slack](task-33-mig-azure-sentry-slack.md)  azure-devops/ sentry/ slack/ + app/azure-devops/
-- [ ] [task-34-mig-integrations-automations](task-34-mig-integrations-automations.md) integrations/ vcs/ workspace-source-picker/ automations/
-- [ ] [task-35-mig-plugins-stats-metrics](task-35-mig-plugins-stats-metrics.md) plugins/ + app/stats/ + system-metrics/ + system-health/
-- [ ] [task-36-mig-tasks-auth-demo-longtail](task-36-mig-tasks-auth-demo-longtail.md) app/tasks/ app/t/ app/actions/ app/auth/ app/demo/ + watches/ release-notes/ agent/ search/ config-chat/ onboarding/ session/
+- [x] [task-30-mig-github](task-30-mig-github.md)                          components/github/ + app/github/
+- [x] [task-31-mig-gitlab](task-31-mig-gitlab.md)                          components/gitlab/ + app/gitlab/
+- [x] [task-32-mig-jira-linear](task-32-mig-jira-linear.md)                jira/ linear/ + app/jira app/linear
+- [x] [task-33-mig-azure-sentry-slack](task-33-mig-azure-sentry-slack.md)  azure-devops/ sentry/ slack/ + app/azure-devops/
+- [x] [task-34-mig-integrations-automations](task-34-mig-integrations-automations.md) integrations/ vcs/ workspace-source-picker/ automations/
+- [x] [task-35-mig-plugins-stats-metrics](task-35-mig-plugins-stats-metrics.md) plugins/ + app/stats/ + system-metrics/ + system-health/
+- [x] [task-36-mig-tasks-auth-demo-longtail](task-36-mig-tasks-auth-demo-longtail.md) app/tasks/ app/t/ app/actions/ app/auth/ app/demo/ + watches/ release-notes/ agent/ search/ config-chat/ onboarding/ session/
 
 Wave 5 — Close-out (sequential, after all M-* clean):
-- [ ] [task-40-lint-flip-e2e-coverage](task-40-lint-flip-e2e-coverage.md)  flip eslint guard warn→error; expand pseudo-coverage e2e; final extract
+- [x] [task-40-lint-flip-e2e-coverage](task-40-lint-flip-e2e-coverage.md)  guard flipped warn→error in eslint.config.mjs; `<Trans>` index check added to i18n:check
 ```
 
 Default execution is sequential in the primary conversation; the migration waves

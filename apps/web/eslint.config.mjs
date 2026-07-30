@@ -3,7 +3,9 @@ import js from "@eslint/js";
 import reactHooks from "eslint-plugin-react-hooks";
 import sonarjs from "eslint-plugin-sonarjs";
 import unusedImports from "eslint-plugin-unused-imports";
+import i18next from "eslint-plugin-i18next";
 import tseslint from "typescript-eslint";
+import { i18nGuardFiles, noLiteralStringOptions } from "./eslint.i18n.options.mjs";
 
 const eslintConfig = defineConfig([
   {
@@ -48,6 +50,17 @@ const eslintConfig = defineConfig([
         { varsIgnorePattern: "^_", argsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
       ],
     },
+  },
+  // Hardcoded user-facing strings. An ERROR, not a warning: the sweep in
+  // docs/plans/i18n took this to zero, and a warning would let it drift back.
+  // Options are shared with eslint.i18n.config.mjs so the two cannot disagree.
+  {
+    files: i18nGuardFiles,
+    // Test files build fixtures out of literal strings on purpose; guarding them
+    // would force every `label="Tasks"` in a test through the catalog.
+    ignores: ["**/*.test.ts", "**/*.test.tsx", "e2e/**"],
+    plugins: { i18next },
+    rules: { "i18next/no-literal-string": ["error", noLiteralStringOptions] },
   },
   // E2E tests (Playwright): disable React hooks rules since Playwright's `use()` and
   // `test.extend()` patterns are falsely flagged, and relax test-specific limits.

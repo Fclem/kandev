@@ -1,7 +1,8 @@
 # i18n sweep — follow-ups
 
 Issues surfaced during the migration that wrapping strings alone does not fix.
-Resolve before flipping the lint guard to error (task-40).
+The lint guard is now an error in `apps/web/eslint.config.mjs` (task-40) and
+reports zero across `components/` and `app/`.
 
 ---
 

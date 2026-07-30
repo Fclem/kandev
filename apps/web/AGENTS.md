@@ -181,10 +181,18 @@ User-facing strings are localized with i18next + react-i18next, keyed as
 `namespace:key`. Add the English text to `src/locales/en/<namespace>.json`, then
 reference it with `t("settings:deleteExecutor")` (`useTranslation()` in
 components, the module-level `t` from `@/lib/i18n` in plain helpers). Use
-`<Trans i18nKey=... values={...}>` only for copy containing markup. Never
-translate user/domain data, code identifiers, `data-testid`, or a literal that is
-also compared with `===`. `pnpm run i18n:check` gates key/catalog drift,
-`pnpm run lint:i18n` flags hardcoded strings, and the **pseudo-locale**
+`<Trans i18nKey=... values={...}>` only for copy containing markup — and never a
+`t()` call inside its children, which shifts the message's tag indices.
+
+Never translate user/domain data, code identifiers, `data-testid`, or a literal
+that is also compared with `===`, used as a map key, or typed as a string-literal
+union. When a prop is both display copy and logic (`label: "Reviewers" |
+"Assignees"`), split it into a `kind`/`origin` discriminant plus a translated
+label rather than translating in place.
+
+`pnpm lint` fails on hardcoded UI strings (`i18next/no-literal-string` is an
+error; options live in `eslint.i18n.options.mjs`), `pnpm run i18n:check` gates
+key/catalog drift and `<Trans>` tag indices, and the **pseudo-locale**
 (Settings → Appearance, dev/e2e) is the completeness check — any plain-English
 text under it was never externalized. The tooling needs **Node 24**. Full guide:
 [`docs/i18n.md`](../../docs/i18n.md); spec:

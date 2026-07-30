@@ -152,14 +152,6 @@ jobs:
       - name: Verify i18n keys and catalogs
         run: pnpm --filter @kandev/web i18n:check
 
-      # Anti-regression guard for hardcoded UI strings. Reported as a warning
-      # while the full-sweep migration is in flight; docs/plans/i18n task-40
-      # folds this rule into the main lint config as an error once every batch
-      # is clean.
-      - name: Report hardcoded UI strings (i18n guard)
-        continue-on-error: true
-        run: pnpm --filter @kandev/web lint:i18n
-
       - name: Run tests
         run: pnpm --filter @kandev/web test
 

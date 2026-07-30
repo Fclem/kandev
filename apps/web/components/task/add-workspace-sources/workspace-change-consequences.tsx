@@ -1,5 +1,5 @@
 import { IconAlertTriangle } from "@tabler/icons-react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function WorkspaceChangeConsequences({ restartsWorkspace }: { restartsWorkspace: boolean }) {
   const { t } = useTranslation();
@@ -36,11 +36,13 @@ export function WorkspaceChangeConsequences({ restartsWorkspace }: { restartsWor
             </div>
           </details>
           <p className="border-t border-amber-500/20 pt-2 text-muted-foreground">
-            <strong className="font-medium text-foreground">
-              {t("task:cancelLeavesTheWorkspaceUnchanged")}
-            </strong>{" "}
-            If you continue, the batch is all-or-nothing: when any source fails, none of the new
-            sources are attached.
+            <Trans i18nKey="task:cancelLeavesWorkspaceUnchangedBatch">
+              <strong className="font-medium text-foreground">
+                Cancel leaves the workspace unchanged.
+              </strong>{" "}
+              If you continue, the batch is all-or-nothing: when any source fails, none of the new
+              sources are attached.
+            </Trans>
           </p>
         </div>
       </div>

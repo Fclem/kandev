@@ -17,7 +17,7 @@ import { IssueWatchTable } from "./issue-watch-table";
 import { ReviewWatchDialog } from "./review-watch-dialog";
 import { ReviewWatchTable } from "./review-watch-table";
 import { DeleteWatchDialog } from "./delete-watch-dialog";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ReviewWatches = ReturnType<typeof useGitLabReviewWatches>;
 type IssueWatches = ReturnType<typeof useGitLabIssueWatches>;
@@ -43,8 +43,10 @@ function NewWatchButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="min-h-11 w-full cursor-pointer sm:min-h-8 sm:w-auto"
     >
-      <IconPlus className="mr-1 h-4 w-4" />
-      New watch
+      <Trans i18nKey="gitlab:newWatch">
+        <IconPlus className="mr-1 h-4 w-4" />
+        New watch
+      </Trans>
     </Button>
   );
 }

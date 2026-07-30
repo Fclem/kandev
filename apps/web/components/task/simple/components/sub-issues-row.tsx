@@ -7,7 +7,7 @@ import { Button } from "@kandev/ui/button";
 import { NewTaskDialog } from "@/app/office/components/new-task-dialog";
 import { StatusIcon } from "@/app/office/tasks/[id]/status-icon";
 import type { Task } from "@/app/office/tasks/[id]/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SubIssuesRowProps = {
   task: Task;
@@ -48,8 +48,10 @@ export function SubIssuesRow({ task }: SubIssuesRowProps) {
           onClick={() => setOpen(true)}
           data-testid="sub-issues-add-button"
         >
-          <IconPlus className="h-3 w-3 mr-1" />
-          Add sub-issue
+          <Trans i18nKey="task:addSubIssue">
+            <IconPlus className="h-3 w-3 mr-1" />
+            Add sub-issue
+          </Trans>
         </Button>
       </div>
       <NewTaskDialog

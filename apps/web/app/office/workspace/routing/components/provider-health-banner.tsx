@@ -6,7 +6,7 @@ import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import type { ProviderHealth } from "@/lib/state/slices/office/types";
 import { providerLabel } from "./provider-order-editor";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   health: ProviderHealth[];
@@ -74,7 +74,13 @@ function ProviderHealthRow({
             <span className="text-xs font-mono text-muted-foreground">{h.error_code}</span>
           )}
         </div>
-        {h.retry_at && <p className="text-xs text-muted-foreground">Retry at {h.retry_at}</p>}
+        {h.retry_at && (
+          <p className="text-xs text-muted-foreground">
+            <Trans i18nKey="office:retryAt" values={{ retry_at: h.retry_at }}>
+              Retry at {h.retry_at}
+            </Trans>
+          </p>
+        )}
       </div>
       <Button
         size="sm"

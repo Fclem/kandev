@@ -32,7 +32,7 @@ import {
 } from "@/components/linear/use-linear-issue-search";
 import type { LinearIssue, LinearTeam } from "@/lib/types/linear";
 import type { Workflow, WorkflowStep } from "@/lib/types/http";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type LinearPageClientProps = {
   workspaceId?: string;
@@ -46,14 +46,16 @@ function NotConfiguredNotice() {
     <div className="p-6 max-w-2xl">
       <Alert>
         <AlertDescription>
-          Linear is not configured.{" "}
-          <Link
-            href="/settings/integrations/linear"
-            className="underline font-medium cursor-pointer"
-          >
-            {t("linear:configureLinear")}
-          </Link>{" "}
-          to see your issues here.
+          <Trans i18nKey="linear:linearIsNotConfiguredToSee">
+            Linear is not configured.{" "}
+            <Link
+              href="/settings/integrations/linear"
+              className="underline font-medium cursor-pointer"
+            >
+              {t("linear:configureLinear")}
+            </Link>{" "}
+            to see your issues here.
+          </Trans>
         </AlertDescription>
       </Alert>
     </div>
@@ -162,8 +164,10 @@ function IssueRow({
           className="cursor-pointer h-7 px-2 gap-1 text-xs"
           onClick={() => onStartTask(issue)}
         >
-          <IconPlus className="h-3.5 w-3.5" />
-          Start task
+          <Trans i18nKey="linear:startTask">
+            <IconPlus className="h-3.5 w-3.5" />
+            Start task
+          </Trans>
         </Button>
       </div>
     </div>
@@ -305,14 +309,16 @@ function DisabledNotice() {
     <div className="p-6 max-w-2xl">
       <Alert>
         <AlertDescription>
-          Linear integration is disabled.{" "}
-          <Link
-            href="/settings/integrations/linear"
-            className="underline font-medium cursor-pointer"
-          >
-            {t("linear:reEnableItInSettings")}
-          </Link>
-          .
+          <Trans i18nKey="linear:linearIntegrationIsDisabled">
+            Linear integration is disabled.{" "}
+            <Link
+              href="/settings/integrations/linear"
+              className="underline font-medium cursor-pointer"
+            >
+              {t("linear:reEnableItInSettings")}
+            </Link>
+            .
+          </Trans>
         </AlertDescription>
       </Alert>
     </div>

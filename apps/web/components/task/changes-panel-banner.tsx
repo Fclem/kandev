@@ -1,3 +1,4 @@
+import { Trans } from "react-i18next";
 import { useMemo } from "react";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { reviewFileKey } from "@/components/review/types";
@@ -28,8 +29,13 @@ export function TruncatedFilesBanner({ count }: { count: number }) {
     >
       <IconAlertTriangle className="h-3.5 w-3.5 shrink-0" />
       <span>
-        {count.toLocaleString()} more changed {count === 1 ? "file is" : "files are"} hidden — the
-        change set is too large to render in full.
+        <Trans
+          i18nKey="task:moreChangedHiddenTheChangeSet"
+          values={{ value0: count.toLocaleString(), value2: count === 1 ? "file is" : "files are" }}
+        >
+          {count.toLocaleString()} more changed {count === 1 ? "file is" : "files are"} hidden — the
+          change set is too large to render in full.
+        </Trans>
       </span>
     </div>
   );

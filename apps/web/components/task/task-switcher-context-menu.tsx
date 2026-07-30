@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { cloneElement, isValidElement, useState } from "react";
 import {
@@ -345,8 +346,10 @@ function BulkSelectionMenuItems({
         <>
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onSelect={() => onBulkDelete(actingIds)}>
-            <IconTrash className="mr-2 h-4 w-4" />
-            Delete {n} tasks
+            <Trans i18nKey="task:deleteTasks" values={{ n }}>
+              <IconTrash className="mr-2 h-4 w-4" />
+              Delete {n} tasks
+            </Trans>
           </ContextMenuItem>
         </>
       )}
@@ -554,14 +557,18 @@ function TaskLinkMenu({
       <ContextMenuSubContent className="w-56">
         {onLinkPullRequest && (
           <ContextMenuItem disabled={disabled} onSelect={onLinkPullRequest}>
-            <IconGitPullRequest className="mr-2 h-4 w-4" />
-            GitHub Pull Request
+            <Trans i18nKey="task:githubPullRequest">
+              <IconGitPullRequest className="mr-2 h-4 w-4" />
+              GitHub Pull Request
+            </Trans>
           </ContextMenuItem>
         )}
         {onLinkIssue && (
           <ContextMenuItem disabled={disabled} onSelect={onLinkIssue}>
-            <IconCircleDot className="mr-2 h-4 w-4" />
-            GitHub Issue
+            <Trans i18nKey="task:githubIssue">
+              <IconCircleDot className="mr-2 h-4 w-4" />
+              GitHub Issue
+            </Trans>
           </ContextMenuItem>
         )}
         {onLinkMergeRequest && (
@@ -570,26 +577,34 @@ function TaskLinkMenu({
             disabled={disabled}
             onSelect={onLinkMergeRequest}
           >
-            <IconBrandGitlab className="mr-2 h-4 w-4" />
-            GitLab Merge Request
+            <Trans i18nKey="task:gitlabMergeRequest">
+              <IconBrandGitlab className="mr-2 h-4 w-4" />
+              GitLab Merge Request
+            </Trans>
           </ContextMenuItem>
         )}
         {onLinkJiraTicket && (
           <ContextMenuItem disabled={disabled} onSelect={onLinkJiraTicket}>
-            <IconTicket className="mr-2 h-4 w-4" />
-            Jira Ticket
+            <Trans i18nKey="task:jiraTicket">
+              <IconTicket className="mr-2 h-4 w-4" />
+              Jira Ticket
+            </Trans>
           </ContextMenuItem>
         )}
         {onLinkLinearIssue && (
           <ContextMenuItem disabled={disabled} onSelect={onLinkLinearIssue}>
-            <IconCircleDot className="mr-2 h-4 w-4" />
-            Linear Issue
+            <Trans i18nKey="task:linearIssue">
+              <IconCircleDot className="mr-2 h-4 w-4" />
+              Linear Issue
+            </Trans>
           </ContextMenuItem>
         )}
         {onLinkSentryIssue && (
           <ContextMenuItem disabled={disabled} onSelect={onLinkSentryIssue}>
-            <IconBrandSentry className="mr-2 h-4 w-4" />
-            Sentry Issue
+            <Trans i18nKey="task:sentryIssue">
+              <IconBrandSentry className="mr-2 h-4 w-4" />
+              Sentry Issue
+            </Trans>
           </ContextMenuItem>
         )}
       </ContextMenuSubContent>

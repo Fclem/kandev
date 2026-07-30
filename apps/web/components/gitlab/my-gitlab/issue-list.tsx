@@ -9,7 +9,7 @@ import type { Issue } from "@/lib/types/gitlab";
 import type { GitLabLaunchPayload, GitLabTaskPreset } from "./quick-task-launcher";
 import { StartTaskMenu } from "./start-task-menu";
 import { SubscriptionToggle } from "../subscription-toggle";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type IssueListProps = {
   items: Issue[];
@@ -78,7 +78,15 @@ function IssueRow({
           </span>
           <span>·</span>
           <span className="whitespace-nowrap">
-            by {issue.author_username} · opened {formatRelativeTime(issue.created_at)}
+            <Trans
+              i18nKey="gitlab:byOpened"
+              values={{
+                author_username: issue.author_username,
+                value3: formatRelativeTime(issue.created_at),
+              }}
+            >
+              by {issue.author_username} · opened {formatRelativeTime(issue.created_at)}
+            </Trans>
           </span>
           <IssueLabels labels={issue.labels} />
         </div>

@@ -15,7 +15,7 @@ import { Button } from "@kandev/ui/button";
 import { Badge } from "@kandev/ui/badge";
 import type { TaskPlanRevision } from "@/lib/types/http";
 import { formatPreciseTime } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const PlanReadOnlyMarkdown = dynamic(
   () =>
@@ -82,7 +82,9 @@ export function PlanRevisionPreviewDialog({
             <span>{revision ? formatPreciseTime(revision.updated_at) : ""}</span>
             {revision?.revert_of_revision_id && (
               <span className="flex items-center gap-1 text-muted-foreground">
-                <IconRestore className="h-3 w-3" /> restored from earlier version
+                <Trans i18nKey="task:restoredFromEarlierVersion">
+                  <IconRestore className="h-3 w-3" /> restored from earlier version
+                </Trans>
               </span>
             )}
           </DialogDescription>

@@ -2,7 +2,7 @@
 
 import { IconGitPullRequest, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function MobilePRBranchSummary({
   displayBranch,
@@ -17,14 +17,24 @@ export function MobilePRBranchSummary({
     <div className="text-sm text-muted-foreground">
       {baseBranch ? (
         <span>
-          Creating {terminology.shortName} from{" "}
-          <span className="font-medium text-foreground">{displayBranch}</span> to{" "}
-          <span className="font-medium text-foreground">{baseBranch}</span>
+          <Trans
+            i18nKey="task:creatingFromTo"
+            values={{ shortName: terminology.shortName, displayBranch, baseBranch }}
+          >
+            Creating {terminology.shortName} from{" "}
+            <span className="font-medium text-foreground">{displayBranch}</span> to{" "}
+            <span className="font-medium text-foreground">{baseBranch}</span>
+          </Trans>
         </span>
       ) : (
         <span>
-          Creating {terminology.shortName} from{" "}
-          <span className="font-medium text-foreground">{displayBranch}</span>
+          <Trans
+            i18nKey="task:creatingFrom"
+            values={{ shortName: terminology.shortName, displayBranch }}
+          >
+            Creating {terminology.shortName} from{" "}
+            <span className="font-medium text-foreground">{displayBranch}</span>
+          </Trans>
         </span>
       )}
     </div>

@@ -7,7 +7,7 @@ import { Command, CommandInput, CommandList, CommandGroup, CommandItem } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconPlus, IconBrandGithub, IconWebhook, IconInfoCircle } from "@tabler/icons-react";
 import type { TriggerType, TriggerTypeInfo } from "@/lib/types/automation";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TriggerPickerProps = {
   triggerTypes: TriggerTypeInfo[];
@@ -60,8 +60,10 @@ export function TriggerPicker({ triggerTypes, onSelect }: TriggerPickerProps) {
           size="sm"
           className="cursor-pointer text-muted-foreground"
         >
-          <IconPlus className="h-4 w-4 mr-1" />
-          Add Condition
+          <Trans i18nKey="automations:addCondition">
+            <IconPlus className="h-4 w-4 mr-1" />
+            Add Condition
+          </Trans>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[320px] p-0" align="start">

@@ -13,7 +13,7 @@ import { useQueue } from "@/hooks/domains/session/use-queue";
 import { isWorkflowQueuedMessage, QueuedGhostMessage } from "./queued-ghost-message";
 import type { QueuedMessage } from "@/lib/state/slices/session/types";
 import type { EntityReference } from "@/lib/types/entity-reference";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const HEAD_PREVIEW_MAX = 80;
 
@@ -384,8 +384,10 @@ function QueuePanelHeader({
             title={t("task:runNextQueuedMessage")}
             data-testid="queue-drain-next"
           >
-            <IconPlayerPlay className="mr-1 h-3 w-3" />
-            Run next
+            <Trans i18nKey="task:runNext">
+              <IconPlayerPlay className="mr-1 h-3 w-3" />
+              Run next
+            </Trans>
           </Button>
         )}
         <Button
@@ -396,8 +398,10 @@ function QueuePanelHeader({
           title={t("task:clearAllQueuedMessages")}
           data-testid="queue-clear-all"
         >
-          <IconTrash className="mr-1 h-3 w-3" />
-          Clear all
+          <Trans i18nKey="task:clearAll">
+            <IconTrash className="mr-1 h-3 w-3" />
+            Clear all
+          </Trans>
         </Button>
         <button
           type="button"

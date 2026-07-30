@@ -11,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@kandev/ui/alert-dialog";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TaskDetachConfirmDialogProps = {
   open: boolean;
@@ -44,8 +44,13 @@ export function TaskDetachConfirmDialog({
           <AlertDialogDescription asChild>
             <div className="space-y-2">
               <p>
-                &quot;{taskTitle || "This task"}&quot; will become a top-level task. Its workflow,
-                subtasks, and state will not change.
+                <Trans
+                  i18nKey="task:willBecomeATopLevelTask"
+                  values={{ value1: taskTitle || "This task" }}
+                >
+                  &quot;{taskTitle || "This task"}&quot; will become a top-level task. Its workflow,
+                  subtasks, and state will not change.
+                </Trans>
               </p>
               <p>{t("task:detachingChangesTheHierarchyOnlyAccess")}</p>
               {sharesParentWorkspace && (

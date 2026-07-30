@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from "@kandev/ui/alert-dialog";
 import { Checkbox } from "@kandev/ui/checkbox";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type TaskResetEnvConfirmDialogProps = {
   open: boolean;
@@ -65,10 +65,12 @@ export function TaskResetEnvConfirmDialog({
                 disabled={isResetting}
               />
               <span>
-                Push the current branch to its remote before resetting.
-                <span className="block text-xs text-muted-foreground">
-                  {t("task:helpsPreserveCommittedWorkUncommittedChanges")}
-                </span>
+                <Trans i18nKey="task:pushTheCurrentBranchToIts">
+                  Push the current branch to its remote before resetting.
+                  <span className="block text-xs text-muted-foreground">
+                    {t("task:helpsPreserveCommittedWorkUncommittedChanges")}
+                  </span>
+                </Trans>
               </span>
             </label>
           )}
@@ -100,8 +102,15 @@ export function TaskResetEnvConfirmDialog({
               onConfirm({ pushBranch });
             }}
           >
-            {isResetting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Reset environment
+            <Trans
+              i18nKey="task:resetEnvironment4"
+              values={{
+                value0: isResetting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null,
+              }}
+            >
+              {isResetting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Reset environment
+            </Trans>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

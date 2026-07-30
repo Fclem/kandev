@@ -17,7 +17,7 @@ import {
   CreateProfilePanel,
   useSelectableProfileOptions,
 } from "./agent-profile-setup-controls";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ProfileSelectOption = ReturnType<typeof useSelectableProfileOptions>["profileOptions"][number];
 
@@ -183,9 +183,14 @@ function TierIndicator({
     <div>
       <Label>{t("office:workspaceDefaultTier")}</Label>
       <p className="text-xs text-muted-foreground mb-2">
-        We&apos;ll treat <span className="font-mono">{modelHint || "your model"}</span> as the{" "}
-        {value} tier for {selectedProfile?.agent_name || "this provider"}. Change it later in
-        Workspace → Provider routing.
+        <Trans
+          i18nKey="office:weLlTreatAsTheTier"
+          values={{ value, value6: selectedProfile?.agent_name || "this provider" }}
+        >
+          We&apos;ll treat <span className="font-mono">{modelHint || "your model"}</span> as the{" "}
+          {value} tier for {selectedProfile?.agent_name || "this provider"}. Change it later in
+          Workspace → Provider routing.
+        </Trans>
       </p>
       <ToggleGroup
         type="single"

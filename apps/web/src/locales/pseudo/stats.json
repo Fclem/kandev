@@ -1,5 +1,6 @@
 {
   "averages": "Àvēŕàĝēś",
+  "avgPerTask": "{{value0}} àvĝ ƥēŕ ţàśķ",
   "bestMonth": "Ɓēśţ ḿōńţĥ",
   "bestWeekday": "Ɓēśţ ŵēēķďàŷ",
   "bestYear": "Ɓēśţ ŷēàŕ",
@@ -7,6 +8,10 @@
   "completedTasksOverTime": "Ćōḿƥĺēţēď Ţàśķś Ōvēŕ Ţĩḿē",
   "completion": "Ćōḿƥĺēţĩōń",
   "completionRate": "Ćōḿƥĺēţĩōń ŕàţē",
+  "errorLoadingStats": "Ēŕŕōŕ ĺōàďĩńĝ śţàţś: {{initialError}}",
+  "filesChanged": "{{total_files_changed}} ƒĩĺēś ćĥàńĝēď",
+  "gitActivity": "<0></0> Ĝĩţ Àćţĩvĩţŷ",
+  "inProgress": "{{in_progress_tasks}} ĩń ƥŕōĝŕēśś",
   "less": "Ĺēśś",
   "longestTasks": "Ĺōńĝēśţ Ţàśķś",
   "meanDurationOfCompletedTurnsExcluding": "Ḿēàń ďũŕàţĩōń ōƒ ćōḿƥĺēţēď ţũŕńś, ēxćĺũďĩńĝ ţũŕńś <1ś, >=1ĥ, ōŕ ŵĩţĥ ńō ḿēśśàĝēś",
@@ -40,6 +45,9 @@
   "totalMessages": "Ţōţàĺ ḿēśśàĝēś",
   "totalTurns": "Ţōţàĺ ţũŕńś",
   "turnDuration": "Ţũŕń ďũŕàţĩōń",
+  "turnsMessages": "{{turn_count}} ţũŕńś, {{message_count}} ḿēśśàĝēś",
+  "turnsMessages2": "{{turn_count}} ţũŕńś · {{message_count}} ḿēśśàĝēś",
+  "turnsMessagesPerSession": "{{value0}} ţũŕńś · {{value4}} ḿēśśàĝēś ƥēŕ śēśśĩōń",
   "turnsPerTask": "Ţũŕńś ƥēŕ ţàśķ",
   "userMsgs": "Ũśēŕ ḿśĝś",
   "userShare": "Ũśēŕ śĥàŕē"

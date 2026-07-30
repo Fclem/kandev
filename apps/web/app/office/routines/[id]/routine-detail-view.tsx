@@ -21,7 +21,7 @@ import {
 import type { Routine, RoutineTrigger } from "@/lib/state/slices/office/types";
 import { timeAgo } from "@/lib/utils/time";
 import { OfficeTopbarPortal } from "../../components/office-topbar-portal";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // Lift the form state out of the component so the file stays under the
 // 100-line per-function ceiling and the helpers can render typed slices
@@ -130,7 +130,9 @@ export function RoutineDetailView({ initialRoutine, initialTriggers }: RoutineDe
         <span className="text-sm font-medium truncate">{routine.name}</span>
         <div className="ml-auto flex gap-2">
           <Button size="sm" variant="outline" onClick={handleRunNow} className="cursor-pointer">
-            <IconPlayerPlay className="h-4 w-4 mr-1" /> Run now
+            <Trans i18nKey="office:runNow">
+              <IconPlayerPlay className="h-4 w-4 mr-1" /> Run now
+            </Trans>
           </Button>
           <Button size="sm" onClick={handleSave} disabled={saving} className="cursor-pointer">
             <IconDeviceFloppy className="h-4 w-4 mr-1" /> {saving ? "Saving…" : "Save"}
@@ -379,8 +381,22 @@ function DetailReadOnlyCard({
         <CardTitle className="text-sm font-medium">{t("office:schedule")}</CardTitle>
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground space-y-1">
-        <div>Last fired: {lastFiredAt ? timeAgo(lastFiredAt) : "never"}</div>
-        <div>Next fire: {nextRunAt ? new Date(nextRunAt).toLocaleString() : "—"}</div>
+        <div>
+          <Trans
+            i18nKey="office:lastFired"
+            values={{ value1: lastFiredAt ? timeAgo(lastFiredAt) : "never" }}
+          >
+            Last fired: {lastFiredAt ? timeAgo(lastFiredAt) : "never"}
+          </Trans>
+        </div>
+        <div>
+          <Trans
+            i18nKey="office:nextFire"
+            values={{ value1: nextRunAt ? new Date(nextRunAt).toLocaleString() : "—" }}
+          >
+            Next fire: {nextRunAt ? new Date(nextRunAt).toLocaleString() : "—"}
+          </Trans>
+        </div>
       </CardContent>
     </Card>
   );

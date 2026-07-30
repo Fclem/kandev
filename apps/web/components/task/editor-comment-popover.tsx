@@ -7,7 +7,7 @@ import { Textarea } from "@kandev/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useDraggablePopover, usePopoverDismiss } from "@/components/task/use-draggable-popover";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type EditorCommentPopoverProps = {
   selectedText: string;
@@ -74,49 +74,84 @@ function PopoverBody({
       />
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-muted-foreground/70">
-          {modKey}+Enter to add{handleSubmitAndRun ? `, ${modKey}+Shift+Enter to run` : ""}
+          <Trans
+            i18nKey="task:enterToAdd"
+            values={{ modKey, value2: handleSubmitAndRun ? `, ${modKey}+Shift+Enter to run` : "" }}
+          >
+            {modKey}+Enter to add{handleSubmitAndRun ? `, ${modKey}+Shift+Enter to run` : ""}
+          </Trans>
         </span>
-        <TooltipProvider delayDuration={400}>
-          <div className="inline-flex">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant={handleSubmitAndRun ? "outline" : "default"}
-                  onClick={handleSubmit}
-                  disabled={isDisabled}
-                  className={`gap-1.5 cursor-pointer ${handleSubmitAndRun ? "rounded-r-none border-r-0" : ""}`}
-                >
-                  <IconPlus className="h-3.5 w-3.5" />
-                  Add
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>Save comment for review ({modKey}+Enter)</p>
-              </TooltipContent>
-            </Tooltip>
-            {handleSubmitAndRun && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    onClick={handleSubmitAndRun}
-                    disabled={isDisabled}
-                    className="gap-1.5 rounded-l-none cursor-pointer"
-                  >
-                    <IconPlayerPlay className="h-3.5 w-3.5" />
-                    Run
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Save and send to agent ({modKey}+Shift+Enter)</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        </TooltipProvider>
+        <PopoverActions
+          isDisabled={isDisabled}
+          modKey={modKey}
+          handleSubmit={handleSubmit}
+          handleSubmitAndRun={handleSubmitAndRun}
+        />
       </div>
     </div>
+  );
+}
+
+// PopoverActions is the Add / Run split-button group of the comment popover.
+function PopoverActions({
+  isDisabled,
+  modKey,
+  handleSubmit,
+  handleSubmitAndRun,
+}: {
+  isDisabled: boolean;
+  modKey: string;
+  handleSubmit: () => void;
+  handleSubmitAndRun?: () => void;
+}) {
+  return (
+    <TooltipProvider delayDuration={400}>
+      <div className="inline-flex">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant={handleSubmitAndRun ? "outline" : "default"}
+              onClick={handleSubmit}
+              disabled={isDisabled}
+              className={`gap-1.5 cursor-pointer ${handleSubmitAndRun ? "rounded-r-none border-r-0" : ""}`}
+            >
+              <IconPlus className="h-3.5 w-3.5" />
+              Add
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>
+              <Trans i18nKey="task:saveCommentForReviewEnter" values={{ modKey }}>
+                Save comment for review ({modKey}+Enter)
+              </Trans>
+            </p>
+          </TooltipContent>
+        </Tooltip>
+        {handleSubmitAndRun && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                onClick={handleSubmitAndRun}
+                disabled={isDisabled}
+                className="gap-1.5 rounded-l-none cursor-pointer"
+              >
+                <IconPlayerPlay className="h-3.5 w-3.5" />
+                Run
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>
+                <Trans i18nKey="task:saveAndSendToAgentShift" values={{ modKey }}>
+                  Save and send to agent ({modKey}+Shift+Enter)
+                </Trans>
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 

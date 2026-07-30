@@ -13,7 +13,7 @@ import { MobilePillButton } from "./mobile-pill-button";
 import { MobilePickerSheet } from "./mobile-picker-sheet";
 import { useMobileTerminalsContext } from "./mobile-terminals-context";
 import type { Terminal } from "@/hooks/domains/session/use-terminals";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function TerminalRow({
   terminal,
@@ -128,6 +128,30 @@ function useTerminalCloseHandler({
   return { pendingClose, setPendingClose, handleConfirmClose, closeTerminal };
 }
 
+// TerminalsListHeader shows the terminal count and the "New terminal" action at
+// the top of the mobile terminal picker sheet.
+function TerminalsListHeader({ count, onAdd }: { count: number; onAdd: () => void }) {
+  return (
+    <div className="flex items-center justify-between px-1">
+      <span className="text-xs font-medium text-muted-foreground">
+        {count} terminal{count === 1 ? "" : "s"}
+      </span>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 gap-1 cursor-pointer"
+        onClick={onAdd}
+        data-testid="mobile-add-terminal"
+      >
+        <Trans i18nKey="task:newTerminal2">
+          <IconPlus className="h-4 w-4" />
+          New terminal
+        </Trans>
+      </Button>
+    </div>
+  );
+}
+
 const MobileTerminalsList = memo(function MobileTerminalsList({
   sessionId,
   onClose,
@@ -190,21 +214,7 @@ const MobileTerminalsList = memo(function MobileTerminalsList({
 
   return (
     <div className="flex flex-col gap-2 px-1">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium text-muted-foreground">
-          {terminals.length} terminal{terminals.length === 1 ? "" : "s"}
-        </span>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 gap-1 cursor-pointer"
-          onClick={() => addTerminal()}
-          data-testid="mobile-add-terminal"
-        >
-          <IconPlus className="h-4 w-4" />
-          New terminal
-        </Button>
-      </div>
+      <TerminalsListHeader count={terminals.length} onAdd={() => addTerminal()} />
       <div className="flex flex-col gap-0.5">
         {terminals.length === 0 && (
           <div className="text-xs text-muted-foreground px-2 py-4 text-center">

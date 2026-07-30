@@ -5,7 +5,7 @@ import { IconTerminal2, IconCopy, IconCheck } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { RecoveryAuthMethod } from "@/components/task/chat/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function buildFullCommand(termAuth: RecoveryAuthMethod["terminal_auth"]): string | null {
   if (!termAuth) return null;
@@ -48,8 +48,10 @@ export function GenericAuthPanel({ onOpenTerminal }: { onOpenTerminal: () => voi
         className="h-6 text-[11px] cursor-pointer gap-1 px-2"
         onClick={onOpenTerminal}
       >
-        <IconTerminal2 className="h-3 w-3" />
-        Open terminal
+        <Trans i18nKey="task:openTerminal">
+          <IconTerminal2 className="h-3 w-3" />
+          Open terminal
+        </Trans>
       </Button>
     </div>
   );
@@ -113,8 +115,10 @@ function AuthMethodRow({
                 className="h-6 text-[11px] cursor-pointer gap-1 px-2 shrink-0"
                 onClick={() => fullCommand && onOpenTerminal(fullCommand)}
               >
-                <IconTerminal2 className="h-3 w-3" />
-                Run in terminal
+                <Trans i18nKey="task:runInTerminal">
+                  <IconTerminal2 className="h-3 w-3" />
+                  Run in terminal
+                </Trans>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">{t("task:openTheBottomTerminalAndPaste")}</TooltipContent>

@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useState, useCallback, memo, useMemo } from "react";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
@@ -318,7 +319,12 @@ function RepeatedToolSummary({
           <IconChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
         )}
         <span className="min-w-0 break-words">
-          {count} repeated identical terminal commands {expanded ? "shown" : "hidden"}
+          <Trans
+            i18nKey="task:repeatedIdenticalTerminalCommands"
+            values={{ count, value2: expanded ? "shown" : "hidden" }}
+          >
+            {count} repeated identical terminal commands {expanded ? "shown" : "hidden"}
+          </Trans>
         </span>
       </button>
       {expanded && (

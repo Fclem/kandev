@@ -26,7 +26,7 @@ import { useWatcherEnabledDrafts } from "@/components/integrations/use-watcher-e
 import { ResetWatchDialog, useWatchResetController } from "@/components/watches/reset-watch-dialog";
 import { cleanupMergedReviewTasks, cleanupClosedIssueTasks } from "@/lib/api/domains/github-api";
 import type { ReviewWatch, IssueWatch } from "@/lib/types/github";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // CleanupNowButton runs a manual global sweep over the dedup tables. Useful
 // for users who upgraded with a pile of legacy merged-PR / closed-issue
@@ -68,6 +68,30 @@ function CleanupNowButton({
       <IconTrashX className="h-4 w-4 mr-1" />
       {busy ? "Cleaning…" : label}
     </Button>
+  );
+}
+
+// WatchSectionAction is the shared cleanup + "Add Watch" toolbar rendered in the
+// header of the review-watch and issue-watch settings sections.
+function WatchSectionAction({
+  cleanupLabel,
+  cleanup,
+  onAdd,
+}: {
+  cleanupLabel: string;
+  cleanup: () => Promise<{ deleted: number }>;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <CleanupNowButton label={cleanupLabel} run={cleanup} />
+      <Button size="sm" onClick={onAdd} className="cursor-pointer">
+        <Trans i18nKey="github:addWatch">
+          <IconPlus className="h-4 w-4 mr-1" />
+          Add Watch
+        </Trans>
+      </Button>
+    </div>
   );
 }
 
@@ -248,8 +272,10 @@ export function GitHubConnectionSection({ workspaceId }: { workspaceId: string }
           className="text-2xl font-bold flex items-center gap-2"
           data-testid="github-integration-heading"
         >
-          <IconBrandGithub className="h-6 w-6" />
-          GitHub Integration
+          <Trans i18nKey="github:githubIntegration">
+            <IconBrandGithub className="h-6 w-6" />
+            GitHub Integration
+          </Trans>
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
           {t("github:chooseTheAutomationAndPersonalIdentities")}
@@ -350,23 +376,14 @@ function ReviewWatchSection({ workspaceId }: { workspaceId: string }) {
         title={t("github:reviewWatches")}
         description="Automatically create tasks for PRs that need your review."
         action={
-          <div className="flex items-center gap-2">
-            <CleanupNowButton
-              label="Clean up merged"
-              run={() => cleanupMergedReviewTasks(workspaceId)}
-            />
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingWatch(null);
-                setDialogOpen(true);
-              }}
-              className="cursor-pointer"
-            >
-              <IconPlus className="h-4 w-4 mr-1" />
-              Add Watch
-            </Button>
-          </div>
+          <WatchSectionAction
+            cleanupLabel="Clean up merged"
+            cleanup={() => cleanupMergedReviewTasks(workspaceId)}
+            onAdd={() => {
+              setEditingWatch(null);
+              setDialogOpen(true);
+            }}
+          />
         }
       >
         <Card>
@@ -453,23 +470,14 @@ function IssueWatchSection({ workspaceId }: { workspaceId: string }) {
         title={t("github:issueWatches")}
         description="Automatically create tasks for GitHub issues matching your criteria."
         action={
-          <div className="flex items-center gap-2">
-            <CleanupNowButton
-              label="Clean up closed"
-              run={() => cleanupClosedIssueTasks(workspaceId)}
-            />
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingIssueWatch(null);
-                setDialogOpen(true);
-              }}
-              className="cursor-pointer"
-            >
-              <IconPlus className="h-4 w-4 mr-1" />
-              Add Watch
-            </Button>
-          </div>
+          <WatchSectionAction
+            cleanupLabel="Clean up closed"
+            cleanup={() => cleanupClosedIssueTasks(workspaceId)}
+            onAdd={() => {
+              setEditingIssueWatch(null);
+              setDialogOpen(true);
+            }}
+          />
         }
       >
         <Card>

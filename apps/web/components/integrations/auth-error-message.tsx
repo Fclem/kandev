@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import Link from "@/components/routing/app-link";
 import { IconLockExclamation } from "@tabler/icons-react";
@@ -66,7 +67,11 @@ export function IntegrationAuthErrorMessage({
         <>
           <IconLockExclamation className="h-10 w-10 mx-auto text-muted-foreground" />
           <div className="space-y-1.5">
-            <h2 className="text-lg font-semibold">{name} authentication required</h2>
+            <h2 className="text-lg font-semibold">
+              <Trans i18nKey="integrations:authenticationRequired" values={{ name }}>
+                {name} authentication required
+              </Trans>
+            </h2>
             <p className="text-sm text-muted-foreground">{authErrorBody}</p>
           </div>
           <Button asChild size="sm" className="cursor-pointer">

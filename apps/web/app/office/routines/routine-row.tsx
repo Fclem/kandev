@@ -20,7 +20,7 @@ import Link from "@/components/routing/app-link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { Routine, AgentProfile, RoutineTrigger } from "@/lib/state/slices/office/types";
 import { timeAgo } from "@/lib/utils/time";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type RoutineRowProps = {
   routine: Routine;
@@ -98,7 +98,13 @@ export function RoutineRow({
             {cronTrigger?.cronExpression && (
               <span className="font-mono">{cronTrigger.cronExpression}</span>
             )}
-            {nextFire && <span>next in {nextFire}</span>}
+            {nextFire && (
+              <span>
+                <Trans i18nKey="office:nextIn" values={{ nextFire }}>
+                  next in {nextFire}
+                </Trans>
+              </span>
+            )}
             <span>{routine.lastRunAt ? timeAgo(routine.lastRunAt) : "Never run"}</span>
             <span className="capitalize">{concurrencyPolicy.replace(/_/g, " ")}</span>
           </div>
@@ -167,7 +173,9 @@ function RoutineActions({ onRunNow, onDelete }: { onRunNow: () => void; onDelete
             onRunNow();
           }}
         >
-          <IconPlayerPlay className="h-4 w-4 mr-2" /> Run Now
+          <Trans i18nKey="office:runNow2">
+            <IconPlayerPlay className="h-4 w-4 mr-2" /> Run Now
+          </Trans>
         </DropdownMenuItem>
         <DropdownMenuItem
           className="text-red-600 cursor-pointer"

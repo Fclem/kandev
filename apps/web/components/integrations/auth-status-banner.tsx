@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import { Alert, AlertDescription } from "@kandev/ui/alert";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // AuthHealth captures everything every integration's config row tells us
 // about the most-recent backend health probe. Each integration's settings
@@ -71,8 +71,13 @@ export function IntegrationAuthStatusBanner({ health }: { health: IntegrationAut
     <Alert data-testid="integration-auth-status-banner" data-state="failed" variant="destructive">
       <IconAlertTriangle className="h-4 w-4" />
       <AlertDescription className="text-sm">
-        Authentication failed: {health.error || "unknown error"}
-        <LastCheckedLabel checkedAt={health.checkedAt} />
+        <Trans
+          i18nKey="integrations:authenticationFailed"
+          values={{ value1: health.error || "unknown error", checkedAt: health.checkedAt }}
+        >
+          Authentication failed: {health.error || "unknown error"}
+          <LastCheckedLabel checkedAt={health.checkedAt} />
+        </Trans>
       </AlertDescription>
     </Alert>
   );

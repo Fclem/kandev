@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { formatDistanceToNow } from "date-fns";
 import { Badge } from "@kandev/ui/badge";
@@ -90,7 +91,13 @@ function SentryIssueMeta({ issue, lastSeen }: { issue: SentryIssue; lastSeen: st
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
       {issue.count != null && issue.count !== "" && <span>events {issue.count}</span>}
       {typeof issue.userCount === "number" && <span>users {issue.userCount}</span>}
-      {lastSeen && <span title={issue.lastSeen}>Last seen {lastSeen}</span>}
+      {lastSeen && (
+        <span title={issue.lastSeen}>
+          <Trans i18nKey="sentry:lastSeen" values={{ lastSeen }}>
+            Last seen {lastSeen}
+          </Trans>
+        </span>
+      )}
     </div>
   );
 }

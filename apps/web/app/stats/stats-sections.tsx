@@ -4,7 +4,7 @@ import { IconGitCommit } from "@tabler/icons-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { StatsResponse, TaskStatsDTO, RepositoryStatsDTO } from "@/lib/types/http";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function formatDuration(ms: number): string {
   if (ms === 0) return "\u2014";
@@ -44,7 +44,14 @@ function TasksCard({ global }: { global: GlobalStats }) {
         <div className="text-3xl font-bold tabular-nums">{global.total_tasks}</div>
         <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
           <span>{global.completed_tasks} completed</span>
-          <span>{global.in_progress_tasks} in progress</span>
+          <span>
+            <Trans
+              i18nKey="stats:inProgress"
+              values={{ in_progress_tasks: global.in_progress_tasks }}
+            >
+              {global.in_progress_tasks} in progress
+            </Trans>
+          </span>
         </div>
         {global.total_tasks > 0 && (
           <div className="mt-3">
@@ -79,7 +86,12 @@ function TimeSpentCard({ global }: { global: GlobalStats }) {
           {formatDuration(global.total_duration_ms)}
         </div>
         <div className="mt-2 text-sm text-muted-foreground">
-          {formatDuration(global.avg_duration_ms_per_task)} avg per task
+          <Trans
+            i18nKey="stats:avgPerTask"
+            values={{ value0: formatDuration(global.avg_duration_ms_per_task) }}
+          >
+            {formatDuration(global.avg_duration_ms_per_task)} avg per task
+          </Trans>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-4 pt-3 border-t">
           <div>
@@ -106,14 +118,21 @@ function GitOrAveragesCard({ global, git_stats }: { global: GlobalStats; git_sta
       <Card className="rounded-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <IconGitCommit className="h-4 w-4" />
-            Git Activity
+            <Trans i18nKey="stats:gitActivity">
+              <IconGitCommit className="h-4 w-4" />
+              Git Activity
+            </Trans>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-3xl font-bold tabular-nums">{git_stats.total_commits}</div>
           <div className="mt-2 text-sm text-muted-foreground">
-            {git_stats.total_files_changed} files changed
+            <Trans
+              i18nKey="stats:filesChanged"
+              values={{ total_files_changed: git_stats.total_files_changed }}
+            >
+              {git_stats.total_files_changed} files changed
+            </Trans>
           </div>
           <div className="mt-3 flex items-center gap-4 pt-3 border-t text-sm">
             <span className="text-emerald-600 dark:text-emerald-400 tabular-nums">
@@ -209,8 +228,16 @@ function SignalCard({ global }: { global: GlobalStats }) {
       <CardContent>
         <div className="text-3xl font-bold tabular-nums">{global.total_sessions}</div>
         <div className="mt-2 text-sm text-muted-foreground">
-          {avgTurnsPerSession.toFixed(1)} turns {"\u00B7"} {avgMessagesPerSession.toFixed(1)}{" "}
-          messages per session
+          <Trans
+            i18nKey="stats:turnsMessagesPerSession"
+            values={{
+              value0: avgTurnsPerSession.toFixed(1),
+              value4: avgMessagesPerSession.toFixed(1),
+            }}
+          >
+            {avgTurnsPerSession.toFixed(1)} turns {"\u00B7"} {avgMessagesPerSession.toFixed(1)}{" "}
+            messages per session
+          </Trans>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-4 pt-3 border-t text-xs text-muted-foreground">
           <div className="space-y-1">
@@ -516,7 +543,12 @@ function TaskDurationList({ tasks, sortDirection, emptyLabel }: TaskDurationList
               {task.task_title}
             </div>
             <div className="text-xs text-muted-foreground">
-              {task.turn_count} turns {"\u00B7"} {task.message_count} messages
+              <Trans
+                i18nKey="stats:turnsMessages2"
+                values={{ turn_count: task.turn_count, message_count: task.message_count }}
+              >
+                {task.turn_count} turns {"\u00B7"} {task.message_count} messages
+              </Trans>
             </div>
           </div>
           <div className="text-sm font-medium tabular-nums text-right">

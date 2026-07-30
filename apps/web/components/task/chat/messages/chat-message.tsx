@@ -35,7 +35,7 @@ import { AgentMessageContent } from "./agent-message-content";
 import { buildEntityReferenceMarkdownComponents } from "./entity-reference-chip";
 import { entityReferencesFromMetadata } from "@/lib/entity-references/message-references";
 import type { EntityReference } from "@/lib/types/entity-reference";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 
 type ChatMessageProps = {
@@ -379,12 +379,16 @@ function UserContextBadges({
       {senderTask && <SenderTaskBadge sender={senderTask} />}
       {hasPlanMode && (
         <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/20 px-2 py-0.5 text-[10px] text-slate-400">
-          <IconWand size={10} /> Plan mode
+          <Trans i18nKey="task:planMode">
+            <IconWand size={10} /> Plan mode
+          </Trans>
         </span>
       )}
       {hasReviewComments && (
         <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] text-blue-400">
-          <IconMessageDots size={10} /> Review comments
+          <Trans i18nKey="task:reviewComments2">
+            <IconMessageDots size={10} /> Review comments
+          </Trans>
         </span>
       )}
       {contextFiles.map((f) => (

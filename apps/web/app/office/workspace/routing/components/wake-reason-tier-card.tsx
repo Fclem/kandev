@@ -13,7 +13,7 @@ import type {
 } from "@/lib/state/slices/office/types";
 import { providerLabel } from "./provider-order-editor";
 import { USE_AGENT_TIER, WAKE_REASONS, type WakeReasonCopy } from "./wake-reason-info";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   config: WorkspaceRouting;
@@ -158,9 +158,11 @@ function ResolvedRow({ tier, config }: { tier: Tier | undefined; config: Workspa
   if (!match) {
     return (
       <p className="text-[11px] text-destructive flex items-center gap-1 pl-1">
-        <IconAlertTriangle className="h-3 w-3" />
-        No provider has the {tier} tier mapped — set a model for {tier} under Provider tier mapping
-        below.
+        <Trans i18nKey="office:noProviderHasTheTierMapped" values={{ tier }}>
+          <IconAlertTriangle className="h-3 w-3" />
+          No provider has the {tier} tier mapped — set a model for {tier} under Provider tier
+          mapping below.
+        </Trans>
       </p>
     );
   }

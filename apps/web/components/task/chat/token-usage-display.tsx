@@ -5,7 +5,7 @@ import { IconInfoCircle } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useSessionContextWindow } from "@/hooks/domains/session/use-session-context-window";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TokenUsageDisplayProps = {
   sessionId: string | null;
@@ -217,7 +217,12 @@ export const TokenUsageDisplay = memo(function TokenUsageDisplay({
                 data-testid="context-window-token-row"
               >
                 <span className="text-[11px] tabular-nums text-muted-foreground">
-                  {formatNumber(used)} of {formatNumber(size)} tokens
+                  <Trans
+                    i18nKey="task:ofTokens"
+                    values={{ value0: formatNumber(used), value2: formatNumber(size) }}
+                  >
+                    {formatNumber(used)} of {formatNumber(size)} tokens
+                  </Trans>
                 </span>
                 <ContextWindowSource source={source} />
               </div>

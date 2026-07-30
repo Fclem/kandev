@@ -1,3 +1,4 @@
+import { Trans } from "react-i18next";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -119,8 +120,10 @@ export function CollapsibleSection({
                 className="h-6 px-1.5 cursor-pointer text-[10px] text-muted-foreground hover:text-foreground gap-1"
                 onClick={onAddAll}
               >
-                <IconMessagePlus className="h-3 w-3" />
-                Add all
+                <Trans i18nKey="github:addAll">
+                  <IconMessagePlus className="h-3 w-3" />
+                  Add all
+                </Trans>
               </Button>
             </TooltipTrigger>
             <TooltipContent>{addAllLabel ?? "Add all to chat context"}</TooltipContent>

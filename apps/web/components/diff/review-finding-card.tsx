@@ -12,7 +12,7 @@ import {
 import { findingLocation } from "@/lib/review/format";
 import type { TaskReviewFinding } from "@/lib/types/review";
 import { ReviewFindingSeverityBadge } from "./review-finding-severity";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type ReviewFindingCardProps = {
   finding: TaskReviewFinding;
@@ -44,8 +44,10 @@ function FindingActions({
           onClick={() => onSendToAgent(finding)}
           data-testid="review-finding-send-to-agent"
         >
-          <IconMessagePlus className="h-3.5 w-3.5" />
-          Send to agent
+          <Trans i18nKey="diff:sendToAgent">
+            <IconMessagePlus className="h-3.5 w-3.5" />
+            Send to agent
+          </Trans>
         </Button>
       )}
       {isOpen && onResolve && (

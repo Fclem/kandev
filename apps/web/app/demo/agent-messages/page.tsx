@@ -12,7 +12,7 @@ import {
   type DiscoveredFile,
 } from "@/lib/api/domains/debug-api";
 import { IconChevronDown, IconChevronRight, IconRefresh } from "@tabler/icons-react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ToolFilter = "all" | "tool_edit" | "tool_read" | "tool_execute" | "tool_call";
 type ViewMode = "fixtures" | "events";
@@ -375,7 +375,11 @@ function ContentArea({
   if (error) {
     return (
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        <div className="font-medium">Error loading {viewMode}</div>
+        <div className="font-medium">
+          <Trans i18nKey="common:errorLoading" values={{ viewMode }}>
+            Error loading {viewMode}
+          </Trans>
+        </div>
         <div className="text-sm">{error}</div>
       </div>
     );
@@ -445,8 +449,17 @@ export default function AgentMessagesPage() {
           setToolFilter={data.setToolFilter}
         />
         <div className="mb-6 text-sm text-muted-foreground">
-          Showing {data.itemCount} of {data.totalCount}{" "}
-          {data.viewMode === "events" ? "messages" : "fixtures"}
+          <Trans
+            i18nKey="common:showingOf"
+            values={{
+              itemCount: data.itemCount,
+              totalCount: data.totalCount,
+              value5: data.viewMode === "events" ? "messages" : "fixtures",
+            }}
+          >
+            Showing {data.itemCount} of {data.totalCount}{" "}
+            {data.viewMode === "events" ? "messages" : "fixtures"}
+          </Trans>
         </div>
         <ContentArea
           viewMode={data.viewMode}

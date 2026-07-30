@@ -7,7 +7,7 @@ import type { Message } from "@/lib/types/http";
 import type { RichMetadata, TodoMetadata, TodoSnapshot } from "@/components/task/chat/types";
 import { ExpandableRow } from "./expandable-row";
 import { StatusIcon, resolveStatus } from "../todo-indicator";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TodoItem = {
   text: string;
@@ -45,12 +45,24 @@ function SnapshotHistory({ snapshots }: { snapshots: TodoSnapshot[] }) {
         className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground/60 hover:text-muted-foreground cursor-pointer"
         aria-expanded={isOpen}
       >
-        {isOpen ? (
-          <IconChevronDown className="h-3 w-3" />
-        ) : (
-          <IconChevronRight className="h-3 w-3" />
-        )}
-        Earlier updates ({snapshots.length})
+        <Trans
+          i18nKey="task:earlierUpdates"
+          values={{
+            value0: isOpen ? (
+              <IconChevronDown className="h-3 w-3" />
+            ) : (
+              <IconChevronRight className="h-3 w-3" />
+            ),
+            length: snapshots.length,
+          }}
+        >
+          {isOpen ? (
+            <IconChevronDown className="h-3 w-3" />
+          ) : (
+            <IconChevronRight className="h-3 w-3" />
+          )}
+          Earlier updates ({snapshots.length})
+        </Trans>
       </button>
       {isOpen && (
         <div className="mt-1.5 space-y-1 text-[11px] text-muted-foreground/80">

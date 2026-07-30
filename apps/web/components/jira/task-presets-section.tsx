@@ -21,7 +21,7 @@ import {
   computeEditorHeight,
 } from "@/components/settings/profile-edit/script-editor";
 import type { ScriptPlaceholder } from "@/components/settings/profile-edit/script-editor-completions";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const JIRA_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
   {
@@ -194,12 +194,14 @@ function PresetPromptEditor({
         />
       </div>
       <p className="text-[11px] text-muted-foreground/60">
-        Type {"{{"} to see available placeholders.{" "}
-        <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{key}}"}</code>,{" "}
-        <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{url}}"}</code>,{" "}
-        <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{title}}"}</code>, and{" "}
-        <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{description}}"}</code> are
-        substituted when the action runs.
+        <Trans i18nKey="jira:typeAndAreSubstitutedWhenThe">
+          Type {"{{"} to see available placeholders.{" "}
+          <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{key}}"}</code>,{" "}
+          <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{url}}"}</code>,{" "}
+          <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{title}}"}</code>, and{" "}
+          <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{description}}"}</code> are
+          substituted when the action runs.
+        </Trans>
       </p>
     </div>
   );
@@ -311,8 +313,10 @@ export function TaskPresetsSection() {
           />
         ))}
         <Button size="sm" variant="outline" onClick={add} className="cursor-pointer">
-          <IconPlus className="h-3.5 w-3.5 mr-1" />
-          Add preset
+          <Trans i18nKey="jira:addPreset">
+            <IconPlus className="h-3.5 w-3.5 mr-1" />
+            Add preset
+          </Trans>
         </Button>
       </SettingsCard>
     </SettingsSection>

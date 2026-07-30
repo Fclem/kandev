@@ -24,7 +24,7 @@ import {
 } from "./shared";
 import { pickArray, pickNumber, pickString } from "./parse";
 import type { KandevRenderer } from "./types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // MarkdownBody renders task plan / document content. We pre-trim and use the
 // shared markdown component set so heading sizes, code blocks, and mermaid
@@ -367,7 +367,9 @@ export const GetTaskConversationRenderer: KandevRenderer = ({ args, result, stat
             ))}
             {truncated && (
               <div className="text-[10px] italic text-muted-foreground/70">
-                + {hiddenCount} more not shown
+                <Trans i18nKey="task:moreNotShown" values={{ hiddenCount }}>
+                  + {hiddenCount} more not shown
+                </Trans>
               </div>
             )}
           </div>

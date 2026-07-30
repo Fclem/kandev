@@ -27,7 +27,7 @@ import type {
   GitHubRepoInfo,
   GitHubWorkspaceSettings,
 } from "@/lib/types/github";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type RepoFilterSelectorProps = {
   allRepos: boolean;
@@ -205,8 +205,10 @@ function OrgBadges({
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <IconLoader2 className="h-3 w-3 animate-spin" />
-        Loading organizations...
+        <Trans i18nKey="github:loadingOrganizations">
+          <IconLoader2 className="h-3 w-3 animate-spin" />
+          Loading organizations...
+        </Trans>
       </div>
     );
   }
@@ -281,8 +283,10 @@ function RepoSearchCombobox({
           disabled={disabled}
           className="cursor-pointer text-xs gap-1"
         >
-          <IconPlus className="h-3 w-3" />
-          Add repository
+          <Trans i18nKey="github:addRepository">
+            <IconPlus className="h-3 w-3" />
+            Add repository
+          </Trans>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start" portal={false}>
@@ -300,7 +304,11 @@ function RepoSearchCombobox({
               </div>
             )}
             {!searchLoading && org && filteredResults.length === 0 && (
-              <CommandEmpty>No repos found for &quot;{org}&quot;</CommandEmpty>
+              <CommandEmpty>
+                <Trans i18nKey="github:noReposFoundFor" values={{ org }}>
+                  No repos found for &quot;{org}&quot;
+                </Trans>
+              </CommandEmpty>
             )}
             {!searchLoading && !org && value.length > 0 && (
               <CommandEmpty>{t("github:typeOwnerRepoToSearch")}</CommandEmpty>

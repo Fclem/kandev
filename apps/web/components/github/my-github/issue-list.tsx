@@ -16,7 +16,7 @@ import { formatRelativeTime } from "@/lib/utils";
 import type { GitHubIssue, TaskIssueLink } from "@/lib/types/github";
 import type { LaunchPayload, TaskPreset } from "./quick-task-launcher";
 import { TaskRowIndicator } from "./task-row-indicator";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type IssueListProps = {
   items: GitHubIssue[];
@@ -122,7 +122,15 @@ function IssueRow({
           </span>
           <span>·</span>
           <span className="whitespace-nowrap">
-            by {issue.author_login} · opened {formatRelativeTime(issue.created_at)}
+            <Trans
+              i18nKey="github:byOpened"
+              values={{
+                author_login: issue.author_login,
+                value3: formatRelativeTime(issue.created_at),
+              }}
+            >
+              by {issue.author_login} · opened {formatRelativeTime(issue.created_at)}
+            </Trans>
           </span>
           <IssueLabels labels={issue.labels} />
           <TaskRowIndicator

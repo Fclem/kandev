@@ -20,7 +20,7 @@ import { AgentLogo } from "@/components/agent-logo";
 import { useAppStore } from "@/components/state-provider";
 import { PlanRevisionPreviewDialog } from "./task-plan-preview-dialog";
 import { PlanRevisionDiffDialog } from "./task-plan-diff-dialog";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ComparePair = [string | null, string | null];
 
@@ -451,8 +451,10 @@ function RevisionRow({
             className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1"
             data-testid="plan-revision-revert-marker"
           >
-            <IconRestore className="h-3 w-3" />
-            restored from earlier version
+            <Trans i18nKey="task:restoredFromEarlierVersion">
+              <IconRestore className="h-3 w-3" />
+              restored from earlier version
+            </Trans>
           </div>
         )}
       </button>
@@ -497,10 +499,19 @@ function RevertConfirmDialog({
     >
       <DialogContent data-testid="plan-revert-confirm-dialog">
         <DialogHeader>
-          <DialogTitle>Restore to version {target?.revision_number}?</DialogTitle>
+          <DialogTitle>
+            <Trans i18nKey="task:restoreToVersion" values={{ value1: target?.revision_number }}>
+              Restore to version {target?.revision_number}?
+            </Trans>
+          </DialogTitle>
           <DialogDescription>
-            This creates a new version with v{target?.revision_number}&#39;s content. Nothing is
-            lost; the current version stays in history.
+            <Trans
+              i18nKey="task:thisCreatesANewVersionWith"
+              values={{ value1: target?.revision_number }}
+            >
+              This creates a new version with v{target?.revision_number}&#39;s content. Nothing is
+              lost; the current version stays in history.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

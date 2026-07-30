@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useState, useMemo, useCallback } from "react";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
@@ -604,7 +605,9 @@ export function ReviewProgressBar({
         </div>
       </TooltipTrigger>
       <TooltipContent>
-        {reviewedCount} of {totalFileCount} files reviewed
+        <Trans i18nKey="task:ofFilesReviewed" values={{ reviewedCount, totalFileCount }}>
+          {reviewedCount} of {totalFileCount} files reviewed
+        </Trans>
       </TooltipContent>
     </Tooltip>
   );

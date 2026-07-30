@@ -14,7 +14,7 @@ import { getWebSocketClient } from "@/lib/ws/connection";
 import { formatRelativeTime } from "@/lib/utils";
 import { AgentAvatar } from "@/app/office/components/agent-avatar";
 import type { RunError } from "@/app/office/tasks/[id]/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type RunErrorEntryProps = {
   taskId: string;
@@ -59,8 +59,10 @@ export function RunErrorEntry({ taskId, error }: RunErrorEntryProps) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm">{agentName}</span>
           <span className="inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
-            <IconAlertTriangle className="h-3.5 w-3.5" />
-            stopped with an error
+            <Trans i18nKey="task:stoppedWithAnError">
+              <IconAlertTriangle className="h-3.5 w-3.5" />
+              stopped with an error
+            </Trans>
           </span>
           <span className="text-xs text-muted-foreground">
             {formatRelativeTime(error.failedAt)}
@@ -70,10 +72,12 @@ export function RunErrorEntry({ taskId, error }: RunErrorEntryProps) {
         {error.rawPayload && (
           <Collapsible open={showDetails} onOpenChange={setShowDetails} className="mt-2">
             <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <IconChevronDown
-                className={`h-3.5 w-3.5 transition-transform ${showDetails ? "rotate-180" : ""}`}
-              />
-              Show details
+              <Trans i18nKey="task:showDetails">
+                <IconChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${showDetails ? "rotate-180" : ""}`}
+                />
+                Show details
+              </Trans>
             </CollapsibleTrigger>
             <CollapsibleContent>
               <pre
@@ -93,8 +97,10 @@ export function RunErrorEntry({ taskId, error }: RunErrorEntryProps) {
             onClick={() => handleRecover("resume")}
             data-testid="run-error-resume-button"
           >
-            <IconRefresh className="h-3 w-3" />
-            Resume session
+            <Trans i18nKey="task:resumeSession">
+              <IconRefresh className="h-3 w-3" />
+              Resume session
+            </Trans>
           </Button>
           <Button
             variant="outline"
@@ -103,8 +109,10 @@ export function RunErrorEntry({ taskId, error }: RunErrorEntryProps) {
             onClick={() => handleRecover("fresh_start")}
             data-testid="run-error-fresh-button"
           >
-            <IconPlayerPlay className="h-3 w-3" />
-            Start fresh session
+            <Trans i18nKey="task:startFreshSession">
+              <IconPlayerPlay className="h-3 w-3" />
+              Start fresh session
+            </Trans>
           </Button>
         </div>
       </div>

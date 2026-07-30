@@ -8,7 +8,7 @@ import { Label } from "@kandev/ui/label";
 import { Spinner } from "@kandev/ui/spinner";
 import { useToast } from "@/components/toast-provider";
 import { setGitHubWorkspaceConnection } from "@/lib/api/domains/github-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function GitHubPATForm({
   workspaceId,
@@ -80,8 +80,13 @@ export function GitHubPATForm({
           </Button>
         </div>
         <Button type="submit" disabled={!token.trim() || saving} className="h-11 cursor-pointer">
-          {saving && <Spinner className="mr-2 h-4 w-4" />}
-          Connect token
+          <Trans
+            i18nKey="github:connectToken"
+            values={{ value0: saving && <Spinner className="mr-2 h-4 w-4" /> }}
+          >
+            {saving && <Spinner className="mr-2 h-4 w-4" />}
+            Connect token
+          </Trans>
         </Button>
       </div>
     </form>

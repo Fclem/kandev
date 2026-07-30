@@ -7,7 +7,7 @@ import { Input } from "@kandev/ui/input";
 import { IconUserPlus } from "@tabler/icons-react";
 import { ApiError } from "@/lib/api/client";
 import { acceptInvite, previewInvite, type InvitePreview } from "@/lib/api/domains/auth-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type InvitePageProps = {
   token?: string;
@@ -174,7 +174,9 @@ export function InvitePage({ token }: InvitePageProps) {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <IconUserPlus className="h-4 w-4" /> Accept invite
+            <Trans i18nKey="auth:acceptInvite">
+              <IconUserPlus className="h-4 w-4" /> Accept invite
+            </Trans>
           </CardTitle>
           <CardDescription>
             {preview ? `You've been invited as ${preview.role}.` : "Join this Kandev deployment."}

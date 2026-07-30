@@ -3,7 +3,7 @@
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import type { ImportDiff, SyncDiff } from "@/lib/api/domains/office-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SyncDiffPaneProps = {
   title: string;
@@ -128,7 +128,9 @@ function ParseErrorsSection({
   return (
     <div>
       <p className="text-xs font-medium text-destructive mb-1.5 uppercase tracking-wide">
-        Parse errors ({errors.length})
+        <Trans i18nKey="office:parseErrors" values={{ length: errors.length }}>
+          Parse errors ({errors.length})
+        </Trans>
       </p>
       <ul className="space-y-1">
         {errors.map((err) => (

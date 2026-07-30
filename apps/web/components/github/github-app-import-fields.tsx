@@ -1,3 +1,4 @@
+import { Trans } from "react-i18next";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
@@ -64,7 +65,9 @@ export function GitHubAppImportIdentityFields({
           <RadioGroupItem value="Organization" /> Organization
         </Label>
         <Label className="flex cursor-pointer items-center gap-2">
-          <RadioGroupItem value="User" /> Personal account
+          <Trans i18nKey="github:personalAccount">
+            <RadioGroupItem value="User" /> Personal account
+          </Trans>
         </Label>
       </RadioGroup>
     </div>

@@ -39,7 +39,7 @@ import { MRDetailPanelComponent, mrTaskKey } from "@/components/gitlab/mr-detail
 import { useTaskMRs } from "@/hooks/domains/gitlab/use-task-mr";
 
 import type { SelectedDiff } from "./task-layout";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TaskCenterPanelProps = {
   selectedDiff: SelectedDiff | null;
@@ -491,16 +491,20 @@ function ApproveButtonGroup({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuItem onClick={onApprove} className="cursor-pointer">
-            <IconCheck className="h-4 w-4 mr-2" />
-            Approve and continue
+            <Trans i18nKey="task:approveAndContinue">
+              <IconCheck className="h-4 w-4 mr-2" />
+              Approve and continue
+            </Trans>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={onRequestChanges}
             className="cursor-pointer text-amber-600 dark:text-amber-500"
           >
-            <IconX className="h-4 w-4 mr-2" />
-            Request changes
+            <Trans i18nKey="task:requestChanges">
+              <IconX className="h-4 w-4 mr-2" />
+              Request changes
+            </Trans>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

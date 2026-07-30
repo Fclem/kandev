@@ -22,7 +22,7 @@ import type {
   PrepareStepInfo,
   SessionPrepareState,
 } from "@/lib/state/slices/session-runtime/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const debug = createDebugLogger("chat:prepare-progress");
 
@@ -391,23 +391,31 @@ function SessionInfo({ sessionId }: { sessionId: string }) {
     <div className="border-muted mt-2 space-y-1 border-t pt-2">
       {isWorktree && worktree_path && (
         <InfoLine icon={<IconFolder className="h-3 w-3" />}>
-          Isolated worktree at <Mono>{worktree_path}</Mono>
+          <Trans i18nKey="common:isolatedWorktreeAt" values={{ worktree_path }}>
+            Isolated worktree at <Mono>{worktree_path}</Mono>
+          </Trans>
         </InfoLine>
       )}
       {!isWorktree && worktree_path && (
         <InfoLine icon={<IconFolder className="h-3 w-3" />}>
-          Working in <Mono>{worktree_path}</Mono>
+          <Trans i18nKey="common:workingIn" values={{ worktree_path }}>
+            Working in <Mono>{worktree_path}</Mono>
+          </Trans>
         </InfoLine>
       )}
       {worktree_branch && (
         <InfoLine icon={<IconGitBranch className="h-3 w-3" />}>
           {base_branch ? (
             <>
-              Branch <Mono>{worktree_branch}</Mono>, based on <Mono>{base_branch}</Mono>
+              <Trans i18nKey="common:branchBasedOn" values={{ worktree_branch, base_branch }}>
+                Branch <Mono>{worktree_branch}</Mono>, based on <Mono>{base_branch}</Mono>
+              </Trans>
             </>
           ) : (
             <>
-              On branch <Mono>{worktree_branch}</Mono>
+              <Trans i18nKey="common:onBranch" values={{ worktree_branch }}>
+                On branch <Mono>{worktree_branch}</Mono>
+              </Trans>
             </>
           )}
         </InfoLine>

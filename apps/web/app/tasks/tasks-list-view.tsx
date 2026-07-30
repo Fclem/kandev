@@ -23,7 +23,7 @@ import {
   type TasksListGroup,
   type TasksListSort,
 } from "@/lib/tasks/tasks-list-options";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type TasksListViewProps = {
   total: number;
@@ -137,12 +137,14 @@ function TasksListControls({
         testId="tasks-list-group"
       />
       <Label className="flex h-11 items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none lg:h-9">
-        <Checkbox
-          checked={showArchived}
-          onCheckedChange={(checked) => onShowArchivedChange(checked === true)}
-          className="cursor-pointer"
-        />
-        Show archived
+        <Trans i18nKey="common:showArchived" values={{ showArchived }}>
+          <Checkbox
+            checked={showArchived}
+            onCheckedChange={(checked) => onShowArchivedChange(checked === true)}
+            className="cursor-pointer"
+          />
+          Show archived
+        </Trans>
       </Label>
     </div>
   );

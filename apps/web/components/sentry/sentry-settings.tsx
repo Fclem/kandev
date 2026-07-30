@@ -20,7 +20,7 @@ import type { SentryConfig } from "@/lib/types/sentry";
 import { SentryInstanceCard } from "./sentry-instance-card";
 import { SentryInstanceForm } from "./sentry-instance-form";
 import { SentryIssueWatchersSection } from "./sentry-issue-watchers-section";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // EditMode is the mutually-exclusive form state: at most one add-or-edit form
 // is open at a time.
@@ -129,24 +129,11 @@ function EnabledPill() {
   return <DraftedIntegrationEnabledControl id="sentry" enabled={enabled} persist={setEnabled} />;
 }
 
-export function SentryConnectionSection({ workspaceId }: { workspaceId: string }) {
-  const { t } = useTranslation();
-  const { instances, loading, reload } = useInstanceList(workspaceId);
+// useDeleteInstance confirms and deletes a Sentry instance, translating the
+// "still bound to watches" backend rejection into an actionable toast.
+function useDeleteInstance(workspaceId: string, reload: () => Promise<void>) {
   const { toast } = useToast();
-  const [mode, setMode] = useState<EditMode>({ kind: "none" });
-  const [formDirty, setFormDirty] = useState(false);
-
-  const closeForm = useCallback(() => {
-    setMode({ kind: "none" });
-    setFormDirty(false);
-  }, []);
-  const handleSaved = useCallback(async () => {
-    setMode({ kind: "none" });
-    setFormDirty(false);
-    await reload();
-  }, [reload]);
-
-  const handleDelete = useCallback(
+  return useCallback(
     async (instance: SentryConfig) => {
       if (!confirm(`Remove Sentry instance "${instance.name}"?`)) return;
       try {
@@ -168,6 +155,25 @@ export function SentryConnectionSection({ workspaceId }: { workspaceId: string }
     },
     [workspaceId, toast, reload],
   );
+}
+
+export function SentryConnectionSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
+  const { instances, loading, reload } = useInstanceList(workspaceId);
+  const [mode, setMode] = useState<EditMode>({ kind: "none" });
+  const [formDirty, setFormDirty] = useState(false);
+
+  const closeForm = useCallback(() => {
+    setMode({ kind: "none" });
+    setFormDirty(false);
+  }, []);
+  const handleSaved = useCallback(async () => {
+    setMode({ kind: "none" });
+    setFormDirty(false);
+    await reload();
+  }, [reload]);
+
+  const handleDelete = useDeleteInstance(workspaceId, reload);
 
   const canAddInstance =
     mode.kind === "none" ||
@@ -223,8 +229,10 @@ export function SentryConnectionSection({ workspaceId }: { workspaceId: string }
               className="cursor-pointer gap-1"
               data-testid="sentry-add-instance-button"
             >
-              <IconPlus className="h-4 w-4" />
-              Add instance
+              <Trans i18nKey="sentry:addInstance">
+                <IconPlus className="h-4 w-4" />
+                Add instance
+              </Trans>
             </Button>
           )}
         </CardContent>

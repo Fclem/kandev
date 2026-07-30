@@ -16,7 +16,7 @@ import {
   type RecentTaskSwitcherController,
 } from "./recent-task-switcher-hooks";
 import type { RecentTaskDisplayItem } from "./recent-task-switcher-model";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function TaskBadges({ item }: { item: RecentTaskDisplayItem }) {
   const { t } = useTranslation();
@@ -162,8 +162,10 @@ function RecentTaskSwitcherDialog(props: RecentTaskSwitcherController) {
       >
         <DialogHeader className="border-b px-4 py-3">
           <DialogTitle className="flex items-center gap-2 text-sm">
-            <IconRefresh className="size-4 text-muted-foreground" />
-            Recent Tasks
+            <Trans i18nKey="task:recentTasks">
+              <IconRefresh className="size-4 text-muted-foreground" />
+              Recent Tasks
+            </Trans>
           </DialogTitle>
           <DialogDescription className="sr-only">{t("task:switchRecentTasks")}</DialogDescription>
         </DialogHeader>

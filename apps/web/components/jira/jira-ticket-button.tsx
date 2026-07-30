@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useState } from "react";
 import { IconTicket } from "@tabler/icons-react";
@@ -36,7 +37,11 @@ export function JiraTicketButton({ workspaceId, taskTitle }: JiraTicketButtonPro
             <span className="text-xs font-medium">{ticketKey}</span>
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Open Jira ticket {ticketKey}</TooltipContent>
+        <TooltipContent>
+          <Trans i18nKey="jira:openJiraTicket" values={{ ticketKey }}>
+            Open Jira ticket {ticketKey}
+          </Trans>
+        </TooltipContent>
       </Tooltip>
       <JiraTicketDialog
         open={open}

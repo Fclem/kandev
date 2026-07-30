@@ -54,7 +54,7 @@ import { MRCommitsSection } from "./mr-commits-section";
 import { MRDiscussionsSection } from "./mr-discussions-section";
 import { MRReviewerControl } from "./mr-reviewer-control";
 import { SubscriptionToggle } from "./subscription-toggle";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type MRKeyInput = Pick<TaskMR, "host" | "project_path" | "mr_iid">;
 const EMPTY_LABELS: string[] = [];
@@ -304,8 +304,13 @@ function MergeConfirmation({
         <AlertDialogHeader>
           <AlertDialogTitle>{t("gitlab:mergeThisMergeRequest")}</AlertDialogTitle>
           <AlertDialogDescription>
-            GitLab will merge {taskMR.project_path}!{taskMR.mr_iid} into {baseBranch} using the
-            project default.
+            <Trans
+              i18nKey="gitlab:gitlabWillMergeIntoUsingThe"
+              values={{ project_path: taskMR.project_path, mr_iid: taskMR.mr_iid, baseBranch }}
+            >
+              GitLab will merge {taskMR.project_path}!{taskMR.mr_iid} into {baseBranch} using the
+              project default.
+            </Trans>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -342,7 +347,9 @@ function FeedbackPlaceholder({ error, onRetry }: { error: string | null; onRetry
   }
   return (
     <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-      <IconLoader2 className="h-4 w-4 animate-spin" /> Loading merge request
+      <Trans i18nKey="gitlab:loadingMergeRequest">
+        <IconLoader2 className="h-4 w-4 animate-spin" /> Loading merge request
+      </Trans>
     </div>
   );
 }
@@ -363,6 +370,34 @@ async function unlinkTaskMR(
   const api = useDockviewStore.getState().api;
   const panel = api?.getPanel(panelId);
   if (api && panel) api.removePanel(panel);
+}
+
+// useMRDiscussionActions builds the MR identity used by every MR mutation and
+// the reply/resolve handlers for the discussions section.
+function useMRDiscussionActions(taskMR: TaskMR, workspaceId: string, run: RunMRAction) {
+  const identity = useMemo<GitLabMRIdentity & { host: string }>(
+    () => ({ workspaceId, project: taskMR.project_path, iid: taskMR.mr_iid, host: taskMR.host }),
+    [workspaceId, taskMR.project_path, taskMR.mr_iid, taskMR.host],
+  );
+  const reply = (discussionId: string, body: string) =>
+    run("Reply", () => createMRDiscussionNote({ ...identity, discussionId, body }), "Reply added");
+  const resolve = (discussionId: string) =>
+    run("Resolve", () => resolveMRDiscussion({ ...identity, discussionId }), "Discussion resolved");
+  return { identity, reply, resolve };
+}
+
+// MRRefreshErrorAlert warns that the panel is showing the last good review data
+// after a failed GitLab refresh.
+function MRRefreshErrorAlert({ error }: { error: string }) {
+  return (
+    <Alert variant="destructive">
+      <AlertDescription>
+        <Trans i18nKey="gitlab:gitlabRefreshFailedShowingTheLast" values={{ error }}>
+          GitLab refresh failed: {error}. Showing the last successfully loaded review data.
+        </Trans>
+      </AlertDescription>
+    </Alert>
+  );
 }
 
 function MRDetailContent({
@@ -386,17 +421,10 @@ function MRDetailContent({
   );
   const { pendingAction, run } = useMRActions(refresh);
   const addContext = useAddMRFeedbackAsContext(sessionId, taskMR.project_path, taskMR.mr_iid);
-  const identity = useMemo<GitLabMRIdentity & { host: string }>(
-    () => ({ workspaceId, project: taskMR.project_path, iid: taskMR.mr_iid, host: taskMR.host }),
-    [workspaceId, taskMR.project_path, taskMR.mr_iid, taskMR.host],
-  );
+  const { identity, reply, resolve } = useMRDiscussionActions(taskMR, workspaceId, run);
   const busy = pendingAction !== null;
   if (!feedback) return <FeedbackPlaceholder error={error} onRetry={refresh} />;
   const mr = feedback.mr;
-  const reply = (discussionId: string, body: string) =>
-    run("Reply", () => createMRDiscussionNote({ ...identity, discussionId, body }), "Reply added");
-  const resolve = (discussionId: string) =>
-    run("Resolve", () => resolveMRDiscussion({ ...identity, discussionId }), "Discussion resolved");
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="mr-detail-panel">
       <PanelHeader
@@ -407,13 +435,7 @@ function MRDetailContent({
       />
       <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto w-full max-w-5xl space-y-4 p-3 sm:p-4">
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                GitLab refresh failed: {error}. Showing the last successfully loaded review data.
-              </AlertDescription>
-            </Alert>
-          ) : null}
+          {error ? <MRRefreshErrorAlert error={error} /> : null}
           <MROverviewSection taskMR={taskMR} feedback={feedback} />
           <MRActionButtons
             identity={identity}
@@ -449,7 +471,13 @@ function MRDetailContent({
             onResolve={resolve}
             onAddContext={addContext}
           />
-          {error && <p className="text-xs text-destructive">Refresh failed: {error}</p>}
+          {error && (
+            <p className="text-xs text-destructive">
+              <Trans i18nKey="gitlab:refreshFailed" values={{ error }}>
+                Refresh failed: {error}
+              </Trans>
+            </p>
+          )}
         </div>
       </ScrollArea>
       <MergeConfirmation
@@ -480,15 +508,19 @@ export function MRDetailPanelComponent({
   if (!mr || !workspaceId || !sessionId)
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        <IconLink className="mr-2 h-4 w-4" />
-        No merge request linked to this session.
+        <Trans i18nKey="gitlab:noMergeRequestLinkedToThis">
+          <IconLink className="mr-2 h-4 w-4" />
+          No merge request linked to this session.
+        </Trans>
       </div>
     );
   if (loading)
     return (
       <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-        <IconLoader2 className="h-4 w-4 animate-spin" />
-        Verifying GitLab connection
+        <Trans i18nKey="gitlab:verifyingGitlabConnection">
+          <IconLoader2 className="h-4 w-4 animate-spin" />
+          Verifying GitLab connection
+        </Trans>
       </div>
     );
   if (!isTaskMRHostAllowed(mr.host, status?.host ?? null)) {

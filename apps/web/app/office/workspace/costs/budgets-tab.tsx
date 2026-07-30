@@ -8,7 +8,7 @@ import { listBudgets, deleteBudget } from "@/lib/api/domains/office-api";
 import type { BudgetPolicy } from "@/lib/state/slices/office/types";
 import { BudgetPolicyCard } from "./budget-policy-card";
 import { CreateBudgetForm } from "./create-budget-form";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function BudgetsTab({ workspaceId }: { workspaceId: string }) {
   const { t } = useTranslation();
@@ -54,8 +54,10 @@ export function BudgetsTab({ workspaceId }: { workspaceId: string }) {
           className="cursor-pointer"
           onClick={() => setShowCreate(!showCreate)}
         >
-          <IconPlus className="h-4 w-4 mr-1" />
-          Add Policy
+          <Trans i18nKey="office:addPolicy">
+            <IconPlus className="h-4 w-4 mr-1" />
+            Add Policy
+          </Trans>
         </Button>
       </div>
 

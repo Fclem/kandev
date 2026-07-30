@@ -56,7 +56,7 @@ import type {
   TimelineEvent,
 } from "@/app/office/tasks/[id]/types";
 import { toast } from "sonner";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const COMMENTABLE_DONE_SESSION_STATES = new Set<TaskSession["state"]>([
   "CREATED",
@@ -211,7 +211,9 @@ function PauseResumeButton({
         disabled={busy}
         onClick={() => runAction(() => resumeTaskTree(taskId), "Task tree resumed")}
       >
-        <IconPlayerPlay className="h-3.5 w-3.5 mr-1" /> Resume tree
+        <Trans i18nKey="task:resumeTree">
+          <IconPlayerPlay className="h-3.5 w-3.5 mr-1" /> Resume tree
+        </Trans>
       </Button>
     );
   }
@@ -224,7 +226,9 @@ function PauseResumeButton({
       disabled={busy || activeHold?.mode === "cancel"}
       onClick={() => runAction(() => pauseTaskTree(taskId), "Task tree paused")}
     >
-      <IconPlayerPause className="h-3.5 w-3.5 mr-1" /> Pause tree
+      <Trans i18nKey="task:pauseTree">
+        <IconPlayerPause className="h-3.5 w-3.5 mr-1" /> Pause tree
+      </Trans>
     </Button>
   );
 }
@@ -253,7 +257,9 @@ function CancelRestoreButton({
         disabled={busy}
         onClick={() => runAction(() => restoreTaskTree(taskId), "Task tree restored")}
       >
-        <IconRestore className="h-3.5 w-3.5 mr-1" /> Restore tree
+        <Trans i18nKey="task:restoreTree">
+          <IconRestore className="h-3.5 w-3.5 mr-1" /> Restore tree
+        </Trans>
       </Button>
     );
   }
@@ -266,7 +272,9 @@ function CancelRestoreButton({
       disabled={busy}
       onClick={onCancel}
     >
-      <IconTrash className="h-3.5 w-3.5 mr-1" /> Cancel tree
+      <Trans i18nKey="task:cancelTree2">
+        <IconTrash className="h-3.5 w-3.5 mr-1" /> Cancel tree
+      </Trans>
     </Button>
   );
 }
@@ -320,7 +328,9 @@ function TreeControls({
       />
       {preview && hasTree && (
         <span className="inline-flex items-center text-xs text-muted-foreground">
-          {preview.task_count} tasks affected
+          <Trans i18nKey="task:tasksAffected" values={{ task_count: preview.task_count }}>
+            {preview.task_count} tasks affected
+          </Trans>
         </span>
       )}
       <TreeCancelDialog
@@ -378,7 +388,9 @@ function TaskActionRow({
     <>
       <div className="flex gap-2 mt-6">
         <Button variant="outline" size="sm" className="cursor-pointer" onClick={onNewSubIssue}>
-          <IconPlus className="h-3.5 w-3.5 mr-1" /> New Sub-Task
+          <Trans i18nKey="task:newSubTask">
+            <IconPlus className="h-3.5 w-3.5 mr-1" /> New Sub-Task
+          </Trans>
         </Button>
         <Button
           variant="outline"
@@ -386,7 +398,9 @@ function TaskActionRow({
           className="cursor-pointer"
           onClick={() => attachInputRef.current?.click()}
         >
-          <IconPaperclip className="h-3.5 w-3.5 mr-1" /> Attach files
+          <Trans i18nKey="task:attachFiles2">
+            <IconPaperclip className="h-3.5 w-3.5 mr-1" /> Attach files
+          </Trans>
         </Button>
         <input
           ref={attachInputRef}

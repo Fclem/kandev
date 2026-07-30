@@ -4,7 +4,7 @@ import { IconExternalLink, IconMessageCircle, IconPlus } from "@tabler/icons-rea
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import type { AzureDevOpsPullRequest, AzureDevOpsWorkItem } from "@/lib/types/azure-devops";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function EmptyResult({ loading, error }: { loading: boolean; error: string | null }) {
   const { t } = useTranslation();
@@ -72,8 +72,10 @@ export function AzureDevOpsWorkItemResults({
               className="cursor-pointer"
               onClick={() => onStartTask(item)}
             >
-              <IconPlus className="h-4 w-4" />
-              Start task
+              <Trans i18nKey="azureDevops:startTask">
+                <IconPlus className="h-4 w-4" />
+                Start task
+              </Trans>
             </Button>
           </div>
         </div>
@@ -139,8 +141,10 @@ export function AzureDevOpsPullRequestResults({
               className="cursor-pointer"
               onClick={() => onStartTask(pullRequest)}
             >
-              <IconPlus className="h-4 w-4" />
-              Start task
+              <Trans i18nKey="azureDevops:startTask">
+                <IconPlus className="h-4 w-4" />
+                Start task
+              </Trans>
             </Button>
             <Button asChild variant="ghost" size="icon-sm" className="cursor-pointer">
               <a

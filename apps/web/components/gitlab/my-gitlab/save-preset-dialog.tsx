@@ -12,7 +12,7 @@ import {
 import { Input } from "@kandev/ui/input";
 import { Button } from "@kandev/ui/button";
 import { Label } from "@kandev/ui/label";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SavePresetDialogProps = {
   open: boolean;
@@ -55,8 +55,13 @@ function SavePresetForm({
       <DialogHeader>
         <DialogTitle>{t("gitlab:saveGitlabQuery")}</DialogTitle>
         <DialogDescription>
-          Save this {kind === "mr" ? "merge request" : "issue"} query to the sidebar for quick
-          access later.
+          <Trans
+            i18nKey="gitlab:saveThisQueryToTheSidebar"
+            values={{ value1: kind === "mr" ? "merge request" : "issue" }}
+          >
+            Save this {kind === "mr" ? "merge request" : "issue"} query to the sidebar for quick
+            access later.
+          </Trans>
         </DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-3">

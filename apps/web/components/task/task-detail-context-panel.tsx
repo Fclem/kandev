@@ -3,7 +3,7 @@
 import { Badge } from "@kandev/ui/badge";
 import { IconAlertTriangle, IconFileText, IconUsersGroup } from "@tabler/icons-react";
 import type { TaskContextDTO, TaskRefDTO } from "@/lib/api/domains/office-task-context-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   /**
@@ -81,7 +81,12 @@ function WorkspaceSection({
       <div className="flex items-center gap-2">
         <IconUsersGroup className="h-4 w-4 text-muted-foreground" />
         <Badge variant="outline" className="font-normal">
-          Shared workspace · {memberCount} {memberCount === 1 ? "member" : "members"}
+          <Trans
+            i18nKey="task:sharedWorkspace"
+            values={{ memberCount, value3: memberCount === 1 ? "member" : "members" }}
+          >
+            Shared workspace · {memberCount} {memberCount === 1 ? "member" : "members"}
+          </Trans>
         </Badge>
         {mode && (
           <span className="text-[11px] text-muted-foreground" data-testid="workspace-mode-label">
@@ -151,7 +156,9 @@ function DocumentsSection({ docs }: { docs: TaskContextDTO["available_documents"
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-        <IconFileText className="h-4 w-4" /> Documents available
+        <Trans i18nKey="task:documentsAvailable">
+          <IconFileText className="h-4 w-4" /> Documents available
+        </Trans>
       </div>
       <ul className="space-y-1 text-xs">
         {docs.map((d) => (

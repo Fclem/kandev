@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconDownload, IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -73,8 +74,10 @@ export function WorkflowCardHeaderActions({
               className="cursor-pointer"
               data-testid="delete-workflow-button"
             >
-              <IconTrash className="h-4 w-4 mr-2" />
-              Delete Workflow
+              <Trans i18nKey="settings:deleteWorkflow">
+                <IconTrash className="h-4 w-4 mr-2" />
+                Delete Workflow
+              </Trans>
             </Button>
           </span>
         </TooltipTrigger>

@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import {
   AlertDialog,
@@ -62,8 +63,10 @@ export function SettingsFloatingSave({
       <div className="pointer-events-auto flex min-h-11 max-w-full flex-col items-stretch gap-2 rounded-md border bg-background p-2 shadow-lg sm:flex-row sm:items-center">
         {status === "error" && (
           <span className="flex items-center gap-1 text-xs text-destructive" role="status">
-            <IconAlertCircle className="size-4" />
-            Couldn't save
+            <Trans i18nKey="settings:couldnTSave">
+              <IconAlertCircle className="size-4" />
+              Couldn't save
+            </Trans>
           </span>
         )}
         {invalidReason && (
@@ -90,46 +93,81 @@ export function SettingsFloatingSave({
     <>
       {isHostedByConfigChat ? createPortal(saveAction, configChatFloatingActionsHost) : saveAction}
 
-      <AlertDialog open={navigationIntent !== null}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Save changes before leaving?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This page has unsaved changes. Save them, discard them, or continue editing.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              className="cursor-pointer"
-              disabled={isBusy}
-              onClick={onContinueEditing}
-            >
-              Continue editing
-            </AlertDialogCancel>
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer"
-              disabled={isBusy}
-              onClick={() => void onDiscardAndLeave()}
-            >
-              {isDiscarding ? "Discarding..." : "Discard and leave"}
-            </Button>
-            <AlertDialogAction
-              className="cursor-pointer bg-success text-success-foreground hover:bg-success/85 focus-visible:border-success focus-visible:ring-success/35"
-              data-dialog-default-action
-              disabled={isBusy || isInvalid}
-              onClick={(event) => {
-                event.preventDefault();
-                void onSave();
-              }}
-            >
-              {isSaving ? "Saving..." : "Save and leave"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <LeaveWithUnsavedChangesDialog
+        open={navigationIntent !== null}
+        isBusy={isBusy}
+        isInvalid={isInvalid}
+        isDiscarding={isDiscarding}
+        isSaving={isSaving}
+        onSave={onSave}
+        onDiscardAndLeave={onDiscardAndLeave}
+        onContinueEditing={onContinueEditing}
+      />
     </>
+  );
+}
+
+// LeaveWithUnsavedChangesDialog is the navigation-guard prompt offering save,
+// discard, or continue editing when leaving a page with unsaved settings.
+function LeaveWithUnsavedChangesDialog({
+  open,
+  isBusy,
+  isInvalid,
+  isDiscarding,
+  isSaving,
+  onSave,
+  onDiscardAndLeave,
+  onContinueEditing,
+}: {
+  open: boolean;
+  isBusy: boolean;
+  isInvalid: boolean;
+  isDiscarding: boolean;
+  isSaving: boolean;
+  onSave: () => Promise<boolean>;
+  onDiscardAndLeave: () => Promise<void> | void;
+  onContinueEditing: () => void;
+}) {
+  return (
+    <AlertDialog open={open}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Save changes before leaving?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This page has unsaved changes. Save them, discard them, or continue editing.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            className="cursor-pointer"
+            disabled={isBusy}
+            onClick={onContinueEditing}
+          >
+            Continue editing
+          </AlertDialogCancel>
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer"
+            disabled={isBusy}
+            onClick={() => void onDiscardAndLeave()}
+          >
+            {isDiscarding ? "Discarding..." : "Discard and leave"}
+          </Button>
+          <AlertDialogAction
+            className="cursor-pointer bg-success text-success-foreground hover:bg-success/85 focus-visible:border-success focus-visible:ring-success/35"
+            data-dialog-default-action
+            disabled={isBusy || isInvalid}
+            onClick={(event) => {
+              event.preventDefault();
+              void onSave();
+            }}
+          >
+            {isSaving ? "Saving..." : "Save and leave"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

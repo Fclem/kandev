@@ -8,7 +8,7 @@ import { stripAnsi } from "@/lib/utils/ansi";
 import { Badge } from "@kandev/ui/badge";
 import { ExpandableRow } from "./expandable-row";
 import { useExpandState } from "./use-expand-state";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 interface ScriptExecutionMetadata {
   script_type: "setup" | "cleanup" | "agent_boot";
@@ -122,7 +122,11 @@ function ScriptFooter({ isAgentBoot, isRunning, metadata, exitCode }: ScriptFoot
   if (!isAgentBoot && exitCode !== undefined) {
     return (
       <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-2 border-t border-border/30">
-        <span>Exit code: {exitCode}</span>
+        <span>
+          <Trans i18nKey="task:exitCode" values={{ exitCode }}>
+            Exit code: {exitCode}
+          </Trans>
+        </span>
         {metadata.started_at && metadata.completed_at && (
           <span>Duration: {calculateDuration(metadata.started_at, metadata.completed_at)}</span>
         )}

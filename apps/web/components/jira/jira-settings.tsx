@@ -41,7 +41,7 @@ import type {
   JiraInstanceType,
   TestJiraConnectionResult,
 } from "@/lib/types/jira";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // Session cookies are HttpOnly so document.cookie can't read them, but
 // DevTools → Application → Cookies surfaces them in plain text. Users copy
@@ -198,8 +198,10 @@ function SessionSnippet() {
         onClick={() => setShow((v) => !v)}
         className="inline-flex items-center gap-1 underline cursor-pointer"
       >
-        <IconCode className="h-3 w-3" />
-        {show ? "Hide" : "Show"} how to copy the session token
+        <Trans i18nKey="jira:howToCopyTheSessionToken" values={{ value1: show ? "Hide" : "Show" }}>
+          <IconCode className="h-3 w-3" />
+          {show ? "Hide" : "Show"} how to copy the session token
+        </Trans>
       </button>
       {show && (
         <pre className="bg-muted rounded p-3 text-[11px] overflow-x-auto whitespace-pre-wrap">
@@ -296,15 +298,17 @@ function SecretField({
       )}
       {method === "api_token" && (
         <p className="text-xs text-muted-foreground">
-          Create a token at{" "}
-          <a
-            className="underline cursor-pointer"
-            href="https://id.atlassian.com/manage-profile/security/api-tokens"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("jira:idAtlassianComManageProfileSecurity")}
-          </a>
+          <Trans i18nKey="jira:createATokenAt">
+            Create a token at{" "}
+            <a
+              className="underline cursor-pointer"
+              href="https://id.atlassian.com/manage-profile/security/api-tokens"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("jira:idAtlassianComManageProfileSecurity")}
+            </a>
+          </Trans>
         </p>
       )}
       {method === "pat" && (

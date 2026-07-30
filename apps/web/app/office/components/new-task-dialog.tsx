@@ -18,7 +18,7 @@ import {
   EMPTY_STAGES,
   type StagesDraft,
 } from "./new-task-stages";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function buildMetadata(draft: IssueDraft): Record<string, unknown> | undefined {
   const meta: Record<string, unknown> = {};
@@ -141,7 +141,9 @@ function NewIssueDialogBody({
           <span className="text-sm text-muted-foreground">{t("office:newIssue")}</span>
           {parentTaskId && (
             <Badge variant="secondary" className="text-xs">
-              Sub-issue of {parentTaskId}
+              <Trans i18nKey="office:subIssueOf" values={{ parentTaskId }}>
+                Sub-issue of {parentTaskId}
+              </Trans>
             </Badge>
           )}
         </div>

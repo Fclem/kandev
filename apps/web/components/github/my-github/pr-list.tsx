@@ -23,7 +23,7 @@ import type { LaunchPayload, TaskPreset } from "./quick-task-launcher";
 import { PRStatusBadges } from "./pr-status-badges";
 import { prStatusKey, usePRStatuses } from "./use-pr-statuses";
 import { PRRowTaskIndicator } from "./pr-row-task-indicator";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type PRListProps = {
   workspaceId: string | null;
@@ -135,7 +135,12 @@ function PRRow({
           </span>
           <span>·</span>
           <span className="whitespace-nowrap">
-            by {pr.author_login} · opened {formatRelativeTime(pr.created_at)}
+            <Trans
+              i18nKey="github:byOpened"
+              values={{ author_login: pr.author_login, value3: formatRelativeTime(pr.created_at) }}
+            >
+              by {pr.author_login} · opened {formatRelativeTime(pr.created_at)}
+            </Trans>
           </span>
           <PRStatusBadges pr={pr} status={status} />
           <PRRowTaskIndicator tasks={tasks} />

@@ -11,7 +11,7 @@ import {
   DialogTrigger,
 } from "@kandev/ui/dialog";
 import type { GitHubStatus } from "@/lib/types/github";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type PermissionState = {
   name: string;
@@ -48,12 +48,24 @@ export function GitHubPermissionsDialog({ status }: { status: GitHubStatus }) {
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="outline" className="h-11 cursor-pointer">
-          {missingCount > 0 ? (
-            <IconAlertTriangle className="mr-2 h-4 w-4 text-amber-500" />
-          ) : (
-            <IconShieldCheck className="mr-2 h-4 w-4" />
-          )}
-          View permissions
+          <Trans
+            i18nKey="github:viewPermissions"
+            values={{
+              value0:
+                missingCount > 0 ? (
+                  <IconAlertTriangle className="mr-2 h-4 w-4 text-amber-500" />
+                ) : (
+                  <IconShieldCheck className="mr-2 h-4 w-4" />
+                ),
+            }}
+          >
+            {missingCount > 0 ? (
+              <IconAlertTriangle className="mr-2 h-4 w-4 text-amber-500" />
+            ) : (
+              <IconShieldCheck className="mr-2 h-4 w-4" />
+            )}
+            View permissions
+          </Trans>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">

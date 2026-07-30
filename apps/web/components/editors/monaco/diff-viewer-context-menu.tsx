@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 export type ContextMenuState = {
   x: number;
   y: number;
@@ -52,7 +52,9 @@ export function DiffViewerContextMenu({
             onClose();
           }}
         >
-          Copy line {contextMenu.lineNumber}
+          <Trans i18nKey="editors:copyLine" values={{ lineNumber: contextMenu.lineNumber }}>
+            Copy line {contextMenu.lineNumber}
+          </Trans>
         </button>
       )}
       {onRevert && (

@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useCallback, useMemo, useState } from "react";
 import { IconEdit, IconTrash, IconEye, IconEyeOff, IconKey } from "@tabler/icons-react";
@@ -216,9 +217,11 @@ function DeleteSecretDialog({ target, onClose, onConfirm, isBusy }: DeleteSecret
         <DialogHeader>
           <DialogTitle>Delete secret</DialogTitle>
           <DialogDescription>
-            This will permanently remove{" "}
-            <span className="font-medium text-foreground">{target?.name ?? "this secret"}</span>.
-            This action cannot be undone.
+            <Trans i18nKey="settings:thisWillPermanentlyRemoveThisAction2">
+              This will permanently remove{" "}
+              <span className="font-medium text-foreground">{target?.name ?? "this secret"}</span>.
+              This action cannot be undone.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

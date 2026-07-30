@@ -3,6 +3,7 @@
   "all": "Àĺĺ",
   "azureDevopsFilters": "Àźũŕē ĎēvŌƥś ƒĩĺţēŕś",
   "azureDevopsIntegration": "Àźũŕē ĎēvŌƥś ĩńţēĝŕàţĩōń",
+  "azureDevopsIsNotConnectedFor": "Àźũŕē ĎēvŌƥś ĩś ńōţ ćōńńēćţēď ƒōŕ ţĥĩś ŵōŕķśƥàćē. <2>{{value0}}</2>",
   "branchPolicies": "Ɓŕàńćĥ ƥōĺĩćĩēś",
   "chooseThisOrganizationAShortExpiration": "Ćĥōōśē ţĥĩś ōŕĝàńĩźàţĩōń, à śĥōŕţ ēxƥĩŕàţĩōń, àńď Ćũśţōḿ ďēƒĩńēď śćōƥēś.",
   "code": "Ćōďē",
@@ -17,6 +18,7 @@
   "eGPlatformTriage": "ē.ĝ. Ƥĺàţƒōŕḿ ţŕĩàĝē",
   "enterAValidOrganizationUrlTo": "Ēńţēŕ à vàĺĩď ōŕĝàńĩźàţĩōń ŨŔĹ ţō ōƥēń ĩţś ţōķēń śēţţĩńĝś.",
   "howToCreateAPersonalAccess": "Ĥōŵ ţō ćŕēàţē à ƥēŕśōńàĺ àććēśś ţōķēń",
+  "linkedItems": "{{length}} ĺĩńķēď ĩţēḿś",
   "loadingFeedback": "Ĺōàďĩńĝ ƒēēďƀàćķ...",
   "loadingResults": "Ĺōàďĩńĝ ŕēśũĺţś...",
   "name": "Ńàḿē",
@@ -35,7 +37,9 @@
   "reviewerId": "Ŕēvĩēŵēŕ ĨĎ",
   "reviewers": "Ŕēvĩēŵēŕś",
   "saveAzureDevopsView": "Śàvē Àźũŕē ĎēvŌƥś vĩēŵ",
+  "saveTheCurrentForThisWorkspace": "Śàvē ţĥē ćũŕŕēńţ {{value1}} ƒōŕ ţĥĩś ŵōŕķśƥàćē.",
   "selectProject": "Śēĺēćţ ƥŕōĵēćţ",
   "selectRepository": "Śēĺēćţ ŕēƥōśĩţōŕŷ",
+  "startTask": "<0></0> Śţàŕţ ţàśķ",
   "workItems": "Ŵōŕķ Ĩţēḿś"
 }

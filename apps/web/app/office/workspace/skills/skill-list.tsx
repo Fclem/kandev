@@ -20,7 +20,7 @@ import { Input } from "@kandev/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Skill, SkillSourceType } from "@/lib/state/slices/office/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 interface SkillListProps {
   skills: Skill[];
@@ -97,8 +97,10 @@ export function SkillList(props: SkillListProps) {
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
         >
-          Browse skills.sh
-          <IconExternalLink className="h-3.5 w-3.5" />
+          <Trans i18nKey="office:browseSkillsSh">
+            Browse skills.sh
+            <IconExternalLink className="h-3.5 w-3.5" />
+          </Trans>
         </a>
       </div>
     </div>

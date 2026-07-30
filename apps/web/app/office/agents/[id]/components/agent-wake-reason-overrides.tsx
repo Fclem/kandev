@@ -17,7 +17,7 @@ import {
   USE_AGENT_TIER,
   WAKE_REASONS,
 } from "../../../workspace/routing/components/wake-reason-info";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   overrides: AgentRoutingOverrides;
@@ -131,7 +131,11 @@ function InheritedSummary({
     );
   }
   return (
-    <p className="text-xs text-muted-foreground">Inherits workspace policy: {parts.join(", ")}.</p>
+    <p className="text-xs text-muted-foreground">
+      <Trans i18nKey="office:inheritsWorkspacePolicy" values={{ value1: parts.join(", ") }}>
+        Inherits workspace policy: {parts.join(", ")}.
+      </Trans>
+    </p>
   );
 }
 
@@ -181,10 +185,12 @@ function OverrideTable({ wsPolicy, agentMap, workspaceConfig, onChange }: Overri
             <p className="text-[11px] text-muted-foreground pl-1 leading-relaxed">{row.short}</p>
             {inheritedTier && !tier && (
               <p className="text-[11px] text-muted-foreground/80 pl-1">
-                Workspace default for this reason:{" "}
-                <Badge variant="secondary" className="capitalize">
-                  {inheritedTier}
-                </Badge>
+                <Trans i18nKey="office:workspaceDefaultForThisReason" values={{ inheritedTier }}>
+                  Workspace default for this reason:{" "}
+                  <Badge variant="secondary" className="capitalize">
+                    {inheritedTier}
+                  </Badge>
+                </Trans>
               </p>
             )}
             <UnmappedWarning tier={tier} config={workspaceConfig} />
@@ -205,8 +211,10 @@ function UnmappedWarning({ tier, config }: { tier: Tier | undefined; config: Wor
   }
   return (
     <p className="text-[11px] text-destructive flex items-center gap-1 pl-1">
-      <IconAlertTriangle className="h-3 w-3" />
-      No provider in the effective order has {tier} mapped.
+      <Trans i18nKey="office:noProviderInTheEffectiveOrder" values={{ tier }}>
+        <IconAlertTriangle className="h-3 w-3" />
+        No provider in the effective order has {tier} mapped.
+      </Trans>
     </p>
   );
 }

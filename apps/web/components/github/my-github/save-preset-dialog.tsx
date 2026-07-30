@@ -13,7 +13,7 @@ import { Input } from "@kandev/ui/input";
 import { Button } from "@kandev/ui/button";
 import { Label } from "@kandev/ui/label";
 import { RepoFilterCombobox } from "./repo-filter-combobox";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SavePresetDialogProps = {
   open: boolean;
@@ -60,8 +60,13 @@ function SavePresetForm({
       <DialogHeader>
         <DialogTitle>{t("github:saveQuery")}</DialogTitle>
         <DialogDescription>
-          Save this {kind === "pr" ? "pull request" : "issue"} query to the sidebar for quick access
-          later.
+          <Trans
+            i18nKey="github:saveThisQueryToTheSidebar"
+            values={{ value1: kind === "pr" ? "pull request" : "issue" }}
+          >
+            Save this {kind === "pr" ? "pull request" : "issue"} query to the sidebar for quick
+            access later.
+          </Trans>
         </DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-3">

@@ -12,7 +12,7 @@ import { useAppStore } from "@/components/state-provider";
 import { useNestTask } from "@/hooks/use-nest-task";
 import { computeNestCandidates } from "@/lib/sidebar/nest-candidates";
 import type { TaskSwitcherItem } from "./task-switcher";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TaskNestContextMenuItemsProps = {
   task: TaskSwitcherItem;
@@ -49,8 +49,10 @@ export function TaskNestContextMenuItems({ task, disabled }: TaskNestContextMenu
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger disabled={disabled}>
-        <IconSubtask className="mr-2 h-4 w-4" />
-        Nest under
+        <Trans i18nKey="task:nestUnder">
+          <IconSubtask className="mr-2 h-4 w-4" />
+          Nest under
+        </Trans>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="max-h-72 w-56 overflow-y-auto">
         {hasParent && (
@@ -59,8 +61,10 @@ export function TaskNestContextMenuItems({ task, disabled }: TaskNestContextMenu
               className="cursor-pointer"
               onSelect={() => void nestTask(task.id, workflowId, null)}
             >
-              <IconArrowUpRight className="mr-2 h-4 w-4" />
-              Un-nest (remove parent)
+              <Trans i18nKey="task:unNestRemoveParent">
+                <IconArrowUpRight className="mr-2 h-4 w-4" />
+                Un-nest (remove parent)
+              </Trans>
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>

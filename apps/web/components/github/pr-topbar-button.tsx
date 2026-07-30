@@ -39,7 +39,7 @@ import { PR_CI_DESKTOP_POPOVER_SCROLL_CLASS, PRCIPopover } from "@/components/gi
 import { MultiPRCIPopover } from "@/components/github/multi-pr-ci-popover";
 import { useAppStore } from "@/components/state-provider";
 import type { TaskPR } from "@/lib/types/github";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const POPOVER_OPEN_DELAY_MS = 150;
 const POPOVER_CLOSE_DELAY_MS = 150;
@@ -266,7 +266,11 @@ function PRMultiButton({ prs, refreshTaskPR }: { prs: TaskPR[]; refreshTaskPR: (
         <TooltipTrigger asChild>
           {usesTouchDrawer ? triggerButton : <PopoverAnchor asChild>{triggerButton}</PopoverAnchor>}
         </TooltipTrigger>
-        <TooltipContent>{prs.length} pull requests linked to this task — open one</TooltipContent>
+        <TooltipContent>
+          <Trans i18nKey="github:pullRequestsLinkedToThisTask" values={{ length: prs.length }}>
+            {prs.length} pull requests linked to this task — open one
+          </Trans>
+        </TooltipContent>
       </Tooltip>
       <MultiPRMenuContent prs={prs} />
     </DropdownMenu>

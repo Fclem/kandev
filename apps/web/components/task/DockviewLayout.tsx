@@ -18,7 +18,7 @@
 
 import dynamic from "@/lib/routing/client-dynamic";
 import { IconClock } from "@tabler/icons-react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const OfficeDockviewLayout = dynamic(
   () =>
@@ -57,7 +57,11 @@ function DormantPanel({ kind }: { kind: DockviewLayoutKind }) {
         className="flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center"
       >
         <IconClock className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-        <h2 className="text-base font-semibold">{verb} is dormant</h2>
+        <h2 className="text-base font-semibold">
+          <Trans i18nKey="task:isDormant" values={{ verb }}>
+            {verb} is dormant
+          </Trans>
+        </h2>
         <p className="text-sm text-muted-foreground">{t("task:theAgentHasFinishedItsLast")}</p>
         <p className="text-xs text-muted-foreground">
           {t("task:terminalPromptInputAreDisabledUntil")}

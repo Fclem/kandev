@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { type Table } from "@tanstack/react-table";
 import {
@@ -70,6 +71,35 @@ function PageButtons({
   );
 }
 
+// ResultsRange is the "Showing X to Y of Z results" summary on the left of the
+// pagination bar.
+function ResultsRange<TData>({ table }: DataTablePaginationProps<TData>) {
+  const pagination = table.getState().pagination;
+  return (
+    <div className="flex-1 text-sm text-muted-foreground">
+      {table.getFilteredRowModel().rows.length > 0 && (
+        <>
+          <Trans
+            i18nKey="common:showingToOfResults"
+            values={{
+              value1: pagination.pageIndex * pagination.pageSize + 1,
+              value4: Math.min(
+                (pagination.pageIndex + 1) * pagination.pageSize,
+                table.getRowCount(),
+              ),
+              value7: table.getRowCount(),
+            }}
+          >
+            Showing {pagination.pageIndex * pagination.pageSize + 1} to{" "}
+            {Math.min((pagination.pageIndex + 1) * pagination.pageSize, table.getRowCount())} of{" "}
+            {table.getRowCount()} results
+          </Trans>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function DataTablePagination<TData>({ table }: DataTablePaginationProps<TData>) {
   const currentPage = table.getState().pagination.pageIndex + 1;
   const pageCount = table.getPageCount();
@@ -78,15 +108,7 @@ export function DataTablePagination<TData>({ table }: DataTablePaginationProps<T
 
   return (
     <div className="flex items-center justify-between px-2">
-      <div className="flex-1 text-sm text-muted-foreground">
-        {table.getFilteredRowModel().rows.length > 0 && (
-          <>
-            Showing {pagination.pageIndex * pagination.pageSize + 1} to{" "}
-            {Math.min((pagination.pageIndex + 1) * pagination.pageSize, table.getRowCount())} of{" "}
-            {table.getRowCount()} results
-          </>
-        )}
-      </div>
+      <ResultsRange table={table} />
       <div className="flex items-center space-x-6 lg:space-x-8">
         <div className="flex items-center space-x-2">
           <p className="text-sm font-medium whitespace-nowrap">Rows per page</p>

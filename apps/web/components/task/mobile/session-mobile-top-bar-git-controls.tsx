@@ -54,7 +54,7 @@ import {
   MobilePRBranchSummary,
   PRSubmitButton,
 } from "./session-mobile-top-bar-dialog-parts";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function computeUncommittedStats(files: Record<string, FileInfo> | undefined) {
   let additions = 0;
@@ -163,8 +163,10 @@ export function CommitDialog({
       <DialogContent className="max-w-[90vw] sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <IconGitCommit className="h-5 w-5 text-amber-500" />
-            Commit Changes
+            <Trans i18nKey="task:commitChanges">
+              <IconGitCommit className="h-5 w-5 text-amber-500" />
+              Commit Changes
+            </Trans>
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -210,32 +212,48 @@ export function CommitDialog({
             </Label>
           </div>
         </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              {t("common:cancel")}
-            </Button>
-          </DialogClose>
-          <Button
-            className="cursor-pointer"
-            onClick={form.handleCommit}
-            disabled={!form.commitMessage.trim() || isGitLoading}
-          >
-            {isGitLoading ? (
-              <>
-                <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
-                Committing...
-              </>
-            ) : (
-              <>
-                <IconCheck className="h-4 w-4 mr-2" />
-                Commit
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+        <CommitDialogFooter
+          isGitLoading={isGitLoading}
+          disabled={!form.commitMessage.trim() || isGitLoading}
+          onCommit={form.handleCommit}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+// CommitDialogFooter holds the cancel/commit actions of the mobile commit dialog.
+function CommitDialogFooter({
+  isGitLoading,
+  disabled,
+  onCommit,
+}: {
+  isGitLoading: boolean;
+  disabled: boolean;
+  onCommit: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <DialogFooter>
+      <DialogClose asChild>
+        <Button type="button" variant="outline">
+          {t("common:cancel")}
+        </Button>
+      </DialogClose>
+      <Button className="cursor-pointer" onClick={onCommit} disabled={disabled}>
+        {isGitLoading ? (
+          <>
+            <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
+            Committing...
+          </>
+        ) : (
+          <>
+            <IconCheck className="h-4 w-4 mr-2" />
+            Commit
+          </>
+        )}
+      </Button>
+    </DialogFooter>
   );
 }
 

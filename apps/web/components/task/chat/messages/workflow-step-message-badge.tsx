@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -79,7 +80,11 @@ export function WorkflowStepMessageBadge({ workflow, size = "sm" }: WorkflowStep
     <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>{badge}</TooltipTrigger>
-        <TooltipContent>Workflow step message from {label}</TooltipContent>
+        <TooltipContent>
+          <Trans i18nKey="task:workflowStepMessageFrom" values={{ label }}>
+            Workflow step message from {label}
+          </Trans>
+        </TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );

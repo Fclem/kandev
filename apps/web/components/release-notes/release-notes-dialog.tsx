@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import ReactMarkdown from "react-markdown";
 import {
@@ -77,8 +78,10 @@ export function ReleaseNotesDialog({
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
-            View full release on GitHub
-            <IconExternalLink className="h-3 w-3" />
+            <Trans i18nKey="common:viewFullReleaseOnGithub">
+              View full release on GitHub
+              <IconExternalLink className="h-3 w-3" />
+            </Trans>
           </a>
         </div>
       </DialogContent>

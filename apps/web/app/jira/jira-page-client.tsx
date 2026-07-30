@@ -32,7 +32,7 @@ import { ResultsPagination } from "@/components/jira/my-jira/results-pagination"
 import { JqlEditor } from "@/components/jira/my-jira/jql-editor";
 import { useJiraTaskPresets } from "@/components/jira/my-jira/use-task-presets";
 import type { JiraTaskPreset } from "@/components/jira/my-jira/presets";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type JiraPageClientProps = {
   workspaceId?: string;
@@ -46,11 +46,16 @@ function NotConfiguredNotice() {
     <div className="p-6 max-w-2xl">
       <Alert>
         <AlertDescription>
-          Jira is not configured.{" "}
-          <Link href="/settings/integrations/jira" className="underline font-medium cursor-pointer">
-            {t("jira:configureJira")}
-          </Link>{" "}
-          to see your tickets here.
+          <Trans i18nKey="jira:jiraIsNotConfiguredToSee">
+            Jira is not configured.{" "}
+            <Link
+              href="/settings/integrations/jira"
+              className="underline font-medium cursor-pointer"
+            >
+              {t("jira:configureJira")}
+            </Link>{" "}
+            to see your tickets here.
+          </Trans>
         </AlertDescription>
       </Alert>
     </div>

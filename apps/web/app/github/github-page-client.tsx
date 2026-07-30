@@ -48,7 +48,7 @@ import {
 import { useGitHubActionPresets } from "@/hooks/domains/github/use-github-action-presets";
 import { useAllWorkflowSnapshots } from "@/hooks/domains/kanban/use-all-workflow-snapshots";
 import { hasGitHubPersonalActor } from "@/lib/github-auth";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type GitHubPageClientProps = {
   workspaceId?: string;
@@ -96,13 +96,23 @@ function NotAuthenticatedNotice({
   return (
     <Alert>
       <AlertDescription>
-        {personalRequired
-          ? "Connect your personal GitHub identity to see pull requests and issues assigned to you."
-          : "GitHub is not connected. Configure workspace automation with gh CLI or a personal access token."}{" "}
-        <Link href={settingsHref} className="underline font-medium cursor-pointer">
-          {t("github:openGithubSettings")}
-        </Link>{" "}
-        to see your pull requests and issues.
+        <Trans
+          i18nKey="github:toSeeYourPullRequestsAnd"
+          values={{
+            value0: personalRequired
+              ? "Connect your personal GitHub identity to see pull requests and issues assigned to you."
+              : "GitHub is not connected. Configure workspace automation with gh CLI or a personal access token.",
+            settingsHref,
+          }}
+        >
+          {personalRequired
+            ? "Connect your personal GitHub identity to see pull requests and issues assigned to you."
+            : "GitHub is not connected. Configure workspace automation with gh CLI or a personal access token."}{" "}
+          <Link href={settingsHref} className="underline font-medium cursor-pointer">
+            {t("github:openGithubSettings")}
+          </Link>{" "}
+          to see your pull requests and issues.
+        </Trans>
       </AlertDescription>
     </Alert>
   );

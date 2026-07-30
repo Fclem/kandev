@@ -24,7 +24,7 @@ import {
   computeEditorHeight,
 } from "@/components/settings/profile-edit/script-editor";
 import type { ScriptPlaceholder } from "@/components/settings/profile-edit/script-editor-completions";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const ACTION_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
   {
@@ -175,10 +175,12 @@ function PresetRow({
             />
           </div>
           <p className="text-[11px] text-muted-foreground/60">
-            Type {"{{"} to see available placeholders.{" "}
-            <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{url}}"}</code> and{" "}
-            <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{title}}"}</code> are
-            substituted when the action runs.
+            <Trans i18nKey="github:typeAndAreSubstitutedWhenThe">
+              Type {"{{"} to see available placeholders.{" "}
+              <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{url}}"}</code> and{" "}
+              <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{title}}"}</code> are
+              substituted when the action runs.
+            </Trans>
           </p>
         </div>
       )}

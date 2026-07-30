@@ -30,7 +30,7 @@ import {
 } from "./session-dialog-shared";
 import { SessionPromptField } from "./new-session-form-prompt";
 import { useSessionContextChange, useSessionLaunchSubmit } from "./new-session-form-actions";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type { HandoffPreset } from "./handoff-types";
 
@@ -592,11 +592,15 @@ export function NewSessionDialog({
           <DialogTitle className="min-w-0 wrap-break-word pr-6 text-sm font-medium">
             {handoffLabel ? (
               <>
-                Hand off to <span className="text-foreground">{handoffLabel}</span>
+                <Trans i18nKey="task:handOffTo" values={{ handoffLabel }}>
+                  Hand off to <span className="text-foreground">{handoffLabel}</span>
+                </Trans>
               </>
             ) : (
               <>
-                New agent in <span className="text-foreground">{taskTitle}</span>
+                <Trans i18nKey="task:newAgentIn" values={{ taskTitle }}>
+                  New agent in <span className="text-foreground">{taskTitle}</span>
+                </Trans>
               </>
             )}
           </DialogTitle>

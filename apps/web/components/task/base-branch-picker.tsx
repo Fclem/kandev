@@ -11,7 +11,7 @@ import { invalidateCumulativeDiffCache } from "@/hooks/domains/session/use-cumul
 import { updateTaskRepositoryBaseBranch } from "@/lib/api/domains/kanban-api";
 import { useToast } from "@/components/toast-provider";
 import { repositoryId, type Branch, type Repository } from "@/lib/types/http";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ResolvedRepo = {
   taskRepositoryId: string;
@@ -191,8 +191,10 @@ function BranchListBody({
   if (isLoadingBranches && filtered.length === 0) {
     return (
       <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
-        <IconLoader2 className="h-3 w-3 animate-spin" />
-        Loading branches…
+        <Trans i18nKey="task:loadingBranches3">
+          <IconLoader2 className="h-3 w-3 animate-spin" />
+          Loading branches…
+        </Trans>
       </div>
     );
   }

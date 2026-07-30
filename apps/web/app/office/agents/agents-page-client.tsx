@@ -13,7 +13,7 @@ import { AgentCard } from "./components/agent-card";
 import { CreateAgentDialog } from "./components/create-agent-dialog";
 import { EmptyState } from "../components/shared/empty-state";
 import { PageHeader } from "../components/shared/page-header";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type AgentsPageClientProps = {
   initialAgents: AgentProfile[];
@@ -60,8 +60,10 @@ export function AgentsPageClient({ initialAgents }: AgentsPageClientProps) {
         title={t("common:agents")}
         action={
           <Button size="sm" className="cursor-pointer" onClick={() => setShowCreate(true)}>
-            <IconPlus className="h-4 w-4 mr-1" />
-            New Agent
+            <Trans i18nKey="office:newAgent">
+              <IconPlus className="h-4 w-4 mr-1" />
+              New Agent
+            </Trans>
           </Button>
         }
       />
@@ -77,8 +79,10 @@ export function AgentsPageClient({ initialAgents }: AgentsPageClientProps) {
               className="cursor-pointer"
               onClick={() => setShowCreate(true)}
             >
-              <IconPlus className="h-4 w-4 mr-1" />
-              Create Agent
+              <Trans i18nKey="office:createAgent2">
+                <IconPlus className="h-4 w-4 mr-1" />
+                Create Agent
+              </Trans>
             </Button>
           }
         />

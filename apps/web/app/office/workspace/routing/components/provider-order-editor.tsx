@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { IconArrowUp, IconArrowDown, IconPlus, IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   order: string[];
@@ -121,8 +121,10 @@ function AddProviderRow({
         </SelectContent>
       </Select>
       <span className="text-xs text-muted-foreground">
-        <IconPlus className="inline h-3 w-3 mr-0.5" />
-        Add to order
+        <Trans i18nKey="office:addToOrder">
+          <IconPlus className="inline h-3 w-3 mr-0.5" />
+          Add to order
+        </Trans>
       </span>
     </div>
   );

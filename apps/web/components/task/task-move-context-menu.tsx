@@ -9,7 +9,7 @@ import {
   ContextMenuSubTrigger,
 } from "@kandev/ui/context-menu";
 import { cn } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type TaskMoveStep = {
   id: string;
@@ -94,8 +94,10 @@ function MoveToCurrentWorkflowSubmenu({
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger data-testid="task-context-move-to" disabled={disabled}>
-        <IconArrowRight className="mr-2 h-4 w-4" />
-        Move to
+        <Trans i18nKey="task:moveTo">
+          <IconArrowRight className="mr-2 h-4 w-4" />
+          Move to
+        </Trans>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-48">
         {steps.map((step) => (
@@ -177,8 +179,10 @@ function SendToWorkflowSubmenu({
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger data-testid="task-context-send-to-workflow" disabled={disabled}>
-        <IconLogicBuffer className="mr-2 h-4 w-4" />
-        Send to workflow
+        <Trans i18nKey="task:sendToWorkflow">
+          <IconLogicBuffer className="mr-2 h-4 w-4" />
+          Send to workflow
+        </Trans>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-56">
         {targets.map((workflow) => (

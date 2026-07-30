@@ -39,7 +39,7 @@ import type {
   JiraIssueWatch,
   UpdateJiraIssueWatchInput,
 } from "@/lib/types/jira";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   open: boolean;
@@ -274,7 +274,9 @@ function PromptField({ value, onChange }: { value: string; onChange: (v: string)
         <PlaceholdersHelp />
       </div>
       <p className="text-xs text-muted-foreground">
-        The prompt sent to the agent for each new ticket. Type {"{{"} to insert placeholders.
+        <Trans i18nKey="jira:thePromptSentToTheAgent">
+          The prompt sent to the agent for each new ticket. Type {"{{"} to insert placeholders.
+        </Trans>
       </p>
       <div className="rounded-md border border-border overflow-hidden">
         <ScriptEditor

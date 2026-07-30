@@ -1,9 +1,12 @@
 {
   "actions": "Actions",
+  "addInstance": "<0></0> Add instance",
   "aLabelForThisInstanceMust": "A label for this instance. Must be unique within the workspace.",
   "allProjects": "All projects",
   "any": "(any)",
+  "authToken": "Auth token {{value1}}",
   "availablePlaceholders": "Available placeholders:",
+  "baseUrlOfYourSentryInstance": "Base URL of your Sentry instance. Leave as {{SENTRY_DEFAULT_URL}} for Sentry SaaS, or point it at a self-hosted install (e.g. https://sentry.your-company.com).",
   "browseSentryIssues": "Browse Sentry issues",
   "capOnOpenTasksCreatedBy": "Cap on open tasks created by this watcher. Leave blank for no cap. New matches are deferred to the next poll when the cap is reached.",
   "checkNow": "Check now",
@@ -24,11 +27,13 @@
   "isUnresolvedRelease123": "is:unresolved release:1.2.3",
   "isUnresolvedTransactionApiCheckout": "is:unresolved transaction:/api/checkout",
   "lastPolled": "Last Polled",
+  "lastSeen": "Last seen {{lastSeen}}",
   "levels": "Levels",
   "loadMore": "Load more",
   "maxInFlightTasks": "Max in-flight tasks",
   "name": "Name",
   "newInstance": "New Instance",
+  "newWatcher": "<0></0> New watcher",
   "noCap": "(no cap)",
   "noHealthySentryInstanceCheckThe": "No healthy Sentry instance — check the integration settings.",
   "noSentryInstancesConfiguredForThis": "No Sentry instances configured for this workspace.",
@@ -58,5 +63,6 @@
   "sentryWatchers": "Sentry watchers",
   "statuses": "Statuses",
   "taskPrompt": "Task Prompt",
+  "thePromptSentToTheAgent": "The prompt sent to the agent for each new issue. Type {{ to insert placeholders.",
   "useStepDefault": "(use step default)"
 }

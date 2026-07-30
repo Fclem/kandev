@@ -7,7 +7,7 @@ import { IconPlus, IconBolt } from "@tabler/icons-react";
 import { useAutomations } from "@/hooks/domains/settings/use-automations";
 import { AutomationsTable } from "./automations-table";
 import { useAutomationEnabledDrafts } from "./use-automation-enabled-drafts";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type AutomationsListPageProps = {
   workspaceId: string;
@@ -44,8 +44,10 @@ export function AutomationsListPage({ workspaceId }: AutomationsListPageProps) {
           className="cursor-pointer"
           onClick={() => router.push(`/settings/workspace/${workspaceId}/automations/new`)}
         >
-          <IconPlus className="h-4 w-4 mr-1" />
-          New Automation
+          <Trans i18nKey="automations:newAutomation">
+            <IconPlus className="h-4 w-4 mr-1" />
+            New Automation
+          </Trans>
         </Button>
       </div>
       <Separator />

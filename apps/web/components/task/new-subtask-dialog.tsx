@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RefObject } from "react";
@@ -511,7 +512,9 @@ export function NewSubtaskDialog({
       >
         <DialogHeader>
           <DialogTitle className="min-w-0 wrap-break-word pr-6 text-sm font-medium">
-            New subtask for <span className="text-foreground">{parentTaskTitle}</span>
+            <Trans i18nKey="task:newSubtaskFor" values={{ parentTaskTitle }}>
+              New subtask for <span className="text-foreground">{parentTaskTitle}</span>
+            </Trans>
           </DialogTitle>
         </DialogHeader>
         <NewSubtaskForm

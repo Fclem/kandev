@@ -31,7 +31,7 @@ import {
   projectSelectItems,
 } from "./sentry-issue-watch-form";
 import type { SentryConfig, SentryLevel, SentryProject, SentryStatus } from "@/lib/types/sentry";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type FormSetter = React.Dispatch<React.SetStateAction<FormState>>;
 
@@ -273,7 +273,9 @@ export function PromptField({ value, onChange }: { value: string; onChange: (v: 
         <PlaceholdersHelp />
       </div>
       <p className="text-xs text-muted-foreground">
-        The prompt sent to the agent for each new issue. Type {"{{"} to insert placeholders.
+        <Trans i18nKey="sentry:thePromptSentToTheAgent">
+          The prompt sent to the agent for each new issue. Type {"{{"} to insert placeholders.
+        </Trans>
       </p>
       <div className="rounded-md border border-border overflow-hidden">
         <ScriptEditor

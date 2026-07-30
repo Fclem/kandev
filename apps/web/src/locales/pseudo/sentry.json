@@ -1,9 +1,12 @@
 {
   "actions": "Àćţĩōńś",
+  "addInstance": "<0></0> Àďď ĩńśţàńćē",
   "aLabelForThisInstanceMust": "À ĺàƀēĺ ƒōŕ ţĥĩś ĩńśţàńćē. Ḿũśţ ƀē ũńĩ qũē ŵĩţĥĩń ţĥē ŵōŕķśƥàćē.",
   "allProjects": "Àĺĺ ƥŕōĵēćţś",
   "any": "(àńŷ)",
+  "authToken": "Àũţĥ ţōķēń {{value1}}",
   "availablePlaceholders": "Àvàĩĺàƀĺē ƥĺàćēĥōĺďēŕś:",
+  "baseUrlOfYourSentryInstance": "Ɓàśē ŨŔĹ ōƒ ŷōũŕ Śēńţŕŷ ĩńśţàńćē. Ĺēàvē àś {{SENTRY_DEFAULT_URL}} ƒōŕ Śēńţŕŷ ŚààŚ, ōŕ ƥōĩńţ ĩţ àţ à śēĺƒ-ĥōśţēď ĩńśţàĺĺ (ē.ĝ. ĥţţƥś://śēńţŕŷ.ŷōũŕ-ćōḿƥàńŷ.ćōḿ).",
   "browseSentryIssues": "Ɓŕōŵśē Śēńţŕŷ ĩśśũēś",
   "capOnOpenTasksCreatedBy": "Ćàƥ ōń ōƥēń ţàśķś ćŕēàţēď ƀŷ ţĥĩś ŵàţćĥēŕ. Ĺēàvē ƀĺàńķ ƒōŕ ńō ćàƥ. Ńēŵ ḿàţćĥēś àŕē ďēƒēŕŕēď ţō ţĥē ńēxţ ƥōĺĺ ŵĥēń ţĥē ćàƥ ĩś ŕēàćĥēď.",
   "checkNow": "Ćĥēćķ ńōŵ",
@@ -24,11 +27,13 @@
   "isUnresolvedRelease123": "ĩś:ũńŕēśōĺvēď ŕēĺēàśē:1.2.3",
   "isUnresolvedTransactionApiCheckout": "ĩś:ũńŕēśōĺvēď ţŕàńśàćţĩōń:/àƥĩ/ćĥēćķōũţ",
   "lastPolled": "Ĺàśţ Ƥōĺĺēď",
+  "lastSeen": "Ĺàśţ śēēń {{lastSeen}}",
   "levels": "Ĺēvēĺś",
   "loadMore": "Ĺōàď ḿōŕē",
   "maxInFlightTasks": "Ḿàx ĩń-ƒĺĩĝĥţ ţàśķś",
   "name": "Ńàḿē",
   "newInstance": "Ńēŵ Ĩńśţàńćē",
+  "newWatcher": "<0></0> Ńēŵ ŵàţćĥēŕ",
   "noCap": "(ńō ćàƥ)",
   "noHealthySentryInstanceCheckThe": "Ńō ĥēàĺţĥŷ Śēńţŕŷ ĩńśţàńćē — ćĥēćķ ţĥē ĩńţēĝŕàţĩōń śēţţĩńĝś.",
   "noSentryInstancesConfiguredForThis": "Ńō Śēńţŕŷ ĩńśţàńćēś ćōńƒĩĝũŕēď ƒōŕ ţĥĩś ŵōŕķśƥàćē.",
@@ -58,5 +63,6 @@
   "sentryWatchers": "Śēńţŕŷ ŵàţćĥēŕś",
   "statuses": "Śţàţũśēś",
   "taskPrompt": "Ţàśķ Ƥŕōḿƥţ",
+  "thePromptSentToTheAgent": "Ţĥē ƥŕōḿƥţ śēńţ ţō ţĥē àĝēńţ ƒōŕ ēàćĥ ńēŵ ĩśśũē. Ţŷƥē {{ ţō ĩńśēŕţ ƥĺàćēĥōĺďēŕś.",
   "useStepDefault": "(ũśē śţēƥ ďēƒàũĺţ)"
 }

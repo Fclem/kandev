@@ -58,7 +58,7 @@ import {
   type StatsSections,
   useStatsSections,
 } from "./stats-data";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 interface StatsPageClientProps {
   workspaceId?: string;
@@ -425,7 +425,11 @@ export function StatsPageClient({ workspaceId, activeRange, initialError }: Stat
       <div className="flex h-full min-h-0 w-full flex-col bg-background">
         <PageTopbar title={t("stats:statistics")} icon={<IconChartBar className="h-4 w-4" />} />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-destructive">Error loading stats: {initialError}</p>
+          <p className="text-destructive">
+            <Trans i18nKey="stats:errorLoadingStats" values={{ initialError }}>
+              Error loading stats: {initialError}
+            </Trans>
+          </p>
         </div>
       </div>
     );

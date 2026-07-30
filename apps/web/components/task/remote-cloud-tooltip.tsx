@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { getWebSocketClient } from "@/lib/ws/connection";
 import { getExecutorStatusIcon } from "@/lib/executor-icons";
 import { formatRelativeTime } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type RemoteStatusData = {
   remote_name?: string;
@@ -63,9 +63,19 @@ function RemoteCloudStatusContent({
       <div className="font-medium">{remoteName}</div>
       {remoteState && <div>State: {remoteState}</div>}
       {createdAt && <div>Created: {createdAt}</div>}
-      {checkedAt && <div>Last check: {checkedAt}</div>}
+      {checkedAt && (
+        <div>
+          <Trans i18nKey="task:lastCheck" values={{ checkedAt }}>
+            Last check: {checkedAt}
+          </Trans>
+        </div>
+      )}
       {remoteStatusError && (
-        <div className="text-destructive">Status failed: {remoteStatusError}</div>
+        <div className="text-destructive">
+          <Trans i18nKey="task:statusFailed" values={{ remoteStatusError }}>
+            Status failed: {remoteStatusError}
+          </Trans>
+        </div>
       )}
       {loading && <div>{t("task:loadingStatus")}</div>}
     </TooltipContent>

@@ -19,7 +19,7 @@ import type {
 import type { Editor } from "@tiptap/core";
 import { PanelSearchBar } from "@/components/search/panel-search-bar";
 import { usePlanFindShortcut } from "./use-plan-find-shortcut";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 
 // Dynamic import to avoid SSR issues with TipTap
@@ -544,11 +544,13 @@ function PlanEmptyState({
           <div className="flex items-start gap-3">
             <IconMessage className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-xs text-muted-foreground">
-              Select text and press{" "}
-              <kbd className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono text-[10px]">
-                &#8984;&#8679;C
-              </kbd>{" "}
-              to comment
+              <Trans i18nKey="task:selectTextAndPressCTo">
+                Select text and press{" "}
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono text-[10px]">
+                  &#8984;&#8679;C
+                </kbd>{" "}
+                to comment
+              </Trans>
             </p>
           </div>
         </div>

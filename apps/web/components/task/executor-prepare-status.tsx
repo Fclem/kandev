@@ -3,7 +3,7 @@
 import { IconAlertTriangle, IconLoader2 } from "@tabler/icons-react";
 
 import type { PrepareSummary } from "@/lib/prepare/summarize";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function PrepareStatusSection({ summary }: { summary: PrepareSummary }) {
   if (summary.phase === "idle" || summary.phase === "ready") return null;
@@ -79,7 +79,11 @@ function FailedRow({ summary }: { summary: PrepareSummary }) {
         <span className="font-medium">{t("task:environmentPreparationFailed")}</span>
       </div>
       {summary.failedStep && (
-        <div className="text-xs text-muted-foreground">Failed at: {summary.failedStep.name}</div>
+        <div className="text-xs text-muted-foreground">
+          <Trans i18nKey="task:failedAt" values={{ name: summary.failedStep.name }}>
+            Failed at: {summary.failedStep.name}
+          </Trans>
+        </div>
       )}
       {summary.failedStep?.error && (
         <pre className="text-[11px] text-destructive whitespace-pre-wrap max-h-16 overflow-auto">

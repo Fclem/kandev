@@ -40,7 +40,7 @@ import { ChecksSection } from "./pr-checks-section";
 import { ReviewsSection } from "./pr-reviews-section";
 import { CommentsSection } from "./pr-comments-section";
 import { usePRScopedReviewRequest } from "./use-pr-scoped-review-request";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // --- Dockview panel wrapper ---
 
@@ -108,6 +108,43 @@ function useAddPRFeedbackAsContext(sessionId: string, prNumber: number) {
   );
 
   return { addAsContext };
+}
+
+// useConflictResolution queues the merge-conflict resolution prompt for this PR,
+// and reports whether one is already pending so repeat clicks are no-ops.
+function useConflictResolution(
+  taskPR: TaskPR,
+  sessionId: string,
+  addAsContext: (feedbackType: PRFeedbackComment["feedbackType"], content: string) => void,
+) {
+  // True once a conflict prompt for this PR is already queued — avoids piling
+  // up identical instructions if the user clicks "Resolve conflicts" again.
+  const conflictQueued = useCommentsStore((s) =>
+    s.pendingForChat.some((id) => {
+      const c = s.byId[id];
+      return (
+        !!c &&
+        isPRFeedbackComment(c) &&
+        c.feedbackType === "conflict" &&
+        c.sessionId === sessionId &&
+        c.prNumber === taskPR.pr_number
+      );
+    }),
+  );
+
+  const onResolveConflicts = useCallback(() => {
+    if (conflictQueued) return;
+    addAsContext(
+      "conflict",
+      buildConflictResolutionMessage({
+        prNumber: taskPR.pr_number,
+        headBranch: taskPR.head_branch,
+        baseBranch: taskPR.base_branch,
+      }),
+    );
+  }, [addAsContext, conflictQueued, taskPR.pr_number, taskPR.head_branch, taskPR.base_branch]);
+
+  return { conflictQueued, onResolveConflicts };
 }
 
 // Sync live feedback data back to the store so topbar/other consumers stay up to date.
@@ -340,32 +377,11 @@ export function PRDetailContent({ taskPR, sessionId }: { taskPR: TaskPR; session
 
   const metrics = derivePanelMetrics(taskPR, feedback);
 
-  // True once a conflict prompt for this PR is already queued — avoids piling
-  // up identical instructions if the user clicks "Resolve conflicts" again.
-  const conflictQueued = useCommentsStore((s) =>
-    s.pendingForChat.some((id) => {
-      const c = s.byId[id];
-      return (
-        !!c &&
-        isPRFeedbackComment(c) &&
-        c.feedbackType === "conflict" &&
-        c.sessionId === sessionId &&
-        c.prNumber === taskPR.pr_number
-      );
-    }),
+  const { conflictQueued, onResolveConflicts } = useConflictResolution(
+    taskPR,
+    sessionId,
+    addAsContext,
   );
-
-  const onResolveConflicts = useCallback(() => {
-    if (conflictQueued) return;
-    addAsContext(
-      "conflict",
-      buildConflictResolutionMessage({
-        prNumber: taskPR.pr_number,
-        headBranch: taskPR.head_branch,
-        baseBranch: taskPR.base_branch,
-      }),
-    );
-  }, [addAsContext, conflictQueued, taskPR.pr_number, taskPR.head_branch, taskPR.base_branch]);
 
   return (
     <div className="flex flex-col h-full">
@@ -418,7 +434,12 @@ export function PRDetailContent({ taskPR, sessionId }: { taskPR: TaskPR; session
         <>
           <Separator />
           <div className="px-3 py-2 text-[10px] text-muted-foreground text-center">
-            Last synced {formatTimeAgo(taskPR.last_synced_at)}
+            <Trans
+              i18nKey="github:lastSynced"
+              values={{ value1: formatTimeAgo(taskPR.last_synced_at) }}
+            >
+              Last synced {formatTimeAgo(taskPR.last_synced_at)}
+            </Trans>
           </div>
         </>
       )}

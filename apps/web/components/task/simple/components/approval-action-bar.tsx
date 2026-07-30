@@ -11,7 +11,7 @@ import {
   type TaskDecisionDTO,
 } from "@/lib/api/domains/office-extended-api";
 import type { Task, TaskDecision, TaskDecisionRole } from "@/app/office/tasks/[id]/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // USER_VIEWER is the synthetic decider id we use for the singleton human
 // user. Mirrors the backend's `userSentinel` — the approval endpoints
@@ -162,7 +162,9 @@ export function ApprovalActionBar({ task }: ApprovalActionBarProps) {
             data-testid="approval-action-request-changes"
             onClick={() => setMode("request_changes")}
           >
-            <IconX className="h-3.5 w-3.5 mr-1" /> Request changes
+            <Trans i18nKey="task:requestChanges">
+              <IconX className="h-3.5 w-3.5 mr-1" /> Request changes
+            </Trans>
           </Button>
         </div>
       )}

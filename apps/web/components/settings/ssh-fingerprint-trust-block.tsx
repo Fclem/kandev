@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 // Trust-confirmation block shown under the SSH test result. Disabled when the
 // caller's last test ran against a different form, to keep stale fingerprints
@@ -27,9 +28,14 @@ export function FingerprintTrustBlock({
       </div>
       {fingerprintChanged && (
         <p data-testid="ssh-fingerprint-change-warning" className="text-xs text-amber-600">
-          Warning: this fingerprint differs from the one currently pinned (
-          <code className="font-mono">{currentlyPinned}</code>). Trusting it overwrites the pinned
-          key. If you didn’t expect a host re-key, stop here.
+          <Trans
+            i18nKey="settings:warningThisFingerprintDiffersFromThe"
+            values={{ currentlyPinned }}
+          >
+            Warning: this fingerprint differs from the one currently pinned (
+            <code className="font-mono">{currentlyPinned}</code>). Trusting it overwrites the pinned
+            key. If you didn’t expect a host re-key, stop here.
+          </Trans>
         </p>
       )}
       {resultStale && (
@@ -53,8 +59,10 @@ export function FingerprintTrustBlock({
           className={"mt-0.5 " + (resultStale ? "cursor-not-allowed" : "cursor-pointer")}
         />
         <span>
-          <strong>Trust this host.</strong> I’ve verified the fingerprint above matches my server.
-          Future connections that report a different fingerprint will be refused.
+          <Trans i18nKey="settings:trustThisHostIVeVerified">
+            <strong>Trust this host.</strong> I’ve verified the fingerprint above matches my server.
+            Future connections that report a different fingerprint will be refused.
+          </Trans>
         </span>
       </label>
     </div>

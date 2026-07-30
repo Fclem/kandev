@@ -22,7 +22,7 @@ import {
 } from "@kandev/ui/dropdown-menu";
 import type { SavedView } from "./use-saved-views";
 import type { SortKey } from "./filter-model";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "updated", label: "Updated" },
@@ -300,8 +300,10 @@ function SaveViewButton({ onSave }: { onSave: (name: string) => void }) {
           className="cursor-pointer h-8 text-xs gap-1.5"
           title={t("jira:saveCurrentFiltersAsAView")}
         >
-          <IconPlus className="h-3.5 w-3.5" />
-          Save view
+          <Trans i18nKey="jira:saveView">
+            <IconPlus className="h-3.5 w-3.5" />
+            Save view
+          </Trans>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-3 space-y-2">

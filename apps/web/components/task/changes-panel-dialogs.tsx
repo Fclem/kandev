@@ -26,7 +26,7 @@ import { Label } from "@kandev/ui/label";
 import { Input } from "@kandev/ui/input";
 import { Textarea } from "@kandev/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // --- Discard Confirmation Dialog ---
 
@@ -60,9 +60,11 @@ export function DiscardDialog({
           <AlertDialogDescription className="break-words">
             {description ?? (
               <>
-                This will permanently discard all changes to{" "}
-                <span className="font-semibold [overflow-wrap:anywhere]">{displayFile}</span>. This
-                action cannot be undone.
+                <Trans i18nKey="task:thisWillPermanentlyDiscardAllChanges" values={{ displayFile }}>
+                  This will permanently discard all changes to{" "}
+                  <span className="font-semibold [overflow-wrap:anywhere]">{displayFile}</span>.
+                  This action cannot be undone.
+                </Trans>
               </>
             )}
           </AlertDialogDescription>
@@ -106,8 +108,10 @@ export function AmendDialog({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <IconGitCommit className="h-5 w-5" />
-            Amend Commit Message
+            <Trans i18nKey="task:amendCommitMessage2">
+              <IconGitCommit className="h-5 w-5" />
+              Amend Commit Message
+            </Trans>
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -233,7 +237,11 @@ export function ResetDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
-          <DialogTitle>Reset to commit {shortSha}</DialogTitle>
+          <DialogTitle>
+            <Trans i18nKey="task:resetToCommit" values={{ shortSha }}>
+              Reset to commit {shortSha}
+            </Trans>
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <ResetModeOptions mode={mode} onModeChange={setMode} />
@@ -241,7 +249,9 @@ export function ResetDialog({
           {mode === "hard" && (
             <div className="space-y-2 p-3 border border-destructive/50 rounded-md bg-destructive/5">
               <p className="text-xs text-destructive font-medium">
-                Type <code className="bg-muted px-1 rounded">{shortSha}</code> to confirm:
+                <Trans i18nKey="task:typeToConfirm" values={{ shortSha }}>
+                  Type <code className="bg-muted px-1 rounded">{shortSha}</code> to confirm:
+                </Trans>
               </p>
               <Input
                 value={confirmation}

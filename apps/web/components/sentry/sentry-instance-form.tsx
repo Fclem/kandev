@@ -24,7 +24,7 @@ import {
   type SentryConfig,
   type TestSentryConnectionResult,
 } from "@/lib/types/sentry";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const FIELD = "space-y-1.5";
 const HELP = "text-xs text-muted-foreground";
@@ -78,8 +78,10 @@ function UrlField({ form, baseline, idPrefix, loading, update }: FieldProps) {
         disabled={loading}
       />
       <p className={HELP}>
-        Base URL of your Sentry instance. Leave as {SENTRY_DEFAULT_URL} for Sentry SaaS, or point it
-        at a self-hosted install (e.g. https://sentry.your-company.com).
+        <Trans i18nKey="sentry:baseUrlOfYourSentryInstance" values={{ SENTRY_DEFAULT_URL }}>
+          Base URL of your Sentry instance. Leave as {SENTRY_DEFAULT_URL} for Sentry SaaS, or point
+          it at a self-hosted install (e.g. https://sentry.your-company.com).
+        </Trans>
       </p>
     </div>
   );
@@ -98,12 +100,23 @@ function SecretField({
     <div className={FIELD}>
       <div className="flex items-center gap-1.5">
         <Label htmlFor={`${idPrefix}-secret`}>
-          Auth token
-          {hasSavedSecret && (
-            <span className="text-xs text-muted-foreground ml-2">
-              {t("sentry:savedLeaveBlankToKeepThe")}
-            </span>
-          )}
+          <Trans
+            i18nKey="sentry:authToken"
+            values={{
+              value1: hasSavedSecret && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  {t("sentry:savedLeaveBlankToKeepThe")}
+                </span>
+              ),
+            }}
+          >
+            Auth token
+            {hasSavedSecret && (
+              <span className="text-xs text-muted-foreground ml-2">
+                {t("sentry:savedLeaveBlankToKeepThe")}
+              </span>
+            )}
+          </Trans>
         </Label>
         <Tooltip>
           <TooltipTrigger asChild>

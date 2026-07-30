@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getTask } from "@/lib/api/domains/office-extended-api";
 import type { OfficeTask } from "@/lib/state/slices/office/types";
 import { StatusIcon } from "@/app/office/tasks/status-icon";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TasksTouchedProps = {
   runId: string;
@@ -106,7 +106,9 @@ function TaskTableRow({ row }: { row: RowState }) {
     return (
       <TableRow data-testid="tasks-touched-row-error">
         <TableCell colSpan={4} className="text-xs text-muted-foreground">
-          Failed to load {shortId(row.id)}
+          <Trans i18nKey="office:failedToLoad" values={{ value1: shortId(row.id) }}>
+            Failed to load {shortId(row.id)}
+          </Trans>
         </TableCell>
       </TableRow>
     );

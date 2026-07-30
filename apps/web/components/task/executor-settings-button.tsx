@@ -14,7 +14,7 @@ import { useTaskEnvironment } from "@/hooks/domains/session/use-task-environment
 import { isPreparingPhase } from "@/lib/prepare/summarize";
 import { PrepareStatusSection } from "./executor-prepare-status";
 import { EnvironmentInfo } from "./executor-environment-info";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ExecutorSettingsButtonProps = {
   taskId?: string | null;
@@ -127,7 +127,9 @@ function ResetEnvironmentAction({
               data-testid="executor-settings-reset"
               onClick={onRequestReset}
             >
-              <IconTrash className="h-3.5 w-3.5 mr-1" /> Reset environment
+              <Trans i18nKey="task:resetEnvironment3">
+                <IconTrash className="h-3.5 w-3.5 mr-1" /> Reset environment
+              </Trans>
             </Button>
           </span>
         </TooltipTrigger>

@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { Progress } from "@kandev/ui/progress";
@@ -46,7 +47,11 @@ export function VoiceModelLoadIndicator({
       {state === "error" ? (
         <>
           <IconAlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          <span className="hidden sm:inline">{modelLabel} failed to load</span>
+          <span className="hidden sm:inline">
+            <Trans i18nKey="task:failedToLoad" values={{ modelLabel }}>
+              {modelLabel} failed to load
+            </Trans>
+          </span>
         </>
       ) : (
         <div className="flex flex-col gap-0.5 min-w-0 flex-1">

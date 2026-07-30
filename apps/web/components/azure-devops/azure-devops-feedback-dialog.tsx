@@ -10,7 +10,7 @@ import {
 } from "@kandev/ui/dialog";
 import { Separator } from "@kandev/ui/separator";
 import type { AzureDevOpsPullRequestFeedback } from "@/lib/types/azure-devops";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function voteLabel(vote: number): string {
   if (vote >= 10) return "Approved";
@@ -25,7 +25,14 @@ function Summary({ feedback }: { feedback: AzureDevOpsPullRequestFeedback }) {
     <div className="flex flex-wrap gap-2">
       <Badge variant="outline">Review: {feedback.reviewState || "pending"}</Badge>
       <Badge variant="outline">Policies: {feedback.policyState || "none"}</Badge>
-      <Badge variant="secondary">{feedback.linkedWorkItems.length} linked items</Badge>
+      <Badge variant="secondary">
+        <Trans
+          i18nKey="azureDevops:linkedItems"
+          values={{ length: feedback.linkedWorkItems.length }}
+        >
+          {feedback.linkedWorkItems.length} linked items
+        </Trans>
+      </Badge>
     </div>
   );
 }

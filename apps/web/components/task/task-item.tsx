@@ -27,7 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { RemoteCloudTooltip } from "./remote-cloud-tooltip";
 import { classifyTask } from "./task-classify";
 import { ScrollOnOverflow } from "@kandev/ui/scroll-on-overflow";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type DiffStats = {
   additions: number;
@@ -316,7 +316,9 @@ function TaskItemStatsRow({
             </span>
           </TooltipTrigger>
           <TooltipContent side="right">
-            Git poll: {pollMode} ({modeConfig.label})
+            <Trans i18nKey="task:gitPoll" values={{ pollMode, label: modeConfig.label }}>
+              Git poll: {pollMode} ({modeConfig.label})
+            </Trans>
           </TooltipContent>
         </Tooltip>
       )}

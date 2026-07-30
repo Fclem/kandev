@@ -18,7 +18,7 @@ import type {
 import { TaskFilters } from "./task-filters";
 import { TaskSort } from "./task-sort";
 import { TaskGroup } from "./task-group";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type IssuesToolbarProps = {
   viewMode: TaskViewMode;
@@ -140,8 +140,10 @@ export function TasksToolbar({
   return (
     <div className="flex items-center gap-2">
       <Button className="cursor-pointer" onClick={onNewIssue}>
-        <IconPlus className="h-4 w-4 mr-1" />
-        New Task
+        <Trans i18nKey="office:newTask">
+          <IconPlus className="h-4 w-4 mr-1" />
+          New Task
+        </Trans>
       </Button>
       <div className="relative flex-1 max-w-[300px]">
         <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -153,12 +155,14 @@ export function TasksToolbar({
         />
       </div>
       <Label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-        <Checkbox
-          checked={showSystem}
-          onCheckedChange={(v) => onShowSystemChange(v === true)}
-          className="cursor-pointer"
-        />
-        Show system tasks
+        <Trans i18nKey="office:showSystemTasks" values={{ showSystem }}>
+          <Checkbox
+            checked={showSystem}
+            onCheckedChange={(v) => onShowSystemChange(v === true)}
+            className="cursor-pointer"
+          />
+          Show system tasks
+        </Trans>
       </Label>
       <div className="ml-auto flex items-center gap-1">
         <ViewModeToggles

@@ -30,7 +30,7 @@ import {
   treeContainsPath,
   countFilesInTree,
 } from "./file-tree-utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type GitFileStatus = FileInfo["status"] | undefined;
 
@@ -76,9 +76,14 @@ function DeleteConfirmDialog({
               This will permanently delete <span className="font-semibold">{node.name}</span>
               {fileCount > 0 && (
                 <>
-                  {" "}
-                  and <span className="font-semibold">{fileCount}</span>{" "}
-                  {fileCount === 1 ? "file" : "files"} inside it
+                  <Trans
+                    i18nKey="task:andInsideIt"
+                    values={{ fileCount, value4: fileCount === 1 ? "file" : "files" }}
+                  >
+                    {" "}
+                    and <span className="font-semibold">{fileCount}</span>{" "}
+                    {fileCount === 1 ? "file" : "files"} inside it
+                  </Trans>
                 </>
               )}
               . This action cannot be undone.

@@ -16,7 +16,7 @@ import {
   ContextMenuTrigger,
 } from "@kandev/ui/context-menu";
 import { timeAgo } from "@/lib/utils/time";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type CommitItem = {
   commit_sha: string;
@@ -62,24 +62,30 @@ function CommitContextMenu({
           <ContextMenuItem
             onSelect={() => onAmendCommit(commit.commit_message, commit.repository_name)}
           >
-            <IconPencil className="h-3.5 w-3.5" />
-            Amend message
+            <Trans i18nKey="task:amendMessage">
+              <IconPencil className="h-3.5 w-3.5" />
+              Amend message
+            </Trans>
           </ContextMenuItem>
         )}
         {isLatest && onRevertCommit && (
           <ContextMenuItem
             onSelect={() => onRevertCommit(commit.commit_sha, commit.repository_name)}
           >
-            <IconArrowBackUp className="h-3.5 w-3.5" />
-            Revert commit
+            <Trans i18nKey="task:revertCommit2">
+              <IconArrowBackUp className="h-3.5 w-3.5" />
+              Revert commit
+            </Trans>
           </ContextMenuItem>
         )}
         {onResetToCommit && (
           <ContextMenuItem
             onSelect={() => onResetToCommit(commit.commit_sha, commit.repository_name)}
           >
-            <IconHistoryToggle className="h-3.5 w-3.5" />
-            Reset to this commit
+            <Trans i18nKey="task:resetToThisCommit2">
+              <IconHistoryToggle className="h-3.5 w-3.5" />
+              Reset to this commit
+            </Trans>
           </ContextMenuItem>
         )}
       </ContextMenuContent>

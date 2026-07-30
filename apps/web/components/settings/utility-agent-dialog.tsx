@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@kandev/ui/dialog";
@@ -179,7 +180,9 @@ function UtilityAgentForm({
           />
         </div>
         <p className="text-xs text-muted-foreground">
-          Type {"{{"} to see available variables with autocomplete
+          <Trans i18nKey="settings:typeToSeeAvailableVariablesWith">
+            Type {"{{"} to see available variables with autocomplete
+          </Trans>
         </p>
       </div>
     </div>

@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import {
   IconBrandVscode,
@@ -76,8 +77,10 @@ export function AddPanelMenuItems({
         Browser
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => addVscodePanel()} className={MENU_ITEM_CLASS}>
-        <IconBrandVscode className={MENU_ICON_CLASS} />
-        VS Code
+        <Trans i18nKey="task:vsCode2" values={{ MENU_ICON_CLASS }}>
+          <IconBrandVscode className={MENU_ICON_CLASS} />
+          VS Code
+        </Trans>
       </DropdownMenuItem>
       {!state.isPassthrough && (
         <DropdownMenuItem onClick={() => addPlanPanel({ groupId })} className={MENU_ITEM_CLASS}>

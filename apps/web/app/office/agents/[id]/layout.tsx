@@ -15,7 +15,7 @@ import { AgentStatusDot } from "../components/agent-status-dot";
 import { AgentRoleBadge } from "../components/agent-role-badge";
 import { BudgetGauge } from "../components/budget-gauge";
 import { AgentRouteStrip } from "./components/agent-route-strip";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type AgentDetailLayoutProps = {
   children: ReactNode;
@@ -173,7 +173,9 @@ function CoordinatorRoutineHint({ agentId, agentRole }: { agentId: string; agent
             <li>{t("office:aNameEGDailyStandup")}</li>
             <li>{t("office:aTaskTitleDescriptionWhatThe")}</li>
             <li>
-              A cron schedule (e.g. <code>{t("office:09MonFri")}</code> for weekdays at 9am)
+              <Trans i18nKey="office:aCronScheduleEGFor">
+                A cron schedule (e.g. <code>{t("office:09MonFri")}</code> for weekdays at 9am)
+              </Trans>
             </li>
             <li>{t("office:thisAgentAsTheAssignee")}</li>
           </ol>

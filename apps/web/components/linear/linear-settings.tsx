@@ -30,7 +30,7 @@ import {
 } from "@/lib/api/domains/linear-api";
 import type { LinearConfig, LinearTeam, TestLinearConnectionResult } from "@/lib/types/linear";
 import { LinearIssueWatchersSection } from "./linear-issue-watchers-section";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type FormState = {
   defaultTeamKey: string;
@@ -65,12 +65,23 @@ function SecretField({
   return (
     <div className="space-y-1.5">
       <Label htmlFor="linear-secret">
-        API key
-        {hasSavedSecret && (
-          <span className="text-xs text-muted-foreground ml-2">
-            {t("linear:savedLeaveBlankToKeepThe")}
-          </span>
-        )}
+        <Trans
+          i18nKey="linear:apiKey"
+          values={{
+            value1: hasSavedSecret && (
+              <span className="text-xs text-muted-foreground ml-2">
+                {t("linear:savedLeaveBlankToKeepThe")}
+              </span>
+            ),
+          }}
+        >
+          API key
+          {hasSavedSecret && (
+            <span className="text-xs text-muted-foreground ml-2">
+              {t("linear:savedLeaveBlankToKeepThe")}
+            </span>
+          )}
+        </Trans>
       </Label>
       <Input
         id="linear-secret"
@@ -83,15 +94,17 @@ function SecretField({
         disabled={loading}
       />
       <p className="text-xs text-muted-foreground">
-        Create a personal API key at{" "}
-        <a
-          className="underline cursor-pointer"
-          href="https://linear.app/settings/account/security"
-          target="_blank"
-          rel="noreferrer"
-        >
-          {t("linear:linearAppSettingsAccountSecurity")}
-        </a>
+        <Trans i18nKey="linear:createAPersonalApiKeyAt">
+          Create a personal API key at{" "}
+          <a
+            className="underline cursor-pointer"
+            href="https://linear.app/settings/account/security"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("linear:linearAppSettingsAccountSecurity")}
+          </a>
+        </Trans>
       </p>
     </div>
   );

@@ -7,7 +7,7 @@ import {
   DEFAULT_ONBOARDING_TASK_DESCRIPTION,
   DEFAULT_ONBOARDING_TASK_TITLE,
 } from "./setup-task-defaults";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type StepTaskProps = {
   agentName: string;
@@ -24,10 +24,16 @@ export function StepTask({ agentName, taskTitle, taskDescription, onChange }: St
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Give your {name} something to do</h2>
+        <h2 className="text-xl font-semibold">
+          <Trans i18nKey="office:giveYourSomethingToDo" values={{ name }}>
+            Give your {name} something to do
+          </Trans>
+        </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          {name} will use this starter task to inspect the repos, set up the team, and propose the
-          next work for approval.
+          <Trans i18nKey="office:willUseThisStarterTaskTo" values={{ name }}>
+            {name} will use this starter task to inspect the repos, set up the team, and propose the
+            next work for approval.
+          </Trans>
         </p>
       </div>
       <div className="space-y-4">

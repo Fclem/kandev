@@ -9,7 +9,7 @@ import { ExportFileTree } from "./export-file-tree";
 import { ExportFilePreview } from "./export-file-preview";
 import { buildFileTree, bundleToExportFiles, countSelectedFiles } from "./export-utils";
 import type { ExportFile } from "./export-types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function ExportPreview() {
   const { t } = useTranslation();
@@ -81,7 +81,12 @@ export function ExportPreview() {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <span className="text-sm text-muted-foreground">
-          {workspaceName} export &middot; {selectedCount} / {files.length} files selected
+          <Trans
+            i18nKey="office:exportFilesSelected"
+            values={{ workspaceName, selectedCount, length: files.length }}
+          >
+            {workspaceName} export &middot; {selectedCount} / {files.length} files selected
+          </Trans>
         </span>
         <Button
           size="sm"
@@ -89,8 +94,10 @@ export function ExportPreview() {
           disabled={selectedCount === 0}
           className="cursor-pointer"
         >
-          <IconDownload className="h-4 w-4 mr-1.5" />
-          Export {selectedCount} files
+          <Trans i18nKey="office:exportFiles" values={{ selectedCount }}>
+            <IconDownload className="h-4 w-4 mr-1.5" />
+            Export {selectedCount} files
+          </Trans>
         </Button>
       </div>
       <div className="flex flex-1 min-h-0">

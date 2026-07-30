@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { AgentLogo } from "@/components/agent-logo";
 import { ProfileFormFields, type ProfileFormData } from "@/components/settings/profile-form-fields";
 import type { AvailableAgent, ToolStatus } from "@/lib/types/http";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type AgentSetting = {
   profileId: string;
@@ -64,8 +64,10 @@ function StatusPill({ status, error }: { status: string; error?: string }) {
     case "auth_required": {
       const pill = (
         <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-          <IconLock className="h-3.5 w-3.5" />
-          No auth
+          <Trans i18nKey="common:noAuth">
+            <IconLock className="h-3.5 w-3.5" />
+            No auth
+          </Trans>
         </span>
       );
       if (!error) return pill;
@@ -273,8 +275,10 @@ export function StepAgents({
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-sm text-muted-foreground">
-        <IconLoader2 className="h-6 w-6 animate-spin" />
-        Discovering agents...
+        <Trans i18nKey="common:discoveringAgents">
+          <IconLoader2 className="h-6 w-6 animate-spin" />
+          Discovering agents...
+        </Trans>
       </div>
     );
   }
@@ -304,8 +308,10 @@ export function StepAgents({
       </div>
       <p className="text-xs text-muted-foreground">{t("common:expandAnAgentToConfigureIts")}</p>
       <p className="text-xs text-muted-foreground">
-        <span className="text-yellow-500 font-medium">{t("common:careful")}</span> The default Agent
-        Profiles run with Auto Approve enabled (YOLO mode).
+        <Trans i18nKey="common:theDefaultAgentProfilesRunWith">
+          <span className="text-yellow-500 font-medium">{t("common:careful")}</span> The default
+          Agent Profiles run with Auto Approve enabled (YOLO mode).
+        </Trans>
       </p>
     </div>
   );

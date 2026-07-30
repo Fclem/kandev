@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import Link from "@/components/routing/app-link";
 import { IconGitBranch } from "@tabler/icons-react";
@@ -52,7 +53,9 @@ function ProjectStats({ project }: { project: Project }) {
         <span>{counts.total} tasks</span>
         {counts.in_progress > 0 && (
           <span className="text-yellow-600 dark:text-yellow-400">
-            {counts.in_progress} in progress
+            <Trans i18nKey="office:inProgress" values={{ in_progress: counts.in_progress }}>
+              {counts.in_progress} in progress
+            </Trans>
           </span>
         )}
         <span className="text-green-600 dark:text-green-400">{counts.done} done</span>

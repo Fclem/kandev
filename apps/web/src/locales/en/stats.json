@@ -1,5 +1,6 @@
 {
   "averages": "Averages",
+  "avgPerTask": "{{value0}} avg per task",
   "bestMonth": "Best month",
   "bestWeekday": "Best weekday",
   "bestYear": "Best year",
@@ -7,6 +8,10 @@
   "completedTasksOverTime": "Completed Tasks Over Time",
   "completion": "Completion",
   "completionRate": "Completion rate",
+  "errorLoadingStats": "Error loading stats: {{initialError}}",
+  "filesChanged": "{{total_files_changed}} files changed",
+  "gitActivity": "<0></0> Git Activity",
+  "inProgress": "{{in_progress_tasks}} in progress",
   "less": "Less",
   "longestTasks": "Longest Tasks",
   "meanDurationOfCompletedTurnsExcluding": "Mean duration of completed turns, excluding turns <1s, >=1h, or with no messages",
@@ -40,6 +45,9 @@
   "totalMessages": "Total messages",
   "totalTurns": "Total turns",
   "turnDuration": "Turn duration",
+  "turnsMessages": "{{turn_count}} turns, {{message_count}} messages",
+  "turnsMessages2": "{{turn_count}} turns · {{message_count}} messages",
+  "turnsMessagesPerSession": "{{value0}} turns · {{value4}} messages per session",
   "turnsPerTask": "Turns per task",
   "userMsgs": "User msgs",
   "userShare": "User share"

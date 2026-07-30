@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import type { PRComment } from "@/lib/types/github";
 import { CollapsibleSection, AddToContextButton, FeedbackItemRow } from "./pr-shared";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function buildCommentMessage(comment: PRComment, prUrl: string): string {
   const location = comment.path
@@ -191,12 +191,24 @@ export function CommentsSection({
           onClick={() => setShowBotComments((current) => !current)}
           className="w-full px-2 py-1 text-left text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 cursor-pointer"
         >
-          {showBotComments ? (
-            <IconChevronDown className="h-3.5 w-3.5" />
-          ) : (
-            <IconChevronRight className="h-3.5 w-3.5" />
-          )}
-          Bot comments ({botComments.length})
+          <Trans
+            i18nKey="github:botComments"
+            values={{
+              value0: showBotComments ? (
+                <IconChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <IconChevronRight className="h-3.5 w-3.5" />
+              ),
+              length: botComments.length,
+            }}
+          >
+            {showBotComments ? (
+              <IconChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <IconChevronRight className="h-3.5 w-3.5" />
+            )}
+            Bot comments ({botComments.length})
+          </Trans>
         </button>
       )}
       {showBotComments &&

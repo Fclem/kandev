@@ -21,7 +21,7 @@ import { useTaskCIAutomationOptions } from "@/hooks/domains/github/use-task-ci-o
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { autoFixRoundForState, findCIAutomationStateForPR } from "@/lib/github/ci-automation";
 import type { TaskCIAutomationPatch, TaskCIPRAutomationState, TaskPR } from "@/lib/types/github";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const PR_FEEDBACK_PLACEHOLDER = "{{pr.feedback}}";
 
@@ -79,14 +79,16 @@ function CIAutomationPromptDialog({
         <DialogHeader>
           <DialogTitle>{t("github:autoFixPrompt")}</DialogTitle>
           <DialogDescription>
-            This prompt is used only for this task. Leave it blank to use the default prompt. Add{" "}
-            <code
-              data-testid="ci-auto-fix-pr-feedback-placeholder"
-              className="rounded bg-muted px-1 py-0.5 text-[11px]"
-            >
-              {PR_FEEDBACK_PLACEHOLDER}
-            </code>{" "}
-            when you want Kandev to include its PR feedback snapshot.
+            <Trans i18nKey="github:thisPromptIsUsedOnlyFor" values={{ PR_FEEDBACK_PLACEHOLDER }}>
+              This prompt is used only for this task. Leave it blank to use the default prompt. Add{" "}
+              <code
+                data-testid="ci-auto-fix-pr-feedback-placeholder"
+                className="rounded bg-muted px-1 py-0.5 text-[11px]"
+              >
+                {PR_FEEDBACK_PLACEHOLDER}
+              </code>{" "}
+              when you want Kandev to include its PR feedback snapshot.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -234,13 +236,18 @@ function CIAutoFixRoundHelpButton({
   );
   const explanation = (
     <span data-testid="ci-auto-fix-round-explanation">
-      Auto-fix has used {round.current} of {round.max} rounds for this PR. A round is counted when
-      Kandev sends or queues a CI auto-fix message. Kandev waits for all PR checks to finish before
-      starting a new CI auto-fix turn, so the agent gets the final failed checks and current
-      comments together. Updating an already queued auto-fix message does not use another round.
-      When this is at {round.max}/{round.max} and there is no pending auto-fix message left to
-      update, Kandev pauses auto-fix for this PR so it cannot loop forever. Disable and re-enable
-      auto-fix after manual review to start over.
+      <Trans
+        i18nKey="github:autoFixHasUsedOfRounds"
+        values={{ current: round.current, max: round.max }}
+      >
+        Auto-fix has used {round.current} of {round.max} rounds for this PR. A round is counted when
+        Kandev sends or queues a CI auto-fix message. Kandev waits for all PR checks to finish
+        before starting a new CI auto-fix turn, so the agent gets the final failed checks and
+        current comments together. Updating an already queued auto-fix message does not use another
+        round. When this is at {round.max}/{round.max} and there is no pending auto-fix message left
+        to update, Kandev pauses auto-fix for this PR so it cannot loop forever. Disable and
+        re-enable auto-fix after manual review to start over.
+      </Trans>
     </span>
   );
   if (!isFinePointer) {

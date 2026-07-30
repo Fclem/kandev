@@ -20,7 +20,7 @@ import {
   ClarificationOptions,
   ClarificationStepper,
 } from "./clarification-overlay-parts";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ClarificationInputOverlayProps = {
   messages: readonly Message[] | null | undefined;
@@ -113,7 +113,9 @@ function ClarificationCard(props: CardProps) {
         <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
           {total > 1 && (
             <span data-testid="clarification-progress-chip">
-              Question {index + 1} of {total}
+              <Trans i18nKey="task:questionOf" values={{ value1: index + 1, total }}>
+                Question {index + 1} of {total}
+              </Trans>
             </span>
           )}
           {metadata.question.title && (
@@ -141,8 +143,10 @@ function ClarificationCard(props: CardProps) {
           data-testid="clarification-deferred-notice"
           className="mt-2 flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400"
         >
-          <IconInfoCircle className="h-3.5 w-3.5 flex-shrink-0" />
-          The agent has moved on. Your response will be sent as a new message.
+          <Trans i18nKey="task:theAgentHasMovedOnYour">
+            <IconInfoCircle className="h-3.5 w-3.5 flex-shrink-0" />
+            The agent has moved on. Your response will be sent as a new message.
+          </Trans>
         </div>
       )}
       <ClarificationCustomInput
@@ -575,7 +579,12 @@ export function ClarificationInputOverlay({
               data-testid="clarification-group-progress"
               className="text-xs text-muted-foreground"
             >
-              {group.answeredCount} of {group.total} answered
+              <Trans
+                i18nKey="task:ofAnswered"
+                values={{ answeredCount: group.answeredCount, total: group.total }}
+              >
+                {group.answeredCount} of {group.total} answered
+              </Trans>
             </span>
           )}
         </div>

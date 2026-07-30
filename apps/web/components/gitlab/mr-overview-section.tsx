@@ -8,7 +8,7 @@ import {
 import { Badge } from "@kandev/ui/badge";
 import type { GitLabMRFeedback, TaskMR } from "@/lib/types/gitlab";
 import { CollapsibleSection, PRMarkdownBody } from "@/components/github/pr-shared";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function pipelineTone(status: string): string {
   if (status === "success") return "text-green-600";
@@ -99,7 +99,12 @@ export function MROverviewSection({
         </CollapsibleSection>
       )}
       <p className="sr-only">
-        Linked merge request {taskMR.project_path}!{taskMR.mr_iid}
+        <Trans
+          i18nKey="gitlab:linkedMergeRequest"
+          values={{ project_path: taskMR.project_path, mr_iid: taskMR.mr_iid }}
+        >
+          Linked merge request {taskMR.project_path}!{taskMR.mr_iid}
+        </Trans>
       </p>
     </div>
   );

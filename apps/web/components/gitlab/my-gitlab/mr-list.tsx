@@ -15,7 +15,7 @@ import type { GitLabLaunchPayload, GitLabTaskPreset } from "./quick-task-launche
 import { gitLabMRKey } from "@/lib/gitlab-identity";
 import { MRRowTaskIndicator } from "./mr-row-task-indicator";
 import { StartTaskMenu } from "./start-task-menu";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type MRListProps = {
   items: MR[];
@@ -75,7 +75,15 @@ function MRRow({
           </span>
           <span>·</span>
           <span className="whitespace-nowrap">
-            by {mr.author_username} · opened {formatRelativeTime(mr.created_at)}
+            <Trans
+              i18nKey="gitlab:byOpened"
+              values={{
+                author_username: mr.author_username,
+                value3: formatRelativeTime(mr.created_at),
+              }}
+            >
+              by {mr.author_username} · opened {formatRelativeTime(mr.created_at)}
+            </Trans>
           </span>
           <MRRowTaskIndicator tasks={tasks} />
         </div>

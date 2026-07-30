@@ -16,7 +16,7 @@ import {
   IconChevronsLeft,
   IconChevronsRight,
 } from "@tabler/icons-react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TasksPaginationProps = {
   total: number;
@@ -56,7 +56,9 @@ export function TasksPagination({
       className="flex flex-col gap-3 px-1 pb-2 text-sm sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="flex-1 text-muted-foreground">
-        Showing {start} to {end} of {total} results
+        <Trans i18nKey="common:showingToOfResults2" values={{ start, end, total }}>
+          Showing {start} to {end} of {total} results
+        </Trans>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">
         <RowsPerPageSelect pagination={pagination} onPaginationChange={onPaginationChange} />

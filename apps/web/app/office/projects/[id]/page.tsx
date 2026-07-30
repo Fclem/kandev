@@ -15,7 +15,7 @@ import { ProjectHeader } from "./project-header";
 import { ProjectReposSection } from "./project-repos-section";
 import { ProjectExecutorSection } from "./project-executor-section";
 import { ProjectTasksSection } from "./project-tasks-section";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -99,8 +99,10 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
         <div className="flex justify-end">
           <Button variant="destructive" size="sm" onClick={handleDelete} className="cursor-pointer">
-            <IconTrash className="h-4 w-4 mr-1" />
-            Delete Project
+            <Trans i18nKey="office:deleteProject">
+              <IconTrash className="h-4 w-4 mr-1" />
+              Delete Project
+            </Trans>
           </Button>
         </div>
       </div>

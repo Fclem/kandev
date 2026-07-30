@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import { IconMessageQuestion, IconCheck, IconX } from "@tabler/icons-react";
 import { markdownComponents, remarkPlugins } from "@/components/shared/markdown-components";
 import type { Message, ClarificationRequestMetadata } from "@/lib/types/http";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ClarificationRequestMessageProps = {
   comment: Message;
@@ -112,8 +112,10 @@ export function ClarificationRequestMessage({ comment }: ClarificationRequestMes
               data-testid="clarification-expired-notice"
               className="mt-1 ml-3 flex items-center gap-1.5 text-xs text-orange-500/80"
             >
-              {getStatusIndicator()}
-              Timed out (agent moved on)
+              <Trans i18nKey="task:timedOutAgentMovedOn" values={{ value0: getStatusIndicator() }}>
+                {getStatusIndicator()}
+                Timed out (agent moved on)
+              </Trans>
             </div>
           )}
         </div>

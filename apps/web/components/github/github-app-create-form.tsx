@@ -19,7 +19,7 @@ import {
 import { GitHubAppPolicyDialog } from "./github-app-policy-dialog";
 import { GitHubAppVisibilityField } from "./github-app-visibility-field";
 import type { useGitHubAppRegistrations } from "@/hooks/domains/github/use-github-app-registrations";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type RegistrationHook = ReturnType<typeof useGitHubAppRegistrations>;
 
@@ -119,8 +119,10 @@ function ManifestHandoff({
           className="h-11 cursor-pointer"
           onClick={() => submitManifestToGitHub(handoff.registration_url, handoff.manifest)}
         >
-          Continue on GitHub
-          <IconExternalLink className="ml-2 h-4 w-4" />
+          <Trans i18nKey="github:continueOnGithub">
+            Continue on GitHub
+            <IconExternalLink className="ml-2 h-4 w-4" />
+          </Trans>
         </Button>
         <Button variant="outline" className="h-11 cursor-pointer" onClick={onEdit}>
           {t("github:editDetails")}
@@ -181,7 +183,9 @@ function CreateAppFields(props: CreateFieldsProps) {
           <RadioGroupItem value="organization" /> Organization
         </Label>
         <Label className="flex cursor-pointer items-center gap-2">
-          <RadioGroupItem value="user" /> Personal account
+          <Trans i18nKey="github:personalAccount">
+            <RadioGroupItem value="user" /> Personal account
+          </Trans>
         </Label>
       </RadioGroup>
       <Field label="Public Kandev URL" error={props.errors.publicBaseUrl}>
@@ -197,9 +201,14 @@ function CreateAppFields(props: CreateFieldsProps) {
       <GitHubAppVisibilityField value={props.visibility} onChange={props.onVisibility} />
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button type="submit" disabled={props.mutating} className="h-11 cursor-pointer">
-          {props.mutating && <Spinner className="mr-2 h-4 w-4" />}
-          Prepare App on GitHub
-          <IconExternalLink className="ml-2 h-4 w-4" />
+          <Trans
+            i18nKey="github:prepareAppOnGithub"
+            values={{ value0: props.mutating && <Spinner className="mr-2 h-4 w-4" /> }}
+          >
+            {props.mutating && <Spinner className="mr-2 h-4 w-4" />}
+            Prepare App on GitHub
+            <IconExternalLink className="ml-2 h-4 w-4" />
+          </Trans>
         </Button>
         <GitHubAppPolicyDialog />
       </div>

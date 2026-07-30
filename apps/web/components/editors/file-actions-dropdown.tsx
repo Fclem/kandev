@@ -16,7 +16,7 @@ import { useOpenSessionInEditor } from "@/hooks/use-open-session-in-editor";
 import { useOpenSessionFolder } from "@/hooks/use-open-session-folder";
 import { useAppStore } from "@/components/state-provider";
 import type { EditorOption } from "@/lib/types/http";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type FileActionsDropdownProps = {
   /** File path to open / copy */
@@ -123,12 +123,16 @@ export function FileActionsDropdown({
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer text-xs" onClick={handleCopyPath}>
-          <IconCopy className="h-3.5 w-3.5 mr-1.5" />
-          Copy path
+          <Trans i18nKey="editors:copyPath">
+            <IconCopy className="h-3.5 w-3.5 mr-1.5" />
+            Copy path
+          </Trans>
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer text-xs" onClick={handleOpenFolder}>
-          <IconFolderShare className="h-3.5 w-3.5 mr-1.5" />
-          Open folder
+          <Trans i18nKey="editors:openFolder">
+            <IconFolderShare className="h-3.5 w-3.5 mr-1.5" />
+            Open folder
+          </Trans>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -38,7 +38,7 @@ import { getSessionStateIcon } from "@/lib/ui/state-icons";
 import { useSessionPendingInput, type PendingInput } from "@/hooks/use-task-pending-input";
 import type { ForegroundActivity, TaskSession, TaskSessionState } from "@/lib/types/http";
 import type { AgentProfileOption } from "@/lib/state/slices";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SessionRow = {
   id: string;
@@ -405,8 +405,10 @@ const MobileSessionsList = memo(function MobileSessionsList({
           onClick={() => setLaunchOpen(true)}
           data-testid="mobile-launch-session"
         >
-          <IconPlus className="h-4 w-4" />
-          New session
+          <Trans i18nKey="task:newSession2">
+            <IconPlus className="h-4 w-4" />
+            New session
+          </Trans>
         </Button>
       </div>
       <div className="flex flex-col gap-0.5">

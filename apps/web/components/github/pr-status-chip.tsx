@@ -42,7 +42,7 @@ import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
 import { autoFixRoundForState, findCIAutomationStateForPR } from "@/lib/github/ci-automation";
 import type { AutoFixRoundInfo } from "@/lib/github/ci-automation";
 import type { TaskCIAutomationOptions, TaskPR } from "@/lib/types/github";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const HOVER_OPEN_DELAY_MS = 150;
 const HOVER_CLOSE_DELAY_MS = 150;
@@ -309,7 +309,12 @@ function AutomationFlagBadges({ automation }: { automation: AutomationFlags }) {
               : "bg-emerald-500/15 text-emerald-500"
           }`}
         >
-          Auto-fix {autoFixRound.current}/{autoFixRound.max}
+          <Trans
+            i18nKey="github:autoFix"
+            values={{ current: autoFixRound.current, max: autoFixRound.max }}
+          >
+            Auto-fix {autoFixRound.current}/{autoFixRound.max}
+          </Trans>
         </span>
       )}
       {automation.autoMerge && (
@@ -482,7 +487,11 @@ function PRStatusChipMultiDrawer({ prs, automation, refreshTaskPR }: MultiChipPr
       </button>
       <DrawerContent data-testid="pr-status-chip-drawer" className="max-h-[80vh] flex flex-col">
         <DrawerHeader className="flex flex-row items-center justify-between border-b py-2">
-          <DrawerTitle className="text-sm">{prs.length} pull requests</DrawerTitle>
+          <DrawerTitle className="text-sm">
+            <Trans i18nKey="github:pullRequests2" values={{ length: prs.length }}>
+              {prs.length} pull requests
+            </Trans>
+          </DrawerTitle>
           <DrawerDescription className="sr-only">
             {t("github:pullRequestCiStatusReviewsAnd")}
           </DrawerDescription>

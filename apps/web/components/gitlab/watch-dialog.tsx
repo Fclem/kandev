@@ -36,7 +36,7 @@ import {
   type GitLabWatchForm,
   type GitLabWatchKind,
 } from "./watch-form";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Watch = ReviewWatch | IssueWatch;
 type CreateRequest = CreateReviewWatchRequest | CreateIssueWatchRequest;
@@ -368,11 +368,21 @@ export function GitLabWatchDialog({
       <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-y-auto sm:max-h-[90vh] sm:w-[min(900px,calc(100vw-2rem))]">
         <DialogHeader>
           <DialogTitle>
-            {watch ? "Edit" : "Create"} GitLab {noun} watch
+            <Trans
+              i18nKey="gitlab:gitlabWatch"
+              values={{ value0: watch ? "Edit" : "Create", noun }}
+            >
+              {watch ? "Edit" : "Create"} GitLab {noun} watch
+            </Trans>
           </DialogTitle>
           <DialogDescription>
-            Automatically create workspace tasks for newly matching GitLab{" "}
-            {kind === "review" ? "merge requests" : "issues"}.
+            <Trans
+              i18nKey="gitlab:automaticallyCreateWorkspaceTasksForNewly"
+              values={{ value2: kind === "review" ? "merge requests" : "issues" }}
+            >
+              Automatically create workspace tasks for newly matching GitLab{" "}
+              {kind === "review" ? "merge requests" : "issues"}.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         {error && (

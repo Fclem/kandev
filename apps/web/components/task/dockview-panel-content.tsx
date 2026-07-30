@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import React, { useCallback, useEffect } from "react";
 import { ReviewDetailPanelComponent } from "./review-detail-panel";
@@ -231,6 +232,12 @@ export function renderPanel(
         />
       );
     default:
-      return <div className="p-4 text-muted-foreground">Unknown panel: {component}</div>;
+      return (
+        <div className="p-4 text-muted-foreground">
+          <Trans i18nKey="task:unknownPanel" values={{ component }}>
+            Unknown panel: {component}
+          </Trans>
+        </div>
+      );
   }
 }

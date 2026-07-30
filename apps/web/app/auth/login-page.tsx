@@ -9,7 +9,7 @@ import { ApiError } from "@/lib/api/client";
 import { login } from "@/lib/api/domains/auth-api";
 import { useAppStore } from "@/components/state-provider";
 import type { SsoProvider } from "@/lib/state/slices/auth/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // LoginSsoButtons renders one "Continue with <provider>" button per
 // plugin-contributed SSO provider, below a divider. Each button is a plain
@@ -19,9 +19,11 @@ function LoginSsoButtons({ providers }: { providers: SsoProvider[] }) {
   return (
     <div className="mt-4 flex flex-col gap-2" data-testid="login-sso">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="h-px flex-1 bg-border" />
-        or continue with
-        <span className="h-px flex-1 bg-border" />
+        <Trans i18nKey="auth:orContinueWith">
+          <span className="h-px flex-1 bg-border" />
+          or continue with
+          <span className="h-px flex-1 bg-border" />
+        </Trans>
       </div>
       {providers.map((provider) => (
         <Button
@@ -31,7 +33,11 @@ function LoginSsoButtons({ providers }: { providers: SsoProvider[] }) {
           className="cursor-pointer"
           data-testid={`login-sso-${provider.id}`}
         >
-          <a href={provider.initiateUrl}>Continue with {provider.displayName}</a>
+          <a href={provider.initiateUrl}>
+            <Trans i18nKey="auth:continueWith" values={{ displayName: provider.displayName }}>
+              Continue with {provider.displayName}
+            </Trans>
+          </a>
         </Button>
       ))}
     </div>
@@ -74,7 +80,9 @@ export function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <IconLock className="h-4 w-4" /> Sign in
+            <Trans i18nKey="auth:signIn">
+              <IconLock className="h-4 w-4" /> Sign in
+            </Trans>
           </CardTitle>
           <CardDescription>{t("auth:signInToYourKandevAccount")}</CardDescription>
         </CardHeader>

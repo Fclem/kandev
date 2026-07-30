@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useCallback, useEffect, useState } from "react";
 import { IconPlus } from "@tabler/icons-react";
@@ -55,8 +56,10 @@ export function ProjectsPageClient({ initialProjects }: ProjectsPageClientProps)
     <div className="space-y-4 p-6">
       <div className="flex justify-end">
         <Button size="sm" onClick={() => setDialogOpen(true)} className="cursor-pointer">
-          <IconPlus className="h-4 w-4 mr-1" />
-          New Project
+          <Trans i18nKey="office:newProject2">
+            <IconPlus className="h-4 w-4 mr-1" />
+            New Project
+          </Trans>
         </Button>
       </div>
 
@@ -70,8 +73,10 @@ export function ProjectsPageClient({ initialProjects }: ProjectsPageClientProps)
               onClick={() => setDialogOpen(true)}
               className="cursor-pointer"
             >
-              <IconPlus className="h-4 w-4 mr-1" />
-              Create your first project
+              <Trans i18nKey="office:createYourFirstProject">
+                <IconPlus className="h-4 w-4 mr-1" />
+                Create your first project
+              </Trans>
             </Button>
           }
         />

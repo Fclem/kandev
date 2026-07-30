@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useCallback, useState } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -323,10 +324,12 @@ function PinnedFingerprintRow({ fingerprint }: { fingerprint: string }) {
     >
       <IconShieldLock className="h-4 w-4 shrink-0" />
       <span className="text-muted-foreground">
-        Pinned fingerprint:{" "}
-        <code data-testid="ssh-fingerprint-pinned-value" className="font-mono">
-          {fingerprint}
-        </code>
+        <Trans i18nKey="settings:pinnedFingerprint" values={{ fingerprint }}>
+          Pinned fingerprint:{" "}
+          <code data-testid="ssh-fingerprint-pinned-value" className="font-mono">
+            {fingerprint}
+          </code>
+        </Trans>
       </span>
     </div>
   );
@@ -359,12 +362,23 @@ function SSHConnectionActions({
         data-testid="ssh-test-button"
         className="cursor-pointer"
       >
-        {testing ? (
-          <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
-        ) : (
-          <IconTestPipe className="mr-1.5 h-4 w-4" />
-        )}
-        Test connection
+        <Trans
+          i18nKey="settings:testConnection3"
+          values={{
+            value0: testing ? (
+              <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <IconTestPipe className="mr-1.5 h-4 w-4" />
+            ),
+          }}
+        >
+          {testing ? (
+            <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
+          ) : (
+            <IconTestPipe className="mr-1.5 h-4 w-4" />
+          )}
+          Test connection
+        </Trans>
       </Button>
       {showSave && (
         <Button

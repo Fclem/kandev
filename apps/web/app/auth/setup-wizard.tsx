@@ -7,7 +7,7 @@ import { Input } from "@kandev/ui/input";
 import { IconShieldLock } from "@tabler/icons-react";
 import { ApiError } from "@/lib/api/client";
 import { setup } from "@/lib/api/domains/auth-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SetupFormProps = {
   email: string;
@@ -130,7 +130,9 @@ export function SetupWizard() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <IconShieldLock className="h-4 w-4" /> Set up Kandev
+            <Trans i18nKey="auth:setUpKandev">
+              <IconShieldLock className="h-4 w-4" /> Set up Kandev
+            </Trans>
           </CardTitle>
           <CardDescription>{t("auth:authenticationIsEnabledForThisDeployment")}</CardDescription>
         </CardHeader>

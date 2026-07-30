@@ -21,7 +21,7 @@ import {
   type TicketState,
 } from "./jira-ticket-common";
 import type { JiraTaskPreset } from "./my-jira/presets";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type JiraTicketDialogProps = {
   open: boolean;
@@ -134,8 +134,10 @@ function TicketFooter({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button size="sm" variant="default" className="cursor-pointer gap-1.5">
-            <IconPlus className="h-4 w-4" />
-            Start task
+            <Trans i18nKey="jira:startTask">
+              <IconPlus className="h-4 w-4" />
+              Start task
+            </Trans>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">

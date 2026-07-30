@@ -26,7 +26,7 @@ import { RoutineRow } from "./routine-row";
 import { RunRow } from "./run-row";
 import { CreateRoutineDialog } from "./create-routine-dialog";
 import { EmptyState } from "../components/shared/empty-state";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type RoutineFormData = {
   name: string;
@@ -213,7 +213,9 @@ export function RoutinesContent() {
     <div className="space-y-4 p-6">
       <div className="flex justify-end">
         <Button size="sm" onClick={() => setShowCreate(true)} className="cursor-pointer">
-          <IconPlus className="h-4 w-4 mr-1" /> New Routine
+          <Trans i18nKey="office:newRoutine">
+            <IconPlus className="h-4 w-4 mr-1" /> New Routine
+          </Trans>
         </Button>
       </div>
 

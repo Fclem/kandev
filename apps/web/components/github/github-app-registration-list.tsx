@@ -4,7 +4,7 @@ import { Label } from "@kandev/ui/label";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import type { GitHubAppRegistrationCatalogItem } from "@/lib/types/github";
 import { cn } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function GitHubAppRegistrationList({
   registrations,
@@ -50,7 +50,9 @@ export function GitHubAppRegistrationList({
               )}
               {registration.selected && (
                 <Badge variant="secondary">
-                  <IconCheck className="mr-1 h-3 w-3" /> In use
+                  <Trans i18nKey="github:inUse">
+                    <IconCheck className="mr-1 h-3 w-3" /> In use
+                  </Trans>
                 </Badge>
               )}
             </span>
@@ -60,9 +62,14 @@ export function GitHubAppRegistrationList({
             </span>
             {registration.shared && (
               <span className="flex items-start gap-1.5 text-xs font-normal leading-5 text-amber-600 dark:text-amber-400">
-                <IconAlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                Used by {registration.workspace_binding_count} workspaces. Editing or deleting it
-                affects all of them.
+                <Trans
+                  i18nKey="github:usedByWorkspacesEditingOrDeleting"
+                  values={{ workspace_binding_count: registration.workspace_binding_count }}
+                >
+                  <IconAlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  Used by {registration.workspace_binding_count} workspaces. Editing or deleting it
+                  affects all of them.
+                </Trans>
               </span>
             )}
             {registration.status === "invalid" && (

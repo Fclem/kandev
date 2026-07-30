@@ -9,8 +9,8 @@ import { Checkbox } from "@kandev/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useAppStore } from "@/components/state-provider";
 import { listSkills, updateAgentProfile } from "@/lib/api/domains/office-api";
-import type { AgentProfile } from "@/lib/state/slices/office/types";
-import { useTranslation } from "react-i18next";
+import type { AgentProfile, Skill } from "@/lib/state/slices/office/types";
+import { Trans, useTranslation } from "react-i18next";
 
 type AgentSkillsTabProps = {
   agent: AgentProfile;
@@ -43,6 +43,72 @@ function useHydrateSkills() {
       cancelled = true;
     };
   }, [workspaceId, setSkills]);
+}
+
+// SkillRow renders one toggleable skill entry with its system/default badges.
+function SkillRow({
+  skill,
+  role,
+  checked,
+  isDefault,
+  onToggle,
+}: {
+  skill: Skill;
+  role: string;
+  checked: boolean;
+  isDefault: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <label
+      data-testid={`skill-toggle-${skill.slug}`}
+      className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-accent/50 cursor-pointer"
+    >
+      <Checkbox
+        checked={checked}
+        onCheckedChange={onToggle}
+        className="cursor-pointer"
+        data-testid={`skill-toggle-checkbox-${skill.slug}`}
+      />
+      <span className="text-sm">{skill.name}</span>
+      {skill.isSystem && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+              {t("common:system")}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <Trans
+              i18nKey="office:bundledWithKandev"
+              values={{ value1: skill.systemVersion ? ` v${skill.systemVersion}` : "" }}
+            >
+              Bundled with kandev{skill.systemVersion ? ` v${skill.systemVersion}` : ""}
+            </Trans>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {isDefault && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-[10px] text-muted-foreground">
+              <Trans i18nKey="office:defaultFor" values={{ role }}>
+                default for {role}
+              </Trans>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <Trans i18nKey="office:thisSkillIsAutoAttachedTo" values={{ role }}>
+              This skill is auto-attached to new {role} agents. You can still untick it for this
+              agent.
+            </Trans>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      <span className="text-xs text-muted-foreground ml-auto">{skill.slug}</span>
+    </label>
+  );
 }
 
 export function AgentSkillsTab({ agent }: AgentSkillsTabProps) {
@@ -93,50 +159,18 @@ export function AgentSkillsTab({ agent }: AgentSkillsTabProps) {
     <div className="space-y-4 mt-4">
       <p className="text-xs text-muted-foreground">{t("office:skillsThisAgentOwnsSkillsAre")}</p>
       <div className="space-y-1.5">
-        {skills.map((skill) => {
-          const isDefault = skill.isSystem && (skill.defaultForRoles ?? []).includes(agent.role);
-          return (
-            <label
-              key={skill.id}
-              data-testid={`skill-toggle-${skill.slug}`}
-              className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-accent/50 cursor-pointer"
-            >
-              <Checkbox
-                checked={selected.has(skill.id)}
-                onCheckedChange={() => toggle(skill.id)}
-                className="cursor-pointer"
-                data-testid={`skill-toggle-checkbox-${skill.slug}`}
-              />
-              <span className="text-sm">{skill.name}</span>
-              {skill.isSystem && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                      {t("common:system")}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Bundled with kandev{skill.systemVersion ? ` v${skill.systemVersion}` : ""}
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              {isDefault && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-[10px] text-muted-foreground">
-                      default for {agent.role}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    This skill is auto-attached to new {agent.role} agents. You can still untick it
-                    for this agent.
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              <span className="text-xs text-muted-foreground ml-auto">{skill.slug}</span>
-            </label>
-          );
-        })}
+        {skills.map((skill) => (
+          <SkillRow
+            key={skill.id}
+            skill={skill}
+            role={agent.role}
+            checked={selected.has(skill.id)}
+            isDefault={Boolean(
+              skill.isSystem && (skill.defaultForRoles ?? []).includes(agent.role),
+            )}
+            onToggle={() => toggle(skill.id)}
+          />
+        ))}
       </div>
       {dirty && (
         <div className="flex justify-end">

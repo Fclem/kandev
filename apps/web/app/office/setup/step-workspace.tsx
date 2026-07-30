@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type StepWorkspaceProps = {
   workspaceName: string;
@@ -66,7 +66,12 @@ export function StepWorkspace({ workspaceName, taskPrefix, onChange }: StepWorks
             maxLength={6}
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Tasks will be numbered {taskPrefix || "KAN"}-1, {taskPrefix || "KAN"}-2, etc.
+            <Trans
+              i18nKey="office:tasksWillBeNumbered12"
+              values={{ value1: taskPrefix || "KAN", value3: taskPrefix || "KAN" }}
+            >
+              Tasks will be numbered {taskPrefix || "KAN"}-1, {taskPrefix || "KAN"}-2, etc.
+            </Trans>
           </p>
         </div>
       </div>

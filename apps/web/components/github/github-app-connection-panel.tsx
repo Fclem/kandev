@@ -9,7 +9,7 @@ import { useGitHubAppRegistrations } from "@/hooks/domains/github/use-github-app
 import { GitHubAppCreateForm } from "./github-app-create-form";
 import { GitHubAppImportForm } from "./github-app-import-form";
 import { GitHubAppRegistrationList } from "./github-app-registration-list";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type AppView = "choose" | "import" | "create";
 type RegistrationHook = ReturnType<typeof useGitHubAppRegistrations>;
@@ -76,7 +76,9 @@ export function GitHubAppConnectionPanel({ workspaceId }: { workspaceId: string 
       </div>
       {registrations.loading ? (
         <div className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-          <Spinner className="h-4 w-4" /> Loading registered Apps...
+          <Trans i18nKey="github:loadingRegisteredApps">
+            <Spinner className="h-4 w-4" /> Loading registered Apps...
+          </Trans>
         </div>
       ) : (
         <GitHubAppRegistrationList
@@ -86,27 +88,62 @@ export function GitHubAppConnectionPanel({ workspaceId }: { workspaceId: string 
         />
       )}
       {registrations.error && <p className="text-xs text-destructive">{registrations.error}</p>}
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        <Button
-          disabled={selectedRegistration?.status !== "active" || registrations.mutating}
-          onClick={() => void install()}
-          className="h-11 cursor-pointer"
-          data-testid="github-app-install-button"
-        >
-          {registrations.mutating && <Spinner className="mr-2 h-4 w-4" />}
-          Install for this workspace
-          <IconExternalLink className="ml-2 h-4 w-4" />
-        </Button>
-        <Button variant="outline" className="h-11 cursor-pointer" onClick={() => setView("import")}>
-          <IconPlus className="mr-2 h-4 w-4" /> Add existing App
-        </Button>
-        <Button variant="outline" className="h-11 cursor-pointer" onClick={() => setView("create")}>
-          <IconPlus className="mr-2 h-4 w-4" /> Create new App
-        </Button>
-      </div>
+      <AppActionButtons
+        installDisabled={selectedRegistration?.status !== "active" || registrations.mutating}
+        mutating={registrations.mutating}
+        onInstall={() => void install()}
+        onImport={() => setView("import")}
+        onCreate={() => setView("create")}
+      />
       <p className="text-xs leading-5 text-muted-foreground">
         {t("github:aRegistrationCanBeReusedAcross")}
       </p>
+    </div>
+  );
+}
+
+// AppActionButtons is the install / add-existing / create-new button row of the
+// GitHub App chooser view.
+function AppActionButtons({
+  installDisabled,
+  mutating,
+  onInstall,
+  onImport,
+  onCreate,
+}: {
+  installDisabled: boolean;
+  mutating: boolean;
+  onInstall: () => void;
+  onImport: () => void;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+      <Button
+        disabled={installDisabled}
+        onClick={onInstall}
+        className="h-11 cursor-pointer"
+        data-testid="github-app-install-button"
+      >
+        <Trans
+          i18nKey="github:installForThisWorkspace"
+          values={{ value0: mutating && <Spinner className="mr-2 h-4 w-4" /> }}
+        >
+          {mutating && <Spinner className="mr-2 h-4 w-4" />}
+          Install for this workspace
+          <IconExternalLink className="ml-2 h-4 w-4" />
+        </Trans>
+      </Button>
+      <Button variant="outline" className="h-11 cursor-pointer" onClick={onImport}>
+        <Trans i18nKey="github:addExistingApp">
+          <IconPlus className="mr-2 h-4 w-4" /> Add existing App
+        </Trans>
+      </Button>
+      <Button variant="outline" className="h-11 cursor-pointer" onClick={onCreate}>
+        <Trans i18nKey="github:createNewApp">
+          <IconPlus className="mr-2 h-4 w-4" /> Create new App
+        </Trans>
+      </Button>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { Label } from "@kandev/ui/label";
 import { Textarea } from "@kandev/ui/textarea";
 import { IconCopy, IconCheck, IconEye, IconEyeOff } from "@tabler/icons-react";
 import { revealWebhookSecret } from "@/lib/api/domains/automation-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type WebhookConfigProps = {
   automationId: string | null;
@@ -105,11 +105,13 @@ export function WebhookConfig({ automationId, workspaceId }: WebhookConfigProps)
         onCopy={(value) => copyValue(value, "secret")}
       />
       <p className="text-xs text-muted-foreground">
-        Send a POST request with a JSON body and the secret in the{" "}
-        <code className="bg-muted px-1 rounded">{t("automations:xWebhookSecret")}</code> header.
-        Reference fields from the payload with{" "}
-        <code className="bg-muted px-1 rounded">{`{{webhook.<path>}}`}</code>, e.g.{" "}
-        <code className="bg-muted px-1 rounded">{`{{webhook.pull_request.number}}`}</code>.
+        <Trans i18nKey="automations:sendAPostRequestWithA">
+          Send a POST request with a JSON body and the secret in the{" "}
+          <code className="bg-muted px-1 rounded">{t("automations:xWebhookSecret")}</code> header.
+          Reference fields from the payload with{" "}
+          <code className="bg-muted px-1 rounded">{`{{webhook.<path>}}`}</code>, e.g.{" "}
+          <code className="bg-muted px-1 rounded">{`{{webhook.pull_request.number}}`}</code>.
+        </Trans>
       </p>
       <SamplePayloadSection
         samplePayload={samplePayload}

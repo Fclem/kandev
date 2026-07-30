@@ -4,7 +4,7 @@ import { IconAlertTriangle } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { cn } from "@/lib/utils";
 import type { MergeableState } from "@/lib/types/github";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // --- Pure descriptor (unit-tested) ---
 
@@ -88,7 +88,9 @@ function ConflictBanner({
       <IconAlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
       <div className="min-w-0 flex-1">
         <div className="text-xs font-semibold text-red-600 dark:text-red-400">
-          Merge conflicts with <code className="font-mono">{baseBranch}</code>
+          <Trans i18nKey="github:mergeConflictsWith" values={{ baseBranch }}>
+            Merge conflicts with <code className="font-mono">{baseBranch}</code>
+          </Trans>
         </div>
         <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
           {t("github:thisBranchCanTBeMerged")}
@@ -132,8 +134,10 @@ function NotMergeableText({ popover }: { popover?: boolean }) {
         popover ? "gap-1.5 text-xs" : "gap-1 text-[10px]",
       )}
     >
-      <IconAlertTriangle className={popover ? "h-3.5 w-3.5" : "h-3 w-3"} />
-      Not mergeable
+      <Trans i18nKey="github:notMergeable">
+        <IconAlertTriangle className={popover ? "h-3.5 w-3.5" : "h-3 w-3"} />
+        Not mergeable
+      </Trans>
     </span>
   );
 }

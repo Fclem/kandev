@@ -18,7 +18,7 @@ import {
   deleteDocument,
   type TaskDocument,
 } from "@/lib/api/domains/office-extended-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // --- Document type config ---
 
@@ -294,8 +294,10 @@ export function TaskDocuments({ taskId }: Props) {
           className="cursor-pointer h-7 text-xs"
           onClick={() => setShowForm((v) => !v)}
         >
-          <IconPlus className="h-3.5 w-3.5 mr-1" />
-          New document
+          <Trans i18nKey="task:newDocument">
+            <IconPlus className="h-3.5 w-3.5 mr-1" />
+            New document
+          </Trans>
         </Button>
       </div>
 

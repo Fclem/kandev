@@ -25,7 +25,7 @@ import {
   isOfficeWorkspace,
   workspaceHomeHref,
 } from "@/components/app-sidebar/app-sidebar-workspace-navigation";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Workspace = WorkspaceState["items"][number];
 
@@ -73,8 +73,17 @@ function DeleteWorkspaceDialog({
         <DialogHeader>
           <DialogTitle>{t("office:deleteWorkspace")}</DialogTitle>
           <DialogDescription>
-            This will permanently delete {summary?.agents ?? 0} agents, {summary?.tasks ?? 0} tasks,{" "}
-            {summary?.skills ?? 0} skills, and the workspace folder.
+            <Trans
+              i18nKey="office:thisWillPermanentlyDeleteAgentsTasks"
+              values={{
+                value1: summary?.agents ?? 0,
+                value3: summary?.tasks ?? 0,
+                value6: summary?.skills ?? 0,
+              }}
+            >
+              This will permanently delete {summary?.agents ?? 0} agents, {summary?.tasks ?? 0}{" "}
+              tasks, {summary?.skills ?? 0} skills, and the workspace folder.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -82,7 +91,11 @@ function DeleteWorkspaceDialog({
             {summary?.config_path}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="delete-workspace-confirm">Type {confirmName} to confirm</Label>
+            <Label htmlFor="delete-workspace-confirm">
+              <Trans i18nKey="office:typeToConfirm" values={{ confirmName }}>
+                Type {confirmName} to confirm
+              </Trans>
+            </Label>
             <Input
               id="delete-workspace-confirm"
               data-testid="workspace-delete-confirm-input"

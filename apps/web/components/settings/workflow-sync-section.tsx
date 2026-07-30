@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconBrandGithub } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -21,8 +22,10 @@ export function WorkflowSyncButton({ onClick }: { onClick: () => void }) {
       className="cursor-pointer"
       data-testid="workflow-sync-open"
     >
-      <IconBrandGithub className="h-4 w-4 mr-2" />
-      GitHub Sync
+      <Trans i18nKey="settings:githubSync">
+        <IconBrandGithub className="h-4 w-4 mr-2" />
+        GitHub Sync
+      </Trans>
     </Button>
   );
 }

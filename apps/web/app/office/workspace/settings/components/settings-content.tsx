@@ -13,7 +13,7 @@ import type { WorkspaceState } from "@/lib/state/slices/workspace/types";
 import { ConfigSection } from "./config-section";
 import { DangerZoneSection } from "./danger-zone-section";
 import { GitSection } from "./git-section";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
@@ -103,8 +103,10 @@ function AppearanceSection({
             className="cursor-pointer"
             onClick={() => fileInputRef.current?.click()}
           >
-            <IconUpload className="h-3.5 w-3.5 mr-1.5" />
-            Upload logo
+            <Trans i18nKey="office:uploadLogo">
+              <IconUpload className="h-3.5 w-3.5 mr-1.5" />
+              Upload logo
+            </Trans>
           </Button>
           <input
             ref={fileInputRef}

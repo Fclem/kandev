@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@kandev/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { DailyActivityDTO, AgentUsageDTO, CompletedTaskActivityDTO } from "@/lib/types/http";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function formatMonthLabel(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
@@ -57,7 +57,12 @@ function HeatmapGrid({ weeks, maxActivity }: { weeks: DailyActivityDTO[][]; maxA
                   <TooltipContent side="top" className="text-xs">
                     <div className="font-medium">{formatDate(day.date)}</div>
                     <div className="text-muted-foreground">
-                      {day.turn_count} turns, {day.message_count} messages
+                      <Trans
+                        i18nKey="stats:turnsMessages"
+                        values={{ turn_count: day.turn_count, message_count: day.message_count }}
+                      >
+                        {day.turn_count} turns, {day.message_count} messages
+                      </Trans>
                     </div>
                   </TooltipContent>
                 </Tooltip>

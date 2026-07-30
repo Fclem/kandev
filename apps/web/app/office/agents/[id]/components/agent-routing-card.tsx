@@ -17,7 +17,7 @@ import type {
 } from "@/lib/state/slices/office/types";
 import { ProviderOrderEditor } from "../../../workspace/routing/components/provider-order-editor";
 import { AgentWakeReasonOverrides } from "./agent-wake-reason-overrides";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const TIERS: Tier[] = ["frontier", "balanced", "economy"];
 
@@ -234,11 +234,13 @@ function InheritedTierHint({ defaultTier }: { defaultTier?: Tier }) {
   if (!defaultTier) return null;
   return (
     <p className="text-xs text-muted-foreground">
-      Inherits{" "}
-      <Badge variant="secondary" className="capitalize">
-        {defaultTier}
-      </Badge>{" "}
-      from workspace.
+      <Trans i18nKey="office:inheritsFromWorkspace" values={{ defaultTier }}>
+        Inherits{" "}
+        <Badge variant="secondary" className="capitalize">
+          {defaultTier}
+        </Badge>{" "}
+        from workspace.
+      </Trans>
     </p>
   );
 }

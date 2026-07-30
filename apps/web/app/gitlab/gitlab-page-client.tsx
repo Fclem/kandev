@@ -38,7 +38,7 @@ import {
 } from "@/components/gitlab/my-gitlab/quick-task-launcher";
 import { toGitLabTaskPreset } from "@/components/gitlab/my-gitlab/task-presets";
 import { useAppStore } from "@/components/state-provider";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type GitLabPageClientProps = {
   workspaceId?: string;
@@ -83,13 +83,25 @@ function NotConnectedNotice({ reconnect }: { reconnect?: boolean }) {
   return (
     <Alert>
       <AlertDescription>
-        {reconnect
-          ? "GitLab credentials are configured, but authentication failed. Reconnect in "
-          : "GitLab is not connected. Configure GitLab authentication in "}
-        <Link href="/settings/integrations/gitlab" className="underline font-medium cursor-pointer">
-          {t("gitlab:settingsGitlab")}
-        </Link>{" "}
-        to see your merge requests and issues.
+        <Trans
+          i18nKey="gitlab:toSeeYourMergeRequestsAnd"
+          values={{
+            value0: reconnect
+              ? "GitLab credentials are configured, but authentication failed. Reconnect in "
+              : "GitLab is not connected. Configure GitLab authentication in ",
+          }}
+        >
+          {reconnect
+            ? "GitLab credentials are configured, but authentication failed. Reconnect in "
+            : "GitLab is not connected. Configure GitLab authentication in "}
+          <Link
+            href="/settings/integrations/gitlab"
+            className="underline font-medium cursor-pointer"
+          >
+            {t("gitlab:settingsGitlab")}
+          </Link>{" "}
+          to see your merge requests and issues.
+        </Trans>
       </AlertDescription>
     </Alert>
   );

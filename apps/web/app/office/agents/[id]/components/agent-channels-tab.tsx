@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { toast } from "sonner";
 import type { AgentProfile } from "@/lib/state/slices/office/types";
 import * as officeApi from "@/lib/api/domains/office-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Channel = {
   id: string;
@@ -89,8 +89,10 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
           onClick={() => setAddDialogOpen(true)}
           className="cursor-pointer"
         >
-          <IconPlus className="h-4 w-4 mr-1" />
-          Add Channel
+          <Trans i18nKey="office:addChannel2">
+            <IconPlus className="h-4 w-4 mr-1" />
+            Add Channel
+          </Trans>
         </Button>
       </div>
 

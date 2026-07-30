@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconArchive, IconLoader, IconSubtask, IconTrash, IconUnlink } from "@tabler/icons-react";
 import { ContextMenuItem, ContextMenuSeparator } from "@kandev/ui/context-menu";
@@ -52,8 +53,10 @@ export function TaskCreateSubtaskItem({
       disabled={disabled}
       onSelect={() => onCreateSubtask(task.id, task.title)}
     >
-      <IconSubtask className="mr-2 h-4 w-4" />
-      Create Subtask
+      <Trans i18nKey="task:createSubtask">
+        <IconSubtask className="mr-2 h-4 w-4" />
+        Create Subtask
+      </Trans>
     </ContextMenuItem>
   );
 }
@@ -74,8 +77,10 @@ export function TaskDetachItem({
       disabled={disabled}
       onSelect={() => onDetachTask(task.id)}
     >
-      <IconUnlink className="mr-2 h-4 w-4" />
-      Detach from parent
+      <Trans i18nKey="task:detachFromParent">
+        <IconUnlink className="mr-2 h-4 w-4" />
+        Detach from parent
+      </Trans>
     </ContextMenuItem>
   );
 }

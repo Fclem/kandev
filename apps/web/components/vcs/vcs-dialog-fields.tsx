@@ -7,7 +7,7 @@ import { Input } from "@kandev/ui/input";
 import { Textarea } from "@kandev/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { getChangeRequestTerminology } from "@/hooks/use-git-operations";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ChangeRequestTerminology = ReturnType<typeof getChangeRequestTerminology>;
 
@@ -197,15 +197,25 @@ export function PRBranchSummary({
     <div className="text-sm text-muted-foreground">
       {baseBranch ? (
         <span>
-          Creating {terminology.shortName} from{" "}
-          <span className="font-medium text-foreground">{displayBranch}</span>
-          {" → "}
-          <span className="font-medium text-foreground">{baseBranch}</span>
+          <Trans
+            i18nKey="integrations:creatingFrom"
+            values={{ shortName: terminology.shortName, displayBranch, baseBranch }}
+          >
+            Creating {terminology.shortName} from{" "}
+            <span className="font-medium text-foreground">{displayBranch}</span>
+            {" → "}
+            <span className="font-medium text-foreground">{baseBranch}</span>
+          </Trans>
         </span>
       ) : (
         <span>
-          Creating {terminology.shortName} from{" "}
-          <span className="font-medium text-foreground">{displayBranch}</span>
+          <Trans
+            i18nKey="integrations:creatingFrom2"
+            values={{ shortName: terminology.shortName, displayBranch }}
+          >
+            Creating {terminology.shortName} from{" "}
+            <span className="font-medium text-foreground">{displayBranch}</span>
+          </Trans>
         </span>
       )}
     </div>
@@ -219,7 +229,12 @@ export function ChangeRequestPartialStatus({
 }) {
   return (
     <div role="status" className="border-l-2 border-amber-500 bg-amber-500/10 px-3 py-2 text-sm">
-      Branch was pushed; retry {terminology.longName.toLowerCase()} creation.
+      <Trans
+        i18nKey="integrations:branchWasPushedRetryCreation"
+        values={{ value1: terminology.longName.toLowerCase() }}
+      >
+        Branch was pushed; retry {terminology.longName.toLowerCase()} creation.
+      </Trans>
     </div>
   );
 }

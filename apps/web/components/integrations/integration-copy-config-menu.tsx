@@ -19,7 +19,7 @@ import {
   integrationLabel,
   type IntegrationSlug,
 } from "./integration-copy-config";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Workspace = { id: string; name: string };
 
@@ -58,13 +58,22 @@ function CopyConfigDialogBody({
   return (
     <DialogContent className="sm:max-w-md">
       <DialogHeader>
-        <DialogTitle>Copy {label} configuration</DialogTitle>
+        <DialogTitle>
+          <Trans i18nKey="integrations:copyConfiguration" values={{ label }}>
+            Copy {label} configuration
+          </Trans>
+        </DialogTitle>
         <DialogDescription>
-          Copy the {label} settings
-          {slug === "github" ? "" : " and credentials"} from{" "}
-          <span className="font-medium text-foreground">{sourceName}</span> into another workspace.
-          This overwrites the target workspace&apos;s current {label} configuration. Watchers and
-          automations are not copied.
+          <Trans
+            i18nKey="integrations:copyTheSettingsFromIntoAnother"
+            values={{ label, value3: slug === "github" ? "" : " and credentials", sourceName }}
+          >
+            Copy the {label} settings
+            {slug === "github" ? "" : " and credentials"} from{" "}
+            <span className="font-medium text-foreground">{sourceName}</span> into another
+            workspace. This overwrites the target workspace&apos;s current {label} configuration.
+            Watchers and automations are not copied.
+          </Trans>
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-2">
@@ -100,8 +109,10 @@ function CopyConfigDialogBody({
           data-dialog-default-action
           data-testid="integration-copy-config-confirm"
         >
-          <IconCopy className="h-4 w-4" />
-          Copy config
+          <Trans i18nKey="integrations:copyConfig">
+            <IconCopy className="h-4 w-4" />
+            Copy config
+          </Trans>
         </Button>
       </DialogFooter>
     </DialogContent>

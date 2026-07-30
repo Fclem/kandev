@@ -1,7 +1,7 @@
 "use client";
 
 import { IconAlertCircle, IconChevronDown } from "@tabler/icons-react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type WorkspaceUnavailableProps = {
   error?: string | null;
@@ -31,8 +31,10 @@ export function WorkspaceUnavailable({ error }: WorkspaceUnavailableProps) {
           {error && (
             <details className="mt-2 min-w-0 text-xs text-muted-foreground">
               <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 sm:min-h-8">
-                <IconChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                Technical details
+                <Trans i18nKey="task:technicalDetails">
+                  <IconChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  Technical details
+                </Trans>
               </summary>
               <pre className="max-h-48 max-w-full overflow-y-auto overscroll-contain whitespace-pre-wrap break-words rounded bg-muted/50 p-2 font-mono text-[11px]">
                 {error}

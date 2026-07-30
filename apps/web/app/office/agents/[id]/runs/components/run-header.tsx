@@ -13,7 +13,7 @@ import { Button } from "@kandev/ui/button";
 import { getWebSocketClient } from "@/lib/ws/connection";
 import type { RunDetail } from "@/lib/api/domains/office-extended-api";
 import { formatDollars } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   run: RunDetail;
@@ -132,7 +132,12 @@ function RoutingBlockBadge({ status, retryAt }: { status: string; retryAt?: stri
   if (status === "waiting_for_provider_capacity") {
     return (
       <Badge variant="secondary" data-testid="run-routing-waiting">
-        Waiting for capacity{retryAt ? ` · retry ${retryAt}` : ""}
+        <Trans
+          i18nKey="office:waitingForCapacity"
+          values={{ value1: retryAt ? ` · retry ${retryAt}` : "" }}
+        >
+          Waiting for capacity{retryAt ? ` · retry ${retryAt}` : ""}
+        </Trans>
       </Badge>
     );
   }
@@ -275,7 +280,9 @@ function ActionBar({ runId, sessionId, isRunning, isFailed }: ActionBarProps) {
             className="cursor-pointer gap-1.5"
             data-testid="run-resume-button"
           >
-            <IconRefresh className="h-3.5 w-3.5" /> Resume session
+            <Trans i18nKey="office:resumeSession">
+              <IconRefresh className="h-3.5 w-3.5" /> Resume session
+            </Trans>
           </Button>
           <Button
             variant="outline"
@@ -284,7 +291,9 @@ function ActionBar({ runId, sessionId, isRunning, isFailed }: ActionBarProps) {
             className="cursor-pointer gap-1.5"
             data-testid="run-fresh-start-button"
           >
-            <IconPlayerPlay className="h-3.5 w-3.5" /> Start fresh
+            <Trans i18nKey="office:startFresh2">
+              <IconPlayerPlay className="h-3.5 w-3.5" /> Start fresh
+            </Trans>
           </Button>
         </>
       )}

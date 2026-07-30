@@ -41,7 +41,7 @@ import {
 import { useAzureDevOpsSavedViews } from "@/hooks/domains/azure-devops/use-azure-devops-saved-views";
 import type { Repository, Workflow, WorkflowStep } from "@/lib/types/http";
 import type { AzureDevOpsPullRequest, AzureDevOpsSavedView } from "@/lib/types/azure-devops";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const PAGE_SIZE = 25;
 const WORK_ITEMS_MODE: AzureDevOpsBrowseMode = "work-items";
@@ -75,10 +75,12 @@ function NotConfigured({ workspaceId }: { workspaceId?: string }) {
     <div className="max-w-2xl p-6">
       <Alert>
         <AlertDescription>
-          Azure DevOps is not connected for this workspace.{" "}
-          <Link href={href} className="cursor-pointer font-medium underline">
-            {t("azureDevops:configureAzureDevops")}
-          </Link>
+          <Trans i18nKey="azureDevops:azureDevopsIsNotConnectedFor" values={{ href }}>
+            Azure DevOps is not connected for this workspace.{" "}
+            <Link href={href} className="cursor-pointer font-medium underline">
+              {t("azureDevops:configureAzureDevops")}
+            </Link>
+          </Trans>
         </AlertDescription>
       </Alert>
     </div>

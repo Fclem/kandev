@@ -11,7 +11,7 @@ import { useCommitDiff } from "@/hooks/domains/session/use-commit-diff";
 import { usePanelActions } from "@/hooks/use-panel-actions";
 import { setPanelTitle } from "@/lib/layout/panel-portal-manager";
 import type { FileInfo } from "@/lib/state/store";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type CommitDetailPanelProps = {
   panelId: string;
@@ -76,8 +76,10 @@ export const CommitDiffView = memo(function CommitDiffView({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full gap-2 text-muted-foreground text-sm">
-        <IconLoader2 className="h-4 w-4 animate-spin" />
-        Loading commit...
+        <Trans i18nKey="task:loadingCommit">
+          <IconLoader2 className="h-4 w-4 animate-spin" />
+          Loading commit...
+        </Trans>
       </div>
     );
   }
@@ -125,8 +127,10 @@ const CommitDetailPanel = memo(function CommitDetailPanel({
       <PanelRoot>
         <PanelBody>
           <div className="flex items-center justify-center h-full gap-2 text-muted-foreground text-sm">
-            <IconLoader2 className="h-4 w-4 animate-spin" />
-            Loading commit...
+            <Trans i18nKey="task:loadingCommit">
+              <IconLoader2 className="h-4 w-4 animate-spin" />
+              Loading commit...
+            </Trans>
           </div>
         </PanelBody>
       </PanelRoot>
@@ -224,7 +228,9 @@ function CommitFileList({
             />
           ) : (
             <div className="px-3 py-2 text-xs text-muted-foreground">
-              {path} -- binary or empty diff
+              <Trans i18nKey="task:binaryOrEmptyDiff" values={{ path }}>
+                {path} -- binary or empty diff
+              </Trans>
             </div>
           )}
         </div>

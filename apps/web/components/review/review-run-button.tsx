@@ -8,7 +8,7 @@ import Link from "@/components/routing/app-link";
 import { cancelTaskReview, runTaskReview } from "@/lib/api/domains/review-api";
 import { isRunActive } from "@/lib/review/findings";
 import type { TaskReviewRun } from "@/lib/types/review";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type ReviewRunButtonProps = {
   taskId: string | null | undefined;
@@ -28,10 +28,12 @@ function RunNotice({ code, message }: { code: string; message: string }) {
   if (code === "review_agent_unavailable") {
     return (
       <p className="text-xs text-muted-foreground" data-testid="review-agent-unavailable">
-        No inference-capable agent is configured for review.{" "}
-        <Link href="/settings/utility-agents" className="cursor-pointer underline">
-          {t("review:settingsUtilityAgents")}
-        </Link>
+        <Trans i18nKey="review:noInferenceCapableAgentIsConfigured">
+          No inference-capable agent is configured for review.{" "}
+          <Link href="/settings/utility-agents" className="cursor-pointer underline">
+            {t("review:settingsUtilityAgents")}
+          </Link>
+        </Trans>
       </p>
     );
   }

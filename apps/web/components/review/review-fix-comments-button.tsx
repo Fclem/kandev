@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useCallback } from "react";
 import { IconMessageForward } from "@tabler/icons-react";
@@ -66,11 +67,13 @@ export function FixCommentsButton({
             onClick={handleClick}
             data-testid="review-fix-comments-button"
           >
-            <IconMessageForward className="h-4 w-4" />
-            Fix Comments
-            <span className="ml-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
-              {commentCount}
-            </span>
+            <Trans i18nKey="review:fixComments" values={{ commentCount }}>
+              <IconMessageForward className="h-4 w-4" />
+              Fix Comments
+              <span className="ml-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+                {commentCount}
+              </span>
+            </Trans>
           </Button>
         </span>
       </PopoverAnchor>

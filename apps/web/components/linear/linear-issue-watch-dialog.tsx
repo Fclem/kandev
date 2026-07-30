@@ -55,7 +55,7 @@ import type {
   LinearUser,
   UpdateLinearIssueWatchInput,
 } from "@/lib/types/linear";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   open: boolean;
@@ -364,7 +364,9 @@ function PromptField({ value, onChange }: { value: string; onChange: (v: string)
         <PlaceholdersHelp />
       </div>
       <p className="text-xs text-muted-foreground">
-        The prompt sent to the agent for each new issue. Type {"{{"} to insert placeholders.
+        <Trans i18nKey="linear:thePromptSentToTheAgent">
+          The prompt sent to the agent for each new issue. Type {"{{"} to insert placeholders.
+        </Trans>
       </p>
       <div className="rounded-md border border-border overflow-hidden">
         <ScriptEditor

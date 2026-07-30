@@ -4,7 +4,7 @@ import { memo } from "react";
 import { IconCheck, IconChecks, IconX } from "@tabler/icons-react";
 import { GridSpinner } from "@/components/grid-spinner";
 import { Button } from "@kandev/ui/button";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type PermissionActionRowProps = {
   onApprove: () => void;
@@ -69,8 +69,10 @@ export const PermissionActionRow = memo(function PermissionActionRow({
           data-testid="permission-allow-always"
           className={ACTION_BUTTON_CLASS}
         >
-          <IconChecks className="h-4 w-4 mr-1 text-green-500" />
-          Always allow
+          <Trans i18nKey="task:alwaysAllow">
+            <IconChecks className="h-4 w-4 mr-1 text-green-500" />
+            Always allow
+          </Trans>
         </Button>
       )}
     </div>

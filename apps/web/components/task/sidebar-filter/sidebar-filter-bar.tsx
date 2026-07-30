@@ -7,29 +7,20 @@ import { toast } from "sonner";
 import { useAppStore } from "@/components/state-provider";
 import { useRegisterCommands } from "@/hooks/use-register-commands";
 import type { CommandItem } from "@/lib/commands/types";
+import type { SidebarView } from "@/lib/state/slices/ui/sidebar-view-types";
 import { cn } from "@/lib/utils";
 import { SidebarViewChips } from "./sidebar-view-chips";
 import { SidebarFilterPopover } from "./sidebar-filter-popover";
 import { useSidebarViewPopover } from "./use-sidebar-view-popover";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
-export function SidebarFilterBar() {
-  const { t } = useTranslation();
-  const filterTriggerRef = useRef<HTMLButtonElement>(null);
-  const draft = useAppStore((s) => s.sidebarViews.draft);
-  const activeViewId = useAppStore((s) => s.sidebarViews.activeViewId);
-  const views = useAppStore((s) => s.sidebarViews.views);
-  const setActiveView = useAppStore((s) => s.setSidebarActiveView);
-  const hasDraft = !!draft && draft.baseViewId === activeViewId;
-  const {
-    open,
-    onOpenChange,
-    startNewView,
-    renameRequestedViewId,
-    consumeRenameRequest,
-    newViewDisabledReason,
-  } = useSidebarViewPopover();
-
+// useSidebarFilterCommands registers the command-palette entries for opening the
+// sidebar filters and for switching to each saved view.
+function useSidebarFilterCommands(
+  views: SidebarView[],
+  onOpenChange: (open: boolean) => void,
+  setActiveView: (id: string) => void,
+) {
   const commands = useMemo<CommandItem[]>(() => {
     const list: CommandItem[] = [
       {
@@ -52,6 +43,26 @@ export function SidebarFilterBar() {
     return list;
   }, [onOpenChange, views, setActiveView]);
   useRegisterCommands(commands);
+}
+
+export function SidebarFilterBar() {
+  const { t } = useTranslation();
+  const filterTriggerRef = useRef<HTMLButtonElement>(null);
+  const draft = useAppStore((s) => s.sidebarViews.draft);
+  const activeViewId = useAppStore((s) => s.sidebarViews.activeViewId);
+  const views = useAppStore((s) => s.sidebarViews.views);
+  const setActiveView = useAppStore((s) => s.setSidebarActiveView);
+  const hasDraft = !!draft && draft.baseViewId === activeViewId;
+  const {
+    open,
+    onOpenChange,
+    startNewView,
+    renameRequestedViewId,
+    consumeRenameRequest,
+    newViewDisabledReason,
+  } = useSidebarViewPopover();
+
+  useSidebarFilterCommands(views, onOpenChange, setActiveView);
 
   return (
     <div
@@ -90,8 +101,10 @@ export function SidebarFilterBar() {
         }
         title={newViewDisabledReason ?? undefined}
       >
-        <IconPlus className="h-3.5 w-3.5" />
-        New view
+        <Trans i18nKey="task:newView">
+          <IconPlus className="h-3.5 w-3.5" />
+          New view
+        </Trans>
       </Button>
       <SidebarFilterPopover
         open={open}

@@ -5,7 +5,7 @@ import { Button } from "@kandev/ui/button";
 import { Textarea } from "@kandev/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconPlayerPlay, IconSend, IconX } from "@tabler/icons-react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 interface CommentFormProps {
   initialContent?: string;
@@ -60,7 +60,11 @@ function ActionButtons({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>Save comment for review ({modKey}+Enter)</p>
+              <p>
+                <Trans i18nKey="diff:saveCommentForReviewEnter" values={{ modKey }}>
+                  Save comment for review ({modKey}+Enter)
+                </Trans>
+              </p>
             </TooltipContent>
           </Tooltip>
           {showRunButton && onSubmitAndRun && (
@@ -77,7 +81,11 @@ function ActionButtons({
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                <p>Save and send to agent ({modKey}+Shift+Enter)</p>
+                <p>
+                  <Trans i18nKey="diff:saveAndSendToAgentShift" values={{ modKey }}>
+                    Save and send to agent ({modKey}+Shift+Enter)
+                  </Trans>
+                </p>
               </TooltipContent>
             </Tooltip>
           )}
@@ -149,7 +157,12 @@ export function CommentForm({
       />
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] text-muted-foreground">
-          {modKey}+Enter to add{onSubmitAndRun ? `, ${modKey}+Shift+Enter to run` : ""}
+          <Trans
+            i18nKey="diff:enterToAdd"
+            values={{ modKey, value2: onSubmitAndRun ? `, ${modKey}+Shift+Enter to run` : "" }}
+          >
+            {modKey}+Enter to add{onSubmitAndRun ? `, ${modKey}+Shift+Enter to run` : ""}
+          </Trans>
         </span>
         <ActionButtons
           disabled={disabled}

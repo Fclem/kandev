@@ -22,7 +22,7 @@ import {
   buildDefaultPermissions,
   PERMISSION_APPLY_AGENTCTL_AUTO_APPROVE,
 } from "@/lib/agent-permissions";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type CliProfileEditorMode = "create" | "edit";
 
@@ -382,7 +382,9 @@ function AdvancedToggles({
         onClick={onToggle}
         className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
       >
-        {open ? "Hide" : "Show"} advanced options
+        <Trans i18nKey="common:advancedOptions" values={{ value0: open ? "Hide" : "Show" }}>
+          {open ? "Hide" : "Show"} advanced options
+        </Trans>
       </button>
       {open && (
         <div className="mt-3 space-y-3">

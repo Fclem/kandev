@@ -13,7 +13,7 @@ import {
 import type { JiraTicket } from "@/lib/types/jira";
 import { formatRelative, statusBadgeClass } from "@/components/jira/jira-ticket-common";
 import type { JiraTaskPreset } from "./presets";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TicketRowProps = {
   ticket: JiraTicket;
@@ -53,8 +53,10 @@ function StartTaskMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button size="sm" variant="outline" className="cursor-pointer h-7 px-2 gap-1 text-xs">
-          <IconPlus className="h-3.5 w-3.5" />
-          Start task
+          <Trans i18nKey="jira:startTask">
+            <IconPlus className="h-3.5 w-3.5" />
+            Start task
+          </Trans>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

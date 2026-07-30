@@ -13,7 +13,7 @@ import {
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 import type { AzureDevOpsPresetKind } from "./azure-devops-presets";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function SaveViewForm({
   kind,
@@ -46,8 +46,13 @@ function SaveViewForm({
       <DialogHeader>
         <DialogTitle>{t("azureDevops:saveAzureDevopsView")}</DialogTitle>
         <DialogDescription>
-          Save the current {kind === "work_item" ? "work-item query" : "pull-request filters"} for
-          this workspace.
+          <Trans
+            i18nKey="azureDevops:saveTheCurrentForThisWorkspace"
+            values={{ value1: kind === "work_item" ? "work-item query" : "pull-request filters" }}
+          >
+            Save the current {kind === "work_item" ? "work-item query" : "pull-request filters"} for
+            this workspace.
+          </Trans>
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-1.5">

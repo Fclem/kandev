@@ -14,7 +14,7 @@ import {
   useIssueState,
   type IssueState,
 } from "./linear-issue-common";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type LinearIssueDialogProps = {
   open: boolean;
@@ -94,8 +94,10 @@ function IssueFooter({ onStart }: { onStart: () => void }) {
   return (
     <div className="flex items-center justify-end gap-2 px-6 py-3 border-t bg-muted/20 shrink-0">
       <Button size="sm" variant="default" className="cursor-pointer gap-1.5" onClick={onStart}>
-        <IconPlus className="h-4 w-4" />
-        Start task
+        <Trans i18nKey="linear:startTask">
+          <IconPlus className="h-4 w-4" />
+          Start task
+        </Trans>
       </Button>
     </div>
   );

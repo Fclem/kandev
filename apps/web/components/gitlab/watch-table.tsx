@@ -13,7 +13,7 @@ import { Button } from "@kandev/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kandev/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { IssueWatch, ReviewWatch } from "@/lib/types/gitlab";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Watch = ReviewWatch | IssueWatch;
 
@@ -188,7 +188,14 @@ function MobileWatchCard<TWatch extends Watch>(props: ActionProps<TWatch>) {
             {watch.enabled ? "Active" : "Paused"}
           </Badge>
           <span>{Math.round(watch.poll_interval_seconds / 60)}m interval</span>
-          <span>Last checked {lastPolled(watch.last_polled_at)}</span>
+          <span>
+            <Trans
+              i18nKey="gitlab:lastChecked2"
+              values={{ value1: lastPolled(watch.last_polled_at) }}
+            >
+              Last checked {lastPolled(watch.last_polled_at)}
+            </Trans>
+          </span>
         </span>
         <WatchError watch={watch} />
       </button>

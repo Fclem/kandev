@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconDownload, IconPlus, IconUpload } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -31,8 +32,10 @@ export function WorkflowSectionActions({
         onClick={onExport}
         className="cursor-pointer"
       >
-        <IconDownload className="h-4 w-4 mr-2" />
-        Export All
+        <Trans i18nKey="settings:exportAll">
+          <IconDownload className="h-4 w-4 mr-2" />
+          Export All
+        </Trans>
       </Button>
       <Button
         type="button"
@@ -51,8 +54,10 @@ export function WorkflowSectionActions({
         className="cursor-pointer"
         data-testid="add-workflow-button"
       >
-        <IconPlus className="h-4 w-4 mr-2" />
-        Add Workflow
+        <Trans i18nKey="settings:addWorkflow2">
+          <IconPlus className="h-4 w-4 mr-2" />
+          Add Workflow
+        </Trans>
       </Button>
     </div>
   );

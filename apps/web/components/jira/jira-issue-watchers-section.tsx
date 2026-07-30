@@ -12,7 +12,7 @@ import { ResetWatchDialog, useWatchResetController } from "@/components/watches/
 import { JiraIssueWatchTable } from "./jira-issue-watch-table";
 import { JiraIssueWatchDialog } from "./jira-issue-watch-dialog";
 import type { JiraIssueWatch } from "@/lib/types/jira";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // JiraIssueWatchersSection lists watches across every workspace in a single
 // flat table on the install-wide settings page. The dialog's create flow asks
@@ -188,8 +188,10 @@ export function JiraIssueWatchersSection() {
       description="Poll a JQL query and auto-create a Kandev task for each newly-matching ticket."
       action={
         <Button size="sm" onClick={openCreate} className="cursor-pointer">
-          <IconPlus className="h-4 w-4 mr-1" />
-          New watcher
+          <Trans i18nKey="jira:newWatcher">
+            <IconPlus className="h-4 w-4 mr-1" />
+            New watcher
+          </Trans>
         </Button>
       }
     >

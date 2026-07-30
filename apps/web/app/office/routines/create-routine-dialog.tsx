@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { IconArrowLeft, IconArrowRight } from "@tabler/icons-react";
 import type { AgentProfile } from "@/lib/state/slices/office/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type CreateRoutineDialogProps = {
   open: boolean;
@@ -392,7 +392,12 @@ export function CreateRoutineDialog({
         <DialogHeader>
           <DialogTitle>{t("office:createRoutine")}</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Step {step + 1} of {STEP_COUNT} — {STEP_TITLES[step]}
+            <Trans
+              i18nKey="office:stepOf"
+              values={{ value1: step + 1, STEP_COUNT, step: STEP_TITLES[step] }}
+            >
+              Step {step + 1} of {STEP_COUNT} — {STEP_TITLES[step]}
+            </Trans>
           </p>
           <StepIndicator current={step} />
         </DialogHeader>

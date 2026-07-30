@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { memo, useEffect, useState } from "react";
 import Link from "@/components/routing/app-link";
@@ -184,7 +185,9 @@ function MRMenuButton({
             </DropdownMenuItem>
             <DropdownMenuItem asChild className="cursor-pointer">
               <Link href={mr.mr_url} target="_blank" rel="noopener noreferrer">
-                <IconExternalLink className="h-4 w-4" /> Open in GitLab
+                <Trans i18nKey="gitlab:openInGitlab">
+                  <IconExternalLink className="h-4 w-4" /> Open in GitLab
+                </Trans>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -200,8 +203,10 @@ function MRMenuButton({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer" onSelect={onLink}>
-              <IconPlus className="h-4 w-4" />
-              Link another merge request
+              <Trans i18nKey="gitlab:linkAnotherMergeRequest">
+                <IconPlus className="h-4 w-4" />
+                Link another merge request
+              </Trans>
             </DropdownMenuItem>
           </>
         ) : null}

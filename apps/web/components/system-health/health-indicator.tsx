@@ -14,7 +14,7 @@ import {
 import { IconAlertTriangle, IconExternalLink } from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
 import type { HealthIssue } from "@/lib/types/health";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type HealthIndicatorButtonProps = {
   hasIssues: boolean;
@@ -61,8 +61,10 @@ export function HealthIssuesDialog({ open, onOpenChange, issues }: HealthIssuesD
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <IconAlertTriangle className="h-5 w-5 text-amber-500" />
-            Setup Issues
+            <Trans i18nKey="common:setupIssues2">
+              <IconAlertTriangle className="h-5 w-5 text-amber-500" />
+              Setup Issues
+            </Trans>
           </DialogTitle>
           <DialogDescription>
             {issues.length === 1

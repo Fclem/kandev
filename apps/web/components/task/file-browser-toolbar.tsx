@@ -21,7 +21,7 @@ import { Skeleton } from "@kandev/ui/skeleton";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { cn } from "@/lib/utils";
 import { PanelHeaderBarSplit } from "./panel-primitives";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function ToolbarButton({
   onClick,
@@ -206,8 +206,10 @@ function WorkspaceActionsMenu({
           className="min-h-11 cursor-pointer gap-2 sm:min-h-8"
           onSelect={onOpenFolder}
         >
-          <IconFolderOpen className="h-3.5 w-3.5" />
-          Open workspace folder
+          <Trans i18nKey="task:openWorkspaceFolder">
+            <IconFolderOpen className="h-3.5 w-3.5" />
+            Open workspace folder
+          </Trans>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

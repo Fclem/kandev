@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useState } from "react";
 import { IconHexagon } from "@tabler/icons-react";
@@ -36,7 +37,11 @@ export function LinearIssueButton({ workspaceId, taskTitle }: LinearIssueButtonP
             <span className="text-xs font-medium">{identifier}</span>
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Open Linear issue {identifier}</TooltipContent>
+        <TooltipContent>
+          <Trans i18nKey="linear:openLinearIssue" values={{ identifier }}>
+            Open Linear issue {identifier}
+          </Trans>
+        </TooltipContent>
       </Tooltip>
       <LinearIssueDialog
         open={open}

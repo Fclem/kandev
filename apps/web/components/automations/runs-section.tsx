@@ -21,7 +21,7 @@ import { IconChevronDown, IconChevronUp, IconRefresh, IconTrash } from "@tabler/
 import { useAutomationRuns } from "@/hooks/domains/settings/use-automation-runs";
 import type { AutomationRun, ExecutionMode, RunStatus } from "@/lib/types/automation";
 import { formatRelativeTime } from "./format-utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type RunsSectionProps = {
   automationId: string | null;
@@ -161,7 +161,9 @@ export function RunsSection({ automationId, executionMode, workspaceId }: RunsSe
           onClick={() => setExpanded(!expanded)}
         >
           <Label className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer">
-            Recent Runs ({runs.length})
+            <Trans i18nKey="automations:recentRuns" values={{ length: runs.length }}>
+              Recent Runs ({runs.length})
+            </Trans>
           </Label>
           {expanded ? (
             <IconChevronUp className="h-3.5 w-3.5 text-muted-foreground" />

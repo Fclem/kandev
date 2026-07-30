@@ -30,7 +30,7 @@ import type {
 } from "@/lib/types/github";
 import { GitHubConnectionDialog } from "./github-connection-dialog";
 import { GitHubPermissionsDialog } from "./github-permissions-dialog";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const sourceLabels: Record<GitHubConnectionSource, string> = {
   pat: "Personal access token",
@@ -151,8 +151,14 @@ function AppRegistrationDetails({ app }: { app?: GitHubAppRegistrationCatalogIte
       </div>
       {app.shared && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          This App registration is shared by {app.workspace_binding_count} workspaces. Registration
-          changes affect every workspace using it; installation access remains workspace-specific.
+          <Trans
+            i18nKey="github:thisAppRegistrationIsSharedBy"
+            values={{ workspace_binding_count: app.workspace_binding_count }}
+          >
+            This App registration is shared by {app.workspace_binding_count} workspaces.
+            Registration changes affect every workspace using it; installation access remains
+            workspace-specific.
+          </Trans>
         </p>
       )}
     </>
@@ -405,8 +411,10 @@ export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string })
 function LoadingStatus() {
   return (
     <div className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-      <Spinner className="h-4 w-4" />
-      Checking GitHub connection...
+      <Trans i18nKey="github:checkingGithubConnection">
+        <Spinner className="h-4 w-4" />
+        Checking GitHub connection...
+      </Trans>
     </div>
   );
 }

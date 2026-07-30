@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
@@ -66,9 +67,18 @@ export function GitHubRateLimitDisplay({ info }: { info?: GitHubRateLimitInfo })
         <Alert variant="destructive" data-testid="github-rate-limit-exhausted">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertDescription className="text-sm">
-            GitHub API rate limit exhausted on{" "}
-            {exhausted.map((s) => RESOURCE_LABELS[s.resource] ?? s.resource).join(", ")}. Background
-            PR/issue checks are paused until the limit resets {formatReset(latestReset(exhausted))}.
+            <Trans
+              i18nKey="github:githubApiRateLimitExhaustedOn"
+              values={{
+                value2: exhausted.map((s) => RESOURCE_LABELS[s.resource] ?? s.resource).join(", "),
+                value4: formatReset(latestReset(exhausted)),
+              }}
+            >
+              GitHub API rate limit exhausted on{" "}
+              {exhausted.map((s) => RESOURCE_LABELS[s.resource] ?? s.resource).join(", ")}.
+              Background PR/issue checks are paused until the limit resets{" "}
+              {formatReset(latestReset(exhausted))}.
+            </Trans>
           </AlertDescription>
         </Alert>
       )}

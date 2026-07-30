@@ -6,7 +6,7 @@ import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconInfoCircle } from "@tabler/icons-react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ScheduleSelectorProps = {
   config: Record<string, unknown> | null;
@@ -114,12 +114,15 @@ export function ScheduleSelector({ config, isDirty = false, onChange }: Schedule
         />
         {error && <p className="text-xs text-destructive">{error}</p>}
         <p className="text-xs text-muted-foreground">
-          Use <code className="bg-muted px-1 rounded">{t("automations:every")}</code> with a
-          duration (e.g., <code className="bg-muted px-1 rounded">{t("automations:every10m")}</code>
-          , <code className="bg-muted px-1 rounded">{t("automations:every2h30m")}</code>) or
-          shorthands like <code className="bg-muted px-1 rounded">@hourly</code>,{" "}
-          <code className="bg-muted px-1 rounded">@daily</code>,{" "}
-          <code className="bg-muted px-1 rounded">@weekly</code>.
+          <Trans i18nKey="automations:useWithADurationEG">
+            Use <code className="bg-muted px-1 rounded">{t("automations:every")}</code> with a
+            duration (e.g.,{" "}
+            <code className="bg-muted px-1 rounded">{t("automations:every10m")}</code>,{" "}
+            <code className="bg-muted px-1 rounded">{t("automations:every2h30m")}</code>) or
+            shorthands like <code className="bg-muted px-1 rounded">@hourly</code>,{" "}
+            <code className="bg-muted px-1 rounded">@daily</code>,{" "}
+            <code className="bg-muted px-1 rounded">@weekly</code>.
+          </Trans>
         </p>
       </div>
     </div>

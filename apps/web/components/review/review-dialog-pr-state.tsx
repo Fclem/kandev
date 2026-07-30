@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { IconLoader2, IconRefresh } from "@tabler/icons-react";
@@ -134,7 +135,12 @@ export function ReviewPRDiffBoundary({
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
         <IconLoader2 className="h-5 w-5 animate-spin" />
         <span>
-          Loading {selectedPR.repo} #{selectedPR.pr_number} changes…
+          <Trans
+            i18nKey="review:loadingChanges"
+            values={{ repo: selectedPR.repo, pr_number: selectedPR.pr_number }}
+          >
+            Loading {selectedPR.repo} #{selectedPR.pr_number} changes…
+          </Trans>
         </span>
       </div>
     );

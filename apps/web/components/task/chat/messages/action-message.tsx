@@ -24,7 +24,7 @@ import { AuthMethodsPanel, GenericAuthPanel } from "./auth-methods-panel";
 import { HostShellDialog } from "@/components/settings/host-shell-dialog";
 import type { Message, TaskSessionState } from "@/lib/types/http";
 import type { MessageAction, RecoveryAuthMethod } from "@/components/task/chat/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   archive: IconArchive,
@@ -147,9 +147,11 @@ function MissingBranchRecovery({
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {branch ? (
               <>
-                This task points to <code className="break-all text-foreground">{branch}</code>, but
-                that branch could not be found on the remote repository. It may have been merged or
-                deleted.
+                <Trans i18nKey="task:thisTaskPointsToButThat" values={{ branch }}>
+                  This task points to <code className="break-all text-foreground">{branch}</code>,
+                  but that branch could not be found on the remote repository. It may have been
+                  merged or deleted.
+                </Trans>
               </>
             ) : (
               fallbackMessage
@@ -169,8 +171,10 @@ function TechnicalDetails({ children }: { children: string }) {
   return (
     <details className="mt-2 min-w-0 text-xs text-muted-foreground">
       <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 sm:min-h-8">
-        <IconChevronDown className="h-3.5 w-3.5" />
-        Technical details
+        <Trans i18nKey="task:technicalDetails">
+          <IconChevronDown className="h-3.5 w-3.5" />
+          Technical details
+        </Trans>
       </summary>
       <pre className="max-h-[300px] max-w-full overflow-y-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-2 font-mono text-[11px]">
         {children}

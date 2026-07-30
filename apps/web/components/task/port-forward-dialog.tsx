@@ -22,7 +22,7 @@ import { listPorts, listTunnels, type ListeningPort } from "@/lib/api/domains/po
 import { useTunnelActions } from "./use-tunnel-actions";
 import { getBackendConfig } from "@/lib/config";
 import { toast } from "sonner";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function buildPortProxyUrl(sessionId: string, port: number): string {
   const backendUrl = getBackendConfig().apiBaseUrl;
@@ -305,8 +305,10 @@ function PortListSection({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium flex items-center gap-1.5">
-          Listening Ports
-          <InfoTip text="TCP ports with active listeners inside the remote executor. Click refresh to re-scan." />
+          <Trans i18nKey="task:listeningPorts">
+            Listening Ports
+            <InfoTip text="TCP ports with active listeners inside the remote executor. Click refresh to re-scan." />
+          </Trans>
         </span>
         <Button
           size="sm"
@@ -384,8 +386,10 @@ function ManualPortInput({ onAdd }: { onAdd: (port: number) => void }) {
   return (
     <div className="space-y-2">
       <span className="text-sm font-medium flex items-center gap-1.5">
-        Add Port Manually
-        <InfoTip text="Add a port that isn't auto-detected. Useful for services not yet started." />
+        <Trans i18nKey="task:addPortManually">
+          Add Port Manually
+          <InfoTip text="Add a port that isn't auto-detected. Useful for services not yet started." />
+        </Trans>
       </span>
       <div className="flex gap-2">
         <Input
@@ -479,8 +483,10 @@ function PortForwardDialogContent({
     >
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <IconNetwork className="h-5 w-5" />
-          Port Forwarding
+          <Trans i18nKey="task:portForwarding">
+            <IconNetwork className="h-5 w-5" />
+            Port Forwarding
+          </Trans>
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4 min-w-0 max-h-[60vh] overflow-y-auto">

@@ -30,7 +30,7 @@ import { ReviewRunButton } from "./review-run-button";
 import { ReviewFindingsButton } from "./review-findings-button";
 import { ReviewPRSelector } from "./review-pr-selector";
 import type { TaskPR } from "@/lib/types/github";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ReviewTopBarProps = {
   sessionId: string;
@@ -111,7 +111,9 @@ function ReviewProgress({ reviewedCount, totalCount }: ReviewProgressProps) {
         />
       </div>
       <span className="text-xs text-muted-foreground truncate">
-        {reviewedCount} of {totalCount} files reviewed
+        <Trans i18nKey="review:ofFilesReviewed" values={{ reviewedCount, totalCount }}>
+          {reviewedCount} of {totalCount} files reviewed
+        </Trans>
       </span>
     </div>
   );

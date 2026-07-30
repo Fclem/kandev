@@ -15,7 +15,7 @@ import { createUserShell } from "@/lib/api/domains/user-shell-api";
 import { AddPanelMenuItems } from "./dockview-add-panel-items";
 import { NewSessionDialog } from "./new-session-dialog";
 import { useActiveSessionDevScript } from "./repository-scripts-menu";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 /**
  * Watermark rendered by Dockview when a group becomes empty (e.g. after
@@ -58,8 +58,10 @@ export function DockviewWatermark({ containerApi, group }: IWatermarkPanelProps)
             className="cursor-pointer gap-1.5"
             data-testid="watermark-add-panel-btn"
           >
-            <IconPlus className="h-3.5 w-3.5" />
-            Add panel
+            <Trans i18nKey="task:addPanel2">
+              <IconPlus className="h-3.5 w-3.5" />
+              Add panel
+            </Trans>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center" className="w-44">

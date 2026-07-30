@@ -10,7 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@kandev/ui/dialog";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export const githubAppPermissions: Record<string, "read" | "write"> = {
   actions: "read",
@@ -47,8 +47,10 @@ export function GitHubAppPolicyDialog({
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="outline" className="h-11 cursor-pointer">
-          <IconShieldCheck className="mr-2 h-4 w-4" />
-          Review permissions
+          <Trans i18nKey="github:reviewPermissions">
+            <IconShieldCheck className="mr-2 h-4 w-4" />
+            Review permissions
+          </Trans>
         </Button>
       </DialogTrigger>
       <DialogContent className="flex max-h-[80dvh] flex-col overflow-hidden sm:max-w-lg">

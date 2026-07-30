@@ -8,7 +8,7 @@ import { Textarea } from "@kandev/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { floatingBounds, placeFloatingRect } from "@/components/task/floating-selection-position";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SelectionPosition = {
   x: number;
@@ -155,12 +155,22 @@ function PopoverActions({
   runButtonTestId?: string;
 }) {
   const { t } = useTranslation();
+  // Hoisted: the "add + run" split-button shape is checked in six places below.
+  const showRunAction = Boolean(onSubmitAndRun) && !isEditing;
   return (
     <div className="mt-2 flex items-center justify-between">
       <div className="flex items-center gap-2">
         <span className="text-[10px] text-muted-foreground/70">
-          ⌘+Enter to {isEditing ? "update" : "add"}
-          {onSubmitAndRun && !isEditing ? ", ⌘+Shift+Enter to run" : ""}
+          <Trans
+            i18nKey="task:enterTo"
+            values={{
+              value1: isEditing ? "update" : "add",
+              value2: showRunAction ? ", ⌘+Shift+Enter to run" : "",
+            }}
+          >
+            ⌘+Enter to {isEditing ? "update" : "add"}
+            {showRunAction ? ", ⌘+Shift+Enter to run" : ""}
+          </Trans>
         </span>
         {isEditing && onDelete && (
           <Button
@@ -180,11 +190,11 @@ function PopoverActions({
             <TooltipTrigger asChild>
               <Button
                 size="sm"
-                variant={onSubmitAndRun && !isEditing ? "outline" : "default"}
+                variant={showRunAction ? "outline" : "default"}
                 onClick={onSubmit}
                 disabled={isDisabled}
                 data-testid={addButtonTestId}
-                className={`h-7 gap-1 text-xs cursor-pointer ${onSubmitAndRun && !isEditing ? "rounded-r-none border-r-0" : ""}`}
+                className={`h-7 gap-1 text-xs cursor-pointer ${showRunAction ? "rounded-r-none border-r-0" : ""}`}
               >
                 <IconPlus className="h-3 w-3" />
                 {isEditing ? "Update" : "Add"}
@@ -194,7 +204,7 @@ function PopoverActions({
               <p>{isEditing ? "Update comment" : "Save comment for review"}</p>
             </TooltipContent>
           </Tooltip>
-          {onSubmitAndRun && !isEditing && (
+          {showRunAction && onSubmitAndRun && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

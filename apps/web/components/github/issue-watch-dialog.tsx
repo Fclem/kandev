@@ -39,7 +39,7 @@ import type {
   UpdateIssueWatchRequest,
   CleanupPolicy,
 } from "@/lib/types/github";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type IssueWatchDialogProps = {
   open: boolean;
@@ -337,7 +337,9 @@ function IssueAutomationFields({
           <PlaceholdersHelp />
         </div>
         <p className="text-xs text-muted-foreground">
-          The prompt sent to the agent for each new issue. Type {"{{"} to insert placeholders.
+          <Trans i18nKey="github:thePromptSentToTheAgent">
+            The prompt sent to the agent for each new issue. Type {"{{"} to insert placeholders.
+          </Trans>
         </p>
         <div className="rounded-md border border-border overflow-hidden">
           <ScriptEditor

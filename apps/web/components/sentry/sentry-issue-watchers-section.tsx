@@ -13,7 +13,7 @@ import { ResetWatchDialog, useWatchResetController } from "@/components/watches/
 import { SentryIssueWatchTable } from "./sentry-issue-watch-table";
 import { SentryIssueWatchDialog } from "./sentry-issue-watch-dialog";
 import type { SentryIssueWatch } from "@/lib/types/sentry";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // SentryIssueWatchersSection lists watches for the workspace resolved by its
 // parent integration page. Creating a watch is locked to that workspace and
@@ -169,8 +169,10 @@ export function SentryIssueWatchersSection({ workspaceId }: { workspaceId: strin
       description="Poll a Sentry filter and auto-create a Kandev task for each newly-matching issue."
       action={
         <Button size="sm" onClick={openCreate} className="cursor-pointer">
-          <IconPlus className="h-4 w-4 mr-1" />
-          New watcher
+          <Trans i18nKey="sentry:newWatcher">
+            <IconPlus className="h-4 w-4 mr-1" />
+            New watcher
+          </Trans>
         </Button>
       }
     >

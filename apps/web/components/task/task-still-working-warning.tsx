@@ -1,3 +1,4 @@
+import { Trans } from "react-i18next";
 import { IconAlertTriangle } from "@tabler/icons-react";
 
 export function StillWorkingWarning({ count }: { count?: number }) {
@@ -13,8 +14,10 @@ export function StillWorkingWarning({ count }: { count?: number }) {
     >
       <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" aria-hidden />
       <span>
-        {subject} — an agent is generating or running background work. Proceeding now discards work
-        that is still in progress.
+        <Trans i18nKey="task:anAgentIsGeneratingOrRunning" values={{ subject }}>
+          {subject} — an agent is generating or running background work. Proceeding now discards
+          work that is still in progress.
+        </Trans>
       </span>
     </div>
   );

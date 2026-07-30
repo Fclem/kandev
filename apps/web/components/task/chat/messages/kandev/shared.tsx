@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { createContext, useContext, type ReactNode } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -182,7 +183,13 @@ export function TaskStateBadge({ state }: { state: string | undefined }) {
 // items. Plain "No results" rendered inside the body rather than the header so
 // the header stays consistent across all states.
 export function EmptyListNote({ noun }: { noun: string }) {
-  return <div className="text-xs text-muted-foreground italic">No {noun} found.</div>;
+  return (
+    <div className="text-xs text-muted-foreground italic">
+      <Trans i18nKey="task:noFound" values={{ noun }}>
+        No {noun} found.
+      </Trans>
+    </div>
+  );
 }
 
 // ListItemRow is one row in a list-style result. Plain layout — no border,

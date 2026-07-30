@@ -12,7 +12,7 @@ import {
 } from "./shared";
 import { pickArray, pickString, shortId } from "./parse";
 import type { KandevRenderer } from "./types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type QuestionOption = { label?: string; description?: string };
 type Question = {
@@ -130,7 +130,12 @@ export const AskUserQuestionRenderer: KandevRenderer = ({ args, result, status }
         )}
         {pendingId && status === "running" && (
           <div className="text-[10px] italic text-muted-foreground/70">
-            Awaiting user response (pending_id={shortId(pendingId)})
+            <Trans
+              i18nKey="task:awaitingUserResponsePendingId"
+              values={{ value1: shortId(pendingId) }}
+            >
+              Awaiting user response (pending_id={shortId(pendingId)})
+            </Trans>
           </div>
         )}
       </KandevBody>

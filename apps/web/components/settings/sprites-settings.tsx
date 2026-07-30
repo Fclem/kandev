@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useState, useCallback } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -77,8 +78,10 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
             </p>
           ) : (
             <p>
-              Configure a <code className="text-xs">SPRITES_API_TOKEN</code> environment variable in
-              the executor profile, referencing a secret with your Sprites.dev API token.
+              <Trans i18nKey="settings:configureASpritesApiTokenEnvironment">
+                Configure a <code className="text-xs">SPRITES_API_TOKEN</code> environment variable
+                in the executor profile, referencing a secret with your Sprites.dev API token.
+              </Trans>
             </p>
           )}
         </div>
@@ -90,12 +93,23 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
             disabled={testing || !status?.token_configured}
             className="cursor-pointer"
           >
-            {testing ? (
-              <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            ) : (
-              <IconTestPipe className="mr-1.5 h-4 w-4" />
-            )}
-            Test Connection
+            <Trans
+              i18nKey="settings:testConnection2"
+              values={{
+                value0: testing ? (
+                  <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <IconTestPipe className="mr-1.5 h-4 w-4" />
+                ),
+              }}
+            >
+              {testing ? (
+                <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <IconTestPipe className="mr-1.5 h-4 w-4" />
+              )}
+              Test Connection
+            </Trans>
           </Button>
         </div>
         {testResult && <TestResultDisplay result={testResult} />}
@@ -204,12 +218,23 @@ export function SpritesInstancesCard({ secretId }: { secretId?: string }) {
               disabled={destroyingAll}
               className="cursor-pointer"
             >
-              {destroyingAll ? (
-                <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <IconTrash className="mr-1.5 h-4 w-4" />
-              )}
-              Destroy All
+              <Trans
+                i18nKey="settings:destroyAll"
+                values={{
+                  value0: destroyingAll ? (
+                    <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <IconTrash className="mr-1.5 h-4 w-4" />
+                  ),
+                }}
+              >
+                {destroyingAll ? (
+                  <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <IconTrash className="mr-1.5 h-4 w-4" />
+                )}
+                Destroy All
+              </Trans>
             </Button>
           )}
         </div>

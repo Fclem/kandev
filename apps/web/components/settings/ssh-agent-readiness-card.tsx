@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -186,8 +187,10 @@ export function SSHAgentReadinessCard({
           <div>
             <CardTitle>Available agents on this host</CardTitle>
             <CardDescription>
-              Probes the remote {"$PATH"} for each enabled agent under the chosen login shell. Copy
-              the install hint and run it on the remote when an agent is missing.
+              <Trans i18nKey="settings:probesTheRemotePathForEach">
+                Probes the remote {"$PATH"} for each enabled agent under the chosen login shell.
+                Copy the install hint and run it on the remote when an agent is missing.
+              </Trans>
             </CardDescription>
           </div>
           <Button
@@ -295,7 +298,9 @@ function ReadinessContent({
   if (!hasProbed) {
     return (
       <p className="text-sm text-muted-foreground">
-        Click {`"Probe agents"`} to check which agents are installed on the remote.
+        <Trans i18nKey="settings:clickToCheckWhichAgentsAre" values={{ value1: `"Probe agents"` }}>
+          Click {`"Probe agents"`} to check which agents are installed on the remote.
+        </Trans>
       </p>
     );
   }
@@ -345,7 +350,9 @@ function StatusBadge({ row }: { row: SSHAgentReadinessRow }) {
   if (row.error) {
     return (
       <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700">
-        <IconX className="mr-1 h-3 w-3" /> Probe error
+        <Trans i18nKey="settings:probeError">
+          <IconX className="mr-1 h-3 w-3" /> Probe error
+        </Trans>
       </Badge>
     );
   }

@@ -162,10 +162,11 @@ func (s *Service) resolveApprovalNextStep(ctx context.Context, step *wfmodels.Wo
 // task.state_changed event.
 //
 // It does NOT move the task on the board: `workflow_step_id` owns the Kanban
-// column and the workflow stepper, and only MoveTask (or a workflow step
-// transition) changes it. Callers that reactivate a task parked on a step must
-// reconcile the step themselves rather than assume a state write follows the
-// board — see issue #2063.
+// column and the workflow stepper, and this method never writes it. The board
+// changes through MoveTask, a workflow step transition, or UpdateTask when the
+// request carries a WorkflowStepID. Callers that reactivate a task parked on a
+// step must reconcile the step themselves rather than assume a state write
+// follows the board — see issue #2063.
 func (s *Service) UpdateTaskState(ctx context.Context, id string, state v1.TaskState) (*models.Task, error) {
 	task, err := s.tasks.GetTask(ctx, id)
 	if err != nil {

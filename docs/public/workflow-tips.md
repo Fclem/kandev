@@ -124,7 +124,7 @@ The portable format also recognizes `set_session_mode`, `clear_decisions`, `queu
 
 Keep one transition action per event. A “next” action on the last step or “previous” on the first has nowhere to go and leaves the task in place. WIP rejection, a missing target step, a failed agent launch, or missing credentials can also prevent the intended progression; inspect the task/session error and backend logs before changing the workflow.
 
-Messaging a task that is waiting in review only sends it back to work when the step it sits on says so. Give a review step an `on_turn_start` “move previous” (or “move to step”) action if you want a new message to return the task to the working step — that is what the built-in Kanban and Architecture workflows do. Without such an action the task stays in its column and keeps its Review status until the agent actually starts the turn, so the board and the task status never disagree.
+Messaging a task that is waiting in review only sends it back to work when the step it sits on says so. Give a review step an `on_turn_start` “move previous” (or “move to step”) action if you want a new message to return the task to the working step — that is what the built-in Kanban and Architecture workflows do. Without such an action, delivering the message leaves the task in its column and in Review; the status changes only once its agent actually starts the turn. Either way Kandev never marks a task In Progress just because a message arrived, so the column and the status cannot drift apart while the task sits idle.
 
 ## Safe authoring pattern
 

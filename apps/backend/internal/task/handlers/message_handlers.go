@@ -528,7 +528,10 @@ func (h *MessageHandlers) reactivateTaskAfterTurnStart(ctx context.Context, task
 			zap.Error(err))
 		return
 	}
-	if task.State != v1.TaskStateReview {
+	// Office tasks are never marked IN_PROGRESS by anyone but the office
+	// runtime — reconcileTaskStateForRuntimeLocked refuses that write too, and
+	// the MCP message_task path carries the same guard.
+	if task.State != v1.TaskStateReview || task.IsFromOffice {
 		return
 	}
 	// An empty parked step means the task has no board position at all

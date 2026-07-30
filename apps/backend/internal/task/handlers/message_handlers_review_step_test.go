@@ -82,11 +82,16 @@ func (*reviewStepOrchestrator) ForegroundActivity(string) v1.ForegroundActivity 
 // stepID and returns the task as it stands once the prompt was dispatched.
 func runParkedReviewMessage(t *testing.T, stepID, moveToStepID string) *models.Task {
 	t.Helper()
+	return runParkedReviewMessageForTask(t, stepID, moveToStepID, false)
+}
+
+func runParkedReviewMessageForTask(t *testing.T, stepID, moveToStepID string, isFromOffice bool) *models.Task {
+	t.Helper()
 	now := time.Now().UTC()
 	repo := &reviewStepRepo{messageAddSwitchRepo: messageAddSwitchRepo{
 		tasks: map[string]*models.Task{"t1": {
 			ID: "t1", WorkspaceID: "ws1", State: v1.TaskStateReview,
-			WorkflowStepID: stepID, UpdatedAt: now,
+			WorkflowStepID: stepID, IsFromOffice: isFromOffice, UpdatedAt: now,
 		}},
 		sessions: map[string]*models.TaskSession{
 			"s1": {
@@ -136,4 +141,13 @@ func TestWSAddMessage_ParkedReviewStepMoveReactivatesTask(t *testing.T) {
 func TestWSAddMessage_ParkedReviewTaskWithoutWorkflowStepReactivates(t *testing.T) {
 	task := runParkedReviewMessage(t, "", "")
 	assert.Equal(t, v1.TaskStateInProgress, task.State)
+}
+
+// Office task state belongs to the office runtime, which never writes
+// IN_PROGRESS (reconcileTaskStateForRuntimeLocked skips it), and the MCP
+// message_task path already refuses the same transition.
+func TestWSAddMessage_ParkedReviewOfficeTaskIsNotReactivated(t *testing.T) {
+	task := runParkedReviewMessageForTask(t, "step-review", "step-in-progress", true)
+	assert.Equal(t, "step-in-progress", task.WorkflowStepID)
+	assert.Equal(t, v1.TaskStateReview, task.State)
 }

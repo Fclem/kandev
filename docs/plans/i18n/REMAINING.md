@@ -20,6 +20,33 @@ Six files were reverted from `<Trans>` wrapping because their tests assert on
 text that `<Trans>` splits across markup; their plain strings are already
 externalized. Re-wrapping them means updating those assertions in the same change.
 
+## Why the last 94 need a human
+
+Each of these is a case where running the codemod produces *worse* output than
+leaving the string alone, so the tools now decline them by design:
+
+- **Conditional JSX children.** `wrap-trans` refuses any element whose direct
+  child expression is not a plain identifier/member — a conditional cannot become
+  a `values` entry without being duplicated into both the attribute and the
+  children. Observed duplicating a `data-testid`, which broke a query.
+- **Text assembled by a child component.** Some hints (e.g. the passthrough
+  composer's `Ctrl+Shift+Y`) are not literals in the file the guard flags; they
+  are composed a level down. Wrapping the parent disturbs them at a distance, so
+  these need the child localized first.
+- **Button accessible names.** A `<Trans>` around an icon+label folds the icon
+  into the name and breaks `getByRole("button", { name })`. The externalizer now
+  treats a childless icon sibling as contributing no text, which fixes most of
+  these, but a few need the markup reshaped by hand.
+- **Irregular plurals.** `fix-plural-hacks` refuses stems where "+s" is wrong
+  (entry/category/repository); they need hand-written `_one`/`_other` values.
+
+### Recommended procedure per file
+1. `node scripts/wrap-trans.mjs <file>` (dry run) and read what it declines.
+2. Localize the innermost component that actually owns the text.
+3. Where a test asserts on now-split text, switch it to a function matcher:
+   `getByText((_, el) => el?.textContent === "...")` — in the same commit.
+4. Re-run `pnpm exec vitest run <that suite>`, `pnpm lint`, `pnpm run i18n:check`.
+
 ## Files
 
 | Findings | File |

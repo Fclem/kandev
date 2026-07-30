@@ -169,6 +169,26 @@ function buildMessage(node, code) {
 }
 
 /**
+ * Decline when any direct child expression is not a simple value. A conditional
+ * or JSX-returning expression cannot become a `values` entry: it would be copied
+ * into the attribute AND left in the children, duplicating real markup (observed
+ * duplicating a `data-testid`). Only identifiers, member expressions, and string
+ * literals are safe to interpolate.
+ */
+function hasComplexChildExpression(node) {
+  return significant(node.children).some((c) => {
+    if (c.type !== "JSXExpressionContainer") return false;
+    const e = c.expression;
+    return !(
+      e.type === "Identifier" ||
+      e.type === "StringLiteral" ||
+      e.type === "JSXEmptyExpression" ||
+      (e.type === "MemberExpression" && e.property.type === "Identifier")
+    );
+  });
+}
+
+/**
  * English plural hacks (`n !== 1 ? "s" : ""`) cannot be translated: the suffix is
  * an English morphology detail, not data. Such sentences need a real i18next
  * plural key (`x_one`/`x_other`), so decline them here rather than freezing the
@@ -240,6 +260,7 @@ const report = {
   skippedThin: 0,
   skippedNested: 0,
   skippedPluralHack: 0,
+  skippedComplexExpr: 0,
 };
 
 function transform(file) {
@@ -288,6 +309,10 @@ function transform(file) {
   for (const node of innermost) {
     if (hasPluralHack(node, original)) {
       report.skippedPluralHack += 1;
+      continue;
+    }
+    if (hasComplexChildExpression(node)) {
+      report.skippedComplexExpr += 1;
       continue;
     }
     const { message, values } = buildMessage(node, original);

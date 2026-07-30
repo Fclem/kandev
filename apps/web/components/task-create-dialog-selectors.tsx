@@ -9,9 +9,9 @@ import { useTranslation } from "react-i18next";
 import { Combobox } from "./combobox";
 import { scoreBranch } from "@/lib/utils/branch-filter";
 import { BranchRefreshButton } from "./branch-refresh-button";
+import { formatBytes } from "@/lib/utils/format-bytes";
 import {
   processFile,
-  formatBytes,
   MAX_FILES,
   MAX_TOTAL_SIZE,
   type FileAttachment,

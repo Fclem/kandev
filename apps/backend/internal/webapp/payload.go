@@ -36,7 +36,6 @@ type ActivePluginPayload struct {
 type RuntimeConfig struct {
 	APIPrefix     string `json:"apiPrefix"`
 	WebSocketPath string `json:"webSocketPath"`
-	HostOS        string `json:"hostOS"`
 	Debug         bool   `json:"debug,omitempty"`
 	// NonProduction marks a dev or e2e build. Distinct from Debug (which the SPA
 	// uses for verbose logging): this gates QA-only UI such as the pseudo-locale

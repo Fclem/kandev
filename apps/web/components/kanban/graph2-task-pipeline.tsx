@@ -1,7 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { t } from "@/lib/i18n";
 import { IconArchive, IconDots, IconTrash } from "@tabler/icons-react";
 import {
   DropdownMenu,
@@ -13,6 +12,7 @@ import { Checkbox } from "@kandev/ui/checkbox";
 import { cn } from "@kandev/ui/lib/utils";
 import { TaskDeleteConfirmDialog } from "@/components/task/task-delete-confirm-dialog";
 import { TaskArchiveConfirmDialog } from "@/components/task/task-archive-confirm-dialog";
+import { formatRelativeTime } from "@/lib/utils";
 import { needsAction } from "@/lib/utils/needs-action";
 import { useAppStore } from "@/components/state-provider";
 import { Graph2StepNode } from "./graph2-step-node";
@@ -22,22 +22,6 @@ import type { Task } from "@/components/kanban-card";
 import type { WorkflowStep } from "@/components/kanban-column";
 
 type ConnectorType = "past" | "transition" | "future";
-
-function formatRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = now - then;
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return t("common:justNow");
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return t("kanban:mAgo", { minutes });
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return t("kanban:hAgo", { hours });
-  const days = Math.floor(hours / 24);
-  if (days < 30) return t("kanban:dAgo", { days });
-  const months = Math.floor(days / 30);
-  return t("kanban:moAgo", { months });
-}
 
 export type Graph2TaskPipelineProps = {
   task: Task;

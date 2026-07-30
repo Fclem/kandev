@@ -14,7 +14,7 @@ import {
 import { PRTaskIcon } from "@/components/github/pr-task-icon";
 import { IssueTaskIcon } from "@/components/github/issue-task-icon";
 import { useAppStore } from "@/components/state-provider";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 import { RowConnector, SelectionBar, SubtaskToggle, TaskMenuButton } from "./task-item-row-chrome";
 import { computeRowIndent, resolveRowDepth } from "@/lib/sidebar/row-indent";
 import { isDebugUI } from "@/lib/config";
@@ -88,22 +88,6 @@ type TaskItemProps = {
   isPinned?: boolean;
   agentErrorMessage?: string | null;
 };
-
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
-  const diffMins = Math.floor(diffSecs / 60);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSecs < 60) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
-}
 
 // Delegates to the shared classifier in task-switcher so the sidebar bucket
 // and the per-task running spinner always agree. A task whose workflow state

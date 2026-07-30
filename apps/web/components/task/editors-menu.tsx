@@ -18,7 +18,6 @@ import { useOpenSessionInEditor } from "@/hooks/use-open-session-in-editor";
 import { useSessionWorktrees } from "@/hooks/domains/session/use-session-worktrees";
 import { useAppStore } from "@/components/state-provider";
 import type { EditorOption } from "@/lib/types/http";
-import { readBackendHostOS } from "@/src/boot-payload";
 import {
   buildWorktreeOptions,
   type WorktreeOption,
@@ -33,6 +32,7 @@ const menuItemClass = "cursor-pointer";
 
 type EditorsMenuProps = {
   activeSessionId: string | null;
+  embeddedVscodeSupported: boolean;
 };
 
 function useWorktreeOptions(sessionId: string | null): WorktreeOption[] {
@@ -173,17 +173,15 @@ function EditorMenuEntry({
   );
 }
 
-export function EditorsMenu({ activeSessionId }: EditorsMenuProps) {
+export function EditorsMenu({ activeSessionId, embeddedVscodeSupported }: EditorsMenuProps) {
   const { t } = useTranslation();
   const openEditor = useOpenSessionInEditor(activeSessionId ?? null);
   const { editors } = useEditors();
   const defaultEditorId = useAppStore((state) => state.userSettings.defaultEditorId);
   const worktreeOptions = useWorktreeOptions(activeSessionId ?? null);
-  const backendHostOS = readBackendHostOS();
-
   const enabledEditors = useMemo(
-    () => getAvailableTaskTopbarEditors(editors, backendHostOS),
-    [editors, backendHostOS],
+    () => getAvailableTaskTopbarEditors(editors, embeddedVscodeSupported),
+    [editors, embeddedVscodeSupported],
   );
 
   const resolvedEditorId = useMemo(() => {

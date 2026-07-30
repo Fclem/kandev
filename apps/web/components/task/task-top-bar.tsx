@@ -43,6 +43,7 @@ type TaskTopBarProps = {
   isArchived?: boolean;
   isRemoteExecutor?: boolean;
   isAgentctlReady?: boolean;
+  embeddedVscodeSupported?: boolean;
   remoteExecutorType?: string | null;
   officeTaskHref?: string | null;
   onTaskUnarchived?: (taskId: string) => void;
@@ -69,6 +70,7 @@ const TaskTopBar = memo(function TaskTopBar({
   isArchived,
   isRemoteExecutor,
   isAgentctlReady,
+  embeddedVscodeSupported,
   issueUrl,
   issueNumber,
   remoteExecutorType,
@@ -107,6 +109,7 @@ const TaskTopBar = memo(function TaskTopBar({
         workspaceId={workspaceId}
         isRemoteExecutor={isRemoteExecutor}
         isAgentctlReady={isAgentctlReady}
+        embeddedVscodeSupported={embeddedVscodeSupported}
         taskTitle={taskTitle}
         issueUrl={issueUrl}
         issueNumber={issueNumber}
@@ -300,11 +303,13 @@ function TopbarToolsGroup({
   showDebugOverlay,
   onToggleDebugOverlay,
   isArchived,
+  embeddedVscodeSupported,
 }: {
   activeSessionId?: string | null;
   showDebugOverlay?: boolean;
   onToggleDebugOverlay?: () => void;
   isArchived?: boolean;
+  embeddedVscodeSupported?: boolean;
 }) {
   const { t } = useTranslation();
   const showDebugToggle = isDebugUI() && onToggleDebugOverlay;
@@ -314,7 +319,10 @@ function TopbarToolsGroup({
       {!isArchived && (
         <>
           <LayoutPresetSelector />
-          <EditorsMenu activeSessionId={activeSessionId ?? null} />
+          <EditorsMenu
+            activeSessionId={activeSessionId ?? null}
+            embeddedVscodeSupported={embeddedVscodeSupported ?? false}
+          />
         </>
       )}
       {showDebugToggle && (
@@ -339,6 +347,7 @@ function TopBarRight({
   workspaceId,
   isRemoteExecutor,
   isAgentctlReady,
+  embeddedVscodeSupported,
   taskTitle,
   issueUrl,
   issueNumber,
@@ -353,6 +362,7 @@ function TopBarRight({
   workspaceId?: string | null;
   isRemoteExecutor?: boolean;
   isAgentctlReady?: boolean;
+  embeddedVscodeSupported?: boolean;
   taskTitle?: string;
   issueUrl?: string;
   issueNumber?: number;
@@ -406,6 +416,7 @@ function TopBarRight({
         showDebugOverlay={showDebugOverlay}
         onToggleDebugOverlay={onToggleDebugOverlay}
         isArchived={isArchived}
+        embeddedVscodeSupported={embeddedVscodeSupported}
       />
     </div>
   );

@@ -14,6 +14,7 @@ import type { Layout } from "react-resizable-panels";
 import { TaskArchivedProvider } from "./task-archived-context";
 import { SessionCommands } from "@/components/session-commands";
 import { TaskPRShortcut } from "@/components/task/task-pr-shortcut";
+import { getEmbeddedVscodeSupported } from "@/components/task/task-page-editor-capability";
 import { VcsDialogsProvider } from "@/components/vcs/vcs-dialogs";
 import {
   buildDebugEntries,
@@ -63,6 +64,9 @@ type RemoteExecutorStatus = {
   remote_created_at?: string | null;
   remote_checked_at?: string | null;
   remote_status_error?: string | null;
+  capabilities?: {
+    embedded_vscode?: boolean;
+  };
 };
 
 function toNullable(value: string | null | undefined): string | null {
@@ -101,6 +105,7 @@ function buildTaskTopBarProps(params: {
   remote: ReturnType<typeof resolveRemoteExecutor>;
   sessionWorkflowStepId: string | null;
   agentctlReady: boolean;
+  embeddedVscodeSupported: boolean;
   officeTaskHref?: string | null;
   onTaskUnarchived: (taskId: string) => void;
 }) {
@@ -125,6 +130,7 @@ function buildTaskTopBarProps(params: {
     isArchived: taskProps.isArchived,
     isRemoteExecutor: params.remote.isRemoteExecutor,
     isAgentctlReady: params.agentctlReady,
+    embeddedVscodeSupported: params.embeddedVscodeSupported,
     remoteExecutorType: params.remote.remoteExecutorType,
     officeTaskHref: params.officeTaskHref,
     onTaskUnarchived: params.onTaskUnarchived,
@@ -196,6 +202,22 @@ function maybeBuildDebugEntries(params: {
   });
 }
 
+/**
+ * Debug-overlay entries for the current session. Split out of `TaskPageInner`
+ * to keep it under the 100-line limit; it needs the session metadata from the
+ * store, so it stays a hook rather than a plain helper.
+ */
+function useTaskDebugEntries(
+  params: Omit<Parameters<typeof maybeBuildDebugEntries>[0], "activeSessionMetadata">,
+) {
+  const activeSessionMetadata = useAppStore((state) =>
+    params.effectiveSessionId
+      ? (state.taskSessions.items[params.effectiveSessionId]?.metadata ?? null)
+      : null,
+  );
+  return maybeBuildDebugEntries({ ...params, activeSessionMetadata });
+}
+
 export function TaskPageInner({
   task,
   effectiveSessionId,
@@ -222,15 +244,12 @@ export function TaskPageInner({
   const { t } = useTranslation();
   const taskProps = resolveTaskProps(task, repository);
   const remote = resolveRemoteExecutor(resumption.sessionStatus as RemoteExecutorStatus | null);
-  const activeSessionMetadata = useAppStore((state) =>
-    effectiveSessionId ? (state.taskSessions.items[effectiveSessionId]?.metadata ?? null) : null,
-  );
-  const debugEntries = maybeBuildDebugEntries({
+  const embeddedVscodeSupported = getEmbeddedVscodeSupported(resumption.sessionStatus);
+  const debugEntries = useTaskDebugEntries({
     isVisible: isDebugUI() && showDebugOverlay,
     connectionStatus,
     task,
     effectiveSessionId,
-    activeSessionMetadata,
     merged,
     resumption,
     sessionPanel,
@@ -247,6 +266,7 @@ export function TaskPageInner({
     remote,
     sessionWorkflowStepId: sessionPanel.sessionWorkflowStepId,
     agentctlReady: agentctlStatus.isReady,
+    embeddedVscodeSupported,
     officeTaskHref,
     onTaskUnarchived,
   });

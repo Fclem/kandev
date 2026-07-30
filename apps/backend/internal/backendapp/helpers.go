@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -713,7 +712,6 @@ func webRuntimeConfig(debug bool, req *http.Request) webapp.RuntimeConfig {
 	return webapp.RuntimeConfig{
 		APIPrefix:     "/api/v1",
 		WebSocketPath: "/ws",
-		HostOS:        runtime.GOOS,
 		Debug:         debug,
 		// Gates QA-only UI (the pseudo-locale option). Separate from Debug: the
 		// e2e harness serves a PRODUCTION bundle, so the frontend cannot infer

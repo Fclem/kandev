@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { t } from "@/lib/i18n";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -176,12 +177,13 @@ export function formatRelativeTime(dateString: string): string {
   const diffHour = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHour / 24);
 
-  if (diffSec < 10) return "just now";
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHour < 24) return `${diffHour}h ago`;
-  if (diffDay === 1) return "yesterday";
-  if (diffDay < 7) return `${diffDay}d ago`;
+  // Resolved per call, not at module load, so a locale switch re-renders these.
+  if (diffSec < 10) return t("common:justNow");
+  if (diffSec < 60) return t("common:sAgo", { diffSec });
+  if (diffMin < 60) return t("common:mAgo", { diffMin });
+  if (diffHour < 24) return t("common:hAgo", { diffHr: diffHour });
+  if (diffDay === 1) return t("common:yesterday");
+  if (diffDay < 7) return t("common:dAgo", { diffDay });
   return date.toLocaleDateString();
 }
 

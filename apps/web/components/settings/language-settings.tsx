@@ -5,6 +5,7 @@ import { IconLanguage } from "@tabler/icons-react";
 import { Label } from "@kandev/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { SettingsSection } from "@/components/settings/settings-section";
+import { CardContent } from "@kandev/ui/card";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { readBootPayload } from "@/src/boot-payload";
 import { pseudoLocaleAvailable } from "@/lib/i18n/boot";
@@ -43,28 +44,32 @@ export function LanguageSettings() {
       description={t("settings:chooseTheLanguageUsedAcrossThe")}
     >
       <SettingsCard>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="language-select">{t("settings:displayLanguage")}</Label>
-          <Select value={locale} onValueChange={handleChange}>
-            <SelectTrigger
-              id="language-select"
-              className="w-64"
-              aria-label={t("settings:displayLanguage")}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {options.map((candidate) => (
-                <SelectItem key={candidate} value={candidate}>
-                  {LOCALE_LABELS[candidate]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-sm text-muted-foreground">
-            {t("settings:changesTheLanguageOfTheKandev")}
-          </p>
-        </div>
+        {/* Card only supplies vertical padding; the horizontal px-4 comes from
+            CardContent, which every other settings card here goes through. */}
+        <CardContent>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="language-select">{t("settings:displayLanguage")}</Label>
+            <Select value={locale} onValueChange={handleChange}>
+              <SelectTrigger
+                id="language-select"
+                className="w-64"
+                aria-label={t("settings:displayLanguage")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((candidate) => (
+                  <SelectItem key={candidate} value={candidate}>
+                    {LOCALE_LABELS[candidate]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              {t("settings:changesTheLanguageOfTheKandev")}
+            </p>
+          </div>
+        </CardContent>
       </SettingsCard>
     </SettingsSection>
   );

@@ -274,20 +274,22 @@ type RelatedTaskItem = {
   workflow_step_id?: string;
 };
 
-const RELATED_GROUPS: Array<{ key: string; label: string }> = [
-  { key: "parents", label: "Parents" },
-  { key: "children", label: "Children" },
-  { key: "siblings", label: "Siblings" },
-  { key: "blockers", label: "Blockers" },
-  { key: "blocked_by", label: "Blocked by" },
+const RELATED_GROUPS: Array<{ key: string; labelKey: string }> = [
+  { key: "parents", labelKey: "task:parents" },
+  { key: "children", labelKey: "task:children" },
+  { key: "siblings", labelKey: "task:siblings" },
+  { key: "blockers", labelKey: "task:blockers" },
+  { key: "blocked_by", labelKey: "task:blockedBy" },
 ];
 
-function RelatedGroup({ label, items }: { label: string; items: RelatedTaskItem[] }) {
+function RelatedGroup({ labelKey, items }: { labelKey: string; items: RelatedTaskItem[] }) {
   const { t } = useTranslation();
   if (items.length === 0) return null;
   return (
     <div className="space-y-1">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">{label}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">
+        {t(labelKey)}
+      </div>
       {items.map((item, i) => (
         <div
           key={item.id ?? item.title ?? `related-${i}`}
@@ -332,7 +334,7 @@ export const ListRelatedTasksRenderer: KandevRenderer = ({ args, result, status 
         {total === 0 ? (
           <EmptyListNote noun="related tasks" />
         ) : (
-          groups.map((g) => <RelatedGroup key={g.key} label={g.label} items={g.items} />)
+          groups.map((g) => <RelatedGroup key={g.key} labelKey={g.labelKey} items={g.items} />)
         )}
       </KandevBody>
     </KandevRow>

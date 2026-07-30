@@ -28,7 +28,7 @@ export type RecentTaskBuildContext = {
 };
 
 export type RecentTaskBadge = {
-  label: string;
+  labelKey: string;
   variant: "default" | "secondary" | "outline" | "destructive";
 };
 
@@ -139,20 +139,20 @@ function getResolvedSessionState(
 }
 
 const TASK_STATUS_BADGES: Partial<Record<TaskState, RecentTaskBadge>> = {
-  REVIEW: { label: "Review", variant: "secondary" },
-  COMPLETED: { label: "Done", variant: "secondary" },
-  IN_PROGRESS: { label: "In Progress", variant: "default" },
-  SCHEDULING: { label: "In Progress", variant: "default" },
-  BLOCKED: { label: "Blocked", variant: "destructive" },
-  TODO: { label: "Todo", variant: "outline" },
-  CREATED: { label: "New", variant: "outline" },
+  REVIEW: { labelKey: "task:review2", variant: "secondary" },
+  COMPLETED: { labelKey: "task:done", variant: "secondary" },
+  IN_PROGRESS: { labelKey: "task:inProgress", variant: "default" },
+  SCHEDULING: { labelKey: "task:inProgress", variant: "default" },
+  BLOCKED: { labelKey: "task:blocked", variant: "destructive" },
+  TODO: { labelKey: "task:todo", variant: "outline" },
+  CREATED: { labelKey: "task:new2", variant: "outline" },
 };
 
 const SESSION_STATUS_BADGES: Partial<Record<TaskSessionState, RecentTaskBadge>> = {
-  RUNNING: { label: "Running", variant: "default" },
-  STARTING: { label: "Starting", variant: "default" },
-  WAITING_FOR_INPUT: { label: "Turn Finished", variant: "secondary" },
-  COMPLETED: { label: "Done", variant: "secondary" },
+  RUNNING: { labelKey: "task:running2", variant: "default" },
+  STARTING: { labelKey: "task:starting3", variant: "default" },
+  WAITING_FOR_INPUT: { labelKey: "task:turnFinished", variant: "secondary" },
+  COMPLETED: { labelKey: "task:done", variant: "secondary" },
 };
 
 export function getTaskStatusBadge(
@@ -160,16 +160,16 @@ export function getTaskStatusBadge(
   sessionState?: TaskSessionState | null,
 ): RecentTaskBadge {
   if (sessionState === "FAILED" || taskState === "FAILED") {
-    return { label: "Failed", variant: "destructive" };
+    return { labelKey: "task:failed3", variant: "destructive" };
   }
   if (sessionState === "CANCELLED" || taskState === "CANCELLED") {
-    return { label: "Cancelled", variant: "outline" };
+    return { labelKey: "task:cancelled", variant: "outline" };
   }
   const sessionBadge = sessionState ? SESSION_STATUS_BADGES[sessionState] : undefined;
   if (sessionBadge) return sessionBadge;
   const taskBadge = taskState ? TASK_STATUS_BADGES[taskState] : undefined;
   if (taskBadge) return taskBadge;
-  return { label: "Backlog", variant: "outline" };
+  return { labelKey: "task:backlog", variant: "outline" };
 }
 
 function resolveDisplay(entry: RecentTaskEntry, ctx: RecentTaskBuildContext): DisplayResolution {

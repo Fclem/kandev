@@ -10,7 +10,11 @@ import {
   type SSHLiveStatus,
   type TaskEnvironment,
 } from "@/lib/api/domains/task-environment-api";
-import { resolveExecutorEnvironmentStatus, type StatusTone } from "./executor-environment-status";
+import {
+  environmentStatusLabel,
+  resolveExecutorEnvironmentStatus,
+  type StatusTone,
+} from "./executor-environment-status";
 import { useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 
@@ -71,11 +75,11 @@ function StatusBadge({
 }) {
   // For container-backed envs the live state is the source of truth; for the
   // others fall back to the recorded TaskEnvironment.status.
-  const { label, tone } = resolveExecutorEnvironmentStatus(env, container);
-  const className = TONE_CLASSES[tone];
+  const status = resolveExecutorEnvironmentStatus(env, container);
+  const className = TONE_CLASSES[status.tone];
   return (
     <Badge variant="outline" className={`text-[10px] uppercase ${className}`}>
-      {label}
+      {environmentStatusLabel(t, status)}
     </Badge>
   );
 }

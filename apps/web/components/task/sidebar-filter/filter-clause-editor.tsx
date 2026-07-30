@@ -68,7 +68,11 @@ export function FilterClauseEditor({ clause, onChange, onRemove }: Props) {
   const { t } = useTranslation();
   const meta = getDimensionMeta(clause.dimension);
   const enumOptions = useFilterValueOptions(clause.dimension);
-  const availableOptions = meta.enumOptions ?? enumOptions;
+  // `meta.enumOptions` is our own static list and holds catalog keys; the hook's
+  // options are runtime values (repo names, workflow steps) that stay verbatim.
+  const availableOptions = meta.enumOptions
+    ? meta.enumOptions.map((o) => ({ value: o.value, label: t(o.labelKey) }))
+    : enumOptions;
 
   function handleDimensionChange(next: FilterDimension) {
     const nextMeta = getDimensionMeta(next);
@@ -112,7 +116,7 @@ export function FilterClauseEditor({ clause, onChange, onRemove }: Props) {
         <SelectContent>
           {DIMENSION_METAS.map((m) => (
             <SelectItem key={m.dimension} value={m.dimension} className="text-xs">
-              {m.label}
+              {t(m.labelKey)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -174,7 +178,7 @@ function ValueInput({
       <Input
         value={String(clause.value ?? "")}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={meta.placeholder ?? t("task:value")}
+        placeholder={meta.placeholderKey ? t(meta.placeholderKey) : t("task:value")}
         className="h-7 min-w-0 flex-1 text-xs"
         data-testid="filter-value-input"
       />

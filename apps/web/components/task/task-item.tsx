@@ -276,12 +276,14 @@ function TaskStateIcon({
   );
 }
 
-const POLL_MODE_CONFIG: Record<SessionPollMode, { letter: string; color: string; label: string }> =
-  {
-    fast: { letter: "F", color: "text-emerald-500", label: "focused, 2s polling" },
-    slow: { letter: "S", color: "text-yellow-500", label: "subscribed, 30s polling" },
-    paused: { letter: "P", color: "text-muted-foreground/40", label: "no subscribers" },
-  };
+const POLL_MODE_CONFIG: Record<
+  SessionPollMode,
+  { letter: string; color: string; labelKey: string }
+> = {
+  fast: { letter: "F", color: "text-emerald-500", labelKey: "task:focused2sPolling" },
+  slow: { letter: "S", color: "text-yellow-500", labelKey: "task:subscribed30sPolling" },
+  paused: { letter: "P", color: "text-muted-foreground/40", labelKey: "task:noSubscribers" },
+};
 
 function TaskItemStatsRow({
   updatedAt,
@@ -292,6 +294,7 @@ function TaskItemStatsRow({
   prInfo?: { number: number; state: string };
   primarySessionId?: string | null;
 }) {
+  const { t } = useTranslation();
   const pollMode = useAppStore((s) =>
     isDebugUI() && primarySessionId
       ? (s.sessionPollMode.bySessionId[primarySessionId] ?? null)
@@ -316,8 +319,8 @@ function TaskItemStatsRow({
             </span>
           </TooltipTrigger>
           <TooltipContent side="right">
-            <Trans i18nKey="task:gitPoll" values={{ pollMode, label: modeConfig.label }}>
-              Git poll: {pollMode} ({modeConfig.label})
+            <Trans i18nKey="task:gitPoll" values={{ pollMode, label: t(modeConfig.labelKey) }}>
+              Git poll: {pollMode} ({t(modeConfig.labelKey)})
             </Trans>
           </TooltipContent>
         </Tooltip>

@@ -4,25 +4,25 @@ export type DimensionValueKind = "boolean" | "enum" | "text";
 
 export type DimensionMeta = {
   dimension: FilterDimension;
-  label: string;
+  labelKey: string;
   valueKind: DimensionValueKind;
   ops: FilterOp[];
-  enumOptions?: Array<{ value: string; label: string }>;
-  placeholder?: string;
+  enumOptions?: Array<{ value: string; labelKey: string }>;
+  placeholderKey?: string;
   defaultOp: FilterOp;
   defaultValue: string | string[] | boolean;
 };
 
 const STATE_OPTIONS = [
-  { value: "review", label: "Review" },
-  { value: "in_progress", label: "In progress" },
-  { value: "backlog", label: "Backlog" },
+  { value: "review", labelKey: "task:review2" },
+  { value: "in_progress", labelKey: "task:inProgress2" },
+  { value: "backlog", labelKey: "task:backlog" },
 ];
 
 export const DIMENSION_METAS: DimensionMeta[] = [
   {
     dimension: "isPRReview",
-    label: "PR review",
+    labelKey: "task:prReview",
     valueKind: "boolean",
     ops: ["is", "is_not"],
     defaultOp: "is",
@@ -30,7 +30,7 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "isIssueWatch",
-    label: "Issue watch",
+    labelKey: "task:issueWatch",
     valueKind: "boolean",
     ops: ["is", "is_not"],
     defaultOp: "is",
@@ -38,7 +38,7 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "archived",
-    label: "Archived",
+    labelKey: "task:archived",
     valueKind: "boolean",
     ops: ["is", "is_not"],
     defaultOp: "is",
@@ -46,7 +46,7 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "hasDiff",
-    label: "Has diff",
+    labelKey: "task:hasDiff",
     valueKind: "boolean",
     ops: ["is", "is_not"],
     defaultOp: "is",
@@ -54,7 +54,7 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "hasPR",
-    label: "Has PR",
+    labelKey: "task:hasPr",
     valueKind: "boolean",
     ops: ["is", "is_not"],
     defaultOp: "is",
@@ -62,7 +62,7 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "state",
-    label: "State",
+    labelKey: "task:state3",
     valueKind: "enum",
     ops: ["in", "not_in", "is", "is_not"],
     enumOptions: STATE_OPTIONS,
@@ -71,7 +71,7 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "workflow",
-    label: "Workflow",
+    labelKey: "task:workflow3",
     valueKind: "enum",
     ops: ["is", "is_not", "in", "not_in"],
     defaultOp: "is",
@@ -79,7 +79,7 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "workflowStep",
-    label: "Workflow step",
+    labelKey: "task:workflowStep",
     valueKind: "enum",
     ops: ["is", "is_not", "in", "not_in"],
     defaultOp: "is",
@@ -87,7 +87,7 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "executorType",
-    label: "Executor type",
+    labelKey: "task:executorType",
     valueKind: "enum",
     ops: ["is", "is_not", "in", "not_in"],
     defaultOp: "is",
@@ -95,7 +95,7 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "repository",
-    label: "Repository",
+    labelKey: "task:repositoryFallback",
     valueKind: "enum",
     ops: ["is", "is_not", "in", "not_in"],
     defaultOp: "is",
@@ -103,10 +103,10 @@ export const DIMENSION_METAS: DimensionMeta[] = [
   },
   {
     dimension: "titleMatch",
-    label: "Title",
+    labelKey: "task:title",
     valueKind: "text",
     ops: ["matches", "not_matches"],
-    placeholder: "Substring...",
+    placeholderKey: "task:substring",
     defaultOp: "matches",
     defaultValue: "",
   },

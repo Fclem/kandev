@@ -17,24 +17,24 @@ type AgentStatusProps = {
 };
 
 type StatusConfig = {
-  label: string;
+  labelKey: string;
   dynamicLabel?: boolean;
   icon: "spinner" | "error" | "warning" | null;
 };
 
 const STATE_CONFIG: Record<TaskSessionState, StatusConfig> = {
-  CREATED: { label: "", icon: null },
-  STARTING: { label: "Agent is starting", dynamicLabel: true, icon: "spinner" },
-  RUNNING: { label: "Agent is running", icon: "spinner" },
-  IDLE: { label: "", icon: null },
-  WAITING_FOR_INPUT: { label: "", icon: null },
-  COMPLETED: { label: "", icon: null },
-  FAILED: { label: "Agent has encountered an error", icon: "error" },
-  CANCELLED: { label: "", icon: null },
+  CREATED: { labelKey: "", icon: null },
+  STARTING: { labelKey: "task:agentIsStarting", dynamicLabel: true, icon: "spinner" },
+  RUNNING: { labelKey: "task:agentIsRunning", icon: "spinner" },
+  IDLE: { labelKey: "", icon: null },
+  WAITING_FOR_INPUT: { labelKey: "", icon: null },
+  COMPLETED: { labelKey: "", icon: null },
+  FAILED: { labelKey: "task:agentHasEncounteredAnError", icon: "error" },
+  CANCELLED: { labelKey: "", icon: null },
 };
 
 const BACKGROUND_WORK_CONFIG: StatusConfig = {
-  label: "Background work is running",
+  labelKey: "task:backgroundWorkIsRunning",
   icon: "spinner",
 };
 
@@ -257,6 +257,16 @@ function useAgentStatusData(sessionId: string | null, messages: Message[], isRun
   return { isTurnActive, runningDuration, elapsedSeconds, displayDuration };
 }
 
+/** The active status text: a named agent wins, otherwise the state's own label. */
+function resolveStatusLabel(
+  t: (key: string, vars?: Record<string, string>) => string,
+  agentLabel: string | null | undefined,
+  labelKey: string,
+): string {
+  if (agentLabel) return t("task:startingAgent", { agent: agentLabel });
+  return labelKey ? t(labelKey) : "";
+}
+
 function renderActiveStatus(
   config: { label: string; icon: string },
   sessionId: string | null,
@@ -296,6 +306,7 @@ export function AgentStatus({
   messages = [],
   isWorking = false,
 }: AgentStatusProps) {
+  const { t } = useTranslation();
   const hasBackgroundWork = useAppStore((state) =>
     sessionId ? state.taskSessions.items[sessionId]?.foreground_activity === "background" : false,
   );
@@ -306,7 +317,8 @@ export function AgentStatus({
   const runningData = useAgentStatusData(sessionId, messages, isRunning);
 
   if (config?.icon) {
-    const label = agentLabel ? `Starting ${agentLabel}` : config.label;
+    // "Starting X" is one sentence, so it is one key rather than a concatenation.
+    const label = resolveStatusLabel(t, agentLabel, config.labelKey);
     return renderActiveStatus({ label, icon: config.icon }, sessionId, runningData);
   }
 

@@ -8,7 +8,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 
 import { getExecutorStatusIcon } from "@/lib/executor-icons";
 import { TaskResetEnvConfirmDialog } from "./task-reset-env-confirm-dialog";
-import type { StatusTone } from "./executor-environment-status";
+import {
+  environmentStatusLabel,
+  type ExecutorEnvironmentStatus,
+  type StatusTone,
+} from "./executor-environment-status";
 import { usePrepareSummary } from "@/hooks/domains/session/use-prepare-summary";
 import { useTaskEnvironment } from "@/hooks/domains/session/use-task-environment";
 import { isPreparingPhase } from "@/lib/prepare/summarize";
@@ -27,6 +31,7 @@ export function ExecutorSettingsButton({
   sessionId,
   disabled,
 }: ExecutorSettingsButtonProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const prepare = usePrepareSummary(sessionId ?? null);
@@ -53,7 +58,7 @@ export function ExecutorSettingsButton({
   if (!taskId) return null;
 
   const executorType = env?.executor_type ?? null;
-  const ariaLabel = computeAriaLabel(isPreparing, status);
+  const ariaLabel = computeAriaLabel(t, isPreparing, status);
 
   return (
     <>
@@ -151,12 +156,17 @@ function ResetEnvironmentAction({
 }
 
 function computeAriaLabel(
+  t: (key: string, vars?: Record<string, string>) => string,
   preparing: boolean,
-  status: { label: string; tone: StatusTone } | null,
+  status: ExecutorEnvironmentStatus | null,
 ): string {
-  if (preparing) return "Executor settings, preparing environment";
-  if (status) return `Executor settings, environment ${status.label}`;
-  return "Executor settings";
+  if (preparing) return t("task:executorSettingsPreparingEnvironment");
+  if (status) {
+    return t("task:executorSettingsEnvironmentStatus", {
+      status: environmentStatusLabel(t, status),
+    });
+  }
+  return t("task:executorSettings");
 }
 
 function ExecutorButtonIcon({
@@ -193,15 +203,16 @@ function ExecutorStatusDot({
   status,
   loading,
 }: {
-  status: { label: string; tone: StatusTone } | null;
+  status: ExecutorEnvironmentStatus | null;
   loading: boolean;
 }) {
+  const { t } = useTranslation();
   const tone = status?.tone ?? "neutral";
-  const label = status?.label ?? "not created";
+  const label = status ? environmentStatusLabel(t, status) : t("task:notCreated");
   return (
     <span
       aria-hidden="true"
-      title={`Environment ${label}`}
+      title={t("task:environmentStatus", { status: label })}
       data-testid="executor-status-indicator"
       className={`absolute right-1 top-1 h-2.5 w-2.5 rounded-full border border-background ${DOT_CLASSES[tone]} ${
         loading && !status ? "animate-pulse" : ""

@@ -36,19 +36,19 @@ describe("resolveExecutorEnvironmentStatus", () => {
         { ...baseEnv, status: "ready" },
         container({ state: "exited", status: "exited", exit_code: 137 }),
       ),
-    ).toEqual({ label: "exited (137)", tone: "error" });
+    ).toEqual({ rawLabel: "exited (137)", tone: "error" });
   });
 
   it("shows paused containers as a warning state", () => {
     expect(resolveExecutorEnvironmentStatus(baseEnv, container({ state: "paused" }))).toEqual({
-      label: "paused",
+      rawLabel: "paused",
       tone: "warn",
     });
   });
 
   it("falls back to the persisted environment status when no live container exists", () => {
     expect(resolveExecutorEnvironmentStatus({ ...baseEnv, status: "creating" }, null)).toEqual({
-      label: "starting",
+      labelKey: "task:starting2",
       tone: "warn",
     });
   });
@@ -58,12 +58,12 @@ describe("getEnvironmentStatusSnapshot", () => {
   it("uses a stable key for status transition notifications", () => {
     expect(getEnvironmentStatusSnapshot(baseEnv, container({ state: "running" }))).toEqual({
       key: "running:running",
-      label: "running",
+      rawLabel: "running",
       tone: "running",
     });
     expect(getEnvironmentStatusSnapshot(null, null)).toEqual({
       key: "none",
-      label: "not created",
+      labelKey: "task:notCreated",
       tone: "neutral",
     });
   });

@@ -38,6 +38,7 @@ import type { useChatPanelState } from "./use-chat-panel-state";
 import { cn } from "@/lib/utils";
 import { resolveComposerWorkspaceId } from "./composer-workspace";
 import { useTranslation } from "react-i18next";
+import { environmentStatusLabel } from "@/components/task/executor-environment-status";
 import { t } from "@/lib/i18n";
 
 const PLAN_CONTEXT_PATH = "plan:context";
@@ -386,10 +387,11 @@ type ChatInputAreaProps = {
 };
 
 function useExecutorUnavailable(taskId: string | null, sessionId: string | null) {
+  const { t } = useTranslation();
   const availability = useExecutorEnvironmentAvailability(taskId, Boolean(sessionId && taskId));
   return {
     unavailable: availability.unavailable,
-    reason: availability.status?.label,
+    reason: environmentStatusLabel(t, availability.status),
   };
 }
 

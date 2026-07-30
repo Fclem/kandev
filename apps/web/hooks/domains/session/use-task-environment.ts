@@ -9,6 +9,8 @@ import {
   type TaskEnvironment,
 } from "@/lib/api/domains/task-environment-api";
 import { ApiError } from "@/lib/api/client";
+import { t } from "@/lib/i18n";
+import { environmentStatusLabel } from "@/components/task/executor-environment-status";
 import {
   getEnvironmentStatusSnapshot,
   resolveExecutorEnvironmentStatus,
@@ -109,7 +111,7 @@ export function useTaskEnvironment(taskId: string | null | undefined, active: bo
         return true;
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
-        toast.error(`Reset failed: ${msg}`);
+        toast.error(t("task:resetFailed", { reason: msg }));
         return false;
       } finally {
         setIsResetting(false);
@@ -132,10 +134,10 @@ function maybeNotifyEnvironmentStatus(
 ) {
   if (!prev || prev.key === next.key) return;
   if (prev.tone === "running" && next.tone !== "running") {
-    toast.error("Executor environment stopped", {
-      description: `Current state: ${next.label}`,
+    toast.error(t("task:executorEnvironmentStopped"), {
+      description: t("task:currentState", { state: environmentStatusLabel(t, next) }),
     });
   } else if (prev.tone !== "running" && next.tone === "running") {
-    toast.success("Executor environment running");
+    toast.success(t("task:executorEnvironmentRunning"));
   }
 }

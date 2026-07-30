@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { isExecutorEnvironmentUnavailable } from "./use-executor-environment-availability";
 import type { ExecutorEnvironmentStatus } from "@/components/task/executor-environment-status";
 
+/** `starting` is the one state identified by key; the rest are runtime text. */
 function status(label: string, tone: ExecutorEnvironmentStatus["tone"]) {
-  return { label, tone };
+  return label === "starting" ? { labelKey: "task:starting2", tone } : { rawLabel: label, tone };
 }
 
 describe("isExecutorEnvironmentUnavailable", () => {

@@ -10,6 +10,7 @@ import { updateTask } from "@/lib/api/domains/office-extended-api";
 import type { Task, TaskStatus } from "@/app/office/tasks/[id]/types";
 import { StatusIcon } from "@/app/office/tasks/[id]/status-icon";
 import { normalizeTaskStatus } from "@/app/office/tasks/normalize-status";
+import { useTranslation } from "react-i18next";
 
 type PendingApprover = { agent_profile_id?: string; name?: string };
 
@@ -45,21 +46,23 @@ async function updateStatusOrTranslateGate(taskId: string, status: TaskStatus): 
   }
 }
 
-type StatusOption = { value: TaskStatus; label: string };
+type StatusOption = { value: TaskStatus; labelKey: string };
 
 const STATUS_OPTIONS: StatusOption[] = [
-  { value: "backlog", label: "Backlog" },
-  { value: "todo", label: "Todo" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "in_review", label: "In Review" },
-  { value: "blocked", label: "Blocked" },
-  { value: "done", label: "Done" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "backlog", labelKey: "task:backlog" },
+  { value: "todo", labelKey: "task:todo" },
+  { value: "in_progress", labelKey: "task:inProgress" },
+  { value: "in_review", labelKey: "task:inReview" },
+  { value: "blocked", labelKey: "task:blocked" },
+  { value: "done", labelKey: "task:done" },
+  { value: "cancelled", labelKey: "task:cancelled" },
 ];
 
-export const STATUS_LABELS: Record<TaskStatus, string> = STATUS_OPTIONS.reduce(
+// Catalog keys, not copy — callers translate at render so a locale switch is
+// reflected. Named `..._KEYS` so a caller that forgets fails to compile.
+export const STATUS_LABEL_KEYS: Record<TaskStatus, string> = STATUS_OPTIONS.reduce(
   (acc, opt) => {
-    acc[opt.value] = opt.label;
+    acc[opt.value] = opt.labelKey;
     return acc;
   },
   {} as Record<TaskStatus, string>,
@@ -70,11 +73,12 @@ type StatusPickerProps = {
 };
 
 export function StatusPicker({ task }: StatusPickerProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const mutate = useOptimisticTaskMutation();
   // Backend may return the kanban-state spelling ("REVIEW", "COMPLETED",
   // …) or the canonical lowercase form ("in_review", "done"). Normalise
-  // both via the shared office helper so STATUS_LABELS lookups and the
+  // both via the shared office helper so STATUS_LABEL_KEYS lookups and the
   // aria-selected comparisons agree on a single TaskStatus value.
   const current = normalizeTaskStatus(task.status) as TaskStatus;
 
@@ -99,7 +103,7 @@ export function StatusPicker({ task }: StatusPickerProps) {
           className="inline-flex items-center gap-1.5 cursor-pointer rounded px-2 py-1 hover:bg-accent/50 ml-auto"
         >
           <StatusIcon status={current} className="h-3.5 w-3.5" />
-          <span>{STATUS_LABELS[current] ?? task.status}</span>
+          <span>{STATUS_LABEL_KEYS[current] ? t(STATUS_LABEL_KEYS[current]) : task.status}</span>
           <IconChevronDown className="h-3 w-3 opacity-50" />
         </button>
       </PopoverTrigger>
@@ -118,7 +122,7 @@ export function StatusPicker({ task }: StatusPickerProps) {
             onClick={() => handleSelect(opt.value)}
           >
             <StatusIcon status={opt.value} className="h-3.5 w-3.5" />
-            <span>{opt.label}</span>
+            <span>{t(opt.labelKey)}</span>
           </button>
         ))}
       </PopoverContent>

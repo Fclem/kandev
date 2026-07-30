@@ -92,13 +92,27 @@ function keyFromText(text) {
   );
 }
 
+/**
+ * Keyboard key names are printed on physical keys and are not translated copy —
+ * the spec lists keyboard glyphs as out of scope. They show up as `label` on
+ * keybar/shortcut config objects, which otherwise look exactly like display copy.
+ */
+const KEY_NAMES =
+  /^(Esc|Escape|Tab|Home|End|PgUp|PgDn|Page Up|Page Down|Enter|Return|Space|Backspace|Delete|Del|Ins|Insert|Shift|Ctrl|Control|Alt|Option|Cmd|Command|Meta|Fn|F\d{1,2}|Up|Down|Left|Right)$/;
+
+/**
+ * Fixture modules hold sample domain data (task titles, repo names) for demos and
+ * storybook-style previews. That is user data by nature, never translated.
+ */
+const FIXTURE_FILE = /(^|\/)(.*-)?(mock|mocks|fixture|fixtures|demo)(-.*)?(\.|\/)/i;
+
 /** Same copy heuristic as externalize-strings.mjs. */
 const KEEP_LITERAL =
   /^(Kandev|GitHub|GitLab|Jira|Linear|Slack|Sentry|Azure DevOps|Docker|SSH|ACP|MCP|PR|CI|AI|API|JSON|YAML|LSP|TLS|SQL|URL|ID|PostgreSQL|SQLite|Claude|Codex|OpenCode|Copilot|Amp)$/;
 function looksLikeCopy(raw) {
   const s = raw.trim();
   if (s.length < 2 || !/[A-Za-z]{2}/.test(s)) return false;
-  if (KEEP_LITERAL.test(s)) return false;
+  if (KEEP_LITERAL.test(s) || KEY_NAMES.test(s)) return false;
   if (/^https?:\/\//.test(s) || s.startsWith("/") || s.startsWith("~/")) return false;
   if (/^[a-z0-9]+([-_][a-z0-9]+)+$/.test(s)) return false;
   if (/^[a-z]+([A-Z][a-z0-9]*)+$/.test(s)) return false;
@@ -205,6 +219,7 @@ function collectProperty(node, { ns, sentinels, edits, renamed }) {
 function transform(file) {
   const original = fs.readFileSync(file, "utf8");
   const rel = path.relative(ROOT, file);
+  if (FIXTURE_FILE.test(rel.replace(/\\/g, "/"))) return;
   const ns = namespaceFor(rel);
   let ast;
   try {

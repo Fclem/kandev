@@ -170,13 +170,15 @@ describe("recent task switcher model", () => {
   });
 
   it("maps task and session states to compact status badges", () => {
-    expect(getTaskStatusBadge("IN_PROGRESS", "RUNNING")).toMatchObject({ label: "Running" });
-    expect(getTaskStatusBadge("REVIEW", "WAITING_FOR_INPUT")).toMatchObject({
-      label: "Turn Finished",
+    expect(getTaskStatusBadge("IN_PROGRESS", "RUNNING")).toMatchObject({
+      labelKey: "task:running2",
     });
-    expect(getTaskStatusBadge("TODO", undefined)).toMatchObject({ label: "Todo" });
+    expect(getTaskStatusBadge("REVIEW", "WAITING_FOR_INPUT")).toMatchObject({
+      labelKey: "task:turnFinished",
+    });
+    expect(getTaskStatusBadge("TODO", undefined)).toMatchObject({ labelKey: "task:todo" });
     expect(getTaskStatusBadge("FAILED", "FAILED")).toMatchObject({
-      label: "Failed",
+      labelKey: "task:failed3",
       variant: "destructive",
     });
   });
@@ -195,7 +197,8 @@ describe("recent task switcher model", () => {
       workflowName: "Main Flow",
       workflowStepTitle: "Working",
     });
-    expect(display[0]?.statusBadge.label).toBe("Running");
+    // The model stores catalog keys; the component translates at render.
+    expect(display[0]?.statusBadge.labelKey).toBe("task:running2");
 
     expect(display[1]).toMatchObject({
       taskId: PREVIOUS_TASK_ID,

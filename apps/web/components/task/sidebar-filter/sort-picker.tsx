@@ -4,13 +4,14 @@ import { IconArrowUp, IconArrowDown } from "@tabler/icons-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { Button } from "@kandev/ui/button";
 import type { SortKey, SortSpec } from "@/lib/state/slices/ui/sidebar-view-types";
+import { useTranslation } from "react-i18next";
 
-const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
-  { key: "state", label: "Status" },
-  { key: "updatedAt", label: "Updated" },
-  { key: "createdAt", label: "Created" },
-  { key: "title", label: "Title" },
-  { key: "custom", label: "Custom" },
+const SORT_OPTIONS: Array<{ key: SortKey; labelKey: string }> = [
+  { key: "state", labelKey: "task:status" },
+  { key: "updatedAt", labelKey: "task:updated" },
+  { key: "createdAt", labelKey: "task:created2" },
+  { key: "title", labelKey: "task:title" },
+  { key: "custom", labelKey: "task:custom" },
 ];
 
 type Props = {
@@ -19,6 +20,7 @@ type Props = {
 };
 
 export function SortPicker({ value, onChange }: Props) {
+  const { t } = useTranslation();
   // Direction has no meaning for the custom sort — its order is the user's
   // drag, not an asc/desc field. Hide the toggle to avoid surprising flips.
   const isCustom = value.key === "custom";
@@ -31,7 +33,7 @@ export function SortPicker({ value, onChange }: Props) {
         <SelectContent>
           {SORT_OPTIONS.map((opt) => (
             <SelectItem key={opt.key} value={opt.key} className="text-xs">
-              {opt.label}
+              {t(opt.labelKey)}
             </SelectItem>
           ))}
         </SelectContent>

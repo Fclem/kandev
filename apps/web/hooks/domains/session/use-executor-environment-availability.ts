@@ -14,12 +14,17 @@ import {
 
 const POLL_INTERVAL_MS = 3000;
 
+/** The one status that is "not yet ready" rather than a failure. */
+const STARTING_LABEL_KEY = "task:starting2";
+
 export function isExecutorEnvironmentUnavailable(
   status: ExecutorEnvironmentStatus | null,
 ): boolean {
   if (!status) return false;
   if (status.tone === "running" || status.tone === "neutral") return false;
-  return status.label !== "starting";
+  // Compare the catalog KEY, not the rendered label: the label is translated, so
+  // matching on its text would stop matching in every non-English locale.
+  return status.labelKey !== STARTING_LABEL_KEY;
 }
 
 export function useExecutorEnvironmentAvailability(taskId: string | null, enabled: boolean) {

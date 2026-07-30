@@ -146,17 +146,21 @@ test.describe("Transcript auto-scroll toggle", () => {
     await waitForOverflow(testPage);
 
     const list = chatList(testPage);
-    // A task can become idle just before the final layout settles. Explicitly
-    // place the view at the bottom so this test isolates the disabled-at-bottom
-    // behavior instead of relying on that timing.
-    await list.evaluate((el) => {
-      el.scrollTop = el.scrollHeight;
-    });
+    // Establish the scenario's true-bottom precondition explicitly. The
+    // sticky prompt bar can settle after the renderer's initial auto-scroll,
+    // which is unrelated to the disabled-state behavior under test.
     await expect
-      .poll(async () => list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight), {
-        timeout: 5_000,
-        message: "expected to be at the bottom before disabling",
-      })
+      .poll(
+        async () =>
+          list.evaluate((el) => {
+            el.scrollTop = el.scrollHeight;
+            return el.scrollHeight - el.scrollTop - el.clientHeight;
+          }),
+        {
+          timeout: 5_000,
+          message: "expected to be at the bottom before disabling",
+        },
+      )
       .toBeLessThan(5);
     const bottomScrollTop = await list.evaluate((el) => el.scrollTop);
 
@@ -175,8 +179,15 @@ test.describe("Transcript auto-scroll toggle", () => {
     );
 
     await expect
-      .poll(async () => list.evaluate((el) => el.scrollTop), { timeout: 2_000 })
-      .toBeLessThanOrEqual(bottomScrollTop + 2);
+      .poll(
+        async () =>
+          list.evaluate(
+            (el, expectedScrollTop) => Math.abs(el.scrollTop - expectedScrollTop),
+            bottomScrollTop,
+          ),
+        { timeout: 2_000 },
+      )
+      .toBeLessThanOrEqual(2);
   });
 
   test("preserves the frozen scroll position across navigating away and back", async ({

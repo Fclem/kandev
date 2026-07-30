@@ -1,6 +1,6 @@
 # i18n — remaining externalization work
 
-Generated from `pnpm run lint:i18n`. **94 findings across 50 files.**
+Generated from `pnpm run lint:i18n`. **87 findings across 50 files.**
 
 These are what the two codemods deliberately declined, not misses. Each needs a
 judgement call rather than a mechanical rewrite:
@@ -51,7 +51,7 @@ leaving the string alone, so the tools now decline them by design:
 
 | Findings | File |
 |---:|---|
-| 16 | `components/task/passthrough-toolbar.tsx` |
+| 9 | `components/task/passthrough-toolbar.tsx` |
 | 6 | `components/task/add-workspace-sources/workspace-change-consequences.tsx` |
 | 5 | `components/azure-devops/azure-devops-settings.tsx` |
 | 5 | `components/github/github-app-import-guide.tsx` |

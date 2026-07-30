@@ -38,7 +38,7 @@ import type { KeyboardShortcut } from "@/lib/keyboard/constants";
 import type { DiffComment } from "@/lib/diff/types";
 import { PassthroughTerminal } from "./passthrough-terminal";
 import { PassthroughComposerPanel, useSendPassthroughMessage } from "./passthrough-chat-composer";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function isEditableElement(element: Element | null) {
   if (element instanceof HTMLElement && element.closest(".xterm")) return false;
@@ -244,17 +244,23 @@ function ChatToggleButton({
         {composerOpen ? (
           <div className="space-y-1">
             <p>
-              Close the compose box (or press <kbd>{t("task:esc")}</kbd> inside it). The CLI agent
-              terminal keeps focus.
+              <Trans i18nKey="task:closeComposeBoxHint" values={{ esc: t("task:esc") }}>
+                Close the compose box (or press <kbd>Esc</kbd> inside it). The CLI agent terminal
+                keeps focus.
+              </Trans>
             </p>
             <PassthroughChatShortcutHint shortcut={focusShortcut} />
           </div>
         ) : (
           <div className="space-y-1">
             <p>
-              Open a kandev-controlled compose box above the terminal to type a follow-up message.
-              Press <kbd>{t("task:enter")}</kbd> to send, <kbd>{t("task:shiftEnter")}</kbd> for a
-              newline.
+              <Trans
+                i18nKey="task:openComposeBoxHint"
+                values={{ enter: t("task:enter"), shiftEnter: t("task:shiftEnter") }}
+              >
+                Open a kandev-controlled compose box above the terminal to type a follow-up message.
+                Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for a newline.
+              </Trans>
             </p>
             <PassthroughChatShortcutHint shortcut={focusShortcut} />
             <p className="text-muted-foreground">{t("task:theTextIsDeliveredStraightTo")}</p>
@@ -269,7 +275,12 @@ function PassthroughChatShortcutHint({ shortcut }: { shortcut: KeyboardShortcut 
   if (isUnboundShortcut(shortcut)) return null;
   return (
     <p className="text-muted-foreground">
-      Shortcut: <kbd>{formatShortcut(shortcut)}</kbd> toggles this chat input.
+      <Trans
+        i18nKey="task:shortcutTogglesChatInput"
+        values={{ shortcut: formatShortcut(shortcut) }}
+      >
+        Shortcut: <kbd>x</kbd> toggles this chat input.
+      </Trans>
     </p>
   );
 }

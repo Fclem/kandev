@@ -175,6 +175,22 @@ function buildMessage(node, code) {
  * duplicating a `data-testid`). Only identifiers, member expressions, and string
  * literals are safe to interpolate.
  */
+function hasNestedTranslationCall(node) {
+  // An element child that already calls t() cannot be folded into a parent
+  // message: innerText() renders it as {{value0}} with no matching `values`
+  // entry, so the text silently disappears at runtime.
+  let found = false;
+  walk(node, (n) => {
+    if (
+      n.type === "CallExpression" &&
+      ((n.callee.type === "Identifier" && n.callee.name === "t") ||
+        (n.callee.type === "MemberExpression" && n.callee.property?.name === "t"))
+    )
+      found = true;
+  });
+  return found;
+}
+
 function hasComplexChildExpression(node) {
   return significant(node.children).some((c) => {
     if (c.type !== "JSXExpressionContainer") return false;
@@ -261,7 +277,28 @@ const report = {
   skippedNested: 0,
   skippedPluralHack: 0,
   skippedComplexExpr: 0,
+  skippedNestedT: 0,
 };
+
+/**
+ * Reasons to leave a sentence alone. Returns the reason (already counted) or null
+ * when the element is safe to wrap.
+ */
+function declineReason(node, code) {
+  if (hasPluralHack(node, code)) {
+    report.skippedPluralHack += 1;
+    return "pluralHack";
+  }
+  if (hasComplexChildExpression(node)) {
+    report.skippedComplexExpr += 1;
+    return "complexExpr";
+  }
+  if (hasNestedTranslationCall(node)) {
+    report.skippedNestedT += 1;
+    return "nestedT";
+  }
+  return null;
+}
 
 function transform(file) {
   const original = fs.readFileSync(file, "utf8");
@@ -307,14 +344,7 @@ function transform(file) {
 
   const edits = [];
   for (const node of innermost) {
-    if (hasPluralHack(node, original)) {
-      report.skippedPluralHack += 1;
-      continue;
-    }
-    if (hasComplexChildExpression(node)) {
-      report.skippedComplexExpr += 1;
-      continue;
-    }
+    if (declineReason(node, original)) continue;
     const { message, values } = buildMessage(node, original);
     if (!worthWrapping(message)) {
       report.skippedThin += 1;

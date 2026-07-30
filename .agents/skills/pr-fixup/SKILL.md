@@ -124,8 +124,9 @@ writes, a duplicate or stale bot thread still needs an explicit reply and
 resolution once current source proves the finding is already fixed, including a
 thread surfaced only in `hidden_unresolved_threads`; only current-head
 actionable threads drive code changes. Declare the PR clean only when
-`failed_checks=[]`, `pending_checks=[]`,
-there is no merge conflict, and `scripts/pr-resolve list <PR>` is empty. Within
+`checks_snapshot_complete=true`, `failed_checks=[]`, `pending_checks=[]`,
+`actionable_issue_comment_count=0`, there is no merge conflict, and
+`scripts/pr-resolve list <PR>` is empty. Within
 the user's monitoring limit, continue checking after resolutions until automated
 review jobs are terminal; otherwise report the exact pending check names.
 

@@ -18,6 +18,9 @@ export type AssetManifest = {
 
 const DEFAULT_OUTPUT_DIR = path.resolve(__dirname, "../../.pr-assets");
 const FRAMES_DIR = ".frames";
+const MANIFEST_LOCK_DIR = ".manifest.lock";
+const MANIFEST_LOCK_RETRY_MS = 10;
+const MANIFEST_LOCK_TIMEOUT_MS = 5_000;
 const RECORDING_FPS = 5;
 const RECORDING_INTERVAL = 1000 / RECORDING_FPS;
 
@@ -51,6 +54,34 @@ function readManifest(outputDir: string): AssetManifest {
 function writeManifest(outputDir: string, manifest: AssetManifest): void {
   manifest.generated_at = new Date().toISOString();
   fs.writeFileSync(path.join(outputDir, "manifest.json"), JSON.stringify(manifest, null, 2));
+}
+
+function waitForManifestLock(): void {
+  const signal = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(signal, 0, 0, MANIFEST_LOCK_RETRY_MS);
+}
+
+function withManifestLock<T>(outputDir: string, write: () => T): T {
+  const lockDir = path.join(outputDir, MANIFEST_LOCK_DIR);
+  const deadline = Date.now() + MANIFEST_LOCK_TIMEOUT_MS;
+  while (true) {
+    try {
+      fs.mkdirSync(lockDir);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (Date.now() >= deadline) {
+        throw new Error(`timed out waiting for PR asset manifest lock: ${lockDir}`);
+      }
+      waitForManifestLock();
+    }
+  }
+
+  try {
+    return write();
+  } finally {
+    fs.rmdirSync(lockDir);
+  }
 }
 
 export class PrAssetCapture {
@@ -163,10 +194,12 @@ export class PrAssetCapture {
       this.recordingInterval = null;
     }
 
-    const manifest = readManifest(this.outputDir);
-    // Remove stale entries from this test
-    manifest.assets = manifest.assets.filter((a) => a.test !== `${this.testSlug}.spec.ts`);
-    manifest.assets.push(...this.assets);
-    writeManifest(this.outputDir, manifest);
+    withManifestLock(this.outputDir, () => {
+      const manifest = readManifest(this.outputDir);
+      // Remove stale entries from this test.
+      manifest.assets = manifest.assets.filter((a) => a.test !== `${this.testSlug}.spec.ts`);
+      manifest.assets.push(...this.assets);
+      writeManifest(this.outputDir, manifest);
+    });
   }
 }

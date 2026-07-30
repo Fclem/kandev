@@ -74,7 +74,12 @@ clean_artifacts() {
 prepare_pr_assets() {
   [[ -n "${CAPTURE_PR_ASSETS:-}" ]] || return
   log "preparing PR asset directory"
-  rm -rf "$WEB_DIR/.pr-assets"
+  rm -rf "$WEB_DIR/.pr-assets" 2>/dev/null || true
+  if [[ -e "$WEB_DIR/.pr-assets" ]]; then
+    docker_up || die "cannot remove root-owned PR assets without Docker; run e2e:clean where Docker is available"
+    docker run --rm -v "$WEB_DIR":/web alpine sh -c 'rm -rf /web/.pr-assets' \
+      >/dev/null || die "failed to remove root-owned PR assets"
+  fi
   mkdir -p "$WEB_DIR/.pr-assets"
 }
 

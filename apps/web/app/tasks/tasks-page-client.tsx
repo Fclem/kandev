@@ -178,7 +178,10 @@ function useTaskMutations(fetchTasks: () => void) {
     async (taskId: string, opts?: { cascade?: boolean }) => {
       try {
         await archiveTask(taskId, opts);
-        toast({ title: t("common:taskArchived"), description: t("common:theTaskHasBeenArchivedSuccessfully") });
+        toast({
+          title: t("common:taskArchived"),
+          description: t("common:theTaskHasBeenArchivedSuccessfully"),
+        });
         fetchTasks();
       } catch (err) {
         toast({

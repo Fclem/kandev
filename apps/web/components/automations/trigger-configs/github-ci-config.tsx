@@ -12,9 +12,9 @@ type GitHubCIConfigProps = {
 };
 
 const CI_CONCLUSIONS = [
-  { value: "success", label: "Success" },
-  { value: "failure", label: "Failure" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "success", labelKey: "automations:success" },
+  { value: "failure", labelKey: "automations:failure" },
+  { value: "cancelled", labelKey: "automations:cancelled" },
 ] as const;
 
 export function GitHubCIConfig({ config, onUpdate }: GitHubCIConfigProps) {
@@ -53,7 +53,7 @@ export function GitHubCIConfig({ config, onUpdate }: GitHubCIConfigProps) {
                 onCheckedChange={() => toggleConclusion(c.value)}
                 className="cursor-pointer"
               />
-              <span className="text-sm">{c.label}</span>
+              <span className="text-sm">{t(c.labelKey)}</span>
             </label>
           ))}
         </div>

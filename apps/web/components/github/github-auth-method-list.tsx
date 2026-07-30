@@ -9,23 +9,20 @@ export type GitHubAutomationMethod = "pat" | "cli" | "app";
 const methods = [
   {
     value: "pat" as const,
-    label: "Personal access token",
-    description:
-      "Stored encrypted by Kandev. Workspace automation and managed task GitHub HTTPS/gh act as your account.",
+    labelKey: "github:personalAccessToken",
+    descriptionKey: "github:storedEncryptedByKandevWorkspaceAutomation",
     icon: IconKey,
   },
   {
     value: "cli" as const,
-    label: "GitHub CLI account",
-    description:
-      "Resolved from one named host account when needed. Managed tasks receive a scoped brokered identity; host Git is not inherited unless selected below.",
+    labelKey: "github:githubCliAccount",
+    descriptionKey: "github:resolvedFromOneNamedHostAccount",
     icon: IconTerminal2,
   },
   {
     value: "app" as const,
-    label: "GitHub App",
-    description:
-      "Stored App credentials mint short-lived installation tokens. Managed tasks receive a scoped brokered App identity for allowed repositories.",
+    labelKey: "github:githubApp",
+    descriptionKey: "github:storedAppCredentialsMintShortLived",
     icon: IconBrandGithub,
   },
 ];
@@ -65,10 +62,10 @@ export function GitHubAuthMethodList({
             <span className="min-w-0 space-y-1">
               <span className="flex items-center gap-2 text-sm font-medium">
                 <Icon className="h-4 w-4 shrink-0" />
-                {method.label}
+                {t(method.labelKey)}
               </span>
               <span className="block text-xs font-normal leading-5 text-muted-foreground">
-                {method.description}
+                {t(method.descriptionKey)}
               </span>
             </span>
           </Label>

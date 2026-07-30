@@ -17,6 +17,7 @@
   "deleteFile": "Ďēĺēţē ƒĩĺē",
   "disableWordWrap": "Ďĩśàƀĺē ŵōŕď ŵŕàƥ",
   "enableWordWrap": "Ēńàƀĺē ŵōŕď ŵŕàƥ",
+  "error": "Ēŕŕōŕ",
   "foldUnchangedLines": "Ƒōĺď ũńćĥàńĝēď ĺĩńēś",
   "hideDiffIndicators": "Ĥĩďē ďĩƒƒ ĩńďĩćàţōŕś",
   "highlight": "Ĥĩĝĥĺĩĝĥţ",
@@ -26,6 +27,13 @@
   "link": "Ĺĩńķ",
   "loadingDiff": "Ĺōàďĩńĝ ďĩƒƒ...",
   "loadingEditor": "Ĺōàďĩńĝ ēďĩţōŕ...",
+  "lspConnectedClickToStop": "ĹŚƤ: Ćōńńēćţēď — ćĺĩćķ ţō śţōƥ",
+  "lspConnecting": "ĹŚƤ: Ćōńńēćţĩńĝ...",
+  "lspInstallingLanguageServer": "ĹŚƤ: Ĩńśţàĺĺĩńĝ ĺàńĝũàĝē śēŕvēŕ...",
+  "lspOffClickToStart": "ĹŚƤ: Ōƒƒ — ćĺĩćķ ţō śţàŕţ",
+  "lspStartingLanguageServer": "ĹŚƤ: Śţàŕţĩńĝ ĺàńĝũàĝē śēŕvēŕ...",
+  "lspStatusReason": "ĹŚƤ: {{reason}}",
+  "lspStopping": "ĹŚƤ: Śţōƥƥĩńĝ...",
   "noDiffAvailable": "Ńō ďĩƒƒ àvàĩĺàƀĺē",
   "noEditorsConfigured": "Ńō ēďĩţōŕś ćōńƒĩĝũŕēď",
   "openFolder": "<0></0> Ōƥēń ƒōĺďēŕ",
@@ -45,5 +53,6 @@
   "switchToSplitView": "Śŵĩţćĥ ţō śƥĺĩţ vĩēŵ",
   "switchToUnifiedView": "Śŵĩţćĥ ţō ũńĩƒĩēď vĩēŵ",
   "toggleWordWrap": "Ţōĝĝĺē ŵōŕď ŵŕàƥ",
+  "unavailable": "Ũńàvàĩĺàƀĺē",
   "underlineCmdU": "Ũńďēŕĺĩńē (Ćḿď+Ũ)"
 }

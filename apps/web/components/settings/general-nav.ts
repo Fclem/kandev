@@ -12,92 +12,75 @@ import type { Icon as TablerIcon } from "@tabler/icons-react";
 
 export type GeneralNavItem = {
   href: string;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: TablerIcon;
 };
 
 export const GENERAL_NAV_ITEMS: GeneralNavItem[] = [
   {
     href: "/settings/general/appearance",
-    label: "Appearance",
-    description: "Theme, metrics, and changes panel preferences",
+    labelKey: "settings:appearance",
+    descriptionKey: "settings:themeMetricsAndChangesPanelPreferences",
     icon: IconPalette,
   },
   {
     href: "/settings/general/layouts",
-    label: "Layouts",
-    description: "Task workbench layout profiles and defaults",
+    labelKey: "settings:layouts",
+    descriptionKey: "settings:taskWorkbenchLayoutProfilesAndDefaults",
     icon: IconLayoutDashboard,
   },
   {
     href: "/settings/general/terminal",
-    label: "Terminal",
-    description: "Shell, terminal fonts, and link behavior",
+    labelKey: "settings:terminal",
+    descriptionKey: "settings:shellTerminalFontsAndLinkBehavior",
     icon: IconTerminal2,
   },
   {
     href: "/settings/general/notifications",
-    label: "Notifications",
-    description: "Providers and notification events",
+    labelKey: "settings:notifications",
+    descriptionKey: "settings:providersAndNotificationEvents",
     icon: IconBell,
   },
   {
     href: "/settings/general/editors",
-    label: "Editors",
-    description: "Editor integrations and defaults",
+    labelKey: "settings:editors",
+    descriptionKey: "settings:editorIntegrationsAndDefaults",
     icon: IconCode,
   },
   {
     href: "/settings/general/keyboard-shortcuts",
-    label: "Keyboard Shortcuts",
-    description: "Chat input and command shortcuts",
+    labelKey: "settings:keyboardShortcuts",
+    descriptionKey: "settings:chatInputAndCommandShortcuts",
     icon: IconCommand,
   },
   {
     href: "/settings/general/task-actions",
-    label: "Task Actions",
-    description: "MCP task defaults and archive safeguards",
+    labelKey: "settings:taskActions",
+    descriptionKey: "settings:mcpTaskDefaultsAndArchiveSafeguards",
     icon: IconArchive,
   },
 ];
 
+/** A nav item with its copy already translated, ready to render. */
+export type ResolvedGeneralNavItem = {
+  href: string;
+  label: string;
+  description: string;
+  icon: TablerIcon;
+};
+
 /**
- * Localized copy for {@link GENERAL_NAV_ITEMS}. The base list is a module-level
- * constant (evaluated once at import time), so translated labels have to be
- * resolved at render time through this hook instead of baked into the const.
+ * Translate {@link GENERAL_NAV_ITEMS} at render time. The base list is a
+ * module-level constant evaluated once at import, so it holds catalog KEYS —
+ * calling `t()` in the const itself would pin the copy to the boot locale.
  */
-export function useGeneralNavItems(): GeneralNavItem[] {
+export function useGeneralNavItems(): ResolvedGeneralNavItem[] {
   const { t } = useTranslation();
-  const copy: Record<string, { label: string; description: string }> = {
-    "/settings/general/appearance": {
-      label: t("settings:appearance"),
-      description: t("settings:themeMetricsAndChangesPanelPreferences"),
-    },
-    "/settings/general/layouts": {
-      label: t("settings:layouts"),
-      description: t("settings:taskWorkbenchLayoutProfilesAndDefaults"),
-    },
-    "/settings/general/terminal": {
-      label: t("settings:terminal"),
-      description: t("settings:shellTerminalFontsAndLinkBehavior"),
-    },
-    "/settings/general/notifications": {
-      label: t("settings:notifications"),
-      description: t("settings:providersAndNotificationEvents"),
-    },
-    "/settings/general/editors": {
-      label: t("settings:editors"),
-      description: t("settings:editorIntegrationsAndDefaults"),
-    },
-    "/settings/general/keyboard-shortcuts": {
-      label: t("settings:keyboardShortcuts"),
-      description: t("settings:chatInputAndCommandShortcuts"),
-    },
-    "/settings/general/task-actions": {
-      label: t("settings:taskActions"),
-      description: t("settings:mcpTaskDefaultsAndArchiveSafeguards"),
-    },
-  };
-  return GENERAL_NAV_ITEMS.map((item) => ({ ...item, ...copy[item.href] }));
+  return GENERAL_NAV_ITEMS.map((item) => ({
+    href: item.href,
+    icon: item.icon,
+    label: t(item.labelKey),
+    description: t(item.descriptionKey),
+  }));
 }

@@ -17,6 +17,7 @@
   "deleteFile": "Delete file",
   "disableWordWrap": "Disable word wrap",
   "enableWordWrap": "Enable word wrap",
+  "error": "Error",
   "foldUnchangedLines": "Fold unchanged lines",
   "hideDiffIndicators": "Hide diff indicators",
   "highlight": "Highlight",
@@ -26,6 +27,13 @@
   "link": "Link",
   "loadingDiff": "Loading diff...",
   "loadingEditor": "Loading editor...",
+  "lspConnectedClickToStop": "LSP: Connected \u2014 click to stop",
+  "lspConnecting": "LSP: Connecting...",
+  "lspInstallingLanguageServer": "LSP: Installing language server...",
+  "lspOffClickToStart": "LSP: Off \u2014 click to start",
+  "lspStartingLanguageServer": "LSP: Starting language server...",
+  "lspStatusReason": "LSP: {{reason}}",
+  "lspStopping": "LSP: Stopping...",
   "noDiffAvailable": "No diff available",
   "noEditorsConfigured": "No editors configured",
   "openFolder": "<0></0> Open folder",
@@ -45,5 +53,6 @@
   "switchToSplitView": "Switch to split view",
   "switchToUnifiedView": "Switch to unified view",
   "toggleWordWrap": "Toggle word wrap",
+  "unavailable": "Unavailable",
   "underlineCmdU": "Underline (Cmd+U)"
 }

@@ -13,26 +13,26 @@ import { isDraftEntryDirty } from "./settings-dirty";
 const LSP_LANGUAGE_OPTIONS = [
   {
     id: "typescript",
-    label: "TypeScript / JavaScript",
+    labelKey: "settings:typescriptJavascript",
     binary: "typescript-language-server",
     docsUrl:
       "https://github.com/typescript-language-server/typescript-language-server#workspace-configuration",
   },
   {
     id: "go",
-    label: "Go",
+    labelKey: "settings:go",
     binary: "gopls",
     docsUrl: "https://github.com/golang/tools/blob/master/gopls/doc/settings.md",
   },
   {
     id: "rust",
-    label: "Rust",
+    labelKey: "settings:rust",
     binary: "rust-analyzer",
     docsUrl: "https://rust-analyzer.github.io/book/configuration.html",
   },
   {
     id: "python",
-    label: "Python",
+    labelKey: "settings:python",
     binary: "pyright-langserver",
     docsUrl: "https://microsoft.github.io/pyright/#/settings",
   },
@@ -102,7 +102,7 @@ export function LspLanguageCards({
               data-settings-dirty={autoStartDirty || autoInstallDirty}
             >
               <div>
-                <div className="text-sm font-medium text-foreground">{lang.label}</div>
+                <div className="text-sm font-medium text-foreground">{t(lang.labelKey)}</div>
                 <div className="text-xs text-muted-foreground">{lang.binary}</div>
               </div>
               <div className="flex items-center justify-between">
@@ -198,7 +198,7 @@ export function LspServerConfigSection({
               onClick={() => setExpandedConfigLang(isExpanded ? null : lang.id)}
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm text-foreground">{lang.label}</span>
+                <span className="text-sm text-foreground">{t(lang.labelKey)}</span>
                 {configStr.trim() && (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                     {t("settings:custom")}

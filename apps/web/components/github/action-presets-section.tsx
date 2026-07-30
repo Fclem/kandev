@@ -80,7 +80,7 @@ function PresetIconSelect({
             <SelectItem key={choice.key} value={choice.key} className="cursor-pointer">
               <span className="flex items-center gap-2">
                 <ChoiceIcon className="h-3.5 w-3.5" />
-                {choice.label}
+                {t(choice.labelKey)}
               </span>
             </SelectItem>
           );

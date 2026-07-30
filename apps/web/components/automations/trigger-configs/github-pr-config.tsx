@@ -19,9 +19,8 @@ type GitHubPRConfigProps = {
 const PR_EVENTS = [
   {
     value: "opened",
-    label: "Opened",
-    tooltip:
-      "Fires once when a new open PR is detected. Each PR number is deduped — the same PR won't trigger again.",
+    labelKey: "automations:opened",
+    tooltipKey: "automations:firesOnceWhenANewOpen",
   },
 ] as const;
 
@@ -126,12 +125,12 @@ function EventsSection({
               onCheckedChange={() => onToggle(evt.value)}
               className="cursor-pointer"
             />
-            <span className="text-sm">{evt.label}</span>
+            <span className="text-sm">{t(evt.labelKey)}</span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <IconInfoCircle className="h-3 w-3 text-muted-foreground" />
               </TooltipTrigger>
-              <TooltipContent className="max-w-[220px]">{evt.tooltip}</TooltipContent>
+              <TooltipContent className="max-w-[220px]">{t(evt.tooltipKey)}</TooltipContent>
             </Tooltip>
           </label>
         ))}

@@ -9,8 +9,9 @@ import {
   IconAlertTriangle,
 } from "@tabler/icons-react";
 import type { LspStatus } from "@/lib/lsp/lsp-client-manager";
+import { useTranslation } from "react-i18next";
 
-type StaticConfig = { tooltip: string; clickable: boolean };
+type StaticConfig = { tooltipKey: string; clickable: boolean };
 
 const ICON_CLS = "h-3.5 w-3.5";
 
@@ -26,29 +27,38 @@ const ICONS: Record<string, React.ReactNode> = {
 };
 
 const STATIC_CONFIGS: Record<string, StaticConfig> = {
-  disabled: { tooltip: "LSP: Off \u2014 click to start", clickable: true },
-  connecting: { tooltip: "LSP: Connecting...", clickable: true },
-  installing: { tooltip: "LSP: Installing language server...", clickable: false },
-  starting: { tooltip: "LSP: Starting language server...", clickable: true },
-  ready: { tooltip: "LSP: Connected \u2014 click to stop", clickable: true },
-  stopping: { tooltip: "LSP: Stopping...", clickable: false },
+  disabled: { tooltipKey: "editors:lspOffClickToStart", clickable: true },
+  connecting: { tooltipKey: "editors:lspConnecting", clickable: true },
+  installing: { tooltipKey: "editors:lspInstallingLanguageServer", clickable: false },
+  starting: { tooltipKey: "editors:lspStartingLanguageServer", clickable: true },
+  ready: { tooltipKey: "editors:lspConnectedClickToStop", clickable: true },
+  stopping: { tooltipKey: "editors:lspStopping", clickable: false },
 };
 
 function getConfig(
   status: LspStatus,
+  t: (key: string, vars?: Record<string, string>) => string,
 ): { icon: React.ReactNode; tooltip: string; clickable: boolean } | null {
   const icon = ICONS[status.state];
   if (!icon) return null;
 
   const sc = STATIC_CONFIGS[status.state];
-  if (sc) return { icon, ...sc };
+  if (sc) return { icon, tooltip: t(sc.tooltipKey), clickable: sc.clickable };
 
   // Dynamic tooltip for unavailable/error states
   const reason = "reason" in status ? status.reason : null;
   if (status.state === "unavailable")
-    return { icon, tooltip: `LSP: ${reason ?? "Unavailable"}`, clickable: true };
+    return {
+      icon,
+      tooltip: t("editors:lspStatusReason", { reason: reason ?? t("editors:unavailable") }),
+      clickable: true,
+    };
   if (status.state === "error")
-    return { icon, tooltip: `LSP: ${reason ?? "Error"}`, clickable: true };
+    return {
+      icon,
+      tooltip: t("editors:lspStatusReason", { reason: reason ?? t("editors:error") }),
+      clickable: true,
+    };
 
   return null;
 }
@@ -62,9 +72,10 @@ export function LspStatusButton({
   lspLanguage: string | null;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   if (!lspLanguage) return null;
 
-  const c = getConfig(status);
+  const c = getConfig(status, t);
   if (!c) return null;
 
   return (

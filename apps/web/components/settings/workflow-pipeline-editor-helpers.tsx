@@ -43,20 +43,20 @@ export function HelpTip({
 }
 
 export const STEP_COLORS = [
-  { value: "bg-slate-500", label: "Gray" },
-  { value: "bg-red-500", label: "Red" },
-  { value: "bg-orange-500", label: "Orange" },
-  { value: "bg-yellow-500", label: "Yellow" },
-  { value: "bg-green-500", label: "Green" },
-  { value: "bg-cyan-500", label: "Cyan" },
-  { value: "bg-blue-500", label: "Blue" },
-  { value: "bg-indigo-500", label: "Indigo" },
-  { value: "bg-purple-500", label: "Purple" },
+  { value: "bg-slate-500", labelKey: "settings:gray" },
+  { value: "bg-red-500", labelKey: "settings:red" },
+  { value: "bg-orange-500", labelKey: "settings:orange" },
+  { value: "bg-yellow-500", labelKey: "settings:yellow" },
+  { value: "bg-green-500", labelKey: "settings:green" },
+  { value: "bg-cyan-500", labelKey: "settings:cyan" },
+  { value: "bg-blue-500", labelKey: "settings:blue" },
+  { value: "bg-indigo-500", labelKey: "settings:indigo" },
+  { value: "bg-purple-500", labelKey: "settings:purple" },
 ];
 
 export const PROMPT_TEMPLATES = [
   {
-    label: "Plan",
+    labelKey: "settings:plan",
     prompt: `Analyze the task and create a detailed implementation plan.
 
 {{task_prompt}}
@@ -70,7 +70,7 @@ INSTRUCTIONS:
 Output the plan as a numbered list. Be specific about file paths, function names, and the approach for each step. Do NOT implement anything yet — only plan.`,
   },
   {
-    label: "Code Review",
+    labelKey: "settings:codeReview",
     prompt: `Please review the changed files in the current git worktree.
 
 STEP 1: Determine what to review
@@ -108,7 +108,7 @@ PERFORMANCE: Algorithmic or resource usage problems with measurable impact
 Now review the changes.`,
   },
   {
-    label: "Security Audit",
+    labelKey: "settings:securityAudit",
     prompt: `Perform a security audit on the changed files in the current git worktree.
 
 {{task_prompt}}

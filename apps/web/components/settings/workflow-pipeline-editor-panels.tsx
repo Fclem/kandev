@@ -93,7 +93,7 @@ function StepConfigHeader({
               <SelectItem key={color.value} value={color.value}>
                 <div className="flex items-center gap-2">
                   <div className={cn("w-3 h-3 rounded-full", color.value)} />
-                  {color.label}
+                  {t(color.labelKey)}
                 </div>
               </SelectItem>
             ))}
@@ -487,7 +487,7 @@ function StepPromptSection({
           <span className="text-[11px] text-muted-foreground/60">{t("settings:templates")}</span>
           {PROMPT_TEMPLATES.map((template) => (
             <button
-              key={template.label}
+              key={t(template.labelKey)}
               type="button"
               onClick={() => {
                 onLocalPromptChange(template.prompt);
@@ -495,7 +495,7 @@ function StepPromptSection({
               }}
               className="text-[11px] px-2 py-0.5 rounded-md border border-border bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
             >
-              {template.label}
+              {t(template.labelKey)}
             </button>
           ))}
         </div>

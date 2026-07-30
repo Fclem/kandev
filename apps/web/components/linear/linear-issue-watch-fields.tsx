@@ -168,6 +168,7 @@ export function PriorityMultiSelect({
   selected: LinearPriority[];
   onToggle: (p: LinearPriority) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-1.5">
       {PRIORITY_OPTIONS.map((opt) => {
@@ -180,7 +181,7 @@ export function PriorityMultiSelect({
             aria-pressed={active}
             className="cursor-pointer"
           >
-            <Badge variant={active ? "default" : "outline"}>{opt.label}</Badge>
+            <Badge variant={active ? "default" : "outline"}>{t(opt.labelKey)}</Badge>
           </button>
         );
       })}
@@ -266,7 +267,7 @@ export function SortByField({ form, setForm }: { form: FormState; setForm: FormS
               key={o.value || SORT_BY_DEFAULT_SENTINEL}
               value={o.value || SORT_BY_DEFAULT_SENTINEL}
             >
-              {o.label}
+              {t(o.labelKey)}
             </SelectItem>
           ))}
         </SelectContent>

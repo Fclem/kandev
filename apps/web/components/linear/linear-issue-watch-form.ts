@@ -13,25 +13,25 @@ export type LinearPriority = 0 | 1 | 2 | 3 | 4;
 
 // Linear priorities: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low. Rendered as
 // toggle chips, mirroring the States and Labels multi-selects.
-export const PRIORITY_OPTIONS: { value: LinearPriority; label: string }[] = [
-  { value: 1, label: "Urgent" },
-  { value: 2, label: "High" },
-  { value: 3, label: "Medium" },
-  { value: 4, label: "Low" },
-  { value: 0, label: "No priority" },
+export const PRIORITY_OPTIONS: { value: LinearPriority; labelKey: string }[] = [
+  { value: 1, labelKey: "linear:urgent" },
+  { value: 2, labelKey: "linear:high" },
+  { value: 3, labelKey: "linear:medium" },
+  { value: 4, labelKey: "linear:low" },
+  { value: 0, labelKey: "linear:noPriority" },
 ];
 
 // Dispatch order applied when the in-flight cap limits how many matched issues
 // run at once. Order matters — most useful first; the empty value is Linear's
 // natural (recently-updated) order.
-export const SORT_BY_OPTIONS: { value: LinearIssueSortBy; label: string }[] = [
-  { value: "priority", label: "Priority (high → low)" },
-  { value: "priority_asc", label: "Priority (low → high)" },
-  { value: "created_desc", label: "Created (newest first)" },
-  { value: "created_asc", label: "Created (oldest first)" },
-  { value: "updated_desc", label: "Updated (recently updated first)" },
-  { value: "updated_asc", label: "Updated (least recently updated first)" },
-  { value: "", label: "Default (Linear order)" },
+export const SORT_BY_OPTIONS: { value: LinearIssueSortBy; labelKey: string }[] = [
+  { value: "priority", labelKey: "linear:priorityHighLow" },
+  { value: "priority_asc", labelKey: "linear:priorityLowHigh" },
+  { value: "created_desc", labelKey: "linear:createdNewestFirst" },
+  { value: "created_asc", labelKey: "linear:createdOldestFirst" },
+  { value: "updated_desc", labelKey: "linear:updatedRecentlyUpdatedFirst" },
+  { value: "updated_asc", labelKey: "linear:updatedLeastRecentlyUpdatedFirst" },
+  { value: "", labelKey: "linear:defaultLinearOrder" },
 ];
 
 export interface FormState {

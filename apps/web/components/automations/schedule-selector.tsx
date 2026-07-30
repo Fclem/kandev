@@ -28,13 +28,13 @@ function isValidExpression(expr: string): boolean {
 }
 
 const PRESETS = [
-  { label: "5 min", expression: "@every 5m" },
-  { label: "15 min", expression: "@every 15m" },
-  { label: "30 min", expression: "@every 30m" },
-  { label: "1 hour", expression: "@hourly" },
-  { label: "6 hours", expression: "@every 6h" },
-  { label: "Daily", expression: "@daily" },
-  { label: "Weekly", expression: "@weekly" },
+  { labelKey: "automations:5Min", expression: "@every 5m" },
+  { labelKey: "automations:15Min", expression: "@every 15m" },
+  { labelKey: "automations:30Min", expression: "@every 30m" },
+  { labelKey: "automations:1Hour", expression: "@hourly" },
+  { labelKey: "automations:6Hours", expression: "@every 6h" },
+  { labelKey: "automations:daily", expression: "@daily" },
+  { labelKey: "automations:weekly", expression: "@weekly" },
 ] as const;
 
 export function ScheduleSelector({ config, isDirty = false, onChange }: ScheduleSelectorProps) {
@@ -86,7 +86,7 @@ export function ScheduleSelector({ config, isDirty = false, onChange }: Schedule
             className="cursor-pointer"
             onClick={() => handlePreset(preset.expression)}
           >
-            {preset.label}
+            {t(preset.labelKey)}
           </Button>
         ))}
         <Tooltip>

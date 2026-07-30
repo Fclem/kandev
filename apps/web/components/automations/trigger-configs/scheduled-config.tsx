@@ -12,9 +12,9 @@ type ScheduledConfigProps = {
 };
 
 const PRESETS = [
-  { label: "Every hour", expression: "@hourly" },
-  { label: "Every day", expression: "@daily" },
-  { label: "Every week", expression: "@weekly" },
+  { labelKey: "automations:everyHour", expression: "@hourly" },
+  { labelKey: "automations:everyDay", expression: "@daily" },
+  { labelKey: "automations:everyWeek", expression: "@weekly" },
 ] as const;
 
 export function ScheduledConfig({ config, onUpdate }: ScheduledConfigProps) {
@@ -49,7 +49,7 @@ export function ScheduledConfig({ config, onUpdate }: ScheduledConfigProps) {
             className="cursor-pointer"
             onClick={() => handlePreset(preset.expression)}
           >
-            {preset.label}
+            {t(preset.labelKey)}
           </Button>
         ))}
       </div>

@@ -16,15 +16,15 @@ import type {
 } from "@/lib/types/github";
 import type { TaskPreset } from "./quick-task-launcher";
 
-export const PRESET_ICON_CHOICES: { key: GitHubActionPresetIcon; icon: Icon; label: string }[] = [
-  { key: "eye", icon: IconEye, label: "Eye" },
-  { key: "message", icon: IconMessageDots, label: "Message" },
-  { key: "tool", icon: IconTool, label: "Tool" },
-  { key: "code", icon: IconCode, label: "Code" },
-  { key: "search", icon: IconSearch, label: "Search" },
-  { key: "bug", icon: IconBug, label: "Bug" },
-  { key: "sparkle", icon: IconSparkles, label: "Sparkle" },
-  { key: "check", icon: IconChecks, label: "Check" },
+export const PRESET_ICON_CHOICES: { key: GitHubActionPresetIcon; icon: Icon; labelKey: string }[] = [
+  { key: "eye", icon: IconEye, labelKey: "github:eye" },
+  { key: "message", icon: IconMessageDots, labelKey: "github:message" },
+  { key: "tool", icon: IconTool, labelKey: "github:tool" },
+  { key: "code", icon: IconCode, labelKey: "github:code" },
+  { key: "search", icon: IconSearch, labelKey: "github:search" },
+  { key: "bug", icon: IconBug, labelKey: "github:bug" },
+  { key: "sparkle", icon: IconSparkles, labelKey: "github:sparkle" },
+  { key: "check", icon: IconChecks, labelKey: "github:check" },
 ];
 
 const ICON_BY_KEY: Record<string, Icon> = Object.fromEntries(

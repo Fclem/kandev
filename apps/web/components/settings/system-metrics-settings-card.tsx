@@ -12,12 +12,12 @@ import { useSettingsSaveContributor } from "./settings-save-provider";
 import { SettingsCard } from "./settings-card";
 import { useTranslation } from "react-i18next";
 
-const METRIC_OPTIONS: Array<{ id: SystemMetricId; label: string }> = [
-  { id: "cpu_percent", label: "CPU %" },
-  { id: "memory_percent", label: "Memory %" },
-  { id: "disk_percent", label: "Disk %" },
-  { id: "cpu_temp", label: "CPU temp" },
-  { id: "io_load", label: "System load (1 min)" },
+const METRIC_OPTIONS: Array<{ id: SystemMetricId; labelKey: string }> = [
+  { id: "cpu_percent", labelKey: "settings:cpu" },
+  { id: "memory_percent", labelKey: "settings:memory" },
+  { id: "disk_percent", labelKey: "settings:disk" },
+  { id: "cpu_temp", labelKey: "settings:cpuTemp" },
+  { id: "io_load", labelKey: "settings:systemLoad1Min" },
 ];
 
 const DEFAULT_METRICS_SETTINGS: SystemMetricsGlobalSettings = {
@@ -265,7 +265,7 @@ function MetricCheckboxes({
               disabled={isSaving}
               onCheckedChange={(checked) => onToggleMetric(metric.id, checked === true)}
             />
-            <span>{metric.label}</span>
+            <span>{t(metric.labelKey)}</span>
           </label>
         ))}
       </div>

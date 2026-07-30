@@ -31,22 +31,22 @@ type RunsSectionProps = {
 
 const STATUS_BADGE: Record<
   RunStatus,
-  { variant: "default" | "destructive" | "secondary" | "outline"; label: string }
+  { variant: "default" | "destructive" | "secondary" | "outline"; labelKey: string }
 > = {
-  triggered: { variant: "secondary", label: "Triggered" },
-  task_created: { variant: "secondary", label: "Running" },
-  succeeded: { variant: "default", label: "Succeeded" },
-  failed: { variant: "destructive", label: "Failed" },
-  skipped: { variant: "outline", label: "Skipped" },
+  triggered: { variant: "secondary", labelKey: "automations:triggered" },
+  task_created: { variant: "secondary", labelKey: "automations:running" },
+  succeeded: { variant: "default", labelKey: "automations:succeeded" },
+  failed: { variant: "destructive", labelKey: "automations:failed" },
+  skipped: { variant: "outline", labelKey: "automations:skipped" },
   // The generating task was archived — via the UI or by the agent itself
   // (e.g. an "archive this task" instruction). Distinct from a genuine
   // user cancellation: archiving just closes the task out, it doesn't
   // mean the run's work was rejected. See internal/automation.RunStatusArchived.
-  archived: { variant: "outline", label: "Archived" },
+  archived: { variant: "outline", labelKey: "automations:archived" },
   // The generating task no longer exists, or its current primary session
   // is CANCELLED — a real cancellation, distinct from archived.
   // See internal/automation.RunStatusCancelled.
-  cancelled: { variant: "outline", label: "Cancelled" },
+  cancelled: { variant: "outline", labelKey: "automations:cancelled" },
 };
 
 type RunRowProps = {
@@ -71,7 +71,7 @@ function RunRow({ run, taskClickable, onDelete, onNavigate }: RunRowProps) {
     >
       <TableCell className="text-sm">{run.trigger_type}</TableCell>
       <TableCell>
-        <Badge variant={badge.variant}>{badge.label}</Badge>
+        <Badge variant={badge.variant}>{t(badge.labelKey)}</Badge>
       </TableCell>
       <TableCell className="text-sm font-mono">
         {run.task_id ? run.task_id.slice(0, 8) : "-"}

@@ -17,6 +17,13 @@
  * name are renamed too, so the file itself stays consistent; everything else
  * surfaces as a tsc error to fix by hand.
  *
+ * Only objects whose shape is declared INLINE are rewritten. When the enclosing
+ * declaration is annotated with a named type (`const X: SelectFieldItem[] = …`),
+ * that type is very often also satisfied by runtime data — a user's agent-profile
+ * names alongside our own static options — and those values must not become
+ * catalog keys. Such objects are reported for hand treatment (give the type both
+ * a `labelKey` and a raw `label`, and resolve at render).
+ *
  * Usage: node scripts/externalize-config-labels.mjs [--write] <dir|file> [...]
  */
 import { parseSync } from "@babel/core";
@@ -26,6 +33,12 @@ import path from "node:path";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const EN = path.join(ROOT, "src", "locales", "en");
 const WRITE = process.argv.includes("--write");
+/**
+ * Rewrite objects annotated with a named type too. Off by default because such a
+ * type is often ALSO satisfied by runtime data, which must not become a key —
+ * pass it per-file once you have checked that shape has only static sources.
+ */
+const FORCE_NAMED = process.argv.includes("--include-named-types");
 const TARGETS = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 if (!TARGETS.length) {
   console.error("usage: externalize-config-labels.mjs [--write] <dir|file> [...]");
@@ -197,7 +210,38 @@ function listFiles() {
   return out;
 }
 
-const report = { files: 0, properties: 0, renamedTypeMembers: 0, skippedSentinel: 0 };
+const report = {
+  files: 0,
+  properties: 0,
+  renamedTypeMembers: 0,
+  skippedSentinel: 0,
+  skippedNamedType: 0,
+};
+const namedTypeSkips = [];
+
+/**
+ * The named type this annotation refers to, or null when the shape is inline.
+ * `Record<K, {inline}>` and `{inline}[]` count as inline: the members are written
+ * right there, so nothing else can be feeding them.
+ */
+function describeAnnotation(node) {
+  if (!node) return null;
+  switch (node.type) {
+    case "TSTypeReference":
+      if (node.typeName?.name === "Record" || node.typeName?.name === "Array") {
+        const args = node.typeParameters?.params ?? [];
+        return describeAnnotation(args[args.length - 1]);
+      }
+      return node.typeName?.name ?? "unknown";
+    case "TSArrayType":
+      return describeAnnotation(node.elementType);
+    case "TSTypeLiteral":
+    case "TSTypeOperator":
+      return null;
+    default:
+      return null;
+  }
+}
 
 /** Rewrite one module-scope display property to hold its catalog key. */
 function collectProperty(node, { ns, sentinels, edits, renamed }) {
@@ -241,10 +285,28 @@ function transform(file) {
   // externalize-strings.mjs already handles those (it can safely emit `t()`
   // there, because the call happens per render rather than at import).
   const ancestors = [];
-  const visit = (node) => {
-    if (node.type === "ObjectProperty" && !ancestors.some((a) => FUNCTION_TYPES.has(a.type))) {
-      collectProperty(node, { ns, sentinels, edits, renamed });
+  /** The named type annotating this property's declaration, if any. */
+  const annotatingType = () => {
+    const declarator = ancestors.find(
+      (a) => a.type === "VariableDeclarator" && a.id?.typeAnnotation,
+    );
+    if (!declarator) return null;
+    return describeAnnotation(declarator.id.typeAnnotation.typeAnnotation);
+  };
+
+  const considerProperty = (node) => {
+    if (ancestors.some((a) => FUNCTION_TYPES.has(a.type))) return;
+    const named = annotatingType();
+    if (named && !FORCE_NAMED) {
+      report.skippedNamedType += 1;
+      namedTypeSkips.push(`${rel}\t${named}`);
+      return;
     }
+    collectProperty(node, { ns, sentinels, edits, renamed });
+  };
+
+  const visit = (node) => {
+    if (node.type === "ObjectProperty") considerProperty(node);
     ancestors.push(node);
     for (const key of Object.keys(node)) {
       if (key === "loc" || key.endsWith("Comments")) continue;
@@ -290,5 +352,8 @@ if (WRITE) {
     );
     fs.writeFileSync(path.join(EN, `${ns}.json`), JSON.stringify(sorted, null, 2) + "\n");
   }
+}
+if (process.env.DUMP_NAMED_TYPE_SKIPS) {
+  for (const line of [...new Set(namedTypeSkips)].sort()) console.error(`NAMED_TYPE\t${line}`);
 }
 console.log(JSON.stringify({ ...report, wrote: WRITE }, null, 2));

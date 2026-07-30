@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import {
@@ -84,6 +84,7 @@ function PipelineNode({
   onRemove,
   readOnly = false,
 }: PipelineNodeProps) {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: step.id,
   });
@@ -116,7 +117,7 @@ function PipelineNode({
                 <IconRosetteNumber1 className="h-3.5 w-3.5" />
               </div>
             </TooltipTrigger>
-            <TooltipContent>Start step</TooltipContent>
+            <TooltipContent>{t("common:startStep")}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       )}
@@ -141,7 +142,9 @@ function PipelineNode({
         <StepCapabilityIcons
           events={step.events}
           agentProfileId={step.agent_profile_id}
-          fallback={<span className="text-xs text-muted-foreground/50">manual</span>}
+          fallback={
+            <span className="text-xs text-muted-foreground/50">{t("settings:manual")}</span>
+          }
         />
         {isReplayCycleAffected && (
           <span

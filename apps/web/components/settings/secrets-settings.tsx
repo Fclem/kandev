@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useCallback, useMemo, useState } from "react";
 import { IconEdit, IconTrash, IconEye, IconEyeOff, IconKey } from "@tabler/icons-react";
@@ -65,6 +65,7 @@ function SecretForm({
   showSubmit = true,
   baselineState,
 }: SecretFormProps) {
+  const { t } = useTranslation();
   const nameIsDirty = Boolean(baselineState) && formState.name.trim() !== baselineState?.name;
   const valueIsDirty = Boolean(baselineState) && formState.value !== baselineState?.value;
   return (
@@ -77,14 +78,14 @@ function SecretForm({
         <Input
           value={formState.name}
           onChange={(e) => onFormChange({ name: e.target.value })}
-          placeholder="Name (e.g. OpenAI Production Key)"
+          placeholder={t("settings:nameEGOpenaiProductionKey")}
           disabled={isBusy}
           data-settings-dirty={nameIsDirty}
         />
         <Textarea
           value={formState.value}
           onChange={(e) => onFormChange({ value: e.target.value })}
-          placeholder="Secret value"
+          placeholder={t("settings:secretValue")}
           rows={2}
           className="resize-y font-mono text-sm"
           disabled={isBusy}
@@ -98,7 +99,7 @@ function SecretForm({
           </Button>
         )}
         <Button variant="ghost" onClick={onCancel} disabled={isBusy} className="cursor-pointer">
-          Cancel
+          {t("common:cancel")}
         </Button>
       </div>
     </div>
@@ -206,6 +207,7 @@ type DeleteSecretDialogProps = {
 };
 
 function DeleteSecretDialog({ target, onClose, onConfirm, isBusy }: DeleteSecretDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog
       open={Boolean(target)}
@@ -215,7 +217,7 @@ function DeleteSecretDialog({ target, onClose, onConfirm, isBusy }: DeleteSecret
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete secret</DialogTitle>
+          <DialogTitle>{t("settings:deleteSecret")}</DialogTitle>
           <DialogDescription>
             <Trans i18nKey="settings:thisWillPermanentlyRemoveThisAction2">
               This will permanently remove{" "}
@@ -226,7 +228,7 @@ function DeleteSecretDialog({ target, onClose, onConfirm, isBusy }: DeleteSecret
         </DialogHeader>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button
             type="button"
@@ -235,7 +237,7 @@ function DeleteSecretDialog({ target, onClose, onConfirm, isBusy }: DeleteSecret
             disabled={isBusy}
             className="cursor-pointer"
           >
-            Delete secret
+            {t("settings:deleteSecret")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -396,6 +398,7 @@ export function getSecretDraftMeta(
 }
 
 export function SecretsSettings() {
+  const { t } = useTranslation();
   const state = useSecretsState();
   const { loaded, editingId, showCreate, formState, setFormState, deleteTarget, items } = state;
   const actions = useSecretsActions(state);
@@ -413,7 +416,7 @@ export function SecretsSettings() {
 
   return (
     <SettingsPageTemplate
-      title="Secrets"
+      title={t("settings:secrets")}
       description="Manage API keys and credentials. Secrets are encrypted at rest and injected into agent environments via executor profile env vars."
       isDirty={isDirty}
       saveStatus="idle"
@@ -426,19 +429,19 @@ export function SecretsSettings() {
     >
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-foreground">Secrets</div>
+          <div className="text-sm font-medium text-foreground">{t("settings:secrets")}</div>
           <Button
             onClick={actions.startCreate}
             disabled={isBusy || Boolean(editingId) || showCreate}
             className="cursor-pointer"
           >
-            Add secret
+            {t("settings:addSecret")}
           </Button>
         </div>
 
         {showCreate && (
           <SecretForm
-            title="New secret"
+            title={t("settings:newSecret")}
             formState={formState}
             onFormChange={onFormChange}
             onSubmit={actions.handleCreate}
@@ -453,7 +456,7 @@ export function SecretsSettings() {
 
         {editingId && (
           <SecretForm
-            title="Edit secret"
+            title={t("settings:editSecret")}
             formState={formState}
             onFormChange={onFormChange}
             onSubmit={actions.handleUpdate}
@@ -469,12 +472,12 @@ export function SecretsSettings() {
         <div className="space-y-3">
           {!loaded && (
             <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-              Loading secrets...
+              {t("settings:loadingSecrets")}
             </div>
           )}
           {loaded && items.length === 0 && !showCreate && (
             <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-              No secrets yet. Add your first secret to get started.
+              {t("settings:noSecretsYetAddYourFirst")}
             </div>
           )}
           {items.map((secret) => (

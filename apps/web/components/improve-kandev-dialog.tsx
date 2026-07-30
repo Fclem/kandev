@@ -224,8 +224,8 @@ function GhAuthMissing({
           <p className="font-medium text-foreground">{t("common:githubCliNotAuthenticated")}</p>
           <p className="mt-1 text-muted-foreground">
             <Trans i18nKey="common:theFinalStepOfThisWorkflow" values={{ message: auth.message }}>
-              The final step of this workflow opens a pull request, which needs the <code>gh</code>{" "}
-              CLI to be authenticated. {auth.message}
+              The final step of this workflow opens a pull request, which needs the{" "}
+              <code>{t("common:gh")}</code> CLI to be authenticated. {auth.message}
             </Trans>
           </p>
         </div>
@@ -267,8 +267,8 @@ function IntroExplanation({
       <p className="text-sm leading-relaxed text-muted-foreground">
         <Trans i18nKey="common:whenItSDoneTheAgent">
           When it&apos;s done, the agent opens a pull request to{" "}
-          <code className="font-mono text-xs">kdlbs/kandev</code> for the maintainers to review,
-          saving them time and shipping the improvement to everyone.
+          <code className="font-mono text-xs">{t("common:kdlbsKandev")}</code> for the maintainers
+          to review, saving them time and shipping the improvement to everyone.
         </Trans>
       </p>
 
@@ -278,8 +278,8 @@ function IntroExplanation({
         <IntroBullet>{t("common:youVerifyAndTestTheChange")}</IntroBullet>
         <IntroBullet>
           <Trans i18nKey="common:theAgentForksKdlbsKandevTo">
-            The agent forks <code className="font-mono text-xs">kdlbs/kandev</code> to your GitHub
-            account and opens a PR from your fork, credited to you
+            The agent forks <code className="font-mono text-xs">{t("common:kdlbsKandev")}</code> to
+            your GitHub account and opens a PR from your fork, credited to you
           </Trans>
         </IntroBullet>
       </ul>

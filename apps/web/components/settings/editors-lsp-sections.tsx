@@ -82,8 +82,10 @@ export function LspLanguageCards({
             go-to-definition. You can also toggle each server on/off per file.
             <br />
             When enabled, install your project&apos;s dependencies (e.g.{" "}
-            <code className="text-[11px] bg-muted px-1 rounded">npm install</code> via repository
-            setup scripts) to avoid missing type errors.
+            <code className="text-[11px] bg-muted px-1 rounded">
+              {t("settings:npmInstall")}
+            </code>{" "}
+            via repository setup scripts) to avoid missing type errors.
           </Trans>
         </div>
       </div>
@@ -169,8 +171,10 @@ export function LspServerConfigSection({
         <div className="text-xs text-muted-foreground">
           <Trans i18nKey="settings:overrideSettingsSentToEachLanguage">
             Override settings sent to each language server via{" "}
-            <code className="text-[11px] bg-muted px-1 rounded">workspace/configuration</code>. JSON
-            format.
+            <code className="text-[11px] bg-muted px-1 rounded">
+              {t("settings:workspaceConfiguration")}
+            </code>
+            . JSON format.
           </Trans>
         </div>
       </div>

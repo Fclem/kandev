@@ -488,7 +488,7 @@ function StepCommandPanel() {
             <span className="text-[0.6rem]">{t("common:select")}</span>
           </span>
           <span className="inline-flex items-center gap-1">
-            <Kbd>esc</Kbd>
+            <Kbd>{t("common:esc")}</Kbd>
             <span className="text-[0.6rem]">{t("common:close")}</span>
           </span>
         </div>

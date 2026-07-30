@@ -10,6 +10,7 @@ import {
 } from "@kandev/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import type { Workflow, WorkflowStep } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 type WorkflowDeleteDialogProps = {
   open: boolean;
@@ -52,12 +53,13 @@ export function WorkflowDeleteDialog({
   onMigrateAndDelete,
   hasUnsavedChanges,
 }: WorkflowDeleteDialogProps) {
+  const { t } = useTranslation();
   const hasTasks = workflowTaskCount !== null && workflowTaskCount > 0;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete workflow</DialogTitle>
+          <DialogTitle>{t("settings:deleteWorkflow2")}</DialogTitle>
           <DialogDescription>
             {workflowDeleteDescription(workflowTaskCount, hasUnsavedChanges)}
           </DialogDescription>
@@ -65,10 +67,10 @@ export function WorkflowDeleteDialog({
         {hasTasks && otherWorkflows.length > 0 && (
           <div className="space-y-3 py-2">
             <div className="space-y-2">
-              <Label>Target Workflow</Label>
+              <Label>{t("settings:targetWorkflow")}</Label>
               <Select value={targetWorkflowId} onValueChange={setTargetWorkflowId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select workflow" />
+                  <SelectValue placeholder={t("common:selectWorkflow")} />
                 </SelectTrigger>
                 <SelectContent>
                   {otherWorkflows.map((w) => (
@@ -81,10 +83,10 @@ export function WorkflowDeleteDialog({
             </div>
             {targetWorkflowSteps.length > 0 && (
               <div className="space-y-2">
-                <Label>Target Step</Label>
+                <Label>{t("settings:targetStep")}</Label>
                 <Select value={targetStepId} onValueChange={setTargetStepId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select step" />
+                    <SelectValue placeholder={t("settings:selectStep")} />
                   </SelectTrigger>
                   <SelectContent>
                     {targetWorkflowSteps.map((s) => (
@@ -105,7 +107,7 @@ export function WorkflowDeleteDialog({
             onClick={() => onOpenChange(false)}
             className="cursor-pointer"
           >
-            Cancel
+            {t("common:cancel")}
           </Button>
           {hasTasks && otherWorkflows.length > 0 && (
             <Button
@@ -174,13 +176,14 @@ export function StepDeleteDialog({
   onDeleteAndTasks,
   hasUnsavedChanges,
 }: StepDeleteDialogProps) {
+  const { t } = useTranslation();
   const hasTasks = stepTaskCount !== null && stepTaskCount > 0;
   const description = stepDeleteDescription(stepName, stepTaskCount, stepsForMigration.length > 0);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete step</DialogTitle>
+          <DialogTitle>{t("settings:deleteStep")}</DialogTitle>
           <DialogDescription>
             {description}
             {hasUnsavedChanges ? " Unsaved step changes will be discarded." : ""}
@@ -188,10 +191,10 @@ export function StepDeleteDialog({
         </DialogHeader>
         {stepsForMigration.length > 0 && (
           <div className="space-y-2 py-2">
-            <Label>Target Step</Label>
+            <Label>{t("settings:targetStep")}</Label>
             <Select value={targetStep} onValueChange={setTargetStep} disabled={loading || pending}>
               <SelectTrigger>
-                <SelectValue placeholder="Select step" />
+                <SelectValue placeholder={t("settings:selectStep")} />
               </SelectTrigger>
               <SelectContent>
                 {stepsForMigration.map((s) => (
@@ -205,7 +208,7 @@ export function StepDeleteDialog({
         )}
         {pending && !loading && (
           <p className="text-sm text-muted-foreground" role="status">
-            Waiting for the failed change to be retried.
+            {t("settings:waitingForTheFailedChangeTo")}
           </p>
         )}
         <DialogFooter>
@@ -215,7 +218,7 @@ export function StepDeleteDialog({
             onClick={() => onOpenChange(false)}
             className="cursor-pointer"
           >
-            Cancel
+            {t("common:cancel")}
           </Button>
           {stepsForMigration.length > 0 && (
             <Button

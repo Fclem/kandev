@@ -21,6 +21,7 @@ import {
 } from "@/components/settings/utility-sections";
 import { useInferenceAgents } from "@/components/settings/use-inference-agents";
 import { useSettingsSaveContributor } from "./settings-save-provider";
+import { useTranslation } from "react-i18next";
 export { isUtilityAgentDirty } from "./utility-dirty";
 
 function buildAllModels(inferenceAgents: InferenceAgent[]) {
@@ -220,6 +221,7 @@ function useUtilityAgentsData() {
 }
 
 export function UtilityAgentsSection() {
+  const { t } = useTranslation();
   const data = useUtilityAgentsData();
   const {
     agents,
@@ -280,7 +282,7 @@ export function UtilityAgentsSection() {
     <>
       <SettingsSection
         icon={<IconWand className="h-5 w-5" />}
-        title="Utility Agents"
+        title={t("settings:utilityAgents")}
         description="One-shot AI helpers for commits, PRs, and prompts."
       >
         <div className="space-y-4">

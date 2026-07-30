@@ -3,6 +3,7 @@
 import { IconAlertCircle } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { RequestIndicator } from "@/components/request-indicator";
+import { useTranslation } from "react-i18next";
 
 type UnsavedSaveButtonProps = {
   isDirty: boolean;
@@ -16,7 +17,8 @@ type UnsavedSaveButtonProps = {
 const dirtyButtonClass = "border-success/60 text-success hover:bg-success/10";
 
 export function UnsavedChangesBadge() {
-  return <span className="text-xs text-success">Unsaved changes</span>;
+  const { t } = useTranslation();
+  return <span className="text-xs text-success">{t("settings:unsavedChanges")}</span>;
 }
 
 export function UnsavedSaveButton({

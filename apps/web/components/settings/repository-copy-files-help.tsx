@@ -30,7 +30,7 @@ export function CopyFilesField({
         aria-describedby={helpId}
         value={copyFiles}
         onChange={(e) => onUpdate(repositoryId, { copy_files: e.target.value })}
-        placeholder=".env, .env.*, apps/**/.env, .env.local:symlink"
+        placeholder={t("settings:envEnvAppsEnvEnvLocal")}
         rows={2}
         className="font-mono text-sm"
         data-settings-dirty={isDirty}
@@ -38,10 +38,11 @@ export function CopyFilesField({
       <p id={helpId} className="text-xs text-muted-foreground">
         <Trans i18nKey="settings:gitignoredPathsCopiedIntoNewWorktrees">
           Gitignored paths copied into new worktrees. Append{" "}
-          <code className="px-1 py-0.5 bg-muted rounded">:symlink</code> to an entry to link it back
-          to the main repo. Use <code className="px-1 py-0.5 bg-muted rounded">::symlink</code> for
-          a literal filename ending in{" "}
-          <code className="px-1 py-0.5 bg-muted rounded">:symlink</code>.
+          <code className="px-1 py-0.5 bg-muted rounded">{t("settings:symlink")}</code> to an entry
+          to link it back to the main repo. Use{" "}
+          <code className="px-1 py-0.5 bg-muted rounded">{t("settings:symlink2")}</code> for a
+          literal filename ending in{" "}
+          <code className="px-1 py-0.5 bg-muted rounded">{t("settings:symlink")}</code>.
         </Trans>
       </p>
       <p data-testid="copy-files-remote-fallback" className="text-xs text-muted-foreground">
@@ -73,21 +74,23 @@ function CopyFilesDetails() {
         <ul className="space-y-1 pl-3 list-disc">
           <li>
             <Trans i18nKey="settings:envLiteralFileOrDirectoryDirectories">
-              <code className="px-1 py-0.5 bg-muted rounded">.env</code> literal file or directory
-              (directories copy recursively)
+              <code className="px-1 py-0.5 bg-muted rounded">{t("settings:env2")}</code> literal
+              file or directory (directories copy recursively)
             </Trans>
           </li>
           <li>
             <Trans i18nKey="settings:abcSingleSegmentWildcards">
               <code className="px-1 py-0.5 bg-muted rounded">*</code>,{" "}
               <code className="px-1 py-0.5 bg-muted rounded">?</code>,{" "}
-              <code className="px-1 py-0.5 bg-muted rounded">[abc]</code> single-segment wildcards
+              <code className="px-1 py-0.5 bg-muted rounded">{t("settings:abc")}</code>{" "}
+              single-segment wildcards
             </Trans>
           </li>
           <li>
             <Trans i18nKey="settings:matchesAnyNumberOfDirectoriesE">
               <code className="px-1 py-0.5 bg-muted rounded">**</code> matches any number of
-              directories, e.g. <code className="px-1 py-0.5 bg-muted rounded">**/.env</code>
+              directories, e.g.{" "}
+              <code className="px-1 py-0.5 bg-muted rounded">{t("settings:env3")}</code>
             </Trans>
           </li>
           <li>

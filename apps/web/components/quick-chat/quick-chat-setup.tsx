@@ -106,7 +106,8 @@ function RepositoryField(props: RepositoryFieldProps) {
         <div className="min-w-0 flex-1">
           <h3 id="quick-chat-repositories-label" className="text-sm font-medium">
             <Trans i18nKey="chat:repositoriesOptional">
-              Repositories <span className="font-normal text-muted-foreground">(optional)</span>
+              Repositories{" "}
+              <span className="font-normal text-muted-foreground">{t("chat:optional")}</span>
             </Trans>
           </h3>
           <p id="quick-chat-repositories-help" className="text-xs text-muted-foreground">

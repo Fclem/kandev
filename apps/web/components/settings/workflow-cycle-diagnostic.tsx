@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useRef } from "react";
 import { IconAlertTriangle, IconArrowRight, IconUser } from "@tabler/icons-react";
@@ -42,6 +42,7 @@ const ACTION_LABELS = {
 } as const;
 
 function CycleHop({ hop, index }: { hop: WorkflowReplayCycleHop; index: number }) {
+  const { t } = useTranslation();
   return (
     <li className="min-w-0 rounded-md border bg-background/60 p-3">
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
@@ -62,7 +63,7 @@ function CycleHop({ hop, index }: { hop: WorkflowReplayCycleHop; index: number }
       {hop.requiresUserInvolvement && (
         <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-foreground">
           <IconUser className="size-3.5 shrink-0" aria-hidden="true" />
-          <span>User action required</span>
+          <span>{t("settings:userActionRequired")}</span>
         </div>
       )}
       <span className="sr-only">

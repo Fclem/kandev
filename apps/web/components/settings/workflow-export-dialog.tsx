@@ -5,6 +5,7 @@ import { Button } from "@kandev/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@kandev/ui/dialog";
 import { Textarea } from "@kandev/ui/textarea";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { useTranslation } from "react-i18next";
 
 type WorkflowExportDialogProps = {
   open: boolean;
@@ -19,6 +20,7 @@ export function WorkflowExportDialog({
   title,
   content,
 }: WorkflowExportDialogProps) {
+  const { t } = useTranslation();
   const { copied, copy } = useCopyToClipboard();
 
   return (
@@ -30,7 +32,7 @@ export function WorkflowExportDialog({
         <Textarea readOnly value={content} className="font-mono text-xs max-h-96 overflow-y-auto" />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Close
+            {t("common:close")}
           </Button>
           <Button onClick={() => copy(content)} className="cursor-pointer">
             {copied ? (

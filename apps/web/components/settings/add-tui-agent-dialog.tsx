@@ -137,7 +137,7 @@ export function AddTUIAgentDialog({ open, onOpenChange, onSubmit }: AddTUIAgentD
             <Label htmlFor="tui-command">{t("settings:command")}</Label>
             <Input
               id="tui-command"
-              placeholder="e.g. superclaude --yolo --model {{model}}"
+              placeholder={t("settings:eGSuperclaudeYoloModel")}
               value={command}
               onChange={(e) => setCommand(e.target.value)}
             />

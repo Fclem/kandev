@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useCallback, useState } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -268,6 +268,7 @@ function useSSHConnection(props: SSHConnectionCardProps) {
 }
 
 export function SSHConnectionCard(props: SSHConnectionCardProps) {
+  const { t } = useTranslation();
   const c = useSSHConnection(props);
   return (
     <SettingsCard isDirty={c.isDirty} data-testid="ssh-connection-card">
@@ -280,9 +281,7 @@ export function SSHConnectionCard(props: SSHConnectionCardProps) {
                 Connection
               </Trans>
             </CardTitle>
-            <CardDescription>
-              Run an agent on Linux amd64 or macOS hosts you can reach over SSH.
-            </CardDescription>
+            <CardDescription>{t("settings:runAnAgentOnLinuxAmd64")}</CardDescription>
           </div>
           <ConnectionBadge fingerprint={c.form.host_fingerprint} />
         </div>
@@ -406,10 +405,11 @@ function SSHConnectionActions({
 }
 
 function ConnectionBadge({ fingerprint }: { fingerprint?: string }) {
+  const { t } = useTranslation();
   if (!fingerprint) {
     return (
       <Badge data-testid="ssh-connection-badge" data-status="unverified" variant="secondary">
-        Unverified
+        {t("settings:unverified")}
       </Badge>
     );
   }
@@ -420,7 +420,7 @@ function ConnectionBadge({ fingerprint }: { fingerprint?: string }) {
       variant="default"
       className="bg-green-600"
     >
-      Trusted
+      {t("settings:trusted")}
     </Badge>
   );
 }

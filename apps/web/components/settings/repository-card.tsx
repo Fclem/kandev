@@ -172,7 +172,7 @@ function RepositoryScriptFields({
         <Textarea
           value={devScript}
           onChange={(e) => onUpdate(repositoryId, { dev_script: e.target.value })}
-          placeholder="#!/bin/bash&#10;npm run dev -- --port $PORT"
+          placeholder={t("settings:binBashNpmRunDevPort")}
           rows={3}
           className="font-mono text-sm"
           data-settings-dirty={devScript !== (savedRepository?.dev_script ?? "")}

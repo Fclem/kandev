@@ -1,10 +1,16 @@
 "use client";
 
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 
 import type { FormState } from "./slack-settings-form-state";
+
+/** Hint styling for the "saved — leave blank to keep" note beside each field. */
+const SAVED_HINT_CLASS = "text-xs text-muted-foreground ml-2";
+
+/** Key for the shared "saved — leave blank to keep" hint. */
+const SAVED_HINT_KEY = "common:savedLeaveBlankToKeep";
 
 // Bot-token / signing-secret inputs for the Slack settings form. Extracted to
 // keep slack-settings.tsx under the 600-line limit.
@@ -25,6 +31,7 @@ export function SecretFields({
   hasSavedCookie,
   update,
 }: SecretFieldsProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
@@ -33,18 +40,12 @@ export function SecretFields({
             i18nKey="common:sessionTokenXoxc"
             values={{
               value1: hasSavedToken && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  (saved — leave blank to keep)
-                </span>
+                <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>
               ),
             }}
           >
             Session token (xoxc-…)
-            {hasSavedToken && (
-              <span className="text-xs text-muted-foreground ml-2">
-                (saved — leave blank to keep)
-              </span>
-            )}
+            {hasSavedToken && <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>}
           </Trans>
         </Label>
         <Input
@@ -63,18 +64,12 @@ export function SecretFields({
             i18nKey="common:dCookieValue"
             values={{
               value1: hasSavedCookie && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  (saved — leave blank to keep)
-                </span>
+                <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>
               ),
             }}
           >
             d cookie value
-            {hasSavedCookie && (
-              <span className="text-xs text-muted-foreground ml-2">
-                (saved — leave blank to keep)
-              </span>
-            )}
+            {hasSavedCookie && <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>}
           </Trans>
         </Label>
         <Input
@@ -86,10 +81,7 @@ export function SecretFields({
           onChange={(e) => update("cookie", e.target.value)}
           disabled={loading}
         />
-        <p className="text-xs text-muted-foreground">
-          Open Slack in your browser, copy the value of the `d` cookie and the `xoxc-` token from
-          local storage. Both are required.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("common:openSlackInYourBrowserCopy")}</p>
       </div>
     </div>
   );

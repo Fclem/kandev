@@ -17,6 +17,7 @@
   "chooseWorkflowAndStepShownOn": "Choose workflow and step shown on board.",
   "chooseWorkflowOrStep": "{{name}}, {{stepLabel}}. Choose workflow or step.",
   "clearSelection": "Clear selection",
+  "closePreview": "Close preview",
   "dAgo": "{{days}}d ago",
   "delete": "Delete {{count}}",
   "deleteTask": "Delete task",

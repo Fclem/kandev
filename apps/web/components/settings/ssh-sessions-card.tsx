@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -17,6 +17,7 @@ export interface SSHSessionsCardProps {
 const REFRESH_INTERVAL_MS = 90_000;
 
 export function SSHSessionsCard({ executorId }: SSHSessionsCardProps) {
+  const { t } = useTranslation();
   const [sessions, setSessions] = useState<SSHSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,10 +61,8 @@ export function SSHSessionsCard({ executorId }: SSHSessionsCardProps) {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Active sessions</CardTitle>
-            <CardDescription>
-              Sessions currently running on this SSH host. Refreshes every 90 seconds.
-            </CardDescription>
+            <CardTitle>{t("settings:activeSessions")}</CardTitle>
+            <CardDescription>{t("settings:sessionsCurrentlyRunningOnThisSsh")}</CardDescription>
           </div>
           <Button
             variant="outline"
@@ -101,6 +100,7 @@ function SSHSessionsBody({
   error: string | null;
   sessions: SSHSession[];
 }) {
+  const { t } = useTranslation();
   if (error) {
     return (
       <p data-testid="ssh-sessions-error" className="text-sm text-red-600">
@@ -111,7 +111,7 @@ function SSHSessionsBody({
   if (sessions.length === 0 && !loading) {
     return (
       <p data-testid="ssh-sessions-empty" className="text-sm text-muted-foreground">
-        No active sessions.
+        {t("settings:noActiveSessions")}
       </p>
     );
   }
@@ -120,17 +120,18 @@ function SSHSessionsBody({
 }
 
 function SSHSessionsTable({ sessions }: { sessions: SSHSession[] }) {
+  const { t } = useTranslation();
   return (
     <Table data-testid="ssh-sessions-table">
       <TableHeader>
         <TableRow>
-          <TableHead>Task</TableHead>
-          <TableHead>Session</TableHead>
-          <TableHead>Host</TableHead>
-          <TableHead>Remote port</TableHead>
-          <TableHead>Local fwd</TableHead>
-          <TableHead>Uptime</TableHead>
-          <TableHead>Status</TableHead>
+          <TableHead>{t("common:task")}</TableHead>
+          <TableHead>{t("settings:session")}</TableHead>
+          <TableHead>{t("common:host")}</TableHead>
+          <TableHead>{t("settings:remotePort")}</TableHead>
+          <TableHead>{t("settings:localFwd")}</TableHead>
+          <TableHead>{t("settings:uptime")}</TableHead>
+          <TableHead>{t("common:status")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

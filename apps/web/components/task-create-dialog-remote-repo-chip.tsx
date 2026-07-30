@@ -417,10 +417,12 @@ function RemoteRepoPopoverContent({
 
 /** Hint shown under the input when the typed value is a submittable remote URL. */
 function StagedRemoteURLHint() {
+  const { t } = useTranslation();
   return (
     <div className="px-2 pt-1 text-xs text-muted-foreground">
       <Trans i18nKey="task:remoteUrlPressEnterToSubmit">
-        <span className="font-medium text-foreground">Remote URL</span> — press Enter to submit it.
+        <span className="font-medium text-foreground">{t("task:remoteUrl")}</span> — press Enter to
+        submit it.
       </Trans>
     </div>
   );
@@ -549,6 +551,7 @@ function AlreadyAddedMarker() {
 }
 
 function ConnectProvidersBanner() {
+  const { t } = useTranslation();
   return (
     <div className="px-3 py-3 text-xs text-muted-foreground">
       <Trans i18nKey="task:connectASourceControlProviderIn">
@@ -557,7 +560,7 @@ function ConnectProvidersBanner() {
           href="/settings/integrations"
           className="text-foreground underline underline-offset-2 cursor-pointer"
         >
-          Settings
+          {t("common:settings")}
         </Link>{" "}
         to pick from your repositories.
       </Trans>

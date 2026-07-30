@@ -184,7 +184,7 @@ function EditorKindFields({
           value={state.command}
           data-settings-dirty={state.command !== baseline.command}
           onChange={(event) => setField("command", event.target.value)}
-          placeholder="code --goto {file}:{line}"
+          placeholder={t("settings:codeGotoFileLine")}
         />
         <p className="text-xs text-muted-foreground">
           {t("settings:supportsPlaceholders", { PLACEHOLDER_HINT })}
@@ -199,7 +199,7 @@ function EditorKindFields({
           value={state.host}
           data-settings-dirty={state.host !== baseline.host}
           onChange={(event) => setField("host", event.target.value)}
-          placeholder="ssh-host.example.com"
+          placeholder={t("settings:sshHostExampleCom")}
         />
         <Input
           value={state.user}

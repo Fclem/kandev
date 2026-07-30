@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useState } from "react";
 import { IconTrash } from "@tabler/icons-react";
@@ -57,6 +57,7 @@ function StepConfigHeader({
   readOnly,
   debouncedUpdateName,
 }: StepConfigHeaderProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -68,7 +69,7 @@ function StepConfigHeader({
             onLocalNameChange(e.target.value);
             debouncedUpdateName(e.target.value);
           }}
-          placeholder="Step name"
+          placeholder={t("settings:stepName")}
           disabled={readOnly}
           className="h-8 w-full sm:max-w-[240px]"
           data-settings-dirty={!savedStep || localName !== savedStep.name}
@@ -85,7 +86,7 @@ function StepConfigHeader({
             className="h-8 w-full sm:w-[120px]"
             data-settings-dirty={isWorkflowStepValueDirty(step, savedStep, (item) => item.color)}
           >
-            <SelectValue placeholder="Color" />
+            <SelectValue placeholder={t("settings:color")} />
           </SelectTrigger>
           <SelectContent position="popper" side="bottom" align="start">
             {STEP_COLORS.map((color) => (
@@ -132,6 +133,7 @@ type StepAutoArchiveRowProps = {
 };
 
 function StepAutoArchiveRow({ step, savedStep, onUpdate, readOnly }: StepAutoArchiveRowProps) {
+  const { t } = useTranslation();
   const isDirty = isWorkflowStepValueDirty(
     step,
     savedStep,
@@ -150,12 +152,12 @@ function StepAutoArchiveRow({ step, savedStep, onUpdate, readOnly }: StepAutoArc
         data-settings-dirty={isDirty}
       />
       <Label htmlFor={`${step.id}-auto-archive`} className="text-sm">
-        Auto-archive
+        {t("settings:autoArchive")}
       </Label>
       <HelpTip text="Automatically archive tasks after they have been in this step for a set number of hours. Useful for the last step of a workflow (e.g., Done) to keep the board clean." />
       {(step.auto_archive_after_hours ?? 0) > 0 && (
         <>
-          <span className="text-sm text-muted-foreground">after</span>
+          <span className="text-sm text-muted-foreground">{t("settings:after")}</span>
           <Input
             id={`${step.id}-auto-archive-hours`}
             type="number"
@@ -170,7 +172,7 @@ function StepAutoArchiveRow({ step, savedStep, onUpdate, readOnly }: StepAutoArc
             disabled={readOnly}
             data-settings-dirty={isDirty}
           />
-          <span className="text-sm text-muted-foreground">hours</span>
+          <span className="text-sm text-muted-foreground">{t("settings:hours")}</span>
         </>
       )}
     </div>
@@ -354,6 +356,7 @@ function StepTransitionsSection({
   toggleOnExitAction,
   readOnly,
 }: StepTransitionsSectionProps) {
+  const { t } = useTranslation();
   const otherSteps = steps.filter((s) => s.id !== step.id);
   const planModeEnabled = hasOnEnterAction(step, "enable_plan_mode");
 
@@ -361,7 +364,7 @@ function StepTransitionsSection({
     <div className="space-y-3">
       <div className="flex items-center gap-1.5">
         <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Transitions
+          {t("settings:transitions")}
         </Label>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -395,7 +398,7 @@ function StepTransitionsSection({
       {planModeEnabled && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
-            <Label className="text-xs font-medium">On Exit</Label>
+            <Label className="text-xs font-medium">{t("settings:onExit")}</Label>
             <HelpTip text="Runs when leaving this step (before entering the next step)." />
           </div>
           <div className="flex items-center gap-2">
@@ -412,7 +415,7 @@ function StepTransitionsSection({
               )}
             />
             <Label htmlFor={`${step.id}-exit-disable-plan`} className="text-sm">
-              Disable plan mode
+              {t("settings:disablePlanMode")}
             </Label>
             <HelpTip text="Keep plan mode on for every turn in this step, then turn it off only when the task moves to another step." />
           </div>
@@ -441,6 +444,7 @@ function StepPromptSection({
   debouncedUpdatePrompt,
   readOnly,
 }: StepPromptSectionProps) {
+  const { t } = useTranslation();
   const { prompts } = useCustomPrompts();
   return (
     <div className="space-y-2">
@@ -449,13 +453,13 @@ function StepPromptSection({
           htmlFor={`${step.id}-prompt`}
           className="text-xs font-medium text-muted-foreground uppercase tracking-wider"
         >
-          Step Prompt
+          {t("settings:stepPrompt")}
         </Label>
         <HelpTip text="Custom instructions for the agent on this step. Use {{task_prompt}} to include the task description." />
       </div>
       {!readOnly && (
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] text-muted-foreground/60">Templates:</span>
+          <span className="text-[11px] text-muted-foreground/60">{t("settings:templates")}</span>
           {PROMPT_TEMPLATES.map((template) => (
             <button
               key={template.label}

@@ -51,8 +51,8 @@ function TailContent({
           <Trans i18nKey="settings:showingTheInMemoryLogBuffer">
             Showing the in-memory log buffer (last ~2000 entries). Kandev is currently logging to
             the terminal, not to a file - file rotation is disabled. Set{" "}
-            <code>logging.outputPath</code> in <code>config.yaml</code> to a file path to enable
-            downloadable log files.
+            <code>{t("settings:loggingOutputpath")}</code> in <code>config.yaml</code> to a file
+            path to enable downloadable log files.
           </Trans>
         </p>
       )}

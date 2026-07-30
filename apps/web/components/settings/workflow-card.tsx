@@ -27,6 +27,7 @@ import { WorkflowSyncedBadge } from "./workflow-synced-badge";
 import { useWorkflowMutationGuard } from "./workflow-mutation-guard";
 import { WorkflowCycleGuardDialog } from "./workflow-cycle-diagnostic";
 import { useWorkflowDraftContributor } from "./use-workflow-draft-contributor";
+import { useTranslation } from "react-i18next";
 
 const TEMP_WORKFLOW_PREFIX = "temp-workflow-";
 
@@ -243,19 +244,20 @@ function WorkflowCardBody({
   stepActions,
   readOnly,
 }: WorkflowCardBodyProps) {
+  const { t } = useTranslation();
   const healthyProfiles = useHealthyAgentProfiles(workflow.agent_profile_id);
 
   return (
     <>
-      <Label>Workflow details</Label>
+      <Label>{t("settings:workflowDetails")}</Label>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-2">
         <div className="flex-1 space-y-1.5">
           <Label className="flex items-center gap-2">
-            <span>Workflow Name</span>
+            <span>{t("settings:workflowName")}</span>
             {readOnly && <WorkflowSyncedBadge sourcePath={workflow.source_path} />}
             {readOnly && (
               <span className="text-xs text-muted-foreground">
-                Read-only — managed by workflow sync
+                {t("settings:readOnlyManagedByWorkflowSync2")}
               </span>
             )}
           </Label>
@@ -268,7 +270,7 @@ function WorkflowCardBody({
         </div>
         <div className="w-full space-y-1.5 sm:w-[240px] sm:shrink-0">
           <Label className="flex items-center gap-1">
-            <span>Agent Profile</span>
+            <span>{t("settings:agentProfile")}</span>
             <HelpTip text="Default agent profile for tasks in this workflow. When set, the agent selector is locked in the task creation dialog." />
           </Label>
           <Select
@@ -287,11 +289,11 @@ function WorkflowCardBody({
                 "agent_profile_id",
               )}
             >
-              <SelectValue placeholder="None (use task default)" />
+              <SelectValue placeholder={t("settings:noneUseTaskDefault")} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none" className="cursor-pointer">
-                None (use task default)
+                {t("settings:noneUseTaskDefault")}
               </SelectItem>
               {healthyProfiles.map((p) => (
                 <SelectItem key={p.id} value={p.id} className="cursor-pointer">
@@ -303,9 +305,9 @@ function WorkflowCardBody({
         </div>
       </div>
       <div className="space-y-2">
-        <Label>Workflow Steps</Label>
+        <Label>{t("settings:workflowSteps")}</Label>
         {workflowLoading ? (
-          <div className="text-sm text-muted-foreground">Loading workflow steps...</div>
+          <div className="text-sm text-muted-foreground">{t("settings:loadingWorkflowSteps")}</div>
         ) : (
           <WorkflowPipelineEditor
             steps={workflowSteps}
@@ -338,6 +340,7 @@ function WorkflowCardDialogs({
   hasUnsavedChanges,
   mutationGuard,
 }: WorkflowCardDialogsProps) {
+  const { t } = useTranslation();
   return (
     <>
       <WorkflowDeleteDialog
@@ -359,7 +362,7 @@ function WorkflowCardDialogs({
       <WorkflowExportDialog
         open={exportOpen}
         onOpenChange={setExportOpen}
-        title="Export Workflow"
+        title={t("settings:exportWorkflow")}
         content={exportYaml}
       />
       <StepDeleteDialog

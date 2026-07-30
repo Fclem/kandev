@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useState, useCallback } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -25,6 +25,7 @@ import {
 import type { SpritesInstance, SpritesTestResult, SpritesTestStep } from "@/lib/types/http-sprites";
 
 export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
+  const { t } = useTranslation();
   const { status } = useSprites(secretId);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<SpritesTestResult | null>(null);
@@ -60,7 +61,7 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
               </Trans>
             </CardTitle>
             <CardDescription>
-              Sprites.dev provides ephemeral cloud sandboxes for running agents remotely.
+              {t("settings:spritesDevProvidesEphemeralCloudSandboxes")}
             </CardDescription>
           </div>
           <TokenBadge
@@ -121,17 +122,18 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
 }
 
 function TokenBadge({ configured, connected }: { configured: boolean; connected: boolean }) {
+  const { t } = useTranslation();
   if (!configured) {
-    return <Badge variant="secondary">Not Configured</Badge>;
+    return <Badge variant="secondary">{t("settings:notConfigured")}</Badge>;
   }
   if (connected) {
     return (
       <Badge variant="default" className="bg-green-600">
-        Connected
+        {t("common:connected")}
       </Badge>
     );
   }
-  return <Badge variant="destructive">Disconnected</Badge>;
+  return <Badge variant="destructive">{t("settings:disconnected")}</Badge>;
 }
 
 function TestResultDisplay({ result }: { result: SpritesTestResult }) {
@@ -180,6 +182,7 @@ function StepRow({ step }: { step: SpritesTestStep }) {
 }
 
 export function SpritesInstancesCard({ secretId }: { secretId?: string }) {
+  const { t } = useTranslation();
   const { instances, loading } = useSprites(secretId);
   const removeSpritesInstance = useAppStore((state) => state.removeSpritesInstance);
   const [destroying, setDestroying] = useState<string | null>(null);
@@ -215,9 +218,9 @@ export function SpritesInstancesCard({ secretId }: { secretId?: string }) {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Running Sprites</CardTitle>
+            <CardTitle>{t("settings:runningSprites")}</CardTitle>
             <CardDescription>
-              Active Kandev sprites. Sprites are destroyed when agents stop.
+              {t("settings:activeKandevSpritesSpritesAreDestroyed")}
             </CardDescription>
           </div>
           {instances.length > 0 && (
@@ -272,6 +275,7 @@ function InstancesContent({
   destroying: string | null;
   onDestroy: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
@@ -283,15 +287,15 @@ function InstancesContent({
     );
   }
   if (instances.length === 0) {
-    return <p className="text-sm text-muted-foreground py-4">No active sprites.</p>;
+    return <p className="text-sm text-muted-foreground py-4">{t("settings:noActiveSprites")}</p>;
   }
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Health</TableHead>
-          <TableHead>Uptime</TableHead>
+          <TableHead>{t("settings:name")}</TableHead>
+          <TableHead>{t("settings:health")}</TableHead>
+          <TableHead>{t("settings:uptime")}</TableHead>
           <TableHead className="w-[80px]" />
         </TableRow>
       </TableHeader>
@@ -363,13 +367,13 @@ function formatUptime(seconds: number): string {
 }
 
 export function SpritesSettings() {
+  const { t } = useTranslation();
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">Sprites.dev</h2>
+        <h2 className="text-2xl font-bold">{t("settings:spritesDev")}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Manage Sprites.dev remote sandbox integration for running agents in isolated cloud
-          environments.
+          {t("settings:manageSpritesDevRemoteSandboxIntegration")}
         </p>
       </div>
       <Separator />

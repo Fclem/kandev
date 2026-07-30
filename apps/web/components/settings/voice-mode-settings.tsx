@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { IconAlertTriangle, IconMicrophone } from "@tabler/icons-react";
@@ -229,6 +229,7 @@ function buildEngineOptions(caps: VoiceCapabilities): EngineOption[] {
 }
 
 function EngineCard({ caps }: { caps: VoiceCapabilities }) {
+  const { t } = useTranslation();
   const { voiceMode, savedVoiceMode } = useVoiceDraft();
   const { save, saving } = useVoiceModeSaver();
   const options = useMemo(() => buildEngineOptions(caps), [caps]);
@@ -236,7 +237,7 @@ function EngineCard({ caps }: { caps: VoiceCapabilities }) {
   return (
     <SettingsCard isDirty={voiceMode.engine !== savedVoiceMode.engine}>
       <CardHeader>
-        <CardTitle className="text-base">Transcription Engine</CardTitle>
+        <CardTitle className="text-base">{t("settings:transcriptionEngine")}</CardTitle>
       </CardHeader>
       <CardContent>
         <RadioGroup
@@ -280,11 +281,12 @@ function EngineCard({ caps }: { caps: VoiceCapabilities }) {
 // ── Behavior card (language + mode + auto-send) ──────────────────────────
 
 function LanguageRow() {
+  const { t } = useTranslation();
   const { voiceMode, savedVoiceMode } = useVoiceDraft();
   const { save, saving } = useVoiceModeSaver();
   return (
     <div className="space-y-2">
-      <Label htmlFor="voice-language">Language</Label>
+      <Label htmlFor="voice-language">{t("settings:language")}</Label>
       <Select
         value={voiceMode.language}
         onValueChange={(v) => save({ language: v })}
@@ -298,7 +300,7 @@ function LanguageRow() {
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            <SelectLabel>Languages</SelectLabel>
+            <SelectLabel>{t("settings:languages")}</SelectLabel>
             {LANGUAGE_OPTIONS.map((l) => (
               <SelectItem key={l.value} value={l.value}>
                 {l.label}
@@ -308,19 +310,19 @@ function LanguageRow() {
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground">
-        Recognition quality drops sharply when the language doesn&apos;t match what you&apos;re
-        speaking.
+        {t("settings:recognitionQualityDropsSharplyWhenThe")}
       </p>
     </div>
   );
 }
 
 function ModeRow() {
+  const { t } = useTranslation();
   const { voiceMode, savedVoiceMode } = useVoiceDraft();
   const { save, saving } = useVoiceModeSaver();
   return (
     <div className="space-y-2">
-      <Label>Activation</Label>
+      <Label>{t("settings:activation")}</Label>
       <RadioGroup
         value={voiceMode.mode}
         onValueChange={(v) => save({ mode: v as VoiceInputActivationMode })}
@@ -330,11 +332,11 @@ function ModeRow() {
       >
         <Label htmlFor="voice-mode-toggle" className="flex items-center gap-2 cursor-pointer">
           <RadioGroupItem id="voice-mode-toggle" value="toggle" />
-          <span className="text-sm">Click to start / stop</span>
+          <span className="text-sm">{t("settings:clickToStartStop")}</span>
         </Label>
         <Label htmlFor="voice-mode-hold" className="flex items-center gap-2 cursor-pointer">
           <RadioGroupItem id="voice-mode-hold" value="hold" />
-          <span className="text-sm">Hold to talk</span>
+          <span className="text-sm">{t("settings:holdToTalk")}</span>
         </Label>
       </RadioGroup>
     </div>
@@ -342,17 +344,16 @@ function ModeRow() {
 }
 
 function AutoSendRow() {
+  const { t } = useTranslation();
   const { voiceMode, savedVoiceMode } = useVoiceDraft();
   const { save, saving } = useVoiceModeSaver();
   return (
     <div className="flex items-center justify-between">
       <div className="space-y-1">
         <Label htmlFor="voice-auto-send" className="cursor-pointer">
-          Auto-send after transcription
+          {t("settings:autoSendAfterTranscription")}
         </Label>
-        <p className="text-xs text-muted-foreground">
-          Submit the message as soon as the transcript is inserted.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("settings:submitTheMessageAsSoonAs")}</p>
       </div>
       <Switch
         id="voice-auto-send"
@@ -366,6 +367,7 @@ function AutoSendRow() {
 }
 
 function BehaviorCard() {
+  const { t } = useTranslation();
   const { voiceMode, savedVoiceMode } = useVoiceDraft();
   const isDirty =
     voiceMode.language !== savedVoiceMode.language ||
@@ -374,7 +376,7 @@ function BehaviorCard() {
   return (
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
-        <CardTitle className="text-base">Behavior</CardTitle>
+        <CardTitle className="text-base">{t("settings:behavior")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         <LanguageRow />
@@ -388,13 +390,14 @@ function BehaviorCard() {
 // ── Whisper Web model card ───────────────────────────────────────────────
 
 function WhisperModelCard() {
+  const { t } = useTranslation();
   const { voiceMode, savedVoiceMode } = useVoiceDraft();
   const { save, saving } = useVoiceModeSaver();
 
   return (
     <SettingsCard isDirty={voiceMode.whisperWebModel !== savedVoiceMode.whisperWebModel}>
       <CardHeader>
-        <CardTitle className="text-base">Whisper Web Model</CardTitle>
+        <CardTitle className="text-base">{t("settings:whisperWebModel")}</CardTitle>
       </CardHeader>
       <CardContent>
         <RadioGroup
@@ -424,8 +427,7 @@ function WhisperModelCard() {
           ))}
         </RadioGroup>
         <p className="text-xs text-muted-foreground mt-3">
-          The model downloads on first use and is cached in your browser. Switching models triggers
-          another download next time you record.
+          {t("settings:theModelDownloadsOnFirstUse")}
         </p>
       </CardContent>
     </SettingsCard>
@@ -435,6 +437,7 @@ function WhisperModelCard() {
 // ── Enable card (top-level on/off) ───────────────────────────────────────
 
 function EnableCard() {
+  const { t } = useTranslation();
   const { voiceMode, savedVoiceMode } = useVoiceDraft();
   const { save, saving } = useVoiceModeSaver();
   return (
@@ -443,18 +446,15 @@ function EnableCard() {
       data-testid="voice-enable-card"
     >
       <CardHeader>
-        <CardTitle className="text-base">Enable Voice Input</CardTitle>
+        <CardTitle className="text-base">{t("settings:enableVoiceInput")}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <Label htmlFor="voice-enabled" className="cursor-pointer">
-              Show the mic button on the chat composer
+              {t("settings:showTheMicButtonOnThe")}
             </Label>
-            <p className="text-xs text-muted-foreground">
-              When off, the voice button is hidden entirely and no voice-related code runs. Settings
-              below are preserved and re-applied when you turn it back on.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("settings:whenOffTheVoiceButtonIs")}</p>
           </div>
           <Switch
             id="voice-enabled"
@@ -472,6 +472,7 @@ function EnableCard() {
 // ── Availability banner ──────────────────────────────────────────────────
 
 function AvailabilityBanner({ caps }: { caps: VoiceCapabilities }) {
+  const { t } = useTranslation();
   if (caps.webSpeech || caps.whisperWeb || caps.audioCapture) return null;
   // Secure-context requirement is the most common reason capability detection
   // returns all-false on mobile (when reaching the dev server over LAN HTTP).
@@ -481,7 +482,7 @@ function AvailabilityBanner({ caps }: { caps: VoiceCapabilities }) {
     <div className="flex items-start gap-3 rounded-md border border-orange-500/40 bg-orange-500/5 p-3">
       <IconAlertTriangle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
       <div className="space-y-1 text-sm">
-        <p className="font-medium">Voice input is unavailable in this browser.</p>
+        <p className="font-medium">{t("settings:voiceInputIsUnavailableInThis")}</p>
         <p className="text-xs text-muted-foreground">
           {insecure
             ? "Microphone APIs require HTTPS or localhost. You appear to be on an insecure HTTP origin — load this page over HTTPS (or http://localhost) to enable voice input."
@@ -499,6 +500,7 @@ function useShortcutSaver() {
 }
 
 function VoiceShortcutCard() {
+  const { t } = useTranslation();
   const { keyboardShortcuts: overrides, savedKeyboardShortcuts } = useVoiceDraft();
   const persist = useShortcutSaver();
   const current = getShortcut("VOICE_INPUT_TOGGLE", overrides);
@@ -539,8 +541,7 @@ function VoiceShortcutCard() {
           isDirty={isDirty}
         />
         <p className="text-xs text-muted-foreground mt-2">
-          Click the shortcut to record a new key combination. All keyboard shortcuts can also be
-          edited in General Settings.
+          {t("settings:clickTheShortcutToRecordA")}
         </p>
       </CardContent>
     </SettingsCard>
@@ -550,13 +551,14 @@ function VoiceShortcutCard() {
 // ── Page ─────────────────────────────────────────────────────────────────
 
 function VoiceModeSettingsContent() {
+  const { t } = useTranslation();
   const caps = useMemo(() => detectVoiceCapabilities(), []);
   const { voiceMode } = useVoiceDraft();
   const enabled = voiceMode.enabled;
   return (
     <SettingsSection
       icon={<IconMicrophone className="h-5 w-5" />}
-      title="Voice Mode"
+      title={t("settings:voiceMode")}
       description="Configure how voice input works on the chat composer."
     >
       <div className="space-y-4">

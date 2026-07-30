@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // Trust-confirmation block shown under the SSH test result. Disabled when the
 // caller's last test ran against a different form, to keep stale fingerprints
@@ -17,11 +17,12 @@ export function FingerprintTrustBlock({
   resultStale: boolean;
   onTrustChange: (v: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const fingerprintChanged = !!currentlyPinned && currentlyPinned !== fingerprint;
   return (
     <div className="mt-3 space-y-2">
       <div className="text-xs">
-        <span className="text-muted-foreground">Host fingerprint observed: </span>
+        <span className="text-muted-foreground">{t("settings:hostFingerprintObserved")} </span>
         <code data-testid="ssh-fingerprint-observed" className="font-mono">
           {fingerprint}
         </code>
@@ -40,8 +41,7 @@ export function FingerprintTrustBlock({
       )}
       {resultStale && (
         <p data-testid="ssh-test-result-stale" className="text-xs text-amber-600">
-          You changed a connection field after this test ran. Run Test Connection again before
-          trusting and saving.
+          {t("settings:youChangedAConnectionFieldAfter")}
         </p>
       )}
       <label
@@ -60,8 +60,9 @@ export function FingerprintTrustBlock({
         />
         <span>
           <Trans i18nKey="settings:trustThisHostIVeVerified">
-            <strong>Trust this host.</strong> I’ve verified the fingerprint above matches my server.
-            Future connections that report a different fingerprint will be refused.
+            <strong>{t("settings:trustThisHost")}</strong> I’ve verified the fingerprint above
+            matches my server. Future connections that report a different fingerprint will be
+            refused.
           </Trans>
         </span>
       </label>

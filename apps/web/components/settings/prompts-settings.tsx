@@ -515,8 +515,8 @@ export function PromptsSettings() {
     >
       <div className="rounded-lg border border-border/70 bg-muted/30 p-4 text-xs text-muted-foreground">
         <Trans i18nKey="settings:useNameInTheChatInput">
-          Use <span className="font-medium text-foreground">@name</span> in the chat input to insert
-          a prompt’s content. Prompts are matched by name and expanded in place.
+          Use <span className="font-medium text-foreground">{t("settings:name2")}</span> in the chat
+          input to insert a prompt’s content. Prompts are matched by name and expanded in place.
         </Trans>
       </div>
       <div className="space-y-6 mt-4">

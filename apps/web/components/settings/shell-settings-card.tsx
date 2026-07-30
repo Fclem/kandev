@@ -7,6 +7,7 @@ import { Input } from "@kandev/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { useTranslation } from "react-i18next";
 
 const AUTO_SHELL = "auto";
 const CUSTOM_SHELL = "custom";
@@ -42,6 +43,7 @@ function ShellSelect({
   shellLoaded,
   shellOptions,
 }: ShellSelectProps) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="space-y-2">
@@ -70,8 +72,8 @@ function ShellSelect({
                   {option.label}
                 </SelectItem>
               ))}
-            <SelectItem value={CUSTOM_SHELL}>Custom</SelectItem>
-            <SelectItem value={AUTO_SHELL}>System default</SelectItem>
+            <SelectItem value={CUSTOM_SHELL}>{t("settings:custom2")}</SelectItem>
+            <SelectItem value={AUTO_SHELL}>{t("settings:systemDefault")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -83,9 +85,7 @@ function ShellSelect({
             onChange={(event) => onCustomShellChange(event.target.value)}
             placeholder="/bin/zsh"
           />
-          <p className="text-xs text-muted-foreground">
-            Enter a shell path or command available in the agent environment.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("settings:enterAShellPathOrCommand")}</p>
         </div>
       )}
     </>
@@ -105,6 +105,7 @@ export function ShellSettingsCard({
   shellLoaded: boolean;
   shellOptions: ShellOption[];
 }) {
+  const { t } = useTranslation();
   const initialSelection = resolveShellSelection(preferredShell, shellOptions);
   const [shellSelection, setShellSelection] = useState(initialSelection.selection);
   const [customShell, setCustomShell] = useState(initialSelection.customShell);
@@ -118,12 +119,12 @@ export function ShellSettingsCard({
   return (
     <SettingsSection
       icon={<IconCode className="h-5 w-5" />}
-      title="Shell"
+      title={t("common:shell")}
       description="Pick the default shell for task sessions"
     >
       <SettingsCard isDirty={isDirty}>
         <CardHeader>
-          <CardTitle className="text-base">Preferred Shell</CardTitle>
+          <CardTitle className="text-base">{t("settings:preferredShell")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <ShellSelect
@@ -152,7 +153,7 @@ export function ShellSettingsCard({
             shellOptions={shellOptions}
           />
           <p className="text-xs text-muted-foreground">
-            New task sessions will use this shell. Existing sessions keep their current shell.
+            {t("settings:newTaskSessionsWillUseThis")}
           </p>
         </CardContent>
       </SettingsCard>

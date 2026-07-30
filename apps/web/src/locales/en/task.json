@@ -521,6 +521,7 @@
   "rejected": "<0></0> Rejected",
   "relatedTasks": "Related tasks",
   "remote": "remote",
+  "remoteUrl": "Remote URL",
   "remoteUrlPressEnterToSubmit": "<0>Remote URL</0> \u2014 press Enter to submit it.",
   "remove": "Remove",
   "removeComment": "Remove comment",

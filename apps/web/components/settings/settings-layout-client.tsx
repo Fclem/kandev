@@ -15,6 +15,7 @@ import { IntegrationCopyConfigMenu } from "@/components/integrations/integration
 import { integrationFromPathname } from "@/components/integrations/integration-copy-config";
 import { safeDecodePathSegment } from "@/lib/routing/path";
 import { SettingsSaveProvider } from "@/components/settings/settings-save-provider";
+import { useTranslation } from "react-i18next";
 
 // Brand/initialism overrides so the derived label matches how the rest of the
 // app spells these (e.g. "github" → "GitHub", not "Github"). Anything not
@@ -82,6 +83,7 @@ function deriveParents(pathname: string): Array<{ label: string; href: string }>
 }
 
 export function SettingsLayoutClient({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const isAgentDetail = pathname.startsWith("/settings/agents/") && pathname !== "/settings/agents";
   const showIntegrationCopyAction = integrationFromPathname(pathname) !== null;
@@ -89,7 +91,7 @@ export function SettingsLayoutClient({ children }: { children: React.ReactNode }
   if (isAgentDetail) {
     return (
       <SettingsShell
-        title="Agent"
+        title={t("settings:agent")}
         backHref="/settings/agents"
         backLabel="Agents"
         parents={[]}
@@ -142,6 +144,7 @@ function IntegrationCopyConfigAction() {
 }
 
 function SettingsMobileMenu({ pathname }: { pathname: string }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { enabled: statusDrawerEnabled, openStatusDrawer } = useAppStatusDrawer();
 
@@ -163,7 +166,7 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
           variant="ghost"
           size="icon"
           className="h-11 w-11 cursor-pointer md:hidden"
-          aria-label="Open settings menu"
+          aria-label={t("settings:openSettingsMenu")}
           data-testid="settings-mobile-menu-button"
         >
           <IconMenu2 className="h-4 w-4" />
@@ -175,7 +178,7 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
         data-testid="settings-mobile-menu"
       >
         <SheetHeader className="border-b px-4 py-3 text-left">
-          <SheetTitle>Settings</SheetTitle>
+          <SheetTitle>{t("common:settings")}</SheetTitle>
         </SheetHeader>
         <nav className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
           {statusDrawerEnabled && (
@@ -187,7 +190,7 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
               data-testid="settings-mobile-status-button"
             >
               <IconActivity className="h-4 w-4 shrink-0" />
-              <span>Status</span>
+              <span>{t("common:status")}</span>
             </Button>
           )}
           <Link
@@ -196,7 +199,7 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
             onClick={() => setOpen(false)}
           >
             <IconHome className="h-4 w-4 shrink-0" />
-            <span className="truncate">Home</span>
+            <span className="truncate">{t("settings:home")}</span>
           </Link>
           <div
             className="flex flex-col gap-0.5 [&_a]:min-h-10 [&_a]:text-sm [&_button]:min-h-10 [&_button]:text-sm [&_svg]:h-4 [&_svg]:w-4"

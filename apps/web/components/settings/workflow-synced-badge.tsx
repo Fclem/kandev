@@ -1,8 +1,9 @@
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Badge } from "@kandev/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 
 export function WorkflowSyncedBadge({ sourcePath }: { sourcePath?: string }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -12,7 +13,7 @@ export function WorkflowSyncedBadge({ sourcePath }: { sourcePath?: string }) {
           className="text-xs cursor-default"
           data-testid="workflow-synced-badge"
         >
-          Synced
+          {t("settings:synced")}
         </Badge>
       </TooltipTrigger>
       <TooltipContent>

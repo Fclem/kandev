@@ -75,7 +75,7 @@ function RemoteDockerFields({
           type="password"
           value={gitToken}
           onChange={(event) => onGitTokenChange(event.target.value)}
-          placeholder="ghp_..."
+          placeholder={t("settings:ghp")}
         />
         <p className="text-xs text-muted-foreground">
           {t("settings:personalAccessTokenForCloningRepositories")}

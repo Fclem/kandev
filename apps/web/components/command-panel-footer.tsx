@@ -304,7 +304,7 @@ function CommandPanelFooter({ mode }: { mode: CommandPanelMode }) {
         </KbdGroup>
       )}
       <KbdGroup>
-        <Kbd>esc</Kbd>
+        <Kbd>{t("common:esc")}</Kbd>
         <span>{t("common:close")}</span>
       </KbdGroup>
     </div>

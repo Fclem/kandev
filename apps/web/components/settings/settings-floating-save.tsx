@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import {
   AlertDialog,
@@ -128,13 +128,14 @@ function LeaveWithUnsavedChangesDialog({
   onDiscardAndLeave: () => Promise<void> | void;
   onContinueEditing: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <AlertDialog open={open}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Save changes before leaving?</AlertDialogTitle>
+          <AlertDialogTitle>{t("settings:saveChangesBeforeLeaving")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This page has unsaved changes. Save them, discard them, or continue editing.
+            {t("settings:thisPageHasUnsavedChangesSave")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -143,7 +144,7 @@ function LeaveWithUnsavedChangesDialog({
             disabled={isBusy}
             onClick={onContinueEditing}
           >
-            Continue editing
+            {t("settings:continueEditing")}
           </AlertDialogCancel>
           <Button
             type="button"

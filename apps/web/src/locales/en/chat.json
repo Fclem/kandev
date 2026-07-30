@@ -35,6 +35,7 @@
   "noAgentsAvailable": "No agents available",
   "noRepository": "No repository",
   "openInQuickChat": "Open in Quick Chat",
+  "optional": "(optional)",
   "quickChatsStayOutsideYourTask": "Quick chats stay outside your task board.",
   "renameChat": "Rename chat",
   "repositoriesOptional": "Repositories <1>(optional)</1>",

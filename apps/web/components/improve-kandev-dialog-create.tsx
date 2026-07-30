@@ -199,7 +199,7 @@ function UsefulInfoCollapsible() {
           <p>
             <Trans i18nKey="common:shellCommandYouCanRunIn">
               Shell command you can run in the secondary instance, plus slash-command{" "}
-              <em>skills</em> you can ask the agent to run during the workflow.
+              <em>{t("common:skills")}</em> you can ask the agent to run during the workflow.
             </Trans>
           </p>
           <div className="space-y-2">

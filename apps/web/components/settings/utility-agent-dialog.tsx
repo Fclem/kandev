@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@kandev/ui/dialog";
@@ -76,14 +76,15 @@ function AgentModelSelect({
   onModelChange,
   onRefresh,
 }: AgentModelSelectProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Agent</Label>
+          <Label>{t("settings:agent")}</Label>
           <Select value={agentId} onValueChange={onAgentChange}>
             <SelectTrigger className="cursor-pointer">
-              <SelectValue placeholder="Select agent..." />
+              <SelectValue placeholder={t("settings:selectAgent")} />
             </SelectTrigger>
             <SelectContent>
               {inferenceAgents.map((ia) => (
@@ -95,13 +96,13 @@ function AgentModelSelect({
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Model</Label>
+          <Label>{t("common:model")}</Label>
           <ModelCombobox
             value={model}
             onChange={onModelChange}
             models={availableModels}
             currentModelId={availableModels.find((m) => m.is_default)?.id}
-            placeholder="Select model..."
+            placeholder={t("common:selectModel")}
             disabled={availableModels.length === 0}
           />
         </div>
@@ -136,25 +137,26 @@ function UtilityAgentForm({
   placeholders,
   onRefreshAgent,
 }: UtilityAgentFormProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4 py-4">
       <div className="space-y-2">
-        <Label htmlFor="name">Name</Label>
+        <Label htmlFor="name">{t("settings:name")}</Label>
         <Input
           id="name"
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          placeholder="e.g., commit-message"
+          placeholder={t("settings:eGCommitMessage")}
           disabled={isBuiltin}
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
+        <Label htmlFor="description">{t("settings:description")}</Label>
         <Input
           id="description"
           value={form.description}
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          placeholder="Brief description of what this agent does"
+          placeholder={t("settings:briefDescriptionOfWhatThisAgent")}
         />
       </div>
       <AgentModelSelect
@@ -168,7 +170,7 @@ function UtilityAgentForm({
         onRefresh={onRefreshAgent}
       />
       <div className="space-y-2">
-        <Label>Prompt Template</Label>
+        <Label>{t("settings:promptTemplate")}</Label>
         <div className="border rounded-md overflow-hidden">
           <ScriptEditor
             value={form.prompt}
@@ -190,6 +192,7 @@ function UtilityAgentForm({
 }
 
 export function UtilityAgentDialog({ open, onOpenChange, agent, onSuccess }: Props) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<FormState>(defaultFormState);
   const [saving, setSaving] = useState(false);
   const [placeholders, setPlaceholders] = useState<ScriptPlaceholder[]>([]);
@@ -286,7 +289,7 @@ export function UtilityAgentDialog({ open, onOpenChange, agent, onSuccess }: Pro
         />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
+            {t("common:cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={saving || !form.name} className="cursor-pointer">
             {getSubmitLabel()}

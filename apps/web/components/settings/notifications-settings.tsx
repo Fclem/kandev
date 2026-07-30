@@ -110,6 +110,7 @@ function AppriseProviderList({
   onTestProvider: (providerId: string) => Promise<void>;
   onTextareaInput: (event: FormEvent<HTMLTextAreaElement>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       {providers.map((provider) => {
@@ -150,7 +151,7 @@ function AppriseProviderList({
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-1 flex-1">
                   <div className="font-medium">{provider.name}</div>
-                  <div className="text-xs text-muted-foreground">Apprise</div>
+                  <div className="text-xs text-muted-foreground">{t("settings:apprise")}</div>
                 </div>
                 <AppriseProviderCardActions
                   provider={provider}
@@ -227,7 +228,7 @@ function ExternalProvidersSection({
               target="_blank"
               rel="noreferrer"
             >
-              View installation instructions
+              {t("settings:viewInstallationInstructions")}
             </a>
             .
           </Trans>

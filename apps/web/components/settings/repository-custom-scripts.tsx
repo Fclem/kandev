@@ -100,7 +100,7 @@ function RepositoryCustomScript({
       <Textarea
         value={script.command ?? ""}
         onChange={(event) => onUpdate(repositoryId, script.id, { command: event.target.value })}
-        placeholder="#!/bin/bash&#10;npm run dev"
+        placeholder={t("settings:binBashNpmRunDev")}
         rows={3}
         className="font-mono text-sm"
         data-settings-dirty={commandIsDirty}

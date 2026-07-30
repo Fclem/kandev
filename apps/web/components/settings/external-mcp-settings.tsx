@@ -55,8 +55,9 @@ export function ExternalMcpSettings() {
         <p className="text-sm text-muted-foreground mt-1">
           <Trans i18nKey="settings:useThisIfYouWantTo">
             Use this if you want to manage Kandev from coding agents that run{" "}
-            <strong>outside</strong> Kandev (e.g. Claude Code, Cursor, or Codex on your host), or
-            from <strong>passthrough agents</strong> running inside Kandev. <br />
+            <strong>{t("settings:outside")}</strong> Kandev (e.g. Claude Code, Cursor, or Codex on
+            your host), or from <strong>{t("settings:passthroughAgents")}</strong> running inside
+            Kandev. <br />
             Agents launched inside Kandev in their normal mode already have the Kandev MCP wired in
             automatically, no setup needed.
           </Trans>
@@ -171,7 +172,7 @@ function SnippetsSection({
       description={t("settings:pasteTheseIntoYourAgentS")}
     >
       <SnippetCard
-        title="Claude Code"
+        title={t("settings:claudeCode")}
         subtitle={t("settings:claudeJsonOrRunTheCli")}
         snippet={buildClaudeCodeConfig(streamableUrl)}
         copied={copied}
@@ -180,7 +181,7 @@ function SnippetsSection({
         extraSnippetLabel={t("settings:oneLinerWritesToClaudeJson")}
       />
       <SnippetCard
-        title="Cursor"
+        title={t("settings:cursor")}
         subtitle="~/.cursor/mcp.json"
         snippet={buildCursorConfig(streamableUrl)}
         copied={copied}
@@ -196,7 +197,7 @@ function SnippetsSection({
         extraSnippetLabel={t("settings:oneLinerWritesToCodexConfig")}
       />
       <SnippetCard
-        title="Auggie CLI"
+        title={t("settings:auggieCli")}
         subtitle={t("settings:augmentSettingsJsonOrRunThe")}
         snippet={buildAuggieConfig(streamableUrl)}
         copied={copied}
@@ -212,7 +213,7 @@ function SnippetsSection({
         onCopy={onCopy}
       />
       <SnippetCard
-        title="GitHub Copilot CLI"
+        title={t("settings:githubCopilotCli")}
         subtitle="~/.copilot/mcp-config.json"
         snippet={buildCopilotCliConfig(streamableUrl)}
         copied={copied}

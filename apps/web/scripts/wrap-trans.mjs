@@ -264,10 +264,12 @@ function transform(file) {
     const kids = significant(node.children);
     if (kids.length < 2) return;
     const hasText = kids.some((c) => c.type === "JSXText" && c.value.trim());
+    // A childless element (icon/spinner) adds no text, so it does not make this
+    // a mixed-content sentence — leave icon+label markup to plain t() calls.
     const hasDynamic = kids.some(
       (c) =>
         (c.type === "JSXExpressionContainer" && c.expression.type !== "JSXEmptyExpression") ||
-        c.type === "JSXElement" ||
+        (c.type === "JSXElement" && (c.children ?? []).length > 0) ||
         c.type === "JSXFragment",
     );
     if (!hasText || !hasDynamic) return;

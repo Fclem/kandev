@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { WorkflowStep } from "@/lib/types/http";
 import { HelpTip } from "./workflow-pipeline-editor-helpers";
 import { isWorkflowStepValueDirty } from "./workflow-dirty-state";
+import { useTranslation } from "react-i18next";
 
 type StepWipControlsProps = {
   step: WorkflowStep;
@@ -28,6 +29,7 @@ export function StepWipControls({
   onUpdate,
   readOnly,
 }: StepWipControlsProps) {
+  const { t } = useTranslation();
   const otherSteps = steps.filter((s) => s.id !== step.id);
   const pullFromValue = step.pull_from_step_id || "none";
   const pullFromSelectID = `${step.id}-pull-from-step`;
@@ -37,7 +39,7 @@ export function StepWipControls({
       <div className="space-y-1.5">
         <div className="flex items-center gap-1.5">
           <Label htmlFor={`${step.id}-wip-limit`} className="text-xs font-medium">
-            WIP limit
+            {t("settings:wipLimit")}
           </Label>
           <HelpTip text="Maximum tasks allowed in this step at once. Use 0 for unlimited." />
         </div>
@@ -64,7 +66,7 @@ export function StepWipControls({
       <div className="space-y-1.5">
         <div className="flex items-center gap-1.5">
           <Label htmlFor={pullFromSelectID} className="text-xs font-medium">
-            Pull from
+            {t("settings:pullFrom")}
           </Label>
           <HelpTip text="Optional feeder step to pull work from when this step has capacity." />
         </div>
@@ -86,11 +88,11 @@ export function StepWipControls({
               (item) => item.pull_from_step_id ?? "",
             )}
           >
-            <SelectValue placeholder="No feeder step" />
+            <SelectValue placeholder={t("settings:noFeederStep")} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none" className="cursor-pointer">
-              No feeder step
+              {t("settings:noFeederStep")}
             </SelectItem>
             {otherSteps.map((candidate) => (
               <SelectItem key={candidate.id} value={candidate.id} className="cursor-pointer">

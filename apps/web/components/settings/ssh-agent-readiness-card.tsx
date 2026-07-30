@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -164,6 +164,7 @@ export function SSHAgentReadinessCard({
   baselineShell,
   onShellChange,
 }: SSHAgentReadinessCardProps) {
+  const { t } = useTranslation();
   const state = useReadinessState({ executorId, shellProp, onShellChange });
   const {
     rows,
@@ -185,7 +186,7 @@ export function SSHAgentReadinessCard({
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle>Available agents on this host</CardTitle>
+            <CardTitle>{t("settings:availableAgentsOnThisHost")}</CardTitle>
             <CardDescription>
               <Trans i18nKey="settings:probesTheRemotePathForEach">
                 Probes the remote {"$PATH"} for each enabled agent under the chosen login shell.
@@ -236,6 +237,7 @@ function ShellSelector({
   onChange: (s: string) => void | Promise<void>;
   isDirty: boolean;
 }) {
+  const { t } = useTranslation();
   // While probing, show a placeholder option so the dropdown can't surface
   // a stale "bash" selection that we haven't confirmed exists on the host.
   // After probing, render whatever the host has, plus the current value so
@@ -244,7 +246,7 @@ function ShellSelector({
   return (
     <div className="flex items-center gap-2 pt-3">
       <Label htmlFor="ssh-readiness-shell" className="text-xs text-muted-foreground">
-        Login shell
+        {t("settings:loginShell")}
       </Label>
       <Select value={shell} onValueChange={(v) => void onChange(v)} disabled={loading}>
         <SelectTrigger
@@ -260,7 +262,7 @@ function ShellSelector({
             <SelectItem key={s} value={s} className="text-xs">
               {s}
               {shells && !shells.includes(s) ? (
-                <span className="text-amber-600 ml-1">(not detected)</span>
+                <span className="text-amber-600 ml-1">{t("settings:notDetected")}</span>
               ) : null}
             </SelectItem>
           ))}
@@ -288,6 +290,7 @@ function ReadinessContent({
   hasProbed: boolean;
   rows: SSHAgentReadinessRow[];
 }) {
+  const { t } = useTranslation();
   if (error) {
     return (
       <p data-testid="ssh-agent-readiness-error" className="text-sm text-red-600 dark:text-red-400">
@@ -305,20 +308,21 @@ function ReadinessContent({
     );
   }
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No enabled agents to probe.</p>;
+    return <p className="text-sm text-muted-foreground">{t("settings:noEnabledAgentsToProbe")}</p>;
   }
   return <ReadinessTable rows={rows} />;
 }
 
 function ReadinessTable({ rows }: { rows: SSHAgentReadinessRow[] }) {
+  const { t } = useTranslation();
   return (
     <Table data-testid="ssh-agent-readiness-table">
       <TableHeader>
         <TableRow>
-          <TableHead>Agent</TableHead>
-          <TableHead>Binary</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Install hint</TableHead>
+          <TableHead>{t("settings:agent")}</TableHead>
+          <TableHead>{t("settings:binary")}</TableHead>
+          <TableHead>{t("common:status")}</TableHead>
+          <TableHead>{t("settings:installHint")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -375,17 +379,20 @@ function StatusBadge({ row }: { row: SSHAgentReadinessRow }) {
 }
 
 function InstallHint({ hint, available }: { hint?: string; available: boolean }) {
+  const { t } = useTranslation();
   if (available) return <span className="text-muted-foreground">—</span>;
-  if (!hint) return <span className="text-muted-foreground">No hint available</span>;
+  if (!hint) return <span className="text-muted-foreground">{t("settings:noHintAvailable")}</span>;
   return (
     <div className="flex items-center gap-1">
       <code className="truncate">{hint}</code>
       <button
         type="button"
         className="cursor-pointer text-muted-foreground hover:text-foreground"
-        aria-label="Copy install hint"
+        aria-label={t("settings:copyInstallHint")}
         onClick={() => {
-          void navigator.clipboard.writeText(hint).then(() => toast.success("Install hint copied"));
+          void navigator.clipboard
+            .writeText(hint)
+            .then(() => toast.success(t("settings:installHintCopied")));
         }}
       >
         <IconCopy className="h-3 w-3" />

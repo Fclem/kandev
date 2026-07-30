@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { IconDownload, IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -31,6 +31,7 @@ export function WorkflowCardHeaderActions({
   exportDisabled,
   readOnly,
 }: WorkflowCardHeaderActionsProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap justify-end gap-2">
       <Tooltip>
@@ -55,7 +56,9 @@ export function WorkflowCardHeaderActions({
             </Button>
           </span>
         </TooltipTrigger>
-        {exportDisabled && <TooltipContent>Save the workflow before exporting.</TooltipContent>}
+        {exportDisabled && (
+          <TooltipContent>{t("settings:saveTheWorkflowBeforeExporting")}</TooltipContent>
+        )}
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>

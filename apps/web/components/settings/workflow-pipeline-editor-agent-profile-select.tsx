@@ -6,6 +6,7 @@ import type { WorkflowStep } from "@/lib/types/http";
 import { useHealthyAgentProfiles } from "@/hooks/domains/settings/use-healthy-agent-profiles";
 import { HelpTip } from "./workflow-pipeline-editor-helpers";
 import { isWorkflowStepValueDirty } from "./workflow-dirty-state";
+import { useTranslation } from "react-i18next";
 
 // StepAgentProfileSelect overrides the agent profile used while a workflow step
 // is active.
@@ -20,6 +21,7 @@ export function StepAgentProfileSelect({
   onUpdate: (updates: Partial<WorkflowStep>) => void;
   readOnly: boolean;
 }) {
+  const { t } = useTranslation();
   const healthyProfiles = useHealthyAgentProfiles(step.agent_profile_id);
 
   return (
@@ -42,11 +44,11 @@ export function StepAgentProfileSelect({
           )}
         >
           <IconRobot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <SelectValue placeholder="No profile override" />
+          <SelectValue placeholder={t("settings:noProfileOverride")} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="none" className="cursor-pointer">
-            No profile override
+            {t("settings:noProfileOverride")}
           </SelectItem>
           {healthyProfiles.map((p) => (
             <SelectItem key={p.id} value={p.id} className="cursor-pointer">

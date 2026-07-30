@@ -34,7 +34,7 @@ function PolicyRuleRow({
         <Input
           value={rule.domain}
           onChange={(e) => onUpdate(index, "domain", e.target.value)}
-          placeholder="*.example.com"
+          placeholder={t("settings:exampleCom")}
           className="text-sm"
           data-settings-dirty={!baselineRule || rule.domain !== baselineRule.domain}
         />

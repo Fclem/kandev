@@ -305,7 +305,7 @@ function CLIFlagRow({
       <Input
         value={row.flag}
         onChange={(e) => update({ flag: e.target.value })}
-        placeholder="--my-flag"
+        placeholder={t("settings:myFlag")}
         className="flex-[2] font-mono text-xs"
         data-testid={`cli-flag-flag-${index}`}
       />
@@ -369,7 +369,7 @@ function CLIFlagsAddForm({ onAdd }: { onAdd: (next: CLIFlag) => void }) {
           id={flagId}
           value={newFlag}
           onChange={(e) => setNewFlag(e.target.value)}
-          placeholder="--my-flag"
+          placeholder={t("settings:myFlag")}
           className="font-mono text-xs"
           data-testid="cli-flag-new-flag-input"
           onKeyDown={onEnter}

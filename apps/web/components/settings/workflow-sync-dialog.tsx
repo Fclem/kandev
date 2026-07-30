@@ -16,6 +16,7 @@ import type {
   WorkflowSyncController,
   WorkflowSyncFormState,
 } from "@/hooks/domains/settings/use-workflow-sync";
+import { useTranslation } from "react-i18next";
 
 const HELP_TEXT =
   "The directory should contain workflow export files (.yml/.yaml/.json) in the kandev_workflow format — the same format produced by workflow export.";
@@ -32,9 +33,10 @@ type RepoUrlFieldProps = {
 // branch, and directory. The resolved target is echoed underneath so the
 // structured fields stay visible to the user.
 function RepoUrlField({ url, invalid, resolved, onChange }: RepoUrlFieldProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="workflow-sync-url">Repository link</Label>
+      <Label htmlFor="workflow-sync-url">{t("settings:repositoryLink")}</Label>
       <Input
         id="workflow-sync-url"
         data-testid="workflow-sync-url-input"
@@ -44,7 +46,9 @@ function RepoUrlField({ url, invalid, resolved, onChange }: RepoUrlFieldProps) {
         aria-invalid={invalid}
       />
       {invalid ? (
-        <p className="text-xs text-destructive">Not a recognized GitHub repository link.</p>
+        <p className="text-xs text-destructive">
+          {t("settings:notARecognizedGithubRepositoryLink")}
+        </p>
       ) : (
         <p className="text-xs text-muted-foreground" data-testid="workflow-sync-resolved">
           {resolved || "Paste a GitHub link — /tree/… links carry the branch and directory too."}
@@ -64,6 +68,7 @@ type FieldsProps = {
 // from the pasted link (or defaults to main) and is echoed in the resolved
 // summary under the link input.
 function PollFields({ form, update }: FieldsProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-3">
@@ -75,12 +80,12 @@ function PollFields({ form, update }: FieldsProps) {
           className="cursor-pointer"
         />
         <Label htmlFor="workflow-sync-poll-toggle" className="cursor-pointer">
-          Auto-sync
+          {t("settings:autoSync")}
         </Label>
         {form.poll_enabled && (
           <div className="ml-auto flex items-center gap-2">
             <Label htmlFor="workflow-sync-interval" className="sr-only">
-              Poll interval (seconds)
+              {t("settings:pollIntervalSeconds")}
             </Label>
             <Input
               id="workflow-sync-interval"
@@ -91,7 +96,7 @@ function PollFields({ form, update }: FieldsProps) {
               value={form.interval_seconds}
               onChange={(e) => update("interval_seconds", Number(e.target.value) || 0)}
             />
-            <span className="text-xs text-muted-foreground">seconds</span>
+            <span className="text-xs text-muted-foreground">{t("settings:seconds")}</span>
           </div>
         )}
       </div>
@@ -114,6 +119,7 @@ type WorkflowSyncDialogProps = {
 // itself after a successful save or removal; failures keep it open with the
 // error surfaced via toast.
 export function WorkflowSyncDialog({ open, onOpenChange, sync }: WorkflowSyncDialogProps) {
+  const { t } = useTranslation();
   const hasConfig = !!sync.config;
   const intervalInvalid =
     sync.form.poll_enabled &&
@@ -140,9 +146,9 @@ export function WorkflowSyncDialog({ open, onOpenChange, sync }: WorkflowSyncDia
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" data-testid="workflow-sync-dialog">
         <DialogHeader>
-          <DialogTitle>GitHub Sync</DialogTitle>
+          <DialogTitle>{t("settings:githubSync2")}</DialogTitle>
           <DialogDescription>
-            Automatically sync workflow definitions from a GitHub repository into this workspace.
+            {t("settings:automaticallySyncWorkflowDefinitionsFromA")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -165,7 +171,7 @@ export function WorkflowSyncDialog({ open, onOpenChange, sync }: WorkflowSyncDia
               className="sm:mr-auto cursor-pointer"
               data-testid="workflow-sync-remove"
             >
-              Remove
+              {t("settings:remove")}
             </Button>
           )}
           <Button

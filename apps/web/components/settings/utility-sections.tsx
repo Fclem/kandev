@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -74,6 +74,7 @@ export function DefaultModelSection({
   onRefreshAgent,
   isDirty,
 }: DefaultModelSectionProps) {
+  const { t } = useTranslation();
   const selectedAgent = inferenceAgents.find((a) => a.id === defaultAgentId);
   const modelOptions = selectedAgent?.models ?? [];
   const currentModelId = modelOptions.find((m) => m.is_default)?.id;
@@ -99,19 +100,19 @@ export function DefaultModelSection({
     <SettingsCard isDirty={isDirty} data-testid="utility-default-model-card">
       <CardHeader>
         <CardTitle className="text-base">
-          <h3>Default utility agent model</h3>
+          <h3>{t("settings:defaultUtilityAgentModel")}</h3>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Select the default model used by all built-in utility actions.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("settings:selectTheDefaultModelUsedBy")}</p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="w-full sm:w-[180px]">
-            <Label className="text-xs text-muted-foreground mb-1 block">Agent</Label>
+            <Label className="text-xs text-muted-foreground mb-1 block">
+              {t("settings:agent")}
+            </Label>
             <Select value={defaultAgentId} onValueChange={(v) => onDefaultChange(v, "")}>
               <SelectTrigger className="cursor-pointer" data-settings-dirty={isDirty}>
-                <SelectValue placeholder="Select agent..." />
+                <SelectValue placeholder={t("settings:selectAgent")} />
               </SelectTrigger>
               <SelectContent>
                 {inferenceAgents.map((ia) => (
@@ -126,14 +127,14 @@ export function DefaultModelSection({
             className="w-full rounded-md border border-transparent sm:w-[280px]"
             data-settings-dirty={isDirty}
           >
-            <Label className="text-xs text-muted-foreground mb-1 block">Model</Label>
+            <Label className="text-xs text-muted-foreground mb-1 block">{t("common:model")}</Label>
             <ModelConfigSelector
               modelOptions={selectorModels}
               currentModel={selectedModel}
               configOptions={selectedConfigOptions}
               onModelChange={(v) => onDefaultChange(defaultAgentId, v)}
               disabled={!defaultAgentId}
-              placeholder="Select model..."
+              placeholder={t("common:selectModel")}
               ariaLabel="Default utility model settings"
             />
           </div>
@@ -274,6 +275,7 @@ export function PerActionOverridesSection({
   onEdit,
   savedBuiltins,
 }: PerActionOverridesSectionProps) {
+  const { t } = useTranslation();
   if (builtins.length === 0) return null;
 
   const defaultLabel = defaultModel ? `Default (${defaultModel})` : "Default";
@@ -290,7 +292,7 @@ export function PerActionOverridesSection({
     >
       <CardHeader>
         <CardTitle className="text-base">
-          <h3>Actions</h3>
+          <h3>{t("settings:actions")}</h3>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-0">
@@ -322,11 +324,12 @@ type CustomAgentsSectionProps = {
 };
 
 export function CustomAgentsSection({ agents, onAdd, onEdit, onDelete }: CustomAgentsSectionProps) {
+  const { t } = useTranslation();
   return (
     <Card data-testid="utility-custom-agents-card">
       <CardHeader>
         <CardTitle className="text-base">
-          <h3>Custom utility agents</h3>
+          <h3>{t("settings:customUtilityAgents")}</h3>
         </CardTitle>
         <CardAction>
           <Button onClick={onAdd} size="sm" className="cursor-pointer">
@@ -339,10 +342,12 @@ export function CustomAgentsSection({ agents, onAdd, onEdit, onDelete }: CustomA
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Create your own utility agents with custom prompts.
+          {t("settings:createYourOwnUtilityAgentsWith")}
         </p>
         {agents.length === 0 && (
-          <p className="text-sm text-muted-foreground py-4">No custom utility agents.</p>
+          <p className="text-sm text-muted-foreground py-4">
+            {t("settings:noCustomUtilityAgents")}
+          </p>
         )}
         {agents.length > 0 && (
           <div className="space-y-2">

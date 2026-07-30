@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "@/components/routing/app-link";
@@ -83,9 +83,10 @@ function UtilityAgentPicker({
   loadingAgents,
   update,
 }: UtilityAgentPickerProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="slack-utility-agent">Triage agent</Label>
+      <Label htmlFor="slack-utility-agent">{t("common:triageAgent")}</Label>
       <Select
         value={form.utilityAgentId || ""}
         onValueChange={(v) => update("utilityAgentId", v)}
@@ -113,7 +114,7 @@ function UtilityAgentPicker({
           the destination Kandev workspace + workflow + repo from context. Built-in agents use your
           default model from{" "}
           <Link href="/settings/utility-agents" className="underline cursor-pointer">
-            Settings → Utility agents
+            {t("common:settingsUtilityAgents")}
           </Link>
           .
         </Trans>
@@ -142,9 +143,10 @@ function PrefixField({
   loading: boolean;
   update: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="slack-prefix">Command prefix</Label>
+      <Label htmlFor="slack-prefix">{t("common:commandPrefix")}</Label>
       <Input
         id="slack-prefix"
         type="text"
@@ -155,13 +157,15 @@ function PrefixField({
         disabled={loading}
       />
       <p className="text-xs text-muted-foreground">
-        Messages you write in Slack starting with this prefix become Kandev tasks. Default:{" "}
-        <code>
-          <Trans i18nKey="common:instruction" values={{ DEFAULT_PREFIX }}>
-            {DEFAULT_PREFIX} &lt;instruction&gt;
-          </Trans>
-        </code>
-        .
+        <Trans i18nKey="common:messagesYouWriteInSlackStarting" values={{ DEFAULT_PREFIX }}>
+          Messages you write in Slack starting with this prefix become Kandev tasks. Default:{" "}
+          <code>
+            <Trans i18nKey="common:instruction" values={{ DEFAULT_PREFIX }}>
+              {DEFAULT_PREFIX} &lt;instruction&gt;
+            </Trans>
+          </code>
+          .
+        </Trans>
       </p>
     </div>
   );
@@ -178,9 +182,10 @@ function PollIntervalField({
   loading: boolean;
   update: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="slack-poll-interval">Polling interval (seconds)</Label>
+      <Label htmlFor="slack-poll-interval">{t("common:pollingIntervalSeconds")}</Label>
       <Input
         id="slack-poll-interval"
         type="number"
@@ -229,13 +234,14 @@ function TestResultAlert({ result }: { result: TestSlackConnectionResult | null 
 }
 
 function UnsupportedWarning() {
+  const { t } = useTranslation();
   return (
     <Alert>
       <AlertDescription className="text-xs">
         <Trans i18nKey="common:browserSessionAuthUnsupportedSlackRotates">
-          <strong>Browser session auth (unsupported):</strong> Slack rotates session cookies often,
-          so you may need to reconnect when authentication expires. Bot installs and user OAuth are
-          on the roadmap.
+          <strong>{t("common:browserSessionAuthUnsupported")}</strong> Slack rotates session cookies
+          often, so you may need to reconnect when authentication expires. Bot installs and user
+          OAuth are on the roadmap.
         </Trans>
       </AlertDescription>
     </Alert>
@@ -475,6 +481,7 @@ function EnabledPill() {
 }
 
 export function SlackConnectionSection({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const s = useSlackSettings(workspaceId);
   const baseline = configToForm(s.config);
   const missingSecrets =
@@ -501,7 +508,7 @@ export function SlackConnectionSection({ workspaceId }: { workspaceId: string })
   return (
     <SettingsSection
       icon={<IconBrandSlack className="h-5 w-5" />}
-      title="Slack integration"
+      title={t("common:slackIntegration")}
       description="Capture Slack threads as tasks for the selected workspace. Type !kandev <instruction> in any thread you can see and the configured utility agent creates the task."
       action={<EnabledPill />}
     >

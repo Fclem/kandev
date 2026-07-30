@@ -34,9 +34,9 @@ export function CommandPrefixField({
       <p className="text-xs text-muted-foreground">
         <Trans i18nKey="settings:tokensPrependedToTheAgentLaunch">
           Tokens prepended to the agent launch command, so it runs under a sandbox launcher (e.g.{" "}
-          <code>greywall --</code>). The value is shell-tokenised. Leave empty to run the agent
-          directly. Applies to ACP sessions only — it has no effect when the profile uses TUI
-          passthrough.
+          <code>{t("settings:greywall")}</code>). The value is shell-tokenised. Leave empty to run
+          the agent directly. Applies to ACP sessions only — it has no effect when the profile uses
+          TUI passthrough.
         </Trans>
       </p>
     </div>

@@ -20,6 +20,7 @@ import {
   hasDisablePlanMode,
 } from "./workflow-pipeline-editor-helpers";
 import { isWorkflowStepValueDirty } from "./workflow-dirty-state";
+import { useTranslation } from "react-i18next";
 
 // --- useStepActions hook ---
 
@@ -119,11 +120,12 @@ export function TurnStartSelect({
   setOnTurnStartTransition,
   readOnly,
 }: StepSelectProps & { setOnTurnStartTransition: (t: string) => void }) {
+  const { t } = useTranslation();
   const transitionType = getOnTurnStartTransitionType(step);
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
-        <Label className="text-xs font-medium">On Turn Start</Label>
+        <Label className="text-xs font-medium">{t("settings:onTurnStart")}</Label>
         <HelpTip text="Runs when a user sends a message. Use for review cycles (e.g., move back to In Progress on feedback)." />
       </div>
       <Select
@@ -142,13 +144,13 @@ export function TurnStartSelect({
             getOnTurnStartTransitionType,
           )}
         >
-          <SelectValue placeholder="Select action" />
+          <SelectValue placeholder={t("settings:selectAction")} />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
-          <SelectItem value="none">Do nothing</SelectItem>
-          <SelectItem value="move_to_next">Move to next step</SelectItem>
-          <SelectItem value="move_to_previous">Move to previous step</SelectItem>
-          <SelectItem value="move_to_step">Move to specific step</SelectItem>
+          <SelectItem value="none">{t("settings:doNothing")}</SelectItem>
+          <SelectItem value="move_to_next">{t("settings:moveToNextStep")}</SelectItem>
+          <SelectItem value="move_to_previous">{t("settings:moveToPreviousStep")}</SelectItem>
+          <SelectItem value="move_to_step">{t("settings:moveToSpecificStep")}</SelectItem>
         </SelectContent>
       </Select>
       {transitionType === "move_to_step" && (
@@ -177,7 +179,7 @@ export function TurnStartSelect({
                   ?.step_id ?? "",
             )}
           >
-            <SelectValue placeholder="Select step" />
+            <SelectValue placeholder={t("settings:selectStep")} />
           </SelectTrigger>
           <SelectContent position="popper" side="bottom" align="start">
             {otherSteps.map((s) => (
@@ -217,6 +219,7 @@ function TurnCompleteTargetSelect({
   onUpdate,
   readOnly,
 }: StepSelectProps) {
+  const { t } = useTranslation();
   const updateTarget = (stepId: string) => {
     if (readOnly) return;
     const currentEvents = step.events ?? {};
@@ -236,7 +239,7 @@ function TurnCompleteTargetSelect({
         className="w-full h-8"
         data-settings-dirty={isWorkflowStepValueDirty(step, savedStep, getTurnCompleteTargetStepId)}
       >
-        <SelectValue placeholder="Select step" />
+        <SelectValue placeholder={t("settings:selectStep")} />
       </SelectTrigger>
       <SelectContent position="popper" side="bottom" align="start">
         {otherSteps.map((candidate) => (
@@ -262,11 +265,12 @@ export function TurnCompleteSelect({
   planModeEnabled,
   readOnly,
 }: TurnCompleteSelectProps) {
+  const { t } = useTranslation();
   const transitionType = getTransitionType(step);
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
-        <Label className="text-xs font-medium">On Turn Complete</Label>
+        <Label className="text-xs font-medium">{t("settings:onTurnComplete")}</Label>
         <HelpTip text="Runs after the agent finishes a turn. Use to auto-advance tasks through the pipeline." />
       </div>
       <Select
@@ -281,13 +285,13 @@ export function TurnCompleteSelect({
           className="w-full h-8"
           data-settings-dirty={isWorkflowStepValueDirty(step, savedStep, getTransitionType)}
         >
-          <SelectValue placeholder="Select action" />
+          <SelectValue placeholder={t("settings:selectAction")} />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
-          <SelectItem value="none">Do nothing (wait for user)</SelectItem>
-          <SelectItem value="move_to_next">Move to next step</SelectItem>
-          <SelectItem value="move_to_previous">Move to previous step</SelectItem>
-          <SelectItem value="move_to_step">Move to specific step</SelectItem>
+          <SelectItem value="none">{t("settings:doNothingWaitForUser")}</SelectItem>
+          <SelectItem value="move_to_next">{t("settings:moveToNextStep")}</SelectItem>
+          <SelectItem value="move_to_previous">{t("settings:moveToPreviousStep")}</SelectItem>
+          <SelectItem value="move_to_step">{t("settings:moveToSpecificStep")}</SelectItem>
         </SelectContent>
       </Select>
       {transitionType === "move_to_step" && (
@@ -312,7 +316,7 @@ export function TurnCompleteSelect({
             data-settings-dirty={isWorkflowStepValueDirty(step, savedStep, hasDisablePlanMode)}
           />
           <Label htmlFor={`${step.id}-disable-plan`} className="text-sm">
-            Disable plan mode on complete
+            {t("settings:disablePlanModeOnComplete")}
           </Label>
           <HelpTip text="Turn off plan mode after the agent finishes a turn, even when the task remains in this step." />
         </div>
@@ -343,6 +347,7 @@ export function ChildrenCompletedSelect({
   setChildrenCompletedTransition,
   readOnly,
 }: ChildrenCompletedSelectProps) {
+  const { t } = useTranslation();
   const transitionType = getChildrenCompletedTransitionType(step);
   const configuredTargetStepId =
     (step.events?.on_children_completed?.find((a) => a.type === "move_to_step")?.config
@@ -352,7 +357,7 @@ export function ChildrenCompletedSelect({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
-        <Label className="text-xs font-medium">When Child Tasks Complete</Label>
+        <Label className="text-xs font-medium">{t("settings:whenChildTasksComplete")}</Label>
         <HelpTip
           testId={`${step.id}-children-completed-help`}
           ariaLabel="How child task completion transitions work"
@@ -379,14 +384,14 @@ export function ChildrenCompletedSelect({
             getChildrenCompletedTransitionType,
           )}
         >
-          <SelectValue placeholder="Select action" />
+          <SelectValue placeholder={t("settings:selectAction")} />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
-          <SelectItem value="none">Do nothing</SelectItem>
-          <SelectItem value="move_to_next">Move to next step</SelectItem>
-          <SelectItem value="move_to_previous">Move to previous step</SelectItem>
+          <SelectItem value="none">{t("settings:doNothing")}</SelectItem>
+          <SelectItem value="move_to_next">{t("settings:moveToNextStep")}</SelectItem>
+          <SelectItem value="move_to_previous">{t("settings:moveToPreviousStep")}</SelectItem>
           <SelectItem value="move_to_step" disabled={!defaultTargetStepId}>
-            Move to specific step
+            {t("settings:moveToSpecificStep")}
           </SelectItem>
         </SelectContent>
       </Select>
@@ -416,7 +421,7 @@ export function ChildrenCompletedSelect({
                   ?.config?.step_id ?? "",
             )}
           >
-            <SelectValue placeholder="Select step" />
+            <SelectValue placeholder={t("settings:selectStep")} />
           </SelectTrigger>
           <SelectContent position="popper" side="bottom" align="start">
             {otherSteps.map((s) => (
@@ -452,6 +457,7 @@ export function ExplicitCompletionToggle({
   onUpdate,
   readOnly,
 }: ExplicitCompletionToggleProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 pt-1" data-testid={`${step.id}-require-signal-row`}>
       <Checkbox
@@ -470,7 +476,7 @@ export function ExplicitCompletionToggle({
         )}
       />
       <Label htmlFor={`${step.id}-require-signal`} className="text-sm">
-        Wait for agent completion signal
+        {t("settings:waitForAgentCompletionSignal")}
       </Label>
       <HelpTip text="Only auto-advance once the agent calls step_complete_kandev. Otherwise turn-end is treated as completion." />
     </div>

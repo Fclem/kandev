@@ -8,6 +8,9 @@ import type { Repository, TaskSession } from "@/lib/types/http";
 import type { KanbanState } from "@/lib/state/slices";
 import { useTranslation } from "react-i18next";
 
+const EMPTY_REPOSITORIES: Repository[] = [];
+const EMPTY_TASK_SESSIONS: TaskSession[] = [];
+
 type RepoRow = {
   taskRepositoryId: string;
   repositoryId: string;
@@ -64,10 +67,14 @@ function useTaskRepoRows(taskId: string | null, workspaceId: string | null): Rep
     return task?.repositories;
   });
   const workspaceRepos = useAppStore((s) =>
-    workspaceId ? (s.repositories.itemsByWorkspaceId[workspaceId] ?? []) : [],
+    workspaceId
+      ? (s.repositories.itemsByWorkspaceId[workspaceId] ?? EMPTY_REPOSITORIES)
+      : EMPTY_REPOSITORIES,
   );
   const taskSessions = useAppStore((s) =>
-    taskId ? (s.taskSessionsByTask.itemsByTaskId[taskId] ?? []) : [],
+    taskId
+      ? (s.taskSessionsByTask.itemsByTaskId[taskId] ?? EMPTY_TASK_SESSIONS)
+      : EMPTY_TASK_SESSIONS,
   );
   const primarySessionId = useAppStore((s) => {
     if (!taskId) return null;

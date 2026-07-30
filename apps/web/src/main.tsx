@@ -5,13 +5,15 @@ import { setOnUnauthorized } from "@/lib/api/client";
 import { PluginModalHost } from "@/components/plugins/plugin-modal-host";
 import { useAppStoreApi, StateProvider } from "@/components/state-provider";
 import { PluginBootBridge } from "@/lib/plugins/plugin-boot-bridge";
-import { activateLocale } from "@/lib/i18n";
-import { resolveInitialLocale } from "@/lib/i18n/boot";
 import { AppShell } from "./app-shell";
 import { AuthGatedScreen, useAuthGateDecision } from "./auth-gate";
 import { loadBootPayload } from "./boot-payload";
 import type { BootPayload } from "./boot-payload";
+import { RootErrorBoundary, RouteErrorBoundary } from "./app-error-boundary";
 import { SpaRoutes } from "./spa-routes";
+import { installVitePreloadRecovery } from "./vite-preload-recovery";
+
+installVitePreloadRecovery();
 
 const AUTH_ROUTE_PATHS = new Set(["/login", "/setup", "/invite"]);
 
@@ -41,7 +43,9 @@ function AppBody({ payload }: { payload: BootPayload }) {
       <PluginBootBridge plugins={payload.plugins} />
       <PluginModalHost />
       <AppShell>
-        <SpaRoutes routeData={payload.routeData} />
+        <RouteErrorBoundary>
+          <SpaRoutes routeData={payload.routeData} />
+        </RouteErrorBoundary>
       </AppShell>
     </>
   );
@@ -61,17 +65,12 @@ if (!root) {
   throw new Error("Missing #root element");
 }
 
-void loadBootPayload()
-  .then(async (payload) => {
-    // Activate the locale before first paint so there is no English flash and
-    // <html lang> (already set by the Go shell) matches the rendered catalog.
-    await activateLocale(resolveInitialLocale(payload));
-    return payload;
-  })
-  .then((payload) => {
-    createRoot(root).render(
-      <StrictMode>
+void loadBootPayload().then((payload) => {
+  createRoot(root).render(
+    <StrictMode>
+      <RootErrorBoundary>
         <App payload={payload} />
-      </StrictMode>,
-    );
-  });
+      </RootErrorBoundary>
+    </StrictMode>,
+  );
+});

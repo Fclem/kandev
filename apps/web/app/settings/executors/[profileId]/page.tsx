@@ -1,5 +1,5 @@
 "use client";
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
@@ -171,9 +171,8 @@ function useGitIdentityState(isRemote: boolean, profile: ExecutorProfile) {
   };
 }
 
-export default function ProfileEditPage({ params }: { params: Promise<{ profileId: string }> }) {
+export default function ProfileEditPage({ profileId }: { profileId: string }) {
   const { t } = useTranslation();
-  const { profileId } = use(params);
   const router = useRouter();
   const result = useProfileFromStore(profileId);
 

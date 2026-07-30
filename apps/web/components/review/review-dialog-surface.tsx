@@ -16,7 +16,7 @@ type ReviewDialogSurfaceProps = {
   onOpenChange: (open: boolean) => void;
   sessionId: string;
   baseBranch?: string;
-  onOpenFile?: (filePath: string) => void;
+  onOpenFile?: (filePath: string, repo?: string) => void;
   prs: TaskPR[];
   selectedPR: TaskPR | null;
   onSelectPR?: (pr: TaskPR) => void;

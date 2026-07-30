@@ -1,5 +1,5 @@
 "use client";
-import { use, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 import { useRouter } from "@/lib/routing/client-router";
@@ -34,12 +34,11 @@ const EXECUTORS_ROUTE = "/settings/executors";
 // user to type a word the gate will never accept.
 const DELETE_CONFIRM_TOKEN = "delete";
 
-export default function ExecutorEditPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ExecutorEditPage({ executorId }: { executorId: string }) {
   const { t } = useTranslation();
-  const { id } = use(params);
   const router = useRouter();
   const executor = useAppStore(
-    (state) => state.executors.items.find((item: Executor) => item.id === id) ?? null,
+    (state) => state.executors.items.find((item: Executor) => item.id === executorId) ?? null,
   );
 
   if (!executor) {

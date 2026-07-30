@@ -12,14 +12,14 @@ import {
   AlertDialogTitle,
 } from "@kandev/ui/alert-dialog";
 import { Input } from "@kandev/ui/input";
-import type { StorageQuarantineEntry } from "@/lib/types/system";
+import type { StorageQuarantineEntry, StorageQuarantinePurgeScope } from "@/lib/types/system";
 
 type ConfirmationDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  phrase: "DEDICATED" | "ADOPT" | "DELETE";
+  phrase: "DEDICATED" | "ADOPT" | "DELETE" | "DELETE ELIGIBLE" | "DELETE ALL NOW";
   actionLabel: string;
   actionTestId: string;
   destructive?: boolean;
@@ -122,6 +122,47 @@ export function PermanentDeleteDialog({
       phrase="DELETE"
       actionLabel={t("settings:deletePermanently")}
       actionTestId="storage-quarantine-delete-confirm"
+      destructive
+    />
+  );
+}
+
+export function QuarantinePurgeDialog({
+  scope,
+  eligibleCount,
+  protectedCount,
+  ...props
+}: Pick<ConfirmationDialogProps, "open" | "onOpenChange" | "onConfirm"> & {
+  scope: StorageQuarantinePurgeScope;
+  eligibleCount: number;
+  protectedCount: number;
+}) {
+  const { t } = useTranslation();
+  const eligible = scope === "eligible";
+  return (
+    <ConfirmationDialog
+      {...props}
+      title={
+        eligible ? t("settings:clearEligibleQuarantine") : t("settings:forceClearAllQuarantine")
+      }
+      description={
+        eligible
+          ? // Two sentences, each with its own plural: English agreement on
+            // "item/items" and "remains/remain" cannot be assembled from
+            // fragments in other languages.
+            `${t("settings:quarantineRemoveEligible", { count: eligibleCount })} ${t(
+              "settings:quarantineProtectedRemain",
+              { count: protectedCount },
+            )}`
+          : t("settings:thisAttemptsToPermanentlyRemoveEvery")
+      }
+      phrase={eligible ? "DELETE ELIGIBLE" : "DELETE ALL NOW"}
+      actionLabel={eligible ? t("settings:clearEligible") : t("settings:forceClearAll")}
+      actionTestId={
+        eligible
+          ? "storage-quarantine-clear-eligible-confirm"
+          : "storage-quarantine-force-clear-confirm"
+      }
       destructive
     />
   );

@@ -35,6 +35,11 @@ export const noLiteralStringOptions = {
       // All-caps acronym badges (ENTRY, KAN, MTD, WIQL, JQL) label a
       // field or entity; they are identifiers, not prose.
       "^[A-Z][A-Z0-9_]+$",
+      // Multi-word ALL-CAPS tokens are type-to-confirm phrases ("DELETE ALL NOW").
+      // The user must type them verbatim and they are compared with `===`, so
+      // translating one makes the dialog impossible to satisfy — see
+      // docs/plans/i18n/FOLLOWUPS.md section 1.
+      "[A-Z][A-Z0-9_]*( [A-Z][A-Z0-9_]*)+",
       // Terminal control glyphs (^C, ^D) and repeat counts (3x) are
       // symbols, and "id · vN.N" is a version line, not prose.
       "^\\^[A-Z]$",

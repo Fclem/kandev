@@ -1,5 +1,5 @@
 "use client";
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
@@ -70,12 +70,13 @@ function rowsToEnvVars(rows: EnvVarRow[]): ProfileEnvVar[] {
 }
 
 export default function ProfileDetailPage({
-  params,
+  executorId,
+  profileId,
 }: {
-  params: Promise<{ id: string; profileId: string }>;
+  executorId: string;
+  profileId: string;
 }) {
   const { t } = useTranslation();
-  const { id: executorId, profileId } = use(params);
   const router = useRouter();
   const executor = useAppStore(
     (state) => state.executors.items.find((e: Executor) => e.id === executorId) ?? null,

@@ -18,7 +18,7 @@ vi.mock("@/lib/api", () => ({
   listTaskSessions: (...args: unknown[]) => listTaskSessionsMock(...args),
 }));
 
-import { useTaskRemoval } from "./use-task-removal";
+import { useTaskRemoval, selectNextTaskAfterRemoval } from "./use-task-removal";
 import { setRecentTasks } from "@/lib/recent-tasks";
 
 type TaskRow = { id: string; primarySessionId: string | null };
@@ -350,5 +350,31 @@ describe("useTaskRemoval — next task selection", () => {
       recentSessionId,
     );
     expect(replaceTaskUrlMock).toHaveBeenCalledWith(recentTaskId);
+  });
+});
+
+describe("selectNextTaskAfterRemoval — stale-candidate rejection", () => {
+  // The exported helper takes the full kanban task shape; the tests use the
+  // minimal TaskRow, so cast at the boundary exactly as the store-based tests do.
+  const select = selectNextTaskAfterRemoval as unknown as (
+    remaining: TaskRow[],
+    removedTaskId: string,
+    liveIds: Set<string>,
+  ) => TaskRow | null;
+
+  it("returns null (redirect home) when the only remaining candidate is not a live board member", () => {
+    // A task deleted moments earlier can linger in a snapshot that races the
+    // local delete. It is not the removed task, but it is no longer a live
+    // board member, so it must not be chosen — the caller then redirects home.
+    const stale: TaskRow = { id: "task-A-stale", primarySessionId: "sess-A" };
+
+    expect(select([stale], "task-B", new Set<string>())).toBeNull();
+  });
+
+  it("returns the candidate when it is a live board member", () => {
+    // Guards against over-rejection: a genuinely present task is still selected.
+    const live: TaskRow = { id: "task-A-live", primarySessionId: "sess-A" };
+
+    expect(select([live], "task-B", new Set(["task-A-live"]))).toBe(live);
   });
 });

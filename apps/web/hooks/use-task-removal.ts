@@ -99,18 +99,37 @@ function collectRemainingTasks(store: StoreApi<AppState>): KanbanState["tasks"] 
   return allRemainingTasks;
 }
 
-function selectNextTaskAfterRemoval(
+/** Ids of every task currently on the authoritative board (both kanbans). */
+function liveTaskIds(store: StoreApi<AppState>): Set<string> {
+  const ids = new Set<string>();
+  for (const snapshot of Object.values(store.getState().kanbanMulti.snapshots)) {
+    for (const t of snapshot.tasks) ids.add(t.id);
+  }
+  for (const t of store.getState().kanban.tasks) ids.add(t.id);
+  return ids;
+}
+
+/**
+ * Pick the next task to switch to after a removal. A candidate must not be the
+ * removed task and must still be a live board member: a task deleted moments
+ * earlier can linger in a snapshot (the WS `task.deleted` removal or a lagging
+ * `kanban.update` rebuild races the local delete), and switching to that stale
+ * id would strand the user on a dead `/t/<id>` route instead of redirecting
+ * home. Rejecting non-members lets the caller fall through to the home redirect.
+ */
+export function selectNextTaskAfterRemoval(
   remainingTasks: KanbanState["tasks"],
   removedTaskId: string,
+  liveIds: Set<string>,
 ): KanbanState["tasks"][number] | null {
-  const remainingById = new Map(
-    remainingTasks.filter((task) => task.id !== removedTaskId).map((task) => [task.id, task]),
-  );
+  const isValid = (task: KanbanState["tasks"][number]) =>
+    task.id !== removedTaskId && liveIds.has(task.id);
+  const remainingById = new Map(remainingTasks.filter(isValid).map((task) => [task.id, task]));
   for (const recent of getRecentTasks()) {
     const task = remainingById.get(recent.taskId);
     if (task) return task;
   }
-  return remainingTasks.find((task) => task.id !== removedTaskId) ?? null;
+  return remainingTasks.find(isValid) ?? null;
 }
 
 function switchToSessionForTask(params: {
@@ -228,7 +247,7 @@ export function useTaskRemoval({ store, useLayoutSwitch = false }: TaskRemovalOp
       }
 
       const oldEnvId = resolveOldEnvId(store, opts);
-      const nextTask = selectNextTaskAfterRemoval(allRemainingTasks, taskId);
+      const nextTask = selectNextTaskAfterRemoval(allRemainingTasks, taskId, liveTaskIds(store));
       if (nextTask) {
         await switchToNextTask({
           store,

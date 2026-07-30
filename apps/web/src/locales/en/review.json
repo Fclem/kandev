@@ -10,6 +10,8 @@
   "files_one": "{{count}} file",
   "files_other": "{{count}} files",
   "filterChangedFiles": "Filter changed files",
+  "findings_one": "{{count}} finding",
+  "findings_other": "{{count}} findings",
   "fixComments": "<0></0> Fix Comments <2>{{commentCount}}</2>",
   "loadingChanges": "Loading {{repo}} #{{pr_number}} changes…",
   "newWalkthrough": "New walkthrough",

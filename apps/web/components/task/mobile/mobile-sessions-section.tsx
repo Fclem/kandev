@@ -396,7 +396,7 @@ const MobileSessionsList = memo(function MobileSessionsList({
     <div className="flex flex-col gap-2 px-1">
       <div className="flex items-center justify-between px-1">
         <span className="text-xs font-medium text-muted-foreground">
-          {rows.length} session{rows.length === 1 ? "" : "s"}
+          {t("task:sessions", { count: rows.length })}
         </span>
         <Button
           size="sm"

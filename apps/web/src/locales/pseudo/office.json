@@ -381,6 +381,8 @@
   "runNow": "<0></0> Ŕũń ńōŵ",
   "runNow2": "<0></0> Ŕũń Ńōŵ",
   "runs": "Ŕũńś",
+  "runs_one": "{{count}} ŕũń",
+  "runs_other": "{{count}} ŕũńś",
   "runtime": "Ŕũńţĩḿē",
   "runtimeCapabilities": "Ŕũńţĩḿē ćàƥàƀĩĺĩţĩēś",
   "save": "<0></0> Śàvē",

@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "react-i18next";
 
 import { useCallback, useState } from "react";
 import { IconChevronDown } from "@tabler/icons-react";
@@ -22,6 +23,7 @@ export type ReviewFindingsButtonProps = {
  * there is nothing to navigate to.
  */
 export function ReviewFindingsButton({ findings, onSelectFile }: ReviewFindingsButtonProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const count = openFindingCount(findings);
 
@@ -51,7 +53,7 @@ export function ReviewFindingsButton({ findings, onSelectFile }: ReviewFindingsB
           aria-label={`Go to ${count} review finding${count === 1 ? "" : "s"}`}
           data-testid="review-open-count"
         >
-          {count} finding{count === 1 ? "" : "s"}
+          {t("review:findings", { count: count })}
           <IconChevronDown className="h-3 w-3" />
         </Button>
       </PopoverTrigger>

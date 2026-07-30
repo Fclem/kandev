@@ -131,10 +131,11 @@ function useTerminalCloseHandler({
 // TerminalsListHeader shows the terminal count and the "New terminal" action at
 // the top of the mobile terminal picker sheet.
 function TerminalsListHeader({ count, onAdd }: { count: number; onAdd: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between px-1">
       <span className="text-xs font-medium text-muted-foreground">
-        {count} terminal{count === 1 ? "" : "s"}
+        {t("task:terminals", { count: count })}
       </span>
       <Button
         size="sm"

@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "react-i18next";
 
 import { useMemo, useState } from "react";
 import { IconChevronDown, IconLoader2 } from "@tabler/icons-react";
@@ -49,6 +50,7 @@ export function AgentTurnPanel({
   toInclusive,
   isLive,
 }: AgentTurnPanelProps) {
+  const { t } = useTranslation();
   const { messages, isLoading } = useSessionMessages(sessionId);
   const turnMessages = useMemo(() => {
     const fromMs = fromExclusive ? new Date(fromExclusive).getTime() : -Infinity;
@@ -79,9 +81,7 @@ export function AgentTurnPanel({
           {isLive ? "working" : "worked"}
           {duration && <span className="ml-1">for {duration}</span>}
           {turnMessages.length > 0 && (
-            <span className="ml-1">
-              · {turnMessages.length} message{turnMessages.length === 1 ? "" : "s"}
-            </span>
+            <span className="ml-1">· {t("task:messages", { count: turnMessages.length })}</span>
           )}
         </span>
         <span className="flex-1" />

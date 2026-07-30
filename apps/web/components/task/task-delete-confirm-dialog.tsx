@@ -100,7 +100,7 @@ export function TaskDeleteConfirmDialog({
               data-testid="delete-cascade-checkbox"
             />
             <span>
-              Also delete {subtaskCount} subtask{subtaskCount === 1 ? "" : "s"}
+              Also delete {t("task:subtasks", { count: subtaskCount })}
               <span className="block text-xs text-muted-foreground">
                 {t("task:subtasksBecomeRootTasksUnlessYou")}
               </span>

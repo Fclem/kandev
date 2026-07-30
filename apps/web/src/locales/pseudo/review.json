@@ -10,6 +10,8 @@
   "files_one": "{{count}} ƒĩĺē",
   "files_other": "{{count}} ƒĩĺēś",
   "filterChangedFiles": "Ƒĩĺţēŕ ćĥàńĝēď ƒĩĺēś",
+  "findings_one": "{{count}} ƒĩńďĩńĝ",
+  "findings_other": "{{count}} ƒĩńďĩńĝś",
   "fixComments": "<0></0> Ƒĩx Ćōḿḿēńţś <2>{{commentCount}}</2>",
   "loadingChanges": "Ĺōàďĩńĝ {{repo}} #{{pr_number}} ćĥàńĝēś…",
   "newWalkthrough": "Ńēŵ ŵàĺķţĥŕōũĝĥ",

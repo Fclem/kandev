@@ -37,7 +37,7 @@ export function RunActivityChart({ days }: Props) {
         <CardTitle className="flex items-baseline justify-between text-sm">
           <span>{t("office:runActivity")}</span>
           <span className="text-xs font-normal text-muted-foreground">
-            {total} run{total === 1 ? "" : "s"}
+            {t("office:runs", { count: total })}
           </span>
         </CardTitle>
       </CardHeader>

@@ -92,6 +92,7 @@ function RepoRowItem({
   isActive: boolean;
   onSelect: (row: RepoRow) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       role="button"
@@ -118,7 +119,7 @@ function RepoRowItem({
           </span>
           {row.sessionCount > 0 && (
             <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-foreground/10 text-muted-foreground leading-none ml-1 shrink-0">
-              {row.sessionCount} session{row.sessionCount === 1 ? "" : "s"}
+              {t("task:sessions", { count: row.sessionCount })}
             </span>
           )}
         </div>

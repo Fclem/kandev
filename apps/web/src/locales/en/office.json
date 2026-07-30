@@ -381,6 +381,8 @@
   "runNow": "<0></0> Run now",
   "runNow2": "<0></0> Run Now",
   "runs": "Runs",
+  "runs_one": "{{count}} run",
+  "runs_other": "{{count}} runs",
   "runtime": "Runtime",
   "runtimeCapabilities": "Runtime capabilities",
   "save": "<0></0> Save",

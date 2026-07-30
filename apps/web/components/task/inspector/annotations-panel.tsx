@@ -48,7 +48,7 @@ export function AnnotationsPanel({ annotations, onRemove, onClear }: Annotations
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
-          {annotations.length} annotation{annotations.length === 1 ? "" : "s"}
+          {t("task:annotations", { count: annotations.length })}
         </span>
         <div className="flex items-center gap-1">
           <Button

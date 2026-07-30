@@ -18,6 +18,7 @@ import {
   useSelectableProfileOptions,
 } from "./agent-profile-setup-controls";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
 type ProfileSelectOption = ReturnType<typeof useSelectableProfileOptions>["profileOptions"][number];
 
@@ -38,12 +39,16 @@ type StepAgentProps = {
 
 // Fallback used only when meta has not been hydrated yet (graceful degradation).
 const FALLBACK_EXECUTOR_OPTIONS = [
-  { id: "local_pc", label: "Local (standalone)", description: "Run on host machine" },
-  { id: "local_docker", label: "Local Docker", description: "Run in a local Docker container" },
+  { id: "local_pc", labelKey: "office:localStandalone", descriptionKey: "office:runOnHostMachine" },
+  {
+    id: "local_docker",
+    labelKey: "office:localDocker",
+    descriptionKey: "office:runInALocalDockerContainer",
+  },
   {
     id: "sprites",
-    label: "Sprites (remote sandbox)",
-    description: "Run in a Sprites cloud environment",
+    labelKey: "office:spritesRemoteSandbox",
+    descriptionKey: "office:runInASpritesCloudEnvironment",
   },
 ];
 
@@ -262,7 +267,7 @@ function ExecutorSelector({
   onChange,
 }: {
   value: string;
-  options: { id: string; label: string; description: string }[];
+  options: ({ id: string; descriptionKey?: string; description?: string } & OptionLabel)[];
   onChange: (v: string) => void;
 }) {
   const { t } = useTranslation();
@@ -273,14 +278,14 @@ function ExecutorSelector({
     const disabled = opt.id !== "local_pc";
     return {
       value: opt.id,
-      label: opt.label,
-      description: opt.description,
+      label: resolveOptionLabel(t, opt),
+      description: opt.descriptionKey ? t(opt.descriptionKey) : (opt.description ?? ""),
       disabled,
-      disabledReason: disabled ? "Coming soon — only Local is supported right now." : undefined,
+      disabledReason: disabled ? t("office:comingSoonOnlyLocalIsSupported") : undefined,
       renderLabel: () => (
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate">{opt.label}</span>
+          <span className="truncate">{resolveOptionLabel(t, opt)}</span>
         </span>
       ),
     };
@@ -297,7 +302,9 @@ function ExecutorSelector({
         triggerClassName="mt-1 border border-input rounded-md px-3 h-9"
       />
       {selected ? (
-        <p className="text-xs text-muted-foreground mt-1">{selected.description}</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {selected.descriptionKey ? t(selected.descriptionKey) : selected.description}
+        </p>
       ) : null}
     </div>
   );

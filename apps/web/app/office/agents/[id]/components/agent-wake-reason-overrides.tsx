@@ -18,6 +18,7 @@ import {
   WAKE_REASONS,
 } from "../../../workspace/routing/components/wake-reason-info";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
 type Props = {
   overrides: AgentRoutingOverrides;
@@ -119,9 +120,9 @@ function InheritedSummary({
     return <p className="text-xs text-muted-foreground">{t("office:usingThisAgentSWakeReason")}</p>;
   }
   const parts = WAKE_REASONS.map((r) => {
-    const t = wsPolicy[r.id];
-    if (!t) return null;
-    return `${r.label} → ${t}`;
+    const tier = wsPolicy[r.id];
+    if (!tier) return null;
+    return `${resolveOptionLabel(t, r)} → ${tier}`;
   }).filter((s): s is string => s !== null);
   if (parts.length === 0) {
     return (
@@ -139,10 +140,10 @@ function InheritedSummary({
   );
 }
 
-const TIER_OPTIONS: Array<{ value: Tier; label: string }> = [
-  { value: "frontier", label: "Frontier" },
-  { value: "balanced", label: "Balanced" },
-  { value: "economy", label: "Economy" },
+const TIER_OPTIONS: Array<{ value: Tier } & OptionLabel> = [
+  { value: "frontier", labelKey: "office:frontier" },
+  { value: "balanced", labelKey: "office:balanced" },
+  { value: "economy", labelKey: "office:economy" },
 ];
 
 type OverrideTableProps = {
@@ -162,7 +163,9 @@ function OverrideTable({ wsPolicy, agentMap, workspaceConfig, onChange }: Overri
         return (
           <div key={row.id} className="py-2 space-y-1.5 first:pt-0 last:pb-0">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-medium uppercase tracking-wide">{row.label}</span>
+              <span className="text-xs font-medium uppercase tracking-wide">
+                {resolveOptionLabel(t, row)}
+              </span>
               <Select
                 value={tier ?? USE_AGENT_TIER}
                 onValueChange={(v) => onChange(row.id, v as Tier | typeof USE_AGENT_TIER)}
@@ -176,7 +179,7 @@ function OverrideTable({ wsPolicy, agentMap, workspaceConfig, onChange }: Overri
                   </SelectItem>
                   {TIER_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
-                      {opt.label}
+                      {resolveOptionLabel(t, opt)}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -9,14 +9,15 @@ import { useWorkspaceRouting } from "@/hooks/domains/office/use-workspace-routin
 import type { ProviderHealth, ProviderHealthState } from "@/lib/state/slices/office/types";
 import { providerLabel } from "../../workspace/routing/components/provider-order-editor";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
 const STATE_PILL: Record<
   ProviderHealthState,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+  { labelKey: string; variant: "default" | "secondary" | "destructive" | "outline" }
 > = {
-  healthy: { label: "Healthy", variant: "secondary" },
-  degraded: { label: "Degraded", variant: "destructive" },
-  user_action_required: { label: "Needs action", variant: "destructive" },
+  healthy: { labelKey: "office:healthy", variant: "secondary" },
+  degraded: { labelKey: "office:degraded", variant: "destructive" },
+  user_action_required: { labelKey: "office:needsAction", variant: "destructive" },
 };
 
 export function ProviderHealthCard() {
@@ -58,6 +59,7 @@ export function ProviderHealthCard() {
 }
 
 function ProviderHealthRow({ h }: { h: ProviderHealth }) {
+  const { t } = useTranslation();
   const pill = STATE_PILL[h.state];
   return (
     <Link
@@ -66,7 +68,7 @@ function ProviderHealthRow({ h }: { h: ProviderHealth }) {
     >
       <span className="text-sm flex-1">{providerLabel(h.provider_id)}</span>
       <Badge variant={pill.variant} className="text-xs">
-        {pill.label}
+        {resolveOptionLabel(t, pill)}
       </Badge>
       {h.error_code && (
         <span className="text-[10px] font-mono text-muted-foreground">{h.error_code}</span>

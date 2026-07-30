@@ -11,6 +11,7 @@ import { useAppStore } from "@/components/state-provider";
 import { createAgentProfile } from "@/lib/api/domains/office-api";
 import type { AgentRole, AgentProfile } from "@/lib/state/slices/office/types";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
 type CreateAgentDialogProps = {
   open: boolean;
@@ -62,7 +63,7 @@ function RoleAndReports({
   role: AgentRole;
   reportsTo: string;
   agents: AgentProfile[];
-  roles: Array<{ id: string; label: string }>;
+  roles: Array<{ id: string } & OptionLabel>;
   onChange: (patch: Partial<FormState>) => void;
 }) {
   const { t } = useTranslation();
@@ -77,7 +78,7 @@ function RoleAndReports({
           <SelectContent>
             {roles.map((r) => (
               <SelectItem key={r.id} value={r.id} className="cursor-pointer">
-                {r.label}
+                {resolveOptionLabel(t, r)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -159,7 +160,7 @@ function ExecutorPreferenceField({
   onChange,
 }: {
   value: string;
-  executorTypes: Array<{ id: string; label: string }>;
+  executorTypes: Array<{ id: string } & OptionLabel>;
   onChange: (v: string) => void;
 }) {
   const { t } = useTranslation();
@@ -179,7 +180,7 @@ function ExecutorPreferenceField({
           </SelectItem>
           {executorTypes.map((et) => (
             <SelectItem key={et.id} value={et.id} className="cursor-pointer">
-              {et.label}
+              {resolveOptionLabel(t, et)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -193,18 +194,18 @@ function ExecutorPreferenceField({
 
 const FALLBACK_ROLES = [
   { id: "ceo", label: "CEO" },
-  { id: "worker", label: "Worker" },
-  { id: "specialist", label: "Specialist" },
-  { id: "assistant", label: "Assistant" },
-  { id: "security", label: "Security" },
+  { id: "worker", labelKey: "office:worker" },
+  { id: "specialist", labelKey: "office:specialist" },
+  { id: "assistant", labelKey: "office:assistant" },
+  { id: "security", labelKey: "office:security" },
   { id: "qa", label: "QA" },
-  { id: "devops", label: "DevOps" },
+  { id: "devops", labelKey: "office:devops" },
 ];
 
 const FALLBACK_EXECUTOR_TYPES = [
-  { id: "local_pc", label: "Local (standalone)" },
-  { id: "local_docker", label: "Local Docker" },
-  { id: "sprites", label: "Sprites (remote sandbox)" },
+  { id: "local_pc", labelKey: "office:localStandalone" },
+  { id: "local_docker", labelKey: "office:localDocker" },
+  { id: "sprites", labelKey: "office:spritesRemoteSandbox" },
 ];
 
 export function CreateAgentDialog({ open, onOpenChange }: CreateAgentDialogProps) {

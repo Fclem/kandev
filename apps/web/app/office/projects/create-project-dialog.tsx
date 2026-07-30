@@ -15,6 +15,7 @@ import type { AgentProfile } from "@/lib/state/slices/office/types";
 import { ProjectRepositoryPicker } from "./project-repository-picker";
 import { RepoChip } from "./repo-chip";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
 const COLOR_OPTIONS = [
   "#ef4444",
@@ -93,10 +94,10 @@ function ReposField({
 }
 
 const FALLBACK_EXECUTOR_TYPES = [
-  { id: "local_pc", label: "Local (standalone)" },
-  { id: "local_docker", label: "Local Docker" },
-  { id: "sprites", label: "Sprites (remote sandbox)" },
-  { id: "remote_docker", label: "Remote Docker" },
+  { id: "local_pc", labelKey: "office:localStandalone" },
+  { id: "local_docker", labelKey: "office:localDocker" },
+  { id: "sprites", labelKey: "office:spritesRemoteSandbox" },
+  { id: "remote_docker", labelKey: "office:remoteDocker" },
 ];
 
 function ExecutorField({
@@ -108,7 +109,7 @@ function ExecutorField({
 }: {
   executorType: string;
   dockerImage: string;
-  executorTypes: Array<{ id: string; label: string }>;
+  executorTypes: Array<{ id: string } & OptionLabel>;
   onExecutorTypeChange: (v: string) => void;
   onDockerImageChange: (v: string) => void;
 }) {
@@ -127,7 +128,7 @@ function ExecutorField({
           </SelectItem>
           {executorTypes.map((et) => (
             <SelectItem key={et.id} value={et.id} className="cursor-pointer">
-              {et.label}
+              {resolveOptionLabel(t, et)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -229,7 +230,7 @@ function ProjectFormBody({
 }: {
   form: ProjectFormState;
   agents: AgentProfile[];
-  executorTypes: Array<{ id: string; label: string }>;
+  executorTypes: Array<{ id: string } & OptionLabel>;
   workspaceId: string;
   onUpdate: (patch: Partial<ProjectFormState>) => void;
   onAddRepo: (repo: string) => void;

@@ -13,6 +13,7 @@ import { updateAgentProfile, getAgentUtilization } from "@/lib/api/domains/offic
 import type { AgentProfile, AgentRole, ProviderUsage } from "@/lib/state/slices/office/types";
 import { UtilizationBars } from "@/app/office/components/utilization-bars";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
 type AgentOverviewTabProps = {
   agent: AgentProfile;
@@ -29,7 +30,7 @@ function IdentityCard({
   name: string;
   role: AgentRole;
   reportsToName: string;
-  roles: Array<{ id: string; label: string }>;
+  roles: Array<{ id: string } & OptionLabel>;
   onNameChange: (v: string) => void;
   onRoleChange: (v: AgentRole) => void;
 }) {
@@ -57,7 +58,7 @@ function IdentityCard({
               <SelectContent>
                 {roles.map((r) => (
                   <SelectItem key={r.id} value={r.id} className="cursor-pointer">
-                    {r.label}
+                    {resolveOptionLabel(t, r)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -85,7 +86,7 @@ function ConfigurationCard({
   budget: number;
   maxConcurrent: number;
   executorType: string;
-  executorTypes: Array<{ id: string; label: string }>;
+  executorTypes: Array<{ id: string } & OptionLabel>;
   onBudgetChange: (v: number) => void;
   onMaxConcurrentChange: (v: number) => void;
   onExecutorTypeChange: (v: string) => void;
@@ -138,7 +139,7 @@ function ConfigurationCard({
               </SelectItem>
               {executorTypes.map((et) => (
                 <SelectItem key={et.id} value={et.id} className="cursor-pointer">
-                  {et.label}
+                  {resolveOptionLabel(t, et)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -209,15 +210,15 @@ function QuotaCard({
 
 const FALLBACK_ROLES = [
   { id: "ceo", label: "CEO" },
-  { id: "worker", label: "Worker" },
-  { id: "specialist", label: "Specialist" },
-  { id: "assistant", label: "Assistant" },
+  { id: "worker", labelKey: "office:worker" },
+  { id: "specialist", labelKey: "office:specialist" },
+  { id: "assistant", labelKey: "office:assistant" },
 ];
 
 const FALLBACK_EXECUTOR_TYPES = [
-  { id: "local_pc", label: "Local (standalone)" },
-  { id: "local_docker", label: "Local Docker" },
-  { id: "sprites", label: "Sprites (remote sandbox)" },
+  { id: "local_pc", labelKey: "office:localStandalone" },
+  { id: "local_docker", labelKey: "office:localDocker" },
+  { id: "sprites", labelKey: "office:spritesRemoteSandbox" },
 ];
 
 export function AgentOverviewTab({ agent }: AgentOverviewTabProps) {

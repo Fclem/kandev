@@ -9,15 +9,16 @@ import { ActivityRow } from "./activity-row";
 import { EmptyState } from "../../components/shared/empty-state";
 import { PageHeader } from "../../components/shared/page-header";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
 const FILTER_OPTIONS = [
-  { value: "all", label: "All types" },
-  { value: "agent", label: "Agent" },
-  { value: "task", label: "Task" },
-  { value: "project", label: "Project" },
-  { value: "budget", label: "Budget" },
-  { value: "approval", label: "Approval" },
-  { value: "system", label: "System" },
+  { value: "all", labelKey: "office:allTypes" },
+  { value: "agent", labelKey: "office:agent" },
+  { value: "task", labelKey: "office:task2" },
+  { value: "project", labelKey: "office:project" },
+  { value: "budget", labelKey: "office:budget2" },
+  { value: "approval", labelKey: "office:approval" },
+  { value: "system", labelKey: "office:system" },
 ];
 
 export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
@@ -45,7 +46,7 @@ export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
             <SelectContent>
               {FILTER_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
-                  {opt.label}
+                  {resolveOptionLabel(t, opt)}
                 </SelectItem>
               ))}
             </SelectContent>

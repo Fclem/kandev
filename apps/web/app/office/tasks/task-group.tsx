@@ -7,14 +7,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { TaskGroupBy } from "@/lib/state/slices/office/types";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
-const GROUP_OPTIONS: { value: TaskGroupBy; label: string }[] = [
-  { value: "none", label: "No grouping" },
-  { value: "status", label: "Status" },
-  { value: "priority", label: "Priority" },
-  { value: "assignee", label: "Assignee" },
-  { value: "project", label: "Project" },
-  { value: "parent", label: "Parent" },
+const GROUP_OPTIONS: ({ value: TaskGroupBy } & OptionLabel)[] = [
+  { value: "none", labelKey: "office:noGrouping" },
+  { value: "status", labelKey: "office:status" },
+  { value: "priority", labelKey: "office:priority" },
+  { value: "assignee", labelKey: "office:assignee" },
+  { value: "project", labelKey: "office:project" },
+  { value: "parent", labelKey: "office:parent" },
 ];
 
 type IssueGroupProps = {
@@ -52,7 +53,7 @@ export function TaskGroup({ groupBy, onGroupByChange }: IssueGroupProps) {
                 groupBy === opt.value ? "bg-accent text-foreground" : "hover:bg-accent/50",
               )}
             >
-              {opt.label}
+              {resolveOptionLabel(t, opt)}
             </button>
           ))}
         </div>

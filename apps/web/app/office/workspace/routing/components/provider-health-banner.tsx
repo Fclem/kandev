@@ -7,16 +7,17 @@ import { Button } from "@kandev/ui/button";
 import type { ProviderHealth } from "@/lib/state/slices/office/types";
 import { providerLabel } from "./provider-order-editor";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
 type Props = {
   health: ProviderHealth[];
   onRetry: (providerId: string) => Promise<void>;
 };
 
-const STATE_BADGE: Record<ProviderHealth["state"], { label: string; variant: BadgeVariant }> = {
-  healthy: { label: "Healthy", variant: "outline" },
-  degraded: { label: "Degraded", variant: "destructive" },
-  user_action_required: { label: "Needs action", variant: "destructive" },
+const STATE_BADGE: Record<ProviderHealth["state"], { labelKey: string; variant: BadgeVariant }> = {
+  healthy: { labelKey: "office:healthy", variant: "outline" },
+  degraded: { labelKey: "office:degraded", variant: "destructive" },
+  user_action_required: { labelKey: "office:needsAction", variant: "destructive" },
 };
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
@@ -70,7 +71,7 @@ function ProviderHealthRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium">{providerLabel(h.provider_id)}</span>
-          <Badge variant={meta.variant}>{meta.label}</Badge>
+          <Badge variant={meta.variant}>{resolveOptionLabel(t, meta)}</Badge>
           {h.error_code && (
             <span className="text-xs font-mono text-muted-foreground">{h.error_code}</span>
           )}

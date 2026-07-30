@@ -5,15 +5,17 @@ import { ScrollArea } from "@kandev/ui/scroll-area";
 import { useAppStore } from "@/components/state-provider";
 import type { OfficeTask, OfficeTaskStatus } from "@/lib/state/slices/office/types";
 import { StatusIcon } from "./status-icon";
+import { useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
-const FALLBACK_COLUMNS: { status: OfficeTaskStatus; label: string }[] = [
-  { status: "backlog", label: "Backlog" },
-  { status: "todo", label: "Todo" },
-  { status: "in_progress", label: "In Progress" },
-  { status: "in_review", label: "In Review" },
-  { status: "blocked", label: "Blocked" },
-  { status: "done", label: "Done" },
-  { status: "cancelled", label: "Cancelled" },
+const FALLBACK_COLUMNS: ({ status: OfficeTaskStatus } & OptionLabel)[] = [
+  { status: "backlog", labelKey: "office:backlog" },
+  { status: "todo", labelKey: "office:todo" },
+  { status: "in_progress", labelKey: "office:inProgress3" },
+  { status: "in_review", labelKey: "office:inReview2" },
+  { status: "blocked", labelKey: "office:blocked" },
+  { status: "done", labelKey: "office:done2" },
+  { status: "cancelled", labelKey: "office:cancelled" },
 ];
 
 type TaskBoardProps = {
@@ -68,6 +70,7 @@ function BoardColumn({
 }
 
 export function TaskBoard({ tasks }: TaskBoardProps) {
+  const { t } = useTranslation();
   const meta = useAppStore((s) => s.office.meta);
   const columns = meta
     ? meta.statuses.map((s) => ({ status: s.id as OfficeTaskStatus, label: s.label }))
@@ -87,7 +90,7 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
       {columns.map((col) => (
         <BoardColumn
           key={col.status}
-          label={col.label}
+          label={resolveOptionLabel(t, col)}
           status={col.status}
           tasks={grouped.get(col.status) ?? []}
         />

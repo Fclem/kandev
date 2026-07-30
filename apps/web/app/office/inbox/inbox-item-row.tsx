@@ -27,15 +27,15 @@ const ICON_MAP: Record<string, typeof IconShieldCheck> = {
   route: IconRoute,
 };
 
-const FALLBACK_TYPE_CONFIG: Record<string, { icon: typeof IconShieldCheck; label: string }> = {
-  approval: { icon: IconShieldCheck, label: "Approval" },
-  budget_alert: { icon: IconAlertTriangle, label: "Budget Alert" },
-  agent_error: { icon: IconBug, label: "Agent Error" },
-  agent_run_failed: { icon: IconBug, label: "Agent run failed" },
-  agent_paused_after_failures: { icon: IconPlayerPause, label: "Agent auto-paused" },
-  task_review: { icon: IconEye, label: "Task Review" },
-  task_review_request: { icon: IconEye, label: "Review Request" },
-  provider_degraded: { icon: IconRoute, label: "Provider degraded" },
+const FALLBACK_TYPE_CONFIG: Record<string, { icon: typeof IconShieldCheck; labelKey: string }> = {
+  approval: { icon: IconShieldCheck, labelKey: "office:approval" },
+  budget_alert: { icon: IconAlertTriangle, labelKey: "office:budgetAlert" },
+  agent_error: { icon: IconBug, labelKey: "office:agentError" },
+  agent_run_failed: { icon: IconBug, labelKey: "office:agentRunFailed" },
+  agent_paused_after_failures: { icon: IconPlayerPause, labelKey: "office:agentAutoPaused" },
+  task_review: { icon: IconEye, labelKey: "office:taskReview" },
+  task_review_request: { icon: IconEye, labelKey: "office:reviewRequest" },
+  provider_degraded: { icon: IconRoute, labelKey: "office:providerDegraded" },
 };
 
 // taskReviewHref returns the deep link for a `task_review_request`

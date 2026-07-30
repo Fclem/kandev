@@ -3,11 +3,12 @@
 import { ToggleGroup, ToggleGroupItem } from "@kandev/ui/toggle-group";
 import type { Tier } from "@/lib/state/slices/office/types";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
-const TIER_OPTIONS: Array<{ value: Tier; label: string; hint: string }> = [
-  { value: "frontier", label: "Frontier", hint: "Best capability per provider" },
-  { value: "balanced", label: "Balanced", hint: "Standard capability" },
-  { value: "economy", label: "Economy", hint: "Cheapest viable model" },
+const TIER_OPTIONS: Array<{ value: Tier; labelKey: string; hintKey: string }> = [
+  { value: "frontier", labelKey: "office:frontier", hintKey: "office:bestCapabilityPerProvider" },
+  { value: "balanced", labelKey: "office:balanced", hintKey: "office:standardCapability" },
+  { value: "economy", labelKey: "office:economy", hintKey: "office:cheapestViableModel" },
 ];
 
 type Props = {
@@ -38,10 +39,10 @@ export function DefaultTierSelector({ value, onChange, disabled }: Props) {
             key={opt.value}
             value={opt.value}
             className="cursor-pointer flex flex-col items-center px-4 py-2 h-auto"
-            title={opt.hint}
+            title={t(opt.hintKey)}
           >
-            <span className="text-sm">{opt.label}</span>
-            <span className="text-[10px] text-muted-foreground">{opt.hint}</span>
+            <span className="text-sm">{resolveOptionLabel(t, opt)}</span>
+            <span className="text-[10px] text-muted-foreground">{t(opt.hintKey)}</span>
           </ToggleGroupItem>
         ))}
       </ToggleGroup>

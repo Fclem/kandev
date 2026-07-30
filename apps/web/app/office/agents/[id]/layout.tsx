@@ -16,21 +16,22 @@ import { AgentRoleBadge } from "../components/agent-role-badge";
 import { BudgetGauge } from "../components/budget-gauge";
 import { AgentRouteStrip } from "./components/agent-route-strip";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
 type AgentDetailLayoutProps = {
   children: ReactNode;
   params: Promise<{ id: string }>;
 };
 
-const TABS: Array<{ slug: string; label: string }> = [
-  { slug: "dashboard", label: "Dashboard" },
-  { slug: "instructions", label: "Instructions" },
-  { slug: "skills", label: "Skills" },
-  { slug: "configuration", label: "Configuration" },
-  { slug: "permissions", label: "Permissions" },
-  { slug: "runs", label: "Runs" },
-  { slug: "memory", label: "Memory" },
-  { slug: "channels", label: "Channels" },
+const TABS: Array<{ slug: string } & OptionLabel> = [
+  { slug: "dashboard", labelKey: "office:dashboard" },
+  { slug: "instructions", labelKey: "office:instructions" },
+  { slug: "skills", labelKey: "office:skills" },
+  { slug: "configuration", labelKey: "office:configuration" },
+  { slug: "permissions", labelKey: "office:permissions" },
+  { slug: "runs", labelKey: "office:runs" },
+  { slug: "memory", labelKey: "office:memory" },
+  { slug: "channels", labelKey: "office:channels" },
 ];
 
 /**
@@ -114,7 +115,7 @@ export default function AgentDetailLayout({ children, params }: AgentDetailLayou
                   : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
-              {tab.label}
+              {resolveOptionLabel(t, tab)}
             </Link>
           ))}
         </nav>

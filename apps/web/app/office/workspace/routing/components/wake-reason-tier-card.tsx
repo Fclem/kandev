@@ -14,6 +14,7 @@ import type {
 import { providerLabel } from "./provider-order-editor";
 import { USE_AGENT_TIER, WAKE_REASONS, type WakeReasonCopy } from "./wake-reason-info";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
 type Props = {
   config: WorkspaceRouting;
@@ -86,14 +87,17 @@ function WakeReasonRow({ row, tier, config, disabled, onChange }: RowProps) {
 }
 
 function RowLabel({ row }: { row: WakeReasonCopy }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-sm font-medium uppercase tracking-wide">{row.label}</span>
+      <span className="text-sm font-medium uppercase tracking-wide">
+        {resolveOptionLabel(t, row)}
+      </span>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
-            aria-label={`More info about ${row.label}`}
+            aria-label={`More info about ${resolveOptionLabel(t, row)}`}
             className="cursor-pointer text-muted-foreground hover:text-foreground"
           >
             <IconInfoCircle className="h-3.5 w-3.5" />
@@ -107,10 +111,10 @@ function RowLabel({ row }: { row: WakeReasonCopy }) {
   );
 }
 
-const TIER_OPTIONS: Array<{ value: Tier; label: string }> = [
-  { value: "frontier", label: "Frontier (best capability)" },
-  { value: "balanced", label: "Balanced (standard)" },
-  { value: "economy", label: "Economy (cheapest)" },
+const TIER_OPTIONS: Array<{ value: Tier } & OptionLabel> = [
+  { value: "frontier", labelKey: "office:frontierBestCapability" },
+  { value: "balanced", labelKey: "office:balancedStandard" },
+  { value: "economy", labelKey: "office:economyCheapest" },
 ];
 
 function TierSelect({
@@ -139,7 +143,7 @@ function TierSelect({
         </SelectItem>
         {TIER_OPTIONS.map((opt) => (
           <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
-            {opt.label}
+            {resolveOptionLabel(t, opt)}
           </SelectItem>
         ))}
       </SelectContent>

@@ -8,11 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAppStore } from "@/components/state-provider";
 import type { SkillSourceType } from "@/lib/state/slices/office/types";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
 const FALLBACK_SOURCE_TYPES = [
-  { id: "inline", label: "Inline (edit in browser)" },
-  { id: "local_path", label: "Local Path" },
-  { id: "git", label: "Git Repository" },
+  { id: "inline", labelKey: "office:inlineEditInBrowser" },
+  { id: "local_path", labelKey: "office:localPath" },
+  { id: "git", labelKey: "office:gitRepository" },
 ];
 
 type CreateSkillFormProps = {
@@ -78,7 +79,7 @@ export function CreateSkillForm({ onCreate, onCancel }: CreateSkillFormProps) {
           <SelectContent>
             {sourceTypes.map((st) => (
               <SelectItem key={st.id} value={st.id}>
-                {st.label}
+                {resolveOptionLabel(t, st)}
               </SelectItem>
             ))}
           </SelectContent>

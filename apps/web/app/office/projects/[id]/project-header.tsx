@@ -11,12 +11,13 @@ import { updateProject } from "@/lib/api/domains/office-api";
 import { useAppStore } from "@/components/state-provider";
 import type { Project, ProjectStatus } from "@/lib/state/slices/office/types";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
-const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
-  { value: "active", label: "Active" },
-  { value: "completed", label: "Completed" },
-  { value: "on_hold", label: "On Hold" },
-  { value: "archived", label: "Archived" },
+const STATUS_OPTIONS: ({ value: ProjectStatus } & OptionLabel)[] = [
+  { value: "active", labelKey: "office:active" },
+  { value: "completed", labelKey: "office:completed" },
+  { value: "on_hold", labelKey: "office:onHold" },
+  { value: "archived", labelKey: "office:archived" },
 ];
 
 type ProjectHeaderProps = {
@@ -82,7 +83,7 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
           <SelectContent>
             {STATUS_OPTIONS.map((opt) => (
               <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
-                {opt.label}
+                {resolveOptionLabel(t, opt)}
               </SelectItem>
             ))}
           </SelectContent>

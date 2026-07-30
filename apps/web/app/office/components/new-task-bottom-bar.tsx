@@ -15,14 +15,19 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useAppStore } from "@/components/state-provider";
 import type { IssueDraft } from "./new-task-draft";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
-type StatusOption = { value: string; label: string; className: string };
-type PriorityOption = { value: string; label: string; icon: typeof IconMinus; className: string };
+type StatusOption = { value: string; className: string } & OptionLabel;
+type PriorityOption = { value: string; icon: typeof IconMinus; className: string } & OptionLabel;
 
 const FALLBACK_STATUS_OPTIONS: StatusOption[] = [
-  { value: "backlog", label: "Backlog", className: "text-muted-foreground" },
-  { value: "todo", label: "Todo", className: "text-blue-600 dark:text-blue-400" },
-  { value: "in_progress", label: "In Progress", className: "text-yellow-600 dark:text-yellow-400" },
+  { value: "backlog", labelKey: "office:backlog", className: "text-muted-foreground" },
+  { value: "todo", labelKey: "office:todo", className: "text-blue-600 dark:text-blue-400" },
+  {
+    value: "in_progress",
+    labelKey: "office:inProgress3",
+    className: "text-yellow-600 dark:text-yellow-400",
+  },
 ];
 
 const PRIORITY_ICONS: Record<string, typeof IconMinus> = {
@@ -33,10 +38,15 @@ const PRIORITY_ICONS: Record<string, typeof IconMinus> = {
 };
 
 const FALLBACK_PRIORITY_OPTIONS: PriorityOption[] = [
-  { value: "critical", label: "Critical", icon: IconAlertTriangle, className: "text-red-600" },
-  { value: "high", label: "High", icon: IconArrowUp, className: "text-orange-600" },
-  { value: "medium", label: "Medium", icon: IconMinus, className: "text-yellow-600" },
-  { value: "low", label: "Low", icon: IconArrowDown, className: "text-blue-600" },
+  {
+    value: "critical",
+    labelKey: "office:critical",
+    icon: IconAlertTriangle,
+    className: "text-red-600",
+  },
+  { value: "high", labelKey: "office:high", icon: IconArrowUp, className: "text-orange-600" },
+  { value: "medium", labelKey: "office:medium", icon: IconMinus, className: "text-yellow-600" },
+  { value: "low", labelKey: "office:low", icon: IconArrowDown, className: "text-blue-600" },
 ];
 
 type Props = {
@@ -55,6 +65,7 @@ function useStatusOptions(): StatusOption[] {
 }
 
 function StatusChip({ draft, onUpdate }: Props) {
+  const { t } = useTranslation();
   const options = useStatusOptions();
   const current = options.find((s) => s.value === draft.status) ?? options[1] ?? options[0];
   return (
@@ -62,7 +73,7 @@ function StatusChip({ draft, onUpdate }: Props) {
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="cursor-pointer h-7 text-xs">
           <IconCircleDot className={`h-3.5 w-3.5 mr-1 ${current?.className ?? ""}`} />
-          {current?.label ?? draft.status}
+          {resolveOptionLabel(t, current) || draft.status}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-40 p-1" align="start">
@@ -74,7 +85,7 @@ function StatusChip({ draft, onUpdate }: Props) {
             onClick={() => onUpdate({ status: opt.value })}
           >
             <IconCircleDot className={`h-3.5 w-3.5 ${opt.className}`} />
-            {opt.label}
+            {resolveOptionLabel(t, opt)}
           </button>
         ))}
       </PopoverContent>
@@ -97,6 +108,7 @@ function usePriorityOptions(): PriorityOption[] {
 }
 
 function PriorityChip({ draft, onUpdate }: Props) {
+  const { t } = useTranslation();
   const options = usePriorityOptions();
   const current = options.find((p) => p.value === draft.priority) ?? options[2] ?? options[0];
   const PriorityIcon = current?.icon ?? IconMinus;
@@ -105,7 +117,7 @@ function PriorityChip({ draft, onUpdate }: Props) {
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="cursor-pointer h-7 text-xs">
           <PriorityIcon className={`h-3.5 w-3.5 mr-1 ${current?.className ?? ""}`} />
-          {current?.label ?? draft.priority}
+          {resolveOptionLabel(t, current) || draft.priority}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-40 p-1" align="start">
@@ -119,7 +131,7 @@ function PriorityChip({ draft, onUpdate }: Props) {
               onClick={() => onUpdate({ priority: opt.value })}
             >
               <Icon className={`h-3.5 w-3.5 ${opt.className}`} />
-              {opt.label}
+              {resolveOptionLabel(t, opt)}
             </button>
           );
         })}

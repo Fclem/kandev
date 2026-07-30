@@ -15,6 +15,7 @@ import {
   useSelectableProfileOptions,
 } from "./agent-profile-setup-controls";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
 type StepTierProfilesProps = {
   tierProfileIds: Partial<Record<Tier, string>>;
@@ -28,20 +29,18 @@ type StepTierProfilesProps = {
 
 const TIERS = ["frontier", "balanced", "economy"] as const;
 
-const TIER_PROFILE_COPY: Record<Tier, { label: string; description: string }> = {
+const TIER_PROFILE_COPY: Record<Tier, { labelKey: string; descriptionKey: string }> = {
   frontier: {
-    label: "Frontier",
-    description:
-      "Used when the coordinator creates agents for the highest-capability work or assigns the Frontier tier.",
+    labelKey: "office:frontier",
+    descriptionKey: "office:usedWhenTheCoordinatorCreatesAgents",
   },
   balanced: {
-    label: "Balanced",
-    description: "Used for general worker agents when the coordinator assigns the Balanced tier.",
+    labelKey: "office:balanced",
+    descriptionKey: "office:usedForGeneralWorkerAgentsWhen",
   },
   economy: {
-    label: "Economy",
-    description:
-      "Used for QA, routine, and lower-cost agents when the coordinator assigns the Economy tier.",
+    labelKey: "office:economy",
+    descriptionKey: "office:usedForQaRoutineAndLower",
   },
 };
 
@@ -130,19 +129,19 @@ function TierProfileSelector({
   return (
     <div className="min-w-0 space-y-1.5">
       <div className="flex items-center gap-1.5">
-        <Label className="text-xs font-medium">{copy.label}</Label>
+        <Label className="text-xs font-medium">{resolveOptionLabel(t, copy)}</Label>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={`${copy.label} tier usage`}
+              aria-label={`${resolveOptionLabel(t, copy)} tier usage`}
             >
               <IconInfoCircle className="size-3.5" />
             </button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs" side="top">
-            {copy.description}
+            {t(copy.descriptionKey)}
           </TooltipContent>
         </Tooltip>
       </div>

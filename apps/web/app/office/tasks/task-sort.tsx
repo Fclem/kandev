@@ -7,13 +7,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { TaskSortField, TaskSortDir } from "@/lib/state/slices/office/types";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
-const SORT_FIELDS: { value: TaskSortField; label: string }[] = [
-  { value: "updated", label: "Updated" },
-  { value: "created", label: "Created" },
-  { value: "status", label: "Status" },
-  { value: "priority", label: "Priority" },
-  { value: "title", label: "Title" },
+const SORT_FIELDS: ({ value: TaskSortField } & OptionLabel)[] = [
+  { value: "updated", labelKey: "office:updated" },
+  { value: "created", labelKey: "office:created2" },
+  { value: "status", labelKey: "office:status" },
+  { value: "priority", labelKey: "office:priority" },
+  { value: "title", labelKey: "office:title" },
 ];
 
 type IssueSortProps = {
@@ -49,7 +50,7 @@ export function TaskSort({ field, dir, onFieldChange, onDirChange }: IssueSortPr
                 field === f.value ? "bg-accent text-foreground" : "hover:bg-accent/50",
               )}
             >
-              {f.label}
+              {resolveOptionLabel(t, f)}
             </button>
           ))}
         </div>

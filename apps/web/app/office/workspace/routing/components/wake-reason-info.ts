@@ -5,7 +5,7 @@ import type { WakeReason } from "@/lib/state/slices/office/types";
 // per-agent override panel so the explanation stays consistent.
 export type WakeReasonCopy = {
   id: WakeReason;
-  label: string;
+  labelKey: string;
   short: string;
   long: string;
   recommendation: string;
@@ -14,7 +14,7 @@ export type WakeReasonCopy = {
 export const WAKE_REASONS: WakeReasonCopy[] = [
   {
     id: "heartbeat",
-    label: "Heartbeat",
+    labelKey: "office:heartbeat",
     short:
       "Periodic check-in your agent runs on a schedule (every few minutes) " +
       "to see if anything new needs attention.",
@@ -27,7 +27,7 @@ export const WAKE_REASONS: WakeReasonCopy[] = [
   },
   {
     id: "routine_trigger",
-    label: "Routine trigger",
+    labelKey: "office:routineTrigger",
     short:
       "Scheduled jobs you have set up under Routines " +
       `(e.g. "summarise PRs every Monday morning").`,
@@ -40,7 +40,7 @@ export const WAKE_REASONS: WakeReasonCopy[] = [
   },
   {
     id: "budget_alert",
-    label: "Budget alert",
+    labelKey: "office:budgetAlert2",
     short:
       "Agent is notified when a workspace or project budget is near its " +
       "limit and may need to throttle or escalate.",

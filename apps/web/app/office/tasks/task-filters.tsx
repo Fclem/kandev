@@ -14,23 +14,24 @@ import type {
 } from "@/lib/state/slices/office/types";
 import { StatusIcon } from "./status-icon";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
-const FALLBACK_STATUSES: { value: OfficeTaskStatus; label: string }[] = [
-  { value: "backlog", label: "Backlog" },
-  { value: "todo", label: "Todo" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "in_review", label: "In Review" },
-  { value: "blocked", label: "Blocked" },
-  { value: "done", label: "Done" },
-  { value: "cancelled", label: "Cancelled" },
+const FALLBACK_STATUSES: ({ value: OfficeTaskStatus } & OptionLabel)[] = [
+  { value: "backlog", labelKey: "office:backlog" },
+  { value: "todo", labelKey: "office:todo" },
+  { value: "in_progress", labelKey: "office:inProgress3" },
+  { value: "in_review", labelKey: "office:inReview2" },
+  { value: "blocked", labelKey: "office:blocked" },
+  { value: "done", labelKey: "office:done2" },
+  { value: "cancelled", labelKey: "office:cancelled" },
 ];
 
-const FALLBACK_PRIORITIES: { value: OfficeTaskPriority; label: string }[] = [
-  { value: "critical", label: "Critical" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" },
-  { value: "none", label: "None" },
+const FALLBACK_PRIORITIES: ({ value: OfficeTaskPriority } & OptionLabel)[] = [
+  { value: "critical", labelKey: "office:critical" },
+  { value: "high", labelKey: "office:high" },
+  { value: "medium", labelKey: "office:medium" },
+  { value: "low", labelKey: "office:low" },
+  { value: "none", labelKey: "office:none" },
 ];
 
 type IssueFiltersProps = {
@@ -92,7 +93,7 @@ export function TaskFilters({ filters, onFilterChange }: IssueFiltersProps) {
                 className="cursor-pointer"
               />
               <StatusIcon status={s.value} className="h-3.5 w-3.5" />
-              {s.label}
+              {resolveOptionLabel(t, s)}
             </label>
           ))}
         </div>
@@ -108,7 +109,7 @@ export function TaskFilters({ filters, onFilterChange }: IssueFiltersProps) {
                 }
                 className="cursor-pointer"
               />
-              {p.label}
+              {resolveOptionLabel(t, p)}
             </label>
           ))}
         </div>

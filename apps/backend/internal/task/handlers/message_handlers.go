@@ -278,8 +278,10 @@ func (h *MessageHandlers) wsAddMessage(ctx context.Context, msg *ws.Message) (*w
 		req.EntityReferences = references
 	}
 
-	// Transition task from REVIEW → IN_PROGRESS if needed
-	if err := h.ensureTaskInProgress(ctx, req.TaskID); err != nil {
+	// Snapshot the REVIEW parking before on_turn_start so the reactivation
+	// below can follow the workflow step instead of drifting from it.
+	parking, err := h.reviewParkingBeforeTurnStart(ctx, req.TaskID)
+	if err != nil {
 		h.logger.Error("failed to get task", zap.String("task_id", req.TaskID), zap.Error(err))
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to get task", nil)
 	}
@@ -298,7 +300,6 @@ func (h *MessageHandlers) wsAddMessage(ctx context.Context, msg *ws.Message) (*w
 				zap.String("session_id", req.TaskSessionID),
 				zap.Error(err))
 		}
-		var err error
 		sessionResp, err = h.resolveSessionAfterTurnStart(ctx, req.TaskID, req.TaskSessionID, sessionResp)
 		if err != nil {
 			h.logger.Warn("failed to resolve prompt session after on_turn_start",
@@ -312,6 +313,10 @@ func (h *MessageHandlers) wsAddMessage(ctx context.Context, msg *ws.Message) (*w
 	if wsErr := h.errorForBlockedMessageSession(msg, sessionResp.Session.ID, sessionResp.Session.State); wsErr != nil {
 		return wsErr, nil
 	}
+	// on_turn_start has settled the workflow step and the session survived the
+	// blocked-state gate, so the REVIEW reactivation can now follow the board
+	// instead of contradicting it.
+	h.reactivateTaskAfterTurnStart(ctx, req.TaskID, parking)
 	isCreatedSession := sessionResp.Session.State == models.TaskSessionStateCreated
 
 	// Build metadata with attachments, plan mode, review comments, and context files
@@ -483,15 +488,56 @@ func (h *MessageHandlers) logBlockedRunningSession(sessionID string, state model
 		zap.String("session_state", string(state)))
 }
 
-// ensureTaskInProgress fetches the task and transitions it from REVIEW → IN_PROGRESS if needed.
-// Returns an error only when the task cannot be fetched.
-func (h *MessageHandlers) ensureTaskInProgress(ctx context.Context, taskID string) error {
+// reviewParking records that a task was parked in REVIEW, and on which
+// workflow step, before on_turn_start ran.
+type reviewParking struct {
+	parked bool
+	stepID string
+}
+
+// reviewParkingBeforeTurnStart snapshots the task's review parking so the
+// reactivation below can follow the workflow step. Returns an error only when
+// the task cannot be fetched.
+func (h *MessageHandlers) reviewParkingBeforeTurnStart(ctx context.Context, taskID string) (reviewParking, error) {
 	task, err := h.service.GetTask(ctx, taskID)
 	if err != nil {
-		return err
+		return reviewParking{}, err
 	}
 	if task.State != v1.TaskStateReview {
-		return nil
+		return reviewParking{}, nil
+	}
+	return reviewParking{parked: true, stepID: task.WorkflowStepID}, nil
+}
+
+// reactivateTaskAfterTurnStart transitions a task parked in REVIEW to
+// IN_PROGRESS, but only once the workflow released it from the step it was
+// parked on. The workflow step owns the Kanban column and the stepper, so
+// writing IN_PROGRESS while the task still sits on the step it was parked on
+// splits the two apart with nothing to reconcile them (issue #2063). A step
+// that keeps the task (no on_turn_start transition, or a transition rejected
+// by WIP capacity) keeps REVIEW; the runtime reconciles the state to
+// IN_PROGRESS if and when the agent actually starts working.
+func (h *MessageHandlers) reactivateTaskAfterTurnStart(ctx context.Context, taskID string, parking reviewParking) {
+	if !parking.parked {
+		return
+	}
+	task, err := h.service.GetTask(ctx, taskID)
+	if err != nil {
+		h.logger.Warn("failed to reload task for REVIEW reactivation",
+			zap.String("task_id", taskID),
+			zap.Error(err))
+		return
+	}
+	if task.State != v1.TaskStateReview {
+		return
+	}
+	// An empty parked step means the task has no board position at all
+	// (quick chat / ephemeral), so there is nothing to contradict.
+	if parking.stepID != "" && task.WorkflowStepID == parking.stepID {
+		h.logger.Debug("leaving task in REVIEW: still parked on its workflow step",
+			zap.String("task_id", taskID),
+			zap.String("workflow_step_id", parking.stepID))
+		return
 	}
 	if _, err := h.service.UpdateTaskState(ctx, taskID, v1.TaskStateInProgress); err != nil {
 		h.logger.Error("failed to transition task from REVIEW to IN_PROGRESS",
@@ -499,9 +545,9 @@ func (h *MessageHandlers) ensureTaskInProgress(ctx context.Context, taskID strin
 			zap.Error(err))
 	} else {
 		h.logger.Info("task transitioned from REVIEW to IN_PROGRESS",
-			zap.String("task_id", taskID))
+			zap.String("task_id", taskID),
+			zap.String("workflow_step_id", task.WorkflowStepID))
 	}
-	return nil
 }
 
 // dispatchPromptAsync forwards the message to the agent as a prompt in a

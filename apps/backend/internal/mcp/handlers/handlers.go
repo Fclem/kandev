@@ -2392,7 +2392,7 @@ func (h *Handlers) dispatchTaskMessage(ctx context.Context, taskID string, sessi
 		return h.queueTaskMessage(ctx, taskID, session, prompt, metadata)
 
 	default:
-		reviewRollback, err := h.ensureTaskInProgressForTaskMessage(ctx, taskID)
+		reviewRollback, err := h.snapshotTaskForTaskMessage(ctx, taskID)
 		if err != nil {
 			return taskMessageDispatchResult{}, err
 		}
@@ -2413,8 +2413,10 @@ func (h *Handlers) dispatchTaskMessage(ctx context.Context, taskID string, sessi
 		result, err := h.dispatchPreparedTaskMessage(ctx, taskID, session, prompt, metadata)
 		if err != nil {
 			h.restoreTaskReviewForTaskMessage(ctx, taskID, reviewRollback)
+			return result, err
 		}
-		return result, err
+		h.reactivateTaskAfterTaskMessageTurnStart(ctx, taskID, reviewRollback)
+		return result, nil
 	}
 }
 
@@ -2585,7 +2587,11 @@ func (h *Handlers) prepareSessionForTaskMessage(ctx context.Context, taskID stri
 	return resolved, nil
 }
 
-func (h *Handlers) ensureTaskInProgressForTaskMessage(ctx context.Context, taskID string) (taskMessageReviewRollback, error) {
+// snapshotTaskForTaskMessage captures the task's state and workflow step before
+// on_turn_start runs, so a dispatch failure can restore both and so
+// reactivateTaskAfterTaskMessageTurnStart can tell whether the workflow
+// released the task from the step it was parked on.
+func (h *Handlers) snapshotTaskForTaskMessage(ctx context.Context, taskID string) (taskMessageReviewRollback, error) {
 	if h.taskSvc == nil {
 		return taskMessageReviewRollback{}, errors.New("task service not available")
 	}
@@ -2593,24 +2599,62 @@ func (h *Handlers) ensureTaskInProgressForTaskMessage(ctx context.Context, taskI
 	if err != nil {
 		return taskMessageReviewRollback{}, err
 	}
-	rollback := taskMessageReviewRollback{
+	return taskMessageReviewRollback{
 		changed:        true,
 		restoreTask:    true,
 		taskState:      task.State,
 		workflowStepID: task.WorkflowStepID,
+	}, nil
+}
+
+// reactivateTaskAfterTaskMessageTurnStart transitions a task parked in REVIEW to
+// IN_PROGRESS, but only once on_turn_start released it from the step it was
+// parked on. The workflow step owns the Kanban column and the stepper, so
+// writing IN_PROGRESS while the task still sits on that step splits the two
+// apart with nothing to reconcile them (issue #2063). A step that keeps the
+// task (no on_turn_start transition, or a transition rejected by WIP capacity)
+// keeps REVIEW; the runtime reconciles the state to IN_PROGRESS if and when the
+// agent actually starts working.
+//
+// It runs after a successful dispatch — the prompt is already with the agent,
+// so a failed state write is logged rather than rolled back — and is therefore
+// also skipped whenever dispatch failed or a coordinator stop took the task
+// over mid-flight.
+func (h *Handlers) reactivateTaskAfterTaskMessageTurnStart(
+	ctx context.Context,
+	taskID string,
+	snapshot taskMessageReviewRollback,
+) {
+	if snapshot.taskState != v1.TaskStateReview {
+		return
 	}
-	if task.State != v1.TaskStateReview {
-		return rollback, nil
+	task, err := h.taskSvc.GetTask(ctx, taskID)
+	if err != nil {
+		h.logger.Warn("failed to reload task for REVIEW reactivation",
+			zap.String("task_id", taskID),
+			zap.Error(err))
+		return
 	}
-	if task.IsFromOffice {
-		return rollback, nil
+	if task.State != v1.TaskStateReview || task.IsFromOffice {
+		return
+	}
+	// An empty parked step means the task has no board position at all
+	// (quick chat / ephemeral), so there is nothing to contradict.
+	if snapshot.workflowStepID != "" && task.WorkflowStepID == snapshot.workflowStepID {
+		h.logger.Debug("leaving task in REVIEW: still parked on its workflow step",
+			zap.String("task_id", taskID),
+			zap.String("workflow_step_id", snapshot.workflowStepID))
+		return
 	}
 	if _, err := h.taskSvc.UpdateTaskState(ctx, taskID, v1.TaskStateInProgress); err != nil {
-		return taskMessageReviewRollback{}, fmt.Errorf("failed to transition task from REVIEW to IN_PROGRESS for task message: %w", err)
+		h.logger.Error("failed to transition task from REVIEW to IN_PROGRESS for task message",
+			zap.String("task_id", taskID),
+			zap.Error(err))
+		return
 	}
 	h.logger.Info("task transitioned from REVIEW to IN_PROGRESS for task message",
-		zap.String("task_id", taskID))
-	return rollback, nil
+		zap.String("task_id", taskID),
+		zap.String("workflow_step_id", task.WorkflowStepID))
 }
 
 func (h *Handlers) restoreTaskReviewForTaskMessage(ctx context.Context, taskID string, rollback taskMessageReviewRollback) {

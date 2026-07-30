@@ -954,7 +954,9 @@ func TestHandleMessageTask_WaitingForInput_FiresTurnStart(t *testing.T) {
 		assert.Equal(t, sess.ID, sessionID)
 		updatedTask, err := svc.GetTask(ctx, taskID)
 		require.NoError(t, err)
-		assert.Equal(t, v1.TaskStateInProgress, updatedTask.State)
+		// The reactivation follows the step move, so the task is still
+		// parked in REVIEW while on_turn_start decides where it goes.
+		assert.Equal(t, v1.TaskStateReview, updatedTask.State)
 		updatedTask.WorkflowStepID = "step-in-progress"
 		return repo.UpdateTask(ctx, updatedTask)
 	}
@@ -991,13 +993,15 @@ func TestHandleMessageTask_KanbanRunnerTransitionsReviewToInProgress(t *testing.
 	require.NoError(t, repo.UpdateTask(ctx, task))
 
 	h, orch := newMessageTaskHandler(t, svc)
+	// The built-in Kanban review step declares `on_turn_start: move_to_previous`,
+	// so the task leaves the review step and the reactivation applies.
 	orch.onTurnStart = func(ctx context.Context, taskID, sessionID string) error {
 		assert.Equal(t, target.ID, taskID)
 		assert.Equal(t, sess.ID, sessionID)
 		updatedTask, err := svc.GetTask(ctx, taskID)
 		require.NoError(t, err)
-		assert.Equal(t, v1.TaskStateInProgress, updatedTask.State)
-		return nil
+		updatedTask.WorkflowStepID = "step-in-progress"
+		return repo.UpdateTask(ctx, updatedTask)
 	}
 
 	msg := makeWSMessage(t, ws.ActionMCPMessageTask, senderPayload(target.ID, "review follow-up", sender.ID))
@@ -1009,7 +1013,7 @@ func TestHandleMessageTask_KanbanRunnerTransitionsReviewToInProgress(t *testing.
 	updatedTask, err := svc.GetTask(ctx, target.ID)
 	require.NoError(t, err)
 	assert.Equal(t, v1.TaskStateInProgress, updatedTask.State)
-	assert.Equal(t, "step-review", updatedTask.WorkflowStepID)
+	assert.Equal(t, "step-in-progress", updatedTask.WorkflowStepID)
 }
 
 func TestHandleMessageTask_WaitingForInput_UsesSessionSelectedByTurnStart(t *testing.T) {
@@ -1292,7 +1296,9 @@ func TestHandleMessageTask_TurnStartErrorRejectsAndRestoresReview(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, v1.TaskStateReview, updatedTask.State)
 	assert.Equal(t, "step-review", updatedTask.WorkflowStepID)
-	assertTaskStateChangedEvent(t, stateEvents, target.ID, v1.TaskStateReview, "step-review")
+	// The step move is rolled back and the state never left REVIEW, so no
+	// state_changed event is published in either direction.
+	assertNoTaskStateChangedEvent(t, stateEvents, target.ID)
 	assert.Empty(t, orch.promptCalls)
 	messages, err := svc.ListMessages(ctx, sess.ID)
 	require.NoError(t, err)
@@ -1496,7 +1502,9 @@ func TestHandleMessageTask_DispatchErrorAfterSessionSwitchRestoresReviewSession(
 	require.NoError(t, err)
 	assert.Equal(t, v1.TaskStateReview, updatedTask.State)
 	assert.Equal(t, "step-review", updatedTask.WorkflowStepID)
-	assertTaskStateChangedEvent(t, stateEvents, target.ID, v1.TaskStateReview, "step-review")
+	// The step move is rolled back and the state never left REVIEW, so no
+	// state_changed event is published in either direction.
+	assertNoTaskStateChangedEvent(t, stateEvents, target.ID)
 
 	primary, err := svc.GetPrimarySession(ctx, target.ID)
 	require.NoError(t, err)

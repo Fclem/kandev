@@ -124,6 +124,8 @@ The portable format also recognizes `set_session_mode`, `clear_decisions`, `queu
 
 Keep one transition action per event. A “next” action on the last step or “previous” on the first has nowhere to go and leaves the task in place. WIP rejection, a missing target step, a failed agent launch, or missing credentials can also prevent the intended progression; inspect the task/session error and backend logs before changing the workflow.
 
+Messaging a task that is waiting in review only sends it back to work when the step it sits on says so. Give a review step an `on_turn_start` “move previous” (or “move to step”) action if you want a new message to return the task to the working step — that is what the built-in Kanban and Architecture workflows do. Without such an action the task stays in its column and keeps its Review status until the agent actually starts the turn, so the board and the task status never disagree.
+
 ## Safe authoring pattern
 
 1. Start with manual transitions and verify prompts in a disposable task.

@@ -52,6 +52,16 @@ Each worker gets an isolated backend, frontend, database, and mock agent — no 
 
 **Always run headless** (`make test-e2e`). Never use `--headed`, `e2e:headed`, or `test-e2e-headed` — headed mode requires a display and will fail in agent environments.
 
+**Fresh worktree bootstrap:** Before the first pnpm or E2E command in a new
+worktree, install the workspace dependencies:
+
+```bash
+cd apps && pnpm install --frozen-lockfile
+```
+
+Do this once before changing into `apps/web` or running a filtered package
+command. Shared `.git` metadata does not include `apps/node_modules`.
+
 ### Preferred: `pnpm e2e:run` (managed runner — builds, runs, tears down)
 
 `e2e/scripts/run-e2e.sh` handles the build, the run, and cleanup in one command. Use it instead of stitching the steps together. It auto-selects docker vs host, runs N shards concurrently, enforces strict WS accounting by default (matching CI), and never leaves root-owned artifacts behind.
@@ -307,6 +317,16 @@ Tests are grouped by feature area in subdirectories under `tests/`. When creatin
 - **Test through the UI, not the API.** E2E tests verify user-facing behavior. Don't write tests that only call the API and assert the response -- those are integration tests. Instead, navigate to the page, interact with UI elements, and assert what the user sees.
 - **Verify persistence with page reload.** After changing a setting or creating data, reload the page (`testPage.reload()`) and assert the state is still correct. This catches hydration bugs and Go boot-payload/client-store mismatches.
 - **Restore patched persisted settings.** When a test PATCHes user settings, capture the baseline and restore it in `test.afterEach`. The backend is worker-scoped, and `e2eReset` does not reset every persisted setting, including `system_metrics_display`; leaking one can affect later tests in the same worker. Fixtures are lazy: acquire `testPage` before setting a non-default persisted value in `beforeEach`, otherwise page initialization can reapply the default and silently undo setup. Verify with the focused test that depends on that setting.
+- **Pass browser-evaluation values explicitly.** `locator.evaluate` and
+  `page.evaluate` callbacks execute in the browser, so they cannot close over
+  Node/test variables. Pass expected values as the argument instead, for
+  example `locator.evaluate((el, expected) => Math.abs(el.scrollTop - expected), baseline)`.
+- **Measure asynchronous layout from a settled baseline.** When the initiating
+  UI action changes layout before its delayed result arrives, delay the mock
+  response and capture the baseline after that synchronous layout settles. Then
+  assert the absolute deviation after the asynchronous content appears. This
+  attributes movement to the result rather than the initiating action and
+  catches movement in either direction.
 - **Nested Escape controls.** If an inner panel inside a Radix Dialog handles Escape, intercept the key in capture phase and call both `preventDefault()` and `stopPropagation()` before dismissing the inner panel. A bubble-phase window handler runs after Radix can dismiss the outer dialog. Add a regression that asserts the inner panel collapses while the outer dialog remains open.
 - **Seed via API, assert via UI.** Use `apiClient` to set up preconditions quickly, but always verify the result by opening the page and checking the DOM.
 - **Workflow/session invariants.** For session-primary/profile behavior, prefer polling backend state with `apiClient.listTaskSessions(taskId)` for invariants such as `agent_profile_id`, `is_primary`, `state`, and session count, then add UI assertions as secondary evidence. UI tab markers can lag or be absent when the backend invariant is the behavior under test.
@@ -344,7 +364,7 @@ When a test fails:
 ### Common issues
 
 - **"Backend did not become healthy"** — run `make build-backend build-web`, check with `E2E_DEBUG=1`
-- **"Cannot find module"** — run `cd apps && pnpm install`
+- **"Cannot find module"** — run `cd apps && pnpm install --frozen-lockfile`
 - **Port conflicts** — backends use 18080+ and frontends use 13000+ (per worker), auto-offset by `E2E_PORT_OFFSET` (derived from PID). Set `E2E_PORT_OFFSET=0` for deterministic ports
 - **Responsive layout stays stale after `page.setViewportSize()`** — record
   `window.innerWidth`, the affected element and parent `clientWidth`, and any

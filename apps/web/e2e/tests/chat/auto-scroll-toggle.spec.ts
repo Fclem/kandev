@@ -46,6 +46,8 @@ function chatList(testPage: Page) {
   return testPage.locator(".chat-message-list:visible").first();
 }
 
+const AUTO_SCROLL_END_TOLERANCE_PX = 50;
+
 async function waitForOverflow(testPage: Page) {
   await expect
     .poll(async () => chatList(testPage).evaluate((el) => el.scrollHeight - el.clientHeight), {
@@ -56,6 +58,29 @@ async function waitForOverflow(testPage: Page) {
 }
 
 test.describe("Transcript auto-scroll toggle", () => {
+  test("can be hidden without changing the default auto-scroll state", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    await apiClient.saveUserSettings({ show_transcript_auto_scroll_control: false });
+    const session = await seedOverflowingTask(
+      testPage,
+      apiClient,
+      seedData,
+      "Auto-scroll Toggle Hidden",
+    );
+    await waitForOverflow(testPage);
+
+    await expect(session.chatStatusBar().getByTestId("auto-scroll-toggle-button")).toHaveCount(0);
+    const list = session.activeChat().locator(".chat-message-list");
+    await expect
+      .poll(async () => {
+        return list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+      })
+      .toBeLessThan(AUTO_SCROLL_END_TOLERANCE_PX);
+  });
+
   test("is visible next to Share, enabled by default, and toggles on click", async ({
     testPage,
     apiClient,

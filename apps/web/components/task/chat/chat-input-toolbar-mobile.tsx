@@ -21,6 +21,7 @@ import {
 import type { ContextFile } from "@/lib/state/context-files-store";
 import type { SHORTCUTS } from "@/lib/keyboard/constants";
 import { t } from "@/lib/i18n";
+import type { MCPAttachmentHistory } from "@/lib/state/slices/session-runtime/types";
 
 type MobileToolbarProps = {
   planModeEnabled: boolean;
@@ -30,6 +31,7 @@ type MobileToolbarProps = {
   hideAgentControls: boolean;
   hideSessionsDropdown: boolean;
   mcpServers: string[];
+  mcpAttachmentHistory?: MCPAttachmentHistory;
   sessionId: string | null;
   taskId: string | null;
   taskTitle?: string;
@@ -95,7 +97,10 @@ function MobileLeftActions(props: MobileToolbarProps) {
           {!props.hideAgentControls && (
             <>
               <div data-testid="toolbar-item-mcp">
-                <McpIndicator mcpServers={props.mcpServers} />
+                <McpIndicator
+                  mcpServers={props.mcpServers}
+                  attachmentHistory={props.mcpAttachmentHistory}
+                />
               </div>
               <div data-testid="toolbar-item-mode">
                 <ModeSelector sessionId={props.sessionId} triggerClassName="max-w-[46vw]" />

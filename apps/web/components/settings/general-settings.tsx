@@ -203,7 +203,7 @@ export function TaskActionsSettings() {
       <SettingsSection
         icon={<IconArrowBackUp className="h-5 w-5" />}
         title={t("settings:transcriptNavigation")}
-        description={t("settings:theScrollUpButtonsNextTo")}
+        description={t("settings:chooseWhichTranscriptNavigationControls")}
       >
         <AnchoredPromptBarSettings />
       </SettingsSection>

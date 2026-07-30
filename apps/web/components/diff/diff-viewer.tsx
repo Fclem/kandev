@@ -37,6 +37,8 @@ interface DiffViewerProps {
   onPreviewMarkdown?: (filePath: string) => void;
   onRevert?: (filePath: string) => void;
   enableAcceptReject?: boolean;
+  /** Render and navigate to the active task walkthrough inside this diff. */
+  enableWalkthroughAnnotations?: boolean;
   onRevertBlock?: (filePath: string, info: RevertBlockInfo) => Promise<void> | void;
   wordWrap?: boolean;
   /** Enable diff expansion (show expand up/down buttons at hunk separators) */
@@ -69,6 +71,7 @@ const SCALAR_PROP_KEYS: (keyof DiffViewerProps)[] = [
   "onPreviewMarkdown",
   "onRevert",
   "enableAcceptReject",
+  "enableWalkthroughAnnotations",
   "onRevertBlock",
   "wordWrap",
   "enableExpansion",
@@ -273,6 +276,7 @@ export const DiffViewer = memo(function DiffViewer(props: DiffViewerProps) {
     onPreviewMarkdown,
     onRevert,
     enableAcceptReject = false,
+    enableWalkthroughAnnotations = true,
     onRevertBlock,
     wordWrap: wordWrapProp,
     enableExpansion = false,
@@ -295,6 +299,7 @@ export const DiffViewer = memo(function DiffViewer(props: DiffViewerProps) {
     data,
     enableComments,
     enableAcceptReject,
+    enableWalkthroughAnnotations,
     sessionId,
     onCommentAdd,
     onCommentDelete,

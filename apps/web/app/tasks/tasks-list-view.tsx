@@ -124,14 +124,14 @@ function TasksListControls({
   return (
     <div className="hidden min-h-9 flex-wrap items-center justify-end gap-3 sm:flex">
       <ListOptionSelect
-        label="Sort"
+        label={t("common:sort")}
         value={tasksListSort}
         options={TASKS_LIST_SORT_OPTIONS}
         onChange={(value) => onTasksListSortChange(value as TasksListSort)}
         testId="tasks-list-sort"
       />
       <ListOptionSelect
-        label="Group"
+        label={t("common:group")}
         value={tasksListGroup}
         options={TASKS_LIST_GROUP_OPTIONS}
         onChange={(value) => onTasksListGroupChange(value as TasksListGroup)}

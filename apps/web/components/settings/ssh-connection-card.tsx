@@ -468,6 +468,7 @@ function TestResultDisplay({
 }
 
 function TestResultHeader({ success, totalMs }: { success: boolean; totalMs: number }) {
+  const { t } = useTranslation();
   return (
     <div
       data-testid={success ? "ssh-test-result-success" : "ssh-test-result-failure"}
@@ -478,7 +479,7 @@ function TestResultHeader({ success, totalMs }: { success: boolean; totalMs: num
       ) : (
         <IconX className="h-4 w-4 text-red-600" />
       )}
-      {success ? "Connection test passed" : "Connection test failed"}
+      {success ? t("settings:connectionTestPassed") : t("settings:connectionTestFailed")}
       <span className="text-muted-foreground font-normal">
         <Trans i18nKey="settings:ms3" values={{ totalMs }}>
           ({totalMs}ms)

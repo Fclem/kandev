@@ -111,7 +111,7 @@ function RunTrigger({
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {busy ? "Review in progress" : "Review these changes with an agent"}
+        {busy ? t("review:reviewInProgress") : t("review:reviewTheseChangesWithAnAgent")}
       </TooltipContent>
     </Tooltip>
   );

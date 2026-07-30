@@ -82,7 +82,7 @@ function WatchActions({ watch, onToggleEnabled, onTrigger, onReset, onDelete }: 
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{watch.enabled ? "Pause" : "Enable"}</TooltipContent>
+        <TooltipContent>{watch.enabled ? t("github:pause") : t("github:enable")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -193,7 +193,7 @@ export function IssueWatchTable({
             </TableCell>
             <TableCell>
               <Badge variant={watch.enabled ? "default" : "secondary"} className="text-xs">
-                {watch.enabled ? "Active" : "Paused"}
+                {watch.enabled ? t("common:active") : t("github:paused")}
               </Badge>
             </TableCell>
             <TableCell className="text-right">

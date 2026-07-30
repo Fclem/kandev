@@ -218,7 +218,7 @@ function FailedSessionBanner({
               data-testid="recovery-fresh-button"
             >
               <IconRefresh className="h-3.5 w-3.5" />
-              {isStartingFresh ? "Starting..." : "Start fresh session"}
+              {isStartingFresh ? t("common:starting") : t("task:startFreshSession2")}
             </Button>
           </div>
         </div>

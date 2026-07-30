@@ -68,13 +68,13 @@ export function CostOverview({ workspaceId }: { workspaceId: string }) {
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-2">
         <MetricCard
           icon={IconCurrencyDollar}
-          label="Total Spend"
+          label={t("office:totalSpend")}
           value={formatDollars(totalSubcents)}
         />
-        <MetricCard icon={IconRobot} label="Active Agents" value={String(byAgent.length)} />
-        <MetricCard icon={IconFolder} label="Projects" value={String(byProject.length)} />
-        <MetricCard icon={IconCpu} label="Models Used" value={String(byModel.length)} />
-        <MetricCard icon={IconBuilding} label="Providers" value={String(byProvider.length)} />
+        <MetricCard icon={IconRobot} label={t("office:activeAgents")} value={String(byAgent.length)} />
+        <MetricCard icon={IconFolder} label={t("office:projects")} value={String(byProject.length)} />
+        <MetricCard icon={IconCpu} label={t("office:modelsUsed")} value={String(byModel.length)} />
+        <MetricCard icon={IconBuilding} label={t("office:providers")} value={String(byProvider.length)} />
       </div>
 
       <div className="space-y-6">

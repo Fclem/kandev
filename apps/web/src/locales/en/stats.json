@@ -31,6 +31,7 @@
   "msgs": "{{message_count}} msgs",
   "noAgentUsageDataYet": "No agent usage data yet.",
   "noCompletedTaskDataYet": "No completed task data yet.",
+  "noCompletedTasksYet": "No completed tasks yet.",
   "noDataYet": "No data yet.",
   "noGitActivityYet": "No git activity yet.",
   "noRepositoryStatsYet": "No repository stats yet.",
@@ -39,12 +40,14 @@
   "rankedByActiveDuration": "Ranked by active duration",
   "repoLeaders": "Repo Leaders",
   "repositoryActivity": "Repository Activity",
+  "selectAWorkspaceToViewStatistics": "Select a workspace to view statistics.",
   "sessions": "Sessions",
   "sessions2": "{{session_count}} sessions",
   "signal": "Signal",
   "span": "span {{value1}}",
   "statistics": "Statistics",
   "tasks": "{{total_tasks}} tasks",
+  "telemetry": "Telemetry",
   "timeSpent": "Time Spent",
   "toolCalls": "Tool calls",
   "toolShare": "Tool share",
@@ -61,5 +64,6 @@
   "turnsMessagesPerSession": "{{value0}} turns · {{value4}} messages per session",
   "turnsPerTask": "Turns per task",
   "userMsgs": "User msgs",
-  "userShare": "User share"
+  "userShare": "User share",
+  "workload": "Workload"
 }

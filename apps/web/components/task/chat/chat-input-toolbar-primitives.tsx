@@ -60,6 +60,7 @@ function SendSubmitButton({
   submitShortcut,
   tooltipDescription,
 }: SendSubmitButtonProps) {
+  const { t } = useTranslation();
   return (
     <KeyboardShortcutTooltip
       shortcut={submitShortcut}
@@ -69,7 +70,7 @@ function SendSubmitButton({
       <span
         className="inline-flex"
         tabIndex={isDisabled && !!tooltipDescription ? 0 : undefined}
-        aria-label={isDisabled ? (tooltipDescription ?? "Submit unavailable") : undefined}
+        aria-label={isDisabled ? (tooltipDescription ?? t("task:submitUnavailable")) : undefined}
       >
         <Button
           type="button"
@@ -104,6 +105,7 @@ export function SubmitButton({
   onSubmit,
   submitShortcut,
 }: SubmitButtonProps) {
+  const { t } = useTranslation();
   const showSendButton = !isAgentBusy || hasContent;
   const [isCancelling, setIsCancelling] = useState(false);
   const tooltipDescription = submitTooltipDescription(
@@ -147,7 +149,7 @@ export function SubmitButton({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{isCancelling ? "Cancelling..." : "Cancel agent"}</TooltipContent>
+          <TooltipContent>{isCancelling ? t("task:cancelling") : t("task:cancelAgent")}</TooltipContent>
         </Tooltip>
       )}
       {showSendButton && (

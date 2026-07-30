@@ -127,6 +127,7 @@ function StepMessages({ step }: { step: PrepareStepInfo }) {
 }
 
 function StepRow({ step }: { step: PrepareStepInfo }) {
+  const { t } = useTranslation();
   const inlineCommand = step.command && isInlineCommand(step.command) ? step.command : undefined;
   const blockCommand = step.command && !isInlineCommand(step.command) ? step.command : undefined;
   const hasExpandable = Boolean(step.output) || Boolean(blockCommand);
@@ -146,7 +147,7 @@ function StepRow({ step }: { step: PrepareStepInfo }) {
         <div className="flex-shrink-0">
           <StepIcon status={step.status} hasWarning={Boolean(step.warning)} />
         </div>
-        <span className={nameClass}>{step.name || "Preparing..."}</span>
+        <span className={nameClass}>{step.name || t("common:preparing")}</span>
         {inlineCommand && (
           <code className="text-muted-foreground/50 min-w-0 break-all font-mono text-[10px]">
             {inlineCommand}
@@ -473,6 +474,7 @@ function hasPrepareDetails(
 }
 
 export function PrepareProgress({ sessionId }: PrepareProgressProps) {
+  const { t } = useTranslation();
   const { status, prepareState } = usePrepareStatus(sessionId);
   const session = useAppStore((state) => state.taskSessions.items[sessionId]);
   const setupScriptSteps = useSetupScriptSteps(sessionId);
@@ -544,7 +546,7 @@ export function PrepareProgress({ sessionId }: PrepareProgressProps) {
               <button
                 type="button"
                 aria-expanded={expanded}
-                aria-label={expanded ? "Hide preparation details" : "Show preparation details"}
+                aria-label={expanded ? t("common:hidePreparationDetails") : t("common:showPreparationDetails")}
                 className="min-h-11 cursor-pointer text-xs text-muted-foreground underline-offset-4 hover:underline sm:min-h-0"
                 onClick={(event) => {
                   event.stopPropagation();

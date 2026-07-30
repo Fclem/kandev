@@ -27,6 +27,7 @@ type AnswerEntry = { question_id?: string; selected?: string; custom_text?: stri
 // the user's answer underlined in the body so a completed call is informative
 // at a glance.
 function QuestionBlock({ q, answer }: { q: Question; answer: AnswerEntry | undefined }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
       {q.prompt && <div className="text-xs text-foreground whitespace-pre-wrap">{q.prompt}</div>}
@@ -48,7 +49,7 @@ function QuestionBlock({ q, answer }: { q: Question; answer: AnswerEntry | undef
         </div>
       )}
       {answer?.custom_text && (
-        <KeyValueRow label="answer">
+        <KeyValueRow label={t("task:answer")}>
           <span className="whitespace-pre-wrap">{answer.custom_text}</span>
         </KeyValueRow>
       )}
@@ -111,7 +112,7 @@ export const AskUserQuestionRenderer: KandevRenderer = ({ args, result, status }
     >
       <KandevBody>
         {context && (
-          <KeyValueRow label="context">
+          <KeyValueRow label={t("task:context2")}>
             <span className="whitespace-pre-wrap">{context}</span>
           </KeyValueRow>
         )}

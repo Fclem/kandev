@@ -76,9 +76,9 @@ export function RunActivityChart({ data }: { data: RunActivityDay[] }) {
       </div>
       <ChartXAxis dates={data.map((d) => d.date)} />
       <div className="flex items-center gap-3 mt-2">
-        <LegendDot color="#10b981" label="Succeeded" />
-        <LegendDot color="#ef4444" label="Failed" />
-        <LegendDot color="#6b7280" label="Other" />
+        <LegendDot color="#10b981" label={t("office:succeeded")} />
+        <LegendDot color="#ef4444" label={t("office:failed")} />
+        <LegendDot color="#6b7280" label={t("office:other")} />
       </div>
     </Card>
   );
@@ -128,7 +128,7 @@ export function SuccessRateChart({ data }: { data: RunActivityDay[] }) {
         <LegendDot color="#10b981" label=">= 80%" />
         <LegendDot color="#eab308" label=">= 50%" />
         <LegendDot color="#ef4444" label="< 50%" />
-        <LegendDot color="#6b7280" label="No runs" />
+        <LegendDot color="#6b7280" label={t("office:noRuns")} />
       </div>
     </Card>
   );

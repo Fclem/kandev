@@ -90,7 +90,7 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
         {dirty && (
           <Button size="sm" onClick={handleSave} disabled={saving} className="cursor-pointer">
             <IconDeviceFloppy className="h-4 w-4 mr-1" />
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("office:saving") : t("office:save2")}
           </Button>
         )}
       </div>

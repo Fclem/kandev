@@ -139,7 +139,7 @@ function AppearanceSection({
         <div className="flex justify-end pt-2">
           <Button size="sm" onClick={onSave} disabled={saving} className="cursor-pointer">
             <IconDeviceFloppy className="h-4 w-4 mr-1.5" />
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("office:saving") : t("office:save2")}
           </Button>
         </div>
       )}
@@ -168,23 +168,24 @@ function PermissionsSection({
   onApprovalSkillChangesChange: (v: boolean) => void;
   onSave: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <SettingCard>
       <ToggleRow
-        label="Require approval for new agents"
-        description="New agent hires must be approved before activation"
+        label={t("office:requireApprovalForNewAgents")}
+        description={t("office:newAgentHiresMustBeApproved")}
         checked={approvalNewAgents}
         onCheckedChange={onApprovalNewAgentsChange}
       />
       <ToggleRow
-        label="Require approval for task completion"
-        description="Tasks must be reviewed before they can be marked as done"
+        label={t("office:requireApprovalForTaskCompletion")}
+        description={t("office:tasksMustBeReviewedBeforeThey")}
         checked={approvalTaskCompletion}
         onCheckedChange={onApprovalTaskCompletionChange}
       />
       <ToggleRow
-        label="Require approval for skill changes"
-        description="Agent-created skills must be approved before activation"
+        label={t("office:requireApprovalForSkillChanges")}
+        description={t("office:agentCreatedSkillsMustBeApproved")}
         checked={approvalSkillChanges}
         onCheckedChange={onApprovalSkillChangesChange}
       />
@@ -192,7 +193,7 @@ function PermissionsSection({
         <div className="flex justify-end pt-2">
           <Button size="sm" onClick={onSave} disabled={saving} className="cursor-pointer">
             <IconDeviceFloppy className="h-4 w-4 mr-1.5" />
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("office:saving") : t("office:save2")}
           </Button>
         </div>
       )}
@@ -240,7 +241,7 @@ function RecoverySection({
         <div className="flex justify-end pt-2">
           <Button size="sm" onClick={onSave} disabled={saving} className="cursor-pointer">
             <IconDeviceFloppy className="h-4 w-4 mr-1.5" />
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("office:saving") : t("office:save2")}
           </Button>
         </div>
       )}

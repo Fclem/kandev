@@ -154,7 +154,7 @@ function SecretField({
         id={`${idPrefix}-secret`}
         data-testid={`${idPrefix}-secret-input`}
         type="password"
-        placeholder={hasSavedSecret ? "••••••••" : "sntrys_..."}
+        placeholder={hasSavedSecret ? "••••••••" : t("sentry:sntrys")}
         value={form.secret}
         data-settings-dirty={form.secret !== baseline.secret}
         onChange={(e) => update("secret", e.target.value)}
@@ -324,10 +324,10 @@ function FormActions({
         onClick={onTest}
         disabled={disableTest}
         className="cursor-pointer"
-        title={requiresTestSecret ? "Paste an auth token to test the connection" : undefined}
+        title={requiresTestSecret ? t("sentry:pasteAnAuthTokenToTest") : undefined}
         data-testid={`${idPrefix}-test-button`}
       >
-        {testing ? "Testing..." : "Test connection"}
+        {testing ? t("sentry:testing") : t("sentry:testConnection")}
       </Button>
       <Button
         type="button"

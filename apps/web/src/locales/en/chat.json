@@ -38,7 +38,7 @@
   "optional": "(optional)",
   "quickChatsStayOutsideYourTask": "Quick chats stay outside your task board.",
   "renameChat": "Rename chat",
-  "repositoriesOptional": "Repositories <1>(optional)</1>",
+  "repositoriesOptional": "Repositories <2>(optional)</2>",
   "repositoryOptional": "Repository (optional)",
   "resizeQuickChatFrom": "Resize quick chat from {{edge}}",
   "selectARepository": "Select a repository...",

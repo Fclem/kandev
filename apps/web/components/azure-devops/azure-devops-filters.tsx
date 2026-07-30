@@ -244,6 +244,7 @@ export function AzureDevOpsFilters({
   onSearch,
   compact,
 }: FiltersProps) {
+  const { t } = useTranslation();
   const disabled =
     loading ||
     !filters.projectId ||
@@ -284,7 +285,7 @@ export function AzureDevOpsFilters({
         data-testid={`azure-devops-search-button${idSuffix}`}
       >
         <IconSearch className="h-4 w-4" />
-        {loading ? "Loading..." : "Search"}
+        {loading ? t("common:loading2") : t("azureDevops:search")}
       </Button>
     </div>
   );

@@ -62,7 +62,7 @@ function PageHeader({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => void 
   return (
     <PageTopbar
       title="GitHub"
-      subtitle="Pull requests and issues across your repos."
+      subtitle={t("github:pullRequestsAndIssuesAcrossYour")}
       icon={<IconBrandGithub className="h-4 w-4" />}
       actions={
         onOpenMobileSidebar && (

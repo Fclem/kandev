@@ -269,6 +269,7 @@ function ViewModeTabs({
   viewMode: ViewMode;
   setViewMode: (v: ViewMode) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-6">
       <div className="flex gap-1 p-1 bg-muted/30 rounded-lg w-fit">
@@ -282,7 +283,7 @@ function ViewModeTabs({
                 : "hover:bg-muted/50 text-muted-foreground"
             }`}
           >
-            {mode === "events" ? "Normalized Events" : "Test Fixtures"}
+            {mode === "events" ? t("common:normalizedEvents") : t("common:testFixtures")}
           </button>
         ))}
       </div>
@@ -310,7 +311,7 @@ function FiltersBar({
     <div className="mb-6 space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-muted-foreground">
-          {viewMode === "events" ? "Event File:" : "Fixture File:"}
+          {viewMode === "events" ? t("common:eventFile") : t("common:fixtureFile")}
         </span>
         <select
           value={selectedFile}
@@ -399,8 +400,8 @@ function ContentArea({
     return (
       <div className="text-center py-12 text-muted-foreground">
         {viewMode === "events"
-          ? "No normalized event files found. Run an agent with KANDEV_DEBUG_AGENT_MESSAGES=1 to generate event logs."
-          : "No fixtures found. Select a fixture file from the dropdown above."}
+          ? t("common:noNormalizedEventFilesFoundRun")
+          : t("common:noFixturesFoundSelectAFixture")}
       </div>
     );
   }

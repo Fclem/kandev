@@ -66,7 +66,7 @@ export const AgentPlanMessage = memo(function AgentPlanMessage({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={collapsed ? "Expand plan" : "Collapse plan"}
+              aria-label={collapsed ? t("task:expandPlan") : t("task:collapsePlan")}
               className="h-7 w-7 cursor-pointer"
               onClick={() => setCollapsed(!collapsed)}
             >

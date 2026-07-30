@@ -9,6 +9,7 @@ import { formatRelativeTime } from "@/lib/utils";
 import type { AgentProfile } from "@/lib/state/slices/office/types";
 import type { Task, TaskDecision } from "@/app/office/tasks/[id]/types";
 import { MultiSelectPopover, type MultiSelectItem } from "./multi-select-popover";
+import { useTranslation } from "react-i18next";
 
 type AgentItem = MultiSelectItem & { icon: string; name: string };
 
@@ -113,6 +114,7 @@ export function AgentsMultiPicker({
   apiRemove,
   decisionsByAgent,
 }: AgentsMultiPickerProps) {
+  const { t } = useTranslation();
   const agents = useAppStore((s) => s.office.agentProfiles);
   const mutate = useOptimisticTaskMutation();
   const items = useMemo(() => buildAgentItems(agents), [agents]);
@@ -184,7 +186,7 @@ export function AgentsMultiPicker({
       renderItem={renderItem}
       addLabel={addLabel}
       searchPlaceholder="Search agents..."
-      emptyMessage="No agents found."
+      emptyMessage={t("task:noAgentsFound")}
       testId={testId}
     />
   );

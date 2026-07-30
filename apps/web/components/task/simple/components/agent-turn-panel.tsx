@@ -78,7 +78,7 @@ export function AgentTurnPanel({
           <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
         )}
         <span>
-          {isLive ? "working" : "worked"}
+          {isLive ? t("task:working5") : t("task:worked")}
           {duration && <span className="ml-1">{t("task:forDuration", { duration })}</span>}
           {turnMessages.length > 0 && (
             <span className="ml-1">· {t("task:messages", { count: turnMessages.length })}</span>

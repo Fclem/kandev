@@ -66,14 +66,14 @@ export function TasksPagination({
         <Pagination className="mx-0 w-auto justify-start sm:justify-end">
           <PaginationContent>
             <PageNavigationButton
-              label="Go to first page"
+              label={t("common:goToFirstPage")}
               disabled={!canPrevious}
               className="hidden lg:flex"
               onClick={() => setPageIndex(0)}
               icon={<IconChevronsLeft className="h-4 w-4" />}
             />
             <PageNavigationButton
-              label="Go to previous page"
+              label={t("common:goToPreviousPage")}
               disabled={!canPrevious}
               onClick={() => setPageIndex(pagination.pageIndex - 1)}
               icon={<IconChevronLeft className="h-4 w-4" />}
@@ -84,13 +84,13 @@ export function TasksPagination({
               onPageChange={(page) => setPageIndex(page - 1)}
             />
             <PageNavigationButton
-              label="Go to next page"
+              label={t("common:goToNextPage")}
               disabled={!canNext}
               onClick={() => setPageIndex(pagination.pageIndex + 1)}
               icon={<IconChevronRight className="h-4 w-4" />}
             />
             <PageNavigationButton
-              label="Go to last page"
+              label={t("common:goToLastPage")}
               disabled={!canNext}
               className="hidden lg:flex"
               onClick={() => setPageIndex(safePageCount - 1)}

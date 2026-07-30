@@ -90,7 +90,7 @@ export function AssigneePicker({ task }: AssigneePickerProps) {
       onValueChange={handleSelect}
       placeholder={t("task:noAssignee")}
       searchPlaceholder="Search agents..."
-      emptyMessage="No agents found."
+      emptyMessage={t("task:noAgentsFound")}
       triggerClassName="h-7 w-full justify-end px-2"
       popoverAlign="end"
       testId="assignee-picker-trigger"

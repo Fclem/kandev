@@ -31,7 +31,7 @@ export function TasksByPriorityChart({ days }: Props) {
         <StackedBars
           rows={rowsFromDays(days)}
           heightPx={120}
-          ariaLabel="Tasks worked on by priority"
+          ariaLabel={t("office:tasksWorkedOnByPriority")}
         />
         <ChartLegend
           items={[

@@ -50,7 +50,7 @@ function StartSessionPrompt({
           ) : (
             <IconPlayerPlay className="h-3.5 w-3.5" />
           )}
-          {isLaunching ? "Starting..." : "Start session"}
+          {isLaunching ? t("common:starting") : t("office:startSession")}
         </Button>
       )}
     </div>
@@ -140,6 +140,7 @@ function useChatActions(
 }
 
 export function AdvancedChatPanel({ taskId, sessionId, hideInput }: AdvancedChatPanelProps) {
+  const { t } = useTranslation();
   const [message, setMessage] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -194,8 +195,8 @@ export function AdvancedChatPanel({ taskId, sessionId, hideInput }: AdvancedChat
             disabled={!defaultProfile}
             placeholder={
               defaultProfile
-                ? "Send a message to start a session..."
-                : "No agent profile configured"
+                ? t("office:sendAMessageToStartA")
+                : t("office:noAgentProfileConfigured")
             }
           />
         )}
@@ -222,7 +223,7 @@ export function AdvancedChatPanel({ taskId, sessionId, hideInput }: AdvancedChat
           onSend={handleSend}
           disabled={!canSend && sessionId !== null}
           placeholder={
-            isAgentBusy ? "Agent is working... message will be queued" : "Send a message..."
+            isAgentBusy ? t("office:agentIsWorkingMessageWillBe") : t("office:sendAMessage")
           }
         />
       )}

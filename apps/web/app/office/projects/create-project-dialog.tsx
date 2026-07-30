@@ -331,7 +331,7 @@ export function CreateProjectDialog({ open, onOpenChange, workspaceId }: CreateP
             disabled={!form.name.trim() || submitting}
             className="cursor-pointer"
           >
-            {submitting ? "Creating..." : "Create Project"}
+            {submitting ? t("office:creating") : t("office:createProject")}
           </Button>
         </div>
       </DialogContent>

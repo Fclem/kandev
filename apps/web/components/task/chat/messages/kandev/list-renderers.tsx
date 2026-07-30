@@ -25,6 +25,9 @@ import { pickArray, pickNumber, pickString } from "./parse";
 import type { KandevRenderer } from "./types";
 import { Trans, useTranslation } from "react-i18next";
 
+/** Shared fallback label for records that have no name. */
+const UNNAMED = "task:unnamed";
+
 // NamedListRow is the canonical row layout for entries with name + id +
 // optional description (workspaces, workflows, executor profiles). The id
 // sits next to the name as a subtle hint; the description occupies its own
@@ -38,10 +41,11 @@ function NamedListRow({
   id?: string;
   description?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="text-xs space-y-0.5">
       <div className="flex items-baseline gap-2">
-        <span>{name ?? "(unnamed)"}</span>
+        <span>{name ?? t(UNNAMED)}</span>
         <IdChip id={id} />
       </div>
       {description && <div className="text-[11px] text-muted-foreground/70">{description}</div>}
@@ -191,7 +195,7 @@ export const ListWorkflowStepsRenderer: KandevRenderer = ({ args, result, status
               className="flex items-center gap-2 text-xs"
             >
               <StepColorDot color={step.color} />
-              <span>{step.name ?? "(unnamed)"}</span>
+              <span>{step.name ?? t(UNNAMED)}</span>
               {step.is_start_step && (
                 <span className="text-[10px] text-muted-foreground/60">{t("task:start")}</span>
               )}
@@ -358,7 +362,7 @@ export const ListAgentsRenderer: KandevRenderer = ({ result, status }) => {
         ) : (
           items.map((a, i) => (
             <ListItemRow key={a.id ?? a.name ?? `agent-${i}`}>
-              <div className="font-medium">{a.name ?? a.id ?? "(unnamed)"}</div>
+              <div className="font-medium">{a.name ?? a.id ?? t(UNNAMED)}</div>
               {a.profiles && a.profiles.length > 0 && (
                 <div className="text-[11px] text-muted-foreground/70">
                   {a.profiles
@@ -416,7 +420,7 @@ export const ListExecutorProfilesRenderer: KandevRenderer = ({ args, result, sta
               key={p.id ?? p.name ?? `profile-${i}`}
               className="flex items-baseline gap-2 text-xs"
             >
-              <span>{p.name ?? "(unnamed)"}</span>
+              <span>{p.name ?? t(UNNAMED)}</span>
               {p.mcp_policy && (
                 <span className="text-[10px] text-muted-foreground/60">
                   <Trans i18nKey="task:mcp" values={{ mcp_policy: p.mcp_policy }}>
@@ -472,7 +476,7 @@ export const ListTaskDocumentsRenderer: KandevRenderer = ({ args, result, status
         ) : (
           items.map((d, i) => (
             <div key={d.key ?? d.title ?? `doc-${i}`} className="flex items-baseline gap-2 text-xs">
-              <span>{d.title ?? d.key ?? "(untitled)"}</span>
+              <span>{d.title ?? d.key ?? t("task:untitled")}</span>
               {d.key && d.title && (
                 <span className="font-mono text-[10px] text-muted-foreground/50">{d.key}</span>
               )}

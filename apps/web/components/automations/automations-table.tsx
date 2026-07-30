@@ -150,7 +150,7 @@ export function AutomationsTable({
                 <TableCell className="font-medium">{a.name}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className="text-[10px]">
-                    {a.execution_mode === "run" ? "Run" : "Task"}
+                    {a.execution_mode === "run" ? t("automations:run") : t("common:task")}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -167,7 +167,7 @@ export function AutomationsTable({
                   />
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
-                  {a.last_triggered_at ? formatRelativeTime(a.last_triggered_at) : "Never"}
+                  {a.last_triggered_at ? formatRelativeTime(a.last_triggered_at) : t("automations:never")}
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <RowActions id={a.id} onTrigger={onTrigger} onDelete={onDelete} />

@@ -69,7 +69,7 @@ export function HealthIssuesDialog({ open, onOpenChange, issues }: HealthIssuesD
           </DialogTitle>
           <DialogDescription>
             {issues.length === 1
-              ? "1 issue needs your attention"
+              ? t("common:1IssueNeedsYourAttention")
               : `${issues.length} issues need your attention`}
           </DialogDescription>
         </DialogHeader>

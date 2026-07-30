@@ -290,16 +290,16 @@ function DetailsCard({ issue }: { issue: LinearIssue }) {
         <SectionHeading>{t("linear:details")}</SectionHeading>
       </div>
       <div className="px-4 py-3 space-y-3 text-sm">
-        <DetailRow label="Assignee">
+        <DetailRow label={t("linear:assignee")}>
           <PersonCell name={issue.assigneeName} avatar={issue.assigneeIcon} />
         </DetailRow>
-        <DetailRow label="Creator">
+        <DetailRow label={t("linear:creator")}>
           <PersonCell name={issue.creatorName} avatar={issue.creatorIcon} />
         </DetailRow>
-        <DetailRow label="Priority">
+        <DetailRow label={t("linear:priority")}>
           <span className={priorityClass(issue.priority)}>{issue.priorityLabel || "—"}</span>
         </DetailRow>
-        <DetailRow label="Team">
+        <DetailRow label={t("linear:team")}>
           <span className="font-mono text-xs">{issue.teamKey}</span>
         </DetailRow>
       </div>

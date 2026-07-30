@@ -183,7 +183,7 @@ export function SentryConnectionSection({ workspaceId }: { workspaceId: string }
     <SettingsSection
       icon={<IconBrandSentry className="h-5 w-5" />}
       title={t("sentry:sentryIntegration")}
-      description="Connect this workspace to Sentry. Add a named instance for each Sentry org or self-hosted host; credentials are stored encrypted server-side."
+      description={t("sentry:connectThisWorkspaceToSentryAdd")}
       action={<EnabledPill />}
     >
       <SettingsCard isDirty={formDirty}>

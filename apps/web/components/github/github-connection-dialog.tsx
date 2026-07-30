@@ -25,6 +25,7 @@ import { GitHubAuthMethodList, type GitHubAutomationMethod } from "./github-auth
 import { GitHubAppConnectionPanel } from "./github-app-connection-panel";
 import { GitHubCLIForm } from "./github-cli-form";
 import { GitHubPATForm } from "./github-pat-form";
+import { useTranslation } from "react-i18next";
 
 function methodForStatus(status: GitHubStatus): GitHubAutomationMethod {
   if (status.automation?.source === "github_app_installation") return "app";
@@ -67,6 +68,7 @@ export function GitHubConnectionDialog({
   workspaceId: string;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<GitHubAutomationMethod>(() => methodForStatus(status));
   const { isMobile } = useResponsiveBreakpoint();
@@ -91,7 +93,7 @@ export function GitHubConnectionDialog({
   const trigger = (
     <Button variant={connected ? "outline" : "default"} className="h-11 cursor-pointer">
       <IconPlug className="mr-2 h-4 w-4" />
-      {connected ? "Change connection" : "Connect GitHub"}
+      {connected ? t("github:changeConnection") : t("github:connectGithub")}
     </Button>
   );
   const body = (
@@ -112,7 +114,7 @@ export function GitHubConnectionDialog({
           className="h-[calc(100dvh-16px-env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-16px-env(safe-area-inset-bottom,0px))] overflow-hidden"
         >
           <DrawerHeader className="shrink-0 border-b text-left">
-            <DrawerTitle>{connected ? "Change GitHub connection" : "Connect GitHub"}</DrawerTitle>
+            <DrawerTitle>{connected ? t("github:changeGithubConnection") : t("github:connectGithub")}</DrawerTitle>
             <DrawerDescription>{description}</DrawerDescription>
           </DrawerHeader>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-4">
@@ -131,7 +133,7 @@ export function GitHubConnectionDialog({
         className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-2xl"
       >
         <DialogHeader className="shrink-0">
-          <DialogTitle>{connected ? "Change GitHub connection" : "Connect GitHub"}</DialogTitle>
+          <DialogTitle>{connected ? t("github:changeGithubConnection") : t("github:connectGithub")}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">{body}</div>

@@ -70,8 +70,8 @@ export function AgentsPageClient({ initialAgents }: AgentsPageClientProps) {
 
       {agents.length === 0 ? (
         <EmptyState
-          message="No agents yet."
-          description="Create a CEO agent to start orchestrating work across your projects."
+          message={t("office:noAgentsYet")}
+          description={t("office:createACeoAgentToStart")}
           action={
             <Button
               variant="outline"

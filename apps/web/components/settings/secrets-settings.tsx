@@ -417,7 +417,7 @@ export function SecretsSettings() {
   return (
     <SettingsPageTemplate
       title={t("settings:secrets")}
-      description="Manage API keys and credentials. Secrets are encrypted at rest and injected into agent environments via executor profile env vars."
+      description={t("settings:manageApiKeysAndCredentialsSecrets")}
       isDirty={isDirty}
       saveStatus="idle"
       saveId="secrets-item-draft"
@@ -448,7 +448,7 @@ export function SecretsSettings() {
             onCancel={actions.resetForm}
             isValid={isValid}
             isBusy={isBusy}
-            submitLabel="Add secret"
+            submitLabel={t("settings:addSecret")}
             showSubmit={false}
             baselineState={defaultFormState}
           />
@@ -463,7 +463,7 @@ export function SecretsSettings() {
             onCancel={actions.resetForm}
             isValid={isValid}
             isBusy={isBusy}
-            submitLabel="Save changes"
+            submitLabel={t("settings:saveChanges")}
             showSubmit={false}
             baselineState={edit.baseline}
           />

@@ -43,7 +43,7 @@ export function WorkflowSwitcher({ workflows, activeWorkflowId, onSelect }: Work
           </span>
           {/* Workflow Name */}
           <span className="flex-1 truncate text-left font-medium">
-            {selectedWorkflow?.name || "Select workflow"}
+            {selectedWorkflow?.name || t("common:selectWorkflow")}
           </span>
           <IconChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
         </button>

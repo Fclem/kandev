@@ -238,21 +238,21 @@ function McpServersEditor({
       <p className="text-xs font-medium text-muted-foreground">{t("settings:popularServers")}</p>
       <div className="flex flex-wrap gap-2">
         <PopularServerButton
-          label="playwright"
-          displayName="Playwright MCP"
+          label={t("settings:playwright")}
+          displayName={t("settings:playwrightMcp")}
           onApply={handleApplyServer}
         />
         <PopularServerButton
           label="chrome-devtools"
-          displayName="Chrome DevTools MCP"
+          displayName={t("settings:chromeDevtoolsMcp")}
           onApply={handleApplyServer}
         />
         <PopularServerButton
-          label="context7"
-          displayName="Context7 MCP"
+          label={t("settings:context7")}
+          displayName={t("settings:context7Mcp")}
           onApply={handleApplyServer}
         />
-        <PopularServerButton label="github" displayName="GitHub MCP" onApply={handleApplyServer} />
+        <PopularServerButton label={t("settings:github")} displayName={t("settings:githubMcp")} onApply={handleApplyServer} />
       </div>
       {currentError && <p className="text-sm text-destructive">{currentError}</p>}
     </div>

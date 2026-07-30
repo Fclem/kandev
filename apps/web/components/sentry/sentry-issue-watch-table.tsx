@@ -98,7 +98,7 @@ function WatchActions({
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{watch.enabled ? "Pause" : "Enable"}</TooltipContent>
+        <TooltipContent>{watch.enabled ? t("sentry:pause") : t("sentry:enable")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -212,7 +212,7 @@ export function SentryIssueWatchTable({
             </TableCell>
             <TableCell>
               <Badge variant={watch.enabled ? "default" : "secondary"} className="text-xs">
-                {watch.enabled ? "Active" : "Paused"}
+                {watch.enabled ? t("common:active") : t("sentry:paused")}
               </Badge>
             </TableCell>
             <TableCell className="text-right">

@@ -286,16 +286,16 @@ function IssueAutomationFields({
       <SectionHeader>{t("github:automation")}</SectionHeader>
       <div className="grid grid-cols-2 gap-4">
         <SelectField
-          label="Workflow"
-          description="The workflow to create tasks in."
+          label={t("common:workflow")}
+          description={t("github:theWorkflowToCreateTasksIn")}
           value={form.workflowId}
           onChange={(v) => setForm((prev) => ({ ...prev, workflowId: v, workflowStepId: "" }))}
           placeholder={t("common:selectWorkflow")}
           items={workflows.map((w) => ({ id: w.id, label: w.name }))}
         />
         <SelectField
-          label="Workflow Step"
-          description="Initial step for new tasks."
+          label={t("github:workflowStep")}
+          description={t("github:initialStepForNewTasks")}
           value={form.workflowStepId}
           onChange={(v) => setForm((prev) => ({ ...prev, workflowStepId: v }))}
           placeholder={stepPlaceholder(form.workflowId, stepsLoading, workflowSteps.length)}
@@ -305,8 +305,8 @@ function IssueAutomationFields({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <SelectField
-          label="Agent Profile"
-          description="Optional — falls back to step default."
+          label={t("github:agentProfile")}
+          description={t("github:optionalFallsBackToStepDefault2")}
           value={form.agentProfileId || STEP_DEFAULT}
           onChange={(v) => setForm((prev) => ({ ...prev, agentProfileId: resolveProfileId(v) }))}
           placeholder={STEP_DEFAULT_LABEL}
@@ -320,8 +320,8 @@ function IssueAutomationFields({
           ]}
         />
         <SelectField
-          label="Executor Profile"
-          description="Optional — falls back to step default."
+          label={t("github:executorProfile")}
+          description={t("github:optionalFallsBackToStepDefault2")}
           value={form.executorProfileId || STEP_DEFAULT}
           onChange={(v) => setForm((prev) => ({ ...prev, executorProfileId: resolveProfileId(v) }))}
           placeholder={STEP_DEFAULT_LABEL}
@@ -390,7 +390,7 @@ function IssueSettingsFields({
         />
       </div>
       <SelectField
-        label="Cleanup behavior"
+        label={t("github:cleanupBehavior")}
         description={
           CLEANUP_POLICY_OPTIONS.find((p) => p.id === form.cleanupPolicy)?.description ?? ""
         }
@@ -489,7 +489,7 @@ export function IssueWatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-full sm:w-[900px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{watch ? "Edit Issue Watch" : "Create Issue Watch"}</DialogTitle>
+          <DialogTitle>{watch ? t("github:editIssueWatch") : t("github:createIssueWatch")}</DialogTitle>
           <DialogDescription>{t("github:automaticallyCreateTasksWhenNewGithub")}</DialogDescription>
         </DialogHeader>
         <IssueWatchFormFields
@@ -504,7 +504,7 @@ export function IssueWatchDialog({
             {t("common:cancel")}
           </Button>
           <Button onClick={handleSave} disabled={saving || !canSave} className="cursor-pointer">
-            {saving ? "Saving..." : getSaveLabel(watch)}
+            {saving ? t("github:saving") : getSaveLabel(watch)}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -567,8 +567,8 @@ function WorkspacePicker({
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
     <SelectField
-      label="Workspace"
-      description="Tasks created by this watcher land in the selected workspace."
+      label={t("common:workspace")}
+      description={t("github:tasksCreatedByThisWatcherLand")}
       value={value}
       onChange={onChange}
       placeholder={t("github:selectWorkspace")}

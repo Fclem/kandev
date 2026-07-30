@@ -91,7 +91,7 @@ function ProviderHealthRow({
         className="cursor-pointer gap-1"
       >
         <IconRefresh className="h-3.5 w-3.5" />
-        {busy ? "Retrying…" : "Retry"}
+        {busy ? t("office:retrying") : t("common:retry")}
       </Button>
     </div>
   );

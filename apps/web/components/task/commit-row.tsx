@@ -194,6 +194,7 @@ export function CommitRow({
   onRevertCommit?: (sha: string, repo?: string) => void;
   onResetToCommit?: (sha: string, repo?: string) => void;
 }) {
+  const { t } = useTranslation();
   const showActions = onResetToCommit || (isLatest && (onAmendCommit || onRevertCommit));
 
   return (
@@ -219,10 +220,10 @@ export function CommitRow({
       >
         <span
           className="shrink-0"
-          title={commit.pushed === true ? "Pushed to remote" : "Local commit (not yet pushed)"}
+          title={commit.pushed === true ? t("task:pushedToRemote") : t("task:localCommitNotYetPushed")}
         >
           <span className="sr-only">
-            {commit.pushed === true ? "Pushed commit" : "Unpushed commit"}
+            {commit.pushed === true ? t("task:pushedCommit") : t("task:unpushedCommit")}
           </span>
           {commit.pushed === true ? (
             <IconGitCommit aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />

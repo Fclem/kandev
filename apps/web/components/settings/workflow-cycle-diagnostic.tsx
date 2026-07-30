@@ -80,6 +80,7 @@ export function WorkflowCycleDiagnostic({
 }: {
   diagnostic: WorkflowReplayCycleDiagnostic;
 }) {
+  const { t } = useTranslation();
   const isBlocking = diagnostic.severity === "blocking";
   const promptText = PROMPT_SOURCE_TEXT[diagnostic.promptSource](diagnostic.autoStartStepName);
 
@@ -94,7 +95,7 @@ export function WorkflowCycleDiagnostic({
     >
       <IconAlertTriangle className="mt-0.5 size-4" aria-hidden="true" />
       <AlertTitle className="text-sm">
-        {isBlocking ? "Automatic workflow cycle" : "Potential repeated agent run"}
+        {isBlocking ? t("settings:automaticWorkflowCycle") : t("settings:potentialRepeatedAgentRun")}
       </AlertTitle>
       <AlertDescription className="min-w-0 space-y-3 text-left text-sm text-pretty">
         <p>
@@ -131,6 +132,7 @@ export function WorkflowCycleGuardDialog({
   onCancel,
   onConfirm,
 }: WorkflowCycleGuardDialogProps) {
+  const { t } = useTranslation();
   const isBlocking = proposal?.severity === "blocking";
   const actionLabel = proposal?.intent === "create" ? "Create anyway" : "Apply anyway";
   const confirming = useRef(false);
@@ -156,12 +158,12 @@ export function WorkflowCycleGuardDialog({
       >
         <AlertDialogHeader className="place-items-start p-4 pb-3 text-left sm:p-6 sm:pb-4">
           <AlertDialogTitle className="text-lg">
-            {isBlocking ? "Workflow cycle blocked" : "Confirm workflow cycle"}
+            {isBlocking ? t("settings:workflowCycleBlocked") : t("settings:confirmWorkflowCycle")}
           </AlertDialogTitle>
           <AlertDialogDescription className="text-left text-sm">
             {isBlocking
-              ? "Change the workflow steps to remove the automatic cycle before continuing."
-              : "Review the repeated agent run before continuing."}
+              ? t("settings:changeTheWorkflowStepsToRemove")
+              : t("settings:reviewTheRepeatedAgentRunBefore")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div
@@ -176,7 +178,7 @@ export function WorkflowCycleGuardDialog({
         </div>
         <AlertDialogFooter className="border-t bg-background p-4 sm:px-6">
           <AlertDialogCancel className="min-h-12 w-full cursor-pointer sm:w-auto">
-            {isBlocking ? "Return to workflow" : "Cancel"}
+            {isBlocking ? t("settings:returnToWorkflow") : t("common:cancel")}
           </AlertDialogCancel>
           {!isBlocking && (
             <AlertDialogAction

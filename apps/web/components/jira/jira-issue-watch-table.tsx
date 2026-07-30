@@ -78,7 +78,7 @@ function WatchActions({
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{watch.enabled ? "Pause" : "Enable"}</TooltipContent>
+        <TooltipContent>{watch.enabled ? t("jira:pause") : t("jira:enable")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -196,7 +196,7 @@ export function JiraIssueWatchTable({
             </TableCell>
             <TableCell>
               <Badge variant={watch.enabled ? "default" : "secondary"} className="text-xs">
-                {watch.enabled ? "Active" : "Paused"}
+                {watch.enabled ? t("common:active") : t("jira:paused")}
               </Badge>
             </TableCell>
             <TableCell className="text-right">

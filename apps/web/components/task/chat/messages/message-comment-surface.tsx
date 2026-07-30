@@ -207,7 +207,7 @@ function DrawerCommentActions({
           className={`min-h-11 cursor-pointer gap-1.5 px-4 transition-transform duration-150 ease-out active:scale-[0.96] ${onRun && !isEditing ? "rounded-r-none border-r-0" : ""}`}
         >
           <IconPlus className="h-4 w-4" />
-          {isEditing ? "Update" : "Add"}
+          {isEditing ? t("common:update") : t("task:add2")}
         </Button>
         {onRun && !isEditing ? (
           <Button
@@ -270,7 +270,7 @@ function MessageCommentDrawer({
         data-testid="agent-message-comment-drawer"
       >
         <DrawerHeader className="shrink-0 px-4 pb-3 text-left">
-          <DrawerTitle>{isEditing ? "Edit comment" : "Comment"}</DrawerTitle>
+          <DrawerTitle>{isEditing ? t("task:editComment") : t("task:comment2")}</DrawerTitle>
           <DrawerDescription className="line-clamp-2 text-pretty italic">
             &ldquo;{target.selection.selectedText}&rdquo;
           </DrawerDescription>

@@ -129,6 +129,7 @@ function OrgProjectRow({
   projects: SentryProject[];
   orgs: string[];
 }) {
+  const { t } = useTranslation();
   const onOrgChange = (v: string) =>
     // The selected project may belong to a different org — clear it so the
     // project dropdown re-picks within the new org.
@@ -139,20 +140,20 @@ function OrgProjectRow({
   return (
     <div className="grid grid-cols-2 gap-4">
       <SelectField
-        label="Organization slug"
-        description="The Sentry org to poll."
+        label={t("sentry:organizationSlug")}
+        description={t("sentry:theSentryOrgToPoll")}
         value={form.orgSlug}
         onChange={onOrgChange}
-        placeholder={orgItems.length === 0 ? "No organizations available" : "Select organization"}
+        placeholder={orgItems.length === 0 ? t("sentry:noOrganizationsAvailable") : t("sentry:selectOrganization")}
         items={orgItems}
         disabled={orgItems.length === 0}
       />
       <SelectField
-        label="Project slug"
-        description="The Sentry project to poll."
+        label={t("sentry:projectSlug")}
+        description={t("sentry:theSentryProjectToPoll")}
         value={form.projectSlug}
         onChange={onProjectChange}
-        placeholder={projectItems.length === 0 ? "No projects available" : "Select project"}
+        placeholder={projectItems.length === 0 ? t("sentry:noProjectsAvailable") : t("sentry:selectProject")}
         items={projectItems}
         disabled={projectItems.length === 0}
       />
@@ -207,8 +208,8 @@ export function FilterFields({
           />
         </div>
         <SelectField
-          label="Stats period"
-          description="How far back to look for matching issues."
+          label={t("sentry:statsPeriod")}
+          description={t("sentry:howFarBackToLookFor")}
           value={form.statsPeriod}
           onChange={(v) => setForm((p) => ({ ...p, statsPeriod: v }))}
           placeholder={t("sentry:any")}
@@ -304,8 +305,8 @@ export function WorkspacePicker({
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
     <SelectField
-      label="Workspace"
-      description="Tasks created by this watcher land in the selected workspace."
+      label={t("common:workspace")}
+      description={t("sentry:tasksCreatedByThisWatcherLand")}
       value={value}
       onChange={onChange}
       placeholder={t("sentry:selectWorkspace")}
@@ -326,14 +327,15 @@ export function InstancePicker({
   onChange: (v: string) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const noInstances = instances.length === 0;
   return (
     <SelectField
-      label="Sentry instance"
-      description="Which Sentry instance this watcher polls. Immutable after creation."
+      label={t("sentry:sentryInstance")}
+      description={t("sentry:whichSentryInstanceThisWatcherPolls")}
       value={value}
       onChange={onChange}
-      placeholder={noInstances ? "No Sentry instances in this workspace" : "Select an instance"}
+      placeholder={noInstances ? t("sentry:noSentryInstancesInThisWorkspace") : t("sentry:selectAnInstance")}
       items={instances.map((i) => ({ id: i.id, label: i.name }))}
       disabled={disabled || noInstances}
     />
@@ -348,16 +350,16 @@ export function AutomationFields({ form, setForm }: { form: FormState; setForm: 
     <>
       <div className="grid grid-cols-2 gap-4">
         <SelectField
-          label="Workflow"
-          description="Tasks are created in this workflow."
+          label={t("common:workflow")}
+          description={t("sentry:tasksAreCreatedInThisWorkflow")}
           value={form.workflowId}
           onChange={(v) => setForm((p) => ({ ...p, workflowId: v, workflowStepId: "" }))}
           placeholder={t("common:selectWorkflow")}
           items={workflows.map((w) => ({ id: w.id, label: w.name }))}
         />
         <SelectField
-          label="Workflow Step"
-          description="Initial step for new tasks."
+          label={t("sentry:workflowStep")}
+          description={t("sentry:initialStepForNewTasks")}
           value={form.workflowStepId}
           onChange={(v) => setForm((p) => ({ ...p, workflowStepId: v }))}
           placeholder={stepPlaceholder(form.workflowId, stepsLoading, steps.length)}
@@ -376,16 +378,16 @@ export function AutomationFields({ form, setForm }: { form: FormState; setForm: 
       />
       <div className="grid grid-cols-2 gap-4">
         <SelectField
-          label="Agent Profile"
-          description="Optional — falls back to step default."
+          label={t("sentry:agentProfile")}
+          description={t("sentry:optionalFallsBackToStepDefault")}
           value={form.agentProfileId}
           onChange={(v) => setForm((p) => ({ ...p, agentProfileId: v }))}
           placeholder={t("sentry:useStepDefault")}
           items={agentProfiles.map((p) => ({ id: p.id, label: p.label }))}
         />
         <SelectField
-          label="Executor Profile"
-          description="Optional — falls back to step default."
+          label={t("sentry:executorProfile")}
+          description={t("sentry:optionalFallsBackToStepDefault")}
           value={form.executorProfileId}
           onChange={(v) => setForm((p) => ({ ...p, executorProfileId: v }))}
           placeholder={t("sentry:useStepDefault")}

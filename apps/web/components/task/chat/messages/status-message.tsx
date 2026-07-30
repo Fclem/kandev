@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Message } from "@/lib/types/http";
 import type { StatusMetadata } from "@/components/task/chat/types";
+import { useTranslation } from "react-i18next";
 
 interface ErrorMetadata extends StatusMetadata {
   error?: string;
@@ -110,10 +111,11 @@ function StatusProgressBar({
   progress: number;
   statusLine: string | undefined;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="mt-2">
       <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-        <span>{statusLine ?? "Progress"}</span>
+        <span>{statusLine ?? t("task:progress")}</span>
         <span>{Math.round(progress)}%</span>
       </div>
       <div className="h-1.5 rounded-full bg-muted/70">
@@ -211,9 +213,10 @@ function StatusMessageBody({
   progress,
   statusLine,
 }: StatusMessageBodyProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex-1 min-w-0 pt-0.5">
-      <div className={cn("text-xs font-mono", textClass)}>{message || "An error occurred"}</div>
+      <div className={cn("text-xs font-mono", textClass)}>{message || t("task:anErrorOccurred")}</div>
       {isExpanded && hasExpandableContent && <ExpandableErrorDetails errorDetails={errorDetails} />}
       {progress !== null && <StatusProgressBar progress={progress} statusLine={statusLine} />}
     </div>

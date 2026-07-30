@@ -38,7 +38,7 @@ export function WorkflowCardHeaderActions({
         <TooltipTrigger asChild>
           <span
             tabIndex={exportDisabled ? 0 : undefined}
-            aria-label={exportDisabled ? "Save the workflow before exporting." : undefined}
+            aria-label={exportDisabled ? t("settings:saveTheWorkflowBeforeExporting") : undefined}
           >
             <Button
               type="button"

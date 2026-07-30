@@ -178,7 +178,7 @@ export function LinearIssueWatchersSection() {
     <SettingsSection
       icon={<IconBellRinging className="h-5 w-5" />}
       title={t("linear:linearWatchers")}
-      description="Poll a Linear filter and auto-create a Kandev task for each newly-matching issue."
+      description={t("linear:pollALinearFilterAndAuto")}
       action={
         <Button size="sm" onClick={openCreate} className="cursor-pointer">
           <Trans i18nKey="linear:newWatcher">
@@ -220,7 +220,7 @@ export function LinearIssueWatchersSection() {
         <ResetWatchDialog
           open
           onOpenChange={resetCtrl.onOpenChange}
-          integrationLabel="Linear watcher"
+          integrationLabel={t("linear:linearWatcher")}
           previewLoader={resetCtrl.previewLoader}
           onConfirm={resetCtrl.confirmReset}
         />

@@ -317,7 +317,7 @@ function StepHoverContent({
           onClick={() => onMove(step.id)}
         >
           <IconArrowRight className="h-3 w-3" />
-          {isMoving ? "Moving..." : "Move here"}
+          {isMoving ? t("task:moving") : t("task:moveHere")}
         </Button>
       )}
       {isCurrent && (

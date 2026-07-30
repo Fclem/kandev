@@ -73,7 +73,7 @@ export function ResetContextButton({ sessionId }: { sessionId: string }) {
               className="cursor-pointer"
               data-testid="reset-context-confirm"
             >
-              {isResetting ? "Resetting..." : "Reset Context"}
+              {isResetting ? t("task:resetting2") : t("task:resetContext")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -84,7 +84,7 @@ export function SettingsFloatingSave({
           onClick={() => void onSave()}
         >
           <SaveButtonIcon status={status} />
-          {accessibleLabel === "Saving changes" ? "Saving..." : accessibleLabel}
+          {accessibleLabel === "Saving changes" ? t("settings:saving") : accessibleLabel}
         </Button>
       </div>
     </div>
@@ -154,7 +154,7 @@ function LeaveWithUnsavedChangesDialog({
             disabled={isBusy}
             onClick={() => void onDiscardAndLeave()}
           >
-            {isDiscarding ? "Discarding..." : "Discard and leave"}
+            {isDiscarding ? t("settings:discarding") : t("settings:discardAndLeave")}
           </Button>
           <AlertDialogAction
             className="cursor-pointer bg-success text-success-foreground hover:bg-success/85 focus-visible:border-success focus-visible:ring-success/35"
@@ -165,7 +165,7 @@ function LeaveWithUnsavedChangesDialog({
               void onSave();
             }}
           >
-            {isSaving ? "Saving..." : "Save and leave"}
+            {isSaving ? t("settings:saving") : t("settings:saveAndLeave")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

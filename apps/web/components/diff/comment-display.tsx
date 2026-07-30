@@ -96,6 +96,7 @@ export function CommentDisplay({
   showCode = false,
   compact = false,
 }: CommentDisplayProps) {
+  const { t } = useTranslation();
   const lineRange = formatLineRange(comment.startLine, comment.endLine);
 
   if (compact) {
@@ -130,7 +131,7 @@ export function CommentDisplay({
           <IconMessage className="h-3.5 w-3.5 text-blue-500" />
           <span className="font-medium">{lineRange}</span>
           <span className="text-muted-foreground">
-            ({comment.side === "additions" ? "new" : "old"})
+            ({comment.side === "additions" ? t("diff:new") : t("diff:old")})
           </span>
         </div>
         <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">

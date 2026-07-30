@@ -97,7 +97,7 @@ function FileActionButton({
         type="button"
         onClick={onCopyPath}
         className="opacity-0 group-hover/expandable:opacity-100 transition-opacity text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-        title={copied ? "Copied!" : "Copy path"}
+        title={copied ? t("task:copied") : t("task:copyPath")}
       >
         {copied ? (
           <IconCheck className="h-3.5 w-3.5 text-green-500" />

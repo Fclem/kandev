@@ -215,7 +215,7 @@ export function ConfigSection({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <SelectField
           testId="execution-mode-selector"
-          label="Execution Mode"
+          label={t("automations:executionMode")}
           value={executionMode}
           isDirty={dirtyFields.executionMode}
           onChange={(v) => onExecutionModeChange(v as ExecutionMode)}
@@ -235,7 +235,7 @@ export function ConfigSection({
           />
         )}
         <SelectField
-          label="Agent Profile"
+          label={t("automations:agentProfile")}
           value={agentProfileId}
           isDirty={dirtyFields.agentProfileId}
           onChange={onAgentProfileChange}
@@ -246,7 +246,7 @@ export function ConfigSection({
           }))}
         />
         <SelectField
-          label="Executor Profile"
+          label={t("automations:executorProfile")}
           value={executorProfileId}
           isDirty={dirtyFields.executorProfileId}
           onChange={onExecutorProfileChange}
@@ -255,7 +255,7 @@ export function ConfigSection({
         />
         <SelectField
           testId="repository-selector"
-          label="Repository"
+          label={t("common:repository")}
           value={selectionToOptionId(repositorySelection)}
           isDirty={dirtyFields.repositorySelection}
           onChange={(v) =>
@@ -264,7 +264,7 @@ export function ConfigSection({
           placeholder={t("automations:auto")}
           items={repositoryItems}
           disabled={isPRTrigger}
-          helpText={isPRTrigger ? "PR triggers always use the PR's own repository." : undefined}
+          helpText={isPRTrigger ? t("automations:prTriggersAlwaysUseThePr") : undefined}
         />
       </div>
     </div>
@@ -301,23 +301,23 @@ function WorkflowFields({
     <>
       <SelectField
         testId="workflow-selector"
-        label="Workflow"
+        label={t("common:workflow")}
         required
         value={workflowId}
         isDirty={workflowDirty}
         onChange={onWorkflowChange}
         placeholder={t("common:selectWorkflow")}
         items={workflows.map((w) => ({ id: w.id, label: w.name }))}
-        helpText={!hasWorkflow ? "Select a workflow to enable saving." : undefined}
+        helpText={!hasWorkflow ? t("automations:selectAWorkflowToEnableSaving") : undefined}
       />
       <SelectField
         testId="workflow-step-selector"
-        label="Workflow Step"
+        label={t("automations:workflowStep")}
         required
         value={workflowStepId}
         isDirty={workflowStepDirty}
         onChange={onStepChange}
-        placeholder={hasWorkflow ? "Select step" : "Pick a workflow first"}
+        placeholder={hasWorkflow ? t("automations:selectStep") : t("automations:pickAWorkflowFirst")}
         items={steps.map((s) => ({ id: s.id, label: s.name }))}
         disabled={!hasWorkflow}
         helpText={getWorkflowStepHelpText(workflowId, workflowStepId)}

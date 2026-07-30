@@ -139,7 +139,7 @@ export function GitHubCLIForm({
           <SelectContent>
             {accounts.map((item) => (
               <SelectItem key={`${item.host}:${item.login}`} value={`${item.host}\n${item.login}`}>
-                {item.login} ({item.host}){item.active ? " - active" : ""}
+                {item.login} ({item.host}){item.active ? t("github:active") : ""}
               </SelectItem>
             ))}
           </SelectContent>

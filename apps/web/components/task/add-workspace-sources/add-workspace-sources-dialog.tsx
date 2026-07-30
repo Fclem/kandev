@@ -217,7 +217,7 @@ function AddWorkspaceSourcesSurface({
         disabled={submitting || !canSubmit}
         onClick={onSubmit}
       >
-        {submitting ? "Adding…" : "Add to workspace"}
+        {submitting ? t("task:adding") : t("task:addToWorkspace")}
       </Button>
     </div>
   );
@@ -369,22 +369,22 @@ function RepositorySourceMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-80 max-w-[calc(100vw-2rem)]">
         <RepositorySourceMenuItem
-          label="Workspace repository"
-          description="Choose from saved or discovered repositories."
+          label={t("task:workspaceRepository")}
+          description={t("task:chooseFromSavedOrDiscoveredRepositories")}
           icon={<IconStack2 className="mt-0.5 h-4 w-4 text-muted-foreground" />}
           className={itemClass}
           onSelect={() => onAdd("saved_repository")}
         />
         <RepositorySourceMenuItem
-          label="Local Git repository"
-          description="Use an existing checkout on this machine."
+          label={t("task:localGitRepository")}
+          description={t("task:useAnExistingCheckoutOnThis")}
           icon={<IconGitBranch className="mt-0.5 h-4 w-4 text-muted-foreground" />}
           className={itemClass}
           onSelect={() => onAdd("local_repository")}
         />
         <RepositorySourceMenuItem
-          label="Remote repository"
-          description="Clone from a provider or Git URL."
+          label={t("task:remoteRepository")}
+          description={t("task:cloneFromAProviderOrGit")}
           icon={<IconCloudDownload className="mt-0.5 h-4 w-4 text-muted-foreground" />}
           className={itemClass}
           onSelect={() => onAdd("remote_repository")}

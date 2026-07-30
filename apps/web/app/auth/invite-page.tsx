@@ -132,7 +132,7 @@ function AcceptForm({
         disabled={submitting}
         data-testid="invite-accept-submit"
       >
-        {submitting ? "Joining..." : "Accept invite"}
+        {submitting ? t("auth:joining") : t("auth:acceptInvite2")}
       </Button>
     </form>
   );
@@ -179,7 +179,7 @@ export function InvitePage({ token }: InvitePageProps) {
             </Trans>
           </CardTitle>
           <CardDescription>
-            {preview ? `You've been invited as ${preview.role}.` : "Join this Kandev deployment."}
+            {preview ? `You've been invited as ${preview.role}.` : t("auth:joinThisKandevDeployment")}
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -106,7 +106,7 @@ export function AgentRoutingCard({ agentId, initial }: Props) {
             disabled={saving || tierWarning !== null}
             className="cursor-pointer"
           >
-            {saving ? "Saving…" : "Save overrides"}
+            {saving ? t("office:saving2") : t("office:saveOverrides")}
           </Button>
         </div>
       </CardContent>
@@ -167,6 +167,7 @@ function RoutingFields({
   knownProviders,
   saving,
 }: FieldsProps) {
+  const { t } = useTranslation();
   const overrideTier = overrides.tier_source === "override";
   const overrideOrder = overrides.provider_order_source === "override";
 
@@ -187,7 +188,7 @@ function RoutingFields({
 
   return (
     <>
-      <InheritRow label="Override workspace tier" checked={overrideTier} onChange={setTierSource} />
+      <InheritRow label={t("office:overrideWorkspaceTier")} checked={overrideTier} onChange={setTierSource} />
       {overrideTier ? (
         <TierToggleGroup
           value={overrides.tier || ""}
@@ -197,7 +198,7 @@ function RoutingFields({
         <InheritedTierHint defaultTier={workspaceConfig?.default_tier} />
       )}
       <InheritRow
-        label="Override workspace provider order"
+        label={t("office:overrideWorkspaceProviderOrder")}
         checked={overrideOrder}
         onChange={setOrderSource}
       />

@@ -242,7 +242,7 @@ function AddChannelDialog({
             {t("common:cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={submitting} className="cursor-pointer">
-            {submitting ? "Creating..." : "Add Channel"}
+            {submitting ? t("office:creating") : t("office:addChannel")}
           </Button>
         </DialogFooter>
       </DialogContent>

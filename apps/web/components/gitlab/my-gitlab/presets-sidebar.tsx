@@ -31,6 +31,7 @@ function KindToggle({
   kind: "mr" | "issue";
   onChange: (k: "mr" | "issue") => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="mx-2 mb-3 grid grid-cols-2 rounded-md border p-0.5 text-xs"
@@ -49,7 +50,7 @@ function KindToggle({
           )}
           data-testid={`gitlab-kind-${value}`}
         >
-          {value === "mr" ? "Merge requests" : "Issues"}
+          {value === "mr" ? t("gitlab:mergeRequests") : t("gitlab:issues")}
         </button>
       ))}
     </div>
@@ -122,11 +123,12 @@ function PresetGroupList({
   onSelect: (s: SidebarSelection) => void;
   kind: "mr" | "issue";
 }) {
+  const { t } = useTranslation();
   const items = presets.filter((p) => p.group === group);
   if (items.length === 0) return null;
   return (
     <>
-      <SectionHeader title={group === "inbox" ? "Inbox" : "Created"} />
+      <SectionHeader title={group === "inbox" ? t("gitlab:inbox") : t("gitlab:created")} />
       {items.map((p) => (
         <PresetItem
           key={`${kind}-${p.value}`}
@@ -200,7 +202,7 @@ function SavedSection({
             ? "text-muted-foreground hover:bg-muted/50 hover:text-foreground cursor-pointer"
             : "text-muted-foreground/50 cursor-not-allowed",
         )}
-        title={canSaveCurrent ? "Save current query" : "Type a custom query first"}
+        title={canSaveCurrent ? t("gitlab:saveCurrentQuery") : t("gitlab:typeACustomQueryFirst")}
         data-testid="gitlab-save-current-query"
       >
         <IconDeviceFloppy className="h-4 w-4 shrink-0" />

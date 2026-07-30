@@ -84,6 +84,7 @@ export function PRSubmitButton({
   terminology: { shortName: string };
   branchPushed: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Button
       onClick={() => onCreatePR(prTitle.trim(), prBody.trim(), prDraft)}
@@ -100,7 +101,7 @@ export function PRSubmitButton({
       ) : (
         <>
           <IconGitPullRequest className="h-4 w-4 mr-2" />
-          {branchPushed ? "Retry" : "Create"} {terminology.shortName}
+          {branchPushed ? t("common:retry") : t("task:create3")} {terminology.shortName}
         </>
       )}
     </Button>

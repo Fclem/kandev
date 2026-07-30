@@ -86,7 +86,7 @@ export function AgentPermissionsTab({ agent }: AgentPermissionsTabProps) {
       {dirty && (
         <div className="flex justify-end">
           <Button onClick={handleSave} disabled={saving} className="cursor-pointer">
-            {saving ? "Saving..." : "Save Permissions"}
+            {saving ? t("office:saving") : t("office:savePermissions")}
           </Button>
         </div>
       )}

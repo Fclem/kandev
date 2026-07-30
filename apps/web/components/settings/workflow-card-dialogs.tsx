@@ -116,7 +116,7 @@ export function WorkflowDeleteDialog({
               disabled={!targetWorkflowId || !targetStepId || migrateLoading || deleteLoading}
               className="cursor-pointer"
             >
-              {migrateLoading ? "Migrating..." : "Migrate & Delete"}
+              {migrateLoading ? t("settings:migrating") : t("settings:migrateDelete")}
             </Button>
           )}
           <Button
@@ -126,7 +126,7 @@ export function WorkflowDeleteDialog({
             disabled={deleteLoading || migrateLoading}
             className="cursor-pointer"
           >
-            {hasTasks ? "Delete & Archive Tasks" : "Delete Workflow"}
+            {hasTasks ? t("settings:deleteArchiveTasks") : t("settings:deleteWorkflow3")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -186,7 +186,7 @@ export function StepDeleteDialog({
           <DialogTitle>{t("settings:deleteStep")}</DialogTitle>
           <DialogDescription>
             {description}
-            {hasUnsavedChanges ? " Unsaved step changes will be discarded." : ""}
+            {hasUnsavedChanges ? t("settings:unsavedStepChangesWillBeDiscarded") : ""}
           </DialogDescription>
         </DialogHeader>
         {stepsForMigration.length > 0 && (
@@ -227,7 +227,7 @@ export function StepDeleteDialog({
               disabled={!targetStep || loading || pending}
               className="cursor-pointer"
             >
-              {loading ? "Migrating..." : "Migrate & Delete Step"}
+              {loading ? t("settings:migrating") : t("settings:migrateDeleteStep")}
             </Button>
           )}
           <Button
@@ -237,7 +237,7 @@ export function StepDeleteDialog({
             disabled={loading || pending}
             className="cursor-pointer"
           >
-            {hasTasks ? "Delete Step & Tasks" : "Delete Step"}
+            {hasTasks ? t("settings:deleteStepTasks") : t("settings:deleteStep2")}
           </Button>
         </DialogFooter>
       </DialogContent>

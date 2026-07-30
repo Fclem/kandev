@@ -164,7 +164,7 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
   return (
     <SettingsSection
       title={t("gitlab:quickActions")}
-      description="Task prompts shown on the GitLab browse page for merge requests and issues."
+      description={t("gitlab:taskPromptsShownOnTheGitlab")}
       action={
         <Button
           type="button"
@@ -193,13 +193,13 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
               </TabsTrigger>
             </TabsList>
             <TabsContent value="mr">
-              <PresetList presets={drafts.mr} onChange={drafts.setMR} addLabel="Add MR action" />
+              <PresetList presets={drafts.mr} onChange={drafts.setMR} addLabel={t("gitlab:addMrAction")} />
             </TabsContent>
             <TabsContent value="issue">
               <PresetList
                 presets={drafts.issue}
                 onChange={drafts.setIssue}
-                addLabel="Add issue action"
+                addLabel={t("gitlab:addIssueAction")}
               />
             </TabsContent>
           </Tabs>

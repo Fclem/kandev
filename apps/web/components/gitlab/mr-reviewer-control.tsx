@@ -19,7 +19,12 @@ type Props = {
   workspaceId: string;
   host: string;
   project: string;
-  label: "Reviewers" | "Assignees";
+  /**
+   * Which member list this control edits. A `kind` rather than the display
+   * string: the heading and aria-labels are translated from it, so an English
+   * label can no longer double as the discriminant.
+   */
+  kind: "reviewers" | "assignees";
   current: GitLabMRUser[];
   busy: boolean;
   onSave: (ids: number[]) => Promise<boolean>;
@@ -27,11 +32,11 @@ type Props = {
 
 function SelectedMemberBadges({
   members,
-  label,
+  kind,
   onRemove,
 }: {
   members: Array<Pick<GitLabProjectMember, "id" | "username" | "name">>;
-  label: Props["label"];
+  kind: Props["kind"];
   onRemove: (id: number) => void;
 }) {
   const { t } = useTranslation();
@@ -43,7 +48,10 @@ function SelectedMemberBadges({
       <button
         type="button"
         className="flex h-11 w-11 cursor-pointer items-center justify-center sm:h-6 sm:w-6"
-        aria-label={`Remove ${member.username} from ${label.toLowerCase()}`}
+        aria-label={t(
+          kind === "reviewers" ? "gitlab:removeFromReviewers" : "gitlab:removeFromAssignees",
+          { username: member.username },
+        )}
         onClick={() => onRemove(member.id)}
       >
         <IconX className="h-3 w-3" />
@@ -104,12 +112,14 @@ export function MRReviewerControl({
   workspaceId,
   host,
   project,
-  label,
+  kind,
   current,
   busy,
   onSave,
 }: Props) {
   const { t } = useTranslation();
+  const heading = t(kind === "reviewers" ? "gitlab:reviewers" : "gitlab:assignees");
+  const searchLabel = t(kind === "reviewers" ? "gitlab:searchReviewers" : "gitlab:searchAssignees");
   const initialIds = useMemo(() => current.map((member) => member.id), [current]);
   const [selectedIds, setSelectedIds] = useState(initialIds);
   const { query, setQuery, members, searching, error, search } = useProjectMemberSearch({
@@ -127,9 +137,9 @@ export function MRReviewerControl({
     .map((id) => knownMembers.get(id))
     .filter((member): member is Pick<GitLabProjectMember, "id" | "username" | "name"> => !!member);
   return (
-    <section className="space-y-2" aria-label={label}>
+    <section className="space-y-2" aria-label={heading}>
       <div className="flex items-center justify-between gap-2">
-        <h4 className="text-xs font-semibold">{label}</h4>
+        <h4 className="text-xs font-semibold">{heading}</h4>
         <Button
           size="sm"
           variant="outline"
@@ -145,7 +155,7 @@ export function MRReviewerControl({
       <div className="flex flex-wrap gap-1.5">
         <SelectedMemberBadges
           members={selectedMembers}
-          label={label}
+          kind={kind}
           onRemove={(id) => setSelectedIds((ids) => ids.filter((candidate) => candidate !== id))}
         />
       </div>
@@ -160,13 +170,13 @@ export function MRReviewerControl({
             }
           }}
           placeholder={t("gitlab:searchProjectMembers")}
-          aria-label={`Search ${label.toLowerCase()}`}
+          aria-label={searchLabel}
         />
         <Button
           size="icon"
           variant="outline"
           className="h-11 w-11 shrink-0 cursor-pointer sm:h-9 sm:w-9"
-          aria-label={`Search ${label.toLowerCase()}`}
+          aria-label={searchLabel}
           disabled={searching}
           onClick={() => void search()}
         >

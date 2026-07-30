@@ -236,13 +236,14 @@ function useAzureDevOpsSettings(workspaceId: string) {
 }
 
 function TestResult({ result }: { result: TestAzureDevOpsConnectionResult | null }) {
+  const { t } = useTranslation();
   if (!result) return null;
   return (
     <Alert variant={result.ok ? "default" : "destructive"} data-testid="azure-devops-test-result">
       <AlertDescription>
         {result.ok
           ? `Connected${result.displayName ? ` as ${result.displayName}` : ""}`
-          : result.error || "Connection failed"}
+          : result.error || t("azureDevops:connectionFailed")}
       </AlertDescription>
     </Alert>
   );
@@ -380,7 +381,7 @@ function ConnectionFields({
             type="password"
             value={state.form.pat}
             onChange={(event) => state.update("pat", event.target.value)}
-            placeholder={canReusePAT ? "Saved credential" : "Paste PAT"}
+            placeholder={canReusePAT ? t("azureDevops:savedCredential") : t("azureDevops:pastePat")}
             disabled={state.loading}
             autoComplete="new-password"
             aria-describedby="azure-devops-pat-help"
@@ -415,7 +416,7 @@ function ConnectionActions({ state, disabled }: { state: SettingsState; disabled
         data-testid="azure-devops-test-button"
       >
         <IconPlugConnected className="h-4 w-4" />
-        {state.testing ? "Testing..." : "Test connection"}
+        {state.testing ? t("azureDevops:testing") : t("azureDevops:testConnection")}
       </Button>
       <Button
         type="button"
@@ -459,7 +460,7 @@ export function AzureDevOpsConnectionSection({ workspaceId }: { workspaceId: str
     <SettingsSection
       icon={<IconBrandAzure className="h-5 w-5" />}
       title={t("azureDevops:azureDevopsIntegration")}
-      description="Azure DevOps Services organization, project, and read-only PAT for this workspace."
+      description={t("azureDevops:azureDevopsServicesOrganizationProjectAnd")}
     >
       <Card>
         <CardContent className="space-y-4 pt-6">

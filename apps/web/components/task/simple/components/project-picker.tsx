@@ -73,7 +73,7 @@ export function ProjectPicker({ task }: ProjectPickerProps) {
       onValueChange={handleSelect}
       placeholder={t("task:noProject")}
       searchPlaceholder="Search projects..."
-      emptyMessage="No projects found."
+      emptyMessage={t("task:noProjectsFound")}
       triggerClassName="h-7 w-full justify-end px-2"
       popoverAlign="end"
       testId="project-picker-trigger"

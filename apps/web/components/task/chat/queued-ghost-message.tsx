@@ -372,7 +372,7 @@ function QueuedRowActions({
           size="sm"
           className="h-6 w-6 cursor-pointer p-0 text-muted-foreground hover:text-foreground"
           onClick={onToggleExpand}
-          title={expanded ? "Collapse message" : "Expand message"}
+          title={expanded ? t("task:collapseMessage") : t("task:expandMessage")}
           data-testid="queue-entry-expand"
           aria-expanded={expanded}
         >

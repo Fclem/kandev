@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useState, useMemo, useCallback } from "react";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
@@ -169,6 +169,7 @@ export function CommitsSection({
   prByRepo,
   defaultCollapsed = true,
 }: CommitsSectionProps) {
+  const { t } = useTranslation();
   const groups = groupByRepositoryName(commits, (c) => c.repository_name);
   const aheadByRepo = new Map((perRepoStatus ?? []).map((s) => [s.repository_name, s.ahead]));
   // Single-repo: drop the per-repo sub-header (CommitsRepoGroup with
@@ -190,7 +191,7 @@ export function CommitsSection({
   return (
     <TimelineSection
       dotColor={DOT_COLORS.commits}
-      label="Commits"
+      label={t("task:commits")}
       count={commits.length}
       defaultCollapsed={defaultCollapsed}
       data-testid="commits-section"
@@ -550,10 +551,11 @@ export function PRFilesSection({
   repoDisplayName,
   defaultCollapsed = true,
 }: PRFilesSectionProps) {
+  const { t } = useTranslation();
   return (
     <TimelineSection
       dotColor={DOT_COLORS.pr}
-      label="PR Changes"
+      label={t("task:prChanges")}
       count={files.length}
       defaultCollapsed={defaultCollapsed}
       data-testid="pr-changes-section"

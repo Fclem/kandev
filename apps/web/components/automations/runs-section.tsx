@@ -205,7 +205,7 @@ export function RunsSection({ automationId, executionMode, workspaceId }: RunsSe
               {runs.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
-                    {loading ? "Loading..." : "No runs yet"}
+                    {loading ? t("common:loading2") : t("automations:noRunsYet")}
                   </TableCell>
                 </TableRow>
               ) : (

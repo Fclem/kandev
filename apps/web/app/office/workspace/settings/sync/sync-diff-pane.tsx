@@ -26,6 +26,7 @@ export function SyncDiffPane({
   applyLabel,
   onApply,
 }: SyncDiffPaneProps) {
+  const { t } = useTranslation();
   const totalChanges = diff ? countChanges(diff) : 0;
 
   return (
@@ -42,7 +43,7 @@ export function SyncDiffPane({
             disabled={applying || loading || totalChanges === 0}
             className="cursor-pointer shrink-0"
           >
-            {applying ? "Applying..." : applyLabel}
+            {applying ? t("office:applying") : applyLabel}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground mt-1">{description}</p>
@@ -73,10 +74,10 @@ function DiffBody({
   }
   return (
     <>
-      <DiffSection label="Agents" diff={diff.preview.agents} />
-      <DiffSection label="Skills" diff={diff.preview.skills} />
-      <DiffSection label="Routines" diff={diff.preview.routines} />
-      <DiffSection label="Projects" diff={diff.preview.projects} />
+      <DiffSection label={t("common:agents")} diff={diff.preview.agents} />
+      <DiffSection label={t("office:skills")} diff={diff.preview.skills} />
+      <DiffSection label={t("office:routines")} diff={diff.preview.routines} />
+      <DiffSection label={t("office:projects")} diff={diff.preview.projects} />
     </>
   );
 }

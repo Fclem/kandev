@@ -270,13 +270,14 @@ function RoutinesList({
   onRunNow: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (routines.length === 0) {
     return (
       <EmptyState
-        message="No routines yet."
-        description="Routines automatically create tasks on a schedule or webhook trigger."
+        message={t("office:noRoutinesYet")}
+        description={t("office:routinesAutomaticallyCreateTasksOnA")}
       />
     );
   }
@@ -300,11 +301,12 @@ function RoutinesList({
 }
 
 function RunsList({ runs }: { runs: RoutineRun[] }) {
+  const { t } = useTranslation();
   if (runs.length === 0) {
     return (
       <EmptyState
-        message="No runs yet."
-        description="Runs appear here when a routine is triggered."
+        message={t("office:noRunsYet")}
+        description={t("office:runsAppearHereWhenARoutine")}
       />
     );
   }

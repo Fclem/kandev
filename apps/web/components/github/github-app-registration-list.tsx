@@ -58,7 +58,7 @@ export function GitHubAppRegistrationList({
             </span>
             <span className="block break-words text-xs font-normal text-muted-foreground">
               {registration.owner_login}/{registration.slug} ·{" "}
-              {registration.source === "managed" ? "Created by Kandev" : "Imported"}
+              {registration.source === "managed" ? t("github:createdByKandev") : t("github:imported")}
             </span>
             {registration.shared && (
               <span className="flex items-start gap-1.5 text-xs font-normal leading-5 text-amber-600 dark:text-amber-400">
@@ -74,7 +74,7 @@ export function GitHubAppRegistrationList({
             )}
             {registration.status === "invalid" && (
               <span className="block text-xs font-normal leading-5 text-destructive">
-                {registration.last_error || "The stored App credentials are unavailable."}
+                {registration.last_error || t("github:theStoredAppCredentialsAreUnavailable")}
               </span>
             )}
           </span>

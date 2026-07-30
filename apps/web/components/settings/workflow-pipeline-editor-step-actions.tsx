@@ -360,7 +360,7 @@ export function ChildrenCompletedSelect({
         <Label className="text-xs font-medium">{t("settings:whenChildTasksComplete")}</Label>
         <HelpTip
           testId={`${step.id}-children-completed-help`}
-          ariaLabel="How child task completion transitions work"
+          ariaLabel={t("settings:howChildTaskCompletionTransitionsWork")}
           text="Use this on a parent task step. When every active direct child task is COMPLETED, FAILED, or CANCELLED, Kandev runs this transition once. Archived and ephemeral child tasks are ignored. Grandchildren do not count here, and nothing runs if the parent has no child tasks."
         />
       </div>

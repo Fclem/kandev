@@ -39,7 +39,7 @@ function RefreshControls({
     <>
       {lastFetchedAt && !loading && (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {showUpdatedPrefix ? "Updated " : ""}
+          {showUpdatedPrefix ? t("github:updated") : ""}
           {formatRelativeTime(lastFetchedAt.toISOString())}
         </span>
       )}
@@ -97,7 +97,7 @@ export function ListToolbar({
         repoFilter={repoFilter}
         onRepoFilterChange={onRepoFilterChange}
         repoOptions={repoOptions}
-        ariaLabel="Filter GitHub results by repository"
+        ariaLabel={t("github:filterGithubResultsByRepository")}
         triggerClassName="w-full md:w-[220px] h-8 border border-input bg-background hover:bg-secondary/50 px-2 py-1.5 text-xs/relaxed"
         className="md:min-w-[360px]"
         testId="github-repo-filter-trigger"

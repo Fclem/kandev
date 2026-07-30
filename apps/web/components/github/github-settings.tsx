@@ -39,6 +39,7 @@ function CleanupNowButton({
   label: string;
   run: () => Promise<{ deleted: number }>;
 }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   return (
@@ -66,7 +67,7 @@ function CleanupNowButton({
       className="cursor-pointer"
     >
       <IconTrashX className="h-4 w-4 mr-1" />
-      {busy ? "Cleaning…" : label}
+      {busy ? t("github:cleaning") : label}
     </Button>
   );
 }
@@ -286,7 +287,7 @@ export function GitHubConnectionSection({ workspaceId }: { workspaceId: string }
       <GitHubCallbackNotice workspaceId={workspaceId} />
       <SettingsSection
         title={t("github:workspaceGithubAccess")}
-        description="Credential used for repository sync, watches, and managed agent git and gh commands. Executor profile tokens take precedence."
+        description={t("github:credentialUsedForRepositorySyncWatches")}
       >
         <GitHubAutomationSettings workspaceId={workspaceId} />
       </SettingsSection>
@@ -309,7 +310,7 @@ function PerWorkspaceSection({ workspaceId }: { workspaceId: string }) {
       <ActionPresetsSection workspaceId={workspaceId} />
       <SettingsSection
         title={t("github:prAnalytics")}
-        description="Pull request activity for this workspace."
+        description={t("github:pullRequestActivityForThisWorkspace")}
       >
         <PRStatsPanel workspaceId={workspaceId} />
       </SettingsSection>
@@ -375,10 +376,10 @@ function ReviewWatchSection({ workspaceId }: { workspaceId: string }) {
     <>
       <SettingsSection
         title={t("github:reviewWatches")}
-        description="Automatically create tasks for PRs that need your review."
+        description={t("github:automaticallyCreateTasksForPrsThat")}
         action={
           <WatchSectionAction
-            cleanupLabel="Clean up merged"
+            cleanupLabel={t("github:cleanUpMerged")}
             cleanup={() => cleanupMergedReviewTasks(workspaceId)}
             onAdd={() => {
               setEditingWatch(null);
@@ -420,7 +421,7 @@ function ReviewWatchSection({ workspaceId }: { workspaceId: string }) {
         <ResetWatchDialog
           open
           onOpenChange={resetCtrl.onOpenChange}
-          integrationLabel="review watch"
+          integrationLabel={t("github:reviewWatch")}
           previewLoader={resetCtrl.previewLoader}
           onConfirm={resetCtrl.confirmReset}
         />
@@ -469,10 +470,10 @@ function IssueWatchSection({ workspaceId }: { workspaceId: string }) {
     <>
       <SettingsSection
         title={t("github:issueWatches")}
-        description="Automatically create tasks for GitHub issues matching your criteria."
+        description={t("github:automaticallyCreateTasksForGithubIssues")}
         action={
           <WatchSectionAction
-            cleanupLabel="Clean up closed"
+            cleanupLabel={t("github:cleanUpClosed")}
             cleanup={() => cleanupClosedIssueTasks(workspaceId)}
             onAdd={() => {
               setEditingIssueWatch(null);
@@ -514,7 +515,7 @@ function IssueWatchSection({ workspaceId }: { workspaceId: string }) {
         <ResetWatchDialog
           open
           onOpenChange={resetCtrl.onOpenChange}
-          integrationLabel="issue watch"
+          integrationLabel={t("github:issueWatch")}
           previewLoader={resetCtrl.previewLoader}
           onConfirm={resetCtrl.confirmReset}
         />

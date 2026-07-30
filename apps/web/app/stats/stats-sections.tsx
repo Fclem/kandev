@@ -309,7 +309,7 @@ export function WorkloadSection({ task_stats }: WorkloadSectionProps) {
           <TaskDurationList
             tasks={task_stats}
             sortDirection="desc"
-            emptyLabel="No completed tasks yet."
+            emptyLabel={t("stats:noCompletedTasksYet")}
           />
         </CardContent>
       </Card>
@@ -326,7 +326,7 @@ export function WorkloadSection({ task_stats }: WorkloadSectionProps) {
           <TaskDurationList
             tasks={task_stats}
             sortDirection="asc"
-            emptyLabel="No completed tasks yet."
+            emptyLabel={t("stats:noCompletedTasksYet")}
           />
         </CardContent>
       </Card>

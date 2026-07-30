@@ -111,7 +111,7 @@ export function ProjectRepositoryPicker({
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
-            <PickerTriggerButton label={triggerLabel ?? "Add repository"} />
+            <PickerTriggerButton label={triggerLabel ?? t("common:addRepository")} />
           </PopoverTrigger>
         </TooltipTrigger>
         <TooltipContent>{t("office:pickAWorkspaceRepoADiscovered")}</TooltipContent>
@@ -173,9 +173,9 @@ function PickerCommandList({
   const { t } = useTranslation();
   return (
     <CommandList>
-      <CommandEmpty>{discoveryLoading ? "Searching your machine…" : "No matches."}</CommandEmpty>
+      <CommandEmpty>{discoveryLoading ? t("office:searchingYourMachine") : t("office:noMatches")}</CommandEmpty>
       {showCustom && (
-        <CommandGroup heading="Add custom">
+        <CommandGroup heading={t("office:addCustom")}>
           <CommandItem
             value={`__custom__:${customQuery}`}
             onSelect={() => onSelect(customQuery)}
@@ -191,18 +191,18 @@ function PickerCommandList({
                 </Trans>
               </span>
               <span className="text-[11px] text-muted-foreground">
-                {looksLikeUrl(customQuery) ? "Add as remote URL" : "Add as local path"}
+                {looksLikeUrl(customQuery) ? t("office:addAsRemoteUrl") : t("office:addAsLocalPath")}
               </span>
             </span>
           </CommandItem>
         </CommandGroup>
       )}
       {workspaceOptions.length > 0 && (
-        <RepoGroup heading="Workspace" options={workspaceOptions} onSelect={onSelect} />
+        <RepoGroup heading={t("common:workspace")} options={workspaceOptions} onSelect={onSelect} />
       )}
       {discoveredOptions.length > 0 && (
         <RepoGroup
-          heading="On disk"
+          heading={t("office:onDisk")}
           options={discoveredOptions}
           onSelect={onSelect}
           badge="on disk"

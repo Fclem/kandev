@@ -92,6 +92,7 @@ export function PRMergeButton({
   onMerged?: () => void;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [merging, setMerging] = useState(false);
   // After a successful merge we stay hidden until the store catches up to
@@ -149,7 +150,7 @@ export function PRMergeButton({
   return (
     <MergeButtonShell
       compact={compact}
-      label={merging ? "Merging..." : mergeLabel(primary)}
+      label={merging ? t("github:merging") : mergeLabel(primary)}
       disabled={merging}
       actor={mutationActor}
       onPrimaryClick={handlePrimary}

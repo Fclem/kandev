@@ -55,8 +55,8 @@ export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
 
       {entries.length === 0 ? (
         <EmptyState
-          message="No activity yet."
-          description="Actions by agents and users are logged here."
+          message={t("office:noActivityYet")}
+          description={t("office:actionsByAgentsAndUsersAre")}
         />
       ) : (
         <div className="border border-border rounded-lg divide-y divide-border">

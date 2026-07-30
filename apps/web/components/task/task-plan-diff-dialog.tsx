@@ -128,7 +128,7 @@ function DiffBody({
     <div className="flex flex-col flex-1 min-h-0 gap-2">
       <div className="flex items-center justify-between">
         <div className="text-[11px] text-muted-foreground" data-testid="plan-revision-diff-summary">
-          {summary ? `${summary.added} added · ${summary.removed} removed` : "Loading…"}
+          {summary ? `${summary.added} added · ${summary.removed} removed` : t("common:loading3")}
         </div>
         <ToggleGroup
           type="single"

@@ -61,6 +61,7 @@ function useSkillSourceMeta(sourceType: SkillSourceType) {
 }
 
 export function SkillDetail({ skill, onSave, onDelete }: SkillDetailProps) {
+  const { t } = useTranslation();
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [draft, setDraft] = useState(skill.content ?? "");
   const [isSaving, setIsSaving] = useState(false);
@@ -134,7 +135,7 @@ export function SkillDetail({ skill, onSave, onDelete }: SkillDetailProps) {
               className="cursor-pointer"
             >
               <IconDeviceFloppy className="h-4 w-4 mr-1" />
-              {isSaving ? "Saving…" : "Save"}
+              {isSaving ? t("office:saving2") : t("office:save2")}
             </Button>
           )}
         </div>
@@ -220,7 +221,7 @@ function SkillDetailHeader({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{copied ? "Copied!" : "Copy slug"}</TooltipContent>
+          <TooltipContent>{copied ? t("office:copied") : t("office:copySlug")}</TooltipContent>
         </Tooltip>
         {onEdit && (
           <Button variant="ghost" size="sm" onClick={onEdit} className="cursor-pointer">
@@ -279,6 +280,7 @@ function SkillMetadataRow({
   readOnly: boolean;
   usedByCount: number;
 }) {
+  const { t } = useTranslation();
   const usedByLabel =
     usedByCount === 0
       ? "No agents attached"
@@ -293,16 +295,16 @@ function SkillMetadataRow({
       <MetadataItem label="KEY">
         <span className="font-mono">{skill.slug}</span>
       </MetadataItem>
-      <MetadataItem label="MODE" hint="Whether this skill's content can be edited in Kandev">
-        <span>{readOnly ? "Read only" : "Editable"}</span>
+      <MetadataItem label="MODE" hint={t("office:whetherThisSkillSContentCan")}>
+        <span>{readOnly ? t("office:readOnly") : t("office:editable")}</span>
       </MetadataItem>
-      <MetadataItem label="USED BY" hint="Agents that have this skill assigned to them">
+      <MetadataItem label={t("office:usedBy")} hint={t("office:agentsThatHaveThisSkillAssigned")}>
         <span>{usedByLabel}</span>
       </MetadataItem>
       {skill.isSystem && roles.length > 0 && (
         <MetadataItem
-          label="DEFAULT FOR"
-          hint="New agents matching these roles get this skill auto-attached"
+          label={t("office:defaultFor2")}
+          hint={t("office:newAgentsMatchingTheseRolesGet")}
         >
           <span>{roles.join(", ")}</span>
         </MetadataItem>

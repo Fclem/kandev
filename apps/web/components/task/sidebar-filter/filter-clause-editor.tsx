@@ -174,7 +174,7 @@ function ValueInput({
       <Input
         value={String(clause.value ?? "")}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={meta.placeholder ?? "Value"}
+        placeholder={meta.placeholder ?? t("task:value")}
         className="h-7 min-w-0 flex-1 text-xs"
         data-testid="filter-value-input"
       />

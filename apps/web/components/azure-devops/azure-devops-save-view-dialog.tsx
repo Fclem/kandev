@@ -89,7 +89,7 @@ function SaveViewForm({
           disabled={!trimmed || saving}
           onClick={() => void handleSave()}
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? t("azureDevops:saving") : t("azureDevops:save")}
         </Button>
       </DialogFooter>
     </>

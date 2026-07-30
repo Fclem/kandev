@@ -153,7 +153,7 @@ function NewDocumentForm({
           {t("common:cancel")}
         </Button>
         <Button size="sm" className="cursor-pointer" disabled={saving} onClick={handleSubmit}>
-          {saving ? "Saving..." : "Save"}
+          {saving ? t("task:saving") : t("task:save")}
         </Button>
       </div>
     </div>

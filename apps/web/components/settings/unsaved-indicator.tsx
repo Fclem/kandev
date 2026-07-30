@@ -29,6 +29,7 @@ export function UnsavedSaveButton({
   disabled,
   cleanLabel = "Save",
 }: UnsavedSaveButtonProps) {
+  const { t } = useTranslation();
   return (
     <Button
       type="button"
@@ -39,7 +40,7 @@ export function UnsavedSaveButton({
       className={isDirty ? dirtyButtonClass : "cursor-pointer"}
     >
       {isDirty && <IconAlertCircle className="h-4 w-4 mr-2" />}
-      {isDirty ? "Save" : cleanLabel}
+      {isDirty ? t("settings:save") : cleanLabel}
       {status !== "idle" && (
         <span className="ml-2">
           <RequestIndicator status={status} />

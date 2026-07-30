@@ -374,7 +374,7 @@ function QueuePanelHeader({
         <span className="uppercase tracking-wide">{t("task:queued")}</span>
         <span className={cn(isFull && "text-amber-600 dark:text-amber-400")}>
           {capacityText}
-          {isFull ? " · full" : ""}
+          {isFull ? t("task:full2") : ""}
         </span>
       </div>
       <div className="flex items-center gap-1">

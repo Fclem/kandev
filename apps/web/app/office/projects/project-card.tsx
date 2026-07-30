@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import Link from "@/components/routing/app-link";
 import { IconGitBranch } from "@tabler/icons-react";
@@ -39,6 +39,7 @@ function useProjectStatusDisplay(status: string) {
 }
 
 function ProjectStats({ project }: { project: Project }) {
+  const { t } = useTranslation();
   const counts = project.taskCounts ?? { total: 0, in_progress: 0, done: 0, blocked: 0 };
   const repoCount = normalizeRepos(project.repositories).length;
   const progressPct = counts.total > 0 ? Math.round((counts.done / counts.total) * 100) : 0;
@@ -48,7 +49,7 @@ function ProjectStats({ project }: { project: Project }) {
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1">
           <IconGitBranch className="h-3.5 w-3.5" />
-          {repoCount} {repoCount === 1 ? "repo" : "repos"}
+          {repoCount} {repoCount === 1 ? t("office:repo") : t("office:repos")}
         </span>
         <span>
           <Trans i18nKey="office:tasks" values={{ total: counts.total }}>

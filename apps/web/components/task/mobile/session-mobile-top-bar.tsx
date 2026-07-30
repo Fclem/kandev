@@ -51,9 +51,10 @@ function MobileTaskTitle({
   totalAdditions: number;
   totalDeletions: number;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col min-w-0 flex-1">
-      <span className="text-sm font-medium truncate">{taskTitle ?? "Task details"}</span>
+      <span className="text-sm font-medium truncate">{taskTitle ?? t("task:taskDetails")}</span>
       {displayBranch && (
         <div className="flex items-center gap-1.5">
           <IconGitBranch className="h-3 w-3 text-muted-foreground flex-shrink-0" />

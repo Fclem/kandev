@@ -22,6 +22,7 @@ type HeaderProps = {
 };
 
 export function ViewHeaderRow(props: HeaderProps) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<HeaderMode>("view");
   const [nameDraft, setNameDraft] = useState("");
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
@@ -72,7 +73,7 @@ export function ViewHeaderRow(props: HeaderProps) {
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="flex flex-1 items-center gap-2 text-xs">
-        <span className="text-muted-foreground">{mode === "saveAs" ? "Save as:" : "View:"}</span>
+        <span className="text-muted-foreground">{mode === "saveAs" ? t("task:saveAs2") : t("task:view")}</span>
         {isEditing ? (
           <NameInput
             mode={mode}
@@ -138,6 +139,7 @@ function NameInput({
   onSubmit: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
@@ -148,14 +150,14 @@ function NameInput({
   return (
     <Input
       ref={inputRef}
-      aria-label={mode === "rename" ? "View name" : "New view name"}
+      aria-label={mode === "rename" ? t("task:viewName") : t("task:newViewName")}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === "Enter") onSubmit();
         if (e.key === "Escape") onCancel();
       }}
-      placeholder={mode === "saveAs" ? "New view name" : undefined}
+      placeholder={mode === "saveAs" ? t("task:newViewName") : undefined}
       className="h-6 flex-1 text-xs"
       data-testid={mode === "rename" ? "view-rename-input" : "view-save-as-name-input"}
     />
@@ -184,7 +186,7 @@ function EditingActions({
         disabled={!canSubmit}
         data-testid={mode === "rename" ? "view-rename-confirm" : "view-save-as-confirm"}
       >
-        {mode === "rename" ? "Save" : "Create"}
+        {mode === "rename" ? t("task:save") : t("task:create3")}
       </Button>
       <Button
         type="button"

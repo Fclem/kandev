@@ -49,7 +49,7 @@ export function RepoFilterCombobox({
       ariaLabel={ariaLabel}
       placeholder={t("github:allRepos")}
       searchPlaceholder="Filter repositories..."
-      emptyMessage="No repositories found."
+      emptyMessage={t("common:noRepositoriesFound")}
       triggerClassName={triggerClassName}
       className={className}
       testId={testId}

@@ -60,7 +60,7 @@ export function ProjectTasksSection({ projectId }: ProjectTasksSectionProps) {
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">{t("common:tasks")}</h2>
         <span className="text-xs text-muted-foreground">
-          {sorted.length} {sorted.length === 1 ? "task" : "tasks"}
+          {sorted.length} {sorted.length === 1 ? t("office:task") : t("office:tasks2")}
         </span>
       </div>
       {sorted.length === 0 ? (

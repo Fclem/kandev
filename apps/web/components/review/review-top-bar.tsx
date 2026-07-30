@@ -157,7 +157,7 @@ function ReviewDisplayControls({
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          {splitView ? "Switch to unified view" : "Switch to split view"}
+          {splitView ? t("review:switchToUnifiedView") : t("review:switchToSplitView")}
         </TooltipContent>
       </Tooltip>
     </>

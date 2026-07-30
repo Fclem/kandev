@@ -122,7 +122,7 @@ export function GitHubTaskCredentialsSection({ workspaceId }: { workspaceId: str
   return (
     <SettingsSection
       title={t("github:taskGitCredentials")}
-      description="Choose how task processes authenticate to GitHub. This does not change Kandev's workspace automation identity."
+      description={t("github:chooseHowTaskProcessesAuthenticateTo")}
       action={<TaskCredentialsHelp />}
     >
       <SettingsCard isDirty={dirty}>

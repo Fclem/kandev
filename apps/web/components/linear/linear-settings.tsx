@@ -87,7 +87,7 @@ function SecretField({
         id="linear-secret"
         data-testid="linear-secret-input"
         type="password"
-        placeholder={hasSavedSecret ? "••••••••" : "lin_api_..."}
+        placeholder={hasSavedSecret ? "••••••••" : t("linear:linApi")}
         value={form.secret}
         data-settings-dirty={form.secret !== baseline.secret}
         onChange={(e) => update("secret", e.target.value)}
@@ -125,7 +125,7 @@ function TeamSelector({ form, baseline, loading, update, teams, loadingTeams }: 
           className="w-full"
           data-settings-dirty={form.defaultTeamKey !== baseline.defaultTeamKey}
         >
-          <SelectValue placeholder={loadingTeams ? "Loading teams…" : "Choose a team"} />
+          <SelectValue placeholder={loadingTeams ? t("linear:loadingTeams") : t("linear:chooseATeam")} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="__none__">{t("linear:noDefault")}</SelectItem>
@@ -182,10 +182,10 @@ function ActionBar({ testing, loading, hasConfig, disableTest, onTest, onDelete 
         onClick={onTest}
         disabled={testing || loading || disableTest}
         className="cursor-pointer"
-        title={disableTest ? "Paste an API key to test the connection" : undefined}
+        title={disableTest ? t("linear:pasteAnApiKeyToTest") : undefined}
         data-testid="linear-test-button"
       >
-        {testing ? "Testing..." : "Test connection"}
+        {testing ? t("linear:testing") : t("linear:testConnection")}
       </Button>
       {hasConfig && (
         <Button
@@ -421,7 +421,7 @@ export function LinearConnectionSection({ workspaceId }: { workspaceId: string }
     <SettingsSection
       icon={<IconHexagon className="h-5 w-5" />}
       title={t("linear:linearIntegration")}
-      description="Connect this workspace to Linear with a personal API key. Credentials are stored encrypted server-side for the selected workspace."
+      description={t("linear:connectThisWorkspaceToLinearWith")}
       action={<EnabledPill />}
     >
       <SettingsCard isDirty={dirty}>

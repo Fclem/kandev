@@ -283,7 +283,7 @@ export function UtilityAgentsSection() {
       <SettingsSection
         icon={<IconWand className="h-5 w-5" />}
         title={t("settings:utilityAgents")}
-        description="One-shot AI helpers for commits, PRs, and prompts."
+        description={t("settings:oneShotAiHelpersForCommits")}
       >
         <div className="space-y-4">
           <DefaultModelSection

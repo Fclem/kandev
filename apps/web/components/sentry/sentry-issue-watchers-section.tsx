@@ -166,7 +166,7 @@ export function SentryIssueWatchersSection({ workspaceId }: { workspaceId: strin
     <SettingsSection
       icon={<IconBellRinging className="h-5 w-5" />}
       title={t("sentry:sentryWatchers")}
-      description="Poll a Sentry filter and auto-create a Kandev task for each newly-matching issue."
+      description={t("sentry:pollASentryFilterAndAuto")}
       action={
         <Button size="sm" onClick={openCreate} className="cursor-pointer">
           <Trans i18nKey="sentry:newWatcher">
@@ -204,7 +204,7 @@ export function SentryIssueWatchersSection({ workspaceId }: { workspaceId: strin
         <ResetWatchDialog
           open
           onOpenChange={resetCtrl.onOpenChange}
-          integrationLabel="Sentry watcher"
+          integrationLabel={t("sentry:sentryWatcher")}
           previewLoader={resetCtrl.previewLoader}
           onConfirm={resetCtrl.confirmReset}
         />

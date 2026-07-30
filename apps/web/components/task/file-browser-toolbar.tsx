@@ -231,6 +231,7 @@ export function FileBrowserToolbar({
   addSourcesButtonRef,
   addSourcesDisabledReason,
 }: FileBrowserToolbarProps) {
+  const { t } = useTranslation();
   return (
     <PanelHeaderBarSplit
       className="group/header"
@@ -258,7 +259,7 @@ export function FileBrowserToolbar({
           {showCreateButton && onStartCreate && (
             <ToolbarButton
               onClick={onStartCreate}
-              label="New file"
+              label={t("task:newFile")}
               icon={<IconPlus className="h-3.5 w-3.5" />}
             />
           )}
@@ -270,13 +271,13 @@ export function FileBrowserToolbar({
           />
           <ToolbarButton
             onClick={onStartSearch}
-            label="Search files"
+            label={t("task:searchFiles2")}
             icon={<IconSearch className="h-3.5 w-3.5" />}
           />
           {expandedPathsSize > 0 && (
             <ToolbarButton
               onClick={onCollapseAll}
-              label="Collapse all"
+              label={t("task:collapseAll")}
               icon={<IconListTree className="h-3.5 w-3.5" />}
             />
           )}

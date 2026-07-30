@@ -37,7 +37,7 @@ export function AgentPreviewTable({ agents, isLoading }: Props) {
           {sorted.length === 0 ? (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
-                {isLoading ? "Loading…" : "No agents in this workspace yet."}
+                {isLoading ? t("common:loading3") : t("office:noAgentsInThisWorkspaceYet")}
               </TableCell>
             </TableRow>
           ) : (

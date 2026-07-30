@@ -6,6 +6,7 @@ import { RichBlocks } from "@/components/task/chat/messages/rich-blocks";
 import { MessageActions } from "@/components/task/chat/messages/message-actions";
 import { MemoizedMarkdown } from "@/components/shared/memoized-markdown";
 import { MessageCommentSurface } from "./message-comment-surface";
+import { useTranslation } from "react-i18next";
 
 type AgentMessageContentProps = {
   comment: Message;
@@ -28,12 +29,13 @@ export const AgentMessageContent = memo(function AgentMessageContent({
   sessionId,
   isTurnActive,
 }: AgentMessageContentProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-2 sm:gap-3 w-full group">
       <div className="flex-1 min-w-0">
         {showRaw ? (
           <pre className="whitespace-pre-wrap font-mono text-xs bg-muted/20 p-3 rounded-md">
-            {comment.raw_content || comment.content || "(empty)"}
+            {comment.raw_content || comment.content || t("task:empty")}
           </pre>
         ) : (
           <MessageCommentSurface

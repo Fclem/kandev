@@ -317,16 +317,16 @@ function DetailsCard({ ticket }: { ticket: JiraTicket }) {
         <SectionHeading>{t("jira:details")}</SectionHeading>
       </div>
       <div className="px-4 py-3 space-y-3 text-sm">
-        <DetailRow label="Assignee">
+        <DetailRow label={t("jira:assignee")}>
           <PersonCell name={ticket.assigneeName} avatar={ticket.assigneeAvatar} />
         </DetailRow>
-        <DetailRow label="Reporter">
+        <DetailRow label={t("jira:reporter")}>
           <PersonCell name={ticket.reporterName} avatar={ticket.reporterAvatar} />
         </DetailRow>
-        <DetailRow label="Priority">
+        <DetailRow label={t("jira:priority")}>
           <IconLabel icon={ticket.priorityIcon} label={ticket.priority} />
         </DetailRow>
-        <DetailRow label="Project">
+        <DetailRow label={t("jira:project")}>
           <span className="font-mono text-xs">{ticket.projectKey}</span>
         </DetailRow>
       </div>

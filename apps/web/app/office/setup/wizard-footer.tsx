@@ -49,7 +49,7 @@ export function WizardFooter({
         {isLast ? (
           <Button onClick={onSubmit} disabled={submitting} className="cursor-pointer">
             <IconRocket className="h-4 w-4 mr-1" />
-            {submitting ? "Creating..." : "Create & Launch"}
+            {submitting ? t("office:creating") : t("office:createLaunch")}
           </Button>
         ) : (
           <Button onClick={onNext} disabled={!canAdvance} className="cursor-pointer">

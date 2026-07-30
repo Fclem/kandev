@@ -300,7 +300,7 @@ export function TaskExternalLinkDialog({
             data-dialog-default-action
             data-testid="task-external-link-submit"
           >
-            {submitting ? "Saving" : "Save"}
+            {submitting ? t("task:saving2") : t("task:save")}
           </Button>
         </DialogFooter>
       </DialogContent>

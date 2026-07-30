@@ -33,7 +33,7 @@ export function SSHConnectionForm({ form, baseline, onChange }: SSHConnectionFor
       <TextField
         id="ssh-name"
         testId="ssh-input-name"
-        label="Name"
+        label={t("settings:name")}
         placeholder={t("settings:myVps")}
         value={form.name}
         isDirty={fieldIsDirty(form, baseline, "name", "")}
@@ -42,8 +42,8 @@ export function SSHConnectionForm({ form, baseline, onChange }: SSHConnectionFor
       <TextField
         id="ssh-host-alias"
         testId="ssh-input-host-alias"
-        label="Host alias from ~/.ssh/config (optional)"
-        hint="If set, inherits HostName / Port / User / IdentityFile / ProxyJump from your config."
+        label={t("settings:hostAliasFromSshConfigOptional")}
+        hint={t("settings:ifSetInheritsHostnamePortUser")}
         placeholder={t("settings:prod")}
         value={form.host_alias ?? ""}
         isDirty={fieldIsDirty(form, baseline, "host_alias", "")}
@@ -52,7 +52,7 @@ export function SSHConnectionForm({ form, baseline, onChange }: SSHConnectionFor
       <TextField
         id="ssh-host"
         testId="ssh-input-host"
-        label="Host"
+        label={t("common:host")}
         placeholder={t("settings:devExampleCom")}
         value={form.host ?? ""}
         isDirty={fieldIsDirty(form, baseline, "host", "")}
@@ -61,7 +61,7 @@ export function SSHConnectionForm({ form, baseline, onChange }: SSHConnectionFor
       <TextField
         id="ssh-port"
         testId="ssh-input-port"
-        label="Port"
+        label={t("settings:port")}
         type="number"
         placeholder="22"
         value={String(form.port ?? 22)}
@@ -71,7 +71,7 @@ export function SSHConnectionForm({ form, baseline, onChange }: SSHConnectionFor
       <TextField
         id="ssh-user"
         testId="ssh-input-user"
-        label="User"
+        label={t("settings:user")}
         placeholder={t("settings:ubuntu")}
         value={form.user ?? ""}
         isDirty={fieldIsDirty(form, baseline, "user", "")}
@@ -86,8 +86,8 @@ export function SSHConnectionForm({ form, baseline, onChange }: SSHConnectionFor
         <TextField
           id="ssh-identity-file"
           testId="ssh-input-identity-file"
-          label="Identity file path"
-          hint="Passphrase-protected keys must be loaded into ssh-agent first."
+          label={t("settings:identityFilePath")}
+          hint={t("settings:passphraseProtectedKeysMustBeLoaded")}
           placeholder="~/.ssh/id_ed25519"
           value={form.identity_file ?? ""}
           isDirty={fieldIsDirty(form, baseline, "identity_file", "")}
@@ -97,8 +97,8 @@ export function SSHConnectionForm({ form, baseline, onChange }: SSHConnectionFor
       <TextField
         id="ssh-proxy-jump"
         testId="ssh-input-proxy-jump"
-        label="ProxyJump (optional)"
-        hint="Single bastion hop. Chained jumps are not supported."
+        label={t("settings:proxyjumpOptional")}
+        hint={t("settings:singleBastionHopChainedJumpsAre")}
         placeholder={t("settings:bastionExampleCom")}
         value={form.proxy_jump ?? ""}
         isDirty={fieldIsDirty(form, baseline, "proxy_jump", "")}
@@ -157,7 +157,7 @@ function IdentitySourceField({
 }) {
   const { t } = useTranslation();
   return (
-    <FieldShell id="ssh-identity-source" label="Identity source">
+    <FieldShell id="ssh-identity-source" label={t("settings:identitySource")}>
       <Select value={value} onValueChange={(next) => onChange(next as SSHIdentitySource)}>
         <SelectTrigger
           id="ssh-identity-source"

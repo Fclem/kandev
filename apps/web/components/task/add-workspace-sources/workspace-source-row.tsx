@@ -72,7 +72,7 @@ export function SourceRow({
       {type === "local_repository" && (
         <LocalPathRow
           row={row}
-          label="Choose local Git repository"
+          label={t("task:chooseLocalGitRepository")}
           requiresCloneableOrigin={capabilities.requiresCloneableLocalRepository}
           onUpdate={onUpdate}
         />
@@ -81,7 +81,7 @@ export function SourceRow({
         <RemoteRepositoryRow row={row} workspaceId={workspaceId} onUpdate={onUpdate} />
       )}
       {type === "folder" && (
-        <LocalPathRow row={row} label="Choose local folder" onUpdate={onUpdate} />
+        <LocalPathRow row={row} label={t("task:chooseLocalFolder")} onUpdate={onUpdate} />
       )}
       {error && (
         <p role="alert" className="text-xs text-destructive">
@@ -144,8 +144,8 @@ function LocalPathRow({
           />
           <p className="text-sm text-muted-foreground">
             {requiresCloneableOrigin
-              ? "This repository must have a cloneable origin; Kandev will verify it before adding."
-              : "Uses the current checkout. Kandev does not switch your local repository branch."}
+              ? t("task:thisRepositoryMustHaveACloneable")
+              : t("task:usesTheCurrentCheckoutKandevDoes")}
           </p>
         </>
       )}

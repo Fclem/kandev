@@ -36,7 +36,7 @@ function AgentPickerPopover({
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="cursor-pointer h-7 text-xs">
-          {selected?.name ?? "Assignee"}
+          {selected?.name ?? t("office:assignee")}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-48 p-1" align="start">
@@ -77,7 +77,7 @@ function ProjectPickerPopover({
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="cursor-pointer h-7 text-xs">
-          {selected?.name ?? "Project"}
+          {selected?.name ?? t("office:project")}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-48 p-1" align="start">
@@ -146,14 +146,14 @@ export function NewTaskSelectorRow({ draft, onUpdate }: Props) {
               onClick={() => onUpdate({ showReviewer: !draft.showReviewer })}
             >
               <IconEye className="h-4 w-4 mr-2" />
-              {draft.showReviewer ? "Hide reviewer" : "Add reviewer"}
+              {draft.showReviewer ? t("office:hideReviewer") : t("office:addReviewer")}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="cursor-pointer"
               onClick={() => onUpdate({ showApprover: !draft.showApprover })}
             >
               <IconCircleCheck className="h-4 w-4 mr-2" />
-              {draft.showApprover ? "Hide approver" : "Add approver"}
+              {draft.showApprover ? t("office:hideApprover") : t("office:addApprover")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -161,7 +161,7 @@ export function NewTaskSelectorRow({ draft, onUpdate }: Props) {
 
       {draft.showReviewer && (
         <ParticipantRow
-          label="Reviewer"
+          label={t("office:reviewer")}
           agents={agents}
           selectedIds={draft.reviewerIds}
           onSelect={(ids) => onUpdate({ reviewerIds: ids })}
@@ -171,7 +171,7 @@ export function NewTaskSelectorRow({ draft, onUpdate }: Props) {
 
       {draft.showApprover && (
         <ParticipantRow
-          label="Approver"
+          label={t("office:approver")}
           agents={agents}
           selectedIds={draft.approverIds}
           onSelect={(ids) => onUpdate({ approverIds: ids })}

@@ -40,6 +40,7 @@ export function EnvironmentBadges({
   worktreeBranch: string | null;
   description?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
       {executorLabel && (
@@ -54,7 +55,7 @@ export function EnvironmentBadges({
         </Badge>
       )}
       <span className="min-w-0 break-words">
-        {description ?? "Same environment as current session"}
+        {description ?? t("task:sameEnvironmentAsCurrentSession")}
       </span>
     </div>
   );
@@ -132,7 +133,7 @@ export function ContextSelect({
       <div className="flex min-w-0 items-center gap-2">
         <Select value={value} onValueChange={onValueChange} disabled={isSummarizing}>
           <SelectTrigger className="w-full min-w-0 text-xs">
-            <SelectValue>{isSummarizing ? "Summarizing..." : displayLabel}</SelectValue>
+            <SelectValue>{isSummarizing ? t("task:summarizing") : displayLabel}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="blank" className="text-xs cursor-pointer">

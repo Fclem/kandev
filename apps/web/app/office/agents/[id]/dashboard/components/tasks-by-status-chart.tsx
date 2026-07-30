@@ -34,7 +34,7 @@ export function TasksByStatusChart({ days }: Props) {
         <StackedBars
           rows={rowsFromDays(days)}
           heightPx={120}
-          ariaLabel="Tasks worked on by status"
+          ariaLabel={t("office:tasksWorkedOnByStatus")}
         />
         <ChartLegend
           items={[

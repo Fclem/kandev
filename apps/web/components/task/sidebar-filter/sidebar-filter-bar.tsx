@@ -97,7 +97,7 @@ export function SidebarFilterBar() {
         data-testid="sidebar-new-view"
         data-disabled-reason={newViewDisabledReason ?? undefined}
         aria-label={
-          newViewDisabledReason ? `New view unavailable. ${newViewDisabledReason}` : "New view"
+          newViewDisabledReason ? `New view unavailable. ${newViewDisabledReason}` : t("task:newView2")
         }
         title={newViewDisabledReason ?? undefined}
       >

@@ -104,6 +104,7 @@ function PickerGroup({
   items: TriggerTypeInfo[];
   onSelect: (info: TriggerTypeInfo) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <CommandGroup heading={heading}>
       {items.map((item) => (
@@ -116,7 +117,7 @@ function PickerGroup({
           <Icon className={`h-4 w-4 mr-2 ${color}`} />
           <span className="flex-1">
             {item.label}
-            {!item.enabled && " (Coming soon)"}
+            {!item.enabled && t("automations:comingSoon")}
           </span>
           <Tooltip>
             <TooltipTrigger asChild>

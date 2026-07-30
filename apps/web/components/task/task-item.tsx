@@ -596,12 +596,13 @@ function SubtaskToggle({
   collapsed: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
       data-testid="sidebar-subtask-toggle"
       data-task-id={taskId}
-      aria-label={collapsed ? "Expand subtasks" : "Collapse subtasks"}
+      aria-label={collapsed ? t("task:expandSubtasks") : t("task:collapseSubtasks")}
       aria-expanded={!collapsed}
       onClick={(e) => {
         e.stopPropagation();

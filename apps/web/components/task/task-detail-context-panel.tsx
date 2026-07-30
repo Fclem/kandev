@@ -119,7 +119,7 @@ function RelationsSection({ context }: { context: TaskContextDTO }) {
     <div className="space-y-2">
       <div className="text-xs font-medium text-muted-foreground">{t("task:relatedTasks")}</div>
       <div className="space-y-1 text-xs">
-        {context.parent && <Relation label="Parent" task={context.parent} />}
+        {context.parent && <Relation label={t("task:parent")} task={context.parent} />}
         {context.siblings.map((t) => (
           <Relation key={t.id} label="Sibling" task={t} />
         ))}

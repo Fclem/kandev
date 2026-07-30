@@ -15,6 +15,10 @@
   "copyPath2": "Copy path",
   "default": "default",
   "deleteFile": "Delete file",
+  "disableWordWrap": "Disable word wrap",
+  "enableWordWrap": "Enable word wrap",
+  "foldUnchangedLines": "Fold unchanged lines",
+  "hideDiffIndicators": "Hide diff indicators",
   "highlight": "Highlight",
   "inlineCode": "Inline code",
   "insertBlock": "Insert block",
@@ -35,7 +39,11 @@
   "revertChanges": "Revert changes",
   "save": "Save",
   "saving": "<0></0> Saving...",
+  "showAllLines": "Show all lines",
+  "showDiffIndicators": "Show diff indicators",
   "strikethroughCmdShiftX": "Strikethrough (Cmd+Shift+X)",
+  "switchToSplitView": "Switch to split view",
+  "switchToUnifiedView": "Switch to unified view",
   "toggleWordWrap": "Toggle word wrap",
   "underlineCmdU": "Underline (Cmd+U)"
 }

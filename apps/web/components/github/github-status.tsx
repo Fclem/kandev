@@ -77,7 +77,7 @@ function StatusLine({ status }: { status: GitHubStatus }) {
       )}
       <span className="min-w-0 break-words font-medium">
         {actor ??
-          (connection.status === "active" ? "Authentication unavailable" : connectionLabel(status))}
+          (connection.status === "active" ? t("github:authenticationUnavailable") : connectionLabel(status))}
       </span>
       <Badge variant={active ? "secondary" : "destructive"}>
         {sourceLabels[connection.source]}
@@ -150,7 +150,7 @@ function AppRegistrationDetails({ app }: { app?: GitHubAppRegistrationCatalogIte
             {t("github:webhook2")} {app.webhook_status}
           </Trans>
         </Badge>
-        <span>{app.source === "managed" ? "Created by Kandev" : "Imported"}</span>
+        <span>{app.source === "managed" ? t("github:createdByKandev") : t("github:imported")}</span>
       </div>
       {app.shared && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
@@ -318,7 +318,7 @@ function PersonalIdentityActions({
       {status.app_available && status.automation?.source === "github_app_installation" && (
         <Button disabled={busy} onClick={onConnect} className="h-11 cursor-pointer">
           <IconBrandGithub className="mr-2 h-4 w-4" />
-          {status.personal ? "Reconnect identity" : "Connect identity"}
+          {status.personal ? t("github:reconnectIdentity") : t("github:connectIdentity")}
           <IconExternalLink className="ml-2 h-4 w-4" />
         </Button>
       )}
@@ -348,7 +348,7 @@ export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string })
     return (
       <SettingsSection
         title={t("github:myGithubIdentity")}
-        description="Connect your GitHub user for My GitHub and human-attributed actions. Without it, automation continues as the App."
+        description={t("github:connectYourGithubUserForMy")}
       >
         <LoadingStatus />
       </SettingsSection>
@@ -361,7 +361,7 @@ export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string })
     return (
       <SettingsSection
         title={t("github:myGithubIdentity")}
-        description="My GitHub and human-attributed actions use the same human account selected for workspace access. Choose a different PAT or GitHub CLI account by changing the workspace connection."
+        description={t("github:myGithubAndHumanAttributedActions")}
       >
         <div className="space-y-2" data-testid="github-personal-identity">
           <PersonalIdentityStatus view={view} />
@@ -398,7 +398,7 @@ export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string })
   return (
     <SettingsSection
       title={t("github:myGithubIdentity")}
-      description="Optionally connect your GitHub user for My GitHub and human-attributed actions. This identity is never given to managed agents; workspace automation continues as the App."
+      description={t("github:optionallyConnectYourGithubUserFor")}
     >
       <div className="space-y-4" data-testid="github-personal-identity">
         <PersonalIdentityStatus view={view} />

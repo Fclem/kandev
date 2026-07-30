@@ -291,19 +291,20 @@ function useBrowseProjects({
 }
 
 function FiltersBar({ state }: { state: DialogState }) {
+  const { t } = useTranslation();
   return (
     <div className="border-b px-5 py-4 space-y-3 shrink-0">
       <InstanceSelectRow state={state} />
       <FilterTopRow state={state} />
       <FilterChipRow
-        label="Level"
+        label={t("sentry:level")}
         options={LEVELS}
         selected={state.filter.levels}
         onToggle={(next) => state.updateFilter("levels", next as SentryLevel[])}
         chipClass={(v) => levelBadgeClass(v as SentryLevel)}
       />
       <FilterChipRow
-        label="Status"
+        label={t("common:status")}
         options={STATUSES}
         selected={state.filter.statuses}
         onToggle={(next) => state.updateFilter("statuses", next as SentryStatus[])}
@@ -359,7 +360,7 @@ function FilterTopRow({ state }: { state: DialogState }) {
     <div className="grid gap-2 sm:grid-cols-[1fr_1fr_180px_120px]">
       <LabeledInput
         id="sentry-search-org"
-        label="Organization"
+        label={t("sentry:organization")}
         value={filter.orgSlug}
         onChange={(v) => updateFilter("orgSlug", v)}
         placeholder="my-org"
@@ -371,7 +372,7 @@ function FilterTopRow({ state }: { state: DialogState }) {
       />
       <LabeledInput
         id="sentry-search-env"
-        label="Environment"
+        label={t("sentry:environment")}
         value={filter.environment}
         onChange={(v) => updateFilter("environment", v)}
         placeholder={t("sentry:production")}
@@ -542,8 +543,8 @@ function ResultsBody({ state }: { state: DialogState }) {
       {empty && (
         <div className="text-sm text-muted-foreground py-12 text-center">
           {instanceId
-            ? "No issues yet. Run a search to begin."
-            : "Select a Sentry instance to browse its issues."}
+            ? t("sentry:noIssuesYetRunASearch")
+            : t("sentry:selectASentryInstanceToBrowse")}
         </div>
       )}
       {issues.map((issue) => (

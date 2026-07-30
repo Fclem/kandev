@@ -91,7 +91,7 @@ export function GitHubPermissionsDialog({ status }: { status: GitHubStatus }) {
                   permission.available ? "text-muted-foreground" : "font-medium text-destructive"
                 }
               >
-                {permission.available ? "Available" : "Missing"}
+                {permission.available ? t("github:available") : t("github:missing")}
               </span>
             </div>
           ))}

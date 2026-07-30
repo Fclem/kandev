@@ -413,6 +413,7 @@ function UserMessageContent({
   onOpenFile,
   onScrollToMessage,
 }: UserMessageProps) {
+  const { t } = useTranslation();
   const userNavigation = useUserMessageNavigation(sessionId ?? null, comment.id);
   const promptNames = usePromptMentionNames();
   const entityReferences = useMemo(
@@ -460,7 +461,7 @@ function UserMessageContent({
                   className="inline-flex items-center gap-1.5 rounded-full bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground"
                 >
                   <IconFile size={12} />
-                  {att.name || "Attachment"}
+                  {att.name || t("task:attachment2")}
                 </span>
               ))}
             </div>
@@ -532,7 +533,7 @@ export const ChatMessage = memo(function ChatMessage({
           </p>
         </div>
         <p className="whitespace-pre-wrap">
-          {comment.content ? renderContentWithFileRefs(comment.content) : "(empty)"}
+          {comment.content ? renderContentWithFileRefs(comment.content) : t("task:empty")}
         </p>
       </div>
     );

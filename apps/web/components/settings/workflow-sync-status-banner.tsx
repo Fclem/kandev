@@ -133,7 +133,7 @@ export function WorkflowSyncStatusCard({
       </div>
       <MetadataLine config={config} />
       {state === "failed" && (
-        <p className="text-xs text-destructive">{config.last_error || "Sync failed"}</p>
+        <p className="text-xs text-destructive">{config.last_error || t("settings:syncFailed")}</p>
       )}
       <WarningsAlert warnings={config.last_warnings ?? []} />
     </div>

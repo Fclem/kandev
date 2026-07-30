@@ -101,7 +101,7 @@ export const ShowWalkthroughRenderer: KandevRenderer = ({ args, result, status }
       hasExpandableContent={steps.length > 0}
     >
       <KandevBody>
-        <KeyValueRow label="title">{title}</KeyValueRow>
+        <KeyValueRow label={t("task:title2")}>{title}</KeyValueRow>
         <div className="space-y-1.5">
           {steps.map((step, index) => {
             const location = stepLocation(step);

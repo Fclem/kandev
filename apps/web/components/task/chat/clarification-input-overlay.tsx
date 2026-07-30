@@ -476,7 +476,7 @@ function ClarificationHeaderActions({
       {total > 1 && (
         <KeyboardShortcutTooltip
           shortcut={SHORTCUTS.SUBMIT}
-          description="Submit answers"
+          description={t("task:submitAnswers")}
           enabled={!isSubmitting}
         >
           <span
@@ -496,7 +496,7 @@ function ClarificationHeaderActions({
                   : "bg-muted text-muted-foreground cursor-not-allowed",
               )}
             >
-              {isSubmitting ? "Submitting…" : "Submit"}
+              {isSubmitting ? t("task:submitting") : t("task:submit")}
               <IconCheck className="h-3 w-3" />
             </button>
           </span>
@@ -504,7 +504,7 @@ function ClarificationHeaderActions({
       )}
       <KeyboardShortcutTooltip
         shortcut={SHORTCUTS.CANCEL}
-        description="Skip all questions"
+        description={t("task:skipAllQuestions")}
         enabled={!isSubmitting}
       >
         <span className="inline-flex" data-testid="clarification-skip-shortcut">

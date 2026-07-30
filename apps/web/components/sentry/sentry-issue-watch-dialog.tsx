@@ -180,7 +180,7 @@ export function SentryIssueWatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-full sm:w-[800px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{watch ? "Edit Sentry Watcher" : "Create Sentry Watcher"}</DialogTitle>
+          <DialogTitle>{watch ? t("sentry:editSentryWatcher") : t("sentry:createSentryWatcher")}</DialogTitle>
           <DialogDescription>{t("sentry:pollSentryWithAStructuredFilter")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-5">

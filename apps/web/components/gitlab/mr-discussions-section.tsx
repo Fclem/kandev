@@ -164,7 +164,7 @@ export function MRDiscussionsSection({
           ? () => onAddContext(buildAllDiscussionsContext(discussions, mrUrl))
           : undefined
       }
-      addAllLabel="Add all discussions to task context"
+      addAllLabel={t("gitlab:addAllDiscussionsToTaskContext")}
     >
       {discussions.length === 0 && (
         <p className="px-2 py-2 text-xs text-muted-foreground">{t("gitlab:noDiscussionsYet")}</p>

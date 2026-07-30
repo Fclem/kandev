@@ -258,7 +258,7 @@ export function ReviewsSection({
           ? () => onAddAsContext(buildAllReviewsMessage(reconciledReviews, prUrl))
           : undefined
       }
-      addAllLabel="Add all reviews to chat context"
+      addAllLabel={t("github:addAllReviewsToChatContext")}
     >
       {reconciledReviews.length === 0 && pendingCount === 0 && (
         <p className="text-xs text-muted-foreground px-2 py-2">{t("github:noReviewsYet")}</p>

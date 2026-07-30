@@ -131,7 +131,7 @@ function SavedMenu<K extends string>({
           className={cn(PILL_BASE, activeSaved ? PILL_ACTIVE : PILL_IDLE)}
         >
           <IconBookmark className="h-3.5 w-3.5 shrink-0" />
-          <span className="max-w-[140px] truncate">{activeLabel ?? "Saved"}</span>
+          <span className="max-w-[140px] truncate">{activeLabel ?? t("integrations:saved")}</span>
           <IconChevronDown className="h-3 w-3 shrink-0 opacity-60" />
         </button>
       </DropdownMenuTrigger>

@@ -195,7 +195,7 @@ export function TaskMRLinkDialog({
             disabled={!mrURL.trim() || submitting}
             className="cursor-pointer"
           >
-            {submitting ? "Linking…" : "Link merge request"}
+            {submitting ? t("gitlab:linking") : t("gitlab:linkMergeRequest")}
           </Button>
         </DialogFooter>
       </DialogContent>

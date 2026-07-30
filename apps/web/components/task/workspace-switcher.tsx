@@ -33,7 +33,7 @@ export function WorkspaceSwitcher({
   if (workspaces.length <= 1) {
     return (
       <span className="text-sm font-medium text-muted-foreground truncate">
-        {selectedWorkspace?.name || "Workspace"}
+        {selectedWorkspace?.name || t("common:workspace")}
       </span>
     );
   }
@@ -50,7 +50,7 @@ export function WorkspaceSwitcher({
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
-          <span className="truncate">{selectedWorkspace?.name || "Workspace"}</span>
+          <span className="truncate">{selectedWorkspace?.name || t("common:workspace")}</span>
           <IconChevronDown
             className={cn(
               "h-3.5 w-3.5 shrink-0 opacity-60 group-hover:opacity-80 transition-opacity duration-150",

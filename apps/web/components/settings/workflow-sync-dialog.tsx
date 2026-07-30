@@ -51,7 +51,7 @@ function RepoUrlField({ url, invalid, resolved, onChange }: RepoUrlFieldProps) {
         </p>
       ) : (
         <p className="text-xs text-muted-foreground" data-testid="workflow-sync-resolved">
-          {resolved || "Paste a GitHub link — /tree/… links carry the branch and directory too."}
+          {resolved || t("settings:pasteAGithubLinkTreeLinks")}
         </p>
       )}
     </div>
@@ -102,8 +102,8 @@ function PollFields({ form, update }: FieldsProps) {
       </div>
       <p className="text-xs text-muted-foreground">
         {form.poll_enabled
-          ? "Checks the repository on this interval (minimum 60s)."
-          : "Syncs only run when you press Sync now."}
+          ? t("settings:checksTheRepositoryOnThisInterval")
+          : t("settings:syncsOnlyRunWhenYouPress")}
       </p>
     </div>
   );

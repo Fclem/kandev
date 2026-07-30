@@ -59,7 +59,7 @@ function ActionButtons({
                 className={`h-6 cursor-pointer px-2 text-xs ${showRunButton ? "rounded-r-none border-r-0" : ""}`}
               >
                 <IconSend className="mr-1 h-3 w-3" />
-                {isEditing ? "Update" : "Add"}
+                {isEditing ? t("common:update") : t("diff:add")}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">

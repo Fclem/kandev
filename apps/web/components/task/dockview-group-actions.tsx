@@ -70,6 +70,7 @@ function MaximizeButton({
   isMaximized: boolean;
   onMaximize: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -86,7 +87,7 @@ function MaximizeButton({
           )}
         </button>
       </TooltipTrigger>
-      <TooltipContent>{isMaximized ? "Restore" : "Maximize"}</TooltipContent>
+      <TooltipContent>{isMaximized ? t("task:restore2") : t("task:maximize")}</TooltipContent>
     </Tooltip>
   );
 }

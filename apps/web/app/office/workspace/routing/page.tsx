@@ -198,7 +198,7 @@ function PageBody({
         <div className="flex justify-end">
           <Button onClick={onSave} disabled={saving} className="cursor-pointer gap-1.5">
             <IconDeviceFloppy className="h-4 w-4" />
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("office:saving2") : t("office:save2")}
           </Button>
         </div>
       )}

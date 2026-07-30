@@ -83,36 +83,37 @@ function usePRStats(workspaceId: string | null) {
 }
 
 function StatsGrid({ stats }: { stats: PRStats }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
       <StatCard
         icon={<IconGitPullRequest className="h-5 w-5" />}
-        label="PRs Created"
+        label={t("github:prsCreated")}
         value={stats.total_prs_created}
       />
       <StatCard
         icon={<IconEye className="h-5 w-5" />}
-        label="PRs Reviewed"
+        label={t("github:prsReviewed")}
         value={stats.total_prs_reviewed}
       />
       <StatCard
         icon={<IconMessage className="h-5 w-5" />}
-        label="Comments"
+        label={t("github:comments")}
         value={stats.total_comments}
       />
       <StatCard
         icon={<IconCheck className="h-5 w-5" />}
-        label="CI Pass Rate"
+        label={t("github:ciPassRate")}
         value={formatPercent(stats.ci_pass_rate)}
       />
       <StatCard
         icon={<IconCheck className="h-5 w-5" />}
-        label="Approval Rate"
+        label={t("github:approvalRate")}
         value={formatPercent(stats.approval_rate)}
       />
       <StatCard
         icon={<IconClock className="h-5 w-5" />}
-        label="Avg Time to Merge"
+        label={t("github:avgTimeToMerge")}
         value={formatHours(stats.avg_time_to_merge_hours)}
       />
     </div>

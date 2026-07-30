@@ -81,6 +81,7 @@ function CodeMirrorWrapButton({
   wrapEnabled: boolean;
   onToggleWrap: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -97,7 +98,7 @@ function CodeMirrorWrapButton({
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{wrapEnabled ? "Disable word wrap" : "Enable word wrap"}</TooltipContent>
+      <TooltipContent>{wrapEnabled ? t("editors:disableWordWrap") : t("editors:enableWordWrap")}</TooltipContent>
     </Tooltip>
   );
 }

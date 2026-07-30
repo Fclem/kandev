@@ -79,7 +79,7 @@ export function ListToolbar({
       <SaveViewButton onSave={onSaveView} />
       <div className="ml-auto flex items-center gap-1">
         <span className="text-xs text-muted-foreground tabular-nums mr-2">
-          {loading ? "Loading…" : `${count} ticket${count === 1 ? "" : "s"} on this page`}
+          {loading ? t("common:loading3") : `${count} ticket${count === 1 ? "" : "s"} on this page`}
         </span>
         <SortDropdown sort={sort} sortLabel={sortLabel} onSortChange={onSortChange} />
         <Button
@@ -172,6 +172,7 @@ function ViewsDropdown({
   onDelete: (id: string) => void;
   activeName: string | undefined;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const builtin = views.filter((v) => v.builtin);
   const custom = views.filter((v) => !v.builtin);
@@ -180,12 +181,12 @@ function ViewsDropdown({
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="cursor-pointer h-8 text-xs gap-1.5">
           <IconBookmark className="h-3.5 w-3.5" />
-          {activeName ?? "No view"}
+          {activeName ?? t("jira:noView")}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-60 p-0">
         <ViewsGroup
-          label="Built-in"
+          label={t("jira:builtIn")}
           views={builtin}
           activeViewId={activeViewId}
           onSelect={(id) => {
@@ -198,7 +199,7 @@ function ViewsDropdown({
           <>
             <div className="border-t" />
             <ViewsGroup
-              label="Saved"
+              label={t("jira:saved")}
               views={custom}
               activeViewId={activeViewId}
               onSelect={(id) => {

@@ -184,7 +184,7 @@ function CloneForm({
       </div>
       <Button onClick={onClone} disabled={loading || !repoUrl} className="cursor-pointer">
         <IconGitBranch className="h-4 w-4 mr-1" />
-        {loading ? "Cloning..." : "Clone"}
+        {loading ? t("office:cloning") : t("office:clone")}
       </Button>
     </div>
   );
@@ -262,7 +262,7 @@ function GitStatusDisplay({
           className="cursor-pointer"
         >
           <IconArrowDown className="h-3.5 w-3.5 mr-1" />
-          {loading ? "Pulling..." : "Pull"}
+          {loading ? t("office:pulling") : t("common:pull")}
         </Button>
         <Button
           variant="outline"
@@ -272,7 +272,7 @@ function GitStatusDisplay({
           className="cursor-pointer"
         >
           <IconArrowUp className="h-3.5 w-3.5 mr-1" />
-          {loading ? "Pushing..." : "Push"}
+          {loading ? t("office:pushing") : t("common:push")}
         </Button>
       </div>
 

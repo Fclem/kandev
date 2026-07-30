@@ -31,6 +31,7 @@
   "msgs": "{{message_count}} ḿśĝś",
   "noAgentUsageDataYet": "Ńō àĝēńţ ũśàĝē ďàţà ŷēţ.",
   "noCompletedTaskDataYet": "Ńō ćōḿƥĺēţēď ţàśķ ďàţà ŷēţ.",
+  "noCompletedTasksYet": "Ńō ćōḿƥĺēţēď ţàśķś ŷēţ.",
   "noDataYet": "Ńō ďàţà ŷēţ.",
   "noGitActivityYet": "Ńō ĝĩţ àćţĩvĩţŷ ŷēţ.",
   "noRepositoryStatsYet": "Ńō ŕēƥōśĩţōŕŷ śţàţś ŷēţ.",
@@ -39,12 +40,14 @@
   "rankedByActiveDuration": "Ŕàńķēď ƀŷ àćţĩvē ďũŕàţĩōń",
   "repoLeaders": "Ŕēƥō Ĺēàďēŕś",
   "repositoryActivity": "Ŕēƥōśĩţōŕŷ Àćţĩvĩţŷ",
+  "selectAWorkspaceToViewStatistics": "Śēĺēćţ à ŵōŕķśƥàćē ţō vĩēŵ śţàţĩśţĩćś.",
   "sessions": "Śēśśĩōńś",
   "sessions2": "{{session_count}} śēśśĩōńś",
   "signal": "Śĩĝńàĺ",
   "span": "śƥàń {{value1}}",
   "statistics": "Śţàţĩśţĩćś",
   "tasks": "{{total_tasks}} ţàśķś",
+  "telemetry": "Ţēĺēḿēţŕŷ",
   "timeSpent": "Ţĩḿē Śƥēńţ",
   "toolCalls": "Ţōōĺ ćàĺĺś",
   "toolShare": "Ţōōĺ śĥàŕē",
@@ -61,5 +64,6 @@
   "turnsMessagesPerSession": "{{value0}} ţũŕńś · {{value4}} ḿēśśàĝēś ƥēŕ śēśśĩōń",
   "turnsPerTask": "Ţũŕńś ƥēŕ ţàśķ",
   "userMsgs": "Ũśēŕ ḿśĝś",
-  "userShare": "Ũśēŕ śĥàŕē"
+  "userShare": "Ũśēŕ śĥàŕē",
+  "workload": "Ŵōŕķĺōàď"
 }

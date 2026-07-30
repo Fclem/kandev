@@ -26,6 +26,7 @@ import { isFromOffice } from "@/lib/types/http";
 import type { Repository, RepositoryScript, Task } from "@/lib/types/http";
 import type { Terminal } from "@/hooks/domains/session/use-terminals";
 import type { Layout } from "react-resizable-panels";
+import { useTranslation } from "react-i18next";
 
 type KanbanTaskShellProps = {
   task: Task | null;
@@ -52,6 +53,7 @@ export function KanbanTaskShell({
   urlSimple,
   urlMode,
 }: KanbanTaskShellProps) {
+  const { t } = useTranslation();
   // Kanban shell defaults to advanced. ?simple flips to simple.
   const mode = resolveTaskBodyMode({ simple: urlSimple, mode: urlMode }, "advanced");
   // "Open in office view" only makes sense when (a) the office feature is
@@ -81,8 +83,8 @@ export function KanbanTaskShell({
         <SimpleTaskHeaderRow task={task} />
         <p className="mt-4 text-sm text-muted-foreground">
           {showOfficeLink
-            ? "Simple view for kanban tasks shows the chat that's already in the panels. For the full Linear-style experience (comments, properties, activity timeline), open this task in the office view."
-            : "Simple view shows the chat that's already in the panels. Use ?simple=false to flip back to the advanced layout."}
+            ? t("common:simpleViewForKanbanTasksShows")
+            : t("common:simpleViewShowsTheChatThat")}
         </p>
       </div>
     </div>

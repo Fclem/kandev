@@ -105,11 +105,11 @@ export function RoutineRow({
                 </Trans>
               </span>
             )}
-            <span>{routine.lastRunAt ? timeAgo(routine.lastRunAt) : "Never run"}</span>
+            <span>{routine.lastRunAt ? timeAgo(routine.lastRunAt) : t("office:neverRun")}</span>
             <span className="capitalize">{concurrencyPolicy.replace(/_/g, " ")}</span>
           </div>
         </div>
-        <Badge variant={isActive ? "default" : "secondary"}>{isActive ? "On" : "Off"}</Badge>
+        <Badge variant={isActive ? "default" : "secondary"}>{isActive ? t("office:on") : t("office:off")}</Badge>
         <Switch
           checked={isActive}
           onCheckedChange={(checked) => {
@@ -208,17 +208,17 @@ function RoutineExpandedDetail({
     routine.concurrencyPolicy ?? (routineRaw.concurrency_policy as string | undefined) ?? "";
   return (
     <div className="px-4 pb-3 pt-1 ml-7 border-t border-border/50 space-y-2 text-sm">
-      {routine.description && <DetailField label="Description" value={routine.description} />}
-      {template?.title && <DetailField label="Task title" value={template.title} />}
+      {routine.description && <DetailField label={t("office:description")} value={routine.description} />}
+      {template?.title && <DetailField label={t("office:taskTitle")} value={template.title} />}
       {template?.description && (
-        <DetailField label="Task description" value={template.description} />
+        <DetailField label={t("office:taskDescription")} value={template.description} />
       )}
-      <DetailField label="Assignee" value={assignee?.name ?? "Unassigned"} />
+      <DetailField label={t("office:assignee")} value={assignee?.name ?? "Unassigned"} />
       <DetailField
-        label="Last run"
+        label={t("office:lastRun")}
         value={routine.lastRunAt ? timeAgo(routine.lastRunAt) : "Never"}
       />
-      <DetailField label="Concurrency" value={concurrencyPolicy.replace(/_/g, " ")} />
+      <DetailField label={t("office:concurrency")} value={concurrencyPolicy.replace(/_/g, " ")} />
       {routine.variables && Object.keys(routine.variables).length > 0 && (
         <div>
           <span className="text-xs font-medium text-muted-foreground">{t("office:variables")}</span>

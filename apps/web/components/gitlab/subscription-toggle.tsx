@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/domains/gitlab-api";
 import { useToast } from "@/components/toast-provider";
 import { isCurrentIdentityRequest } from "@/hooks/domains/gitlab/request-identity";
+import { useTranslation } from "react-i18next";
 
 function requestIsActive(
   generation: number,
@@ -120,6 +121,7 @@ function useGitLabSubscription({
 }
 
 export function SubscriptionToggle(identity: SubscriptionIdentity) {
+  const { t } = useTranslation();
   const { subscribed, loading, toggle } = useGitLabSubscription(identity);
 
   const label = subscriptionActionLabel(subscribed);
@@ -135,7 +137,7 @@ export function SubscriptionToggle(identity: SubscriptionIdentity) {
       onClick={() => void toggle()}
     >
       <Icon className="h-4 w-4" />
-      <span className="hidden lg:inline">{subscribed ? "Unsubscribe" : "Subscribe"}</span>
+      <span className="hidden lg:inline">{subscribed ? t("gitlab:unsubscribe") : t("gitlab:subscribe")}</span>
     </Button>
   );
 }

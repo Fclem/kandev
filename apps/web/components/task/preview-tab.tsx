@@ -92,7 +92,7 @@ function PreviewTab(props: IDockviewPanelHeaderProps & { type: PreviewType }) {
           )}
           onMouseDown={onMouseDown}
           onDoubleClick={onDoubleClick}
-          title={isPromoted ? undefined : "Double-click to keep this tab open"}
+          title={isPromoted ? undefined : t("task:doubleClickToKeepThisTab")}
           data-testid={`preview-tab-${type}`}
         >
           <DockviewDefaultTab {...props} />

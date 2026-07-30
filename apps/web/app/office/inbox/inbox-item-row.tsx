@@ -172,7 +172,7 @@ function ProviderDegradedActions({ item, onChanged }: { item: InboxItem; onChang
           href="/office/workspace/routing"
           className="text-xs underline-offset-4 hover:underline cursor-pointer"
         >
-          {action === "reconnect" ? "Reconnect" : "Configure"}
+          {action === "reconnect" ? t("office:reconnect") : t("office:configure")}
         </Link>
       )}
       <Button
@@ -182,13 +182,14 @@ function ProviderDegradedActions({ item, onChanged }: { item: InboxItem; onChang
         onClick={handleRetry}
         disabled={busy || !providerId}
       >
-        {busy ? "Retrying…" : "Retry now"}
+        {busy ? t("office:retrying") : t("office:retryNow")}
       </Button>
     </div>
   );
 }
 
 function MarkFixedButton({ item, onChanged }: { item: InboxItem; onChanged?: () => void }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const handleClick = async () => {
     if (busy) return;
@@ -212,7 +213,7 @@ function MarkFixedButton({ item, onChanged }: { item: InboxItem; onChanged?: () 
         disabled={busy}
         data-testid={`inbox-mark-fixed-${item.type}`}
       >
-        {busy ? "Marking…" : "Mark fixed"}
+        {busy ? t("office:marking") : t("office:markFixed")}
       </Button>
     </div>
   );

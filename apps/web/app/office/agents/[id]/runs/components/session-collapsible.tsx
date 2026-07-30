@@ -35,18 +35,18 @@ export function SessionCollapsible({ session }: Props) {
       </CollapsibleTrigger>
       <CollapsibleContent className="px-4 py-3 space-y-1.5 border-t border-border text-xs">
         {session.session_id && (
-          <Row label="Session ID" value={session.session_id} testid="session-id" />
+          <Row label={t("office:sessionId")} value={session.session_id} testid="session-id" />
         )}
         {session.session_id_before && (
           <Row
-            label="Session ID (before)"
+            label={t("office:sessionIdBefore")}
             value={session.session_id_before}
             testid="session-id-before"
           />
         )}
         {session.session_id_after && (
           <Row
-            label="Session ID (after)"
+            label={t("office:sessionIdAfter")}
             value={session.session_id_after}
             testid="session-id-after"
           />

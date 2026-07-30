@@ -164,7 +164,7 @@ function DialogBody({ state, shares, onPublish, onRevoked, onRetry, onClose }: B
           disabled={isPublishing}
           className="cursor-pointer"
         >
-          {isPublishing ? "Publishing…" : "Publish to GitHub Gist"}
+          {isPublishing ? t("task:publishing") : t("task:publishToGithubGist")}
         </Button>
       </DialogFooter>
     </div>
@@ -215,7 +215,7 @@ function PublishedState({
           className="flex-shrink-0 cursor-pointer"
         >
           <IconCopy className="h-3 w-3" />
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("task:copied2") : t("common:copy")}
         </Button>
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto pr-1">

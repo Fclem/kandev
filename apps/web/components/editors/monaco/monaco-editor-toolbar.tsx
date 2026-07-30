@@ -117,6 +117,7 @@ function DiffIndicatorsButton({
   isVisible: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   const buttonClass = `h-8 w-8 p-0 cursor-pointer ${isVisible ? "text-foreground" : "text-muted-foreground"}`;
   return (
     <Tooltip>
@@ -125,7 +126,7 @@ function DiffIndicatorsButton({
           <IconArrowsDiff className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{isVisible ? "Hide diff indicators" : "Show diff indicators"}</TooltipContent>
+      <TooltipContent>{isVisible ? t("editors:hideDiffIndicators") : t("editors:showDiffIndicators")}</TooltipContent>
     </Tooltip>
   );
 }

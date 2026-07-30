@@ -40,7 +40,7 @@ function RefreshControls({
     <>
       {lastFetchedAt && !loading && (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {showUpdatedPrefix ? "Updated " : ""}
+          {showUpdatedPrefix ? t("gitlab:updated") : ""}
           {formatRelativeTime(lastFetchedAt.toISOString())}
         </span>
       )}

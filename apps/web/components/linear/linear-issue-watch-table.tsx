@@ -93,7 +93,7 @@ function WatchActions({
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{watch.enabled ? "Pause" : "Enable"}</TooltipContent>
+        <TooltipContent>{watch.enabled ? t("linear:pause") : t("linear:enable")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -212,7 +212,7 @@ export function LinearIssueWatchTable({
             </TableCell>
             <TableCell>
               <Badge variant={watch.enabled ? "default" : "secondary"} className="text-xs">
-                {watch.enabled ? "Active" : "Paused"}
+                {watch.enabled ? t("common:active") : t("linear:paused")}
               </Badge>
             </TableCell>
             <TableCell className="text-right">

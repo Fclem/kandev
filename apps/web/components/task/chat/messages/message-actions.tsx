@@ -127,6 +127,7 @@ function RawToggleButton({
   onToggleRaw: () => void;
   hasHiddenPrompts?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onToggleRaw}
@@ -137,8 +138,8 @@ function RawToggleButton({
         hasHiddenPrompts ? "h-5 px-1 py-1" : ACTION_BUTTON_SIZE,
         isRawView && "bg-muted text-foreground",
       )}
-      title={isRawView ? "Show formatted" : "Show raw text"}
-      aria-label={isRawView ? "Show formatted message" : "Show raw text"}
+      title={isRawView ? t("task:showFormatted") : t("task:showRawText")}
+      aria-label={isRawView ? t("task:showFormattedMessage") : t("task:showRawText")}
     >
       <IconCode className="h-3 w-3" />
       {hasHiddenPrompts && <IconEyeCode className="h-3 w-3" />}

@@ -136,7 +136,7 @@ export function ProjectPill({ projects, value, onChange }: ProjectPillProps) {
 
   return (
     <PillShell
-      label="Project"
+      label={t("jira:project")}
       summary={value.length > 0 ? joinSummary(value, 2) : null}
       active={value.length > 0}
       onClear={() => onChange([])}
@@ -203,7 +203,7 @@ export function StatusPill({ options, value, onChange, hasProjectSelected }: Sta
 
   return (
     <PillShell
-      label="Status"
+      label={t("common:status")}
       summary={summary}
       active={value.length > 0}
       onClear={() => onChange([])}
@@ -249,11 +249,12 @@ const ASSIGNEE_OPTIONS: { value: AssigneeFilter; label: string }[] = [
 ];
 
 export function AssigneePill({ value, onChange }: AssigneePillProps) {
+  const { t } = useTranslation();
   const active = value !== "anyone";
   const summary = active ? (ASSIGNEE_OPTIONS.find((o) => o.value === value)?.label ?? null) : null;
   return (
     <PillShell
-      label="Assignee"
+      label={t("jira:assignee")}
       summary={summary}
       active={active}
       onClear={() => onChange("anyone")}

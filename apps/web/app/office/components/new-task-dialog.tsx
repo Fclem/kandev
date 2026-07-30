@@ -192,6 +192,7 @@ export function CreateTaskButton({
   submitting: boolean;
   onCreate: () => void;
 }) {
+  const { t } = useTranslation();
   const missingTitle = !draft.title.trim();
   const missingProject = !draft.projectId;
   const disabled = missingTitle || missingProject || submitting;
@@ -206,7 +207,7 @@ export function CreateTaskButton({
       className="cursor-pointer"
       data-testid="new-task-create-button"
     >
-      {submitting ? "Creating..." : "Create Task"}
+      {submitting ? t("office:creating") : t("office:createTask")}
     </Button>
   );
 

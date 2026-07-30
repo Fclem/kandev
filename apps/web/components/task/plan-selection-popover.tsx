@@ -197,11 +197,11 @@ function PopoverActions({
                 className={`h-7 gap-1 text-xs cursor-pointer ${showRunAction ? "rounded-r-none border-r-0" : ""}`}
               >
                 <IconPlus className="h-3 w-3" />
-                {isEditing ? "Update" : "Add"}
+                {isEditing ? t("common:update") : t("task:add2")}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>{isEditing ? "Update comment" : "Save comment for review"}</p>
+              <p>{isEditing ? t("task:updateComment") : t("task:saveCommentForReview")}</p>
             </TooltipContent>
           </Tooltip>
           {showRunAction && onSubmitAndRun && (

@@ -74,7 +74,7 @@ export function GitHubPATForm({
             size="icon"
             className="absolute right-0 top-0 h-11 w-11 cursor-pointer"
             onClick={() => setVisible((current) => !current)}
-            aria-label={visible ? "Hide token" : "Show token"}
+            aria-label={visible ? t("github:hideToken") : t("github:showToken")}
           >
             {visible ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
           </Button>

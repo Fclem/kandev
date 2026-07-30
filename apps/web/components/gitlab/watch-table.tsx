@@ -56,7 +56,7 @@ function CheckNowButton({
       className={`${size} p-0 cursor-pointer`}
       aria-label={t("gitlab:checkNow")}
       aria-description={disabledReason}
-      title={disabledReason ? undefined : "Check now"}
+      title={disabledReason ? undefined : t("gitlab:checkNow")}
       disabled={Boolean(disabledReason)}
       onClick={onClick}
     >
@@ -111,7 +111,7 @@ function WatchActions<TWatch extends Watch>({
         variant="ghost"
         size="sm"
         className={`${size} p-0 cursor-pointer`}
-        aria-label={watch.enabled ? "Pause watch" : "Enable watch"}
+        aria-label={watch.enabled ? t("gitlab:pauseWatch") : t("gitlab:enableWatch")}
         data-settings-dirty={dirty}
         onClick={stop(() => onToggleEnabled(watch))}
       >
@@ -186,7 +186,7 @@ function MobileWatchCard<TWatch extends Watch>(props: ActionProps<TWatch>) {
         </span>
         <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge variant={watch.enabled ? "default" : "secondary"}>
-            {watch.enabled ? "Active" : "Paused"}
+            {watch.enabled ? t("common:active") : t("gitlab:paused")}
           </Badge>
           <span>
             <Trans
@@ -262,7 +262,7 @@ export function GitLabWatchTable<TWatch extends Watch>(props: WatchTableProps<TW
                 </TableCell>
                 <TableCell>
                   <Badge variant={watch.enabled ? "default" : "secondary"}>
-                    {watch.enabled ? "Active" : "Paused"}
+                    {watch.enabled ? t("common:active") : t("gitlab:paused")}
                   </Badge>
                 </TableCell>
                 <TableCell>

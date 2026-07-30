@@ -58,7 +58,7 @@ export function MROverviewSection({
             ) : (
               <IconAlertTriangle className="h-4 w-4 text-yellow-600" />
             )}
-            {mr.has_conflicts ? "Conflicts" : mr.merge_status.replaceAll("_", " ")}
+            {mr.has_conflicts ? t("gitlab:conflicts") : mr.merge_status.replaceAll("_", " ")}
           </p>
         </div>
         <div className="rounded-md border p-2 text-xs">

@@ -516,7 +516,7 @@ function NewSessionForm({
           {t("common:cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitDisabled} className="cursor-pointer">
-          {isCreating ? "Creating..." : "Start Agent"}
+          {isCreating ? t("task:creating3") : t("task:startAgent2")}
         </Button>
       </DialogFooter>
     </form>

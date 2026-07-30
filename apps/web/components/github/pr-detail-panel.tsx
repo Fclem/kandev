@@ -307,6 +307,7 @@ function ApproveButton({
   feedback: PRFeedback | null;
   onRefresh: () => void;
 }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   // Ensures status (and thus the authenticated username) is fetched even when
@@ -350,7 +351,7 @@ function ApproveButton({
       disabled={submitting}
     >
       <IconCheck className="h-3.5 w-3.5" />
-      {submitting ? "Approving..." : `Approve as ${mutationActor}`}
+      {submitting ? t("github:approving") : `Approve as ${mutationActor}`}
     </Button>
   );
 }

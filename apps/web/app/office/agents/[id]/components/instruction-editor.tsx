@@ -83,7 +83,7 @@ export function InstructionEditor({
             className="cursor-pointer"
           >
             <IconDeviceFloppy className="h-4 w-4 mr-1" />
-            {isSaving ? "Saving..." : "Save"}
+            {isSaving ? t("office:saving") : t("office:save2")}
           </Button>
           {!file.is_entry && (
             <Button

@@ -168,7 +168,7 @@ export function ThenSection({
             value={form.taskTitleTemplate}
             data-settings-dirty={isAutomationFieldDirty(form, savedForm, "taskTitleTemplate")}
             onChange={(event) => updateField("taskTitleTemplate", event.target.value)}
-            placeholder={defaultTaskTitle || "[Auto] automation name"}
+            placeholder={defaultTaskTitle || t("automations:autoAutomationName")}
           />
           <p className="text-xs text-muted-foreground">
             {t("automations:leaveEmptyToUseTheDefault")}

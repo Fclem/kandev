@@ -14,6 +14,7 @@ import { getPRStatusColor } from "@/components/github/pr-task-icon";
 import { openExternalLink } from "@/lib/desktop/external-links";
 import type { TaskPR } from "@/lib/types/github";
 import type { TaskMR } from "@/lib/types/gitlab";
+import { useTranslation } from "react-i18next";
 
 type TaskPRPickerDialogProps = {
   open: boolean;
@@ -28,6 +29,7 @@ type TaskPRPickerDialogProps = {
  * Enter or click opens the focused PR on GitHub and closes the dialog.
  */
 export function TaskPRPickerDialog({ open, onOpenChange, prs, mrs = [] }: TaskPRPickerDialogProps) {
+  const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
 
   const openPR = (pr: TaskPR) => {
@@ -67,10 +69,10 @@ export function TaskPRPickerDialog({ open, onOpenChange, prs, mrs = [] }: TaskPR
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg" onOpenAutoFocus={focusFirstRow}>
         <DialogHeader>
-          <DialogTitle>{mrs.length ? "Open code review" : "Open pull request"}</DialogTitle>
+          <DialogTitle>{mrs.length ? t("task:openCodeReview") : t("task:openPullRequest")}</DialogTitle>
           <DialogDescription>
             {mrs.length
-              ? "Choose a linked pull request or merge request to open at its provider."
+              ? t("task:chooseALinkedPullRequestOr")
               : `This task has ${prs.length} linked pull requests. Choose one to open on GitHub.`}
           </DialogDescription>
         </DialogHeader>

@@ -231,6 +231,7 @@ export function ClarificationCustomInput({
   onSubmit,
   onRequestFinalSubmit,
 }: CustomInputProps) {
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const trimmed = draft.trim();
   // Touch keyboards have no Shift+Enter chord, so on coarse-pointer devices we
@@ -271,7 +272,7 @@ export function ClarificationCustomInput({
         ref={textareaRef}
         rows={1}
         placeholder={
-          committedText !== null ? "Press Enter to update your answer…" : "Or type a custom answer…"
+          committedText !== null ? t("task:pressEnterToUpdateYourAnswer") : t("task:orTypeACustomAnswer")
         }
         value={draft}
         onChange={(e) => onChange(e.target.value)}
@@ -342,7 +343,7 @@ export function ClarificationCarouselNav({
     <div className="flex items-center justify-between gap-2 px-4 pb-3">
       <KeyboardShortcutTooltip
         shortcut={{ key: KEYS.ARROW_LEFT }}
-        description="Previous question"
+        description={t("task:previousQuestion")}
         enabled={!isFirst && !isSubmitting}
       >
         <span className="inline-flex">
@@ -367,7 +368,7 @@ export function ClarificationCarouselNav({
       </KeyboardShortcutTooltip>
       <KeyboardShortcutTooltip
         shortcut={{ key: KEYS.ARROW_RIGHT }}
-        description="Next question"
+        description={t("task:nextQuestion")}
         enabled={!isLast && !isSubmitting}
       >
         <span className="inline-flex">

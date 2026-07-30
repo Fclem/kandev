@@ -85,7 +85,7 @@ export const GetTaskPlanRenderer: KandevRenderer = ({ args, result, status }) =>
       hasExpandableContent={hasPlan}
     >
       <KandevBody>
-        {title && <KeyValueRow label="title">{title}</KeyValueRow>}
+        {title && <KeyValueRow label={t("task:title2")}>{title}</KeyValueRow>}
         {hasPlan ? (
           <ContentBox>
             <MarkdownBody content={content} />
@@ -130,7 +130,7 @@ export const CreateTaskPlanRenderer: KandevRenderer = ({ args, result, status })
       hasExpandableContent={!!displayContent}
     >
       <KandevBody>
-        {displayTitle && <KeyValueRow label="title">{displayTitle}</KeyValueRow>}
+        {displayTitle && <KeyValueRow label={t("task:title2")}>{displayTitle}</KeyValueRow>}
         {displayContent && (
           <ContentBox>
             <MarkdownBody content={displayContent} />
@@ -168,7 +168,7 @@ export const UpdateTaskPlanRenderer: KandevRenderer = ({ args, result, status })
       hasExpandableContent={!!displayContent}
     >
       <KandevBody>
-        {displayTitle && <KeyValueRow label="title">{displayTitle}</KeyValueRow>}
+        {displayTitle && <KeyValueRow label={t("task:title2")}>{displayTitle}</KeyValueRow>}
         {displayContent && (
           <ContentBox>
             <MarkdownBody content={displayContent} />
@@ -309,6 +309,7 @@ type ConversationMessage = {
 const MAX_INLINE_MESSAGES = 30;
 
 function ConversationMessageRow({ msg }: { msg: ConversationMessage }) {
+  const { t } = useTranslation();
   const isUser = msg.author_type === "user";
   // Render the author label as a small uppercase tag rather than a coloured
   // bubble — the chat is already inside a tool-call card, so a heavy bubble
@@ -316,7 +317,7 @@ function ConversationMessageRow({ msg }: { msg: ConversationMessage }) {
   return (
     <div className="text-xs space-y-0.5">
       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/70">
-        <span>{isUser ? "user" : (msg.author_type ?? "agent")}</span>
+        <span>{isUser ? "user" : (msg.author_type ?? t("task:agent3"))}</span>
         {msg.type && msg.type !== "message" && (
           <Badge variant="outline" className="text-[9px]">
             {msg.type}

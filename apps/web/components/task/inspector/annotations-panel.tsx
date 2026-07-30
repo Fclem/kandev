@@ -57,8 +57,8 @@ export function AnnotationsPanel({ annotations, onRemove, onClear }: Annotations
             className="h-6 px-2 cursor-pointer"
             onClick={handleCopy}
             data-testid="preview-annotations-copy"
-            aria-label={copied ? "Copied" : "Copy annotations"}
-            title={copied ? "Copied" : "Copy annotations to clipboard"}
+            aria-label={copied ? t("task:copied2") : t("task:copyAnnotations")}
+            title={copied ? t("task:copied2") : t("task:copyAnnotationsToClipboard")}
           >
             {copied ? <IconCheck className="h-3 w-3" /> : <IconCopy className="h-3 w-3" />}
           </Button>

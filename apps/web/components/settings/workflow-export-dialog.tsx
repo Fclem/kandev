@@ -40,7 +40,7 @@ export function WorkflowExportDialog({
             ) : (
               <IconCopy className="h-4 w-4 mr-2" />
             )}
-            {copied ? "Copied" : "Copy"}
+            {copied ? t("settings:copied") : t("common:copy")}
           </Button>
         </DialogFooter>
       </DialogContent>

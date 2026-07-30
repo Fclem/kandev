@@ -93,7 +93,7 @@ export function CommitBodyField({
             onClick={onGenerateDescription}
             isGenerating={isGeneratingDescription}
             disabled={disabled}
-            tooltip="Generate commit description with AI"
+            tooltip={t("integrations:generateCommitDescriptionWithAi")}
             isConfigured={isUtilityConfigured}
           />
         </div>

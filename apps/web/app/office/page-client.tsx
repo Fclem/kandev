@@ -66,6 +66,7 @@ function extractMetrics(dashboard: DashboardData | null) {
 }
 
 function MetricsGrid({ m }: { m: ReturnType<typeof extractMetrics> }) {
+  const { t } = useTranslation();
   const tb = m.taskBreakdown;
   return (
     <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
@@ -73,7 +74,7 @@ function MetricsGrid({ m }: { m: ReturnType<typeof extractMetrics> }) {
         <MetricCard
           icon={IconRobot}
           value={m.agentCount}
-          label="Agents Enabled"
+          label={t("office:agentsEnabled")}
           description={`${m.running} running, ${m.paused} paused, ${m.errors} errors`}
         />
       </Link>
@@ -81,7 +82,7 @@ function MetricsGrid({ m }: { m: ReturnType<typeof extractMetrics> }) {
         <MetricCard
           icon={IconCircleDot}
           value={m.tasksInProgress}
-          label="Tasks In Progress"
+          label={t("office:tasksInProgress")}
           description={`${tb.open} open, ${tb.blocked} blocked`}
         />
       </Link>
@@ -89,16 +90,16 @@ function MetricsGrid({ m }: { m: ReturnType<typeof extractMetrics> }) {
         <MetricCard
           icon={IconCurrencyDollar}
           value={formatMonthSpend(m.monthSpend)}
-          label="Month Spend"
-          description="Total API costs this billing period"
+          label={t("office:monthSpend")}
+          description={t("office:totalApiCostsThisBillingPeriod")}
         />
       </Link>
       <Link href="/office/inbox" className="cursor-pointer">
         <MetricCard
           icon={IconShieldCheck}
           value={m.pendingApprovals}
-          label="Pending Approvals"
-          description="Items waiting for your review"
+          label={t("office:pendingApprovals")}
+          description={t("office:itemsWaitingForYourReview")}
         />
       </Link>
     </div>
@@ -217,6 +218,7 @@ function SubscriptionUsageCard({ agents }: { agents: AgentProfile[] }) {
 }
 
 export function OfficePageClient({ initialDashboard }: OfficePageClientProps) {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
   const dashboard = useAppStore((s) => s.office.dashboard);
   const agents = useAppStore((s) => s.office.agentProfiles);
@@ -272,8 +274,8 @@ export function OfficePageClient({ initialDashboard }: OfficePageClientProps) {
           <MetricCard
             icon={IconChartBar}
             value={quotaLabel}
-            label="Subscription Quota"
-            description="Highest utilization across subscription agents"
+            label={t("office:subscriptionQuota")}
+            description={t("office:highestUtilizationAcrossSubscriptionAgents")}
           />
         </div>
       )}

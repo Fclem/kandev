@@ -363,13 +363,14 @@ function StatsContent({
   rangeLabel: string;
   workspaceId?: string;
 }) {
+  const { t } = useTranslation();
   const taskStatus = flattenTaskStats(sections.tasks);
   return (
     <div className="flex-1 overflow-auto">
       <div className="max-w-7xl mx-auto p-6">
         <div className="space-y-5">
           <OverviewPanel global={sections.global} git={sections.git} />
-          <SectionDivider id="telemetry" label="Telemetry" />
+          <SectionDivider id="telemetry" label={t("stats:telemetry")} />
           <CompletedPanel status={sections.completed} />
           <ActivityPanel daily={sections.daily} agents={sections.agents} rangeLabel={rangeLabel} />
           <RepositoryActivityPanel status={sections.repos} />
@@ -377,7 +378,7 @@ function StatsContent({
           <RepoLeadersPanel status={sections.repos} />
           <SectionDivider id="github" label="GitHub" />
           <PRStatsPanel workspaceId={workspaceId ?? null} />
-          <SectionDivider id="workload" label="Workload" />
+          <SectionDivider id="workload" label={t("stats:workload")} />
           <WorkloadPanel status={taskStatus} />
         </div>
       </div>
@@ -436,7 +437,7 @@ export function StatsPageClient({ workspaceId, activeRange, initialError }: Stat
         </div>
       </div>
     );
-  if (!workspaceId) return <StatsEmptyState message="Select a workspace to view statistics." />;
+  if (!workspaceId) return <StatsEmptyState message={t("stats:selectAWorkspaceToViewStatistics")} />;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-background">

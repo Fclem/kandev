@@ -146,8 +146,8 @@ function FilterFields({ kind, form, setForm }: FormFieldsProps) {
         <Label htmlFor={`${kind}-watch-query`}>{t("gitlab:gitlabQueryParameters")}</Label>
         <p className="text-xs text-muted-foreground">
           {kind === "review"
-            ? "Leave empty to match merge requests requesting your review. Adding parameters explicitly replaces that reviewer constraint."
-            : "Optional GitLab API query parameters, such as state=opened&milestone=Next."}
+            ? t("gitlab:leaveEmptyToMatchMergeRequests")
+            : t("gitlab:optionalGitlabApiQueryParametersSuch")}
         </p>
         <Input
           id={`${kind}-watch-query`}
@@ -161,8 +161,8 @@ function FilterFields({ kind, form, setForm }: FormFieldsProps) {
       </div>
       {kind === "review" && (
         <SelectField
-          label="Review scope"
-          description="Choose whether to include only direct reviewer requests or the broader compatible scope."
+          label={t("gitlab:reviewScope")}
+          description={t("gitlab:chooseWhetherToIncludeOnlyDirect")}
           value={form.reviewScope}
           onChange={(value) =>
             setForm((current) => ({
@@ -195,8 +195,8 @@ function AutomationFields({ kind, form, setForm }: FormFieldsProps) {
       <SectionTitle>{t("gitlab:taskAutomation")}</SectionTitle>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <SelectField
-          label="Workflow"
-          description="Workflow that receives new tasks."
+          label={t("common:workflow")}
+          description={t("gitlab:workflowThatReceivesNewTasks")}
           value={form.workflowId}
           onChange={(workflowId) =>
             setForm((current) => ({ ...current, workflowId, workflowStepId: "" }))
@@ -205,8 +205,8 @@ function AutomationFields({ kind, form, setForm }: FormFieldsProps) {
           items={data.workflows.map((item) => ({ id: item.id, label: item.name }))}
         />
         <SelectField
-          label="Workflow step"
-          description="Initial step for each new task."
+          label={t("gitlab:workflowStep")}
+          description={t("gitlab:initialStepForEachNewTask")}
           value={form.workflowStepId}
           onChange={(workflowStepId) => setForm((current) => ({ ...current, workflowStepId }))}
           placeholder={stepPlaceholder(form.workflowId, data.stepsLoading, data.steps.length)}
@@ -225,8 +225,8 @@ function AutomationFields({ kind, form, setForm }: FormFieldsProps) {
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <SelectField
-          label="Agent profile"
-          description="Optional; otherwise uses the workflow step default."
+          label={t("gitlab:agentProfile")}
+          description={t("gitlab:optionalOtherwiseUsesTheWorkflowStep")}
           value={form.agentProfileId || STEP_DEFAULT}
           onChange={(value) =>
             setForm((current) => ({ ...current, agentProfileId: resolveProfileId(value) }))
@@ -238,8 +238,8 @@ function AutomationFields({ kind, form, setForm }: FormFieldsProps) {
           ]}
         />
         <SelectField
-          label="Executor profile"
-          description="Optional; otherwise uses the workflow step default."
+          label={t("gitlab:executorProfile")}
+          description={t("gitlab:optionalOtherwiseUsesTheWorkflowStep")}
           value={form.executorProfileId || STEP_DEFAULT}
           onChange={(value) =>
             setForm((current) => ({ ...current, executorProfileId: resolveProfileId(value) }))
@@ -303,8 +303,8 @@ function ScheduleFields({ kind, form, setForm }: FormFieldsProps) {
         </div>
       </div>
       <SelectField
-        label="Cleanup policy"
-        description="Controls task deletion when the GitLab item closes."
+        label={t("gitlab:cleanupPolicy")}
+        description={t("gitlab:controlsTaskDeletionWhenTheGitlab")}
         value={form.cleanupPolicy}
         onChange={(value) =>
           setForm((current) => ({

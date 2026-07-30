@@ -30,6 +30,56 @@ if (!TARGETS.length) {
 const DISPLAY_ATTRS = new Set(["placeholder", "aria-label", "aria-description", "title", "alt"]);
 const TOAST_CALLEES = /^(toast|toast\.(success|error|info|warning|message|loading))$/;
 
+/**
+ * Props on internal components that render their value as copy. Unlike
+ * DISPLAY_ATTRS these are not DOM attributes, so they are only display copy by
+ * convention — hence an explicit list rather than a pattern. `value`, `href`,
+ * `id`, and friends are deliberately absent: those carry data.
+ */
+const DISPLAY_PROPS = new Set([
+  "label",
+  "description",
+  "tooltip",
+  "hint",
+  "heading",
+  "headline",
+  "message",
+  "ariaLabel",
+  "triggerAriaLabel",
+  "addLabel",
+  "addAllLabel",
+  "applyLabel",
+  "submitLabel",
+  "actionLabel",
+  "secondaryActionLabel",
+  "cleanupLabel",
+  "emptyLabel",
+  "watchLabel",
+  "integrationLabel",
+  "displayName",
+  "validationHint",
+  "confirmLabel",
+  "cancelLabel",
+  "emptyMessage",
+  "errorMessage",
+  "helpText",
+  "subtitle",
+]);
+
+/**
+ * A string literal is only display copy when something renders it. Literals
+ * reached through these node types are data — comparisons, object/array keys,
+ * enum arguments — and translating them changes behavior rather than wording.
+ */
+const NON_DISPLAY_PARENTS = new Set([
+  "BinaryExpression",
+  "SwitchCase",
+  "ImportDeclaration",
+  "ExportNamedDeclaration",
+  "TSLiteralType",
+  "TSEnumMember",
+]);
+
 /** Brand/proper nouns and acronyms that must stay untranslated. */
 const KEEP_LITERAL =
   /^(Kandev|GitHub|GitLab|Jira|Linear|Slack|Sentry|Azure DevOps|Docker|SSH|ACP|MCP|PR|CI|AI|API|JSON|YAML|LSP|TLS|SQL|URL|ID|PostgreSQL|SQLite|Claude|Codex|OpenCode|Copilot|Amp)$/;
@@ -258,14 +308,21 @@ const report = {
   jsxText: 0,
   attrs: 0,
   toasts: 0,
+  exprLiterals: 0,
   skippedSentinel: 0,
   skippedFragment: 0,
+  skippedShadowed: 0,
+  skippedInsideTrans: 0,
   bindings: 0,
 };
 
 /** JSX text child -> {t("ns:key")}, unless it is a sentinel or a fragment. */
-function handleJsxText(node, parent, { ns, sentinels, edits, noteHost }) {
+function handleJsxText(node, parent, ancestors, { ns, sentinels, edits, noteHost }) {
   if (node.type !== "JSXText") return;
+  if (insideTrans(ancestors)) {
+    report.skippedInsideTrans += 1;
+    return;
+  }
   const raw = node.value;
   const trimmed = raw.trim();
   if (!trimmed || !looksLikeCopy(trimmed)) return;
@@ -301,6 +358,152 @@ function handleDisplayAttribute(node, { ns, sentinels, edits, noteHost }) {
   edits.push({ start: v.start, end: v.end, text: `{t("${key}")}` });
   report.attrs += 1;
   noteHost();
+}
+
+/** Every name bound by a function/catch parameter pattern. */
+function paramNames(pattern, out = []) {
+  if (!pattern || typeof pattern.type !== "string") return out;
+  switch (pattern.type) {
+    case "Identifier":
+      out.push(pattern.name);
+      break;
+    case "ObjectPattern":
+      for (const p of pattern.properties)
+        paramNames(p.type === "RestElement" ? p.argument : p.value, out);
+      break;
+    case "ArrayPattern":
+      for (const e of pattern.elements) paramNames(e, out);
+      break;
+    case "AssignmentPattern":
+      paramNames(pattern.left, out);
+      break;
+    case "RestElement":
+      paramNames(pattern.argument, out);
+      break;
+    default:
+      break;
+  }
+  return out;
+}
+
+/**
+ * True when `t` names something other than the translate function at this point
+ * — almost always a `.map((t) => …)` callback parameter over tasks/terminals.
+ * Emitting `t("ns:key")` there calls the item, so the rewrite must be declined.
+ */
+function tIsShadowed(ancestors) {
+  for (const a of ancestors) {
+    if (FUNCTION_TYPES.has(a.type)) {
+      for (const p of a.params ?? []) if (paramNames(p).includes("t")) return true;
+    }
+    if (a.type === "CatchClause" && paramNames(a.param).includes("t")) return true;
+  }
+  return false;
+}
+
+/**
+ * True when the node sits inside a `<Trans>` element.
+ *
+ * `<Trans>` children are a FALLBACK rendering whose positions define the `<n>`
+ * tag indices in the catalog message. Rewriting a literal in there to `t(...)`
+ * inserts a new expression child, shifts every index after it, and silently
+ * repoints the message's tags at the wrong elements — the copy then renders as
+ * duplicated fragments with empty tags. The whole sentence already belongs to
+ * one key, so there is nothing to externalize here.
+ */
+const insideTrans = (ancestors) =>
+  ancestors.some(
+    (a) =>
+      (a.type === "JSXElement" && a.openingElement?.name?.name === "Trans") ||
+      (a.type === "JSXOpeningElement" && a.name?.name === "Trans"),
+  );
+
+/** Node types a literal may pass through on its way up to the JSX and still be copy. */
+const PRESENTATIONAL = new Set([
+  "ConditionalExpression",
+  "LogicalExpression",
+  "ParenthesizedExpression",
+  "TSAsExpression",
+  "TSNonNullExpression",
+]);
+
+/** Types that make the literal data rather than copy, regardless of nesting. */
+const DATA_PARENTS = new Set(["ObjectProperty", "ObjectExpression", "ArrayExpression"]);
+
+/**
+ * Walk from the literal up to the nearest JSXExpressionContainer, returning it
+ * only when every node in between is presentational. Returns null the moment
+ * the chain passes through something that consumes the string as data.
+ */
+function enclosingJsxContainer(node, ancestors) {
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const a = ancestors[i];
+    if (a.type === "JSXExpressionContainer") return a;
+    if (NON_DISPLAY_PARENTS.has(a.type) || DATA_PARENTS.has(a.type)) return null;
+    // Any call consumes the string as an argument rather than rendering it.
+    if (a.type === "CallExpression" || a.type === "NewExpression") return null;
+    if (!PRESENTATIONAL.has(a.type)) return null;
+    // The *test* of a conditional is a comparison operand, not a rendered branch.
+    if (a.type === "ConditionalExpression" && a.test === (ancestors[i + 1] ?? node)) return null;
+  }
+  return null;
+}
+
+/** The JSX attribute this literal is nested under, if any. */
+const enclosingAttribute = (ancestors) =>
+  [...ancestors].reverse().find((a) => a.type === "JSXAttribute") ?? null;
+
+/**
+ * Display copy that never appears as a JSX text node:
+ *
+ *   {saving ? "Saving..." : "Save"}      ->  {saving ? t("ns:saving") : t("ns:save")}
+ *   <Field label="Assignee" />           ->  <Field label={t("ns:assignee")} />
+ *
+ * These are the shapes `mode: "jsx-text-only"` could not see. The literal is
+ * only rewritten when the chain from it up to the JSX is pure presentation;
+ * anything else — a comparison, an object key, an argument to `cn()` — is data
+ * and is left alone.
+ */
+function handleJsxExpressionLiteral(node, ancestors, { ns, sentinels, edits, noteHost }) {
+  if (node.type !== "StringLiteral" || !looksLikeCopy(node.value)) return;
+  if (sentinels.has(node.value)) {
+    report.skippedSentinel += 1;
+    return;
+  }
+  if (tIsShadowed(ancestors)) {
+    // `items.map((t) => …)` rebinds `t` to the item, so emitting `t("ns:key")`
+    // here would call the item instead of translating. Decline and report.
+    report.skippedShadowed += 1;
+    return;
+  }
+  if (insideTrans(ancestors)) {
+    report.skippedInsideTrans += 1;
+    return;
+  }
+  const parent = ancestors[ancestors.length - 1];
+  if (!parent) return;
+
+  const emit = (text) => {
+    edits.push({ start: node.start, end: node.end, text });
+    report.exprLiterals += 1;
+    noteHost();
+  };
+  const key = () => qualify(ns, keyFor(ns, node.value));
+
+  // A display prop with a bare literal value: label="Assignee".
+  if (parent.type === "JSXAttribute") {
+    if (DISPLAY_PROPS.has(String(parent.name?.name))) emit(`{t("${key()}")}`);
+    return;
+  }
+
+  if (!enclosingJsxContainer(node, ancestors)) return;
+  // Inside an attribute expression, only a display prop carries copy.
+  const attr = enclosingAttribute(ancestors);
+  if (attr) {
+    const name = String(attr.name?.name);
+    if (!DISPLAY_PROPS.has(name) && !DISPLAY_ATTRS.has(name)) return;
+  }
+  emit(`t("${key()}")`);
 }
 
 /** toast("...") / toast.error("...") first argument. */
@@ -348,7 +551,16 @@ function addImport(src, statement) {
       else open = true;
     }
   }
-  if (last === -1) return statement + "\n" + src;
+  if (last === -1) {
+    // No imports at all. The statement must still land BELOW any leading
+    // "use client"/"use strict" directive — above it, the directive stops being
+    // the first statement and degrades into a stray expression.
+    let at = 0;
+    while (at < lines.length && /^\s*$/.test(lines[at])) at++;
+    if (/^\s*["']use (client|strict)["'];?\s*$/.test(lines[at] ?? "")) at++;
+    lines.splice(at, 0, statement);
+    return lines.join("\n");
+  }
   lines.splice(last + 1, 0, statement);
   return lines.join("\n");
 }
@@ -399,14 +611,17 @@ function transform(file) {
   };
 
   const ctx = { ns, sentinels, edits, noteHost };
+  const ancestors = [];
   const visit = (node, parent) => {
     const isFn = FUNCTION_TYPES.has(node.type);
     if (isFn) stack.push({ node, name: fnName(node, parent) });
 
-    handleJsxText(node, parent, ctx);
+    handleJsxText(node, parent, ancestors, ctx);
     handleDisplayAttribute(node, ctx);
     handleToastCall(node, ctx);
+    handleJsxExpressionLiteral(node, ancestors, ctx);
 
+    ancestors.push(node);
     for (const key of Object.keys(node)) {
       if (key === "loc" || key.endsWith("Comments")) continue;
       const child = node[key];
@@ -414,6 +629,7 @@ function transform(file) {
         for (const c of child) if (c && typeof c.type === "string") visit(c, node);
       } else if (child && typeof child.type === "string") visit(child, node);
     }
+    ancestors.pop();
     if (isFn) stack.pop();
   };
   visit(ast, null);

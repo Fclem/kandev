@@ -148,7 +148,7 @@ function PresetRow({
           className="h-8 cursor-pointer text-xs"
           onClick={onToggle}
         >
-          {expanded ? "Hide prompt" : "Edit prompt"}
+          {expanded ? t("jira:hidePrompt") : t("jira:editPrompt")}
         </Button>
         <Button
           variant="ghost"
@@ -285,7 +285,7 @@ export function TaskPresetsSection() {
   return (
     <SettingsSection
       title={t("jira:taskPresets")}
-      description="Prompts shown on /jira when starting a task from a ticket."
+      description={t("jira:promptsShownOnJiraWhenStarting")}
       action={
         <div className="flex gap-2">
           <Button

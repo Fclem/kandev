@@ -485,8 +485,8 @@ function AvailabilityBanner({ caps }: { caps: VoiceCapabilities }) {
         <p className="font-medium">{t("settings:voiceInputIsUnavailableInThis")}</p>
         <p className="text-xs text-muted-foreground">
           {insecure
-            ? "Microphone APIs require HTTPS or localhost. You appear to be on an insecure HTTP origin — load this page over HTTPS (or http://localhost) to enable voice input."
-            : "Your browser doesn't expose either the Web Speech API or MediaRecorder. Try Chrome, Edge, or Safari 14.5+."}
+            ? t("settings:microphoneApisRequireHttpsOrLocalhost")
+            : t("settings:yourBrowserDoesnTExposeEither")}
         </p>
       </div>
     </div>
@@ -559,7 +559,7 @@ function VoiceModeSettingsContent() {
     <SettingsSection
       icon={<IconMicrophone className="h-5 w-5" />}
       title={t("settings:voiceMode")}
-      description="Configure how voice input works on the chat composer."
+      description={t("settings:configureHowVoiceInputWorksOn")}
     >
       <div className="space-y-4">
         <EnableCard />

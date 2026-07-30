@@ -187,6 +187,7 @@ export function formatDecisionLine(decision: TaskDecision): string {
 }
 
 function DecisionTimelineEntry({ decision }: { decision: TaskDecision }) {
+  const { t } = useTranslation();
   const isApproval = decision.decision === "approved";
   return (
     <div
@@ -194,7 +195,7 @@ function DecisionTimelineEntry({ decision }: { decision: TaskDecision }) {
       data-testid="decision-timeline-entry"
     >
       <span className={isApproval ? "text-green-600" : "text-red-600"}>
-        {isApproval ? "approved" : "requested changes"}
+        {isApproval ? "approved" : t("task:requestedChanges")}
       </span>
       <span className="truncate">{formatDecisionLine(decision)}</span>
       <span className="ml-auto shrink-0">{formatRelativeTime(decision.createdAt)}</span>

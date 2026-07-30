@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { cloneWithMenuOpen, selectTaskLinkActions } from "./task-switcher-menu-helpers";
 
 // Re-exported: the helper moved to the sibling module, but this remains its
@@ -397,11 +397,12 @@ function TaskPinItem({
   disabled?: boolean;
   onTogglePin?: (taskId: string) => void;
 }) {
+  const { t } = useTranslation();
   if (!onTogglePin) return null;
   return (
     <ContextMenuItem disabled={disabled} onSelect={() => onTogglePin(taskId)}>
       {isPinned ? <IconPinFilled className="mr-2 h-4 w-4" /> : <IconPin className="mr-2 h-4 w-4" />}
-      {isPinned ? "Unpin" : "Pin"}
+      {isPinned ? t("task:unpin") : t("task:pin")}
     </ContextMenuItem>
   );
 }

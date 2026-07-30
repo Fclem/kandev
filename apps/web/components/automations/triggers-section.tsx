@@ -32,6 +32,7 @@ export function TriggersSection({
   onToggleTrigger,
   onDeleteTrigger,
 }: TriggersSectionProps) {
+  const { t } = useTranslation();
   const webhookTrigger = useMemo(() => triggers.find((t) => t.type === "webhook"), [triggers]);
   const savedWebhookTrigger = useMemo(
     () => savedTriggers.find((t) => t.type === "webhook"),
@@ -86,7 +87,7 @@ export function TriggersSection({
           onToggleEnabled={(enabled) => onToggleTrigger(webhookTrigger.id, enabled)}
           onDelete={handleRemoveWebhook}
         />
-        <SwitchModeButton label="Switch to scheduled" onClick={handleRemoveWebhook} />
+        <SwitchModeButton label={t("automations:switchToScheduled")} onClick={handleRemoveWebhook} />
       </div>
     );
   }
@@ -109,7 +110,7 @@ export function TriggersSection({
         onToggleTrigger={onToggleTrigger}
         onDeleteTrigger={onDeleteTrigger}
       />
-      <SwitchModeButton label="Or use a webhook instead" onClick={handleAddWebhook} />
+      <SwitchModeButton label={t("automations:orUseAWebhookInstead")} onClick={handleAddWebhook} />
     </div>
   );
 }

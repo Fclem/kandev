@@ -99,7 +99,7 @@ function SavePresetForm({
             repoFilter={defaultRepoFilter}
             onRepoFilterChange={setDefaultRepoFilter}
             repoOptions={repoOptions}
-            ariaLabel="Default repository"
+            ariaLabel={t("github:defaultRepository")}
             triggerClassName="h-11 border border-input bg-background px-3 py-2 text-sm hover:bg-secondary/50 md:h-9 md:py-1.5"
             testId="github-save-query-repo-trigger"
             dropdownTestId="github-save-query-repo-dropdown"

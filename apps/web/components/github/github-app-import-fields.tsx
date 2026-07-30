@@ -35,21 +35,21 @@ export function GitHubAppImportIdentityFields({
   return (
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Name in Kandev" error={errors.displayName}>
+        <Field label={t("github:nameInKandev")} error={errors.displayName}>
           <Input
             className="h-11"
             value={values.displayName}
             onChange={(e) => update("displayName", e.target.value)}
           />
         </Field>
-        <Field label="GitHub App slug" error={errors.slug}>
+        <Field label={t("github:githubAppSlug")} error={errors.slug}>
           <Input
             className="h-11"
             value={values.slug}
             onChange={(e) => update("slug", e.target.value)}
           />
         </Field>
-        <Field label="GitHub owner login" error={errors.ownerLogin}>
+        <Field label={t("github:githubOwnerLogin")} error={errors.ownerLogin}>
           <Input
             className="h-11"
             value={values.ownerLogin}
@@ -86,6 +86,7 @@ export function GitHubAppImportSecretFields({
   errors: AppSetupErrors;
   update: Update;
 }) {
+  const { t } = useTranslation();
   const labels = {
     appId: "App ID",
     clientId: "Client ID",
@@ -106,7 +107,7 @@ export function GitHubAppImportSecretFields({
         </Field>
       ))}
       <div className="sm:col-span-2">
-        <Field label="Private key (.pem)" error={errors.privateKey}>
+        <Field label={t("github:privateKeyPem")} error={errors.privateKey}>
           <Textarea
             className="min-h-28 font-mono text-xs"
             value={values.privateKey}

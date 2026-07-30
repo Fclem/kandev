@@ -141,14 +141,14 @@ export const UpdateTaskRenderer: KandevRenderer = ({ args, result, status }) => 
       hasExpandableContent={!!task || changes.length > 0}
     >
       <KandevBody>
-        {newTitle !== undefined && <KeyValueRow label="title">{newTitle}</KeyValueRow>}
+        {newTitle !== undefined && <KeyValueRow label={t("task:title2")}>{newTitle}</KeyValueRow>}
         {newState !== undefined && (
-          <KeyValueRow label="state">
+          <KeyValueRow label={t("task:state2")}>
             <TaskStateBadge state={newState} />
           </KeyValueRow>
         )}
         {newDescription !== undefined && (
-          <KeyValueRow label="description">
+          <KeyValueRow label={t("task:description2")}>
             <span className="whitespace-pre-wrap">{newDescription}</span>
           </KeyValueRow>
         )}
@@ -184,17 +184,17 @@ export const MoveTaskRenderer: KandevRenderer = ({ args, result, status }) => {
     >
       <KandevBody>
         {workflowId && (
-          <KeyValueRow label="workflow" mono>
+          <KeyValueRow label={t("task:workflow2")} mono>
             {workflowId}
           </KeyValueRow>
         )}
         {stepId && (
-          <KeyValueRow label="step" mono>
+          <KeyValueRow label={t("task:step3")} mono>
             {stepId}
           </KeyValueRow>
         )}
         {prompt && (
-          <KeyValueRow label="prompt">
+          <KeyValueRow label={t("task:prompt2")}>
             <span className="whitespace-pre-wrap">{prompt}</span>
           </KeyValueRow>
         )}
@@ -237,12 +237,12 @@ export const MessageTaskRenderer: KandevRenderer = ({ args, result, status }) =>
     >
       <KandevBody>
         {prompt && (
-          <KeyValueRow label="prompt">
+          <KeyValueRow label={t("task:prompt2")}>
             <span className="whitespace-pre-wrap">{prompt}</span>
           </KeyValueRow>
         )}
         {session && (
-          <KeyValueRow label="session">
+          <KeyValueRow label={t("task:session")}>
             <IdChip id={sessionId} />
           </KeyValueRow>
         )}

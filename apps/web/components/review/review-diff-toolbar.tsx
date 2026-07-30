@@ -18,6 +18,7 @@ import { FileActionsDropdown } from "@/components/editors/file-actions-dropdown"
 import { ExternalVcsFileLink } from "@/components/editors/external-vcs-file-link";
 import { useGlobalViewMode } from "@/hooks/use-global-view-mode";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
+import { useTranslation } from "react-i18next";
 
 const iconBtn = "h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100";
 const iconBtnActive = "h-6 w-6 p-0 cursor-pointer opacity-100 bg-muted";
@@ -84,6 +85,7 @@ function ToolbarIconBtn({
 }
 
 export function FileDiffToolbar(props: FileDiffToolbarProps) {
+  const { t } = useTranslation();
   const {
     diff,
     filePath,
@@ -115,7 +117,7 @@ export function FileDiffToolbar(props: FileDiffToolbarProps) {
   );
   return (
     <div className="flex items-center gap-0.5">
-      <ToolbarIconBtn onClick={handleCopyDiff} tooltip="Copy diff">
+      <ToolbarIconBtn onClick={handleCopyDiff} tooltip={t("review:copyDiff")}>
         <IconCopy className="h-3.5 w-3.5" />
       </ToolbarIconBtn>
       <ExternalVcsFileLink
@@ -132,7 +134,7 @@ export function FileDiffToolbar(props: FileDiffToolbarProps) {
       />
       <ToolbarIconBtn
         onClick={onToggleExpandUnchanged}
-        tooltip={expandUnchanged ? "Collapse unchanged" : "Expand all"}
+        tooltip={expandUnchanged ? t("review:collapseUnchanged") : t("review:expandAll")}
         active={expandUnchanged}
       >
         {expandUnchanged ? (
@@ -141,12 +143,12 @@ export function FileDiffToolbar(props: FileDiffToolbarProps) {
           <IconFoldDown className="h-3.5 w-3.5" />
         )}
       </ToolbarIconBtn>
-      <ToolbarIconBtn onClick={onToggleWordWrap} tooltip="Toggle word wrap" active={wordWrap}>
+      <ToolbarIconBtn onClick={onToggleWordWrap} tooltip={t("review:toggleWordWrap")} active={wordWrap}>
         <IconTextWrap className="h-3.5 w-3.5" />
       </ToolbarIconBtn>
       <ToolbarIconBtn
         onClick={handleToggleViewMode}
-        tooltip={globalViewMode === "split" ? "Switch to unified view" : "Switch to split view"}
+        tooltip={globalViewMode === "split" ? t("review:switchToUnifiedView") : t("review:switchToSplitView")}
       >
         {globalViewMode === "split" ? (
           <IconLayoutRows className="h-3.5 w-3.5" />
@@ -155,12 +157,12 @@ export function FileDiffToolbar(props: FileDiffToolbarProps) {
         )}
       </ToolbarIconBtn>
       {onPreviewMarkdown && isMarkdownPath(filePath) && (
-        <ToolbarIconBtn onClick={() => onPreviewMarkdown(filePath)} tooltip="Preview markdown">
+        <ToolbarIconBtn onClick={() => onPreviewMarkdown(filePath)} tooltip={t("review:previewMarkdown")}>
           <IconEye className="h-3.5 w-3.5" />
         </ToolbarIconBtn>
       )}
       {onOpenFile && (
-        <ToolbarIconBtn onClick={() => onOpenFile(filePath, repo)} tooltip="Edit">
+        <ToolbarIconBtn onClick={() => onOpenFile(filePath, repo)} tooltip={t("common:edit")}>
           <IconPencil className="h-3.5 w-3.5" />
         </ToolbarIconBtn>
       )}
@@ -168,7 +170,7 @@ export function FileDiffToolbar(props: FileDiffToolbarProps) {
       {source === "uncommitted" && (
         <ToolbarIconBtn
           onClick={onDiscard}
-          tooltip="Revert changes"
+          tooltip={t("review:revertChanges")}
           className="h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100 hover:text-destructive"
         >
           <IconArrowBackUp className="h-3.5 w-3.5" />

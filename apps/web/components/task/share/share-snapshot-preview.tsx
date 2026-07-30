@@ -126,6 +126,7 @@ function PreviewMessage({ message }: { message: SnapshotPreviewMessage }) {
 }
 
 function PreviewBlock({ block }: { block: SnapshotPreviewMessage["blocks"][number] }) {
+  const { t } = useTranslation();
   if (block.kind === "text") {
     return (
       <div className="markdown-body min-w-0 text-sm">
@@ -138,8 +139,8 @@ function PreviewBlock({ block }: { block: SnapshotPreviewMessage["blocks"][numbe
   if (block.kind === "tool_call") {
     return (
       <div className="min-w-0 rounded bg-muted/60 p-1.5 text-xs">
-        <div className="truncate font-mono" title={block.tool_name || "tool"}>
-          {block.tool_name || "tool"}
+        <div className="truncate font-mono" title={block.tool_name || t("task:tool")}>
+          {block.tool_name || t("task:tool")}
         </div>
         {block.text && (
           <p className="truncate text-muted-foreground" title={block.text}>

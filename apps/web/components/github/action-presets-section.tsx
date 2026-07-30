@@ -146,7 +146,7 @@ function PresetRow({
           className="h-8 cursor-pointer text-xs"
           onClick={onToggle}
         >
-          {expanded ? "Hide prompt" : "Edit prompt"}
+          {expanded ? t("github:hidePrompt") : t("github:editPrompt")}
         </Button>
         <Button
           variant="ghost"
@@ -357,7 +357,7 @@ export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
   return (
     <SettingsSection
       title={t("github:quickActions")}
-      description="Prompts shown on /github when starting a task from a PR or issue."
+      description={t("github:promptsShownOnGithubWhenStarting")}
       action={
         <div className="flex gap-2">
           <Button
@@ -392,7 +392,7 @@ export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
                   presets={prDraft}
                   baseline={prBaseline}
                   onChange={setPrDraft}
-                  addLabel="Add PR action"
+                  addLabel={t("github:addPrAction")}
                 />
               </TabsContent>
               <TabsContent value="issue">
@@ -400,7 +400,7 @@ export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
                   presets={issueDraft}
                   baseline={issueBaseline}
                   onChange={setIssueDraft}
-                  addLabel="Add issue action"
+                  addLabel={t("github:addIssueAction")}
                 />
               </TabsContent>
             </Tabs>

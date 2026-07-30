@@ -266,7 +266,7 @@ function PaginationBar({
   return (
     <div className="flex items-center justify-between px-6 py-3 border-t shrink-0">
       <div className="text-xs text-muted-foreground tabular-nums">
-        {itemCount === 0 ? "No results" : `${start}–${end}`}
+        {itemCount === 0 ? t("linear:noResults") : `${start}–${end}`}
       </div>
       <Pagination className="mx-0 w-auto justify-end">
         <PaginationContent>

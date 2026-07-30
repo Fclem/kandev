@@ -45,6 +45,7 @@ function ReviewDialogDiffContent({
   | "onRetryPRDiff"
   | "state"
 >) {
+  const { t } = useTranslation();
   const blockReviewForPR = shouldBlockReviewForPR(state.allFiles);
   return (
     <ReviewPRDiffBoundary
@@ -69,7 +70,7 @@ function ReviewDialogDiffContent({
         />
       ) : (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-          {state.filter.trim() ? "No files match the filter" : "No changes to review"}
+          {state.filter.trim() ? t("review:noFilesMatchTheFilter") : t("review:noChangesToReview")}
         </div>
       )}
     </ReviewPRDiffBoundary>

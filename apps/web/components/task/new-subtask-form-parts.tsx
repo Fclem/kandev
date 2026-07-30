@@ -77,7 +77,7 @@ export function SelectorsRow({
           value={agentProfileId}
           onValueChange={onAgentProfileChange}
           disabled={disabled || noAgents}
-          placeholder={noAgents ? "No agents found" : "Select agent profile"}
+          placeholder={noAgents ? t("task:noAgentsFound2") : t("task:selectAgentProfile")}
           popoverPortal
         />
       </div>
@@ -308,11 +308,11 @@ export function WorkspaceModeToggle({
       >
         <WorkspaceModeOption
           value="inherit_parent"
-          label="Inherit parent workspace"
+          label={t("task:inheritParentWorkspace")}
           description={
             worktreeBranch
               ? `Run in the parent's worktree (${worktreeBranch})`
-              : "Run in the parent's materialized workspace"
+              : t("task:runInTheParentSMaterialized")
           }
           checked={value === "inherit_parent"}
           disabled={disabled}
@@ -321,8 +321,8 @@ export function WorkspaceModeToggle({
         />
         <WorkspaceModeOption
           value="new_workspace"
-          label="Create new workspace"
-          description="Pick a different repo, local folder, or remote URL"
+          label={t("task:createNewWorkspace")}
+          description={t("task:pickADifferentRepoLocalFolder")}
           checked={value === "new_workspace"}
           disabled={disabled}
           onSelect={() => onChange("new_workspace")}
@@ -487,7 +487,7 @@ export function SubtaskFormBody({
           disabled={isCreating || isSummarizing || !hasPrompt}
           className="cursor-pointer"
         >
-          {isCreating ? "Creating..." : "Create Subtask"}
+          {isCreating ? t("task:creating3") : t("common:createSubtask")}
         </Button>
       </DialogFooter>
     </form>

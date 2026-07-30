@@ -43,7 +43,7 @@ function FormFields({
   const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-3">
-      <FormField label="Scope Type">
+      <FormField label={t("office:scopeType")}>
         <Select value={state.scopeType} onValueChange={(v) => onChange({ scopeType: v })}>
           <SelectTrigger className="h-8 text-sm cursor-pointer">
             <SelectValue />
@@ -61,7 +61,7 @@ function FormFields({
           </SelectContent>
         </Select>
       </FormField>
-      <FormField label="Scope ID">
+      <FormField label={t("office:scopeId")}>
         <Input
           className="h-8 text-sm"
           value={state.scopeId}
@@ -69,7 +69,7 @@ function FormFields({
           placeholder={t("office:entityId")}
         />
       </FormField>
-      <FormField label="Limit ($)">
+      <FormField label={t("office:limit")}>
         <Input
           className="h-8 text-sm"
           type="number"
@@ -78,7 +78,7 @@ function FormFields({
           placeholder="10.00"
         />
       </FormField>
-      <FormField label="Period">
+      <FormField label={t("office:period2")}>
         <Select value={state.period} onValueChange={(v) => onChange({ period: v })}>
           <SelectTrigger className="h-8 text-sm cursor-pointer">
             <SelectValue />
@@ -93,7 +93,7 @@ function FormFields({
           </SelectContent>
         </Select>
       </FormField>
-      <FormField label="Alert Threshold (%)">
+      <FormField label={t("office:alertThreshold")}>
         <Input
           className="h-8 text-sm"
           type="number"
@@ -101,7 +101,7 @@ function FormFields({
           onChange={(e) => onChange({ alertPct: e.target.value })}
         />
       </FormField>
-      <FormField label="Action on Exceed">
+      <FormField label={t("office:actionOnExceed")}>
         <Select value={state.action} onValueChange={(v) => onChange({ action: v })}>
           <SelectTrigger className="h-8 text-sm cursor-pointer">
             <SelectValue />
@@ -168,7 +168,7 @@ export function CreateBudgetForm({ workspaceId, onCreated, onCancel }: Props) {
             {t("common:cancel")}
           </Button>
           <Button size="sm" className="cursor-pointer" disabled={saving} onClick={handleSubmit}>
-            {saving ? "Creating..." : "Create Policy"}
+            {saving ? t("office:creating") : t("office:createPolicy")}
           </Button>
         </div>
       </CardContent>

@@ -38,22 +38,22 @@ export function SyncContent() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
           <SyncDiffPane
             title={t("office:incomingFilesystemDatabase")}
-            description="Apply on-disk YAML files to the database."
+            description={t("office:applyOnDiskYamlFilesTo")}
             icon={<IconArrowDown className="h-4 w-4" />}
             diff={sync.incoming}
             loading={sync.loading}
             applying={sync.applyingIn}
-            applyLabel="Import from filesystem"
+            applyLabel={t("office:importFromFilesystem")}
             onApply={sync.applyIncoming}
           />
           <SyncDiffPane
             title={t("office:outgoingDatabaseFilesystem")}
-            description="Write the database state to on-disk YAML files."
+            description={t("office:writeTheDatabaseStateToOn")}
             icon={<IconArrowUp className="h-4 w-4" />}
             diff={sync.outgoing}
             loading={sync.loading}
             applying={sync.applyingOut}
-            applyLabel="Export to filesystem"
+            applyLabel={t("office:exportToFilesystem")}
             onApply={sync.applyOutgoing}
           />
         </div>

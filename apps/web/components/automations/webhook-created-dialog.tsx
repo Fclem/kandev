@@ -42,8 +42,8 @@ export function WebhookCreatedDialog({
             </Trans>
           </DialogDescription>
         </DialogHeader>
-        <CopyableField label="Webhook URL" value={webhookUrl} />
-        <CopyableField label="Webhook secret" value={webhookSecret} mono />
+        <CopyableField label={t("automations:webhookUrl")} value={webhookUrl} />
+        <CopyableField label={t("automations:webhookSecret")} value={webhookSecret} mono />
         <DialogFooter>
           <Button
             onClick={onClose}

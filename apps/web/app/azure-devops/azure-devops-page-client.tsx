@@ -96,11 +96,12 @@ function ResultHeader({
   workItemCount: number;
   pullRequestCount: number;
 }) {
+  const { t } = useTranslation();
   const count = mode === WORK_ITEMS_MODE ? workItemCount : pullRequestCount;
   return (
     <div className="flex min-h-12 items-center justify-between border-b px-4">
       <h2 className="text-sm font-semibold">
-        {mode === WORK_ITEMS_MODE ? "Work items" : "Pull requests"}
+        {mode === WORK_ITEMS_MODE ? t("azureDevops:workItems") : t("azureDevops:pullRequests")}
       </h2>
       <span className="text-xs text-muted-foreground">
         <Trans i18nKey="azureDevops:results" values={{ count }}>

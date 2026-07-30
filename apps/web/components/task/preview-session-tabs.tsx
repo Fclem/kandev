@@ -48,6 +48,7 @@ export function PreviewSessionTabs({
   workspaceId,
   onSessionChange,
 }: PreviewSessionTabsProps) {
+  const { t } = useTranslation();
   const { sessions, isLoaded } = useTaskSessions(taskId);
   const agentProfiles = useAppStore((state) => state.agentProfiles.items);
 
@@ -92,12 +93,12 @@ export function PreviewSessionTabs({
   );
 
   if (!isLoaded && sortedSessions.length === 0) {
-    return <PreviewLoadingState label="Loading agents…" />;
+    return <PreviewLoadingState label={t("task:loadingAgents2")} />;
   }
 
   if (sortedSessions.length === 0) {
     if (ensureSession?.status === "preparing") {
-      return <PreviewLoadingState label="Preparing workspace…" />;
+      return <PreviewLoadingState label={t("task:preparingWorkspace2")} />;
     }
     if (ensureSession?.status === "error") {
       return (

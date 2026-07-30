@@ -89,7 +89,7 @@ function SetupForm({
         disabled={submitting}
         data-testid="setup-submit"
       >
-        {submitting ? "Creating admin account..." : "Create admin account"}
+        {submitting ? t("auth:creatingAdminAccount") : t("auth:createAdminAccount")}
       </Button>
     </form>
   );

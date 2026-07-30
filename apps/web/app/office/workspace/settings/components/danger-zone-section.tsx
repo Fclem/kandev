@@ -116,7 +116,7 @@ function DeleteWorkspaceDialog({
             className="cursor-pointer"
             data-testid="workspace-delete-confirm-button"
           >
-            {deleting ? "Deleting..." : "Delete"}
+            {deleting ? t("office:deleting") : t("common:delete")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -195,7 +195,7 @@ export function DangerZoneSection({
           data-testid="workspace-delete-button"
         >
           <IconTrash className="h-4 w-4 mr-1.5" />
-          {loading ? "Loading..." : "Delete workspace"}
+          {loading ? t("common:loading2") : t("office:deleteWorkspace")}
         </Button>
       </div>
       <DeleteWorkspaceDialog

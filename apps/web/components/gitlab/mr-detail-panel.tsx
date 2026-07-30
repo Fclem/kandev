@@ -266,7 +266,7 @@ function MRPeopleControls({
     <div className="grid gap-4 lg:grid-cols-2">
       <MRReviewerControl
         {...shared}
-        label="Reviewers"
+        kind="reviewers"
         current={reviewers}
         busy={busy}
         onSave={(reviewerIds) =>
@@ -275,7 +275,7 @@ function MRPeopleControls({
       />
       <MRReviewerControl
         {...shared}
-        label="Assignees"
+        kind="assignees"
         current={assignees}
         busy={busy}
         onSave={(assigneeIds) =>

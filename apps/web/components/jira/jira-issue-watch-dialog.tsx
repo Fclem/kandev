@@ -221,7 +221,7 @@ function JQLField({
           disabled={!jql.trim() || testing}
           className="cursor-pointer h-7"
         >
-          {testing ? "Testing…" : "Test JQL"}
+          {testing ? t("jira:testing") : t("jira:testJql")}
         </Button>
       </div>
       <Textarea
@@ -305,8 +305,8 @@ function WorkspacePicker({
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
     <SelectField
-      label="Workspace"
-      description="Tasks created by this watcher land in the selected workspace."
+      label={t("common:workspace")}
+      description={t("jira:tasksCreatedByThisWatcherLand")}
       value={value}
       onChange={onChange}
       placeholder={t("jira:selectWorkspace")}
@@ -330,16 +330,16 @@ function AutomationFields({
     <>
       <div className="grid grid-cols-2 gap-4">
         <SelectField
-          label="Workflow"
-          description="Tasks are created in this workflow."
+          label={t("common:workflow")}
+          description={t("jira:tasksAreCreatedInThisWorkflow")}
           value={form.workflowId}
           onChange={(v) => setForm((p) => ({ ...p, workflowId: v, workflowStepId: "" }))}
           placeholder={t("common:selectWorkflow")}
           items={workflows.map((w) => ({ id: w.id, label: w.name }))}
         />
         <SelectField
-          label="Workflow Step"
-          description="Initial step for new tasks."
+          label={t("jira:workflowStep")}
+          description={t("jira:initialStepForNewTasks")}
           value={form.workflowStepId}
           onChange={(v) => setForm((p) => ({ ...p, workflowStepId: v }))}
           placeholder={stepPlaceholder(form.workflowId, stepsLoading, steps.length)}
@@ -358,8 +358,8 @@ function AutomationFields({
       />
       <div className="grid grid-cols-2 gap-4">
         <SelectField
-          label="Agent Profile"
-          description="Optional — falls back to step default."
+          label={t("jira:agentProfile")}
+          description={t("jira:optionalFallsBackToStepDefault")}
           value={form.agentProfileId || STEP_DEFAULT}
           onChange={(v) => setForm((p) => ({ ...p, agentProfileId: resolveProfileId(v) }))}
           placeholder={STEP_DEFAULT_LABEL}
@@ -373,8 +373,8 @@ function AutomationFields({
           ]}
         />
         <SelectField
-          label="Executor Profile"
-          description="Optional — falls back to step default."
+          label={t("jira:executorProfile")}
+          description={t("jira:optionalFallsBackToStepDefault")}
           value={form.executorProfileId || STEP_DEFAULT}
           onChange={(v) => setForm((p) => ({ ...p, executorProfileId: resolveProfileId(v) }))}
           placeholder={STEP_DEFAULT_LABEL}
@@ -538,7 +538,7 @@ export function JiraIssueWatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-full sm:w-[800px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{watch ? "Edit JIRA Watcher" : "Create JIRA Watcher"}</DialogTitle>
+          <DialogTitle>{watch ? t("jira:editJiraWatcher") : t("jira:createJiraWatcher")}</DialogTitle>
           <DialogDescription>{t("jira:pollAJqlQueryAndAuto")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-5">

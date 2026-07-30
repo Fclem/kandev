@@ -204,7 +204,7 @@ export function SSHAgentReadinessCard({
             className="cursor-pointer shrink-0"
           >
             {loading ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-            {hasProbed ? "Re-probe" : "Probe agents"}
+            {hasProbed ? t("settings:reProbe") : t("settings:probeAgents")}
           </Button>
         </div>
         <ShellSelector

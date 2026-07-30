@@ -29,13 +29,13 @@ export function InvocationPanel({ invocation }: Props) {
     <div className="rounded-lg border border-border" data-testid="invocation-panel">
       <div className="px-4 py-3 space-y-1.5 text-xs">
         {invocation.adapter && (
-          <Row label="Adapter" value={invocation.adapter} testid="invocation-adapter" />
+          <Row label={t("office:adapter")} value={invocation.adapter} testid="invocation-adapter" />
         )}
         {invocation.model && (
-          <Row label="Model" value={invocation.model} testid="invocation-model" />
+          <Row label={t("common:model")} value={invocation.model} testid="invocation-model" />
         )}
         {invocation.working_dir && (
-          <Row label="Working dir" value={invocation.working_dir} testid="invocation-cwd" />
+          <Row label={t("office:workingDir")} value={invocation.working_dir} testid="invocation-cwd" />
         )}
       </div>
       {hasDetails && (

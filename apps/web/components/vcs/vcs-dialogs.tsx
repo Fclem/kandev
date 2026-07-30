@@ -150,7 +150,7 @@ function CommitDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconGitCommit className="h-5 w-5" />
-            {scopedRepo ? `Commit Changes — ${scopedRepo}` : "Commit Changes"}
+            {scopedRepo ? `Commit Changes — ${scopedRepo}` : t("common:commitChanges")}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -171,7 +171,7 @@ function CommitDialog({
                 onClick={onGenerateMessage}
                 isGenerating={isGenerating}
                 disabled={fileSummary.count === 0}
-                tooltip="Generate commit message with AI"
+                tooltip={t("integrations:generateCommitMessageWithAi")}
                 isConfigured={isUtilityConfigured}
               />
             </div>

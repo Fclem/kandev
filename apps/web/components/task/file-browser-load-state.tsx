@@ -28,15 +28,15 @@ export function renderSessionOrLoadState({
     return <WorkspaceUnavailable error={sessionError} />;
   }
   if ((loadState === "loading" || isLoadingTree) && !tree) {
-    return <PanelLoadingState label="Loading files..." />;
+    return <PanelLoadingState label={t("task:loadingFiles")} />;
   }
   if (loadState === "waiting") {
-    return <PanelLoadingState testId="file-tree-waiting" label="Preparing workspace..." />;
+    return <PanelLoadingState testId="file-tree-waiting" label={t("task:preparingWorkspace")} />;
   }
   if (loadState === "manual") {
     return (
       <div data-testid="file-tree-manual" className="p-4 text-sm text-muted-foreground space-y-2">
-        <div>{loadError ?? "Workspace is still starting."}</div>
+        <div>{loadError ?? t("task:workspaceIsStillStarting")}</div>
         <button
           type="button"
           className="text-xs text-foreground underline cursor-pointer"

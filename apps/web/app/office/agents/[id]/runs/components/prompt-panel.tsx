@@ -40,14 +40,14 @@ export function PromptPanel({ run }: Props) {
       <div className="divide-y divide-border">
         {summary !== "" && (
           <PromptSection
-            label="Injected continuation summary"
+            label={t("office:injectedContinuationSummary")}
             content={summary}
             testid="prompt-summary-injected"
           />
         )}
         {assembled !== "" && (
           <PromptSection
-            label="Assembled prompt"
+            label={t("office:assembledPrompt")}
             content={assembled}
             testid="prompt-assembled"
             defaultOpen
@@ -55,7 +55,7 @@ export function PromptPanel({ run }: Props) {
         )}
         {hasResult && (
           <PromptSection
-            label="Structured result"
+            label={t("office:structuredResult")}
             content={formatJSONIfPossible(result)}
             testid="prompt-result-json"
           />

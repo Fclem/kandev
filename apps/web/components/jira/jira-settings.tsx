@@ -94,8 +94,8 @@ function InstanceFields({ form, baseline, loading, setForm }: InstanceFieldsProp
         </Select>
         <p className="text-xs text-muted-foreground">
           {form.instanceType === "cloud"
-            ? "Sites hosted at *.atlassian.net."
-            : "Self-hosted Jira (Server or Data Center)."}
+            ? t("jira:sitesHostedAtAtlassianNet")
+            : t("jira:selfHostedJiraServerOrData")}
         </p>
       </div>
       <div className="space-y-1.5">
@@ -368,10 +368,10 @@ function ActionBar({ testing, loading, hasConfig, disableTest, onTest, onDelete 
         onClick={onTest}
         disabled={testing || loading || disableTest}
         className="cursor-pointer"
-        title={disableTest ? "Paste a token to test the connection" : undefined}
+        title={disableTest ? t("jira:pasteATokenToTestThe") : undefined}
         data-testid="jira-test-button"
       >
-        {testing ? "Testing..." : "Test connection"}
+        {testing ? t("jira:testing2") : t("jira:testConnection")}
       </Button>
       {hasConfig && (
         <Button
@@ -545,7 +545,7 @@ export function JiraConnectionSection({ workspaceId }: { workspaceId: string }) 
     <SettingsSection
       icon={<IconTicket className="h-5 w-5" />}
       title={t("jira:jiraIntegration")}
-      description="Connect this workspace to Atlassian Cloud or a self-hosted Jira Server / Data Center instance. Credentials are stored encrypted server-side for the selected workspace."
+      description={t("jira:connectThisWorkspaceToAtlassianCloud")}
       action={<JiraEnabledControl />}
     >
       <SettingsCard isDirty={dirty}>

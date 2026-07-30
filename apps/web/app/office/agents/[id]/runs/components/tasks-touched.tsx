@@ -134,7 +134,7 @@ function TaskTableRow({ row }: { row: RowState }) {
           className="hover:underline"
           data-testid="tasks-touched-row-title"
         >
-          {task.title || "(untitled)"}
+          {task.title || t("office:untitled")}
         </Link>
       </TableCell>
       <TableCell>

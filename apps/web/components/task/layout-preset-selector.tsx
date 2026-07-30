@@ -175,7 +175,7 @@ function SaveLayoutDialog({
             onClick={handleSave}
             disabled={!name.trim() || saving}
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? t("task:saving") : t("task:save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -332,8 +332,8 @@ function DeleteLayoutDialog({
           </AlertDialogTitle>
           <AlertDialogDescription>
             {layout?.is_default
-              ? "The built-in Default layout will become the default."
-              : "This saved layout will be permanently removed."}
+              ? t("task:theBuiltInDefaultLayoutWill")
+              : t("task:thisSavedLayoutWillBePermanently")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -348,7 +348,7 @@ function DeleteLayoutDialog({
               void handleDelete();
             }}
           >
-            {deleting ? "Deleting..." : "Delete"}
+            {deleting ? t("task:deleting") : t("common:delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

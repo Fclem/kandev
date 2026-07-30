@@ -57,7 +57,7 @@ export function StepImport({
             {t("office:startFresh")}
           </Button>
           <Button onClick={onImport} disabled={submitting} className="cursor-pointer">
-            {submitting ? "Importing..." : "Import & Continue"}
+            {submitting ? t("office:importing") : t("office:importContinue")}
           </Button>
         </div>
       </div>

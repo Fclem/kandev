@@ -255,7 +255,7 @@ export function DefaultQueriesSection({ workspaceId }: { workspaceId?: string })
   return (
     <SettingsSection
       title={t("github:defaultQueries")}
-      description="Sidebar queries shown on /github for pull requests and issues."
+      description={t("github:sidebarQueriesShownOnGithubFor")}
       action={
         <div className="flex gap-2">
           <Button
@@ -289,7 +289,7 @@ export function DefaultQueriesSection({ workspaceId }: { workspaceId?: string })
                 presets={drafts.prDraft}
                 baseline={drafts.prBaseline}
                 onChange={drafts.setPrDraft}
-                addLabel="Add PR query"
+                addLabel={t("github:addPrQuery")}
               />
             </TabsContent>
             <TabsContent value="issue">
@@ -297,7 +297,7 @@ export function DefaultQueriesSection({ workspaceId }: { workspaceId?: string })
                 presets={drafts.issueDraft}
                 baseline={drafts.issueBaseline}
                 onChange={drafts.setIssueDraft}
-                addLabel="Add issue query"
+                addLabel={t("github:addIssueQuery")}
               />
             </TabsContent>
           </Tabs>

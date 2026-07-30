@@ -184,8 +184,8 @@ function FilterFields({
         <Label>{t("linear:states")}</Label>
         <p className="text-xs text-muted-foreground">
           {form.teamKey
-            ? "Click states to toggle. Empty matches every state on the team."
-            : "Pick a team to choose specific workflow states."}
+            ? t("linear:clickStatesToToggleEmptyMatches")
+            : t("linear:pickATeamToChooseSpecific")}
         </p>
         <StateMultiSelect
           states={states}
@@ -199,8 +199,8 @@ function FilterFields({
         <Label>{t("linear:labels")}</Label>
         <p className="text-xs text-muted-foreground">
           {form.teamKey
-            ? "Click to toggle. Matches ANY of the selected labels."
-            : "Pick a team to choose specific labels."}
+            ? t("linear:clickToToggleMatchesAnyOf")
+            : t("linear:pickATeamToChooseSpecific2")}
         </p>
         <LabelMultiSelect
           labels={labels}
@@ -230,8 +230,8 @@ function TeamRow({
   const { t } = useTranslation();
   return (
     <SelectField
-      label="Team"
-      description="Restrict matches to one team."
+      label={t("linear:team")}
+      description={t("linear:restrictMatchesToOneTeam")}
       value={form.teamKey}
       onChange={(v) =>
         setForm((p) => ({ ...p, teamKey: v, stateIds: [], labelIds: [], creatorId: "" }))
@@ -257,8 +257,8 @@ function AssigneeAndCreatorRow({
   return (
     <div className="grid grid-cols-2 gap-4">
       <SelectField
-        label="Assignee"
-        description="Filter by who an issue is assigned to."
+        label={t("linear:assignee")}
+        description={t("linear:filterByWhoAnIssueIs")}
         value={form.assigned || ASSIGNED_ANY}
         onChange={(v) => setForm((p) => ({ ...p, assigned: v === ASSIGNED_ANY ? "" : v }))}
         placeholder={t("linear:any")}
@@ -269,8 +269,8 @@ function AssigneeAndCreatorRow({
         ]}
       />
       <SelectField
-        label="Creator"
-        description="Match issues created by one user."
+        label={t("linear:creator")}
+        description={t("linear:matchIssuesCreatedByOneUser")}
         value={form.creatorId || CREATOR_ANY}
         onChange={(v) => setForm((p) => ({ ...p, creatorId: v === CREATOR_ANY ? "" : v }))}
         placeholder={creatorPlaceholder(form.teamKey, loadingUsers)}
@@ -395,8 +395,8 @@ function WorkspacePicker({
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
     <SelectField
-      label="Workspace"
-      description="Tasks created by this watcher land in the selected workspace."
+      label={t("common:workspace")}
+      description={t("linear:tasksCreatedByThisWatcherLand")}
       value={value}
       onChange={onChange}
       placeholder={t("linear:selectWorkspace")}
@@ -420,16 +420,16 @@ function AutomationFields({
     <>
       <div className="grid grid-cols-2 gap-4">
         <SelectField
-          label="Workflow"
-          description="Tasks are created in this workflow."
+          label={t("common:workflow")}
+          description={t("linear:tasksAreCreatedInThisWorkflow")}
           value={form.workflowId}
           onChange={(v) => setForm((p) => ({ ...p, workflowId: v, workflowStepId: "" }))}
           placeholder={t("common:selectWorkflow")}
           items={workflows.map((w) => ({ id: w.id, label: w.name }))}
         />
         <SelectField
-          label="Workflow Step"
-          description="Initial step for new tasks."
+          label={t("linear:workflowStep")}
+          description={t("linear:initialStepForNewTasks")}
           value={form.workflowStepId}
           onChange={(v) => setForm((p) => ({ ...p, workflowStepId: v }))}
           placeholder={stepPlaceholder(form.workflowId, stepsLoading, steps.length)}
@@ -448,8 +448,8 @@ function AutomationFields({
       />
       <div className="grid grid-cols-2 gap-4">
         <SelectField
-          label="Agent Profile"
-          description="Optional — falls back to step default."
+          label={t("linear:agentProfile")}
+          description={t("linear:optionalFallsBackToStepDefault")}
           value={form.agentProfileId || STEP_DEFAULT}
           onChange={(v) => setForm((p) => ({ ...p, agentProfileId: resolveProfileId(v) }))}
           placeholder={STEP_DEFAULT_LABEL}
@@ -463,8 +463,8 @@ function AutomationFields({
           ]}
         />
         <SelectField
-          label="Executor Profile"
-          description="Optional — falls back to step default."
+          label={t("linear:executorProfile")}
+          description={t("linear:optionalFallsBackToStepDefault")}
           value={form.executorProfileId || STEP_DEFAULT}
           onChange={(v) => setForm((p) => ({ ...p, executorProfileId: resolveProfileId(v) }))}
           placeholder={STEP_DEFAULT_LABEL}
@@ -529,7 +529,7 @@ export function LinearIssueWatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-full sm:w-[800px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{watch ? "Edit Linear Watcher" : "Create Linear Watcher"}</DialogTitle>
+          <DialogTitle>{watch ? t("linear:editLinearWatcher") : t("linear:createLinearWatcher")}</DialogTitle>
           <DialogDescription>{t("linear:pollLinearWithAStructuredFilter")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-5">

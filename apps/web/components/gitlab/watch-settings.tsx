@@ -142,6 +142,7 @@ function ReviewDialogs(props: {
   setDeleting: (watch: ReviewWatch | null) => void;
   actions: ReturnType<typeof useReviewActions>;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <ReviewWatchDialog
@@ -157,7 +158,7 @@ function ReviewDialogs(props: {
           open
           requirePreviewSuccess
           onOpenChange={props.actions.reset.onOpenChange}
-          integrationLabel="GitLab review watch"
+          integrationLabel={t("gitlab:gitlabReviewWatch")}
           previewLoader={props.actions.reset.previewLoader}
           onConfirm={props.actions.reset.confirmReset}
         />
@@ -168,7 +169,7 @@ function ReviewDialogs(props: {
           onOpenChange={(open) => {
             if (!open) props.setDeleting(null);
           }}
-          watchLabel="GitLab review watch"
+          watchLabel={t("gitlab:gitlabReviewWatch")}
           onConfirm={() => props.actions.remove(props.deleting!)}
         />
       )}
@@ -195,7 +196,7 @@ function ReviewWatchSettings({ workspaceId }: { workspaceId: string }) {
     <SettingsSection
       icon={<IconGitMerge className="h-5 w-5" />}
       title={t("gitlab:mergeRequestReviewWatches")}
-      description="Poll GitLab for merge requests awaiting review and create one task per new match."
+      description={t("gitlab:pollGitlabForMergeRequestsAwaiting")}
       action={
         <NewWatchButton
           onClick={() => {
@@ -340,6 +341,7 @@ function IssueDialogs(props: {
   setDeleting: (watch: IssueWatch | null) => void;
   actions: ReturnType<typeof useIssueActions>;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <IssueWatchDialog
@@ -355,7 +357,7 @@ function IssueDialogs(props: {
           open
           requirePreviewSuccess
           onOpenChange={props.actions.reset.onOpenChange}
-          integrationLabel="GitLab issue watch"
+          integrationLabel={t("gitlab:gitlabIssueWatch")}
           previewLoader={props.actions.reset.previewLoader}
           onConfirm={props.actions.reset.confirmReset}
         />
@@ -366,7 +368,7 @@ function IssueDialogs(props: {
           onOpenChange={(open) => {
             if (!open) props.setDeleting(null);
           }}
-          watchLabel="GitLab issue watch"
+          watchLabel={t("gitlab:gitlabIssueWatch")}
           onConfirm={() => props.actions.remove(props.deleting!)}
         />
       )}
@@ -393,7 +395,7 @@ function IssueWatchSettings({ workspaceId }: { workspaceId: string }) {
     <SettingsSection
       icon={<IconTicket className="h-5 w-5" />}
       title={t("gitlab:issueWatches")}
-      description="Poll GitLab issues and create one task per new match."
+      description={t("gitlab:pollGitlabIssuesAndCreateOne")}
       action={
         <NewWatchButton
           onClick={() => {

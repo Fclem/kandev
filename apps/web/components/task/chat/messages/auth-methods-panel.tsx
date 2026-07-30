@@ -96,7 +96,7 @@ function AuthMethodRow({
                 size="sm"
                 className="h-6 w-6 p-0 cursor-pointer shrink-0"
                 onClick={handleCopy}
-                aria-label={copied ? "Command copied" : "Copy command"}
+                aria-label={copied ? t("task:commandCopied") : t("task:copyCommand")}
               >
                 {copied ? (
                   <IconCheck className="h-3 w-3 text-green-500" />
@@ -126,7 +126,7 @@ function AuthMethodRow({
         </div>
       ) : (
         <div className="text-xs text-muted-foreground">
-          {method.description || "Login required"}
+          {method.description || t("task:loginRequired")}
         </div>
       )}
     </div>

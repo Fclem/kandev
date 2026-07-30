@@ -51,7 +51,7 @@ export function SecretFields({
         <Input
           id="slack-token"
           type="password"
-          placeholder={hasSavedToken ? "••••••••" : "xoxc-..."}
+          placeholder={hasSavedToken ? "••••••••" : t("common:xoxc")}
           value={form.token}
           data-settings-dirty={form.token !== baseline.token}
           onChange={(e) => update("token", e.target.value)}
@@ -75,7 +75,7 @@ export function SecretFields({
         <Input
           id="slack-cookie"
           type="password"
-          placeholder={hasSavedCookie ? "••••••••" : "xoxd-..."}
+          placeholder={hasSavedCookie ? "••••••••" : t("common:xoxd")}
           value={form.cookie}
           data-settings-dirty={form.cookie !== baseline.cookie}
           onChange={(e) => update("cookie", e.target.value)}

@@ -23,18 +23,18 @@ export function JiraImportBar({ workspaceId, disabled, onImport }: JiraImportBar
     <ValidatedPopover
       triggerStyle="ghost-icon"
       triggerIcon={<IconTicket className="h-4 w-4" />}
-      triggerAriaLabel="Import from Jira"
+      triggerAriaLabel={t("jira:importFromJira")}
       triggerDisabled={disabled}
       testIdPrefix="jira-import"
-      tooltip="Import from Jira ticket URL or key"
+      tooltip={t("jira:importFromJiraTicketUrlOr")}
       align="start"
-      headline="Import Jira ticket"
+      headline={t("jira:importJiraTicket")}
       placeholder={t("jira:proj123OrPasteTicketUrl")}
       extractKey={(raw) => raw.toUpperCase().match(JIRA_KEY_RE)?.[0] ?? null}
-      validationHint="Paste a Jira ticket URL or key (PROJ-123)"
+      validationHint={t("jira:pasteAJiraTicketUrlOr")}
       fetch={(key) => getJiraTicket(key, { workspaceId })}
       onSuccess={(_key, ticket) => onImport(ticket)}
-      submitLabel="Import"
+      submitLabel={t("jira:import")}
       submittingLabel="Loading..."
     />
   );

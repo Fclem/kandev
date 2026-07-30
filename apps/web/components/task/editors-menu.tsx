@@ -205,7 +205,7 @@ export function EditorsMenu({ activeSessionId }: EditorsMenuProps) {
       <OpenEditorButton
         disabled={!activeSessionId || openEditor.isLoading || enabledEditors.length === 0}
         isLoading={openEditor.isLoading}
-        tooltip={activeSessionId ? "Open editor" : "Select a session to open its worktree"}
+        tooltip={activeSessionId ? t("task:openEditor") : t("task:selectASessionToOpenIts")}
         worktreeOptions={worktreeOptions}
         onOpen={(worktreeId) => openWith(resolvedEditorId, worktreeId)}
       />

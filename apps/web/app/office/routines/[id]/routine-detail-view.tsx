@@ -135,7 +135,7 @@ export function RoutineDetailView({ initialRoutine, initialTriggers }: RoutineDe
             </Trans>
           </Button>
           <Button size="sm" onClick={handleSave} disabled={saving} className="cursor-pointer">
-            <IconDeviceFloppy className="h-4 w-4 mr-1" /> {saving ? "Saving…" : "Save"}
+            <IconDeviceFloppy className="h-4 w-4 mr-1" /> {saving ? t("office:saving2") : t("office:save2")}
           </Button>
         </div>
       </OfficeTopbarPortal>
@@ -169,7 +169,7 @@ function DetailGeneralCard({
         <StatusAndAssigneeFields draft={draft} update={update} agents={agents} />
         <PolicyFields draft={draft} update={update} />
         {draft.catchUpPolicy === "enqueue_missed_with_cap" && (
-          <Field label="Catch-up max">
+          <Field label={t("office:catchUpMax")}>
             <Input
               type="number"
               min={1}
@@ -190,12 +190,13 @@ function BasicGeneralFields({
   draft: DraftState;
   update: (patch: Partial<DraftState>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <Field label="Name">
+      <Field label={t("office:name")}>
         <Input value={draft.name} onChange={(e) => update({ name: e.target.value })} />
       </Field>
-      <Field label="Description">
+      <Field label={t("office:description")}>
         <Textarea
           rows={2}
           value={draft.description}
@@ -218,7 +219,7 @@ function StatusAndAssigneeFields({
   const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
-      <Field label="Status">
+      <Field label={t("common:status")}>
         <Select
           value={draft.status}
           onValueChange={(v) => update({ status: v as DraftState["status"] })}
@@ -239,7 +240,7 @@ function StatusAndAssigneeFields({
           </SelectContent>
         </Select>
       </Field>
-      <Field label="Assignee">
+      <Field label={t("office:assignee")}>
         <Select
           value={draft.assigneeAgentProfileId}
           onValueChange={(v) => update({ assigneeAgentProfileId: v })}
@@ -270,7 +271,7 @@ function PolicyFields({
   const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
-      <Field label="Concurrency policy">
+      <Field label={t("office:concurrencyPolicy")}>
         <Select
           value={draft.concurrencyPolicy}
           onValueChange={(v) => update({ concurrencyPolicy: v })}
@@ -291,7 +292,7 @@ function PolicyFields({
           </SelectContent>
         </Select>
       </Field>
-      <Field label="Catch-up policy">
+      <Field label={t("office:catchUpPolicy")}>
         <Select value={draft.catchUpPolicy} onValueChange={(v) => update({ catchUpPolicy: v })}>
           <SelectTrigger className="cursor-pointer">
             <SelectValue />
@@ -325,7 +326,7 @@ function DetailTriggerCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Kind">
+          <Field label={t("office:kind")}>
             <Select
               value={draft.triggerKind}
               onValueChange={(v) => update({ triggerKind: v as DraftState["triggerKind"] })}
@@ -344,7 +345,7 @@ function DetailTriggerCard({
             </Select>
           </Field>
           {draft.triggerKind === "cron" && (
-            <Field label="Cron expression">
+            <Field label={t("office:cronExpression2")}>
               <Input
                 value={draft.cronExpression}
                 onChange={(e) => update({ cronExpression: e.target.value })}
@@ -354,7 +355,7 @@ function DetailTriggerCard({
           )}
         </div>
         {draft.triggerKind === "cron" && (
-          <Field label="Timezone">
+          <Field label={t("office:timezone")}>
             <Input
               value={draft.timezone}
               onChange={(e) => update({ timezone: e.target.value })}

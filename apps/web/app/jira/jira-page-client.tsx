@@ -344,7 +344,7 @@ export function JiraPageClient({ workspaceId, workflows, steps }: JiraPageClient
     <div className="flex h-full min-h-0 w-full flex-col bg-background">
       <PageTopbar
         title="Jira"
-        subtitle="Tickets across your Atlassian projects."
+        subtitle={t("jira:ticketsAcrossYourAtlassianProjects")}
         icon={<IconTicket className="h-4 w-4" />}
       />
       {!loaded && (

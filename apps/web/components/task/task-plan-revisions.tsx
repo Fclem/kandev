@@ -532,7 +532,7 @@ function RevertConfirmDialog({
             className="cursor-pointer"
             data-testid="plan-revert-confirm-ok"
           >
-            {isSaving ? "Restoring..." : "Restore"}
+            {isSaving ? t("task:restoring") : t("task:restore2")}
           </Button>
         </DialogFooter>
       </DialogContent>

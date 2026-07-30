@@ -117,6 +117,7 @@ function ThreadBlock({
   prUrl: string;
   onAddAsContext: (message: string) => void;
 }) {
+  const { t } = useTranslation();
   const hasReplies = thread.replies.length > 0;
   return (
     <div className="space-y-1.5">
@@ -127,7 +128,7 @@ function ThreadBlock({
         {hasReplies && (
           <AddToContextButton
             onClick={() => onAddAsContext(buildThreadMessage(thread, prUrl))}
-            tooltip="Add whole thread to chat context"
+            tooltip={t("github:addWholeThreadToChatContext")}
           />
         )}
       </div>
@@ -172,7 +173,7 @@ export function CommentsSection({
       count={comments.length}
       defaultOpen
       onAddAll={() => onAddAsContext(buildAllCommentsMessage(comments, prUrl))}
-      addAllLabel="Add all comments to chat context"
+      addAllLabel={t("github:addAllCommentsToChatContext")}
     >
       {comments.length === 0 && (
         <p className="text-xs text-muted-foreground px-2 py-2">{t("github:noCommentsYet")}</p>

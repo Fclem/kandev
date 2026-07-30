@@ -74,11 +74,12 @@ function ScriptHeader({
   isRunning: boolean;
   isSuccess: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap">
         <Badge variant={isSetup ? "default" : "secondary"} className="text-xs">
-          {isSetup ? "Setup" : "Cleanup"}
+          {isSetup ? t("task:setup") : t("task:cleanup")}
         </Badge>
         <span className="font-mono text-xs text-muted-foreground">{command}</span>
         {isRunning && <GridSpinner className="text-muted-foreground" />}

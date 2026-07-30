@@ -116,7 +116,7 @@ export function TaskGitHubPRDialog({
           <DialogDescription>
             {inferredRepo
               ? `Use a full pull request URL or number for ${inferredRepo.owner}/${inferredRepo.repo}.`
-              : "Use a full GitHub pull request URL for this task."}
+              : t("task:useAFullGithubPullRequest")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
@@ -152,7 +152,7 @@ export function TaskGitHubPRDialog({
             disabled={submitting}
             data-testid="task-github-pr-submit"
           >
-            {submitting ? "Saving" : "Save"}
+            {submitting ? t("task:saving2") : t("task:save")}
           </Button>
         </DialogFooter>
       </DialogContent>

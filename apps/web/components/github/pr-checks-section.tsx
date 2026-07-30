@@ -100,7 +100,7 @@ export function ChecksSection({
       count={checks.length}
       defaultOpen
       onAddAll={hasFailed ? () => onAddAsContext(buildAllFailedMessage(checks)) : undefined}
-      addAllLabel="Add all failed checks to chat context"
+      addAllLabel={t("github:addAllFailedChecksToChat")}
     >
       {checks.length === 0 && (
         <p className="text-xs text-muted-foreground px-2 py-2">{t("github:noChecks")}</p>

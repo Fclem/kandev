@@ -228,6 +228,61 @@ type StepBehaviorSectionProps = {
   readOnly: boolean;
 };
 
+/**
+ * The three on-enter-action toggles. Grouped because they share
+ * `toggleOnEnterAction` and the same `hasOnEnterAction` dirty check, which the
+ * rest of the behavior section does not.
+ */
+function StepOnEnterRows({
+  step,
+  savedStep,
+  toggleOnEnterAction,
+  readOnly,
+}: Pick<StepBehaviorSectionProps, "step" | "savedStep" | "toggleOnEnterAction" | "readOnly">) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <StepCheckboxRow
+        id={`${step.id}-auto-start`}
+        checked={hasOnEnterAction(step, "auto_start_agent")}
+        onCheckedChange={() => !readOnly && toggleOnEnterAction("auto_start_agent")}
+        disabled={readOnly}
+        label={t("common:autoStartAgent")}
+        helpText={t("settings:automaticallyStartTheAgentWhenA")}
+        isDirty={isWorkflowStepValueDirty(step, savedStep, (item) =>
+          hasOnEnterAction(item, "auto_start_agent"),
+        )}
+      />
+      <StepCheckboxRow
+        id={`${step.id}-plan-mode`}
+        checked={hasOnEnterAction(step, "enable_plan_mode")}
+        onCheckedChange={() => !readOnly && toggleOnEnterAction("enable_plan_mode")}
+        disabled={readOnly}
+        label={t("common:planMode")}
+        helpText={t("settings:agentProposesAPlanInsteadOf")}
+        isDirty={isWorkflowStepValueDirty(step, savedStep, (item) =>
+          hasOnEnterAction(item, "enable_plan_mode"),
+        )}
+      />
+      <StepCheckboxRow
+        id={`${step.id}-reset-context`}
+        checked={hasOnEnterAction(step, "reset_agent_context")}
+        onCheckedChange={() => !readOnly && toggleOnEnterAction("reset_agent_context")}
+        disabled={readOnly || !!step.agent_profile_id}
+        label={t("common:resetAgentContext")}
+        helpText={
+          step.agent_profile_id
+            ? t("settings:notNeededSwitchingAgentProfilesAlready")
+            : t("settings:restartTheAgentWithAFresh")
+        }
+        isDirty={isWorkflowStepValueDirty(step, savedStep, (item) =>
+          hasOnEnterAction(item, "reset_agent_context"),
+        )}
+      />
+    </>
+  );
+}
+
 function StepBehaviorSection({
   step,
   savedStep,
@@ -236,6 +291,7 @@ function StepBehaviorSection({
   toggleOnEnterAction,
   readOnly,
 }: StepBehaviorSectionProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
@@ -244,54 +300,23 @@ function StepBehaviorSection({
           checked={step.is_start_step === true}
           onCheckedChange={(c) => !readOnly && onUpdate({ is_start_step: c })}
           disabled={readOnly}
-          label="Start step"
-          helpText="New tasks start in this step. Only one step per workflow can be the start step."
+          label={t("common:startStep")}
+          helpText={t("settings:newTasksStartInThisStep")}
           isDirty={isWorkflowStepValueDirty(step, savedStep, (item) => item.is_start_step ?? false)}
         />
-        <StepCheckboxRow
-          id={`${step.id}-auto-start`}
-          checked={hasOnEnterAction(step, "auto_start_agent")}
-          onCheckedChange={() => !readOnly && toggleOnEnterAction("auto_start_agent")}
-          disabled={readOnly}
-          label="Auto-start agent"
-          helpText="Automatically start the agent when a task enters this step."
-          isDirty={isWorkflowStepValueDirty(step, savedStep, (item) =>
-            hasOnEnterAction(item, "auto_start_agent"),
-          )}
-        />
-        <StepCheckboxRow
-          id={`${step.id}-plan-mode`}
-          checked={hasOnEnterAction(step, "enable_plan_mode")}
-          onCheckedChange={() => !readOnly && toggleOnEnterAction("enable_plan_mode")}
-          disabled={readOnly}
-          label="Plan mode"
-          helpText="Agent proposes a plan instead of making changes directly."
-          isDirty={isWorkflowStepValueDirty(step, savedStep, (item) =>
-            hasOnEnterAction(item, "enable_plan_mode"),
-          )}
-        />
-        <StepCheckboxRow
-          id={`${step.id}-reset-context`}
-          checked={hasOnEnterAction(step, "reset_agent_context")}
-          onCheckedChange={() => !readOnly && toggleOnEnterAction("reset_agent_context")}
-          disabled={readOnly || !!step.agent_profile_id}
-          label="Reset agent context"
-          helpText={
-            step.agent_profile_id
-              ? "Not needed — switching agent profiles already creates a new session with fresh context."
-              : "Restart the agent with a fresh conversation context when entering this step. Useful for review steps that need an unbiased perspective."
-          }
-          isDirty={isWorkflowStepValueDirty(step, savedStep, (item) =>
-            hasOnEnterAction(item, "reset_agent_context"),
-          )}
+        <StepOnEnterRows
+          step={step}
+          savedStep={savedStep}
+          toggleOnEnterAction={toggleOnEnterAction}
+          readOnly={readOnly}
         />
         <StepCheckboxRow
           id={`${step.id}-manual-move`}
           checked={step.allow_manual_move !== false}
           onCheckedChange={(c) => !readOnly && onUpdate({ allow_manual_move: c })}
           disabled={readOnly}
-          label="Allow manual move"
-          helpText="Allow dragging tasks into this step on the board."
+          label={t("settings:allowManualMove")}
+          helpText={t("settings:allowDraggingTasksIntoThisStep")}
           isDirty={isWorkflowStepValueDirty(
             step,
             savedStep,
@@ -303,8 +328,8 @@ function StepBehaviorSection({
           checked={step.show_in_command_panel !== false}
           onCheckedChange={(c) => !readOnly && onUpdate({ show_in_command_panel: c })}
           disabled={readOnly}
-          label="Show in command panel"
-          helpText="Show tasks in this step when opening the command panel (Cmd+K). Useful for hiding backlog or done steps from quick access."
+          label={t("settings:showInCommandPanel")}
+          helpText={t("settings:showTasksInThisStepWhen")}
           isDirty={isWorkflowStepValueDirty(
             step,
             savedStep,

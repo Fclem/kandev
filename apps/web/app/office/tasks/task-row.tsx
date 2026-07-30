@@ -57,7 +57,7 @@ export function TaskRow({
         <button
           onClick={handleToggle}
           className="shrink-0 cursor-pointer p-0 border-0 bg-transparent"
-          aria-label={expanded ? "Collapse" : "Expand"}
+          aria-label={expanded ? t("office:collapse") : t("office:expand")}
         >
           <IconChevronRight
             className={cn(

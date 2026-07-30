@@ -110,7 +110,7 @@ export function ReviewCommentsOverview({ comments }: { comments: DiffComment[] }
                   <div className="mb-0.5 flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
                     <span>{formatLineRange(comment.startLine, comment.endLine)}</span>
                     <span className="text-muted-foreground/60">
-                      · {comment.side === "additions" ? "new" : "old"}
+                      · {comment.side === "additions" ? t("review:new") : t("review:old")}
                     </span>
                   </div>
                   <p className="line-clamp-2 whitespace-pre-wrap text-xs leading-snug text-foreground/90">

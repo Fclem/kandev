@@ -158,8 +158,8 @@ function ExecutorFormCard({
             onChange={(event) => onDockerHostChange(event.target.value)}
             placeholder={
               isRemoteDocker
-                ? "tcp://remote:2376 or ssh://user@host"
-                : "unix:///var/run/docker.sock"
+                ? t("settings:tcpRemote2376OrSshUser")
+                : t("settings:unixVarRunDockerSock")
             }
           />
           <p className="text-xs text-muted-foreground">

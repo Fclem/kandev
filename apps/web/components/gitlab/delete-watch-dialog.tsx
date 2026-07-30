@@ -69,7 +69,7 @@ export function DeleteWatchDialog({
               }
             }}
           >
-            {deleting ? "Deleting..." : "Delete watch"}
+            {deleting ? t("gitlab:deleting") : t("gitlab:deleteWatch")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

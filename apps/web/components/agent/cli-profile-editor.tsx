@@ -370,6 +370,7 @@ function AdvancedToggles({
   onAutoApproveChange,
   onCliFlagsChange,
 }: AdvancedTogglesProps) {
+  const { t } = useTranslation();
   const autoSetting = permissionSettings?.auto_approve;
   const showAgentctlAutoApprove = Boolean(
     autoSetting?.supported && autoSetting.apply_method === PERMISSION_APPLY_AGENTCTL_AUTO_APPROVE,
@@ -391,8 +392,8 @@ function AdvancedToggles({
           {allowCliPassthrough && (
             <ToggleRow
               id="cli-passthrough"
-              label="CLI passthrough"
-              description="Forward stdin/stdout straight to the CLI subprocess. Disables ACP."
+              label={t("common:cliPassthrough")}
+              description={t("common:forwardStdinStdoutStraightToThe")}
               checked={cliPassthrough}
               onChange={onCliPassthroughChange}
             />
@@ -408,8 +409,8 @@ function AdvancedToggles({
           {showAllowIndexing && (
             <ToggleRow
               id="allow-indexing"
-              label="Allow indexing"
-              description="Permit the CLI to upload code for cloud indexing (auggie / similar)."
+              label={t("common:allowIndexing")}
+              description={t("common:permitTheCliToUploadCode")}
               checked={allowIndexing}
               onChange={onAllowIndexingChange}
             />
@@ -463,15 +464,16 @@ function AgentctlAutoApproveRow({
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
       <div className="space-y-0.5">
         <Label htmlFor={id} className="text-sm text-destructive">
-          {setting?.label ?? "Auto-approve all permissions"}
+          {setting?.label ?? t("common:autoApproveAllPermissions")}
         </Label>
         <p className="text-xs text-muted-foreground">
           {setting?.description ??
-            "Kandev allows every agent permission request without prompting you."}
+            t("common:kandevAllowsEveryAgentPermissionRequest")}
         </p>
       </div>
       <Switch

@@ -267,6 +267,7 @@ function ActionBar({
   onTest,
   onDelete,
 }: ActionBarProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button
@@ -275,9 +276,9 @@ function ActionBar({
         onClick={onTest}
         disabled={testing || loading || disableTest}
         className="cursor-pointer"
-        title={disableTest ? "Paste a token and cookie to test the connection" : undefined}
+        title={disableTest ? t("common:pasteATokenAndCookieTo") : undefined}
       >
-        {testing ? "Testing..." : "Test connection"}
+        {testing ? t("common:testing") : t("common:testConnection")}
       </Button>
       {hasConfig && (
         <Button
@@ -287,7 +288,7 @@ function ActionBar({
           disabled={deleting}
           className="ml-auto cursor-pointer"
         >
-          {deleting ? "Removing..." : "Remove configuration"}
+          {deleting ? t("common:removing") : t("common:removeConfiguration")}
         </Button>
       )}
     </div>
@@ -509,7 +510,7 @@ export function SlackConnectionSection({ workspaceId }: { workspaceId: string })
     <SettingsSection
       icon={<IconBrandSlack className="h-5 w-5" />}
       title={t("common:slackIntegration")}
-      description="Capture Slack threads as tasks for the selected workspace. Type !kandev <instruction> in any thread you can see and the configured utility agent creates the task."
+      description={t("common:captureSlackThreadsAsTasksFor")}
       action={<EnabledPill />}
     >
       <SettingsCard isDirty={dirty}>

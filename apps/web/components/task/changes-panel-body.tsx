@@ -112,6 +112,7 @@ type WorkingTreeProps = Pick<
 >;
 
 function WorkingTreeSections(props: WorkingTreeProps) {
+  const { t } = useTranslation();
   const isBulkOp = props.pendingStageFiles.size === 0;
   return (
     <>
@@ -120,7 +121,7 @@ function WorkingTreeSections(props: WorkingTreeProps) {
           variant="unstaged"
           files={props.unstagedFiles}
           pendingStageFiles={props.pendingStageFiles}
-          actionLabel="Stage all"
+          actionLabel={t("task:stageAll")}
           isActionLoading={isBulkOp && props.loadingOperation === "stage"}
           onAction={props.onStageAll}
           onOpenDiff={props.onOpenDiffFile}
@@ -139,10 +140,10 @@ function WorkingTreeSections(props: WorkingTreeProps) {
           variant="staged"
           files={props.stagedFiles}
           pendingStageFiles={props.pendingStageFiles}
-          actionLabel="Commit"
+          actionLabel={t("common:commit")}
           isActionLoading={props.loadingOperation === "commit"}
           onAction={() => props.dialogs.openCommitDialog()}
-          secondaryActionLabel="Unstage all"
+          secondaryActionLabel={t("task:unstageAll")}
           isSecondaryActionLoading={isBulkOp && props.loadingOperation === "unstage"}
           onSecondaryAction={props.onUnstageAll}
           onOpenDiff={props.onOpenDiffFile}

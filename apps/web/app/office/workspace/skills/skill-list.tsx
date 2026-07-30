@@ -188,7 +188,7 @@ function SkillImportInput({
           disabled={!value.trim() || importing}
           className="h-8 shrink-0 cursor-pointer"
         >
-          {importing ? <IconLoader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+          {importing ? <IconLoader2 className="h-3.5 w-3.5 animate-spin" /> : t("office:add")}
         </Button>
       </div>
     </div>
@@ -206,6 +206,7 @@ function SkillItems({
   onSelect: (id: string) => void;
   search: string;
 }) {
+  const { t } = useTranslation();
   // System skills (`is_system = true`) are kandev-owned and live at
   // the top, read-only. Workspace skills are user-imported and editable.
   // Empty groups don't render headings to keep the rail tight on fresh
@@ -218,12 +219,12 @@ function SkillItems({
     <div className="flex-1 overflow-y-auto px-2 space-y-2">
       {empty && (
         <p className="text-sm text-muted-foreground px-3 py-2">
-          {search ? "No matching skills" : "No skills yet. Import from GitHub or create your own."}
+          {search ? t("office:noMatchingSkills") : t("office:noSkillsYetImportFromGithub")}
         </p>
       )}
       {systemItems.length > 0 && (
         <SkillItemsGroup
-          heading="System"
+          heading={t("common:system")}
           items={systemItems}
           selectedId={selectedId}
           onSelect={onSelect}
@@ -238,7 +239,7 @@ function SkillItems({
       )}
       {userItems.length > 0 && (
         <SkillItemsGroup
-          heading={systemItems.length > 0 ? "Workspace" : undefined}
+          heading={systemItems.length > 0 ? t("common:workspace") : undefined}
           items={userItems}
           selectedId={selectedId}
           onSelect={onSelect}

@@ -349,7 +349,7 @@ export function PRCIAutomationControls({ pr }: { pr: TaskPR }) {
       </div>
       <CIAutomationRow
         id={`task-ci-auto-fix-${pr.task_id}`}
-        label="Auto-fix CI and address comments"
+        label={t("github:autoFixCiAndAddressComments")}
         checked={Boolean(options?.auto_fix_enabled)}
         disabled={disabled}
         onCheckedChange={(checked) => patchOption({ auto_fix_enabled: checked })}
@@ -364,7 +364,7 @@ export function PRCIAutomationControls({ pr }: { pr: TaskPR }) {
       />
       <CIAutomationRow
         id={`task-ci-auto-merge-${pr.task_id}`}
-        label="Auto-merge when ready"
+        label={t("github:autoMergeWhenReady")}
         checked={Boolean(options?.auto_merge_enabled)}
         disabled={disabled}
         onCheckedChange={(checked) => patchOption({ auto_merge_enabled: checked })}

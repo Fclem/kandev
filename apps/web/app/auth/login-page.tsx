@@ -128,7 +128,7 @@ export function LoginPage() {
               disabled={submitting}
               data-testid="login-submit"
             >
-              {submitting ? "Signing in..." : "Sign in"}
+              {submitting ? t("auth:signingIn") : t("auth:signIn2")}
             </Button>
           </form>
           <LoginSsoButtons providers={ssoProviders} />

@@ -15,6 +15,10 @@
   "copyPath2": "Ćōƥŷ ƥàţĥ",
   "default": "ďēƒàũĺţ",
   "deleteFile": "Ďēĺēţē ƒĩĺē",
+  "disableWordWrap": "Ďĩśàƀĺē ŵōŕď ŵŕàƥ",
+  "enableWordWrap": "Ēńàƀĺē ŵōŕď ŵŕàƥ",
+  "foldUnchangedLines": "Ƒōĺď ũńćĥàńĝēď ĺĩńēś",
+  "hideDiffIndicators": "Ĥĩďē ďĩƒƒ ĩńďĩćàţōŕś",
   "highlight": "Ĥĩĝĥĺĩĝĥţ",
   "inlineCode": "Ĩńĺĩńē ćōďē",
   "insertBlock": "Ĩńśēŕţ ƀĺōćķ",
@@ -35,7 +39,11 @@
   "revertChanges": "Ŕēvēŕţ ćĥàńĝēś",
   "save": "Śàvē",
   "saving": "<0></0> Śàvĩńĝ...",
+  "showAllLines": "Śĥōŵ àĺĺ ĺĩńēś",
+  "showDiffIndicators": "Śĥōŵ ďĩƒƒ ĩńďĩćàţōŕś",
   "strikethroughCmdShiftX": "Śţŕĩķēţĥŕōũĝĥ (Ćḿď+Śĥĩƒţ+X)",
+  "switchToSplitView": "Śŵĩţćĥ ţō śƥĺĩţ vĩēŵ",
+  "switchToUnifiedView": "Śŵĩţćĥ ţō ũńĩƒĩēď vĩēŵ",
   "toggleWordWrap": "Ţōĝĝĺē ŵōŕď ŵŕàƥ",
   "underlineCmdU": "Ũńďēŕĺĩńē (Ćḿď+Ũ)"
 }

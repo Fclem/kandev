@@ -59,7 +59,7 @@ export function SuccessRateChart({ days }: Props) {
           rows={rowsFromDays(days)}
           heightPx={120}
           maxValue={100}
-          ariaLabel="Daily success rate"
+          ariaLabel={t("office:dailySuccessRate")}
         />
       </CardContent>
     </Card>

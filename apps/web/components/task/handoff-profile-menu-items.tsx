@@ -77,7 +77,7 @@ function HandoffProfileList({
       key={profile.id}
       className="cursor-pointer"
       disabled={profile.disabled}
-      title={profile.disabled ? "Not configured for this executor" : undefined}
+      title={profile.disabled ? t("task:notConfiguredForThisExecutor") : undefined}
       data-testid={`handoff-profile-${profile.id}`}
       onSelect={() => onSelectProfile(profile.id)}
     >

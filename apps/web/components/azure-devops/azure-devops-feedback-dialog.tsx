@@ -136,12 +136,12 @@ export function AzureDevOpsFeedbackDialog({
       <DialogContent className="max-h-[85dvh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="break-words">
-            {feedback?.pullRequest.title ?? "Pull request feedback"}
+            {feedback?.pullRequest.title ?? t("azureDevops:pullRequestFeedback")}
           </DialogTitle>
           <DialogDescription>
             {feedback
               ? `${feedback.pullRequest.repositoryName} · PR ${feedback.pullRequest.id}`
-              : "Azure DevOps review and policy state"}
+              : t("azureDevops:azureDevopsReviewAndPolicyState")}
           </DialogDescription>
         </DialogHeader>
         {loading && (

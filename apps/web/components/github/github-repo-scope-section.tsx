@@ -303,7 +303,7 @@ export function GitHubRepoScopeSection({ workspaceId }: { workspaceId: string })
     <SettingsSection
       title={t("github:repositoryScope")}
       titleAccessory={<RepositoryScopeHelp />}
-      description="Limits GitHub pull requests and issues shown or imported in this workspace."
+      description={t("github:limitsGithubPullRequestsAndIssues")}
     >
       <RepositoryScopeFields
         mode={draft.mode}

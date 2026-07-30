@@ -151,7 +151,7 @@ export function ParentPicker({ task }: ParentPickerProps) {
         onValueChange={handleSelect}
         placeholder={t("task:noParent")}
         searchPlaceholder="Search tasks..."
-        emptyMessage="No tasks found."
+        emptyMessage={t("common:noTasksFound")}
         disabled={isDetaching}
         triggerClassName="h-7 w-full justify-end px-2"
         popoverAlign="end"

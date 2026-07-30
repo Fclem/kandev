@@ -176,7 +176,7 @@ export function AgentSkillsTab({ agent }: AgentSkillsTabProps) {
       {dirty && (
         <div className="flex justify-end">
           <Button onClick={handleSave} disabled={saving} className="cursor-pointer">
-            {saving ? "Saving..." : "Save skills"}
+            {saving ? t("office:saving") : t("office:saveSkills")}
           </Button>
         </div>
       )}

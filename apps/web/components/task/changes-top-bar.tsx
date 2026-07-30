@@ -198,7 +198,7 @@ function ChangesTopBarRight({
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{splitView ? "Unified view" : "Split view"}</TooltipContent>
+        <TooltipContent>{splitView ? t("task:unifiedView") : t("task:splitView")}</TooltipContent>
       </Tooltip>
       {totalCommentCount > 0 && (
         <Button

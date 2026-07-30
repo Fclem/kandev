@@ -142,7 +142,7 @@ export function ResetWatchDialog({
             }}
             className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {confirming ? "Resetting…" : "Reset"}
+            {confirming ? t("common:resetting") : t("common:reset2")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -60,7 +60,7 @@ function ResultDetails({ snapshot }: { snapshot: ShellCommandOutputSnapshot }) {
       {output.truncated && <span>{t("task:outputTruncated")}</span>}
       {isTerminalToolCallStatus(status) && (
         <span className={cn("font-mono", exitClass)}>
-          {knownExit ? `Exit code ${output.exit_code}` : "Exit code unavailable"}
+          {knownExit ? `Exit code ${output.exit_code}` : t("task:exitCodeUnavailable")}
         </span>
       )}
     </div>

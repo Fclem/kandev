@@ -104,7 +104,7 @@ function ConflictBanner({
             onClick={onResolveConflicts}
             disabled={resolveDisabled}
           >
-            {resolveDisabled ? "Added to chat context" : "Resolve conflicts"}
+            {resolveDisabled ? t("github:addedToChatContext") : t("github:resolveConflicts")}
           </Button>
         )}
       </div>

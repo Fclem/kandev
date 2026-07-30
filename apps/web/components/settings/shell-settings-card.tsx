@@ -55,7 +55,7 @@ function ShellSelect({
           <SelectTrigger data-settings-dirty={isDirty}>
             <SelectValue
               placeholder={
-                shellOptions.length === 0 ? "Shell options unavailable" : "Select a shell"
+                shellOptions.length === 0 ? t("settings:shellOptionsUnavailable") : t("settings:selectAShell")
               }
             />
           </SelectTrigger>
@@ -120,7 +120,7 @@ export function ShellSettingsCard({
     <SettingsSection
       icon={<IconCode className="h-5 w-5" />}
       title={t("common:shell")}
-      description="Pick the default shell for task sessions"
+      description={t("settings:pickTheDefaultShellForTask")}
     >
       <SettingsCard isDirty={isDirty}>
         <CardHeader>

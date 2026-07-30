@@ -306,7 +306,7 @@ export function TerminalSettings() {
       <SettingsSection
         icon={<IconTerminal2 className="h-5 w-5" />}
         title={t("settings:terminal")}
-        description="Configure terminal appearance and behavior"
+        description={t("settings:configureTerminalAppearanceAndBehavior")}
       >
         <TerminalFontCard
           fontFamily={draft.terminalFontFamily}

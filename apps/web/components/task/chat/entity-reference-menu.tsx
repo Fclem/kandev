@@ -135,7 +135,7 @@ export function EntityReferenceMenu({
             })
           ) : (
             <div className="min-h-11 px-3 py-2 text-xs text-muted-foreground">
-              {GROUP_STATUS_LABELS[group.status] ?? "Provider unavailable"}
+              {GROUP_STATUS_LABELS[group.status] ?? t("task:providerUnavailable")}
             </div>
           )}
         </div>

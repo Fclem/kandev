@@ -46,18 +46,18 @@ export function StepReview({
         </p>
       </div>
       <Card className="divide-y divide-border">
-        <ReviewRow label="Workspace" value={workspaceName || "Default Workspace"}>
+        <ReviewRow label={t("common:workspace")} value={workspaceName || "Default Workspace"}>
           <Badge variant="secondary" className="ml-2">
             {taskPrefix || "KAN"}
           </Badge>
         </ReviewRow>
-        <ReviewRow label="Coordinator agent" value={agentName || "CEO"}>
+        <ReviewRow label={t("office:coordinatorAgent")} value={agentName || "CEO"}>
           {agentProfileLabel && (
             <span className="text-xs text-muted-foreground ml-2">({agentProfileLabel})</span>
           )}
         </ReviewRow>
-        <ReviewRow label="Executor" value={executorLabel} />
-        <ReviewRow label="First task" value={taskTitle || "No initial task"} />
+        <ReviewRow label={t("office:executor")} value={executorLabel} />
+        <ReviewRow label={t("office:firstTask")} value={taskTitle || "No initial task"} />
       </Card>
     </div>
   );

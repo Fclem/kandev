@@ -288,7 +288,7 @@ export function CreateAgentDialog({ open, onOpenChange }: CreateAgentDialogProps
             disabled={!state.name.trim() || submitting}
             className="cursor-pointer"
           >
-            {submitting ? "Creating..." : "Create Agent"}
+            {submitting ? t("office:creating") : t("office:createAgent")}
           </Button>
         </DialogFooter>
       </DialogContent>

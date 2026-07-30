@@ -235,7 +235,7 @@ function LoadMoreFooter({ hasMore, loading, onLoadMore }: LoadMoreFooterProps) {
               aria-hidden="true"
             />
           )}
-          {loading ? "Loading…" : "Load more"}
+          {loading ? t("common:loading3") : t("office:loadMore")}
         </Button>
       </div>
     );

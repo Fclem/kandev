@@ -28,6 +28,7 @@ import { useTerminalSearch } from "./use-terminal-search";
 import { TerminalSearchBar } from "./terminal-search-bar";
 import { usePanelSearch } from "@/hooks/use-panel-search";
 import { useTerminalBusyTracking } from "./use-terminal-busy-tracking";
+import { useTranslation } from "react-i18next";
 
 type BaseProps = {
   autoFocus?: boolean;
@@ -142,6 +143,7 @@ function computeCanConnect(
 
 // eslint-disable-next-line max-lines-per-function -- wires many hooks + refs; each block is already its own hook
 export function PassthroughTerminal(props: PassthroughTerminalProps) {
+  const { t } = useTranslation();
   const {
     mode,
     label,
@@ -282,7 +284,7 @@ export function PassthroughTerminal(props: PassthroughTerminalProps) {
         <PanelLoadingState
           testId="passthrough-loading"
           className="absolute inset-0 bg-background"
-          label={mode === "agent" ? "Preparing workspace..." : "Connecting terminal..."}
+          label={mode === "agent" ? t("task:preparingWorkspace") : t("task:connectingTerminal")}
         />
       )}
     </div>

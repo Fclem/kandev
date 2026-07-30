@@ -229,9 +229,10 @@ function AttentionStatusGroup({
   issueUrl?: string;
   issueNumber?: number;
 }) {
+  const { t } = useTranslation();
   return (
     <TopbarCluster
-      label="Task status and attention"
+      label={t("task:taskStatusAndAttention")}
       className={[
         "[&_button]:h-7",
         "[&_button]:text-xs",
@@ -305,10 +306,11 @@ function TopbarToolsGroup({
   onToggleDebugOverlay?: () => void;
   isArchived?: boolean;
 }) {
+  const { t } = useTranslation();
   const showDebugToggle = isDebugUI() && onToggleDebugOverlay;
 
   return (
-    <TopbarCluster label="Task tools" className="[&_button]:h-7 [&_button]:text-xs">
+    <TopbarCluster label={t("task:taskTools")} className="[&_button]:h-7 [&_button]:text-xs">
       {!isArchived && (
         <>
           <LayoutPresetSelector />
@@ -362,7 +364,7 @@ function TopBarRight({
     <div className="flex items-center justify-self-end gap-2 [&_button]:whitespace-nowrap">
       <TopbarMetrics activeSessionId={activeSessionId} size="sm" />
       {!isArchived && (
-        <TopbarCluster label="Plugin top bar actions" className="[&_button]:h-7 [&_button]:text-xs">
+        <TopbarCluster label={t("task:pluginTopBarActions")} className="[&_button]:h-7 [&_button]:text-xs">
           <TaskTopBarPluginActions
             sessionId={activeSessionId ?? null}
             taskId={taskId ?? null}
@@ -372,12 +374,12 @@ function TopBarRight({
         </TopbarCluster>
       )}
       {isArchived && (
-        <TopbarCluster label="Unarchive task" className="[&_button]:h-7 [&_button]:text-xs">
+        <TopbarCluster label={t("common:unarchiveTask")} className="[&_button]:h-7 [&_button]:text-xs">
           <TaskUnarchiveButton taskId={taskId} onUnarchived={onTaskUnarchived} />
         </TopbarCluster>
       )}
       {officeTaskHref && (
-        <TopbarCluster label="Open in office view" className="[&_a]:h-7 [&_a]:text-xs">
+        <TopbarCluster label={t("task:openInOfficeView")} className="[&_a]:h-7 [&_a]:text-xs">
           <Button asChild size="sm" variant="outline" className="h-7 cursor-pointer px-2">
             <Link href={officeTaskHref}>{t("task:openInOfficeView")}</Link>
           </Button>

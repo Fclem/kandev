@@ -101,6 +101,7 @@ function TunnelToggleButton({
   onStop: () => void;
   onToggleForm: () => void;
 }) {
+  const { t } = useTranslation();
   const Icon = isTunnelActive ? IconPlugConnectedX : IconPlugConnected;
   return (
     <Tooltip>
@@ -119,7 +120,7 @@ function TunnelToggleButton({
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{isTunnelActive ? "Stop tunnel" : "Start tunnel"}</TooltipContent>
+      <TooltipContent>{isTunnelActive ? t("task:stopTunnel") : t("task:startTunnel")}</TooltipContent>
     </Tooltip>
   );
 }
@@ -150,16 +151,17 @@ function PortUrlRow({
 }
 
 function PortUrlRows({ proxyUrl, tunnelUrl }: { proxyUrl: string; tunnelUrl: string | null }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1 overflow-hidden">
       <PortUrlRow
-        label="Proxy"
+        label={t("task:proxy")}
         tip="Path-based proxy. Works for APIs but may break web apps that expect to be served at /."
         url={proxyUrl}
       />
       {tunnelUrl && (
         <PortUrlRow
-          label="Tunnel"
+          label={t("task:tunnel")}
           tip="Dedicated port tunnel. App is served at /, so assets and routing work correctly."
           url={tunnelUrl}
           variant="default"
@@ -538,6 +540,7 @@ export function PortForwardButton({
   sessionId?: string | null;
   isAgentctlReady?: boolean;
 }) {
+  const { t } = useTranslation();
   const [activeTunnels, setActiveTunnelsRaw] = useState<Map<number, number>>(new Map());
   const hasActiveTunnels = activeTunnels.size > 0;
 
@@ -575,7 +578,7 @@ export function PortForwardButton({
         <TooltipContent>
           {hasActiveTunnels
             ? `Port Forwarding (${activeTunnels.size} tunnel${activeTunnels.size > 1 ? "s" : ""} active)`
-            : "Port Forwarding"}
+            : t("task:portForwarding2")}
         </TooltipContent>
       </Tooltip>
       <PortForwardDialogContent

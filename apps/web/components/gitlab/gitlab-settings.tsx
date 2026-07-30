@@ -295,7 +295,7 @@ export function GitLabCredentialsForm(props: GitLabCredentialsFormProps) {
               type="button"
               onClick={() => setShowToken((value) => !value)}
               className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-              aria-label={showToken ? "Hide token" : "Show token"}
+              aria-label={showToken ? t("gitlab:hideToken") : t("gitlab:showToken")}
             >
               {showToken ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
             </button>
@@ -431,7 +431,7 @@ function GitLabConnectionCard(props: ConnectionCardProps) {
   return (
     <SettingsSection
       title="GitLab"
-      description="Connect a GitLab account so kandev can open merge requests, read review discussions, and reply to / resolve them on your behalf."
+      description={t("gitlab:connectAGitlabAccountSoKandev")}
       icon={<IconBrandGitlab className="h-4 w-4" />}
       action={
         <Button

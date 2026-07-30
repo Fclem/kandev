@@ -147,7 +147,7 @@ function TaskGitHubIssueActions({
           disabled={submitting}
           data-testid="task-github-issue-submit"
         >
-          {submitting ? "Saving" : "Save"}
+          {submitting ? t("task:saving2") : t("task:save")}
         </Button>
       </div>
     </DialogFooter>
@@ -160,6 +160,7 @@ export function TaskGitHubIssueDialog({
   task,
   repositories,
 }: TaskGitHubIssueDialogProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -216,11 +217,11 @@ export function TaskGitHubIssueDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{currentLabel ? "Change GitHub issue" : "Link GitHub issue"}</DialogTitle>
+          <DialogTitle>{currentLabel ? t("task:changeGithubIssue") : t("task:linkGithubIssue")}</DialogTitle>
           <DialogDescription>
             {inferredRepo
               ? `Use a full issue URL or number for ${inferredRepo.owner}/${inferredRepo.repo}.`
-              : "Use a full GitHub issue URL for this task."}
+              : t("task:useAFullGithubIssueUrl")}
           </DialogDescription>
         </DialogHeader>
         <TaskGitHubIssueFields

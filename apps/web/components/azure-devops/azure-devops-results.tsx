@@ -49,7 +49,7 @@ export function AzureDevOpsWorkItemResults({
             </div>
             <div className="break-words text-sm font-medium">{item.title}</div>
             <div className="text-xs text-muted-foreground">
-              {item.assignedTo || "Unassigned"}
+              {item.assignedTo || t("azureDevops:unassigned")}
               {item.areaPath ? ` · ${item.areaPath}` : ""}
             </div>
           </div>

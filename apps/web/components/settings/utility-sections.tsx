@@ -135,7 +135,7 @@ export function DefaultModelSection({
               onModelChange={(v) => onDefaultChange(defaultAgentId, v)}
               disabled={!defaultAgentId}
               placeholder={t("common:selectModel")}
-              ariaLabel="Default utility model settings"
+              ariaLabel={t("settings:defaultUtilityModelSettings")}
             />
           </div>
         </div>
@@ -228,6 +228,7 @@ type CustomAgentRowProps = {
 };
 
 export function CustomAgentRow({ agent, onEdit, onDelete }: CustomAgentRowProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between py-3 px-3 rounded hover:bg-muted/50">
       <div className="min-w-0 flex-1">
@@ -235,7 +236,7 @@ export function CustomAgentRow({ agent, onEdit, onDelete }: CustomAgentRowProps)
         <p className="text-xs text-muted-foreground truncate">{agent.description}</p>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">{agent.model || "Not configured"}</span>
+        <span className="text-xs text-muted-foreground">{agent.model || t("settings:notConfigured2")}</span>
         <Button
           variant="ghost"
           size="sm"

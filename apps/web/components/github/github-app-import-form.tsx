@@ -146,7 +146,7 @@ function PrepareImportForm(props: {
           {t("github:kandevFirstReservesExactCallbackAnd")}
         </p>
       </div>
-      <Field label="Public Kandev URL" error={props.error}>
+      <Field label={t("github:publicKandevUrl")} error={props.error}>
         <Input
           className="h-11"
           type="url"

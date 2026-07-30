@@ -12,6 +12,7 @@ import {
 } from "@kandev/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 export type MultiSelectItem = {
   id: string;
@@ -69,6 +70,7 @@ export function MultiSelectPopover<T extends MultiSelectItem>({
   searchPlaceholder = "Search...",
   testId,
 }: MultiSelectPopoverProps<T>) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   const selected = useMemo(
@@ -108,7 +110,7 @@ export function MultiSelectPopover<T extends MultiSelectItem>({
           <CommandList>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             {selected.length > 0 && (
-              <CommandGroup heading="Selected">
+              <CommandGroup heading={t("task:selected3")}>
                 {selected.map((item) => (
                   <CommandItem
                     key={item.id}
@@ -127,7 +129,7 @@ export function MultiSelectPopover<T extends MultiSelectItem>({
               </CommandGroup>
             )}
             {addable.length > 0 && (
-              <CommandGroup heading={selected.length > 0 ? "Add more" : undefined}>
+              <CommandGroup heading={selected.length > 0 ? t("task:addMore") : undefined}>
                 {addable.map((item) => (
                   <CommandItem
                     key={item.id}

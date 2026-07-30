@@ -52,7 +52,7 @@ export function ImportWorkflowsDialog({
             <Label>{t("settings:orPasteYaml")}</Label>
             <Textarea
               placeholder={
-                "version: 1\ntype: kandev_workflow\nworkflows:\n  - name: My Workflow\n    steps: [...]"
+                t("settings:version1TypeKandevWorkflowWorkflows")
               }
               value={importYaml}
               onChange={(e) => onImportYamlChange(e.target.value)}

@@ -49,6 +49,7 @@ type DesktopToolbarProps = ChatInputToolbarProps & {
 };
 
 function ToolbarExpandToggle(props: { isExpanded: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -56,7 +57,7 @@ function ToolbarExpandToggle(props: { isExpanded: boolean; onToggle: () => void 
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={props.isExpanded ? "Collapse toolbar" : "More toolbar actions"}
+          aria-label={props.isExpanded ? t("task:collapseToolbar") : t("task:moreToolbarActions")}
           aria-expanded={props.isExpanded}
           className="h-7 w-7 cursor-pointer hover:bg-muted/40"
           data-testid="toolbar-overflow-menu"
@@ -69,7 +70,7 @@ function ToolbarExpandToggle(props: { isExpanded: boolean; onToggle: () => void 
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{props.isExpanded ? "Collapse" : "More actions"}</TooltipContent>
+      <TooltipContent>{props.isExpanded ? t("task:collapse") : t("task:moreActions")}</TooltipContent>
     </Tooltip>
   );
 }

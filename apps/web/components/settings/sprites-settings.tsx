@@ -139,6 +139,7 @@ function TokenBadge({ configured, connected }: { configured: boolean; connected:
 }
 
 function TestResultDisplay({ result }: { result: SpritesTestResult }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-md border p-3 space-y-2">
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -147,7 +148,7 @@ function TestResultDisplay({ result }: { result: SpritesTestResult }) {
         ) : (
           <IconX className="h-4 w-4 text-red-600" />
         )}
-        {result.success ? "Connection test passed" : "Connection test failed"}
+        {result.success ? t("settings:connectionTestPassed") : t("settings:connectionTestFailed")}
         <span className="text-muted-foreground font-normal">
           <Trans i18nKey="settings:ms" values={{ total_duration_ms: result.total_duration_ms }}>
             ({result.total_duration_ms}ms)

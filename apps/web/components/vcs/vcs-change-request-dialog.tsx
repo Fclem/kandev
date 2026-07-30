@@ -109,7 +109,7 @@ export function VcsChangeRequestDialog(props: VcsChangeRequestDialogProps) {
             ) : (
               <>
                 <IconGitPullRequest className="h-4 w-4 mr-2" />
-                {props.branchPushed ? "Retry" : "Create"} {terms.shortName}
+                {props.branchPushed ? t("common:retry") : t("integrations:create")} {terms.shortName}
               </>
             )}
           </Button>

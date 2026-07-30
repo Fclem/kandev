@@ -159,14 +159,14 @@ function CreateAppFields(props: CreateFieldsProps) {
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Name in Kandev" error={props.errors.displayName}>
+        <Field label={t("github:nameInKandev")} error={props.errors.displayName}>
           <Input
             className="h-11"
             value={props.displayName}
             onChange={(event) => props.onDisplayName(event.target.value)}
           />
         </Field>
-        <Field label="GitHub owner login" error={props.errors.ownerLogin}>
+        <Field label={t("github:githubOwnerLogin")} error={props.errors.ownerLogin}>
           <Input
             className="h-11"
             value={props.ownerLogin}
@@ -190,7 +190,7 @@ function CreateAppFields(props: CreateFieldsProps) {
           </Trans>
         </Label>
       </RadioGroup>
-      <Field label="Public Kandev URL" error={props.errors.publicBaseUrl}>
+      <Field label={t("github:publicKandevUrl")} error={props.errors.publicBaseUrl}>
         <Input
           className="h-11"
           type="url"

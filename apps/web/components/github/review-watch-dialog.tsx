@@ -186,8 +186,8 @@ function WorkspacePicker({
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
     <SelectField
-      label="Workspace"
-      description="Tasks created by this watcher land in the selected workspace."
+      label={t("common:workspace")}
+      description={t("github:tasksCreatedByThisWatcherLand")}
       value={value}
       onChange={onChange}
       placeholder={t("github:selectWorkspace")}
@@ -400,16 +400,16 @@ function WorkflowFields({
   return (
     <div className="grid grid-cols-2 gap-4">
       <SelectField
-        label="Workflow"
-        description="The workflow to create tasks in."
+        label={t("common:workflow")}
+        description={t("github:theWorkflowToCreateTasksIn")}
         value={form.workflowId}
         onChange={onWorkflowChange}
         placeholder={t("common:selectWorkflow")}
         items={workflows.map((w) => ({ id: w.id, label: w.name }))}
       />
       <SelectField
-        label="Workflow Step"
-        description="Initial step for new tasks. Auto-start is set on the step."
+        label={t("github:workflowStep")}
+        description={t("github:initialStepForNewTasksAuto")}
         value={form.workflowStepId}
         onChange={(v) => setForm((prev) => ({ ...prev, workflowStepId: v }))}
         placeholder={stepPlaceholder(form.workflowId, stepsLoading, workflowSteps.length)}
@@ -448,8 +448,8 @@ function ProfileFields({
   return (
     <div className="grid grid-cols-2 gap-4">
       <SelectField
-        label="Agent Profile"
-        description="Optional — falls back to step default."
+        label={t("github:agentProfile")}
+        description={t("github:optionalFallsBackToStepDefault2")}
         value={form.agentProfileId || STEP_DEFAULT}
         onChange={(v) => setForm((prev) => ({ ...prev, agentProfileId: resolveProfileId(v) }))}
         placeholder={STEP_DEFAULT_LABEL}
@@ -526,7 +526,7 @@ function SettingsFields({
         />
       </div>
       <SelectField
-        label="Cleanup behavior"
+        label={t("github:cleanupBehavior")}
         description={
           CLEANUP_POLICY_OPTIONS.find((p) => p.id === form.cleanupPolicy)?.description ?? ""
         }
@@ -619,7 +619,7 @@ export function ReviewWatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-full sm:w-[900px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{watch ? "Edit Review Watch" : "Create Review Watch"}</DialogTitle>
+          <DialogTitle>{watch ? t("github:editReviewWatch") : t("github:createReviewWatch")}</DialogTitle>
           <DialogDescription>{t("github:automaticallyCreateTasksWhenNewPull")}</DialogDescription>
         </DialogHeader>
         <WatchFormFields

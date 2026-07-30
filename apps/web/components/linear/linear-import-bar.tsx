@@ -23,18 +23,18 @@ export function LinearImportBar({ workspaceId, disabled, onImport }: LinearImpor
     <ValidatedPopover
       triggerStyle="ghost-icon"
       triggerIcon={<IconHexagon className="h-4 w-4" />}
-      triggerAriaLabel="Import from Linear"
+      triggerAriaLabel={t("linear:importFromLinear")}
       triggerDisabled={disabled}
       testIdPrefix="linear-import"
-      tooltip="Import from Linear issue URL or identifier"
+      tooltip={t("linear:importFromLinearIssueUrlOr")}
       align="start"
-      headline="Import Linear issue"
+      headline={t("linear:importLinearIssue")}
       placeholder={t("linear:eng123OrPasteIssueUrl")}
       extractKey={(raw) => raw.toUpperCase().match(LINEAR_KEY_RE)?.[0] ?? null}
-      validationHint="Paste a Linear issue URL or identifier (ENG-123)"
+      validationHint={t("linear:pasteALinearIssueUrlOr")}
       fetch={(key) => getLinearIssue(key, { workspaceId })}
       onSuccess={(_key, issue) => onImport(issue)}
-      submitLabel="Import"
+      submitLabel={t("linear:import")}
       submittingLabel="Loading..."
     />
   );

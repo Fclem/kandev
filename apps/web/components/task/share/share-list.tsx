@@ -81,7 +81,7 @@ function ShareRow({ share, onRevoked }: { share: Share; onRevoked: () => void })
           aria-label={t("task:revokeShare")}
         >
           <IconTrash className="h-3 w-3" />
-          {busy ? "Revoking…" : "Revoke"}
+          {busy ? t("task:revoking") : t("task:revoke")}
         </Button>
       </div>
       {err && <span className="text-xs text-destructive">{err}</span>}

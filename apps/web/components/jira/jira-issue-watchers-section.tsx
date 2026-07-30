@@ -185,7 +185,7 @@ export function JiraIssueWatchersSection() {
     <SettingsSection
       icon={<IconBellRinging className="h-5 w-5" />}
       title={t("jira:jiraWatchers")}
-      description="Poll a JQL query and auto-create a Kandev task for each newly-matching ticket."
+      description={t("jira:pollAJqlQueryAndAuto2")}
       action={
         <Button size="sm" onClick={openCreate} className="cursor-pointer">
           <Trans i18nKey="jira:newWatcher">
@@ -229,7 +229,7 @@ export function JiraIssueWatchersSection() {
         <ResetWatchDialog
           open
           onOpenChange={resetCtrl.onOpenChange}
-          integrationLabel="JIRA watcher"
+          integrationLabel={t("jira:jiraWatcher")}
           previewLoader={resetCtrl.previewLoader}
           onConfirm={resetCtrl.confirmReset}
         />

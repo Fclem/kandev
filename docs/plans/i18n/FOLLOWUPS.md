@@ -4,6 +4,9 @@ Issues surfaced during the migration that wrapping strings alone does not fix.
 The lint guard is now an error in `apps/web/eslint.config.mjs` (task-40) and
 reports zero across `components/` and `app/`.
 
+Zero is not the same as complete: the guard only inspects JSX, so copy held in
+module-scope config objects is invisible to it. §5 is the open work.
+
 ---
 
 ## 1. Type-to-confirm sentinels break under translation — FIXED
@@ -81,7 +84,9 @@ the DB, and `DEFAULT_CUSTOM_STEPS` workflow step names.
 ## 3. Module-scope translation is not locale-reactive — FIXED
 
 `t()` at module scope resolves once at import, before a locale is active, and
-never updates on a locale switch. Fixed:
+never updates on a locale switch. This is the same failure mode as §5, which
+tracks the config objects still holding raw English for exactly this reason.
+Fixed:
 
 - `components/kanban/swimlane-kanban-content.tsx` — `ORPHAN_STEP` became
   `orphanStep()`, resolved at call time (2 consumers updated).
@@ -103,3 +108,54 @@ Under Lingui, `{{`/`}}` in copy was parsed as ICU syntax and had to be hoisted
 and interpolated. i18next's interpolation is `{{name}}` and the affected strings
 now live as catalog values rather than inline macro arguments, so the hazard is
 gone. The `i18n:check` gate would catch a malformed placeholder as a missing key.
+
+---
+
+## 5. Display copy in module-scope config objects — OPEN
+
+The lint guard reports zero, but it only sees JSX. Roughly **325 English strings
+across 58 files** live in module-scope config arrays that the guard cannot reach:
+
+```ts
+const STATUS_OPTIONS: StatusOption[] = [
+  { value: "backlog", label: "Backlog" },   // rendered as {opt.label}
+  ...
+];
+```
+
+Enumerate them with:
+
+```bash
+cd apps/web && DUMP_MODULE_SCOPE=1 node scripts/externalize-strings.mjs components app
+```
+
+`externalize-strings.mjs` declines these deliberately. Wrapping the literal as
+`label: t("task:backlog")` would call `t()` at **import** time, pinning the copy
+to whatever locale was active at boot and never updating on a switch — a worse
+bug than the hardcoded string, because it looks correct until someone switches
+language.
+
+**The fix is to store the key as data and translate at the render site**, which is
+the pattern ~50 config objects in the codebase already use
+(`label: "common:addTerminalPanel"` + `t(item.label)` where it renders).
+
+`scripts/externalize-config-labels.mjs` does the mechanical half: it rewrites the
+literal to its catalog key and **renames the property** (`label` -> `labelKey`),
+so a consumer still reading `.label` fails to compile rather than rendering a raw
+key to a user. Run over `components app` it externalizes 496 properties and
+leaves **341 compile errors across 98 files** — each one a render site that needs
+`t(...)` added.
+
+**Why it is not done yet:** 31 of those 98 files are *not* files the codemod
+touched. Shared config modules (`my-github`/`my-gitlab` presets, jira ticket
+shapes) declare the object type in one file and build the literal in another, and
+derived aggregates keep their `Record<K, string>` type while their values become
+keys — so those consumers need the rename applied across the module boundary, plus
+their tests updated. That is a coherent piece of work, but it is an API refactor
+across module boundaries rather than a sweep, and it should land as its own change
+with the tree green at each step.
+
+Suggested order: run the codemod one directory at a time, fix the compile errors
+it produces, and rename any derived aggregate (`STATUS_LABELS` ->
+`STATUS_LABEL_KEYS`) so its consumers surface as errors too rather than silently
+rendering keys.

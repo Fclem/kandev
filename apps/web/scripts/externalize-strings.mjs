@@ -13,6 +13,10 @@
  * docs/plans/i18n/FOLLOWUPS.md for the type-to-confirm incident this prevents.
  *
  * Usage: node scripts/externalize-strings.mjs [--write] <dir|file> [...]
+ *
+ * `DUMP_MODULE_SCOPE=1` lists the module-scope config literals this script
+ * declines (see `displayContext`), one per line as `path<TAB>literal`. That is
+ * the work-list for the follow-up in docs/plans/i18n/FOLLOWUPS.md §3.
  */
 import { parseSync } from "@babel/core";
 import fs from "node:fs";
@@ -532,7 +536,7 @@ function displayContext(node, ancestors) {
   }
 }
 
-function handleJsxExpressionLiteral(node, ancestors, { ns, sentinels, edits, noteHost }) {
+function handleJsxExpressionLiteral(node, ancestors, { ns, rel, sentinels, edits, noteHost }) {
   if (node.type !== "StringLiteral" || !looksLikeCopy(node.value)) return;
   if (sentinels.has(node.value)) {
     report.skippedSentinel += 1;
@@ -552,6 +556,9 @@ function handleJsxExpressionLiteral(node, ancestors, { ns, sentinels, edits, not
   if (context === null) return;
   if (context === "module-scope") {
     report.skippedModuleScope += 1;
+    if (process.env.DUMP_MODULE_SCOPE) {
+      console.error(`MODULE_SCOPE\t${rel}\t${JSON.stringify(node.value)}`);
+    }
     return;
   }
   const call = `t("${qualify(ns, keyFor(ns, node.value))}")`;
@@ -665,7 +672,7 @@ function transform(file) {
     }
   };
 
-  const ctx = { ns, sentinels, edits, noteHost };
+  const ctx = { ns, rel, sentinels, edits, noteHost };
   const ancestors = [];
   const visit = (node, parent) => {
     const isFn = FUNCTION_TYPES.has(node.type);

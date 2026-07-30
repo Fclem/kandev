@@ -167,7 +167,7 @@ Wave 4 — Migration batch C (integrations + long tail, parallel candidates):
 - [x] [task-36-mig-tasks-auth-demo-longtail](task-36-mig-tasks-auth-demo-longtail.md) app/tasks/ app/t/ app/actions/ app/auth/ app/demo/ + watches/ release-notes/ agent/ search/ config-chat/ onboarding/ session/
 
 Wave 5 — Close-out (sequential, after all M-* clean):
-- [x] [task-40-lint-flip-e2e-coverage](task-40-lint-flip-e2e-coverage.md)  guard flipped warn→error in eslint.config.mjs; `<Trans>` index check added to i18n:check
+- [x] [task-40-lint-flip-e2e-coverage](task-40-lint-flip-e2e-coverage.md)  guard flipped warn→error in eslint.config.mjs; `<Trans>` index check added to i18n:check (module-scope config copy remains — FOLLOWUPS §5)
 ```
 
 Default execution is sequential in the primary conversation; the migration waves

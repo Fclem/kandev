@@ -261,7 +261,11 @@ func TestCorrectStaleBase_CurrentBaseUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("computeMergeBase(main) failed: %v", err)
 	}
-	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "main", true)
+	// A non-integration target with no live upstream clears the first guard, so
+	// the integration-merge-base equality branch is the one under test: because
+	// feature/x branches straight off current main, integrationMergeBase equals
+	// base, exercising the `integ == baseCommit → unchanged` path.
+	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "feature/gone", false)
 	if corrected != base {
 		t.Errorf("expected unchanged base %s, got %s", base, corrected)
 	}

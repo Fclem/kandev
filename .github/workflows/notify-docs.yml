@@ -87,6 +87,7 @@ jobs:
       - name: Build preview from pull request docs
         working-directory: landing
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           KANDEV_DOCS_SOURCE_PATH: ${{ github.workspace }}/docs
         run: pnpm run build:pages
 

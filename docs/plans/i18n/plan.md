@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/platform/i18n.md
 created: 2026-07-27
-status: draft
+status: building
 ---
 
 # Implementation Plan: Internationalization (i18n)
@@ -184,3 +184,36 @@ are authorized for multi-agent orchestration by the user for this feature.
 - Catalog regeneration (`lingui extract`) is run once in Wave 5 (and by the
   developer as needed); individual M-* tasks do **not** commit catalog changes,
   avoiding merge conflicts on `messages.po`.
+
+
+---
+
+## Actual state (updated after the sweep)
+
+The plan above described the original Lingui buildout. What shipped:
+
+- **Library**: react-i18next, keyed `namespace:key` (superseded Lingui — see
+  `docs/specs/platform/i18n.md` "Resolved decisions").
+- **Frontend**: 3,721 catalog entries across 22 namespaces. `lint:i18n` findings
+  went 2,674 -> 596; the remainder is inventoried in
+  [REMAINING.md](REMAINING.md) with the reason each was declined.
+- **Backend**: `apps/backend/internal/i18n` — locale resolution
+  (cookie -> Accept-Language -> `en`), embedded catalogs, `pseudo` generated from
+  `en`, and `Normalize` shared with `<html lang>`. Scope is the copy Go renders
+  directly to a browser; diagnostic API errors stay English by design
+  (contract in `docs/i18n.md`).
+- **Gates**: `pnpm run i18n:check` (key/catalog drift), `pnpm run lint:i18n`
+  (hardcoded strings), the pseudo-locale oracle, and
+  `lib/i18n/confirm-tokens.test.ts` (sentinel safety).
+
+### Tools kept for the remaining work
+- `scripts/externalize-strings.mjs` — raw literal -> `t("ns:key")`. Declines
+  logic sentinels and sentence fragments.
+- `scripts/wrap-trans.mjs` — mixed-content sentence -> `<Trans i18nKey>`.
+  Declines English plural hacks and thin sentences.
+- `scripts/generate-pseudo-locale.mjs`, `scripts/check-i18n-keys.mjs`.
+
+### Not done
+- The 596 findings in [REMAINING.md](REMAINING.md).
+- The three display-strings-as-sentinels cases in [FOLLOWUPS.md](FOLLOWUPS.md#2).
+- No second human language ships; `en` + `pseudo` only (as specced).

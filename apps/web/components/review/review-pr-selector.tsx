@@ -55,7 +55,10 @@ export function ReviewPRSelector({
           variant="outline"
           data-testid={`${testIdPrefix}-trigger`}
           data-pr-number={selectedPR.pr_number}
-          aria-label={`Review pull request ${selectedPR.repo} #${selectedPR.pr_number}`}
+          aria-label={t("review:reviewPullRequest2", {
+            repo: selectedPR.repo,
+            prnumber: selectedPR.pr_number,
+          })}
           className={cn(
             "max-w-full cursor-pointer gap-1.5 px-2 transition-transform active:scale-[0.96]",
             triggerHeight,

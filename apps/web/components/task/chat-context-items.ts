@@ -8,6 +8,7 @@ import type {
   WalkthroughComment,
   AgentMessageComment,
 } from "@/lib/state/slices/comments";
+import { t } from "@/lib/i18n";
 
 const PLAN_CONTEXT_PATH = "plan:context";
 
@@ -74,7 +75,7 @@ function buildPlanContextItem(params: BuildContextItemsParams): ContextItem | nu
   return {
     kind: "plan",
     id: PLAN_CONTEXT_PATH,
-    label: "Plan",
+    label: t("task:plan"),
     taskId: taskId ?? undefined,
     pinned: planFile?.pinned,
     onRemove: sid ? () => removeContextFile(sid, PLAN_CONTEXT_PATH) : undefined,
@@ -187,7 +188,7 @@ function buildWalkthroughCommentItems(params: BuildContextItemsParams): ContextI
     {
       kind: "walkthrough-comment" as const,
       id: "walkthrough-comments",
-      label: `${walkthroughComments.length} walkthrough note${walkthroughComments.length !== 1 ? "s" : ""}`,
+      label: t("task:walkthroughNote", { count: walkthroughComments.length }),
       comments: walkthroughComments,
       onRemove: handleClearWalkthroughComments,
       onRemoveComment: (id: string) => handleRemoveWalkthroughComment(id),
@@ -202,7 +203,7 @@ function buildAgentMessageCommentItems(params: BuildContextItemsParams): Context
     {
       kind: "agent-message-comment" as const,
       id: "agent-message-comments",
-      label: `${messageComments.length} message comment${messageComments.length === 1 ? "" : "s"}`,
+      label: t("task:messageComment", { count: messageComments.length }),
       comments: messageComments,
       onRemove: handleClearMessageComments,
     },
@@ -246,7 +247,7 @@ export function buildContextItems(params: BuildContextItemsParams): ContextItem[
     items.push({
       kind: "plan-comment",
       id: "plan-comments",
-      label: `${params.planComments.length} plan comment${params.planComments.length !== 1 ? "s" : ""}`,
+      label: t("task:planComment", { count: params.planComments.length }),
       comments: params.planComments,
       onRemove: params.handleClearPlanComments,
       onOpen: params.addPlan,

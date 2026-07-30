@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import type { KanbanState } from "@/lib/state/slices";
 import { findTaskInSnapshots } from "@/lib/kanban/find-task";
 import type { ExternalLinkProvider } from "./task-external-link-dialog";
+import { useTranslation } from "react-i18next";
 
 type StoreApi = {
   getState: () => {
@@ -27,6 +28,7 @@ export type SidebarExternalLinkTarget = {
 };
 
 export function useSidebarLinkActions(store: StoreApi) {
+  const { t } = useTranslation();
   const [linkingPullRequestTask, setLinkingPullRequestTask] = useState<SidebarLinkTarget | null>(
     null,
   );
@@ -43,7 +45,7 @@ export function useSidebarLinkActions(store: StoreApi) {
       const task = findTaskInSnapshots(taskId, state.kanbanMulti.snapshots, state.kanban.tasks);
       return {
         id: taskId,
-        title: task?.title ?? fallbackTitle ?? "this task",
+        title: task?.title ?? fallbackTitle ?? t("task:thisTask"),
         repositoryId: task?.repositoryId,
         issueUrl: task?.issueUrl,
         issueNumber: task?.issueNumber,

@@ -162,7 +162,7 @@ export function AgentsMultiPicker({
             remove();
           }
         }}
-        aria-label={`Remove ${item.name}`}
+        aria-label={t("task:remove3", { name: item.name })}
       >
         <IconX className="h-2.5 w-2.5" />
       </span>

@@ -181,6 +181,7 @@ function MRMenuButton({
   onLink: () => void;
   onUnlink: (associationId: string) => void;
 }) {
+  const { t } = useTranslation();
   const single = mrs.length === 1 ? mrs[0] : null;
   const addMRPanel = useDockviewStore((state) => state.addMRPanel);
   const dockviewReady = useDockviewStore((state) => state.api !== null);
@@ -217,8 +218,8 @@ function MRMenuButton({
           className={mrTriggerClass(compact, mobile)}
           aria-label={
             single
-              ? `GitLab merge request !${single.mr_iid}`
-              : `${mrs.length} GitLab merge requests`
+              ? t("gitlab:gitlabMergeRequest", { mriid: single.mr_iid })
+              : t("gitlab:gitlabMergeRequests", { length: mrs.length })
           }
         >
           <MRTriggerContent compact={compact} single={single} count={mrs.length} />

@@ -190,9 +190,16 @@ union. When a prop is both display copy and logic (`label: "Reviewers" |
 "Assignees"`), split it into a `kind`/`origin` discriminant plus a translated
 label rather than translating in place.
 
+Never write a plural ending yourself: use `t(key, { count })` with `_one`/`_other`
+keys. Passing the morpheme as a value (`{ s: n === 1 ? "" : "s" }`) is
+untranslatable — the plural rule ends up at the call site.
+
 `pnpm lint` fails on hardcoded UI strings (`i18next/no-literal-string` is an
-error; options live in `eslint.i18n.options.mjs`), `pnpm run i18n:check` gates
-key/catalog drift and `<Trans>` tag indices, and the **pseudo-locale**
+error; options live in `eslint.i18n.options.mjs`) but **only sees plain literals
+in JSX** — template literals, `confirm()` arguments and copy in plain `.ts`
+helpers are invisible to it, so a clean lint is not proof a file is done.
+`pnpm run i18n:check` gates key/catalog drift, `<Trans>` tag indices and inline
+plurals, and the **pseudo-locale**
 (Settings → Appearance, dev/e2e) is the completeness check — any plain-English
 text under it was never externalized. The tooling needs **Node 24**. Full guide:
 [`docs/i18n.md`](../../docs/i18n.md); spec:

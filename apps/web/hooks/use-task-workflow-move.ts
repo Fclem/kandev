@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { bulkMoveSelectedTasks } from "@/lib/api";
 import { useToast } from "@/components/toast-provider";
+import { useTranslation } from "react-i18next";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Failed to move task";
@@ -25,6 +26,7 @@ function movedDescription(movedCount: number, destination: "step" | "workflow") 
 }
 
 export function useTaskWorkflowMove() {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   return useCallback(
@@ -49,7 +51,7 @@ export function useTaskWorkflowMove() {
         });
       } catch (error) {
         toast({
-          title: "Failed to move task",
+          title: t("common:failedToMoveTask"),
           description: errorMessage(error),
           variant: "error",
         });

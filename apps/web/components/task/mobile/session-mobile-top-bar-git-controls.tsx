@@ -80,20 +80,21 @@ function useGitToast() {
         const result = await operation();
         if (result.success) {
           toast({
-            title: `${operationName} successful`,
-            description: result.output.slice(0, 200) || `${operationName} completed successfully`,
+            title: t("task:successful", { operationName }),
+            description:
+              result.output.slice(0, 200) || t("task:completedSuccessfully", { operationName }),
             variant: "success",
           });
         } else {
           toast({
-            title: `${operationName} failed`,
+            title: t("task:failed4", { operationName }),
             description: result.error || t("task:anErrorOccurred"),
             variant: "error",
           });
         }
       } catch (error) {
         toast({
-          title: `${operationName} failed`,
+          title: t("task:failed4", { operationName }),
           description: error instanceof Error ? error.message : t("task:anUnexpectedErrorOccurred"),
           variant: "error",
         });
@@ -324,8 +325,8 @@ export function PRDialog({
             <input
               id="pr-title-mobile"
               type="text"
-              aria-label={`${terminology.longName} title`}
-              placeholder={`${terminology.longName} title...`}
+              aria-label={t("task:title3", { longName: terminology.longName })}
+              placeholder={t("task:title4", { longName: terminology.longName })}
               value={prTitle}
               onChange={(e) => setPrTitle(e.target.value)}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -564,8 +565,11 @@ export function useMobileGitActions(
         if (result.success) {
           const terms = resolveChangeRequestTerminology(result.provider, defaultTerminology);
           toast({
-            title: draft ? `Draft ${terms.longName} created` : `${terms.longName} created`,
-            description: result.pr_url || `${terms.longName} created successfully`,
+            title: draft
+              ? t("task:draftCreated", { longName: terms.longName })
+              : t("task:created3", { longName: terms.longName }),
+            description:
+              result.pr_url || t("task:createdSuccessfully", { longName: terms.longName }),
             variant: "success",
           });
           if (result.pr_url) {
@@ -586,7 +590,7 @@ export function useMobileGitActions(
         setPrBranchPushed(false);
       } catch (e) {
         toast({
-          title: `Create ${defaultTerminology.shortName} failed`,
+          title: t("task:createFailed", { shortName: defaultTerminology.shortName }),
           description: e instanceof Error ? e.message : t("task:anErrorOccurred"),
           variant: "error",
         });

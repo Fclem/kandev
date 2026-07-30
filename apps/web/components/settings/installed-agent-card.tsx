@@ -102,7 +102,7 @@ function InstalledAgentIdentity({
         className="text-xs text-muted-foreground line-clamp-2 min-h-[2rem]"
         title={agent.matched_path ?? undefined}
       >
-        {agent.matched_path ? `Detected at ${agent.matched_path}` : ""}
+        {agent.matched_path ? t("settings:detectedAt", { matchedpath: agent.matched_path }) : ""}
       </p>
     </div>
   );

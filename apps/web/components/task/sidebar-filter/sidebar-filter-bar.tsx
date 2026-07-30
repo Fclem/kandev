@@ -35,7 +35,7 @@ function useSidebarFilterCommands(
     for (const view of views) {
       list.push({
         id: `sidebar-switch-view-${view.id}`,
-        label: `Switch sidebar view: ${view.name}`,
+        label: t("task:switchSidebarView", { name: view.name }),
         group: "Sidebar",
         keywords: ["view", "switch", "sidebar", view.name.toLowerCase()],
         action: () => setActiveView(view.id),
@@ -99,7 +99,7 @@ export function SidebarFilterBar() {
         data-disabled-reason={newViewDisabledReason ?? undefined}
         aria-label={
           newViewDisabledReason
-            ? `New view unavailable. ${newViewDisabledReason}`
+            ? t("task:newViewUnavailable", { newViewDisabledReason })
             : t("task:newView2")
         }
         title={newViewDisabledReason ?? undefined}

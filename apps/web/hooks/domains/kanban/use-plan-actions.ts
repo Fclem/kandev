@@ -13,12 +13,14 @@ import type {
   ChatInputContainerHandle,
   MessageAttachment,
 } from "@/components/task/chat/chat-input-container";
+import { useTranslation } from "react-i18next";
 
 const PLAN_CONTEXT_PATH = "plan:context";
 
 const AUTO_TRANSITION_ACTIONS = ["move_to_next", "move_to_previous", "move_to_step"];
 
 export function useNextWorkflowStep(taskId: string | null) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const workflowId = useAppStore((s) => s.kanban.workflowId);
   const steps = useAppStore((s) => s.kanban.steps);
@@ -82,7 +84,7 @@ export function useNextWorkflowStep(taskId: string | null) {
       return true;
     } catch (err) {
       console.error("Failed to proceed to next step:", err);
-      toast({ description: "Failed to proceed to next step", variant: "error" });
+      toast({ description: t("common:failedToProceedToNextStep"), variant: "error" });
       setMoveFromSessionId(null);
       return false;
     }
@@ -155,6 +157,7 @@ function useImplementPlan(
   clearPlanModeAfterSend: boolean,
   chatInputRef?: React.RefObject<ChatInputContainerHandle | null>,
 ) {
+  const { t } = useTranslation();
   const setTaskPlan = useAppStore((s) => s.setTaskPlan);
   const { toast } = useToast();
   return useCallback(async (): Promise<boolean> => {
@@ -207,7 +210,7 @@ function useImplementPlan(
       return true;
     } catch (err) {
       console.error("Failed to start implementation:", err);
-      toast({ description: "Failed to start implementing the plan", variant: "error" });
+      toast({ description: t("common:failedToStartImplementingThePlan"), variant: "error" });
       return false;
     }
   }, [

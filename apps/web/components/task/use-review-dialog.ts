@@ -18,6 +18,7 @@ import { getWebSocketClient } from "@/lib/ws/connection";
 import { useToast } from "@/components/toast-provider";
 import type { DiffComment } from "@/lib/diff/types";
 import type { FileInfo, GitStatusEntry } from "@/lib/state/slices/session-runtime/types";
+import { useTranslation } from "react-i18next";
 
 type ReviewGitStatusFiles = {
   files: Record<string, FileInfo> | null;
@@ -88,6 +89,7 @@ function useReviewGitStatusFiles(
 }
 
 export function useReviewDialog(effectiveSessionId: string | null) {
+  const { t } = useTranslation();
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const { toast } = useToast();
   const activeTaskId = useAppStore((state) => state.tasks.activeTaskId);
@@ -138,7 +140,7 @@ export function useReviewDialog(effectiveSessionId: string | null) {
           10000,
         )
         .catch(() => {
-          toast({ title: "Failed to send comments", variant: "error" });
+          toast({ title: t("task:failedToSendComments"), variant: "error" });
         });
       setReviewDialogOpen(false);
     },

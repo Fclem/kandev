@@ -27,6 +27,7 @@ export const WALKTHROUGH_STEP_BODY_CLASS =
   "prose prose-sm dark:prose-invert max-w-none text-left text-sm leading-6 [overflow-wrap:anywhere] [text-align:left] [&_li]:text-left [&_p]:my-2 [&_p]:text-left";
 
 function StepBody({ step, onOpenFile }: { step: WalkthroughStep; onOpenFile: () => void }) {
+  const { t } = useTranslation();
   const lineLabel = step.line_end ? `${step.line}–${step.line_end}` : `${step.line}`;
   const fileName = step.file.split("/").pop() || step.file;
   return (
@@ -39,7 +40,7 @@ function StepBody({ step, onOpenFile }: { step: WalkthroughStep; onOpenFile: () 
       <button
         type="button"
         onClick={onOpenFile}
-        title={`Open ${step.file}:${step.line}`}
+        title={t("diff:open", { file: step.file, line: step.line })}
         data-testid="walkthrough-step-file"
         className="mb-2.5 flex max-w-full cursor-pointer items-center gap-1.5 rounded-md bg-muted/60 px-2 py-1 text-xs font-medium hover:bg-muted"
       >

@@ -344,13 +344,16 @@ function SecretField({
 }
 
 function TestResultAlert({ result }: { result: TestJiraConnectionResult | null }) {
+  const { t } = useTranslation();
   if (!result) return null;
   return (
     <Alert variant={result.ok ? "default" : "destructive"}>
       <AlertDescription>
         {result.ok
-          ? `Connected as ${result.displayName || result.email || result.accountId}`
-          : `Failed: ${result.error}`}
+          ? t("jira:connectedAs", {
+              displayName: result.displayName || result.email || result.accountId,
+            })
+          : t("jira:failed", { error: result.error })}
       </AlertDescription>
     </Alert>
   );
@@ -411,41 +414,27 @@ function useJiraConfigRefresh(workspaceId: string, setConfig: (cfg: JiraConfig |
   }, [workspaceId, setConfig]);
 }
 
-function useJiraSettings(workspaceId: string) {
+/**
+ * Test / save / delete for the Jira config. Split out of `useJiraSettings` to
+ * keep that hook under the 100-line limit; the state itself stays there.
+ */
+function useJiraMutations({
+  workspaceId,
+  form,
+  setForm,
+  setConfig,
+  setTestResult,
+}: {
+  workspaceId: string;
+  form: FormState;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  setConfig: React.Dispatch<React.SetStateAction<JiraConfig | null>>;
+  setTestResult: React.Dispatch<React.SetStateAction<TestJiraConnectionResult | null>>;
+}) {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const [config, setConfig] = useState<JiraConfig | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<TestJiraConnectionResult | null>(null);
-  const health = configToHealth(config);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const cfg = await getJiraConfig({ workspaceId });
-      setConfig(cfg);
-      setForm(configToForm(cfg));
-    } catch (err) {
-      toast({ description: `Failed to load Jira config: ${String(err)}`, variant: "error" });
-    } finally {
-      setLoading(false);
-    }
-  }, [workspaceId, toast]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useJiraConfigRefresh(workspaceId, setConfig);
-
-  const update = useCallback(
-    <K extends keyof FormState>(key: K, value: FormState[K]) =>
-      setForm((prev) => ({ ...prev, [key]: value })),
-    [],
-  );
 
   const handleTest = useCallback(async () => {
     setTesting(true);
@@ -484,7 +473,7 @@ function useJiraSettings(workspaceId: string) {
       setTestResult(null);
       toast({ description: t("jira:jiraConfigurationSaved"), variant: "success" });
     } catch (err) {
-      toast({ description: `Save failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("jira:saveFailed", { err: String(err) }), variant: "error" });
       throw err;
     } finally {
       setSaving(false);
@@ -492,7 +481,7 @@ function useJiraSettings(workspaceId: string) {
   }, [workspaceId, form, toast]);
 
   const handleDelete = useCallback(async () => {
-    if (!confirm("Remove Jira configuration?")) return;
+    if (!confirm(t("jira:removeJiraConfiguration"))) return;
     try {
       await deleteJiraConfig({ workspaceId });
       setConfig(null);
@@ -500,9 +489,57 @@ function useJiraSettings(workspaceId: string) {
       setTestResult(null);
       toast({ description: t("jira:jiraConfigurationRemoved"), variant: "success" });
     } catch (err) {
-      toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("jira:deleteFailed", { err: String(err) }), variant: "error" });
     }
   }, [workspaceId, toast]);
+
+  return { saving, testing, handleTest, handleSave, handleDelete };
+}
+
+function useJiraSettings(workspaceId: string) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const [config, setConfig] = useState<JiraConfig | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const [loading, setLoading] = useState(true);
+  const [testResult, setTestResult] = useState<TestJiraConnectionResult | null>(null);
+  const health = configToHealth(config);
+  const { saving, testing, handleTest, handleSave, handleDelete } = useJiraMutations({
+    workspaceId,
+    form,
+    setForm,
+    setConfig,
+    setTestResult,
+  });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const cfg = await getJiraConfig({ workspaceId });
+      setConfig(cfg);
+      setForm(configToForm(cfg));
+    } catch (err) {
+      toast({
+        description: t("jira:failedToLoadJiraConfig", { err: String(err) }),
+        variant: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [workspaceId, toast]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useJiraConfigRefresh(workspaceId, setConfig);
+
+  const update = useCallback(
+    <K extends keyof FormState>(key: K, value: FormState[K]) =>
+      setForm((prev) => ({ ...prev, [key]: value })),
+    [],
+  );
+
   const discard = useCallback(() => setForm(configToForm(config)), [config]);
 
   return {

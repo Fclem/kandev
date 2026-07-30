@@ -220,14 +220,18 @@ function PollIntervalField({
 }
 
 function TestResultAlert({ result }: { result: TestSlackConnectionResult | null }) {
+  const { t } = useTranslation();
   if (!result) return null;
   const teamSuffix = result.teamName ? ` (${result.teamName})` : "";
   return (
     <Alert variant={result.ok ? "default" : "destructive"}>
       <AlertDescription>
         {result.ok
-          ? `Connected as ${result.displayName || result.userId}${teamSuffix}`
-          : `Failed: ${result.error}`}
+          ? t("common:connectedAs", {
+              displayName: result.displayName || result.userId,
+              teamSuffix,
+            })
+          : t("common:failed", { error: result.error })}
       </AlertDescription>
     </Alert>
   );
@@ -379,7 +383,7 @@ function useSettingsActions({
       setTestResult(null);
       toast({ description: t("common:slackConfigurationSaved"), variant: "success" });
     } catch (err) {
-      toast({ description: `Save failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("common:saveFailed", { err: String(err) }), variant: "error" });
       throw err;
     } finally {
       setSaving(false);
@@ -387,7 +391,7 @@ function useSettingsActions({
   }, [workspaceId, form, toast, setConfig, setForm, setTestResult]);
 
   const handleDelete = useCallback(async () => {
-    if (!confirm("Remove Slack configuration?")) return;
+    if (!confirm(t("common:removeSlackConfiguration"))) return;
     setDeleting(true);
     try {
       await deleteSlackConfig({ workspaceId });
@@ -396,7 +400,7 @@ function useSettingsActions({
       setTestResult(null);
       toast({ description: t("common:slackConfigurationRemoved"), variant: "success" });
     } catch (err) {
-      toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("common:deleteFailed", { err: String(err) }), variant: "error" });
     } finally {
       setDeleting(false);
     }
@@ -406,6 +410,7 @@ function useSettingsActions({
 }
 
 function useSlackSettings(workspaceId: string) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [config, setConfig] = useState<SlackConfig | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -421,7 +426,10 @@ function useSlackSettings(workspaceId: string) {
       setConfig(cfg);
       setForm(configToForm(cfg));
     } catch (err) {
-      toast({ description: `Failed to load Slack config: ${String(err)}`, variant: "error" });
+      toast({
+        description: t("common:failedToLoadSlackConfig", { err: String(err) }),
+        variant: "error",
+      });
     } finally {
       setLoading(false);
     }

@@ -8,6 +8,7 @@ import { formatFindingAsMarkdown } from "@/lib/review/format";
 import type { TaskReviewFinding } from "@/lib/types/review";
 import type { Message } from "@/lib/types/http";
 import { getWebSocketClient } from "@/lib/ws/connection";
+import { useTranslation } from "react-i18next";
 
 type Params = {
   taskId: string | null | undefined;
@@ -26,6 +27,7 @@ function isAgentBusy(state: string | undefined): boolean {
  * Follows the same busy-queue / direct-send split as diff comments.
  */
 export function useSendFindingToAgent({ taskId, sessionId }: Params) {
+  const { t } = useTranslation();
   const storeApi = useAppStoreApi();
   const { toast } = useToast();
 
@@ -45,7 +47,7 @@ export function useSendFindingToAgent({ taskId, sessionId }: Params) {
             content,
             ...(planMode ? { plan_mode: true } : {}),
           });
-          toast({ title: "Finding queued for the agent", variant: "success" });
+          toast({ title: t("common:findingQueuedForTheAgent"), variant: "success" });
           return;
         }
         const client = getWebSocketClient();
@@ -64,11 +66,11 @@ export function useSendFindingToAgent({ taskId, sessionId }: Params) {
         // Add the returned message directly so the chat updates even if the
         // broadcast is missed; addMessage is idempotent on id.
         if (created?.id && created.session_id) storeApi.getState().addMessage(created);
-        toast({ title: "Finding sent to the agent", variant: "success" });
+        toast({ title: t("common:findingSentToTheAgent"), variant: "success" });
       } catch (error) {
         toast({
-          title: "Could not send the finding",
-          description: error instanceof Error ? error.message : "An error occurred",
+          title: t("common:couldNotSendTheFinding"),
+          description: error instanceof Error ? error.message : t("common:anErrorOccurred"),
           variant: "error",
         });
       }

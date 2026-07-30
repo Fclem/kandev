@@ -75,7 +75,7 @@ export function TaskPRPickerDialog({ open, onOpenChange, prs, mrs = [] }: TaskPR
           <DialogDescription>
             {mrs.length
               ? t("task:chooseALinkedPullRequestOr")
-              : `This task has ${prs.length} linked pull requests. Choose one to open on GitHub.`}
+              : t("task:thisTaskHasLinkedPullRequests", { length: prs.length })}
           </DialogDescription>
         </DialogHeader>
         <div

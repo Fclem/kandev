@@ -258,7 +258,7 @@ function MessageTimestamp({ createdAt }: { createdAt: string }) {
           className="cursor-pointer border-0 bg-transparent p-0 text-left"
           aria-haspopup="dialog"
           aria-expanded={open}
-          aria-label={`Show full timestamp: ${absoluteTime}`}
+          aria-label={t("task:showFullTimestamp", { absoluteTime })}
         >
           {timeEl}
         </button>

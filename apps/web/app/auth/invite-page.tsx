@@ -180,7 +180,7 @@ export function InvitePage({ token }: InvitePageProps) {
           </CardTitle>
           <CardDescription>
             {preview
-              ? `You've been invited as ${preview.role}.`
+              ? t("auth:youVeBeenInvitedAs", { role: preview.role })
               : t("auth:joinThisKandevDeployment")}
           </CardDescription>
         </CardHeader>

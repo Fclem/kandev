@@ -1,5 +1,6 @@
 "use client";
-import { Trans } from "react-i18next";
+import { useTranslation } from "react-i18next";
+import { t as translate } from "@/lib/i18n";
 
 import { useState, useCallback, memo, useMemo } from "react";
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
@@ -50,14 +51,19 @@ function getActiveGroupDescription(messages: Message[]): string {
       return msg.content.slice(0, 60) + (msg.content.length > 60 ? "..." : "");
     }
   }
-  return "Working...";
+  return translate("task:working");
 }
 
 function getCompletedGroupDescription(messages: Message[]): string {
   const { toolCalls, subagents } = countMessageTypes(messages);
-  if (subagents === 0) return `tool call${toolCalls !== 1 ? "s" : ""}`;
-  if (toolCalls === 0) return `subagent${subagents !== 1 ? "s" : ""}`;
-  return `tool call${toolCalls !== 1 ? "s" : ""}, ${subagents} subagent${subagents !== 1 ? "s" : ""}`;
+  // The counts drive plural selection without being rendered here — the header
+  // shows the number in its own badge.
+  if (subagents === 0) return translate("task:toolCallsLabel", { count: toolCalls });
+  if (toolCalls === 0) return translate("task:subagentsLabel", { count: subagents });
+  return translate("task:toolCallsWithSubagents", {
+    count: subagents,
+    toolCalls: translate("task:toolCallsLabel", { count: toolCalls }),
+  });
 }
 
 function getGroupDescription(messages: Message[], isActive: boolean): string {
@@ -300,6 +306,7 @@ function RepeatedToolSummary({
   entry: Extract<TurnGroupContentEntry, { kind: "repeated_tool_summary" }>;
   renderProps: MessageRenderProps;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const count = entry.messages.length;
   return (
@@ -319,12 +326,12 @@ function RepeatedToolSummary({
           <IconChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
         )}
         <span className="min-w-0 break-words">
-          <Trans
-            i18nKey="task:repeatedIdenticalTerminalCommands"
-            values={{ count, value2: expanded ? "shown" : "hidden" }}
-          >
-            {count} repeated identical terminal commands {expanded ? "shown" : "hidden"}
-          </Trans>
+          {/* "shown"/"hidden" is copy, so it selects a whole message rather
+              than being interpolated as a word. */}
+          {t(
+            expanded ? "task:repeatedTerminalCommandsShown" : "task:repeatedTerminalCommandsHidden",
+            { count },
+          )}
         </span>
       </button>
       {expanded && (

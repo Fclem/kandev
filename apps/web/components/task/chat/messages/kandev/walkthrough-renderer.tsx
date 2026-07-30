@@ -85,7 +85,7 @@ export const ShowWalkthroughRenderer: KandevRenderer = ({ args, result, status }
   return (
     <KandevRow
       Icon={IconRoute}
-      title={`Walkthrough: ${title}`}
+      title={t("task:walkthrough2", { title })}
       summary={
         <span className="inline-flex min-w-0 items-center gap-1.5">
           {taskId && (

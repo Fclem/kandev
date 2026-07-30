@@ -11,6 +11,7 @@ import { useTaskRemoval } from "./use-task-removal";
 import { useTaskWorkflowMove } from "./use-task-workflow-move";
 import { useToast } from "@/components/toast-provider";
 import { useAppStoreApi } from "@/components/state-provider";
+import { useTranslation } from "react-i18next";
 
 type BulkOpts = { cascade?: boolean };
 
@@ -20,10 +21,23 @@ type BulkOpts = { cascade?: boolean };
  * switch-aware path last so the view doesn't strand on removed content; keep any
  * failed ids selected for retry and surface the failure via toast.
  */
+/**
+ * Which bulk operation failed. The verb is part of the message rather than an
+ * interpolated word: "Failed to archive N tasks" cannot be assembled from a
+ * verb and a frame in languages that inflect or reorder it.
+ */
+type BulkAction = "archive" | "delete";
+
+const BULK_FAILURE_KEY: Record<BulkAction, string> = {
+  archive: "common:failedToArchiveTasks",
+  delete: "common:failedToDeleteTasks",
+};
+
 function useSidebarBulkActions(
   dispatch: Dispatch<{ type: "set_selected"; ids: Set<string> }>,
   clearSelection: () => void,
 ) {
+  const { t } = useTranslation();
   const store = useAppStoreApi();
   const { archiveTaskById, deleteTaskById } = useTaskActions();
   const archiveAndSwitch = useArchiveAndSwitchTask({ useLayoutSwitch: true });
@@ -40,7 +54,7 @@ function useSidebarBulkActions(
       per: (id: string) => Promise<void>,
       handleActive: (id: string) => Promise<void>,
       setBusy: (v: boolean) => void,
-      noun: string,
+      action: BulkAction,
     ) => {
       if (ids.length === 0) return;
       const activeId = store.getState().tasks.activeTaskId;
@@ -63,7 +77,7 @@ function useSidebarBulkActions(
           // Keep the failed ids selected so the user can retry, and surface it.
           dispatch({ type: "set_selected", ids: new Set(failed) });
           toast({
-            title: `Failed to ${noun} ${failed.length} task${failed.length === 1 ? "" : "s"}`,
+            title: t(BULK_FAILURE_KEY[action], { count: failed.length }),
             variant: "error",
           });
           return;

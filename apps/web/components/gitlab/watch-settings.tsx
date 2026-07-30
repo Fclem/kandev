@@ -66,7 +66,7 @@ function useReviewActions(
         const result = await watches.trigger(watch.id, watch.workspace_id);
         toast({
           description: result.count
-            ? `Found ${result.count} matching merge request(s)`
+            ? t("gitlab:foundMatchingMergeRequestS", { count: result.count })
             : t("gitlab:noNewMergeRequestsMatched"),
           variant: "success",
         });
@@ -96,7 +96,9 @@ function useReviewActions(
       try {
         const result = await watches.reset(watch.id, watch.workspace_id);
         toast({
-          description: `Review watch reset; ${result.tasksDeleted} task(s) deleted`,
+          description: t("gitlab:reviewWatchResetTaskSDeleted", {
+            tasksDeleted: result.tasksDeleted,
+          }),
           variant: "success",
         });
       } catch (error) {
@@ -266,7 +268,7 @@ function useIssueActions(
         const result = await watches.trigger(watch.id, watch.workspace_id);
         toast({
           description: result.count
-            ? `Found ${result.count} matching issue(s)`
+            ? t("gitlab:foundMatchingIssueS", { count: result.count })
             : t("gitlab:noNewIssuesMatched"),
           variant: "success",
         });
@@ -296,7 +298,9 @@ function useIssueActions(
       try {
         const result = await watches.reset(watch.id, watch.workspace_id);
         toast({
-          description: `Issue watch reset; ${result.tasksDeleted} task(s) deleted`,
+          description: t("gitlab:issueWatchResetTaskSDeleted", {
+            tasksDeleted: result.tasksDeleted,
+          }),
           variant: "success",
         });
       } catch (error) {

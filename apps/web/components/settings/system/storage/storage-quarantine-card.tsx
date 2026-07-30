@@ -91,7 +91,11 @@ function QuarantineEntryRow({
             variant="destructive"
             disabledReason={
               disabledReason ??
-              (eligible ? undefined : `Retention ends ${formatQuarantineDeadline(entry)}.`)
+              (eligible
+                ? undefined
+                : t("settings:retentionEnds", {
+                    quarantineDeadline: formatQuarantineDeadline(entry),
+                  }))
             }
             onClick={() => onDelete(entry)}
             data-testid={`storage-quarantine-${entry.id}-delete`}

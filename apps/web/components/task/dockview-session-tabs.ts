@@ -22,6 +22,7 @@ import {
   shouldPreserveActivePanel,
 } from "./dockview-session-tab-activation";
 import { anchorIncomingSessionPanel, ensureSessionPanel } from "./dockview-session-handoff";
+import { t } from "@/lib/i18n";
 
 const debug = createDebugLogger("dockview:session-tabs");
 
@@ -130,7 +131,7 @@ export function setupChatPanelSafetyNet(
           id: `session:${activeSessionId}`,
           component: "chat",
           tabComponent: "sessionTab",
-          title: "Agent",
+          title: t("task:agent2"),
           params: { sessionId: activeSessionId },
           position,
         });
@@ -253,7 +254,7 @@ export function runAutoPRPanelEffect(
     focusOrAddPanel(api, {
       id: "pr-detail",
       component: "pr-detail",
-      title: "Pull Request",
+      title: t("task:pullRequest2"),
       position: { referenceGroup: targetGroupId },
       inactive: true,
       // Stamp the panel's params so addPRPanel can tell a matching menu

@@ -21,6 +21,8 @@
 import { parseSync } from "@babel/core";
 import fs from "node:fs";
 import path from "node:path";
+import { templateToMessage, templateCall } from "./lib/template-literals.mjs";
+import { configureDisplayContext, displayContext } from "./lib/display-context.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const EN = path.join(ROOT, "src", "locales", "en");
@@ -33,6 +35,11 @@ if (!TARGETS.length) {
 
 const DISPLAY_ATTRS = new Set(["placeholder", "aria-label", "aria-description", "title", "alt"]);
 const TOAST_CALLEES = /^(toast|toast\.(success|error|info|warning|message|loading))$/;
+/**
+ * Native dialogs whose first argument is copy shown to the user. Guard-blind
+ * like toasts: `i18next/no-literal-string` only inspects JSX.
+ */
+const DIALOG_CALLEES = /^(window\.)?(confirm|alert|prompt)$/;
 
 /**
  * Props on internal components that render their value as copy. Unlike
@@ -87,20 +94,6 @@ const DISPLAY_PROPS = new Set([
   "failedLabel",
   "disabledReason",
   "externalBlockedReason",
-]);
-
-/**
- * A string literal is only display copy when something renders it. Literals
- * reached through these node types are data — comparisons, object/array keys,
- * enum arguments — and translating them changes behavior rather than wording.
- */
-const NON_DISPLAY_PARENTS = new Set([
-  "BinaryExpression",
-  "SwitchCase",
-  "ImportDeclaration",
-  "ExportNamedDeclaration",
-  "TSLiteralType",
-  "TSEnumMember",
 ]);
 
 /** Brand/proper nouns and acronyms that must stay untranslated. */
@@ -281,6 +274,26 @@ function fnName(node, parent) {
 }
 const canUseHooks = (name) => /^[A-Z]/.test(name) || /^use[A-Z]/.test(name);
 
+/**
+ * Paths whose strings are NOT display copy, even when they sit in a
+ * display-shaped property:
+ *  - `lib/api` / `lib/types` are the backend's JSON shape. A translated field
+ *    name or default value changes what we send and what gets persisted.
+ *  - `lib/state/layout-manager` serializes panel titles into saved layouts, so
+ *    a locale change would rewrite stored state.
+ *  - test helpers and fixtures are not shipped UI.
+ */
+const EXCLUDED = [
+  /^lib\/api\//,
+  /^lib\/types\//,
+  /^lib\/state\/layout-manager\//,
+  /\.(test-helpers|fixtures|mocks)\.tsx?$/,
+];
+const isExcluded = (abs) => {
+  const rel = path.relative(ROOT, abs).replace(/\\/g, "/");
+  return EXCLUDED.some((re) => re.test(rel));
+};
+
 // ---------------------------------------------------------------- collect files
 function listFiles() {
   const out = [];
@@ -290,14 +303,16 @@ function listFiles() {
       if (e.isDirectory()) {
         if (["node_modules", "dist", "e2e", "locales", "__tests__"].includes(e.name)) continue;
         walkDir(full);
-      } else if (/\.tsx$/.test(e.name) && !/\.test\.tsx$/.test(e.name)) out.push(full);
+      } else if (/\.tsx?$/.test(e.name) && !/\.(test|d)\.tsx?$/.test(e.name) && !isExcluded(full)) {
+        out.push(full);
+      }
     }
   };
   for (const t of TARGETS) {
     const abs = path.isAbsolute(t) ? t : path.join(ROOT, t);
     if (!fs.existsSync(abs)) continue;
     if (fs.statSync(abs).isDirectory()) walkDir(abs);
-    else if (/\.tsx$/.test(abs)) out.push(abs);
+    else if (/\.tsx?$/.test(abs)) out.push(abs);
   }
   return out;
 }
@@ -323,15 +338,21 @@ function keyFor(ns, message) {
   cat[key] = message;
   return key;
 }
+/** Injected into ./lib/template-literals.mjs, which cannot see this module. */
+const DEPS = { walk, looksLikeCopy, keyFor, qualify: (ns, key) => qualify(ns, key) };
 const qualify = (ns, key) => (key.includes(":") ? key : `${ns}:${key}`);
 
 // ------------------------------------------------------------------- transform
+configureDisplayContext({ DISPLAY_PROPS, DISPLAY_ATTRS, FUNCTION_TYPES });
+
 const report = {
   files: 0,
   jsxText: 0,
   attrs: 0,
   toasts: 0,
   exprLiterals: 0,
+  templates: 0,
+  skippedTemplate: 0,
   skippedSentinel: 0,
   skippedFragment: 0,
   skippedShadowed: 0,
@@ -442,106 +463,6 @@ const insideTrans = (ancestors) =>
       (a.type === "JSXOpeningElement" && a.name?.name === "Trans"),
   );
 
-/** True when the literal sits inside any function, i.e. not at module scope. */
-const insideFunction = (ancestors) => ancestors.some((a) => FUNCTION_TYPES.has(a.type));
-
-/** Node types a literal may pass through on its way up to the JSX and still be copy. */
-const PRESENTATIONAL = new Set([
-  "ConditionalExpression",
-  "LogicalExpression",
-  "ParenthesizedExpression",
-  "TSAsExpression",
-  "TSNonNullExpression",
-]);
-
-/**
- * The nearest ancestor that actually decides what this literal is, skipping the
- * presentational wrappers (`cond ? … : …`, `err || …`, casts) the literal may sit
- * inside. Returns null when the chain passes through something that consumes the
- * string as data — a call argument, a comparison, a bare array element.
- */
-function displayAnchor(node, ancestors) {
-  for (let i = ancestors.length - 1; i >= 0; i--) {
-    const a = ancestors[i];
-    if (PRESENTATIONAL.has(a.type)) {
-      // The *test* of a conditional is a comparison operand, not a rendered branch.
-      if (a.type === "ConditionalExpression" && a.test === (ancestors[i + 1] ?? node)) return null;
-      continue;
-    }
-    if (NON_DISPLAY_PARENTS.has(a.type)) return null;
-    // Any call consumes the string as an argument rather than rendering it.
-    if (a.type === "CallExpression" || a.type === "NewExpression") return null;
-    return a;
-  }
-  return null;
-}
-
-/**
- * The JSX attribute that governs this literal, or null.
- *
- * Stops at the first JSXElement: once the literal is inside an element nested in
- * a prop (`actions={<><Button>Copy</Button></>}`), the element renders its own
- * children and the outer prop name says nothing about them.
- */
-function governingAttribute(ancestors) {
-  for (let i = ancestors.length - 1; i >= 0; i--) {
-    const a = ancestors[i];
-    if (a.type === "JSXElement" || a.type === "JSXFragment") return null;
-    if (a.type === "JSXAttribute") return a;
-  }
-  return null;
-}
-
-/**
- * Where this literal lands: "attr" (a bare display prop), "expr" (inside a JSX
- * expression), "objprop" (a display key in a config object), "module-scope" (a
- * display key that would evaluate at import time), or null when it is data.
- *
- * These are the shapes `mode: "jsx-text-only"` could not see:
- *
- *   {saving ? "Saving..." : "Save"}      ->  {saving ? t("ns:saving") : t("ns:save")}
- *   <Field label="Assignee" />           ->  <Field label={t("ns:assignee")} />
- *   { label: "In progress" }             ->  { label: t("ns:inProgress") }
- */
-const propName = (node) => String(node?.name?.name ?? node?.key?.name ?? node?.key?.value);
-
-/** `label="Assignee"` — a bare literal on a display prop. */
-function attributeContext(node, anchor) {
-  if (!DISPLAY_PROPS.has(propName(anchor))) return null;
-  // A bare `label="x"` needs braces; a `label={cond ? "x" : "y"}` does not.
-  return anchor.value === node ? "attr" : "expr";
-}
-
-/** `{ label: "In progress" }` — a display key in a config object. */
-function objectPropertyContext(anchors, anchor) {
-  if (!DISPLAY_PROPS.has(propName(anchor))) return null;
-  // A module-scope object evaluates its `t()` at import time, which pins the
-  // copy to whatever locale was active then and never updates on a switch.
-  return insideFunction(anchors) ? "objprop" : "module-scope";
-}
-
-/** `{saving ? "Saving..." : "Save"}` — inside a JSX expression container. */
-function expressionContext(ancestors) {
-  const attr = governingAttribute(ancestors);
-  if (!attr) return "expr";
-  const name = propName(attr);
-  return DISPLAY_PROPS.has(name) || DISPLAY_ATTRS.has(name) ? "expr" : null;
-}
-
-function displayContext(node, ancestors) {
-  const anchor = displayAnchor(node, ancestors);
-  switch (anchor?.type) {
-    case "JSXAttribute":
-      return attributeContext(node, anchor);
-    case "ObjectProperty":
-      return objectPropertyContext(ancestors, anchor);
-    case "JSXExpressionContainer":
-      return expressionContext(ancestors);
-    default:
-      return null;
-  }
-}
-
 function handleJsxExpressionLiteral(node, ancestors, { ns, rel, sentinels, edits, noteHost }) {
   if (node.type !== "StringLiteral" || !looksLikeCopy(node.value)) return;
   if (sentinels.has(node.value)) {
@@ -574,20 +495,69 @@ function handleJsxExpressionLiteral(node, ancestors, { ns, rel, sentinels, edits
   noteHost();
 }
 
-/** toast("...") / toast.error("...") first argument. */
-function handleToastCall(node, { ns, sentinels, edits, noteHost }) {
-  if (node.type !== "CallExpression") return;
-  const callee = node.callee;
-  let name = "";
-  if (callee.type === "Identifier") name = callee.name;
-  else if (
+/** A template literal in a display position -> t() with named placeholders. */
+function handleTemplateLiteral(node, ancestors, ctx) {
+  if (node.type !== "TemplateLiteral" || !node.expressions.length) return;
+  if (tIsShadowed(ancestors) || insideTrans(ancestors)) return;
+  const context = displayContext(node, ancestors);
+  if (context === null || context === "module-scope") return;
+  // Only non-empty chunks can be sentinels: a template ending in `${x}` has an
+  // empty trailing quasi, and "" is a sentinel in almost every file.
+  const chunks = node.quasis.map((q) => (q.value.cooked ?? "").trim()).filter(Boolean);
+  if (chunks.some((chunk) => ctx.sentinels.has(chunk))) {
+    report.skippedSentinel += 1;
+    return;
+  }
+  emitTemplateArg(node, ctx, context === "attr");
+}
+
+/** `toast` / `toast.error` / `window.confirm` as a dotted name, or "". */
+function calleeName(callee) {
+  if (callee.type === "Identifier") return callee.name;
+  if (
     callee.type === "MemberExpression" &&
     callee.object.type === "Identifier" &&
     callee.property.type === "Identifier"
-  )
-    name = `${callee.object.name}.${callee.property.name}`;
-  if (!TOAST_CALLEES.test(name)) return;
+  ) {
+    return `${callee.object.name}.${callee.property.name}`;
+  }
+  return "";
+}
+
+/**
+ * Convert a template literal to a `t()` call. `braces` wraps the result for a
+ * bare JSX attribute value (`aria-label={t(...)}`); call arguments need none.
+ */
+function emitTemplateArg(node, { ns, source, edits, noteHost }, braces = false) {
+  const parts = templateToMessage(node, DEPS);
+  if (!parts) {
+    report.skippedTemplate += 1;
+    return;
+  }
+  const call = templateCall(node, ns, parts, source, DEPS);
+  edits.push({ start: node.start, end: node.end, text: braces ? `{${call}}` : call });
+  report.templates += 1;
+  noteHost();
+}
+
+/** toast("...") / toast.error("...") / confirm("...") first argument. */
+function handleToastCall(node, ancestors, ctx) {
+  if (node.type !== "CallExpression") return;
+  const name = calleeName(node.callee);
+  if (!TOAST_CALLEES.test(name) && !DIALOG_CALLEES.test(name)) return;
+  // `terminals.map((t) => … confirm(`Destroy ${t.label}?`))` rebinds `t` to the
+  // item, so an emitted t("key") would call the item instead of translating.
+  if (tIsShadowed(ancestors)) {
+    report.skippedShadowed += 1;
+    return;
+  }
+  const { ns, sentinels, edits, noteHost } = ctx;
   const arg = node.arguments[0];
+  if (arg?.type === "TemplateLiteral") {
+    // `toast.error(`Failed to save: ${msg}`)` — same copy, different node type.
+    emitTemplateArg(arg, ctx);
+    return;
+  }
   if (arg?.type !== "StringLiteral" || !looksLikeCopy(arg.value)) return;
   if (sentinels.has(arg.value)) {
     report.skippedSentinel += 1;
@@ -678,7 +648,7 @@ function transform(file) {
     }
   };
 
-  const ctx = { ns, rel, sentinels, edits, noteHost };
+  const ctx = { ns, rel, source: original, sentinels, edits, noteHost };
   const ancestors = [];
   const visit = (node, parent) => {
     const isFn = FUNCTION_TYPES.has(node.type);
@@ -686,8 +656,9 @@ function transform(file) {
 
     handleJsxText(node, parent, ancestors, ctx);
     handleDisplayAttribute(node, ctx);
-    handleToastCall(node, ctx);
+    handleToastCall(node, ancestors, ctx);
     handleJsxExpressionLiteral(node, ancestors, ctx);
+    handleTemplateLiteral(node, ancestors, ctx);
 
     ancestors.push(node);
     for (const key of Object.keys(node)) {
@@ -760,7 +731,13 @@ if (WRITE) {
     const sorted = Object.fromEntries(
       Object.entries(entries).sort(([a], [b]) => a.localeCompare(b)),
     );
-    fs.writeFileSync(path.join(EN, `${ns}.json`), JSON.stringify(sorted, null, 2) + "\n");
+    // Match the existing catalogs' escaping so the diff stays scoped to real
+    // message changes rather than re-encoding every non-ASCII character.
+    const json = JSON.stringify(sorted, null, 2).replace(
+      /[\u0080-\uffff]/g,
+      (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    );
+    fs.writeFileSync(path.join(EN, `${ns}.json`), json + "\n");
   }
 }
 console.log(JSON.stringify({ ...report, wrote: WRITE }, null, 2));

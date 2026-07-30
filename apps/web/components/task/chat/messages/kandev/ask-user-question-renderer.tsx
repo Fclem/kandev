@@ -42,7 +42,7 @@ function QuestionBlock({ q, answer }: { q: Question; answer: AnswerEntry | undef
                 className="text-[10px]"
                 title={opt.description}
               >
-                {opt.label ?? `option ${i + 1}`}
+                {opt.label ?? t("task:option", { i: i + 1 })}
               </Badge>
             );
           })}

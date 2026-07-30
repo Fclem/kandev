@@ -323,7 +323,7 @@ export function useFileRename(
     if (tree && treeContainsPath(tree, newPath)) {
       toast({
         title: t("task:failedToRenameItem"),
-        description: `Target already exists: ${newPath}`,
+        description: t("task:targetAlreadyExists", { newPath }),
         variant: "error",
       });
       handleCancelRename();

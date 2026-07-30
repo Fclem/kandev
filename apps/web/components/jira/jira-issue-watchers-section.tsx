@@ -39,7 +39,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
         await create(req);
         toast({ description: t("jira:watcherCreated"), variant: "success" });
       } catch (err) {
-        toast({ description: `Create failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("jira:createFailed", { err: String(err) }), variant: "error" });
         throw err;
       }
     },
@@ -52,7 +52,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
         await update(id, req, rowWorkspaceId);
         toast({ description: t("jira:watcherUpdated"), variant: "success" });
       } catch (err) {
-        toast({ description: `Update failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("jira:updateFailed", { err: String(err) }), variant: "error" });
         throw err;
       }
     },
@@ -61,12 +61,12 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
 
   const wrappedDelete = useCallback(
     async (w: JiraIssueWatch) => {
-      if (!confirm("Delete this JIRA watcher?")) return;
+      if (!confirm(t("jira:deleteThisJiraWatcher"))) return;
       try {
         await remove(w.id, w.workspaceId);
         toast({ description: t("jira:watcherDeleted"), variant: "success" });
       } catch (err) {
-        toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("jira:deleteFailed", { err: String(err) }), variant: "error" });
       }
     },
     [remove, toast],
@@ -83,7 +83,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
             : "No new tickets matched.";
         toast({ description, variant: "success" });
       } catch (err) {
-        toast({ description: `Check failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("jira:checkFailed", { err: String(err) }), variant: "error" });
       }
     },
     [trigger, toast],
@@ -97,12 +97,12 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
         toast({
           description:
             n > 0
-              ? `Reset complete — deleted ${n} task(s); next poll will re-import matches.`
+              ? t("jira:resetCompleteDeletedTaskSNext", { n })
               : t("jira:resetCompleteNextPollWillRe"),
           variant: "success",
         });
       } catch (err) {
-        toast({ description: `Reset failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("jira:resetFailed", { err: String(err) }), variant: "error" });
         throw err;
       }
     },

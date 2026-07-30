@@ -573,7 +573,7 @@ export function PortForwardButton({
         </TooltipTrigger>
         <TooltipContent>
           {hasActiveTunnels
-            ? `Port Forwarding (${activeTunnels.size} tunnel${activeTunnels.size > 1 ? "s" : ""} active)`
+            ? t("task:portForwardingTunnelActive", { count: activeTunnels.size })
             : t("task:portForwarding2")}
         </TooltipContent>
       </Tooltip>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useReducer } from "react";
 import { getPRFeedback } from "@/lib/api/domains/github-api";
 import type { PRFeedback } from "@/lib/types/github";
+import { useTranslation } from "react-i18next";
 
 export type PRFeedbackState = {
   /** `<workspaceId>/<owner>/<repo>/<prNumber>` of the request `feedback` belongs to. */
@@ -68,6 +69,7 @@ export function usePRFeedback(
   repo: string | null,
   prNumber: number | null,
 ) {
+  const { t } = useTranslation();
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
   const [fetchCount, setFetchCount] = useState(0);
   const key =
@@ -90,7 +92,7 @@ export function usePRFeedback(
           dispatch({
             type: "error",
             key,
-            message: err instanceof Error ? err.message : "Failed to fetch PR feedback",
+            message: err instanceof Error ? err.message : t("common:failedToFetchPrFeedback"),
           });
       });
     return () => {

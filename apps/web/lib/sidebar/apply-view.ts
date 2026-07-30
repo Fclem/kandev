@@ -12,6 +12,7 @@ import type {
   SortKey,
   SortSpec,
 } from "@/lib/state/slices/ui/sidebar-view-types";
+import { t } from "@/lib/i18n";
 
 export type SidebarGroup = {
   key: string;
@@ -297,7 +298,7 @@ export function applyGroup(
 
   if (groupKey === "none") {
     return {
-      groups: [{ key: "__all__", label: "All", tasks: rootTasks }],
+      groups: [{ key: "__all__", label: t("common:all"), tasks: rootTasks }],
       subTasksByParentId,
     };
   }

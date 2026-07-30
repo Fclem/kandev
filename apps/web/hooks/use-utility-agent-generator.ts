@@ -5,6 +5,7 @@ import { executeUtilityPrompt, type ExecutePromptRequest } from "@/lib/api/domai
 import { useToast } from "@/components/toast-provider";
 import { useSessionGitStatus } from "@/hooks/domains/session/use-session-git-status";
 import type { FileInfo } from "@/lib/state/slices";
+import { useTranslation } from "react-i18next";
 
 const ENHANCE_PROMPT = "enhance-prompt" as const;
 
@@ -51,6 +52,7 @@ export function useUtilityAgentGenerator({
   taskTitle,
   taskDescription,
 }: UseUtilityAgentGeneratorOptions) {
+  const { t } = useTranslation();
   const [generating, setGenerating] = useState<Set<GeneratorType>>(new Set());
   const { toast } = useToast();
   const gitStatus = useSessionGitStatus(sessionId);
@@ -103,8 +105,8 @@ export function useUtilityAgentGenerator({
       // Other generators need git context from an active session.
       if (!sessionId && type !== ENHANCE_PROMPT) {
         toast({
-          title: "No active session",
-          description: "Start a session first to use AI generation",
+          title: t("common:noActiveSession"),
+          description: t("common:startASessionFirstToUse"),
           variant: "error",
         });
         return;
@@ -115,8 +117,8 @@ export function useUtilityAgentGenerator({
         const resp = await executeUtilityPrompt(buildRequest(type, options));
         if (!resp.success || !resp.response) {
           toast({
-            title: "Generation failed",
-            description: resp.error || "Failed to generate content",
+            title: t("common:generationFailed"),
+            description: resp.error || t("common:failedToGenerateContent"),
             variant: "error",
           });
           return;
@@ -128,8 +130,8 @@ export function useUtilityAgentGenerator({
         });
       } catch (error) {
         toast({
-          title: "Generation failed",
-          description: error instanceof Error ? error.message : "Unknown error",
+          title: t("common:generationFailed"),
+          description: error instanceof Error ? error.message : t("common:unknownError"),
           variant: "error",
         });
       } finally {

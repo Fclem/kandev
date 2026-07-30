@@ -49,7 +49,7 @@ export function SortPicker({ value, onChange }: Props) {
           }
           data-testid="sort-direction-toggle"
           data-direction={value.direction}
-          aria-label={`Sort direction ${value.direction}`}
+          aria-label={t("task:sortDirection", { direction: value.direction })}
         >
           {value.direction === "asc" ? (
             <IconArrowUp className="h-3.5 w-3.5" />

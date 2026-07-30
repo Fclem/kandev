@@ -34,7 +34,7 @@ export function ParticipantRow({
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className="cursor-pointer h-7 text-xs">
             {selectedIds.length > 0
-              ? `${selectedIds.length} selected`
+              ? t("office:selected", { length: selectedIds.length })
               : `Add ${label.toLowerCase()}`}
           </Button>
         </PopoverTrigger>

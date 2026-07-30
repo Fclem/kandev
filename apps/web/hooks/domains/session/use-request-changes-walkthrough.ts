@@ -11,6 +11,7 @@ import {
 import type { Message } from "@/lib/types/http";
 import type { AppState } from "@/lib/state/store";
 import { deriveSessionInputMode } from "./session-input-mode";
+import { useTranslation } from "react-i18next";
 
 const TERMINAL_SESSION_STATES = new Set(["FAILED", "CANCELLED", "COMPLETED"]);
 
@@ -75,6 +76,7 @@ export function useRequestChangesWalkthrough({
   sessionId,
   ready = true,
 }: UseRequestChangesWalkthroughParams) {
+  const { t } = useTranslation();
   const storeApi = useAppStoreApi();
   const { toast } = useToast();
 
@@ -86,7 +88,7 @@ export function useRequestChangesWalkthrough({
     const inputMode = deriveSessionInputMode(activeSession);
     const planModeEnabled = state.chatInput.planModeBySessionId[sessionId] ?? false;
     if (!ready) {
-      toast({ title: "Changes are still loading", variant: "error" });
+      toast({ title: t("common:changesAreStillLoading"), variant: "error" });
       return;
     }
     if (inputMode === "unavailable") {
@@ -110,15 +112,15 @@ export function useRequestChangesWalkthrough({
           content,
           planModeEnabled,
         });
-        toast({ title: "Walkthrough request queued", variant: "success" });
+        toast({ title: t("common:walkthroughRequestQueued"), variant: "success" });
         return;
       }
 
       await sendWalkthroughRequest({ taskId, sessionId, content, planModeEnabled, state });
-      toast({ title: "Walkthrough request sent", variant: "success" });
+      toast({ title: t("common:walkthroughRequestSent"), variant: "success" });
     } catch (error) {
       console.error("Failed to request walkthrough:", error);
-      toast({ title: "Failed to request walkthrough", variant: "error" });
+      toast({ title: t("common:failedToRequestWalkthrough"), variant: "error" });
     }
   }, [ready, sessionId, storeApi, taskId, toast]);
 }

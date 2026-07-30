@@ -132,7 +132,7 @@ export function AddPanelMenuItems({
           <IconGitPullRequest className={`${MENU_ICON_CLASS} text-orange-500`} />
           {state.mrs.length > 1
             ? `MR !${mr.mr_iid} - ${mr.project_path}`
-            : `Merge Request !${mr.mr_iid}`}
+            : t("task:mergeRequest", { mriid: mr.mr_iid })}
         </DropdownMenuItem>
       ))}
       <RepositoryScriptsMenuItems onRunScript={onRunScript} onRunDevScript={onRunDevScript} />

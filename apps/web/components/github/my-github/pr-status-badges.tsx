@@ -70,9 +70,9 @@ function ReviewChip({
     return (
       <StatusChip
         Icon={IconClockHour4}
-        label={`${pending} pending`}
+        label={t("github:pending2", { pending })}
         tone="pending"
-        title={`${pending} pending review(s)`}
+        title={t("github:pendingReviewS", { pending })}
       />
     );
   return null;

@@ -311,7 +311,7 @@ export function WorkspaceModeToggle({
           label={t("task:inheritParentWorkspace")}
           description={
             worktreeBranch
-              ? `Run in the parent's worktree (${worktreeBranch})`
+              ? t("task:runInTheParentSWorktree", { worktreeBranch })
               : t("task:runInTheParentSMaterialized")
           }
           checked={value === "inherit_parent"}

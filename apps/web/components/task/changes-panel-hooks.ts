@@ -3,6 +3,8 @@
 import { useState, useCallback } from "react";
 import type { useToast } from "@/components/toast-provider";
 import type { SessionGit, PerRepoOperationResult } from "@/hooks/domains/session/use-session-git";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 // Bug 7: drop the local GitOps shape — `SessionGit` is the single source of
 // truth for all the methods this module needs (pull, push, rebase, merge,
@@ -49,23 +51,33 @@ function describePerRepo(
     .join("; ");
   if (failed.length === 0) {
     return {
-      title: `${operationName} successful`,
-      description: `${operationName} succeeded in ${succeeded.length} repos: ${succeededNames}`,
+      title: t("task:successful", { operationName }),
+      description: t("task:succeededInRepos", {
+        operationName,
+        length: succeeded.length,
+        succeededNames,
+      }),
       variant: "success",
     };
   }
   if (succeeded.length === 0) {
     return {
-      title: `${operationName} failed`,
-      description: `Failed in ${failed.length} repos — ${failedSummary}`,
+      title: t("task:failed4", { operationName }),
+      description: t("task:failedInRepos", { length: failed.length, failedSummary }),
       variant: "error",
     };
   }
   // Partial success: surface as error so the user notices, but include the
   // succeeded list in the description so they don't retry the whole op.
   return {
-    title: `${operationName} partially succeeded`,
-    description: `${operationName} succeeded in ${succeeded.length} of ${perRepo.length} repos (${succeededNames}); failed in ${failedSummary}`,
+    title: t("task:partiallySucceeded", { operationName }),
+    description: t("task:succeededInOfReposFailedIn", {
+      operationName,
+      length: succeeded.length,
+      length2: perRepo.length,
+      succeededNames,
+      failedSummary,
+    }),
     variant: "error",
   };
 }
@@ -79,6 +91,7 @@ export function useChangesGitHandlers(
   toast: Toast,
   baseBranch: string | undefined,
 ) {
+  const { t } = useTranslation();
   const handleGitOperation = useCallback(
     async (operation: () => Promise<GitOperationResultLike>, operationName: string) => {
       try {
@@ -99,8 +112,8 @@ export function useChangesGitHandlers(
         toast({ title, description, variant });
       } catch (e) {
         toast({
-          title: `${operationName} failed`,
-          description: e instanceof Error ? e.message : "An unexpected error occurred",
+          title: t("task:failed4", { operationName }),
+          description: e instanceof Error ? e.message : t("task:anUnexpectedErrorOccurred"),
           variant: "error",
         });
       }
@@ -166,6 +179,7 @@ function useChangesDiscardAmendHandlers(
   toast: Toast,
   handleGitOperation: GitOperationFn,
 ) {
+  const { t } = useTranslation();
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [fileToDiscard, setFileToDiscard] = useState<string | null>(null);
   const [filesToDiscard, setFilesToDiscard] = useState<string[] | null>(null);
@@ -192,14 +206,14 @@ function useChangesDiscardAmendHandlers(
       const result = await gitOps.discard(paths, repoToDiscard);
       if (!result.success)
         toast({
-          title: "Failed to discard changes",
-          description: result.error || "An unknown error occurred",
+          title: t("task:failedToDiscardChanges"),
+          description: result.error || t("task:anUnknownErrorOccurred"),
           variant: "error",
         });
     } catch (error) {
       toast({
-        title: "Failed to discard changes",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
+        title: t("task:failedToDiscardChanges"),
+        description: error instanceof Error ? error.message : t("task:anUnknownErrorOccurred"),
         variant: "error",
       });
     } finally {

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useAppStore } from "@/components/state-provider";
 import { useToast } from "@/components/toast-provider";
 import type { TaskDeletionReason } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 // Exhaustive over TaskDeletionReason: adding or renaming a reason is a compile
 // error here until a matching message is provided.
@@ -28,6 +29,7 @@ function describeReason(reason: string | undefined): string {
  * focused task is removed out from under the user. Mount once inside ToastProvider.
  */
 export function useTaskDeletedToast() {
+  const { t } = useTranslation();
   const notification = useAppStore((s) => s.taskDeletedNotification);
   const clearNotification = useAppStore((s) => s.setTaskDeletedNotification);
   const { toast } = useToast();
@@ -41,7 +43,9 @@ export function useTaskDeletedToast() {
     }
     shownRef.current.add(notification.taskId);
     toast({
-      title: notification.title ? `"${notification.title}" was closed` : "Task closed",
+      title: notification.title
+        ? t("common:wasClosed", { title: notification.title })
+        : t("common:taskClosed"),
       description: describeReason(notification.reason),
     });
     clearNotification(null);

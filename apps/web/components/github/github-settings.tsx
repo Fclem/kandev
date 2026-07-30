@@ -55,7 +55,7 @@ function CleanupNowButton({
             description:
               deleted === 0
                 ? t("github:noTasksToCleanUp")
-                : `Deleted ${deleted} task${deleted === 1 ? "" : "s"}`,
+                : t("github:deletedTask", { count: deleted }),
             variant: "success",
           });
         } catch {
@@ -139,7 +139,7 @@ function useWatchActions(workspaceId?: string | null) {
         const count = result?.new_prs_found ?? 0;
         if (count > 0) {
           toast({
-            description: `Found ${count} new PR${count > 1 ? "s" : ""}`,
+            description: t("github:foundNewPr", { count }),
             variant: "success",
           });
         } else {
@@ -159,7 +159,7 @@ function useWatchActions(workspaceId?: string | null) {
         toast({
           description:
             tasksDeleted > 0
-              ? `Reset complete — deleted ${tasksDeleted} task(s); next poll will re-import.`
+              ? t("github:resetCompleteDeletedTaskSNext", { tasksDeleted })
               : t("github:resetCompleteNextPollWillRe"),
           variant: "success",
         });
@@ -224,7 +224,7 @@ function useIssueWatchActions(workspaceId?: string | null) {
         const count = result?.new_issues_found ?? 0;
         if (count > 0) {
           toast({
-            description: `Found ${count} new issue${count > 1 ? "s" : ""}`,
+            description: t("github:foundNewIssue", { count }),
             variant: "success",
           });
         } else {
@@ -244,7 +244,7 @@ function useIssueWatchActions(workspaceId?: string | null) {
         toast({
           description:
             tasksDeleted > 0
-              ? `Reset complete — deleted ${tasksDeleted} task(s); next poll will re-import.`
+              ? t("github:resetCompleteDeletedTaskSNext", { tasksDeleted })
               : t("github:resetCompleteNextPollWillRe"),
           variant: "success",
         });

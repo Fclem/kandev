@@ -132,13 +132,17 @@ function TeamSelector({ form, baseline, loading, update, teams, loadingTeams }: 
 }
 
 function TestResultAlert({ result }: { result: TestLinearConnectionResult | null }) {
+  const { t } = useTranslation();
   if (!result) return null;
   return (
     <Alert variant={result.ok ? "default" : "destructive"}>
       <AlertDescription>
         {result.ok
-          ? `Connected as ${result.displayName || result.email || result.userId}${result.orgName ? ` (${result.orgName})` : ""}`
-          : `Failed: ${result.error}`}
+          ? t("linear:connectedAs", {
+              displayName: result.displayName || result.email || result.userId,
+              value1: result.orgName ? ` (${result.orgName})` : "",
+            })
+          : t("linear:failed", { error: result.error })}
       </AlertDescription>
     </Alert>
   );
@@ -254,7 +258,7 @@ function useSettingsActions({
       setTestResult(null);
       toast({ description: t("linear:linearConfigurationSaved"), variant: "success" });
     } catch (err) {
-      toast({ description: `Save failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("linear:saveFailed", { err: String(err) }), variant: "error" });
       throw err;
     } finally {
       setSaving(false);
@@ -262,7 +266,7 @@ function useSettingsActions({
   }, [workspaceId, form, toast, setConfig, setBaselineConfig, setForm, setTestResult]);
 
   const handleDelete = useCallback(async () => {
-    if (!confirm("Remove Linear configuration?")) return;
+    if (!confirm(t("linear:removeLinearConfiguration"))) return;
     try {
       await deleteLinearConfig({ workspaceId });
       setConfig(null);
@@ -271,7 +275,7 @@ function useSettingsActions({
       setTestResult(null);
       toast({ description: t("linear:linearConfigurationRemoved"), variant: "success" });
     } catch (err) {
-      toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("linear:deleteFailed", { err: String(err) }), variant: "error" });
     }
   }, [workspaceId, toast, setConfig, setBaselineConfig, setForm, setTestResult]);
 
@@ -310,6 +314,7 @@ function useTeamsLoader(
 }
 
 function useLinearSettings(workspaceId: string) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [config, setConfig] = useState<LinearConfig | null>(null);
   const [baselineConfig, setBaselineConfig] = useState<LinearConfig | null>(null);
@@ -327,7 +332,10 @@ function useLinearSettings(workspaceId: string) {
       setBaselineConfig(cfg);
       setForm(configToForm(cfg));
     } catch (err) {
-      toast({ description: `Failed to load Linear config: ${String(err)}`, variant: "error" });
+      toast({
+        description: t("linear:failedToLoadLinearConfig", { err: String(err) }),
+        variant: "error",
+      });
     } finally {
       setLoading(false);
     }

@@ -18,7 +18,7 @@ export function IssueTaskIcon({ issueInfo }: { issueInfo: IssueInfo }) {
           onClick={(e) => e.stopPropagation()}
           className="inline-flex items-center shrink-0 text-green-600 hover:text-green-500 cursor-pointer"
           data-testid="issue-task-icon"
-          aria-label={`Issue #${issueInfo.number}`}
+          aria-label={t("github:issue", { number: issueInfo.number })}
         >
           <IconCircleDot className="h-3.5 w-3.5" />
         </a>

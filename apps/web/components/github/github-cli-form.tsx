@@ -111,7 +111,10 @@ export function GitHubCLIForm({
         host: account.host,
         login: account.login,
       });
-      toast({ description: `Connected ${account.login} for this workspace`, variant: "success" });
+      toast({
+        description: t("github:connectedForThisWorkspace", { login: account.login }),
+        variant: "success",
+      });
       onSaved();
     } catch (error) {
       toast({

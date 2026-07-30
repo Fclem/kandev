@@ -5,6 +5,7 @@
  */
 
 import { getLogBuffer, type LogEntry, type LogLevel } from "./buffer";
+import { t } from "@/lib/i18n";
 
 let installed = false;
 
@@ -76,7 +77,7 @@ export function installConsoleInterceptor(): void {
       timestamp: new Date().toISOString(),
       level: "error",
       source: "window.onerror",
-      message: event.message ?? "Uncaught error",
+      message: event.message ?? t("common:uncaughtError"),
       args: [
         {
           filename: event.filename,

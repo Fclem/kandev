@@ -2,6 +2,7 @@ import type { Workflow, WorkflowStep } from "@/lib/types/http";
 import type { useToast } from "@/components/toast-provider";
 import { generateUUID } from "@/lib/utils";
 import { createWorkflowStepAction, updateWorkflowStepAction } from "@/app/actions/workspaces";
+import { t } from "@/lib/i18n";
 
 const FALLBACK_ERROR_MESSAGE = "Request failed";
 const NEW_STEP_DEFAULTS = { name: "New Step", color: "bg-slate-500" } as const;
@@ -51,7 +52,7 @@ export async function addRemoteStep(
     setWorkflowSteps((previous) => [...previous, created]);
   } catch (error) {
     toast({
-      title: "Failed to add workflow step",
+      title: t("settings:failedToAddWorkflowStep"),
       description: error instanceof Error ? error.message : FALLBACK_ERROR_MESSAGE,
       variant: "error",
     });
@@ -87,7 +88,7 @@ export async function updateRemoteWorkflowStep({
     setWorkflowSteps((previous) => applyWorkflowStepUpdates(previous, stepId, updated));
   } catch (error) {
     toast({
-      title: "Failed to update workflow step",
+      title: t("settings:failedToUpdateWorkflowStep"),
       description: error instanceof Error ? error.message : FALLBACK_ERROR_MESSAGE,
       variant: "error",
     });

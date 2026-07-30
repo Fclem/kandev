@@ -60,7 +60,7 @@ function buildMonitorViewModel(comment: Message): MonitorViewModel {
     endReason: view.end_reason ?? "",
     eventCount,
     recentEvents: view.recent_events ?? [],
-    title: command ? `Monitor: ${command}` : t("task:monitor"),
+    title: command ? t("task:monitor2", { command }) : t("task:monitor"),
     countSuffix: pluralizeEventCount(eventCount),
   };
 }

@@ -68,12 +68,6 @@ export function MessageCommentDecorationOverlay({
 }
 
 export function MessageCustomHighlightStyle({ highlightName }: { highlightName: string }) {
-  return (
-    <style>{`::highlight(${highlightName}) {
-      background-color: color-mix(in oklch, var(--accent) 70%, transparent);
-      color: inherit;
-      text-decoration: underline 2px color-mix(in oklch, var(--accent-foreground) 25%, transparent);
-      text-underline-offset: 2px;
-    }`}</style>
-  );
+  const { t } = useTranslation();
+  return <style>{t("task:highlightBackgroundColorColorMixIn", { highlightName })}</style>;
 }

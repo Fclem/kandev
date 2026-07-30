@@ -60,7 +60,7 @@ function PageHeader({
   return (
     <PageTopbar
       title="GitLab"
-      subtitle={`${host} · merge requests and issues`}
+      subtitle={t("gitlab:mergeRequestsAndIssues", { host })}
       icon={<IconBrandGitlab className="h-4 w-4" />}
       actions={
         onOpenMobileSidebar && (

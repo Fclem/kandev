@@ -9,6 +9,7 @@ import { useRouter } from "@/lib/routing/client-router";
 import { associateAzureDevOpsPullRequest } from "@/lib/api/domains/azure-devops-api";
 import type { AzureDevOpsPullRequest, AzureDevOpsWorkItem } from "@/lib/types/azure-devops";
 import type { Repository, Task, Workflow, WorkflowStep } from "@/lib/types/http";
+import { t } from "@/lib/i18n";
 
 export type AzureDevOpsLaunchPayload =
   | { kind: "work-item"; item: AzureDevOpsWorkItem }
@@ -37,7 +38,7 @@ function launchText(payload: AzureDevOpsLaunchPayload) {
   }
   const pullRequest = payload.pullRequest;
   return {
-    title: `Review PR ${pullRequest.id}: ${pullRequest.title}`,
+    title: t("azureDevops:reviewPr", { id: pullRequest.id, title: pullRequest.title }),
     description: [
       `Azure DevOps pull request: ${pullRequest.webUrl}`,
       "",

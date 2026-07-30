@@ -231,7 +231,7 @@ export function SetupWizard({
     setSubmitting(true);
     try {
       const result = await importFromFS();
-      toast.success(`Imported ${result.importedCount} config entries`);
+      toast.success(t("office:importedConfigEntries", { importedCount: result.importedCount }));
       router.push("/office");
       router.refresh();
     } catch (err) {

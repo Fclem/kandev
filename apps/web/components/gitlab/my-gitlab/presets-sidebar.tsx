@@ -185,7 +185,7 @@ function SavedSection({
               }}
               className="opacity-0 group-hover/item:opacity-100 transition-opacity text-muted-foreground hover:text-foreground cursor-pointer"
               title={t("gitlab:deleteSavedQuery")}
-              aria-label={`Delete saved query ${s.label}`}
+              aria-label={t("gitlab:deleteSavedQuery2", { label: s.label })}
               data-testid={`gitlab-saved-delete-${s.id}`}
             >
               <IconX className="h-3.5 w-3.5" />

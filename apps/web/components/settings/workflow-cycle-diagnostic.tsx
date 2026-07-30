@@ -102,11 +102,17 @@ export function WorkflowCycleDiagnostic({
       <AlertDescription className="min-w-0 space-y-3 text-left text-sm text-pretty">
         <p>
           {isBlocking
-            ? `This path re-enters "${diagnostic.autoStartStepName}" and can start the agent again without another user action.`
-            : `This path can re-enter "${diagnostic.autoStartStepName}" and start the agent again after a user action.`}
+            ? t("settings:thisPathReEntersAndCan", {
+                autoStartStepName: diagnostic.autoStartStepName,
+              })
+            : t("settings:thisPathCanReEnterAnd", {
+                autoStartStepName: diagnostic.autoStartStepName,
+              })}
         </p>
         <ol
-          aria-label={`Replay path for ${diagnostic.autoStartStepName}`}
+          aria-label={t("settings:replayPathFor", {
+            autoStartStepName: diagnostic.autoStartStepName,
+          })}
           className="grid min-w-0 gap-2"
         >
           {diagnostic.trace.map((hop, index) => (

@@ -94,7 +94,7 @@ export function AnnotationsPanel({ annotations, onRemove, onClear }: Annotations
               variant="ghost"
               className="h-5 w-5 p-0 cursor-pointer shrink-0"
               onClick={() => onRemove(a.id)}
-              aria-label={`Remove annotation ${a.number}`}
+              aria-label={t("task:removeAnnotation", { number: a.number })}
               data-testid="preview-annotation-remove"
             >
               <IconX className="h-3 w-3" />

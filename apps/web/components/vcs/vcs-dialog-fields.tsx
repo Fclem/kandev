@@ -117,12 +117,13 @@ export function PRTitleField({
   isUtilityConfigured: boolean;
   terminology: ChangeRequestTerminology;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="relative min-w-0">
       <Input
         id="vcs-pr-title"
-        aria-label={`${terminology.longName} title`}
-        placeholder={`${terminology.longName} title...`}
+        aria-label={t("integrations:title", { longName: terminology.longName })}
+        placeholder={t("integrations:title2", { longName: terminology.longName })}
         value={prTitle}
         onChange={(e) => onPrTitleChange(e.target.value)}
         className="pr-10"
@@ -132,7 +133,7 @@ export function PRTitleField({
         <GenerateButton
           onClick={onGenerateTitle}
           isGenerating={isGeneratingTitle}
-          tooltip={`Generate ${terminology.shortName} title with AI`}
+          tooltip={t("integrations:generateTitleWithAi", { shortName: terminology.shortName })}
           isConfigured={isUtilityConfigured}
         />
       </div>
@@ -174,7 +175,9 @@ export function PRDescriptionField({
           <GenerateButton
             onClick={onGenerateDescription}
             isGenerating={isGeneratingDescription}
-            tooltip={`Generate ${terminology.shortName} description with AI`}
+            tooltip={t("integrations:generateDescriptionWithAi", {
+              shortName: terminology.shortName,
+            })}
             isConfigured={isUtilityConfigured}
           />
         </div>

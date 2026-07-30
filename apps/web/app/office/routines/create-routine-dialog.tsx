@@ -68,13 +68,14 @@ function dotColor(index: number, current: number): string {
 }
 
 function StepIndicator({ current }: { current: number }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-center gap-2 pt-1">
       {STEP_TITLES.map((title, i) => (
         <div
           key={title}
           className={`h-2 w-2 rounded-full transition-colors ${dotColor(i, current)}`}
-          aria-label={`Step ${i + 1}: ${title}`}
+          aria-label={t("office:step2", { i: i + 1, title })}
         />
       ))}
     </div>

@@ -19,6 +19,7 @@ import {
 import { buildMarkdownPreviewComment, commentsOverlapRange } from "@/lib/markdown/preview-comments";
 import { useDiffFileComments } from "./use-diff-comments";
 import { useRunComment } from "./use-run-comment";
+import { useTranslation } from "react-i18next";
 
 export type MarkdownCommentView = {
   comments: DiffComment[];
@@ -169,6 +170,7 @@ function useMarkdownCommentSubmitters({
   textSelection: MarkdownPreviewSelection | null;
   clearTextSelection: () => void;
 }) {
+  const { t } = useTranslation();
   const addComment = useCommentsStore((s) => s.addComment);
   const { runComment } = useRunComment({ sessionId: sessionId ?? null, taskId: taskId ?? null });
   const { toast } = useToast();
@@ -198,8 +200,8 @@ function useMarkdownCommentSubmitters({
       const comment = createComment(text);
       if (!comment) return;
       toast({
-        title: "Comment added",
-        description: "Your comment will be sent with your next message.",
+        title: t("common:commentAdded"),
+        description: t("common:yourCommentWillBeSentWith"),
       });
     },
     [createComment, toast],
@@ -209,8 +211,8 @@ function useMarkdownCommentSubmitters({
     async (text: string) => {
       if (!canRunComment) {
         toast({
-          title: "Failed to send comment",
-          description: "Open a task session before sending to the agent.",
+          title: t("common:failedToSendComment"),
+          description: t("common:openATaskSessionBeforeSending"),
           variant: "error",
         });
         return;
@@ -220,13 +222,13 @@ function useMarkdownCommentSubmitters({
       try {
         const { queued } = await runComment(comment);
         toast({
-          title: "Comment sent",
-          description: queued ? "Queued for the agent." : "Sent to the agent.",
+          title: t("common:commentSent"),
+          description: queued ? t("common:queuedForTheAgent") : t("common:sentToTheAgent"),
         });
       } catch {
         toast({
-          title: "Failed to send comment",
-          description: "Please try again.",
+          title: t("common:failedToSendComment"),
+          description: t("common:pleaseTryAgain"),
           variant: "error",
         });
       }
@@ -278,6 +280,7 @@ function useVisibleMarkdownCommentActions({
 }: {
   setCommentView: Dispatch<SetStateAction<MarkdownCommentView>>;
 }) {
+  const { t } = useTranslation();
   const removeComment = useCommentsStore((s) => s.removeComment);
   const updateComment = useCommentsStore((s) => s.updateComment);
   const { toast } = useToast();
@@ -289,7 +292,7 @@ function useVisibleMarkdownCommentActions({
         const nextComments = view.comments.filter((comment) => comment.id !== commentId);
         return nextComments.length > 0 ? { ...view, comments: nextComments } : null;
       });
-      toast({ title: "Comment deleted" });
+      toast({ title: t("common:commentDeleted") });
     },
     [removeComment, setCommentView, toast],
   );
@@ -305,7 +308,7 @@ function useVisibleMarkdownCommentActions({
           ),
         };
       });
-      toast({ title: "Comment updated" });
+      toast({ title: t("common:commentUpdated") });
     },
     [setCommentView, toast, updateComment],
   );

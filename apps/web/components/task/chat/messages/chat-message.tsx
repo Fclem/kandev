@@ -281,6 +281,7 @@ const PROMPT_MENTION_CHIP_CLASS =
  * doesn't need to switch to the raw message view.
  */
 function PromptMentionChip({ name, value }: { name: string; value: string }) {
+  const { t } = useTranslation();
   const content = useAppStore(
     useCallback(
       (state) => state.prompts.items.find((prompt) => prompt.name === name)?.content ?? null,
@@ -293,7 +294,7 @@ function PromptMentionChip({ name, value }: { name: string; value: string }) {
       <span
         data-testid="custom-prompt-mention"
         data-prompt-name={name}
-        title={`Custom prompt: ${name}`}
+        title={t("task:customPrompt2", { name })}
         className={PROMPT_MENTION_CHIP_CLASS}
       >
         {value}
@@ -420,7 +421,7 @@ function UserMessageAttachments({
         <ImagePreviewDialog
           key={index}
           src={`data:${att.mime_type};base64,${att.data}`}
-          alt={`Attachment ${index + 1}`}
+          alt={t("task:attachment3", { index: index + 1 })}
           thumbnailClassName="max-h-48 max-w-full rounded-lg object-contain transition-opacity hover:opacity-90"
         />
       ))}

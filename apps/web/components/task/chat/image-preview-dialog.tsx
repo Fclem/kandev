@@ -38,6 +38,7 @@ export function ImagePreviewDialog({
   thumbnailClassName,
   interactive = true,
 }: ImagePreviewDialogProps) {
+  const { t } = useTranslation();
   if (!interactive) {
     return <img src={src} alt={alt} className={thumbnailClassName} />;
   }
@@ -47,7 +48,7 @@ export function ImagePreviewDialog({
       <DialogTrigger asChild>
         <button
           type="button"
-          aria-label={`Open ${alt}`}
+          aria-label={t("task:open", { alt })}
           className="inline-flex max-w-full cursor-pointer items-center justify-center rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
         >
           <img src={src} alt="" className={cn("pointer-events-none", thumbnailClassName)} />
@@ -57,7 +58,7 @@ export function ImagePreviewDialog({
         aria-describedby={undefined}
         className={IMAGE_PREVIEW_DIALOG_CONTENT_CLASSNAME}
       >
-        <ImagePreviewContent src={src} alt={`Full size ${alt}`} />
+        <ImagePreviewContent src={src} alt={t("task:fullSize", { alt })} />
       </DialogContent>
     </Dialog>
   );

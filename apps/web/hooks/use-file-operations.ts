@@ -4,6 +4,7 @@ import type { WebSocketClient } from "@/lib/ws/client";
 import { createFile, deleteFile, renameFile, requestFileContent } from "@/lib/ws/workspace-files";
 import { triggerFileDownload } from "@/lib/utils/file-download";
 import { useToast } from "@/components/toast-provider";
+import { useTranslation } from "react-i18next";
 
 type ToastFn = ReturnType<typeof useToast>["toast"];
 
@@ -55,6 +56,7 @@ async function runFileOp<T extends { success: boolean; error?: string }>(
 }
 
 export function useFileOperations(sessionId: string | null) {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const handleCreateFile = useCallback(
@@ -95,7 +97,7 @@ export function useFileOperations(sessionId: string | null) {
       const result = await downloadFileContent(client, sessionId, path);
       if (!result.ok) {
         toast({
-          title: "Failed to download file",
+          title: t("common:failedToDownloadFile"),
           description: result.error || UNKNOWN_ERROR,
           variant: ERROR_VARIANT,
         });

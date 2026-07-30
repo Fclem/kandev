@@ -143,7 +143,7 @@ export function BlockersPicker({ task }: BlockersPickerProps) {
             remove();
           }
         }}
-        aria-label={`Remove ${item.identifier}`}
+        aria-label={t("task:remove4", { identifier: item.identifier })}
       >
         <IconX className="h-2.5 w-2.5" />
       </span>

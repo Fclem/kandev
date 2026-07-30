@@ -9,10 +9,12 @@ import {
 } from "@/lib/api/domains/automation-api";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import type { AutomationRun } from "@/lib/types/automation";
+import { useTranslation } from "react-i18next";
 
 const EMPTY_RUNS: AutomationRun[] = [];
 
 export function useAutomationRuns(automationId: string | null, workspaceId: string) {
+  const { t } = useTranslation();
   const runs = useAppStore((state) =>
     automationId ? (state.automationRuns.byAutomationId[automationId] ?? EMPTY_RUNS) : EMPTY_RUNS,
   );
@@ -88,7 +90,7 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
               if (deletedRun) {
                 restoreRun(automationId, deletedRun);
               }
-              toast.error("Could not refresh runs — restored from local cache");
+              toast.error(t("common:couldNotRefreshRunsRestoredFrom"));
             });
         });
     },
@@ -118,7 +120,7 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
             // would stay permanently empty even though delete-all never
             // succeeded server-side. Fall back to the pre-clear snapshot.
             setRuns(automationId, previousRuns);
-            toast.error("Could not refresh runs — restored from local cache");
+            toast.error(t("common:couldNotRefreshRunsRestoredFrom"));
           });
       });
   }, [automationId, clearRuns, setRuns, storeApi, workspaceId]);

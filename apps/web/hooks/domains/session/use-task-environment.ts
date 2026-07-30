@@ -16,6 +16,7 @@ import {
   resolveExecutorEnvironmentStatus,
   type EnvironmentStatusSnapshot,
 } from "@/components/task/executor-environment-status";
+import { useTranslation } from "react-i18next";
 
 const ACTIVE_POLL_INTERVAL_MS = 3000;
 const BACKGROUND_POLL_INTERVAL_MS = 7000;
@@ -27,6 +28,7 @@ const BACKGROUND_POLL_INTERVAL_MS = 7000;
  * still reflect externally stopped/restarted containers.
  */
 export function useTaskEnvironment(taskId: string | null | undefined, active: boolean) {
+  const { t } = useTranslation();
   const [env, setEnv] = useState<TaskEnvironment | null>(null);
   const [container, setContainer] = useState<ContainerLiveStatus | null>(null);
   const [ssh, setSsh] = useState<SSHLiveStatus | null>(null);
@@ -103,7 +105,7 @@ export function useTaskEnvironment(taskId: string | null | undefined, active: bo
       setIsResetting(true);
       try {
         await resetTaskEnvironment(taskId, { push_branch: pushBranch });
-        toast.success("Environment reset");
+        toast.success(t("common:environmentReset"));
         lastStatusRef.current = getEnvironmentStatusSnapshot(null, null);
         setEnv(null);
         setContainer(null);

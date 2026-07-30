@@ -124,6 +124,7 @@ function Field({
   copy?: boolean;
   copyValue?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-2">
       <dt className="text-muted-foreground min-w-[80px]">{label}</dt>
@@ -133,11 +134,11 @@ function Field({
           <button
             type="button"
             className="cursor-pointer text-muted-foreground hover:text-foreground"
-            aria-label={`Copy ${label}`}
+            aria-label={t("task:copy", { label })}
             onClick={() => {
               void navigator.clipboard
                 .writeText(copyValue ?? value)
-                .then(() => toast.success(`${label} copied`));
+                .then(() => toast.success(t("task:copied3", { label })));
             }}
           >
             <IconCopy className="h-3 w-3" />

@@ -204,7 +204,9 @@ function KanbanCardBadges({ task }: { task: Task }) {
         <Badge
           variant="secondary"
           className="text-xs h-5"
-          title={`Queued for ${task.queuedForStepTitle ?? `workflow step ${task.queuedForStepId}`}`}
+          title={t("kanban:queuedFor2", {
+            queuedForStepTitle: task.queuedForStepTitle ?? `workflow step ${task.queuedForStepId}`,
+          })}
         >
           {t("kanban:queuedFor")} {task.queuedForStepTitle ?? t("kanban:nextCapacity")}
         </Badge>
@@ -450,6 +452,7 @@ function KanbanCardCheckbox({
   isSelected?: boolean;
   onCheckboxClick: (e: React.MouseEvent) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="mt-0.5 shrink-0"
@@ -459,7 +462,7 @@ function KanbanCardCheckbox({
     >
       <Checkbox
         checked={!!isSelected}
-        aria-label={`Select task ${taskTitle}`}
+        aria-label={t("kanban:selectTask", { taskTitle })}
         className="cursor-pointer border-muted-foreground/50"
       />
     </div>

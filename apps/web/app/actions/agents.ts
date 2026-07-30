@@ -140,6 +140,7 @@ import type {
   RoutingTierReference,
   WatcherReference,
 } from "@/lib/types/agent-profile-errors";
+import { t } from "@/lib/i18n";
 
 export type DeleteProfileResult =
   | { status: "ok" }
@@ -180,7 +181,9 @@ export async function deleteAgentProfileAction(
     }
     return {
       status: "error",
-      message: body?.error || `Request failed: ${response.status} ${response.statusText}`,
+      message:
+        body?.error ||
+        t("common:requestFailed2", { status: response.status, statusText: response.statusText }),
     };
   }
   return { status: "ok" };

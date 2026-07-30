@@ -7,6 +7,8 @@ import { detectVoiceCapabilities, resolveActiveEngine } from "@/lib/voice/capabi
 import { WhisperWebClient, type WhisperWebProgress } from "@/lib/voice/whisper-web-client";
 import { useAppStore } from "@/components/state-provider";
 import type { VoiceInputEngine, WhisperWebModelSize } from "@/lib/types/http-voice";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 // ── Public types ────────────────────────────────────────────────────────
 
@@ -82,38 +84,39 @@ function createSpeechRecognition(): SpeechRecognitionInstance | null {
 
 function mapSpeechError(code: string): VoiceError {
   if (code === "not-allowed" || code === "service-not-allowed") {
-    return { code: "permission-denied", message: "Microphone permission denied." };
+    return { code: "permission-denied", message: t("common:microphonePermissionDenied") };
   }
-  if (code === "no-speech") return { code: "no-speech", message: "No speech detected. Try again." };
+  if (code === "no-speech")
+    return { code: "no-speech", message: t("common:noSpeechDetectedTryAgain") };
   if (code === "network") {
-    return { code: "network", message: "Voice recognition lost network connection." };
+    return { code: "network", message: t("common:voiceRecognitionLostNetworkConnection") };
   }
-  if (code === "audio-capture") return { code: "unknown", message: "No microphone was found." };
-  return { code: "unknown", message: `Voice recognition error: ${code}` };
+  if (code === "audio-capture")
+    return { code: "unknown", message: t("common:noMicrophoneWasFound") };
+  return { code: "unknown", message: t("common:voiceRecognitionError", { code }) };
 }
 
 function mapMicError(err: unknown): VoiceError {
   if (err && typeof err === "object" && "name" in err) {
     const name = (err as { name: string }).name;
     if (name === "NotAllowedError" || name === "SecurityError") {
-      return { code: "permission-denied", message: "Microphone permission denied." };
+      return { code: "permission-denied", message: t("common:microphonePermissionDenied") };
     }
     if (name === "NotFoundError" || name === "OverconstrainedError") {
-      return { code: "unknown", message: "No microphone was found." };
+      return { code: "unknown", message: t("common:noMicrophoneWasFound") };
     }
   }
-  return { code: "unknown", message: "Failed to start recording." };
+  return { code: "unknown", message: t("common:failedToStartRecording") };
 }
 
 function mapTranscribeError(err: unknown): VoiceError {
   if (err instanceof ApiError && err.status === 503) {
     return {
       code: "not-configured",
-      message:
-        "Server-side transcription isn't configured. Pick Web Speech or Whisper Web in Voice Mode settings.",
+      message: t("common:serverSideTranscriptionIsnTConfigured"),
     };
   }
-  return { code: "network", message: "Transcription failed. Please try again." };
+  return { code: "network", message: t("common:transcriptionFailedPleaseTryAgain") };
 }
 
 function whisperErrorMessage(err: unknown): VoiceError {
@@ -240,7 +243,7 @@ type WebSpeechHandlers = {
 function runWebSpeech(h: WebSpeechHandlers): void {
   const recognition = createSpeechRecognition();
   if (!recognition) {
-    h.emitError({ code: "unsupported", message: "Voice recognition is not supported." });
+    h.emitError({ code: "unsupported", message: t("common:voiceRecognitionIsNotSupported") });
     return;
   }
   const transcripts: string[] = [];
@@ -266,7 +269,7 @@ function runWebSpeech(h: WebSpeechHandlers): void {
     h.driverRef.current = { kind: "webSpeech", recognition };
     h.setState("recording");
   } catch {
-    h.emitError({ code: "unknown", message: "Failed to start voice recognition." });
+    h.emitError({ code: "unknown", message: t("common:failedToStartVoiceRecognition") });
   }
 }
 
@@ -410,6 +413,7 @@ function useUnmountCleanup(driverRef: DriverRefBox, whisperRef: WhisperRefBox) {
 // ── Hook ────────────────────────────────────────────────────────────────
 
 export function useVoiceInput(opts: UseVoiceInputOptions): UseVoiceInputResult {
+  const { t } = useTranslation();
   const caps = useMemo(() => detectVoiceCapabilities(), []);
   const prefs = useVoiceModePrefs();
   const enabled = opts.enabled !== false;
@@ -446,7 +450,7 @@ export function useVoiceInput(opts: UseVoiceInputOptions): UseVoiceInputResult {
 
   const start = useCallback(async () => {
     if (!supported || !engine) {
-      emitError({ code: "unsupported", message: "Voice input is not supported in this browser." });
+      emitError({ code: "unsupported", message: t("common:voiceInputIsNotSupportedIn") });
       return;
     }
     if (state !== "idle") return;

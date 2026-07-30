@@ -13,6 +13,7 @@ import {
   remapWorkflowDraftSteps,
 } from "./workflow-card-actions";
 import type { useWorkflowMutationGuard } from "./workflow-mutation-guard";
+import { useTranslation } from "react-i18next";
 
 const TEMP_WORKFLOW_PREFIX = "temp-workflow-";
 
@@ -90,6 +91,7 @@ function useWorkflowDraftPersistence(args: WorkflowDraftContributorArgs) {
 }
 
 export function useWorkflowDraftContributor(args: WorkflowDraftContributorArgs) {
+  const { t } = useTranslation();
   const { workflow, workflowSteps, savedWorkflowSteps, mutationGuard, toast } = args;
   const persistence = useWorkflowDraftPersistence(args);
   const removingDraftRef = useRef(false);
@@ -102,7 +104,7 @@ export function useWorkflowDraftContributor(args: WorkflowDraftContributorArgs) 
     revision: persistence.revision,
     isDirty: args.isWorkflowDirty || stepsDirty,
     canSave: workflow.name.trim().length > 0,
-    invalidReason: workflow.name.trim() ? undefined : "Workflow name is required",
+    invalidReason: workflow.name.trim() ? undefined : t("settings:workflowNameIsRequired"),
     save: async (submittedRevision) => {
       if (!workflow.id.startsWith(TEMP_WORKFLOW_PREFIX)) {
         await persistence.persistSubmittedDraft(submittedRevision);
@@ -121,8 +123,8 @@ export function useWorkflowDraftContributor(args: WorkflowDraftContributorArgs) 
           } catch (error) {
             if (!guardReturned) throw error;
             toast({
-              title: "Failed to save workflow changes",
-              description: error instanceof Error ? error.message : "Request failed",
+              title: t("settings:failedToSaveWorkflowChanges"),
+              description: error instanceof Error ? error.message : t("common:requestFailed"),
               variant: "error",
             });
           }

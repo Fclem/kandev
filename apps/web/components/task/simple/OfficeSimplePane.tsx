@@ -378,9 +378,9 @@ function TaskActionRow({
             title: file.name,
             content: content.slice(0, 100_000),
           });
-          toast.success(`Uploaded ${file.name}`);
+          toast.success(t("task:uploaded", { name: file.name }));
         } catch {
-          toast.error(`Failed to upload ${file.name}`);
+          toast.error(t("task:failedToUpload", { name: file.name }));
         }
       }
       e.target.value = "";

@@ -202,9 +202,12 @@ function JQLField({
     setResult(null);
     try {
       const res = await searchJiraTickets({ jql, maxResults: 5 }, { workspaceId });
-      setResult({ ok: true, message: `Matched ${res.tickets.length} ticket(s) in this page.` });
+      setResult({
+        ok: true,
+        message: t("jira:matchedTicketSInThisPage", { length: res.tickets.length }),
+      });
     } catch (err) {
-      setResult({ ok: false, message: `JQL error: ${String(err)}` });
+      setResult({ ok: false, message: t("jira:jqlError", { err: String(err) }) });
     } finally {
       setTesting(false);
     }

@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -18,11 +18,12 @@ type LiveAgentIndicatorProps = {
  * and `execution-indicator` (emerald-400/500, animate-ping halo).
  */
 export function LiveAgentIndicator({ count, className }: LiveAgentIndicatorProps) {
+  const { t } = useTranslation();
   if (count <= 0) return null;
   return (
     <div
       className={cn("flex items-center gap-1.5", className)}
-      aria-label={`${count} active session${count === 1 ? "" : "s"}`}
+      aria-label={t("office:activeSession", { count })}
     >
       <span className="relative flex h-2 w-2 shrink-0">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />

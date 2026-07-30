@@ -14,6 +14,7 @@ import type {
   UpdateAvailablePayload,
 } from "@/lib/types/backend";
 import type { WsHandlers } from "@/lib/ws/handlers/types";
+import { t } from "@/lib/i18n";
 
 /** Check whether the notification should be suppressed. */
 function shouldSuppressNotification(state: AppState, taskId: string | undefined): string | null {
@@ -86,7 +87,7 @@ export function registerNotificationsHandlers(store: StoreApi<AppState>): WsHand
       store,
       NOTIFICATION_EVENT_SESSION_TURN_FINISHED,
       {
-        title: "Agent turn finished",
+        title: t("common:agentTurnFinished"),
         body: "The agent finished a turn.",
       },
     ),
@@ -94,7 +95,7 @@ export function registerNotificationsHandlers(store: StoreApi<AppState>): WsHand
       store,
       NOTIFICATION_EVENT_SESSION_CLARIFICATION_REQUESTED,
       {
-        title: "Agent needs your answer",
+        title: t("common:agentNeedsYourAnswer"),
         body: "The agent asked a question.",
       },
     ),
@@ -102,7 +103,7 @@ export function registerNotificationsHandlers(store: StoreApi<AppState>): WsHand
       store,
       NOTIFICATION_EVENT_OFFICE_INBOX_ITEM,
       {
-        title: "New inbox item",
+        title: t("common:newInboxItem"),
         body: "A new item needs your attention.",
       },
     ),

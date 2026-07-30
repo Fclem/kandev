@@ -46,13 +46,13 @@ function PresetList({
         <div key={preset.id} className="space-y-2 rounded-md border p-3">
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
             <Input
-              aria-label={`Action label ${index + 1}`}
+              aria-label={t("gitlab:actionLabel", { index: index + 1 })}
               value={preset.label}
               placeholder={t("gitlab:label")}
               onChange={(event) => patch(index, { label: event.target.value })}
             />
             <Input
-              aria-label={`Action hint ${index + 1}`}
+              aria-label={t("gitlab:actionHint", { index: index + 1 })}
               value={preset.hint}
               placeholder={t("gitlab:shortHint")}
               onChange={(event) => patch(index, { hint: event.target.value })}
@@ -62,14 +62,14 @@ function PresetList({
               variant="ghost"
               size="icon"
               className="h-11 w-11 cursor-pointer text-destructive sm:h-8 sm:w-8"
-              aria-label={`Remove ${preset.label}`}
+              aria-label={t("gitlab:remove", { label: preset.label })}
               onClick={() => onChange(presets.filter((_, current) => current !== index))}
             >
               <IconTrash className="h-4 w-4" />
             </Button>
           </div>
           <Textarea
-            aria-label={`Action prompt ${index + 1}`}
+            aria-label={t("gitlab:actionPrompt", { index: index + 1 })}
             value={preset.prompt_template}
             placeholder={t("gitlab:promptUsingAnd")}
             className="min-h-24 font-mono text-xs"

@@ -4,12 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import * as officeApi from "@/lib/api/domains/office-api";
 import type { SyncDiff } from "@/lib/api/domains/office-api";
+import { useTranslation } from "react-i18next";
 
 const MSG_LOAD_FAIL = "Failed to load diffs";
 const MSG_IMPORT_FAIL = "Failed to import from filesystem";
 const MSG_EXPORT_FAIL = "Failed to export to filesystem";
 
 export function useSyncState(activeWorkspaceId: string) {
+  const { t } = useTranslation();
   const [incoming, setIncoming] = useState<SyncDiff | null>(null);
   const [outgoing, setOutgoing] = useState<SyncDiff | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,7 +45,10 @@ export function useSyncState(activeWorkspaceId: string) {
     try {
       const res = await officeApi.applyIncomingSync(activeWorkspaceId);
       toast.success(
-        `Imported from filesystem (created ${res.result.created_count}, updated ${res.result.updated_count})`,
+        t("office:importedFromFilesystemCreatedUpdated", {
+          createdcount: res.result.created_count,
+          updatedcount: res.result.updated_count,
+        }),
       );
       await refresh();
     } catch (err) {
@@ -58,7 +63,7 @@ export function useSyncState(activeWorkspaceId: string) {
     setApplyingOut(true);
     try {
       await officeApi.applyOutgoingSync(activeWorkspaceId);
-      toast.success("Exported to filesystem");
+      toast.success(t("office:exportedToFilesystem"));
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : MSG_EXPORT_FAIL);

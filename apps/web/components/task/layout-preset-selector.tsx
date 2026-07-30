@@ -214,7 +214,7 @@ function SavedLayoutItems({
       </DropdownMenuItem>
       <DropdownMenuItem
         className="min-h-11 min-w-11 shrink-0 cursor-pointer justify-center px-2 text-destructive/60 focus:text-destructive sm:min-h-7 sm:min-w-7"
-        aria-label={`Delete ${layout.name}`}
+        aria-label={t("task:delete3", { name: layout.name })}
         data-testid="layout-saved-delete"
         data-layout-id={layout.id}
         onSelect={() => onDelete(layout)}

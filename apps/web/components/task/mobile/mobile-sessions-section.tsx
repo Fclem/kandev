@@ -506,7 +506,7 @@ export const MobileSessionsPicker = memo(function MobileSessionsPicker({
         isOpen={open}
         onClick={() => setOpen(true)}
         data-testid="mobile-sessions-pill"
-        ariaLabel={`Active session: ${label}. Tap to switch.`}
+        ariaLabel={t("task:activeSessionTapToSwitch", { label })}
       />
       <MobilePickerSheet open={open} onOpenChange={setOpen} title={t("task:sessions")}>
         <MobileSessionsList

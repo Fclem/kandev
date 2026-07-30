@@ -6,6 +6,7 @@ import type { FileAttachment } from "./chat/file-attachment";
 import type { AgentProfileOption } from "@/lib/state/slices";
 import type { SummarizeSessionResult } from "@/hooks/use-summarize-session";
 import { applySummarizeSessionResult, type SummaryToastFn } from "./session-context-summary";
+import { useTranslation } from "react-i18next";
 
 type SessionContextChangeOpts = {
   promptRef: RefObject<HTMLTextAreaElement | null>;
@@ -75,6 +76,7 @@ export function useSessionLaunchSubmit({
   ) => void;
   setIsCreating: (creating: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -104,8 +106,8 @@ export function useSessionLaunchSubmit({
         onClose();
       } catch (error) {
         toast({
-          title: "Failed to create session",
-          description: error instanceof Error ? error.message : "Unknown error",
+          title: t("task:failedToCreateSession"),
+          description: error instanceof Error ? error.message : t("common:unknownError"),
           variant: "error",
         });
       } finally {

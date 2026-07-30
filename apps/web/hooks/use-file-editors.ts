@@ -25,6 +25,7 @@ import {
   type FileEditorRequestToken,
 } from "./file-editor-state";
 import { scrollEditorIfMounted, setPendingCursorPosition } from "./file-editor-cursor";
+import { useTranslation } from "react-i18next";
 export {
   consumePendingCursorPosition,
   scrollEditorIfMounted,
@@ -365,6 +366,7 @@ function useOpenFileAction({
   addFileEditorPanel,
   toast,
 }: OpenFileActionParams) {
+  const { t } = useTranslation();
   return useCallback(
     async (filePath: string, repo?: string) => {
       const client = getWebSocketClient();
@@ -409,8 +411,8 @@ function useOpenFileAction({
         setFileState(fileKey, state);
       } catch (error) {
         toast({
-          title: "Failed to open file",
-          description: error instanceof Error ? error.message : "Unknown error",
+          title: t("common:failedToOpenFile"),
+          description: error instanceof Error ? error.message : t("common:unknownError"),
           variant: "error",
         });
       }
@@ -447,6 +449,7 @@ function useMarkdownPreviewAction({
   addFileEditorPanel,
   toast,
 }: MarkdownPreviewActionParams) {
+  const { t } = useTranslation();
   return useCallback(
     async (filePath: string, repo?: string) => {
       const client = getWebSocketClient();
@@ -488,8 +491,8 @@ function useMarkdownPreviewAction({
         setFileState(fileKey, { ...state, markdownPreview: true });
       } catch (error) {
         toast({
-          title: "Failed to open file",
-          description: error instanceof Error ? error.message : "Unknown error",
+          title: t("common:failedToOpenFile"),
+          description: error instanceof Error ? error.message : t("common:unknownError"),
           variant: "error",
         });
       }

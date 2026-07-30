@@ -50,7 +50,7 @@ export function AgentInstructionsTab({ agent }: AgentInstructionsTabProps) {
     async (filename: string, content: string) => {
       try {
         await officeApi.upsertInstruction(agent.id, filename, content);
-        toast.success(`Saved ${filename}`);
+        toast.success(t("office:saved", { filename }));
         await fetchFiles();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to save");
@@ -63,7 +63,7 @@ export function AgentInstructionsTab({ agent }: AgentInstructionsTabProps) {
     async (filename: string) => {
       try {
         await officeApi.deleteInstruction(agent.id, filename);
-        toast.success(`Deleted ${filename}`);
+        toast.success(t("office:deleted", { filename }));
         setSelectedFile(null);
         await fetchFiles();
       } catch (err) {

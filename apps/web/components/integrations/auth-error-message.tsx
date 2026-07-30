@@ -51,7 +51,9 @@ export function IntegrationAuthErrorMessage({
     return (
       <div className="flex items-center gap-3 text-sm">
         <span className={isAuth ? "text-muted-foreground" : "text-destructive"}>
-          {isAuth ? `${name} authentication required.` : cleanIntegrationErrorMessage(error)}
+          {isAuth
+            ? t("integrations:authenticationRequired2", { name })
+            : cleanIntegrationErrorMessage(error)}
         </span>
         {isAuth && (
           <Button asChild size="sm" variant="outline" className="cursor-pointer h-7 text-xs">

@@ -50,7 +50,7 @@ function PreparingRow({ summary }: { summary: PrepareSummary }) {
       </div>
       <div className="text-xs text-muted-foreground">
         {summary.totalSteps > 0
-          ? `Step ${stepNumber} of ${summary.totalSteps}: ${stepLabel}`
+          ? t("task:stepOf", { stepNumber, totalSteps: summary.totalSteps, stepLabel })
           : stepLabel}
       </div>
       {summary.phase === "preparing_fallback" && summary.fallbackWarning && (

@@ -181,7 +181,7 @@ function useSaveHandler(opts: SaveHandlerOpts): () => Promise<void> {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Failed to save automation: ${msg}`);
+      toast.error(t("automations:failedToSaveAutomation", { msg }));
       throw err;
     } finally {
       setSaving(false);

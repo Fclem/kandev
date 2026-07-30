@@ -6,6 +6,7 @@ import { lspClientManager } from "@/lib/lsp/lsp-client-manager";
 import { computeLineDiffStats } from "@/lib/diff";
 import { useToast } from "@/components/toast-provider";
 import { diffLines } from "diff";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Diff gutter decorations (pure function)
@@ -177,6 +178,7 @@ type UseMonacoLspOpts = {
 };
 
 export function useMonacoEditorLsp(opts: UseMonacoLspOpts) {
+  const { t } = useTranslation();
   const { sessionId, worktreePath, language, path, contentRef, editorRef } = opts;
   const { toast } = useToast();
 
@@ -226,14 +228,17 @@ export function useMonacoEditorLsp(opts: UseMonacoLspOpts) {
   const lspReasonForToast = "reason" in lspStatus ? lspStatus.reason : null;
   useEffect(() => {
     if (lspStateForToast === "installing") {
-      toast({ title: "Installing language server", description: "This may take a moment..." });
+      toast({
+        title: t("editors:installingLanguageServer"),
+        description: t("editors:thisMayTakeAMoment"),
+      });
     } else if (lspStateForToast === "unavailable" && lspReasonForToast) {
       toast({
-        title: "Language server not found",
-        description: `${lspReasonForToast}. Enable auto-install in Settings \u2192 Editors.`,
+        title: t("editors:languageServerNotFound"),
+        description: t("editors:enableAutoInstallInSettingsEditors", { lspReasonForToast }),
       });
     } else if (lspStateForToast === "error" && lspReasonForToast) {
-      toast({ title: "LSP error", description: lspReasonForToast });
+      toast({ title: t("editors:lspError"), description: lspReasonForToast });
     }
   }, [lspStateForToast, lspReasonForToast, toast]);
 

@@ -25,7 +25,7 @@ export function TaskArchiveItem({
     return (
       <ContextMenuItem disabled={disabled} onSelect={() => onBulkArchive(actingIds)}>
         <IconArchive className="mr-2 h-4 w-4" />
-        {count > 1 ? `Archive ${count} tasks` : t("task:archive")}
+        {count > 1 ? t("task:archiveTasks", { count }) : t("task:archive")}
       </ContextMenuItem>
     );
   }

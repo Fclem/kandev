@@ -38,7 +38,7 @@ export function VoiceModelLoadIndicator({
       data-testid="voice-model-load-indicator"
       data-state={state}
       role="status"
-      aria-label={state === "error" ? `${modelLabel} failed to load` : undefined}
+      aria-label={state === "error" ? t("task:failedToLoad", { modelLabel }) : undefined}
       className={
         state === "error"
           ? "flex items-center gap-1 text-xs text-destructive w-32"
@@ -64,7 +64,7 @@ export function VoiceModelLoadIndicator({
           <Progress
             value={pct}
             className="h-1"
-            aria-label={`Downloading ${modelLabel}, ${pct} percent`}
+            aria-label={t("task:downloadingPercent", { modelLabel, pct })}
           />
         </div>
       )}

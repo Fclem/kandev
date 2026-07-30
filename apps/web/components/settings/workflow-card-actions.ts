@@ -19,6 +19,8 @@ import {
   exportWorkflowAction,
   bulkMoveTasks,
 } from "@/app/actions/workspaces";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 const FALLBACK_ERROR_MESSAGE = "Request failed";
 const TEMP_WORKFLOW_PREFIX = "temp-workflow-";
@@ -131,7 +133,7 @@ function createRemoveWorkflowStepHandler(
           ({ task_count: taskCount } = await getStepTaskCount(stepId));
         } catch (error) {
           toast({
-            title: "Failed to check workflow step tasks",
+            title: t("settings:failedToCheckWorkflowStepTasks"),
             description: error instanceof Error ? error.message : FALLBACK_ERROR_MESSAGE,
             variant: "error",
           });
@@ -439,6 +441,7 @@ export function useWorkflowDeleteHandlers({
   deleteWorkflowRun,
   toast,
 }: WorkflowDeleteHandlersParams) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!wfDel.targetWorkflowId) {
       wfDel.setTargetWorkflowSteps([]);
@@ -473,7 +476,7 @@ export function useWorkflowDeleteHandlers({
       wfDel.setDeleteOpen(true);
     } catch (error) {
       toast({
-        title: "Failed to check workflow tasks",
+        title: t("settings:failedToCheckWorkflowTasks"),
         description: error instanceof Error ? error.message : FALLBACK_ERROR_MESSAGE,
         variant: "error",
       });
@@ -491,7 +494,7 @@ export function useWorkflowDeleteHandlers({
       wfDel.setDeleteOpen(false);
     } catch (error) {
       toast({
-        title: "Failed to delete workflow",
+        title: t("settings:failedToDeleteWorkflow"),
         description: error instanceof Error ? error.message : FALLBACK_ERROR_MESSAGE,
         variant: "error",
       });
@@ -512,7 +515,7 @@ export function useWorkflowDeleteHandlers({
       wfDel.setDeleteOpen(false);
     } catch (error) {
       toast({
-        title: "Failed to migrate tasks",
+        title: t("settings:failedToMigrateTasks"),
         description: error instanceof Error ? error.message : FALLBACK_ERROR_MESSAGE,
         variant: "error",
       });
@@ -619,7 +622,7 @@ export async function handleExportWorkflow({
     setExportOpen(true);
   } catch (error) {
     toast({
-      title: "Failed to export workflow",
+      title: t("settings:failedToExportWorkflow"),
       description: error instanceof Error ? error.message : FALLBACK_ERROR_MESSAGE,
       variant: "error",
     });

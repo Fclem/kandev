@@ -163,20 +163,20 @@ export function IntegrationCopyConfigMenu({
     setCopying(true);
     const pendingId = toast({
       variant: "loading",
-      description: `Copying ${label} config to ${targetName}…`,
+      description: t("integrations:copyingConfigTo", { label, targetName }),
     });
     try {
       await copyIntegrationConfig(slug, sourceWorkspaceId, targetId);
       updateToast(pendingId, {
         variant: "success",
-        description: `Copied ${label} config to ${targetName}.`,
+        description: t("integrations:copiedConfigTo", { label, targetName }),
       });
       setOpen(false);
       setTargetId(null);
     } catch (err) {
       updateToast(pendingId, {
         variant: "error",
-        description: `Failed to copy config: ${String(err)}`,
+        description: t("integrations:failedToCopyConfig", { err: String(err) }),
       });
     } finally {
       setCopying(false);

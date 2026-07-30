@@ -16,6 +16,7 @@
   "noActiveSessionForWalkthroughNote": "No active session for walkthrough note",
   "noDiffAvailable": "No diff available",
   "old": "old",
+  "open": "Open {{file}}:{{line}}",
   "previewMarkdown": "Preview markdown",
   "reopen": "<0></0> Reopen",
   "reopen2": "Reopen",

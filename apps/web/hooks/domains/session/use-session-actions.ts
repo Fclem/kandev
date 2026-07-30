@@ -5,6 +5,7 @@ import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { useToast } from "@/components/toast-provider";
 import { getWebSocketClient } from "@/lib/ws/connection";
 import type { TaskSessionState } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 export function isSessionStoppable(s: TaskSessionState): boolean {
   return s === "RUNNING" || s === "STARTING" || s === "WAITING_FOR_INPUT";
@@ -31,6 +32,7 @@ type WsActionFn = (
 ) => Promise<boolean>;
 
 function useWsAction(): WsActionFn {
+  const { t } = useTranslation();
   const { toast, updateToast } = useToast();
   return useCallback(
     async (action, label, payload, timeout = 15000) => {
@@ -39,11 +41,15 @@ function useWsAction(): WsActionFn {
       const toastId = toast({ title: `${label}...`, variant: "loading" });
       try {
         await client.request(action, payload, timeout);
-        updateToast(toastId, { title: `${label} successful`, variant: "success" });
+        updateToast(toastId, { title: t("common:successful", { label }), variant: "success" });
         return true;
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Unknown error";
-        updateToast(toastId, { title: `${label} failed`, description: msg, variant: "error" });
+        updateToast(toastId, {
+          title: t("common:failed2", { label }),
+          description: msg,
+          variant: "error",
+        });
         return false;
       }
     },

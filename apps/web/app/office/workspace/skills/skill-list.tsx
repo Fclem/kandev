@@ -66,7 +66,7 @@ export function SkillList(props: SkillListProps) {
       setImportSource("");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      toast.error(`Failed to import skill: ${msg}`);
+      toast.error(t("office:failedToImportSkill", { msg }));
     } finally {
       setImporting(false);
     }

@@ -36,7 +36,7 @@ import { useToast } from "@/components/toast-provider";
 import { openExternalLink } from "@/lib/desktop/external-links";
 import type { FileInfo } from "@/lib/state/slices";
 import { getChangeRequestFailureFeedback } from "./change-request-feedback";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 
 type VcsDialogsContextValue = {
   /** When `repo` is provided, the commit is scoped to that repo only. */
@@ -150,7 +150,9 @@ function CommitDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconGitCommit className="h-5 w-5" />
-            {scopedRepo ? `Commit Changes — ${scopedRepo}` : t("common:commitChanges")}
+            {scopedRepo
+              ? t("integrations:commitChanges", { scopedRepo })
+              : t("common:commitChanges")}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -203,20 +205,11 @@ function CommitDialog({
           </DialogClose>
           <Button onClick={onCommit} disabled={!commitMessage.trim() || isGitLoading}>
             {isGitLoading ? (
-              <>
-                <Trans i18nKey="integrations:committing">
-                  <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
-                  Committing...
-                </Trans>
-              </>
+              <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
-              <>
-                <Trans i18nKey="integrations:commit">
-                  <IconCheck className="h-4 w-4 mr-2" />
-                  {t("common:commit")}
-                </Trans>
-              </>
+              <IconCheck className="h-4 w-4 mr-2" />
             )}
+            {isGitLoading ? t("integrations:committing") : t("common:commit")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -401,7 +394,8 @@ function useCreatePRHandler(
         const title = ps.draft ? `Draft ${terms.shortName} created` : `${terms.shortName} created`;
         toast({
           title,
-          description: result.pr_url || `${terms.longName} created successfully`,
+          description:
+            result.pr_url || t("integrations:createdSuccessfully", { longName: terms.longName }),
           variant: "success",
         });
         if (result.pr_url) {
@@ -421,7 +415,7 @@ function useCreatePRHandler(
       }
     } catch (e) {
       toast({
-        title: `Create ${defaultTerminology.shortName} failed`,
+        title: t("integrations:createFailed", { shortName: defaultTerminology.shortName }),
         description: e instanceof Error ? e.message : t("integrations:anErrorOccurred"),
         variant: "error",
       });

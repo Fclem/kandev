@@ -530,7 +530,9 @@ function AzureDevOpsPageContent({ workspaceId, workflows, steps, repositories }:
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <PageTopbar
         title="Azure DevOps"
-        subtitle={`${state.connection.data.organizationUrl} · Boards and Repos`}
+        subtitle={t("azureDevops:boardsAndRepos", {
+          organizationUrl: state.connection.data.organizationUrl,
+        })}
         icon={<AzureDevOpsIcon className="h-4 w-4" />}
         actions={
           <Button

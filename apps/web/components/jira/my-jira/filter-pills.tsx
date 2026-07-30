@@ -76,6 +76,7 @@ function PillShell({
   disabledHint,
   children,
 }: PillShellProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   if (disabled) {
     return (
@@ -105,7 +106,7 @@ function PillShell({
             type="button"
             onClick={onClear}
             className="cursor-pointer px-1.5 border-l hover:bg-muted flex items-center"
-            title={`Clear ${label.toLowerCase()}`}
+            title={t("jira:clear", { lowerCase: label.toLowerCase() })}
           >
             <IconX className="h-3 w-3 text-muted-foreground" />
           </button>

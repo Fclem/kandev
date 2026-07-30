@@ -6,6 +6,7 @@ import { useToast } from "@/components/toast-provider";
 import { nativeNotifications } from "@/lib/desktop/native-notification-client";
 import { listNotificationProviders } from "@/lib/api";
 import type { NotificationProvider } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 function localSessionNotificationsEnabled(
   providers: Array<{ type: string; enabled: boolean; events: string[] }>,
@@ -15,6 +16,7 @@ function localSessionNotificationsEnabled(
 
 /** Watches for session failure notifications and shows an error toast. Mount once inside ToastProvider. */
 export function useSessionFailureToast() {
+  const { t } = useTranslation();
   const notification = useAppStore((s) => s.sessionFailureNotification);
   const clearNotification = useAppStore((s) => s.setSessionFailureNotification);
   const notificationProviders = useAppStore((s) => s.notificationProviders.items);
@@ -33,7 +35,7 @@ export function useSessionFailureToast() {
     }
     shownRef.current.add(notification.sessionId);
     toast({
-      title: "Task failed to start",
+      title: t("common:taskFailedToStart"),
       description: notification.message,
       variant: "error",
     });
@@ -72,7 +74,7 @@ export function useSessionFailureToast() {
           if (!localSessionNotificationsEnabled(providers)) return;
           await nativeNotifications.show({
             eventId: `session.failed:${notification.sessionId}`,
-            title: "Task failed to start",
+            title: t("common:taskFailedToStart"),
             body: notification.message,
             taskId: notification.taskId,
             sessionId: notification.sessionId,

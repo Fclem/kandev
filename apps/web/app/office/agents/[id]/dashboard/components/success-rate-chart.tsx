@@ -50,7 +50,7 @@ export function SuccessRateChart({ days }: Props) {
         <CardTitle className="flex items-baseline justify-between text-sm">
           <span>{t("office:successRate")}</span>
           <span className="text-xs font-normal text-muted-foreground">
-            {totals.total === 0 ? "—" : `${overall}% over ${totals.total} runs`}
+            {totals.total === 0 ? "—" : t("office:overRuns", { overall, total: totals.total })}
           </span>
         </CardTitle>
       </CardHeader>

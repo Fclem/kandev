@@ -7,6 +7,7 @@ import { useDockviewStore } from "@/lib/state/dockview-store";
 import type { AppState } from "@/lib/state/store";
 import type { TaskMR } from "@/lib/types/gitlab";
 import { resolvePRPanelTargetGroup } from "./dockview-session-tabs";
+import { t } from "@/lib/i18n";
 
 export function resolveAutoMRPanelAction(params: {
   hasMR: boolean;
@@ -88,7 +89,7 @@ function applyAutoMRPanel(expected: AutoMRPanelIdentity, app: AppState) {
     focusOrAddPanel(api, {
       id: "mr-detail",
       component: "mr-detail",
-      title: "Merge Request",
+      title: t("task:mergeRequest2"),
       position: {
         referenceGroup: resolvePRPanelTargetGroup(api, expected.sessionId, dockview.centerGroupId),
       },

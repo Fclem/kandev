@@ -22,6 +22,7 @@ function LabelChips({
   labels: TaskLabelLocal[];
   onRemove: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       {labels.map((label) => (
@@ -46,7 +47,7 @@ function LabelChips({
                 onRemove(label.name);
               }
             }}
-            aria-label={`Remove ${label.name}`}
+            aria-label={t("task:remove3", { name: label.name })}
           >
             <IconX className="h-2.5 w-2.5" />
           </span>

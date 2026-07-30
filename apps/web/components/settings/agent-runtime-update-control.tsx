@@ -309,7 +309,7 @@ function UpdateTrigger({
             variant="ghost"
             size="icon"
             className="h-11 w-11 cursor-pointer active:scale-95 sm:h-7 sm:w-7"
-            aria-label={`Update ${displayName}`}
+            aria-label={t("settings:update", { displayName })}
             disabled={installInFlight}
             onClick={onOpen}
             data-testid={`agent-update-trigger-${agentName}`}
@@ -319,7 +319,9 @@ function UpdateTrigger({
         </span>
       </TooltipTrigger>
       <TooltipContent>
-        {installInFlight ? t("settings:agentInstallationIsInProgress2") : `Update ${displayName}`}
+        {installInFlight
+          ? t("settings:agentInstallationIsInProgress2")
+          : t("settings:update", { displayName })}
       </TooltipContent>
     </Tooltip>
   );

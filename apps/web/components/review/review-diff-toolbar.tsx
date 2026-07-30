@@ -226,8 +226,8 @@ function MobileFileActionsMenu(props: FileDiffToolbarProps) {
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={`More actions for ${filePath}`}
-          title={`More actions for ${filePath}`}
+          aria-label={t("review:moreActionsFor", { filePath })}
+          title={t("review:moreActionsFor", { filePath })}
           className="size-11 shrink-0 cursor-pointer text-muted-foreground transition-[scale,color,background-color] duration-150 ease-out active:scale-[0.96]"
           onPointerDown={(event) => event.preventDefault()}
           onClick={() => setOpen((previous) => !previous)}
@@ -237,7 +237,7 @@ function MobileFileActionsMenu(props: FileDiffToolbarProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         data-testid="review-file-actions-menu"
-        aria-label={`Actions for ${filePath}`}
+        aria-label={t("review:actionsFor", { filePath })}
         align="end"
         className="w-64"
       >

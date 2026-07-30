@@ -71,7 +71,7 @@ function AttachmentRow({ attachments, interactive }: AttachmentRowProps) {
         <ImagePreviewDialog
           key={`img-${i}`}
           src={`data:${att.mime_type};base64,${att.data}`}
-          alt={`Attachment ${i + 1}`}
+          alt={t("task:attachment4", { i: i + 1 })}
           interactive={interactive}
           thumbnailClassName={cn(
             "h-10 w-10 rounded-md border border-border object-cover",
@@ -285,6 +285,7 @@ function DisplayView({
   onStartEdit,
   onRemove,
 }: DisplayViewProps) {
+  const { t } = useTranslation();
   const visible = stripSystemTags(entry.content);
   const attachments = (entry.attachments ?? []) as QueuedAttachment[];
   const senderTask = getSenderTaskInfo(entry);
@@ -299,7 +300,7 @@ function DisplayView({
     <div className="group flex items-start gap-2 py-1.5">
       <span className="flex items-center gap-1.5 mt-0.5 text-muted-foreground">
         <span
-          aria-label={`Position ${positionLabel}`}
+          aria-label={t("task:position", { positionLabel })}
           className="font-mono text-[10px] tabular-nums"
         >
           {positionLabel}

@@ -30,6 +30,7 @@ type EditMode = { kind: "none" } | { kind: "add" } | { kind: "edit"; id: string 
 // request-versioned so a slow load for a previous workspace (or an overlapping
 // poll) can't clobber newer results.
 function useInstanceList(workspaceId: string) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [instances, setInstances] = useState<SentryConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +47,7 @@ function useInstanceList(workspaceId: string) {
         if (current !== requestId.current) return;
         if (reportError) {
           toast({
-            description: `Failed to load Sentry instances: ${String(err)}`,
+            description: t("sentry:failedToLoadSentryInstances", { err: String(err) }),
             variant: "error",
           });
         }
@@ -136,7 +137,7 @@ function useDeleteInstance(workspaceId: string, reload: () => Promise<void>) {
   const { toast } = useToast();
   return useCallback(
     async (instance: SentryConfig) => {
-      if (!confirm(`Remove Sentry instance "${instance.name}"?`)) return;
+      if (!confirm(t("sentry:removeSentryInstance", { name: instance.name }))) return;
       try {
         await deleteSentryInstance(workspaceId, instance.id);
         toast({ description: t("sentry:sentryInstanceRemoved"), variant: "success" });
@@ -146,12 +147,16 @@ function useDeleteInstance(workspaceId: string, reload: () => Promise<void>) {
         if (watchCount !== null) {
           const plural = watchCount === 1 ? "watch" : "watches";
           toast({
-            description: `Can't delete "${instance.name}": ${watchCount} ${plural} still bound to it. Reassign or remove those watchers first.`,
+            description: t("sentry:canTDeleteStillBoundTo", {
+              name: instance.name,
+              watchCount,
+              plural,
+            }),
             variant: "error",
           });
           return;
         }
-        toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("sentry:deleteFailed", { err: String(err) }), variant: "error" });
       }
     },
     [workspaceId, toast, reload],

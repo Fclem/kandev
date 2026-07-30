@@ -36,7 +36,7 @@ export function CloseTerminalConfirmDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>{t("task:closeTerminal")}</AlertDialogTitle>
           <AlertDialogDescription>
-            {`This stops the “${terminalName}” shell and any command it's running.`}
+            {t("task:thisStopsTheShellAndAny", { terminalName })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

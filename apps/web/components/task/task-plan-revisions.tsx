@@ -222,7 +222,7 @@ function RevisionsDialogStack({
       try {
         const result = await onRevert(revision.id);
         if (result) {
-          toast.success(`Plan restored to v${revision.revision_number}`);
+          toast.success(t("task:planRestoredToV", { revisionnumber: revision.revision_number }));
           closePopover();
           setPreviewRevision(null);
           setDiffOpen(false);

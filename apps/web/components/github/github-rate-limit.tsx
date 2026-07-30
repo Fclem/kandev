@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
@@ -55,6 +55,7 @@ function snapshotsFromInfo(info: GitHubRateLimitInfo): GitHubRateLimitSnapshot[]
 }
 
 export function GitHubRateLimitDisplay({ info }: { info?: GitHubRateLimitInfo }) {
+  const { t } = useTranslation();
   const now = useTickNow(30_000);
   if (!info) return null;
   const snapshots = snapshotsFromInfo(info);
@@ -90,7 +91,7 @@ export function GitHubRateLimitDisplay({ info }: { info?: GitHubRateLimitInfo })
           return (
             <span key={snap.resource} data-testid={`github-rate-limit-${snap.resource}`}>
               {label}: <strong>{snap.remaining}</strong>/{limit}
-              {reset ? ` · resets ${reset}` : ""}
+              {reset ? t("github:resets", { reset }) : ""}
             </span>
           );
         })}

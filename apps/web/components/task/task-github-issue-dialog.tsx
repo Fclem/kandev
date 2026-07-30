@@ -222,7 +222,7 @@ export function TaskGitHubIssueDialog({
           </DialogTitle>
           <DialogDescription>
             {inferredRepo
-              ? `Use a full issue URL or number for ${inferredRepo.owner}/${inferredRepo.repo}.`
+              ? t("task:useAFullIssueUrlOr", { owner: inferredRepo.owner, repo: inferredRepo.repo })
               : t("task:useAFullGithubIssueUrl")}
           </DialogDescription>
         </DialogHeader>

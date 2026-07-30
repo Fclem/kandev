@@ -122,7 +122,8 @@ function CommentEntry({
           {comment.status && (
             <span className="text-xs text-muted-foreground">
               {comment.status}
-              {comment.durationMs != null && ` after ${formatDuration(comment.durationMs)}`}
+              {comment.durationMs != null &&
+                t("task:after", { duration: formatDuration(comment.durationMs) })}
             </span>
           )}
           <span className="text-xs text-muted-foreground">
@@ -237,6 +238,7 @@ async function readFileAsMarkdown(file: File): Promise<string> {
 }
 
 function useChatInputHandlers(setInput: React.Dispatch<React.SetStateAction<string>>) {
+  const { t } = useTranslation();
   const processFiles = useCallback(
     async (files: File[]) => {
       for (const file of files) {
@@ -244,7 +246,7 @@ function useChatInputHandlers(setInput: React.Dispatch<React.SetStateAction<stri
           const md = await readFileAsMarkdown(file);
           setInput((prev) => (prev ? `${prev}\n\n${md}` : md));
         } catch {
-          toast.error(`Failed to read ${file.name}`);
+          toast.error(t("task:failedToRead", { name: file.name }));
         }
       }
     },

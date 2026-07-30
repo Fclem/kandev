@@ -97,7 +97,9 @@ function RowLabel({ row }: { row: WakeReasonCopy }) {
         <TooltipTrigger asChild>
           <button
             type="button"
-            aria-label={`More info about ${resolveOptionLabel(t, row)}`}
+            aria-label={t("office:moreInfoAbout", {
+              resolveOptionLabel: resolveOptionLabel(t, row),
+            })}
             className="cursor-pointer text-muted-foreground hover:text-foreground"
           >
             <IconInfoCircle className="h-3.5 w-3.5" />

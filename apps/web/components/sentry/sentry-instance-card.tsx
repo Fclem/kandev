@@ -46,7 +46,7 @@ export function SentryInstanceCard({ instance, onEdit, onDelete }: SentryInstanc
             size="sm"
             variant="outline"
             onClick={onEdit}
-            aria-label={`Edit ${instance.name} Sentry instance`}
+            aria-label={t("sentry:editSentryInstance", { name: instance.name })}
             className="cursor-pointer gap-1"
             data-testid="sentry-instance-edit-button"
           >
@@ -60,7 +60,7 @@ export function SentryInstanceCard({ instance, onEdit, onDelete }: SentryInstanc
             size="sm"
             variant="destructive"
             onClick={onDelete}
-            aria-label={`Delete ${instance.name} Sentry instance`}
+            aria-label={t("sentry:deleteSentryInstance", { name: instance.name })}
             className="cursor-pointer gap-1"
             data-testid="sentry-instance-delete-button"
           >

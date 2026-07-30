@@ -60,7 +60,7 @@ export function AzureDevOpsWorkItemResults({
                   href={item.webUrl}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label={`Open work item ${item.id} in Azure DevOps`}
+                  aria-label={t("azureDevops:openWorkItemInAzureDevops", { id: item.id })}
                 >
                   <IconExternalLink className="h-4 w-4" />
                 </a>
@@ -154,7 +154,7 @@ export function AzureDevOpsPullRequestResults({
                 href={pullRequest.webUrl}
                 target="_blank"
                 rel="noreferrer"
-                aria-label={`Open pull request ${pullRequest.id} in Azure DevOps`}
+                aria-label={t("azureDevops:openPullRequestInAzureDevops", { id: pullRequest.id })}
               >
                 <IconExternalLink className="h-4 w-4" />
               </a>

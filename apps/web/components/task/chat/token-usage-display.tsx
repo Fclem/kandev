@@ -179,7 +179,7 @@ export const TokenUsageDisplay = memo(function TokenUsageDisplay({
           <button
             ref={tooltip.triggerRef}
             type="button"
-            aria-label={`Context window: ${usagePercent.toFixed(0)}% used`}
+            aria-label={t("task:contextWindowUsed", { fixed: usagePercent.toFixed(0) })}
             aria-expanded={tooltip.open}
             onClick={tooltip.onTriggerClick}
             className={cn(

@@ -30,6 +30,7 @@ import {
 } from "./chat/use-attachment-file-feedback";
 import type { ContextItem, ImageContextItem, FileAttachmentContextItem } from "@/lib/types/context";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 export function EnvironmentBadges({
   executorLabel,
@@ -313,7 +314,7 @@ export function toContextItems(
       ? ({
           kind: "image" as const,
           id: `image:${att.id}`,
-          label: `Image (${formatBytes(att.size)})`,
+          label: t("task:image3", { bytes: formatBytes(att.size) }),
           attachment: att,
           onRemove: () => onRemove(att.id),
         } as ImageContextItem)

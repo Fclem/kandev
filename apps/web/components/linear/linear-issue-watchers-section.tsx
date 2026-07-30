@@ -36,7 +36,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
         await create(req);
         toast({ description: t("linear:watcherCreated"), variant: "success" });
       } catch (err) {
-        toast({ description: `Create failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("linear:createFailed", { err: String(err) }), variant: "error" });
         throw err;
       }
     },
@@ -49,7 +49,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
         await update(id, req, rowWorkspaceId);
         toast({ description: t("linear:watcherUpdated"), variant: "success" });
       } catch (err) {
-        toast({ description: `Update failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("linear:updateFailed", { err: String(err) }), variant: "error" });
         throw err;
       }
     },
@@ -58,12 +58,12 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
 
   const wrappedDelete = useCallback(
     async (w: LinearIssueWatch) => {
-      if (!confirm("Delete this Linear watcher?")) return;
+      if (!confirm(t("linear:deleteThisLinearWatcher"))) return;
       try {
         await remove(w.id, w.workspaceId);
         toast({ description: t("linear:watcherDeleted"), variant: "success" });
       } catch (err) {
-        toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("linear:deleteFailed", { err: String(err) }), variant: "error" });
       }
     },
     [remove, toast],
@@ -78,7 +78,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
           n > 0 ? `Found ${n} new issue(s) — tasks will appear shortly.` : "No new issues matched.";
         toast({ description, variant: "success" });
       } catch (err) {
-        toast({ description: `Check failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("linear:checkFailed", { err: String(err) }), variant: "error" });
       }
     },
     [trigger, toast],
@@ -92,12 +92,12 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
         toast({
           description:
             n > 0
-              ? `Reset complete — deleted ${n} task(s); next poll will re-import matches.`
+              ? t("linear:resetCompleteDeletedTaskSNext", { n })
               : t("linear:resetCompleteNextPollWillRe"),
           variant: "success",
         });
       } catch (err) {
-        toast({ description: `Reset failed: ${String(err)}`, variant: "error" });
+        toast({ description: t("linear:resetFailed", { err: String(err) }), variant: "error" });
         throw err;
       }
     },

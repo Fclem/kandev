@@ -126,13 +126,14 @@ function AutomationActorExplanation({
   status: GitHubStatus;
   appAutomation: boolean;
 }) {
+  const { t } = useTranslation();
   const actor = status.automation?.actor?.login;
   if (!status.authenticated || !actor) return null;
   return (
     <p className="text-xs text-muted-foreground">
       {appAutomation
-        ? `Kandev-managed operations use the GitHub App installed for ${actor}.`
-        : `Kandev-managed operations act as ${actor}.`}
+        ? t("github:kandevManagedOperationsUseTheGithub", { actor })
+        : t("github:kandevManagedOperationsActAs", { actor })}
     </p>
   );
 }

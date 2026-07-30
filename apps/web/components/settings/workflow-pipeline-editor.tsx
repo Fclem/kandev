@@ -149,7 +149,7 @@ function PipelineNode({
         {isReplayCycleAffected && (
           <span
             className="flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300"
-            aria-label={`${step.name} is part of a replay cycle`}
+            aria-label={t("settings:isPartOfAReplayCycle", { name: step.name })}
           >
             <Trans i18nKey="settings:cycle">
               <IconAlertTriangle className="size-3 shrink-0" aria-hidden="true" />

@@ -7,6 +7,8 @@ import { updateFileContent, deleteFile } from "@/lib/ws/workspace-files";
 import { generateUnifiedDiff, calculateHash } from "@/lib/utils/file-diff";
 import type { useToast } from "@/components/toast-provider";
 import { buildRepoScopedItemId, PREVIEW_FILE_EDITOR_ID } from "@/lib/state/dockview-panel-actions";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 /** Read openFiles from the store without subscribing to changes. */
 function getOpenFiles() {
@@ -86,23 +88,23 @@ async function performSaveFile(path: string, repo: string | undefined, params: S
       if (stillClean) updatePanelAfterSave(file.path, file.name, file.repo);
       if (response.resolution === "overwritten") {
         params.toast({
-          title: "File saved (overwritten)",
-          description: "The file was modified externally. Your version was saved.",
+          title: t("common:fileSavedOverwritten"),
+          description: t("common:theFileWasModifiedExternallyYour"),
           variant: "default",
         });
       }
     } else {
       params.toast({
-        title: "Save failed",
-        description: response.error || "Failed to save file",
+        title: t("common:saveFailed2"),
+        description: response.error || t("common:failedToSaveFile"),
         variant: "error",
       });
     }
   } catch (error) {
     params.toast({
-      title: "Save failed",
+      title: t("common:saveFailed2"),
       description:
-        error instanceof Error ? error.message : "An error occurred while saving the file",
+        error instanceof Error ? error.message : t("common:anErrorOccurredWhileSavingThe"),
       variant: "error",
     });
   } finally {
@@ -115,6 +117,7 @@ async function performSaveFile(path: string, repo: string | undefined, params: S
 }
 
 export function useSaveDeleteActions(params: SaveDeleteParams) {
+  const { t } = useTranslation();
   const { activeSessionIdRef, updateFileState, toast } = params;
 
   const saveFile = useCallback(
@@ -133,17 +136,17 @@ export function useSaveDeleteActions(params: SaveDeleteParams) {
         const response = await deleteFile(client, currentSessionId, path, fileRepo);
         if (!response.success) {
           toast({
-            title: "Delete failed",
-            description: response.error || "Failed to delete file",
+            title: t("common:deleteFailed2"),
+            description: response.error || t("common:failedToDeleteFile"),
             variant: "error",
           });
           return;
         }
       } catch (error) {
         toast({
-          title: "Delete failed",
+          title: t("common:deleteFailed2"),
           description:
-            error instanceof Error ? error.message : "An error occurred while deleting the file",
+            error instanceof Error ? error.message : t("common:anErrorOccurredWhileDeletingThe"),
           variant: "error",
         });
         return;

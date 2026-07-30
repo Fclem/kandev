@@ -157,7 +157,7 @@ function useAzureDevOpsSettings(workspaceId: string) {
       setForm(configToForm(next));
     } catch (err) {
       toast({
-        description: `Failed to load Azure DevOps config: ${String(err)}`,
+        description: t("azureDevops:failedToLoadAzureDevopsConfig", { err: String(err) }),
         variant: "error",
       });
     } finally {
@@ -202,14 +202,14 @@ function useAzureDevOpsSettings(workspaceId: string) {
       setTestResult(null);
       toast({ description: t("azureDevops:azureDevopsConfigurationSaved"), variant: "success" });
     } catch (err) {
-      toast({ description: `Save failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("azureDevops:saveFailed", { err: String(err) }), variant: "error" });
     } finally {
       setSaving(false);
     }
   }, [config, form, toast, workspaceId]);
 
   const remove = useCallback(async () => {
-    if (!confirm("Remove Azure DevOps configuration?")) return;
+    if (!confirm(t("azureDevops:removeAzureDevopsConfiguration"))) return;
     try {
       await deleteAzureDevOpsConfig(workspaceId);
       setConfig(null);
@@ -217,7 +217,7 @@ function useAzureDevOpsSettings(workspaceId: string) {
       setTestResult(null);
       toast({ description: t("azureDevops:azureDevopsConfigurationRemoved"), variant: "success" });
     } catch (err) {
-      toast({ description: `Remove failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("azureDevops:removeFailed", { err: String(err) }), variant: "error" });
     }
   }, [toast, workspaceId]);
 
@@ -243,7 +243,9 @@ function TestResult({ result }: { result: TestAzureDevOpsConnectionResult | null
     <Alert variant={result.ok ? "default" : "destructive"} data-testid="azure-devops-test-result">
       <AlertDescription>
         {result.ok
-          ? `Connected${result.displayName ? ` as ${result.displayName}` : ""}`
+          ? t("azureDevops:connected", {
+              value0: result.displayName ? ` as ${result.displayName}` : "",
+            })
           : result.error || t("azureDevops:connectionFailed")}
       </AlertDescription>
     </Alert>

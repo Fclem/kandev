@@ -54,8 +54,11 @@ export function VcsChangeRequestDialog(props: VcsChangeRequestDialogProps) {
           <DialogTitle className="flex items-center gap-2">
             <IconGitPullRequest className="h-5 w-5" />
             {props.scopedRepo
-              ? `Create ${terms.longName} — ${props.scopedRepo}`
-              : `Create ${terms.longName}`}
+              ? t("integrations:create2", {
+                  longName: terms.longName,
+                  scopedRepo: props.scopedRepo,
+                })
+              : t("integrations:create3", { longName: terms.longName })}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">

@@ -117,13 +117,14 @@ function useDestroyTerminalRow({
   taskID,
   removeUserShellStore,
 }: DestroyTerminalRowOptions) {
+  const { t } = useTranslation();
   return useCallback(
     async (event: React.MouseEvent, shell: UserShellInfo) => {
       event.preventDefault();
       event.stopPropagation();
       if (!environmentId) return;
       const label = shell.seq != null ? `terminal #${shell.seq}` : "this terminal";
-      if (!window.confirm(`Terminate ${label}? This kills the running PTY.`)) return;
+      if (!window.confirm(t("task:terminateThisKillsTheRunningPty", { label }))) return;
 
       try {
         await destroyUserShell(environmentId, shell.terminalId, taskID ?? undefined);
@@ -249,7 +250,7 @@ function TerminalReopenRow({
       <span className="flex-1 truncate">{label}</span>
       <button
         type="button"
-        aria-label={`Terminate terminal #${shell.seq ?? ""}`}
+        aria-label={t("task:terminateTerminal", { seq: shell.seq ?? "" })}
         title={t("task:terminate")}
         className="shrink-0 ml-1 rounded p-0.5 text-muted-foreground hover:bg-destructive/15 hover:text-destructive cursor-pointer"
         data-testid="destroy-terminal-row"

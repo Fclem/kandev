@@ -5,6 +5,7 @@ import { useRequest } from "@/lib/http/use-request";
 import { useDockviewStore } from "@/lib/state/dockview-store";
 import { openFileInVscode } from "@/lib/api/domains/vscode-api";
 import { useToast } from "@/components/toast-provider";
+import { useTranslation } from "react-i18next";
 
 type OpenEditorOptions = {
   filePath?: string;
@@ -36,6 +37,7 @@ function parseInternalVscodeURL(url: string): { file: string; line: number; col:
 }
 
 export function useOpenSessionInEditor(sessionId?: string | null) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const request = useRequest(async (options?: OpenEditorOptions) => {
     if (!sessionId) {
@@ -79,8 +81,8 @@ export function useOpenSessionInEditor(sessionId?: string | null) {
         return await request.run(options);
       } catch (error) {
         toast({
-          title: "Failed to open editor",
-          description: error instanceof Error ? error.message : "Request failed",
+          title: t("common:failedToOpenEditor"),
+          description: error instanceof Error ? error.message : t("common:requestFailed"),
           variant: "error",
         });
         return null;

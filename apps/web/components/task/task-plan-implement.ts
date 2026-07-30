@@ -1,4 +1,5 @@
 import type { TaskPlan } from "@/lib/types/http";
+import { t } from "@/lib/i18n";
 
 type PlanToolbarImplementArgs = {
   draftContent: string;
@@ -19,7 +20,7 @@ export function getPlanToolbarImplementState({
     return {
       visible: true,
       disabled: true,
-      disabledReason: "This plan has already been sent for implementation.",
+      disabledReason: t("task:thisPlanHasAlreadyBeenSent"),
     };
   }
   if (draftContent.trim() === "") {

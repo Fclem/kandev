@@ -84,7 +84,7 @@ export function ListToolbar({
       <SaveViewButton onSave={onSaveView} />
       <div className="ml-auto flex items-center gap-1">
         <span className="text-xs text-muted-foreground tabular-nums mr-2">
-          {loading ? t("common:loading3") : `${count} ticket${count === 1 ? "" : "s"} on this page`}
+          {loading ? t("common:loading3") : t("jira:ticketOnThisPage", { count })}
         </span>
         <SortDropdown sort={sort} sortLabel={sortLabel} onSortChange={onSortChange} />
         <Button

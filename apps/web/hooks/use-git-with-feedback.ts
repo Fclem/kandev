@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useToast } from "@/components/toast-provider";
+import { useTranslation } from "react-i18next";
 
 type GitOperationResult = { success: boolean; output: string; error?: string };
 
@@ -7,6 +8,7 @@ type GitOperationResult = { success: boolean; output: string; error?: string };
  * Wraps a git operation with toast feedback (loading → success/error).
  */
 export function useGitWithFeedback() {
+  const { t } = useTranslation();
   const { toast, updateToast } = useToast();
 
   const run = useCallback(
@@ -19,21 +21,21 @@ export function useGitWithFeedback() {
         const result = await operation();
         if (result.success) {
           updateToast(toastId, {
-            title: `${operationName} successful`,
-            description: result.output.slice(0, 200) || `${operationName} completed`,
+            title: t("common:successful2", { operationName }),
+            description: result.output.slice(0, 200) || t("common:completed", { operationName }),
             variant: "success",
           });
         } else {
           updateToast(toastId, {
-            title: `${operationName} failed`,
-            description: result.error || "An error occurred",
+            title: t("common:failed3", { operationName }),
+            description: result.error || t("common:anErrorOccurred"),
             variant: "error",
           });
         }
       } catch (e) {
         updateToast(toastId, {
-          title: `${operationName} failed`,
-          description: e instanceof Error ? e.message : "An unexpected error occurred",
+          title: t("common:failed3", { operationName }),
+          description: e instanceof Error ? e.message : t("common:anUnexpectedErrorOccurred"),
           variant: "error",
         });
       }

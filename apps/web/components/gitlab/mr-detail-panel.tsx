@@ -153,7 +153,7 @@ function PanelHeader({
         <IconBrandGitlab className="h-4 w-4 shrink-0 text-orange-500" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-semibold">
-            {mr.mr_title || `Merge request !${mr.mr_iid}`}
+            {mr.mr_title || t("gitlab:mergeRequest", { mriid: mr.mr_iid })}
           </h2>
           <p className="truncate text-[10px] text-muted-foreground">
             {mr.project_path}!{mr.mr_iid}

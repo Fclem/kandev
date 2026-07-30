@@ -70,7 +70,7 @@ export function HealthIssuesDialog({ open, onOpenChange, issues }: HealthIssuesD
           <DialogDescription>
             {issues.length === 1
               ? t("common:1IssueNeedsYourAttention")
-              : `${issues.length} issues need your attention`}
+              : t("common:issuesNeedYourAttention", { length: issues.length })}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-2">

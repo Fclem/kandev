@@ -109,6 +109,7 @@ function CardHeader({
   isLive: boolean;
   isErrored: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 min-w-0">
       <StatusDot isLive={isLive} isErrored={isErrored} />
@@ -116,7 +117,7 @@ function CardHeader({
       <span className="font-medium truncate flex-1">{summary.agent_name}</span>
       <Link
         href={`/office/agents/${summary.agent_id}`}
-        aria-label={`Open ${summary.agent_name}`}
+        aria-label={t("office:open", { agentname: summary.agent_name })}
         className="cursor-pointer text-muted-foreground hover:text-foreground"
       >
         <IconExternalLink className="h-3.5 w-3.5" />

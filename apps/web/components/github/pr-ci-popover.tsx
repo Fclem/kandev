@@ -90,6 +90,7 @@ function PRPopoverTitle({
   title: string;
   onOpenDetailPanel?: () => void;
 }) {
+  const { t } = useTranslation();
   const className = "min-w-0 truncate text-sm font-medium";
   if (!onOpenDetailPanel) {
     return (
@@ -104,7 +105,7 @@ function PRPopoverTitle({
       data-testid="pr-popover-title"
       className={`${className} cursor-pointer text-left hover:underline`}
       title={title}
-      aria-label={`Open ${title} details`}
+      aria-label={t("github:openDetails", { title })}
       onClick={(e) => {
         e.stopPropagation();
         onOpenDetailPanel();
@@ -185,6 +186,7 @@ function PRWorkflowRow({
   group: WorkflowGroup;
   onAddAsContext: ((message: string) => void) | null;
 }) {
+  const { t } = useTranslation();
   // For an in-progress workflow, "0/1 ran" reads as "nothing finished"
   // and confuses people: did it start? It's clearer to just report how
   // many jobs are running. (Failed workflows go to a different bucket,
@@ -217,7 +219,7 @@ function PRWorkflowRow({
             e.stopPropagation();
             void openExternalLink(group.htmlUrl).catch(() => undefined);
           }}
-          aria-label={`Open ${group.workflow} on GitHub`}
+          aria-label={t("github:openOnGithub", { workflow: group.workflow })}
         >
           <IconExternalLink className="h-3 w-3" />
         </Button>
@@ -232,7 +234,7 @@ function PRWorkflowRow({
             e.stopPropagation();
             onAddAsContext(buildWorkflowMessage(group));
           }}
-          aria-label={`Add ${group.workflow} failures to chat context`}
+          aria-label={t("github:addFailuresToChatContext", { workflow: group.workflow })}
         >
           <IconPlus className="h-3 w-3" />
         </Button>

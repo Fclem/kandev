@@ -149,10 +149,7 @@ function useRightPanelTabs({
       // promotes this to a real shadcn ContextMenu, but window.prompt
       // ships the renameable-terminal requirement today.
       const current = pickCurrentRenameValue(terminal);
-      const choice = window.prompt(
-        `Rename terminal (leave empty to reset, type "destroy" to remove and stop the PTY).`,
-        current,
-      );
+      const choice = window.prompt(t("task:renameTerminalLeaveEmptyToReset"), current);
       if (choice === null) return;
       const trimmed = choice.trim();
       if (trimmed.toLowerCase() === "destroy") {

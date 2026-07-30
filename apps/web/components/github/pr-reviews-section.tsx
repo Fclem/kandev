@@ -162,7 +162,7 @@ function SubmittedReviewRow({
                 variant="outline"
                 className="h-8 min-h-11 w-full max-w-full sm:w-auto sm:min-h-0 shrink-0 cursor-pointer px-2 text-[10px] [@media(pointer:coarse)]:min-h-11"
                 data-testid={`pr-rerequest-review-${normalizeLogin(review.author)}`}
-                aria-label={`Re-request review from ${review.author}`}
+                aria-label={t("github:reRequestReviewFrom", { author: review.author })}
                 onClick={() => onReRequest(review.author)}
                 disabled={isRequesting}
               >
@@ -244,7 +244,7 @@ export function ReviewsSection({
 
   return (
     <CollapsibleSection
-      title={`Reviews${summary}`}
+      title={t("github:reviews", { summary })}
       count={totalCount}
       defaultOpen
       subtitle={subtitle}

@@ -4,6 +4,7 @@ export const TERMINAL_TYPE_DEV_SERVER = "dev-server";
 export const BOTTOM_PANEL_TERMINAL_ID = "bottom-panel";
 
 import type { Terminal, TerminalType } from "./use-terminals-types";
+import { t } from "@/lib/i18n";
 
 export function deriveLabel(shell: UserShellInfo): string {
   if (shell.customName && shell.customName !== "") return shell.customName;
@@ -114,7 +115,7 @@ export function syncDevTerminal(prev: Terminal[], previewOpen: boolean): Termina
       {
         id: TERMINAL_TYPE_DEV_SERVER,
         type: TERMINAL_TYPE_DEV_SERVER as TerminalType,
-        label: "Dev Server",
+        label: t("common:devServer"),
         closable: true,
       },
       ...prev,

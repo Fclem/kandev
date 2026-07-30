@@ -5,6 +5,7 @@ import type {
   GitHubAppRegistrationErrorBody,
   GitHubAppVisibility,
 } from "@/lib/types/github";
+import { t } from "@/lib/i18n";
 
 const ownerPattern = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const slugPattern = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,98}[A-Za-z0-9])?$/;
@@ -105,31 +106,31 @@ export function callbackNotice(code: string): CallbackNotice {
   if (code === "app_registered")
     return {
       tone: "success",
-      title: "GitHub App added",
-      description: "The App is ready to select and install for this workspace.",
+      title: t("github:githubAppAdded"),
+      description: t("github:theAppIsReadyToSelect"),
     };
   if (code === "app_connected")
     return {
       tone: "success",
-      title: "GitHub App connected",
-      description: "Workspace automation now uses the verified App installation.",
+      title: t("github:githubAppConnected"),
+      description: t("github:workspaceAutomationNowUsesTheVerified"),
     };
   if (code === "personal_connected")
     return {
       tone: "success",
-      title: "GitHub identity connected",
-      description: "My GitHub now uses your verified personal identity.",
+      title: t("github:githubIdentityConnected"),
+      description: t("github:myGithubNowUsesYourVerified"),
     };
   if (code === "github_app_registration_cancelled")
     return {
       tone: "info",
-      title: "GitHub App setup cancelled",
-      description: "The existing workspace connection was not changed.",
+      title: t("github:githubAppSetupCancelled"),
+      description: t("github:theExistingWorkspaceConnectionWasNot"),
     };
   return {
     tone: "error",
-    title: "GitHub setup was not completed",
-    description: "The GitHub response could not be verified. Review the connection and try again.",
+    title: t("github:githubSetupWasNotCompleted"),
+    description: t("github:theGithubResponseCouldNotBe"),
   };
 }
 

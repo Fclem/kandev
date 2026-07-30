@@ -135,7 +135,9 @@ function TierProfileSelector({
             <button
               type="button"
               className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={`${resolveOptionLabel(t, copy)} tier usage`}
+              aria-label={t("office:tierUsage", {
+                resolveOptionLabel: resolveOptionLabel(t, copy),
+              })}
             >
               <IconInfoCircle className="size-3.5" />
             </button>

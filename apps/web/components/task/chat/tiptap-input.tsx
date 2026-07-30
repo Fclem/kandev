@@ -206,6 +206,7 @@ function useSuggestionConfigs({
   setMentionMenu,
   setSlashMenu,
 }: SuggestionConfigsInput) {
+  const { t } = useTranslation();
   const agentCommands = useAppStore((state) =>
     sessionId ? state.availableCommands.bySessionId[sessionId] : undefined,
   );
@@ -216,7 +217,7 @@ function useSuggestionConfigs({
       .map((cmd) => ({
         id: `agent-${cmd.name}`,
         label: `/${cmd.name}`,
-        description: cmd.description || `Run /${cmd.name} command`,
+        description: cmd.description || t("task:runCommand", { name: cmd.name }),
         action: "agent" as const,
         agentCommandName: cmd.name,
       }));

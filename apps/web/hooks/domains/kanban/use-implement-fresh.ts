@@ -11,6 +11,7 @@ import {
   markPlanImplementationStartedBestEffort,
 } from "./use-plan-actions";
 import type { ChatInputContainerHandle } from "@/components/task/chat/chat-input-container";
+import { useTranslation } from "react-i18next";
 
 async function setupFreshSession(newSessionId: string): Promise<void> {
   // Set the fresh session as primary
@@ -45,6 +46,7 @@ export function useImplementFresh(
   taskId: string | null,
   chatInputRef?: React.RefObject<ChatInputContainerHandle | null>,
 ) {
+  const { t } = useTranslation();
   const planningSession = useAppStore((s) =>
     resolvedSessionId ? s.taskSessions.items[resolvedSessionId] : undefined,
   );
@@ -87,7 +89,7 @@ export function useImplementFresh(
       return true;
     } catch (err) {
       console.error("Failed to launch fresh implementation session:", err);
-      toast({ description: "Failed to start implementation session", variant: "error" });
+      toast({ description: t("common:failedToStartImplementationSession"), variant: "error" });
       return false;
     }
   }, [

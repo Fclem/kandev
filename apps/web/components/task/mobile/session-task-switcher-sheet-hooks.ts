@@ -36,6 +36,7 @@ import {
   usePersistResolvedAgentErrorAcknowledgements,
 } from "../use-agent-error-acknowledgements";
 import { mapSnapshotToKanban, sortByUpdatedAtDesc } from "./session-task-switcher-sheet-helpers";
+import { useTranslation } from "react-i18next";
 
 type SheetItemCtx = {
   repositoryPathsById: Map<string, string | undefined>;
@@ -486,6 +487,7 @@ function useSheetDeleteActions(
   store: ReturnType<typeof useAppStoreApi>,
   removeTaskFromBoard: ReturnType<typeof useTaskRemoval>["removeTaskFromBoard"],
 ) {
+  const { t } = useTranslation();
   const { deleteTaskById } = useTaskActions();
   const [deletingTask, setDeletingTask] = useState<{
     id: string;
@@ -500,7 +502,7 @@ function useSheetDeleteActions(
       const task = findTaskInSnapshots(taskId, state.kanbanMulti.snapshots, state.kanban.tasks);
       setDeletingTask({
         id: taskId,
-        title: task?.title ?? "this task",
+        title: task?.title ?? t("task:thisTask"),
         executorType: task?.primaryExecutorType,
       });
     },
@@ -542,6 +544,7 @@ function useSheetDeleteActions(
 }
 
 export function useSheetActions(workspaceId: string | null, onOpenChange: (open: boolean) => void) {
+  const { t } = useTranslation();
   const setActiveTask = useAppStore((state) => state.setActiveTask);
   const setActiveSession = useAppStore((state) => state.setActiveSession);
   const store = useAppStoreApi();
@@ -591,7 +594,7 @@ export function useSheetActions(workspaceId: string | null, onOpenChange: (open:
       const task = findTaskInSnapshots(taskId, state.kanbanMulti.snapshots, state.kanban.tasks);
       setArchivingTask({
         id: taskId,
-        title: task?.title ?? "this task",
+        title: task?.title ?? t("task:thisTask"),
         executorType: task?.primaryExecutorType,
       });
     },

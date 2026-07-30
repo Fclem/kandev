@@ -247,7 +247,7 @@ function QueueChip({ count, isFull, previewText, onToggle }: QueueChipProps) {
       type="button"
       data-testid="queue-chip"
       data-full={isFull ? "true" : "false"}
-      aria-label={`${count} queued message${count === 1 ? "" : "s"}, click to expand`}
+      aria-label={t("task:queuedMessageClickToExpand", { count })}
       onClick={onToggle}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5",

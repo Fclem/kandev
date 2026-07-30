@@ -154,13 +154,16 @@ function SecretField({
 }
 
 function TestResultAlert({ result }: { result: TestSentryConnectionResult | null }) {
+  const { t } = useTranslation();
   if (!result) return null;
   return (
     <Alert variant={result.ok ? "default" : "destructive"}>
       <AlertDescription>
         {result.ok
-          ? `Connected as ${result.displayName || result.email || result.userId}`
-          : `Failed: ${result.error}`}
+          ? t("sentry:connectedAs", {
+              displayName: result.displayName || result.email || result.userId,
+            })
+          : t("sentry:failed", { error: result.error })}
       </AlertDescription>
     </Alert>
   );

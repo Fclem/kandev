@@ -12,6 +12,8 @@ import {
 } from "@/lib/api/domains/workflow-sync-api";
 import type { WorkflowSyncConfig, WorkflowSyncSetConfigRequest } from "@/lib/types/workflow-sync";
 import { buildGitHubRepoUrl, parseGitHubRepoUrl } from "@/lib/utils/github-repo-url";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 export type WorkflowSyncFormState = {
   repo_owner: string;
@@ -121,9 +123,10 @@ function useWorkflowSyncForm() {
 type SyncToast = { description: string; variant?: "success" | "error" | "default" };
 
 function syncOutcomeToast(error: string | undefined, warnings: string[] | undefined): SyncToast {
-  if (error) return { description: `Sync failed: ${error}`, variant: "error" };
-  if (warnings?.length) return { description: "Sync completed with warnings", variant: "default" };
-  return { description: "Workflow sync completed", variant: "success" };
+  if (error) return { description: t("common:syncFailed", { error }), variant: "error" };
+  if (warnings?.length)
+    return { description: t("common:syncCompletedWithWarnings"), variant: "default" };
+  return { description: t("common:workflowSyncCompleted"), variant: "success" };
 }
 
 type InitialLoadDeps = {
@@ -141,6 +144,7 @@ function useWorkflowSyncInitialLoad(
   workspaceId: string,
   { setConfig, reset, setLoading, toast }: InitialLoadDeps,
 ) {
+  const { t } = useTranslation();
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -153,7 +157,7 @@ function useWorkflowSyncInitialLoad(
       .catch((err) => {
         if (cancelled) return;
         toast({
-          description: `Failed to load workflow sync config: ${String(err)}`,
+          description: t("common:failedToLoadWorkflowSyncConfig", { err: String(err) }),
           variant: "error",
         });
       })
@@ -168,6 +172,7 @@ function useWorkflowSyncInitialLoad(
 }
 
 export function useWorkflowSync(workspaceId: string) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const router = useRouter();
   const [config, setConfig] = useState<WorkflowSyncConfig | null>(null);
@@ -194,10 +199,10 @@ export function useWorkflowSync(workspaceId: string) {
       const saved = await setWorkflowSyncConfig(payload, { workspaceId });
       setConfig(saved);
       reset(saved);
-      toast({ description: "Workflow sync configuration saved", variant: "success" });
+      toast({ description: t("common:workflowSyncConfigurationSaved"), variant: "success" });
       return true;
     } catch (err) {
-      toast({ description: `Save failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("common:saveFailed", { err: String(err) }), variant: "error" });
       return false;
     } finally {
       setSaving(false);
@@ -205,22 +210,20 @@ export function useWorkflowSync(workspaceId: string) {
   }, [workspaceId, form, toast, reset]);
 
   const handleDelete = useCallback(async () => {
-    if (
-      !confirm("Remove workflow sync configuration? This will not delete already-synced workflows.")
-    ) {
+    if (!confirm(t("common:removeWorkflowSyncConfigurationThisWill"))) {
       return false;
     }
     try {
       await deleteWorkflowSyncConfig({ workspaceId });
       setConfig(null);
       reset(null);
-      toast({ description: "Workflow sync removed — synced workflows are editable again" });
+      toast({ description: t("common:workflowSyncRemovedSyncedWorkflowsAre") });
       // Released workflows lose their read-only state server-side; reload the
       // page data so the cards unlock without a manual refresh.
       router.refresh();
       return true;
     } catch (err) {
-      toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("common:deleteFailed", { err: String(err) }), variant: "error" });
       return false;
     }
   }, [workspaceId, toast, reset, router]);
@@ -238,7 +241,7 @@ export function useWorkflowSync(workspaceId: string) {
         router.refresh();
       }
     } catch (err) {
-      toast({ description: `Sync failed: ${String(err)}`, variant: "error" });
+      toast({ description: t("common:syncFailed2", { err: String(err) }), variant: "error" });
     } finally {
       setSyncing(false);
     }

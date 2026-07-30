@@ -171,3 +171,93 @@ Hard limits, each learned from wrong output:
 | 5 | `app/demo/agent-messages/page.tsx` | Demo fixture data |
 | 3 | `office/workspace/routing/components/provider-tier-mapping.tsx` | Label is typed `Tier`, a union used for matching — translating breaks the comparison |
 | 2 | `app/layout.tsx` | Dead Next.js `metadata` export; `index.html` owns the real `<title>` |
+
+---
+
+## 6. Copy the lint guard cannot see — FIXED
+
+`i18next/no-literal-string` only inspects **plain string literals in JSX**. Three
+shapes therefore sat at zero findings while still shipping English:
+
+| Shape | Why it was invisible | Example |
+|---|---|---|
+| Template literal | The rule never visits `TemplateLiteral` | ``aria-label={`Remove ${label}`}`` |
+| Native dialog argument | Not JSX at all | `confirm("Remove workflow sync configuration?")` |
+| Plain `.ts` module | The codemod only walked `.tsx` | `toast.error(\`Save failed: ${err}\`)` in `hooks/` |
+
+`aria-label` mattered most: a screen reader reads it aloud, so these were the
+least visible strings and the ones a sighted reviewer is least likely to catch.
+
+**Fixed by** extending `externalize-strings.mjs`: `handleTemplateLiteral`
+(+ `scripts/lib/template-literals.mjs`), `DIALOG_CALLEES` for
+`confirm`/`alert`/`prompt`, and `.ts` in `listFiles`. 234 template literals, 13
+dialog/toast arguments and 225 further literals were converted.
+
+Placeholders are named from the expression (`{{label}}`, not `{{value0}}`), because
+a translator reorders a sentence and cannot do that against anonymous slots.
+
+### Two bugs this class hid
+
+- **An empty trailing quasi matched the `""` sentinel.** Every template ending in
+  `${x}` has a final empty chunk, and `""` is a comparison operand in nearly every
+  file, so the sentinel guard rejected the whole string. Silently — the decline
+  had no counter. Fixed by testing only non-empty chunks; this alone unblocked
+  conversions across the tree.
+- **`t` shadowed in the dialog path.** `handleToastCall` did not run the
+  `tIsShadowed` check, so `terminals.map((t) => confirm(...))` emitted a `t("key")`
+  that called the terminal object. `tsc` caught it as "not callable".
+
+### Excluded on purpose
+
+`EXCLUDED` in `externalize-strings.mjs`: `lib/api/**` and `lib/types/**` (the
+backend's JSON shape — a translated default value changes what gets persisted;
+`plan-api.ts` sent `title: "Plan"` to the server), `lib/state/layout-manager/**`
+(panel titles are serialized into saved layouts), and test helpers/fixtures.
+
+## 7. English pluralization inside an interpolation — FIXED
+
+The codemod's first output turned ``${n} task${n === 1 ? "" : "s"}`` into
+
+```ts
+t("ns:task", { length: n, value1: n === 1 ? "" : "s" })   // "{{length}} task{{value1}}"
+```
+
+which renders correctly in English and is untranslatable everywhere else: the
+plural rule lives at the call site, so a language with three or six plural forms
+has nowhere to express them and a translator editing the catalog cannot fix it.
+
+`fix-inline-plurals.mjs` converted all 12 to i18next's own mechanism — `count`
+plus `_one`/`_other` keys — and `check-inline-plurals.mjs` (now in `i18n:check`)
+fails on both the call-site form and the catalog form (`{{count}} task(s)`, or a
+`{{count}}` message with no `_one`/`_other` sibling). 17 further count-bearing
+messages gained plural forms; where English does not inflect (`{{count}} selected`)
+both forms are identical so translators can still diverge.
+
+Two needed a discriminant rather than a plural, per the copy-vs-logic rule:
+
+- `Failed to ${noun} N tasks` with `noun` = `"archive"｜"delete"` → a `BulkAction`
+  type selecting a whole message. A verb cannot be interpolated into a frame in
+  languages that inflect or reorder it.
+- `<Trans values={{ value2: expanded ? "shown" : "hidden" }}>` — English words in
+  `values` are never translated. Split into two keys.
+
+## 8. `t()` as a `<Trans>` text child — DOCUMENTED, NOT A BUG
+
+~340 sites read:
+
+```tsx
+<Trans i18nKey="ns:commit">
+  <IconCheck />
+  {t("common:commit")}
+</Trans>
+```
+
+`<Trans>` renders the **catalog message**; children only supply substitutes for
+`<n>` tags. So the inner `t()` is inert — verified empirically in
+`lib/i18n/trans-children.test.tsx`, which pins the render (`<span/> Commit`, once)
+so a future react-i18next upgrade that starts rendering text children fails there
+instead of duplicating copy across the UI.
+
+It is redundant, not broken: two keys hold the same English and can drift apart in
+translation. Left as-is deliberately — rewriting 340 render paths to remove dead
+arguments is churn with real regression risk and no user-visible change.

@@ -32,6 +32,7 @@ import type {
   SystemJob,
 } from "@/lib/types/system";
 import { useSystemJob } from "./use-system-jobs";
+import { useTranslation } from "react-i18next";
 
 export type StoragePendingAction =
   | "load"
@@ -96,6 +97,7 @@ const TERMINAL_REFRESH_MAX_RETRY_MS = 8000;
 const MAX_TERMINAL_REFRESH_ATTEMPTS = 6;
 
 function useStorageActionRunner() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [pendingActions, setPendingActions] = useState<
@@ -125,7 +127,7 @@ function useStorageActionRunner() {
       } catch (requestError) {
         const message = messageFromError(requestError);
         setError(message);
-        toast({ title: "Storage action failed", description: message, variant: "error" });
+        toast({ title: t("common:storageActionFailed"), description: message, variant: "error" });
         if (rethrow) throw requestError;
       } finally {
         setPendingActions((current) => current.filter(({ id }) => id !== pendingActionId));
@@ -142,6 +144,7 @@ function useStoragePolicyActions(
   toast: ReturnType<typeof useToast>["toast"],
   clearBusy: () => void,
 ) {
+  const { t } = useTranslation();
   const save = useCallback(
     async (settings: StorageMaintenanceSettings, confirmation?: "DEDICATED") => {
       clearBusy();
@@ -150,7 +153,7 @@ function useStoragePolicyActions(
         async () => {
           await saveStorageSettings(settings, confirmation);
           await reload();
-          toast({ title: "Storage policy saved", variant: "success" });
+          toast({ title: t("common:storagePolicySaved"), variant: "success" });
         },
         true,
       );
@@ -164,7 +167,7 @@ function useStoragePolicyActions(
       return perform("adopt", async () => {
         await adoptStorageGoCache(path);
         await reload();
-        toast({ title: "Go build cache adopted", variant: "success" });
+        toast({ title: t("common:goBuildCacheAdopted"), variant: "success" });
       });
     },
     [clearBusy, perform, reload, toast],
@@ -179,13 +182,14 @@ function useStorageDeleteAction(
   clearBusy: () => void,
   setDeleteJobId: Dispatch<SetStateAction<string | null>>,
 ) {
+  const { t } = useTranslation();
   return useCallback(
     async (id: string) => {
       clearBusy();
       return perform("delete", async () => {
         const accepted = await deleteStorageQuarantine(id);
         setDeleteJobId(accepted.job_id);
-        toast({ title: "Permanent deletion started", variant: "success" });
+        toast({ title: t("common:permanentDeletionStarted"), variant: "success" });
       });
     },
     [clearBusy, perform, setDeleteJobId, toast],
@@ -198,6 +202,7 @@ function useStorageBulkDeleteAction(
   clearBusy: () => void,
   setDeleteJobId: Dispatch<SetStateAction<string | null>>,
 ) {
+  const { t } = useTranslation();
   return useCallback(
     async (scope: StorageQuarantinePurgeScope) => {
       clearBusy();
@@ -207,8 +212,8 @@ function useStorageBulkDeleteAction(
         toast({
           title:
             scope === "eligible"
-              ? "Eligible quarantine cleanup started"
-              : "Forced quarantine cleanup started",
+              ? t("common:eligibleQuarantineCleanupStarted")
+              : t("common:forcedQuarantineCleanupStarted"),
           variant: "success",
         });
       });
@@ -218,6 +223,7 @@ function useStorageBulkDeleteAction(
 }
 
 function useStorageActions(reload: Reload) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { pendingAction, error, setError, finishLoading, perform } = useStorageActionRunner();
   const [analysisJobId, setAnalysisJobId] = useState<string | null>(null);
@@ -235,7 +241,7 @@ function useStorageActions(reload: Reload) {
     return perform("analyze", async () => {
       const accepted = await analyzeStorage();
       setAnalysisJobId(accepted.job_id);
-      toast({ title: "Storage analysis started", variant: "success" });
+      toast({ title: t("common:storageAnalysisStarted"), variant: "success" });
     });
   }, [clearBusy, perform, toast]);
 
@@ -247,7 +253,7 @@ function useStorageActions(reload: Reload) {
         try {
           const accepted = await runStorageMaintenance(resources);
           setCleanupJobId(accepted.job_id);
-          toast({ title: "Storage maintenance started", variant: "success" });
+          toast({ title: t("common:storageMaintenanceStarted"), variant: "success" });
         } catch (error) {
           const nextBusy = busyStateFromError(error, resources);
           if (nextBusy) {
@@ -269,7 +275,7 @@ function useStorageActions(reload: Reload) {
       try {
         const accepted = await runStorageMaintenance(resources, true);
         setCleanupJobId(accepted.job_id);
-        toast({ title: "Storage maintenance started", variant: "success" });
+        toast({ title: t("common:storageMaintenanceStarted"), variant: "success" });
       } catch (error) {
         const nextBusy = busyStateFromError(error, resources);
         if (nextBusy) {
@@ -287,7 +293,7 @@ function useStorageActions(reload: Reload) {
       return perform("restore", async () => {
         await restoreStorageQuarantine(id);
         await reload();
-        toast({ title: "Quarantined resource restored", variant: "success" });
+        toast({ title: t("common:quarantinedResourceRestored"), variant: "success" });
       });
     },
     [clearBusy, perform, reload, toast],

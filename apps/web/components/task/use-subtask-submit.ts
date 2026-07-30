@@ -14,6 +14,7 @@ import { useUtilityAgentGenerator } from "@/hooks/use-utility-agent-generator";
 import type { Repository } from "@/lib/types/http";
 import type { SubtaskWorkspaceMode, useSubtaskFormState } from "./new-subtask-form-state";
 import { toContextItems, useDialogAttachments } from "./session-dialog-shared";
+import { useTranslation } from "react-i18next";
 
 type UseSubtaskSubmitOpts = {
   fs: ReturnType<typeof useSubtaskFormState>;
@@ -37,6 +38,7 @@ type UseSubtaskSubmitOpts = {
  * so the surrounding component stays under the per-function complexity cap.
  */
 export function useSubtaskSubmit(opts: UseSubtaskSubmitOpts) {
+  const { t } = useTranslation();
   const {
     fs,
     parentTaskId,
@@ -129,8 +131,8 @@ export function useSubtaskSubmit(opts: UseSubtaskSubmitOpts) {
         onClose();
       } catch (error) {
         toast({
-          title: "Failed to create subtask",
-          description: error instanceof Error ? error.message : "Unknown error",
+          title: t("task:failedToCreateSubtask"),
+          description: error instanceof Error ? error.message : t("common:unknownError"),
           variant: "error",
         });
       } finally {
@@ -159,6 +161,7 @@ export function useSubtaskPromptZone(opts: {
   setPromptValue: (value: string) => void;
   setHasPrompt: (v: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const {
     parentTaskId,
     taskTitle,
@@ -199,7 +202,7 @@ export function useSubtaskPromptZone(opts: {
     await enhancePrompt(current, (enhanced) => {
       const delivered = promptResultDelivery.deliver(current, enhanced, generation);
       if (delivered) {
-        toast({ description: "Enhanced prompt applied.", variant: "success" });
+        toast({ description: t("task:enhancedPromptApplied"), variant: "success" });
       }
 
       return delivered;

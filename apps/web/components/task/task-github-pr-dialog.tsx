@@ -116,7 +116,10 @@ export function TaskGitHubPRDialog({
           <DialogTitle>{t("task:linkGithubPullRequest")}</DialogTitle>
           <DialogDescription>
             {inferredRepo
-              ? `Use a full pull request URL or number for ${inferredRepo.owner}/${inferredRepo.repo}.`
+              ? t("task:useAFullPullRequestUrl", {
+                  owner: inferredRepo.owner,
+                  repo: inferredRepo.repo,
+                })
               : t("task:useAFullGithubPullRequest")}
           </DialogDescription>
         </DialogHeader>

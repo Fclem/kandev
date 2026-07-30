@@ -106,7 +106,7 @@ function RenameBranchButton({
         variant="ghost"
         className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
         disabled={!onRenameBranch || isRenaming}
-        aria-label={`Edit branch ${branch}`}
+        aria-label={t("task:editBranch2", { branch })}
         onClick={openDialog}
       >
         <IconEdit className="h-3.5 w-3.5" />

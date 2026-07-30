@@ -56,7 +56,7 @@ function TerminalRow({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`Close ${terminal.label}`}
+          aria-label={t("task:close", { label: terminal.label })}
           className="cursor-pointer h-7 w-7"
           onClick={(e) => {
             e.stopPropagation();
@@ -280,7 +280,7 @@ export const MobileTerminalsPicker = memo(function MobileTerminalsPicker({
         isOpen={open}
         onClick={() => setOpen(true)}
         data-testid="mobile-terminals-pill"
-        ariaLabel={`Active terminal: ${label}. Tap to switch.`}
+        ariaLabel={t("task:activeTerminalTapToSwitch", { label })}
       />
       <MobilePickerSheet open={open} onOpenChange={setOpen} title={t("task:terminals")}>
         <MobileTerminalsList sessionId={sessionId} onClose={() => setOpen(false)} />

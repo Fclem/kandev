@@ -6,6 +6,7 @@ import { getWebSocketClient } from "@/lib/ws/connection";
 import { searchWorkspaceFiles } from "@/lib/ws/workspace-files";
 import { getFileName } from "@/lib/utils/file-path";
 import type { RichTextInputHandle } from "@/components/task/chat/rich-text-input";
+import { t } from "@/lib/i18n";
 
 export type TaskMentionData = {
   taskId: string;
@@ -76,7 +77,7 @@ function makeFileItem(
     id: filePath,
     kind: "file",
     label: filePath,
-    description: "File",
+    description: t("common:file"),
     onSelect: (input, value, triggerStart, onChange) => {
       const cursorPos = input.getSelectionStart();
       onChange(value.substring(0, triggerStart) + value.substring(cursorPos));
@@ -93,8 +94,8 @@ function makePlanItem(onPlanSelect: () => void): MentionItem {
   return {
     id: "__plan__",
     kind: "plan",
-    label: "Plan",
-    description: "Include the plan as context",
+    label: t("common:plan"),
+    description: t("common:includeThePlanAsContext"),
     onSelect: (input, value, triggerStart, onChange) => {
       const cursorPos = input.getSelectionStart();
       onChange(value.substring(0, triggerStart) + value.substring(cursorPos));

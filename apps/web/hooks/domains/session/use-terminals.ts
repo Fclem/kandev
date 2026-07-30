@@ -23,6 +23,7 @@ import type { UserShellInfo } from "@/lib/state/slices/session-runtime/types";
 import type { RepositoryScript } from "@/lib/types/http";
 import type { Dispatch, SetStateAction, MouseEvent } from "react";
 import type { PreviewStage } from "@/lib/state/slices";
+import { useTranslation } from "react-i18next";
 
 export type { Terminal, TerminalType };
 
@@ -153,6 +154,7 @@ function useAddTerminal({
   setTerminals,
   setRightPanelActiveTab,
 }: AddTerminalOpts) {
+  const { t } = useTranslation();
   return useCallback(async () => {
     if (!environmentId) return;
     try {
@@ -168,7 +170,7 @@ function useAddTerminal({
       const newTerm: Terminal = {
         id: result.terminalId,
         type: "shell",
-        label: result.displayName ?? result.label ?? "Terminal",
+        label: result.displayName ?? result.label ?? t("common:terminal"),
         closable: true,
         kind: ordinary ? "ordinary" : result.kind,
         seq: result.seq,
@@ -391,6 +393,7 @@ function useTerminalActions({
   setPreviewOpen,
   setPreviewStage,
 }: TerminalActionsOptions) {
+  const { t } = useTranslation();
   const [isStoppingDev, setIsStoppingDev] = useState(false);
   const updateUserShell = useAppStore((state) => state.updateUserShell);
   const removeUserShellStore = useAppStore((state) => state.removeUserShell);
@@ -440,7 +443,7 @@ function useTerminalActions({
         const newTerm: Terminal = {
           id: result.terminalId,
           type: "script",
-          label: result.label ?? script.name ?? "Script",
+          label: result.label ?? script.name ?? t("common:script"),
           closable: true,
           kind: "script",
         };

@@ -80,7 +80,7 @@ export const MobileRepoPill = memo(function MobileRepoPill({
         isOpen={open}
         onClick={() => setOpen(true)}
         data-testid="mobile-repo-pill"
-        ariaLabel={`Active repository: ${label}. Tap to switch.`}
+        ariaLabel={t("task:activeRepositoryTapToSwitch", { label })}
       />
       <MobilePickerSheet open={open} onOpenChange={setOpen} title={t("common:repositories")}>
         <MobileReposSection

@@ -75,7 +75,11 @@ function MetricsGrid({ m }: { m: ReturnType<typeof extractMetrics> }) {
           icon={IconRobot}
           value={m.agentCount}
           label={t("office:agentsEnabled")}
-          description={`${m.running} running, ${m.paused} paused, ${m.errors} errors`}
+          description={t("office:runningPausedErrors", {
+            running: m.running,
+            paused: m.paused,
+            errors: m.errors,
+          })}
         />
       </Link>
       <Link href="/office/tasks" className="cursor-pointer">
@@ -83,7 +87,7 @@ function MetricsGrid({ m }: { m: ReturnType<typeof extractMetrics> }) {
           icon={IconCircleDot}
           value={m.tasksInProgress}
           label={t("office:tasksInProgress")}
-          description={`${tb.open} open, ${tb.blocked} blocked`}
+          description={t("office:openBlocked", { open: tb.open, blocked: tb.blocked })}
         />
       </Link>
       <Link href="/office/workspace/costs" className="cursor-pointer">

@@ -13,6 +13,7 @@ import { calculateHash, generateUnifiedDiff } from "@/lib/utils/file-diff";
 import { requestFileContent, updateFileContent, deleteFile } from "@/lib/ws/workspace-files";
 import { useToast } from "@/components/toast-provider";
 import { getFileTabKey } from "./task-center-panel-file-tabs";
+import { useTranslation } from "react-i18next";
 
 export type FileTabRestorationOptions = {
   activeSessionId: string | null;
@@ -181,6 +182,7 @@ export function useFileSaveDelete({
   setSavingFiles,
   handleCloseFileTab,
 }: FileSaveDeleteOptions) {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const handleFileSave = useCallback(
@@ -215,16 +217,16 @@ export function useFileSaveDelete({
           );
         } else {
           toast({
-            title: "Save failed",
-            description: response.error || "Failed to save file",
+            title: t("task:saveFailed"),
+            description: response.error || t("task:failedToSaveFile"),
             variant: "error",
           });
         }
       } catch (error) {
         toast({
-          title: "Save failed",
+          title: t("task:saveFailed"),
           description:
-            error instanceof Error ? error.message : "An error occurred while saving the file",
+            error instanceof Error ? error.message : t("task:anErrorOccurredWhileSavingThe"),
           variant: "error",
         });
       } finally {
@@ -248,16 +250,16 @@ export function useFileSaveDelete({
           handleCloseFileTab(getFileTabKey({ path, repo }));
         } else {
           toast({
-            title: "Delete failed",
-            description: response.error || "Failed to delete file",
+            title: t("task:deleteFailed"),
+            description: response.error || t("task:failedToDeleteFile"),
             variant: "error",
           });
         }
       } catch (error) {
         toast({
-          title: "Delete failed",
+          title: t("task:deleteFailed"),
           description:
-            error instanceof Error ? error.message : "An error occurred while deleting the file",
+            error instanceof Error ? error.message : t("task:anErrorOccurredWhileDeletingThe"),
           variant: "error",
         });
       }

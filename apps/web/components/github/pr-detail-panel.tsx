@@ -352,7 +352,7 @@ function ApproveButton({
       disabled={submitting}
     >
       <IconCheck className="h-3.5 w-3.5" />
-      {submitting ? t("github:approving") : `Approve as ${mutationActor}`}
+      {submitting ? t("github:approving") : t("github:approveAs", { mutationActor })}
     </Button>
   );
 }

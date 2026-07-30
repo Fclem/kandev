@@ -96,7 +96,7 @@ export function ChecksSection({
 
   return (
     <CollapsibleSection
-      title={`CI Checks${summary}`}
+      title={t("github:ciChecks", { summary })}
       count={checks.length}
       defaultOpen
       onAddAll={hasFailed ? () => onAddAsContext(buildAllFailedMessage(checks)) : undefined}

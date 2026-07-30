@@ -5,6 +5,7 @@ import { useAppStore } from "@/components/state-provider";
 import { useToast } from "@/components/toast-provider";
 import { requestCommitDiff } from "@/components/task/commit-diff-request";
 import type { FileInfo } from "@/lib/state/store";
+import { useTranslation } from "react-i18next";
 
 type UseCommitDiffResult = {
   files: Record<string, FileInfo> | null;
@@ -18,6 +19,7 @@ type UseCommitDiffResult = {
  * (CommitDetailPanel) and mobile (CommitDiffView in the diff sheet).
  */
 export function useCommitDiff(commitSha: string, repo?: string): UseCommitDiffResult {
+  const { t } = useTranslation();
   const activeSessionId = useAppStore((state) => state.tasks.activeSessionId);
   const activeTaskId = useAppStore((state) => state.tasks.activeTaskId);
   const sessionTaskId = useAppStore((state) =>
@@ -57,8 +59,8 @@ export function useCommitDiff(commitSha: string, repo?: string): UseCommitDiffRe
     } catch (err) {
       if (requestSeq !== requestSeqRef.current) return;
       toast({
-        title: "Failed to load commit diff",
-        description: err instanceof Error ? err.message : "An unexpected error occurred",
+        title: t("common:failedToLoadCommitDiff"),
+        description: err instanceof Error ? err.message : t("common:anUnexpectedErrorOccurred"),
         variant: "error",
       });
     } finally {

@@ -39,6 +39,7 @@ import {
   isCommitReleaseEvent,
   isCycleShortcutEvent,
 } from "./recent-task-switcher-keys";
+import { useTranslation } from "react-i18next";
 
 /** Direction the switcher cycles through recent tasks. */
 type CycleDirection = "forward" | "backward";
@@ -416,11 +417,12 @@ function useSwitcherActions({
 }
 
 function useRecentTaskSwitcherCommand(shortcut: KeyboardShortcut, openSwitcher: () => void) {
+  const { t } = useTranslation();
   const commands = useMemo(
     () => [
       {
         id: "open-recent-task-switcher",
-        label: "Open Recent Task Switcher",
+        label: t("task:openRecentTaskSwitcher"),
         group: "Navigation",
         shortcut,
         keywords: [

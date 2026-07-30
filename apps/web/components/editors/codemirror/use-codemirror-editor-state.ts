@@ -12,6 +12,7 @@ import type { DiffComment } from "@/lib/diff/types";
 import { computeLineDiffStats } from "@/lib/diff";
 import { useToast } from "@/components/toast-provider";
 import { useCommandPanelOpen } from "@/lib/commands/command-registry";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -198,6 +199,7 @@ type UseCodeMirrorEditorStateOpts = {
 
 // eslint-disable-next-line max-lines-per-function
 export function useCodeMirrorEditorState(opts: UseCodeMirrorEditorStateOpts) {
+  const { t } = useTranslation();
   const {
     path,
     originalContent,
@@ -469,8 +471,8 @@ export function useCodeMirrorEditorState(opts: UseCodeMirrorEditorStateOpts) {
       const comment = createCommentFromSelection(annotation);
       if (comment) {
         toast({
-          title: "Comment added",
-          description: "Your comment will be sent with your next message.",
+          title: t("editors:commentAdded"),
+          description: t("editors:yourCommentWillBeSentWith"),
         });
       }
     },
@@ -484,13 +486,13 @@ export function useCodeMirrorEditorState(opts: UseCodeMirrorEditorStateOpts) {
         try {
           const { queued } = await runComment(comment);
           toast({
-            title: "Comment sent",
-            description: queued ? "Queued for the agent." : "Sent to the agent.",
+            title: t("editors:commentSent"),
+            description: queued ? t("editors:queuedForTheAgent") : t("editors:sentToTheAgent"),
           });
         } catch {
           toast({
-            title: "Failed to send comment",
-            description: "Please try again.",
+            title: t("editors:failedToSendComment"),
+            description: t("editors:pleaseTryAgain"),
             variant: "error",
           });
         }
@@ -512,7 +514,7 @@ export function useCodeMirrorEditorState(opts: UseCodeMirrorEditorStateOpts) {
         const nextComments = view.comments.filter((comment) => comment.id !== commentId);
         return nextComments.length > 0 ? { ...view, comments: nextComments } : null;
       });
-      toast({ title: "Comment deleted" });
+      toast({ title: t("editors:commentDeleted") });
     },
     [sessionId, removeComment, toast],
   );
@@ -529,7 +531,7 @@ export function useCodeMirrorEditorState(opts: UseCodeMirrorEditorStateOpts) {
           ),
         };
       });
-      toast({ title: "Comment updated" });
+      toast({ title: t("editors:commentUpdated") });
     },
     [toast, updateComment],
   );

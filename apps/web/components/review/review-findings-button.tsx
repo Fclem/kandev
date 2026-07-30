@@ -50,7 +50,7 @@ export function ReviewFindingsButton({ findings, onSelectFile }: ReviewFindingsB
           size="sm"
           variant="outline"
           className="h-6 cursor-pointer gap-1 px-1.5 text-[10px]"
-          aria-label={`Go to ${count} review finding${count === 1 ? "" : "s"}`}
+          aria-label={t("review:goToReviewFinding", { count })}
           data-testid="review-open-count"
         >
           {t("review:findings", { count: count })}

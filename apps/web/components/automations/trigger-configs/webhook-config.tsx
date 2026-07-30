@@ -179,7 +179,7 @@ function SecretField({
       .catch((err) => {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
-        toast.error(`Failed to load webhook secret: ${msg}`);
+        toast.error(t("automations:failedToLoadWebhookSecret", { msg }));
         setState({ status: "error" });
       });
     return () => {

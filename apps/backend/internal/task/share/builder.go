@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kandev/kandev/internal/i18n"
 	"github.com/kandev/kandev/internal/sysprompt"
 	"github.com/kandev/kandev/internal/task/models"
 )
@@ -60,6 +61,7 @@ func BuildSnapshot(ctx context.Context, repo TaskReader, taskSessionID, kandevVe
 	snap := &Snapshot{
 		Version:       SnapshotVersion,
 		KandevVersion: kandevVersion,
+		Locale:        i18n.FromContext(ctx),
 		ExportedAt:    time.Now().UTC(),
 		Task:          taskMeta(task),
 		Session:       sessionMeta(session),

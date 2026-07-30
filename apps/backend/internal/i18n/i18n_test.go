@@ -1,8 +1,10 @@
 package i18n
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -99,4 +101,49 @@ func TestFromRequest(t *testing.T) {
 			t.Fatalf("got %q, want %q", got, DefaultLocale)
 		}
 	})
+}
+
+func TestTf_SubstitutesPlaceholders(t *testing.T) {
+	got := Tf(DefaultLocale, "share.pageTitleWithTask", map[string]string{"title": "Fix login"})
+	if want := "Fix login — kandev share"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestTf_LeavesUnknownPlaceholderVerbatim(t *testing.T) {
+	// Blanking it would silently drop words; leaving it makes the bug visible.
+	if got := Tf(DefaultLocale, "share.pageTitleWithTask", map[string]string{"other": "x"}); !strings.Contains(got, "{{title}}") {
+		t.Fatalf("placeholder should survive, got %q", got)
+	}
+}
+
+func TestTf_WithoutVarsMatchesT(t *testing.T) {
+	if Tf(DefaultLocale, "share.brandTag", nil) != T(DefaultLocale, "share.brandTag") {
+		t.Fatal("Tf with no vars should equal T")
+	}
+}
+
+func TestContextLocaleRoundTrip(t *testing.T) {
+	ctx := ContextWithLocale(context.Background(), "pseudo")
+	if got := FromContext(ctx); got != "pseudo" {
+		t.Fatalf("got %q, want pseudo", got)
+	}
+}
+
+func TestFromContext_DefaultsWithoutLocale(t *testing.T) {
+	// Pollers and schedulers never pass through the HTTP layer.
+	if got := FromContext(context.Background()); got != DefaultLocale {
+		t.Fatalf("got %q, want %q", got, DefaultLocale)
+	}
+	//nolint:staticcheck // explicitly covering the nil-context path
+	if got := FromContext(nil); got != DefaultLocale {
+		t.Fatalf("nil context: got %q, want %q", got, DefaultLocale)
+	}
+}
+
+func TestContextWithLocale_CoercesUnsupported(t *testing.T) {
+	ctx := ContextWithLocale(context.Background(), "kl-KL")
+	if got := FromContext(ctx); got != DefaultLocale {
+		t.Fatalf("got %q, want %q", got, DefaultLocale)
+	}
 }

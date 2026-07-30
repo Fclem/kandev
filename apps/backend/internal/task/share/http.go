@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/common/logger"
+	"github.com/kandev/kandev/internal/i18n"
 )
 
 // HTTPHandlers wires the share endpoints. RegisterRoutes is the public entry
@@ -116,7 +117,9 @@ func (h *HTTPHandlers) httpCreate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errorBody{Error: "session id is required"})
 		return
 	}
-	ctx := c.Request.Context()
+	// The share artifacts are rendered by Go, so the snapshot builder needs the
+	// requester's locale; it is too far from the HTTP layer to read the request.
+	ctx := i18n.ContextWithLocale(c.Request.Context(), i18n.FromRequest(c.Request))
 
 	if strings.EqualFold(c.Query("dry_run"), "true") {
 		snap, err := h.svc.PreviewSnapshot(ctx, sessionID)

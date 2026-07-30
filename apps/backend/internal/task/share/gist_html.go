@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"html"
 	"strings"
+
+	"github.com/kandev/kandev/internal/i18n"
 )
 
 // kandevRepoURL is the public GitHub repo for the project — used in the
@@ -20,10 +22,11 @@ const kandevRepoURL = "https://github.com/kdlbs/kandev"
 // as their own messages.
 func BuildShareHTML(snap *Snapshot) string {
 	if snap == nil {
-		return "<!doctype html><title>kandev share</title>"
+		return "<!doctype html><title>" + i18n.T(i18n.DefaultLocale, "share.pageTitle") + "</title>"
 	}
+	locale := i18n.Normalize(snap.Locale)
 	var b strings.Builder
-	b.WriteString("<!doctype html>\n<html lang=\"en\">\n")
+	fmt.Fprintf(&b, "<!doctype html>\n<html lang=%q>\n", locale)
 	writeHTMLHead(&b, snap)
 	b.WriteString("<body>\n")
 	// Duplicate the stylesheet at the top of <body> as defense-in-depth: some
@@ -39,7 +42,7 @@ func BuildShareHTML(snap *Snapshot) string {
 	b.WriteString("</style>\n")
 	writeHTMLHero(&b, snap)
 	b.WriteString("<main class=\"conv\">\n")
-	writeHTMLConversation(&b, snap.Messages)
+	writeHTMLConversation(&b, snap.Messages, locale)
 	b.WriteString("</main>\n")
 	writeHTMLFooter(&b, snap)
 	b.WriteString("</body>\n</html>\n")
@@ -47,10 +50,12 @@ func BuildShareHTML(snap *Snapshot) string {
 }
 
 func writeHTMLHead(b *strings.Builder, snap *Snapshot) {
-	title := html.EscapeString(nonEmpty(snap.Task.Title, "Untitled task"))
+	locale := i18n.Normalize(snap.Locale)
+	title := html.EscapeString(nonEmpty(snap.Task.Title, i18n.T(locale, "share.untitledTask")))
 	fmt.Fprintf(b, "<head>\n<meta charset=\"utf-8\">\n")
 	fmt.Fprintf(b, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
-	fmt.Fprintf(b, "<title>%s — kandev share</title>\n", title)
+	fmt.Fprintf(b, "<title>%s</title>\n",
+		i18n.Tf(locale, "share.pageTitleWithTask", map[string]string{"title": title}))
 	fmt.Fprintf(b, "<meta name=\"description\" content=\"%s\">\n", title)
 	b.WriteString("<style>")
 	b.WriteString(shareCSS)
@@ -58,10 +63,12 @@ func writeHTMLHead(b *strings.Builder, snap *Snapshot) {
 }
 
 func writeHTMLHero(b *strings.Builder, snap *Snapshot) {
-	title := html.EscapeString(nonEmpty(snap.Task.Title, "Untitled task"))
+	locale := i18n.Normalize(snap.Locale)
+	title := html.EscapeString(nonEmpty(snap.Task.Title, i18n.T(locale, "share.untitledTask")))
 	b.WriteString("<header class=\"hero\">\n")
 	b.WriteString("<div class=\"brand\"><a href=\"" + kandevRepoURL + "\" target=\"_blank\" rel=\"noopener\">kandev</a>")
-	b.WriteString("<span class=\"brand-sep\">·</span><span class=\"brand-tag\">shared task</span></div>\n")
+	fmt.Fprintf(b, "<span class=\"brand-sep\">·</span><span class=\"brand-tag\">%s</span></div>\n",
+		html.EscapeString(i18n.T(locale, "share.brandTag")))
 	fmt.Fprintf(b, "<h1>%s</h1>\n", title)
 	b.WriteString("<div class=\"badges\">")
 	writeHTMLBadge(b, snap.Session.AgentType)
@@ -115,49 +122,53 @@ func groupMessages(messages []Message) []messageGroup {
 	return groups
 }
 
-func writeHTMLConversation(b *strings.Builder, messages []Message) {
+func writeHTMLConversation(b *strings.Builder, messages []Message, locale string) {
 	groups := groupMessages(messages)
 	if len(groups) == 0 {
-		b.WriteString("<p class=\"empty\">No messages.</p>\n")
+		fmt.Fprintf(b, "<p class=\"empty\">%s</p>\n",
+			html.EscapeString(i18n.T(locale, "share.noMessages")))
 		return
 	}
 	for _, g := range groups {
-		writeHTMLGroup(b, g)
+		writeHTMLGroup(b, g, locale)
 	}
 }
 
-func writeHTMLGroup(b *strings.Builder, g messageGroup) {
-	cls, label, icon := messageRoleAttrs(g.role)
+func writeHTMLGroup(b *strings.Builder, g messageGroup, locale string) {
+	cls, label, icon := messageRoleAttrs(g.role, locale)
 	fmt.Fprintf(b, "<section class=\"group group-%s\">\n", cls)
 	fmt.Fprintf(b, "<div class=\"avatar\" aria-hidden=\"true\">%s</div>\n", icon)
 	b.WriteString("<div class=\"bubble\">\n")
 	fmt.Fprintf(b, "<div class=\"role\">%s</div>\n", html.EscapeString(label))
 	for _, block := range g.blocks {
-		writeHTMLBlock(b, block)
+		writeHTMLBlock(b, block, locale)
 	}
 	b.WriteString("</div>\n</section>\n")
 }
 
-func messageRoleAttrs(role string) (cls, label, icon string) {
+// messageRoleAttrs maps a role to its CSS class, translated label, and avatar.
+// The class stays an untranslated identifier; only the label is copy.
+func messageRoleAttrs(role, locale string) (cls, label, icon string) {
 	switch role {
 	case roleUser:
-		return "user", "You", "🧑"
+		return "user", i18n.T(locale, "share.roleYou"), "🧑"
 	case roleAssistant:
-		return "assistant", "Assistant", "🤖"
+		return "assistant", i18n.T(locale, "share.roleAssistant"), "🤖"
 	case roleSystem:
-		return "system", "System", "⚙️"
+		return "system", i18n.T(locale, "share.roleSystem"), "⚙️"
 	}
+	// An unrecognized role falls back to the raw value — it is data, not copy.
 	return "other", role, "•"
 }
 
-func writeHTMLBlock(b *strings.Builder, block Block) {
+func writeHTMLBlock(b *strings.Builder, block Block, locale string) {
 	switch block.Kind {
 	case blockKindText:
 		writeHTMLText(b, block.Text)
 	case blockKindToolCall:
 		writeHTMLToolCall(b, block)
 	case blockKindToolResult:
-		writeHTMLToolResult(b, block)
+		writeHTMLToolResult(b, block, locale)
 	case blockKindDiff:
 		writeHTMLDiff(b, block)
 	}
@@ -182,14 +193,14 @@ func writeHTMLToolCall(b *strings.Builder, block Block) {
 	b.WriteString("</details>\n")
 }
 
-func writeHTMLToolResult(b *strings.Builder, block Block) {
+func writeHTMLToolResult(b *strings.Builder, block Block, locale string) {
 	out := strings.TrimRight(block.Output, "\n")
 	if strings.TrimSpace(out) == "" {
 		return
 	}
-	label := "Tool output"
+	label := i18n.T(locale, "share.toolOutput")
 	if block.Truncated {
-		label += " (truncated)"
+		label = i18n.T(locale, "share.toolOutputTruncated")
 	}
 	b.WriteString("<details class=\"tool tool-result\">\n<summary>")
 	b.WriteString("<span class=\"tool-icon\">📤</span>")
@@ -230,7 +241,8 @@ func writeHTMLDiffLine(b *strings.Builder, line string) {
 
 func writeHTMLFooter(b *strings.Builder, snap *Snapshot) {
 	b.WriteString("<footer class=\"page-footer\">\n")
-	b.WriteString("<a href=\"" + kandevRepoURL + "\" target=\"_blank\" rel=\"noopener\" class=\"cta\">Try kandev on GitHub →</a>\n")
+	fmt.Fprintf(b, "<a href=%q target=\"_blank\" rel=\"noopener\" class=\"cta\">%s</a>\n",
+		kandevRepoURL, html.EscapeString(i18n.T(i18n.Normalize(snap.Locale), "share.cta")))
 	b.WriteString("<span class=\"foot-sep\">·</span>\n")
 	b.WriteString("<a href=\"snapshot.json\" class=\"foot-link\">snapshot.json</a>\n")
 	if snap.KandevVersion != "" {

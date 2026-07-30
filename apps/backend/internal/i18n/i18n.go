@@ -15,6 +15,7 @@
 package i18n
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -104,6 +105,28 @@ func FromRequest(r *http.Request) string {
 	return DefaultLocale
 }
 
+// localeContextKey is unexported so only this package can seed the value.
+type localeContextKey struct{}
+
+// ContextWithLocale carries the request's locale down to code that renders copy
+// but is too far from the HTTP layer to hold a *http.Request — the share
+// snapshot builder, for instance.
+func ContextWithLocale(ctx context.Context, locale string) context.Context {
+	return context.WithValue(ctx, localeContextKey{}, Normalize(locale))
+}
+
+// FromContext returns the locale attached by ContextWithLocale, or DefaultLocale
+// for a context that never passed through the HTTP layer (pollers, schedulers).
+func FromContext(ctx context.Context) string {
+	if ctx == nil {
+		return DefaultLocale
+	}
+	if locale, ok := ctx.Value(localeContextKey{}).(string); ok {
+		return Normalize(locale)
+	}
+	return DefaultLocale
+}
+
 // parseAcceptLanguage returns the header's tags in descending q-value order.
 // Malformed entries are skipped rather than failing the request.
 func parseAcceptLanguage(header string) []string {
@@ -165,6 +188,21 @@ func T(locale, key string) string {
 		}
 	}
 	return key
+}
+
+// Tf is T with `{{name}}` placeholders substituted from vars. Mirrors the
+// frontend's `t(key, { name })`, so the same catalog message reads the same way
+// on both sides. A placeholder with no matching var is left verbatim rather than
+// blanked, so the omission is visible instead of silently losing words.
+func Tf(locale, key string, vars map[string]string) string {
+	message := T(locale, key)
+	if len(vars) == 0 {
+		return message
+	}
+	for name, value := range vars {
+		message = strings.ReplaceAll(message, "{{"+name+"}}", value)
+	}
+	return message
 }
 
 // Keys lists every key in the source catalog; used by the drift test that keeps

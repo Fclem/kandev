@@ -10,6 +10,11 @@
  * `{{interpolation}}` placeholders and <0>tag</0> markers are preserved
  * verbatim — transforming them would break interpolation and Trans nesting.
  *
+ * Covers the Go catalog too (apps/backend/internal/i18n/locales). The backend
+ * renders its own user-facing copy — error pages and the shared-task page — so
+ * leaving it out would make the pseudo locale a partial oracle, and the backend
+ * has a test asserting every `en` key exists in `pseudo`.
+ *
  * Usage: node scripts/generate-pseudo-locale.mjs
  */
 import fs from "node:fs";
@@ -18,6 +23,15 @@ import path from "node:path";
 const LOCALES = path.resolve(import.meta.dirname, "..", "src", "locales");
 const SRC = path.join(LOCALES, "en");
 const OUT = path.join(LOCALES, "pseudo");
+const BACKEND_LOCALES = path.resolve(
+  import.meta.dirname,
+  "..",
+  "..",
+  "backend",
+  "internal",
+  "i18n",
+  "locales",
+);
 
 const MAP = {
   a: "à",
@@ -102,4 +116,18 @@ for (const file of fs.readdirSync(SRC).filter((f) => f.endsWith(".json"))) {
   files += 1;
   messages += Object.keys(source).length;
 }
-console.log(`pseudo locale: ${files} namespace(s), ${messages} message(s)`);
+// The Go catalog is a single flat file per locale rather than a directory.
+const backendSrc = path.join(BACKEND_LOCALES, "en.json");
+let backendMessages = 0;
+if (fs.existsSync(backendSrc)) {
+  const source = JSON.parse(fs.readFileSync(backendSrc, "utf8"));
+  fs.writeFileSync(
+    path.join(BACKEND_LOCALES, "pseudo.json"),
+    JSON.stringify(transform(source), null, 2) + "\n",
+  );
+  backendMessages = Object.keys(source).length;
+}
+console.log(
+  `pseudo locale: ${files} namespace(s), ${messages} message(s)` +
+    ` (+ ${backendMessages} backend message(s))`,
+);

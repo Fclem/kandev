@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kandev/kandev/internal/github"
+	"github.com/kandev/kandev/internal/i18n"
 )
 
 // GistMaxBytes is a conservative cap on a single snapshot.json file. GitHub
@@ -213,9 +214,10 @@ func (b *GistBackend) clientFor(ctx context.Context, workspaceID string) (github
 
 func gistDescription(snap *Snapshot) string {
 	if snap == nil || snap.Task.Title == "" {
-		return "kandev task share"
+		return i18n.T(i18n.DefaultLocale, "share.gistDescription")
 	}
-	return "kandev share: " + snap.Task.Title
+	return i18n.Tf(i18n.Normalize(snap.Locale), "share.gistDescriptionWithTask",
+		map[string]string{"title": snap.Task.Title})
 }
 
 func nonEmpty(s, fallback string) string {

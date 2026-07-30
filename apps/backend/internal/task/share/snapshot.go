@@ -15,13 +15,17 @@ const SnapshotVersion = 1
 // task session. It MUST NOT contain foreign keys to live kandev rows; it is
 // designed to survive deletion of the underlying task, session, or workspace.
 type Snapshot struct {
-	Version       int          `json:"version"`
-	KandevVersion string       `json:"kandev_version,omitempty"`
-	ExportedAt    time.Time    `json:"exported_at"`
-	Task          TaskMeta     `json:"task"`
-	Session       SessionMeta  `json:"session"`
-	Messages      []Message    `json:"messages"`
-	Redaction     RedactionLog `json:"redaction"`
+	Version       int    `json:"version"`
+	KandevVersion string `json:"kandev_version,omitempty"`
+	// Locale the rendered artifacts (share.html, README.md) were written in.
+	// A shared page is read by people whose locale the server cannot know, so
+	// this is the sharer's locale — the only one available at publish time.
+	Locale     string       `json:"locale,omitempty"`
+	ExportedAt time.Time    `json:"exported_at"`
+	Task       TaskMeta     `json:"task"`
+	Session    SessionMeta  `json:"session"`
+	Messages   []Message    `json:"messages"`
+	Redaction  RedactionLog `json:"redaction"`
 }
 
 // TaskMeta is the durable bit of the task captured at export time.

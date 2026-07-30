@@ -41,30 +41,40 @@ import { t } from "@/lib/i18n";
 
 // Single source of truth for the language options. Web Speech reads `lang`,
 // Whisper engines treat it as a hint. "auto" defers to the browser locale.
-const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "auto", label: "Auto-detect (browser language)" },
-  { value: "en-US", label: "English (United States)" },
-  { value: "en-GB", label: "English (United Kingdom)" },
-  { value: "es-ES", label: "Spanish (Spain)" },
-  { value: "es-MX", label: "Spanish (Mexico)" },
-  { value: "pt-PT", label: "Portuguese (Portugal)" },
-  { value: "pt-BR", label: "Portuguese (Brazil)" },
-  { value: "fr-FR", label: "French" },
-  { value: "de-DE", label: "German" },
-  { value: "it-IT", label: "Italian" },
-  { value: "ja-JP", label: "Japanese" },
-  { value: "zh-CN", label: "Chinese (Simplified)" },
+const LANGUAGE_OPTIONS: Array<{ value: string; labelKey: string }> = [
+  { value: "auto", labelKey: "settings:autoDetectBrowserLanguage" },
+  { value: "en-US", labelKey: "settings:englishUnitedStates" },
+  { value: "en-GB", labelKey: "settings:englishUnitedKingdom" },
+  { value: "es-ES", labelKey: "settings:spanishSpain" },
+  { value: "es-MX", labelKey: "settings:spanishMexico" },
+  { value: "pt-PT", labelKey: "settings:portuguesePortugal" },
+  { value: "pt-BR", labelKey: "settings:portugueseBrazil" },
+  { value: "fr-FR", labelKey: "settings:french" },
+  { value: "de-DE", labelKey: "settings:german" },
+  { value: "it-IT", labelKey: "settings:italian" },
+  { value: "ja-JP", labelKey: "settings:japanese" },
+  { value: "zh-CN", labelKey: "settings:chineseSimplified" },
 ];
 
 const WHISPER_MODELS: Array<{
   value: WhisperWebModelSize;
-  label: string;
+  labelKey: string;
   size: string;
-  hint: string;
+  hintKey: string;
 }> = [
-  { value: "tiny", label: "Tiny", size: "~40 MB", hint: "Fastest, lower accuracy" },
-  { value: "base", label: "Base", size: "~75 MB", hint: "Balanced default" },
-  { value: "small", label: "Small", size: "~240 MB", hint: "Best accuracy, slower load" },
+  {
+    value: "tiny",
+    labelKey: "settings:tiny",
+    size: "~40 MB",
+    hintKey: "settings:fastestLowerAccuracy",
+  },
+  { value: "base", labelKey: "settings:base", size: "~75 MB", hintKey: "settings:balancedDefault" },
+  {
+    value: "small",
+    labelKey: "settings:small",
+    size: "~240 MB",
+    hintKey: "settings:bestAccuracySlowerLoad",
+  },
 ];
 
 function toWire(state: VoiceModeState): VoiceModeWire {
@@ -304,7 +314,7 @@ function LanguageRow() {
             <SelectLabel>{t("settings:languages")}</SelectLabel>
             {LANGUAGE_OPTIONS.map((l) => (
               <SelectItem key={l.value} value={l.value}>
-                {l.label}
+                {t(l.labelKey)}
               </SelectItem>
             ))}
           </SelectGroup>
@@ -420,9 +430,10 @@ function WhisperModelCard() {
               <RadioGroupItem id={`whisper-model-${m.value}`} value={m.value} className="mt-0.5" />
               <div>
                 <div className="text-sm font-medium">
-                  {m.label} <span className="text-muted-foreground font-normal">· {m.size}</span>
+                  {t(m.labelKey)}{" "}
+                  <span className="text-muted-foreground font-normal">· {m.size}</span>
                 </div>
-                <p className="text-xs text-muted-foreground">{m.hint}</p>
+                <p className="text-xs text-muted-foreground">{t(m.hintKey)}</p>
               </div>
             </Label>
           ))}

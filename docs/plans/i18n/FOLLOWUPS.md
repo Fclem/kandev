@@ -111,51 +111,85 @@ gone. The `i18n:check` gate would catch a malformed placeholder as a missing key
 
 ---
 
-## 5. Display copy in module-scope config objects — OPEN
+## 5. Display copy in module-scope config objects — MOSTLY DONE
 
-The lint guard reports zero, but it only sees JSX. Roughly **325 English strings
-across 58 files** live in module-scope config arrays that the guard cannot reach:
+Config objects at module scope hold catalog KEYS and are translated at the render
+site. `label: t("task:todo")` there would call `t()` at import, pinning the copy to
+whatever locale was active at boot and never updating on a switch — a worse bug
+than the hardcoded string, because it looks correct until someone switches
+language.
 
-```ts
-const STATUS_OPTIONS: StatusOption[] = [
-  { value: "backlog", label: "Backlog" },   // rendered as {opt.label}
-  ...
-];
-```
-
-Enumerate them with:
+**286 of 325 strings across 47 files are done.** Re-check the remainder with:
 
 ```bash
 cd apps/web && DUMP_MODULE_SCOPE=1 node scripts/externalize-strings.mjs components app
 ```
 
-`externalize-strings.mjs` declines these deliberately. Wrapping the literal as
-`label: t("task:backlog")` would call `t()` at **import** time, pinning the copy
-to whatever locale was active at boot and never updating on a switch — a worse
-bug than the hardcoded string, because it looks correct until someone switches
-language.
+### Tooling
 
-**The fix is to store the key as data and translate at the render site**, which is
-the pattern ~50 config objects in the codebase already use
-(`label: "common:addTerminalPanel"` + `t(item.label)` where it renders).
+- `externalize-config-labels.mjs` rewrites the literal to its key and **renames**
+  the property (`label` -> `labelKey`), so a consumer still reading `.label` fails
+  to compile instead of rendering a raw key to a user.
+- `fix-config-label-reads.mjs` reads `tsc` output and applies the mechanical half
+  of each break (`{opt.label}` -> `{t(opt.labelKey)}`, plus cross-file type-member
+  renames).
+- `fix-missing-t.mjs` binds `t` where a rewrite introduced a call to it.
 
-`scripts/externalize-config-labels.mjs` does the mechanical half: it rewrites the
-literal to its catalog key and **renames the property** (`label` -> `labelKey`),
-so a consumer still reading `.label` fails to compile rather than rendering a raw
-key to a user. Run over `components app` it externalizes 496 properties and
-leaves **341 compile errors across 98 files** — each one a render site that needs
-`t(...)` added.
+Hard limits, each learned from wrong output:
 
-**Why it is not done yet:** 31 of those 98 files are *not* files the codemod
-touched. Shared config modules (`my-github`/`my-gitlab` presets, jira ticket
-shapes) declare the object type in one file and build the literal in another, and
-derived aggregates keep their `Record<K, string>` type while their values become
-keys — so those consumers need the rename applied across the module boundary, plus
-their tests updated. That is a coherent piece of work, but it is an API refactor
-across module boundaries rather than a sweep, and it should land as its own change
-with the tree green at each step.
+- **`lib/types/**` and `lib/api/**` are off limits.** Those types describe the
+  server's JSON, so a member name is a wire contract.
+- **Fixture modules and keyboard key names are not copy.** `*-mock-data`, `demo/`,
+  and `Esc`/`Tab`/`PgUp` are excluded.
+- **A named type annotation is a warning sign.** Such a type is frequently ALSO
+  satisfied by runtime data, so `--include-named-types` is opt-in per file.
+- **Component props are not config items.** A `SelectField`-style component
+  receives `label={t(...)}` — already translated. Only the *item* types in its
+  option arrays need the key treatment.
 
-Suggested order: run the codemod one directory at a time, fix the compile errors
-it produces, and rename any derived aggregate (`STATUS_LABELS` ->
-`STATUS_LABEL_KEYS`) so its consumers surface as errors too rather than silently
-rendering keys.
+### The shape that keeps recurring
+
+An option list fed from two places at once — a static list we wrote, plus runtime
+values we were handed (a user's agent-profile names, a repo slug, an acronym like
+`CEO`). One field cannot be both, so these carry the two separately:
+
+- `lib/i18n/option-label.ts` — `OptionLabel` + `resolveOptionLabel(t, option)`
+- `ExecutorEnvironmentStatus` — `labelKey` / `rawLabel` (Docker's own state text)
+- `ScriptPlaceholder` — `descriptionKey` / `description` (backend-supplied)
+
+### Out of scope (31 strings)
+
+| Count | File | Why |
+|---|---|---|
+| 21 | `task/mobile/mobile-terminal-keybar-helpers.tsx` | Keyboard key names, printed on physical keys; the spec lists keyboard glyphs as out of scope |
+| 5 | `app/demo/agent-messages/page.tsx` | Demo fixture data |
+| 3 | `office/workspace/routing/components/provider-tier-mapping.tsx` | Label is typed `Tier`, a union used for matching — translating breaks the comparison |
+| 2 | `app/layout.tsx` | Dead Next.js `metadata` export; `index.html` owns the real `<title>` |
+
+### Still to do (39 strings, 11 files)
+
+All of them hang off the shared preset shapes — `PresetOption` (declared twice:
+`my-github/search-bar.tsx` and `my-gitlab/presets.ts`), `ScopePreset` in
+`integrations/presets-scope-bar-base.tsx`, and the `SelectField`/`CategoryMeta`
+props in the watch dialogs and automations config:
+
+```
+components/github/my-github/search-bar.tsx            9
+components/github/issue-watch-dialog.tsx              6
+components/github/review-watch-dialog.tsx             6
+components/jira/jira-settings.tsx                     3
+components/jira/my-jira/filter-pills.tsx              3
+components/jira/my-jira/list-toolbar.tsx              3
+components/automations/config-section.tsx             2
+components/azure-devops/azure-devops-scope-bar.tsx    2
+components/github/my-github/presets-scope-bar.tsx     2
+components/gitlab/my-gitlab/presets-scope-bar.tsx     2
+components/automations/trigger-picker.tsx             1
+```
+
+These need one coordinated change, not a sweep: the type moves in
+`presets-scope-bar-base.tsx`, both `PresetOption` declarations, the three
+integration scope bars, `use-default-query-presets.ts`, and four test files all
+have to land together, and the props-vs-item distinction has to be made per
+member rather than per file. Attempting it as a batch produced 58 compile errors
+that would not converge, so it was reverted rather than landed half-done.

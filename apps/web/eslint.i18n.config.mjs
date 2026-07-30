@@ -29,8 +29,15 @@ export default defineConfig([
       "i18next/no-literal-string": [
         "warn",
         {
-          // Only flag text that actually reaches the user.
-          mode: "jsx-text-only",
+          // `jsx-only` (not `jsx-text-only`) so the guard also sees copy that
+          // never appears as a JSX text node: ternary button labels
+          // (`{saving ? "Saving..." : "Save"}`) and display props on internal
+          // components (`label=`, `description=`, `tooltip=`). Those are the
+          // majority of user-facing strings in this codebase, and the narrower
+          // mode reported them as clean. The cost is that every attribute is
+          // now checked, so the `words.exclude` list below has to carry the
+          // weight of separating copy from prop enum values.
+          mode: "jsx-only",
           "should-validate-template": false,
           // Brand/proper nouns and symbol-only strings are not translatable copy.
           words: {
@@ -51,13 +58,28 @@ export default defineConfig([
               // symbols, and "id · vN.N" is a version line, not prose.
               "^\\^[A-Z]$",
               "^·?\\s*v?$",
+              // Single lowercase/camel/kebab tokens are prop enum values,
+              // classnames, and identifiers (variant="ghost", side="top",
+              // value="work-items") — never display copy, which is capitalized
+              // or multi-word.
+              "^[a-z][a-zA-Z0-9]*$",
+              "^[a-z0-9]+(-[a-z0-9]+)+$",
+              // CSS lengths, colors, Tailwind class lists, link rel/target
+              // keywords, route paths, and `__sentinel__` option values.
+              "^\\d+(\\.\\d+)?(px|rem|em|%|vh|vw|ch|fr|s|ms)$",
+              "^#[0-9a-fA-F]{3,8}$",
+              "^_(blank|self|parent|top)$",
+              "^(noopener|noreferrer)( (noopener|noreferrer))*$",
+              "^__[a-z_]+__$",
+              "^/[\\w/\\-\\[\\]:.]*$",
+              "^(?:-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*\\s+)+-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*$",
             ],
           },
           "jsx-attributes": {
             // Attributes that carry display copy and must be translated.
             include: ["placeholder", "aria-label", "aria-description", "title", "alt"],
             exclude: [
-              "className",
+              ".*[Cc]lassName$",
               "class",
               "id",
               "key",

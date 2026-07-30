@@ -325,6 +325,18 @@ func (wt *WorkspaceTracker) ResolveBaseCommit(ctx context.Context) string {
 	return wt.computeBaseCommit(ctx, baseBranch)
 }
 
+// ResolveBaseAnchor returns both the comparison anchor SHA and the base branch
+// ref it was computed against. Multi-repo commits/diff use the ref to detect a
+// stale local-only base (merged/deleted stacked parent) the same way the
+// single-repo path uses target_branch. Both are "" when no base resolves.
+func (wt *WorkspaceTracker) ResolveBaseAnchor(ctx context.Context) (sha, baseBranch string) {
+	baseBranch = wt.resolveBaseBranch(ctx)
+	if baseBranch == "" {
+		return "", ""
+	}
+	return wt.computeBaseCommit(ctx, baseBranch), baseBranch
+}
+
 // getAheadBehindCounts populates the Ahead/Behind fields relative to the base
 // branch (origin/main or origin/master). Always compares against the base
 // branch rather than the remote tracking branch, because after a rebase the

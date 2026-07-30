@@ -14,7 +14,7 @@ import (
 // filtered.
 func TestGetLog_NoBaseReturnsFullGraph(t *testing.T) {
 	repoDir, cleanup := setupTestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	log := newTestLogger(t)
 	ctx := context.Background()
@@ -57,7 +57,7 @@ func TestGetLog_NoBaseReturnsFullGraph(t *testing.T) {
 // the underlying git scenario.
 func TestGetLog_StaleLocalBranchScenario(t *testing.T) {
 	repoDir, cleanup := setupTestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	log := newTestLogger(t)
 	ctx := context.Background()
@@ -132,7 +132,7 @@ func TestGetLog_StaleLocalBranchScenario(t *testing.T) {
 // confuses users expecting "what this branch did".
 func TestGetLog_FirstParentSkipsMergedInCommits(t *testing.T) {
 	repoDir, cleanup := setupTestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	log := newTestLogger(t)
 	ctx := context.Background()
@@ -226,7 +226,7 @@ func TestGetLog_FirstParentSkipsMergedInCommits(t *testing.T) {
 // is a genuine error, and empty inputs short-circuit to (false, nil).
 func TestIsAncestor(t *testing.T) {
 	repoDir, cleanup := setupTestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	log := newTestLogger(t)
 	ctx := context.Background()

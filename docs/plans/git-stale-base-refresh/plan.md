@@ -96,7 +96,7 @@ The true `merge-base(HEAD, origin/master)` is `19646efc83` → 1 commit (matches
   descendant, equal, and unrelated cases via `setupTestRepo`.
 
 Targeted commands:
-```
+```shell
 cd apps/backend && go test -run 'TestComputeMergeBase|TestRunGitLogForRepo|TestGetLog|IsAncestor' ./internal/agentctl/server/api/... ./internal/agentctl/server/process/...
 ```
 
@@ -113,7 +113,7 @@ cd apps/backend && go test -run 'TestComputeMergeBase|TestRunGitLogForRepo|TestG
 
 Small fix (2 tasks). Sequential by default in the primary conversation.
 
-```
+```text
 Wave 1:
 - [x] [task-01-git-operator-is-ancestor](task-01-git-operator-is-ancestor.md)
 

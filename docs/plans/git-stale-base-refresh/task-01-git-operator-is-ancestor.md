@@ -48,7 +48,7 @@ inline.
 
 ## Verification
 
-```
+```shell
 cd apps/backend && go test -run 'IsAncestor' ./internal/agentctl/server/process/...
 ```
 

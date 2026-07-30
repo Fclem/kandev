@@ -20,7 +20,7 @@ import (
 // merge-base reflects the upstream's actual state.
 func TestComputeMergeBase_PrefersOriginOverStaleLocalBranch(t *testing.T) {
 	repoDir, cleanup := setupAPITestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	staleLocalMain := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "HEAD"))
 
@@ -62,7 +62,7 @@ func TestComputeMergeBase_PrefersOriginOverStaleLocalBranch(t *testing.T) {
 // — it must fall back to the local ref so log filtering still works.
 func TestComputeMergeBase_FallsBackToLocalWhenRemoteMissing(t *testing.T) {
 	repoDir, cleanup := setupAPITestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	mainSHA := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "HEAD"))
 	runGitAPI(t, repoDir, "checkout", "-b", "feature/x")
@@ -95,7 +95,7 @@ func TestComputeMergeBase_FallsBackToLocalWhenRemoteMissing(t *testing.T) {
 // callers route through this helper.
 func TestComputeMergeBase_CorrectAnchorForCumulativeDiff(t *testing.T) {
 	repoDir, cleanup := setupAPITestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	// Capture initial main as the "stored base" — what the kandev session
 	// would have recorded at session-start time.
@@ -143,17 +143,24 @@ func TestComputeMergeBase_CorrectAnchorForCumulativeDiff(t *testing.T) {
 
 // TestCorrectStaleBase_MergedStackedParent reproduces the reported bug: the
 // session's stored base branch is a stacked-PR parent that has since merged
-// into the integration branch and had its origin ref deleted. computeMergeBase
-// falls back to the stale local parent ref and the log range sweeps in every
-// commit the parent already landed on the integration branch (the 31-vs-1
-// count). correctStaleBase must detect that the resolved base is a strict
-// ancestor of merge-base(HEAD, origin/main) and re-anchor to it. This is the
-// regression test — it fails before the code change.
+// into the integration branch and had its origin ref deleted, lingering only
+// as a local ref. computeMergeBase falls back to that stale local parent ref
+// and the log range sweeps in commits that already landed on the integration
+// branch (the 31-vs-1 count).
+//
+// The geometry deliberately advances main ONE commit PAST the parent tip after
+// the merge, so the stale local parent merge-base is a STRICT ancestor of
+// merge-base(HEAD, origin/main) rather than equal to it. That exercises the
+// IsAncestor-based correction: a no-op implementation (returning its input) or
+// one gated only on the equality check would fail this test. correctStaleBase
+// must re-anchor to the integration merge-base. Regression test — fails before
+// the code change.
 func TestCorrectStaleBase_MergedStackedParent(t *testing.T) {
 	repoDir, cleanup := setupAPITestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
-	// main starts at the initial commit; branch the stacked PARENT off it.
+	// main starts at the initial commit; branch the stacked PARENT off it and
+	// add three commits.
 	mainStart := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "HEAD"))
 	runGitAPI(t, repoDir, "checkout", "-b", "feature/parent", mainStart)
 	for i := 0; i < 3; i++ {
@@ -163,19 +170,23 @@ func TestCorrectStaleBase_MergedStackedParent(t *testing.T) {
 	}
 	parentTip := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "HEAD"))
 
-	// The child feature branch stacks on the parent and adds one commit.
-	runGitAPI(t, repoDir, "checkout", "-b", "feature/child", parentTip)
+	// The parent PR merges into main (ff), then main advances ONE more commit
+	// beyond the parent tip and origin is pushed. feature/parent's origin ref is
+	// never created (merged+deleted), so it survives only as a stale local ref.
+	runGitAPI(t, repoDir, "checkout", "main")
+	runGitAPI(t, repoDir, "merge", "--ff-only", "feature/parent")
+	writeFileAPI(t, repoDir, "main-after.txt", "main advances past parent\n")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "chore: main past parent")
+	runGitAPI(t, repoDir, "push", "origin", "main")
+	runGitAPI(t, repoDir, "fetch", "origin", "refs/heads/main:refs/remotes/origin/main")
+
+	// The child feature branch stacks on the advanced integration line and adds
+	// one commit of its own.
+	runGitAPI(t, repoDir, "checkout", "-b", "feature/child", "origin/main")
 	writeFileAPI(t, repoDir, "child.txt", "child work\n")
 	runGitAPI(t, repoDir, "add", ".")
 	runGitAPI(t, repoDir, "commit", "-m", "feat: child work")
-
-	// The parent PR merges into main and origin advances. Fast-forward main to
-	// the parent tip, push, and delete the parent's origin ref (merged+deleted).
-	runGitAPI(t, repoDir, "checkout", "main")
-	runGitAPI(t, repoDir, "merge", "--ff-only", "feature/parent")
-	runGitAPI(t, repoDir, "push", "origin", "main")
-	runGitAPI(t, repoDir, "fetch", "origin", "refs/heads/main:refs/remotes/origin/main")
-	runGitAPI(t, repoDir, "checkout", "feature/child")
 
 	log, _ := logger.NewLogger(logger.LoggingConfig{Level: "error"})
 	srv := &Server{logger: log}
@@ -191,14 +202,24 @@ func TestCorrectStaleBase_MergedStackedParent(t *testing.T) {
 		t.Fatalf("expected stale base = parent tip %s, got %s", parentTip, staleBase)
 	}
 
-	// The true integration merge-base is the parent tip on main (== parentTip),
-	// so the corrected base makes `git log <base>..HEAD` show only the child's
-	// own commit.
-	corrected := srv.correctStaleBase(context.Background(), gitOp, staleBase, "feature/parent")
 	integ, err := srv.computeMergeBase(context.Background(), gitOp, "main")
 	if err != nil {
 		t.Fatalf("computeMergeBase(main) failed: %v", err)
 	}
+	// Guard against a no-op test: the stale base must be STRICTLY behind the
+	// integration merge-base for the IsAncestor correction to be meaningful.
+	if staleBase == integ {
+		t.Fatalf("test setup invalid: stale base %s equals integration merge-base %s — "+
+			"correction would be a no-op", staleBase, integ)
+	}
+
+	// feature/parent has no origin ref (merged+deleted), so it is not a live
+	// upstream target — the correction applies and re-anchors to integ.
+	hasUpstream := srv.targetHasUpstreamRef(context.Background(), gitOp, "feature/parent")
+	if hasUpstream {
+		t.Fatalf("expected feature/parent to have NO upstream ref after merge+delete")
+	}
+	corrected := srv.correctStaleBase(context.Background(), gitOp, staleBase, "feature/parent", hasUpstream)
 	if corrected != integ {
 		t.Errorf("expected corrected base = integration merge-base %s, got %s", integ, corrected)
 	}
@@ -223,7 +244,7 @@ func TestCorrectStaleBase_MergedStackedParent(t *testing.T) {
 // integration merge-base, correctStaleBase returns it unchanged.
 func TestCorrectStaleBase_CurrentBaseUnchanged(t *testing.T) {
 	repoDir, cleanup := setupAPITestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	// Feature branches straight off current main; its merge-base against main
 	// is main's tip, which is already current.
@@ -240,23 +261,92 @@ func TestCorrectStaleBase_CurrentBaseUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("computeMergeBase(main) failed: %v", err)
 	}
-	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "main")
+	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "main", true)
 	if corrected != base {
 		t.Errorf("expected unchanged base %s, got %s", base, corrected)
 	}
 }
 
-// TestCorrectStaleBase_NoIntegrationRefFallsBack verifies that when neither
-// origin/main nor origin/master resolves (no integration ref) the base is
-// returned unchanged and no error is raised.
+// TestCorrectStaleBase_LiveUpstreamTargetPreserved verifies the Codex P1 guard:
+// when the target branch is a LIVE non-default upstream (e.g. origin/develop)
+// whose own merge-base is a strict ancestor of the main merge-base, the base is
+// NOT overridden. Overriding would hide commits that are genuinely part of the
+// develop comparison. The distinguishing signal is that the target still has a
+// live origin/<name> ref, so targetHasUpstream is true and the correction is
+// skipped even though the ancestry relationship holds.
+func TestCorrectStaleBase_LiveUpstreamTargetPreserved(t *testing.T) {
+	repoDir, cleanup := setupAPITestRepo(t)
+	t.Cleanup(cleanup)
+
+	// develop diverges early from main0 and is pushed (live upstream).
+	runGitAPI(t, repoDir, "checkout", "-b", "develop")
+	runGitAPI(t, repoDir, "push", "-u", "origin", "develop")
+	runGitAPI(t, repoDir, "fetch", "origin", "refs/heads/develop:refs/remotes/origin/develop")
+	developBase := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "HEAD"))
+
+	// main advances past the develop branch point.
+	runGitAPI(t, repoDir, "checkout", "main")
+	writeFileAPI(t, repoDir, "main1.txt", "main advances\n")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "chore: main forward")
+	runGitAPI(t, repoDir, "push", "origin", "main")
+	runGitAPI(t, repoDir, "fetch", "origin", "refs/heads/main:refs/remotes/origin/main")
+
+	// feature branches off the advanced main but its stored target is develop,
+	// so merge-base(HEAD, origin/develop) is strictly behind
+	// merge-base(HEAD, origin/main) — the exact shape that would mis-fire.
+	runGitAPI(t, repoDir, "checkout", "-b", "feature/y", "main")
+	writeFileAPI(t, repoDir, "y.txt", "y\n")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "feat: y")
+
+	log, _ := logger.NewLogger(logger.LoggingConfig{Level: "error"})
+	srv := &Server{logger: log}
+	gitOp := process.NewGitOperator(repoDir, log, nil)
+
+	base, err := srv.computeMergeBase(context.Background(), gitOp, "develop")
+	if err != nil {
+		t.Fatalf("computeMergeBase(develop) failed: %v", err)
+	}
+	if base != developBase {
+		t.Fatalf("expected develop merge-base %s, got %s", developBase, base)
+	}
+	// Sanity: the ancestry relationship that would trigger a naive re-anchor
+	// does hold, so the guard is what prevents the regression.
+	integ, err := srv.computeMergeBase(context.Background(), gitOp, "main")
+	if err != nil {
+		t.Fatalf("computeMergeBase(main) failed: %v", err)
+	}
+	if base == integ {
+		t.Fatalf("test setup invalid: develop merge-base equals main merge-base %s", integ)
+	}
+
+	hasUpstream := srv.targetHasUpstreamRef(context.Background(), gitOp, "develop")
+	if !hasUpstream {
+		t.Fatalf("expected develop to have a live upstream ref")
+	}
+	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "develop", hasUpstream)
+	if corrected != base {
+		t.Errorf("expected live-upstream develop base %s preserved, got %s (integ=%s)",
+			base, corrected, integ)
+	}
+}
+
+// TestCorrectStaleBase_NoIntegrationRefFallsBack verifies that when no
+// integration ref resolves (neither origin/main, origin/master, nor a local
+// main/master) the base is returned unchanged and no error is raised. The
+// origin/main tracking ref created by setupAPITestRepo is explicitly deleted so
+// the no-integration fallback is genuinely exercised.
 func TestCorrectStaleBase_NoIntegrationRefFallsBack(t *testing.T) {
 	repoDir, cleanup := setupAPITestRepo(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
-	// Rename the only integration branch away from main/master so no
-	// integration candidate resolves locally or on origin.
-	runGitAPI(t, repoDir, "branch", "-m", "main", "trunk")
+	// Rename the only integration branch away from main/master and drop the
+	// origin/main tracking ref, so no integration candidate resolves locally or
+	// on origin.
 	runGitAPI(t, repoDir, "checkout", "-b", "feature/x")
+	runGitAPI(t, repoDir, "branch", "-m", "main", "trunk")
+	runGitAPI(t, repoDir, "update-ref", "-d", "refs/remotes/origin/main")
 	writeFileAPI(t, repoDir, "feature.txt", "feature\n")
 	runGitAPI(t, repoDir, "add", ".")
 	runGitAPI(t, repoDir, "commit", "-m", "feat: work")
@@ -265,8 +355,14 @@ func TestCorrectStaleBase_NoIntegrationRefFallsBack(t *testing.T) {
 	srv := &Server{logger: log}
 	gitOp := process.NewGitOperator(repoDir, log, nil)
 
+	// Confirm the integration merge-base genuinely resolves to nothing — this is
+	// what makes the fallback assertion meaningful rather than incidental.
+	if integ := srv.integrationMergeBase(context.Background(), gitOp); integ != "" {
+		t.Fatalf("expected no integration merge-base, got %s", integ)
+	}
+
 	base := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "trunk"))
-	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "trunk")
+	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "trunk", false)
 	if corrected != base {
 		t.Errorf("expected unchanged base %s when no integration ref, got %s", base, corrected)
 	}

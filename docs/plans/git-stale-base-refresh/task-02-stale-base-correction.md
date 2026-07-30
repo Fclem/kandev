@@ -68,7 +68,7 @@ base resolution. If it computes its own base against the target branch, apply th
 
 ## Verification
 
-```
+```shell
 cd apps/backend && go test -run 'TestComputeMergeBase|TestRunGitLogForRepo|TestGetLog' ./internal/agentctl/server/api/...
 cd apps/backend && golangci-lint run ./internal/agentctl/server/api/... --new-from-rev="<base-sha>" --timeout=5m
 ```

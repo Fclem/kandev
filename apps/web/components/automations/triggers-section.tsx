@@ -87,7 +87,10 @@ export function TriggersSection({
           onToggleEnabled={(enabled) => onToggleTrigger(webhookTrigger.id, enabled)}
           onDelete={handleRemoveWebhook}
         />
-        <SwitchModeButton label={t("automations:switchToScheduled")} onClick={handleRemoveWebhook} />
+        <SwitchModeButton
+          label={t("automations:switchToScheduled")}
+          onClick={handleRemoveWebhook}
+        />
       </div>
     );
   }

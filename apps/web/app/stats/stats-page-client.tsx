@@ -132,7 +132,7 @@ function StatsHeader({
             onClick={onCopy}
             disabled={copyDisabled}
           >
-            {copied ? "Copied" : "Copy Stats"}
+            {copied ? t("stats:copied") : t("stats:copyStats")}
           </Button>
         </>
       }
@@ -205,7 +205,7 @@ function CompletedPanel({ status }: { status: SectionStatus<CompletedTaskActivit
         <ChartsSkeleton />
       </div>
     ),
-    errorTitle: "Completed Tasks Over Time",
+    errorTitle: t("stats:completedTasksOverTime"),
     ready: (data) => (
       <div id="completed" className="scroll-mt-24">
         <div className="grid gap-4 lg:grid-cols-3">
@@ -249,7 +249,7 @@ function ActivityPanel({
     <div id="activity" className="grid gap-4 lg:grid-cols-2 scroll-mt-24">
       {renderSection(daily, {
         skeleton: <ActivitySkeleton />,
-        errorTitle: "Activity",
+        errorTitle: t("stats:activity3"),
         ready: (data) => (
           <Card className="rounded-sm">
             <CardHeader className="pb-2">
@@ -268,7 +268,7 @@ function ActivityPanel({
       })}
       {renderSection(agents, {
         skeleton: <ActivitySkeleton />,
-        errorTitle: "Top Agents",
+        errorTitle: t("stats:topAgents"),
         ready: (data) => (
           <Card className="rounded-sm">
             <CardHeader className="pb-2">
@@ -290,7 +290,7 @@ function RepositoryActivityPanel({ status }: { status: SectionStatus<RepositoryS
   const { t } = useTranslation();
   return renderSection(status, {
     skeleton: <RepositoriesSkeleton />,
-    errorTitle: "Repository Activity",
+    errorTitle: t("stats:repositoryActivity"),
     ready: (data) => (
       <Card id="repositories" className="rounded-sm scroll-mt-24">
         <CardHeader className="pb-2">
@@ -310,7 +310,7 @@ function TopRepositoriesPanel({ status }: { status: SectionStatus<RepositoryStat
   const { t } = useTranslation();
   return renderSection(status, {
     skeleton: <TopRepositoriesSkeleton />,
-    errorTitle: "Top Repositories",
+    errorTitle: t("stats:topRepositories"),
     ready: (data) => (
       <Card className="rounded-sm">
         <CardHeader className="pb-2">
@@ -330,7 +330,7 @@ function RepoLeadersPanel({ status }: { status: SectionStatus<RepositoryStatsDTO
   const { t } = useTranslation();
   return renderSection(status, {
     skeleton: <RepoLeadersSkeleton />,
-    errorTitle: "Repo Leaders",
+    errorTitle: t("stats:repoLeaders"),
     ready: (data) => (
       <Card className="rounded-sm">
         <CardHeader className="pb-2">
@@ -347,9 +347,10 @@ function RepoLeadersPanel({ status }: { status: SectionStatus<RepositoryStatsDTO
 }
 
 function WorkloadPanel({ status }: { status: SectionStatus<TaskStatsDTO[]> }) {
+  const { t } = useTranslation();
   return renderSection(status, {
     skeleton: <WorkloadSkeleton />,
-    errorTitle: "Workload",
+    errorTitle: t("stats:workload"),
     ready: (data) => <WorkloadSection task_stats={data} />,
   });
 }
@@ -437,7 +438,8 @@ export function StatsPageClient({ workspaceId, activeRange, initialError }: Stat
         </div>
       </div>
     );
-  if (!workspaceId) return <StatsEmptyState message={t("stats:selectAWorkspaceToViewStatistics")} />;
+  if (!workspaceId)
+    return <StatsEmptyState message={t("stats:selectAWorkspaceToViewStatistics")} />;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-background">

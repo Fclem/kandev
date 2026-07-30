@@ -35,7 +35,11 @@ export function InvocationPanel({ invocation }: Props) {
           <Row label={t("common:model")} value={invocation.model} testid="invocation-model" />
         )}
         {invocation.working_dir && (
-          <Row label={t("office:workingDir")} value={invocation.working_dir} testid="invocation-cwd" />
+          <Row
+            label={t("office:workingDir")}
+            value={invocation.working_dir}
+            testid="invocation-cwd"
+          />
         )}
       </div>
       {hasDetails && (

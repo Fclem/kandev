@@ -162,13 +162,14 @@ type JiraErrorMessageProps = {
 };
 
 export function JiraErrorMessage({ error, compact }: JiraErrorMessageProps) {
+  const { t } = useTranslation();
   return (
     <IntegrationAuthErrorMessage
       error={error}
       name="Jira"
       reconnectHref="/settings/integrations/jira"
       isAuthError={isJiraAuthError}
-      authErrorBody="Your Jira session expired or needs step-up authentication. Reconnect to view this ticket."
+      authErrorBody={t("jira:yourJiraSessionExpiredOrNeeds")}
       compact={compact}
     />
   );

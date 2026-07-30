@@ -62,7 +62,11 @@ export function UnanchoredFindingsBanner({ findings }: { findings: TaskReviewFin
       {expanded && (
         <div className="mt-1 space-y-1">
           {sortFindings(open).map((finding) => (
-            <InlineReviewFinding key={finding.id} finding={finding} staleReason={t("diff:staleFindingReason")} />
+            <InlineReviewFinding
+              key={finding.id}
+              finding={finding}
+              staleReason={t("diff:staleFindingReason")}
+            />
           ))}
         </div>
       )}

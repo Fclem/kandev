@@ -30,13 +30,14 @@ type RawActions = {
 // success/failure toasts. Per-row mutations need each watch's own workspaceId,
 // so the wrappers take the watch (not just an id) and pass it through.
 function useToastedActions({ create, update, remove, trigger, reset }: RawActions) {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const wrappedCreate = useCallback(
     async (req: Parameters<typeof create>[0]) => {
       try {
         await create(req);
-        toast({ description: "Watcher created", variant: "success" });
+        toast({ description: t("jira:watcherCreated"), variant: "success" });
       } catch (err) {
         toast({ description: `Create failed: ${String(err)}`, variant: "error" });
         throw err;
@@ -49,7 +50,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
     async (id: string, req: Parameters<typeof update>[1], rowWorkspaceId: string) => {
       try {
         await update(id, req, rowWorkspaceId);
-        toast({ description: "Watcher updated", variant: "success" });
+        toast({ description: t("jira:watcherUpdated"), variant: "success" });
       } catch (err) {
         toast({ description: `Update failed: ${String(err)}`, variant: "error" });
         throw err;
@@ -63,7 +64,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
       if (!confirm("Delete this JIRA watcher?")) return;
       try {
         await remove(w.id, w.workspaceId);
-        toast({ description: "Watcher deleted", variant: "success" });
+        toast({ description: t("jira:watcherDeleted"), variant: "success" });
       } catch (err) {
         toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
       }
@@ -97,7 +98,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
           description:
             n > 0
               ? `Reset complete — deleted ${n} task(s); next poll will re-import matches.`
-              : "Reset complete — next poll will re-import matches.",
+              : t("jira:resetCompleteNextPollWillRe"),
           variant: "success",
         });
       } catch (err) {

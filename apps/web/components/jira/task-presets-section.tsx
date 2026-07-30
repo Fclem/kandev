@@ -22,6 +22,7 @@ import {
 } from "@/components/settings/profile-edit/script-editor";
 import type { ScriptPlaceholder } from "@/components/settings/profile-edit/script-editor-completions";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 const JIRA_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
   {
@@ -53,7 +54,7 @@ const JIRA_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
 function newPreset(): JiraStoredPreset {
   return {
     id: `preset_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-    label: "New action",
+    label: t("jira:newAction"),
     hint: "",
     icon: "sparkle",
     prompt_template: "",
@@ -266,9 +267,9 @@ export function TaskPresetsSection() {
   const handleSave = useCallback(async () => {
     try {
       await save();
-      toast({ description: "Task presets saved", variant: "success" });
+      toast({ description: t("jira:taskPresetsSaved"), variant: "success" });
     } catch {
-      toast({ description: "Failed to save task presets", variant: "error" });
+      toast({ description: t("jira:failedToSaveTaskPresets"), variant: "error" });
       throw new Error("Failed to save task presets");
     }
   }, [save, toast]);

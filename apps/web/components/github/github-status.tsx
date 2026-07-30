@@ -77,7 +77,9 @@ function StatusLine({ status }: { status: GitHubStatus }) {
       )}
       <span className="min-w-0 break-words font-medium">
         {actor ??
-          (connection.status === "active" ? t("github:authenticationUnavailable") : connectionLabel(status))}
+          (connection.status === "active"
+            ? t("github:authenticationUnavailable")
+            : connectionLabel(status))}
       </span>
       <Badge variant={active ? "secondary" : "destructive"}>
         {sourceLabels[connection.source]}
@@ -226,6 +228,7 @@ function AutomationActions({
 }
 
 export function GitHubAutomationSettings({ workspaceId }: { workspaceId: string }) {
+  const { t } = useTranslation();
   const { status, loaded, loading, refresh } = useGitHubStatus(workspaceId);
   const appRegistrations = useGitHubAppRegistrations(workspaceId);
   const [busy, setBusy] = useState(false);
@@ -234,11 +237,11 @@ export function GitHubAutomationSettings({ workspaceId }: { workspaceId: string 
     setBusy(true);
     try {
       await disconnectGitHubWorkspace(workspaceId);
-      toast({ description: "Workspace GitHub connection removed", variant: "success" });
+      toast({ description: t("github:workspaceGithubConnectionRemoved"), variant: "success" });
       refresh();
     } catch (error) {
       toast({
-        description: error instanceof Error ? error.message : "Disconnect failed",
+        description: error instanceof Error ? error.message : t("github:disconnectFailed"),
         variant: "error",
       });
     } finally {
@@ -376,11 +379,11 @@ export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string })
     setBusy(true);
     try {
       await disconnectGitHubPersonal(workspaceId);
-      toast({ description: "Personal GitHub identity disconnected", variant: "success" });
+      toast({ description: t("github:personalGithubIdentityDisconnected"), variant: "success" });
       refresh();
     } catch (error) {
       toast({
-        description: error instanceof Error ? error.message : "Disconnect failed",
+        description: error instanceof Error ? error.message : t("github:disconnectFailed"),
         variant: "error",
       });
     } finally {

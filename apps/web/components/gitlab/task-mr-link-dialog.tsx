@@ -156,9 +156,9 @@ export function TaskMRLinkDialog({
       onOpenChange(false);
     } catch (error) {
       toast({
-        title: "Failed to link merge request",
+        title: t("gitlab:failedToLinkMergeRequest"),
         description:
-          error instanceof Error ? error.message : "GitLab rejected the merge request link.",
+          error instanceof Error ? error.message : t("gitlab:gitlabRejectedTheMergeRequestLink"),
         variant: "error",
       });
     } finally {

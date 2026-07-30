@@ -151,7 +151,9 @@ function TreeCostSection({ task }: { task: Task }) {
       <PropertyRow label={t("task:treeCost")}>{formatCurrency(summary.cost_subcents)}</PropertyRow>
       <PropertyRow label={t("task:treeTasks")}>{summary.task_count}</PropertyRow>
       <PropertyRow label={t("task:inputTokens")}>{formatNumber(summary.tokens_in)}</PropertyRow>
-      <PropertyRow label={t("task:cachedInput")}>{formatNumber(summary.tokens_cached_in)}</PropertyRow>
+      <PropertyRow label={t("task:cachedInput")}>
+        {formatNumber(summary.tokens_cached_in)}
+      </PropertyRow>
       <PropertyRow label={t("task:outputTokens")}>{formatNumber(summary.tokens_out)}</PropertyRow>
     </>
   );

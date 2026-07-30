@@ -25,6 +25,7 @@ import {
 } from "@/components/settings/profile-edit/script-editor";
 import type { ScriptPlaceholder } from "@/components/settings/profile-edit/script-editor-completions";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 const ACTION_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
   {
@@ -44,7 +45,7 @@ const ACTION_PROMPT_PLACEHOLDERS: ScriptPlaceholder[] = [
 function newPreset(): GitHubActionPreset {
   return {
     id: `preset_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-    label: "New action",
+    label: t("github:newAction"),
     hint: "",
     icon: "sparkle",
     prompt_template: "",
@@ -338,9 +339,9 @@ export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
   const handleSave = useCallback(async () => {
     try {
       await save();
-      toast({ description: "Quick actions saved", variant: "success" });
+      toast({ description: t("github:quickActionsSaved"), variant: "success" });
     } catch {
-      toast({ description: "Failed to save quick actions", variant: "error" });
+      toast({ description: t("github:failedToSaveQuickActions"), variant: "error" });
       throw new Error("Failed to save quick actions");
     }
   }, [save, toast]);
@@ -349,7 +350,7 @@ export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
     revision: JSON.stringify([prDraft, issueDraft]),
     isDirty: dirty,
     canSave: !loading,
-    invalidReason: loading ? "Quick actions are still loading." : undefined,
+    invalidReason: loading ? t("github:quickActionsAreStillLoading") : undefined,
     save: handleSave,
     discard,
   });

@@ -37,6 +37,7 @@ export function GitHubAppImportForm({
   registrations: RegistrationHook;
   onImported: (registrationId: string) => void;
 }) {
+  const { t } = useTranslation();
   const [preparation, setPreparation] = useState<PrepareGitHubAppImportResponse | null>(null);
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState<AppSetupErrors>({});
@@ -88,7 +89,7 @@ export function GitHubAppImportForm({
       });
       setValues(clearImportSecrets);
       toast({
-        description: "GitHub App imported. It is ready to install.",
+        description: t("github:githubAppImportedItIsReady"),
         variant: "success",
       });
       onImported(imported.id);

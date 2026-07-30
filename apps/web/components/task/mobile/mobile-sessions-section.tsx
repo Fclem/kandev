@@ -449,6 +449,7 @@ function useActiveSessionPillLabel(
   agentName: string | null;
   effectiveSessionId: string | null;
 } {
+  const { t } = useTranslation();
   const storedActiveSessionId = useAppStore((s) => s.tasks.activeSessionId);
   const { rows } = useSessionRows(taskId);
   const effectiveSessionId = sessionId === undefined ? storedActiveSessionId : sessionId;
@@ -459,7 +460,7 @@ function useActiveSessionPillLabel(
   if (total > 1 && idx) count = `${idx}/${total}`;
   else if (total > 1) count = `${total}`;
   return {
-    label: activeRow?.agentLabel ?? "Session",
+    label: activeRow?.agentLabel ?? t("task:session2"),
     count,
     agentName: activeRow?.agentName ?? null,
     effectiveSessionId,

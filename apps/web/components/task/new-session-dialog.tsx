@@ -175,6 +175,7 @@ export function useSessionPromptController(
   setHasPrompt: (value: boolean) => void,
   taskId: string,
 ) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { enhancePrompt, isEnhancingPrompt } = useUtilityAgentGenerator({ sessionId: null });
   const latestPromptValueRef = useRef(promptValue);
@@ -201,7 +202,7 @@ export function useSessionPromptController(
     await enhancePrompt(current, (enhanced) => {
       const delivered = promptResultDelivery.deliver(current, enhanced, generation);
       if (delivered) {
-        toast({ description: "Enhanced prompt applied.", variant: "success" });
+        toast({ description: t("task:enhancedPromptApplied"), variant: "success" });
       }
 
       return delivered;

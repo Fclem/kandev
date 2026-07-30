@@ -63,7 +63,7 @@ export function DeleteWatchDialog({
                 await onConfirm();
                 onOpenChange(false);
               } catch (cause) {
-                setError(cause instanceof Error ? cause.message : "Watch deletion failed");
+                setError(cause instanceof Error ? cause.message : t("gitlab:watchDeletionFailed"));
               } finally {
                 setDeleting(false);
               }

@@ -39,6 +39,7 @@ export function ClarificationStepper({
   onJump,
   isSubmitting,
 }: StepperProps) {
+  const { t } = useTranslation();
   return (
     <div
       className="flex items-center gap-1.5 select-none"
@@ -54,7 +55,10 @@ export function ClarificationStepper({
               type="button"
               role="tab"
               aria-selected={active}
-              aria-label={`Question ${i + 1} of ${total}${answered ? " (answered)" : ""}`}
+              aria-label={t(answered ? "task:questionOfTotalAnswered" : "task:questionOfTotal", {
+                number: i + 1,
+                total,
+              })}
               onClick={() => onJump(i)}
               disabled={isSubmitting}
               data-testid="clarification-step"
@@ -272,7 +276,9 @@ export function ClarificationCustomInput({
         ref={textareaRef}
         rows={1}
         placeholder={
-          committedText !== null ? t("task:pressEnterToUpdateYourAnswer") : t("task:orTypeACustomAnswer")
+          committedText !== null
+            ? t("task:pressEnterToUpdateYourAnswer")
+            : t("task:orTypeACustomAnswer")
         }
         value={draft}
         onChange={(e) => onChange(e.target.value)}

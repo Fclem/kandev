@@ -151,6 +151,7 @@ function useWalkthroughStepFeedback(params: {
   stepCount: number;
   walkthrough: TaskWalkthrough | null | undefined;
 }) {
+  const { t } = useTranslation();
   const { activeStep, activeTaskId, sessionId, step, stepCount, walkthrough } = params;
   const addComment = useCommentsStore((s) => s.addComment);
   const { runComment } = useRunComment({ sessionId: sessionId ?? null, taskId: activeTaskId });
@@ -168,7 +169,7 @@ function useWalkthroughStepFeedback(params: {
     });
   };
   const showMissingSessionError = () => {
-    toast({ title: "No active session for walkthrough note", variant: "error" });
+    toast({ title: t("diff:noActiveSessionForWalkthroughNote"), variant: "error" });
   };
   const addWalkthroughFeedback = (text: string) => {
     const comment = buildComment(text);
@@ -177,7 +178,7 @@ function useWalkthroughStepFeedback(params: {
       return;
     }
     addComment(comment);
-    toast({ title: "Walkthrough note added", variant: "success" });
+    toast({ title: t("diff:walkthroughNoteAdded"), variant: "success" });
   };
   const runWalkthroughFeedback = (text: string) => {
     const comment = buildComment(text);
@@ -189,12 +190,12 @@ function useWalkthroughStepFeedback(params: {
     void runComment(comment)
       .then(({ queued }) => {
         toast({
-          title: queued ? "Walkthrough note queued" : "Walkthrough note sent",
+          title: queued ? t("diff:walkthroughNoteQueued") : t("diff:walkthroughNoteSent"),
           variant: "success",
         });
       })
       .catch(() => {
-        toast({ title: "Failed to send walkthrough note", variant: "error" });
+        toast({ title: t("diff:failedToSendWalkthroughNote"), variant: "error" });
       });
   };
   return { addWalkthroughFeedback, runWalkthroughFeedback };

@@ -55,6 +55,7 @@ import { MRDiscussionsSection } from "./mr-discussions-section";
 import { MRReviewerControl } from "./mr-reviewer-control";
 import { SubscriptionToggle } from "./subscription-toggle";
 import { Trans, useTranslation } from "react-i18next";
+import { t as translate } from "@/lib/i18n";
 
 type MRKeyInput = Pick<TaskMR, "host" | "project_path" | "mr_iid">;
 const EMPTY_LABELS: string[] = [];
@@ -213,7 +214,12 @@ function MRActionButtons({
         size="sm"
         className="h-11 cursor-pointer gap-1.5 bg-green-600 text-white hover:bg-green-700 sm:h-8"
         disabled={disabled}
-        onClick={() => void run("Approve", () => approveMR(identity), "Merge request approved")}
+        onClick={() =>
+          void run("approve", () => approveMR(identity), {
+            success: t("gitlab:mergeRequestApproved"),
+            failure: t("gitlab:approveFailed"),
+          })
+        }
       >
         <Trans i18nKey="gitlab:approve">
           <IconCheck className="h-4 w-4" /> {t("gitlab:approve2")}
@@ -224,7 +230,12 @@ function MRActionButtons({
         variant="outline"
         className="h-11 cursor-pointer sm:h-8"
         disabled={disabled}
-        onClick={() => void run("Unapprove", () => unapproveMR(identity), "Approval removed")}
+        onClick={() =>
+          void run("unapprove", () => unapproveMR(identity), {
+            success: t("gitlab:approvalRemoved"),
+            failure: t("gitlab:unapproveFailed"),
+          })
+        }
       >
         {t("gitlab:unapprove")}
       </Button>
@@ -257,6 +268,7 @@ function MRPeopleControls({
   busy: boolean;
   run: RunMRAction;
 }) {
+  const { t } = useTranslation();
   const shared = {
     workspaceId: identity.workspaceId,
     host: identity.host,
@@ -270,7 +282,10 @@ function MRPeopleControls({
         current={reviewers}
         busy={busy}
         onSave={(reviewerIds) =>
-          run("Reviewers", () => setMRReviewers({ ...identity, reviewerIds }), "Reviewers updated")
+          run("reviewers", () => setMRReviewers({ ...identity, reviewerIds }), {
+            success: t("gitlab:reviewersUpdated"),
+            failure: t("gitlab:reviewersUpdateFailed"),
+          })
         }
       />
       <MRReviewerControl
@@ -279,7 +294,10 @@ function MRPeopleControls({
         current={assignees}
         busy={busy}
         onSave={(assigneeIds) =>
-          run("Assignees", () => setMRAssignees({ ...identity, assigneeIds }), "Assignees updated")
+          run("assignees", () => setMRAssignees({ ...identity, assigneeIds }), {
+            success: t("gitlab:assigneesUpdated"),
+            failure: t("gitlab:assigneesUpdateFailed"),
+          })
         }
       />
     </div>
@@ -322,11 +340,10 @@ function MergeConfirmation({
           <AlertDialogAction
             className="cursor-pointer"
             onClick={() =>
-              void run(
-                "Merge",
-                () => mergeMR({ ...identity, squash: false }),
-                "Merge request merged",
-              )
+              void run("merge", () => mergeMR({ ...identity, squash: false }), {
+                success: t("gitlab:mergeRequestMerged"),
+                failure: t("gitlab:mergeFailed"),
+              })
             }
           >
             {t("common:merge")}
@@ -366,7 +383,10 @@ async function unlinkTaskMR(
   removeTaskMR: (workspaceId: string, associationId: string) => void,
 ) {
   if (
-    !(await run("Unlink", () => deleteTaskMR(taskMR.id, workspaceId), "Merge request unlinked"))
+    !(await run("unlink", () => deleteTaskMR(taskMR.id, workspaceId), {
+      success: translate("gitlab:mergeRequestUnlinked"),
+      failure: translate("gitlab:unlinkFailed"),
+    }))
   ) {
     return;
   }
@@ -379,14 +399,21 @@ async function unlinkTaskMR(
 // useMRDiscussionActions builds the MR identity used by every MR mutation and
 // the reply/resolve handlers for the discussions section.
 function useMRDiscussionActions(taskMR: TaskMR, workspaceId: string, run: RunMRAction) {
+  const { t } = useTranslation();
   const identity = useMemo<GitLabMRIdentity & { host: string }>(
     () => ({ workspaceId, project: taskMR.project_path, iid: taskMR.mr_iid, host: taskMR.host }),
     [workspaceId, taskMR.project_path, taskMR.mr_iid, taskMR.host],
   );
   const reply = (discussionId: string, body: string) =>
-    run("Reply", () => createMRDiscussionNote({ ...identity, discussionId, body }), "Reply added");
+    run("reply", () => createMRDiscussionNote({ ...identity, discussionId, body }), {
+      success: t("gitlab:replyAdded"),
+      failure: t("gitlab:replyFailed"),
+    });
   const resolve = (discussionId: string) =>
-    run("Resolve", () => resolveMRDiscussion({ ...identity, discussionId }), "Discussion resolved");
+    run("resolve", () => resolveMRDiscussion({ ...identity, discussionId }), {
+      success: t("gitlab:discussionResolved"),
+      failure: t("gitlab:resolveFailed"),
+    });
   return { identity, reply, resolve };
 }
 
@@ -415,6 +442,7 @@ function MRDetailContent({
   sessionId: string;
   workspaceId: string;
 }) {
+  const { t } = useTranslation();
   const [mergeOpen, setMergeOpen] = useState(false);
   const removeTaskMR = useAppStore((state) => state.removeTaskMR);
   const { feedback, files, commits, loading, error, refresh } = useMRFeedback(
@@ -461,7 +489,10 @@ function MRDetailContent({
             value={mr.labels ?? EMPTY_LABELS}
             busy={busy}
             onSave={(labels) =>
-              void run("Labels", () => setMRLabels({ ...identity, labels }), "Labels updated")
+              void run("labels", () => setMRLabels({ ...identity, labels }), {
+                success: t("gitlab:labelsUpdated"),
+                failure: t("gitlab:labelsUpdateFailed"),
+              })
             }
           />
           <Separator />

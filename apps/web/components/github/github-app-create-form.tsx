@@ -30,6 +30,7 @@ export function GitHubAppCreateForm({
   workspaceId: string;
   registrations: RegistrationHook;
 }) {
+  const { t } = useTranslation();
   const [displayName, setDisplayName] = useState("");
   const [ownerType, setOwnerType] = useState<"user" | "organization">("organization");
   const [ownerLogin, setOwnerLogin] = useState("");
@@ -71,7 +72,10 @@ export function GitHubAppCreateForm({
       );
     } catch (error) {
       const detail = appRegistrationError(error);
-      toast({ description: detail?.error ?? "GitHub App setup could not start", variant: "error" });
+      toast({
+        description: detail?.error ?? t("github:githubAppSetupCouldNotStart"),
+        variant: "error",
+      });
     }
   }
 

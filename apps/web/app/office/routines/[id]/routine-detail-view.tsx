@@ -135,7 +135,8 @@ export function RoutineDetailView({ initialRoutine, initialTriggers }: RoutineDe
             </Trans>
           </Button>
           <Button size="sm" onClick={handleSave} disabled={saving} className="cursor-pointer">
-            <IconDeviceFloppy className="h-4 w-4 mr-1" /> {saving ? t("office:saving2") : t("office:save2")}
+            <IconDeviceFloppy className="h-4 w-4 mr-1" />{" "}
+            {saving ? t("office:saving2") : t("office:save2")}
           </Button>
         </div>
       </OfficeTopbarPortal>

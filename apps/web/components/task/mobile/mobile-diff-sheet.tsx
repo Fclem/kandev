@@ -10,6 +10,7 @@ import type { ReviewSource, SourceCounts } from "@/hooks/domains/session/use-rev
 import type { SelectedDiff } from "../task-layout";
 import type { DiffSheetMode } from "../changes-diff-target";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 const MOBILE_DIFF_SOURCE_FILTER_KEY = "mobile-diff-source-filter";
 
@@ -75,8 +76,12 @@ type SourceTab = { key: ReviewSource; label: string; count: number };
 
 function buildSourceTabs(sourceCounts: SourceCounts): SourceTab[] {
   return [
-    { key: "uncommitted" as ReviewSource, label: "Uncommitted", count: sourceCounts.uncommitted },
-    { key: "committed" as ReviewSource, label: "Committed", count: sourceCounts.committed },
+    {
+      key: "uncommitted" as ReviewSource,
+      label: t("task:uncommitted"),
+      count: sourceCounts.uncommitted,
+    },
+    { key: "committed" as ReviewSource, label: t("task:committed"), count: sourceCounts.committed },
     { key: "pr" as ReviewSource, label: "PR", count: sourceCounts.pr },
   ].filter((t) => t.count > 0);
 }

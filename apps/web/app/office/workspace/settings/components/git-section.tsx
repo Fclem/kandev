@@ -62,6 +62,7 @@ function useGitOperations(activeWorkspaceId: string) {
 }
 
 export function GitSection() {
+  const { t } = useTranslation();
   const activeWorkspaceId = useAppStore((s) => s.workspaces?.activeId ?? "");
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("main");
@@ -94,7 +95,7 @@ export function GitSection() {
       runOp(
         async () => {
           await officeApi.gitPush(activeWorkspaceId, {
-            message: commitMessage || "Update workspace configuration",
+            message: commitMessage || t("office:updateWorkspaceConfiguration"),
           });
           setCommitMessage("");
         },

@@ -83,9 +83,8 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
           ) : (
             <p>
               <Trans i18nKey="settings:configureASpritesApiTokenEnvironment">
-                Configure a <code className="text-xs">SPRITES_API_TOKEN</code>{" "}
-                environment variable in the executor profile, referencing a secret with your
-                Sprites.dev API token.
+                Configure a <code className="text-xs">SPRITES_API_TOKEN</code> environment variable
+                in the executor profile, referencing a secret with your Sprites.dev API token.
               </Trans>
             </p>
           )}

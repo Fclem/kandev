@@ -71,21 +71,45 @@ export function CostOverview({ workspaceId }: { workspaceId: string }) {
           label={t("office:totalSpend")}
           value={formatDollars(totalSubcents)}
         />
-        <MetricCard icon={IconRobot} label={t("office:activeAgents")} value={String(byAgent.length)} />
-        <MetricCard icon={IconFolder} label={t("office:projects")} value={String(byProject.length)} />
+        <MetricCard
+          icon={IconRobot}
+          label={t("office:activeAgents")}
+          value={String(byAgent.length)}
+        />
+        <MetricCard
+          icon={IconFolder}
+          label={t("office:projects")}
+          value={String(byProject.length)}
+        />
         <MetricCard icon={IconCpu} label={t("office:modelsUsed")} value={String(byModel.length)} />
-        <MetricCard icon={IconBuilding} label={t("office:providers")} value={String(byProvider.length)} />
+        <MetricCard
+          icon={IconBuilding}
+          label={t("office:providers")}
+          value={String(byProvider.length)}
+        />
       </div>
 
       <div className="space-y-6">
-        <CostBreakdownTable title={t("office:byAgent")} items={byAgent} labelPrefix="Agent" />
-        <CostBreakdownTable title={t("office:byProject")} items={byProject} labelPrefix="Project" />
+        <CostBreakdownTable
+          title={t("office:byAgent")}
+          items={byAgent}
+          labelPrefix={t("office:agent")}
+        />
+        <CostBreakdownTable
+          title={t("office:byProject")}
+          items={byProject}
+          labelPrefix={t("office:project")}
+        />
         <CostBreakdownTable
           title={t("office:byProvider")}
           items={byProvider}
-          labelPrefix="Provider"
+          labelPrefix={t("office:provider")}
         />
-        <CostBreakdownTable title={t("office:byModel")} items={byModel} labelPrefix="Model" />
+        <CostBreakdownTable
+          title={t("office:byModel")}
+          items={byModel}
+          labelPrefix={t("common:model")}
+        />
       </div>
     </div>
   );

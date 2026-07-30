@@ -24,6 +24,7 @@ import {
   type TasksListSort,
 } from "@/lib/tasks/tasks-list-options";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 export type TasksListViewProps = {
   total: number;
@@ -339,15 +340,15 @@ function groupForTask(
 ) {
   if (groupBy === "workflow") {
     const title = workflowMap.get(task.workflow_id);
-    if (!title) return { key: "workflow:none", title: "No workflow" };
+    if (!title) return { key: "workflow:none", title: t("common:noWorkflow") };
     return { key: `workflow:${task.workflow_id || "none"}`, title };
   }
   if (groupBy === "repository") {
     const primaryRepo = primaryTaskRepository(task.repositories);
-    if (!primaryRepo) return { key: "repository:none", title: "No repository" };
+    if (!primaryRepo) return { key: "repository:none", title: t("common:noRepository") };
     const repoId = primaryRepo?.repository_id ?? "none";
     const title = repoMap.get(repoId);
-    if (!title) return { key: "repository:none", title: "No repository" };
+    if (!title) return { key: "repository:none", title: t("common:noRepository") };
     return { key: `repository:${repoId}`, title };
   }
   const title = formatTaskStateLabel(task.state);

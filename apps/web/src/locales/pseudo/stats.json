@@ -1,6 +1,7 @@
 {
   "activity": "Àćţĩvĩţŷ ({{value1}})",
   "activity2": "Àćţĩvĩţŷ (",
+  "activity3": "Àćţĩvĩţŷ",
   "averages": "Àvēŕàĝēś",
   "avgPerTask": "{{value0}} àvĝ ƥēŕ ţàśķ",
   "bestMonth": "Ɓēśţ ḿōńţĥ",
@@ -13,6 +14,8 @@
   "completedTasksOverTime": "Ćōḿƥĺēţēď Ţàśķś Ōvēŕ Ţĩḿē",
   "completion": "Ćōḿƥĺēţĩōń",
   "completionRate": "Ćōḿƥĺēţĩōń ŕàţē",
+  "copied": "Ćōƥĩēď",
+  "copyStats": "Ćōƥŷ Śţàţś",
   "errorLoadingStats": "Ēŕŕōŕ ĺōàďĩńĝ śţàţś: {{initialError}}",
   "filesChanged": "{{total_files_changed}} ƒĩĺēś ćĥàńĝēď",
   "gitActivity": "<0></0> Ĝĩţ Àćţĩvĩţŷ",

@@ -185,6 +185,7 @@ function useGitLabCredentialDraft({
   onDirtyChange,
   onHostChange,
 }: GitLabCredentialsFormProps) {
+  const { t } = useTranslation();
   const [method, setMethod] = useState(initial);
   const [baseline, setBaseline] = useState(initial);
   const [syncedInitial, setSyncedInitial] = useState(initial);
@@ -215,12 +216,12 @@ function useGitLabCredentialDraft({
       setBaseline(method);
       setHostBaseline(host.trim());
       setToken((current) => (current.trim() === submittedToken ? "" : current));
-      toast({ description: "GitLab authentication method updated", variant: "success" });
+      toast({ description: t("gitlab:gitlabAuthenticationMethodUpdated"), variant: "success" });
       onSaved();
     } catch (error) {
       toast({
         description:
-          error instanceof Error ? error.message : "Failed to update authentication method",
+          error instanceof Error ? error.message : t("gitlab:failedToUpdateAuthenticationMethod"),
         variant: "error",
       });
       throw error;
@@ -325,11 +326,11 @@ function ClearTokenButton({
         setBusy(true);
         try {
           await clearGitLabToken({ workspaceId });
-          toast({ description: "GitLab token cleared" });
+          toast({ description: t("gitlab:gitlabTokenCleared") });
           onCleared();
         } catch (err) {
           toast({
-            description: err instanceof Error ? err.message : "Failed to clear token",
+            description: err instanceof Error ? err.message : t("gitlab:failedToClearToken"),
             variant: "error",
           });
         } finally {

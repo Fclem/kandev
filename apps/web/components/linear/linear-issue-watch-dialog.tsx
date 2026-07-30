@@ -263,9 +263,9 @@ function AssigneeAndCreatorRow({
         onChange={(v) => setForm((p) => ({ ...p, assigned: v === ASSIGNED_ANY ? "" : v }))}
         placeholder={t("linear:any")}
         items={[
-          { id: ASSIGNED_ANY, label: "(any)" },
-          { id: "me", label: "Me" },
-          { id: "unassigned", label: "Unassigned" },
+          { id: ASSIGNED_ANY, label: t("linear:any") },
+          { id: "me", label: t("linear:me") },
+          { id: "unassigned", label: t("linear:unassigned") },
         ]}
       />
       <SelectField
@@ -275,7 +275,7 @@ function AssigneeAndCreatorRow({
         onChange={(v) => setForm((p) => ({ ...p, creatorId: v === CREATOR_ANY ? "" : v }))}
         placeholder={creatorPlaceholder(form.teamKey, loadingUsers)}
         items={[
-          { id: CREATOR_ANY, label: "(any)" },
+          { id: CREATOR_ANY, label: t("linear:any") },
           ...users.map((u) => ({ id: u.id, label: userOptionLabel(u) })),
         ]}
         disabled={!form.teamKey || loadingUsers}
@@ -297,7 +297,7 @@ function EstimateRow({ form, setForm }: { form: FormState; setForm: FormSetter }
           onChange={(e) => setForm((p) => ({ ...p, estimateMin: e.target.value }))}
           min={0}
           step="0.5"
-          placeholder="e.g. 1"
+          placeholder={t("linear:egNumber", { example: 1 })}
         />
       </div>
       <div className="space-y-1.5">
@@ -309,7 +309,7 @@ function EstimateRow({ form, setForm }: { form: FormState; setForm: FormSetter }
           onChange={(e) => setForm((p) => ({ ...p, estimateMax: e.target.value }))}
           min={0}
           step="0.5"
-          placeholder="e.g. 5"
+          placeholder={t("linear:egNumber", { example: 5 })}
         />
       </div>
     </div>
@@ -529,7 +529,9 @@ export function LinearIssueWatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-full sm:w-[800px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{watch ? t("linear:editLinearWatcher") : t("linear:createLinearWatcher")}</DialogTitle>
+          <DialogTitle>
+            {watch ? t("linear:editLinearWatcher") : t("linear:createLinearWatcher")}
+          </DialogTitle>
           <DialogDescription>{t("linear:pollLinearWithAStructuredFilter")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-5">

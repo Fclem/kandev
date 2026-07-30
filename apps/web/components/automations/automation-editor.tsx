@@ -258,13 +258,14 @@ function useAutomationSaveContributor(options: {
   save: () => Promise<void>;
   discard: () => void;
 }) {
+  const { t } = useTranslation();
   const { isNew, currentId, revision, savedRevision, canSave, save, discard } = options;
   useSettingsSaveContributor({
     id: `automation:${currentId ?? "new"}`,
     revision,
     isDirty: isNew || revision !== savedRevision,
     canSave,
-    invalidReason: canSave ? undefined : "Complete the required automation fields before saving.",
+    invalidReason: canSave ? undefined : t("automations:completeTheRequiredAutomationFieldsBefore"),
     save,
     discard,
   });
@@ -307,7 +308,7 @@ function useAutomationPersistence(options: AutomationPersistenceOptions) {
     options.router,
     (error) =>
       toast.error(t("automations:failedToDeleteAutomation"), {
-        description: error instanceof Error ? error.message : "Request failed",
+        description: error instanceof Error ? error.message : t("common:requestFailed"),
       }),
   );
   const isRunMode = options.form.executionMode === "run";

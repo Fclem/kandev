@@ -30,6 +30,7 @@ import { usePluginRegistry } from "@/lib/plugins/registry";
 import type { GitHubStatus } from "@/lib/types/github";
 import { AzureDevOpsIcon } from "@/components/icons/azure-devops-icon";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 type MobileIntegrationsSectionProps = {
   onNavigate: () => void;
@@ -90,8 +91,8 @@ function getStatusLabel(loading: boolean | undefined): string {
 }
 
 export function getGitHubIntegrationStatus(status: GitHubStatus | null, loading: boolean) {
-  if (status?.authenticated) return { ready: true, label: "Connected" };
-  if (status?.token_configured) return { ready: true, label: "Configured" };
+  if (status?.authenticated) return { ready: true, label: t("common:connected") };
+  if (status?.token_configured) return { ready: true, label: t("integrations:configured") };
   return { ready: false, label: getStatusLabel(loading) };
 }
 

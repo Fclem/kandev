@@ -38,13 +38,13 @@ export function TasksByStatusChart({ days }: Props) {
         />
         <ChartLegend
           items={[
-            { label: "Todo", className: "bg-slate-400" },
-            { label: "In progress", className: "bg-blue-500" },
-            { label: "In review", className: "bg-violet-500" },
-            { label: "Done", className: "bg-emerald-500" },
-            { label: "Blocked", className: "bg-orange-500" },
-            { label: "Cancelled", className: "bg-zinc-400" },
-            { label: "Backlog", className: "bg-slate-200" },
+            { label: t("office:todo"), className: "bg-slate-400" },
+            { label: t("office:inProgress2"), className: "bg-blue-500" },
+            { label: t("office:inReview"), className: "bg-violet-500" },
+            { label: t("office:done2"), className: "bg-emerald-500" },
+            { label: t("office:blocked"), className: "bg-orange-500" },
+            { label: t("office:cancelled"), className: "bg-zinc-400" },
+            { label: t("office:backlog"), className: "bg-slate-200" },
           ]}
         />
       </CardContent>

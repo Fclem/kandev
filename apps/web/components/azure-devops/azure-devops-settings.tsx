@@ -140,6 +140,7 @@ function useConfigRefresh(
 }
 
 function useAzureDevOpsSettings(workspaceId: string) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [config, setConfig] = useState<AzureDevOpsConfig | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -199,7 +200,7 @@ function useAzureDevOpsSettings(workspaceId: string) {
       setConfig(next);
       setForm(configToForm(next));
       setTestResult(null);
-      toast({ description: "Azure DevOps configuration saved", variant: "success" });
+      toast({ description: t("azureDevops:azureDevopsConfigurationSaved"), variant: "success" });
     } catch (err) {
       toast({ description: `Save failed: ${String(err)}`, variant: "error" });
     } finally {
@@ -214,7 +215,7 @@ function useAzureDevOpsSettings(workspaceId: string) {
       setConfig(null);
       setForm(EMPTY_FORM);
       setTestResult(null);
-      toast({ description: "Azure DevOps configuration removed", variant: "success" });
+      toast({ description: t("azureDevops:azureDevopsConfigurationRemoved"), variant: "success" });
     } catch (err) {
       toast({ description: `Remove failed: ${String(err)}`, variant: "error" });
     }

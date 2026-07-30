@@ -28,6 +28,7 @@ import {
   reviewFileKey,
   splitReviewFileKey as splitFileKey,
 } from "./types";
+import { useTranslation } from "react-i18next";
 
 /**
  * Multi-repo dedup: keying ReviewFile entries by `path` only collapses
@@ -254,6 +255,7 @@ type ReviewDialogHandlerOptions = {
 };
 
 function useReviewDialogHandlers(opts: ReviewDialogHandlerOptions) {
+  const { t } = useTranslation();
   const { allFiles, markReviewed, markUnreviewed, onSendComments, onOpenChange, sessionId } = opts;
   const { discard } = useGitOperations(sessionId);
   const { toast } = useToast();
@@ -298,17 +300,17 @@ function useReviewDialogHandlers(opts: ReviewDialogHandlerOptions) {
       try {
         const result = await discard([path], repositoryName || undefined);
         if (result.success)
-          toast({ title: "Changes discarded", description: path, variant: "success" });
+          toast({ title: t("review:changesDiscarded"), description: path, variant: "success" });
         else
           toast({
-            title: "Discard failed",
-            description: result.error || "An error occurred",
+            title: t("review:discardFailed"),
+            description: result.error || t("review:anErrorOccurred"),
             variant: "error",
           });
       } catch (e) {
         toast({
-          title: "Discard failed",
-          description: e instanceof Error ? e.message : "An error occurred",
+          title: t("review:discardFailed"),
+          description: e instanceof Error ? e.message : t("review:anErrorOccurred"),
           variant: "error",
         });
       }

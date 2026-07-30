@@ -43,7 +43,7 @@ export function CostBreakdownTable({ title, items, labelPrefix }: Props) {
           </div>
           {items.map((item) => {
             const pct = Math.round((item.total_subcents / maxSubcents) * 100);
-            const label = item.group_label || item.group_key || "(unassigned)";
+            const label = item.group_label || item.group_key || t("office:unassignedGroup");
             const isFallbackToId = !item.group_label && Boolean(item.group_key);
             return (
               <div key={item.group_key} className="flex items-center gap-4 py-2 text-sm">

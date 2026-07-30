@@ -162,6 +162,7 @@ function useModelChangeHandlers(
   configOptions: SelectConfigOption[],
   sessionModelsData: SessionModelsEntry | undefined,
 ) {
+  const { t } = useTranslation();
   const activeModels = useAppStore((state) => state.activeModel.bySessionId);
   const setActiveModel = useAppStore((state) => state.setActiveModel);
   const setSessionModels = useAppStore((state) => state.setSessionModels);
@@ -195,7 +196,7 @@ function useModelChangeHandlers(
         setActiveModel(sid, previousActive);
         if (previousModels) setSessionModels(sid, previousModels);
         toast({
-          title: "Failed to change model",
+          title: t("task:failedToChangeModel"),
           description: describeError(err),
           variant: "error",
         });

@@ -24,6 +24,7 @@ import { useIsUtilityConfigured } from "@/hooks/use-is-utility-configured";
 import { usePromptResultDelivery } from "@/hooks/use-prompt-result-delivery";
 import { PromptResultRecovery } from "@/components/prompt-result-recovery";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 // Re-export ImageAttachment type for consumers
 export type { ImageAttachment } from "./image-attachment-preview";
@@ -338,7 +339,7 @@ function buildEditorAreaProps(
 function buildStoppedBannerProps(p: ChatInputContainerProps) {
   if (!p.executorUnavailable) return {};
   return {
-    message: "Executor environment is unavailable.",
+    message: t("task:executorEnvironmentIsUnavailable"),
     detail: p.executorUnavailableReason,
     resumeLabel: "Restart",
     resumingLabel: "Restarting...",

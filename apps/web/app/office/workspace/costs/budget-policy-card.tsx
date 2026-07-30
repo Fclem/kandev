@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { BudgetPolicy } from "@/lib/state/slices/office/types";
 import { cn, formatDollars } from "@/lib/utils";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 type Props = {
   policy: BudgetPolicy;
@@ -24,18 +25,18 @@ function getBarColor(pct: number): string {
 function getBudgetStatus(pct: number): { label: string; className: string } {
   if (pct >= 100) {
     return {
-      label: "Exceeded",
+      label: t("office:exceeded"),
       className: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
     };
   }
   if (pct >= 80) {
     return {
-      label: "Warning",
+      label: t("office:warning"),
       className: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300",
     };
   }
   return {
-    label: "Healthy",
+    label: t("office:healthy"),
     className: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300",
   };
 }

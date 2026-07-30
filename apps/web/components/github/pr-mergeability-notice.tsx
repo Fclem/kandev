@@ -5,6 +5,7 @@ import { Button } from "@kandev/ui/button";
 import { cn } from "@/lib/utils";
 import type { MergeableState } from "@/lib/types/github";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 // --- Pure descriptor (unit-tested) ---
 
@@ -31,9 +32,9 @@ export function describeMergeability({
     case "dirty":
       return { kind: "banner" };
     case "blocked":
-      return { kind: "chip", label: "Blocked" };
+      return { kind: "chip", label: t("github:blocked") };
     case "behind":
-      return { kind: "chip", label: "Behind base" };
+      return { kind: "chip", label: t("github:behindBase") };
     case "clean":
     case "unstable":
     case "has_hooks":

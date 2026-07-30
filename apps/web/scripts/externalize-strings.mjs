@@ -64,6 +64,19 @@ const DISPLAY_PROPS = new Set([
   "errorMessage",
   "helpText",
   "subtitle",
+  "text",
+  "tip",
+  "badge",
+  "title",
+  "labelPrefix",
+  "submittingLabel",
+  "authErrorBody",
+  "errorTitle",
+  "backLabel",
+  "searchPlaceholder",
+  "emptyHint",
+  "note",
+  "invalidReason",
 ]);
 
 /**
@@ -313,6 +326,7 @@ const report = {
   skippedFragment: 0,
   skippedShadowed: 0,
   skippedInsideTrans: 0,
+  skippedModuleScope: 0,
   bindings: 0,
 };
 
@@ -418,6 +432,9 @@ const insideTrans = (ancestors) =>
       (a.type === "JSXOpeningElement" && a.name?.name === "Trans"),
   );
 
+/** True when the literal sits inside any function, i.e. not at module scope. */
+const insideFunction = (ancestors) => ancestors.some((a) => FUNCTION_TYPES.has(a.type));
+
 /** Node types a literal may pass through on its way up to the JSX and still be copy. */
 const PRESENTATIONAL = new Set([
   "ConditionalExpression",
@@ -427,43 +444,94 @@ const PRESENTATIONAL = new Set([
   "TSNonNullExpression",
 ]);
 
-/** Types that make the literal data rather than copy, regardless of nesting. */
-const DATA_PARENTS = new Set(["ObjectProperty", "ObjectExpression", "ArrayExpression"]);
-
 /**
- * Walk from the literal up to the nearest JSXExpressionContainer, returning it
- * only when every node in between is presentational. Returns null the moment
- * the chain passes through something that consumes the string as data.
+ * The nearest ancestor that actually decides what this literal is, skipping the
+ * presentational wrappers (`cond ? … : …`, `err || …`, casts) the literal may sit
+ * inside. Returns null when the chain passes through something that consumes the
+ * string as data — a call argument, a comparison, a bare array element.
  */
-function enclosingJsxContainer(node, ancestors) {
+function displayAnchor(node, ancestors) {
   for (let i = ancestors.length - 1; i >= 0; i--) {
     const a = ancestors[i];
-    if (a.type === "JSXExpressionContainer") return a;
-    if (NON_DISPLAY_PARENTS.has(a.type) || DATA_PARENTS.has(a.type)) return null;
+    if (PRESENTATIONAL.has(a.type)) {
+      // The *test* of a conditional is a comparison operand, not a rendered branch.
+      if (a.type === "ConditionalExpression" && a.test === (ancestors[i + 1] ?? node)) return null;
+      continue;
+    }
+    if (NON_DISPLAY_PARENTS.has(a.type)) return null;
     // Any call consumes the string as an argument rather than rendering it.
     if (a.type === "CallExpression" || a.type === "NewExpression") return null;
-    if (!PRESENTATIONAL.has(a.type)) return null;
-    // The *test* of a conditional is a comparison operand, not a rendered branch.
-    if (a.type === "ConditionalExpression" && a.test === (ancestors[i + 1] ?? node)) return null;
+    return a;
   }
   return null;
 }
 
-/** The JSX attribute this literal is nested under, if any. */
-const enclosingAttribute = (ancestors) =>
-  [...ancestors].reverse().find((a) => a.type === "JSXAttribute") ?? null;
+/**
+ * The JSX attribute that governs this literal, or null.
+ *
+ * Stops at the first JSXElement: once the literal is inside an element nested in
+ * a prop (`actions={<><Button>Copy</Button></>}`), the element renders its own
+ * children and the outer prop name says nothing about them.
+ */
+function governingAttribute(ancestors) {
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const a = ancestors[i];
+    if (a.type === "JSXElement" || a.type === "JSXFragment") return null;
+    if (a.type === "JSXAttribute") return a;
+  }
+  return null;
+}
 
 /**
- * Display copy that never appears as a JSX text node:
+ * Where this literal lands: "attr" (a bare display prop), "expr" (inside a JSX
+ * expression), "objprop" (a display key in a config object), "module-scope" (a
+ * display key that would evaluate at import time), or null when it is data.
+ *
+ * These are the shapes `mode: "jsx-text-only"` could not see:
  *
  *   {saving ? "Saving..." : "Save"}      ->  {saving ? t("ns:saving") : t("ns:save")}
  *   <Field label="Assignee" />           ->  <Field label={t("ns:assignee")} />
- *
- * These are the shapes `mode: "jsx-text-only"` could not see. The literal is
- * only rewritten when the chain from it up to the JSX is pure presentation;
- * anything else — a comparison, an object key, an argument to `cn()` — is data
- * and is left alone.
+ *   { label: "In progress" }             ->  { label: t("ns:inProgress") }
  */
+const propName = (node) => String(node?.name?.name ?? node?.key?.name ?? node?.key?.value);
+
+/** `label="Assignee"` — a bare literal on a display prop. */
+function attributeContext(node, anchor) {
+  if (!DISPLAY_PROPS.has(propName(anchor))) return null;
+  // A bare `label="x"` needs braces; a `label={cond ? "x" : "y"}` does not.
+  return anchor.value === node ? "attr" : "expr";
+}
+
+/** `{ label: "In progress" }` — a display key in a config object. */
+function objectPropertyContext(anchors, anchor) {
+  if (!DISPLAY_PROPS.has(propName(anchor))) return null;
+  // A module-scope object evaluates its `t()` at import time, which pins the
+  // copy to whatever locale was active then and never updates on a switch.
+  return insideFunction(anchors) ? "objprop" : "module-scope";
+}
+
+/** `{saving ? "Saving..." : "Save"}` — inside a JSX expression container. */
+function expressionContext(ancestors) {
+  const attr = governingAttribute(ancestors);
+  if (!attr) return "expr";
+  const name = propName(attr);
+  return DISPLAY_PROPS.has(name) || DISPLAY_ATTRS.has(name) ? "expr" : null;
+}
+
+function displayContext(node, ancestors) {
+  const anchor = displayAnchor(node, ancestors);
+  switch (anchor?.type) {
+    case "JSXAttribute":
+      return attributeContext(node, anchor);
+    case "ObjectProperty":
+      return objectPropertyContext(ancestors, anchor);
+    case "JSXExpressionContainer":
+      return expressionContext(ancestors);
+    default:
+      return null;
+  }
+}
+
 function handleJsxExpressionLiteral(node, ancestors, { ns, sentinels, edits, noteHost }) {
   if (node.type !== "StringLiteral" || !looksLikeCopy(node.value)) return;
   if (sentinels.has(node.value)) {
@@ -480,30 +548,17 @@ function handleJsxExpressionLiteral(node, ancestors, { ns, sentinels, edits, not
     report.skippedInsideTrans += 1;
     return;
   }
-  const parent = ancestors[ancestors.length - 1];
-  if (!parent) return;
-
-  const emit = (text) => {
-    edits.push({ start: node.start, end: node.end, text });
-    report.exprLiterals += 1;
-    noteHost();
-  };
-  const key = () => qualify(ns, keyFor(ns, node.value));
-
-  // A display prop with a bare literal value: label="Assignee".
-  if (parent.type === "JSXAttribute") {
-    if (DISPLAY_PROPS.has(String(parent.name?.name))) emit(`{t("${key()}")}`);
+  const context = displayContext(node, ancestors);
+  if (context === null) return;
+  if (context === "module-scope") {
+    report.skippedModuleScope += 1;
     return;
   }
-
-  if (!enclosingJsxContainer(node, ancestors)) return;
-  // Inside an attribute expression, only a display prop carries copy.
-  const attr = enclosingAttribute(ancestors);
-  if (attr) {
-    const name = String(attr.name?.name);
-    if (!DISPLAY_PROPS.has(name) && !DISPLAY_ATTRS.has(name)) return;
-  }
-  emit(`t("${key()}")`);
+  const call = `t("${qualify(ns, keyFor(ns, node.value))}")`;
+  // A bare attribute value needs braces; the others are already expressions.
+  edits.push({ start: node.start, end: node.end, text: context === "attr" ? `{${call}}` : call });
+  report.exprLiterals += 1;
+  noteHost();
 }
 
 /** toast("...") / toast.error("...") first argument. */

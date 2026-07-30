@@ -63,6 +63,7 @@ function useResolvedTaskRepo(taskId: string | null, repositoryName: string): Res
  * the trigger components tiny and avoids duplicated select + toast plumbing.
  */
 function usePickerLogic(taskId: string | null, repositoryName: string, fallbackBaseBranch: string) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -102,8 +103,8 @@ function usePickerLogic(taskId: string | null, repositoryName: string, fallbackB
       if (envKey) invalidateCumulativeDiffCache(envKey);
     } catch (err) {
       toast({
-        title: "Failed to change compare branch",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("task:failedToChangeCompareBranch"),
+        description: err instanceof Error ? err.message : t("common:unknownError"),
         variant: "error",
       });
     } finally {

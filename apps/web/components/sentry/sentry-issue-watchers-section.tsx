@@ -27,13 +27,14 @@ type RawActions = {
 };
 
 function useToastedActions({ create, update, remove, trigger, reset }: RawActions) {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const wrappedCreate = useCallback(
     async (req: Parameters<typeof create>[0]) => {
       try {
         await create(req);
-        toast({ description: "Watcher created", variant: "success" });
+        toast({ description: t("sentry:watcherCreated"), variant: "success" });
       } catch (err) {
         toast({ description: `Create failed: ${String(err)}`, variant: "error" });
         throw err;
@@ -46,7 +47,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
     async (id: string, workspaceId: string, req: Parameters<typeof update>[2]) => {
       try {
         await update(id, workspaceId, req);
-        toast({ description: "Watcher updated", variant: "success" });
+        toast({ description: t("sentry:watcherUpdated"), variant: "success" });
       } catch (err) {
         toast({ description: `Update failed: ${String(err)}`, variant: "error" });
         throw err;
@@ -60,7 +61,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
       if (!confirm("Delete this Sentry watcher?")) return;
       try {
         await remove(id, workspaceId);
-        toast({ description: "Watcher deleted", variant: "success" });
+        toast({ description: t("sentry:watcherDeleted"), variant: "success" });
       } catch (err) {
         toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
       }
@@ -92,7 +93,7 @@ function useToastedActions({ create, update, remove, trigger, reset }: RawAction
           description:
             n > 0
               ? `Reset complete — deleted ${n} task(s); next poll will re-import matches.`
-              : "Reset complete — next poll will re-import matches.",
+              : t("sentry:resetCompleteNextPollWillRe"),
           variant: "success",
         });
       } catch (err) {

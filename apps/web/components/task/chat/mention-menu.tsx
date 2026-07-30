@@ -68,9 +68,9 @@ export function MentionMenu({
   const emptyState = (
     <div className="px-3 py-1 text-center text-xs text-muted-foreground">
       {(() => {
-        if (isLoading) return "Loading...";
-        if (query) return "No results found";
-        return "Type to search...";
+        if (isLoading) return t("task:mentionsLoading");
+        if (query) return t("task:mentionsNoResults");
+        return t("task:typeToSearch");
       })()}
     </div>
   );

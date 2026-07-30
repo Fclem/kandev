@@ -328,6 +328,7 @@ function useSettingsActions({
   setForm,
   setTestResult,
 }: SettingsActionsArgs) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -376,7 +377,7 @@ function useSettingsActions({
         JSON.stringify(current) === JSON.stringify(submitted) ? configToForm(saved) : current,
       );
       setTestResult(null);
-      toast({ description: "Slack configuration saved", variant: "success" });
+      toast({ description: t("common:slackConfigurationSaved"), variant: "success" });
     } catch (err) {
       toast({ description: `Save failed: ${String(err)}`, variant: "error" });
       throw err;
@@ -393,7 +394,7 @@ function useSettingsActions({
       setConfig(null);
       setForm(emptyForm);
       setTestResult(null);
-      toast({ description: "Slack configuration removed", variant: "success" });
+      toast({ description: t("common:slackConfigurationRemoved"), variant: "success" });
     } catch (err) {
       toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
     } finally {

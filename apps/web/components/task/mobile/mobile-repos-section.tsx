@@ -159,8 +159,8 @@ export const MobileReposSection = memo(function MobileReposSection({
       // for what looks like navigation. Surface a hint so the tap doesn't
       // appear silently broken.
       toast({
-        title: "No session on this repo yet",
-        description: "Open the session picker to launch one.",
+        title: t("task:noSessionOnThisRepoYet"),
+        description: t("task:openTheSessionPickerToLaunch"),
       });
     },
     [taskId, setActiveSession, onClose, toast],

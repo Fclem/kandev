@@ -70,7 +70,9 @@ function ToolbarExpandToggle(props: { isExpanded: boolean; onToggle: () => void 
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{props.isExpanded ? t("task:collapse") : t("task:moreActions")}</TooltipContent>
+      <TooltipContent>
+        {props.isExpanded ? t("task:collapse") : t("task:moreActions")}
+      </TooltipContent>
     </Tooltip>
   );
 }

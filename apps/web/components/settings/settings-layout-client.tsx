@@ -16,6 +16,7 @@ import { integrationFromPathname } from "@/components/integrations/integration-c
 import { safeDecodePathSegment } from "@/lib/routing/path";
 import { SettingsSaveProvider } from "@/components/settings/settings-save-provider";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 // Brand/initialism overrides so the derived label matches how the rest of the
 // app spells these (e.g. "github" → "GitHub", not "Github"). Anything not
@@ -63,7 +64,7 @@ function deriveParents(pathname: string): Array<{ label: string; href: string }>
   if (segments.length <= 1) return [];
 
   const parents: Array<{ label: string; href: string }> = [
-    { label: "Settings", href: "/settings" },
+    { label: t("common:settings"), href: "/settings" },
   ];
 
   const automationsMatch = pathname.match(
@@ -74,7 +75,7 @@ function deriveParents(pathname: string): Array<{ label: string; href: string }>
     // edit), not on the listing page itself — the listing page title is
     // already "Automations".
     parents.push({
-      label: "Automations",
+      label: t("common:automations"),
       href: `/settings/workspace/${automationsMatch[1]}/automations`,
     });
   }
@@ -93,7 +94,7 @@ export function SettingsLayoutClient({ children }: { children: React.ReactNode }
       <SettingsShell
         title={t("settings:agent")}
         backHref="/settings/agents"
-        backLabel="Agents"
+        backLabel={t("common:agents")}
         parents={[]}
         showIntegrationCopyAction={showIntegrationCopyAction}
       >

@@ -188,6 +188,7 @@ function useWalkthroughBackfill(params: {
  * surface required).
  */
 export function WalkthroughOverlay({ taskId, onSelectFile }: WalkthroughOverlayProps) {
+  const { t } = useTranslation();
   const walkthrough = useAppStore((s) => (taskId ? s.walkthroughs.byTaskId[taskId] : null));
   const connectionStatus = useAppStore((s) => s.connection.status);
   const activeStep = useAppStore((s) =>
@@ -240,10 +241,10 @@ export function WalkthroughOverlay({ taskId, onSelectFile }: WalkthroughOverlayP
       setOpenTaskId(null);
       setWalkthrough(taskId, null);
       setConfirmDiscardOpen(false);
-      toast({ title: "Walkthrough discarded", variant: "success" });
+      toast({ title: t("review:walkthroughDiscarded"), variant: "success" });
     } catch (error) {
       console.error("Failed to discard walkthrough:", error);
-      toast({ title: "Failed to discard walkthrough", variant: "error" });
+      toast({ title: t("review:failedToDiscardWalkthrough"), variant: "error" });
     } finally {
       setDiscarding(false);
     }

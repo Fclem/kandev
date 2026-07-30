@@ -45,9 +45,9 @@ export function RunActivityChart({ days }: Props) {
         <StackedBars rows={rowsFromDays(days)} heightPx={120} ariaLabel={t("office:runActivity")} />
         <ChartLegend
           items={[
-            { label: "Succeeded", className: "bg-emerald-500" },
-            { label: "Failed", className: "bg-red-500" },
-            { label: "Other", className: "bg-muted-foreground/40" },
+            { label: t("office:succeeded"), className: "bg-emerald-500" },
+            { label: t("office:failed"), className: "bg-red-500" },
+            { label: t("office:other"), className: "bg-muted-foreground/40" },
           ]}
         />
       </CardContent>

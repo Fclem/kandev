@@ -69,8 +69,8 @@ export function WorkflowCardHeaderActions({
               onClick={() => {
                 void onDeleteClick().catch((error) => {
                   toast({
-                    title: "Failed to delete workflow",
-                    description: error instanceof Error ? error.message : "Request failed",
+                    title: t("settings:failedToDeleteWorkflow"),
+                    description: error instanceof Error ? error.message : t("common:requestFailed"),
                     variant: "error",
                   });
                 });

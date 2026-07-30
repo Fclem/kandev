@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Combobox, type ComboboxOption } from "@/components/combobox";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 const ALL_REPOS = "__all__";
 
@@ -19,7 +20,7 @@ type RepoFilterComboboxProps = {
 
 function buildRepoFilterOptions(repoOptions: string[]): ComboboxOption[] {
   return [
-    { value: ALL_REPOS, label: "All repos", keywords: ["all", "repositories", "repos"] },
+    { value: ALL_REPOS, label: t("github:allRepos"), keywords: ["all", "repositories", "repos"] },
     ...repoOptions.map((repo) => ({ value: repo, label: repo, keywords: [repo] })),
   ];
 }
@@ -48,7 +49,7 @@ export function RepoFilterCombobox({
       options={options}
       ariaLabel={ariaLabel}
       placeholder={t("github:allRepos")}
-      searchPlaceholder="Filter repositories..."
+      searchPlaceholder={t("github:filterRepositories")}
       emptyMessage={t("common:noRepositoriesFound")}
       triggerClassName={triggerClassName}
       className={className}

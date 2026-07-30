@@ -11,7 +11,9 @@
   "editComment": "Edit comment",
   "enterToAdd": "{{modKey}}+Enter to add{{value2}}",
   "expandAllLines": "Expand all lines",
+  "failedToSendWalkthroughNote": "Failed to send walkthrough note",
   "new": "new",
+  "noActiveSessionForWalkthroughNote": "No active session for walkthrough note",
   "noDiffAvailable": "No diff available",
   "old": "old",
   "previewMarkdown": "Preview markdown",
@@ -39,5 +41,8 @@
   "toggleWordWrap": "Toggle word wrap",
   "unableToRenderDiffForThis": "Unable to render diff for this file. The cached diff may be out of sync with the working tree — refresh to retry.",
   "undo": "Undo",
-  "walkthrough": "Walkthrough"
+  "walkthrough": "Walkthrough",
+  "walkthroughNoteAdded": "Walkthrough note added",
+  "walkthroughNoteQueued": "Walkthrough note queued",
+  "walkthroughNoteSent": "Walkthrough note sent"
 }

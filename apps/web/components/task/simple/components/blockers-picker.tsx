@@ -168,7 +168,7 @@ export function BlockersPicker({ task }: BlockersPickerProps) {
       renderChip={renderChip}
       renderItem={renderItem}
       addLabel={t("task:addBlocker")}
-      searchPlaceholder="Search tasks..."
+      searchPlaceholder={t("task:searchTasks")}
       emptyMessage={t("common:noTasksFound")}
       testId="blockers-picker-trigger"
     />

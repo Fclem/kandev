@@ -213,7 +213,7 @@ function UnsupportedVoiceButton({ disabled }: { disabled?: boolean }) {
   const { toast } = useToast();
   const handleClick = () => {
     toast({
-      title: "Voice input unavailable",
+      title: t("task:voiceInputUnavailable"),
       description: buildUnsupportedReason(),
       variant: "error",
     });

@@ -219,11 +219,45 @@ function useChangesPRPresentation(opts: {
   return { selectedFileKey, blockChangesForPR };
 }
 
+/**
+ * Discard one file's changes and report the outcome. Split out of
+ * `useChangesActions` because it owns its own toast copy and error shaping.
+ */
+function useDiscardFile(
+  discard: (paths: string[]) => Promise<{ success: boolean; error?: string }>,
+) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  return useCallback(
+    async (key: string) => {
+      const { path } = splitReviewFileKey(key);
+      const fail = (detail: string | undefined) =>
+        toast({
+          title: t("task:discardFailed"),
+          description: detail || t("task:anErrorOccurred"),
+          variant: "error",
+        });
+      try {
+        const result = await discard([path]);
+        if (result.success) {
+          toast({ title: t("task:changesDiscarded"), description: path, variant: "success" });
+        } else {
+          fail(result.error);
+        }
+      } catch (e) {
+        fail(e instanceof Error ? e.message : undefined);
+      }
+    },
+    [discard, t, toast],
+  );
+}
+
 function useChangesActions(
   activeSessionId: string | null | undefined,
   allFiles: ReviewFile[],
   defaultWordWrap = DEFAULT_DIFF_WORD_WRAP,
 ) {
+  const { t } = useTranslation();
   const activeTaskId = useAppStore((state) => state.tasks.activeTaskId);
   const autoMarkOnScroll = useAppStore((s) => s.userSettings.reviewAutoMarkOnScroll);
   const setUserSettings = useAppStore((state) => state.setUserSettings);
@@ -258,30 +292,7 @@ function useChangesActions(
     [allFiles, markReviewed, markUnreviewed],
   );
 
-  const handleDiscard = useCallback(
-    async (key: string) => {
-      const { path } = splitReviewFileKey(key);
-      try {
-        const result = await discard([path]);
-        if (result.success) {
-          toast({ title: "Changes discarded", description: path, variant: "success" });
-        } else {
-          toast({
-            title: "Discard failed",
-            description: result.error || "An error occurred",
-            variant: "error",
-          });
-        }
-      } catch (e) {
-        toast({
-          title: "Discard failed",
-          description: e instanceof Error ? e.message : "An error occurred",
-          variant: "error",
-        });
-      }
-    },
-    [discard, toast],
-  );
+  const handleDiscard = useDiscardFile(discard);
 
   const handleToggleAutoMark = useCallback(
     (checked: boolean) => {
@@ -308,7 +319,7 @@ function useChangesActions(
           content: markdown,
         })
         .catch(() => {
-          toast({ title: "Failed to send comments", variant: "error" });
+          toast({ title: t("task:failedToSendComments"), variant: "error" });
         });
     }
     markCommentsSent(comments.map((c) => c.id));

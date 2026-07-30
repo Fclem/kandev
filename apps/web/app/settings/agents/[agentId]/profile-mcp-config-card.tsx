@@ -252,7 +252,11 @@ function McpServersEditor({
           displayName={t("settings:context7Mcp")}
           onApply={handleApplyServer}
         />
-        <PopularServerButton label={t("settings:github")} displayName={t("settings:githubMcp")} onApply={handleApplyServer} />
+        <PopularServerButton
+          label={t("settings:github")}
+          displayName={t("settings:githubMcp")}
+          onApply={handleApplyServer}
+        />
       </div>
       {currentError && <p className="text-sm text-destructive">{currentError}</p>}
     </div>

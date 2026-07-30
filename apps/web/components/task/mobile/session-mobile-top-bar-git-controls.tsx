@@ -71,6 +71,7 @@ export function computeUncommittedStats(files: Record<string, FileInfo> | undefi
 type GitOperationRunner = () => Promise<{ success: boolean; output: string; error?: string }>;
 
 function useGitToast() {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   return useCallback(
@@ -86,14 +87,14 @@ function useGitToast() {
         } else {
           toast({
             title: `${operationName} failed`,
-            description: result.error || "An error occurred",
+            description: result.error || t("task:anErrorOccurred"),
             variant: "error",
           });
         }
       } catch (error) {
         toast({
           title: `${operationName} failed`,
-          description: error instanceof Error ? error.message : "An unexpected error occurred",
+          description: error instanceof Error ? error.message : t("task:anUnexpectedErrorOccurred"),
           variant: "error",
         });
       }
@@ -517,6 +518,7 @@ export function useMobileGitActions(
   setPrDialogOpen: (v: boolean) => void,
   setPrBranchPushed: (v: boolean) => void,
 ) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const activeTaskId = useAppStore((state) => state.tasks.activeTaskId);
   const setPendingPrUrlForTask = useAppStore((state) => state.setPendingPrUrlForTask);
@@ -585,7 +587,7 @@ export function useMobileGitActions(
       } catch (e) {
         toast({
           title: `Create ${defaultTerminology.shortName} failed`,
-          description: e instanceof Error ? e.message : "An error occurred",
+          description: e instanceof Error ? e.message : t("task:anErrorOccurred"),
           variant: "error",
         });
       }

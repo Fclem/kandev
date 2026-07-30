@@ -10,6 +10,7 @@ import { linkToTask } from "@/lib/links";
 import { useRouter } from "@/lib/routing/client-router";
 import type { Issue, MR } from "@/lib/types/gitlab";
 import type { Repository, Task, Workflow, WorkflowStep } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 export type GitLabTaskPreset = {
   id: string;
@@ -98,6 +99,7 @@ export function QuickTaskLauncher({
   payload,
   onClose,
 }: QuickTaskLauncherProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { toast } = useToast();
   const setTaskMR = useAppStore((state) => state.setTaskMR);
@@ -131,7 +133,7 @@ export function QuickTaskLauncher({
         setTaskMR(workspaceId, task.id, association);
       } catch (error) {
         toast({
-          title: "Task created, but merge request was not linked",
+          title: t("gitlab:taskCreatedButMergeRequestWas"),
           description: `Open the task and use Link GitLab merge request to retry. ${
             error instanceof Error ? error.message : "GitLab rejected the association."
           }`,

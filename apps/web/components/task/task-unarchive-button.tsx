@@ -32,8 +32,8 @@ export function TaskUnarchiveButton({
       }
     } catch (err) {
       toast({
-        title: "Failed to unarchive task",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("task:failedToUnarchiveTask"),
+        description: err instanceof Error ? err.message : t("common:unknownError"),
         variant: "error",
       });
     } finally {

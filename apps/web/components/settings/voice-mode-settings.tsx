@@ -37,6 +37,7 @@ import type {
 } from "@/lib/types/http-voice";
 import { useSettingsSaveContributor } from "./settings-save-provider";
 import { SettingsCard } from "./settings-card";
+import { t } from "@/lib/i18n";
 
 // Single source of truth for the language options. Web Speech reads `lang`,
 // Whisper engines treat it as a hint. "auto" defers to the browser locale.
@@ -196,33 +197,33 @@ function buildEngineOptions(caps: VoiceCapabilities): EngineOption[] {
   return [
     {
       value: "auto",
-      label: "Automatic",
-      description: "Use the best engine available in this browser.",
+      label: t("settings:automatic"),
+      description: t("settings:useTheBestEngineAvailableIn"),
     },
     {
       value: "webSpeech",
-      label: "Web Speech (in-browser)",
+      label: t("settings:webSpeechInBrowser"),
       description: caps.webSpeech
-        ? "Free, instant, uses your browser's built-in speech recognition."
-        : "Not supported in this browser.",
+        ? t("settings:freeInstantUsesYourBrowserS")
+        : t("settings:notSupportedInThisBrowser"),
       disabled: !caps.webSpeech,
     },
     {
       value: "whisperWeb",
-      label: "Whisper Web (private, in-browser)",
+      label: t("settings:whisperWebPrivateInBrowser"),
       description: caps.whisperWeb
-        ? "Runs OpenAI Whisper entirely on this device. First use downloads the model (40–240 MB)."
-        : "Not supported in this browser.",
-      badge: "Local",
+        ? t("settings:runsOpenaiWhisperEntirelyOnThis")
+        : t("settings:notSupportedInThisBrowser"),
+      badge: t("common:local"),
       disabled: !caps.whisperWeb,
     },
     {
       value: "whisperServer",
-      label: "Whisper Server (OpenAI)",
+      label: t("settings:whisperServerOpenai"),
       description: caps.audioCapture
-        ? "Sends audio to the backend, which forwards it to OpenAI's Whisper API. Requires a configured API key on the server."
-        : "Not supported in this browser.",
-      badge: "Server",
+        ? t("settings:sendsAudioToTheBackendWhich")
+        : t("settings:notSupportedInThisBrowser"),
+      badge: t("settings:server"),
       disabled: !caps.audioCapture,
     },
   ];

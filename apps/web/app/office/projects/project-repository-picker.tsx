@@ -173,7 +173,9 @@ function PickerCommandList({
   const { t } = useTranslation();
   return (
     <CommandList>
-      <CommandEmpty>{discoveryLoading ? t("office:searchingYourMachine") : t("office:noMatches")}</CommandEmpty>
+      <CommandEmpty>
+        {discoveryLoading ? t("office:searchingYourMachine") : t("office:noMatches")}
+      </CommandEmpty>
       {showCustom && (
         <CommandGroup heading={t("office:addCustom")}>
           <CommandItem
@@ -191,7 +193,9 @@ function PickerCommandList({
                 </Trans>
               </span>
               <span className="text-[11px] text-muted-foreground">
-                {looksLikeUrl(customQuery) ? t("office:addAsRemoteUrl") : t("office:addAsLocalPath")}
+                {looksLikeUrl(customQuery)
+                  ? t("office:addAsRemoteUrl")
+                  : t("office:addAsLocalPath")}
               </span>
             </span>
           </CommandItem>
@@ -205,7 +209,7 @@ function PickerCommandList({
           heading={t("office:onDisk")}
           options={discoveredOptions}
           onSelect={onSelect}
-          badge="on disk"
+          badge={t("office:onDisk2")}
         />
       )}
     </CommandList>

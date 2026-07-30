@@ -44,6 +44,7 @@ function useLinkPullRequestForm({
   githubRepos: ReturnType<typeof githubReposForTask>;
   onLinked: () => void;
 }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -75,7 +76,7 @@ function useLinkPullRequestForm({
         pr_url: payload.pr_url,
         ...(payload.repository_id ? { repository_id: payload.repository_id } : {}),
       });
-      toast({ description: "GitHub pull request linked", variant: "success" });
+      toast({ description: t("task:githubPullRequestLinked"), variant: "success" });
       onLinked();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to link GitHub pull request.");

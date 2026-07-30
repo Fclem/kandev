@@ -78,7 +78,7 @@ export const GetTaskPlanRenderer: KandevRenderer = ({ args, result, status }) =>
               <SummaryDot />
             </>
           )}
-          <span>{hasPlan ? summarizeContent(content) : "no plan"}</span>
+          <span>{hasPlan ? summarizeContent(content) : t("task:noPlan")}</span>
         </span>
       }
       status={status}

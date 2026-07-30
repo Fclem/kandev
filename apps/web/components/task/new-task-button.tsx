@@ -45,7 +45,7 @@ export const NewTaskButton = memo(function NewTaskButton({
     () => [
       {
         id: "task-create",
-        label: "Create New Task",
+        label: t("common:createNewTask"),
         group: "Tasks",
         icon: <IconPlus className="size-3.5" />,
         shortcut: newTaskShortcut,

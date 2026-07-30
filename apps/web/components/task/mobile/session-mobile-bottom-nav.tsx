@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@kandev/ui/badge";
 import type { MobileSessionPanel } from "@/lib/state/slices/ui/types";
+import { useTranslation } from "react-i18next";
 
 type SessionMobileBottomNavProps = {
   activePanel: MobileSessionPanel;
@@ -39,16 +40,17 @@ export function SessionMobileBottomNav({
   showStatus,
   onOpenStatus,
 }: SessionMobileBottomNavProps) {
+  const { t } = useTranslation();
   const items: NavItem[] = useMemo(
     () => [
       {
         panel: "chat",
-        label: "Chat",
+        label: t("task:chat"),
         icon: <IconMessage className="h-5 w-5" />,
       },
       {
         panel: "plan",
-        label: "Plan",
+        label: t("task:plan"),
         icon: <IconListCheck className="h-5 w-5" />,
         badge: planBadge ? (
           <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500" />
@@ -56,7 +58,7 @@ export function SessionMobileBottomNav({
       },
       {
         panel: "changes",
-        label: "Changes",
+        label: t("task:changes2"),
         icon: <IconGitBranch className="h-5 w-5" />,
         badge:
           changesBadge > 0 ? (
@@ -70,27 +72,27 @@ export function SessionMobileBottomNav({
       },
       {
         panel: "files",
-        label: "Files",
+        label: t("common:files"),
         icon: <IconFolder className="h-5 w-5" />,
       },
       ...(hasReview
         ? [
             {
               panel: "review" as const,
-              label: "Review",
+              label: t("task:review2"),
               icon: <IconGitMerge className="h-5 w-5" />,
             },
           ]
         : []),
       {
         panel: "terminal",
-        label: "Terminal",
+        label: t("task:terminal"),
         icon: <IconTerminal2 className="h-5 w-5" />,
       },
       ...(showStatus
         ? [
             {
-              label: "Status",
+              label: t("common:status"),
               icon: <IconActivity className="h-5 w-5" />,
               onClick: onOpenStatus,
             },

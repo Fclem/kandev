@@ -3,6 +3,8 @@
   "advanced": "<0></0> Advanced <2></2>",
   "advanced2": "Advanced",
   "all": "All",
+  "azureDevopsConfigurationRemoved": "Azure DevOps configuration removed",
+  "azureDevopsConfigurationSaved": "Azure DevOps configuration saved",
   "azureDevopsFilters": "Azure DevOps filters",
   "azureDevopsIntegration": "Azure DevOps integration",
   "azureDevopsIsNotConnectedFor": "Azure DevOps is not connected for this workspace. <2>{{value0}}</2>",

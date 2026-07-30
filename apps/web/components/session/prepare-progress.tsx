@@ -546,14 +546,16 @@ export function PrepareProgress({ sessionId }: PrepareProgressProps) {
               <button
                 type="button"
                 aria-expanded={expanded}
-                aria-label={expanded ? t("common:hidePreparationDetails") : t("common:showPreparationDetails")}
+                aria-label={
+                  expanded ? t("common:hidePreparationDetails") : t("common:showPreparationDetails")
+                }
                 className="min-h-11 cursor-pointer text-xs text-muted-foreground underline-offset-4 hover:underline sm:min-h-0"
                 onClick={(event) => {
                   event.stopPropagation();
                   setExpanded(!expanded);
                 }}
               >
-                {expanded ? "Hide details" : "Show details"}
+                {expanded ? t("common:hideDetails") : t("common:showDetails")}
               </button>
             )}
           </div>

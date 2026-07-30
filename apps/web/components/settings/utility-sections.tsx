@@ -236,7 +236,9 @@ export function CustomAgentRow({ agent, onEdit, onDelete }: CustomAgentRowProps)
         <p className="text-xs text-muted-foreground truncate">{agent.description}</p>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">{agent.model || t("settings:notConfigured2")}</span>
+        <span className="text-xs text-muted-foreground">
+          {agent.model || t("settings:notConfigured2")}
+        </span>
         <Button
           variant="ghost"
           size="sm"

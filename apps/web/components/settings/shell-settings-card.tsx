@@ -55,7 +55,9 @@ function ShellSelect({
           <SelectTrigger data-settings-dirty={isDirty}>
             <SelectValue
               placeholder={
-                shellOptions.length === 0 ? t("settings:shellOptionsUnavailable") : t("settings:selectAShell")
+                shellOptions.length === 0
+                  ? t("settings:shellOptionsUnavailable")
+                  : t("settings:selectAShell")
               }
             />
           </SelectTrigger>

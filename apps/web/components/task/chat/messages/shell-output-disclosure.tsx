@@ -128,7 +128,7 @@ export function ShellOutputDisclosure({
           variant="ghost"
           size="sm"
           className="-ml-2 h-7 max-w-full cursor-pointer gap-1 px-2 text-muted-foreground"
-          aria-label={`${isOpen ? "Hide" : "Show"} command output`}
+          aria-label={t(isOpen ? "task:hideCommandOutput" : "task:showCommandOutput")}
         >
           {isOpen ? <IconChevronDown aria-hidden /> : <IconChevronRight aria-hidden />}
           <span className="truncate">{label}</span>

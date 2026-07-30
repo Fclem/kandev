@@ -37,6 +37,7 @@ import {
   stablePrimarySessionIdsKey,
   usePersistResolvedAgentErrorAcknowledgements,
 } from "./use-agent-error-acknowledgements";
+import { useTranslation } from "react-i18next";
 
 function useStablePrimarySessionIds(allTasks: Array<{ primarySessionId?: string | null }>) {
   const key = useMemo(() => stablePrimarySessionIdsKey(allTasks), [allTasks]);
@@ -232,6 +233,7 @@ function useMoveToStep(store: StoreApi) {
 }
 
 function useArchiveActions(store: StoreApi) {
+  const { t } = useTranslation();
   const archiveAndSwitch = useArchiveAndSwitchTask({ useLayoutSwitch: true });
   const [archivingTask, setArchivingTask] = useState<{
     id: string;
@@ -247,7 +249,7 @@ function useArchiveActions(store: StoreApi) {
       const task = findTaskInSnapshots(taskId, state.kanbanMulti.snapshots, state.kanban.tasks);
       setArchivingTask({
         id: taskId,
-        title: task?.title ?? "this task",
+        title: task?.title ?? t("task:thisTask"),
         executorType: task?.primaryExecutorType,
       });
     },
@@ -287,6 +289,7 @@ function useDeleteActions(
   store: StoreApi,
   removeTaskFromBoard: ReturnType<typeof useTaskRemoval>["removeTaskFromBoard"],
 ) {
+  const { t } = useTranslation();
   const { deleteTaskById } = useTaskActions();
   const [deletingTask, setDeletingTask] = useState<{
     id: string;
@@ -301,7 +304,7 @@ function useDeleteActions(
       const task = findTaskInSnapshots(taskId, state.kanbanMulti.snapshots, state.kanban.tasks);
       setDeletingTask({
         id: taskId,
-        title: task?.title ?? "this task",
+        title: task?.title ?? t("task:thisTask"),
         executorType: task?.primaryExecutorType,
       });
     },

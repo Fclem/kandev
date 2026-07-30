@@ -94,7 +94,9 @@ export function ReviewCommentsAttachment({ comments, className }: ReviewComments
                         <span className="font-medium">
                           {formatLineRange(comment.startLine, comment.endLine)}
                         </span>
-                        <span>({comment.side === "additions" ? t("task:new3") : t("task:old")})</span>
+                        <span>
+                          ({comment.side === "additions" ? t("task:new3") : t("task:old")})
+                        </span>
                       </div>
 
                       {/* Code preview */}

@@ -129,13 +129,14 @@ type SentryErrorMessageProps = {
 };
 
 export function SentryErrorMessage({ error, compact }: SentryErrorMessageProps) {
+  const { t } = useTranslation();
   return (
     <IntegrationAuthErrorMessage
       error={error}
       name="Sentry"
       reconnectHref="/settings/integrations/sentry"
       isAuthError={isSentryAuthError}
-      authErrorBody="Your Sentry auth token is invalid or has been revoked. Reconnect to view this issue."
+      authErrorBody={t("sentry:yourSentryAuthTokenIsInvalid")}
       compact={compact}
     />
   );

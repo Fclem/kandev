@@ -134,13 +134,14 @@ function useCoordinatedSSHSave({
   save,
   discard,
 }: CoordinatedSSHSaveOptions) {
+  const { t } = useTranslation();
   const revision = JSON.stringify(form);
   useSettingsSaveContributor({
     id: id ?? "ssh-connection-create",
     revision,
     isDirty: Boolean(id) && revision !== JSON.stringify(baseline),
     canSave,
-    invalidReason: canSave ? undefined : "Test the connection and trust its fingerprint to save.",
+    invalidReason: canSave ? undefined : t("settings:testTheConnectionAndTrustIts"),
     save,
     discard,
   });

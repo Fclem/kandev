@@ -57,6 +57,7 @@ function useReviewActions(
   workspaceId: string,
   setError: (message: string) => void,
 ) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const run = useCallback(
     async (watch: ReviewWatch) => {
@@ -66,7 +67,7 @@ function useReviewActions(
         toast({
           description: result.count
             ? `Found ${result.count} matching merge request(s)`
-            : "No new merge requests matched",
+            : t("gitlab:noNewMergeRequestsMatched"),
           variant: "success",
         });
       } catch (error) {
@@ -80,7 +81,7 @@ function useReviewActions(
       setError("");
       try {
         await watches.remove(watch.id, watch.workspace_id);
-        toast({ description: "Review watch deleted", variant: "success" });
+        toast({ description: t("gitlab:reviewWatchDeleted"), variant: "success" });
       } catch (error) {
         setError(errorMessage(error, "Review watch deletion failed"));
         throw error;
@@ -109,7 +110,7 @@ function useReviewActions(
       setError("");
       try {
         await watches.create(request);
-        toast({ description: "Review watch created", variant: "success" });
+        toast({ description: t("gitlab:reviewWatchCreated"), variant: "success" });
       } catch (error) {
         setError(errorMessage(error, "Review watch creation failed"));
         throw error;
@@ -122,7 +123,7 @@ function useReviewActions(
       setError("");
       try {
         await watches.update(id, request, workspaceId);
-        toast({ description: "Review watch updated", variant: "success" });
+        toast({ description: t("gitlab:reviewWatchUpdated"), variant: "success" });
       } catch (error) {
         setError(errorMessage(error, "Review watch update failed"));
         throw error;
@@ -256,6 +257,7 @@ function useIssueActions(
   workspaceId: string,
   setError: (message: string) => void,
 ) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const run = useCallback(
     async (watch: IssueWatch) => {
@@ -265,7 +267,7 @@ function useIssueActions(
         toast({
           description: result.count
             ? `Found ${result.count} matching issue(s)`
-            : "No new issues matched",
+            : t("gitlab:noNewIssuesMatched"),
           variant: "success",
         });
       } catch (error) {
@@ -279,7 +281,7 @@ function useIssueActions(
       setError("");
       try {
         await watches.remove(watch.id, watch.workspace_id);
-        toast({ description: "Issue watch deleted", variant: "success" });
+        toast({ description: t("gitlab:issueWatchDeleted"), variant: "success" });
       } catch (error) {
         setError(errorMessage(error, "Issue watch deletion failed"));
         throw error;
@@ -308,7 +310,7 @@ function useIssueActions(
       setError("");
       try {
         await watches.create(request);
-        toast({ description: "Issue watch created", variant: "success" });
+        toast({ description: t("gitlab:issueWatchCreated"), variant: "success" });
       } catch (error) {
         setError(errorMessage(error, "Issue watch creation failed"));
         throw error;
@@ -321,7 +323,7 @@ function useIssueActions(
       setError("");
       try {
         await watches.update(id, request, workspaceId);
-        toast({ description: "Issue watch updated", variant: "success" });
+        toast({ description: t("gitlab:issueWatchUpdated"), variant: "success" });
       } catch (error) {
         setError(errorMessage(error, "Issue watch update failed"));
         throw error;

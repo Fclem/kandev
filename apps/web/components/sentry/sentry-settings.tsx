@@ -132,13 +132,14 @@ function EnabledPill() {
 // useDeleteInstance confirms and deletes a Sentry instance, translating the
 // "still bound to watches" backend rejection into an actionable toast.
 function useDeleteInstance(workspaceId: string, reload: () => Promise<void>) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   return useCallback(
     async (instance: SentryConfig) => {
       if (!confirm(`Remove Sentry instance "${instance.name}"?`)) return;
       try {
         await deleteSentryInstance(workspaceId, instance.id);
-        toast({ description: "Sentry instance removed", variant: "success" });
+        toast({ description: t("sentry:sentryInstanceRemoved"), variant: "success" });
         await reload();
       } catch (err) {
         const watchCount = sentryInUseWatchCount(err);

@@ -538,7 +538,9 @@ export function JiraIssueWatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-full sm:w-[800px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{watch ? t("jira:editJiraWatcher") : t("jira:createJiraWatcher")}</DialogTitle>
+          <DialogTitle>
+            {watch ? t("jira:editJiraWatcher") : t("jira:createJiraWatcher")}
+          </DialogTitle>
           <DialogDescription>{t("jira:pollAJqlQueryAndAuto")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-5">

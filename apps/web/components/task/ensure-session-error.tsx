@@ -5,6 +5,7 @@ import { IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
 import { Alert, AlertDescription, AlertTitle } from "@kandev/ui/alert";
 import { Button } from "@kandev/ui/button";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 // EnsureSessionErrorInfo wraps a parsed ensure error so UI can offer a targeted action for the missing-agent-profile case.
 export type EnsureSessionErrorInfo = {
@@ -26,17 +27,17 @@ export function describeEnsureError(
   const isAgentProfileMissing = message.toLowerCase().includes(AGENT_PROFILE_MISSING_HINT);
   if (isAgentProfileMissing) {
     return {
-      title: "No agent profile configured",
+      title: t("task:noAgentProfileConfigured"),
       detail:
         "This task has no agent profile, and the workspace, workflow, and workflow step have no default set. Pick a default agent profile so new tasks can start a session.",
       isAgentProfileMissing: true,
       action: workspaceId
-        ? { label: "Open workspace settings", href: `/settings/workspace/${workspaceId}` }
+        ? { label: t("task:openWorkspaceSettings"), href: `/settings/workspace/${workspaceId}` }
         : null,
     };
   }
   return {
-    title: "Couldn't start a session",
+    title: t("task:couldnTStartASession"),
     detail: message || "The backend rejected the session request.",
     isAgentProfileMissing: false,
     action: null,

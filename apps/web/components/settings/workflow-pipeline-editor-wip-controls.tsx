@@ -41,7 +41,7 @@ export function StepWipControls({
           <Label htmlFor={`${step.id}-wip-limit`} className="text-xs font-medium">
             {t("settings:wipLimit")}
           </Label>
-          <HelpTip text="Maximum tasks allowed in this step at once. Use 0 for unlimited." />
+          <HelpTip text={t("settings:maximumTasksAllowedInThisStep")} />
         </div>
         <Input
           id={`${step.id}-wip-limit`}
@@ -68,7 +68,7 @@ export function StepWipControls({
           <Label htmlFor={pullFromSelectID} className="text-xs font-medium">
             {t("settings:pullFrom")}
           </Label>
-          <HelpTip text="Optional feeder step to pull work from when this step has capacity." />
+          <HelpTip text={t("settings:optionalFeederStepToPullWork")} />
         </div>
         <Select
           value={pullFromValue}

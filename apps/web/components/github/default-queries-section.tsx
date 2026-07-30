@@ -21,11 +21,12 @@ import {
   ISSUE_PRESETS as BUILTIN_ISSUE_PRESETS,
 } from "@/components/github/my-github/search-bar";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 function newPreset(): StoredQueryPreset {
   return {
     value: `q_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-    label: "New query",
+    label: t("github:newQuery"),
     filter: "",
     group: "inbox",
   };
@@ -147,6 +148,7 @@ function QueryEditor({
 }
 
 function useDefaultQueryDrafts(workspaceId?: string) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { prPresets, issuePresets, save, reset, isCustomized, isReady } = useDefaultQueryPresets(
     workspaceId ?? null,
@@ -195,9 +197,9 @@ function useDefaultQueryDrafts(workspaceId?: string) {
         JSON.stringify(current) === JSON.stringify(submittedIssue) ? submittedIssue : current,
       );
       setResetRequested(false);
-      toast({ description: "Default queries saved", variant: "success" });
+      toast({ description: t("github:defaultQueriesSaved"), variant: "success" });
     } catch {
-      toast({ description: "Failed to save default queries", variant: "error" });
+      toast({ description: t("github:failedToSaveDefaultQueries"), variant: "error" });
       throw new Error("Failed to save default queries");
     }
   }, [issueDraft, prDraft, reset, resetRequested, save, toast]);
@@ -223,7 +225,7 @@ function useDefaultQueryDrafts(workspaceId?: string) {
     revision: JSON.stringify([prDraft, issueDraft]),
     isDirty: dirty,
     canSave: isReady,
-    invalidReason: isReady ? undefined : "Default queries are still loading.",
+    invalidReason: isReady ? undefined : t("github:defaultQueriesAreStillLoading"),
     save: handleSave,
     discard,
   });

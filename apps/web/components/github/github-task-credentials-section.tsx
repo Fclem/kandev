@@ -86,7 +86,7 @@ export function GitHubTaskCredentialsSection({ workspaceId }: { workspaceId: str
       })
       .catch(() => {
         if (!cancelled)
-          toast({ description: "Failed to load task Git credential settings", variant: "error" });
+          toast({ description: t("github:failedToLoadTaskGitCredential"), variant: "error" });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -104,9 +104,9 @@ export function GitHubTaskCredentialsSection({ workspaceId }: { workspaceId: str
       const next = updated.task_git_credentials_mode ?? "managed";
       setBaseline(next);
       setMode((current) => (current === mode ? next : current));
-      toast({ description: "Task Git credential settings saved", variant: "success" });
+      toast({ description: t("github:taskGitCredentialSettingsSaved"), variant: "success" });
     } catch {
-      toast({ description: "Failed to save task Git credential settings", variant: "error" });
+      toast({ description: t("github:failedToSaveTaskGitCredential"), variant: "error" });
       throw new Error("Failed to save task Git credential settings");
     }
   }, [mode, toast, workspaceId]);

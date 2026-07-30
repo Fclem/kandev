@@ -184,6 +184,7 @@ type UseInstanceFormArgs = {
 };
 
 function useInstanceForm({ workspaceId, instance, form }: UseInstanceFormArgs) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -228,7 +229,7 @@ function useInstanceForm({ workspaceId, instance, form }: UseInstanceFormArgs) {
             url: form.url,
             secret: form.secret,
           });
-      toast({ description: "Sentry instance saved", variant: "success" });
+      toast({ description: t("sentry:sentryInstanceSaved"), variant: "success" });
       return saved;
     } catch (err) {
       const message =
@@ -274,6 +275,7 @@ function useCoordinatedInstanceSave({
   onSaved,
   canSave,
 }: CoordinatedSaveOptions) {
+  const { t } = useTranslation();
   const [baseline, setBaseline] = useState<FormState>(() => instanceToForm(instance));
   const revision = JSON.stringify(form);
   const latestRevision = useRef(revision);
@@ -285,7 +287,7 @@ function useCoordinatedInstanceSave({
     revision,
     isDirty,
     canSave,
-    invalidReason: canSave ? undefined : "Enter an instance name and auth token before saving.",
+    invalidReason: canSave ? undefined : t("sentry:enterAnInstanceNameAndAuth"),
     save: async (submittedRevision) => {
       const submitted = form;
       const saved = await handleSave();

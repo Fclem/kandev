@@ -1,6 +1,7 @@
 {
   "activity": "Activity ({{value1}})",
   "activity2": "Activity (",
+  "activity3": "Activity",
   "averages": "Averages",
   "avgPerTask": "{{value0}} avg per task",
   "bestMonth": "Best month",
@@ -13,6 +14,8 @@
   "completedTasksOverTime": "Completed Tasks Over Time",
   "completion": "Completion",
   "completionRate": "Completion rate",
+  "copied": "Copied",
+  "copyStats": "Copy Stats",
   "errorLoadingStats": "Error loading stats: {{initialError}}",
   "filesChanged": "{{total_files_changed}} files changed",
   "gitActivity": "<0></0> Git Activity",

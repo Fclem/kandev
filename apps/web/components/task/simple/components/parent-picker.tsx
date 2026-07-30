@@ -47,7 +47,7 @@ function useTaskWorkspaceMode(task: Task) {
 function buildOptions(candidates: OfficeTask[], currentTaskId: string): ComboboxOption[] {
   const noOpt: ComboboxOption = {
     value: NO_PARENT,
-    label: "No parent",
+    label: t("task:noParent"),
     keywords: ["none"],
     renderLabel: () => <span className="text-muted-foreground">{t("task:noParent")}</span>,
   };
@@ -150,7 +150,7 @@ export function ParentPicker({ task }: ParentPickerProps) {
         value={currentValue}
         onValueChange={handleSelect}
         placeholder={t("task:noParent")}
-        searchPlaceholder="Search tasks..."
+        searchPlaceholder={t("task:searchTasks")}
         emptyMessage={t("common:noTasksFound")}
         disabled={isDetaching}
         triggerClassName="h-7 w-full justify-end px-2"

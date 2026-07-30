@@ -276,6 +276,7 @@ export function useFileRename(
   setTree: React.Dispatch<React.SetStateAction<FileTreeNode | null>>,
   onRenameFile?: (oldPath: string, newPath: string) => Promise<boolean>,
 ) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(node.name);
@@ -298,8 +299,8 @@ export function useFileRename(
     }
     if (newName.includes("/") || newName.includes("\\")) {
       toast({
-        title: "Invalid name",
-        description: "File names cannot contain path separators",
+        title: t("task:invalidName"),
+        description: t("task:fileNamesCannotContainPathSeparators"),
         variant: "error",
       });
       handleCancelRename();
@@ -313,7 +314,7 @@ export function useFileRename(
     setIsRenaming(false);
     if (tree && treeContainsPath(tree, newPath)) {
       toast({
-        title: "Failed to rename item",
+        title: t("task:failedToRenameItem"),
         description: `Target already exists: ${newPath}`,
         variant: "error",
       });

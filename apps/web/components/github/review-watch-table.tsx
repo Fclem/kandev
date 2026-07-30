@@ -88,7 +88,7 @@ function WatchActions({ watch, onToggleEnabled, onTrigger, onReset, onDelete }: 
             onClick={(e) => {
               e.stopPropagation();
               onTrigger(watch.id);
-              toast({ description: "Checking for new PRs..." });
+              toast({ description: t("github:checkingForNewPrs") });
             }}
           >
             <IconRefresh className="h-3.5 w-3.5" />

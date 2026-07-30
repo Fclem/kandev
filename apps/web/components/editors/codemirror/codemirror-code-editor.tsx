@@ -98,7 +98,9 @@ function CodeMirrorWrapButton({
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{wrapEnabled ? t("editors:disableWordWrap") : t("editors:enableWordWrap")}</TooltipContent>
+      <TooltipContent>
+        {wrapEnabled ? t("editors:disableWordWrap") : t("editors:enableWordWrap")}
+      </TooltipContent>
     </Tooltip>
   );
 }

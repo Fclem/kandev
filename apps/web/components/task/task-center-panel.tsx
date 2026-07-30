@@ -140,6 +140,7 @@ function useFileTabOperations({
   handleTabChange,
   leftTab,
 }: FileTabOperationsOptions) {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const addFileTab = useCallback(
@@ -177,8 +178,8 @@ function useFileTabOperations({
         });
       } catch (error) {
         toast({
-          title: "Failed to open file",
-          description: error instanceof Error ? error.message : "Unknown error",
+          title: t("task:failedToOpenFile"),
+          description: error instanceof Error ? error.message : t("common:unknownError"),
           variant: "error",
         });
       }
@@ -231,10 +232,11 @@ function useCenterPanelTabs(
   hasChanges: boolean | undefined,
   reviewLabel: "Pull Request" | "Merge Request" | null,
 ) {
+  const { t } = useTranslation();
   const tabs: SessionTab[] = useMemo(() => {
     const staticTabs: SessionTab[] = [
-      ...(hasChanges ? [{ id: "changes", label: "All changes" }] : []),
-      { id: "chat", label: "Chat" },
+      ...(hasChanges ? [{ id: "changes", label: t("task:allChanges") }] : []),
+      { id: "chat", label: t("task:chat") },
       ...(reviewLabel ? [{ id: "pr", label: reviewLabel }] : []),
     ];
     const fileTabs: SessionTab[] = openFileTabs.map((tab) => ({

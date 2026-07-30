@@ -489,7 +489,9 @@ export function IssueWatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-full sm:w-[900px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{watch ? t("github:editIssueWatch") : t("github:createIssueWatch")}</DialogTitle>
+          <DialogTitle>
+            {watch ? t("github:editIssueWatch") : t("github:createIssueWatch")}
+          </DialogTitle>
           <DialogDescription>{t("github:automaticallyCreateTasksWhenNewGithub")}</DialogDescription>
         </DialogHeader>
         <IssueWatchFormFields

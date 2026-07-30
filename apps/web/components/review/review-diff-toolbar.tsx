@@ -84,6 +84,52 @@ function ToolbarIconBtn({
   );
 }
 
+/**
+ * The per-file action cluster (preview, edit, file menu, revert). Split from
+ * `FileDiffToolbar` purely for size; it needs no toolbar state.
+ */
+function FileDiffToolbarFileActions({
+  filePath,
+  repo,
+  sessionId,
+  source,
+  onPreviewMarkdown,
+  onOpenFile,
+  onDiscard,
+}: Pick<
+  FileDiffToolbarProps,
+  "filePath" | "sessionId" | "source" | "onPreviewMarkdown" | "onOpenFile" | "onDiscard"
+> & { repo: string | undefined }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      {onPreviewMarkdown && isMarkdownPath(filePath) && (
+        <ToolbarIconBtn
+          onClick={() => onPreviewMarkdown(filePath)}
+          tooltip={t("review:previewMarkdown")}
+        >
+          <IconEye className="h-3.5 w-3.5" />
+        </ToolbarIconBtn>
+      )}
+      {onOpenFile && (
+        <ToolbarIconBtn onClick={() => onOpenFile(filePath, repo)} tooltip={t("common:edit")}>
+          <IconPencil className="h-3.5 w-3.5" />
+        </ToolbarIconBtn>
+      )}
+      <FileActionsDropdown filePath={filePath} sessionId={sessionId} size="xs" />
+      {source === "uncommitted" && (
+        <ToolbarIconBtn
+          onClick={onDiscard}
+          tooltip={t("review:revertChanges")}
+          className="h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100 hover:text-destructive"
+        >
+          <IconArrowBackUp className="h-3.5 w-3.5" />
+        </ToolbarIconBtn>
+      )}
+    </>
+  );
+}
+
 export function FileDiffToolbar(props: FileDiffToolbarProps) {
   const { t } = useTranslation();
   const {
@@ -143,12 +189,20 @@ export function FileDiffToolbar(props: FileDiffToolbarProps) {
           <IconFoldDown className="h-3.5 w-3.5" />
         )}
       </ToolbarIconBtn>
-      <ToolbarIconBtn onClick={onToggleWordWrap} tooltip={t("review:toggleWordWrap")} active={wordWrap}>
+      <ToolbarIconBtn
+        onClick={onToggleWordWrap}
+        tooltip={t("review:toggleWordWrap")}
+        active={wordWrap}
+      >
         <IconTextWrap className="h-3.5 w-3.5" />
       </ToolbarIconBtn>
       <ToolbarIconBtn
         onClick={handleToggleViewMode}
-        tooltip={globalViewMode === "split" ? t("review:switchToUnifiedView") : t("review:switchToSplitView")}
+        tooltip={
+          globalViewMode === "split"
+            ? t("review:switchToUnifiedView")
+            : t("review:switchToSplitView")
+        }
       >
         {globalViewMode === "split" ? (
           <IconLayoutRows className="h-3.5 w-3.5" />
@@ -156,26 +210,15 @@ export function FileDiffToolbar(props: FileDiffToolbarProps) {
           <IconLayoutColumns className="h-3.5 w-3.5" />
         )}
       </ToolbarIconBtn>
-      {onPreviewMarkdown && isMarkdownPath(filePath) && (
-        <ToolbarIconBtn onClick={() => onPreviewMarkdown(filePath)} tooltip={t("review:previewMarkdown")}>
-          <IconEye className="h-3.5 w-3.5" />
-        </ToolbarIconBtn>
-      )}
-      {onOpenFile && (
-        <ToolbarIconBtn onClick={() => onOpenFile(filePath, repo)} tooltip={t("common:edit")}>
-          <IconPencil className="h-3.5 w-3.5" />
-        </ToolbarIconBtn>
-      )}
-      <FileActionsDropdown filePath={filePath} sessionId={sessionId} size="xs" />
-      {source === "uncommitted" && (
-        <ToolbarIconBtn
-          onClick={onDiscard}
-          tooltip={t("review:revertChanges")}
-          className="h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100 hover:text-destructive"
-        >
-          <IconArrowBackUp className="h-3.5 w-3.5" />
-        </ToolbarIconBtn>
-      )}
+      <FileDiffToolbarFileActions
+        filePath={filePath}
+        repo={repo}
+        sessionId={sessionId}
+        source={source}
+        onPreviewMarkdown={onPreviewMarkdown}
+        onOpenFile={onOpenFile}
+        onDiscard={onDiscard}
+      />
     </div>
   );
 }

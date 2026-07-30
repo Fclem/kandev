@@ -77,9 +77,7 @@ export function ReviewFindingsOverview({
     <div className="flex max-h-[min(60vh,26rem)] flex-col" data-testid="review-findings-overview">
       <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
         <IconSparkles className="h-4 w-4 shrink-0 text-primary" />
-        <span className="text-sm font-medium">
-          {t("review:openFindings", { count: total })}
-        </span>
+        <span className="text-sm font-medium">{t("review:openFindings", { count: total })}</span>
         <span className="text-xs text-muted-foreground">
           <Trans
             i18nKey="review:across"

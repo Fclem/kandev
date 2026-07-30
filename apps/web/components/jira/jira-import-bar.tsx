@@ -35,7 +35,7 @@ export function JiraImportBar({ workspaceId, disabled, onImport }: JiraImportBar
       fetch={(key) => getJiraTicket(key, { workspaceId })}
       onSuccess={(_key, ticket) => onImport(ticket)}
       submitLabel={t("jira:import")}
-      submittingLabel="Loading..."
+      submittingLabel={t("common:loading2")}
     />
   );
 }

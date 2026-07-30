@@ -42,7 +42,11 @@ function CostAggregateRow({ aggregate }: { aggregate: AgentCostAggregate }) {
   const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm" data-testid="cost-aggregate">
-      <Stat label={t("office:inputTokens")} value={formatTokens(aggregate.input_tokens)} testId="agg-input" />
+      <Stat
+        label={t("office:inputTokens")}
+        value={formatTokens(aggregate.input_tokens)}
+        testId="agg-input"
+      />
       <Stat
         label={t("office:outputTokens")}
         value={formatTokens(aggregate.output_tokens)}

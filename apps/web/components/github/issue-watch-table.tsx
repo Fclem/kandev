@@ -93,7 +93,7 @@ function WatchActions({ watch, onToggleEnabled, onTrigger, onReset, onDelete }: 
             onClick={(e) => {
               e.stopPropagation();
               onTrigger(watch.id);
-              toast({ description: "Checking for new issues..." });
+              toast({ description: t("github:checkingForNewIssues") });
             }}
           >
             <IconRefresh className="h-3.5 w-3.5" />

@@ -275,7 +275,7 @@ export function AgentOverviewTab({ agent }: AgentOverviewTabProps) {
       <IdentityCard
         name={name}
         role={role}
-        reportsToName={reportsToAgent?.name ?? "None"}
+        reportsToName={reportsToAgent?.name ?? t("office:none")}
         roles={roles}
         onNameChange={(v) => {
           setName(v);

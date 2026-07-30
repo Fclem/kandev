@@ -35,10 +35,10 @@ export function TasksByPriorityChart({ days }: Props) {
         />
         <ChartLegend
           items={[
-            { label: "Critical", className: "bg-red-600" },
-            { label: "High", className: "bg-orange-500" },
-            { label: "Medium", className: "bg-amber-400" },
-            { label: "Low", className: "bg-blue-400" },
+            { label: t("office:critical"), className: "bg-red-600" },
+            { label: t("office:high"), className: "bg-orange-500" },
+            { label: t("office:medium"), className: "bg-amber-400" },
+            { label: t("office:low"), className: "bg-blue-400" },
           ]}
         />
       </CardContent>

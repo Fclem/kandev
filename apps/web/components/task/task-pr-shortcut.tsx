@@ -10,6 +10,7 @@ import { openExternalLink } from "@/lib/desktop/external-links";
 import { resolveTaskReviewOpenAction } from "./task-pr-open";
 import { TaskPRPickerDialog } from "./task-pr-picker-dialog";
 import { useTaskMRs } from "@/hooks/domains/gitlab/use-task-mr";
+import { useTranslation } from "react-i18next";
 
 /**
  * Task-screen keybinding (default Cmd/Ctrl+Shift+G) that jumps straight to the
@@ -17,6 +18,7 @@ import { useTaskMRs } from "@/hooks/domains/gitlab/use-task-mr";
  * picker dialog; none shows a toast.
  */
 export function TaskPRShortcut({ taskId }: { taskId: string | null }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { prs } = useTaskPR(taskId);
   const mrs = useTaskMRs(taskId);
@@ -28,7 +30,7 @@ export function TaskPRShortcut({ taskId }: { taskId: string | null }) {
     () => {
       const action = resolveTaskReviewOpenAction(prs, mrs);
       if (action.kind === "none") {
-        toast({ description: "No pull request or merge request linked to this task" });
+        toast({ description: t("task:noPullRequestOrMergeRequest") });
         return;
       }
       if (action.kind === "open") {

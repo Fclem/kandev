@@ -37,11 +37,11 @@ export function GitHubPATForm({
       try {
         await setGitHubWorkspaceConnection(workspaceId, { source: "pat", token: token.trim() });
         setToken("");
-        toast({ description: "Workspace GitHub token connected", variant: "success" });
+        toast({ description: t("github:workspaceGithubTokenConnected"), variant: "success" });
         onSaved();
       } catch (error) {
         toast({
-          description: error instanceof Error ? error.message : "Connection failed",
+          description: error instanceof Error ? error.message : t("github:connectionFailed"),
           variant: "error",
         });
       } finally {

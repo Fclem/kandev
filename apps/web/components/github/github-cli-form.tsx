@@ -115,7 +115,7 @@ export function GitHubCLIForm({
       onSaved();
     } catch (error) {
       toast({
-        description: error instanceof Error ? error.message : "Connection failed",
+        description: error instanceof Error ? error.message : t("github:connectionFailed"),
         variant: "error",
       });
     } finally {

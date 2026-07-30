@@ -21,11 +21,12 @@ function useSidebarFilterCommands(
   onOpenChange: (open: boolean) => void,
   setActiveView: (id: string) => void,
 ) {
+  const { t } = useTranslation();
   const commands = useMemo<CommandItem[]>(() => {
     const list: CommandItem[] = [
       {
         id: "sidebar-open-filter",
-        label: "Open sidebar filters",
+        label: t("task:openSidebarFilters"),
         group: "Sidebar",
         keywords: ["filter", "sort", "group", "view", "sidebar"],
         action: () => onOpenChange(true),
@@ -97,7 +98,9 @@ export function SidebarFilterBar() {
         data-testid="sidebar-new-view"
         data-disabled-reason={newViewDisabledReason ?? undefined}
         aria-label={
-          newViewDisabledReason ? `New view unavailable. ${newViewDisabledReason}` : t("task:newView2")
+          newViewDisabledReason
+            ? `New view unavailable. ${newViewDisabledReason}`
+            : t("task:newView2")
         }
         title={newViewDisabledReason ?? undefined}
       >

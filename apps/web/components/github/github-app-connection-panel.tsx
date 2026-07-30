@@ -37,7 +37,7 @@ export function GitHubAppConnectionPanel({ workspaceId }: { workspaceId: string 
       window.location.assign(url);
     } catch (error) {
       toast({
-        description: error instanceof Error ? error.message : "App installation failed",
+        description: error instanceof Error ? error.message : t("github:appInstallationFailed"),
         variant: "error",
       });
     }

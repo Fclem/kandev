@@ -154,7 +154,7 @@ function StepAutoArchiveRow({ step, savedStep, onUpdate, readOnly }: StepAutoArc
       <Label htmlFor={`${step.id}-auto-archive`} className="text-sm">
         {t("settings:autoArchive")}
       </Label>
-      <HelpTip text="Automatically archive tasks after they have been in this step for a set number of hours. Useful for the last step of a workflow (e.g., Done) to keep the board clean." />
+      <HelpTip text={t("settings:automaticallyArchiveTasksAfterTheyHave")} />
       {(step.auto_archive_after_hours ?? 0) > 0 && (
         <>
           <span className="text-sm text-muted-foreground">{t("settings:after")}</span>
@@ -424,7 +424,7 @@ function StepTransitionsSection({
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
             <Label className="text-xs font-medium">{t("settings:onExit")}</Label>
-            <HelpTip text="Runs when leaving this step (before entering the next step)." />
+            <HelpTip text={t("settings:runsWhenLeavingThisStepBefore")} />
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -442,7 +442,7 @@ function StepTransitionsSection({
             <Label htmlFor={`${step.id}-exit-disable-plan`} className="text-sm">
               {t("settings:disablePlanMode")}
             </Label>
-            <HelpTip text="Keep plan mode on for every turn in this step, then turn it off only when the task moves to another step." />
+            <HelpTip text={t("settings:keepPlanModeOnForEvery")} />
           </div>
         </div>
       )}
@@ -480,7 +480,7 @@ function StepPromptSection({
         >
           {t("settings:stepPrompt")}
         </Label>
-        <HelpTip text="Custom instructions for the agent on this step. Use {{task_prompt}} to include the task description." />
+        <HelpTip text={t("settings:customInstructionsForTheAgentOn")} />
       </div>
       {!readOnly && (
         <div className="flex items-center gap-1.5 flex-wrap">

@@ -38,6 +38,7 @@ import type { useChatPanelState } from "./use-chat-panel-state";
 import { cn } from "@/lib/utils";
 import { resolveComposerWorkspaceId } from "./composer-workspace";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 const PLAN_CONTEXT_PATH = "plan:context";
 
@@ -122,16 +123,15 @@ function showMessageSendToast(error: unknown, toast: ReturnType<typeof useToast>
   console.error("Failed to send message:", error);
   if (isMessageSendError(error)) {
     toast({
-      title: "Message not sent",
+      title: t("task:messageNotSent"),
       description: error.message,
       variant: "error",
     });
     return;
   }
   toast({
-    title: "Message send status unknown",
-    description:
-      "The connection dropped or timed out. Refresh the task to confirm whether it went through.",
+    title: t("task:messageSendStatusUnknown"),
+    description: t("task:theConnectionDroppedOrTimedOut"),
     variant: "error",
   });
 }

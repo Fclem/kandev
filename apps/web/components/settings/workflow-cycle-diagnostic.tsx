@@ -95,7 +95,9 @@ export function WorkflowCycleDiagnostic({
     >
       <IconAlertTriangle className="mt-0.5 size-4" aria-hidden="true" />
       <AlertTitle className="text-sm">
-        {isBlocking ? t("settings:automaticWorkflowCycle") : t("settings:potentialRepeatedAgentRun")}
+        {isBlocking
+          ? t("settings:automaticWorkflowCycle")
+          : t("settings:potentialRepeatedAgentRun")}
       </AlertTitle>
       <AlertDescription className="min-w-0 space-y-3 text-left text-sm text-pretty">
         <p>

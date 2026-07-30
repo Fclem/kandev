@@ -7,6 +7,7 @@ import { useSessionTurn } from "@/hooks/domains/session/use-session-turn";
 import { useAppStore } from "@/components/state-provider";
 import { GridSpinner } from "@/components/grid-spinner";
 import { resolveAgentErrorLabel } from "./agent-error-label";
+import { useTranslation } from "react-i18next";
 
 type AgentStatusProps = {
   sessionState?: TaskSessionState;
@@ -157,6 +158,7 @@ function AgentErrorStatus({
   config: { label: string };
   sessionId: string | null;
 }) {
+  const { t } = useTranslation();
   const errorMessage = useAppStore((state) =>
     sessionId
       ? (state.taskSessions.items[sessionId]?.error_message as string | undefined)
@@ -181,7 +183,11 @@ function AgentErrorStatus({
         disabled={!hasDetails}
         aria-expanded={hasDetails ? expanded : undefined}
         aria-label={
-          hasDetails ? `${expanded ? "Hide" : "Show"} error details: ${displayLabel}` : displayLabel
+          hasDetails
+            ? t(expanded ? "task:hideErrorDetailsFor" : "task:showErrorDetailsFor", {
+                label: displayLabel,
+              })
+            : displayLabel
         }
       >
         <IconAlertCircle className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />

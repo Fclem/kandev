@@ -144,7 +144,11 @@ function OrgProjectRow({
         description={t("sentry:theSentryOrgToPoll")}
         value={form.orgSlug}
         onChange={onOrgChange}
-        placeholder={orgItems.length === 0 ? t("sentry:noOrganizationsAvailable") : t("sentry:selectOrganization")}
+        placeholder={
+          orgItems.length === 0
+            ? t("sentry:noOrganizationsAvailable")
+            : t("sentry:selectOrganization")
+        }
         items={orgItems}
         disabled={orgItems.length === 0}
       />
@@ -153,7 +157,9 @@ function OrgProjectRow({
         description={t("sentry:theSentryProjectToPoll")}
         value={form.projectSlug}
         onChange={onProjectChange}
-        placeholder={projectItems.length === 0 ? t("sentry:noProjectsAvailable") : t("sentry:selectProject")}
+        placeholder={
+          projectItems.length === 0 ? t("sentry:noProjectsAvailable") : t("sentry:selectProject")
+        }
         items={projectItems}
         disabled={projectItems.length === 0}
       />
@@ -335,7 +341,9 @@ export function InstancePicker({
       description={t("sentry:whichSentryInstanceThisWatcherPolls")}
       value={value}
       onChange={onChange}
-      placeholder={noInstances ? t("sentry:noSentryInstancesInThisWorkspace") : t("sentry:selectAnInstance")}
+      placeholder={
+        noInstances ? t("sentry:noSentryInstancesInThisWorkspace") : t("sentry:selectAnInstance")
+      }
       items={instances.map((i) => ({ id: i.id, label: i.name }))}
       disabled={disabled || noInstances}
     />

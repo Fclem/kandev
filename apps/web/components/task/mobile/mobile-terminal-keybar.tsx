@@ -61,7 +61,13 @@ export function MobileTerminalKeybar({
       style={{ ...position, height: `${KEYBAR_HEIGHT_PX}px` }}
     >
       <div className="flex w-full gap-1 overflow-x-auto px-2 py-1.5">
-        <ModifierButton id="ctrl" label={t("task:ctrl")} ariaLabel={t("task:control")} state={ctrl} onTap={onCtrlTap} />
+        <ModifierButton
+          id="ctrl"
+          label={t("task:ctrl")}
+          ariaLabel={t("task:control")}
+          state={ctrl}
+          onTap={onCtrlTap}
+        />
         <ModifierButton
           id="shift"
           label={t("task:shift")}
@@ -77,7 +83,11 @@ export function MobileTerminalKeybar({
         >
           ^C
         </KeybarButton>
-        <KeybarButton id="ctrl-d" ariaLabel={t("task:controlD")} onTap={() => tapSend(KEY_SEQUENCES.ctrlD)}>
+        <KeybarButton
+          id="ctrl-d"
+          ariaLabel={t("task:controlD")}
+          onTap={() => tapSend(KEY_SEQUENCES.ctrlD)}
+        >
           ^D
         </KeybarButton>
         {KEYS.map((key) => (

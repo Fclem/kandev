@@ -9,6 +9,7 @@ import { cancelTaskReview, runTaskReview } from "@/lib/api/domains/review-api";
 import { isRunActive } from "@/lib/review/findings";
 import type { TaskReviewRun } from "@/lib/types/review";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 export type ReviewRunButtonProps = {
   taskId: string | null | undefined;
@@ -130,7 +131,7 @@ function resolveNotice(
   if (activeRun?.status !== "failed") return null;
   return {
     code: activeRun.error_code,
-    message: activeRun.error_message || "The review failed",
+    message: activeRun.error_message || t("review:theReviewFailed"),
   };
 }
 

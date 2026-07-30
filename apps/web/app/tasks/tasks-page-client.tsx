@@ -31,6 +31,7 @@ import {
   type TasksListGroup,
   type TasksListSort,
 } from "@/lib/tasks/tasks-list-options";
+import { useTranslation } from "react-i18next";
 
 interface TasksPageClientProps {
   workspaces: Workspace[];
@@ -89,6 +90,7 @@ function useTaskOperations({
   setTasks,
   setTotal,
 }: UseTaskOperationsParams) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const { beginRequest, isCurrentRequest } = useLatestWorkspaceRequest(activeWorkspaceId);
@@ -114,7 +116,7 @@ function useTaskOperations({
     } catch (err) {
       if (!shouldCommit()) return;
       toast({
-        title: "Failed to load tasks",
+        title: t("common:failedToLoadTasks"),
         description: errorDescription(err),
         variant: "error",
       });
@@ -146,6 +148,7 @@ function errorDescription(err: unknown): string {
 }
 
 function useTaskMutations(fetchTasks: () => void) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
 
@@ -153,11 +156,14 @@ function useTaskMutations(fetchTasks: () => void) {
     async (taskId: string, opts?: { cascade?: boolean }) => {
       try {
         await archiveTask(taskId, opts);
-        toast({ title: "Task archived", description: "The task has been archived successfully." });
+        toast({
+          title: t("common:taskArchived"),
+          description: t("common:theTaskHasBeenArchivedSuccessfully"),
+        });
         fetchTasks();
       } catch (err) {
         toast({
-          title: "Failed to archive task",
+          title: t("common:failedToArchiveTask"),
           description: errorDescription(err),
           variant: "error",
         });
@@ -174,7 +180,7 @@ function useTaskMutations(fetchTasks: () => void) {
         fetchTasks();
       } catch (err) {
         toast({
-          title: "Failed to unarchive task",
+          title: t("common:failedToUnarchiveTask"),
           description: errorDescription(err),
           variant: "error",
         });
@@ -191,7 +197,7 @@ function useTaskMutations(fetchTasks: () => void) {
         fetchTasks();
       } catch (err) {
         toast({
-          title: "Failed to delete task",
+          title: t("common:failedToDeleteTask"),
           description: errorDescription(err),
           variant: "error",
         });

@@ -120,7 +120,9 @@ function TunnelToggleButton({
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{isTunnelActive ? t("task:stopTunnel") : t("task:startTunnel")}</TooltipContent>
+      <TooltipContent>
+        {isTunnelActive ? t("task:stopTunnel") : t("task:startTunnel")}
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -156,13 +158,13 @@ function PortUrlRows({ proxyUrl, tunnelUrl }: { proxyUrl: string; tunnelUrl: str
     <div className="space-y-1 overflow-hidden">
       <PortUrlRow
         label={t("task:proxy")}
-        tip="Path-based proxy. Works for APIs but may break web apps that expect to be served at /."
+        tip={t("task:pathBasedProxyWorksForApis")}
         url={proxyUrl}
       />
       {tunnelUrl && (
         <PortUrlRow
           label={t("task:tunnel")}
-          tip="Dedicated port tunnel. App is served at /, so assets and routing work correctly."
+          tip={t("task:dedicatedPortTunnelAppIsServed")}
           url={tunnelUrl}
           variant="default"
         />
@@ -176,7 +178,12 @@ type PortRowProps = {
   address?: string;
   process?: string;
   sessionId: string;
-  badge: "Detected" | "Manual";
+  /**
+   * How the port was found. A discriminant, not the badge text: the label below
+   * is translated from it, so the copy and the `variant` choice no longer share
+   * one English string.
+   */
+  origin: "detected" | "manual";
   tunnelPort?: number;
   tunnelPending?: boolean;
   onTunnelStart: (port: number, requestedPort?: number) => void;
@@ -188,7 +195,7 @@ function PortRow({
   address,
   process,
   sessionId,
-  badge,
+  origin,
   tunnelPort,
   tunnelPending,
   onTunnelStart,
@@ -230,10 +237,10 @@ function PortRow({
             <span className="text-xs text-muted-foreground">{address}</span>
           )}
           <Badge
-            variant={badge === "Detected" ? "secondary" : "outline"}
+            variant={origin === "detected" ? "secondary" : "outline"}
             className="text-[10px] px-1.5 py-0"
           >
-            {badge}
+            {t(origin === "detected" ? "task:portDetected" : "task:portManual")}
           </Badge>
         </div>
         <div className="flex items-center gap-0.5">
@@ -267,7 +274,7 @@ function PortRow({
           >
             {t("task:start2")}
           </Button>
-          <InfoTip text="Specify a local port or leave blank for a random one. For Docker/K8s, use a port you've pre-exposed." />
+          <InfoTip text={t("task:specifyALocalPortOrLeave")} />
         </div>
       )}
 
@@ -366,7 +373,7 @@ function PortListSection({
             address={p.address}
             process={p.process}
             sessionId={sessionId}
-            badge="Detected"
+            origin="detected"
             tunnelPort={activeTunnels.get(p.port)}
             tunnelPending={pendingTunnels.has(p.port)}
             onTunnelStart={onTunnelStart}
@@ -378,7 +385,7 @@ function PortListSection({
             key={`m-${port}`}
             port={port}
             sessionId={sessionId}
-            badge="Manual"
+            origin="manual"
             tunnelPort={activeTunnels.get(port)}
             tunnelPending={pendingTunnels.has(port)}
             onTunnelStart={onTunnelStart}

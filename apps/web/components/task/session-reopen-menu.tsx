@@ -18,6 +18,7 @@ import { useSessionPendingInput } from "@/hooks/use-task-pending-input";
 import type { ForegroundActivity, TaskSession, TaskSessionState } from "@/lib/types/http";
 import type { AgentProfileOption } from "@/lib/state/slices";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 type AgentInfo = { label: string; agentName: string };
 
@@ -53,7 +54,7 @@ function resolveAgentInfo(
   // A user-supplied session name wins over the derived profile label,
   // matching the session tab title precedence (resolveSessionTabTitle).
   if (session.name) return { label: session.name, agentName };
-  if (!profile) return { label: "Unknown agent", agentName: "" };
+  if (!profile) return { label: t("task:unknownAgent"), agentName: "" };
   const parts = profile.label.split(" \u2022 ");
   return { label: parts[1] || parts[0] || profile.label, agentName };
 }

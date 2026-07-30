@@ -264,7 +264,7 @@ export function TerminalSettings() {
     revision,
     isDirty: revision !== JSON.stringify(saved),
     canSave: Number.isFinite(draft.terminalFontSize),
-    invalidReason: "Terminal font size must be a number between 8 and 24.",
+    invalidReason: t("settings:terminalFontSizeMustBeA"),
     save: async () => {
       const submitted = { ...draft, terminalFontSize: validFontSize };
       const current = storeApi.getState().userSettings;

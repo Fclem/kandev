@@ -23,6 +23,7 @@ import { ReviewDiffHeader, type ReviewExternalLinkContext } from "./review-diff-
 import { groupByRepositoryName } from "@/lib/group-by-repo";
 import { useActiveTaskPR } from "@/hooks/domains/github/use-task-pr";
 import { t } from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 
 type ReviewDiffListProps = {
   files: ReviewFile[];
@@ -222,6 +223,7 @@ function useAutoMarkOnScroll({
 }
 
 function useCommentRunHandler(sessionId: string) {
+  const { t } = useTranslation();
   const activeTaskId = useAppStore((state) => state.tasks.activeTaskId);
   const { toast } = useToast();
   const { runComment } = useRunComment({
@@ -233,14 +235,14 @@ function useCommentRunHandler(sessionId: string) {
       try {
         const { queued } = await runComment(comment);
         toast({
-          title: "Comment sent",
-          description: queued ? "Queued for the agent." : "Sent to the agent.",
+          title: t("review:commentSent"),
+          description: queued ? t("review:queuedForTheAgent") : t("review:sentToTheAgent"),
         });
       } catch (err) {
         console.error("Failed to run diff comment:", err);
         toast({
-          title: "Failed to send comment",
-          description: "Please try again.",
+          title: t("review:failedToSendComment"),
+          description: t("review:pleaseTryAgain"),
           variant: "error",
         });
       }

@@ -89,8 +89,8 @@ export function SenderTaskBadge({ sender, size = "sm" }: SenderTaskBadgeProps) {
         <TooltipContent>
           {sessionName ? (
             <Trans i18nKey="task:fromSessionInTask" values={{ sessionName, fullTitle }}>
-              From session <span className="font-semibold">&ldquo;{sessionName}&rdquo;</span> in task{" "}
-              <span className="font-semibold">&ldquo;{fullTitle}&rdquo;</span>
+              From session <span className="font-semibold">&ldquo;{sessionName}&rdquo;</span> in
+              task <span className="font-semibold">&ldquo;{fullTitle}&rdquo;</span>
             </Trans>
           ) : (
             <Trans i18nKey="task:fromAgentInTask" values={{ fullTitle }}>

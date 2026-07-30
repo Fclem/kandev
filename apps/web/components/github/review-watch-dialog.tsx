@@ -465,7 +465,7 @@ function ProfileFields({
       <div className="space-y-1.5">
         <div className="flex items-center gap-1.5">
           <Label>{t("github:executorProfile")}</Label>
-          <HelpTip text="The repository will be automatically cloned to ~/.kandev/repos/<owner>/<repo> if it is not already present in the workspace." />
+          <HelpTip text={t("github:theRepositoryWillBeAutomaticallyCloned")} />
         </div>
         <p className="text-xs text-muted-foreground">
           {t("github:optionalFallsBackToStepDefault")}
@@ -619,7 +619,9 @@ export function ReviewWatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-full sm:w-[900px] sm:max-w-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{watch ? t("github:editReviewWatch") : t("github:createReviewWatch")}</DialogTitle>
+          <DialogTitle>
+            {watch ? t("github:editReviewWatch") : t("github:createReviewWatch")}
+          </DialogTitle>
           <DialogDescription>{t("github:automaticallyCreateTasksWhenNewPull")}</DialogDescription>
         </DialogHeader>
         <WatchFormFields

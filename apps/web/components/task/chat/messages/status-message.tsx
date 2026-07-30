@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import type { Message } from "@/lib/types/http";
 import type { StatusMetadata } from "@/components/task/chat/types";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 interface ErrorMetadata extends StatusMetadata {
   error?: string;
@@ -51,19 +52,19 @@ function formatErrorDetails(
   if (!metadata) return details;
 
   if (metadata.stderr && metadata.stderr.length > 0) {
-    details.push({ label: "Agent Output", value: metadata.stderr.join("\n") });
+    details.push({ label: t("task:agentOutput"), value: metadata.stderr.join("\n") });
   }
   if (metadata.error) {
-    details.push({ label: "Error", value: metadata.error });
+    details.push({ label: t("task:error"), value: metadata.error });
   }
   if (metadata.text) {
-    details.push({ label: "Details", value: metadata.text });
+    details.push({ label: t("common:details"), value: metadata.text });
   }
   if (metadata.error_data) {
     const filteredData = { ...metadata.error_data };
     delete filteredData.stderr;
     if (Object.keys(filteredData).length > 0) {
-      details.push({ label: "Error Data", value: JSON.stringify(filteredData, null, 2) });
+      details.push({ label: t("task:errorData"), value: JSON.stringify(filteredData, null, 2) });
     }
   }
   return details;
@@ -216,7 +217,9 @@ function StatusMessageBody({
   const { t } = useTranslation();
   return (
     <div className="flex-1 min-w-0 pt-0.5">
-      <div className={cn("text-xs font-mono", textClass)}>{message || t("task:anErrorOccurred")}</div>
+      <div className={cn("text-xs font-mono", textClass)}>
+        {message || t("task:anErrorOccurred")}
+      </div>
       {isExpanded && hasExpandableContent && <ExpandableErrorDetails errorDetails={errorDetails} />}
       {progress !== null && <StatusProgressBar progress={progress} statusLine={statusLine} />}
     </div>

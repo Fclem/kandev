@@ -126,7 +126,9 @@ function DiffIndicatorsButton({
           <IconArrowsDiff className="h-4 w-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{isVisible ? t("editors:hideDiffIndicators") : t("editors:showDiffIndicators")}</TooltipContent>
+      <TooltipContent>
+        {isVisible ? t("editors:hideDiffIndicators") : t("editors:showDiffIndicators")}
+      </TooltipContent>
     </Tooltip>
   );
 }

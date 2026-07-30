@@ -1,5 +1,6 @@
 {
   "addDetailsAboutThisChange": "Add details about this change...",
+  "anErrorOccurred": "An error occurred",
   "authenticated": "Authenticated <1></1>",
   "authenticated2": "Authenticated",
   "authenticationFailed": "Authentication failed: {{value1}}<2></2>",
@@ -8,6 +9,7 @@
   "checked": "· checked {{value1}}",
   "commit": "<0></0> Commit",
   "committing": "<0></0> Committing...",
+  "configured": "Configured",
   "copyConfig": "<0></0> Copy config",
   "copyConfig2": "Copy config",
   "copyConfigToAnotherWorkspace": "Copy config to another workspace",

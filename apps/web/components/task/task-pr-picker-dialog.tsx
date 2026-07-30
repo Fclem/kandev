@@ -69,7 +69,9 @@ export function TaskPRPickerDialog({ open, onOpenChange, prs, mrs = [] }: TaskPR
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg" onOpenAutoFocus={focusFirstRow}>
         <DialogHeader>
-          <DialogTitle>{mrs.length ? t("task:openCodeReview") : t("task:openPullRequest")}</DialogTitle>
+          <DialogTitle>
+            {mrs.length ? t("task:openCodeReview") : t("task:openPullRequest")}
+          </DialogTitle>
           <DialogDescription>
             {mrs.length
               ? t("task:chooseALinkedPullRequestOr")

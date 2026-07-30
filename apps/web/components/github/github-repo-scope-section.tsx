@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { CardContent } from "@kandev/ui/card";
@@ -190,7 +190,52 @@ function RepositoryScopeFields({
   );
 }
 
+/** Repo-scope settings as the form holds them. */
+type RepoScopeDraft = { mode: GitHubRepoScopeMode; orgs: string; repos: string };
+
+/**
+ * Load the persisted repo scope once per workspace and hand it to `apply`.
+ * Extracted from the draft hook so that hook stays a state container.
+ */
+function useLoadRepoScope(
+  workspaceId: string,
+  apply: (draft: RepoScopeDraft) => void,
+  setLoading: (loading: boolean) => void,
+) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  // `apply` is redefined every render; a ref keeps the effect keyed on the
+  // workspace alone so a re-render cannot refetch.
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void fetchGitHubWorkspaceSettings(workspaceId)
+      .then((settings) => {
+        if (cancelled) return;
+        applyRef.current({
+          mode: settings.repo_scope_mode ?? "all",
+          orgs: (settings.repo_scope_orgs ?? []).join(", "),
+          repos: repoFiltersToInput(settings.repo_scope_repos ?? []),
+        });
+      })
+      .catch(() => {
+        if (!cancelled)
+          toast({ description: t("github:failedToLoadGithubWorkspaceSettings"), variant: "error" });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setLoading, t, toast, workspaceId]);
+}
+
 function useGitHubRepoScopeDraft(workspaceId: string) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [mode, setMode] = useState<GitHubRepoScopeMode>("all");
   const [orgs, setOrgs] = useState("");
@@ -207,33 +252,16 @@ function useGitHubRepoScopeDraft(workspaceId: string) {
     return mode === "repos" && entries.length > 0 && parsedRepos.length !== entries.length;
   }, [mode, parsedRepos.length, repos]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void fetchGitHubWorkspaceSettings(workspaceId)
-      .then((settings) => {
-        if (cancelled) return;
-        const next = {
-          mode: settings.repo_scope_mode ?? "all",
-          orgs: (settings.repo_scope_orgs ?? []).join(", "),
-          repos: repoFiltersToInput(settings.repo_scope_repos ?? []),
-        };
-        setBaseline(next);
-        setMode(next.mode);
-        setOrgs(next.orgs);
-        setRepos(next.repos);
-      })
-      .catch(() => {
-        if (!cancelled)
-          toast({ description: "Failed to load GitHub workspace settings", variant: "error" });
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [toast, workspaceId]);
+  useLoadRepoScope(
+    workspaceId,
+    ({ mode: m, orgs: o, repos: r }) => {
+      setBaseline({ mode: m, orgs: o, repos: r });
+      setMode(m);
+      setOrgs(o);
+      setRepos(r);
+    },
+    setLoading,
+  );
 
   const save = useCallback(async () => {
     const submitted = { mode, orgs, repos };
@@ -258,9 +286,9 @@ function useGitHubRepoScopeDraft(workspaceId: string) {
       setMode((current) => (current === submitted.mode ? saved.mode : current));
       setOrgs((current) => (current === submitted.orgs ? saved.orgs : current));
       setRepos((current) => (current === submitted.repos ? saved.repos : current));
-      toast({ description: "GitHub workspace settings saved", variant: "success" });
+      toast({ description: t("github:githubWorkspaceSettingsSaved"), variant: "success" });
     } catch {
-      toast({ description: "Failed to save GitHub workspace settings", variant: "error" });
+      toast({ description: t("github:failedToSaveGithubWorkspaceSettings"), variant: "error" });
       throw new Error("Failed to save GitHub workspace settings");
     }
   }, [mode, orgs, parsedRepos, repos, toast, workspaceId]);
@@ -277,7 +305,7 @@ function useGitHubRepoScopeDraft(workspaceId: string) {
     revision,
     isDirty: dirty,
     canSave: !loading && !invalidRepos,
-    invalidReason: invalidRepos ? "Use comma-separated owner/repo values." : undefined,
+    invalidReason: invalidRepos ? t("github:useCommaSeparatedOwnerRepoValues") : undefined,
     save,
     discard,
   });

@@ -27,6 +27,7 @@ import type { Repository, RepositoryScript, Task } from "@/lib/types/http";
 import type { Terminal } from "@/hooks/domains/session/use-terminals";
 import type { Layout } from "react-resizable-panels";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 type KanbanTaskShellProps = {
   task: Task | null;
@@ -112,7 +113,7 @@ function simpleTaskHeaderData(task: Task | null) {
       primarySessionPendingAction: task?.primary_session_pending_action,
     },
     identifier: task?.id?.slice(0, 8),
-    title: task?.title ?? "Loading...",
+    title: task?.title ?? t("common:loading2"),
     state: task?.state ?? null,
     foregroundActivity: task?.foreground_activity,
   };

@@ -165,13 +165,14 @@ type LinearErrorMessageProps = {
 };
 
 export function LinearErrorMessage({ error, compact }: LinearErrorMessageProps) {
+  const { t } = useTranslation();
   return (
     <IntegrationAuthErrorMessage
       error={error}
       name="Linear"
       reconnectHref="/settings/integrations/linear"
       isAuthError={isLinearAuthError}
-      authErrorBody="Your Linear API key is invalid or has been revoked. Reconnect to view this issue."
+      authErrorBody={t("linear:yourLinearApiKeyIsInvalid")}
       compact={compact}
     />
   );

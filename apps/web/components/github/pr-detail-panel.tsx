@@ -85,6 +85,7 @@ export function PRDetailPanelComponent({ panelId, params }: PRDetailPanelProps) 
 // --- Add PR feedback as chat context ---
 
 function useAddPRFeedbackAsContext(sessionId: string, prNumber: number) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const addComment = useCommentsStore((s) => s.addComment);
 
@@ -102,7 +103,7 @@ function useAddPRFeedbackAsContext(sessionId: string, prNumber: number) {
         content,
       };
       addComment(comment);
-      toast({ description: "Added to chat context" });
+      toast({ description: t("github:addedToChatContext") });
     },
     [sessionId, prNumber, addComment, toast],
   );
@@ -329,12 +330,12 @@ function ApproveButton({
         { owner: taskPR.owner, repo: taskPR.repo, number: taskPR.pr_number },
         "APPROVE",
       );
-      toast({ description: "PR approved", variant: "success" });
+      toast({ description: t("github:prApproved"), variant: "success" });
       onRefresh();
     } catch (e) {
       toast({
-        title: "Failed to approve",
-        description: e instanceof Error ? e.message : "An error occurred",
+        title: t("github:failedToApprove"),
+        description: e instanceof Error ? e.message : t("github:anErrorOccurred"),
         variant: "error",
       });
     } finally {

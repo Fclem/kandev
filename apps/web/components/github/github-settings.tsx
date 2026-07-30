@@ -54,12 +54,12 @@ function CleanupNowButton({
           toast({
             description:
               deleted === 0
-                ? "No tasks to clean up"
+                ? t("github:noTasksToCleanUp")
                 : `Deleted ${deleted} task${deleted === 1 ? "" : "s"}`,
             variant: "success",
           });
         } catch {
-          toast({ description: "Cleanup failed", variant: "error" });
+          toast({ description: t("github:cleanupFailed"), variant: "error" });
         } finally {
           setBusy(false);
         }
@@ -98,6 +98,7 @@ function WatchSectionAction({
 }
 
 function useWatchActions(workspaceId?: string | null) {
+  const { t } = useTranslation();
   const {
     items: watches,
     create,
@@ -113,14 +114,14 @@ function useWatchActions(workspaceId?: string | null) {
     async (id: string) => {
       const watch = watches.find((item) => item.id === id);
       if (!watch) {
-        toast({ description: "Review watch not found", variant: "error" });
+        toast({ description: t("github:reviewWatchNotFound"), variant: "error" });
         return;
       }
       try {
         await remove(id, watch.workspace_id);
-        toast({ description: "Review watch deleted", variant: "success" });
+        toast({ description: t("github:reviewWatchDeleted"), variant: "success" });
       } catch {
-        toast({ description: "Failed to delete review watch", variant: "error" });
+        toast({ description: t("github:failedToDeleteReviewWatch"), variant: "error" });
       }
     },
     [remove, toast, watches],
@@ -130,7 +131,7 @@ function useWatchActions(workspaceId?: string | null) {
     async (id: string) => {
       const watch = watches.find((item) => item.id === id);
       if (!watch) {
-        toast({ description: "Review watch not found", variant: "error" });
+        toast({ description: t("github:reviewWatchNotFound"), variant: "error" });
         return;
       }
       try {
@@ -142,10 +143,10 @@ function useWatchActions(workspaceId?: string | null) {
             variant: "success",
           });
         } else {
-          toast({ description: "No new PRs found" });
+          toast({ description: t("github:noNewPrsFound") });
         }
       } catch {
-        toast({ description: "Failed to check for PRs", variant: "error" });
+        toast({ description: t("github:failedToCheckForPrs"), variant: "error" });
       }
     },
     [trigger, toast, watches],
@@ -159,11 +160,11 @@ function useWatchActions(workspaceId?: string | null) {
           description:
             tasksDeleted > 0
               ? `Reset complete — deleted ${tasksDeleted} task(s); next poll will re-import.`
-              : "Reset complete — next poll will re-import matches.",
+              : t("github:resetCompleteNextPollWillRe"),
           variant: "success",
         });
       } catch {
-        toast({ description: "Failed to reset review watch", variant: "error" });
+        toast({ description: t("github:failedToResetReviewWatch"), variant: "error" });
         throw new Error("reset failed");
       }
     },
@@ -182,6 +183,7 @@ function useWatchActions(workspaceId?: string | null) {
 }
 
 function useIssueWatchActions(workspaceId?: string | null) {
+  const { t } = useTranslation();
   const {
     items: watches,
     create,
@@ -197,14 +199,14 @@ function useIssueWatchActions(workspaceId?: string | null) {
     async (id: string) => {
       const watch = watches.find((item) => item.id === id);
       if (!watch) {
-        toast({ description: "Issue watch not found", variant: "error" });
+        toast({ description: t("github:issueWatchNotFound"), variant: "error" });
         return;
       }
       try {
         await remove(id, watch.workspace_id);
-        toast({ description: "Issue watch deleted", variant: "success" });
+        toast({ description: t("github:issueWatchDeleted"), variant: "success" });
       } catch {
-        toast({ description: "Failed to delete issue watch", variant: "error" });
+        toast({ description: t("github:failedToDeleteIssueWatch"), variant: "error" });
       }
     },
     [remove, toast, watches],
@@ -214,7 +216,7 @@ function useIssueWatchActions(workspaceId?: string | null) {
     async (id: string) => {
       const watch = watches.find((item) => item.id === id);
       if (!watch) {
-        toast({ description: "Issue watch not found", variant: "error" });
+        toast({ description: t("github:issueWatchNotFound"), variant: "error" });
         return;
       }
       try {
@@ -226,10 +228,10 @@ function useIssueWatchActions(workspaceId?: string | null) {
             variant: "success",
           });
         } else {
-          toast({ description: "No new issues found" });
+          toast({ description: t("github:noNewIssuesFound") });
         }
       } catch {
-        toast({ description: "Failed to check for issues", variant: "error" });
+        toast({ description: t("github:failedToCheckForIssues"), variant: "error" });
       }
     },
     [trigger, toast, watches],
@@ -243,11 +245,11 @@ function useIssueWatchActions(workspaceId?: string | null) {
           description:
             tasksDeleted > 0
               ? `Reset complete — deleted ${tasksDeleted} task(s); next poll will re-import.`
-              : "Reset complete — next poll will re-import matches.",
+              : t("github:resetCompleteNextPollWillRe"),
           variant: "success",
         });
       } catch {
-        toast({ description: "Failed to reset issue watch", variant: "error" });
+        toast({ description: t("github:failedToResetIssueWatch"), variant: "error" });
         throw new Error("reset failed");
       }
     },
@@ -408,13 +410,13 @@ function ReviewWatchSection({ workspaceId }: { workspaceId: string }) {
         workspaceId={workspaceId}
         onCreate={async (req) => {
           await create(req);
-          toast({ description: "Review watch created", variant: "success" });
+          toast({ description: t("github:reviewWatchCreated"), variant: "success" });
         }}
         onUpdate={async (id, req) => {
           const watch = watches.find((item) => item.id === id);
           if (!watch) throw new Error("review watch not found");
           await update(id, watch.workspace_id, req);
-          toast({ description: "Review watch updated", variant: "success" });
+          toast({ description: t("github:reviewWatchUpdated"), variant: "success" });
         }}
       />
       {resetCtrl.resetting && (
@@ -502,13 +504,13 @@ function IssueWatchSection({ workspaceId }: { workspaceId: string }) {
         workspaceId={workspaceId}
         onCreate={async (req) => {
           await issueActions.create(req);
-          toast({ description: "Issue watch created", variant: "success" });
+          toast({ description: t("github:issueWatchCreated"), variant: "success" });
         }}
         onUpdate={async (id, req) => {
           const watch = issueActions.watches.find((item) => item.id === id);
           if (!watch) throw new Error("issue watch not found");
           await issueActions.update(id, watch.workspace_id, req);
-          toast({ description: "Issue watch updated", variant: "success" });
+          toast({ description: t("github:issueWatchUpdated"), variant: "success" });
         }}
       />
       {resetCtrl.resetting && (

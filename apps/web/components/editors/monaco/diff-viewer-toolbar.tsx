@@ -76,7 +76,9 @@ function DiffViewerToggleButtons({
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{foldUnchanged ? t("editors:showAllLines") : t("editors:foldUnchangedLines")}</TooltipContent>
+        <TooltipContent>
+          {foldUnchanged ? t("editors:showAllLines") : t("editors:foldUnchangedLines")}
+        </TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -107,7 +109,9 @@ function DiffViewerToggleButtons({
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          {globalViewMode === "split" ? t("editors:switchToUnifiedView") : t("editors:switchToSplitView")}
+          {globalViewMode === "split"
+            ? t("editors:switchToUnifiedView")
+            : t("editors:switchToSplitView")}
         </TooltipContent>
       </Tooltip>
     </>

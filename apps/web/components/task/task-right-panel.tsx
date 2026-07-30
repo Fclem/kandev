@@ -26,6 +26,7 @@ import {
 } from "@/components/task/task-right-panel-tab-contents";
 import type { RepositoryScript } from "@/lib/types/http";
 import type { Terminal } from "@/hooks/domains/session/use-terminals";
+import { useTranslation } from "react-i18next";
 
 type TaskRightPanelProps = {
   topPanel: ReactNode;
@@ -140,6 +141,7 @@ function useRightPanelTabs({
   sessionId: string | null;
   setRightPanelActiveTab: (sessionId: string, tabId: string) => void;
 }) {
+  const { t } = useTranslation();
   const onContextMenu = useCallback(
     (event: MouseEvent, terminal: Terminal) => {
       event.preventDefault();
@@ -163,7 +165,9 @@ function useRightPanelTabs({
   );
 
   const tabs: SessionTab[] = useMemo(() => {
-    const commandsTabs: SessionTab[] = hasScripts ? [{ id: "commands", label: "Commands" }] : [];
+    const commandsTabs: SessionTab[] = hasScripts
+      ? [{ id: "commands", label: t("common:commands") }]
+      : [];
     return [
       ...commandsTabs,
       ...buildTerminalTabs({
@@ -467,6 +471,7 @@ const TaskRightPanel = memo(function TaskRightPanel({
   initialScripts = [],
   initialTerminals,
 }: TaskRightPanelProps) {
+  const { t } = useTranslation();
   const {
     terminals,
     parkedTerminals,
@@ -516,7 +521,7 @@ const TaskRightPanel = memo(function TaskRightPanel({
       />
       <CloseTerminalConfirmDialog
         open={pendingClose !== null}
-        terminalName={pendingClose?.label || "Terminal"}
+        terminalName={pendingClose?.label || t("task:terminalFallback")}
         onOpenChange={(open) => {
           if (!open) setPendingClose(null);
         }}

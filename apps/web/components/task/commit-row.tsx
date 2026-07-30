@@ -220,7 +220,9 @@ export function CommitRow({
       >
         <span
           className="shrink-0"
-          title={commit.pushed === true ? t("task:pushedToRemote") : t("task:localCommitNotYetPushed")}
+          title={
+            commit.pushed === true ? t("task:pushedToRemote") : t("task:localCommitNotYetPushed")
+          }
         >
           <span className="sr-only">
             {commit.pushed === true ? t("task:pushedCommit") : t("task:unpushedCommit")}

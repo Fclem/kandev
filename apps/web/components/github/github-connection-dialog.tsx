@@ -114,7 +114,9 @@ export function GitHubConnectionDialog({
           className="h-[calc(100dvh-16px-env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-16px-env(safe-area-inset-bottom,0px))] overflow-hidden"
         >
           <DrawerHeader className="shrink-0 border-b text-left">
-            <DrawerTitle>{connected ? t("github:changeGithubConnection") : t("github:connectGithub")}</DrawerTitle>
+            <DrawerTitle>
+              {connected ? t("github:changeGithubConnection") : t("github:connectGithub")}
+            </DrawerTitle>
             <DrawerDescription>{description}</DrawerDescription>
           </DrawerHeader>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-4">
@@ -133,7 +135,9 @@ export function GitHubConnectionDialog({
         className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-2xl"
       >
         <DialogHeader className="shrink-0">
-          <DialogTitle>{connected ? t("github:changeGithubConnection") : t("github:connectGithub")}</DialogTitle>
+          <DialogTitle>
+            {connected ? t("github:changeGithubConnection") : t("github:connectGithub")}
+          </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">{body}</div>

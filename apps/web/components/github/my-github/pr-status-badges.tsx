@@ -47,7 +47,9 @@ function ChecksChip({ status }: { status: GitHubPRStatus }) {
     return <StatusChip Icon={IconCheck} label={label || t("github:checksPassed")} tone="success" />;
   if (state === "failure")
     return <StatusChip Icon={IconX} label={label || t("github:checksFailed")} tone="failure" />;
-  return <StatusChip Icon={IconClockHour4} label={label || t("github:checksRunning")} tone="pending" />;
+  return (
+    <StatusChip Icon={IconClockHour4} label={label || t("github:checksRunning")} tone="pending" />
+  );
 }
 
 function ReviewChip({
@@ -58,9 +60,12 @@ function ReviewChip({
   pending: number;
 }) {
   const { t } = useTranslation();
-  if (state === "approved") return <StatusChip Icon={IconCheck} label={t("github:approved")} tone="success" />;
+  if (state === "approved")
+    return <StatusChip Icon={IconCheck} label={t("github:approved")} tone="success" />;
   if (state === "changes_requested")
-    return <StatusChip Icon={IconAlertTriangle} label={t("github:changesRequested")} tone="failure" />;
+    return (
+      <StatusChip Icon={IconAlertTriangle} label={t("github:changesRequested")} tone="failure" />
+    );
   if (pending > 0)
     return (
       <StatusChip
@@ -81,7 +86,8 @@ function MergeableChip({
   prState: GitHubPR["state"];
 }) {
   const { t } = useTranslation();
-  if (prState === "merged") return <StatusChip Icon={IconGitMerge} label={t("github:merged2")} tone="success" />;
+  if (prState === "merged")
+    return <StatusChip Icon={IconGitMerge} label={t("github:merged2")} tone="success" />;
   if (state === "draft")
     return <StatusChip Icon={IconGitPullRequestDraft} label={t("github:draft")} tone="neutral" />;
   if (state === "dirty")

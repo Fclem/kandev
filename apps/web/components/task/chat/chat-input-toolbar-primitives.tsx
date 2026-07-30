@@ -149,7 +149,9 @@ export function SubmitButton({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{isCancelling ? t("task:cancelling") : t("task:cancelAgent")}</TooltipContent>
+          <TooltipContent>
+            {isCancelling ? t("task:cancelling") : t("task:cancelAgent")}
+          </TooltipContent>
         </Tooltip>
       )}
       {showSendButton && (

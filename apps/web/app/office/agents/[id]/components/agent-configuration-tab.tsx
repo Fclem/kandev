@@ -118,7 +118,7 @@ export function AgentConfigurationTab({ agent }: AgentConfigurationTabProps) {
         name={form.name}
         role={form.role}
         roles={roles}
-        reportsToName={reportsToAgent?.name ?? "None"}
+        reportsToName={reportsToAgent?.name ?? t("office:none")}
         onNameChange={(v) => patch({ name: v })}
         onRoleChange={(v) => patch({ role: v })}
       />

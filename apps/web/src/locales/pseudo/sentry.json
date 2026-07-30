@@ -21,6 +21,7 @@
   "edit": "<0></0> Ēďĩţ",
   "editSentryWatcher": "Ēďĩţ Śēńţŕŷ Ŵàţćĥēŕ",
   "enable": "Ēńàƀĺē",
+  "enterAnInstanceNameAndAuth": "Ēńţēŕ àń ĩńśţàńćē ńàḿē àńď àũţĥ ţōķēń ƀēƒōŕē śàvĩńĝ.",
   "enterAPositiveIntegerOrLeave": "Ēńţēŕ à ƥōśĩţĩvē ĩńţēĝēŕ ōŕ ĺēàvē ƀĺàńķ.",
   "environment": "Ēńvĩŕōńḿēńţ",
   "eventRead": "ēvēńţ:ŕēàď",
@@ -82,6 +83,7 @@
   "query": "Qũēŕŷ",
   "requiredTokenScopes": "Ŕē qũĩŕēď ţōķēń śćōƥēś",
   "reset": "Ŕēśēţ",
+  "resetCompleteNextPollWillRe": "Ŕēśēţ ćōḿƥĺēţē — ńēxţ ƥōĺĺ ŵĩĺĺ ŕē-ĩḿƥōŕţ ḿàţćĥēś.",
   "resetWatch": "Ŕēśēţ ŵàţćĥ",
   "savedLeaveBlankToKeepThe": "(śàvēď — ĺēàvē ƀĺàńķ ţō ķēēƥ ţĥē ćũŕŕēńţ vàĺũē)",
   "search": "Śēàŕćĥ",
@@ -92,6 +94,8 @@
   "selectProject": "Śēĺēćţ ƥŕōĵēćţ",
   "selectWorkspace": "Śēĺēćţ ŵōŕķśƥàćē",
   "sentryInstance": "Śēńţŕŷ ĩńśţàńćē",
+  "sentryInstanceRemoved": "Śēńţŕŷ ĩńśţàńćē ŕēḿōvēď",
+  "sentryInstanceSaved": "Śēńţŕŷ ĩńśţàńćē śàvēď",
   "sentryIntegration": "Śēńţŕŷ ĩńţēĝŕàţĩōń",
   "sentryWatcher": "Śēńţŕŷ ŵàţćĥēŕ",
   "sentryWatchers": "Śēńţŕŷ ŵàţćĥēŕś",
@@ -108,6 +112,10 @@
   "theSentryProjectToPoll": "Ţĥē Śēńţŕŷ ƥŕōĵēćţ ţō ƥōĺĺ.",
   "users": "ũśēŕś {{userCount}}",
   "useStepDefault": "(ũśē śţēƥ ďēƒàũĺţ)",
+  "watcherCreated": "Ŵàţćĥēŕ ćŕēàţēď",
+  "watcherDeleted": "Ŵàţćĥēŕ ďēĺēţēď",
+  "watcherUpdated": "Ŵàţćĥēŕ ũƥďàţēď",
   "whichSentryInstanceThisWatcherPolls": "Ŵĥĩćĥ Śēńţŕŷ ĩńśţàńćē ţĥĩś ŵàţćĥēŕ ƥōĺĺś. Ĩḿḿũţàƀĺē àƒţēŕ ćŕēàţĩōń.",
-  "workflowStep": "Ŵōŕķƒĺōŵ Śţēƥ"
+  "workflowStep": "Ŵōŕķƒĺōŵ Śţēƥ",
+  "yourSentryAuthTokenIsInvalid": "Ŷōũŕ Śēńţŕŷ àũţĥ ţōķēń ĩś ĩńvàĺĩď ōŕ ĥàś ƀēēń ŕēvōķēď. Ŕēćōńńēćţ ţō vĩēŵ ţĥĩś ĩśśũē."
 }

@@ -188,7 +188,11 @@ function RoutingFields({
 
   return (
     <>
-      <InheritRow label={t("office:overrideWorkspaceTier")} checked={overrideTier} onChange={setTierSource} />
+      <InheritRow
+        label={t("office:overrideWorkspaceTier")}
+        checked={overrideTier}
+        onChange={setTierSource}
+      />
       {overrideTier ? (
         <TierToggleGroup
           value={overrides.tier || ""}

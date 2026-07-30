@@ -23,6 +23,7 @@ function useResolveConflicts(pr: TaskPR): {
   onResolveConflicts: (() => void) | null;
   conflictQueued: boolean;
 } {
+  const { t } = useTranslation();
   const sessionId = useAppStore((s) => s.tasks.activeSessionId);
   const addComment = useCommentsStore((s) => s.addComment);
   const { toast } = useToast();
@@ -60,7 +61,7 @@ function useResolveConflicts(pr: TaskPR): {
       content,
     };
     addComment(comment);
-    toast({ description: "Added to chat context" });
+    toast({ description: t("github:addedToChatContext") });
   }, [sessionId, conflictQueued, prNumber, headBranch, baseBranch, addComment, toast]);
 
   return { onResolveConflicts: sessionId ? handler : null, conflictQueued };

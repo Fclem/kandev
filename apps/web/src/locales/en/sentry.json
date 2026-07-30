@@ -21,6 +21,7 @@
   "edit": "<0></0> Edit",
   "editSentryWatcher": "Edit Sentry Watcher",
   "enable": "Enable",
+  "enterAnInstanceNameAndAuth": "Enter an instance name and auth token before saving.",
   "enterAPositiveIntegerOrLeave": "Enter a positive integer or leave blank.",
   "environment": "Environment",
   "eventRead": "event:read",
@@ -82,6 +83,7 @@
   "query": "Query",
   "requiredTokenScopes": "Required token scopes",
   "reset": "Reset",
+  "resetCompleteNextPollWillRe": "Reset complete — next poll will re-import matches.",
   "resetWatch": "Reset watch",
   "savedLeaveBlankToKeepThe": "(saved — leave blank to keep the current value)",
   "search": "Search",
@@ -92,6 +94,8 @@
   "selectProject": "Select project",
   "selectWorkspace": "Select workspace",
   "sentryInstance": "Sentry instance",
+  "sentryInstanceRemoved": "Sentry instance removed",
+  "sentryInstanceSaved": "Sentry instance saved",
   "sentryIntegration": "Sentry integration",
   "sentryWatcher": "Sentry watcher",
   "sentryWatchers": "Sentry watchers",
@@ -108,6 +112,10 @@
   "theSentryProjectToPoll": "The Sentry project to poll.",
   "users": "users {{userCount}}",
   "useStepDefault": "(use step default)",
+  "watcherCreated": "Watcher created",
+  "watcherDeleted": "Watcher deleted",
+  "watcherUpdated": "Watcher updated",
   "whichSentryInstanceThisWatcherPolls": "Which Sentry instance this watcher polls. Immutable after creation.",
-  "workflowStep": "Workflow Step"
+  "workflowStep": "Workflow Step",
+  "yourSentryAuthTokenIsInvalid": "Your Sentry auth token is invalid or has been revoked. Reconnect to view this issue."
 }

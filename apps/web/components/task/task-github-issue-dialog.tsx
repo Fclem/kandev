@@ -190,7 +190,7 @@ export function TaskGitHubIssueDialog({
     setError(null);
     try {
       await linkTaskIssue(task.id, issuePayload(input, inferredRepo));
-      toast({ description: "GitHub issue linked", variant: "success" });
+      toast({ description: t("task:githubIssueLinked"), variant: "success" });
       onOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to link GitHub issue.");
@@ -204,7 +204,7 @@ export function TaskGitHubIssueDialog({
     setError(null);
     try {
       await unlinkTaskIssue(task.id);
-      toast({ description: "GitHub issue unlinked", variant: "success" });
+      toast({ description: t("task:githubIssueUnlinked"), variant: "success" });
       onOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to unlink GitHub issue.");
@@ -217,7 +217,9 @@ export function TaskGitHubIssueDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{currentLabel ? t("task:changeGithubIssue") : t("task:linkGithubIssue")}</DialogTitle>
+          <DialogTitle>
+            {currentLabel ? t("task:changeGithubIssue") : t("task:linkGithubIssue")}
+          </DialogTitle>
           <DialogDescription>
             {inferredRepo
               ? `Use a full issue URL or number for ${inferredRepo.owner}/${inferredRepo.repo}.`

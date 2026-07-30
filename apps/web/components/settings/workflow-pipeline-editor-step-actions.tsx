@@ -126,7 +126,7 @@ export function TurnStartSelect({
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
         <Label className="text-xs font-medium">{t("settings:onTurnStart")}</Label>
-        <HelpTip text="Runs when a user sends a message. Use for review cycles (e.g., move back to In Progress on feedback)." />
+        <HelpTip text={t("settings:runsWhenAUserSendsA")} />
       </div>
       <Select
         value={transitionType}
@@ -271,7 +271,7 @@ export function TurnCompleteSelect({
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
         <Label className="text-xs font-medium">{t("settings:onTurnComplete")}</Label>
-        <HelpTip text="Runs after the agent finishes a turn. Use to auto-advance tasks through the pipeline." />
+        <HelpTip text={t("settings:runsAfterTheAgentFinishesA")} />
       </div>
       <Select
         value={transitionType}
@@ -318,7 +318,7 @@ export function TurnCompleteSelect({
           <Label htmlFor={`${step.id}-disable-plan`} className="text-sm">
             {t("settings:disablePlanModeOnComplete")}
           </Label>
-          <HelpTip text="Turn off plan mode after the agent finishes a turn, even when the task remains in this step." />
+          <HelpTip text={t("settings:turnOffPlanModeAfterThe")} />
         </div>
       )}
       {transitionType !== "none" && (
@@ -361,7 +361,7 @@ export function ChildrenCompletedSelect({
         <HelpTip
           testId={`${step.id}-children-completed-help`}
           ariaLabel={t("settings:howChildTaskCompletionTransitionsWork")}
-          text="Use this on a parent task step. When every active direct child task is COMPLETED, FAILED, or CANCELLED, Kandev runs this transition once. Archived and ephemeral child tasks are ignored. Grandchildren do not count here, and nothing runs if the parent has no child tasks."
+          text={t("settings:useThisOnAParentTask")}
         />
       </div>
       <Select
@@ -478,7 +478,7 @@ export function ExplicitCompletionToggle({
       <Label htmlFor={`${step.id}-require-signal`} className="text-sm">
         {t("settings:waitForAgentCompletionSignal")}
       </Label>
-      <HelpTip text="Only auto-advance once the agent calls step_complete_kandev. Otherwise turn-end is treated as completion." />
+      <HelpTip text={t("settings:onlyAutoAdvanceOnceTheAgent")} />
     </div>
   );
 }

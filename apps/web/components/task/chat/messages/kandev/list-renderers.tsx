@@ -27,6 +27,7 @@ import { Trans, useTranslation } from "react-i18next";
 
 /** Shared fallback label for records that have no name. */
 const UNNAMED = "task:unnamed";
+const UNTITLED = "task:untitledPlaceholder";
 
 // NamedListRow is the canonical row layout for entries with name + id +
 // optional description (workspaces, workflows, executor profiles). The id
@@ -248,11 +249,14 @@ export const ListTasksRenderer: KandevRenderer = ({ args, result, status }) => {
         {items.length === 0 ? (
           <EmptyListNote noun="tasks" />
         ) : (
-          items.map((t, i) => (
-            <div key={t.id ?? t.title ?? `task-${i}`} className="flex items-baseline gap-2 text-xs">
-              <TaskStateBadge state={t.state} />
-              <span>{t.title ?? "(untitled)"}</span>
-              <IdChip id={t.id} />
+          items.map((task, i) => (
+            <div
+              key={task.id ?? task.title ?? `task-${i}`}
+              className="flex items-baseline gap-2 text-xs"
+            >
+              <TaskStateBadge state={task.state} />
+              <span>{task.title ?? t(UNTITLED)}</span>
+              <IdChip id={task.id} />
             </div>
           ))
         )}
@@ -279,18 +283,19 @@ const RELATED_GROUPS: Array<{ key: string; label: string }> = [
 ];
 
 function RelatedGroup({ label, items }: { label: string; items: RelatedTaskItem[] }) {
+  const { t } = useTranslation();
   if (items.length === 0) return null;
   return (
     <div className="space-y-1">
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground/60">{label}</div>
-      {items.map((t, i) => (
+      {items.map((item, i) => (
         <div
-          key={t.id ?? t.title ?? `related-${i}`}
+          key={item.id ?? item.title ?? `related-${i}`}
           className="flex items-baseline gap-2 text-xs pl-2"
         >
-          <TaskStateBadge state={t.state} />
-          <span>{t.title ?? "(untitled)"}</span>
-          <IdChip id={t.id} />
+          <TaskStateBadge state={item.state} />
+          <span>{item.title ?? t(UNTITLED)}</span>
+          <IdChip id={item.id} />
         </div>
       ))}
     </div>

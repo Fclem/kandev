@@ -13,6 +13,7 @@ import type { LocalRepository, Repository } from "@/lib/types/http";
 import type { ExecutionMode, TriggerType } from "@/lib/types/automation";
 import { RequiredFieldLabel } from "./required-field-label";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 // RepositorySelection mirrors the task-create dialog's two-tier model: a
 // registered workspace repository (keyed by id) OR a filesystem-discovered
@@ -80,7 +81,7 @@ function buildRepositoryItems(
       .map((p) => p.replace(/\/+$/, "")),
   );
   const items: Array<{ id: string; label: string }> = [
-    { id: REPO_NONE_OPTION_ID, label: "None — no repository" },
+    { id: REPO_NONE_OPTION_ID, label: t("automations:noneNoRepository") },
   ];
   for (const r of workspaceRepos) {
     items.push({ id: r.id, label: r.name || `${r.provider_owner}/${r.provider_name}` });
@@ -317,7 +318,9 @@ function WorkflowFields({
         value={workflowStepId}
         isDirty={workflowStepDirty}
         onChange={onStepChange}
-        placeholder={hasWorkflow ? t("automations:selectStep") : t("automations:pickAWorkflowFirst")}
+        placeholder={
+          hasWorkflow ? t("automations:selectStep") : t("automations:pickAWorkflowFirst")
+        }
         items={steps.map((s) => ({ id: s.id, label: s.name }))}
         disabled={!hasWorkflow}
         helpText={getWorkflowStepHelpText(workflowId, workflowStepId)}

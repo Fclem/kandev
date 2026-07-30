@@ -60,6 +60,7 @@ function useWorkflowSteps(
   initialSteps: WorkflowStep[] | undefined,
   toast: ReturnType<typeof useToast>["toast"],
 ) {
+  const { t } = useTranslation();
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>(initialSteps ?? []);
   const [savedWorkflowSteps, setSavedWorkflowSteps] = useState<WorkflowStep[]>(initialSteps ?? []);
   const [workflowLoading, setWorkflowLoading] = useState(false);
@@ -76,7 +77,7 @@ function useWorkflowSteps(
           setSavedWorkflowSteps(res.steps ?? []);
         }
       } catch {
-        if (!cancelled) toast({ title: "Failed to load workflow steps", variant: "error" });
+        if (!cancelled) toast({ title: t("settings:failedToLoadWorkflowSteps"), variant: "error" });
       } finally {
         if (!cancelled) setWorkflowLoading(false);
       }
@@ -271,7 +272,7 @@ function WorkflowCardBody({
         <div className="w-full space-y-1.5 sm:w-[240px] sm:shrink-0">
           <Label className="flex items-center gap-1">
             <span>{t("settings:agentProfile")}</span>
-            <HelpTip text="Default agent profile for tasks in this workflow. When set, the agent selector is locked in the task creation dialog." />
+            <HelpTip text={t("settings:defaultAgentProfileForTasksIn")} />
           </Label>
           <Select
             value={workflow.agent_profile_id || "none"}

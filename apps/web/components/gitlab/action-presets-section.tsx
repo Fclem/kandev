@@ -14,11 +14,12 @@ import { useToast } from "@/components/toast-provider";
 import { useGitLabActionPresets } from "@/hooks/domains/gitlab/use-gitlab-action-presets";
 import type { GitLabActionPreset, GitLabActionPresets } from "@/lib/types/gitlab";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 function newPreset(): GitLabActionPreset {
   return {
     id: `preset_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-    label: "New action",
+    label: t("gitlab:newAction"),
     hint: "",
     icon: "sparkle",
     prompt_template: "",
@@ -122,10 +123,10 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
     try {
       const result = await update({ mr: drafts.mr, issue: drafts.issue });
       if (result) drafts.setBaseline({ mr: result.mr, issue: result.issue });
-      toast({ description: "GitLab quick actions saved", variant: "success" });
+      toast({ description: t("gitlab:gitlabQuickActionsSaved"), variant: "success" });
     } catch (error) {
       toast({
-        description: error instanceof Error ? error.message : "Failed to save quick actions",
+        description: error instanceof Error ? error.message : t("gitlab:failedToSaveQuickActions"),
         variant: "error",
       });
       throw error;
@@ -141,7 +142,7 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
     revision: JSON.stringify([drafts.mr, drafts.issue]),
     isDirty: drafts.dirty,
     canSave: !loading && valid,
-    invalidReason: valid ? undefined : "Every quick action needs a label and prompt.",
+    invalidReason: valid ? undefined : t("gitlab:everyQuickActionNeedsALabel"),
     save,
     discard,
   });
@@ -153,10 +154,10 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
         drafts.setIssue(result.issue);
         drafts.setBaseline({ mr: result.mr, issue: result.issue });
       }
-      toast({ description: "GitLab quick actions reset", variant: "success" });
+      toast({ description: t("gitlab:gitlabQuickActionsReset"), variant: "success" });
     } catch (error) {
       toast({
-        description: error instanceof Error ? error.message : "Failed to reset quick actions",
+        description: error instanceof Error ? error.message : t("gitlab:failedToResetQuickActions"),
         variant: "error",
       });
     }
@@ -193,7 +194,11 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
               </TabsTrigger>
             </TabsList>
             <TabsContent value="mr">
-              <PresetList presets={drafts.mr} onChange={drafts.setMR} addLabel={t("gitlab:addMrAction")} />
+              <PresetList
+                presets={drafts.mr}
+                onChange={drafts.setMR}
+                addLabel={t("gitlab:addMrAction")}
+              />
             </TabsContent>
             <TabsContent value="issue">
               <PresetList

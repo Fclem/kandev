@@ -1,5 +1,6 @@
 {
   "addDetailsAboutThisChange": "Àďď ďēţàĩĺś àƀōũţ ţĥĩś ćĥàńĝē...",
+  "anErrorOccurred": "Àń ēŕŕōŕ ōććũŕŕēď",
   "authenticated": "Àũţĥēńţĩćàţēď <1></1>",
   "authenticated2": "Àũţĥēńţĩćàţēď",
   "authenticationFailed": "Àũţĥēńţĩćàţĩōń ƒàĩĺēď: {{value1}}<2></2>",
@@ -8,6 +9,7 @@
   "checked": "· ćĥēćķēď {{value1}}",
   "commit": "<0></0> Ćōḿḿĩţ",
   "committing": "<0></0> Ćōḿḿĩţţĩńĝ...",
+  "configured": "Ćōńƒĩĝũŕēď",
   "copyConfig": "<0></0> Ćōƥŷ ćōńƒĩĝ",
   "copyConfig2": "Ćōƥŷ ćōńƒĩĝ",
   "copyConfigToAnotherWorkspace": "Ćōƥŷ ćōńƒĩĝ ţō àńōţĥēŕ ŵōŕķśƥàćē",

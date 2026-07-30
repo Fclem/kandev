@@ -470,9 +470,7 @@ function PRCommentsRow({ pr }: { pr: TaskPR }) {
   return (
     <div data-testid="pr-comments-row" className="flex items-center gap-1.5 px-1 py-1 text-xs">
       <IconMessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
-      <span>
-        {t("github:unresolvedComments", { count: pr.unresolved_review_threads })}
-      </span>
+      <span>{t("github:unresolvedComments", { count: pr.unresolved_review_threads })}</span>
     </div>
   );
 }
@@ -596,6 +594,7 @@ export function PRCIPopover({
 
 // --- Add-to-context wiring (mirrors pr-detail-panel.tsx for failed checks) ---
 function useAddCheckToContext(pr: TaskPR): ((message: string) => void) | null {
+  const { t } = useTranslation();
   const sessionId = useAppStore((s) => s.tasks.activeSessionId);
   const addComment = useCommentsStore((s) => s.addComment);
   const { toast } = useToast();
@@ -619,7 +618,7 @@ function useAddCheckToContext(pr: TaskPR): ((message: string) => void) | null {
         content: message,
       };
       addComment(comment);
-      toast({ description: "Added to chat context" });
+      toast({ description: t("github:addedToChatContext") });
     },
     [sessionId, prNumber, addComment, toast],
   );

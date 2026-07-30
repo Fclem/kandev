@@ -382,6 +382,7 @@ function useCreatePRHandler(
   toast: ReturnType<typeof useToast>["toast"],
   defaultTerminology: ReturnType<typeof getChangeRequestTerminology>,
 ) {
+  const { t } = useTranslation();
   const activeTaskId = useAppStore((state) => state.tasks.activeTaskId);
   const setPendingPrUrlForTask = useAppStore((state) => state.setPendingPrUrlForTask);
   return useCallback(async () => {
@@ -421,7 +422,7 @@ function useCreatePRHandler(
     } catch (e) {
       toast({
         title: `Create ${defaultTerminology.shortName} failed`,
-        description: e instanceof Error ? e.message : "An error occurred",
+        description: e instanceof Error ? e.message : t("integrations:anErrorOccurred"),
         variant: "error",
       });
     }

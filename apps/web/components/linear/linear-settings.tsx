@@ -125,7 +125,9 @@ function TeamSelector({ form, baseline, loading, update, teams, loadingTeams }: 
           className="w-full"
           data-settings-dirty={form.defaultTeamKey !== baseline.defaultTeamKey}
         >
-          <SelectValue placeholder={loadingTeams ? t("linear:loadingTeams") : t("linear:chooseATeam")} />
+          <SelectValue
+            placeholder={loadingTeams ? t("linear:loadingTeams") : t("linear:chooseATeam")}
+          />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="__none__">{t("linear:noDefault")}</SelectItem>
@@ -219,6 +221,7 @@ function useSettingsActions({
   setForm,
   setTestResult,
 }: SettingsActionsArgs) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -260,7 +263,7 @@ function useSettingsActions({
         JSON.stringify(current) === JSON.stringify(submitted) ? configToForm(saved) : current,
       );
       setTestResult(null);
-      toast({ description: "Linear configuration saved", variant: "success" });
+      toast({ description: t("linear:linearConfigurationSaved"), variant: "success" });
     } catch (err) {
       toast({ description: `Save failed: ${String(err)}`, variant: "error" });
       throw err;
@@ -277,7 +280,7 @@ function useSettingsActions({
       setBaselineConfig(null);
       setForm(emptyForm);
       setTestResult(null);
-      toast({ description: "Linear configuration removed", variant: "success" });
+      toast({ description: t("linear:linearConfigurationRemoved"), variant: "success" });
     } catch (err) {
       toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
     }
@@ -412,7 +415,7 @@ export function LinearConnectionSection({ workspaceId }: { workspaceId: string }
     revision,
     isDirty: dirty,
     canSave: !disableSave,
-    invalidReason: missingSecret ? "An API key is required." : undefined,
+    invalidReason: missingSecret ? t("linear:anApiKeyIsRequired") : undefined,
     save: s.handleSave,
     discard: s.discard,
   });

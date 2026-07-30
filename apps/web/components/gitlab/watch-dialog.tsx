@@ -172,8 +172,8 @@ function FilterFields({ kind, form, setForm }: FormFieldsProps) {
           }
           placeholder={t("gitlab:directRequests")}
           items={[
-            { id: "user", label: "Direct requests" },
-            { id: "user_and_teams", label: "Direct and group-compatible requests" },
+            { id: "user", label: t("gitlab:directRequests") },
+            { id: "user_and_teams", label: t("gitlab:directAndGroupCompatibleRequests") },
           ]}
         />
       )}
@@ -314,9 +314,9 @@ function ScheduleFields({ kind, form, setForm }: FormFieldsProps) {
         }
         placeholder={t("gitlab:auto")}
         items={[
-          { id: "auto", label: "Auto; keep engaged tasks" },
-          { id: "always", label: "Always delete" },
-          { id: "never", label: "Never delete" },
+          { id: "auto", label: t("gitlab:autoKeepEngagedTasks") },
+          { id: "always", label: t("gitlab:alwaysDelete") },
+          { id: "never", label: t("gitlab:neverDelete") },
         ]}
       />
     </div>

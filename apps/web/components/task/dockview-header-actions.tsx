@@ -167,7 +167,7 @@ export function LeftHeaderActions(props: IDockviewHeaderActionsProps) {
     try {
       const result = await createUserShell(environmentId, {
         command: devScript,
-        label: "Dev Server",
+        label: t("task:devServer"),
       });
       addTerminalPanel(result.terminalId, group.id, environmentId, undefined, "Dev Server");
     } catch (error) {

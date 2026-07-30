@@ -53,7 +53,7 @@ export function ShareDialog({ open, onOpenChange, taskId, sessionId }: Props) {
     } catch (e) {
       setState({
         kind: "error",
-        message: e instanceof Error ? e.message : "Failed to load preview.",
+        message: e instanceof Error ? e.message : t("task:failedToLoadPreview"),
       });
     }
   }, [taskId, sessionId]);
@@ -75,7 +75,7 @@ export function ShareDialog({ open, onOpenChange, taskId, sessionId }: Props) {
       } catch (e) {
         setState({
           kind: "error",
-          message: e instanceof Error ? e.message : "Failed to publish share.",
+          message: e instanceof Error ? e.message : t("task:failedToPublishShare"),
         });
       }
     },

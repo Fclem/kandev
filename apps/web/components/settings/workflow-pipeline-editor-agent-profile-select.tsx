@@ -57,7 +57,7 @@ export function StepAgentProfileSelect({
           ))}
         </SelectContent>
       </Select>
-      <HelpTip text="Override the agent profile for this step. A different profile creates a new session with fresh context when entering this step." />
+      <HelpTip text={t("settings:overrideTheAgentProfileForThis")} />
     </div>
   );
 }

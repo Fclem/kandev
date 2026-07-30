@@ -235,7 +235,7 @@ const MobileTerminalsList = memo(function MobileTerminalsList({
       </div>
       <CloseTerminalConfirmDialog
         open={pendingClose !== null}
-        terminalName={pendingClose?.label || "Terminal"}
+        terminalName={pendingClose?.label || t("task:terminalFallback")}
         onOpenChange={(open) => {
           if (!open) setPendingClose(null);
         }}
@@ -246,6 +246,7 @@ const MobileTerminalsList = memo(function MobileTerminalsList({
 });
 
 function useActiveTerminalPillLabel(): { label: string; count: string | undefined } {
+  const { t } = useTranslation();
   const { terminals, terminalTabValue } = useMobileTerminalsContext();
   const activeIdx = terminals.findIndex((t) => t.id === terminalTabValue);
   const idx = activeIdx >= 0 ? activeIdx : 0;
@@ -253,7 +254,7 @@ function useActiveTerminalPillLabel(): { label: string; count: string | undefine
   const total = terminals.length;
   let count: string | undefined;
   if (total > 1) count = `${idx + 1}/${total}`;
-  return { label: active?.label ?? "Terminal", count };
+  return { label: active?.label ?? t("task:terminal"), count };
 }
 
 export const MobileTerminalsPicker = memo(function MobileTerminalsPicker({

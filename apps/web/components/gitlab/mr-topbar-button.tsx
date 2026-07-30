@@ -284,6 +284,7 @@ export const MRTopbarButton = memo(function MRTopbarButton({
   compact?: boolean;
   mobile?: boolean;
 }) {
+  const { t } = useTranslation();
   const [linkOpen, setLinkOpen] = useState(false);
   const activeTaskId = useAppStore((s) => s.tasks.activeTaskId);
   const workspaceId = useAppStore((s) => s.workspaces.activeId);
@@ -307,8 +308,9 @@ export const MRTopbarButton = memo(function MRTopbarButton({
       removeTaskMR(workspaceId, associationId);
     } catch (error) {
       toast({
-        title: "Failed to unlink merge request",
-        description: error instanceof Error ? error.message : "The merge request is still linked.",
+        title: t("gitlab:failedToUnlinkMergeRequest"),
+        description:
+          error instanceof Error ? error.message : t("gitlab:theMergeRequestIsStillLinked"),
         variant: "error",
       });
     }

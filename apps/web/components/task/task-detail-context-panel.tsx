@@ -120,14 +120,14 @@ function RelationsSection({ context }: { context: TaskContextDTO }) {
       <div className="text-xs font-medium text-muted-foreground">{t("task:relatedTasks")}</div>
       <div className="space-y-1 text-xs">
         {context.parent && <Relation label={t("task:parent")} task={context.parent} />}
-        {context.siblings.map((t) => (
-          <Relation key={t.id} label="Sibling" task={t} />
+        {context.siblings.map((sibling) => (
+          <Relation key={sibling.id} label={t("task:sibling")} task={sibling} />
         ))}
-        {context.blockers.map((t) => (
-          <Relation key={t.id} label="Blocked by" task={t} variant="warning" />
+        {context.blockers.map((blocker) => (
+          <Relation key={blocker.id} label={t("task:blockedBy")} task={blocker} variant="warning" />
         ))}
-        {context.blocked_by.map((t) => (
-          <Relation key={t.id} label="Blocks" task={t} />
+        {context.blocked_by.map((blocked) => (
+          <Relation key={blocked.id} label={t("task:blocks")} task={blocked} />
         ))}
       </div>
     </div>

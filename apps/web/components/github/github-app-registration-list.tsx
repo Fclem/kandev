@@ -58,7 +58,9 @@ export function GitHubAppRegistrationList({
             </span>
             <span className="block break-words text-xs font-normal text-muted-foreground">
               {registration.owner_login}/{registration.slug} ·{" "}
-              {registration.source === "managed" ? t("github:createdByKandev") : t("github:imported")}
+              {registration.source === "managed"
+                ? t("github:createdByKandev")
+                : t("github:imported")}
             </span>
             {registration.shared && (
               <span className="flex items-start gap-1.5 text-xs font-normal leading-5 text-amber-600 dark:text-amber-400">

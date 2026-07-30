@@ -129,12 +129,12 @@ export function PRMergeButton({
     try {
       await mergePR(workspaceId, taskPR.owner, taskPR.repo, taskPR.pr_number, method);
       setMerged(true);
-      toast({ description: "PR merged", variant: "success" });
+      toast({ description: t("github:prMerged"), variant: "success" });
       onMerged?.();
     } catch (err) {
       toast({
-        title: "Failed to merge",
-        description: err instanceof Error ? err.message : "An error occurred",
+        title: t("github:failedToMerge"),
+        description: err instanceof Error ? err.message : t("github:anErrorOccurred"),
         variant: "error",
       });
     } finally {

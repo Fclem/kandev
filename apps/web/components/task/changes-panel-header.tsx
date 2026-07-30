@@ -143,7 +143,7 @@ function PerRepoPullMenu({
       {repoNames.map((repo, idx) => {
         const s = statusByName.get(repo);
         const behind = s?.behind ?? 0;
-        const label = repoDisplayName?.(repo) || repo || "Repository";
+        const label = repoDisplayName?.(repo) || repo || t("task:repositoryFallback");
         return (
           <div key={repo || "__no_repo__"}>
             {idx > 0 && <DropdownMenuSeparator />}

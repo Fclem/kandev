@@ -210,7 +210,7 @@ function PauseResumeButton({
         size="sm"
         className="cursor-pointer"
         disabled={busy}
-        onClick={() => runAction(() => resumeTaskTree(taskId), "Task tree resumed")}
+        onClick={() => runAction(() => resumeTaskTree(taskId), t("task:taskTreeResumed"))}
       >
         <Trans i18nKey="task:resumeTree">
           <IconPlayerPlay className="h-3.5 w-3.5 mr-1" /> {t("task:resumeTree2")}
@@ -225,7 +225,7 @@ function PauseResumeButton({
       size="sm"
       className="cursor-pointer"
       disabled={busy || activeHold?.mode === "cancel"}
-      onClick={() => runAction(() => pauseTaskTree(taskId), "Task tree paused")}
+      onClick={() => runAction(() => pauseTaskTree(taskId), t("task:taskTreePaused"))}
     >
       <Trans i18nKey="task:pauseTree">
         <IconPlayerPause className="h-3.5 w-3.5 mr-1" /> {t("task:pauseTree2")}
@@ -257,7 +257,7 @@ function CancelRestoreButton({
         size="sm"
         className="cursor-pointer"
         disabled={busy}
-        onClick={() => runAction(() => restoreTaskTree(taskId), "Task tree restored")}
+        onClick={() => runAction(() => restoreTaskTree(taskId), t("task:taskTreeRestored"))}
       >
         <Trans i18nKey="task:restoreTree">
           <IconRestore className="h-3.5 w-3.5 mr-1" /> {t("task:restoreTree2")}
@@ -292,6 +292,7 @@ function TreeControls({
   activeHold: TreeHold | null;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const hasTree = (preview?.task_count ?? 1) > 1 || task.children.length > 0;
@@ -303,7 +304,7 @@ function TreeControls({
       toast.success(message);
       await onChanged();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Tree action failed");
+      toast.error(error instanceof Error ? error.message : t("task:treeActionFailed"));
     } finally {
       setBusy(false);
     }
@@ -342,7 +343,7 @@ function TreeControls({
         activeRunCount={preview?.active_run_count ?? 0}
         onConfirm={() => {
           setCancelOpen(false);
-          void runAction(() => cancelTaskTree(task.id), "Task tree cancelled");
+          void runAction(() => cancelTaskTree(task.id), t("task:taskTreeCancelled"));
         }}
       />
     </div>

@@ -40,11 +40,16 @@ export default defineConfig([
           mode: "jsx-only",
           "should-validate-template": false,
           // Brand/proper nouns and symbol-only strings are not translatable copy.
+          //
+          // NOTE: the plugin wraps each pattern as `^<pattern>$`
+          // (helper/generateFullMatchRegExp), so every entry must match the WHOLE
+          // literal. A prefix-only pattern like "^https?://" silently never
+          // matches — add an explicit `.*` instead.
           words: {
             exclude: [
               "^\\s*$",
               "^[^A-Za-z]*$",
-              "^(Kandev|GitHub|GitLab|Jira|Linear|Slack|Sentry|Azure DevOps)$",
+              "^(Kandev|GitHub|GitLab|Jira|Linear|Slack|Sentry|Azure DevOps|Docker|Codex|OpenCode|Claude|Copilot|Amp|Sprites\\.dev)$",
               "^(ACP|MCP|SSH|URL|ID|PR|CI|AI|API|JSON|YAML|LSP|TLS|SQL|JQL)$",
               // Units, version prefixes, and keyboard glyphs — not translatable
               // copy; these show up as fragments beside an interpolated value.
@@ -53,26 +58,40 @@ export default defineConfig([
               "^[·+\\-|/(),.:\\s]+$",
               // All-caps acronym badges (ENTRY, KAN, MTD, WIQL, JQL) label a
               // field or entity; they are identifiers, not prose.
-              "^[A-Z][A-Z0-9_]{1,9}$",
+              "^[A-Z][A-Z0-9_]+$",
               // Terminal control glyphs (^C, ^D) and repeat counts (3x) are
               // symbols, and "id · vN.N" is a version line, not prose.
               "^\\^[A-Z]$",
               "^·?\\s*v?$",
+              // URLs, home-relative paths, dotted placeholder tokens, and a
+              // single letter (an avatar initial) are values, not prose.
+              "(https?|file|ssh|git)://.*",
+              "^~?/[\\w./~-]*$",
+              "^[a-z][a-z0-9]*(\\.[a-z0-9<>]+)+$",
+              "^[A-Za-z]$",
+              // Tailwind class lists with variants/important modifiers.
+              ".*[!\\[].*",
+              // Example values shown in placeholders: emails, CSS functions,
+              // inline JSON, and ALLCAPS filename stand-ins.
+              "[\\w.+-]+@[\\w-]+\\.[\\w.-]+",
+              ".*(calc|env|url|var)\\(.*",
+              "\\{.*\\}",
+              "[A-Z][A-Z0-9_]*\\.[a-z]{2,4}",
               // Single lowercase/camel/kebab tokens are prop enum values,
               // classnames, and identifiers (variant="ghost", side="top",
               // value="work-items") — never display copy, which is capitalized
               // or multi-word.
               "^[a-z][a-zA-Z0-9]*$",
-              "^[a-z0-9]+(-[a-z0-9]+)+$",
+              "^[a-z0-9]+([-_][a-z0-9]+)+$",
               // CSS lengths, colors, Tailwind class lists, link rel/target
               // keywords, route paths, and `__sentinel__` option values.
-              "^\\d+(\\.\\d+)?(px|rem|em|%|vh|vw|ch|fr|s|ms)$",
+              "^\\d+(\\.\\d+)?(px|rem|em|%|vh|vw|ch|fr|s|ms|d|h|m|w|y)$",
               "^#[0-9a-fA-F]{3,8}$",
               "^_(blank|self|parent|top)$",
               "^(noopener|noreferrer)( (noopener|noreferrer))*$",
               "^__[a-z_]+__$",
-              "^/[\\w/\\-\\[\\]:.]*$",
-              "^(?:-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*\\s+)+-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*$",
+              "^/[\\w/\\-\\[\\]:.]*(\\?[\\w=&%.\\-]*)?$",
+              "(?:-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*\\s+)*-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*",
             ],
           },
           "jsx-attributes": {
@@ -91,6 +110,15 @@ export default defineConfig([
               "to",
               "htmlFor",
               "data-.*",
+              // Identifiers and prefixes the caller composes into ids/testids.
+              "id",
+              "k",
+              // Option/badge values are data the app compares and submits.
+              "value",
+              "cmd",
+              ".*[Ii]dPrefix$",
+              ".*[Ii]dSuffix$",
+              ".*SaveId$",
               "aria-labelledby",
               "aria-controls",
               "aria-describedby",
@@ -101,6 +129,9 @@ export default defineConfig([
             exclude: [
               "cn",
               "clsx",
+              // `skipAll("User skipped")` records a reason sent to the server
+              // alongside the skip; it is stored data, not rendered copy.
+              ".*\\.skipAll",
               "cva",
               "tv",
               "t",

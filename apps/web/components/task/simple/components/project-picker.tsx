@@ -22,7 +22,7 @@ export function ProjectPicker({ task }: ProjectPickerProps) {
   const options = useMemo<ComboboxOption[]>(() => {
     const noOpt: ComboboxOption = {
       value: NO_PROJECT,
-      label: "No project",
+      label: t("task:noProject"),
       keywords: ["none"],
       renderLabel: () => <span className="text-muted-foreground">{t("task:noProject")}</span>,
     };
@@ -72,7 +72,7 @@ export function ProjectPicker({ task }: ProjectPickerProps) {
       value={currentValue}
       onValueChange={handleSelect}
       placeholder={t("task:noProject")}
-      searchPlaceholder="Search projects..."
+      searchPlaceholder={t("task:searchProjects")}
       emptyMessage={t("task:noProjectsFound")}
       triggerClassName="h-7 w-full justify-end px-2"
       popoverAlign="end"

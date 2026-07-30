@@ -35,6 +35,7 @@ import {
 } from "./file-browser-hooks";
 import { resolveFileBrowserPaths } from "./file-browser-path";
 import { getVisiblePaths, moveNodesInTree, computeMoveTargets } from "./file-tree-utils";
+import { t } from "@/lib/i18n";
 
 type FileBrowserHeaderProps = {
   treeLoaded: boolean;
@@ -218,8 +219,8 @@ function executeMoveFiles(params: MoveFilesParams, toast: ReturnType<typeof useT
       if (results.some((ok) => !ok)) {
         treeState.setTree(snapshot);
         toast({
-          title: "Move failed",
-          description: "Some files could not be moved",
+          title: t("task:moveFailed"),
+          description: t("task:someFilesCouldNotBeMoved"),
           variant: "error",
         });
       }
@@ -227,8 +228,8 @@ function executeMoveFiles(params: MoveFilesParams, toast: ReturnType<typeof useT
     .catch(() => {
       treeState.setTree(snapshot);
       toast({
-        title: "Move failed",
-        description: "An error occurred while moving files",
+        title: t("task:moveFailed"),
+        description: t("task:anErrorOccurredWhileMovingFiles"),
         variant: "error",
       });
     });

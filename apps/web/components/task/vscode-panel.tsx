@@ -113,6 +113,7 @@ function buildBaseUrl(proxyPath: string): string {
 
 /** Manages auto-start, polling, and navigation for the VS Code panel. */
 function useVscodeLifecycle() {
+  const { t } = useTranslation();
   const activeSessionId = useAppStore((state) => state.tasks.activeSessionId);
   const { resolvedTheme } = useTheme();
   const [status, setStatus] = useState<VscodeStatus>({ status: "stopped" });
@@ -166,7 +167,7 @@ function useVscodeLifecycle() {
     if (!activeSessionId) return;
     startedRef.current = true;
     const theme = resolvedTheme === "light" ? "light" : "dark";
-    setStatus({ status: "installing", message: "Retrying..." });
+    setStatus({ status: "installing", message: t("task:retrying") });
     startVscode(activeSessionId, theme)
       .then(setStatus)
       .catch(() => {

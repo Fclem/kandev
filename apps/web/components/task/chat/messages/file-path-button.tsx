@@ -2,6 +2,7 @@
 
 import { memo, useCallback } from "react";
 import { cn, toRelativePath } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 type FilePathButtonProps = {
   filePath: string;
@@ -38,6 +39,7 @@ export const FilePathButton = memo(function FilePathButton({
   variant = "badge",
   className = "",
 }: FilePathButtonProps) {
+  const { t } = useTranslation();
   const relativePath = toRelativePath(filePath, worktreePath);
   const canOpen = isOpenableFilePath(filePath);
 
@@ -51,8 +53,7 @@ export const FilePathButton = memo(function FilePathButton({
 
   const baseStyles = "font-mono truncate cursor-pointer transition-colors block w-full text-left";
   const variantStyles = {
-    badge:
-      "text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 hover:underline",
+    badge: t("task:textXsPx15Py"),
     "list-item":
       "flex items-center px-2 py-1 rounded hover:bg-indigo-500/20 text-indigo-400 hover:underline",
     link: "text-xs text-muted-foreground hover:text-foreground underline decoration-muted-foreground/40 hover:decoration-foreground/60",
@@ -72,8 +73,7 @@ export const FilePathButton = memo(function FilePathButton({
   }
 
   const inactiveStyles = {
-    badge:
-      "text-xs text-muted-foreground/60 truncate font-mono bg-muted/30 px-1.5 py-0.5 rounded block w-full",
+    badge: t("task:textXsTextMutedForeground60"),
     "list-item": "px-2 py-1 font-mono text-muted-foreground truncate block w-full",
     link: "text-xs font-mono text-muted-foreground/60 truncate block w-full",
   }[variant];

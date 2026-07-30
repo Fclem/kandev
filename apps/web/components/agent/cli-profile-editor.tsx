@@ -472,8 +472,7 @@ function AgentctlAutoApproveRow({
           {setting?.label ?? t("common:autoApproveAllPermissions")}
         </Label>
         <p className="text-xs text-muted-foreground">
-          {setting?.description ??
-            t("common:kandevAllowsEveryAgentPermissionRequest")}
+          {setting?.description ?? t("common:kandevAllowsEveryAgentPermissionRequest")}
         </p>
       </div>
       <Switch

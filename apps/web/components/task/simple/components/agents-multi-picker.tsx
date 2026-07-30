@@ -185,7 +185,7 @@ export function AgentsMultiPicker({
       renderChip={renderChip}
       renderItem={renderItem}
       addLabel={addLabel}
-      searchPlaceholder="Search agents..."
+      searchPlaceholder={t("task:searchAgents")}
       emptyMessage={t("task:noAgentsFound")}
       testId={testId}
     />

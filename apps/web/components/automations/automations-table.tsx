@@ -167,7 +167,9 @@ export function AutomationsTable({
                   />
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
-                  {a.last_triggered_at ? formatRelativeTime(a.last_triggered_at) : t("automations:never")}
+                  {a.last_triggered_at
+                    ? formatRelativeTime(a.last_triggered_at)
+                    : t("automations:never")}
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <RowActions id={a.id} onTrigger={onTrigger} onDelete={onDelete} />

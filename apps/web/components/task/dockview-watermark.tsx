@@ -116,6 +116,7 @@ function useWatermarkHandlers(
   environmentId: string | null,
   taskID: string | null,
 ) {
+  const { t } = useTranslation();
   const addTerminalPanel = useDockviewStore((s) => s.addTerminalPanel);
   const addUserShell = useAppStore((s) => s.addUserShell);
   const devScript = useActiveSessionDevScript();
@@ -167,7 +168,7 @@ function useWatermarkHandlers(
     try {
       const result = await createUserShell(environmentId, {
         command: devScript,
-        label: "Dev Server",
+        label: t("task:devServer"),
       });
       addTerminalPanel(result.terminalId, groupId, environmentId, undefined, "Dev Server");
     } catch (error) {

@@ -288,6 +288,7 @@ export function useSendPassthroughMessage({
   panelState: ReturnType<typeof useChatPanelState>;
   onSent: () => void;
 }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const markCommentsSent = useCommentsStore((s) => s.markCommentsSent);
   const storeApi = useAppStoreApi();
@@ -301,7 +302,7 @@ export function useSendPassthroughMessage({
       inlineTaskMentions,
     }: ChatSubmitPayload) => {
       if (!taskId || !sessionId) {
-        toast({ title: "Session not ready", variant: "error" });
+        toast({ title: t("task:sessionNotReady"), variant: "error" });
         throw new Error("Session not ready");
       }
       try {
@@ -323,7 +324,7 @@ export function useSendPassthroughMessage({
         onSent();
       } catch (error) {
         console.error("Failed to send passthrough message:", error);
-        toast({ title: "Failed to send message", variant: "error" });
+        toast({ title: t("task:failedToSendMessage"), variant: "error" });
         throw error;
       }
     },

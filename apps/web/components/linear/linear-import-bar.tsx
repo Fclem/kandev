@@ -35,7 +35,7 @@ export function LinearImportBar({ workspaceId, disabled, onImport }: LinearImpor
       fetch={(key) => getLinearIssue(key, { workspaceId })}
       onSuccess={(_key, issue) => onImport(issue)}
       submitLabel={t("linear:import")}
-      submittingLabel="Loading..."
+      submittingLabel={t("common:loading2")}
     />
   );
 }

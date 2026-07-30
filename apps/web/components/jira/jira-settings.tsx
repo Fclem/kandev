@@ -42,6 +42,7 @@ import type {
   TestJiraConnectionResult,
 } from "@/lib/types/jira";
 import { Trans, useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 // Session cookies are HttpOnly so document.cookie can't read them, but
 // DevTools → Application → Cookies surfaces them in plain text. Users copy
@@ -229,8 +230,8 @@ function secretPlaceholder(method: JiraAuthMethod, hasSavedSecret: boolean): str
 
 function formatExpiry(expiresAt: string): { label: string; tone: "ok" | "warn" | "danger" } {
   const diffMs = new Date(expiresAt).getTime() - Date.now();
-  if (Number.isNaN(diffMs)) return { label: "Expiry unknown", tone: "warn" };
-  if (diffMs <= 0) return { label: "Cookie expired — paste a fresh one", tone: "danger" };
+  if (Number.isNaN(diffMs)) return { label: t("jira:expiryUnknown"), tone: "warn" };
+  if (diffMs <= 0) return { label: t("jira:cookieExpiredPasteAFreshOne"), tone: "danger" };
   const hours = diffMs / (60 * 60 * 1000);
   if (hours < 24) {
     const h = Math.max(1, Math.round(hours));
@@ -405,6 +406,7 @@ function useJiraConfigRefresh(workspaceId: string, setConfig: (cfg: JiraConfig |
 }
 
 function useJiraSettings(workspaceId: string) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [config, setConfig] = useState<JiraConfig | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -474,7 +476,7 @@ function useJiraSettings(workspaceId: string) {
       // Clear any inline test result from the previous credentials so the
       // alert reflects only the currently-saved state.
       setTestResult(null);
-      toast({ description: "Jira configuration saved", variant: "success" });
+      toast({ description: t("jira:jiraConfigurationSaved"), variant: "success" });
     } catch (err) {
       toast({ description: `Save failed: ${String(err)}`, variant: "error" });
       throw err;
@@ -490,7 +492,7 @@ function useJiraSettings(workspaceId: string) {
       setConfig(null);
       setForm(emptyForm);
       setTestResult(null);
-      toast({ description: "Jira configuration removed", variant: "success" });
+      toast({ description: t("jira:jiraConfigurationRemoved"), variant: "success" });
     } catch (err) {
       toast({ description: `Delete failed: ${String(err)}`, variant: "error" });
     }

@@ -142,6 +142,7 @@ function SubmittedReviewRow({
   isRequesting: boolean;
   onReRequest?: (reviewer: string) => void;
 }) {
+  const { t } = useTranslation();
   const hasActionable = review.state === "CHANGES_REQUESTED" || !!review.body;
   return (
     <div data-testid={`pr-submitted-review-${normalizeLogin(review.author)}`}>
@@ -164,7 +165,7 @@ function SubmittedReviewRow({
                 onClick={() => onReRequest(review.author)}
                 disabled={isRequesting}
               >
-                {isRequesting ? "Requesting..." : "Re-request review"}
+                {isRequesting ? t("github:requesting") : t("github:reRequestReview")}
               </Button>
             </div>
           ) : undefined

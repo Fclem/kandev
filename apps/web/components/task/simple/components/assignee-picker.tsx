@@ -45,7 +45,7 @@ export function AssigneePicker({ task }: AssigneePickerProps) {
   const options = useMemo<ComboboxOption[]>(() => {
     const noOpt: ComboboxOption = {
       value: NO_ASSIGNEE,
-      label: "No assignee",
+      label: t("task:noAssignee"),
       keywords: ["none", "unassigned"],
       renderLabel: () => <span className="text-muted-foreground">{t("task:noAssignee")}</span>,
     };
@@ -89,7 +89,7 @@ export function AssigneePicker({ task }: AssigneePickerProps) {
       value={currentValue}
       onValueChange={handleSelect}
       placeholder={t("task:noAssignee")}
-      searchPlaceholder="Search agents..."
+      searchPlaceholder={t("task:searchAgents")}
       emptyMessage={t("task:noAgentsFound")}
       triggerClassName="h-7 w-full justify-end px-2"
       popoverAlign="end"

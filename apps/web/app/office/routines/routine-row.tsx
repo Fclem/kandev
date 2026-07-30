@@ -109,7 +109,9 @@ export function RoutineRow({
             <span className="capitalize">{concurrencyPolicy.replace(/_/g, " ")}</span>
           </div>
         </div>
-        <Badge variant={isActive ? "default" : "secondary"}>{isActive ? t("office:on") : t("office:off")}</Badge>
+        <Badge variant={isActive ? "default" : "secondary"}>
+          {isActive ? t("office:on") : t("office:off")}
+        </Badge>
         <Switch
           checked={isActive}
           onCheckedChange={(checked) => {
@@ -208,7 +210,9 @@ function RoutineExpandedDetail({
     routine.concurrencyPolicy ?? (routineRaw.concurrency_policy as string | undefined) ?? "";
   return (
     <div className="px-4 pb-3 pt-1 ml-7 border-t border-border/50 space-y-2 text-sm">
-      {routine.description && <DetailField label={t("office:description")} value={routine.description} />}
+      {routine.description && (
+        <DetailField label={t("office:description")} value={routine.description} />
+      )}
       {template?.title && <DetailField label={t("office:taskTitle")} value={template.title} />}
       {template?.description && (
         <DetailField label={t("office:taskDescription")} value={template.description} />

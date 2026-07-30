@@ -91,8 +91,7 @@ function FileSummaryText({ count, additions, deletions }: FileSummary) {
   if (count === 0) return <span>{t("common:noChangesToCommit")}</span>;
   return (
     <span>
-      <span className="font-medium text-foreground">{count}</span> file{count !== 1 ? "s" : ""}{" "}
-      changed
+      {t("common:filesChanged", { count: count })}
       {(additions > 0 || deletions > 0) && (
         <span className="ml-2">
           (<span className="text-green-600">+{additions}</span>

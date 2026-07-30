@@ -568,7 +568,7 @@ export function TaskChat({
           className="self-start text-xs text-muted-foreground hover:text-foreground underline cursor-pointer mb-2"
           data-testid="show-older-sessions"
         >
-          {t("task:show")} {olderGroups.length} older session{olderGroups.length === 1 ? "" : "s"}
+          {t("task:showOlderSessions", { count: olderGroups.length })}
         </button>
       )}
       {isEmpty ? (

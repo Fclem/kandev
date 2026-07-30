@@ -80,8 +80,7 @@ export function ShareSnapshotPreview({ snapshot }: Props) {
           ))}
           {slices.hiddenCount > 0 && (
             <p className="text-center text-xs text-muted-foreground italic py-1">
-              … {slices.hiddenCount} more message{slices.hiddenCount === 1 ? "" : "s"} hidden in
-              this preview (still included in the share) …
+              … {t("task:moreMessagesHiddenInPreview", { count: slices.hiddenCount })} …
             </p>
           )}
           {slices.tail.map((msg, idx) => (

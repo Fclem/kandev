@@ -55,8 +55,7 @@ export function CommitSummary({
   if (uncommittedCount <= 0) return <span>{t("common:noChangesToCommit")}</span>;
   return (
     <span>
-      <span className="font-medium text-foreground">{uncommittedCount}</span> file
-      {uncommittedCount !== 1 ? "s" : ""} changed
+      {t("common:filesChanged", { count: uncommittedCount })}
       {(uncommittedAdditions > 0 || uncommittedDeletions > 0) && (
         <span className="ml-2">
           (<span className="text-green-600">+{uncommittedAdditions}</span>

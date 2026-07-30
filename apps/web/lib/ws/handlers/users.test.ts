@@ -123,7 +123,9 @@ describe("user settings websocket handler", () => {
     registerUsersHandlers(store)["user.settings.updated"]?.(userSettingsMessage({}));
     expect(store.getState().userSettings.confirmTaskArchive).toBe(true);
   });
+});
 
+describe("user settings websocket transcript navigation", () => {
   it("syncs transcript navigation preferences and defaults missing values to enabled", () => {
     const store = makeStore();
 

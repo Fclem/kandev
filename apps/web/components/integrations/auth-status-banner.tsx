@@ -31,7 +31,12 @@ function LastCheckedLabel({ checkedAt }: { checkedAt: Date | null }) {
   if (!checkedAt) return null;
   return (
     <span className="text-xs text-muted-foreground ml-2">
-      · checked {formatDistanceToNow(checkedAt, { addSuffix: true })}
+      <Trans
+        i18nKey="integrations:checked"
+        values={{ value1: formatDistanceToNow(checkedAt, { addSuffix: true }) }}
+      >
+        · checked {formatDistanceToNow(checkedAt, { addSuffix: true })}
+      </Trans>
     </span>
   );
 }
@@ -61,8 +66,10 @@ export function IntegrationAuthStatusBanner({ health }: { health: IntegrationAut
       >
         <IconCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
         <AlertDescription className="text-sm font-medium">
-          Authenticated
-          <LastCheckedLabel checkedAt={health.checkedAt} />
+          <Trans i18nKey="integrations:authenticated" values={{ checkedAt: health.checkedAt }}>
+            Authenticated
+            <LastCheckedLabel checkedAt={health.checkedAt} />
+          </Trans>
         </AlertDescription>
       </Alert>
     );

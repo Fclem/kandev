@@ -61,8 +61,20 @@ function RemoteCloudStatusContent({
   return (
     <TooltipContent side="top" className="space-y-0.5">
       <div className="font-medium">{remoteName}</div>
-      {remoteState && <div>State: {remoteState}</div>}
-      {createdAt && <div>Created: {createdAt}</div>}
+      {remoteState && (
+        <div>
+          <Trans i18nKey="task:state" values={{ remoteState }}>
+            State: {remoteState}
+          </Trans>
+        </div>
+      )}
+      {createdAt && (
+        <div>
+          <Trans i18nKey="task:created" values={{ createdAt }}>
+            Created: {createdAt}
+          </Trans>
+        </div>
+      )}
       {checkedAt && (
         <div>
           <Trans i18nKey="task:lastCheck" values={{ checkedAt }}>

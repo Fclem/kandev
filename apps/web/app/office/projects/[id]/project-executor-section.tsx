@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { updateProject } from "@/lib/api/domains/office-api";
 import { useAppStore } from "@/components/state-provider";
 import type { Project } from "@/lib/state/slices/office/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ProjectExecutorSectionProps = {
   project: Project;
@@ -155,8 +155,10 @@ export function ProjectExecutorSection({ project }: ProjectExecutorSectionProps)
             disabled={saving}
             className="cursor-pointer"
           >
-            <IconDeviceFloppy className="h-3.5 w-3.5 mr-1" />
-            Save
+            <Trans i18nKey="office:save">
+              <IconDeviceFloppy className="h-3.5 w-3.5 mr-1" />
+              Save
+            </Trans>
           </Button>
         )}
       </div>

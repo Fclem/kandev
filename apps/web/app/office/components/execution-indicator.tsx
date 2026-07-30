@@ -3,7 +3,7 @@
 import { IconPointFilled } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type ExecutionIndicatorProps = {
   status: string;
@@ -27,8 +27,10 @@ export function ExecutionIndicator({ status, className }: ExecutionIndicatorProp
           <span
             className={cn("inline-flex items-center gap-1 text-xs text-emerald-500", className)}
           >
-            <IconPointFilled className="h-3 w-3 animate-pulse" />
-            Live
+            <Trans i18nKey="office:live2">
+              <IconPointFilled className="h-3 w-3 animate-pulse" />
+              Live
+            </Trans>
           </span>
         </TooltipTrigger>
         <TooltipContent>{t("office:agentIsActivelyWorkingOnThis")}</TooltipContent>
@@ -41,8 +43,10 @@ export function ExecutionIndicator({ status, className }: ExecutionIndicatorProp
       <Tooltip>
         <TooltipTrigger asChild>
           <span className={cn("inline-flex items-center gap-1 text-xs text-amber-500", className)}>
-            <IconPointFilled className="h-3 w-3" />
-            Ready
+            <Trans i18nKey="office:ready2">
+              <IconPointFilled className="h-3 w-3" />
+              Ready
+            </Trans>
           </span>
         </TooltipTrigger>
         <TooltipContent>{t("office:agentFinishedWorkspaceReadyForReview")}</TooltipContent>

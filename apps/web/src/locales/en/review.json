@@ -1,5 +1,8 @@
 {
+  "across": "across {{value1}}",
   "autoMarkReviewedOnScroll": "Auto-mark reviewed on scroll",
+  "cancel": "<0></0> Cancel",
+  "changed": "<0></0> changed",
   "closeReview": "Close review",
   "diffTruncatedShowingFirst256Kb": "Diff truncated — showing first 256 KB",
   "discardWalkthrough": "Discard walkthrough",
@@ -16,6 +19,7 @@
   "noOpenFindings": "No open findings.",
   "ofFilesReviewed": "{{reviewedCount}} of {{totalCount}} files reviewed",
   "resizeFileList": "Resize file list",
+  "retry": "<0></0> Retry",
   "reviewChanges": "Review Changes",
   "reviewChanges2": "Review changes",
   "reviewPullRequest": "Review pull request",

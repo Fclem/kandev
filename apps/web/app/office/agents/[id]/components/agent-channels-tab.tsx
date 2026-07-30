@@ -138,7 +138,12 @@ function ChannelRow({ channel, onDelete }: { channel: Channel; onDelete: () => v
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium capitalize">{channel.platform}</p>
         <p className="text-xs text-muted-foreground">
-          Created {new Date(channel.created_at).toLocaleDateString()}
+          <Trans
+            i18nKey="office:created"
+            values={{ value1: new Date(channel.created_at).toLocaleDateString() }}
+          >
+            Created {new Date(channel.created_at).toLocaleDateString()}
+          </Trans>
         </p>
       </div>
       <Badge className={statusColor}>{channel.status}</Badge>

@@ -7,7 +7,7 @@ import { useTaskPendingInput, type PendingInput } from "@/hooks/use-task-pending
 import { getTaskStateIcon } from "@/lib/ui/state-icons";
 import type { Repository, Task } from "@/lib/types/http";
 import { resolveRichTaskRowDetails } from "./rich-task-row-details";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type RichTaskRowDetails = ReturnType<typeof resolveRichTaskRowDetails>;
 
@@ -81,7 +81,9 @@ function RichMetadataBadges({ details }: { details: RichTaskRowDetails }) {
       )}
       {details.sessionCount && (
         <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-          {details.sessionCount} sessions
+          <Trans i18nKey="common:sessions" values={{ sessionCount: details.sessionCount }}>
+            {details.sessionCount} sessions
+          </Trans>
         </Badge>
       )}
     </div>

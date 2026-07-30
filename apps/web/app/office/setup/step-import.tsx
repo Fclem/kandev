@@ -3,7 +3,7 @@
 import { Button } from "@kandev/ui/button";
 import type { OnboardingFSWorkspace } from "@/lib/api/domains/office-api";
 import { CloseButton } from "./close-button";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type StepImportProps = {
   fsWorkspaces: OnboardingFSWorkspace[];
@@ -29,8 +29,13 @@ export function StepImport({
           {t("office:existingConfigurationFound")}
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Found {t("office:workspaces", { count: fsWorkspaces.length })} on the filesystem. Import
-          settings to get started?
+          <Trans
+            i18nKey="office:foundOnTheFilesystemImportSettings"
+            values={{ value1: t("office:workspaces", { count: fsWorkspaces.length }) }}
+          >
+            Found {t("office:workspaces", { count: fsWorkspaces.length })} on the filesystem. Import
+            settings to get started?
+          </Trans>
         </p>
         <div className="mt-6 rounded-lg border bg-muted/50 p-4">
           <ul className="space-y-1 text-sm text-left">

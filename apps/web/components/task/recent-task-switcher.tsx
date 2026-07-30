@@ -141,10 +141,14 @@ function SwitcherFooter({
   return (
     <div className="flex items-center gap-3 border-t px-4 py-2 text-[11px] text-muted-foreground">
       <span className="flex items-center gap-1.5">
-        <Kbd>{shortcutLabel}</Kbd> Next
+        <Trans i18nKey="task:next2" values={{ shortcutLabel }}>
+          <Kbd>{shortcutLabel}</Kbd> Next
+        </Trans>
       </span>
       <span className="flex items-center gap-1.5">
-        <Kbd>{reverseShortcutLabel}</Kbd> Previous
+        <Trans i18nKey="task:previous" values={{ reverseShortcutLabel }}>
+          <Kbd>{reverseShortcutLabel}</Kbd> Previous
+        </Trans>
       </span>
     </div>
   );

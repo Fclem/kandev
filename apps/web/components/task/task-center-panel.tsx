@@ -476,8 +476,10 @@ function ApproveButtonGroup({
         className="h-6 gap-1.5 px-2.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-r-none border-r border-emerald-700/30"
         onClick={onApprove}
       >
-        <IconCheck className="h-3.5 w-3.5" />
-        Approve
+        <Trans i18nKey="task:approve2">
+          <IconCheck className="h-3.5 w-3.5" />
+          Approve
+        </Trans>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

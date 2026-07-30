@@ -320,7 +320,16 @@ function FiltersBar({
           {currentFiles.length === 0 && <option value="">{t("common:noFilesFound2")}</option>}
           {currentFiles.map((file) => (
             <option key={file.path} value={file.path}>
-              {file.protocol} - {file.agent || "unknown"} ({file.message_count} messages)
+              <Trans
+                i18nKey="common:messages"
+                values={{
+                  protocol: file.protocol,
+                  value2: file.agent || "unknown",
+                  message_count: file.message_count,
+                }}
+              >
+                {file.protocol} - {file.agent || "unknown"} ({file.message_count} messages)
+              </Trans>
             </option>
           ))}
         </select>
@@ -431,8 +440,10 @@ export default function AgentMessagesPage() {
               disabled={data.loading || !data.selectedFile}
               className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border hover:bg-muted/50 disabled:opacity-50 transition-colors"
             >
-              <IconRefresh className={`h-4 w-4 ${data.loading ? "animate-spin" : ""}`} />
-              Refresh
+              <Trans i18nKey="common:refresh2">
+                <IconRefresh className={`h-4 w-4 ${data.loading ? "animate-spin" : ""}`} />
+                Refresh
+              </Trans>
             </button>
           </div>
           <p className="text-muted-foreground">

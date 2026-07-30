@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { linkToTask } from "@/lib/links";
 import { useTaskById } from "@/hooks/domains/kanban/use-task-by-id";
 import type { KanbanState } from "@/lib/state/slices";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type TaskRowLink = {
   id: string;
@@ -88,8 +88,18 @@ function SingleTaskButton({
       </TooltipTrigger>
       <TooltipContent>
         <div className="flex flex-col gap-0.5 text-xs">
-          <span>Task: {title}</span>
-          {stepTitle ? <span className="text-muted-foreground">Step: {stepTitle}</span> : null}
+          <span>
+            <Trans i18nKey="github:task2" values={{ title }}>
+              Task: {title}
+            </Trans>
+          </span>
+          {stepTitle ? (
+            <span className="text-muted-foreground">
+              <Trans i18nKey="github:step" values={{ stepTitle }}>
+                Step: {stepTitle}
+              </Trans>
+            </span>
+          ) : null}
         </div>
       </TooltipContent>
     </Tooltip>

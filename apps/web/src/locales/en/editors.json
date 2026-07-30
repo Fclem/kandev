@@ -1,6 +1,7 @@
 {
   "applyLatestAgentChangesToThis": "Apply latest agent changes to this file",
   "boldCmdB": "Bold (Cmd+B)",
+  "comment": "<0></0> Comment",
   "commentCmdShiftC": "Comment (Cmd+Shift+C)",
   "comments_one": "{{count}} comment",
   "comments_other": "{{count}} comments",
@@ -24,8 +25,10 @@
   "openWith": "Open with...",
   "pasteLink": "Paste link...",
   "previewMarkdown": "Preview markdown",
+  "reload": "<0></0> Reload",
   "revertAllChanges": "Revert all changes",
   "revertChanges": "Revert changes",
+  "saving": "<0></0> Saving...",
   "strikethroughCmdShiftX": "Strikethrough (Cmd+Shift+X)",
   "toggleWordWrap": "Toggle word wrap",
   "underlineCmdU": "Underline (Cmd+U)"

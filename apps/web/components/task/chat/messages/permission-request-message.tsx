@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconAlertTriangle, IconCheck, IconX } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
@@ -17,13 +18,17 @@ function getPermissionStatusBadge(status: PermissionRequestMetadata["status"]) {
     case "approved":
       return (
         <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-          <IconCheck className="h-3 w-3" /> Approved
+          <Trans i18nKey="task:approved">
+            <IconCheck className="h-3 w-3" /> Approved
+          </Trans>
         </span>
       );
     case "rejected":
       return (
         <span className="inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
-          <IconX className="h-3 w-3" /> Rejected
+          <Trans i18nKey="task:rejected">
+            <IconX className="h-3 w-3" /> Rejected
+          </Trans>
         </span>
       );
     case "expired":

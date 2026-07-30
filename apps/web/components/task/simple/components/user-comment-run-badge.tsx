@@ -3,7 +3,7 @@
 import { IconAlertCircle, IconLoader2 } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { TaskRunStatus } from "@/app/office/tasks/[id]/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type UserCommentRunBadgeProps = {
   status: TaskRunStatus;
@@ -37,11 +37,13 @@ export function UserCommentRunBadge({ status, errorMessage }: UserCommentRunBadg
         data-testid="user-comment-run-badge"
         data-status={status}
       >
-        <span
-          className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
-          aria-hidden
-        />
-        Queued
+        <Trans i18nKey="task:queued3">
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
+            aria-hidden
+          />
+          Queued
+        </Trans>
       </span>
     );
   }
@@ -53,8 +55,10 @@ export function UserCommentRunBadge({ status, errorMessage }: UserCommentRunBadg
         data-testid="user-comment-run-badge"
         data-status={status}
       >
-        <IconLoader2 className="h-3 w-3 animate-spin" aria-hidden />
-        Working…
+        <Trans i18nKey="task:working3">
+          <IconLoader2 className="h-3 w-3 animate-spin" aria-hidden />
+          Working…
+        </Trans>
       </span>
     );
   }
@@ -78,8 +82,10 @@ export function UserCommentRunBadge({ status, errorMessage }: UserCommentRunBadg
       data-testid="user-comment-run-badge"
       data-status={status}
     >
-      <IconAlertCircle className="h-3 w-3" aria-hidden />
-      Failed
+      <Trans i18nKey="task:failed">
+        <IconAlertCircle className="h-3 w-3" aria-hidden />
+        Failed
+      </Trans>
     </span>
   );
 

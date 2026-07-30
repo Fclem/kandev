@@ -18,7 +18,7 @@ import {
 import { MobileRepoPill } from "./mobile-repo-pill";
 import { TaskTopBarPluginActions } from "@/components/task/task-top-bar-plugin-actions";
 import { MRTopbarButton } from "@/components/gitlab/mr-topbar-button";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SessionMobileTopBarProps = {
   taskId?: string | null;
@@ -111,8 +111,10 @@ function ApproveButton({ onApprove }: { onApprove: () => void }) {
       className="h-7 gap-1 px-2 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
       onClick={onApprove}
     >
-      <IconCheck className="h-3.5 w-3.5" />
-      Approve
+      <Trans i18nKey="task:approve2">
+        <IconCheck className="h-3.5 w-3.5" />
+        Approve
+      </Trans>
     </Button>
   );
 }

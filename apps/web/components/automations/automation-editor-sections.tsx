@@ -17,7 +17,7 @@ import { PromptSection } from "./prompt-section";
 import { RequiredFieldLabel } from "./required-field-label";
 import { TriggersSection } from "./triggers-section";
 import { WebhookCreatedDialog } from "./webhook-created-dialog";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type UpdateField = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 
@@ -281,8 +281,10 @@ export function EditorFooter({
           onClick={onDelete}
           disabled={saving}
         >
-          <IconTrash className="h-4 w-4 mr-1" />
-          Delete
+          <Trans i18nKey="automations:delete">
+            <IconTrash className="h-4 w-4 mr-1" />
+            Delete
+          </Trans>
         </Button>
       )}
     </div>

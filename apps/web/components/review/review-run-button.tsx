@@ -169,8 +169,10 @@ export function ReviewRunButton({
           onClick={handleCancel}
           data-testid="review-cancel-run"
         >
-          <IconX className="h-3.5 w-3.5" />
-          Cancel
+          <Trans i18nKey="review:cancel">
+            <IconX className="h-3.5 w-3.5" />
+            Cancel
+          </Trans>
         </Button>
       )}
 

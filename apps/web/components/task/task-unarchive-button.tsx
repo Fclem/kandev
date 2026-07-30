@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useState } from "react";
 import { IconArchiveOff, IconLoader } from "@tabler/icons-react";
@@ -48,12 +49,23 @@ export function TaskUnarchiveButton({
       onClick={handleClick}
       data-testid="task-unarchive-button"
     >
-      {isPending ? (
-        <IconLoader className="h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <IconArchiveOff className="h-3.5 w-3.5" />
-      )}
-      Unarchive
+      <Trans
+        i18nKey="task:unarchive"
+        values={{
+          value0: isPending ? (
+            <IconLoader className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <IconArchiveOff className="h-3.5 w-3.5" />
+          ),
+        }}
+      >
+        {isPending ? (
+          <IconLoader className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <IconArchiveOff className="h-3.5 w-3.5" />
+        )}
+        Unarchive
+      </Trans>
     </Button>
   );
 }

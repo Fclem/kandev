@@ -73,20 +73,39 @@ function DeleteConfirmDialog({
             `This will permanently delete ${selectedCount} selected items. This action cannot be undone.`
           ) : (
             <>
-              This will permanently delete <span className="font-semibold">{node.name}</span>
-              {fileCount > 0 && (
-                <>
-                  <Trans
-                    i18nKey="task:andInsideIt"
-                    values={{ fileCount, value4: fileCount === 1 ? "file" : "files" }}
-                  >
-                    {" "}
-                    and <span className="font-semibold">{fileCount}</span>{" "}
-                    {fileCount === 1 ? "file" : "files"} inside it
-                  </Trans>
-                </>
-              )}
-              . This action cannot be undone.
+              <Trans
+                i18nKey="task:thisWillPermanentlyDeleteThisAction"
+                values={{
+                  name: node.name,
+                  value2: fileCount > 0 && (
+                    <>
+                      <Trans
+                        i18nKey="task:andInsideIt"
+                        values={{ fileCount, value4: fileCount === 1 ? "file" : "files" }}
+                      >
+                        {" "}
+                        and <span className="font-semibold">{fileCount}</span>{" "}
+                        {fileCount === 1 ? "file" : "files"} inside it
+                      </Trans>
+                    </>
+                  ),
+                }}
+              >
+                This will permanently delete <span className="font-semibold">{node.name}</span>
+                {fileCount > 0 && (
+                  <>
+                    <Trans
+                      i18nKey="task:andInsideIt"
+                      values={{ fileCount, value4: fileCount === 1 ? "file" : "files" }}
+                    >
+                      {" "}
+                      and <span className="font-semibold">{fileCount}</span>{" "}
+                      {fileCount === 1 ? "file" : "files"} inside it
+                    </Trans>
+                  </>
+                )}
+                . This action cannot be undone.
+              </Trans>
             </>
           )}
         </AlertDialogDescription>
@@ -136,15 +155,19 @@ function FileContextMenuItems({
       {showRename && onDeleteFile && <ContextMenuSeparator />}
       {showRename && (
         <ContextMenuItem onSelect={onStartRename}>
-          <IconPencil className="h-3.5 w-3.5" />
-          Rename
+          <Trans i18nKey="task:rename3">
+            <IconPencil className="h-3.5 w-3.5" />
+            Rename
+          </Trans>
         </ContextMenuItem>
       )}
       {download && (showRename || onDeleteFile) && <ContextMenuSeparator />}
       {download && (
         <ContextMenuItem onSelect={() => void download(node.path)}>
-          <IconDownload className="h-3.5 w-3.5" />
-          Download
+          <Trans i18nKey="task:download">
+            <IconDownload className="h-3.5 w-3.5" />
+            Download
+          </Trans>
         </ContextMenuItem>
       )}
     </>

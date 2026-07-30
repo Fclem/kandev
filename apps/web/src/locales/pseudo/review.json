@@ -1,5 +1,8 @@
 {
+  "across": "àćŕōśś {{value1}}",
   "autoMarkReviewedOnScroll": "Àũţō-ḿàŕķ ŕēvĩēŵēď ōń śćŕōĺĺ",
+  "cancel": "<0></0> Ćàńćēĺ",
+  "changed": "<0></0> ćĥàńĝēď",
   "closeReview": "Ćĺōśē ŕēvĩēŵ",
   "diffTruncatedShowingFirst256Kb": "Ďĩƒƒ ţŕũńćàţēď — śĥōŵĩńĝ ƒĩŕśţ 256 ĶƁ",
   "discardWalkthrough": "Ďĩśćàŕď ŵàĺķţĥŕōũĝĥ",
@@ -16,6 +19,7 @@
   "noOpenFindings": "Ńō ōƥēń ƒĩńďĩńĝś.",
   "ofFilesReviewed": "{{reviewedCount}} ōƒ {{totalCount}} ƒĩĺēś ŕēvĩēŵēď",
   "resizeFileList": "Ŕēśĩźē ƒĩĺē ĺĩśţ",
+  "retry": "<0></0> Ŕēţŕŷ",
   "reviewChanges": "Ŕēvĩēŵ Ćĥàńĝēś",
   "reviewChanges2": "Ŕēvĩēŵ ćĥàńĝēś",
   "reviewPullRequest": "Ŕēvĩēŵ ƥũĺĺ ŕē qũēśţ",

@@ -534,7 +534,11 @@ function PRStatusChipDrawer({ pr, automation, refreshTaskPR }: SingleChipProps) 
       </button>
       <DrawerContent data-testid="pr-status-chip-drawer" className="max-h-[80vh] flex flex-col">
         <DrawerHeader className="flex flex-row items-center justify-between border-b py-2">
-          <DrawerTitle className="text-sm">PR #{pr.pr_number}</DrawerTitle>
+          <DrawerTitle className="text-sm">
+            <Trans i18nKey="github:pr" values={{ pr_number: pr.pr_number }}>
+              PR #{pr.pr_number}
+            </Trans>
+          </DrawerTitle>
           <DrawerDescription className="sr-only">
             {t("github:pullRequestCiStatusReviewsAnd")}
           </DrawerDescription>

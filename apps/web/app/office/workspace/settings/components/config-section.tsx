@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconArrowsLeftRight, IconDownload } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function ConfigSection() {
   const { t } = useTranslation();
@@ -24,12 +24,16 @@ export function ConfigSection() {
       <p className="text-xs text-muted-foreground">{t("office:syncTheWorkspaceDatabaseWithOn")}</p>
       <div className="flex gap-2">
         <Button variant="outline" onClick={handleSync} className="cursor-pointer">
-          <IconArrowsLeftRight className="h-4 w-4 mr-1" />
-          Sync
+          <Trans i18nKey="office:sync2">
+            <IconArrowsLeftRight className="h-4 w-4 mr-1" />
+            Sync
+          </Trans>
         </Button>
         <Button variant="outline" onClick={handleExport} className="cursor-pointer">
-          <IconDownload className="h-4 w-4 mr-1" />
-          Export
+          <Trans i18nKey="office:export">
+            <IconDownload className="h-4 w-4 mr-1" />
+            Export
+          </Trans>
         </Button>
       </div>
     </section>

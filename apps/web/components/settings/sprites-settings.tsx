@@ -54,8 +54,10 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <IconSparkles className="h-5 w-5" />
-              Connection
+              <Trans i18nKey="settings:connection">
+                <IconSparkles className="h-5 w-5" />
+                Connection
+              </Trans>
             </CardTitle>
             <CardDescription>
               Sprites.dev provides ephemeral cloud sandboxes for running agents remotely.
@@ -142,7 +144,11 @@ function TestResultDisplay({ result }: { result: SpritesTestResult }) {
           <IconX className="h-4 w-4 text-red-600" />
         )}
         {result.success ? "Connection test passed" : "Connection test failed"}
-        <span className="text-muted-foreground font-normal">({result.total_duration_ms}ms)</span>
+        <span className="text-muted-foreground font-normal">
+          <Trans i18nKey="settings:ms" values={{ total_duration_ms: result.total_duration_ms }}>
+            ({result.total_duration_ms}ms)
+          </Trans>
+        </span>
       </div>
       {result.steps.map((step: SpritesTestStep) => (
         <StepRow key={step.name} step={step} />
@@ -163,7 +169,11 @@ function StepRow({ step }: { step: SpritesTestStep }) {
         <IconX className="h-3 w-3 text-red-600 shrink-0" />
       )}
       <span>{step.name}</span>
-      <span className="text-muted-foreground">({step.duration_ms}ms)</span>
+      <span className="text-muted-foreground">
+        <Trans i18nKey="settings:ms2" values={{ duration_ms: step.duration_ms }}>
+          ({step.duration_ms}ms)
+        </Trans>
+      </span>
       {step.error && <span className="text-red-600 truncate">{step.error}</span>}
     </div>
   );
@@ -265,8 +275,10 @@ function InstancesContent({
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-        <IconLoader2 className="h-4 w-4 animate-spin" />
-        Loading...
+        <Trans i18nKey="settings:loading">
+          <IconLoader2 className="h-4 w-4 animate-spin" />
+          Loading...
+        </Trans>
       </div>
     );
   }

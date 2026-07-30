@@ -58,8 +58,10 @@ function FindingActions({
           onClick={() => onResolve(finding)}
           data-testid="review-finding-resolve"
         >
-          <IconCheck className="h-3.5 w-3.5" />
-          Resolve
+          <Trans i18nKey="diff:resolve">
+            <IconCheck className="h-3.5 w-3.5" />
+            Resolve
+          </Trans>
         </Button>
       )}
       {isOpen && onDismiss && (
@@ -70,8 +72,10 @@ function FindingActions({
           onClick={() => onDismiss(finding)}
           data-testid="review-finding-dismiss"
         >
-          <IconEyeOff className="h-3.5 w-3.5" />
-          Dismiss
+          <Trans i18nKey="diff:dismiss">
+            <IconEyeOff className="h-3.5 w-3.5" />
+            Dismiss
+          </Trans>
         </Button>
       )}
       {!isOpen && onReopen && (
@@ -82,8 +86,10 @@ function FindingActions({
           onClick={() => onReopen(finding)}
           data-testid="review-finding-reopen"
         >
-          <IconArrowBackUp className="h-3.5 w-3.5" />
-          Reopen
+          <Trans i18nKey="diff:reopen">
+            <IconArrowBackUp className="h-3.5 w-3.5" />
+            Reopen
+          </Trans>
         </Button>
       )}
     </div>

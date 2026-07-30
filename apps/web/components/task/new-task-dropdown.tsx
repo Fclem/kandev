@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useState } from "react";
 import { IconPlus, IconSubtask, IconChevronDown } from "@tabler/icons-react";
@@ -48,8 +49,10 @@ export function NewTaskDropdown({
           onClick={() => setShowTaskDialog(true)}
           data-testid="new-task-primary"
         >
-          <IconPlus className="h-3.5 w-3.5" />
-          Task
+          <Trans i18nKey="task:task">
+            <IconPlus className="h-3.5 w-3.5" />
+            Task
+          </Trans>
         </Button>
         {activeTaskId && (
           <DropdownMenu>
@@ -69,8 +72,10 @@ export function NewTaskDropdown({
                 onClick={() => setShowSubtaskDialog(true)}
                 data-testid="new-subtask-button"
               >
-                <IconSubtask className="h-3.5 w-3.5" />
-                Subtask
+                <Trans i18nKey="task:subtask">
+                  <IconSubtask className="h-3.5 w-3.5" />
+                  Subtask
+                </Trans>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

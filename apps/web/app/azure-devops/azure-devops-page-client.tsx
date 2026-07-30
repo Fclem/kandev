@@ -102,7 +102,11 @@ function ResultHeader({
       <h2 className="text-sm font-semibold">
         {mode === WORK_ITEMS_MODE ? "Work items" : "Pull requests"}
       </h2>
-      <span className="text-xs text-muted-foreground">{count} results</span>
+      <span className="text-xs text-muted-foreground">
+        <Trans i18nKey="azureDevops:results" values={{ count }}>
+          {count} results
+        </Trans>
+      </span>
     </div>
   );
 }

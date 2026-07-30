@@ -227,7 +227,11 @@ function BucketBarChart({
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
                 <div className="font-medium">{item.label}</div>
-                <div className="text-muted-foreground">{item.count} completed</div>
+                <div className="text-muted-foreground">
+                  <Trans i18nKey="stats:completed" values={{ count: item.count }}>
+                    {item.count} completed
+                  </Trans>
+                </div>
               </TooltipContent>
             </Tooltip>
           );

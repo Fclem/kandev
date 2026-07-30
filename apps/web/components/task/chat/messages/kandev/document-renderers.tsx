@@ -231,7 +231,13 @@ export const GetTaskDocumentRenderer: KandevRenderer = ({ args, result, status }
               {type}
             </Badge>
           )}
-          {author && <span className="text-[10px] text-muted-foreground/70">by {author}</span>}
+          {author && (
+            <span className="text-[10px] text-muted-foreground/70">
+              <Trans i18nKey="task:by" values={{ author }}>
+                by {author}
+              </Trans>
+            </span>
+          )}
         </div>
         {content && (
           <ContentBox>

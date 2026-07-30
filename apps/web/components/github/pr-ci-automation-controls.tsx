@@ -204,8 +204,10 @@ function CIAutomationErrorRow({
         disabled={loading}
         onClick={onRetry}
       >
-        <IconRefresh className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
-        Retry
+        <Trans i18nKey="github:retry">
+          <IconRefresh className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+          Retry
+        </Trans>
       </Button>
     </div>
   );

@@ -20,7 +20,7 @@ import {
   PR_PRESETS as BUILTIN_PR_PRESETS,
   ISSUE_PRESETS as BUILTIN_ISSUE_PRESETS,
 } from "@/components/github/my-github/search-bar";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function newPreset(): StoredQueryPreset {
   return {
@@ -265,8 +265,10 @@ export function DefaultQueriesSection({ workspaceId }: { workspaceId?: string })
             disabled={drafts.resetDisabled}
             className="cursor-pointer"
           >
-            <IconRefresh className="h-3.5 w-3.5 mr-1" />
-            Reset
+            <Trans i18nKey="github:reset2">
+              <IconRefresh className="h-3.5 w-3.5 mr-1" />
+              Reset
+            </Trans>
           </Button>
         </div>
       }

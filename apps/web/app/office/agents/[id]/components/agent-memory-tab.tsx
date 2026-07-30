@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { toast } from "sonner";
 import type { AgentProfile } from "@/lib/state/slices/office/types";
 import * as officeApi from "@/lib/api/domains/office-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type MemoryEntry = {
   id: string;
@@ -234,8 +234,10 @@ function MemoryToolbar({
           disabled={isEmpty}
           className="cursor-pointer"
         >
-          <IconDownload className="h-4 w-4 mr-1" />
-          Export
+          <Trans i18nKey="office:export">
+            <IconDownload className="h-4 w-4 mr-1" />
+            Export
+          </Trans>
         </Button>
         <Button
           variant="destructive"

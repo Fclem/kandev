@@ -62,7 +62,9 @@ export function GitHubAppImportIdentityFields({
         className="flex min-h-11 flex-wrap items-center gap-5"
       >
         <Label className="flex cursor-pointer items-center gap-2">
-          <RadioGroupItem value="Organization" /> Organization
+          <Trans i18nKey="github:organization">
+            <RadioGroupItem value="Organization" /> Organization
+          </Trans>
         </Label>
         <Label className="flex cursor-pointer items-center gap-2">
           <Trans i18nKey="github:personalAccount">

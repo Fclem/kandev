@@ -97,14 +97,18 @@ export function ClarificationRequestMessage({ comment }: ClarificationRequestMes
           )}
           {isSkipped && (
             <div className="mt-1 ml-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-              {getStatusIndicator()}
-              Skipped
+              <Trans i18nKey="task:skipped" values={{ value0: getStatusIndicator() }}>
+                {getStatusIndicator()}
+                Skipped
+              </Trans>
             </div>
           )}
           {isCancelled && (
             <div className="mt-1 ml-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-              {getStatusIndicator()}
-              Cancelled
+              <Trans i18nKey="task:cancelled2" values={{ value0: getStatusIndicator() }}>
+                {getStatusIndicator()}
+                Cancelled
+              </Trans>
             </div>
           )}
           {isExpired && (

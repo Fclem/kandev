@@ -18,7 +18,7 @@ import { FileIcon } from "@/components/ui/file-icon";
 import { getFileCategory } from "@/lib/utils/file-types";
 import type { ChangedFile } from "./changes-panel-helpers";
 import type { OpenDiffOptions } from "./changes-diff-target";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const splitPath = (path: string) => {
   const lastSlash = path.lastIndexOf("/");
@@ -362,7 +362,11 @@ export function BulkActionBar({
 
   return (
     <div data-testid={`bulk-actions-${variant}`} className="flex items-center gap-1.5">
-      <span className="text-[11px] text-muted-foreground">{selectionCount} selected</span>
+      <span className="text-[11px] text-muted-foreground">
+        <Trans i18nKey="task:selected" values={{ selectionCount }}>
+          {selectionCount} selected
+        </Trans>
+      </span>
       {variant === "unstaged" && onBulkStage && (
         <Button
           data-testid="bulk-stage"
@@ -371,7 +375,9 @@ export function BulkActionBar({
           className="h-6 text-[11px] px-2.5 gap-1 cursor-pointer"
           onClick={() => onBulkStage(paths)}
         >
-          Stage {selectionCount}
+          <Trans i18nKey="task:stage" values={{ selectionCount }}>
+            Stage {selectionCount}
+          </Trans>
         </Button>
       )}
       {variant === "staged" && onBulkUnstage && (
@@ -382,7 +388,9 @@ export function BulkActionBar({
           className="h-6 text-[11px] px-2.5 gap-1 cursor-pointer"
           onClick={() => onBulkUnstage(paths)}
         >
-          Unstage {selectionCount}
+          <Trans i18nKey="task:unstage" values={{ selectionCount }}>
+            Unstage {selectionCount}
+          </Trans>
         </Button>
       )}
       {onBulkDiscard && (
@@ -393,7 +401,9 @@ export function BulkActionBar({
           className="h-6 text-[11px] px-2.5 gap-1 cursor-pointer text-destructive hover:text-destructive"
           onClick={() => onBulkDiscard(paths)}
         >
-          Discard {selectionCount}
+          <Trans i18nKey="task:discard2" values={{ selectionCount }}>
+            Discard {selectionCount}
+          </Trans>
         </Button>
       )}
     </div>

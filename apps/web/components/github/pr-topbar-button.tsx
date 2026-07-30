@@ -249,7 +249,11 @@ function PRMultiButton({ prs, refreshTaskPR }: { prs: TaskPR[]; refreshTaskPR: (
         onBlur={onTriggerLeave}
       >
         <IconGitPullRequest className={`h-4 w-4 ${aggColor}`} />
-        <span className="text-xs font-medium">{prs.length} PRs</span>
+        <span className="text-xs font-medium">
+          <Trans i18nKey="github:prs" values={{ length: prs.length }}>
+            {prs.length} PRs
+          </Trans>
+        </span>
         <IconChevronDown className="h-3 w-3 text-muted-foreground" />
       </Button>
     </DropdownMenuTrigger>

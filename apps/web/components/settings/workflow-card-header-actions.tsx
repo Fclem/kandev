@@ -48,8 +48,10 @@ export function WorkflowCardHeaderActions({
               className="cursor-pointer"
               disabled={exportDisabled}
             >
-              <IconDownload className="h-4 w-4 mr-2" />
-              Export
+              <Trans i18nKey="settings:export">
+                <IconDownload className="h-4 w-4 mr-2" />
+                Export
+              </Trans>
             </Button>
           </span>
         </TooltipTrigger>

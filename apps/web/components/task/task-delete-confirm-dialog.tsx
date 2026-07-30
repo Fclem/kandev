@@ -17,7 +17,7 @@ import { useSubtaskCount } from "@/hooks/use-subtask-count";
 import { useTaskInFlight } from "@/hooks/use-task-in-flight";
 import { getCleanupSummary, getBulkCleanupSummary } from "./task-cleanup-summary";
 import { StillWorkingWarning } from "./task-still-working-warning";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TaskDeleteConfirmDialogProps = {
   open: boolean;
@@ -119,8 +119,15 @@ export function TaskDeleteConfirmDialog({
               handleOpenChange(false);
             }}
           >
-            {isDeleting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Delete
+            <Trans
+              i18nKey="task:delete2"
+              values={{
+                value0: isDeleting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null,
+              }}
+            >
+              {isDeleting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
+            </Trans>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

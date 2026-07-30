@@ -107,7 +107,13 @@ export function TicketRow({ ticket, presets, onStartTask, onOpen }: TicketRowPro
             </Badge>
           )}
           <AssigneeCell ticket={ticket} />
-          {relative && <span className="text-xs text-muted-foreground">· updated {relative}</span>}
+          {relative && (
+            <span className="text-xs text-muted-foreground">
+              <Trans i18nKey="jira:updated2" values={{ relative }}>
+                · updated {relative}
+              </Trans>
+            </span>
+          )}
         </div>
       </button>
       <div className="flex items-center gap-1 shrink-0">

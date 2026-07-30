@@ -254,7 +254,9 @@ function ActivityPanel({
           <Card className="rounded-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Activity ({rangeLabel.toLowerCase()})
+                <Trans i18nKey="stats:activity" values={{ value1: rangeLabel.toLowerCase() }}>
+                  Activity ({rangeLabel.toLowerCase()})
+                </Trans>
               </CardTitle>
             </CardHeader>
             <CardContent>

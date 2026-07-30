@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import type { ClarificationOption } from "@/lib/types/http";
 import { KeyboardShortcutTooltip } from "@/components/keyboard-shortcut-tooltip";
 import { KEYS } from "@/lib/keyboard/constants";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // Grow the custom-answer box up to ~6 lines, then scroll internally so the
 // clarification overlay stays compact.
@@ -188,8 +188,10 @@ function CustomInputControls({
           aria-hidden="true"
           className="select-none flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border border-border bg-background text-muted-foreground"
         >
-          <IconCornerDownLeft className="h-2.5 w-2.5" />
-          Enter
+          <Trans i18nKey="task:enter2">
+            <IconCornerDownLeft className="h-2.5 w-2.5" />
+            Enter
+          </Trans>
         </kbd>
         <span aria-hidden="true" className="select-none text-[10px] text-muted-foreground/60">
           {t("task:newline")}
@@ -212,8 +214,10 @@ function CustomInputControls({
           : "bg-muted text-muted-foreground cursor-not-allowed",
       )}
     >
-      Send
-      <IconCornerDownLeft className="h-3 w-3" />
+      <Trans i18nKey="task:send">
+        Send
+        <IconCornerDownLeft className="h-3 w-3" />
+      </Trans>
     </button>
   );
 }
@@ -353,8 +357,10 @@ export function ClarificationCarouselNav({
                 : "border-border text-foreground/80 hover:bg-muted/50 cursor-pointer",
             )}
           >
-            <IconArrowLeft className="h-3 w-3" />
-            Back
+            <Trans i18nKey="task:back">
+              <IconArrowLeft className="h-3 w-3" />
+              Back
+            </Trans>
           </button>
         </span>
       </KeyboardShortcutTooltip>
@@ -376,8 +382,10 @@ export function ClarificationCarouselNav({
                 : "border-border text-foreground/80 hover:bg-muted/50 cursor-pointer",
             )}
           >
-            Next
-            <IconArrowRight className="h-3 w-3" />
+            <Trans i18nKey="task:next">
+              Next
+              <IconArrowRight className="h-3 w-3" />
+            </Trans>
           </button>
         </span>
       </KeyboardShortcutTooltip>

@@ -215,7 +215,9 @@ function MRActionButtons({
         disabled={disabled}
         onClick={() => void run("Approve", () => approveMR(identity), "Merge request approved")}
       >
-        <IconCheck className="h-4 w-4" /> Approve
+        <Trans i18nKey="gitlab:approve">
+          <IconCheck className="h-4 w-4" /> Approve
+        </Trans>
       </Button>
       <Button
         size="sm"
@@ -233,7 +235,9 @@ function MRActionButtons({
         disabled={disabled || hasConflicts}
         onClick={onMerge}
       >
-        <IconGitMerge className="h-4 w-4" /> Merge
+        <Trans i18nKey="gitlab:merge">
+          <IconGitMerge className="h-4 w-4" /> Merge
+        </Trans>
       </Button>
       <SubscriptionToggle {...identity} />
     </div>

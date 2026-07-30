@@ -113,8 +113,10 @@ function StepConfigHeader({
         disabled={readOnly}
         className="h-8 self-end cursor-pointer text-destructive hover:text-destructive sm:self-auto"
       >
-        <IconTrash className="h-3.5 w-3.5 mr-1" />
-        Delete
+        <Trans i18nKey="settings:delete3">
+          <IconTrash className="h-3.5 w-3.5 mr-1" />
+          Delete
+        </Trans>
       </Button>
     </div>
   );

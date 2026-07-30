@@ -3,7 +3,7 @@ import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import type { PRReview, RequestedReviewer } from "@/lib/types/github";
 import { CollapsibleSection, FeedbackItemRow } from "./pr-shared";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function ReviewStateIcon({ state }: { state: string }) {
   if (state === "APPROVED") return <IconCheck className="h-3.5 w-3.5 text-green-500 shrink-0" />;
@@ -232,8 +232,18 @@ export function ReviewsSection({
 
   const subtitle = reviewState ? (
     <div className="text-[10px] text-muted-foreground px-2 pb-1">
-      Overall: <ReviewStateBadge state={reviewState} />
-      {pendingText && <span className="text-yellow-600 dark:text-yellow-400">{pendingText}</span>}
+      <Trans
+        i18nKey="github:overall"
+        values={{
+          reviewState,
+          value2: pendingText && (
+            <span className="text-yellow-600 dark:text-yellow-400">{pendingText}</span>
+          ),
+        }}
+      >
+        Overall: <ReviewStateBadge state={reviewState} />
+        {pendingText && <span className="text-yellow-600 dark:text-yellow-400">{pendingText}</span>}
+      </Trans>
     </div>
   ) : null;
 

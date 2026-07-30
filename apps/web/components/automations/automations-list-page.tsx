@@ -32,8 +32,10 @@ export function AutomationsListPage({ workspaceId }: AutomationsListPageProps) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <IconBolt className="h-5 w-5" />
-            Automations
+            <Trans i18nKey="automations:automations">
+              <IconBolt className="h-5 w-5" />
+              Automations
+            </Trans>
           </h2>
           <p className="text-sm text-muted-foreground">
             {t("automations:createRulesThatAutomaticallyTriggerAgent")}

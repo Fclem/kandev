@@ -23,8 +23,16 @@ function voteLabel(vote: number): string {
 function Summary({ feedback }: { feedback: AzureDevOpsPullRequestFeedback }) {
   return (
     <div className="flex flex-wrap gap-2">
-      <Badge variant="outline">Review: {feedback.reviewState || "pending"}</Badge>
-      <Badge variant="outline">Policies: {feedback.policyState || "none"}</Badge>
+      <Badge variant="outline">
+        <Trans i18nKey="azureDevops:review" values={{ value1: feedback.reviewState || "pending" }}>
+          Review: {feedback.reviewState || "pending"}
+        </Trans>
+      </Badge>
+      <Badge variant="outline">
+        <Trans i18nKey="azureDevops:policies" values={{ value1: feedback.policyState || "none" }}>
+          Policies: {feedback.policyState || "none"}
+        </Trans>
+      </Badge>
       <Badge variant="secondary">
         <Trans
           i18nKey="azureDevops:linkedItems"

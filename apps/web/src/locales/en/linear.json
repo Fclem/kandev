@@ -67,6 +67,8 @@
   "taskPrompt": "Task Prompt",
   "thePromptSentToTheAgent": "The prompt sent to the agent for each new issue. Type {{ to insert placeholders.",
   "unassigned": "Unassigned",
+  "updated": "Updated {{updated}}",
+  "updated2": "· updated {{relative}}",
   "upperBoundInPointsOptional": "Upper bound in points (optional).",
   "whenTheInFlightCapIs": "When the in-flight cap is reached, issues are dispatched in this order so the most important ones run first."
 }

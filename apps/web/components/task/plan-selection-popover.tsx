@@ -214,8 +214,10 @@ function PopoverActions({
                   data-testid={runButtonTestId}
                   className="h-7 gap-1 rounded-l-none text-xs cursor-pointer"
                 >
-                  <IconPlayerPlay className="h-3 w-3" />
-                  Run
+                  <Trans i18nKey="task:run">
+                    <IconPlayerPlay className="h-3 w-3" />
+                    Run
+                  </Trans>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">

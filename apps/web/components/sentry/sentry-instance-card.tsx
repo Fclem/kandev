@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconPencil, IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -48,8 +49,10 @@ export function SentryInstanceCard({ instance, onEdit, onDelete }: SentryInstanc
             className="cursor-pointer gap-1"
             data-testid="sentry-instance-edit-button"
           >
-            <IconPencil className="h-3.5 w-3.5" />
-            Edit
+            <Trans i18nKey="sentry:edit">
+              <IconPencil className="h-3.5 w-3.5" />
+              Edit
+            </Trans>
           </Button>
           <Button
             type="button"
@@ -60,8 +63,10 @@ export function SentryInstanceCard({ instance, onEdit, onDelete }: SentryInstanc
             className="cursor-pointer gap-1"
             data-testid="sentry-instance-delete-button"
           >
-            <IconTrash className="h-3.5 w-3.5" />
-            Delete
+            <Trans i18nKey="sentry:delete">
+              <IconTrash className="h-3.5 w-3.5" />
+              Delete
+            </Trans>
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconCheck, IconPalette } from "@tabler/icons-react";
 import {
@@ -23,16 +24,30 @@ export function TaskColorMenu({ taskId, disabled }: { taskId: string; disabled?:
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger disabled={disabled}>
-        <IconPalette className="mr-2 h-4 w-4" />
-        Color
-        {currentColor && (
-          <span
-            className={cn(
-              "ml-2 inline-block h-2 w-2 rounded-full",
-              TASK_COLOR_BAR_CLASS[currentColor],
-            )}
-          />
-        )}
+        <Trans
+          i18nKey="task:color"
+          values={{
+            value2: currentColor && (
+              <span
+                className={cn(
+                  "ml-2 inline-block h-2 w-2 rounded-full",
+                  TASK_COLOR_BAR_CLASS[currentColor],
+                )}
+              />
+            ),
+          }}
+        >
+          <IconPalette className="mr-2 h-4 w-4" />
+          Color
+          {currentColor && (
+            <span
+              className={cn(
+                "ml-2 inline-block h-2 w-2 rounded-full",
+                TASK_COLOR_BAR_CLASS[currentColor],
+              )}
+            />
+          )}
+        </Trans>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-40">
         {TASK_COLORS.map((color) => (
@@ -45,8 +60,10 @@ export function TaskColorMenu({ taskId, disabled }: { taskId: string; disabled?:
         ))}
         <ContextMenuSeparator />
         <ContextMenuItem disabled={!currentColor} onSelect={() => setColor(taskId, null)}>
-          <span className="mr-2 inline-block h-2 w-2 rounded-full border border-muted-foreground/40" />
-          None
+          <Trans i18nKey="task:none">
+            <span className="mr-2 inline-block h-2 w-2 rounded-full border border-muted-foreground/40" />
+            None
+          </Trans>
         </ContextMenuItem>
       </ContextMenuSubContent>
     </ContextMenuSub>

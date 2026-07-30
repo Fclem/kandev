@@ -5,7 +5,7 @@ import { ReviewFindingSeverityBadge } from "@/components/diff/review-finding-sev
 import { findingFileKey, sortFindings } from "@/lib/review/findings";
 import { formatLineRange } from "@/lib/diff";
 import type { TaskReviewFinding } from "@/lib/types/review";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type FindingFileGroup = { key: string; filePath: string; findings: TaskReviewFinding[] };
 
@@ -81,7 +81,12 @@ export function ReviewFindingsOverview({
           {total} open finding{total !== 1 ? "s" : ""}
         </span>
         <span className="text-xs text-muted-foreground">
-          across {t("review:files", { count: groups.length })}
+          <Trans
+            i18nKey="review:across"
+            values={{ value1: t("review:files", { count: groups.length }) }}
+          >
+            across {t("review:files", { count: groups.length })}
+          </Trans>
         </span>
       </div>
 

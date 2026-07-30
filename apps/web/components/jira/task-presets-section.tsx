@@ -294,8 +294,10 @@ export function TaskPresetsSection() {
             disabled={!loaded}
             className="cursor-pointer"
           >
-            <IconRefresh className="h-3.5 w-3.5 mr-1" />
-            Reset
+            <Trans i18nKey="jira:reset2">
+              <IconRefresh className="h-3.5 w-3.5 mr-1" />
+              Reset
+            </Trans>
           </Button>
         </div>
       }

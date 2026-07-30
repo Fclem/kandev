@@ -5,7 +5,7 @@ import { Button } from "@kandev/ui/button";
 import { useAppStore } from "@/components/state-provider";
 import { SyncDiffPane } from "./sync-diff-pane";
 import { useSyncState } from "./use-sync-state";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function SyncContent() {
   const { t } = useTranslation();
@@ -28,8 +28,10 @@ export function SyncContent() {
           disabled={sync.loading}
           className="cursor-pointer"
         >
-          <IconRefresh className="h-4 w-4 mr-1.5" />
-          Refresh
+          <Trans i18nKey="office:refresh">
+            <IconRefresh className="h-4 w-4 mr-1.5" />
+            Refresh
+          </Trans>
         </Button>
       </div>
       <div className="flex-1 min-h-0 overflow-auto">

@@ -15,7 +15,7 @@ import { useMonacoEditorComments } from "./use-monaco-editor-state";
 import { useMonacoEditorLsp, useMonacoDiffDecorations } from "./use-monaco-editor-lsp";
 import { useMonacoWalkthroughRange } from "./use-monaco-walkthrough-range";
 import { initMonacoThemes } from "./monaco-init";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 initMonacoThemes();
 
@@ -261,8 +261,10 @@ export function MonacoCodeEditor(props: MonacoCodeEditorProps) {
             onMouseDown={(e) => e.stopPropagation()}
             onClick={state.handleFloatingButtonClick}
           >
-            <IconMessagePlus className="h-3.5 w-3.5" />
-            Comment
+            <Trans i18nKey="editors:comment">
+              <IconMessagePlus className="h-3.5 w-3.5" />
+              Comment
+            </Trans>
           </Button>
         )}
       </div>

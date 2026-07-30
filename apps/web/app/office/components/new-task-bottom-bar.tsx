@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useAppStore } from "@/components/state-provider";
 import type { IssueDraft } from "./new-task-draft";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type StatusOption = { value: string; label: string; className: string };
 type PriorityOption = { value: string; label: string; icon: typeof IconMinus; className: string };
@@ -135,8 +135,10 @@ export function NewTaskBottomBar({ draft, onUpdate }: Props) {
       <StatusChip draft={draft} onUpdate={onUpdate} />
       <PriorityChip draft={draft} onUpdate={onUpdate} />
       <Button variant="outline" size="sm" className="cursor-pointer h-7 text-xs">
-        <IconUpload className="h-3.5 w-3.5 mr-1" />
-        Upload
+        <Trans i18nKey="office:upload">
+          <IconUpload className="h-3.5 w-3.5 mr-1" />
+          Upload
+        </Trans>
       </Button>
       <Tooltip>
         <TooltipTrigger asChild>

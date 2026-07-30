@@ -179,13 +179,17 @@ function StatsGrid({ run }: { run: RunDetail }) {
       </div>
       <div>
         <div className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-          <IconClock className="h-3 w-3" /> Duration
+          <Trans i18nKey="office:duration">
+            <IconClock className="h-3 w-3" /> Duration
+          </Trans>
         </div>
         <div data-testid="run-duration">{formatDuration(run.duration_ms)}</div>
       </div>
       <div>
         <div className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-          <IconCoin className="h-3 w-3" /> Cost
+          <Trans i18nKey="office:cost2">
+            <IconCoin className="h-3 w-3" /> Cost
+          </Trans>
         </div>
         <div data-testid="run-cost">{formatCostSubcents(run.costs.cost_subcents)}</div>
       </div>
@@ -268,7 +272,9 @@ function ActionBar({ runId, sessionId, isRunning, isFailed }: ActionBarProps) {
           className="cursor-pointer gap-1.5"
           data-testid="run-cancel-button"
         >
-          <IconPlayerStop className="h-3.5 w-3.5" /> Cancel
+          <Trans i18nKey="office:cancel">
+            <IconPlayerStop className="h-3.5 w-3.5" /> Cancel
+          </Trans>
         </Button>
       )}
       {isFailed && sessionId && (

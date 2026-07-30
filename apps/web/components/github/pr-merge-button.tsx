@@ -17,11 +17,17 @@ import { mergePR } from "@/lib/api/domains/github-api";
 import { getGitHubMutationActor } from "@/lib/github-auth";
 import type { MergeMethod, TaskPR } from "@/lib/types/github";
 import { isPRReadyToMerge } from "./pr-task-icon";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function MutationActor({ actor }: { actor: string | null }) {
   if (!actor) return null;
-  return <span className="text-[11px] text-muted-foreground">as {actor}</span>;
+  return (
+    <span className="text-[11px] text-muted-foreground">
+      <Trans i18nKey="github:as" values={{ actor }}>
+        as {actor}
+      </Trans>
+    </span>
+  );
 }
 
 function CompactMergeButton({

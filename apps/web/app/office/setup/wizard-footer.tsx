@@ -3,7 +3,7 @@
 import { Button } from "@kandev/ui/button";
 import { IconArrowLeft, IconArrowRight, IconRocket } from "@tabler/icons-react";
 import { SETUP_WIZARD_STEP_COUNT, SETUP_WIZARD_STEPS } from "./setup-wizard-steps";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type WizardFooterProps = {
   step: number;
@@ -33,8 +33,10 @@ export function WizardFooter({
       <div className="flex items-center gap-2">
         {step > 0 && (
           <Button variant="ghost" onClick={onBack} className="cursor-pointer">
-            <IconArrowLeft className="h-4 w-4 mr-1" />
-            Back
+            <Trans i18nKey="office:back">
+              <IconArrowLeft className="h-4 w-4 mr-1" />
+              Back
+            </Trans>
           </Button>
         )}
       </div>
@@ -51,8 +53,10 @@ export function WizardFooter({
           </Button>
         ) : (
           <Button onClick={onNext} disabled={!canAdvance} className="cursor-pointer">
-            Next
-            <IconArrowRight className="h-4 w-4 ml-1" />
+            <Trans i18nKey="office:next">
+              Next
+              <IconArrowRight className="h-4 w-4 ml-1" />
+            </Trans>
           </Button>
         )}
       </div>

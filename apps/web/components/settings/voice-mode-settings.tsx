@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { IconAlertTriangle, IconMicrophone } from "@tabler/icons-react";
@@ -519,7 +520,12 @@ function VoiceShortcutCard() {
     <SettingsCard isDirty={isDirty}>
       <CardHeader>
         <CardTitle className="text-base">
-          {CONFIGURABLE_SHORTCUTS.VOICE_INPUT_TOGGLE.label} Shortcut
+          <Trans
+            i18nKey="settings:shortcut"
+            values={{ label: CONFIGURABLE_SHORTCUTS.VOICE_INPUT_TOGGLE.label }}
+          >
+            {CONFIGURABLE_SHORTCUTS.VOICE_INPUT_TOGGLE.label} Shortcut
+          </Trans>
         </CardTitle>
       </CardHeader>
       <CardContent>

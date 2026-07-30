@@ -28,7 +28,7 @@ import {
 } from "@/components/editors/external-vcs-file-link";
 import { useCodeMirrorEditorState } from "./use-codemirror-editor-state";
 import { useCodeMirrorWalkthroughRange } from "./use-codemirror-walkthrough-range";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const SAVE_SHORTCUT =
   typeof navigator !== "undefined" && navigator.platform.includes("Mac") ? "\u2318" : "Ctrl";
@@ -121,8 +121,10 @@ function CodeMirrorReloadButton({
           className="h-8 cursor-pointer gap-1 px-2 text-xs"
           onClick={onReloadFromAgent}
         >
-          <IconRefresh className="h-3.5 w-3.5" />
-          Reload
+          <Trans i18nKey="editors:reload">
+            <IconRefresh className="h-3.5 w-3.5" />
+            Reload
+          </Trans>
         </Button>
       </TooltipTrigger>
       <TooltipContent>{t("editors:applyLatestAgentChangesToThis")}</TooltipContent>
@@ -170,8 +172,10 @@ function CodeMirrorSaveButton({
     >
       {isSaving ? (
         <>
-          <IconLoader2 className="h-4 w-4 animate-spin" />
-          Saving...
+          <Trans i18nKey="editors:saving">
+            <IconLoader2 className="h-4 w-4 animate-spin" />
+            Saving...
+          </Trans>
         </>
       ) : (
         <>
@@ -306,8 +310,10 @@ function CodeMirrorOverlays({ state }: { state: CodeMirrorEditorState }) {
           onMouseDown={(e) => e.stopPropagation()}
           onClick={state.handleFloatingButtonClick}
         >
-          <IconMessagePlus className="h-3.5 w-3.5" />
-          Comment
+          <Trans i18nKey="editors:comment">
+            <IconMessagePlus className="h-3.5 w-3.5" />
+            Comment
+          </Trans>
         </Button>
       )}
       {state.textSelection && (

@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from "@kandev/ui/alert-dialog";
 import { Button } from "@kandev/ui/button";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // previewLoader fetches the count of tasks that would be deleted. The
 // dialog calls it once when it opens; the result is cached for the
@@ -102,7 +102,11 @@ export function ResetWatchDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent data-testid="reset-watch-dialog">
         <AlertDialogHeader>
-          <AlertDialogTitle>Reset {integrationLabel}?</AlertDialogTitle>
+          <AlertDialogTitle>
+            <Trans i18nKey="common:reset" values={{ integrationLabel }}>
+              Reset {integrationLabel}?
+            </Trans>
+          </AlertDialogTitle>
           <AlertDialogDescription data-testid="reset-watch-dialog-description">
             {description}
           </AlertDialogDescription>

@@ -89,8 +89,20 @@ export function SentryIssueRow({ issue }: { issue: SentryIssue }) {
 function SentryIssueMeta({ issue, lastSeen }: { issue: SentryIssue; lastSeen: string }) {
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-      {issue.count != null && issue.count !== "" && <span>events {issue.count}</span>}
-      {typeof issue.userCount === "number" && <span>users {issue.userCount}</span>}
+      {issue.count != null && issue.count !== "" && (
+        <span>
+          <Trans i18nKey="sentry:events" values={{ count: issue.count }}>
+            events {issue.count}
+          </Trans>
+        </span>
+      )}
+      {typeof issue.userCount === "number" && (
+        <span>
+          <Trans i18nKey="sentry:users" values={{ userCount: issue.userCount }}>
+            users {issue.userCount}
+          </Trans>
+        </span>
+      )}
       {lastSeen && (
         <span title={issue.lastSeen}>
           <Trans i18nKey="sentry:lastSeen" values={{ lastSeen }}>

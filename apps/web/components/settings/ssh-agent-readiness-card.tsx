@@ -359,13 +359,17 @@ function StatusBadge({ row }: { row: SSHAgentReadinessRow }) {
   if (row.available) {
     return (
       <Badge variant="outline" className="border-green-500/30 bg-green-500/10 text-green-700">
-        <IconCheck className="mr-1 h-3 w-3" /> Installed
+        <Trans i18nKey="settings:installed3">
+          <IconCheck className="mr-1 h-3 w-3" /> Installed
+        </Trans>
       </Badge>
     );
   }
   return (
     <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-700">
-      <IconX className="mr-1 h-3 w-3" /> Missing
+      <Trans i18nKey="settings:missing">
+        <IconX className="mr-1 h-3 w-3" /> Missing
+      </Trans>
     </Badge>
   );
 }

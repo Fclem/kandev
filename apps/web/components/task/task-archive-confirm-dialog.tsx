@@ -18,7 +18,7 @@ import { useSubtaskCount } from "@/hooks/use-subtask-count";
 import { useTaskInFlight } from "@/hooks/use-task-in-flight";
 import { getCleanupSummary, getBulkCleanupSummary } from "./task-cleanup-summary";
 import { StillWorkingWarning } from "./task-still-working-warning";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type TaskArchiveConfirmDialogProps = {
   open: boolean;
@@ -80,6 +80,25 @@ function computeTaskIsInFlight(isInFlight: boolean | undefined, storeInFlight: b
   return Boolean(isInFlight) || storeInFlight;
 }
 
+/**
+ * Archive dialog heading + confirmation line. Extracted to keep
+ * TaskArchiveConfirmDialog under the complexity limit, and to route the copy
+ * through real plural keys instead of an English `task{s}` template.
+ */
+function useArchiveCopy(isBulkOperation: boolean | undefined, count: number, taskTitle?: string) {
+  const { t } = useTranslation();
+  if (!isBulkOperation) {
+    return {
+      title: t("task:archiveTaskQuestion"),
+      firstLine: t("task:areYouSureArchiveNamed", { title: taskTitle ?? "" }),
+    };
+  }
+  return {
+    title: t("task:archiveCountTasksQuestion", { count }),
+    firstLine: t("task:areYouSureArchiveCount", { count }),
+  };
+}
+
 export function TaskArchiveConfirmDialog({
   open,
   onOpenChange,
@@ -98,11 +117,7 @@ export function TaskArchiveConfirmDialog({
   const { t } = useTranslation();
   const confirmTaskArchive = useAppStore((state) => state.userSettings?.confirmTaskArchive ?? true);
   const safeCount = count ?? 0;
-  const label = isBulkOperation ? `task${safeCount !== 1 ? "s" : ""}` : "task";
-  const title = isBulkOperation ? `Archive ${safeCount} ${label}?` : "Archive task?";
-  const firstLine = isBulkOperation
-    ? `Are you sure you want to archive ${safeCount} ${label}?`
-    : `Are you sure you want to archive "${taskTitle}"?`;
+  const { title, firstLine } = useArchiveCopy(isBulkOperation, safeCount, taskTitle);
   const cleanup = isBulkOperation
     ? getBulkCleanupSummary(executorTypes ?? [])
     : getCleanupSummary(executorType);
@@ -171,8 +186,15 @@ export function TaskArchiveConfirmDialog({
               handleOpenChange(false);
             }}
           >
-            {isArchiving ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Archive
+            <Trans
+              i18nKey="task:archive2"
+              values={{
+                value0: isArchiving ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null,
+              }}
+            >
+              {isArchiving ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Archive
+            </Trans>
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

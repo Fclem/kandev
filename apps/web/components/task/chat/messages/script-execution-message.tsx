@@ -53,7 +53,9 @@ function AgentBootHeader({
     <div className="flex items-center gap-2 text-xs">
       <span className="inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap">
         <span className="text-xs text-muted-foreground">
-          {verb} agent {agentName}
+          <Trans i18nKey="task:agent" values={{ verb, agentName }}>
+            {verb} agent {agentName}
+          </Trans>
         </span>
         {isRunning && <GridSpinner className="text-muted-foreground" />}
       </span>
@@ -115,7 +117,12 @@ function ScriptFooter({ isAgentBoot, isRunning, metadata, exitCode }: ScriptFoot
   if (isAgentBoot && metadata.started_at && metadata.completed_at) {
     return (
       <div className="text-[10px] text-muted-foreground pt-2 border-t border-border/30">
-        Duration: {calculateDuration(metadata.started_at, metadata.completed_at)}
+        <Trans
+          i18nKey="task:duration"
+          values={{ value1: calculateDuration(metadata.started_at, metadata.completed_at) }}
+        >
+          Duration: {calculateDuration(metadata.started_at, metadata.completed_at)}
+        </Trans>
       </div>
     );
   }
@@ -128,7 +135,14 @@ function ScriptFooter({ isAgentBoot, isRunning, metadata, exitCode }: ScriptFoot
           </Trans>
         </span>
         {metadata.started_at && metadata.completed_at && (
-          <span>Duration: {calculateDuration(metadata.started_at, metadata.completed_at)}</span>
+          <span>
+            <Trans
+              i18nKey="task:duration"
+              values={{ value1: calculateDuration(metadata.started_at, metadata.completed_at) }}
+            >
+              Duration: {calculateDuration(metadata.started_at, metadata.completed_at)}
+            </Trans>
+          </span>
         )}
       </div>
     );

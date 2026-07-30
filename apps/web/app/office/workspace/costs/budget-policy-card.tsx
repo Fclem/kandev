@@ -7,7 +7,7 @@ import { IconTrash } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { BudgetPolicy } from "@/lib/state/slices/office/types";
 import { cn, formatDollars } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   policy: BudgetPolicy;
@@ -87,13 +87,42 @@ export function BudgetPolicyCard({ policy, spentSubcents = 0, onDelete }: Props)
             <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Budget: {formatDollars(policy.limitSubcents)}</span>
-            <span>Remaining: {formatDollars(remaining)}</span>
+            <span>
+              <Trans
+                i18nKey="office:budget"
+                values={{ value1: formatDollars(policy.limitSubcents) }}
+              >
+                Budget: {formatDollars(policy.limitSubcents)}
+              </Trans>
+            </span>
+            <span>
+              <Trans i18nKey="office:remaining" values={{ value1: formatDollars(remaining) }}>
+                Remaining: {formatDollars(remaining)}
+              </Trans>
+            </span>
           </div>
           <div className="flex gap-2 text-xs text-muted-foreground mt-1">
-            <span>Period: {policy.period}</span>
-            <span>Alert: {policy.alertThresholdPct}%</span>
-            <span>Action: {policy.actionOnExceed.replace(/_/g, " ")}</span>
+            <span>
+              <Trans i18nKey="office:period" values={{ period: policy.period }}>
+                Period: {policy.period}
+              </Trans>
+            </span>
+            <span>
+              <Trans
+                i18nKey="office:alert"
+                values={{ alertThresholdPct: policy.alertThresholdPct }}
+              >
+                Alert: {policy.alertThresholdPct}%
+              </Trans>
+            </span>
+            <span>
+              <Trans
+                i18nKey="office:action"
+                values={{ value1: policy.actionOnExceed.replace(/_/g, " ") }}
+              >
+                Action: {policy.actionOnExceed.replace(/_/g, " ")}
+              </Trans>
+            </span>
           </div>
         </div>
       </CardContent>

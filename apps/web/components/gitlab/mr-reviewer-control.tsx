@@ -9,7 +9,7 @@ import { Badge } from "@kandev/ui/badge";
 import { listProjectMembers } from "@/lib/api/domains/gitlab-api";
 import type { GitLabMRUser, GitLabProjectMember } from "@/lib/types/gitlab";
 import { isCurrentIdentityRequest } from "@/hooks/domains/gitlab/request-identity";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function toggleMemberId(ids: number[], id: number): number[] {
   return ids.includes(id) ? ids.filter((candidate) => candidate !== id) : [...ids, id];
@@ -137,7 +137,9 @@ export function MRReviewerControl({
           disabled={busy || !changed}
           onClick={() => void onSave(selectedIds)}
         >
-          <IconUserCheck className="mr-1 h-3.5 w-3.5" /> Apply
+          <Trans i18nKey="gitlab:apply">
+            <IconUserCheck className="mr-1 h-3.5 w-3.5" /> Apply
+          </Trans>
         </Button>
       </div>
       <div className="flex flex-wrap gap-1.5">

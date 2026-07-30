@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@kandev/ui/textarea";
 import type { AzureDevOpsProject, AzureDevOpsRepository } from "@/lib/types/azure-devops";
 import { cn } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type AzureDevOpsBrowseMode = "work-items" | "pull-requests";
 
@@ -170,9 +170,13 @@ function AdvancedFilters({
         onClick={() => onOpenChange(!open)}
         aria-expanded={open}
       >
-        <IconAdjustments className="h-4 w-4" />
-        Advanced
-        <IconChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        <Trans i18nKey="azureDevops:advanced">
+          <IconAdjustments className="h-4 w-4" />
+          Advanced
+          <IconChevronDown
+            className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")}
+          />
+        </Trans>
       </Button>
       <CollapsibleContent className={cn(compact && "basis-full")}>
         <div className={cn("space-y-4 pt-3", compact && "flex flex-wrap gap-3 space-y-0")}>

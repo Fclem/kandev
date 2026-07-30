@@ -15,7 +15,7 @@ import { ToggleGroup, ToggleGroupItem } from "@kandev/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import type { TaskPlanRevision } from "@/lib/types/http";
 import { lineDiff, diffSummary, type DiffLine, type DiffLineKind } from "./task-plan-diff";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   /** Revision pair in arbitrary user-pick order; the dialog re-orders them by
@@ -95,7 +95,9 @@ export function PlanRevisionDiffDialog({
               className="cursor-pointer"
               data-testid="plan-revision-diff-restore"
             >
-              Restore v{before.revision_number}
+              <Trans i18nKey="task:restoreV" values={{ revision_number: before.revision_number }}>
+                Restore v{before.revision_number}
+              </Trans>
             </Button>
           )}
         </DialogFooter>
@@ -353,8 +355,10 @@ function SplitCell({ side, line }: { side: "before" | "after"; line: DiffLine | 
 function DiffLoading() {
   return (
     <div className="flex items-center gap-2 p-3 text-muted-foreground">
-      <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-      Loading…
+      <Trans i18nKey="task:loading2">
+        <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+        Loading…
+      </Trans>
     </div>
   );
 }

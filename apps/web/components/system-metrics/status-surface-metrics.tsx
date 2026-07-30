@@ -15,7 +15,7 @@ import { useAppStore } from "@/components/state-provider";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useSystemMetricsSubscription } from "@/hooks/use-system-metrics-subscription";
 import type { SystemMetricSample, SystemMetricsSource } from "@/lib/types/system";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type StatusSurfaceMetricsProps = {
   presentation: "bar" | "mobile-drawer";
@@ -240,7 +240,11 @@ function MetricValue({
         <div className="space-y-1">
           <div className="font-medium">{metricLabel(metric.id)}</div>
           {help ? <div className="max-w-72 text-xs text-muted-foreground">{help}</div> : null}
-          <div className="text-xs text-muted-foreground">Host: {source.label}</div>
+          <div className="text-xs text-muted-foreground">
+            <Trans i18nKey="common:host2" values={{ label: source.label }}>
+              Host: {source.label}
+            </Trans>
+          </div>
           <div className="text-xs tabular-nums">{formatMetric(metric)}</div>
           {metric.error ? (
             <div className="text-xs text-muted-foreground">{metric.error}</div>

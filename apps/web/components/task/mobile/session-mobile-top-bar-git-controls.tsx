@@ -243,13 +243,17 @@ function CommitDialogFooter({
       <Button className="cursor-pointer" onClick={onCommit} disabled={disabled}>
         {isGitLoading ? (
           <>
-            <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
-            Committing...
+            <Trans i18nKey="task:committing">
+              <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
+              Committing...
+            </Trans>
           </>
         ) : (
           <>
-            <IconCheck className="h-4 w-4 mr-2" />
-            Commit
+            <Trans i18nKey="task:commit">
+              <IconCheck className="h-4 w-4 mr-2" />
+              Commit
+            </Trans>
           </>
         )}
       </Button>
@@ -299,8 +303,10 @@ export function PRDialog({
       <DialogContent className="max-w-[90vw] sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <IconGitPullRequest className="h-5 w-5 text-cyan-500" />
-            Create {terminology.longName}
+            <Trans i18nKey="task:create" values={{ longName: terminology.longName }}>
+              <IconGitPullRequest className="h-5 w-5 text-cyan-500" />
+              Create {terminology.longName}
+            </Trans>
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -383,6 +389,43 @@ export type GitActionsDropdownProps = {
   onMerge: () => void;
 };
 
+// GitPushMenuSub groups the plain-push and force-push actions into a submenu.
+function GitPushMenuSub({
+  disabled,
+  onPush,
+}: {
+  disabled: boolean;
+  onPush: (force?: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className="cursor-pointer gap-3" disabled={disabled}>
+        <IconCloudUpload className="h-4 w-4 text-green-500" />
+        <span className="flex-1">{t("common:push")}</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuItem
+          className="cursor-pointer gap-3"
+          onClick={() => onPush(false)}
+          disabled={disabled}
+        >
+          <IconCloudUpload className="h-4 w-4 text-green-500" />
+          <span>{t("common:push")}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="cursor-pointer gap-3"
+          onClick={() => onPush(true)}
+          disabled={disabled}
+        >
+          <IconAlertTriangle className="h-4 w-4 text-orange-500" />
+          <span>{t("common:forcePush")}</span>
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
 export function GitActionsDropdown({
   sessionId,
   isGitLoading,
@@ -431,47 +474,36 @@ export function GitActionsDropdown({
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer gap-3" onClick={onPRClick} disabled={disabled}>
           <IconGitPullRequest className="h-4 w-4 text-cyan-500" />
-          <span className="flex-1">Create {terminology.shortName}</span>
+          <span className="flex-1">
+            <Trans i18nKey="task:create2" values={{ shortName: terminology.shortName }}>
+              Create {terminology.shortName}
+            </Trans>
+          </span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer gap-3" onClick={onPull} disabled={disabled}>
           <IconCloudDownload className="h-4 w-4 text-blue-500" />
           <span className="flex-1">{t("common:pull")}</span>
         </DropdownMenuItem>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger className="cursor-pointer gap-3" disabled={disabled}>
-            <IconCloudUpload className="h-4 w-4 text-green-500" />
-            <span className="flex-1">{t("common:push")}</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuItem
-              className="cursor-pointer gap-3"
-              onClick={() => onPush(false)}
-              disabled={disabled}
-            >
-              <IconCloudUpload className="h-4 w-4 text-green-500" />
-              <span>{t("common:push")}</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="cursor-pointer gap-3"
-              onClick={() => onPush(true)}
-              disabled={disabled}
-            >
-              <IconAlertTriangle className="h-4 w-4 text-orange-500" />
-              <span>{t("common:forcePush")}</span>
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        <GitPushMenuSub disabled={disabled} onPush={onPush} />
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer gap-3" onClick={onRebase} disabled={disabled}>
           <IconGitCherryPick className="h-4 w-4 text-orange-500" />
           <span className="flex-1">{t("common:rebase")}</span>
-          <span className="text-xs text-muted-foreground">onto {baseBranch || "main"}</span>
+          <span className="text-xs text-muted-foreground">
+            <Trans i18nKey="task:onto" values={{ value1: baseBranch || "main" }}>
+              onto {baseBranch || "main"}
+            </Trans>
+          </span>
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer gap-3" onClick={onMerge} disabled={disabled}>
           <IconGitMerge className="h-4 w-4 text-purple-500" />
           <span className="flex-1">{t("common:merge")}</span>
-          <span className="text-xs text-muted-foreground">from {baseBranch || "main"}</span>
+          <span className="text-xs text-muted-foreground">
+            <Trans i18nKey="task:from" values={{ value1: baseBranch || "main" }}>
+              from {baseBranch || "main"}
+            </Trans>
+          </span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

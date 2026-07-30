@@ -73,8 +73,10 @@ export function AddPanelMenuItems({
         onClick={() => addBrowserPanel(undefined, groupId)}
         className={MENU_ITEM_CLASS}
       >
-        <IconDeviceDesktop className={MENU_ICON_CLASS} />
-        Browser
+        <Trans i18nKey="task:browser" values={{ MENU_ICON_CLASS }}>
+          <IconDeviceDesktop className={MENU_ICON_CLASS} />
+          Browser
+        </Trans>
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => addVscodePanel()} className={MENU_ITEM_CLASS}>
         <Trans i18nKey="task:vsCode2" values={{ MENU_ICON_CLASS }}>
@@ -84,20 +86,26 @@ export function AddPanelMenuItems({
       </DropdownMenuItem>
       {!state.isPassthrough && (
         <DropdownMenuItem onClick={() => addPlanPanel({ groupId })} className={MENU_ITEM_CLASS}>
-          <IconFileText className={MENU_ICON_CLASS} />
-          Plan
+          <Trans i18nKey="task:plan2" values={{ MENU_ICON_CLASS }}>
+            <IconFileText className={MENU_ICON_CLASS} />
+            Plan
+          </Trans>
         </DropdownMenuItem>
       )}
       {!state.hasChanges && (
         <DropdownMenuItem onClick={() => addChangesPanel(groupId)} className={MENU_ITEM_CLASS}>
-          <IconGitBranch className={MENU_ICON_CLASS} />
-          Changes
+          <Trans i18nKey="task:changes" values={{ MENU_ICON_CLASS }}>
+            <IconGitBranch className={MENU_ICON_CLASS} />
+            Changes
+          </Trans>
         </DropdownMenuItem>
       )}
       {!state.hasFiles && (
         <DropdownMenuItem onClick={() => addFilesPanel(groupId)} className={MENU_ITEM_CLASS}>
-          <IconFolder className={MENU_ICON_CLASS} />
-          Files
+          <Trans i18nKey="task:files" values={{ MENU_ICON_CLASS }}>
+            <IconFolder className={MENU_ICON_CLASS} />
+            Files
+          </Trans>
         </DropdownMenuItem>
       )}
       {state.prs.map((pr) => (

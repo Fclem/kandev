@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconAlertTriangle, IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { Checkbox } from "@kandev/ui/checkbox";
@@ -84,8 +85,10 @@ export function ReviewDiffHeader({
       <FileStatusIcon status={file.status} oldPath={file.old_path} className="sm:hidden" />
       {isStale && (
         <span className="flex items-center gap-1 text-xs text-yellow-500">
-          <IconAlertTriangle className="h-3.5 w-3.5" />
-          changed
+          <Trans i18nKey="review:changed">
+            <IconAlertTriangle className="h-3.5 w-3.5" />
+            changed
+          </Trans>
         </span>
       )}
       <span className="text-xs text-muted-foreground">

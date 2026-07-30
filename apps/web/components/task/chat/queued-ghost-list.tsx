@@ -256,7 +256,11 @@ function QueueChip({ count, isFull, previewText, onToggle }: QueueChipProps) {
       )}
     >
       <IconLayoutList className="h-3 w-3" />
-      <span>{count} queued</span>
+      <span>
+        <Trans i18nKey="task:queued2" values={{ count }}>
+          {count} queued
+        </Trans>
+      </span>
       {isFull && <span className="opacity-80">{t("task:full")}</span>}
     </button>
   );

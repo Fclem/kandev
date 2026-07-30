@@ -145,7 +145,9 @@ function AppRegistrationDetails({ app }: { app?: GitHubAppRegistrationCatalogIte
           {app.visibility}
         </Badge>
         <Badge variant="outline" className="capitalize">
-          Webhook {app.webhook_status}
+          <Trans i18nKey="github:webhook" values={{ webhook_status: app.webhook_status }}>
+            Webhook {app.webhook_status}
+          </Trans>
         </Badge>
         <span>{app.source === "managed" ? "Created by Kandev" : "Imported"}</span>
       </div>
@@ -212,8 +214,10 @@ function AutomationActions({
           disabled={busy}
           className="h-11 cursor-pointer text-destructive"
         >
-          <IconTrash className="mr-2 h-4 w-4" />
-          Disconnect
+          <Trans i18nKey="github:disconnect">
+            <IconTrash className="mr-2 h-4 w-4" />
+            Disconnect
+          </Trans>
         </Button>
       )}
     </div>
@@ -323,8 +327,10 @@ function PersonalIdentityActions({
           disabled={busy}
           className="h-11 cursor-pointer text-destructive"
         >
-          <IconTrash className="mr-2 h-4 w-4" />
-          Disconnect
+          <Trans i18nKey="github:disconnect">
+            <IconTrash className="mr-2 h-4 w-4" />
+            Disconnect
+          </Trans>
         </Button>
       )}
     </div>

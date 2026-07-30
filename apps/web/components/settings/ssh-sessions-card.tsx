@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -72,8 +73,15 @@ export function SSHSessionsCard({ executorId }: SSHSessionsCardProps) {
             data-testid="ssh-sessions-refresh"
             className="cursor-pointer"
           >
-            {loading ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-            Refresh
+            <Trans
+              i18nKey="settings:refresh2"
+              values={{
+                value0: loading ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null,
+              }}
+            >
+              {loading ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Refresh
+            </Trans>
           </Button>
         </div>
       </CardHeader>

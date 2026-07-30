@@ -116,8 +116,10 @@ function PopoverActions({
               disabled={isDisabled}
               className={`gap-1.5 cursor-pointer ${handleSubmitAndRun ? "rounded-r-none border-r-0" : ""}`}
             >
-              <IconPlus className="h-3.5 w-3.5" />
-              Add
+              <Trans i18nKey="task:add">
+                <IconPlus className="h-3.5 w-3.5" />
+                Add
+              </Trans>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -137,8 +139,10 @@ function PopoverActions({
                 disabled={isDisabled}
                 className="gap-1.5 rounded-l-none cursor-pointer"
               >
-                <IconPlayerPlay className="h-3.5 w-3.5" />
-                Run
+                <Trans i18nKey="task:run">
+                  <IconPlayerPlay className="h-3.5 w-3.5" />
+                  Run
+                </Trans>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">

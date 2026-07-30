@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -58,7 +59,11 @@ export function ParticipantRow({
             <IconX className="h-3 w-3" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Remove {label.toLowerCase()}</TooltipContent>
+        <TooltipContent>
+          <Trans i18nKey="office:remove2" values={{ value1: label.toLowerCase() }}>
+            Remove {label.toLowerCase()}
+          </Trans>
+        </TooltipContent>
       </Tooltip>
     </div>
   );

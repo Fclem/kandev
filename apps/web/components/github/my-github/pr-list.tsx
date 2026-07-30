@@ -70,9 +70,11 @@ function StartTaskMenu({
           className="h-7 gap-1 cursor-pointer"
           data-testid="pr-start-task-trigger"
         >
-          <IconPlus className="h-3.5 w-3.5" />
-          Task
-          <IconChevronDown className="h-3 w-3" />
+          <Trans i18nKey="github:task">
+            <IconPlus className="h-3.5 w-3.5" />
+            Task
+            <IconChevronDown className="h-3 w-3" />
+          </Trans>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">

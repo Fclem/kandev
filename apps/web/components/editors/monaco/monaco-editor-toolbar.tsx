@@ -24,7 +24,7 @@ import {
 import { PanelHeaderBarSplit } from "@/components/task/panel-primitives";
 import { LspStatusButton } from "@/components/editors/lsp-status-button";
 import type { LspStatus } from "@/lib/lsp/lsp-client-manager";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const SAVE_SHORTCUT =
   typeof navigator !== "undefined" && navigator.platform.includes("Mac") ? "\u2318" : "Ctrl";
@@ -48,8 +48,10 @@ function SaveButton({
     >
       {isSaving ? (
         <>
-          <IconLoader2 className="h-4 w-4 animate-spin" />
-          Saving...
+          <Trans i18nKey="editors:saving">
+            <IconLoader2 className="h-4 w-4 animate-spin" />
+            Saving...
+          </Trans>
         </>
       ) : (
         <>
@@ -173,8 +175,10 @@ function ReloadFromAgentButton({
           className="h-8 cursor-pointer gap-1 px-2 text-xs"
           onClick={onReloadFromAgent}
         >
-          <IconRefresh className="h-3.5 w-3.5" />
-          Reload
+          <Trans i18nKey="editors:reload">
+            <IconRefresh className="h-3.5 w-3.5" />
+            Reload
+          </Trans>
         </Button>
       </TooltipTrigger>
       <TooltipContent>{t("editors:applyLatestAgentChangesToThis")}</TooltipContent>

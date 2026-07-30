@@ -152,7 +152,9 @@ export function ApprovalActionBar({ task }: ApprovalActionBarProps) {
             data-testid="approval-action-approve"
             onClick={() => setMode("approve")}
           >
-            <IconCheck className="h-3.5 w-3.5 mr-1" /> Approve
+            <Trans i18nKey="task:approve2">
+              <IconCheck className="h-3.5 w-3.5 mr-1" /> Approve
+            </Trans>
           </Button>
           <Button
             type="button"

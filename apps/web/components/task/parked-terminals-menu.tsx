@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import type { Terminal } from "@/hooks/domains/session/use-terminals";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 /**
  * Compact dropdown that lists every parked (hidden but PTY-alive) terminal
@@ -51,7 +51,11 @@ export function ParkedTerminalsMenu({
         title={t("task:parkedTerminals")}
       >
         <span className="font-mono">⌃</span>
-        <span>Parked ({parkedTerminals.length})</span>
+        <span>
+          <Trans i18nKey="task:parked" values={{ length: parkedTerminals.length }}>
+            Parked ({parkedTerminals.length})
+          </Trans>
+        </span>
       </button>
       {open && (
         <div

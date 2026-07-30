@@ -274,6 +274,46 @@ function PortRow({
   );
 }
 
+// PortListHeader renders the "Listening Ports" title plus the re-scan button.
+function PortListHeader({ loading, onRefresh }: { loading: boolean; onRefresh: () => void }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm font-medium flex items-center gap-1.5">
+        <Trans i18nKey="task:listeningPorts">
+          Listening Ports
+          <InfoTip text="TCP ports with active listeners inside the remote executor. Click refresh to re-scan." />
+        </Trans>
+      </span>
+      <Button
+        size="sm"
+        variant="ghost"
+        data-testid="port-forward-refresh"
+        className="cursor-pointer h-7 gap-1 text-xs"
+        onClick={onRefresh}
+        disabled={loading}
+      >
+        <Trans
+          i18nKey="task:refresh2"
+          values={{
+            value0: loading ? (
+              <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <IconRefresh className="h-3.5 w-3.5" />
+            ),
+          }}
+        >
+          {loading ? (
+            <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <IconRefresh className="h-3.5 w-3.5" />
+          )}
+          Refresh
+        </Trans>
+      </Button>
+    </div>
+  );
+}
+
 function PortListSection({
   detectedPorts,
   manualPorts,
@@ -303,29 +343,7 @@ function PortListSection({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium flex items-center gap-1.5">
-          <Trans i18nKey="task:listeningPorts">
-            Listening Ports
-            <InfoTip text="TCP ports with active listeners inside the remote executor. Click refresh to re-scan." />
-          </Trans>
-        </span>
-        <Button
-          size="sm"
-          variant="ghost"
-          data-testid="port-forward-refresh"
-          className="cursor-pointer h-7 gap-1 text-xs"
-          onClick={onRefresh}
-          disabled={loading}
-        >
-          {loading ? (
-            <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <IconRefresh className="h-3.5 w-3.5" />
-          )}
-          Refresh
-        </Button>
-      </div>
+      <PortListHeader loading={loading} onRefresh={onRefresh} />
 
       {!loaded && !loading && (
         <p className="text-xs text-muted-foreground">
@@ -410,8 +428,10 @@ function ManualPortInput({ onAdd }: { onAdd: (port: number) => void }) {
           className="cursor-pointer h-8 gap-1"
           onClick={handleAdd}
         >
-          <IconPlus className="h-3.5 w-3.5" />
-          Add
+          <Trans i18nKey="task:add">
+            <IconPlus className="h-3.5 w-3.5" />
+            Add
+          </Trans>
         </Button>
       </div>
     </div>

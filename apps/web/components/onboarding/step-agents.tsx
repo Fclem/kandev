@@ -87,8 +87,10 @@ function StatusPill({ status, error }: { status: string; error?: string }) {
     case "failed": {
       const pill = (
         <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
-          <IconAlertTriangle className="h-3.5 w-3.5" />
-          Error
+          <Trans i18nKey="common:error">
+            <IconAlertTriangle className="h-3.5 w-3.5" />
+            Error
+          </Trans>
         </span>
       );
       if (!error) return pill;
@@ -102,8 +104,10 @@ function StatusPill({ status, error }: { status: string; error?: string }) {
     case "probing":
       return (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-          Probing
+          <Trans i18nKey="common:probing">
+            <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+            Probing
+          </Trans>
         </span>
       );
     case "not_configured":
@@ -115,8 +119,10 @@ function StatusPill({ status, error }: { status: string; error?: string }) {
     default:
       return (
         <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-          <IconCheck className="h-3.5 w-3.5" />
-          Installed
+          <Trans i18nKey="common:installed">
+            <IconCheck className="h-3.5 w-3.5" />
+            Installed
+          </Trans>
         </span>
       );
   }

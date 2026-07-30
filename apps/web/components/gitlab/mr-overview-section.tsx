@@ -64,12 +64,25 @@ export function MROverviewSection({
         <div className="rounded-md border p-2 text-xs">
           <span className="text-muted-foreground">{t("gitlab:approvals")}</span>
           <p className="mt-1 flex items-center gap-1 font-medium">
-            {feedback.approvals.length > 0 ? (
-              <IconCheck className="h-4 w-4 text-green-600" />
-            ) : (
-              <IconX className="h-4 w-4 text-muted-foreground" />
-            )}
-            {feedback.approvals.length} approved
+            <Trans
+              i18nKey="gitlab:approved"
+              values={{
+                value0:
+                  feedback.approvals.length > 0 ? (
+                    <IconCheck className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <IconX className="h-4 w-4 text-muted-foreground" />
+                  ),
+                length: feedback.approvals.length,
+              }}
+            >
+              {feedback.approvals.length > 0 ? (
+                <IconCheck className="h-4 w-4 text-green-600" />
+              ) : (
+                <IconX className="h-4 w-4 text-muted-foreground" />
+              )}
+              {feedback.approvals.length} approved
+            </Trans>
           </p>
         </div>
         <div className="rounded-md border p-2 text-xs">

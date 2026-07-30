@@ -167,7 +167,13 @@ function AttachmentBody({ doc }: { doc: TaskDocument }) {
     <div className="flex items-center gap-2 px-3 pb-3">
       <span className="text-sm text-muted-foreground flex-1">
         {doc.filename ?? doc.key}
-        {doc.size !== undefined && <span className="ml-1">({Math.round(doc.size / 1024)} KB)</span>}
+        {doc.size !== undefined && (
+          <span className="ml-1">
+            <Trans i18nKey="task:kb" values={{ value1: Math.round(doc.size / 1024) }}>
+              ({Math.round(doc.size / 1024)} KB)
+            </Trans>
+          </span>
+        )}
       </span>
       <a
         href={`/api/v1/office/tasks/${doc.taskId}/documents/${encodeURIComponent(doc.key)}/download`}
@@ -206,7 +212,11 @@ function DocumentCard({ doc, onDelete }: { doc: TaskDocument; onDelete: (key: st
           {typeConfig.label}
         </span>
         <span className="flex-1 text-sm font-medium truncate">{doc.title || doc.key}</span>
-        <span className="text-xs text-muted-foreground shrink-0">rev {doc.revision}</span>
+        <span className="text-xs text-muted-foreground shrink-0">
+          <Trans i18nKey="task:rev" values={{ revision: doc.revision }}>
+            rev {doc.revision}
+          </Trans>
+        </span>
         <span className="text-xs text-muted-foreground shrink-0 ml-2">
           {formatRelativeTime(doc.updatedAt)}
         </span>

@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useRef } from "react";
 import { IconAlertTriangle, IconArrowRight, IconUser } from "@tabler/icons-react";
@@ -64,7 +65,11 @@ function CycleHop({ hop, index }: { hop: WorkflowReplayCycleHop; index: number }
           <span>User action required</span>
         </div>
       )}
-      <span className="sr-only">Hop {index + 1}</span>
+      <span className="sr-only">
+        <Trans i18nKey="settings:hop" values={{ value1: index + 1 }}>
+          Hop {index + 1}
+        </Trans>
+      </span>
     </li>
   );
 }

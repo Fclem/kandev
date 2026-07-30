@@ -92,8 +92,10 @@ export function PRSubmitButton({
     >
       {isGitLoading ? (
         <>
-          <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
-          Creating...
+          <Trans i18nKey="task:creating">
+            <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
+            Creating...
+          </Trans>
         </>
       ) : (
         <>

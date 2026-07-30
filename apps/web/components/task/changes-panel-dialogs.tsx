@@ -138,13 +138,17 @@ export function AmendDialog({
           >
             {isLoading ? (
               <>
-                <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
-                Amending...
+                <Trans i18nKey="task:amending">
+                  <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
+                  Amending...
+                </Trans>
               </>
             ) : (
               <>
-                <IconCheck className="h-4 w-4 mr-2" />
-                Amend
+                <Trans i18nKey="task:amend">
+                  <IconCheck className="h-4 w-4 mr-2" />
+                  Amend
+                </Trans>
               </>
             )}
           </Button>
@@ -277,8 +281,10 @@ export function ResetDialog({
           >
             {isLoading ? (
               <>
-                <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
-                Resetting...
+                <Trans i18nKey="task:resetting">
+                  <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
+                  Resetting...
+                </Trans>
               </>
             ) : (
               <>{t("task:reset")}</>

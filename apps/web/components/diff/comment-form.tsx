@@ -42,8 +42,10 @@ function ActionButtons({
           onClick={onCancel}
           className="h-6 cursor-pointer px-2 text-xs"
         >
-          <IconX className="mr-1 h-3 w-3" />
-          Cancel
+          <Trans i18nKey="diff:cancel">
+            <IconX className="mr-1 h-3 w-3" />
+            Cancel
+          </Trans>
         </Button>
         <div className="inline-flex">
           <Tooltip>
@@ -76,8 +78,10 @@ function ActionButtons({
                   disabled={disabled}
                   className="h-6 cursor-pointer gap-1 rounded-l-none px-2 text-xs"
                 >
-                  <IconPlayerPlay className="h-3 w-3" />
-                  Run
+                  <Trans i18nKey="diff:run">
+                    <IconPlayerPlay className="h-3 w-3" />
+                    Run
+                  </Trans>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">

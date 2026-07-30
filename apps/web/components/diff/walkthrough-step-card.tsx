@@ -20,7 +20,7 @@ import {
 import type { TaskWalkthrough, WalkthroughStep } from "@/lib/types/http";
 import type { WalkthroughComment } from "@/lib/state/slices/comments";
 import { CommentForm } from "./comment-form";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export const WALKTHROUGH_STEP_BODY_CLASS =
   "prose prose-sm dark:prose-invert max-w-none text-left text-sm leading-6 [overflow-wrap:anywhere] [text-align:left] [&_li]:text-left [&_p]:my-2 [&_p]:text-left";
@@ -77,7 +77,9 @@ function StepHeader({
         {t("diff:walkthrough")}
       </Badge>
       <span className="text-xs text-muted-foreground" data-testid="walkthrough-step-header">
-        Step {activeStep + 1} / {stepCount} · {lineLabel}
+        <Trans i18nKey="diff:step" values={{ value1: activeStep + 1, stepCount, lineLabel }}>
+          Step {activeStep + 1} / {stepCount} · {lineLabel}
+        </Trans>
       </span>
       <Button
         variant="ghost"

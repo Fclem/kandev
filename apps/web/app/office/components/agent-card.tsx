@@ -8,7 +8,7 @@ import type { AgentSummary, SessionSummary } from "@/lib/api/domains/office-api"
 import { AgentAvatar as RoleAwareAgentAvatar } from "./agent-avatar";
 import { timeAgo } from "@/lib/utils/time";
 import { useNow } from "./shared/use-now";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = { summary: AgentSummary };
 
@@ -187,7 +187,9 @@ function SessionRow({ session, agentName }: { session: SessionSummary; agentName
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
       <span className="truncate">
-        {agentName} {verb} for {durationS}s{cmds}
+        <Trans i18nKey="office:forS" values={{ agentName, verb, durationS, cmds }}>
+          {agentName} {verb} for {durationS}s{cmds}
+        </Trans>
       </span>
       <span className="flex-1" />
       <span className="shrink-0">{timeAgo(session.started_at)}</span>

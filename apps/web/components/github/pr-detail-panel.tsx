@@ -503,25 +503,35 @@ function HeaderDateLine({ taskPR }: { taskPR: TaskPR }) {
   return (
     <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
       <span className="flex items-center gap-0.5">
-        by <AuthorLink author={taskPR.author_login} />
+        <Trans i18nKey="github:by" values={{ author_login: taskPR.author_login }}>
+          by <AuthorLink author={taskPR.author_login} />
+        </Trans>
       </span>
       <span>&middot;</span>
       <span className={getTimeAgoColor(taskPR.created_at)}>
-        opened {formatTimeAgo(taskPR.created_at)}
+        <Trans i18nKey="github:opened" values={{ value1: formatTimeAgo(taskPR.created_at) }}>
+          opened {formatTimeAgo(taskPR.created_at)}
+        </Trans>
       </span>
       {taskPR.merged_at && (
         <>
           <span>&middot;</span>
           <span className="flex items-center gap-0.5">
-            <IconGitMerge className="h-3 w-3 text-purple-500" />
-            merged {formatTimeAgo(taskPR.merged_at)}
+            <Trans i18nKey="github:merged" values={{ value2: formatTimeAgo(taskPR.merged_at) }}>
+              <IconGitMerge className="h-3 w-3 text-purple-500" />
+              merged {formatTimeAgo(taskPR.merged_at)}
+            </Trans>
           </span>
         </>
       )}
       {taskPR.closed_at && !taskPR.merged_at && (
         <>
           <span>&middot;</span>
-          <span>closed {formatTimeAgo(taskPR.closed_at)}</span>
+          <span>
+            <Trans i18nKey="github:closed" values={{ value1: formatTimeAgo(taskPR.closed_at) }}>
+              closed {formatTimeAgo(taskPR.closed_at)}
+            </Trans>
+          </span>
         </>
       )}
     </div>
@@ -545,8 +555,13 @@ function HeaderStatsLine({ taskPR, metrics }: { taskPR: TaskPR; metrics: PRPanel
         {t("github:reviews", { count: metrics.reviewCount })}
         {metrics.pendingReviewCount > 0 && (
           <span className="text-yellow-600 dark:text-yellow-400">
-            {" "}
-            ({metrics.pendingReviewCount} pending)
+            <Trans
+              i18nKey="github:pending"
+              values={{ pendingReviewCount: metrics.pendingReviewCount }}
+            >
+              {" "}
+              ({metrics.pendingReviewCount} pending)
+            </Trans>
           </span>
         )}
       </span>

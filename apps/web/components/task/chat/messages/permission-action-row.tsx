@@ -42,8 +42,10 @@ export const PermissionActionRow = memo(function PermissionActionRow({
         data-testid="permission-reject"
         className={ACTION_BUTTON_CLASS}
       >
-        <IconX className="h-4 w-4 mr-1 text-red-500" />
-        Deny
+        <Trans i18nKey="task:deny">
+          <IconX className="h-4 w-4 mr-1 text-red-500" />
+          Deny
+        </Trans>
       </Button>
       <Button
         size="xs"
@@ -53,12 +55,23 @@ export const PermissionActionRow = memo(function PermissionActionRow({
         data-testid="permission-approve"
         className={ACTION_BUTTON_CLASS}
       >
-        {isResponding ? (
-          <GridSpinner className="text-foreground mr-1" />
-        ) : (
-          <IconCheck className="h-4 w-4 mr-1 text-green-500" />
-        )}
-        Approve
+        <Trans
+          i18nKey="task:approve"
+          values={{
+            value0: isResponding ? (
+              <GridSpinner className="text-foreground mr-1" />
+            ) : (
+              <IconCheck className="h-4 w-4 mr-1 text-green-500" />
+            ),
+          }}
+        >
+          {isResponding ? (
+            <GridSpinner className="text-foreground mr-1" />
+          ) : (
+            <IconCheck className="h-4 w-4 mr-1 text-green-500" />
+          )}
+          Approve
+        </Trans>
       </Button>
       {onAllowAlways && (
         <Button

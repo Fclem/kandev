@@ -171,22 +171,12 @@ function TaskContextMenuItems(props: TaskContextMenuItemsProps) {
     workflows,
     stepsByWorkflowId,
     steps,
-    onRenameTask,
-    onArchiveTask,
-    onCreateSubtask,
-    onDeleteTask,
-    onDetachTask,
-    onMoveToStep,
-    onTogglePin,
-    isPinned,
     pinnedTaskIds,
-    isDeleting,
     selectedTaskIds,
     onBulkArchive,
     onBulkDelete,
     onBulkPin,
     onBulkMove,
-    onClearSelection,
     isMixedWorkflowSelection,
     closeMenu,
     moveTasks,
@@ -220,6 +210,38 @@ function TaskContextMenuItems(props: TaskContextMenuItemsProps) {
     );
   }
 
+  return (
+    <SingleTaskMenuItems {...props} actingIds={actingIds} actingOnSelection={actingOnSelection} />
+  );
+}
+
+/** Full single-task action list, shown when the right-click targets one task. */
+function SingleTaskMenuItems(
+  props: TaskContextMenuItemsProps & { actingIds: string[]; actingOnSelection: boolean },
+) {
+  const {
+    task,
+    workflows,
+    stepsByWorkflowId,
+    steps,
+    onRenameTask,
+    onArchiveTask,
+    onCreateSubtask,
+    onDeleteTask,
+    onDetachTask,
+    onMoveToStep,
+    onTogglePin,
+    isPinned,
+    isDeleting,
+    onBulkArchive,
+    onBulkMove,
+    onClearSelection,
+    isMixedWorkflowSelection,
+    closeMenu,
+    moveTasks,
+    actingIds,
+    actingOnSelection,
+  } = props;
   // Acting on a lone selected row (Pin / Delete) must drop it from the selection
   // so later plain clicks navigate instead of toggling.
   const withClear = (handler?: (id: string) => void) =>
@@ -242,8 +264,10 @@ function TaskContextMenuItems(props: TaskContextMenuItemsProps) {
       <TaskRenameItem task={task} disabled={isDeleting} onRenameTask={onRenameTask} />
       <TaskCreateSubtaskItem task={task} disabled={isDeleting} onCreateSubtask={onCreateSubtask} />
       <ContextMenuItem disabled>
-        <IconCopy className="mr-2 h-4 w-4" />
-        Duplicate
+        <Trans i18nKey="task:duplicate">
+          <IconCopy className="mr-2 h-4 w-4" />
+          Duplicate
+        </Trans>
       </ContextMenuItem>
       <TaskArchiveItem
         taskId={task.id}
@@ -432,8 +456,10 @@ function TaskRenameItem({
   if (!onRenameTask) return null;
   return (
     <ContextMenuItem disabled={disabled} onSelect={() => onRenameTask(task.id, task.title)}>
-      <IconPencil className="mr-2 h-4 w-4" />
-      Rename
+      <Trans i18nKey="task:rename3">
+        <IconPencil className="mr-2 h-4 w-4" />
+        Rename
+      </Trans>
     </ContextMenuItem>
   );
 }
@@ -551,8 +577,10 @@ function TaskLinkMenu({
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger disabled={disabled}>
-        <IconLink className="mr-2 h-4 w-4" />
-        Link
+        <Trans i18nKey="task:link">
+          <IconLink className="mr-2 h-4 w-4" />
+          Link
+        </Trans>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-56">
         {onLinkPullRequest && (

@@ -28,7 +28,7 @@ import { useSidebarTaskLinking } from "../task-session-sidebar-task-linking";
 import { useSheetData, useSheetActions } from "./session-task-switcher-sheet-hooks";
 import { useQuickChatLauncher } from "@/hooks/use-quick-chat-launcher";
 import { useMobileTaskRename } from "./use-mobile-task-rename";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SessionTaskSwitcherSheetProps = {
   open: boolean;
@@ -184,8 +184,10 @@ function TaskSwitcherSurfaceHeader({
               onClick={onQuickChat}
               data-testid="mobile-sheet-quick-chat"
             >
-              <IconMessageCircle className="h-4 w-4" />
-              Chat
+              <Trans i18nKey="task:chat2">
+                <IconMessageCircle className="h-4 w-4" />
+                Chat
+              </Trans>
             </Button>
           )}
           <Button
@@ -194,8 +196,10 @@ function TaskSwitcherSurfaceHeader({
             className="h-7 gap-1 cursor-pointer"
             onClick={onNewTask}
           >
-            <IconPlus className="h-4 w-4" />
-            New
+            <Trans i18nKey="task:new">
+              <IconPlus className="h-4 w-4" />
+              New
+            </Trans>
           </Button>
         </div>
       </div>

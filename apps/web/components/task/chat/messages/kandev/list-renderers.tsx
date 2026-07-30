@@ -23,7 +23,7 @@ import {
 } from "./shared";
 import { pickArray, pickNumber, pickString } from "./parse";
 import type { KandevRenderer } from "./types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 // NamedListRow is the canonical row layout for entries with name + id +
 // optional description (workspaces, workflows, executor profiles). The id
@@ -418,7 +418,11 @@ export const ListExecutorProfilesRenderer: KandevRenderer = ({ args, result, sta
             >
               <span>{p.name ?? "(unnamed)"}</span>
               {p.mcp_policy && (
-                <span className="text-[10px] text-muted-foreground/60">mcp: {p.mcp_policy}</span>
+                <span className="text-[10px] text-muted-foreground/60">
+                  <Trans i18nKey="task:mcp" values={{ mcp_policy: p.mcp_policy }}>
+                    mcp: {p.mcp_policy}
+                  </Trans>
+                </span>
               )}
               <IdChip id={p.id} />
             </div>
@@ -474,7 +478,11 @@ export const ListTaskDocumentsRenderer: KandevRenderer = ({ args, result, status
               )}
               {d.type && <span className="text-[10px] text-muted-foreground/60">{d.type}</span>}
               {d.author && (
-                <span className="text-[10px] text-muted-foreground/60">by {d.author}</span>
+                <span className="text-[10px] text-muted-foreground/60">
+                  <Trans i18nKey="task:by" values={{ author: d.author }}>
+                    by {d.author}
+                  </Trans>
+                </span>
               )}
             </div>
           ))

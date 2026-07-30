@@ -30,6 +30,13 @@ if (!TARGETS.length) {
   process.exit(2);
 }
 
+/**
+ * Units, version prefixes, and keyboard glyphs that appear as sentence
+ * fragments. Not copy: translating "ms)" or "esc" would be wrong, not helpful.
+ */
+const UNIT_OR_GLYPH =
+  /^(v|ms\)?|s|m|h|d|K|B|KB|MB|GB|TB|esc|Page|of|for|·[\s·v]*|[+\-·|/(),.:]+|\+[A-Z]\)?)$/;
+
 const KEEP_LITERAL =
   /^(Kandev|GitHub|GitLab|Jira|Linear|Slack|Sentry|Azure DevOps|Docker|SSH|ACP|MCP|PR|CI|AI|API|JSON|YAML|LSP|TLS|SQL|URL|ID)$/;
 
@@ -181,7 +188,10 @@ function hasPluralHack(node, code) {
 function worthWrapping(message) {
   const prose = message.replace(/\{\{[^}]*\}\}/g, "").replace(/<\/?\d+>/g, " ");
   const words = prose.match(/[A-Za-z]{2,}/g) ?? [];
-  if (words.length < 2) return false;
+  // One real word is still a translatable label ("Delete", "Status"); only
+  // decline when there is no word at all, or it is a unit/glyph fragment.
+  if (words.length < 1) return false;
+  if (UNIT_OR_GLYPH.test(prose.trim())) return false;
   if (KEEP_LITERAL.test(prose.trim())) return false;
   return true;
 }

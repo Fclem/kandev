@@ -50,7 +50,7 @@ import {
   MessageCommentDecorationOverlay,
   MessageCustomHighlightStyle,
 } from "./message-comment-decorations";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type MessageCommentSurfaceProps = {
   message: Message;
@@ -218,8 +218,10 @@ function DrawerCommentActions({
             data-testid="agent-message-comment-run"
             className="min-h-11 cursor-pointer gap-1.5 rounded-l-none px-4 transition-transform duration-150 ease-out active:scale-[0.96]"
           >
-            <IconPlayerPlay className="h-4 w-4" />
-            Run
+            <Trans i18nKey="task:run">
+              <IconPlayerPlay className="h-4 w-4" />
+              Run
+            </Trans>
           </Button>
         ) : null}
       </div>

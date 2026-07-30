@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "@/components/routing/app-link";
@@ -15,10 +16,7 @@ import { SettingsSection } from "@/components/settings/settings-section";
 import { useSettingsSaveContributor } from "@/components/settings/settings-save-provider";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { useSlackEnabled } from "@/hooks/domains/slack/use-slack-enabled";
-import {
-  IntegrationAuthStatusBanner,
-  type IntegrationAuthHealth,
-} from "@/components/integrations/auth-status-banner";
+import { IntegrationAuthStatusBanner } from "@/components/integrations/auth-status-banner";
 import { WorkspaceScopedSection } from "@/components/integrations/workspace-scoped-section";
 import { DraftedIntegrationEnabledControl } from "@/components/integrations/drafted-integration-enabled-control";
 import { INTEGRATION_STATUS_REFRESH_MS } from "@/hooks/domains/integrations/use-integration-availability";
@@ -30,113 +28,18 @@ import {
 } from "@/lib/api/domains/slack-api";
 import { listUtilityAgents, type UtilityAgent } from "@/lib/api/domains/utility-api";
 import type { SlackConfig, TestSlackConnectionResult } from "@/lib/types/slack";
+import {
+  configToForm,
+  configToHealth,
+  DEFAULT_POLL_INTERVAL_SECONDS,
+  DEFAULT_PREFIX,
+  emptyForm,
+  type FormState,
+} from "./slack-settings-form-state";
+import { SecretFields } from "./slack-secret-fields";
 
-const DEFAULT_PREFIX = "!kandev";
-const DEFAULT_POLL_INTERVAL_SECONDS = 30;
 const MIN_POLL_INTERVAL_SECONDS = 5;
 const MAX_POLL_INTERVAL_SECONDS = 600;
-
-type FormState = {
-  utilityAgentId: string;
-  commandPrefix: string;
-  pollIntervalSeconds: number;
-  token: string;
-  cookie: string;
-};
-
-const emptyForm: FormState = {
-  utilityAgentId: "",
-  commandPrefix: DEFAULT_PREFIX,
-  pollIntervalSeconds: DEFAULT_POLL_INTERVAL_SECONDS,
-  token: "",
-  cookie: "",
-};
-
-function configToForm(cfg: SlackConfig | null): FormState {
-  if (!cfg) return emptyForm;
-  return {
-    utilityAgentId: cfg.utilityAgentId,
-    commandPrefix: cfg.commandPrefix || DEFAULT_PREFIX,
-    pollIntervalSeconds: cfg.pollIntervalSeconds || DEFAULT_POLL_INTERVAL_SECONDS,
-    token: "",
-    cookie: "",
-  };
-}
-
-function configToHealth(config: SlackConfig | null): IntegrationAuthHealth | null {
-  if (!config?.hasToken || !config.hasCookie) return null;
-  if (!config.lastCheckedAt) return { ok: false, error: "", checkedAt: null };
-  return {
-    ok: !!config.lastOk,
-    error: config.lastError ?? "",
-    checkedAt: new Date(config.lastCheckedAt),
-  };
-}
-
-type SecretFieldsProps = {
-  form: FormState;
-  baseline: FormState;
-  loading: boolean;
-  hasSavedToken: boolean;
-  hasSavedCookie: boolean;
-  update: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
-};
-
-function SecretFields({
-  form,
-  baseline,
-  loading,
-  hasSavedToken,
-  hasSavedCookie,
-  update,
-}: SecretFieldsProps) {
-  return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="slack-token">
-          Session token (xoxc-…)
-          {hasSavedToken && (
-            <span className="text-xs text-muted-foreground ml-2">
-              (saved — leave blank to keep)
-            </span>
-          )}
-        </Label>
-        <Input
-          id="slack-token"
-          type="password"
-          placeholder={hasSavedToken ? "••••••••" : "xoxc-..."}
-          value={form.token}
-          data-settings-dirty={form.token !== baseline.token}
-          onChange={(e) => update("token", e.target.value)}
-          disabled={loading}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="slack-cookie">
-          d cookie value
-          {hasSavedCookie && (
-            <span className="text-xs text-muted-foreground ml-2">
-              (saved — leave blank to keep)
-            </span>
-          )}
-        </Label>
-        <Input
-          id="slack-cookie"
-          type="password"
-          placeholder={hasSavedCookie ? "••••••••" : "xoxd-..."}
-          value={form.cookie}
-          data-settings-dirty={form.cookie !== baseline.cookie}
-          onChange={(e) => update("cookie", e.target.value)}
-          disabled={loading}
-        />
-        <p className="text-xs text-muted-foreground">
-          Open Slack in your browser, copy the value of the `d` cookie and the `xoxc-` token from
-          local storage. Both are required.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 type UtilityAgentPickerProps = {
   form: FormState;
@@ -204,21 +107,25 @@ function UtilityAgentPicker({
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground">
-        The utility agent that interprets each Slack message and creates the Kandev task. It runs
-        with Kandev MCP tools wired in (list_workspaces_kandev, create_task_kandev, …) so it picks
-        the destination Kandev workspace + workflow + repo from context. Built-in agents use your
-        default model from{" "}
-        <Link href="/settings/utility-agents" className="underline cursor-pointer">
-          Settings → Utility agents
-        </Link>
-        .
+        <Trans i18nKey="common:theUtilityAgentThatInterpretsEach">
+          The utility agent that interprets each Slack message and creates the Kandev task. It runs
+          with Kandev MCP tools wired in (list_workspaces_kandev, create_task_kandev, …) so it picks
+          the destination Kandev workspace + workflow + repo from context. Built-in agents use your
+          default model from{" "}
+          <Link href="/settings/utility-agents" className="underline cursor-pointer">
+            Settings → Utility agents
+          </Link>
+          .
+        </Trans>
       </p>
       <p className="text-xs text-muted-foreground">
-        Custom prompts can reference <code>{"{{SlackInstruction}}"}</code>,{" "}
-        <code>{"{{SlackThread}}"}</code>, <code>{"{{SlackPermalink}}"}</code>,{" "}
-        <code>{"{{SlackUser}}"}</code>, <code>{"{{SlackChannelID}}"}</code>, and{" "}
-        <code>{"{{SlackTS}}"}</code>. When at least one is used, your template owns the full prompt;
-        otherwise the default Slack-triage system prompt is prepended automatically.
+        <Trans i18nKey="common:customPromptsCanReferenceAndWhen">
+          Custom prompts can reference <code>{"{{SlackInstruction}}"}</code>,{" "}
+          <code>{"{{SlackThread}}"}</code>, <code>{"{{SlackPermalink}}"}</code>,{" "}
+          <code>{"{{SlackUser}}"}</code>, <code>{"{{SlackChannelID}}"}</code>, and{" "}
+          <code>{"{{SlackTS}}"}</code>. When at least one is used, your template owns the full
+          prompt; otherwise the default Slack-triage system prompt is prepended automatically.
+        </Trans>
       </p>
     </div>
   );
@@ -249,7 +156,12 @@ function PrefixField({
       />
       <p className="text-xs text-muted-foreground">
         Messages you write in Slack starting with this prefix become Kandev tasks. Default:{" "}
-        <code>{DEFAULT_PREFIX} &lt;instruction&gt;</code>.
+        <code>
+          <Trans i18nKey="common:instruction" values={{ DEFAULT_PREFIX }}>
+            {DEFAULT_PREFIX} &lt;instruction&gt;
+          </Trans>
+        </code>
+        .
       </p>
     </div>
   );
@@ -284,10 +196,19 @@ function PollIntervalField({
         disabled={loading}
       />
       <p className="text-xs text-muted-foreground">
-        How often Slack is checked for new <code>{form.commandPrefix || DEFAULT_PREFIX}</code>{" "}
-        messages. Lower = more responsive, higher = fewer Slack API calls. Range:{" "}
-        {MIN_POLL_INTERVAL_SECONDS}–{MAX_POLL_INTERVAL_SECONDS}s. Default:{" "}
-        {DEFAULT_POLL_INTERVAL_SECONDS}s.
+        <Trans
+          i18nKey="common:howOftenSlackIsCheckedFor"
+          values={{
+            MIN_POLL_INTERVAL_SECONDS,
+            MAX_POLL_INTERVAL_SECONDS,
+            DEFAULT_POLL_INTERVAL_SECONDS,
+          }}
+        >
+          How often Slack is checked for new <code>{form.commandPrefix || DEFAULT_PREFIX}</code>{" "}
+          messages. Lower = more responsive, higher = fewer Slack API calls. Range:{" "}
+          {MIN_POLL_INTERVAL_SECONDS}–{MAX_POLL_INTERVAL_SECONDS}s. Default:{" "}
+          {DEFAULT_POLL_INTERVAL_SECONDS}s.
+        </Trans>
       </p>
     </div>
   );
@@ -311,9 +232,11 @@ function UnsupportedWarning() {
   return (
     <Alert>
       <AlertDescription className="text-xs">
-        <strong>Browser session auth (unsupported):</strong> Slack rotates session cookies often, so
-        you may need to reconnect when authentication expires. Bot installs and user OAuth are on
-        the roadmap.
+        <Trans i18nKey="common:browserSessionAuthUnsupportedSlackRotates">
+          <strong>Browser session auth (unsupported):</strong> Slack rotates session cookies often,
+          so you may need to reconnect when authentication expires. Bot installs and user OAuth are
+          on the roadmap.
+        </Trans>
       </AlertDescription>
     </Alert>
   );

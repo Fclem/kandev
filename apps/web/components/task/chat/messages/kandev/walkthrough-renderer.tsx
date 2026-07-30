@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconRoute } from "@tabler/icons-react";
 import {
@@ -107,7 +108,11 @@ export const ShowWalkthroughRenderer: KandevRenderer = ({ args, result, status }
             return (
               <ListItemRow key={`${location ?? "step"}-${index}`}>
                 <div className="flex min-w-0 items-baseline gap-2">
-                  <span className="shrink-0 text-muted-foreground/70">Step {index + 1}</span>
+                  <span className="shrink-0 text-muted-foreground/70">
+                    <Trans i18nKey="task:step" values={{ value1: index + 1 }}>
+                      Step {index + 1}
+                    </Trans>
+                  </span>
                   {location && (
                     <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
                       {location}

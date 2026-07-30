@@ -31,8 +31,10 @@ export function TaskArchiveItem({
   if (!onArchiveTask) return null;
   return (
     <ContextMenuItem disabled={disabled} onSelect={() => onArchiveTask(taskId)}>
-      <IconArchive className="mr-2 h-4 w-4" />
-      Archive
+      <Trans i18nKey="task:archive3">
+        <IconArchive className="mr-2 h-4 w-4" />
+        Archive
+      </Trans>
     </ContextMenuItem>
   );
 }
@@ -103,12 +105,23 @@ export function TaskDeleteItem({
         disabled={isDeleting}
         onSelect={() => onDeleteTask(taskId)}
       >
-        {isDeleting ? (
-          <IconLoader className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <IconTrash className="mr-2 h-4 w-4" />
-        )}
-        Delete
+        <Trans
+          i18nKey="task:delete2"
+          values={{
+            value0: isDeleting ? (
+              <IconLoader className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <IconTrash className="mr-2 h-4 w-4" />
+            ),
+          }}
+        >
+          {isDeleting ? (
+            <IconLoader className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <IconTrash className="mr-2 h-4 w-4" />
+          )}
+          Delete
+        </Trans>
       </ContextMenuItem>
     </>
   );

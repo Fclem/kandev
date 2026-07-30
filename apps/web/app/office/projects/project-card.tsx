@@ -50,7 +50,11 @@ function ProjectStats({ project }: { project: Project }) {
           <IconGitBranch className="h-3.5 w-3.5" />
           {repoCount} {repoCount === 1 ? "repo" : "repos"}
         </span>
-        <span>{counts.total} tasks</span>
+        <span>
+          <Trans i18nKey="office:tasks" values={{ total: counts.total }}>
+            {counts.total} tasks
+          </Trans>
+        </span>
         {counts.in_progress > 0 && (
           <span className="text-yellow-600 dark:text-yellow-400">
             <Trans i18nKey="office:inProgress" values={{ in_progress: counts.in_progress }}>
@@ -58,7 +62,11 @@ function ProjectStats({ project }: { project: Project }) {
             </Trans>
           </span>
         )}
-        <span className="text-green-600 dark:text-green-400">{counts.done} done</span>
+        <span className="text-green-600 dark:text-green-400">
+          <Trans i18nKey="office:done" values={{ done: counts.done }}>
+            {counts.done} done
+          </Trans>
+        </span>
       </div>
       {counts.total > 0 && (
         <div className="space-y-1">
@@ -88,7 +96,13 @@ export function ProjectCard({ project, leadAgentName }: ProjectCardProps) {
         </CardHeader>
         <CardContent className="space-y-3">
           <ProjectStats project={project} />
-          {leadAgentName && <p className="text-xs text-muted-foreground">Lead: {leadAgentName}</p>}
+          {leadAgentName && (
+            <p className="text-xs text-muted-foreground">
+              <Trans i18nKey="office:lead" values={{ leadAgentName }}>
+                Lead: {leadAgentName}
+              </Trans>
+            </p>
+          )}
         </CardContent>
       </Card>
     </Link>

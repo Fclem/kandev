@@ -131,8 +131,10 @@ export function AzureDevOpsPullRequestResults({
               className="cursor-pointer"
               onClick={() => onFeedback(pullRequest)}
             >
-              <IconMessageCircle className="h-4 w-4" />
-              Feedback
+              <Trans i18nKey="azureDevops:feedback">
+                <IconMessageCircle className="h-4 w-4" />
+                Feedback
+              </Trans>
             </Button>
             <Button
               type="button"

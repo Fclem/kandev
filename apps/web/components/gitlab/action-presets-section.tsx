@@ -13,7 +13,7 @@ import { useSettingsSaveContributor } from "@/components/settings/settings-save-
 import { useToast } from "@/components/toast-provider";
 import { useGitLabActionPresets } from "@/hooks/domains/gitlab/use-gitlab-action-presets";
 import type { GitLabActionPreset, GitLabActionPresets } from "@/lib/types/gitlab";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function newPreset(): GitLabActionPreset {
   return {
@@ -175,7 +175,9 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
           aria-label={t("gitlab:resetQuickActionsToDefaults")}
           onClick={() => void resetDefaults()}
         >
-          <IconRefresh className="h-4 w-4" /> Reset
+          <Trans i18nKey="gitlab:reset">
+            <IconRefresh className="h-4 w-4" /> Reset
+          </Trans>
         </Button>
       }
     >

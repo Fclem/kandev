@@ -469,8 +469,10 @@ function RevisionRow({
           }}
           data-testid="plan-revision-revert-button"
         >
-          <IconRestore className="h-3.5 w-3.5" />
-          Restore
+          <Trans i18nKey="task:restore">
+            <IconRestore className="h-3.5 w-3.5" />
+            Restore
+          </Trans>
         </Button>
       )}
     </li>

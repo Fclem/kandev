@@ -45,7 +45,7 @@ import {
   survivingEntityReferences,
 } from "@/lib/entity-references/message-references";
 import { buildEntityReferenceMarkdownComponents } from "@/components/task/chat/messages/entity-reference-chip";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type QueuedAttachment = NonNullable<QueuedMessage["attachments"]>[number];
 
@@ -83,8 +83,10 @@ function AttachmentRow({ attachments, interactive }: AttachmentRowProps) {
           key={`file-${i}`}
           className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground"
         >
-          <IconFile className="h-3 w-3" />
-          Attachment
+          <Trans i18nKey="task:attachment">
+            <IconFile className="h-3 w-3" />
+            Attachment
+          </Trans>
         </span>
       ))}
     </div>
@@ -233,8 +235,10 @@ function EditView({
           disabled={saving || !value.trim()}
           className="h-7 cursor-pointer"
         >
-          <IconCheck className="mr-1 h-3.5 w-3.5" />
-          Save
+          <Trans i18nKey="task:save2">
+            <IconCheck className="mr-1 h-3.5 w-3.5" />
+            Save
+          </Trans>
         </Button>
         <Button
           size="sm"

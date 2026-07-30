@@ -44,8 +44,10 @@ export function WorkflowSectionActions({
         onClick={onImport}
         className="cursor-pointer"
       >
-        <IconUpload className="h-4 w-4 mr-2" />
-        Import
+        <Trans i18nKey="settings:import2">
+          <IconUpload className="h-4 w-4 mr-2" />
+          Import
+        </Trans>
       </Button>
       <Button
         type="button"

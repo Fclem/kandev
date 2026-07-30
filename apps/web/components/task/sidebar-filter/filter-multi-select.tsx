@@ -14,7 +14,7 @@ import {
 } from "@kandev/ui/command";
 import { cn } from "@/lib/utils";
 import { buildOptionGroups, hasGroupedOptions } from "./filter-option-groups";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type MultiSelectOption = { value: string; label: string; color?: string; group?: string };
 
@@ -179,5 +179,11 @@ function MultiSelectSummary({
       </span>
     );
   }
-  return <span className="truncate">{selected.length} selected</span>;
+  return (
+    <span className="truncate">
+      <Trans i18nKey="task:selected2" values={{ length: selected.length }}>
+        {selected.length} selected
+      </Trans>
+    </span>
+  );
 }

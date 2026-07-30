@@ -69,7 +69,11 @@ export function PlanRevisionPreviewDialog({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <span>Version {revision?.revision_number}</span>
+            <span>
+              <Trans i18nKey="task:version" values={{ value1: revision?.revision_number }}>
+                Version {revision?.revision_number}
+              </Trans>
+            </span>
             {isCurrent && (
               <Badge variant="secondary" className="h-4 text-[10px] px-1.5">
                 {t("task:current")}
@@ -181,8 +185,10 @@ function PreviewBodyInner({ content, error }: { content: string | null; error: s
   if (content === null) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-        Loading…
+        <Trans i18nKey="task:loading2">
+          <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+          Loading…
+        </Trans>
       </div>
     );
   }

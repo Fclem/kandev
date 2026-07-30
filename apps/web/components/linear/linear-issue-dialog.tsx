@@ -320,7 +320,9 @@ function MetaFooter({ issue }: { issue: LinearIssue }) {
   if (!updated) return null;
   return (
     <div className="text-xs text-muted-foreground px-1" title={issue.updated}>
-      Updated {updated}
+      <Trans i18nKey="linear:updated" values={{ updated }}>
+        Updated {updated}
+      </Trans>
     </div>
   );
 }

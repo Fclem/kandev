@@ -11,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@kandev/ui/alert-dialog";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function DeleteWatchDialog({
   open,
@@ -34,7 +34,11 @@ export function DeleteWatchDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete {watchLabel}?</AlertDialogTitle>
+          <AlertDialogTitle>
+            <Trans i18nKey="gitlab:delete" values={{ watchLabel }}>
+              Delete {watchLabel}?
+            </Trans>
+          </AlertDialogTitle>
           <AlertDialogDescription>
             {t("gitlab:thisWillDeleteEveryTaskCreated")}
           </AlertDialogDescription>

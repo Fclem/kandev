@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type BudgetGaugeProps = {
   budgetCents: number;
@@ -25,7 +25,11 @@ export function BudgetGauge({ budgetCents, spentCents = 0, className }: BudgetGa
       <div className="h-1.5 w-16 bg-muted rounded-full overflow-hidden">
         <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-muted-foreground">${(budgetCents / 100).toFixed(0)}/mo</span>
+      <span className="text-xs text-muted-foreground">
+        <Trans i18nKey="office:mo" values={{ value1: (budgetCents / 100).toFixed(0) }}>
+          ${(budgetCents / 100).toFixed(0)}/mo
+        </Trans>
+      </span>
     </div>
   );
 }

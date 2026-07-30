@@ -36,7 +36,7 @@ import { useToast } from "@/components/toast-provider";
 import { openExternalLink } from "@/lib/desktop/external-links";
 import type { FileInfo } from "@/lib/state/slices";
 import { getChangeRequestFailureFeedback } from "./change-request-feedback";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type VcsDialogsContextValue = {
   /** When `repo` is provided, the commit is scoped to that repo only. */
@@ -205,13 +205,17 @@ function CommitDialog({
           <Button onClick={onCommit} disabled={!commitMessage.trim() || isGitLoading}>
             {isGitLoading ? (
               <>
-                <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
-                Committing...
+                <Trans i18nKey="integrations:committing">
+                  <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
+                  Committing...
+                </Trans>
               </>
             ) : (
               <>
-                <IconCheck className="h-4 w-4 mr-2" />
-                Commit
+                <Trans i18nKey="integrations:commit">
+                  <IconCheck className="h-4 w-4 mr-2" />
+                  Commit
+                </Trans>
               </>
             )}
           </Button>

@@ -36,7 +36,7 @@ import {
   ExternalVcsFileLink,
   useExternalVcsFileStatus,
 } from "@/components/editors/external-vcs-file-link";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 interface MarkdownPreviewToolbarProps {
   path: string;
@@ -294,8 +294,10 @@ function MarkdownPreviewCommentOverlays({
           onMouseDown={(event) => event.stopPropagation()}
           onClick={commentState.openComposer}
         >
-          <IconMessagePlus className="h-3.5 w-3.5" />
-          Comment
+          <Trans i18nKey="task:comment">
+            <IconMessagePlus className="h-3.5 w-3.5" />
+            Comment
+          </Trans>
         </Button>
       )}
       {commentState.textSelection && (

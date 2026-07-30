@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { IconChevronDown, IconLoader2 } from "@tabler/icons-react";
@@ -131,7 +132,13 @@ function HeaderText({
     <span className="text-muted-foreground">
       {verb}
       {duration && <span className="ml-1">for {duration}</span>}
-      {commandsLabel && <span className="ml-1">· ran {commandsLabel}</span>}
+      {commandsLabel && (
+        <span className="ml-1">
+          <Trans i18nKey="task:ran" values={{ commandsLabel }}>
+            · ran {commandsLabel}
+          </Trans>
+        </span>
+      )}
     </span>
   );
 }

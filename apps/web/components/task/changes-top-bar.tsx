@@ -21,7 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { ReviewPRSelector } from "@/components/review/review-pr-selector";
 import type { TaskPR } from "@/lib/types/github";
 import { PanelHeaderBar, PanelHeaderBarSplit } from "./panel-primitives";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type ChangesTopBarProps = {
   autoMarkOnScroll: boolean;
@@ -84,7 +84,9 @@ function ChangesTopBarLeft({
             />
           </div>
           <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-            {reviewedCount}/{totalCount} Reviewed
+            <Trans i18nKey="task:reviewed2" values={{ reviewedCount, totalCount }}>
+              {reviewedCount}/{totalCount} Reviewed
+            </Trans>
           </span>
         </div>
       )}
@@ -205,11 +207,13 @@ function ChangesTopBarRight({
           className="h-5 text-xs cursor-pointer"
           onClick={handleFixComments}
         >
-          <IconMessageForward className="h-3.5 w-3.5" />
-          Fix
-          <span className="ml-0.5 rounded-full bg-blue-500/30 px-1 py-0 text-[10px] font-medium text-blue-600 dark:text-blue-400">
-            {totalCommentCount}
-          </span>
+          <Trans i18nKey="task:fix" values={{ totalCommentCount }}>
+            <IconMessageForward className="h-3.5 w-3.5" />
+            Fix
+            <span className="ml-0.5 rounded-full bg-blue-500/30 px-1 py-0 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+              {totalCommentCount}
+            </span>
+          </Trans>
         </Button>
       )}
     </>

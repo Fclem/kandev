@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { Fragment } from "react";
 import {
@@ -40,7 +41,9 @@ export function ResultsPagination({ page, pageSize, total, onPageChange }: Resul
   return (
     <div className="flex items-center justify-between px-6 py-3 border-t shrink-0">
       <div className="text-xs text-muted-foreground tabular-nums">
-        {start}–{end} of {total}
+        <Trans i18nKey="gitlab:of" values={{ start, end, total }}>
+          {start}–{end} of {total}
+        </Trans>
       </div>
       <Pagination className="mx-0 w-auto justify-end">
         <PaginationContent>

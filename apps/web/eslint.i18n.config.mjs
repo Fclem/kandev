@@ -38,7 +38,12 @@ export default defineConfig([
               "^\\s*$",
               "^[^A-Za-z]*$",
               "^(Kandev|GitHub|GitLab|Jira|Linear|Slack|Sentry|Azure DevOps)$",
-              "^(ACP|MCP|SSH|URL|ID|PR|CI|AI|API|JSON|YAML|LSP|TLS|SQL)$",
+              "^(ACP|MCP|SSH|URL|ID|PR|CI|AI|API|JSON|YAML|LSP|TLS|SQL|JQL)$",
+              // Units, version prefixes, and keyboard glyphs — not translatable
+              // copy; these show up as fragments beside an interpolated value.
+              "^(v|ms\\)?|s|m|h|d|K|B|KB|MB|GB|TB|esc)$",
+              "^\\+[A-Z]\\)?$",
+              "^[·+\\-|/(),.:\\s]+$",
             ],
           },
           "jsx-attributes": {

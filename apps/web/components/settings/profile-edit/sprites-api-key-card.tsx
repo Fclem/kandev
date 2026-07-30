@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { IconTestPipe, IconLoader2, IconCheck, IconX, IconSparkles } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -175,7 +175,11 @@ function TestResultDisplay({ result }: { result: SpritesTestResult }) {
           <IconX className="h-4 w-4 text-red-600" />
         )}
         {result.success ? t("settings:connectionTestPassed") : t("settings:connectionTestFailed")}
-        <span className="text-muted-foreground font-normal">({result.total_duration_ms}ms)</span>
+        <span className="text-muted-foreground font-normal">
+          <Trans i18nKey="settings:ms" values={{ total_duration_ms: result.total_duration_ms }}>
+            ({result.total_duration_ms}ms)
+          </Trans>
+        </span>
       </div>
       {result.steps.map((step: SpritesTestStep) => (
         <StepRow key={step.name} step={step} />
@@ -196,7 +200,11 @@ function StepRow({ step }: { step: SpritesTestStep }) {
         <IconX className="h-3 w-3 text-red-600 shrink-0" />
       )}
       <span>{step.name}</span>
-      <span className="text-muted-foreground">({step.duration_ms}ms)</span>
+      <span className="text-muted-foreground">
+        <Trans i18nKey="settings:ms2" values={{ duration_ms: step.duration_ms }}>
+          ({step.duration_ms}ms)
+        </Trans>
+      </span>
       {step.error && <span className="text-red-600 truncate">{step.error}</span>}
     </div>
   );

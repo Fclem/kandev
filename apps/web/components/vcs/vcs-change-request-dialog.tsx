@@ -19,7 +19,7 @@ import {
   PRDescriptionField,
   PRTitleField,
 } from "./vcs-dialog-fields";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type VcsChangeRequestDialogProps = {
   open: boolean;
@@ -101,8 +101,10 @@ export function VcsChangeRequestDialog(props: VcsChangeRequestDialogProps) {
           <Button onClick={props.onCreate} disabled={!props.title.trim() || props.loading}>
             {props.loading ? (
               <>
-                <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
-                Creating...
+                <Trans i18nKey="integrations:creating">
+                  <IconLoader2 className="h-4 w-4 animate-spin mr-2" />
+                  Creating...
+                </Trans>
               </>
             ) : (
               <>

@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { useAppStore } from "@/components/state-provider";
 import * as officeApi from "@/lib/api/domains/office-api";
 import type { GitStatusData } from "@/lib/api/domains/office-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function useGitOperations(activeWorkspaceId: string) {
   const [gitStatus, setGitStatus] = useState<GitStatusData | null>(null);
@@ -220,8 +220,10 @@ function GitStatusDisplay({
             </Badge>
           ) : (
             <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">
-              <IconCheck className="h-3 w-3 mr-0.5" />
-              clean
+              <Trans i18nKey="office:clean">
+                <IconCheck className="h-3 w-3 mr-0.5" />
+                clean
+              </Trans>
             </Badge>
           )}
         </div>
@@ -234,14 +236,18 @@ function GitStatusDisplay({
         <div className="flex gap-3 text-xs text-muted-foreground">
           {status.ahead > 0 && (
             <span className="flex items-center gap-1">
-              <IconArrowUp className="h-3 w-3" />
-              {status.ahead} ahead
+              <Trans i18nKey="office:ahead" values={{ ahead: status.ahead }}>
+                <IconArrowUp className="h-3 w-3" />
+                {status.ahead} ahead
+              </Trans>
             </span>
           )}
           {status.behind > 0 && (
             <span className="flex items-center gap-1">
-              <IconArrowDown className="h-3 w-3" />
-              {status.behind} behind
+              <Trans i18nKey="office:behind" values={{ behind: status.behind }}>
+                <IconArrowDown className="h-3 w-3" />
+                {status.behind} behind
+              </Trans>
             </span>
           )}
         </div>

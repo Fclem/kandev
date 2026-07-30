@@ -39,7 +39,9 @@ function StatusBadge({ status }: { status: GitLabStatus | null }) {
   if (status.authenticated) {
     return (
       <Badge variant="secondary" className="gap-1">
-        <IconCheck className="h-3 w-3" /> Connected
+        <Trans i18nKey="gitlab:connected">
+          <IconCheck className="h-3 w-3" /> Connected
+        </Trans>
       </Badge>
     );
   }
@@ -52,7 +54,9 @@ function StatusBadge({ status }: { status: GitLabStatus | null }) {
         variant="outline"
         className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-300"
       >
-        <IconAlertTriangle className="h-3 w-3" /> Unreachable
+        <Trans i18nKey="gitlab:unreachable">
+          <IconAlertTriangle className="h-3 w-3" /> Unreachable
+        </Trans>
       </Badge>
     );
   }
@@ -390,7 +394,9 @@ function ConnectionStatusRow({ status }: { status: GitLabStatus | null }) {
         {status && <AuthMethodBadge method={status.auth_method} />}
         {status?.glab_version ? (
           <Badge variant="outline" className="font-mono text-xs">
-            glab {status.glab_version}
+            <Trans i18nKey="gitlab:glab" values={{ glab_version: status.glab_version }}>
+              glab {status.glab_version}
+            </Trans>
           </Badge>
         ) : null}
       </div>
@@ -432,7 +438,9 @@ function GitLabConnectionCard(props: ConnectionCardProps) {
           disabled={loading}
           className="gap-1 cursor-pointer"
         >
-          <IconRefresh className="h-3 w-3" /> Refresh
+          <Trans i18nKey="gitlab:refresh2">
+            <IconRefresh className="h-3 w-3" /> Refresh
+          </Trans>
         </Button>
       }
     >

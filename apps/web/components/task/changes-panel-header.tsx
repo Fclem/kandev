@@ -27,7 +27,7 @@ import {
   type RenameBranchResult,
 } from "./changes-panel-branch-card";
 import type { GitCredentialDisplay } from "./changes-git-credential-display";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function PullTriggerContent({
   behindCount,
@@ -149,29 +149,39 @@ function PerRepoPullMenu({
             <DropdownMenuLabel className="text-[10px] text-muted-foreground/70 uppercase tracking-wide flex items-center justify-between">
               <span className="truncate">{label}</span>
               {behind > 0 && (
-                <span className="text-yellow-500 normal-case tracking-normal">{behind} behind</span>
+                <span className="text-yellow-500 normal-case tracking-normal">
+                  <Trans i18nKey="task:behind" values={{ behind }}>
+                    {behind} behind
+                  </Trans>
+                </span>
               )}
             </DropdownMenuLabel>
             <DropdownMenuItem
               onClick={() => onRepoPull(repo)}
               className="cursor-pointer text-xs gap-2"
             >
-              <IconCloudDownload className="h-3.5 w-3.5 text-muted-foreground" />
-              Pull
+              <Trans i18nKey="task:pull">
+                <IconCloudDownload className="h-3.5 w-3.5 text-muted-foreground" />
+                Pull
+              </Trans>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onRepoRebase(repo)}
               className="cursor-pointer text-xs gap-2"
             >
-              <IconGitCherryPick className="h-3.5 w-3.5 text-muted-foreground" />
-              Rebase
+              <Trans i18nKey="task:rebase">
+                <IconGitCherryPick className="h-3.5 w-3.5 text-muted-foreground" />
+                Rebase
+              </Trans>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onRepoMerge(repo)}
               className="cursor-pointer text-xs gap-2"
             >
-              <IconGitMerge className="h-3.5 w-3.5 text-muted-foreground" />
-              Merge
+              <Trans i18nKey="task:merge">
+                <IconGitMerge className="h-3.5 w-3.5 text-muted-foreground" />
+                Merge
+              </Trans>
             </DropdownMenuItem>
           </div>
         );
@@ -202,8 +212,10 @@ function ChangesPanelHeaderLeft({
         className="h-5 text-[11px] px-1.5 gap-1 cursor-pointer"
         onClick={onOpenDiffAll}
       >
-        <IconGitMerge className="h-3 w-3" />
-        Diff
+        <Trans i18nKey="task:diff2">
+          <IconGitMerge className="h-3 w-3" />
+          Diff
+        </Trans>
       </Button>
       <Button
         size="sm"
@@ -211,8 +223,10 @@ function ChangesPanelHeaderLeft({
         className="h-5 text-[11px] px-1.5 gap-1 cursor-pointer"
         onClick={onOpenReview}
       >
-        <IconEye className="h-3 w-3" />
-        Review
+        <Trans i18nKey="task:review">
+          <IconEye className="h-3 w-3" />
+          Review
+        </Trans>
       </Button>
       {onRequestWalkthrough ? (
         <ChangesPanelWalkthroughButton

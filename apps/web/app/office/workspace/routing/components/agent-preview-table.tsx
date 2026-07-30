@@ -5,7 +5,7 @@ import { Badge } from "@kandev/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kandev/ui/table";
 import type { AgentRoutePreview } from "@/lib/state/slices/office/types";
 import { providerLabel } from "./provider-order-editor";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   agents: AgentRoutePreview[];
@@ -116,7 +116,9 @@ function StatusBadges({ missing, degraded }: { missing: string[]; degraded: bool
       {degraded && <Badge variant="destructive">{t("office:degraded")}</Badge>}
       {missing.length > 0 && (
         <Badge variant="outline" title={missing.join(", ")}>
-          {missing.length} missing
+          <Trans i18nKey="office:missing" values={{ length: missing.length }}>
+            {missing.length} missing
+          </Trans>
         </Badge>
       )}
     </div>

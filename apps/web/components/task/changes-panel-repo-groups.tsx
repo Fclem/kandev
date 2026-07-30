@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { CommitRow, type CommitItem } from "./commit-row";
 import { groupByRepositoryName } from "@/lib/group-by-repo";
 import type { ChangedFile } from "./changes-panel-helpers";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export type RepoGroup = ReturnType<typeof groupByRepositoryName<ChangedFile>>[number];
 
@@ -170,9 +170,11 @@ export function CommitsGroupActions({
           data-testid="commits-repo-push"
           onClick={() => onRepoPush(repositoryName)}
         >
-          <IconCloudUpload className="h-3 w-3" />
-          Push
-          <span className="text-muted-foreground">{aheadCount}</span>
+          <Trans i18nKey="task:push" values={{ aheadCount }}>
+            <IconCloudUpload className="h-3 w-3" />
+            Push
+            <span className="text-muted-foreground">{aheadCount}</span>
+          </Trans>
         </Button>
       )}
       {onRepoCreatePR && (

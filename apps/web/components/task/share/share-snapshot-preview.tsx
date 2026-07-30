@@ -6,7 +6,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type { SnapshotPreview, SnapshotPreviewMessage } from "@/lib/api/domains/share-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   snapshot: SnapshotPreview;
@@ -52,9 +52,20 @@ export function ShareSnapshotPreview({ snapshot }: Props) {
         {snapshot.session.executor_type && (
           <Badge variant="outline">{snapshot.session.executor_type}</Badge>
         )}
-        <span>{snapshot.messages.length} messages</span>
+        <span>
+          <Trans i18nKey="task:messages" values={{ length: snapshot.messages.length }}>
+            {snapshot.messages.length} messages
+          </Trans>
+        </span>
         {snapshot.redaction.applied_rules.length > 0 && (
-          <span>Redacted: {snapshot.redaction.applied_rules.join(", ")}</span>
+          <span>
+            <Trans
+              i18nKey="task:redacted"
+              values={{ value1: snapshot.redaction.applied_rules.join(", ") }}
+            >
+              Redacted: {snapshot.redaction.applied_rules.join(", ")}
+            </Trans>
+          </span>
         )}
       </div>
       <ScrollArea className="h-72 rounded border bg-muted/30">

@@ -43,7 +43,11 @@ function TasksCard({ global }: { global: GlobalStats }) {
       <CardContent>
         <div className="text-3xl font-bold tabular-nums">{global.total_tasks}</div>
         <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-          <span>{global.completed_tasks} completed</span>
+          <span>
+            <Trans i18nKey="stats:completed2" values={{ completed_tasks: global.completed_tasks }}>
+              {global.completed_tasks} completed
+            </Trans>
+          </span>
           <span>
             <Trans
               i18nKey="stats:inProgress"
@@ -367,10 +371,26 @@ export function RepositoryStatsGrid({
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground font-mono">
-              <span>{repo.total_tasks} tasks</span>
-              <span>{repo.session_count} sessions</span>
-              <span>{repo.turn_count} turns</span>
-              <span>{repo.message_count} msgs</span>
+              <span>
+                <Trans i18nKey="stats:tasks" values={{ total_tasks: repo.total_tasks }}>
+                  {repo.total_tasks} tasks
+                </Trans>
+              </span>
+              <span>
+                <Trans i18nKey="stats:sessions2" values={{ session_count: repo.session_count }}>
+                  {repo.session_count} sessions
+                </Trans>
+              </span>
+              <span>
+                <Trans i18nKey="stats:turns" values={{ turn_count: repo.turn_count }}>
+                  {repo.turn_count} turns
+                </Trans>
+              </span>
+              <span>
+                <Trans i18nKey="stats:msgs" values={{ message_count: repo.message_count }}>
+                  {repo.message_count} msgs
+                </Trans>
+              </span>
             </div>
 
             <div className="mt-3">
@@ -386,7 +406,11 @@ export function RepositoryStatsGrid({
             <div className="mt-2 pt-2 border-t text-[11px] text-muted-foreground">
               {hasGit ? (
                 <div className="flex items-center justify-between">
-                  <span className="font-mono">{repo.total_commits} commits</span>
+                  <span className="font-mono">
+                    <Trans i18nKey="stats:commits" values={{ total_commits: repo.total_commits }}>
+                      {repo.total_commits} commits
+                    </Trans>
+                  </span>
                   <span className="font-mono tabular-nums">
                     <span className="text-emerald-600 dark:text-emerald-400">
                       +{repo.total_insertions.toLocaleString()}
@@ -554,7 +578,9 @@ function TaskDurationList({ tasks, sortDirection, emptyLabel }: TaskDurationList
           <div className="text-sm font-medium tabular-nums text-right">
             <div>{formatDuration(task.active_duration_ms)}</div>
             <div className="text-[11px] text-muted-foreground">
-              span {formatDuration(task.elapsed_span_ms)}
+              <Trans i18nKey="stats:span" values={{ value1: formatDuration(task.elapsed_span_ms) }}>
+                span {formatDuration(task.elapsed_span_ms)}
+              </Trans>
             </div>
           </div>
         </div>

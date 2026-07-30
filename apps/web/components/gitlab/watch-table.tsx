@@ -187,7 +187,14 @@ function MobileWatchCard<TWatch extends Watch>(props: ActionProps<TWatch>) {
           <Badge variant={watch.enabled ? "default" : "secondary"}>
             {watch.enabled ? "Active" : "Paused"}
           </Badge>
-          <span>{Math.round(watch.poll_interval_seconds / 60)}m interval</span>
+          <span>
+            <Trans
+              i18nKey="gitlab:mInterval"
+              values={{ value0: Math.round(watch.poll_interval_seconds / 60) }}
+            >
+              {Math.round(watch.poll_interval_seconds / 60)}m interval
+            </Trans>
+          </span>
           <span>
             <Trans
               i18nKey="gitlab:lastChecked2"

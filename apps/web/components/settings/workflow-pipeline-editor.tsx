@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import {
@@ -147,8 +148,10 @@ function PipelineNode({
             className="flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300"
             aria-label={`${step.name} is part of a replay cycle`}
           >
-            <IconAlertTriangle className="size-3 shrink-0" aria-hidden="true" />
-            Cycle
+            <Trans i18nKey="settings:cycle">
+              <IconAlertTriangle className="size-3 shrink-0" aria-hidden="true" />
+              Cycle
+            </Trans>
           </span>
         )}
       </div>

@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconCircleDot } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
@@ -21,7 +22,11 @@ export function IssueTaskIcon({ issueInfo }: { issueInfo: IssueInfo }) {
           <IconCircleDot className="h-3.5 w-3.5" />
         </a>
       </TooltipTrigger>
-      <TooltipContent>Issue #{issueInfo.number}</TooltipContent>
+      <TooltipContent>
+        <Trans i18nKey="github:issue" values={{ number: issueInfo.number }}>
+          Issue #{issueInfo.number}
+        </Trans>
+      </TooltipContent>
     </Tooltip>
   );
 }

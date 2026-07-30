@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -329,8 +330,10 @@ export function CustomAgentsSection({ agents, onAdd, onEdit, onDelete }: CustomA
         </CardTitle>
         <CardAction>
           <Button onClick={onAdd} size="sm" className="cursor-pointer">
-            <IconPlus className="h-4 w-4 mr-1" />
-            Add
+            <Trans i18nKey="settings:add2">
+              <IconPlus className="h-4 w-4 mr-1" />
+              Add
+            </Trans>
           </Button>
         </CardAction>
       </CardHeader>

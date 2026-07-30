@@ -149,7 +149,13 @@ function IssueRow({
             </Badge>
           )}
           <AssigneeCell issue={issue} />
-          {relative && <span className="text-xs text-muted-foreground">· updated {relative}</span>}
+          {relative && (
+            <span className="text-xs text-muted-foreground">
+              <Trans i18nKey="linear:updated2" values={{ relative }}>
+                · updated {relative}
+              </Trans>
+            </span>
+          )}
         </div>
       </button>
       <div className="flex items-center gap-1 shrink-0">

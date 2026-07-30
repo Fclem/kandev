@@ -27,7 +27,7 @@ import { getSessionStateIcon } from "@/lib/ui/state-icons";
 import { getWebSocketClient } from "@/lib/ws/connection";
 import { useSessionPendingInput, type PendingInput } from "@/hooks/use-task-pending-input";
 import { buildAgentLabelsById, resolveAgentLabelFor, sortSessions } from "./session-sort";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type SessionStatus = "running" | "waiting_input" | "complete" | "failed" | "cancelled";
 
@@ -318,8 +318,10 @@ function SessionDropdownContent({
           onClick={onNewSession}
           className="flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors cursor-pointer"
         >
-          <IconPlus className="h-3.5 w-3.5" />
-          New
+          <Trans i18nKey="task:new">
+            <IconPlus className="h-3.5 w-3.5" />
+            New
+          </Trans>
         </button>
       </div>
       <DropdownMenuSeparator />

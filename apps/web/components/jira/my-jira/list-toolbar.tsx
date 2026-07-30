@@ -99,8 +99,10 @@ export function ListToolbar({
           className="cursor-pointer h-7 text-xs gap-1.5"
           title={t("jira:toggleRawJqlEditor")}
         >
-          <IconCode className="h-3.5 w-3.5" />
-          JQL
+          <Trans i18nKey="jira:jql">
+            <IconCode className="h-3.5 w-3.5" />
+            JQL
+          </Trans>
         </Button>
       </div>
     </div>
@@ -120,8 +122,10 @@ function SortDropdown({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="cursor-pointer h-7 text-xs gap-1.5">
-          <IconArrowsSort className="h-3.5 w-3.5" />
-          Sort: {sortLabel}
+          <Trans i18nKey="jira:sort" values={{ sortLabel }}>
+            <IconArrowsSort className="h-3.5 w-3.5" />
+            Sort: {sortLabel}
+          </Trans>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">

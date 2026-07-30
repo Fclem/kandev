@@ -17,7 +17,7 @@ import { cn, formatUserHomePath } from "@/lib/utils";
 import type { Repository } from "@/lib/types/http";
 import { normalizeRepoValue, shouldShowCustomEntry } from "./repo-entry";
 import { useDiscoveredRepositories } from "./use-discovered-repositories";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   workspaceId: string | null;
@@ -183,7 +183,11 @@ function PickerCommandList({
           >
             <IconWorld className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="flex flex-col min-w-0">
-              <span className="truncate">Use “{customQuery}”</span>
+              <span className="truncate">
+                <Trans i18nKey="office:use" values={{ customQuery }}>
+                  Use “{customQuery}”
+                </Trans>
+              </span>
               <span className="text-[11px] text-muted-foreground">
                 {looksLikeUrl(customQuery) ? "Add as remote URL" : "Add as local path"}
               </span>

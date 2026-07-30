@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { memo, useMemo, useState } from "react";
 import { IconPlus } from "@tabler/icons-react";
@@ -64,8 +65,10 @@ export const NewTaskButton = memo(function NewTaskButton({
         className="h-6 gap-1 cursor-pointer"
         onClick={() => setDialogOpen(true)}
       >
-        <IconPlus className="h-4 w-4" />
-        Task
+        <Trans i18nKey="task:task">
+          <IconPlus className="h-4 w-4" />
+          Task
+        </Trans>
       </Button>
       <TaskCreateDialog
         open={dialogOpen}

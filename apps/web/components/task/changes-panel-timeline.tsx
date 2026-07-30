@@ -600,7 +600,9 @@ export function ReviewProgressBar({
             />
           </div>
           <span className="text-[10px] text-muted-foreground/40 whitespace-nowrap">
-            {reviewedCount}/{totalFileCount} reviewed
+            <Trans i18nKey="task:reviewed" values={{ reviewedCount, totalFileCount }}>
+              {reviewedCount}/{totalFileCount} reviewed
+            </Trans>
           </span>
         </div>
       </TooltipTrigger>

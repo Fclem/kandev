@@ -184,7 +184,9 @@ function RoutineActions({ onRunNow, onDelete }: { onRunNow: () => void; onDelete
             onDelete();
           }}
         >
-          <IconTrash className="h-4 w-4 mr-2" /> Delete
+          <Trans i18nKey="office:delete2">
+            <IconTrash className="h-4 w-4 mr-2" /> Delete
+          </Trans>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

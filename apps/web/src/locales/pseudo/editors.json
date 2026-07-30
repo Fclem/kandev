@@ -1,6 +1,7 @@
 {
   "applyLatestAgentChangesToThis": "Àƥƥĺŷ ĺàţēśţ àĝēńţ ćĥàńĝēś ţō ţĥĩś ƒĩĺē",
   "boldCmdB": "Ɓōĺď (Ćḿď+Ɓ)",
+  "comment": "<0></0> Ćōḿḿēńţ",
   "commentCmdShiftC": "Ćōḿḿēńţ (Ćḿď+Śĥĩƒţ+Ć)",
   "comments_one": "{{count}} ćōḿḿēńţ",
   "comments_other": "{{count}} ćōḿḿēńţś",
@@ -24,8 +25,10 @@
   "openWith": "Ōƥēń ŵĩţĥ...",
   "pasteLink": "Ƥàśţē ĺĩńķ...",
   "previewMarkdown": "Ƥŕēvĩēŵ ḿàŕķďōŵń",
+  "reload": "<0></0> Ŕēĺōàď",
   "revertAllChanges": "Ŕēvēŕţ àĺĺ ćĥàńĝēś",
   "revertChanges": "Ŕēvēŕţ ćĥàńĝēś",
+  "saving": "<0></0> Śàvĩńĝ...",
   "strikethroughCmdShiftX": "Śţŕĩķēţĥŕōũĝĥ (Ćḿď+Śĥĩƒţ+X)",
   "toggleWordWrap": "Ţōĝĝĺē ŵōŕď ŵŕàƥ",
   "underlineCmdU": "Ũńďēŕĺĩńē (Ćḿď+Ũ)"

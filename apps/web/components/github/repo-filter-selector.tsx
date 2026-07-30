@@ -236,6 +236,62 @@ function OrgBadges({
   );
 }
 
+// RepoSearchResults renders the combobox's loading, empty and result states.
+function RepoSearchResults({
+  searchLoading,
+  org,
+  value,
+  results,
+  onSelect,
+}: {
+  searchLoading: boolean;
+  org: string;
+  value: string;
+  results: GitHubRepoInfo[];
+  onSelect: (fullName: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <CommandList>
+      {searchLoading && (
+        <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
+          <Trans i18nKey="github:searching">
+            <IconLoader2 className="h-3 w-3 animate-spin" />
+            Searching...
+          </Trans>
+        </div>
+      )}
+      {!searchLoading && org && results.length === 0 && (
+        <CommandEmpty>
+          <Trans i18nKey="github:noReposFoundFor" values={{ org }}>
+            No repos found for &quot;{org}&quot;
+          </Trans>
+        </CommandEmpty>
+      )}
+      {!searchLoading && !org && value.length > 0 && (
+        <CommandEmpty>{t("github:typeOwnerRepoToSearch")}</CommandEmpty>
+      )}
+      {results.length > 0 && (
+        <CommandGroup>
+          {results.map((repo) => (
+            <CommandItem
+              key={repo.full_name}
+              value={repo.full_name}
+              onSelect={onSelect}
+              className="cursor-pointer"
+            >
+              {repo.full_name}
+              {repo.private && (
+                <span className="ml-auto text-xs text-muted-foreground">{t("github:private")}</span>
+              )}
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      )}
+    </CommandList>
+  );
+}
+
 function RepoSearchCombobox({
   workspaceId,
   disabled,
@@ -296,43 +352,13 @@ function RepoSearchCombobox({
             onValueChange={setValue}
             placeholder={t("github:ownerRepo")}
           />
-          <CommandList>
-            {searchLoading && (
-              <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
-                <IconLoader2 className="h-3 w-3 animate-spin" />
-                Searching...
-              </div>
-            )}
-            {!searchLoading && org && filteredResults.length === 0 && (
-              <CommandEmpty>
-                <Trans i18nKey="github:noReposFoundFor" values={{ org }}>
-                  No repos found for &quot;{org}&quot;
-                </Trans>
-              </CommandEmpty>
-            )}
-            {!searchLoading && !org && value.length > 0 && (
-              <CommandEmpty>{t("github:typeOwnerRepoToSearch")}</CommandEmpty>
-            )}
-            {filteredResults.length > 0 && (
-              <CommandGroup>
-                {filteredResults.map((repo) => (
-                  <CommandItem
-                    key={repo.full_name}
-                    value={repo.full_name}
-                    onSelect={handleSelect}
-                    className="cursor-pointer"
-                  >
-                    {repo.full_name}
-                    {repo.private && (
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {t("github:private")}
-                      </span>
-                    )}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-          </CommandList>
+          <RepoSearchResults
+            searchLoading={searchLoading}
+            org={org}
+            value={value}
+            results={filteredResults}
+            onSelect={handleSelect}
+          />
         </Command>
       </PopoverContent>
     </Popover>

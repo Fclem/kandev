@@ -367,8 +367,10 @@ export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
             disabled={loading}
             className="cursor-pointer"
           >
-            <IconRefresh className="h-3.5 w-3.5 mr-1" />
-            Reset
+            <Trans i18nKey="github:reset2">
+              <IconRefresh className="h-3.5 w-3.5 mr-1" />
+              Reset
+            </Trans>
           </Button>
         </div>
       }

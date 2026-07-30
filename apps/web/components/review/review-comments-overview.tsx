@@ -3,7 +3,7 @@
 import { IconMessage } from "@tabler/icons-react";
 import type { DiffComment } from "@/lib/diff/types";
 import { formatLineRange } from "@/lib/diff";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type FileGroup = { key: string; filePath: string; comments: DiffComment[] };
 
@@ -72,7 +72,12 @@ export function ReviewCommentsOverview({ comments }: { comments: DiffComment[] }
           {total} pending review comment{total !== 1 ? "s" : ""}
         </span>
         <span className="text-xs text-muted-foreground">
-          across {t("review:files", { count: groups.length })}
+          <Trans
+            i18nKey="review:across"
+            values={{ value1: t("review:files", { count: groups.length }) }}
+          >
+            across {t("review:files", { count: groups.length })}
+          </Trans>
         </span>
       </div>
 

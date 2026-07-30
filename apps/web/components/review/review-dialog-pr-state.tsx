@@ -151,8 +151,10 @@ export function ReviewPRDiffBoundary({
         <span>{error}</span>
         {onRetry && (
           <Button className="min-h-11" variant="outline" size="sm" onClick={onRetry}>
-            <IconRefresh className="h-4 w-4" />
-            Retry
+            <Trans i18nKey="review:retry">
+              <IconRefresh className="h-4 w-4" />
+              Retry
+            </Trans>
           </Button>
         )}
       </div>

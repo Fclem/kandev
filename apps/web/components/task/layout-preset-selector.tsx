@@ -63,7 +63,7 @@ import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
 import type { SavedLayout } from "@/lib/types/http";
 import { useTaskSessions } from "@/hooks/use-task-sessions";
 import { resolveLayoutApplySessionIds } from "./layout-preset-selector-session-ids";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type PresetOption = {
   id: BuiltInLayoutProfileId;
@@ -325,7 +325,11 @@ function DeleteLayoutDialog({
     <AlertDialog open={Boolean(layout)} onOpenChange={(open) => !open && !deleting && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete {layout?.name ?? "saved layout"}?</AlertDialogTitle>
+          <AlertDialogTitle>
+            <Trans i18nKey="task:delete" values={{ value1: layout?.name ?? "saved layout" }}>
+              Delete {layout?.name ?? "saved layout"}?
+            </Trans>
+          </AlertDialogTitle>
           <AlertDialogDescription>
             {layout?.is_default
               ? "The built-in Default layout will become the default."

@@ -1,7 +1,7 @@
 "use client";
 
 import type { RunRuntimeDetail } from "@/lib/api/domains/office-extended-api";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   runtime: RunRuntimeDetail;
@@ -52,8 +52,10 @@ export function RuntimePanel({ runtime }: Props) {
                 {skill.version && <span className="text-muted-foreground">v{skill.version}</span>}
                 {skill.content_hash && (
                   <span className="text-muted-foreground">
-                    {" "}
-                    hash {shortHash(skill.content_hash)}
+                    <Trans i18nKey="office:hash" values={{ value2: shortHash(skill.content_hash) }}>
+                      {" "}
+                      hash {shortHash(skill.content_hash)}
+                    </Trans>
                   </span>
                 )}
               </div>

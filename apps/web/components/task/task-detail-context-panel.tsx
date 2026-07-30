@@ -90,7 +90,9 @@ function WorkspaceSection({
         </Badge>
         {mode && (
           <span className="text-[11px] text-muted-foreground" data-testid="workspace-mode-label">
-            mode: {mode}
+            <Trans i18nKey="task:mode" values={{ mode }}>
+              mode: {mode}
+            </Trans>
           </span>
         )}
       </div>

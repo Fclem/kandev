@@ -72,7 +72,11 @@ export function WorkflowStepMessageBadge({ workflow, size = "sm" }: WorkflowStep
         className={cn("shrink-0 rounded-full", dotSize, stepColor)}
         data-testid="workflow-message-dot"
       />
-      <span className="truncate">Workflow: {label}</span>
+      <span className="truncate">
+        <Trans i18nKey="task:workflow" values={{ label }}>
+          Workflow: {label}
+        </Trans>
+      </span>
     </span>
   );
 

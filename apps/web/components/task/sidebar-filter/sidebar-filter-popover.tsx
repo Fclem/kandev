@@ -17,7 +17,7 @@ import { FilterClauseEditor } from "./filter-clause-editor";
 import { SortPicker } from "./sort-picker";
 import { GroupPicker } from "./group-picker";
 import { ViewHeaderRow } from "./view-manager";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   trigger: React.ReactNode;
@@ -167,8 +167,10 @@ function FilterSection({
           onClick={onAdd}
           data-testid="filter-add-button"
         >
-          <IconPlus className="mr-1 h-3 w-3" />
-          Add
+          <Trans i18nKey="task:add">
+            <IconPlus className="mr-1 h-3 w-3" />
+            Add
+          </Trans>
         </Button>
       </div>
       {filters.length > 0 && (

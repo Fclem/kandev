@@ -275,8 +275,10 @@ export function SSHConnectionCard(props: SSHConnectionCardProps) {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <IconTerminal2 className="h-5 w-5" />
-              Connection
+              <Trans i18nKey="settings:connection">
+                <IconTerminal2 className="h-5 w-5" />
+                Connection
+              </Trans>
             </CardTitle>
             <CardDescription>
               Run an agent on Linux amd64 or macOS hosts you can reach over SSH.
@@ -388,8 +390,15 @@ function SSHConnectionActions({
           data-testid="ssh-save-button"
           className="cursor-pointer"
         >
-          {saving ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-          Save
+          <Trans
+            i18nKey="settings:save2"
+            values={{
+              value0: saving ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null,
+            }}
+          >
+            {saving ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+            Save
+          </Trans>
         </Button>
       )}
     </div>
@@ -469,7 +478,11 @@ function TestResultHeader({ success, totalMs }: { success: boolean; totalMs: num
         <IconX className="h-4 w-4 text-red-600" />
       )}
       {success ? "Connection test passed" : "Connection test failed"}
-      <span className="text-muted-foreground font-normal">({totalMs}ms)</span>
+      <span className="text-muted-foreground font-normal">
+        <Trans i18nKey="settings:ms3" values={{ totalMs }}>
+          ({totalMs}ms)
+        </Trans>
+      </span>
     </div>
   );
 }
@@ -490,7 +503,11 @@ function StepRow({ step }: { step: SSHTestStep }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span>{step.name}</span>
-          <span className="text-muted-foreground text-xs">({step.duration_ms}ms)</span>
+          <span className="text-muted-foreground text-xs">
+            <Trans i18nKey="settings:ms2" values={{ duration_ms: step.duration_ms }}>
+              ({step.duration_ms}ms)
+            </Trans>
+          </span>
         </div>
         {step.output && (
           <p className="text-xs text-muted-foreground truncate font-mono">{step.output}</p>

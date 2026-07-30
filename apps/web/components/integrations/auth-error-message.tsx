@@ -54,7 +54,11 @@ export function IntegrationAuthErrorMessage({
         </span>
         {isAuth && (
           <Button asChild size="sm" variant="outline" className="cursor-pointer h-7 text-xs">
-            <Link href={reconnectHref}>Reconnect {name}</Link>
+            <Link href={reconnectHref}>
+              <Trans i18nKey="integrations:reconnect" values={{ name }}>
+                Reconnect {name}
+              </Trans>
+            </Link>
           </Button>
         )}
       </div>
@@ -75,7 +79,11 @@ export function IntegrationAuthErrorMessage({
             <p className="text-sm text-muted-foreground">{authErrorBody}</p>
           </div>
           <Button asChild size="sm" className="cursor-pointer">
-            <Link href={reconnectHref}>Reconnect {name}</Link>
+            <Link href={reconnectHref}>
+              <Trans i18nKey="integrations:reconnect" values={{ name }}>
+                Reconnect {name}
+              </Trans>
+            </Link>
           </Button>
         </>
       ) : (

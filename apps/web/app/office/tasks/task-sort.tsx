@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@kandev/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { TaskSortField, TaskSortDir } from "@/lib/state/slices/office/types";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const SORT_FIELDS: { value: TaskSortField; label: string }[] = [
   { value: "updated", label: "Updated" },
@@ -60,8 +60,10 @@ export function TaskSort({ field, dir, onFieldChange, onDirChange }: IssueSortPr
             className="flex-1 cursor-pointer"
             onClick={() => onDirChange("asc")}
           >
-            <IconSortAscending className="h-3.5 w-3.5 mr-1" />
-            Asc
+            <Trans i18nKey="office:asc">
+              <IconSortAscending className="h-3.5 w-3.5 mr-1" />
+              Asc
+            </Trans>
           </Button>
           <Button
             variant={dir === "desc" ? "secondary" : "ghost"}
@@ -69,8 +71,10 @@ export function TaskSort({ field, dir, onFieldChange, onDirChange }: IssueSortPr
             className="flex-1 cursor-pointer"
             onClick={() => onDirChange("desc")}
           >
-            <IconSortDescending className="h-3.5 w-3.5 mr-1" />
-            Desc
+            <Trans i18nKey="office:desc">
+              <IconSortDescending className="h-3.5 w-3.5 mr-1" />
+              Desc
+            </Trans>
           </Button>
         </div>
       </PopoverContent>

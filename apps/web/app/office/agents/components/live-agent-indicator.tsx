@@ -1,4 +1,5 @@
 "use client";
+import { Trans } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -27,7 +28,11 @@ export function LiveAgentIndicator({ count, className }: LiveAgentIndicatorProps
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
         <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
       </span>
-      <span className="text-[11px] font-medium text-emerald-500">{count} live</span>
+      <span className="text-[11px] font-medium text-emerald-500">
+        <Trans i18nKey="office:live" values={{ count }}>
+          {count} live
+        </Trans>
+      </span>
     </div>
   );
 }

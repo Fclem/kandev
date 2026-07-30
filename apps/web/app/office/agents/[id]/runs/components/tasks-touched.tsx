@@ -97,7 +97,9 @@ function TaskTableRow({ row }: { row: RowState }) {
     return (
       <TableRow data-testid="tasks-touched-row-loading">
         <TableCell colSpan={4} className="text-xs text-muted-foreground">
-          Loading {shortId(row.id)}…
+          <Trans i18nKey="office:loading" values={{ value1: shortId(row.id) }}>
+            Loading {shortId(row.id)}…
+          </Trans>
         </TableCell>
       </TableRow>
     );

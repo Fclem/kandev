@@ -56,7 +56,9 @@ export function VoiceModelLoadIndicator({
       ) : (
         <div className="flex flex-col gap-0.5 min-w-0 flex-1">
           <span className="hidden sm:inline text-[10px] leading-none text-muted-foreground truncate">
-            Downloading {modelLabel}… {pct}%
+            <Trans i18nKey="task:downloading" values={{ modelLabel, pct }}>
+              Downloading {modelLabel}… {pct}%
+            </Trans>
           </span>
           <Progress
             value={pct}

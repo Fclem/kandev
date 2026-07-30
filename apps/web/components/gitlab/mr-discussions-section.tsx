@@ -7,7 +7,7 @@ import { Button } from "@kandev/ui/button";
 import { Textarea } from "@kandev/ui/textarea";
 import type { GitLabMRDiscussion } from "@/lib/types/gitlab";
 import { CollapsibleSection, formatTimeAgo, PRMarkdownBody } from "@/components/github/pr-shared";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 function discussionLocation(discussion: GitLabMRDiscussion): string {
   if (!discussion.path) return "";
@@ -117,7 +117,9 @@ function Discussion({
               disabled={busy}
               onClick={() => void onResolve(discussion.id)}
             >
-              <IconCheck className="h-3.5 w-3.5" /> Resolve
+              <Trans i18nKey="gitlab:resolve">
+                <IconCheck className="h-3.5 w-3.5" /> Resolve
+              </Trans>
             </Button>
           )}
           <Button
@@ -126,7 +128,9 @@ function Discussion({
             disabled={busy || !reply.trim()}
             onClick={() => void submitReply()}
           >
-            <IconSend className="h-3.5 w-3.5" /> Reply
+            <Trans i18nKey="gitlab:reply">
+              <IconSend className="h-3.5 w-3.5" /> Reply
+            </Trans>
           </Button>
         </div>
       </div>

@@ -111,8 +111,55 @@ function MRTriggerContent({
   return (
     <>
       <IconBrandGitlab className="h-4 w-4 text-orange-500" />
-      <span className="text-xs font-medium">{count} MRs</span>
+      <span className="text-xs font-medium">
+        <Trans i18nKey="gitlab:mrs" values={{ count }}>
+          {count} MRs
+        </Trans>
+      </span>
     </>
+  );
+}
+
+// MRMenuEntry renders the review / open-in-GitLab / unlink actions for one MR.
+function MRMenuEntry({
+  mr,
+  onReview,
+  onUnlink,
+}: {
+  mr: TaskMR;
+  onReview: (mr: TaskMR) => void;
+  onUnlink: (associationId: string) => void;
+}) {
+  return (
+    <div>
+      <DropdownMenuItem className="cursor-pointer" onSelect={() => onReview(mr)}>
+        <IconGitMerge className="h-4 w-4" />
+        <span className="min-w-0 truncate">
+          <Trans
+            i18nKey="gitlab:review"
+            values={{ project_path: mr.project_path, mr_iid: mr.mr_iid }}
+          >
+            Review {mr.project_path}!{mr.mr_iid}
+          </Trans>
+        </span>
+      </DropdownMenuItem>
+      <DropdownMenuItem asChild className="cursor-pointer">
+        <Link href={mr.mr_url} target="_blank" rel="noopener noreferrer">
+          <Trans i18nKey="gitlab:openInGitlab">
+            <IconExternalLink className="h-4 w-4" /> Open in GitLab
+          </Trans>
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        className="cursor-pointer text-destructive focus:text-destructive"
+        onSelect={() => onUnlink(mr.id)}
+      >
+        <Trans i18nKey="gitlab:unlink" values={{ mr_iid: mr.mr_iid }}>
+          <IconUnlink className="h-4 w-4" />
+          Unlink !{mr.mr_iid}
+        </Trans>
+      </DropdownMenuItem>
+    </div>
   );
 }
 
@@ -176,28 +223,7 @@ function MRMenuButton({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
         {mrs.map((mr) => (
-          <div key={mr.id}>
-            <DropdownMenuItem className="cursor-pointer" onSelect={() => openReview(mr)}>
-              <IconGitMerge className="h-4 w-4" />
-              <span className="min-w-0 truncate">
-                Review {mr.project_path}!{mr.mr_iid}
-              </span>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild className="cursor-pointer">
-              <Link href={mr.mr_url} target="_blank" rel="noopener noreferrer">
-                <Trans i18nKey="gitlab:openInGitlab">
-                  <IconExternalLink className="h-4 w-4" /> Open in GitLab
-                </Trans>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="cursor-pointer text-destructive focus:text-destructive"
-              onSelect={() => onUnlink(mr.id)}
-            >
-              <IconUnlink className="h-4 w-4" />
-              Unlink !{mr.mr_iid}
-            </DropdownMenuItem>
-          </div>
+          <MRMenuEntry key={mr.id} mr={mr} onReview={openReview} onUnlink={onUnlink} />
         ))}
         {canLink ? (
           <>

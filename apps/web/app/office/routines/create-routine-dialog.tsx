@@ -412,8 +412,10 @@ export function CreateRoutineDialog({
                 onClick={() => setStep((s) => s - 1)}
                 className="cursor-pointer"
               >
-                <IconArrowLeft className="h-4 w-4 mr-1" />
-                Back
+                <Trans i18nKey="office:back">
+                  <IconArrowLeft className="h-4 w-4 mr-1" />
+                  Back
+                </Trans>
               </Button>
             )}
           </div>
@@ -435,8 +437,10 @@ export function CreateRoutineDialog({
                 disabled={!advanceEnabled}
                 className="cursor-pointer"
               >
-                Next
-                <IconArrowRight className="h-4 w-4 ml-1" />
+                <Trans i18nKey="office:next">
+                  Next
+                  <IconArrowRight className="h-4 w-4 ml-1" />
+                </Trans>
               </Button>
             )}
           </div>

@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ScriptEditor } from "@/components/settings/profile-edit/script-editor";
 import type { InstructionFile } from "./agent-instructions-tab";
 import { createInstructionFileCompletionProvider } from "./instruction-file-completions";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type InstructionEditorProps = {
   file: InstructionFile | null;
@@ -132,7 +132,11 @@ function DeleteConfirmDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete {filename}?</DialogTitle>
+          <DialogTitle>
+            <Trans i18nKey="office:delete" values={{ filename }}>
+              Delete {filename}?
+            </Trans>
+          </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           {t("office:thisWillPermanentlyDeleteThisInstruction")}

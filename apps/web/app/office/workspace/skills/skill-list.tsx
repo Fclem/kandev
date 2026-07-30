@@ -122,7 +122,9 @@ function SkillListHeader({
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-semibold">{t("office:skills")}</h3>
         <Badge variant="secondary" className="text-xs">
-          {count} available
+          <Trans i18nKey="office:available" values={{ count }}>
+            {count} available
+          </Trans>
         </Badge>
       </div>
       <div className="flex items-center gap-1">

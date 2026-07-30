@@ -3,7 +3,7 @@
 import Link from "@/components/routing/app-link";
 import type { ActivityEntry } from "@/lib/state/slices/office/types";
 import { timeAgo } from "@/lib/utils/time";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 
 const CANCEL_REASON_LABEL: Record<string, string> = {
@@ -86,7 +86,14 @@ function renderAction(entry: ActivityEntry): React.ReactNode {
     return (
       <>
         <span className="text-muted-foreground"> {t("office:statusChanged")}</span>
-        {newStatus && <span className="text-muted-foreground"> to {newStatus}</span>}
+        {newStatus && (
+          <span className="text-muted-foreground">
+            <Trans i18nKey="office:to" values={{ newStatus }}>
+              {" "}
+              to {newStatus}
+            </Trans>
+          </span>
+        )}
         {taskRefNode(d)}
       </>
     );

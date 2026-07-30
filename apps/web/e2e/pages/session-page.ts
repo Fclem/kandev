@@ -151,7 +151,7 @@ export class SessionPage {
     const pollSlice = 1_500;
     const idle = this.anyIdleInput();
     const start = Date.now();
-    let reloaded = false;
+    let lastReloadAt = start;
 
     while (Date.now() - start < softTotalTimeout) {
       if (await idle.isVisible()) return;
@@ -165,23 +165,29 @@ export class SessionPage {
         continue;
       }
 
-      const elapsed = Date.now() - start;
-      if (!reloaded && elapsed >= attemptTimeout) {
-        reloaded = true;
+      const now = Date.now();
+      const remaining = softTotalTimeout - (now - start);
+      // Re-drive SSR hydration once per attemptTimeout slice (not just once):
+      // under CI shard load a single reload isn't always enough for the
+      // idle-input state to hydrate. Only reload while enough budget remains
+      // for the reloaded page to settle.
+      if (now - lastReloadAt >= attemptTimeout && remaining > pollSlice) {
+        lastReloadAt = now;
         await this.page.reload();
         await this.activeChat()
-          .waitFor({ state: "visible", timeout: attemptTimeout })
+          .waitFor({ state: "visible", timeout: Math.min(attemptTimeout, remaining) })
           .catch(() => undefined);
         continue;
       }
 
-      const remaining = softTotalTimeout - elapsed;
       await idle
         .waitFor({ state: "visible", timeout: Math.min(pollSlice, remaining) })
         .catch(() => undefined);
     }
 
-    await idle.waitFor({ state: "visible", timeout: 1_000 });
+    // Final bounded check: still throws on a genuinely stuck session, but gives
+    // the last hydration attempt a full attemptTimeout slice to land.
+    await idle.waitFor({ state: "visible", timeout: attemptTimeout });
   }
 
   /** Wait for the passthrough terminal to be visible (for TUI/passthrough sessions). */

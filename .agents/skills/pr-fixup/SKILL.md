@@ -70,6 +70,9 @@ fallback in `references/ci-troubleshooting.md`. Reproduce the exact failed comma
 CI-specific Go lint often needs `golangci-lint run ./... --new-from-rev=<base>
 --timeout=5m`.
 
+For unfamiliar, infrastructure, or E2E failures, load
+`references/ci-troubleshooting.md` before changing code.
+
 Fix with `/tdd` or `/e2e` as applicable, run focused checks, and keep each
 remediation scoped to the reported failure. Do not suppress a failure or mark a
 check clean without fresh evidence.

@@ -34,6 +34,17 @@ gh api repos/<owner>/<repo>/actions/jobs/<job_id>/logs > /tmp/kandev-job-<job_id
 Treat an unavailable log stream as unknown evidence, not a product failure.
 If the direct job-log request returns 404 while the job is queued or in progress,
 wait for that job to complete before retrying; it is not missing evidence.
+When the aggregate command exposes only a merge/report job, obtain every failed
+shard `job_id` from `scripts/pr-state --summary <PR>` and inspect at least one
+failure from each shard before changing code:
+
+```bash
+gh api repos/<owner>/<repo>/actions/jobs/<job_id>/logs \
+  | rg -n -i -C 4 '(Test timeout|Error:|failed|Process completed)'
+```
+
+Verify the output names the actual failing spec or assertion, rather than only
+the merge-report exit code.
 
 **CodeQL code-scanning upload failure:** If CodeQL completes extraction and
 query evaluation, then fails immediately after `Uploading code scanning

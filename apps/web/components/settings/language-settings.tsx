@@ -6,6 +6,8 @@ import { Label } from "@kandev/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { readBootPayload } from "@/src/boot-payload";
+import { pseudoLocaleAvailable } from "@/lib/i18n/boot";
 import {
   activateLocale,
   i18n,
@@ -25,7 +27,9 @@ export function LanguageSettings() {
   const { t } = useTranslation();
   const [locale, setLocale] = useState<SupportedLocale>(() => normalizeLocale(i18n.language));
 
-  const options = selectableLocales(import.meta.env.PROD);
+  // Not `import.meta.env.PROD`: the e2e harness serves a production bundle, so
+  // that constant would hide the pseudo locale the QA specs rely on.
+  const options = selectableLocales(!pseudoLocaleAvailable(readBootPayload()));
 
   const handleChange = async (value: string) => {
     const activated = await activateLocale(value);

@@ -65,6 +65,7 @@ import (
 	"github.com/kandev/kandev/internal/orchestrator"
 	"github.com/kandev/kandev/internal/plugins"
 	pluginstore "github.com/kandev/kandev/internal/plugins/store"
+	"github.com/kandev/kandev/internal/profiles"
 	promptcontroller "github.com/kandev/kandev/internal/prompts/controller"
 	prompthandlers "github.com/kandev/kandev/internal/prompts/handlers"
 	"github.com/kandev/kandev/internal/repoclone"
@@ -712,6 +713,7 @@ func bootPayload(ctx context.Context, req *http.Request, p routeParams, route we
 			APIPrefix:     "/api/v1",
 			WebSocketPath: "/ws",
 			Debug:         p.devMode,
+			NonProduction: profiles.DetectEnvironment() != profiles.EnvProd,
 			Locale:        i18n.FromRequest(req),
 		},
 		bootInitialState(ctx, req, p, route),

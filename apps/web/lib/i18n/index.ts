@@ -40,6 +40,14 @@ export function normalizeLocale(value: unknown): SupportedLocale {
  * Locales offered in the language switcher. The `pseudo` QA locale is hidden in
  * production builds.
  */
+/**
+ * Locales offered by the switcher. The pseudo QA locale is hidden in production.
+ *
+ * Takes "is this a production build?" from the caller rather than reading
+ * `import.meta.env.PROD`: the e2e harness serves a production bundle, so that
+ * constant is true there too and would hide the locale the QA tests need. The
+ * boot payload's `nonProduction` flag is the authoritative signal.
+ */
 export function selectableLocales(isProd: boolean): SupportedLocale[] {
   return SUPPORTED_LOCALES.filter((locale) => locale !== "pseudo" || !isProd);
 }

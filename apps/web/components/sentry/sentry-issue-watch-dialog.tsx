@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@kandev/ui/button";
 import { Separator } from "@kandev/ui/separator";
+import { Switch } from "@kandev/ui/switch";
+import { Label } from "@kandev/ui/label";
+import { Input } from "@kandev/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -11,18 +14,22 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@kandev/ui/dialog";
+import { IconInfoCircle } from "@tabler/icons-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
 import { useAppStore } from "@/components/state-provider";
-import { listSentryInstances, listSentryOrganizations } from "@/lib/api/domains/sentry-api";
-import { clearWorkspaceScopedForm } from "@/lib/watcher-repository-default";
+import { useSettingsData } from "@/hooks/domains/settings/use-settings-data";
+import { useWorkflows } from "@/hooks/use-workflows";
+import { useWorkflowSteps, stepPlaceholder } from "@/hooks/use-workflow-steps";
 import {
-  AutomationFields,
-  FilterFields,
-  InstancePicker,
-  PromptField,
-  SettingsFields,
-  WorkspacePicker,
-  type FormSetter,
-} from "./sentry-issue-watch-fields";
+  ScriptEditor,
+  computeEditorHeight,
+} from "@/components/settings/profile-edit/script-editor";
+import { listSentryInstances, listSentryOrganizations } from "@/lib/api/domains/sentry-api";
+import { WatcherRepositoryFields } from "@/components/watcher-repository-fields";
+import { clearWorkspaceScopedForm } from "@/lib/watcher-repository-default";
+import { SENTRY_ISSUE_WATCH_PLACEHOLDERS } from "./sentry-issue-watch-placeholders";
+import { MaxInflightTasksField } from "./sentry-issue-watch-throttle-field";
+import { SelectField, FilterFields, type FormSetter } from "./sentry-issue-watch-filter-fields";
 import {
   type FormState,
   parseMaxInflightTasks,
@@ -37,7 +44,7 @@ import type {
   SentryIssueWatch,
   UpdateSentryIssueWatchRequest,
 } from "@/lib/types/sentry";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 type Props = {
   open: boolean;
@@ -51,6 +58,102 @@ type Props = {
     req: UpdateSentryIssueWatchRequest,
   ) => Promise<unknown>;
 };
+
+function useFormData(workspaceId: string) {
+  useSettingsData(true);
+  useWorkflows(workspaceId, true);
+  const allWorkflows = useAppStore((s) => s.workflows.items);
+  const workflows = useMemo(() => allWorkflows.filter((w) => !w.hidden), [allWorkflows]);
+  const agentProfiles = useAppStore((s) => s.agentProfiles.items);
+  const executors = useAppStore((s) => s.executors.items);
+  const allExecutorProfiles = useMemo(
+    () =>
+      executors
+        .filter((e) => e.type !== "local" && e.type !== "local_pc")
+        .flatMap((e) => e.profiles ?? []),
+    [executors],
+  );
+  const filteredAgentProfiles = useMemo(
+    () => agentProfiles.filter((p) => !p.cli_passthrough),
+    [agentProfiles],
+  );
+  return { workflows, agentProfiles: filteredAgentProfiles, allExecutorProfiles };
+}
+
+function PlaceholdersHelp() {
+  const { t } = useTranslation();
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs" align="start">
+          <p className="text-xs font-medium mb-1">{t("sentry:availablePlaceholders")}</p>
+          <ul className="text-xs space-y-0.5">
+            {SENTRY_ISSUE_WATCH_PLACEHOLDERS.map((p) => (
+              <li key={p.key}>
+                <code className="text-[10px] bg-white/15 px-1 rounded">{`{{${p.key}}}`}</code>{" "}
+                <span className="opacity-70">{p.description}</span>
+              </li>
+            ))}
+          </ul>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function PromptField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <Label>{t("sentry:taskPrompt")}</Label>
+        <PlaceholdersHelp />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        <Trans i18nKey="sentry:thePromptSentToTheAgent">
+          The prompt sent to the agent for each new issue. Type {"{{"} to insert placeholders.
+        </Trans>
+      </p>
+      <div className="rounded-md border border-border overflow-hidden">
+        <ScriptEditor
+          value={value}
+          onChange={onChange}
+          language="markdown"
+          height={computeEditorHeight(value)}
+          lineNumbers="off"
+          placeholders={SENTRY_ISSUE_WATCH_PLACEHOLDERS}
+        />
+      </div>
+    </div>
+  );
+}
+
+function WorkspacePicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  const workspaces = useAppStore((s) => s.workspaces.items);
+  return (
+    <SelectField
+      label={t("common:workspace")}
+      description={t("sentry:tasksCreatedByThisWatcherLand")}
+      value={value}
+      onChange={onChange}
+      placeholder={t("sentry:selectWorkspace")}
+      items={workspaces.map((w) => ({ id: w.id, label: w.name }))}
+      disabled={disabled}
+    />
+  );
+}
 
 // useWorkspaceInstances loads the workspace's Sentry instances for the required
 // instance selector and auto-selects the sole instance on a fresh create.
@@ -83,6 +186,121 @@ function useWorkspaceInstances(
     setForm((p) => (p.sentryInstanceId ? p : { ...p, sentryInstanceId: instances[0].id }));
   }, [hasWatch, instances, setForm]);
   return instances;
+}
+
+function InstancePicker({
+  instances,
+  value,
+  onChange,
+  disabled,
+}: {
+  instances: SentryConfig[];
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  const noInstances = instances.length === 0;
+  return (
+    <SelectField
+      label={t("sentry:sentryInstance")}
+      description={t("sentry:whichSentryInstanceThisWatcherPolls")}
+      value={value}
+      onChange={onChange}
+      placeholder={
+        noInstances ? t("sentry:noSentryInstancesInThisWorkspace") : t("sentry:selectAnInstance")
+      }
+      items={instances.map((i) => ({ id: i.id, label: i.name }))}
+      disabled={disabled || noInstances}
+    />
+  );
+}
+
+function AutomationFields({ form, setForm }: { form: FormState; setForm: FormSetter }) {
+  const { t } = useTranslation();
+  const { workflows, agentProfiles, allExecutorProfiles } = useFormData(form.workspaceId);
+  const { steps, loading: stepsLoading } = useWorkflowSteps(form.workflowId);
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-4">
+        <SelectField
+          label={t("common:workflow")}
+          description={t("sentry:tasksAreCreatedInThisWorkflow")}
+          value={form.workflowId}
+          onChange={(v) => setForm((p) => ({ ...p, workflowId: v, workflowStepId: "" }))}
+          placeholder={t("common:selectWorkflow")}
+          items={workflows.map((w) => ({ id: w.id, label: w.name }))}
+        />
+        <SelectField
+          label={t("sentry:workflowStep")}
+          description={t("sentry:initialStepForNewTasks")}
+          value={form.workflowStepId}
+          onChange={(v) => setForm((p) => ({ ...p, workflowStepId: v }))}
+          placeholder={stepPlaceholder(form.workflowId, stepsLoading, steps.length)}
+          items={steps.map((s) => ({ id: s.id, label: s.name }))}
+          disabled={!form.workflowId || stepsLoading || steps.length === 0}
+        />
+      </div>
+      <WatcherRepositoryFields
+        workspaceId={form.workspaceId}
+        repositoryId={form.repositoryId}
+        baseBranch={form.baseBranch}
+        onRepositoryChange={(repositoryId) =>
+          setForm((p) => ({ ...p, repositoryId, baseBranch: "" }))
+        }
+        onBaseBranchChange={(baseBranch) => setForm((p) => ({ ...p, baseBranch }))}
+      />
+      <div className="grid grid-cols-2 gap-4">
+        <SelectField
+          label={t("sentry:agentProfile")}
+          description={t("sentry:optionalFallsBackToStepDefault")}
+          value={form.agentProfileId}
+          onChange={(v) => setForm((p) => ({ ...p, agentProfileId: v }))}
+          placeholder={t("sentry:useStepDefault")}
+          items={agentProfiles.map((p) => ({ id: p.id, label: p.label }))}
+        />
+        <SelectField
+          label={t("sentry:executorProfile")}
+          description={t("sentry:optionalFallsBackToStepDefault")}
+          value={form.executorProfileId}
+          onChange={(v) => setForm((p) => ({ ...p, executorProfileId: v }))}
+          placeholder={t("sentry:useStepDefault")}
+          items={allExecutorProfiles.map((p) => ({ id: p.id, label: p.name }))}
+        />
+      </div>
+    </>
+  );
+}
+
+function SettingsFields({ form, setForm }: { form: FormState; setForm: FormSetter }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <div className="space-y-1.5">
+        <Label>{t("sentry:pollIntervalSeconds")}</Label>
+        <p className="text-xs text-muted-foreground">{t("sentry:howOftenToReRunThe")}</p>
+        <Input
+          type="number"
+          value={form.pollInterval}
+          onChange={(e) => setForm((p) => ({ ...p, pollInterval: Number(e.target.value) }))}
+          min={60}
+          max={3600}
+        />
+      </div>
+      <MaxInflightTasksField form={form} setForm={setForm} />
+      <div className="flex items-center justify-between">
+        <div>
+          <Label>{t("common:enabled")}</Label>
+          <p className="text-xs text-muted-foreground">{t("sentry:pauseOrResumePolling")}</p>
+        </div>
+        <Switch
+          checked={form.enabled}
+          onCheckedChange={(v) => setForm((p) => ({ ...p, enabled: v }))}
+          className="cursor-pointer"
+        />
+      </div>
+    </>
+  );
 }
 
 function savingLabel(saving: boolean, isEdit: boolean): string {
@@ -195,7 +413,7 @@ export function SentryIssueWatchDialog({
             instances={instances}
             value={form.sentryInstanceId}
             onChange={(v) =>
-              setForm((p) => ({ ...p, sentryInstanceId: v, orgSlug: "", projectSlug: "" }))
+              setForm((p) => ({ ...p, sentryInstanceId: v, orgSlug: "", projectSlugs: [] }))
             }
             disabled={!!watch}
           />

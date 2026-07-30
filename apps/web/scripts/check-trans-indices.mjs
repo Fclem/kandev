@@ -8,6 +8,11 @@
  * does not blank out — it renders duplicated fragments with empty tags, which is
  * easy to miss and impossible to spot from the catalog alone.
  *
+ * It also rejects a React element passed through `values`. i18next interpolation
+ * stringifies its values, so `{{value0}}` with an element renders the literal
+ * text `[object Object]` on screen — elements belong in the children, addressed
+ * by an `<n>` tag. A string-valued placeholder is fine and is left alone.
+ *
  * A message is wrong when a `<n>` it uses does not land on an element child.
  * That is the exact signature of stale indices, and it is what this check fails
  * on. It cannot judge whether `<1>` wraps the *intended* element — only that it
@@ -72,6 +77,47 @@ function listFiles(dir, out = []) {
 
 const problems = [];
 let checked = 0;
+
+/** A React element in `values` always renders as "[object Object]". */
+function checkValuesForElements(node, key, where) {
+  const attr = node.openingElement.attributes.find(
+    (a) => a.type === "JSXAttribute" && a.name?.name === "values",
+  );
+  const object = attr?.value?.expression;
+  if (object?.type !== "ObjectExpression") return;
+  for (const prop of object.properties) {
+    if (prop.type !== "ObjectProperty") continue;
+    let hasJsx = false;
+    walk(prop.value, (n) => {
+      if (n.type === "JSXElement" || n.type === "JSXFragment") hasJsx = true;
+    });
+    if (!hasJsx) continue;
+    const name = prop.key?.name ?? prop.key?.value;
+    problems.push(
+      `${where}  ${key}: values.${name} is a React element — it will render as "[object Object]"`,
+    );
+  }
+}
+
+/** Every `<n>` in the message must land on an element child. */
+function checkTagIndices(msg, children, key, where) {
+  const indices = [...msg.matchAll(/<(\d+)>/g)].map((m) => Number(m[1]));
+  for (const i of new Set(indices)) {
+    const child = children[i];
+    if (!child) problems.push(`${where}  ${key}: <${i}> has no child`);
+    else if (child.type !== "JSXElement")
+      problems.push(`${where}  ${key}: <${i}> is ${child.type}, not an element`);
+  }
+}
+
+/** The static i18nKey on a `<Trans>`, or null when it is computed. */
+function transKey(node) {
+  const attr = node.openingElement.attributes.find(
+    (a) => a.type === "JSXAttribute" && a.name?.name === "i18nKey",
+  );
+  return attr?.value?.type === "StringLiteral" ? attr.value.value : null;
+}
+
 for (const dir of DIRS) {
   const abs = path.isAbsolute(dir) ? dir : path.join(ROOT, dir);
   if (!fs.existsSync(abs)) continue;
@@ -92,27 +138,14 @@ for (const dir of DIRS) {
     }
     walk(ast, (node) => {
       if (node.type !== "JSXElement" || node.openingElement?.name?.name !== "Trans") return;
-      const keyAttr = node.openingElement.attributes.find(
-        (a) => a.type === "JSXAttribute" && a.name?.name === "i18nKey",
-      );
-      const key = keyAttr?.value?.type === "StringLiteral" ? keyAttr.value.value : null;
+      const key = transKey(node);
       if (!key) return; // dynamic key — nothing static to verify
       const msg = message(key);
       if (msg == null) return; // missing keys are check-i18n-keys.mjs's job
       checked += 1;
-      const children = runtimeChildren(node);
-      const line = src.slice(0, node.start).split("\n").length;
-      const indices = [...msg.matchAll(/<(\d+)>/g)].map((m) => Number(m[1]));
-      for (const i of new Set(indices)) {
-        const child = children[i];
-        if (!child) {
-          problems.push(`${path.relative(ROOT, file)}:${line}  ${key}: <${i}> has no child`);
-        } else if (child.type !== "JSXElement") {
-          problems.push(
-            `${path.relative(ROOT, file)}:${line}  ${key}: <${i}> is ${child.type}, not an element`,
-          );
-        }
-      }
+      const where = `${path.relative(ROOT, file)}:${src.slice(0, node.start).split("\n").length}`;
+      checkValuesForElements(node, key, where);
+      checkTagIndices(msg, runtimeChildren(node), key, where);
     });
   }
 }

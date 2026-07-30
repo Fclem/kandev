@@ -1,7 +1,8 @@
 "use client";
-import { useTranslation } from "react-i18next";
+
+/* eslint-disable max-lines -- create and edit submit flows share one lifecycle boundary. */
+
 import { useCallback, FormEvent } from "react";
-import { t } from "@/lib/i18n";
 import { useRouter } from "@/lib/routing/client-router";
 import { updateTask } from "@/lib/api";
 import { useAppStore } from "@/components/state-provider";
@@ -12,6 +13,7 @@ import { linkToTask } from "@/lib/links";
 import type { SubmitHandlersDeps } from "@/components/task-create-dialog-types";
 import { useFreshBranchConsent } from "@/components/task-create-dialog-fresh-branch-consent";
 import { queueTaskCreateLastUsedFromPayload } from "@/components/task-create-dialog-handlers";
+
 import {
   activatePlanMode,
   buildCreateTaskPayload,
@@ -21,11 +23,22 @@ import {
   validateCreateInputs,
   toMessageAttachments,
 } from "@/components/task-create-dialog-helpers";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
-// Lazily evaluated so the active locale is resolved when the toast fires, not
-// at module-import time.
-const genericErrorMessage = () => t("task:anErrorOccurred");
-const duplicateRepoTitle = () => t("task:duplicateRepository");
+const GENERIC_ERROR_MESSAGE = "An error occurred";
+const DUPLICATE_REPO_TITLE = "Duplicate repository";
+
+function notifyQueuedTask(
+  response: { queued_for_step_id?: string | null },
+  notify: (input: { title: string; description: string }) => unknown,
+) {
+  if (!response.queued_for_step_id) return;
+  notify({
+    title: t("task:taskQueued"),
+    description: t("task:theWorkflowStepIsAtIts"),
+  });
+}
 
 // eslint-disable-next-line max-lines-per-function
 export function useTaskSubmitHandlers({
@@ -124,8 +137,8 @@ export function useTaskSubmitHandlers({
     const duplicate = findDuplicateRemoteRepo(remoteRepos);
     if (!duplicate) return false;
     toast({
-      title: duplicateRepoTitle(),
-      description: t("task:isAddedMoreThanOnceRemove", { duplicate }),
+      title: DUPLICATE_REPO_TITLE,
+      description: `${duplicate} is added more than once — remove the duplicate row.`,
       variant: "error",
     });
     return true;
@@ -214,7 +227,7 @@ export function useTaskSubmitHandlers({
     } catch (error) {
       toast({
         title: t("task:failedToCreateSession"),
-        description: error instanceof Error ? error.message : genericErrorMessage(),
+        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
         variant: "error",
       });
     } finally {
@@ -279,7 +292,7 @@ export function useTaskSubmitHandlers({
     } catch (error) {
       toast({
         title: t("task:failedToUpdateTask"),
-        description: error instanceof Error ? error.message : genericErrorMessage(),
+        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
         variant: "error",
       });
     } finally {
@@ -306,7 +319,7 @@ export function useTaskSubmitHandlers({
     } catch (error) {
       toast({
         title: t("task:failedToUpdateTask"),
-        description: error instanceof Error ? error.message : genericErrorMessage(),
+        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
         variant: "error",
       });
     } finally {
@@ -351,6 +364,7 @@ export function useTaskSubmitHandlers({
       };
       const taskResponse = await createTaskWithFreshBranchRetry(buildPayload, opts.consented);
       if (!taskResponse) return;
+      notifyQueuedTask(taskResponse, toast);
       const newSessionId = taskResponse.session_id ?? taskResponse.primary_session_id ?? null;
       const willNavigate =
         (opts.withAgent && isPassthroughProfile) || !!(opts.planMode && newSessionId);
@@ -448,7 +462,7 @@ export function useTaskSubmitHandlers({
       } catch (error) {
         toast({
           title: t("task:failedToStartTaskInPlan"),
-          description: error instanceof Error ? error.message : genericErrorMessage(),
+          description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
           variant: "error",
         });
       } finally {
@@ -477,7 +491,7 @@ export function useTaskSubmitHandlers({
     } catch (error) {
       toast({
         title: t("task:failedToStartTaskInPlan"),
-        description: error instanceof Error ? error.message : genericErrorMessage(),
+        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
         variant: "error",
       });
     } finally {
@@ -524,7 +538,7 @@ export function useTaskSubmitHandlers({
     } catch (error) {
       toast({
         title: t("task:failedToCreateTask"),
-        description: error instanceof Error ? error.message : genericErrorMessage(),
+        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
         variant: "error",
       });
     } finally {
@@ -575,6 +589,7 @@ export function useTaskSubmitHandlers({
       };
       const taskResponse = await createTaskWithFreshBranchRetry(buildPayload, consent);
       if (!taskResponse) return;
+      notifyQueuedTask(taskResponse, toast);
       onSuccess?.(taskResponse, "create");
       clearDraft();
       queueTaskCreateLastUsedFromPayload(submittedPayload);
@@ -583,7 +598,7 @@ export function useTaskSubmitHandlers({
     } catch (error) {
       toast({
         title: t("task:failedToCreateTask"),
-        description: error instanceof Error ? error.message : genericErrorMessage(),
+        description: error instanceof Error ? error.message : GENERIC_ERROR_MESSAGE,
         variant: "error",
       });
     } finally {

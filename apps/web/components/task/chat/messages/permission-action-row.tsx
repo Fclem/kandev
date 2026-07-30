@@ -55,23 +55,12 @@ export const PermissionActionRow = memo(function PermissionActionRow({
         data-testid="permission-approve"
         className={ACTION_BUTTON_CLASS}
       >
-        <Trans
-          i18nKey="task:approve"
-          values={{
-            value0: isResponding ? (
-              <GridSpinner className="text-foreground mr-1" />
-            ) : (
-              <IconCheck className="h-4 w-4 mr-1 text-green-500" />
-            ),
-          }}
-        >
-          {isResponding ? (
-            <GridSpinner className="text-foreground mr-1" />
-          ) : (
-            <IconCheck className="h-4 w-4 mr-1 text-green-500" />
-          )}
-          {t("task:approve3")}
-        </Trans>
+        {isResponding ? (
+          <GridSpinner className="text-foreground mr-1" />
+        ) : (
+          <IconCheck className="h-4 w-4 mr-1 text-green-500" />
+        )}
+        {t("task:approve")}
       </Button>
       {onAllowAlways && (
         <Button

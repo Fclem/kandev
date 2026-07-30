@@ -102,15 +102,8 @@ export function TaskResetEnvConfirmDialog({
               onConfirm({ pushBranch });
             }}
           >
-            <Trans
-              i18nKey="task:resetEnvironment4"
-              values={{
-                value0: isResetting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null,
-              }}
-            >
-              {isResetting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {t("task:resetEnvironment")}
-            </Trans>
+            {isResetting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {t("task:resetEnvironment4")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

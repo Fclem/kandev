@@ -25,30 +25,16 @@ export function TaskColorMenu({ taskId, disabled }: { taskId: string; disabled?:
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger disabled={disabled}>
-        <Trans
-          i18nKey="task:color"
-          values={{
-            value2: currentColor && (
-              <span
-                className={cn(
-                  "ml-2 inline-block h-2 w-2 rounded-full",
-                  TASK_COLOR_BAR_CLASS[currentColor],
-                )}
-              />
-            ),
-          }}
-        >
-          <IconPalette className="mr-2 h-4 w-4" />
-          {t("task:color2")}
-          {currentColor && (
-            <span
-              className={cn(
-                "ml-2 inline-block h-2 w-2 rounded-full",
-                TASK_COLOR_BAR_CLASS[currentColor],
-              )}
-            />
-          )}
-        </Trans>
+        <IconPalette className="mr-2 h-4 w-4" />
+        {currentColor && (
+          <span
+            className={cn(
+              "ml-2 inline-block h-2 w-2 rounded-full",
+              TASK_COLOR_BAR_CLASS[currentColor],
+            )}
+          />
+        )}
+        {t("task:color")}
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-40">
         {TASK_COLORS.map((color) => (

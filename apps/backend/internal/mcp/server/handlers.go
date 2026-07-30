@@ -224,6 +224,70 @@ func (s *Server) updateTaskHandler() server.ToolHandlerFunc {
 	}
 }
 
+func (s *Server) getTaskPRAutomationHandler() server.ToolHandlerFunc {
+	return func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var result map[string]interface{}
+		if err := s.backend.RequestPayload(
+			ctx, ws.ActionMCPGetTaskPRAutomation, map[string]interface{}{"task_id": s.taskID}, &result,
+		); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		removeLifecyclePromptFields(result)
+		data, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}
+
+func (s *Server) updateTaskPRAutomationHandler() server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		payload := map[string]interface{}{"task_id": s.taskID}
+		args := req.GetArguments()
+		if hasLifecyclePromptOverrideArgument(args) {
+			return mcp.NewToolResultError("lifecycle prompt overrides are not supported"), nil
+		}
+		for _, key := range []string{
+			"auto_fix_enabled", "auto_merge_enabled",
+			"prompt_on_review_requested", "prompt_on_merged", "prompt_on_closed",
+		} {
+			if value, ok := args[key].(bool); ok {
+				payload[key] = value
+			}
+		}
+		for _, key := range []string{"auto_fix_prompt_override"} {
+			if value, ok := args[key].(string); ok {
+				payload[key] = value
+			}
+		}
+		if len(payload) == 1 {
+			return mcp.NewToolResultError("at least one PR automation option is required"), nil
+		}
+		var result map[string]interface{}
+		if err := s.backend.RequestPayload(ctx, ws.ActionMCPUpdateTaskPRAutomation, payload, &result); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		data, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}
+
+func hasLifecyclePromptOverrideArgument(args map[string]interface{}) bool {
+	for _, field := range []string{"review_prompt_override", "merged_prompt_override", "closed_prompt_override"} {
+		if _, ok := args[field]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func removeLifecyclePromptFields(result map[string]interface{}) {
+	for _, field := range []string{
+		"review_prompt_override", "merged_prompt_override", "closed_prompt_override",
+		"effective_review_prompt", "effective_merged_prompt", "effective_closed_prompt",
+	} {
+		delete(result, field)
+	}
+}
+
 func (s *Server) messageTaskHandler() server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		taskID, err := req.RequireString("task_id")
@@ -672,13 +736,36 @@ func (s *Server) notifyClarificationTimeout() {
 	}
 }
 
-// resolveTaskID returns the server-injected taskID if available, otherwise falls back
-// to the agent-provided value. This prevents LLM hallucination of task IDs.
+// resolveTaskID resolves the task a plan/walkthrough/review tool call targets.
+//
+// An explicitly provided task_id argument wins; the session-bound task is only a
+// fallback for when the argument is absent (or the server is not session-bound,
+// e.g. external mode). The tool schemas advertise task_id as a first-class
+// parameter, so a caller that names another task — a parent reading its child's
+// plan, say — must reach that task, exactly like message_task_kandev /
+// stop_task_kandev already address tasks other than the caller's own.
+//
+// Honoring the explicit value is safe because cross-task access is authorized on
+// the backend against the *stream owner's* identity: internal/mcp/scope attaches
+// that identity from the agent's own execution (task → workspace → owner), never
+// from the request payload, and the plan/walkthrough/review services then gate
+// the target task_id through the same workspace-ownership check every other
+// cross-task surface uses. A task outside the caller's reach is rejected there,
+// not served.
+//
+// This replaces the earlier behavior, which silently discarded the argument and
+// always used the bound task — turning a cross-task read into a wrong-task read
+// (and a cross-task write into a wrong-task write) with no error. The pin was a
+// blunt guard against LLM-hallucinated task IDs; the backend authorization above
+// is the precise one, so the silent misdirection is no longer worth its cost.
 func (s *Server) resolveTaskID(req mcp.CallToolRequest) (string, error) {
+	if explicit := req.GetString(mcpKeyTaskID, ""); explicit != "" {
+		return explicit, nil
+	}
 	if s.taskID != "" {
 		return s.taskID, nil
 	}
-	return req.RequireString("task_id")
+	return "", fmt.Errorf("task_id is required")
 }
 
 func (s *Server) createTaskPlanHandler() server.ToolHandlerFunc {

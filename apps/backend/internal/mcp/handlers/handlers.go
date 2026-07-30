@@ -212,12 +212,14 @@ type Handlers struct {
 	// Optional PR lister (set via SetTaskPRLister) used to enrich
 	// task-listing responses with associated pull requests.
 	taskPRLister TaskPRLister
-
 	// Native code review (optional, set via SetReviewService /
 	// SetReviewRunner). Without them the review actions are simply not
 	// registered — see registerReviewHandlers.
 	reviewService *service.ReviewService
 	reviewRunner  ReviewRunner
+
+	// Optional task-bound GitHub PR automation controls.
+	taskPRAutomation TaskPRAutomationService
 }
 
 // NewHandlers creates new MCP handlers.
@@ -302,6 +304,8 @@ func (h *Handlers) RegisterHandlers(d *ws.Dispatcher) {
 	d.RegisterFunc(ws.ActionMCPListTasks, h.handleListTasks)
 	d.RegisterFunc(ws.ActionMCPCreateTask, h.handleCreateTask)
 	d.RegisterFunc(ws.ActionMCPUpdateTask, h.handleUpdateTask)
+	d.RegisterFunc(ws.ActionMCPGetTaskPRAutomation, h.handleGetTaskPRAutomation)
+	d.RegisterFunc(ws.ActionMCPUpdateTaskPRAutomation, h.handleUpdateTaskPRAutomation)
 	d.RegisterFunc(ws.ActionMCPAddBranchToTask, h.handleAddBranchToTask)
 	d.RegisterFunc(ws.ActionMCPAddWorkspaceSources, h.handleAddWorkspaceSources)
 	d.RegisterFunc(ws.ActionMCPUpdateRepositoryBaseBranch, h.handleUpdateRepositoryBaseBranch)
@@ -326,6 +330,7 @@ func (h *Handlers) RegisterHandlers(d *ws.Dispatcher) {
 	d.RegisterFunc(ws.ActionMCPClarificationTimeout, h.handleClarificationTimeout)
 	count := 25
 	count += h.registerReviewHandlers(d)
+	count += 2 // task PR automation get/update
 
 	// Config-mode handlers (registered when config deps are set)
 	if h.workflowSvc != nil {
@@ -636,6 +641,14 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		return ws.NewError(msg.ID, msg.Action, code, err.Error(), nil)
 	}
 	metadata = mergeMCPMetadata(metadata, workspacePolicy.MetadataBlock())
+	var deferredLaunch map[string]interface{}
+	if startAgent {
+		deferredLaunch = map[string]interface{}{
+			"intent": "start", "agent_profile_id": launchConfig.AgentProfileID,
+			"executor_id": launchConfig.ExecutorID, "executor_profile_id": launchConfig.ExecutorProfileID,
+			"prompt": req.Description,
+		}
+	}
 
 	task, err := h.taskSvc.CreateTask(ctx, &service.CreateTaskRequest{
 		ParentID:               req.ParentID,
@@ -648,6 +661,7 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		BlockedBy:              req.BlockedBy,
 		AssigneeAgentProfileID: req.AssigneeAgentProfileID,
 		Metadata:               metadata,
+		DeferredLaunch:         deferredLaunch,
 	})
 	if err != nil {
 		h.logger.Error("failed to create task", zap.Error(err))
@@ -671,8 +685,8 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		}
 	}
 
-	// Auto-start agent session asynchronously only if requested
-	if startAgent && h.sessionLauncher != nil {
+	// Auto-start agent session asynchronously only if requested and admitted.
+	if startAgent && task.QueuedForStepID == "" && h.sessionLauncher != nil {
 		h.launchAutoStartTask(ctx, task, launchConfig)
 	}
 
@@ -1343,14 +1357,22 @@ func (h *Handlers) handleAddBranchToTask(ctx context.Context, msg *ws.Message) (
 		code := classifyAddBranchError(err)
 		return ws.NewError(msg.ID, msg.Action, code, "Failed to add branch: "+err.Error(), nil)
 	}
-	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{
-		"id":              taskRepo.ID,
-		keyTaskID:         taskRepo.TaskID,
-		keyRepositoryID:   taskRepo.RepositoryID,
-		keyBaseBranch:     taskRepo.BaseBranch,
-		keyCheckoutBranch: taskRepo.CheckoutBranch,
-		keyPosition:       taskRepo.Position,
-	})
+	response := map[string]interface{}{
+		"id":                taskRepo.ID,
+		keyTaskID:           taskRepo.TaskID,
+		keyRepositoryID:     taskRepo.RepositoryID,
+		keyBaseBranch:       taskRepo.BaseBranch,
+		keyCheckoutBranch:   taskRepo.CheckoutBranch,
+		keyPosition:         taskRepo.Position,
+		"agent_cwd_changed": taskRepo.AgentCWDChanged,
+	}
+	if taskRepo.WorktreePath != "" {
+		response["worktree_path"] = taskRepo.WorktreePath
+	}
+	if taskRepo.TaskWorkspacePath != "" {
+		response["task_workspace_path"] = taskRepo.TaskWorkspacePath
+	}
+	return ws.NewResponse(msg.ID, msg.Action, response)
 }
 
 // handleAddWorkspaceSources forwards the documented discriminated source
@@ -2244,22 +2266,27 @@ func (r *taskMessageReviewRollback) captureSessions(ctx context.Context, repo Se
 	return nil
 }
 
-func (r *taskMessageReviewRollback) captureQueues(ctx context.Context, queue *messagequeue.Service) {
+func (r *taskMessageReviewRollback) captureQueues(ctx context.Context, queue *messagequeue.Service) error {
 	if !r.changed || queue == nil || len(r.sessions) == 0 {
-		return
+		return nil
 	}
-	r.queues = make(map[string]taskMessageQueueRollback, len(r.sessions))
+	queues := make(map[string]taskMessageQueueRollback, len(r.sessions))
 	for _, session := range r.sessions {
-		status := queue.GetStatus(ctx, session.sessionID)
-		snapshot := taskMessageQueueRollback{
-			entries: cloneTaskMessageQueuedMessages(status.Entries),
+		entries, move, err := queue.SnapshotSession(ctx, session.sessionID)
+		if err != nil {
+			return err
 		}
-		if move, ok := queue.GetPendingMove(ctx, session.sessionID); ok {
+		snapshot := taskMessageQueueRollback{
+			entries: cloneTaskMessageQueuedMessages(entries),
+		}
+		if move != nil {
 			snapshot.hadPendingMove = true
 			snapshot.pendingMove = cloneTaskMessagePendingMove(move)
 		}
-		r.queues[session.sessionID] = snapshot
+		queues[session.sessionID] = snapshot
 	}
+	r.queues = queues
+	return nil
 }
 
 func (r *taskMessageReviewRollback) captureSelectedSession(session *models.TaskSession) {
@@ -2373,7 +2400,10 @@ func (h *Handlers) dispatchTaskMessage(ctx context.Context, taskID string, sessi
 			h.restoreTaskReviewForTaskMessage(ctx, taskID, reviewRollback)
 			return taskMessageDispatchResult{}, err
 		}
-		reviewRollback.captureQueues(ctx, h.sessionLauncher.GetMessageQueue())
+		if err := reviewRollback.captureQueues(ctx, h.sessionLauncher.GetMessageQueue()); err != nil {
+			h.restoreTaskReviewForTaskMessage(ctx, taskID, reviewRollback)
+			return taskMessageDispatchResult{}, err
+		}
 		session, err := h.prepareSessionForTaskMessage(ctx, taskID, session, pinnedTarget)
 		if err != nil {
 			h.restoreTaskReviewForTaskMessage(ctx, taskID, reviewRollback)
@@ -2680,7 +2710,9 @@ func (h *Handlers) restoreSelectedTaskMessageSession(ctx context.Context, repo t
 		return errTaskMessageRollbackSuperseded
 	}
 	if primaryID != "" && rollback.selectedID != primaryID {
-		h.clearTaskMessageQueue(ctx, rollback.selectedID)
+		if err := h.restoreTaskMessageQueueOwner(ctx, rollback.selectedID, primaryID); err != nil {
+			return err
+		}
 	}
 	return repo.DeleteTaskSession(ctx, rollback.selectedID)
 }
@@ -2718,17 +2750,12 @@ func (h *Handlers) restoreTaskMessageQueue(ctx context.Context, queue *messagequ
 	return queue.RestoreSession(ctx, sessionID, cloneTaskMessageQueuedMessages(snapshot.entries), pendingMove)
 }
 
-func (h *Handlers) clearTaskMessageQueue(ctx context.Context, sessionID string) {
+func (h *Handlers) restoreTaskMessageQueueOwner(ctx context.Context, selectedID, primaryID string) error {
 	queue := h.sessionLauncher.GetMessageQueue()
 	if queue == nil {
-		return
+		return nil
 	}
-	if _, err := queue.CancelAll(ctx, sessionID); err != nil {
-		h.logger.Warn("failed to clear task message queue during rollback",
-			zap.String("session_id", sessionID),
-			zap.Error(err))
-	}
-	_, _ = queue.TakePendingMove(ctx, sessionID)
+	return queue.TransferSession(ctx, selectedID, primaryID)
 }
 
 func restoreTaskMessageSessionSnapshot(ctx context.Context, repo taskMessageSessionRollbackRepository, rollback taskMessageSessionRollback) error {

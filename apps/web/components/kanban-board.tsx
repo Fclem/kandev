@@ -1,6 +1,6 @@
 "use client";
-import { useTranslation } from "react-i18next";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { useRouter, useSearchParams } from "@/lib/routing/client-router";
 import { Task } from "./kanban-card";
 import { TaskCreateDialog } from "./task-create-dialog";
@@ -11,6 +11,7 @@ import { type MoveTaskError } from "@/hooks/use-drag-and-drop";
 import { SwimlaneContainer } from "./kanban/swimlane-container";
 import { KanbanHeader } from "./kanban/kanban-header";
 import { MobileFab } from "./kanban/mobile-fab";
+import { PullToRefresh } from "./mobile/pull-to-refresh";
 import { MobileSearchBar } from "./kanban/mobile-search-bar";
 import { TaskMultiSelectToolbar } from "./kanban/task-multi-select-toolbar";
 import { useKanbanData, useKanbanActions, useKanbanNavigation } from "@/hooks/domains/kanban";
@@ -37,6 +38,7 @@ import {
   AlertDialogAction,
 } from "@kandev/ui/alert-dialog";
 import { IconAlertTriangle } from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
 
 function useWorkflowSelection({
   store,
@@ -304,7 +306,7 @@ function useKanbanBoardSetup(
     setWorkflows,
   } = useKanbanBoardStore();
 
-  useAllWorkflowSnapshots(workspaceState.activeId);
+  const { refresh } = useAllWorkflowSnapshots(workspaceState.activeId);
   useWorkspacePRs(workspaceState.activeId);
   useWorkspaceMRs(workspaceState.activeId);
 
@@ -382,6 +384,7 @@ function useKanbanBoardSetup(
     effectiveWorkflowId,
     effectiveSteps,
     setMobileWorkflowFocusId,
+    refresh,
   };
 }
 
@@ -435,7 +438,7 @@ export function KanbanBoard({ onPreviewTask, onOpenTask, onBeforeEdit }: KanbanB
         setMoveError={s.setMoveError}
         handleGoToTask={s.handleGoToTask}
       />
-      <SwimlaneContainer
+      <KanbanSwimlanes
         viewMode={s.kanbanViewMode || ""}
         workflowFilter={s.workflowsState.activeId}
         onPreviewTask={s.handleCardClick}
@@ -456,6 +459,8 @@ export function KanbanBoard({ onPreviewTask, onOpenTask, onBeforeEdit }: KanbanB
         onToggleMultiSelect={s.multiSelect.toggleMultiSelect}
         onWorkflowChange={s.handleWorkflowChange}
         onMobileWorkflowFocusChange={s.setMobileWorkflowFocusId}
+        isMobile={s.isMobile}
+        onRefresh={s.refresh}
       />
       <TaskMultiSelectToolbar
         selectedIds={s.multiSelect.selectedIds}
@@ -470,6 +475,16 @@ export function KanbanBoard({ onPreviewTask, onOpenTask, onBeforeEdit }: KanbanB
       {s.isMobile && <MobileFab onClick={s.handleCreate} />}
     </div>
   );
+}
+
+type KanbanSwimlanesProps = ComponentProps<typeof SwimlaneContainer> & {
+  isMobile: boolean;
+  onRefresh: () => Promise<void>;
+};
+
+function KanbanSwimlanes({ isMobile, onRefresh, ...props }: KanbanSwimlanesProps) {
+  const swimlanes = <SwimlaneContainer {...props} />;
+  return isMobile ? <PullToRefresh onRefresh={onRefresh}>{swimlanes}</PullToRefresh> : swimlanes;
 }
 
 type KanbanBoardDialogsProps = {

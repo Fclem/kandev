@@ -39,6 +39,10 @@ export const noLiteralStringOptions = {
       // symbols, and "id · vN.N" is a version line, not prose.
       "^\\^[A-Z]$",
       "^·?\\s*v?$",
+      // Keyboard key names label a physical key, so they are not translatable
+      // copy — the spec lists keyboard glyphs as out of scope. They appear as
+      // <Kbd> children and on keybar config.
+      "(Esc|Escape|Tab|Home|End|PgUp|PgDn|Enter|Return|Space|Backspace|Delete|Del|Ins|Shift|Ctrl|Alt|Cmd|Meta|F\\d{1,2})",
       // URLs, home-relative paths, dotted placeholder tokens, and a
       // single letter (an avatar initial) are values, not prose.
       "(https?|file|ssh|git)://.*",

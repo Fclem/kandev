@@ -365,23 +365,12 @@ function SSHConnectionActions({
         data-testid="ssh-test-button"
         className="cursor-pointer"
       >
-        <Trans
-          i18nKey="settings:testConnection3"
-          values={{
-            value0: testing ? (
-              <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            ) : (
-              <IconTestPipe className="mr-1.5 h-4 w-4" />
-            ),
-          }}
-        >
-          {testing ? (
-            <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <IconTestPipe className="mr-1.5 h-4 w-4" />
-          )}
-          {t("settings:testConnection4")}
-        </Trans>
+        {testing ? (
+          <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
+        ) : (
+          <IconTestPipe className="mr-1.5 h-4 w-4" />
+        )}
+        {t("settings:testConnection3")}
       </Button>
       {showSave && (
         <Button
@@ -391,15 +380,8 @@ function SSHConnectionActions({
           data-testid="ssh-save-button"
           className="cursor-pointer"
         >
-          <Trans
-            i18nKey="settings:save2"
-            values={{
-              value0: saving ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null,
-            }}
-          >
-            {saving ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-            {t("settings:save")}
-          </Trans>
+          {saving ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+          {t("settings:save2")}
         </Button>
       )}
     </div>

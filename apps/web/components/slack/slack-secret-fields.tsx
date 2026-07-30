@@ -1,6 +1,6 @@
 "use client";
 
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 
@@ -36,17 +36,8 @@ export function SecretFields({
     <div className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="slack-token">
-          <Trans
-            i18nKey="common:sessionTokenXoxc"
-            values={{
-              value1: hasSavedToken && (
-                <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>
-              ),
-            }}
-          >
-            {t("common:sessionTokenXoxc2")}
-            {hasSavedToken && <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>}
-          </Trans>
+          {t("common:sessionTokenXoxc2")}
+          {hasSavedToken && <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>}
         </Label>
         <Input
           id="slack-token"
@@ -60,17 +51,8 @@ export function SecretFields({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="slack-cookie">
-          <Trans
-            i18nKey="common:dCookieValue"
-            values={{
-              value1: hasSavedCookie && (
-                <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>
-              ),
-            }}
-          >
-            d cookie value
-            {hasSavedCookie && <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>}
-          </Trans>
+          {t("common:dCookieValue")}
+          {hasSavedCookie && <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>}
         </Label>
         <Input
           id="slack-cookie"

@@ -207,14 +207,9 @@ function CreateAppFields(props: CreateFieldsProps) {
       <GitHubAppVisibilityField value={props.visibility} onChange={props.onVisibility} />
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button type="submit" disabled={props.mutating} className="h-11 cursor-pointer">
-          <Trans
-            i18nKey="github:prepareAppOnGithub"
-            values={{ value0: props.mutating && <Spinner className="mr-2 h-4 w-4" /> }}
-          >
-            {props.mutating && <Spinner className="mr-2 h-4 w-4" />}
-            Prepare App on GitHub
-            <IconExternalLink className="ml-2 h-4 w-4" />
-          </Trans>
+          {props.mutating && <Spinner className="mr-2 h-4 w-4" />}
+          <IconExternalLink className="ml-2 h-4 w-4" />
+          {t("github:prepareAppOnGithub")}
         </Button>
         <GitHubAppPolicyDialog />
       </div>

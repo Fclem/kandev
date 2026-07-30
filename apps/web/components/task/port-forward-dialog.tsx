@@ -302,23 +302,12 @@ function PortListHeader({ loading, onRefresh }: { loading: boolean; onRefresh: (
         onClick={onRefresh}
         disabled={loading}
       >
-        <Trans
-          i18nKey="task:refresh2"
-          values={{
-            value0: loading ? (
-              <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <IconRefresh className="h-3.5 w-3.5" />
-            ),
-          }}
-        >
-          {loading ? (
-            <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <IconRefresh className="h-3.5 w-3.5" />
-          )}
-          {t("task:refresh")}
-        </Trans>
+        {loading ? (
+          <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <IconRefresh className="h-3.5 w-3.5" />
+        )}
+        {t("task:refresh2")}
       </Button>
     </div>
   );

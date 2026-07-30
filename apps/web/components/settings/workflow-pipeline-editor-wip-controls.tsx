@@ -41,7 +41,7 @@ export function StepWipControls({
           <Label htmlFor={`${step.id}-wip-limit`} className="text-xs font-medium">
             {t("settings:wipLimit")}
           </Label>
-          <HelpTip text={t("settings:maximumTasksAllowedInThisStep")} />
+          <HelpTip text={t("settings:maximumAdmittedActiveTasksInThis")} />
         </div>
         <Input
           id={`${step.id}-wip-limit`}
@@ -68,7 +68,7 @@ export function StepWipControls({
           <Label htmlFor={pullFromSelectID} className="text-xs font-medium">
             {t("settings:pullFrom")}
           </Label>
-          <HelpTip text={t("settings:optionalFeederStepToPullWork")} />
+          <HelpTip text={t("settings:optionalFeederStepToPullQueued")} />
         </div>
         <Select
           value={pullFromValue}
@@ -102,6 +102,9 @@ export function StepWipControls({
           </SelectContent>
         </Select>
       </div>
+      <p className="text-xs text-muted-foreground sm:col-span-2">
+        {t("settings:wipLimitsActiveWorkNotVisibility")}
+      </p>
     </div>
   );
 }

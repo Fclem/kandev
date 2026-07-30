@@ -55,6 +55,10 @@ func (u *handlerRuntimeUpdater) RunUpdate(
 	return nil
 }
 
+func (u *handlerRuntimeUpdater) InvalidateExecutionCache(context.Context, string) error {
+	return nil
+}
+
 func (u *handlerRuntimeUpdater) Refresh(
 	context.Context,
 	string,
@@ -134,6 +138,34 @@ func updateRequest(method, path string) *http.Request {
 	request := httptest.NewRequest(method, path, nil)
 	request.Header.Set(httpmw.InterimSettingsInterlockHeader, "test-interlock")
 	return request
+}
+
+func TestAgentUpdatePreviewEndpointIsReadOnly(t *testing.T) {
+	router, _, _ := newAgentUpdateRouter(t, &handlerRuntimeUpdater{})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, updateRequest(
+		http.MethodGet,
+		"/api/v1/agent-update/claude-acp/preview",
+	))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET preview status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var preview map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &preview); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if preview["current_version"] != "1.0.0" || preview["target_version"] != "1.1.0" {
+		t.Fatalf("versions = %#v", preview)
+	}
+	if preview["command_string"] != `npm exec --yes --prefer-online --package=@agentclientprotocol/claude-agent-acp -- node -e ""` {
+		t.Fatalf("command_string = %#v", preview["command_string"])
+	}
+
+	jobs := httptest.NewRecorder()
+	router.ServeHTTP(jobs, updateRequest(http.MethodGet, "/api/v1/agent-update/jobs"))
+	if jobs.Code != http.StatusOK || !strings.Contains(jobs.Body.String(), `"jobs":[]`) {
+		t.Fatalf("preview must not create a job: %d %s", jobs.Code, jobs.Body.String())
+	}
 }
 
 func TestAgentUpdateEndpointsAcceptAndRetainJobs(t *testing.T) {
@@ -233,6 +265,15 @@ func TestAgentUpdateEndpointRejectsUnmanagedAgentAndMissingJob(t *testing.T) {
 	))
 	if unsupported.Code != http.StatusBadRequest {
 		t.Fatalf("unsupported status = %d, body = %s", unsupported.Code, unsupported.Body.String())
+	}
+
+	unsupportedPreview := httptest.NewRecorder()
+	router.ServeHTTP(unsupportedPreview, updateRequest(
+		http.MethodGet,
+		"/api/v1/agent-update/cursor-acp/preview",
+	))
+	if unsupportedPreview.Code != http.StatusBadRequest {
+		t.Fatalf("unsupported preview status = %d, body = %s", unsupportedPreview.Code, unsupportedPreview.Body.String())
 	}
 
 	missing := httptest.NewRecorder()

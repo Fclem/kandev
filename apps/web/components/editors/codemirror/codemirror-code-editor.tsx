@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { EditorView } from "@codemirror/view";
 import { Button } from "@kandev/ui/button";
@@ -26,9 +26,14 @@ import {
   ExternalVcsFileLink,
   useExternalVcsFileStatus,
 } from "@/components/editors/external-vcs-file-link";
+import { registerCodeMirrorCursorRevealer } from "@/hooks/file-editor-cursor";
 import { useCodeMirrorEditorState } from "./use-codemirror-editor-state";
 import { useCodeMirrorWalkthroughRange } from "./use-codemirror-walkthrough-range";
-import { Trans, useTranslation } from "react-i18next";
+import {
+  revealCodeMirrorCursor,
+  revealPendingCodeMirrorCursor,
+} from "./codemirror-cursor-navigation";
+import { useTranslation } from "react-i18next";
 
 const SAVE_SHORTCUT =
   typeof navigator !== "undefined" && navigator.platform.includes("Mac") ? "\u2318" : "Ctrl";
@@ -63,13 +68,14 @@ function CodeMirrorCommentBadge({
   sessionId?: string;
   commentCount: number;
 }) {
-  const { t } = useTranslation();
   if (!enableComments || !sessionId || commentCount <= 0) return null;
 
   return (
     <div className="flex items-center gap-1 px-2 py-1 text-xs text-primary">
       <IconMessagePlus className="h-3.5 w-3.5" />
-      <span>{t("editors:comments", { count: commentCount })}</span>
+      <span>
+        {commentCount} comment{commentCount > 1 ? "s" : ""}
+      </span>
     </div>
   );
 }
@@ -124,10 +130,8 @@ function CodeMirrorReloadButton({
           className="h-8 cursor-pointer gap-1 px-2 text-xs"
           onClick={onReloadFromAgent}
         >
-          <Trans i18nKey="editors:reload">
-            <IconRefresh className="h-3.5 w-3.5" />
-            {t("editors:reload2")}
-          </Trans>
+          <IconRefresh className="h-3.5 w-3.5" />
+          {t("editors:reload2")}
         </Button>
       </TooltipTrigger>
       <TooltipContent>{t("editors:applyLatestAgentChangesToThis")}</TooltipContent>
@@ -176,10 +180,8 @@ function CodeMirrorSaveButton({
     >
       {isSaving ? (
         <>
-          <Trans i18nKey="editors:saving">
-            <IconLoader2 className="h-4 w-4 animate-spin" />
-            Saving...
-          </Trans>
+          <IconLoader2 className="h-4 w-4 animate-spin" />
+          {t("editors:saving")}
         </>
       ) : (
         <>
@@ -315,10 +317,8 @@ function CodeMirrorOverlays({ state }: { state: CodeMirrorEditorState }) {
           onMouseDown={(e) => e.stopPropagation()}
           onClick={state.handleFloatingButtonClick}
         >
-          <Trans i18nKey="editors:comment">
-            <IconMessagePlus className="h-3.5 w-3.5" />
-            {t("editors:comment2")}
-          </Trans>
+          <IconMessagePlus className="h-3.5 w-3.5" />
+          {t("editors:comment2")}
         </Button>
       )}
       {state.textSelection && (
@@ -370,6 +370,15 @@ function useCodeMirrorCodeEditorSetup(props: FileEditorContentProps) {
     path,
     repo,
   });
+  useEffect(() => {
+    if (editorView) revealPendingCodeMirrorCursor(editorView, path, repo);
+  });
+  useEffect(() => {
+    if (!editorView) return;
+    return registerCodeMirrorCursorRevealer(path, repo, (line, column) =>
+      revealCodeMirrorCursor(editorView, line, column),
+    );
+  }, [editorView, path, repo]);
   const handleCreateEditor = useCallback((view: EditorView) => setEditorView(view), []);
   return { wrapperRef, editorAreaRef, editorRef, state, walkthroughRange, handleCreateEditor };
 }

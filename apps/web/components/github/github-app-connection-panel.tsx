@@ -126,14 +126,9 @@ function AppActionButtons({
         className="h-11 cursor-pointer"
         data-testid="github-app-install-button"
       >
-        <Trans
-          i18nKey="github:installForThisWorkspace"
-          values={{ value0: mutating && <Spinner className="mr-2 h-4 w-4" /> }}
-        >
-          {mutating && <Spinner className="mr-2 h-4 w-4" />}
-          Install for this workspace
-          <IconExternalLink className="ml-2 h-4 w-4" />
-        </Trans>
+        {mutating && <Spinner className="mr-2 h-4 w-4" />}
+        <IconExternalLink className="ml-2 h-4 w-4" />
+        {t("github:installForThisWorkspace")}
       </Button>
       <Button variant="outline" className="h-11 cursor-pointer" onClick={onImport}>
         <Trans i18nKey="github:addExistingApp">

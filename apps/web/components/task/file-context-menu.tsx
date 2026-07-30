@@ -49,6 +49,45 @@ function deleteNodeOptimistically(
     .catch(() => setTree(snapshot));
 }
 
+/**
+ * The confirmation body. A component rather than nested ternaries so each shape
+ * is one whole message — a folder name and a file count land in different places
+ * in other languages, so they cannot be assembled from fragments.
+ */
+function DeleteConfirmText({
+  isBulk,
+  selectedCount,
+  node,
+  fileCount,
+}: {
+  isBulk: boolean;
+  selectedCount: number;
+  node: FileTreeNode;
+  fileCount: number;
+}) {
+  const { t } = useTranslation();
+  if (isBulk) return <>{t("task:deleteSelectedItemsConfirm", { count: selectedCount })}</>;
+  if (fileCount > 0) {
+    return (
+      <Trans
+        i18nKey="task:deleteFolderWithFilesConfirm"
+        count={fileCount}
+        values={{ name: node.name, count: fileCount }}
+      >
+        This will permanently delete <span className="font-semibold">{node.name}</span> and{" "}
+        <span className="font-semibold">{fileCount}</span> files inside it. This action cannot be
+        undone.
+      </Trans>
+    );
+  }
+  return (
+    <Trans i18nKey="task:deleteEntryConfirm" values={{ name: node.name }}>
+      This will permanently delete <span className="font-semibold">{node.name}</span>. This action
+      cannot be undone.
+    </Trans>
+  );
+}
+
 function DeleteConfirmDialog({
   isBulk,
   selectedCount,
@@ -63,51 +102,20 @@ function DeleteConfirmDialog({
   onConfirm: () => void;
 }) {
   const { t } = useTranslation();
-  const title = isBulk ? `Delete ${selectedCount} items?` : "Delete folder?";
+  const title = isBulk
+    ? t("task:deleteItemsTitle", { count: selectedCount })
+    : t("task:deleteFolderTitle");
   return (
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle>{title}</AlertDialogTitle>
         <AlertDialogDescription>
-          {isBulk ? (
-            `This will permanently delete ${selectedCount} selected items. This action cannot be undone.`
-          ) : (
-            <>
-              <Trans
-                i18nKey="task:thisWillPermanentlyDeleteThisAction"
-                values={{
-                  name: node.name,
-                  value2: fileCount > 0 && (
-                    <>
-                      <Trans
-                        i18nKey="task:andInsideIt"
-                        values={{ fileCount, value4: fileCount === 1 ? "file" : "files" }}
-                      >
-                        {" "}
-                        and <span className="font-semibold">{fileCount}</span>{" "}
-                        {fileCount === 1 ? "file" : "files"} inside it
-                      </Trans>
-                    </>
-                  ),
-                }}
-              >
-                This will permanently delete <span className="font-semibold">{node.name}</span>
-                {fileCount > 0 && (
-                  <>
-                    <Trans
-                      i18nKey="task:andInsideIt"
-                      values={{ fileCount, value4: fileCount === 1 ? "file" : "files" }}
-                    >
-                      {" "}
-                      and <span className="font-semibold">{fileCount}</span>{" "}
-                      {fileCount === 1 ? "file" : "files"} inside it
-                    </Trans>
-                  </>
-                )}
-                . This action cannot be undone.
-              </Trans>
-            </>
-          )}
+          <DeleteConfirmText
+            isBulk={isBulk}
+            selectedCount={selectedCount}
+            node={node}
+            fileCount={fileCount}
+          />
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>

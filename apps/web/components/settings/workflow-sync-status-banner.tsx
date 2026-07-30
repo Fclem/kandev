@@ -1,5 +1,5 @@
 "use client";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -112,23 +112,12 @@ export function WorkflowSyncStatusCard({
           className="cursor-pointer"
           data-testid="workflow-sync-now"
         >
-          <Trans
-            i18nKey="settings:syncNow"
-            values={{
-              value0: syncing ? (
-                <IconLoader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <IconRefresh className="h-4 w-4 mr-2" />
-              ),
-            }}
-          >
-            {syncing ? (
-              <IconLoader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <IconRefresh className="h-4 w-4 mr-2" />
-            )}
-            {t("settings:syncNow2")}
-          </Trans>
+          {syncing ? (
+            <IconLoader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <IconRefresh className="h-4 w-4 mr-2" />
+          )}
+          {t("settings:syncNow")}
         </Button>
       </div>
       <MetadataLine config={config} />

@@ -97,23 +97,12 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
             disabled={testing || !status?.token_configured}
             className="cursor-pointer"
           >
-            <Trans
-              i18nKey="settings:testConnection2"
-              values={{
-                value0: testing ? (
-                  <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                ) : (
-                  <IconTestPipe className="mr-1.5 h-4 w-4" />
-                ),
-              }}
-            >
-              {testing ? (
-                <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <IconTestPipe className="mr-1.5 h-4 w-4" />
-              )}
-              {t("settings:testConnection")}
-            </Trans>
+            {testing ? (
+              <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <IconTestPipe className="mr-1.5 h-4 w-4" />
+            )}
+            {t("settings:testConnection2")}
           </Button>
         </div>
         {testResult && <TestResultDisplay result={testResult} />}
@@ -233,23 +222,12 @@ export function SpritesInstancesCard({ secretId }: { secretId?: string }) {
               disabled={destroyingAll}
               className="cursor-pointer"
             >
-              <Trans
-                i18nKey="settings:destroyAll"
-                values={{
-                  value0: destroyingAll ? (
-                    <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                  ) : (
-                    <IconTrash className="mr-1.5 h-4 w-4" />
-                  ),
-                }}
-              >
-                {destroyingAll ? (
-                  <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                ) : (
-                  <IconTrash className="mr-1.5 h-4 w-4" />
-                )}
-                {t("settings:destroyAll2")}
-              </Trans>
+              {destroyingAll ? (
+                <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <IconTrash className="mr-1.5 h-4 w-4" />
+              )}
+              {t("settings:destroyAll")}
             </Button>
           )}
         </div>

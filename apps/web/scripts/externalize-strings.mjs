@@ -81,6 +81,12 @@ const DISPLAY_PROPS = new Set([
   "emptyHint",
   "note",
   "invalidReason",
+  "idleLabel",
+  "activeLabel",
+  "successLabel",
+  "failedLabel",
+  "disabledReason",
+  "externalBlockedReason",
 ]);
 
 /**

@@ -1,6 +1,6 @@
 "use client";
+
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
 import { IconLoader2, IconLock, IconSettings } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
@@ -11,8 +11,9 @@ import { AgentLogo } from "@/components/agent-logo";
 import { AgentLoginDialog } from "@/components/settings/agent-login-dialog";
 import { AgentRuntimeUpdateControl } from "@/components/settings/agent-runtime-update-control";
 import { HostShellDialog } from "@/components/settings/host-shell-dialog";
-import type { AgentUpdateJob, InstallJob } from "@/lib/api";
+import type { AgentUpdateJob, AgentUpdatePreview, InstallJob } from "@/lib/api";
 import type { Agent, AgentDiscovery, RuntimeUpdate } from "@/lib/types/http";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   agent: AgentDiscovery;
@@ -23,7 +24,8 @@ type Props = {
   runtimeUpdate?: RuntimeUpdate;
   updateJob?: AgentUpdateJob;
   installJob?: InstallJob;
-  onUpdate?: (agentName: string) => void;
+  onPreview?: (agentName: string) => Promise<AgentUpdatePreview>;
+  onUpdate?: (agentName: string) => Promise<AgentUpdateJob>;
   /**
    * Called when the auth/shell dialog closes so the page can refresh
    * discovery + availability. Without this the yellow lock stays put even
@@ -57,48 +59,50 @@ function InstalledAgentIdentity({
         <h4 className="min-w-0 truncate font-medium">{displayName}</h4>
         {agent.supports_mcp && <Badge variant="secondary">MCP</Badge>}
         {configured && <Badge variant="outline">{t("settings:configured2")}</Badge>}
-        {probing && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                data-testid={`probing-icon-${agent.name}`}
-                className="ml-auto flex items-center text-muted-foreground cursor-help"
-                aria-label={t("settings:checkingAuthentication")}
-              >
-                <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              {t("settings:checkingAgentCapabilitiesAndAuthentication")}
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {authRequired && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onAuthClick}
-                data-testid={`auth-icon-${agent.name}`}
-                className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-amber-500 cursor-pointer hover:bg-amber-500/10"
-                aria-label={t("settings:authenticationRequired")}
-              >
-                <IconLock className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {loginAvailable
-                ? t("settings:authenticationRequiredClickToOpenLogin")
-                : t("settings:authenticationRequiredClickToOpenA")}
-            </TooltipContent>
-          </Tooltip>
-        )}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {probing && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  data-testid={`probing-icon-${agent.name}`}
+                  className="flex items-center text-muted-foreground cursor-help"
+                  aria-label={t("settings:checkingAuthentication")}
+                >
+                  <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {t("settings:checkingAgentCapabilitiesAndAuthentication")}
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {authRequired && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onAuthClick}
+                  data-testid={`auth-icon-${agent.name}`}
+                  className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-amber-500 cursor-pointer hover:bg-amber-500/10"
+                  aria-label={t("settings:authenticationRequired")}
+                >
+                  <IconLock className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {loginAvailable
+                  ? t("settings:authenticationRequiredClickToOpenLogin")
+                  : t("settings:authenticationRequiredClickToOpenA")}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       </div>
       <p
         className="text-xs text-muted-foreground line-clamp-2 min-h-[2rem]"
         title={agent.matched_path ?? undefined}
       >
-        {agent.matched_path ? t("settings:detectedAt", { matched_path: agent.matched_path }) : ""}
+        {agent.matched_path ? `Detected at ${agent.matched_path}` : ""}
       </p>
     </div>
   );
@@ -118,6 +122,7 @@ export function InstalledAgentCard({
   runtimeUpdate,
   updateJob,
   installJob,
+  onPreview,
   onUpdate,
   onAuthComplete,
 }: Props) {
@@ -150,27 +155,35 @@ export function InstalledAgentCard({
           loginAvailable={loginAvailable}
           onAuthClick={handleAuthClick}
         />
-        {runtimeUpdate?.supported && onUpdate && (
-          <AgentRuntimeUpdateControl
-            agentName={agent.name}
-            runtimeUpdate={runtimeUpdate}
-            job={updateJob}
-            installJob={installJob}
-            onUpdate={onUpdate}
-          />
-        )}
-        <Button size="sm" className="cursor-pointer mt-auto" asChild>
-          <Link
-            href={
-              hasAgentRecord
-                ? `/settings/agents/${encodeURIComponent(agent.name)}?mode=create`
-                : `/settings/agents/${encodeURIComponent(agent.name)}`
-            }
+        <div className="mt-auto flex items-center gap-2">
+          <Button
+            size="sm"
+            className="h-11 min-h-11 flex-1 cursor-pointer sm:h-7 sm:min-h-7"
+            asChild
           >
-            <IconSettings className="h-4 w-4 mr-2" />
-            {hasAgentRecord ? t("settings:createNewProfile") : t("settings:setupProfile")}
-          </Link>
-        </Button>
+            <Link
+              href={
+                hasAgentRecord
+                  ? `/settings/agents/${encodeURIComponent(agent.name)}?mode=create`
+                  : `/settings/agents/${encodeURIComponent(agent.name)}`
+              }
+            >
+              <IconSettings className="mr-2 h-4 w-4" />
+              {hasAgentRecord ? t("settings:createNewProfile") : t("settings:setupProfile")}
+            </Link>
+          </Button>
+          {runtimeUpdate?.supported && onPreview && onUpdate && (
+            <AgentRuntimeUpdateControl
+              agentName={agent.name}
+              displayName={displayName}
+              runtimeUpdate={runtimeUpdate}
+              job={updateJob}
+              installJob={installJob}
+              onPreview={onPreview}
+              onUpdate={onUpdate}
+            />
+          )}
+        </div>
         <AuthDialogs
           agent={agent}
           loginOpen={loginOpen}

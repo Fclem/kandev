@@ -20,7 +20,8 @@ import {
 import type { TaskWalkthrough, WalkthroughStep } from "@/lib/types/http";
 import type { WalkthroughComment } from "@/lib/state/slices/comments";
 import { CommentForm } from "./comment-form";
-import { Trans, useTranslation } from "react-i18next";
+import { cn } from "@kandev/ui/lib/utils";
+import { useTranslation } from "react-i18next";
 
 export const WALKTHROUGH_STEP_BODY_CLASS =
   "prose prose-sm dark:prose-invert max-w-none text-left text-sm leading-6 [overflow-wrap:anywhere] [text-align:left] [&_li]:text-left [&_p]:my-2 [&_p]:text-left";
@@ -77,9 +78,7 @@ function StepHeader({
         {t("diff:walkthrough")}
       </Badge>
       <span className="text-xs text-muted-foreground" data-testid="walkthrough-step-header">
-        <Trans i18nKey="diff:step" values={{ value1: activeStep + 1, stepCount, lineLabel }}>
-          {t("diff:step2")} {activeStep + 1} / {stepCount} · {lineLabel}
-        </Trans>
+        {t("diff:step2")} {activeStep + 1} / {stepCount} · {lineLabel}
       </span>
       <Button
         variant="ghost"
@@ -108,7 +107,10 @@ function StepNavigation({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-2 px-4 py-2 border-t border-border">
+    <div
+      className="flex shrink-0 items-center gap-2 border-t border-border px-4 py-2"
+      data-testid="walkthrough-navigation"
+    >
       <Button
         variant="outline"
         size="sm"
@@ -211,9 +213,11 @@ function useWalkthroughStepFeedback(params: {
 export function WalkthroughStepInner({
   onClose,
   onSelectFile,
+  layout = "inline",
 }: {
   onClose: () => void;
   onSelectFile?: OpenFileFn;
+  layout?: "inline" | "floating";
 }) {
   const activeTaskId = useAppStore((s) => s.tasks.activeTaskId);
   const sessionId = useAppStore((s) => s.tasks.activeSessionId);
@@ -242,10 +246,25 @@ export function WalkthroughStepInner({
   }, [activeTaskId, walkthrough, markSeen]);
   if (!activeTaskId || !walkthrough) return null;
   if (!step) return null;
+  const isFloating = layout === "floating";
   const lineLabel = step.line_end ? `Lines ${step.line}–${step.line_end}` : `Line ${step.line}`;
+  const navigation = (
+    <StepNavigation
+      activeStep={activeStep}
+      stepCount={stepCount}
+      onPrevious={() => setActiveStep(activeTaskId, activeStep - 1)}
+      onNext={() => setActiveStep(activeTaskId, activeStep + 1)}
+    />
+  );
 
   return (
-    <div className="flex max-h-[calc(100dvh-2rem)] flex-col rounded-xl border-l-2 border-primary/60 border border-border bg-card shadow-lg sm:max-h-[min(78vh,720px)]">
+    <div
+      className={cn(
+        "flex max-h-[calc(100dvh-2rem)] flex-col rounded-xl border border-border border-l-2 border-primary/60 bg-card shadow-lg sm:max-h-[min(78vh,720px)]",
+        isFloating &&
+          "h-[calc(100dvh-1rem-var(--app-status-bar-height)-env(safe-area-inset-bottom,0px))] overflow-hidden sm:h-[min(78vh,720px)]",
+      )}
+    >
       <StepHeader
         activeStep={activeStep}
         stepCount={stepCount}
@@ -256,13 +275,8 @@ export function WalkthroughStepInner({
         step={step}
         onOpenFile={() => revealFileAtLine(openFile, step.file, step.line, step.repo)}
       />
-      <StepNavigation
-        activeStep={activeStep}
-        stepCount={stepCount}
-        onPrevious={() => setActiveStep(activeTaskId, activeStep - 1)}
-        onNext={() => setActiveStep(activeTaskId, activeStep + 1)}
-      />
-      <div className="px-4 pb-3 pt-1">
+      {!isFloating ? navigation : null}
+      <div className="shrink-0 px-4 pb-3 pt-1">
         <CommentForm
           key={`${walkthrough.id}:${activeStep}`}
           onSubmit={addWalkthroughFeedback}
@@ -271,6 +285,7 @@ export function WalkthroughStepInner({
           autoFocus={false}
         />
       </div>
+      {isFloating ? navigation : null}
     </div>
   );
 }

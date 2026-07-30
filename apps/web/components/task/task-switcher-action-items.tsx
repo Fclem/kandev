@@ -109,23 +109,12 @@ export function TaskDeleteItem({
         disabled={isDeleting}
         onSelect={() => onDeleteTask(taskId)}
       >
-        <Trans
-          i18nKey="task:delete2"
-          values={{
-            value0: isDeleting ? (
-              <IconLoader className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <IconTrash className="mr-2 h-4 w-4" />
-            ),
-          }}
-        >
-          {isDeleting ? (
-            <IconLoader className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <IconTrash className="mr-2 h-4 w-4" />
-          )}
-          {t("common:delete")}
-        </Trans>
+        {isDeleting ? (
+          <IconLoader className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <IconTrash className="mr-2 h-4 w-4" />
+        )}
+        {t("task:delete2")}
       </ContextMenuItem>
     </>
   );

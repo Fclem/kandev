@@ -65,23 +65,12 @@ function SecretField({
   return (
     <div className="space-y-1.5">
       <Label htmlFor="linear-secret">
-        <Trans
-          i18nKey="linear:apiKey"
-          values={{
-            value1: hasSavedSecret && (
-              <span className="text-xs text-muted-foreground ml-2">
-                {t("linear:savedLeaveBlankToKeepThe")}
-              </span>
-            ),
-          }}
-        >
-          {t("linear:apiKey2")}
-          {hasSavedSecret && (
-            <span className="text-xs text-muted-foreground ml-2">
-              {t("linear:savedLeaveBlankToKeepThe")}
-            </span>
-          )}
-        </Trans>
+        {t("linear:apiKey2")}
+        {hasSavedSecret && (
+          <span className="text-xs text-muted-foreground ml-2">
+            {t("linear:savedLeaveBlankToKeepThe")}
+          </span>
+        )}
       </Label>
       <Input
         id="linear-secret"

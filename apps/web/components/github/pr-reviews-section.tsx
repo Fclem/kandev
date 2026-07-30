@@ -3,7 +3,8 @@ import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import type { PRReview, RequestedReviewer } from "@/lib/types/github";
 import { CollapsibleSection, FeedbackItemRow } from "./pr-shared";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 function ReviewStateIcon({ state }: { state: string }) {
   if (state === "APPROVED") return <IconCheck className="h-3.5 w-3.5 text-green-500 shrink-0" />;
@@ -113,7 +114,7 @@ function computeSectionSummary(
     requestedReviewers.length > 0 ? requestedReviewers.length : pendingReviewCount;
   const summaryParts: string[] = [];
   if (submittedSummary) summaryParts.push(submittedSummary);
-  if (pendingCount > 0) summaryParts.push(`${pendingCount} pending`);
+  if (pendingCount > 0) summaryParts.push(t("github:pendingReviews", { count: pendingCount }));
   const summary = summaryParts.length > 0 ? ` \u2014 ${summaryParts.join(", ")}` : "";
   return { pendingCount, summary, totalCount: reviews.length + pendingCount };
 }
@@ -229,22 +230,15 @@ export function ReviewsSection({
     pendingReviewers,
     pendingReviewCount,
   );
-  const pendingText = pendingCount > 0 ? ` (${pendingCount} pending)` : "";
-
   const subtitle = reviewState ? (
     <div className="text-[10px] text-muted-foreground px-2 pb-1">
-      <Trans
-        i18nKey="github:overall"
-        values={{
-          reviewState,
-          value2: pendingText && (
-            <span className="text-yellow-600 dark:text-yellow-400">{pendingText}</span>
-          ),
-        }}
-      >
-        Overall: <ReviewStateBadge state={reviewState} />
-        {pendingText && <span className="text-yellow-600 dark:text-yellow-400">{pendingText}</span>}
-      </Trans>
+      {t("github:overallLabel")} <ReviewStateBadge state={reviewState} />
+      {pendingCount > 0 && (
+        <span className="text-yellow-600 dark:text-yellow-400">
+          {" "}
+          ({t("github:pendingReviews", { count: pendingCount })})
+        </span>
+      )}
     </div>
   ) : null;
 

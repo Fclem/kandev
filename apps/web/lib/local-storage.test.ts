@@ -3,15 +3,42 @@ import {
   cleanupTaskStorage,
   clearGlobalSidebarWidth,
   getGlobalSidebarWidth,
+  getManualRightWidth,
   getOpenFileTabs,
+  getStoredAutoScrollEnabled,
+  getStoredAutoScrollTop,
   markPRClosedBannerDismissed,
   markPRMergedBannerDismissed,
   restoreAttachmentPreview,
   setGlobalSidebarWidth,
+  setManualRightWidth,
+  clearManualRightWidth,
   setOpenFileTabs,
+  setStoredAutoScrollEnabled,
+  setStoredAutoScrollTop,
   wasPRClosedBannerDismissed,
   wasPRMergedBannerDismissed,
 } from "./local-storage";
+import {
+  loadSessionFavorites,
+  persistSessionFavorites,
+} from "./state/slices/message-favorites/persistence";
+
+describe("message favorites storage", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("clears a session's favorites via cleanupTaskStorage but leaves other sessions intact", () => {
+    persistSessionFavorites("session-a", ["msg-1"]);
+    persistSessionFavorites("session-b", ["msg-2"]);
+
+    cleanupTaskStorage("task-a", ["session-a"]);
+
+    expect(loadSessionFavorites("session-a")).toEqual([]);
+    expect(loadSessionFavorites("session-b")).toEqual(["msg-2"]);
+  });
+});
 
 describe("PR merged banner dismissal storage", () => {
   beforeEach(() => {
@@ -107,6 +134,39 @@ describe("global sidebar width storage", () => {
   });
 });
 
+describe("manual right width storage", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("keeps a rounded width scoped to its environment", () => {
+    setManualRightWidth("env-a", 421.6);
+
+    expect(getManualRightWidth("env-a")).toBe(422);
+    expect(getManualRightWidth("env-b")).toBeNull();
+  });
+
+  it("ignores invalid widths and can clear a preference", () => {
+    setManualRightWidth("env-a", 0);
+    setManualRightWidth("env-a", Number.NaN);
+    expect(getManualRightWidth("env-a")).toBeNull();
+
+    setManualRightWidth("env-a", 320);
+    clearManualRightWidth("env-a");
+    expect(getManualRightWidth("env-a")).toBeNull();
+  });
+
+  it("cleans only the deleted task environments while preserving other widths", () => {
+    setManualRightWidth("env-a", 320);
+    setManualRightWidth("env-b", 420);
+
+    cleanupTaskStorage("task-a", [], ["env-a"]);
+
+    expect(getManualRightWidth("env-a")).toBeNull();
+    expect(getManualRightWidth("env-b")).toBe(420);
+  });
+});
+
 describe("task-scoped artifact notification storage", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -189,5 +249,43 @@ describe("chat draft attachment storage", () => {
     });
 
     expect(restored.deliveryMode).toBe("path");
+  });
+});
+
+describe("transcript auto-scroll storage", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("returns null for a session with no recorded preference", () => {
+    expect(getStoredAutoScrollEnabled("session-a")).toBeNull();
+  });
+
+  it("persists the enabled preference per session and reads it back", () => {
+    setStoredAutoScrollEnabled("session-a", false);
+
+    expect(getStoredAutoScrollEnabled("session-a")).toBe(false);
+    expect(getStoredAutoScrollEnabled("session-b")).toBeNull();
+  });
+
+  it("persists the last scrollTop per session and reads it back", () => {
+    setStoredAutoScrollTop("session-a", 480);
+
+    expect(getStoredAutoScrollTop("session-a")).toBe(480);
+    expect(getStoredAutoScrollTop("session-b")).toBeNull();
+  });
+
+  it("clears both the enabled preference and scrollTop via cleanupTaskStorage", () => {
+    setStoredAutoScrollEnabled("session-a", false);
+    setStoredAutoScrollTop("session-a", 480);
+    setStoredAutoScrollEnabled("session-b", false);
+    setStoredAutoScrollTop("session-b", 200);
+
+    cleanupTaskStorage("task-a", ["session-a"]);
+
+    expect(getStoredAutoScrollEnabled("session-a")).toBeNull();
+    expect(getStoredAutoScrollTop("session-a")).toBeNull();
+    expect(getStoredAutoScrollEnabled("session-b")).toBe(false);
+    expect(getStoredAutoScrollTop("session-b")).toBe(200);
   });
 });

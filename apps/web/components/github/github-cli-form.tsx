@@ -145,13 +145,8 @@ export function GitHubCLIForm({
           </SelectContent>
         </Select>
         <Button onClick={connect} disabled={!account || saving} className="h-11 cursor-pointer">
-          <Trans
-            i18nKey="github:useAccount"
-            values={{ value0: saving && <Spinner className="mr-2 h-4 w-4" /> }}
-          >
-            {saving && <Spinner className="mr-2 h-4 w-4" />}
-            {t("github:useAccount2")}
-          </Trans>
+          {saving && <Spinner className="mr-2 h-4 w-4" />}
+          {t("github:useAccount")}
         </Button>
       </div>
       <GitHubCLIAccountNotice

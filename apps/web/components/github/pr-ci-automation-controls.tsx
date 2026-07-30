@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useState, type ReactNode } from "react";
-import { IconEdit, IconInfoCircle, IconRefresh } from "@tabler/icons-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { IconChevronDown, IconEdit, IconInfoCircle, IconRefresh } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kandev/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,12 @@ import { useToast } from "@/components/toast-provider";
 import { useTaskCIAutomationOptions } from "@/hooks/domains/github/use-task-ci-options";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { autoFixRoundForState, findCIAutomationStateForPR } from "@/lib/github/ci-automation";
-import type { TaskCIAutomationPatch, TaskCIPRAutomationState, TaskPR } from "@/lib/types/github";
+import type {
+  TaskCIAutomationOptions,
+  TaskCIAutomationPatch,
+  TaskCIPRAutomationState,
+  TaskPR,
+} from "@/lib/types/github";
 import { Trans, useTranslation } from "react-i18next";
 
 const PR_FEEDBACK_PLACEHOLDER = "{{pr.feedback}}";
@@ -41,7 +47,7 @@ function CIAutomationInfoButton() {
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top" align="end" className="max-w-[280px] text-xs leading-relaxed">
-        {t("github:watchesThisTaskSLinkedPull")}
+        {t("github:watchesThisTaskSLinkedPull2")}
       </TooltipContent>
     </Tooltip>
   );
@@ -157,6 +163,7 @@ function CIAutomationRow({
   disabled,
   onCheckedChange,
   help,
+  describedBy,
 }: {
   id: string;
   label: string;
@@ -164,11 +171,15 @@ function CIAutomationRow({
   disabled: boolean;
   onCheckedChange: (checked: boolean) => void;
   help?: ReactNode;
+  describedBy?: string;
 }) {
+  const { isFinePointer, isMobile } = useResponsiveBreakpoint();
+  const minHeight = isMobile || !isFinePointer ? "min-h-11" : "min-h-7";
+
   return (
-    <div className="flex min-h-7 items-center justify-between gap-3 px-1">
+    <div className={`flex items-center justify-between gap-3 px-1 ${minHeight}`}>
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <Label htmlFor={id} className="min-w-0 cursor-pointer truncate text-xs">
+        <Label htmlFor={id} className="min-w-0 cursor-pointer text-xs leading-5">
           {label}
         </Label>
         {help}
@@ -176,6 +187,7 @@ function CIAutomationRow({
       <Switch
         id={id}
         aria-label={label}
+        aria-describedby={describedBy}
         checked={checked}
         disabled={disabled}
         onCheckedChange={onCheckedChange}
@@ -195,7 +207,10 @@ function CIAutomationErrorRow({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center justify-between gap-2 px-1 text-[11px] text-destructive">
+    <div
+      role="alert"
+      className="flex items-center justify-between gap-2 px-1 text-[11px] text-destructive"
+    >
       <span className="min-w-0 flex-1 truncate">{error}</span>
       <Button
         type="button"
@@ -205,12 +220,58 @@ function CIAutomationErrorRow({
         disabled={loading}
         onClick={onRetry}
       >
-        <Trans i18nKey="github:retry">
-          <IconRefresh className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
-          {t("common:retry")}
-        </Trans>
+        <IconRefresh className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+        {t("common:retry")}
       </Button>
     </div>
+  );
+}
+
+function CIAutomationHelpButton({
+  ariaLabel,
+  testId,
+  children,
+}: {
+  ariaLabel: string;
+  testId: string;
+  children: ReactNode;
+}) {
+  const { isFinePointer } = useResponsiveBreakpoint();
+  const [open, setOpen] = useState(false);
+  const trigger = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      data-testid={testId}
+      className="h-5 w-5 cursor-help text-muted-foreground hover:text-foreground"
+      aria-label={ariaLabel}
+    >
+      <IconInfoCircle className="h-3.5 w-3.5" />
+    </Button>
+  );
+  if (!isFinePointer) {
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        <PopoverContent
+          side="top"
+          align="start"
+          portal={false}
+          className="max-w-[280px] text-xs leading-relaxed"
+        >
+          {children}
+        </PopoverContent>
+      </Popover>
+    );
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+      <TooltipContent side="top" align="start" className="max-w-[280px] text-xs leading-relaxed">
+        {children}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -223,63 +284,241 @@ function CIAutoFixRoundHelpButton({
 }) {
   const { t } = useTranslation();
   const round = autoFixRoundForState(state, maxRounds);
-  const { isFinePointer } = useResponsiveBreakpoint();
-  const [open, setOpen] = useState(false);
-  const trigger = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      data-testid="ci-auto-fix-round-help"
-      className="h-5 w-5 cursor-help text-muted-foreground hover:text-foreground"
-      aria-label={t("github:explainAutoFixRounds")}
-    >
-      <IconInfoCircle className="h-3.5 w-3.5" />
-    </Button>
-  );
-  const explanation = (
-    <span data-testid="ci-auto-fix-round-explanation">
-      <Trans
-        i18nKey="github:autoFixHasUsedOfRounds"
-        values={{ current: round.current, max: round.max }}
-      >
-        {t("github:autoFixHasUsed")} {round.current} of {round.max} rounds for this PR. A round is
-        counted when Kandev sends or queues a CI auto-fix message. Kandev waits for all PR checks to
-        finish before starting a new CI auto-fix turn, so the agent gets the final failed checks and
-        current comments together. Updating an already queued auto-fix message does not use another
-        round. When this is at {round.max}/{round.max} and there is no pending auto-fix message left
-        to update, Kandev pauses auto-fix for this PR so it cannot loop forever. Disable and
-        re-enable auto-fix after manual review to start over.
-      </Trans>
-    </span>
-  );
-  if (!isFinePointer) {
-    return (
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-        <PopoverContent
-          side="top"
-          align="start"
-          portal={false}
-          className="max-w-[280px] text-xs leading-relaxed"
-        >
-          {explanation}
-        </PopoverContent>
-      </Popover>
-    );
-  }
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-      <TooltipContent side="top" align="start" className="max-w-[280px] text-xs leading-relaxed">
-        {explanation}
-      </TooltipContent>
-    </Tooltip>
+    <CIAutomationHelpButton
+      testId="ci-auto-fix-round-help"
+      ariaLabel={t("github:explainAutoFixRounds")}
+    >
+      <span data-testid="ci-auto-fix-round-explanation">
+        {t("github:autoFixRoundExplanation", { current: round.current, max: round.max })}
+      </span>
+    </CIAutomationHelpButton>
+  );
+}
+
+function PRAgentPromptRows({
+  taskId,
+  options,
+  disabled,
+  patchOption,
+}: {
+  taskId: string;
+  options: TaskCIAutomationOptions | null;
+  disabled: boolean;
+  patchOption: (patch: TaskCIAutomationPatch) => void;
+}) {
+  const { t } = useTranslation();
+  const terminalHelpID = `task-pr-terminal-help-${taskId}`;
+  const terminalHelp = "Wake the agent when review work ends. Choose either or both outcomes.";
+  return (
+    <>
+      <ReviewRequestedPromptRow
+        taskId={taskId}
+        options={options}
+        disabled={disabled}
+        patchOption={patchOption}
+      />
+      <span id={terminalHelpID} className="sr-only">
+        {terminalHelp}
+      </span>
+      <CIAutomationRow
+        id={`task-pr-merged-prompt-${taskId}`}
+        label={t("github:prMerged")}
+        describedBy={terminalHelpID}
+        checked={Boolean(options?.prompt_on_merged)}
+        disabled={disabled}
+        onCheckedChange={(checked) => patchOption({ prompt_on_merged: checked })}
+        help={
+          <CIAutomationHelpButton
+            testId="ci-pr-terminal-help"
+            ariaLabel={t("github:explainFinalPrStateNotifications")}
+          >
+            {terminalHelp}
+          </CIAutomationHelpButton>
+        }
+      />
+      <CIAutomationRow
+        id={`task-pr-closed-prompt-${taskId}`}
+        label={t("github:prClosedWithoutMerging")}
+        describedBy={terminalHelpID}
+        checked={Boolean(options?.prompt_on_closed)}
+        disabled={disabled}
+        onCheckedChange={(checked) => patchOption({ prompt_on_closed: checked })}
+      />
+    </>
+  );
+}
+
+function ReviewFollowUpSection({
+  taskId,
+  options,
+  disabled,
+  patchOption,
+}: {
+  taskId: string;
+  options: TaskCIAutomationOptions | null;
+  disabled: boolean;
+  patchOption: (patch: TaskCIAutomationPatch) => void;
+}) {
+  const { t } = useTranslation();
+  const { isFinePointer, isMobile } = useResponsiveBreakpoint();
+  const [open, setOpen] = useState(false);
+  const lifecycleEnabled = Boolean(
+    options?.prompt_on_review_requested || options?.prompt_on_merged || options?.prompt_on_closed,
+  );
+  const minHeight = isMobile || !isFinePointer ? "min-h-11" : "min-h-7";
+
+  useEffect(() => {
+    if (lifecycleEnabled) setOpen(true);
+  }, [lifecycleEnabled]);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          data-testid="ci-review-follow-up-trigger"
+          aria-label={t("github:toggleReviewFollowUpAutomation")}
+          className={`w-full cursor-pointer justify-between px-1 text-xs text-muted-foreground ${minHeight}`}
+        >
+          {t("github:reviewFollowUp")}
+          <IconChevronDown
+            aria-hidden="true"
+            className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="flex flex-col gap-1">
+        <PRAgentPromptRows
+          taskId={taskId}
+          options={options}
+          disabled={disabled}
+          patchOption={patchOption}
+        />
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ReviewRequestedPromptRow({
+  taskId,
+  options,
+  disabled,
+  patchOption,
+}: {
+  taskId: string;
+  options: TaskCIAutomationOptions | null;
+  disabled: boolean;
+  patchOption: (patch: TaskCIAutomationPatch) => void;
+}) {
+  const { t } = useTranslation();
+  const helpID = `task-pr-review-requested-prompt-${taskId}-description`;
+  const help = "Wake the agent for any new request, including re-review after changes.";
+  return (
+    <>
+      <span id={helpID} className="sr-only">
+        {help}
+      </span>
+      <CIAutomationRow
+        id={`task-pr-review-requested-prompt-${taskId}`}
+        label={t("github:yourReviewIsRequested")}
+        describedBy={helpID}
+        checked={Boolean(options?.prompt_on_review_requested)}
+        disabled={disabled}
+        onCheckedChange={(checked) => patchOption({ prompt_on_review_requested: checked })}
+        help={
+          <CIAutomationHelpButton
+            testId="ci-review-requested-help"
+            ariaLabel={t("github:explainReviewRequestNotifications")}
+          >
+            {help}
+          </CIAutomationHelpButton>
+        }
+      />
+    </>
+  );
+}
+
+function CIAutomationHeader({
+  disabled,
+  onEditPrompt,
+}: {
+  disabled: boolean;
+  onEditPrompt: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-between gap-2 px-1">
+      <div className="text-xs font-medium text-foreground">{t("github:automation")}</div>
+      <div className="flex items-center gap-1">
+        <CIAutomationInfoButton />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-foreground"
+          aria-label={t("github:editAutoFixPromptForThis")}
+          disabled={disabled}
+          onClick={onEditPrompt}
+        >
+          <IconEdit className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CIAutomationOptionRows({
+  pr,
+  options,
+  disabled,
+  patchOption,
+  automationState,
+}: {
+  pr: TaskPR;
+  options: TaskCIAutomationOptions | null;
+  disabled: boolean;
+  patchOption: (patch: TaskCIAutomationPatch) => void;
+  automationState: TaskCIPRAutomationState | undefined;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <CIAutomationRow
+        id={`task-ci-auto-fix-${pr.task_id}`}
+        label={t("github:autoFixCiAndAddressComments")}
+        checked={Boolean(options?.auto_fix_enabled)}
+        disabled={disabled}
+        onCheckedChange={(checked) => patchOption({ auto_fix_enabled: checked })}
+        help={
+          options?.auto_fix_enabled ? (
+            <CIAutoFixRoundHelpButton
+              state={automationState}
+              maxRounds={options.auto_fix_max_rounds}
+            />
+          ) : null
+        }
+      />
+      <CIAutomationRow
+        id={`task-ci-auto-merge-${pr.task_id}`}
+        label={t("github:autoMergeWhenReady")}
+        checked={Boolean(options?.auto_merge_enabled)}
+        disabled={disabled}
+        onCheckedChange={(checked) => patchOption({ auto_merge_enabled: checked })}
+      />
+      <ReviewFollowUpSection
+        taskId={pr.task_id}
+        options={options}
+        disabled={disabled}
+        patchOption={patchOption}
+      />
+    </>
   );
 }
 
 export function PRCIAutomationControls({ pr }: { pr: TaskPR }) {
-  const { t } = useTranslation();
   const { options, loading, saving, error, refresh, update, resetPrompt } =
     useTaskCIAutomationOptions(pr.task_id);
   const { toast } = useToast();
@@ -330,45 +569,21 @@ export function PRCIAutomationControls({ pr }: { pr: TaskPR }) {
       data-testid="pr-ci-automation-controls"
       className="flex flex-col gap-1 border-t border-border/50 pt-2"
     >
-      <div className="flex items-center justify-between gap-2 px-1">
-        <div className="text-xs font-medium text-foreground">{t("github:automation")}</div>
-        <div className="flex items-center gap-1">
-          <CIAutomationInfoButton />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 cursor-pointer text-muted-foreground hover:text-foreground"
-            aria-label={t("github:editAutoFixPromptForThis")}
-            disabled={!options}
-            onClick={openPromptEditor}
-          >
-            <IconEdit className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
-      <CIAutomationRow
-        id={`task-ci-auto-fix-${pr.task_id}`}
-        label={t("github:autoFixCiAndAddressComments")}
-        checked={Boolean(options?.auto_fix_enabled)}
+      <CIAutomationHeader disabled={!options} onEditPrompt={openPromptEditor} />
+      <CIAutomationOptionRows
+        pr={pr}
+        options={options}
         disabled={disabled}
-        onCheckedChange={(checked) => patchOption({ auto_fix_enabled: checked })}
-        help={
-          options?.auto_fix_enabled ? (
-            <CIAutoFixRoundHelpButton
-              state={automationState}
-              maxRounds={options.auto_fix_max_rounds}
-            />
-          ) : null
-        }
+        patchOption={patchOption}
+        automationState={automationState}
       />
-      <CIAutomationRow
-        id={`task-ci-auto-merge-${pr.task_id}`}
-        label={t("github:autoMergeWhenReady")}
-        checked={Boolean(options?.auto_merge_enabled)}
-        disabled={disabled}
-        onCheckedChange={(checked) => patchOption({ auto_merge_enabled: checked })}
-      />
+      {automationState?.last_error && (
+        <CIAutomationErrorRow
+          error={automationState.last_error}
+          loading={loading}
+          onRetry={retryLoad}
+        />
+      )}
       {error && <CIAutomationErrorRow error={error} loading={loading} onRetry={retryLoad} />}
       <CIAutomationPromptDialog
         open={promptOpen}

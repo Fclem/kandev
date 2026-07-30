@@ -1,11 +1,13 @@
 "use client";
+
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useTranslation } from "react-i18next";
-import { t } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@kandev/ui/alert";
 import { Spinner } from "@kandev/ui/spinner";
 import { IconAlertTriangle, IconCheck, IconPlayerPlay, IconRefresh } from "@tabler/icons-react";
-import { useStorageMaintenance } from "@/hooks/domains/system/use-storage-maintenance";
+import {
+  useStorageMaintenance,
+  type StorageBusyState,
+} from "@/hooks/domains/system/use-storage-maintenance";
 import type { StorageMaintenanceSettings as Settings, SystemJob } from "@/lib/types/system";
 import { useSettingsSaveContributor } from "../../settings-save-provider";
 import { StorageActionButton } from "./storage-action-button";
@@ -13,6 +15,7 @@ import { StorageOverviewCard } from "./storage-overview-card";
 import { StoragePolicyCard } from "./storage-policy-card";
 import { StorageQuarantineCard } from "./storage-quarantine-card";
 import { StorageRunHistory } from "./storage-run-history";
+import { useTranslation } from "react-i18next";
 
 function StorageJobButtonContent({
   job,
@@ -124,6 +127,64 @@ function StorageActions({
   );
 }
 
+function StorageActionFeedback({
+  controller,
+}: {
+  controller: ReturnType<typeof useStorageMaintenance>;
+}) {
+  const { t } = useTranslation();
+  if (controller.busy) {
+    return (
+      <StorageBusyFeedback busy={controller.busy} onRunAnyway={() => void controller.runAnyway()} />
+    );
+  }
+  if (!controller.error) return null;
+  return (
+    <Alert variant="destructive" data-testid="storage-error">
+      <IconAlertTriangle className="size-4" />
+      <AlertTitle>{t("settings:storageActionFailed")}</AlertTitle>
+      <AlertDescription className="break-words">{controller.error}</AlertDescription>
+    </Alert>
+  );
+}
+
+function StorageBusyFeedback({
+  busy,
+  onRunAnyway,
+}: {
+  busy: StorageBusyState;
+  onRunAnyway: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Alert variant="destructive" data-testid="storage-busy">
+      <IconAlertTriangle className="size-4" />
+      <AlertTitle>{t("settings:storageCleanupFoundActiveKandevWork")}</AlertTitle>
+      <AlertDescription className="break-words">
+        <p>{t("settings:cleanupMayDisruptTheFollowingWork")}</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          {busy.resources.map((resource) => (
+            <li key={resource.kind}>{resource.label}</li>
+          ))}
+        </ul>
+        {busy.forceAvailable && (
+          <>
+            <p className="mt-3">{t("settings:runningCleanupAnywayMayDisruptThis")}</p>
+            <StorageActionButton
+              variant="outline"
+              className="mt-3 w-full sm:w-auto"
+              onClick={onRunAnyway}
+              data-testid="storage-run-anyway"
+            >
+              <IconPlayerPlay className="size-4" /> {t("settings:runAnyway")}
+            </StorageActionButton>
+          </>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 function serializeSettings(settings: Settings | null): string {
   return settings ? JSON.stringify(settings) : "loading";
 }
@@ -133,8 +194,8 @@ function policyPendingAction(action: ReturnType<typeof useStorageMaintenance>["p
 }
 
 function policyBlockedReason(action: ReturnType<typeof useStorageMaintenance>["pendingAction"]) {
-  if (action === "adopt") return t("settings:waitForGoCacheAdoptionTo");
-  if (action === "load") return t("settings:waitForStorageSettingsToFinish");
+  if (action === "adopt") return "Wait for Go cache adoption to finish.";
+  if (action === "load") return "Wait for storage settings to finish loading.";
   return undefined;
 }
 
@@ -185,25 +246,18 @@ function useStoragePolicyDraft(controller: ReturnType<typeof useStorageMaintenan
 }
 
 export function StorageMaintenanceSettings() {
-  const { t } = useTranslation();
   const controller = useStorageMaintenance();
   const { draft, setDraft, savedSettings } = useStoragePolicyDraft(controller);
   const controlsPending = policyPendingAction(controller.pendingAction);
   const actionDisabledReason = controller.pendingAction
-    ? t("settings:waitForTheCurrentStorageAction")
+    ? "Wait for the current storage action to finish."
     : undefined;
 
   return (
     <div className="min-w-0 space-y-6" data-testid="storage-settings-page">
       <StorageActions controller={controller} disabledReason={actionDisabledReason} />
 
-      {controller.error && (
-        <Alert variant="destructive" data-testid="storage-error">
-          <IconAlertTriangle className="size-4" />
-          <AlertTitle>{t("settings:storageActionFailed")}</AlertTitle>
-          <AlertDescription className="break-words">{controller.error}</AlertDescription>
-        </Alert>
-      )}
+      <StorageActionFeedback controller={controller} />
 
       <div className="min-w-0 space-y-4" data-testid="storage-primary-sections">
         <StorageOverviewCard

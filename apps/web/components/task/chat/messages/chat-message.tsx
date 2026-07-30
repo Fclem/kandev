@@ -14,6 +14,7 @@ import { IconWand, IconMessageDots, IconFile } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/lib/types/http";
 import { MessageActions } from "@/components/task/chat/messages/message-actions";
+import { useMessageFavorite } from "@/hooks/domains/session/use-message-favorite";
 import { useUserMessageNavigation } from "@/hooks/use-message-navigation";
 import { SenderTaskBadge, type SenderTaskInfo } from "./sender-task-badge";
 import { MemoizedMarkdown } from "@/components/shared/memoized-markdown";
@@ -35,7 +36,7 @@ import { AgentMessageContent } from "./agent-message-content";
 import { buildEntityReferenceMarkdownComponents } from "./entity-reference-chip";
 import { entityReferencesFromMetadata } from "@/lib/entity-references/message-references";
 import type { EntityReference } from "@/lib/types/entity-reference";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 
 type ChatMessageProps = {
@@ -380,16 +381,12 @@ function UserContextBadges({
       {senderTask && <SenderTaskBadge sender={senderTask} />}
       {hasPlanMode && (
         <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/20 px-2 py-0.5 text-[10px] text-slate-400">
-          <Trans i18nKey="task:planMode">
-            <IconWand size={10} /> {t("common:planMode")}
-          </Trans>
+          <IconWand size={10} /> {t("common:planMode")}
         </span>
       )}
       {hasReviewComments && (
         <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] text-blue-400">
-          <Trans i18nKey="task:reviewComments2">
-            <IconMessageDots size={10} /> {t("task:reviewComments3")}
-          </Trans>
+          <IconMessageDots size={10} /> {t("task:reviewComments3")}
         </span>
       )}
       {contextFiles.map((f) => (
@@ -398,6 +395,43 @@ function UserContextBadges({
           className="inline-flex items-center gap-1 rounded-full bg-muted/50 px-2 py-0.5 text-[10px] text-muted-foreground"
         >
           <IconFile size={10} /> {f.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+type UserMessageAttachment = { type: string; data: string; mime_type: string; name?: string };
+
+/** Renders image previews and file chips attached to a user message. */
+function UserMessageAttachments({
+  imageAttachments,
+  fileAttachments,
+  hasContent,
+}: {
+  imageAttachments: UserMessageAttachment[];
+  fileAttachments: UserMessageAttachment[];
+  hasContent: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className={cn("flex flex-wrap gap-2", hasContent && "mb-2")}>
+      {imageAttachments.map((att, index) => (
+        <ImagePreviewDialog
+          key={index}
+          src={`data:${att.mime_type};base64,${att.data}`}
+          alt={`Attachment ${index + 1}`}
+          thumbnailClassName="max-h-48 max-w-full rounded-lg object-contain transition-opacity hover:opacity-90"
+        />
+      ))}
+      {fileAttachments.map((att, index) => (
+        <span
+          key={`file-${index}`}
+          data-testid="message-file-attachment"
+          className="inline-flex self-start items-center gap-1.5 rounded-full bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground"
+        >
+          <IconFile size={12} />
+          {att.name || t("task:attachment2")}
         </span>
       ))}
     </div>
@@ -413,9 +447,9 @@ function UserMessageContent({
   onOpenFile,
   onScrollToMessage,
 }: UserMessageProps) {
-  const { t } = useTranslation();
   const userNavigation = useUserMessageNavigation(sessionId ?? null, comment.id);
   const promptNames = usePromptMentionNames();
+  const { isFavorite, toggleFavorite } = useMessageFavorite(comment.session_id, comment.id);
   const entityReferences = useMemo(
     () => entityReferencesFromMetadata(comment.metadata),
     [comment.metadata],
@@ -444,27 +478,19 @@ function UserMessageContent({
           senderTask={senderTask}
           workflowMessage={workflowMessage}
         />
-        <div className="rounded-2xl bg-primary/30 px-4 py-2.5 overflow-hidden">
+        <div
+          data-testid="user-message-bubble"
+          className={cn(
+            "rounded-2xl px-4 py-2.5 overflow-hidden",
+            isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
+          )}
+        >
           {hasAttachments && (
-            <div className={cn("flex flex-wrap gap-2", hasContent && "mb-2")}>
-              {imageAttachments.map((att, index) => (
-                <ImagePreviewDialog
-                  key={index}
-                  src={`data:${att.mime_type};base64,${att.data}`}
-                  alt={`Attachment ${index + 1}`}
-                  thumbnailClassName="max-h-48 max-w-full rounded-lg object-contain transition-opacity hover:opacity-90"
-                />
-              ))}
-              {fileAttachments.map((att, index) => (
-                <span
-                  key={`file-${index}`}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground"
-                >
-                  <IconFile size={12} />
-                  {att.name || t("task:attachment2")}
-                </span>
-              ))}
-            </div>
+            <UserMessageAttachments
+              imageAttachments={imageAttachments}
+              fileAttachments={fileAttachments}
+              hasContent={hasContent}
+            />
           )}
           {renderUserMessageBody({
             hasContent,
@@ -486,6 +512,8 @@ function UserMessageContent({
           showNavigation={userNavigation.hasPrevious || userNavigation.hasNext}
           isRawView={showRaw}
           onToggleRaw={onToggleRaw}
+          isFavorite={isFavorite}
+          onToggleFavorite={toggleFavorite}
           onNavigatePrev={() => {
             if (userNavigation.previousId && onScrollToMessage)
               onScrollToMessage(userNavigation.previousId);

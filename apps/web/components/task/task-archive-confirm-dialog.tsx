@@ -18,7 +18,7 @@ import { useSubtaskCount } from "@/hooks/use-subtask-count";
 import { useTaskInFlight } from "@/hooks/use-task-in-flight";
 import { getCleanupSummary, getBulkCleanupSummary } from "./task-cleanup-summary";
 import { StillWorkingWarning } from "./task-still-working-warning";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 
 type TaskArchiveConfirmDialogProps = {
   open: boolean;
@@ -186,15 +186,8 @@ export function TaskArchiveConfirmDialog({
               handleOpenChange(false);
             }}
           >
-            <Trans
-              i18nKey="task:archive2"
-              values={{
-                value0: isArchiving ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null,
-              }}
-            >
-              {isArchiving ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {t("task:archive")}
-            </Trans>
+            {isArchiving ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {t("task:archive2")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

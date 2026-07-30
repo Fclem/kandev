@@ -339,15 +339,8 @@ function ClearTokenButton({
       }}
       className="gap-1 cursor-pointer"
     >
-      <Trans
-        i18nKey="gitlab:clearToken"
-        values={{
-          value0: busy ? <Spinner className="h-3 w-3" /> : <IconTrash className="h-3 w-3" />,
-        }}
-      >
-        {busy ? <Spinner className="h-3 w-3" /> : <IconTrash className="h-3 w-3" />}
-        {t("gitlab:clearToken2")}
-      </Trans>
+      {busy ? <Spinner className="h-3 w-3" /> : <IconTrash className="h-3 w-3" />}
+      {t("gitlab:clearToken")}
     </Button>
   );
 }

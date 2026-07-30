@@ -1,7 +1,6 @@
 "use client";
+
 import { Fragment, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@kandev/ui/dialog";
-import { Button } from "@kandev/ui/button";
 import { Checkbox } from "@kandev/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kandev/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger } from "@kandev/ui/tabs";
@@ -14,41 +13,54 @@ import {
   IconChevronDown,
   IconBrandGithub,
   IconGitFork,
-  IconStethoscope,
 } from "@tabler/icons-react";
-import { t } from "@/lib/i18n";
-import { Trans, useTranslation } from "react-i18next";
+
 import { TaskCreateDialog } from "@/components/task-create-dialog";
 import type { ImproveKandevBootstrapResponse } from "@/lib/api/domains/improve-kandev-api";
 import { cn } from "@/lib/utils";
 import type { Task, WorkflowStep } from "@/lib/types/http";
+import {
+  contributorAccessMessage,
+  getImproveKandevForkBlockedReason,
+  getImproveKandevStepDescription,
+  resolveImproveKandevWorkflow,
+  type ImproveKandevKind,
+} from "./improve-kandev-dialog-model";
+import { Trans, useTranslation } from "react-i18next";
 
 export type BootstrapState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ready"; data: ImproveKandevBootstrapResponse; steps: WorkflowStep[] }
-  | { kind: "error"; message: string }
-  | { kind: "blocked"; message: string };
+  | {
+      kind: "ready";
+      data: ImproveKandevBootstrapResponse;
+      steps: WorkflowStep[];
+      issueSteps: WorkflowStep[];
+    }
+  | { kind: "error"; message: string };
 
-type ImproveKind = "bug" | "feature";
+type ImproveKind = ImproveKandevKind;
 
 // Surfaced in the dialog's submit-button tooltip while the bootstrap probe is
 // in flight, so the disabled state has an explanation the user can act on
 // instead of the usual missing-field reasons.
 function bootstrapBlockedReason(bootstrap: BootstrapState): string | null {
   if (bootstrap.kind === "loading" || bootstrap.kind === "idle") {
-    return t("common:preparingKandevRepository");
+    return "Preparing kandev repository…";
+  }
+  if (bootstrap.kind === "error") {
+    return "Bootstrap failed — close and reopen to retry.";
   }
   return null;
 }
 
-// Resolved per render (not a module-level const) so the active locale applies.
-function descriptionPlaceholder(kind: ImproveKind): string {
-  if (kind === "bug") {
-    return t("common:eGWhenIOpenThe");
-  }
-  return t("common:eGAddAKeyboardShortcut");
-}
+const PLACEHOLDERS: Record<ImproveKind, string> = {
+  bug: "E.g. When I open the kanban board, the column header text overlaps the task count badge on screens narrower than 1200px...",
+  feature:
+    "E.g. Add a keyboard shortcut to mark a task as Done from the task detail view, and show the shortcut in the task action menu...",
+  issue:
+    "Describe the problem or request you want published. The agent will ask for any details required by the matching GitHub issue template...",
+};
 
 type CreateModeViewProps = {
   open: boolean;
@@ -59,32 +71,22 @@ type CreateModeViewProps = {
   setCaptureLogs: (v: boolean) => void;
   transformDescription: (description: string) => Promise<string>;
   onTaskCreated: (task: Task) => void;
+  externalBlockedReason?: string | null;
 };
 
 export function CreateModeView(props: CreateModeViewProps) {
   const { bootstrap, captureLogs, setCaptureLogs } = props;
   const [kind, setKind] = useState<ImproveKind>("bug");
   const ready = bootstrap.kind === "ready" ? bootstrap : null;
-  const startStep = ready ? (ready.steps.find((s) => s.is_start_step) ?? ready.steps[0]) : null;
+  const workflow = resolveImproveKandevWorkflow(ready, kind);
+  const forkBlockedReason = ready
+    ? getImproveKandevForkBlockedReason(kind, ready.data.fork_status, ready.data.fork_message)
+    : null;
 
   const handleKindChange = (next: ImproveKind) => {
     setKind(next);
     setCaptureLogs(next === "bug");
   };
-
-  // Hard-block the contribution flow if the bootstrap probe detected the
-  // user can't fork kdlbs/kandev (e.g., EMU enterprise restriction). Showing
-  // the task form here would only let them fill out a task that fails at
-  // the PR step.
-  if (bootstrap.kind === "blocked") {
-    return (
-      <BlockedDialog
-        open={props.open}
-        onOpenChange={props.onOpenChange}
-        message={bootstrap.message}
-      />
-    );
-  }
 
   return (
     <TaskCreateDialog
@@ -92,9 +94,9 @@ export function CreateModeView(props: CreateModeViewProps) {
       onOpenChange={props.onOpenChange}
       mode="create"
       workspaceId={props.workspaceId}
-      workflowId={ready?.data.workflow_id ?? null}
-      defaultStepId={startStep?.id ?? null}
-      steps={ready ? ready.steps.map((s) => ({ id: s.id, title: s.name, events: s.events })) : []}
+      workflowId={workflow.workflowId}
+      defaultStepId={workflow.startStep?.id ?? null}
+      steps={workflow.steps.map((s) => ({ id: s.id, title: s.name, events: s.events }))}
       initialValues={{
         title: "",
         repositoryId: ready?.data.repository_id ?? "",
@@ -102,12 +104,15 @@ export function CreateModeView(props: CreateModeViewProps) {
       }}
       onSuccess={props.onTaskCreated}
       lockedFields={{ repository: true, branch: true, workflow: true }}
-      submitBlockedReason={bootstrapBlockedReason(bootstrap)}
-      descriptionPlaceholder={descriptionPlaceholder(kind)}
+      submitBlockedReason={
+        props.externalBlockedReason ?? forkBlockedReason ?? bootstrapBlockedReason(bootstrap)
+      }
+      descriptionPlaceholder={PLACEHOLDERS[kind]}
       aboveDescriptionSlot={<KindTabs kind={kind} onChange={handleKindChange} />}
       extraFormSlot={
         <BootstrapStatusSlot
           bootstrap={bootstrap}
+          kind={kind}
           captureLogs={captureLogs}
           setCaptureLogs={setCaptureLogs}
         />
@@ -115,8 +120,7 @@ export function CreateModeView(props: CreateModeViewProps) {
       bottomSlot={
         ready && (
           <div className="space-y-2">
-            <WorkflowStepsPreview steps={ready.steps} />
-            <UsefulInfoCollapsible />
+            <CreateModeBottomSlot kind={kind} steps={workflow.steps} />
           </div>
         )
       }
@@ -125,19 +129,13 @@ export function CreateModeView(props: CreateModeViewProps) {
   );
 }
 
-// Keys match the lowercased workflow step name (logic lookup); only the
-// descriptions are user-facing copy.
-function stepDescription(stepName: string): string | undefined {
-  if (stepName === "improve") {
-    return t("common:agentReadsTheReportExploresThe");
-  }
-  if (stepName === "test") {
-    return t("common:agentBootsASecondaryKandevInstance");
-  }
-  if (stepName === "pr") {
-    return t("common:agentRunsThePrSkillPushes");
-  }
-  return undefined;
+function CreateModeBottomSlot({ kind, steps }: { kind: ImproveKind; steps: WorkflowStep[] }) {
+  return (
+    <>
+      <WorkflowStepsPreview steps={steps} />
+      {kind !== "issue" && <UsefulInfoCollapsible />}
+    </>
+  );
 }
 
 function WorkflowStepsPreview({ steps }: { steps: WorkflowStep[] }) {
@@ -167,7 +165,7 @@ function WorkflowStepsPreview({ steps }: { steps: WorkflowStep[] }) {
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">
-                  {stepDescription(s.name.toLowerCase()) ?? s.name}
+                  {getImproveKandevStepDescription(s)}
                 </TooltipContent>
               </Tooltip>
             </Fragment>
@@ -197,9 +195,9 @@ function UsefulInfoCollapsible() {
       <CollapsibleContent>
         <div className="mt-2 space-y-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
           <p>
-            <Trans i18nKey="common:shellCommandYouCanRunIn">
+            <Trans i18nKey="common:shellCommandPlusSkills">
               Shell command you can run in the secondary instance, plus slash-command{" "}
-              <em>{t("common:skills")}</em> you can ask the agent to run during the workflow.
+              <em>skills</em> you can ask the agent to run during the workflow.
             </Trans>
           </p>
           <div className="space-y-2">
@@ -258,6 +256,9 @@ function KindTabs({
         <TabsTrigger value="feature" className="cursor-pointer">
           {t("common:featureRequest")}
         </TabsTrigger>
+        <TabsTrigger value="issue" className="cursor-pointer">
+          {t("common:openIssue")}
+        </TabsTrigger>
       </TabsList>
     </Tabs>
   );
@@ -265,21 +266,31 @@ function KindTabs({
 
 function BootstrapStatusSlot({
   bootstrap,
+  kind,
   captureLogs,
   setCaptureLogs,
 }: {
   bootstrap: BootstrapState;
+  kind: ImproveKind;
   captureLogs: boolean;
   setCaptureLogs: (v: boolean) => void;
 }) {
   const { t } = useTranslation();
   return (
     <div className="space-y-2">
-      <BootstrapBanner bootstrap={bootstrap} />
+      <BootstrapBanner bootstrap={bootstrap} kind={kind} />
+      {kind === "issue" && (
+        <div
+          className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-muted-foreground"
+          data-testid="improve-kandev-issue-only-notice"
+        >
+          {t("common:thisWorkflowWillOnlyCreateA")}
+        </div>
+      )}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <label className="flex cursor-pointer items-center gap-2">
           <Checkbox checked={captureLogs} onCheckedChange={(v) => setCaptureLogs(v === true)} />
-          {t("common:includeRecentBackendBrowserLogsAs")}
+          {t("common:includeRecentBackendBrowserLogs")}
         </label>
         <TooltipProvider delayDuration={150}>
           <Tooltip>
@@ -302,20 +313,17 @@ function BootstrapStatusSlot({
   );
 }
 
-function BootstrapBanner({ bootstrap }: { bootstrap: BootstrapState }) {
+function BootstrapBanner({ bootstrap, kind }: { bootstrap: BootstrapState; kind: ImproveKind }) {
   const { t } = useTranslation();
   if (bootstrap.kind === "loading" || bootstrap.kind === "idle") {
     return (
       <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-        {t("common:preparingKandevRepositoryInBackgroundFill")}
+        {t("common:preparingKandevRepositoryInBackground")}
       </div>
     );
   }
-  // The "blocked" kind is intercepted earlier in CreateModeView and routed to
-  // BlockedDialog, so the form (and this banner) are not rendered for it. It
-  // is still listed here to keep the union exhaustive for the type narrower.
-  if (bootstrap.kind === "error" || bootstrap.kind === "blocked") {
+  if (bootstrap.kind === "error") {
     return (
       <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
         <IconAlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
@@ -323,60 +331,27 @@ function BootstrapBanner({ bootstrap }: { bootstrap: BootstrapState }) {
       </div>
     );
   }
-  return <ContributorBanner data={bootstrap.data} />;
+  return <ContributorBanner data={bootstrap.data} kind={kind} />;
 }
 
-function BlockedDialog({
-  open,
-  onOpenChange,
-  message,
+function ContributorBanner({
+  data,
+  kind,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  message: string;
+  data: ImproveKandevBootstrapResponse;
+  kind: ImproveKind;
 }) {
   const { t } = useTranslation();
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <IconStethoscope className="h-5 w-5" />
-            {t("common:improveKandev")}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            <IconAlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>{message}</span>
-          </div>
-          <div className="flex justify-end">
-            <Button
-              data-testid="improve-kandev-blocked-close"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              className="cursor-pointer"
-            >
-              {t("common:close")}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ContributorBanner({ data }: { data: ImproveKandevBootstrapResponse }) {
-  const { t } = useTranslation();
   const { github_login: login, has_write_access: hasWrite } = data;
-  const account = login ? (
-    <code className="font-mono text-foreground">@{login}</code>
-  ) : (
-    <span>{t("common:yourGithubAccount")}</span>
-  );
-  const accessNote = hasWrite
-    ? t("common:youHaveWriteAccessToKdlbs")
-    : t("common:theAgentWillForkKdlbsKandev");
+  if (data.fork_status === "blocked_emu" && kind !== "issue") {
+    return (
+      <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <IconAlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+        <span>{data.fork_message ?? t("common:thisGithubAccountCannotForkKdlbs")}</span>
+      </div>
+    );
+  }
+  const accessMessage = contributorAccessMessage(kind, hasWrite);
   return (
     <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
       {hasWrite ? (
@@ -384,7 +359,15 @@ function ContributorBanner({ data }: { data: ImproveKandevBootstrapResponse }) {
       ) : (
         <IconGitFork className="h-3.5 w-3.5 mt-0.5 shrink-0" />
       )}
-      <span>{t("common:contributingAs", { account, accessNote })}</span>
+      <span>
+        {t("common:contributingAs")}{" "}
+        {login ? (
+          <code className="font-mono text-foreground">@{login}</code>
+        ) : (
+          <span>{t("common:yourGithubAccount")}</span>
+        )}
+        . {accessMessage}
+      </span>
     </div>
   );
 }

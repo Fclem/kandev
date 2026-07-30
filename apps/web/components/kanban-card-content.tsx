@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { CSS, type Transform } from "@dnd-kit/utilities";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
@@ -9,7 +10,6 @@ import {
   IconLoader2,
   IconSubtask,
 } from "@tabler/icons-react";
-import { useTranslation } from "react-i18next";
 import { Badge } from "@kandev/ui/badge";
 import { Card, CardContent } from "@kandev/ui/card";
 import { Checkbox } from "@kandev/ui/checkbox";
@@ -33,6 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 import { needsAction } from "@/lib/utils/needs-action";
 import type { RepositoryChip, Task } from "@/components/kanban-card";
+import { Trans, useTranslation } from "react-i18next";
 
 const kanbanStatusDebug = createDebugLogger("kanban:task-status");
 
@@ -162,37 +163,57 @@ export function KanbanCardBody({
           {task.description}
         </p>
       )}
+      <KanbanCardRelationship task={task} />
       <KanbanCardBadges task={task} />
     </>
   );
 }
 
-function KanbanCardBadges({ task }: { task: Task }) {
+function KanbanCardRelationship({ task }: { task: Task }) {
   const { t } = useTranslation();
   const parentTitle = useAppStore((s) => {
     if (!task.parentTaskId) return null;
     return s.kanban.tasks.find((t) => t.id === task.parentTaskId)?.title ?? null;
   });
 
-  const showRow =
-    (task.sessionCount && task.sessionCount > 1) ||
-    task.reviewStatus === "changes_requested" ||
-    task.reviewStatus === "pending" ||
-    task.parentTaskId;
+  if (!task.parentTaskId) return null;
+  const relationshipTitle = parentTitle ?? "Subtask";
+
+  return (
+    <div
+      data-testid="task-parent-relationship"
+      title={relationshipTitle}
+      className="mt-1 flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground"
+    >
+      <IconSubtask className="h-3 w-3 shrink-0" />
+      <span className="shrink-0 font-medium">{t("kanban:subtaskOf")}</span>
+      <span className="min-w-0 truncate">{relationshipTitle}</span>
+    </div>
+  );
+}
+
+function KanbanCardBadges({ task }: { task: Task }) {
+  const { t } = useTranslation();
+  const showRow = hasCardBadges(task);
 
   if (!showRow) return null;
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2 mt-1 min-w-0">
-      {task.parentTaskId && (
-        <Badge variant="outline" className="text-xs h-5 gap-1 max-w-[160px] min-w-0">
-          <IconSubtask className="h-3 w-3 shrink-0" />
-          <span className="truncate">{parentTitle ?? t("kanban:subtask")}</span>
+      {task.queuedForStepId && (
+        <Badge
+          variant="secondary"
+          className="text-xs h-5"
+          title={`Queued for ${task.queuedForStepTitle ?? `workflow step ${task.queuedForStepId}`}`}
+        >
+          {t("kanban:queuedFor")} {task.queuedForStepTitle ?? t("kanban:nextCapacity")}
         </Badge>
       )}
       {task.sessionCount && task.sessionCount > 1 && (
         <Badge variant="secondary" className="text-xs h-5">
-          {t("kanban:sessions", { count: task.sessionCount })}
+          <Trans i18nKey="kanban:sessions" values={{ sessionCount: task.sessionCount }}>
+            {task.sessionCount} sessions
+          </Trans>
         </Badge>
       )}
       {task.reviewStatus === "pending" && task.state !== "IN_PROGRESS" && (
@@ -210,6 +231,15 @@ function KanbanCardBadges({ task }: { task: Task }) {
         </Badge>
       )}
     </div>
+  );
+}
+
+function hasCardBadges(task: Task): boolean {
+  return Boolean(
+    (task.sessionCount && task.sessionCount > 1) ||
+    task.reviewStatus === "changes_requested" ||
+    task.reviewStatus === "pending" ||
+    task.queuedForStepId,
   );
 }
 
@@ -249,6 +279,32 @@ export function renderTaskStatusIcon(
     hasPendingClarification,
     task.foregroundActivity,
     hasPendingPermission,
+  );
+}
+
+/** Opens the task's full page. Split out purely to keep the actions row small. */
+function OpenFullPageButton({
+  task,
+  onOpenFullPage,
+}: {
+  task: KanbanCardActionProps["task"];
+  onOpenFullPage: NonNullable<KanbanCardActionProps["onOpenFullPage"]>;
+}) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-sm p-1 -m-1 transition-colors cursor-pointer"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpenFullPage(task);
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      aria-label={t("common:openFullPage")}
+      title={t("common:openFullPage")}
+    >
+      <IconArrowsMaximize className="h-4 w-4" />
+    </button>
   );
 }
 
@@ -332,7 +388,7 @@ function KanbanCardActions({
     <div className="flex items-center gap-2">
       {statusIcon}
       {showMaximizeButton && onOpenFullPage && hasKnownSession && (
-        <OpenFullPageButton onOpen={() => onOpenFullPage(task)} />
+        <OpenFullPageButton task={task} onOpenFullPage={onOpenFullPage} />
       )}
       <KanbanCardMenu
         task={task}
@@ -343,25 +399,6 @@ function KanbanCardActions({
         menuEntries={menuEntries}
       />
     </div>
-  );
-}
-
-function OpenFullPageButton({ onOpen }: { onOpen: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <button
-      type="button"
-      className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-sm p-1 -m-1 transition-colors cursor-pointer"
-      onClick={(event) => {
-        event.stopPropagation();
-        onOpen();
-      }}
-      onPointerDown={(event) => event.stopPropagation()}
-      aria-label={t("common:openFullPage")}
-      title={t("common:openFullPage")}
-    >
-      <IconArrowsMaximize className="h-4 w-4" />
-    </button>
   );
 }
 
@@ -413,7 +450,6 @@ function KanbanCardCheckbox({
   isSelected?: boolean;
   onCheckboxClick: (e: React.MouseEvent) => void;
 }) {
-  const { t } = useTranslation();
   return (
     <div
       className="mt-0.5 shrink-0"
@@ -423,7 +459,7 @@ function KanbanCardCheckbox({
     >
       <Checkbox
         checked={!!isSelected}
-        aria-label={t("kanban:selectTask", { taskTitle })}
+        aria-label={`Select task ${taskTitle}`}
         className="cursor-pointer border-muted-foreground/50"
       />
     </div>

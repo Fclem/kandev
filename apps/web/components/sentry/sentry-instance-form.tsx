@@ -100,23 +100,12 @@ function SecretField({
     <div className={FIELD}>
       <div className="flex items-center gap-1.5">
         <Label htmlFor={`${idPrefix}-secret`}>
-          <Trans
-            i18nKey="sentry:authToken"
-            values={{
-              value1: hasSavedSecret && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  {t("sentry:savedLeaveBlankToKeepThe")}
-                </span>
-              ),
-            }}
-          >
-            {t("sentry:authToken2")}
-            {hasSavedSecret && (
-              <span className="text-xs text-muted-foreground ml-2">
-                {t("sentry:savedLeaveBlankToKeepThe")}
-              </span>
-            )}
-          </Trans>
+          {t("sentry:authToken2")}
+          {hasSavedSecret && (
+            <span className="text-xs text-muted-foreground ml-2">
+              {t("sentry:savedLeaveBlankToKeepThe")}
+            </span>
+          )}
         </Label>
         <Tooltip>
           <TooltipTrigger asChild>

@@ -3,7 +3,6 @@
   "anErrorOccurred": "Àń ēŕŕōŕ ōććũŕŕēď",
   "autoMarkReviewedOnScroll": "Àũţō-ḿàŕķ ŕēvĩēŵēď ōń śćŕōĺĺ",
   "cancel": "<0></0> Ćàńćēĺ",
-  "changed": "<0></0> ćĥàńĝēď",
   "changesDiscarded": "Ćĥàńĝēś ďĩśćàŕďēď",
   "closeReview": "Ćĺōśē ŕēvĩēŵ",
   "collapseUnchanged": "Ćōĺĺàƥśē ũńćĥàńĝēď",
@@ -13,7 +12,9 @@
   "discardFailed": "Ďĩśćàŕď ƒàĩĺēď",
   "discardWalkthrough": "Ďĩśćàŕď ŵàĺķţĥŕōũĝĥ",
   "discardWalkthrough2": "Ďĩśćàŕď ŵàĺķţĥŕōũĝĥ?",
+  "editFile": "Ēďĩţ ƒĩĺē",
   "expandAll": "Ēxƥàńď àĺĺ",
+  "expandUnchangedLines": "Ēxƥàńď ũńćĥàńĝēď ĺĩńēś",
   "failedToDiscardWalkthrough": "Ƒàĩĺēď ţō ďĩśćàŕď ŵàĺķţĥŕōũĝĥ",
   "failedToSendComment": "Ƒàĩĺēď ţō śēńď ćōḿḿēńţ",
   "file": "ƒĩĺē",
@@ -58,7 +59,9 @@
   "theReviewFailed": "Ţĥē ŕēvĩēŵ ƒàĩĺēď",
   "thisRemovesTheSavedWalkthroughFrom": "Ţĥĩś ŕēḿōvēś ţĥē śàvēď ŵàĺķţĥŕōũĝĥ ƒŕōḿ ţĥĩś ţàśķ. Ţĥē àĝēńţ ćàń ćŕēàţē à ńēŵ ōńē ĺàţēŕ.",
   "toggleWordWrap": "Ţōĝĝĺē ŵōŕď ŵŕàƥ",
+  "view": "Vĩēŵ",
   "walkMeThroughTheseReviewChanges": "Ŵàĺķ ḿē ţĥŕōũĝĥ ţĥēśē ŕēvĩēŵ ćĥàńĝēś",
   "walkthrough": "Ŵàĺķţĥŕōũĝĥ",
-  "walkthroughDiscarded": "Ŵàĺķţĥŕōũĝĥ ďĩśćàŕďēď"
+  "walkthroughDiscarded": "Ŵàĺķţĥŕōũĝĥ ďĩśćàŕďēď",
+  "wrapLongLines": "Ŵŕàƥ ĺōńĝ ĺĩńēś"
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   IconArrowBackUp,
   IconCopy,
+  IconDots,
   IconEye,
   IconFold,
   IconFoldDown,
@@ -13,15 +14,34 @@ import {
   IconTextWrap,
 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@kandev/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
-import { FileActionsDropdown } from "@/components/editors/file-actions-dropdown";
-import { ExternalVcsFileLink } from "@/components/editors/external-vcs-file-link";
+import {
+  FileActionsDropdown,
+  FileActionsMenuItems,
+} from "@/components/editors/file-actions-dropdown";
+import {
+  ExternalVcsFileLink,
+  ExternalVcsFileMenuItem,
+} from "@/components/editors/external-vcs-file-link";
 import { useGlobalViewMode } from "@/hooks/use-global-view-mode";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useTranslation } from "react-i18next";
 
 const iconBtn = "h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100";
-const iconBtnActive = "h-6 w-6 p-0 cursor-pointer opacity-100 bg-muted";
+const iconBtnActive = "h-6 w-6 p-0 cursor-pointer bg-muted opacity-100";
+const iconBtnDestructive =
+  "h-6 w-6 p-0 cursor-pointer opacity-60 hover:text-destructive hover:opacity-100";
+const mobileMenuItem = "cursor-pointer gap-3 text-sm";
+const mobileMenuIcon = "size-4 text-muted-foreground";
 
 function isMarkdownPath(filePath: string): boolean {
   const ext = filePath.split(".").pop()?.toLowerCase();
@@ -84,53 +104,97 @@ function ToolbarIconBtn({
   );
 }
 
-/**
- * The per-file action cluster (preview, edit, file menu, revert). Split from
- * `FileDiffToolbar` purely for size; it needs no toolbar state.
- */
-function FileDiffToolbarFileActions({
-  filePath,
-  repo,
-  sessionId,
-  source,
-  onPreviewMarkdown,
-  onOpenFile,
-  onDiscard,
-}: Pick<
-  FileDiffToolbarProps,
-  "filePath" | "sessionId" | "source" | "onPreviewMarkdown" | "onOpenFile" | "onDiscard"
-> & { repo: string | undefined }) {
+type DiffDisplayControlsProps = {
+  expandUnchanged: boolean;
+  globalViewMode: "split" | "unified";
+  wordWrap: boolean;
+  onToggleExpandUnchanged: () => void;
+  onToggleViewMode: () => void;
+  onToggleWordWrap: () => void;
+};
+
+function DiffDisplayControls({
+  expandUnchanged,
+  globalViewMode,
+  wordWrap,
+  onToggleExpandUnchanged,
+  onToggleViewMode,
+  onToggleWordWrap,
+}: DiffDisplayControlsProps) {
   const { t } = useTranslation();
   return (
     <>
-      {onPreviewMarkdown && isMarkdownPath(filePath) && (
-        <ToolbarIconBtn
-          onClick={() => onPreviewMarkdown(filePath)}
-          tooltip={t("review:previewMarkdown")}
-        >
-          <IconEye className="h-3.5 w-3.5" />
-        </ToolbarIconBtn>
-      )}
-      {onOpenFile && (
-        <ToolbarIconBtn onClick={() => onOpenFile(filePath, repo)} tooltip={t("common:edit")}>
-          <IconPencil className="h-3.5 w-3.5" />
-        </ToolbarIconBtn>
-      )}
-      <FileActionsDropdown filePath={filePath} sessionId={sessionId} size="xs" />
-      {source === "uncommitted" && (
-        <ToolbarIconBtn
-          onClick={onDiscard}
-          tooltip={t("review:revertChanges")}
-          className="h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100 hover:text-destructive"
-        >
-          <IconArrowBackUp className="h-3.5 w-3.5" />
-        </ToolbarIconBtn>
-      )}
+      <ToolbarIconBtn
+        onClick={onToggleExpandUnchanged}
+        tooltip={expandUnchanged ? t("review:collapseUnchanged") : t("review:expandAll")}
+        active={expandUnchanged}
+      >
+        {expandUnchanged ? (
+          <IconFold className="h-3.5 w-3.5" />
+        ) : (
+          <IconFoldDown className="h-3.5 w-3.5" />
+        )}
+      </ToolbarIconBtn>
+      <ToolbarIconBtn
+        onClick={onToggleWordWrap}
+        tooltip={t("review:toggleWordWrap")}
+        active={wordWrap}
+      >
+        <IconTextWrap className="h-3.5 w-3.5" />
+      </ToolbarIconBtn>
+      <ToolbarIconBtn
+        onClick={onToggleViewMode}
+        tooltip={
+          globalViewMode === "split"
+            ? t("review:switchToUnifiedView")
+            : t("review:switchToSplitView")
+        }
+      >
+        {globalViewMode === "split" ? (
+          <IconLayoutRows className="h-3.5 w-3.5" />
+        ) : (
+          <IconLayoutColumns className="h-3.5 w-3.5" />
+        )}
+      </ToolbarIconBtn>
     </>
   );
 }
 
-export function FileDiffToolbar(props: FileDiffToolbarProps) {
+function MobileDiffViewMenuItems({
+  expandUnchanged,
+  wordWrap,
+  onToggleExpandUnchanged,
+  onToggleWordWrap,
+}: Pick<
+  FileDiffToolbarProps,
+  "expandUnchanged" | "wordWrap" | "onToggleExpandUnchanged" | "onToggleWordWrap"
+>) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>{t("review:view")}</DropdownMenuLabel>
+      <DropdownMenuCheckboxItem
+        checked={expandUnchanged}
+        className={mobileMenuItem}
+        onCheckedChange={onToggleExpandUnchanged}
+      >
+        <IconFoldDown className={mobileMenuIcon} />
+        {t("review:expandUnchangedLines")}
+      </DropdownMenuCheckboxItem>
+      <DropdownMenuCheckboxItem
+        checked={wordWrap}
+        className={mobileMenuItem}
+        onCheckedChange={onToggleWordWrap}
+      >
+        <IconTextWrap className={mobileMenuIcon} />
+        {t("review:wrapLongLines")}
+      </DropdownMenuCheckboxItem>
+    </>
+  );
+}
+
+function MobileFileActionsMenu(props: FileDiffToolbarProps) {
   const { t } = useTranslation();
   const {
     diff,
@@ -152,15 +216,116 @@ export function FileDiffToolbar(props: FileDiffToolbarProps) {
     onToggleWordWrap,
     repo,
   } = props;
-  const { isMobile } = useResponsiveBreakpoint();
+  const handleCopyDiff = useCallback(() => {
+    void navigator.clipboard.writeText(diff || "");
+  }, [diff]);
+  const [open, setOpen] = useState(false);
+  const fileName = filePath.split("/").pop() || filePath;
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`More actions for ${filePath}`}
+          title={`More actions for ${filePath}`}
+          className="size-11 shrink-0 cursor-pointer text-muted-foreground transition-[scale,color,background-color] duration-150 ease-out active:scale-[0.96]"
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={() => setOpen((previous) => !previous)}
+        >
+          <IconDots className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        data-testid="review-file-actions-menu"
+        aria-label={`Actions for ${filePath}`}
+        align="end"
+        className="w-64"
+      >
+        <DropdownMenuLabel className="truncate font-medium text-foreground" title={filePath}>
+          {fileName}
+        </DropdownMenuLabel>
+        <DropdownMenuItem className={mobileMenuItem} onSelect={handleCopyDiff}>
+          <IconCopy className={mobileMenuIcon} />
+          {t("review:copyDiff")}
+        </DropdownMenuItem>
+        {onOpenFile && (
+          <DropdownMenuItem className={mobileMenuItem} onSelect={() => onOpenFile(filePath, repo)}>
+            <IconPencil className={mobileMenuIcon} />
+            {t("review:editFile")}
+          </DropdownMenuItem>
+        )}
+        {onPreviewMarkdown && isMarkdownPath(filePath) && (
+          <DropdownMenuItem className={mobileMenuItem} onSelect={() => onPreviewMarkdown(filePath)}>
+            <IconEye className={mobileMenuIcon} />
+            {t("review:previewMarkdown")}
+          </DropdownMenuItem>
+        )}
+        <ExternalVcsFileMenuItem
+          filePath={filePath}
+          previousPath={previousPath}
+          status={status}
+          taskId={taskId}
+          sessionId={sessionId}
+          repositoryId={repositoryId}
+          repositoryName={repo}
+          publishedBranch={publishedBranch}
+          baseBranch={baseBranch}
+        />
+        <FileActionsMenuItems filePath={filePath} sessionId={sessionId} />
+        <MobileDiffViewMenuItems
+          expandUnchanged={expandUnchanged}
+          wordWrap={wordWrap}
+          onToggleExpandUnchanged={onToggleExpandUnchanged}
+          onToggleWordWrap={onToggleWordWrap}
+        />
+        {source === "uncommitted" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" className={mobileMenuItem} onSelect={onDiscard}>
+              <IconArrowBackUp className="size-4" />
+              {t("review:revertChanges")}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function DesktopFileDiffToolbar(props: FileDiffToolbarProps) {
+  const { t } = useTranslation();
+  const {
+    diff,
+    filePath,
+    previousPath,
+    status,
+    taskId,
+    sessionId,
+    repositoryId,
+    source,
+    publishedBranch,
+    baseBranch,
+    wordWrap,
+    expandUnchanged,
+    onDiscard,
+    onOpenFile,
+    onPreviewMarkdown,
+    onToggleExpandUnchanged,
+    onToggleWordWrap,
+    repo,
+  } = props;
   const [globalViewMode, setGlobalViewMode] = useGlobalViewMode();
   const handleCopyDiff = useCallback(() => {
-    navigator.clipboard.writeText(diff || "");
+    void navigator.clipboard.writeText(diff || "");
   }, [diff]);
   const handleToggleViewMode = useCallback(
     () => setGlobalViewMode(globalViewMode === "split" ? "unified" : "split"),
     [globalViewMode, setGlobalViewMode],
   );
+
   return (
     <div className="flex items-center gap-0.5">
       <ToolbarIconBtn onClick={handleCopyDiff} tooltip={t("review:copyDiff")}>
@@ -176,49 +341,44 @@ export function FileDiffToolbar(props: FileDiffToolbarProps) {
         repositoryName={repo}
         publishedBranch={publishedBranch}
         baseBranch={baseBranch}
-        size={isMobile ? "touch" : "xs"}
+        size="xs"
       />
-      <ToolbarIconBtn
-        onClick={onToggleExpandUnchanged}
-        tooltip={expandUnchanged ? t("review:collapseUnchanged") : t("review:expandAll")}
-        active={expandUnchanged}
-      >
-        {expandUnchanged ? (
-          <IconFold className="h-3.5 w-3.5" />
-        ) : (
-          <IconFoldDown className="h-3.5 w-3.5" />
-        )}
-      </ToolbarIconBtn>
-      <ToolbarIconBtn
-        onClick={onToggleWordWrap}
-        tooltip={t("review:toggleWordWrap")}
-        active={wordWrap}
-      >
-        <IconTextWrap className="h-3.5 w-3.5" />
-      </ToolbarIconBtn>
-      <ToolbarIconBtn
-        onClick={handleToggleViewMode}
-        tooltip={
-          globalViewMode === "split"
-            ? t("review:switchToUnifiedView")
-            : t("review:switchToSplitView")
-        }
-      >
-        {globalViewMode === "split" ? (
-          <IconLayoutRows className="h-3.5 w-3.5" />
-        ) : (
-          <IconLayoutColumns className="h-3.5 w-3.5" />
-        )}
-      </ToolbarIconBtn>
-      <FileDiffToolbarFileActions
-        filePath={filePath}
-        repo={repo}
-        sessionId={sessionId}
-        source={source}
-        onPreviewMarkdown={onPreviewMarkdown}
-        onOpenFile={onOpenFile}
-        onDiscard={onDiscard}
+      <DiffDisplayControls
+        expandUnchanged={expandUnchanged}
+        globalViewMode={globalViewMode}
+        wordWrap={wordWrap}
+        onToggleExpandUnchanged={onToggleExpandUnchanged}
+        onToggleViewMode={handleToggleViewMode}
+        onToggleWordWrap={onToggleWordWrap}
       />
+      {onPreviewMarkdown && isMarkdownPath(filePath) && (
+        <ToolbarIconBtn
+          onClick={() => onPreviewMarkdown(filePath)}
+          tooltip={t("review:previewMarkdown")}
+        >
+          <IconEye className="h-3.5 w-3.5" />
+        </ToolbarIconBtn>
+      )}
+      {onOpenFile && (
+        <ToolbarIconBtn onClick={() => onOpenFile(filePath, repo)} tooltip={t("common:edit")}>
+          <IconPencil className="h-3.5 w-3.5" />
+        </ToolbarIconBtn>
+      )}
+      <FileActionsDropdown filePath={filePath} sessionId={sessionId} size="xs" />
+      {source === "uncommitted" && (
+        <ToolbarIconBtn
+          onClick={onDiscard}
+          tooltip={t("review:revertChanges")}
+          className={iconBtnDestructive}
+        >
+          <IconArrowBackUp className="h-3.5 w-3.5" />
+        </ToolbarIconBtn>
+      )}
     </div>
   );
+}
+
+export function FileDiffToolbar(props: FileDiffToolbarProps) {
+  const { isMobile } = useResponsiveBreakpoint();
+  return isMobile ? <MobileFileActionsMenu {...props} /> : <DesktopFileDiffToolbar {...props} />;
 }

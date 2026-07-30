@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -699,23 +700,33 @@ func newWebDevHandler(p routeParams) (*webapp.DevHandler, error) {
 
 func webAppHandlerOptions(p routeParams) []webapp.HandlerOption {
 	return []webapp.HandlerOption{
-		webapp.WithRuntimeConfig(webapp.RuntimeConfig{APIPrefix: "/api/v1", WebSocketPath: "/ws"}),
 		webapp.WithPayloadBuilder(func(req *http.Request, route webapp.RouteClassification) webapp.BootPayload {
 			return bootPayload(req.Context(), req, p, route)
 		}),
 	}
 }
 
+// webRuntimeConfig builds the SPA's runtime block. `req` supplies the active
+// locale (from the kandev_locale cookie) so the shell can set <html lang> and the
+// client can activate the right catalog before first paint.
+func webRuntimeConfig(debug bool, req *http.Request) webapp.RuntimeConfig {
+	return webapp.RuntimeConfig{
+		APIPrefix:     "/api/v1",
+		WebSocketPath: "/ws",
+		HostOS:        runtime.GOOS,
+		Debug:         debug,
+		// Gates QA-only UI (the pseudo-locale option). Separate from Debug: the
+		// e2e harness serves a PRODUCTION bundle, so the frontend cannot infer
+		// this from its own build mode.
+		NonProduction: profiles.DetectEnvironment() != profiles.EnvProd,
+		Locale:        i18n.FromRequest(req),
+	}
+}
+
 func bootPayload(ctx context.Context, req *http.Request, p routeParams, route webapp.RouteClassification) webapp.BootPayload {
 	payload := webapp.NewBootPayload(
 		route,
-		webapp.RuntimeConfig{
-			APIPrefix:     "/api/v1",
-			WebSocketPath: "/ws",
-			Debug:         p.devMode,
-			NonProduction: profiles.DetectEnvironment() != profiles.EnvProd,
-			Locale:        i18n.FromRequest(req),
-		},
+		webRuntimeConfig(p.devMode, req),
 		bootInitialState(ctx, req, p, route),
 	)
 	payload.RouteData = bootRouteData(ctx, req, p, route)
@@ -1399,6 +1410,7 @@ func registerMCPAndDebugRoutes(
 	// number, state) when the github service is available.
 	if p.services.GitHub != nil {
 		mcpHandlers.SetTaskPRLister(mcpTaskPRListerAdapter{gh: p.services.GitHub})
+		mcpHandlers.SetTaskPRAutomationService(p.services.GitHub)
 	}
 
 	// Reuse the cross-task handoff service constructed in registerRoutes —

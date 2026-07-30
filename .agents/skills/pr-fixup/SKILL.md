@@ -86,9 +86,13 @@ already addressed, a preference, or wrong for this codebase. Validate against
 the current head, the spec, and existing architecture before editing or
 replying.
 
-Make only valid changes. For an invalid comment, reply with concrete reasoning
-only when the user asks to respond. Resolve a thread only when the change or
-response genuinely addresses it.
+Make only valid changes. GitHub replies and thread resolution are external
+writes: do not perform either unless the user explicitly authorizes them. For
+an invalid comment, reply with concrete reasoning only when that authorization
+includes a response. When writes are not authorized, report valid comments as
+addressed in code but still unresolved; do not declare the PR clean solely from
+the code change. Resolve an authorized thread only when the change or response
+genuinely addresses it.
 
 ## 4. Commit, Verify, Push
 
@@ -102,11 +106,12 @@ the PR/CI finding requires it.
 After every push, run `scripts/pr-state --summary <PR>` again for the new head.
 Require `checks_head_sha` to match that head, report pending checks separately
 from failures, and rerun `scripts/pr-resolve list <PR>` before declaring the
-PR clean. Treat prior review evidence as stale. A duplicate or stale bot thread
-still needs an explicit reply and resolution once current source proves the
-finding is already fixed, including a thread surfaced only in
-`hidden_unresolved_threads`; only current-head actionable threads drive code
-changes. Declare the PR clean only when `failed_checks=[]`, `pending_checks=[]`,
+PR clean. Treat prior review evidence as stale. When the user authorized thread
+writes, a duplicate or stale bot thread still needs an explicit reply and
+resolution once current source proves the finding is already fixed, including a
+thread surfaced only in `hidden_unresolved_threads`; only current-head
+actionable threads drive code changes. Declare the PR clean only when
+`failed_checks=[]`, `pending_checks=[]`,
 there is no merge conflict, and `scripts/pr-resolve list <PR>` is empty. Within
 the user's monitoring limit, continue checking after resolutions until automated
 review jobs are terminal; otherwise report the exact pending check names.

@@ -189,7 +189,7 @@ spec: "../../specs/<slug>/spec.md"
 
 Each task should be small enough for one focused implementation pass:
 - **Acceptance:** 1-3 concrete conditions.
-- **Verification:** exact command(s), e.g. `cd apps/backend && go test -run TestName ./internal/path/...` or `cd apps && pnpm --filter @kandev/web test -- path/to/file.test.ts`. Frontend/E2E tasks must include the fresh-worktree bootstrap (`cd apps && pnpm install --frozen-lockfile`) when dependencies may be absent; backend commands should use the applicable repository `make` target when one exists.
+- **Verification:** exact command(s), e.g. `cd apps/backend && go test -run TestName ./internal/path/...` or `cd apps && pnpm --filter @kandev/web test -- path/to/file.test.ts`. Frontend/E2E tasks must include the fresh-worktree bootstrap (`cd apps && pnpm install --frozen-lockfile`) when dependencies may be absent; direct web typechecking uses `cd apps/web && pnpm run typecheck`, while other workspace package commands use the documented `pnpm --filter` form. Backend commands should use the applicable repository `make` target when one exists.
 - **Files likely touched:** specific paths, not broad directories.
 - **Dependencies:** task numbers that must land first, or `None`.
 - **Parallelism:** `sequential` by default; set `parallel-safe` only with named

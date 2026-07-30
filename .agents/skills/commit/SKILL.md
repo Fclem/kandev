@@ -124,7 +124,11 @@ qualifies as a successful hook receipt.
    fi 2>&1 | tee "$COMMIT_LOG" >/dev/null
    ```
    Read the log to extract the hook receipt, rather than printing the full
-   stream again. Remove it after copying the receipt into the handoff.
+   stream again. Remove the exact temporary file after copying the receipt into
+   the handoff:
+   ```bash
+   unlink "$COMMIT_LOG"
+   ```
 
    If a hook fails only because another worktree is already running
    golangci-lint (for example, `parallel golangci-lint is running`), wait for

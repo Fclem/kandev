@@ -331,3 +331,42 @@ reason above; this was verified to fail when the boot call is deleted.
 **Lesson:** a green unit suite says nothing about whether the app boots. The
 `i18n/language-switch` e2e spec is what caught this, and it is the only thing
 that would have.
+
+## 10. `<Trans>` tag markup rendered through `t()` — FIXED
+
+A CI e2e failure (`menuitem` named "Color" resolving to 0 elements) turned out to
+be a user-visible defect: the task context menu rendered the literal text
+`<0></0> Color`.
+
+`task:color` was `"<0></0> Color"` — a message written for `<Trans>`, where `<0>`
+substitutes the first child (the palette icon). The call site had since been
+flattened to a plain `t("task:color")` with the icon as an ordinary JSX sibling,
+but the message kept its now-vestigial tags. `t()` returns a string, so the
+markup reached the screen verbatim.
+
+Four keys shipped this way:
+
+| Key | Shipped text |
+|---|---|
+| `task:color` | `<0></0> Color` |
+| `editors:saving` | `<0></0> Saving...` |
+| `github:installForThisWorkspace` | `Install for this workspace <2></2>` |
+| `github:prepareAppOnGithub` | `Prepare App on GitHub <2></2>` |
+
+`task:files` and `task:comments` carried tags too but are shadowed by their
+`_one`/`_other` forms, so they never rendered; cleaned anyway.
+
+### Why nothing caught it
+
+- `check-i18n-keys.mjs` — the key exists and is referenced. Happy.
+- `check-trans-indices.mjs` — only inspected `<Trans>` elements, and only `.tsx`.
+- The lint guard — the string is in the catalog, not the source.
+- The pseudo-locale — accents the message but keeps the tags, so it looks the
+  same kind of wrong in both locales.
+- Unit tests — none asserted this menu item's accessible name.
+
+**Fixed by** stripping the vestigial tags and extending `check-trans-indices.mjs`
+to flag any `t()`/`translate()` call whose message contains `<n>` markup. That
+check now also walks `.ts`, not just `.tsx`. Count-bearing calls are skipped
+because the `_one`/`_other` entry shadows the flat one. Verified to fail when
+`task:color` is restored to its broken value.

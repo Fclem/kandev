@@ -55,7 +55,7 @@
   "revertAllChanges": "Revert all changes",
   "revertChanges": "Revert changes",
   "save": "Save",
-  "saving": "<0></0> Saving...",
+  "saving": "Saving...",
   "sentToTheAgent": "Sent to the agent.",
   "showAllLines": "Show all lines",
   "showDiffIndicators": "Show diff indicators",

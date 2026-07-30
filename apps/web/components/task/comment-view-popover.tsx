@@ -106,6 +106,7 @@ export function CommentViewPopover({
   onUpdate,
   onClose,
 }: CommentViewPopoverProps) {
+  const { t } = useTranslation();
   const popoverRef = useRef<HTMLDivElement>(null);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const { pos, onDragStart } = useDraggablePopover(position, 350, 200);
@@ -125,7 +126,7 @@ export function CommentViewPopover({
         onMouseDown={onDragStart}
       >
         <span className="text-xs text-muted-foreground">
-          {comments.length} comment{comments.length !== 1 ? "s" : ""}
+          {t("task:comments", { count: comments.length })}
         </span>
         <IconGripHorizontal className="h-3.5 w-3.5 text-muted-foreground/40" />
       </div>

@@ -29,8 +29,8 @@ export function StepImport({
           {t("office:existingConfigurationFound")}
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Found {fsWorkspaces.length} workspace{fsWorkspaces.length !== 1 ? "s" : ""} on the
-          filesystem. Import settings to get started?
+          Found {t("office:workspaces", { count: fsWorkspaces.length })} on the filesystem. Import
+          settings to get started?
         </p>
         <div className="mt-6 rounded-lg border bg-muted/50 p-4">
           <ul className="space-y-1 text-sm text-left">

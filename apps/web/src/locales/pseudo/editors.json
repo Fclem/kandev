@@ -2,6 +2,8 @@
   "applyLatestAgentChangesToThis": "Àƥƥĺŷ ĺàţēśţ àĝēńţ ćĥàńĝēś ţō ţĥĩś ƒĩĺē",
   "boldCmdB": "Ɓōĺď (Ćḿď+Ɓ)",
   "commentCmdShiftC": "Ćōḿḿēńţ (Ćḿď+Śĥĩƒţ+Ć)",
+  "comments_one": "{{count}} ćōḿḿēńţ",
+  "comments_other": "{{count}} ćōḿḿēńţś",
   "copyAllChangedLines": "Ćōƥŷ àĺĺ ćĥàńĝēď ĺĩńēś",
   "copyCode": "Ćōƥŷ ćōďē",
   "copyDiff": "Ćōƥŷ ďĩƒƒ",

@@ -90,9 +90,7 @@ function MarkdownPreviewToolbar({
           {commentsEnabled && commentCount > 0 && (
             <div className="flex items-center gap-1 px-2 py-1 text-xs text-primary">
               <IconMessagePlus className="h-3.5 w-3.5" />
-              <span>
-                {commentCount} comment{commentCount > 1 ? "s" : ""}
-              </span>
+              <span>{t("task:comments", { count: commentCount })}</span>
             </div>
           )}
           <Tooltip>

@@ -61,7 +61,7 @@ export function ReviewCommentsAttachment({ comments, className }: ReviewComments
             <span className="text-sm font-medium">{t("task:reviewComments")}</span>
 
             <Badge variant="secondary" className="ml-auto text-xs">
-              {totalComments} comment{totalComments !== 1 ? "s" : ""} on {fileCount} file
+              {t("task:comments", { count: totalComments })} on {fileCount} file
               {fileCount !== 1 ? "s" : ""}
             </Badge>
           </Button>

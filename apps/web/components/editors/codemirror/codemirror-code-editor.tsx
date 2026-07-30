@@ -63,14 +63,13 @@ function CodeMirrorCommentBadge({
   sessionId?: string;
   commentCount: number;
 }) {
+  const { t } = useTranslation();
   if (!enableComments || !sessionId || commentCount <= 0) return null;
 
   return (
     <div className="flex items-center gap-1 px-2 py-1 text-xs text-primary">
       <IconMessagePlus className="h-3.5 w-3.5" />
-      <span>
-        {commentCount} comment{commentCount > 1 ? "s" : ""}
-      </span>
+      <span>{t("editors:comments", { count: commentCount })}</span>
     </div>
   );
 }

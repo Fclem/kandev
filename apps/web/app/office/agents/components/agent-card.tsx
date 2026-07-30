@@ -52,7 +52,7 @@ export function AgentCard({ agent }: AgentCardProps) {
               <AgentRoleBadge role={agent.role} />
               {agent.desiredSkills && agent.desiredSkills.length > 0 && (
                 <span className="text-xs text-muted-foreground">
-                  {agent.desiredSkills.length} skill{agent.desiredSkills.length !== 1 ? "s" : ""}
+                  {t("office:skills", { count: agent.desiredSkills.length })}
                 </span>
               )}
             </div>

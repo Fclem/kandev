@@ -376,6 +376,8 @@
   "skillMdContent": "SKILL.md Content",
   "skillNameInstructionsForTheAgent": "# Skill Name\n\nInstructions for the agent...",
   "skills": "Skills",
+  "skills_one": "{{count}} skill",
+  "skills_other": "{{count}} skills",
   "skillsTeachAgentsHowToPerform": "Skills teach agents how to perform specific tasks. Import from GitHub or create your own.",
   "skillsThisAgentOwnsSkillsAre": "Skills this agent owns. Skills are injected into the agent's system prompt at session start.",
   "skillsUpdated": "Skills updated",
@@ -458,6 +460,8 @@
   "workspaceDefaultTier": "Workspace default tier",
   "workspaceDeleted": "Workspace deleted",
   "workspaceName": "Workspace name",
+  "workspaces_one": "{{count}} workspace",
+  "workspaces_other": "{{count}} workspaces",
   "zoomIn": "Zoom in",
   "zoomOut": "Zoom out"
 }

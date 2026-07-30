@@ -4,6 +4,8 @@
   "diffTruncatedShowingFirst256Kb": "Ďĩƒƒ ţŕũńćàţēď — śĥōŵĩńĝ ƒĩŕśţ 256 ĶƁ",
   "discardWalkthrough": "Ďĩśćàŕď ŵàĺķţĥŕōũĝĥ",
   "discardWalkthrough2": "Ďĩśćàŕď ŵàĺķţĥŕōũĝĥ?",
+  "files_one": "{{count}} ƒĩĺē",
+  "files_other": "{{count}} ƒĩĺēś",
   "filterChangedFiles": "Ƒĩĺţēŕ ćĥàńĝēď ƒĩĺēś",
   "fixComments": "<0></0> Ƒĩx Ćōḿḿēńţś <2>{{commentCount}}</2>",
   "loadingChanges": "Ĺōàďĩńĝ {{repo}} #{{pr_number}} ćĥàńĝēś…",

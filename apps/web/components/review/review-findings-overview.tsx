@@ -81,7 +81,7 @@ export function ReviewFindingsOverview({
           {total} open finding{total !== 1 ? "s" : ""}
         </span>
         <span className="text-xs text-muted-foreground">
-          across {groups.length} file{groups.length !== 1 ? "s" : ""}
+          across {t("review:files", { count: groups.length })}
         </span>
       </div>
 

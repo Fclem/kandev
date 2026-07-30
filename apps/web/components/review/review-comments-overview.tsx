@@ -72,7 +72,7 @@ export function ReviewCommentsOverview({ comments }: { comments: DiffComment[] }
           {total} pending review comment{total !== 1 ? "s" : ""}
         </span>
         <span className="text-xs text-muted-foreground">
-          across {groups.length} file{groups.length !== 1 ? "s" : ""}
+          across {t("review:files", { count: groups.length })}
         </span>
       </div>
 

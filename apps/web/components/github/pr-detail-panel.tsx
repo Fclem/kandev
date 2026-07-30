@@ -51,7 +51,6 @@ type PRDetailPanelProps = {
 };
 
 export function PRDetailPanelComponent({ panelId, params }: PRDetailPanelProps) {
-  const { t } = useTranslation();
   const activeTaskId = useAppStore((s) => s.tasks.activeTaskId);
   const { prs } = useTaskPR(activeTaskId);
   const activePR = useActiveTaskPR();
@@ -68,6 +67,7 @@ export function PRDetailPanelComponent({ panelId, params }: PRDetailPanelProps) 
   }, [pr, panelId]);
 
   if (!pr || !sessionId) {
+    const { t } = useTranslation();
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
         {t("github:noPullRequestLinkedToThis")}
@@ -529,6 +529,7 @@ function HeaderDateLine({ taskPR }: { taskPR: TaskPR }) {
 }
 
 function HeaderStatsLine({ taskPR, metrics }: { taskPR: TaskPR; metrics: PRPanelMetrics }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
       <span className="flex items-center gap-1">
@@ -541,7 +542,7 @@ function HeaderStatsLine({ taskPR, metrics }: { taskPR: TaskPR; metrics: PRPanel
       </span>
       <span>&middot;</span>
       <span>
-        {metrics.reviewCount} review{metrics.reviewCount !== 1 ? "s" : ""}
+        {t("github:reviews", { count: metrics.reviewCount })}
         {metrics.pendingReviewCount > 0 && (
           <span className="text-yellow-600 dark:text-yellow-400">
             {" "}
@@ -550,9 +551,7 @@ function HeaderStatsLine({ taskPR, metrics }: { taskPR: TaskPR; metrics: PRPanel
         )}
       </span>
       <span>&middot;</span>
-      <span>
-        {metrics.commentCount} comment{metrics.commentCount !== 1 ? "s" : ""}
-      </span>
+      <span>{t("github:comments", { count: metrics.commentCount })}</span>
       {metrics.reviewState && <ReviewStateBadge state={metrics.reviewState} />}
     </div>
   );

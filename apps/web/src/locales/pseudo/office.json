@@ -376,6 +376,8 @@
   "skillMdContent": "ŚĶĨĹĹ.ḿď Ćōńţēńţ",
   "skillNameInstructionsForTheAgent": "# Śķĩĺĺ Ńàḿē\n\nĨńśţŕũćţĩōńś ƒōŕ ţĥē àĝēńţ...",
   "skills": "Śķĩĺĺś",
+  "skills_one": "{{count}} śķĩĺĺ",
+  "skills_other": "{{count}} śķĩĺĺś",
   "skillsTeachAgentsHowToPerform": "Śķĩĺĺś ţēàćĥ àĝēńţś ĥōŵ ţō ƥēŕƒōŕḿ śƥēćĩƒĩć ţàśķś. Ĩḿƥōŕţ ƒŕōḿ ĜĩţĤũƀ ōŕ ćŕēàţē ŷōũŕ ōŵń.",
   "skillsThisAgentOwnsSkillsAre": "Śķĩĺĺś ţĥĩś àĝēńţ ōŵńś. Śķĩĺĺś àŕē ĩńĵēćţēď ĩńţō ţĥē àĝēńţ'ś śŷśţēḿ ƥŕōḿƥţ àţ śēśśĩōń śţàŕţ.",
   "skillsUpdated": "Śķĩĺĺś ũƥďàţēď",
@@ -458,6 +460,8 @@
   "workspaceDefaultTier": "Ŵōŕķśƥàćē ďēƒàũĺţ ţĩēŕ",
   "workspaceDeleted": "Ŵōŕķśƥàćē ďēĺēţēď",
   "workspaceName": "Ŵōŕķśƥàćē ńàḿē",
+  "workspaces_one": "{{count}} ŵōŕķśƥàćē",
+  "workspaces_other": "{{count}} ŵōŕķśƥàćēś",
   "zoomIn": "Źōōḿ ĩń",
   "zoomOut": "Źōōḿ ōũţ"
 }

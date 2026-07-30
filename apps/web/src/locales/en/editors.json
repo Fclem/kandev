@@ -2,6 +2,8 @@
   "applyLatestAgentChangesToThis": "Apply latest agent changes to this file",
   "boldCmdB": "Bold (Cmd+B)",
   "commentCmdShiftC": "Comment (Cmd+Shift+C)",
+  "comments_one": "{{count}} comment",
+  "comments_other": "{{count}} comments",
   "copyAllChangedLines": "Copy all changed lines",
   "copyCode": "Copy code",
   "copyDiff": "Copy diff",

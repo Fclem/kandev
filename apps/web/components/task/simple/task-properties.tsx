@@ -17,7 +17,6 @@ import { SubIssuesRow } from "./components/sub-issues-row";
 import { ReviewersPicker } from "./components/reviewers-picker";
 import { ApproversPicker } from "./components/approvers-picker";
 import { PendingApprovalBadge } from "./components/pending-approval-badge";
-import { t } from "@/lib/i18n";
 import { useTranslation } from "react-i18next";
 
 type TaskPropertiesProps = {
@@ -44,8 +43,6 @@ function formatCurrency(subcents: number): string {
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value);
 }
-
-const NONE_LABEL = <span className="text-muted-foreground">{t("common:none")}</span>;
 
 function IdentitySection({ task }: { task: Task }) {
   const { t } = useTranslation();
@@ -84,7 +81,11 @@ function DependenciesSection({ task }: { task: Task }) {
         <BlockersPicker task={task} />
       </PropertyRow>
       <PropertyRow label={t("task:blocking")}>
-        {task.blocking.length > 0 ? task.blocking.join(", ") : NONE_LABEL}
+        {task.blocking.length > 0 ? (
+          task.blocking.join(", ")
+        ) : (
+          <span className="text-muted-foreground">{t("common:none")}</span>
+        )}
       </PropertyRow>
       <PropertyRow label={t("task:subIssues")} alignStart>
         <SubIssuesRow task={task} />

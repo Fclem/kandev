@@ -29,8 +29,6 @@ function formatTimestamp(iso: string | null | undefined): string {
   return d.toLocaleString();
 }
 
-const WAL_HELP = t("settings:writeAheadLogSqliteWritesNew");
-
 type Row = { label: string; value: string; testid: string; info?: string };
 
 function StatRow({ label, value, testid, info }: Row) {
@@ -97,7 +95,7 @@ function StatsTable({ database }: { database: DatabaseStats }) {
           label={t("settings:wal")}
           value={formatBytes(database.wal_size_bytes)}
           testid="system-db-wal"
-          info={WAL_HELP}
+          info={t("settings:writeAheadLogSqliteWritesNew")}
         />
       )}
       <StatRow
@@ -119,9 +117,11 @@ function StatsTable({ database }: { database: DatabaseStats }) {
 // Plain-language descriptions of each maintenance operation. Surfaced as a
 // short paragraph next to the button + an on-hover tooltip so users without
 // database background know what each action does and when to use it.
-const VACUUM_HELP = t("settings:reclaimsUnusedSpaceInsideTheDatabase");
-const OPTIMIZE_HELP = t("settings:asksTheDatabaseToRefreshIts");
-const FACTORY_RESET_HELP = t("settings:wipesAllKandevDataTasksSessions");
+// Keys, not resolved text: a module-scope `t()` runs at import, before a locale
+// is active, and never re-resolves on a switch.
+const VACUUM_HELP = "settings:reclaimsUnusedSpaceInsideTheDatabase";
+const OPTIMIZE_HELP = "settings:asksTheDatabaseToRefreshIts";
+const FACTORY_RESET_HELP = "settings:wipesAllKandevDataTasksSessions";
 
 function OperationRow({
   testid,
@@ -182,7 +182,7 @@ function SQLiteMaintenanceButtons({
       <OperationRow
         testid="system-vacuum-row"
         label={t("settings:vacuum")}
-        description={VACUUM_HELP}
+        description={t(VACUUM_HELP)}
         button={
           <Tooltip>
             <TooltipTrigger asChild>
@@ -202,14 +202,14 @@ function SQLiteMaintenanceButtons({
                 />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{VACUUM_HELP}</TooltipContent>
+            <TooltipContent>{t(VACUUM_HELP)}</TooltipContent>
           </Tooltip>
         }
       />
       <OperationRow
         testid="system-optimize-row"
         label={t("settings:optimize")}
-        description={OPTIMIZE_HELP}
+        description={t(OPTIMIZE_HELP)}
         button={
           <Tooltip>
             <TooltipTrigger asChild>
@@ -229,14 +229,14 @@ function SQLiteMaintenanceButtons({
                 />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{OPTIMIZE_HELP}</TooltipContent>
+            <TooltipContent>{t(OPTIMIZE_HELP)}</TooltipContent>
           </Tooltip>
         }
       />
       <OperationRow
         testid="system-factory-reset-row"
         label={t("settings:factoryReset")}
-        description={FACTORY_RESET_HELP}
+        description={t(FACTORY_RESET_HELP)}
         button={
           <Tooltip>
             <TooltipTrigger asChild>
@@ -250,7 +250,7 @@ function SQLiteMaintenanceButtons({
                 <IconTrash className="h-3.5 w-3.5 mr-1" /> {t("settings:factoryReset")}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{FACTORY_RESET_HELP}</TooltipContent>
+            <TooltipContent>{t(FACTORY_RESET_HELP)}</TooltipContent>
           </Tooltip>
         }
       />

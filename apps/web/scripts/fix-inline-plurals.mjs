@@ -23,6 +23,10 @@
  * lowercase string literals are touched; anything else is reported and left
  * alone. `check-inline-plurals.mjs` fails the build if one reappears.
  *
+ * LIMITATION: the flat key is deleted in favour of the `_one`/`_other` pair, so a
+ * second call site sharing that key loses it. That shows up as a missing key in
+ * `check-i18n-keys.mjs` rather than at runtime — run `i18n:check` afterwards.
+ *
  * Usage: node scripts/fix-inline-plurals.mjs [--write] <dir|file> [...]
  */
 import { parseSync } from "@babel/core";
@@ -89,8 +93,13 @@ function singularBranch(test) {
   const literal = [left, right].find((n) => n.type === "NumericLiteral");
   const counted = [left, right].find((n) => n.type !== "NumericLiteral");
   if (!literal || !counted) return null;
+  // `===`/`!==` are commutative, so operand order does not matter. `>`/`>=` are
+  // not: `1 > n` means the opposite of `n > 1`, and treating them alike would
+  // silently swap the singular and plural messages.
+  const literalOnRight = right === literal;
   if (literal.value === 1 && /^===?$/.test(operator)) return { which: "consequent", counted };
   if (literal.value === 1 && /^!==?$/.test(operator)) return { which: "alternate", counted };
+  if (!literalOnRight) return null;
   if (literal.value === 1 && operator === ">") return { which: "alternate", counted };
   if (literal.value === 2 && operator === ">=") return { which: "alternate", counted };
   return null;

@@ -24,7 +24,6 @@ import { useLinearAuthed } from "@/hooks/domains/linear/use-linear-availability"
 import { useSentryAvailable } from "@/hooks/domains/sentry/use-sentry-availability";
 import { useSlackAuthed } from "@/hooks/domains/slack/use-slack-availability";
 import { SettingsGroup, SettingsLeaf } from "./settings-nav-primitives";
-import { t } from "@/lib/i18n";
 
 const ROOT_HREF = "/settings/workspace";
 
@@ -40,17 +39,25 @@ const INTEGRATIONS: Array<{ slug: string; label: string; icon: IntegrationIcon }
   { slug: "slack", label: "Slack", icon: IconBrandSlack },
 ];
 
-const ACTIVE_WORKSPACE_LABEL = (
-  <span className="shrink-0 rounded-full border border-primary/35 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
-    {t("common:active")}
-  </span>
-);
+// Components rather than module-scope elements: an element built at import time
+// captures whatever locale was active then and never re-renders on a switch.
+function ActiveWorkspaceLabel() {
+  const { t } = useTranslation();
+  return (
+    <span className="shrink-0 rounded-full border border-primary/35 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary">
+      {t("common:active")}
+    </span>
+  );
+}
 
-const ENABLED_LABEL = (
-  <span className="shrink-0 rounded border border-emerald-500/30 bg-emerald-500/10 px-1 py-0.5 text-[9px] font-medium leading-none text-emerald-600 dark:text-emerald-400">
-    {t("common:enabled")}
-  </span>
-);
+function EnabledLabel() {
+  const { t } = useTranslation();
+  return (
+    <span className="shrink-0 rounded border border-emerald-500/30 bg-emerald-500/10 px-1 py-0.5 text-[9px] font-medium leading-none text-emerald-600 dark:text-emerald-400">
+      {t("common:enabled")}
+    </span>
+  );
+}
 
 function WorkspaceIntegrationItems({
   workspaceId,
@@ -85,7 +92,7 @@ function WorkspaceIntegrationItems({
         key={href}
         href={href}
         label={label}
-        labelSuffix={enabled.has(slug) ? ENABLED_LABEL : undefined}
+        labelSuffix={enabled.has(slug) ? <EnabledLabel /> : undefined}
         icon={icon}
         isActive={pathname === href}
         depth={3}
@@ -165,7 +172,7 @@ export function WorkspacesGroup({ pathname, expanded, onToggle }: WorkspacesGrou
           <SettingsGroup
             key={workspace.id}
             label={workspace.name}
-            labelSuffix={workspaceIsActive ? ACTIVE_WORKSPACE_LABEL : undefined}
+            labelSuffix={workspaceIsActive ? <ActiveWorkspaceLabel /> : undefined}
             href={workspacePath}
             isActive={pathname === workspacePath}
             expanded={expandedWorkspaceId === workspace.id}

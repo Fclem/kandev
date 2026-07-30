@@ -1,6 +1,5 @@
 "use client";
 import { useTranslation } from "react-i18next";
-import { t } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Button } from "@kandev/ui/button";
 import { Spinner } from "@kandev/ui/spinner";
@@ -16,21 +15,21 @@ import { formatBytes } from "@/lib/utils/format-bytes";
 import { ActionButtonContent } from "./action-button-content";
 import { JobProgressIndicator } from "./job-progress-indicator";
 
-const REFRESH_HELP = t("settings:walksEveryDirectoryInsideTheData");
-
 type Row = {
   key: keyof Omit<DiskBreakdown, "warnings" | "computed_at" | "total">;
-  label: string;
+  /** Catalog key, not text: a module-scope `t()` resolves once at import and
+   *  never updates on a locale switch. */
+  labelKey: string;
 };
 
 const ROWS: Row[] = [
-  { key: "data_dir", label: t("settings:dataDirectory") },
-  { key: "worktrees", label: t("settings:worktrees") },
-  { key: "repos", label: t("common:repositories") },
-  { key: "sessions", label: t("settings:sessions") },
-  { key: "tasks", label: t("common:tasks") },
-  { key: "quick_chat", label: t("settings:quickChat") },
-  { key: "backups", label: t("common:backups") },
+  { key: "data_dir", labelKey: "settings:dataDirectory" },
+  { key: "worktrees", labelKey: "settings:worktrees" },
+  { key: "repos", labelKey: "common:repositories" },
+  { key: "sessions", labelKey: "settings:sessions" },
+  { key: "tasks", labelKey: "common:tasks" },
+  { key: "quick_chat", labelKey: "settings:quickChat" },
+  { key: "backups", labelKey: "common:backups" },
 ];
 
 function formatComputedAt(iso: string): string {
@@ -111,7 +110,7 @@ function BreakdownTable({ data }: { data: DiskBreakdown }) {
       <TableBody>
         {ROWS.map((row) => (
           <TableRow key={row.key} data-testid={`system-disk-usage-row-${row.key}`}>
-            <TableCell>{row.label}</TableCell>
+            <TableCell>{t(row.labelKey)}</TableCell>
             <TableCell className="text-right tabular-nums">{formatBytes(data[row.key])}</TableCell>
           </TableRow>
         ))}
@@ -173,7 +172,9 @@ export function DiskUsageCard() {
                 />
               </Button>
             </TooltipTrigger>
-            <TooltipContent className="max-w-xs">{REFRESH_HELP}</TooltipContent>
+            <TooltipContent className="max-w-xs">
+              {t("settings:walksEveryDirectoryInsideTheData")}
+            </TooltipContent>
           </Tooltip>
         </div>
       </CardHeader>

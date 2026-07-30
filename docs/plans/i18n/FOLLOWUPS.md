@@ -100,6 +100,26 @@ Audited clean: the `() => t(...)` helpers in `task-create-dialog*.tsx` and the
 **Convention going forward:** never assign `t()` to a module-level constant —
 use a getter, or resolve inside the component.
 
+### That audit was manual, and it missed 15 calls
+
+A self-review found module-scope `t()` still live in four files — the claim above
+was true only of the files that were looked at:
+
+| File | What |
+|---|---|
+| `settings/system/disk-usage-card.tsx` | `ROWS` labels + `REFRESH_HELP` (8) |
+| `settings/system/database-stats-card.tsx` | `WAL_HELP`, `VACUUM_HELP`, `OPTIMIZE_HELP`, `FACTORY_RESET_HELP` (4) |
+| `app-sidebar/sections/settings/workspaces-group.tsx` | `ACTIVE_WORKSPACE_LABEL`, `ENABLED_LABEL` — module-scope **JSX**, built once (2) |
+| `task/simple/task-properties.tsx` | `NONE_LABEL` — module-scope JSX (1) |
+
+Rows and help text now carry keys resolved at render; the two label elements
+became components. **The pseudo-locale cannot catch this class** — the text *is*
+translated, just frozen at the boot locale — which is why it survived a QA pass
+that was otherwise thorough.
+
+`scripts/check-module-scope-t.mjs` (in `i18n:check`) now enforces it, so the
+convention above is a build failure rather than a habit.
+
 ---
 
 ## 4. Literal braces in copy — RESOLVED BY THE i18next MIGRATION

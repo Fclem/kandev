@@ -697,6 +697,67 @@ func (s *Server) computeMergeBase(
 	return gitOp.GetMergeBase(ctx, "HEAD", targetBranch)
 }
 
+// integrationMergeBaseCandidates lists the bare integration branch names, in
+// priority order, used to detect a stale stored base. computeMergeBase already
+// prefers origin/<name>, so these stay bare. Mirrors branchDiffCandidates in
+// process/workspace_git_status.go so the commits panel and the task-card stats
+// land on the same anchor.
+var integrationMergeBaseCandidates = []string{"main", "master"}
+
+// integrationMergeBase returns merge-base(HEAD, origin/<candidate>) for the
+// first integration candidate that resolves, or "" when none do (no origin
+// ref, unrelated history). Used to detect a stale stored base.
+func (s *Server) integrationMergeBase(ctx context.Context, gitOp *process.GitOperator) string {
+	for _, candidate := range integrationMergeBaseCandidates {
+		if mb, err := s.computeMergeBase(ctx, gitOp, candidate); err == nil && mb != "" {
+			return mb
+		}
+	}
+	return ""
+}
+
+// correctStaleBase re-anchors a stored base commit to the live integration
+// merge-base when the stored base is a STRICT ancestor of it. This fixes the
+// stacked-PR / merged-parent / rebase case where computeMergeBase falls back to
+// a stale local ref (a parent branch whose origin ref was deleted after merge)
+// and the commits panel enumerates commits that already landed on the
+// integration branch. The stored base is returned unchanged when: targetBranch
+// is itself an integration candidate (redundant self-compare), no integration
+// merge-base resolves, the integration merge-base equals the base, the base is
+// not a strict ancestor of it, or the ancestry probe errors — every case falls
+// back to today's behavior.
+func (s *Server) correctStaleBase(
+	ctx context.Context,
+	gitOp *process.GitOperator,
+	baseCommit, targetBranch string,
+) string {
+	if baseCommit == "" || isIntegrationCandidate(targetBranch) {
+		return baseCommit
+	}
+	integ := s.integrationMergeBase(ctx, gitOp)
+	if integ == "" || integ == baseCommit {
+		return baseCommit
+	}
+	anc, err := gitOp.IsAncestor(ctx, baseCommit, integ)
+	if err == nil && anc {
+		return integ
+	}
+	return baseCommit
+}
+
+// isIntegrationCandidate reports whether branch is one of the integration
+// candidates (with or without an origin/ prefix). Used to skip the redundant
+// self-compare when the stored target branch already IS the integration line.
+func isIntegrationCandidate(branch string) bool {
+	name := strings.TrimPrefix(branch, "origin/")
+	for _, candidate := range integrationMergeBaseCandidates {
+		if name == candidate {
+			return true
+		}
+	}
+	return false
+}
+
 // runGitLogForRepo runs git log against a single repo subpath. Returns a
 // result-with-error or a non-nil error for transport failures.
 func (s *Server) runGitLogForRepo(
@@ -747,6 +808,10 @@ func (s *Server) runGitLogForRepo(
 					zap.Error(err))
 			}
 		}
+		// Re-anchor a stale stored base (merged/deleted stacked parent, rebase)
+		// to the live integration merge-base so the panel counts only the
+		// branch's own commits. No-op when the base is already current.
+		baseCommit = s.correctStaleBase(c.Request.Context(), gitOp, baseCommit, req.TargetBranch)
 	}
 
 	return gitOp.GetLog(c.Request.Context(), baseCommit, limit)
@@ -958,6 +1023,11 @@ func (s *Server) runGitCumulativeDiffForRepo(
 		default:
 			base = mb
 		}
+		// Mirror the commits panel: re-anchor a stale stored base (merged/
+		// deleted stacked parent, rebase) to the live integration merge-base so
+		// the diff excludes changes that already landed on the integration
+		// branch. No-op when the base is already current.
+		base = s.correctStaleBase(c.Request.Context(), gitOp, base, targetBranch)
 	}
 	result, err := gitOp.GetCumulativeDiff(c.Request.Context(), base)
 	if err != nil {

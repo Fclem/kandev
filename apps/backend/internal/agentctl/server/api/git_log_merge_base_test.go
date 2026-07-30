@@ -141,6 +141,137 @@ func TestComputeMergeBase_CorrectAnchorForCumulativeDiff(t *testing.T) {
 	}
 }
 
+// TestCorrectStaleBase_MergedStackedParent reproduces the reported bug: the
+// session's stored base branch is a stacked-PR parent that has since merged
+// into the integration branch and had its origin ref deleted. computeMergeBase
+// falls back to the stale local parent ref and the log range sweeps in every
+// commit the parent already landed on the integration branch (the 31-vs-1
+// count). correctStaleBase must detect that the resolved base is a strict
+// ancestor of merge-base(HEAD, origin/main) and re-anchor to it. This is the
+// regression test — it fails before the code change.
+func TestCorrectStaleBase_MergedStackedParent(t *testing.T) {
+	repoDir, cleanup := setupAPITestRepo(t)
+	defer cleanup()
+
+	// main starts at the initial commit; branch the stacked PARENT off it.
+	mainStart := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "HEAD"))
+	runGitAPI(t, repoDir, "checkout", "-b", "feature/parent", mainStart)
+	for i := 0; i < 3; i++ {
+		writeFileAPI(t, repoDir, "parent.txt", strings.Repeat("parent\n", i+1))
+		runGitAPI(t, repoDir, "add", ".")
+		runGitAPI(t, repoDir, "commit", "-m", "feat: parent work")
+	}
+	parentTip := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "HEAD"))
+
+	// The child feature branch stacks on the parent and adds one commit.
+	runGitAPI(t, repoDir, "checkout", "-b", "feature/child", parentTip)
+	writeFileAPI(t, repoDir, "child.txt", "child work\n")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "feat: child work")
+
+	// The parent PR merges into main and origin advances. Fast-forward main to
+	// the parent tip, push, and delete the parent's origin ref (merged+deleted).
+	runGitAPI(t, repoDir, "checkout", "main")
+	runGitAPI(t, repoDir, "merge", "--ff-only", "feature/parent")
+	runGitAPI(t, repoDir, "push", "origin", "main")
+	runGitAPI(t, repoDir, "fetch", "origin", "refs/heads/main:refs/remotes/origin/main")
+	runGitAPI(t, repoDir, "checkout", "feature/child")
+
+	log, _ := logger.NewLogger(logger.LoggingConfig{Level: "error"})
+	srv := &Server{logger: log}
+	gitOp := process.NewGitOperator(repoDir, log, nil)
+
+	// The stored target branch is the merged/deleted parent. computeMergeBase
+	// falls back to the stale local parent ref (== parentTip).
+	staleBase, err := srv.computeMergeBase(context.Background(), gitOp, "feature/parent")
+	if err != nil {
+		t.Fatalf("computeMergeBase(feature/parent) failed: %v", err)
+	}
+	if staleBase != parentTip {
+		t.Fatalf("expected stale base = parent tip %s, got %s", parentTip, staleBase)
+	}
+
+	// The true integration merge-base is the parent tip on main (== parentTip),
+	// so the corrected base makes `git log <base>..HEAD` show only the child's
+	// own commit.
+	corrected := srv.correctStaleBase(context.Background(), gitOp, staleBase, "feature/parent")
+	integ, err := srv.computeMergeBase(context.Background(), gitOp, "main")
+	if err != nil {
+		t.Fatalf("computeMergeBase(main) failed: %v", err)
+	}
+	if corrected != integ {
+		t.Errorf("expected corrected base = integration merge-base %s, got %s", integ, corrected)
+	}
+
+	// End-to-end: the commits panel now enumerates exactly the child's commit.
+	result, err := gitOp.GetLog(context.Background(), corrected, 0)
+	if err != nil {
+		t.Fatalf("GetLog failed: %v", err)
+	}
+	if len(result.Commits) != 1 {
+		shas := make([]string, 0, len(result.Commits))
+		for _, c := range result.Commits {
+			shas = append(shas, c.CommitSHA[:7]+" "+c.CommitMessage)
+		}
+		t.Errorf("expected exactly 1 child commit after correction, got %d:\n%s",
+			len(result.Commits), strings.Join(shas, "\n"))
+	}
+}
+
+// TestCorrectStaleBase_CurrentBaseUnchanged verifies the correction does not
+// over-reach: when the resolved base already equals (or descends from) the
+// integration merge-base, correctStaleBase returns it unchanged.
+func TestCorrectStaleBase_CurrentBaseUnchanged(t *testing.T) {
+	repoDir, cleanup := setupAPITestRepo(t)
+	defer cleanup()
+
+	// Feature branches straight off current main; its merge-base against main
+	// is main's tip, which is already current.
+	runGitAPI(t, repoDir, "checkout", "-b", "feature/x")
+	writeFileAPI(t, repoDir, "feature.txt", "feature\n")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "feat: work")
+
+	log, _ := logger.NewLogger(logger.LoggingConfig{Level: "error"})
+	srv := &Server{logger: log}
+	gitOp := process.NewGitOperator(repoDir, log, nil)
+
+	base, err := srv.computeMergeBase(context.Background(), gitOp, "main")
+	if err != nil {
+		t.Fatalf("computeMergeBase(main) failed: %v", err)
+	}
+	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "main")
+	if corrected != base {
+		t.Errorf("expected unchanged base %s, got %s", base, corrected)
+	}
+}
+
+// TestCorrectStaleBase_NoIntegrationRefFallsBack verifies that when neither
+// origin/main nor origin/master resolves (no integration ref) the base is
+// returned unchanged and no error is raised.
+func TestCorrectStaleBase_NoIntegrationRefFallsBack(t *testing.T) {
+	repoDir, cleanup := setupAPITestRepo(t)
+	defer cleanup()
+
+	// Rename the only integration branch away from main/master so no
+	// integration candidate resolves locally or on origin.
+	runGitAPI(t, repoDir, "branch", "-m", "main", "trunk")
+	runGitAPI(t, repoDir, "checkout", "-b", "feature/x")
+	writeFileAPI(t, repoDir, "feature.txt", "feature\n")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "feat: work")
+
+	log, _ := logger.NewLogger(logger.LoggingConfig{Level: "error"})
+	srv := &Server{logger: log}
+	gitOp := process.NewGitOperator(repoDir, log, nil)
+
+	base := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "trunk"))
+	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "trunk")
+	if corrected != base {
+		t.Errorf("expected unchanged base %s when no integration ref, got %s", base, corrected)
+	}
+}
+
 // --- test scaffolding (api package can't reuse process_test helpers) ---
 
 func setupAPITestRepo(t *testing.T) (string, func()) {

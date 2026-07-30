@@ -8,6 +8,7 @@ import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { updateUserSettings } from "@/lib/api";
 import { SettingsCard } from "./settings-card";
 import { useSettingsSaveContributor } from "./settings-save-provider";
+import { useTranslation } from "react-i18next";
 
 type TranscriptNavigationSettings = {
   showAnchoredPromptBar: boolean;
@@ -44,6 +45,7 @@ function changedSettings(
 }
 
 export function AnchoredPromptBarSettings() {
+  const { t } = useTranslation();
   const userSettings = useAppStore((state) => state.userSettings);
   const setUserSettings = useAppStore((state) => state.setUserSettings);
   const storeApi = useAppStoreApi();
@@ -82,15 +84,14 @@ export function AnchoredPromptBarSettings() {
   return (
     <SettingsCard isDirty={isDirty} data-testid="anchored-prompt-bar-card">
       <CardHeader>
-        <CardTitle className="text-base">Transcript Navigation</CardTitle>
+        <CardTitle className="text-base">{t("settings:transcriptNavigation")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex min-h-11 items-center justify-between gap-4">
           <div className="min-w-0 space-y-0.5">
-            <Label htmlFor="show-anchored-prompt-bar">Show anchored prompt bar</Label>
+            <Label htmlFor="show-anchored-prompt-bar">{t("settings:showAnchoredPromptBar")}</Label>
             <p className="text-xs text-muted-foreground">
-              Desktop only. While you scroll past your last prompt, stick a shortened copy to the
-              top of the transcript with an expand toggle.
+              {t("settings:desktopOnlyWhileYouScrollPast")}
             </p>
           </div>
           <Switch
@@ -105,9 +106,11 @@ export function AnchoredPromptBarSettings() {
         </div>
         <div className="flex min-h-11 items-center justify-between gap-4">
           <div className="min-w-0 space-y-0.5">
-            <Label htmlFor="show-scroll-to-last-prompt">Show scroll to last prompt</Label>
+            <Label htmlFor="show-scroll-to-last-prompt">
+              {t("settings:showScrollToLastPrompt")}
+            </Label>
             <p className="text-xs text-muted-foreground">
-              Show the jump control after your latest prompt scrolls above the transcript.
+              {t("settings:showTheJumpControlAfterYour")}
             </p>
           </div>
           <Switch
@@ -122,9 +125,9 @@ export function AnchoredPromptBarSettings() {
         </div>
         <div className="flex min-h-11 items-center justify-between gap-4">
           <div className="min-w-0 space-y-0.5">
-            <Label htmlFor="show-scroll-to-start">Show scroll to start</Label>
+            <Label htmlFor="show-scroll-to-start">{t("settings:showScrollToStart")}</Label>
             <p className="text-xs text-muted-foreground">
-              Show the control that jumps to the beginning of the transcript.
+              {t("settings:showTheControlThatJumpsTo")}
             </p>
           </div>
           <Switch

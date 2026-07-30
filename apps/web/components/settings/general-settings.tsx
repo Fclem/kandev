@@ -202,8 +202,8 @@ export function TaskActionsSettings() {
 
       <SettingsSection
         icon={<IconArrowBackUp className="h-5 w-5" />}
-        title="Transcript Navigation"
-        description="The scroll-up buttons next to the share button are always available; optionally show a sticky prompt bar on desktop"
+        title={t("settings:transcriptNavigation")}
+        description={t("settings:theScrollUpButtonsNextTo")}
       >
         <AnchoredPromptBarSettings />
       </SettingsSection>

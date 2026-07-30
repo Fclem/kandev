@@ -109,7 +109,7 @@ export function TaskResetEnvConfirmDialog({
               }}
             >
               {isResetting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Reset environment
+              {t("task:resetEnvironment")}
             </Trans>
           </AlertDialogAction>
         </AlertDialogFooter>

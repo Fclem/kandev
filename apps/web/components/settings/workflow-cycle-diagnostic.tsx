@@ -68,7 +68,7 @@ function CycleHop({ hop, index }: { hop: WorkflowReplayCycleHop; index: number }
       )}
       <span className="sr-only">
         <Trans i18nKey="settings:hop" values={{ value1: index + 1 }}>
-          Hop {index + 1}
+          {t("settings:hop2")} {index + 1}
         </Trans>
       </span>
     </li>

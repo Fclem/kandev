@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { Progress } from "@kandev/ui/progress";
@@ -24,6 +24,7 @@ export function VoiceModelLoadIndicator({
   progress,
   modelLabel,
 }: VoiceModelLoadIndicatorProps) {
+  const { t } = useTranslation();
   if (state === "idle" || state === "ready") return null;
 
   const pct = clampPercent(progress);
@@ -57,7 +58,7 @@ export function VoiceModelLoadIndicator({
         <div className="flex flex-col gap-0.5 min-w-0 flex-1">
           <span className="hidden sm:inline text-[10px] leading-none text-muted-foreground truncate">
             <Trans i18nKey="task:downloading" values={{ modelLabel, pct }}>
-              Downloading {modelLabel}… {pct}%
+              {t("task:downloading2")} {modelLabel}… {pct}%
             </Trans>
           </span>
           <Progress

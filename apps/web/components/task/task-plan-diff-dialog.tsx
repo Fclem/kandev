@@ -96,7 +96,8 @@ export function PlanRevisionDiffDialog({
               data-testid="plan-revision-diff-restore"
             >
               <Trans i18nKey="task:restoreV" values={{ revision_number: before.revision_number }}>
-                Restore v{before.revision_number}
+                {t("task:restoreV2")}
+                {before.revision_number}
               </Trans>
             </Button>
           )}
@@ -353,11 +354,12 @@ function SplitCell({ side, line }: { side: "before" | "after"; line: DiffLine | 
 }
 
 function DiffLoading() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 p-3 text-muted-foreground">
       <Trans i18nKey="task:loading2">
         <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-        Loading…
+        {t("common:loading3")}
       </Trans>
     </div>
   );

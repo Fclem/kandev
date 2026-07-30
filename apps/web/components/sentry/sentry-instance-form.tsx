@@ -110,7 +110,7 @@ function SecretField({
               ),
             }}
           >
-            Auth token
+            {t("sentry:authToken2")}
             {hasSavedSecret && (
               <span className="text-xs text-muted-foreground ml-2">
                 {t("sentry:savedLeaveBlankToKeepThe")}

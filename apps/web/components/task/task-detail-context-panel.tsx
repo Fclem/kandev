@@ -75,6 +75,7 @@ function WorkspaceSection({
   group: NonNullable<TaskContextDTO["workspace_group"]>;
   mode?: TaskContextDTO["workspace_mode"];
 }) {
+  const { t } = useTranslation();
   const memberCount = group.members.length;
   return (
     <div className="space-y-2">
@@ -85,7 +86,7 @@ function WorkspaceSection({
             i18nKey="task:sharedWorkspace"
             values={{ memberCount, value3: memberCount === 1 ? "member" : "members" }}
           >
-            Shared workspace · {memberCount} {memberCount === 1 ? "member" : "members"}
+            {t("task:sharedWorkspace2")} {memberCount} {memberCount === 1 ? "member" : "members"}
           </Trans>
         </Badge>
         {mode && (
@@ -155,11 +156,12 @@ function Relation({
 }
 
 function DocumentsSection({ docs }: { docs: TaskContextDTO["available_documents"] }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Trans i18nKey="task:documentsAvailable">
-          <IconFileText className="h-4 w-4" /> Documents available
+          <IconFileText className="h-4 w-4" /> {t("task:documentsAvailable2")}
         </Trans>
       </div>
       <ul className="space-y-1 text-xs">

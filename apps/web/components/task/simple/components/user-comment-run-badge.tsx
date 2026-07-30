@@ -42,7 +42,7 @@ export function UserCommentRunBadge({ status, errorMessage }: UserCommentRunBadg
             className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
             aria-hidden
           />
-          Queued
+          {t("task:queued")}
         </Trans>
       </span>
     );
@@ -57,7 +57,7 @@ export function UserCommentRunBadge({ status, errorMessage }: UserCommentRunBadg
       >
         <Trans i18nKey="task:working3">
           <IconLoader2 className="h-3 w-3 animate-spin" aria-hidden />
-          Working…
+          {t("task:working4")}
         </Trans>
       </span>
     );
@@ -84,7 +84,7 @@ export function UserCommentRunBadge({ status, errorMessage }: UserCommentRunBadg
     >
       <Trans i18nKey="task:failed">
         <IconAlertCircle className="h-3 w-3" aria-hidden />
-        Failed
+        {t("task:failed2")}
       </Trans>
     </span>
   );

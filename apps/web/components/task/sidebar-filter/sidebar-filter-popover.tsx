@@ -169,7 +169,7 @@ function FilterSection({
         >
           <Trans i18nKey="task:add">
             <IconPlus className="mr-1 h-3 w-3" />
-            Add
+            {t("task:add2")}
           </Trans>
         </Button>
       </div>

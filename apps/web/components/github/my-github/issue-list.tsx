@@ -36,6 +36,7 @@ function StartTaskMenu({
   presets: TaskPreset[];
   onStartTask: IssueListProps["onStartTask"];
 }) {
+  const { t } = useTranslation();
   const launch = (preset: TaskPreset) => onStartTask({ kind: "issue", issue, preset });
   return (
     <DropdownMenu>
@@ -43,7 +44,7 @@ function StartTaskMenu({
         <Button size="sm" variant="outline" className="h-7 gap-1 cursor-pointer">
           <Trans i18nKey="github:task">
             <IconPlus className="h-3.5 w-3.5" />
-            Task
+            {t("common:task")}
             <IconChevronDown className="h-3 w-3" />
           </Trans>
         </Button>

@@ -44,7 +44,7 @@ export const PermissionActionRow = memo(function PermissionActionRow({
       >
         <Trans i18nKey="task:deny">
           <IconX className="h-4 w-4 mr-1 text-red-500" />
-          Deny
+          {t("task:deny2")}
         </Trans>
       </Button>
       <Button
@@ -70,7 +70,7 @@ export const PermissionActionRow = memo(function PermissionActionRow({
           ) : (
             <IconCheck className="h-4 w-4 mr-1 text-green-500" />
           )}
-          Approve
+          {t("task:approve3")}
         </Trans>
       </Button>
       {onAllowAlways && (
@@ -84,7 +84,7 @@ export const PermissionActionRow = memo(function PermissionActionRow({
         >
           <Trans i18nKey="task:alwaysAllow">
             <IconChecks className="h-4 w-4 mr-1 text-green-500" />
-            Always allow
+            {t("task:alwaysAllow2")}
           </Trans>
         </Button>
       )}

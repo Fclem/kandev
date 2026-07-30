@@ -49,7 +49,7 @@ export function GitHubAppPolicyDialog({
         <Button variant="outline" className="h-11 cursor-pointer">
           <Trans i18nKey="github:reviewPermissions">
             <IconShieldCheck className="mr-2 h-4 w-4" />
-            Review permissions
+            {t("github:reviewPermissions2")}
           </Trans>
         </Button>
       </DialogTrigger>

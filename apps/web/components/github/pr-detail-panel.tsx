@@ -356,6 +356,7 @@ function ApproveButton({
 }
 
 export function PRDetailContent({ taskPR, sessionId }: { taskPR: TaskPR; sessionId: string }) {
+  const { t } = useTranslation();
   const workspaceId = useAppStore((state) => state.workspaces.activeId);
   const { feedback, loading, refresh } = usePRFeedback(
     workspaceId,
@@ -438,7 +439,7 @@ export function PRDetailContent({ taskPR, sessionId }: { taskPR: TaskPR; session
               i18nKey="github:lastSynced"
               values={{ value1: formatTimeAgo(taskPR.last_synced_at) }}
             >
-              Last synced {formatTimeAgo(taskPR.last_synced_at)}
+              {t("github:lastSynced2")} {formatTimeAgo(taskPR.last_synced_at)}
             </Trans>
           </div>
         </>

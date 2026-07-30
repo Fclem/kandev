@@ -56,7 +56,7 @@ export function BudgetsTab({ workspaceId }: { workspaceId: string }) {
         >
           <Trans i18nKey="office:addPolicy">
             <IconPlus className="h-4 w-4 mr-1" />
-            Add Policy
+            {t("office:addPolicy2")}
           </Trans>
         </Button>
       </div>

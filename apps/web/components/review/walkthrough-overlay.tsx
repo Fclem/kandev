@@ -62,7 +62,7 @@ function WalkthroughLauncher({
         )}
       >
         <IconRoute className="size-4 text-primary" />
-        Walkthrough
+        {t("review:walkthrough")}
         {hasUnseen ? (
           <span
             aria-label={t("review:newWalkthrough")}

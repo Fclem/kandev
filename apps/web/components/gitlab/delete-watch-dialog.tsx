@@ -36,7 +36,7 @@ export function DeleteWatchDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>
             <Trans i18nKey="gitlab:delete" values={{ watchLabel }}>
-              Delete {watchLabel}?
+              {t("common:delete")} {watchLabel}?
             </Trans>
           </AlertDialogTitle>
           <AlertDialogDescription>

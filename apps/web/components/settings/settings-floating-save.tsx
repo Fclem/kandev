@@ -42,6 +42,7 @@ export function SettingsFloatingSave({
   onDiscardAndLeave,
   onContinueEditing,
 }: SettingsFloatingSaveProps) {
+  const { t } = useTranslation();
   const isSaving = status === "saving";
   const isSaved = status === "saved";
   const isInvalid = Boolean(invalidReason);
@@ -65,7 +66,7 @@ export function SettingsFloatingSave({
           <span className="flex items-center gap-1 text-xs text-destructive" role="status">
             <Trans i18nKey="settings:couldnTSave">
               <IconAlertCircle className="size-4" />
-              Couldn't save
+              {t("settings:couldnTSave2")}
             </Trans>
           </span>
         )}

@@ -49,13 +49,14 @@ function StartTaskMenu({
   presets: JiraTaskPreset[];
   onStartTask: TicketRowProps["onStartTask"];
 }) {
+  const { t } = useTranslation();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button size="sm" variant="outline" className="cursor-pointer h-7 px-2 gap-1 text-xs">
           <Trans i18nKey="jira:startTask">
             <IconPlus className="h-3.5 w-3.5" />
-            Start task
+            {t("jira:startTask2")}
           </Trans>
         </Button>
       </DropdownMenuTrigger>

@@ -78,7 +78,7 @@ function StepHeader({
       </Badge>
       <span className="text-xs text-muted-foreground" data-testid="walkthrough-step-header">
         <Trans i18nKey="diff:step" values={{ value1: activeStep + 1, stepCount, lineLabel }}>
-          Step {activeStep + 1} / {stepCount} · {lineLabel}
+          {t("diff:step2")} {activeStep + 1} / {stepCount} · {lineLabel}
         </Trans>
       </span>
       <Button

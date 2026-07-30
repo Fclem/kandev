@@ -390,7 +390,7 @@ function QueuePanelHeader({
           >
             <Trans i18nKey="task:runNext">
               <IconPlayerPlay className="mr-1 h-3 w-3" />
-              Run next
+              {t("task:runNext2")}
             </Trans>
           </Button>
         )}
@@ -404,7 +404,7 @@ function QueuePanelHeader({
         >
           <Trans i18nKey="task:clearAll">
             <IconTrash className="mr-1 h-3 w-3" />
-            Clear all
+            {t("task:clearAll2")}
           </Trans>
         </Button>
         <button

@@ -214,7 +214,7 @@ export function RoutinesContent() {
       <div className="flex justify-end">
         <Button size="sm" onClick={() => setShowCreate(true)} className="cursor-pointer">
           <Trans i18nKey="office:newRoutine">
-            <IconPlus className="h-4 w-4 mr-1" /> New Routine
+            <IconPlus className="h-4 w-4 mr-1" /> {t("office:newRoutine2")}
           </Trans>
         </Button>
       </div>

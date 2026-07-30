@@ -62,7 +62,7 @@ export function TaskSort({ field, dir, onFieldChange, onDirChange }: IssueSortPr
           >
             <Trans i18nKey="office:asc">
               <IconSortAscending className="h-3.5 w-3.5 mr-1" />
-              Asc
+              {t("office:asc2")}
             </Trans>
           </Button>
           <Button
@@ -73,7 +73,7 @@ export function TaskSort({ field, dir, onFieldChange, onDirChange }: IssueSortPr
           >
             <Trans i18nKey="office:desc">
               <IconSortDescending className="h-3.5 w-3.5 mr-1" />
-              Desc
+              {t("office:desc2")}
             </Trans>
           </Button>
         </div>

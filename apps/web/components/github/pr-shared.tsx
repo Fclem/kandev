@@ -1,4 +1,4 @@
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -93,6 +93,7 @@ export function CollapsibleSection({
   addAllLabel?: string;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen ?? true);
 
   return (
@@ -122,7 +123,7 @@ export function CollapsibleSection({
               >
                 <Trans i18nKey="github:addAll">
                   <IconMessagePlus className="h-3 w-3" />
-                  Add all
+                  {t("github:addAll2")}
                 </Trans>
               </Button>
             </TooltipTrigger>

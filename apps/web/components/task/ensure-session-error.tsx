@@ -51,6 +51,7 @@ type BannerProps = {
 
 /** Slim banner for the task page, rendered above the layout. */
 export function EnsureSessionErrorBanner({ error, onRetry, workspaceId }: BannerProps) {
+  const { t } = useTranslation();
   const info = describeEnsureError(error, workspaceId);
   if (!info) return null;
   return (
@@ -79,7 +80,7 @@ export function EnsureSessionErrorBanner({ error, onRetry, workspaceId }: Banner
             >
               <Trans i18nKey="task:retry">
                 <IconRefresh className="size-3" />
-                Retry
+                {t("common:retry")}
               </Trans>
             </Button>
           </span>

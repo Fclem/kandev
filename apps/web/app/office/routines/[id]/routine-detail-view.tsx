@@ -131,7 +131,7 @@ export function RoutineDetailView({ initialRoutine, initialTriggers }: RoutineDe
         <div className="ml-auto flex gap-2">
           <Button size="sm" variant="outline" onClick={handleRunNow} className="cursor-pointer">
             <Trans i18nKey="office:runNow">
-              <IconPlayerPlay className="h-4 w-4 mr-1" /> Run now
+              <IconPlayerPlay className="h-4 w-4 mr-1" /> {t("office:runNow3")}
             </Trans>
           </Button>
           <Button size="sm" onClick={handleSave} disabled={saving} className="cursor-pointer">

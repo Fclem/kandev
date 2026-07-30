@@ -365,6 +365,7 @@ function UserContextBadges({
   senderTask: SenderTaskInfo | null;
   workflowMessage: WorkflowStepMessageInfo | null;
 }) {
+  const { t } = useTranslation();
   if (
     !hasPlanMode &&
     !hasReviewComments &&
@@ -380,14 +381,14 @@ function UserContextBadges({
       {hasPlanMode && (
         <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/20 px-2 py-0.5 text-[10px] text-slate-400">
           <Trans i18nKey="task:planMode">
-            <IconWand size={10} /> Plan mode
+            <IconWand size={10} /> {t("common:planMode")}
           </Trans>
         </span>
       )}
       {hasReviewComments && (
         <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] text-blue-400">
           <Trans i18nKey="task:reviewComments2">
-            <IconMessageDots size={10} /> Review comments
+            <IconMessageDots size={10} /> {t("task:reviewComments3")}
           </Trans>
         </span>
       )}

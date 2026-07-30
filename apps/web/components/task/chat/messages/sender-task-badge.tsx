@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/components/state-provider";
 import { useTaskById } from "@/hooks/domains/kanban/use-task-by-id";
 import { linkToTask } from "@/lib/links";
+import { useTranslation } from "react-i18next";
 
 export type SenderTaskInfo = {
   id: string;
@@ -42,6 +43,7 @@ type SenderTaskBadgeProps = {
  * prompt shows the same provenance affordance as the final delivered message.
  */
 export function SenderTaskBadge({ sender, size = "sm" }: SenderTaskBadgeProps) {
+  const { t } = useTranslation();
   const liveTask = useTaskById(sender.id);
   // Live-resolve the sender session's name when it's in the store (sibling
   // sessions on the loaded task), falling back to the send-time snapshot.
@@ -88,8 +90,9 @@ export function SenderTaskBadge({ sender, size = "sm" }: SenderTaskBadgeProps) {
         <TooltipContent>
           {sessionName ? (
             <>
-              From session <span className="font-semibold">&ldquo;{sessionName}&rdquo;</span> in
-              task <span className="font-semibold">&ldquo;{fullTitle}&rdquo;</span>
+              {t("task:fromSession")}{" "}
+              <span className="font-semibold">&ldquo;{sessionName}&rdquo;</span> in task{" "}
+              <span className="font-semibold">&ldquo;{fullTitle}&rdquo;</span>
             </>
           ) : (
             <>

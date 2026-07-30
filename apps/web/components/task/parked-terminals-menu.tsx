@@ -53,7 +53,8 @@ export function ParkedTerminalsMenu({
         <span className="font-mono">⌃</span>
         <span>
           <Trans i18nKey="task:parked" values={{ length: parkedTerminals.length }}>
-            Parked ({parkedTerminals.length})
+            {t("task:parked2")}
+            {parkedTerminals.length})
           </Trans>
         </span>
       </button>

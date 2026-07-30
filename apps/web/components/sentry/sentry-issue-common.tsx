@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { formatDistanceToNow } from "date-fns";
 import { Badge } from "@kandev/ui/badge";
@@ -87,6 +87,7 @@ export function SentryIssueRow({ issue }: { issue: SentryIssue }) {
 }
 
 function SentryIssueMeta({ issue, lastSeen }: { issue: SentryIssue; lastSeen: string }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
       {issue.count != null && issue.count !== "" && (
@@ -106,7 +107,7 @@ function SentryIssueMeta({ issue, lastSeen }: { issue: SentryIssue; lastSeen: st
       {lastSeen && (
         <span title={issue.lastSeen}>
           <Trans i18nKey="sentry:lastSeen" values={{ lastSeen }}>
-            Last seen {lastSeen}
+            {t("sentry:lastSeen2")} {lastSeen}
           </Trans>
         </span>
       )}

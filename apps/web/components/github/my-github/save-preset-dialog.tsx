@@ -64,8 +64,8 @@ function SavePresetForm({
             i18nKey="github:saveThisQueryToTheSidebar"
             values={{ value1: kind === "pr" ? "pull request" : "issue" }}
           >
-            Save this {kind === "pr" ? "pull request" : "issue"} query to the sidebar for quick
-            access later.
+            {t("github:saveThis")} {kind === "pr" ? "pull request" : "issue"} query to the sidebar
+            for quick access later.
           </Trans>
         </DialogDescription>
       </DialogHeader>

@@ -59,8 +59,8 @@ function SavePresetForm({
             i18nKey="gitlab:saveThisQueryToTheSidebar"
             values={{ value1: kind === "mr" ? "merge request" : "issue" }}
           >
-            Save this {kind === "mr" ? "merge request" : "issue"} query to the sidebar for quick
-            access later.
+            {t("gitlab:saveThis")} {kind === "mr" ? "merge request" : "issue"} query to the sidebar
+            for quick access later.
           </Trans>
         </DialogDescription>
       </DialogHeader>

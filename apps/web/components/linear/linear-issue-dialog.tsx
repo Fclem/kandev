@@ -91,12 +91,13 @@ export function LinearIssueDialog({
 }
 
 function IssueFooter({ onStart }: { onStart: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-2 px-6 py-3 border-t bg-muted/20 shrink-0">
       <Button size="sm" variant="default" className="cursor-pointer gap-1.5" onClick={onStart}>
         <Trans i18nKey="linear:startTask">
           <IconPlus className="h-4 w-4" />
-          Start task
+          {t("linear:startTask2")}
         </Trans>
       </Button>
     </div>
@@ -316,12 +317,13 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 }
 
 function MetaFooter({ issue }: { issue: LinearIssue }) {
+  const { t } = useTranslation();
   const updated = formatRelative(issue.updated);
   if (!updated) return null;
   return (
     <div className="text-xs text-muted-foreground px-1" title={issue.updated}>
       <Trans i18nKey="linear:updated" values={{ updated }}>
-        Updated {updated}
+        {t("linear:updated3")} {updated}
       </Trans>
     </div>
   );

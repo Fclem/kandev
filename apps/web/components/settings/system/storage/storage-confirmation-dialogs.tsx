@@ -42,7 +42,7 @@ function ConfirmationDialog(props: ConfirmationDialogProps) {
               i18nKey="settings:typeToContinue"
               values={{ description: props.description, token: props.phrase }}
             >
-              {props.description} Type <strong>{props.phrase}</strong> to continue.
+              {props.description} {t("settings:type")} <strong>{props.phrase}</strong> to continue.
             </Trans>
           </AlertDialogDescription>
         </AlertDialogHeader>

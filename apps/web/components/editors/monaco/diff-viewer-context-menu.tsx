@@ -53,7 +53,7 @@ export function DiffViewerContextMenu({
           }}
         >
           <Trans i18nKey="editors:copyLine" values={{ lineNumber: contextMenu.lineNumber }}>
-            Copy line {contextMenu.lineNumber}
+            {t("editors:copyLine2")} {contextMenu.lineNumber}
           </Trans>
         </button>
       )}

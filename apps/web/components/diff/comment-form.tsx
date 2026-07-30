@@ -33,6 +33,7 @@ function ActionButtons({
   onSubmit: () => void;
   onSubmitAndRun?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <TooltipProvider delayDuration={400}>
       <div className="flex gap-1">
@@ -44,7 +45,7 @@ function ActionButtons({
         >
           <Trans i18nKey="diff:cancel">
             <IconX className="mr-1 h-3 w-3" />
-            Cancel
+            {t("common:cancel")}
           </Trans>
         </Button>
         <div className="inline-flex">
@@ -80,7 +81,7 @@ function ActionButtons({
                 >
                   <Trans i18nKey="diff:run">
                     <IconPlayerPlay className="h-3 w-3" />
-                    Run
+                    {t("diff:run2")}
                   </Trans>
                 </Button>
               </TooltipTrigger>

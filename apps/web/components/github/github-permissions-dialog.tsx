@@ -64,7 +64,7 @@ export function GitHubPermissionsDialog({ status }: { status: GitHubStatus }) {
             ) : (
               <IconShieldCheck className="mr-2 h-4 w-4" />
             )}
-            View permissions
+            {t("github:viewPermissions2")}
           </Trans>
         </Button>
       </DialogTrigger>

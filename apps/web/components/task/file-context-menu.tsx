@@ -141,6 +141,7 @@ function FileContextMenuItems({
   onStartRename,
   onDelete,
 }: FileContextMenuItemsProps) {
+  const { t } = useTranslation();
   const deleteLabel = isBulk ? `Delete ${selectedCount} items` : "Delete";
   const showRename = !!onRenameFile && !isBulk;
   const download = !node.is_dir && !isBulk ? onDownloadFile : undefined;
@@ -157,7 +158,7 @@ function FileContextMenuItems({
         <ContextMenuItem onSelect={onStartRename}>
           <Trans i18nKey="task:rename3">
             <IconPencil className="h-3.5 w-3.5" />
-            Rename
+            {t("task:rename2")}
           </Trans>
         </ContextMenuItem>
       )}
@@ -166,7 +167,7 @@ function FileContextMenuItems({
         <ContextMenuItem onSelect={() => void download(node.path)}>
           <Trans i18nKey="task:download">
             <IconDownload className="h-3.5 w-3.5" />
-            Download
+            {t("task:download2")}
           </Trans>
         </ContextMenuItem>
       )}

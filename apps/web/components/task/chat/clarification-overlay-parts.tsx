@@ -215,7 +215,7 @@ function CustomInputControls({
       )}
     >
       <Trans i18nKey="task:send">
-        Send
+        {t("task:send2")}
         <IconCornerDownLeft className="h-3 w-3" />
       </Trans>
     </button>
@@ -335,6 +335,7 @@ export function ClarificationCarouselNav({
   onPrev,
   onNext,
 }: CarouselNavProps) {
+  const { t } = useTranslation();
   const isFirst = activeIndex === 0;
   const isLast = activeIndex === total - 1;
   return (
@@ -359,7 +360,7 @@ export function ClarificationCarouselNav({
           >
             <Trans i18nKey="task:back">
               <IconArrowLeft className="h-3 w-3" />
-              Back
+              {t("common:back")}
             </Trans>
           </button>
         </span>
@@ -383,7 +384,7 @@ export function ClarificationCarouselNav({
             )}
           >
             <Trans i18nKey="task:next">
-              Next
+              {t("common:next")}
               <IconArrowRight className="h-3 w-3" />
             </Trans>
           </button>

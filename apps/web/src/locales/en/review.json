@@ -13,6 +13,7 @@
   "findings_one": "{{count}} finding",
   "findings_other": "{{count}} findings",
   "fixComments": "<0></0> Fix Comments <2>{{commentCount}}</2>",
+  "fixComments2": "Fix Comments",
   "loadingChanges": "Loading {{repo}} #{{pr_number}} changes…",
   "newWalkthrough": "New walkthrough",
   "noChangesToReviewYet": "No changes to review yet.",
@@ -29,5 +30,6 @@
   "settingsUtilityAgents": "Settings → Utility Agents",
   "thisRemovesTheSavedWalkthroughFrom": "This removes the saved walkthrough from this task. The agent can create a new one later.",
   "toggleWordWrap": "Toggle word wrap",
-  "walkMeThroughTheseReviewChanges": "Walk me through these review changes"
+  "walkMeThroughTheseReviewChanges": "Walk me through these review changes",
+  "walkthrough": "Walkthrough"
 }

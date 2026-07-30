@@ -335,7 +335,7 @@ export function CustomAgentsSection({ agents, onAdd, onEdit, onDelete }: CustomA
           <Button onClick={onAdd} size="sm" className="cursor-pointer">
             <Trans i18nKey="settings:add2">
               <IconPlus className="h-4 w-4 mr-1" />
-              Add
+              {t("settings:add")}
             </Trans>
           </Button>
         </CardAction>

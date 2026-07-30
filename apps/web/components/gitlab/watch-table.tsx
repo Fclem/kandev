@@ -169,6 +169,7 @@ function WatchError({ watch }: { watch: Watch }) {
 }
 
 function MobileWatchCard<TWatch extends Watch>(props: ActionProps<TWatch>) {
+  const { t } = useTranslation();
   const { watch, onEdit } = props;
   return (
     <div
@@ -200,7 +201,7 @@ function MobileWatchCard<TWatch extends Watch>(props: ActionProps<TWatch>) {
               i18nKey="gitlab:lastChecked2"
               values={{ value1: lastPolled(watch.last_polled_at) }}
             >
-              Last checked {lastPolled(watch.last_polled_at)}
+              {t("gitlab:lastChecked")} {lastPolled(watch.last_polled_at)}
             </Trans>
           </span>
         </span>

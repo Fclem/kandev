@@ -73,7 +73,7 @@ export function TaskDetachConfirmDialog({
             }}
           >
             {isDetaching && <IconLoader className="mr-2 h-4 w-4 animate-spin" />}
-            Detach
+            {t("task:detach")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

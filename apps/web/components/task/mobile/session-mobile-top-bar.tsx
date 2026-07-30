@@ -105,6 +105,7 @@ function RemoteExecutorIndicator({
 }
 
 function ApproveButton({ onApprove }: { onApprove: () => void }) {
+  const { t } = useTranslation();
   return (
     <Button
       size="sm"
@@ -113,7 +114,7 @@ function ApproveButton({ onApprove }: { onApprove: () => void }) {
     >
       <Trans i18nKey="task:approve2">
         <IconCheck className="h-3.5 w-3.5" />
-        Approve
+        {t("task:approve3")}
       </Trans>
     </Button>
   );

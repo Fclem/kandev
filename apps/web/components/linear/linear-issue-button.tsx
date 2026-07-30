@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useState } from "react";
 import { IconHexagon } from "@tabler/icons-react";
@@ -18,6 +18,7 @@ type LinearIssueButtonProps = {
 // LinearIssueButton sits in the task top bar. It extracts a Linear identifier
 // from the task title and opens a full issue dialog on click.
 export function LinearIssueButton({ workspaceId, taskTitle }: LinearIssueButtonProps) {
+  const { t } = useTranslation();
   const identifier = extractLinearKey(taskTitle);
   const [open, setOpen] = useState(false);
 
@@ -39,7 +40,7 @@ export function LinearIssueButton({ workspaceId, taskTitle }: LinearIssueButtonP
         </TooltipTrigger>
         <TooltipContent>
           <Trans i18nKey="linear:openLinearIssue" values={{ identifier }}>
-            Open Linear issue {identifier}
+            {t("linear:openLinearIssue2")} {identifier}
           </Trans>
         </TooltipContent>
       </Tooltip>

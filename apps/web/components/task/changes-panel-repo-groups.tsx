@@ -172,7 +172,7 @@ export function CommitsGroupActions({
         >
           <Trans i18nKey="task:push" values={{ aheadCount }}>
             <IconCloudUpload className="h-3 w-3" />
-            Push
+            {t("common:push")}
             <span className="text-muted-foreground">{aheadCount}</span>
           </Trans>
         </Button>

@@ -91,7 +91,7 @@ export function AgentChannelsTab({ agent }: AgentChannelsTabProps) {
         >
           <Trans i18nKey="office:addChannel2">
             <IconPlus className="h-4 w-4 mr-1" />
-            Add Channel
+            {t("office:addChannel")}
           </Trans>
         </Button>
       </div>
@@ -142,7 +142,7 @@ function ChannelRow({ channel, onDelete }: { channel: Channel; onDelete: () => v
             i18nKey="office:created"
             values={{ value1: new Date(channel.created_at).toLocaleDateString() }}
           >
-            Created {new Date(channel.created_at).toLocaleDateString()}
+            {t("office:created2")} {new Date(channel.created_at).toLocaleDateString()}
           </Trans>
         </p>
       </div>

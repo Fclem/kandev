@@ -67,7 +67,7 @@ export function IntegrationAuthStatusBanner({ health }: { health: IntegrationAut
         <IconCheck className="h-4 w-4 text-green-600 dark:text-green-400" />
         <AlertDescription className="text-sm font-medium">
           <Trans i18nKey="integrations:authenticated" values={{ checkedAt: health.checkedAt }}>
-            Authenticated
+            {t("integrations:authenticated2")}
             <LastCheckedLabel checkedAt={health.checkedAt} />
           </Trans>
         </AlertDescription>

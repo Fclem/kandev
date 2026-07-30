@@ -207,7 +207,8 @@ export function CommentsSection({
             ) : (
               <IconChevronRight className="h-3.5 w-3.5" />
             )}
-            Bot comments ({botComments.length})
+            {t("github:botComments2")}
+            {botComments.length})
           </Trans>
         </button>
       )}

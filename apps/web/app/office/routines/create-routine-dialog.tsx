@@ -396,7 +396,7 @@ export function CreateRoutineDialog({
               i18nKey="office:stepOf"
               values={{ value1: step + 1, STEP_COUNT, step: STEP_TITLES[step] }}
             >
-              Step {step + 1} of {STEP_COUNT} — {STEP_TITLES[step]}
+              {t("office:step")} {step + 1} of {STEP_COUNT} — {STEP_TITLES[step]}
             </Trans>
           </p>
           <StepIndicator current={step} />
@@ -414,7 +414,7 @@ export function CreateRoutineDialog({
               >
                 <Trans i18nKey="office:back">
                   <IconArrowLeft className="h-4 w-4 mr-1" />
-                  Back
+                  {t("common:back")}
                 </Trans>
               </Button>
             )}
@@ -438,7 +438,7 @@ export function CreateRoutineDialog({
                 className="cursor-pointer"
               >
                 <Trans i18nKey="office:next">
-                  Next
+                  {t("common:next")}
                   <IconArrowRight className="h-4 w-4 ml-1" />
                 </Trans>
               </Button>

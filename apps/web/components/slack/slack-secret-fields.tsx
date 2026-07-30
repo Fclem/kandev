@@ -44,7 +44,7 @@ export function SecretFields({
               ),
             }}
           >
-            Session token (xoxc-…)
+            {t("common:sessionTokenXoxc2")}
             {hasSavedToken && <span className={SAVED_HINT_CLASS}>{t(SAVED_HINT_KEY)}</span>}
           </Trans>
         </Label>

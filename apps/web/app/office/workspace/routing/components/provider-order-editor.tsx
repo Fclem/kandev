@@ -123,7 +123,7 @@ function AddProviderRow({
       <span className="text-xs text-muted-foreground">
         <Trans i18nKey="office:addToOrder">
           <IconPlus className="inline h-3 w-3 mr-0.5" />
-          Add to order
+          {t("office:addToOrder2")}
         </Trans>
       </span>
     </div>

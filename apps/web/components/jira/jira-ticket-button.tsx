@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useState } from "react";
 import { IconTicket } from "@tabler/icons-react";
@@ -18,6 +18,7 @@ type JiraTicketButtonProps = {
 // JiraTicketButton sits in the task top bar. It extracts a Jira key from the
 // task title and opens a full ticket dialog on click.
 export function JiraTicketButton({ workspaceId, taskTitle }: JiraTicketButtonProps) {
+  const { t } = useTranslation();
   const ticketKey = extractJiraKey(taskTitle);
   const [open, setOpen] = useState(false);
 
@@ -39,7 +40,7 @@ export function JiraTicketButton({ workspaceId, taskTitle }: JiraTicketButtonPro
         </TooltipTrigger>
         <TooltipContent>
           <Trans i18nKey="jira:openJiraTicket" values={{ ticketKey }}>
-            Open Jira ticket {ticketKey}
+            {t("jira:openJiraTicket2")} {ticketKey}
           </Trans>
         </TooltipContent>
       </Tooltip>

@@ -162,7 +162,8 @@ export function RunsSection({ automationId, executionMode, workspaceId }: RunsSe
         >
           <Label className="text-xs uppercase tracking-wider text-muted-foreground cursor-pointer">
             <Trans i18nKey="automations:recentRuns" values={{ length: runs.length }}>
-              Recent Runs ({runs.length})
+              {t("automations:recentRuns2")}
+              {runs.length})
             </Trans>
           </Label>
           {expanded ? (

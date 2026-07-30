@@ -30,7 +30,7 @@ export function SyncContent() {
         >
           <Trans i18nKey="office:refresh">
             <IconRefresh className="h-4 w-4 mr-1.5" />
-            Refresh
+            {t("common:refresh3")}
           </Trans>
         </Button>
       </div>

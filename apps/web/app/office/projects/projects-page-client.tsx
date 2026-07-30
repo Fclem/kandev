@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useCallback, useEffect, useState } from "react";
 import { IconPlus } from "@tabler/icons-react";
@@ -18,6 +18,7 @@ type ProjectsPageClientProps = {
 };
 
 export function ProjectsPageClient({ initialProjects }: ProjectsPageClientProps) {
+  const { t } = useTranslation();
   const projects = useAppStore((s) => s.office.projects);
   const agents = useAppStore((s) => s.office.agentProfiles);
   const setProjects = useAppStore((s) => s.setProjects);
@@ -58,7 +59,7 @@ export function ProjectsPageClient({ initialProjects }: ProjectsPageClientProps)
         <Button size="sm" onClick={() => setDialogOpen(true)} className="cursor-pointer">
           <Trans i18nKey="office:newProject2">
             <IconPlus className="h-4 w-4 mr-1" />
-            New Project
+            {t("office:newProject")}
           </Trans>
         </Button>
       </div>

@@ -104,7 +104,7 @@ export function ResetWatchDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>
             <Trans i18nKey="common:reset" values={{ integrationLabel }}>
-              Reset {integrationLabel}?
+              {t("common:reset2")} {integrationLabel}?
             </Trans>
           </AlertDialogTitle>
           <AlertDialogDescription data-testid="reset-watch-dialog-description">

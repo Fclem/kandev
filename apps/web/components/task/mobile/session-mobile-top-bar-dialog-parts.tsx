@@ -13,6 +13,7 @@ export function MobilePRBranchSummary({
   baseBranch: string | undefined;
   terminology: { shortName: string };
 }) {
+  const { t } = useTranslation();
   return (
     <div className="text-sm text-muted-foreground">
       {baseBranch ? (
@@ -21,7 +22,7 @@ export function MobilePRBranchSummary({
             i18nKey="task:creatingFromTo"
             values={{ shortName: terminology.shortName, displayBranch, baseBranch }}
           >
-            Creating {terminology.shortName} from{" "}
+            {t("task:creating2")} {terminology.shortName} from{" "}
             <span className="font-medium text-foreground">{displayBranch}</span> to{" "}
             <span className="font-medium text-foreground">{baseBranch}</span>
           </Trans>
@@ -32,7 +33,7 @@ export function MobilePRBranchSummary({
             i18nKey="task:creatingFrom"
             values={{ shortName: terminology.shortName, displayBranch }}
           >
-            Creating {terminology.shortName} from{" "}
+            {t("task:creating2")} {terminology.shortName} from{" "}
             <span className="font-medium text-foreground">{displayBranch}</span>
           </Trans>
         </span>

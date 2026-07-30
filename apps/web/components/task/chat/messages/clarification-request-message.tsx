@@ -99,7 +99,7 @@ export function ClarificationRequestMessage({ comment }: ClarificationRequestMes
             <div className="mt-1 ml-3 flex items-center gap-1.5 text-xs text-muted-foreground">
               <Trans i18nKey="task:skipped" values={{ value0: getStatusIndicator() }}>
                 {getStatusIndicator()}
-                Skipped
+                {t("task:skipped2")}
               </Trans>
             </div>
           )}
@@ -107,7 +107,7 @@ export function ClarificationRequestMessage({ comment }: ClarificationRequestMes
             <div className="mt-1 ml-3 flex items-center gap-1.5 text-xs text-muted-foreground">
               <Trans i18nKey="task:cancelled2" values={{ value0: getStatusIndicator() }}>
                 {getStatusIndicator()}
-                Cancelled
+                {t("task:cancelled")}
               </Trans>
             </div>
           )}

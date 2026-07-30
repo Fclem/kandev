@@ -100,7 +100,7 @@ export function TaskDeleteConfirmDialog({
               data-testid="delete-cascade-checkbox"
             />
             <span>
-              Also delete {t("task:subtasks", { count: subtaskCount })}
+              {t("task:alsoDelete")} {t("task:subtasks", { count: subtaskCount })}
               <span className="block text-xs text-muted-foreground">
                 {t("task:subtasksBecomeRootTasksUnlessYou")}
               </span>
@@ -126,7 +126,7 @@ export function TaskDeleteConfirmDialog({
               }}
             >
               {isDeleting ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Delete
+              {t("common:delete")}
             </Trans>
           </AlertDialogAction>
         </AlertDialogFooter>

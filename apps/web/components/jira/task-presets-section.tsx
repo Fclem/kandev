@@ -181,6 +181,7 @@ function PresetPromptEditor({
   isDirty: boolean;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="px-2 pb-2 space-y-1">
       <div className="rounded-md border overflow-hidden" data-settings-dirty={isDirty}>
@@ -195,7 +196,7 @@ function PresetPromptEditor({
       </div>
       <p className="text-[11px] text-muted-foreground/60">
         <Trans i18nKey="jira:typeAndAreSubstitutedWhenThe">
-          Type {"{{"} to see available placeholders.{" "}
+          {t("jira:type")} {"{{"} to see available placeholders.{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{key}}"}</code>,{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{url}}"}</code>,{" "}
           <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{title}}"}</code>, and{" "}
@@ -296,7 +297,7 @@ export function TaskPresetsSection() {
           >
             <Trans i18nKey="jira:reset2">
               <IconRefresh className="h-3.5 w-3.5 mr-1" />
-              Reset
+              {t("jira:reset")}
             </Trans>
           </Button>
         </div>
@@ -317,7 +318,7 @@ export function TaskPresetsSection() {
         <Button size="sm" variant="outline" onClick={add} className="cursor-pointer">
           <Trans i18nKey="jira:addPreset">
             <IconPlus className="h-3.5 w-3.5 mr-1" />
-            Add preset
+            {t("jira:addPreset2")}
           </Trans>
         </Button>
       </SettingsCard>

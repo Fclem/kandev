@@ -267,7 +267,7 @@ export function DefaultQueriesSection({ workspaceId }: { workspaceId?: string })
           >
             <Trans i18nKey="github:reset2">
               <IconRefresh className="h-3.5 w-3.5 mr-1" />
-              Reset
+              {t("github:reset")}
             </Trans>
           </Button>
         </div>

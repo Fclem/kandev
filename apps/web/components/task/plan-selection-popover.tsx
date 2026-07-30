@@ -216,7 +216,7 @@ function PopoverActions({
                 >
                   <Trans i18nKey="task:run">
                     <IconPlayerPlay className="h-3 w-3" />
-                    Run
+                    {t("task:run2")}
                   </Trans>
                 </Button>
               </TooltipTrigger>

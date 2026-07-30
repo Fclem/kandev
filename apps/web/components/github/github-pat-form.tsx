@@ -85,7 +85,7 @@ export function GitHubPATForm({
             values={{ value0: saving && <Spinner className="mr-2 h-4 w-4" /> }}
           >
             {saving && <Spinner className="mr-2 h-4 w-4" />}
-            Connect token
+            {t("github:connectToken2")}
           </Trans>
         </Button>
       </div>

@@ -50,7 +50,7 @@ export function SubIssuesRow({ task }: SubIssuesRowProps) {
         >
           <Trans i18nKey="task:addSubIssue">
             <IconPlus className="h-3 w-3 mr-1" />
-            Add sub-issue
+            {t("task:addSubIssue2")}
           </Trans>
         </Button>
       </div>

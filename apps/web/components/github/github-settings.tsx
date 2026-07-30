@@ -82,13 +82,14 @@ function WatchSectionAction({
   cleanup: () => Promise<{ deleted: number }>;
   onAdd: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2">
       <CleanupNowButton label={cleanupLabel} run={cleanup} />
       <Button size="sm" onClick={onAdd} className="cursor-pointer">
         <Trans i18nKey="github:addWatch">
           <IconPlus className="h-4 w-4 mr-1" />
-          Add Watch
+          {t("github:addWatch2")}
         </Trans>
       </Button>
     </div>
@@ -274,7 +275,7 @@ export function GitHubConnectionSection({ workspaceId }: { workspaceId: string }
         >
           <Trans i18nKey="github:githubIntegration">
             <IconBrandGithub className="h-6 w-6" />
-            GitHub Integration
+            {t("github:githubIntegration2")}
           </Trans>
         </h2>
         <p className="text-sm text-muted-foreground mt-1">

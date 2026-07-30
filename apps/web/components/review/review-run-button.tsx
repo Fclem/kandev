@@ -140,6 +140,7 @@ export function ReviewRunButton({
   activeRun,
   compact = false,
 }: ReviewRunButtonProps) {
+  const { t } = useTranslation();
   const { notice, starting, start, clearNotice } = useRunReview(taskId, sessionId);
   const running = isRunActive(activeRun);
   const shown = resolveNotice(notice, activeRun);
@@ -171,7 +172,7 @@ export function ReviewRunButton({
         >
           <Trans i18nKey="review:cancel">
             <IconX className="h-3.5 w-3.5" />
-            Cancel
+            {t("common:cancel")}
           </Trans>
         </Button>
       )}

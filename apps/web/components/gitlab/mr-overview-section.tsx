@@ -116,7 +116,7 @@ export function MROverviewSection({
           i18nKey="gitlab:linkedMergeRequest"
           values={{ project_path: taskMR.project_path, mr_iid: taskMR.mr_iid }}
         >
-          Linked merge request {taskMR.project_path}!{taskMR.mr_iid}
+          {t("gitlab:linkedMergeRequest2")} {taskMR.project_path}!{taskMR.mr_iid}
         </Trans>
       </p>
     </div>

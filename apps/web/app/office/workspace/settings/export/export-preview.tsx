@@ -96,7 +96,7 @@ export function ExportPreview() {
         >
           <Trans i18nKey="office:exportFiles" values={{ selectedCount }}>
             <IconDownload className="h-4 w-4 mr-1.5" />
-            Export {selectedCount} files
+            {t("office:export2")} {selectedCount} files
           </Trans>
         </Button>
       </div>

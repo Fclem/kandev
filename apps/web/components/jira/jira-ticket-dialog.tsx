@@ -129,6 +129,7 @@ function TicketFooter({
   presets: JiraTaskPreset[];
   onStartTask: (ticket: JiraTicket, preset: JiraTaskPreset) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-end gap-2 px-6 py-3 border-t bg-muted/20 shrink-0">
       <DropdownMenu>
@@ -136,7 +137,7 @@ function TicketFooter({
           <Button size="sm" variant="default" className="cursor-pointer gap-1.5">
             <Trans i18nKey="jira:startTask">
               <IconPlus className="h-4 w-4" />
-              Start task
+              {t("jira:startTask2")}
             </Trans>
           </Button>
         </DropdownMenuTrigger>
@@ -343,12 +344,13 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 }
 
 function MetaFooter({ ticket }: { ticket: JiraTicket }) {
+  const { t } = useTranslation();
   const updated = formatRelative(ticket.updated);
   if (!updated) return null;
   return (
     <div className="text-xs text-muted-foreground px-1" title={ticket.updated}>
       <Trans i18nKey="jira:updated" values={{ updated }}>
-        Updated {updated}
+        {t("jira:updated3")} {updated}
       </Trans>
     </div>
   );

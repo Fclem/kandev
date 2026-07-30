@@ -189,8 +189,9 @@ export function SSHAgentReadinessCard({
             <CardTitle>{t("settings:availableAgentsOnThisHost")}</CardTitle>
             <CardDescription>
               <Trans i18nKey="settings:probesTheRemotePathForEach">
-                Probes the remote {"$PATH"} for each enabled agent under the chosen login shell.
-                Copy the install hint and run it on the remote when an agent is missing.
+                {t("settings:probesTheRemote")} {"$PATH"} for each enabled agent under the chosen
+                login shell. Copy the install hint and run it on the remote when an agent is
+                missing.
               </Trans>
             </CardDescription>
           </div>
@@ -302,7 +303,8 @@ function ReadinessContent({
     return (
       <p className="text-sm text-muted-foreground">
         <Trans i18nKey="settings:clickToCheckWhichAgentsAre" values={{ value1: `"Probe agents"` }}>
-          Click {`"Probe agents"`} to check which agents are installed on the remote.
+          {t("settings:click")} {`"Probe agents"`} to check which agents are installed on the
+          remote.
         </Trans>
       </p>
     );
@@ -351,11 +353,12 @@ function ReadinessRow({ row }: { row: SSHAgentReadinessRow }) {
 }
 
 function StatusBadge({ row }: { row: SSHAgentReadinessRow }) {
+  const { t } = useTranslation();
   if (row.error) {
     return (
       <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700">
         <Trans i18nKey="settings:probeError">
-          <IconX className="mr-1 h-3 w-3" /> Probe error
+          <IconX className="mr-1 h-3 w-3" /> {t("settings:probeError2")}
         </Trans>
       </Badge>
     );
@@ -364,7 +367,7 @@ function StatusBadge({ row }: { row: SSHAgentReadinessRow }) {
     return (
       <Badge variant="outline" className="border-green-500/30 bg-green-500/10 text-green-700">
         <Trans i18nKey="settings:installed3">
-          <IconCheck className="mr-1 h-3 w-3" /> Installed
+          <IconCheck className="mr-1 h-3 w-3" /> {t("settings:installed2")}
         </Trans>
       </Badge>
     );
@@ -372,7 +375,7 @@ function StatusBadge({ row }: { row: SSHAgentReadinessRow }) {
   return (
     <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-700">
       <Trans i18nKey="settings:missing">
-        <IconX className="mr-1 h-3 w-3" /> Missing
+        <IconX className="mr-1 h-3 w-3" /> {t("settings:missing2")}
       </Trans>
     </Badge>
   );

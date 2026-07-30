@@ -85,7 +85,7 @@ function ChangesTopBarLeft({
           </div>
           <span className="text-[11px] text-muted-foreground whitespace-nowrap">
             <Trans i18nKey="task:reviewed2" values={{ reviewedCount, totalCount }}>
-              {reviewedCount}/{totalCount} Reviewed
+              {reviewedCount}/{totalCount} {t("task:reviewed3")}
             </Trans>
           </span>
         </div>
@@ -209,7 +209,7 @@ function ChangesTopBarRight({
         >
           <Trans i18nKey="task:fix" values={{ totalCommentCount }}>
             <IconMessageForward className="h-3.5 w-3.5" />
-            Fix
+            {t("task:fix2")}
             <span className="ml-0.5 rounded-full bg-blue-500/30 px-1 py-0 text-[10px] font-medium text-blue-600 dark:text-blue-400">
               {totalCommentCount}
             </span>

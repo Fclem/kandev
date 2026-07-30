@@ -115,9 +115,9 @@ export function ScheduleSelector({ config, isDirty = false, onChange }: Schedule
         {error && <p className="text-xs text-destructive">{error}</p>}
         <p className="text-xs text-muted-foreground">
           <Trans i18nKey="automations:useWithADurationEG">
-            Use <code className="bg-muted px-1 rounded">{t("automations:every")}</code> with a
-            duration (e.g.,{" "}
-            <code className="bg-muted px-1 rounded">{t("automations:every10m")}</code>,{" "}
+            {t("automations:use")}{" "}
+            <code className="bg-muted px-1 rounded">{t("automations:every")}</code> with a duration
+            (e.g., <code className="bg-muted px-1 rounded">{t("automations:every10m")}</code>,{" "}
             <code className="bg-muted px-1 rounded">{t("automations:every2h30m")}</code>) or
             shorthands like <code className="bg-muted px-1 rounded">@hourly</code>,{" "}
             <code className="bg-muted px-1 rounded">@daily</code>,{" "}

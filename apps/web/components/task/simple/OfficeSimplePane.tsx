@@ -202,6 +202,7 @@ function PauseResumeButton({
   busy: boolean;
   runAction: TreeActionRunner;
 }) {
+  const { t } = useTranslation();
   if (activeHold?.mode === "pause") {
     return (
       <Button
@@ -212,7 +213,7 @@ function PauseResumeButton({
         onClick={() => runAction(() => resumeTaskTree(taskId), "Task tree resumed")}
       >
         <Trans i18nKey="task:resumeTree">
-          <IconPlayerPlay className="h-3.5 w-3.5 mr-1" /> Resume tree
+          <IconPlayerPlay className="h-3.5 w-3.5 mr-1" /> {t("task:resumeTree2")}
         </Trans>
       </Button>
     );
@@ -227,7 +228,7 @@ function PauseResumeButton({
       onClick={() => runAction(() => pauseTaskTree(taskId), "Task tree paused")}
     >
       <Trans i18nKey="task:pauseTree">
-        <IconPlayerPause className="h-3.5 w-3.5 mr-1" /> Pause tree
+        <IconPlayerPause className="h-3.5 w-3.5 mr-1" /> {t("task:pauseTree2")}
       </Trans>
     </Button>
   );
@@ -248,6 +249,7 @@ function CancelRestoreButton({
   onCancel: () => void;
   runAction: TreeActionRunner;
 }) {
+  const { t } = useTranslation();
   if (activeHold?.mode === "cancel") {
     return (
       <Button
@@ -258,7 +260,7 @@ function CancelRestoreButton({
         onClick={() => runAction(() => restoreTaskTree(taskId), "Task tree restored")}
       >
         <Trans i18nKey="task:restoreTree">
-          <IconRestore className="h-3.5 w-3.5 mr-1" /> Restore tree
+          <IconRestore className="h-3.5 w-3.5 mr-1" /> {t("task:restoreTree2")}
         </Trans>
       </Button>
     );
@@ -273,7 +275,7 @@ function CancelRestoreButton({
       onClick={onCancel}
     >
       <Trans i18nKey="task:cancelTree2">
-        <IconTrash className="h-3.5 w-3.5 mr-1" /> Cancel tree
+        <IconTrash className="h-3.5 w-3.5 mr-1" /> {t("task:cancelTree")}
       </Trans>
     </Button>
   );
@@ -360,6 +362,7 @@ function TaskActionRow({
   onTreeChanged: () => Promise<void>;
   onNewSubIssue: () => void;
 }) {
+  const { t } = useTranslation();
   const attachInputRef = useRef<HTMLInputElement>(null);
   const handleAttachFiles = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -389,7 +392,7 @@ function TaskActionRow({
       <div className="flex gap-2 mt-6">
         <Button variant="outline" size="sm" className="cursor-pointer" onClick={onNewSubIssue}>
           <Trans i18nKey="task:newSubTask">
-            <IconPlus className="h-3.5 w-3.5 mr-1" /> New Sub-Task
+            <IconPlus className="h-3.5 w-3.5 mr-1" /> {t("task:newSubTask2")}
           </Trans>
         </Button>
         <Button
@@ -399,7 +402,7 @@ function TaskActionRow({
           onClick={() => attachInputRef.current?.click()}
         >
           <Trans i18nKey="task:attachFiles2">
-            <IconPaperclip className="h-3.5 w-3.5 mr-1" /> Attach files
+            <IconPaperclip className="h-3.5 w-3.5 mr-1" /> {t("task:attachFiles")}
           </Trans>
         </Button>
         <input

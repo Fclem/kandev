@@ -398,7 +398,8 @@ function EnvOption({
           <span className="text-sm font-medium">{t("settings:provideSecret")}</span>
           <span className="text-xs text-muted-foreground">
             <Trans i18nKey="settings:setViaAStoredSecret" values={{ env_var: method.env_var }}>
-              Set <code className="text-[11px] bg-muted px-1 rounded">{method.env_var}</code> via a
+              {t("settings:set")}{" "}
+              <code className="text-[11px] bg-muted px-1 rounded">{method.env_var}</code> via a
               stored secret
             </Trans>
           </span>

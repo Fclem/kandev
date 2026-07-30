@@ -193,6 +193,7 @@ function CIAutomationErrorRow({
   loading: boolean;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between gap-2 px-1 text-[11px] text-destructive">
       <span className="min-w-0 flex-1 truncate">{error}</span>
@@ -206,7 +207,7 @@ function CIAutomationErrorRow({
       >
         <Trans i18nKey="github:retry">
           <IconRefresh className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
-          Retry
+          {t("common:retry")}
         </Trans>
       </Button>
     </div>
@@ -242,9 +243,9 @@ function CIAutoFixRoundHelpButton({
         i18nKey="github:autoFixHasUsedOfRounds"
         values={{ current: round.current, max: round.max }}
       >
-        Auto-fix has used {round.current} of {round.max} rounds for this PR. A round is counted when
-        Kandev sends or queues a CI auto-fix message. Kandev waits for all PR checks to finish
-        before starting a new CI auto-fix turn, so the agent gets the final failed checks and
+        {t("github:autoFixHasUsed")} {round.current} of {round.max} rounds for this PR. A round is
+        counted when Kandev sends or queues a CI auto-fix message. Kandev waits for all PR checks to
+        finish before starting a new CI auto-fix turn, so the agent gets the final failed checks and
         current comments together. Updating an already queued auto-fix message does not use another
         round. When this is at {round.max}/{round.max} and there is no pending auto-fix message left
         to update, Kandev pauses auto-fix for this PR so it cannot loop forever. Disable and

@@ -116,7 +116,7 @@ function StepConfigHeader({
       >
         <Trans i18nKey="settings:delete3">
           <IconTrash className="h-3.5 w-3.5 mr-1" />
-          Delete
+          {t("common:delete")}
         </Trans>
       </Button>
     </div>
@@ -496,7 +496,7 @@ function StepPromptSection({
       </div>
       <p className="text-[11px] text-muted-foreground/60">
         <Trans i18nKey="settings:typeInsertsTheTaskDescriptionOr">
-          Type {"{{"} for placeholders (
+          {t("settings:type")} {"{{"} for placeholders (
           <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{task_prompt}}"}</code>{" "}
           inserts the task description) or {"@"} to reference a saved prompt by name — its content
           is attached as hidden context, and editing the saved prompt updates every step that

@@ -168,7 +168,7 @@ function ResolvedRow({ tier, config }: { tier: Tier | undefined; config: Workspa
   }
   return (
     <p className="text-[11px] text-muted-foreground pl-1">
-      Currently maps to{" "}
+      {t("office:currentlyMapsTo")}{" "}
       <Tooltip>
         <TooltipTrigger asChild>
           <Badge variant="secondary" className="ml-0.5 cursor-help">

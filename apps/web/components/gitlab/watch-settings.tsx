@@ -37,6 +37,7 @@ function ActionError({ message }: { message: string }) {
 }
 
 function NewWatchButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <Button
       size="sm"
@@ -45,7 +46,7 @@ function NewWatchButton({ onClick }: { onClick: () => void }) {
     >
       <Trans i18nKey="gitlab:newWatch">
         <IconPlus className="mr-1 h-4 w-4" />
-        New watch
+        {t("gitlab:newWatch2")}
       </Trans>
     </Button>
   );

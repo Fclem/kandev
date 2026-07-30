@@ -1,4 +1,4 @@
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { Input } from "@kandev/ui/input";
 import { Label } from "@kandev/ui/label";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
@@ -31,6 +31,7 @@ export function GitHubAppImportIdentityFields({
   errors: AppSetupErrors;
   update: Update;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -63,12 +64,12 @@ export function GitHubAppImportIdentityFields({
       >
         <Label className="flex cursor-pointer items-center gap-2">
           <Trans i18nKey="github:organization">
-            <RadioGroupItem value="Organization" /> Organization
+            <RadioGroupItem value="Organization" /> {t("github:organization2")}
           </Trans>
         </Label>
         <Label className="flex cursor-pointer items-center gap-2">
           <Trans i18nKey="github:personalAccount">
-            <RadioGroupItem value="User" /> Personal account
+            <RadioGroupItem value="User" /> {t("github:personalAccount2")}
           </Trans>
         </Label>
       </RadioGroup>

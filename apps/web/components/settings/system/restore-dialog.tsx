@@ -54,9 +54,9 @@ function ConfirmView({
         <DialogDescription className="space-y-2">
           <span>
             <Trans i18nKey="settings:restoreOverTheCurrentDatabaseAfter" values={{ name }}>
-              Restore <code className="font-mono">{name}</code> over the current database. After the
-              staged copy is in place you will be asked to quit and relaunch Kandev so the new data
-              is loaded fresh - the backend does not auto-restart.
+              {t("settings:restore")} <code className="font-mono">{name}</code> over the current
+              database. After the staged copy is in place you will be asked to quit and relaunch
+              Kandev so the new data is loaded fresh - the backend does not auto-restart.
             </Trans>
           </span>
           <span className="block font-medium text-foreground">
@@ -64,7 +64,7 @@ function ConfirmView({
               i18nKey="settings:typeToEnableTheConfirmButton"
               values={{ token: CONFIRM_TOKEN }}
             >
-              Type <code>{CONFIRM_TOKEN}</code> to enable the confirm button.
+              {t("settings:type")} <code>{CONFIRM_TOKEN}</code> to enable the confirm button.
             </Trans>
           </span>
         </DialogDescription>

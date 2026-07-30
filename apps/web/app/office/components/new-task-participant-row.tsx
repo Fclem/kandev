@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { IconX } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -22,6 +22,7 @@ export function ParticipantRow({
   onSelect,
   onHide,
 }: ParticipantRowProps) {
+  const { t } = useTranslation();
   const toggle = (id: string) => {
     onSelect(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
   };
@@ -61,7 +62,7 @@ export function ParticipantRow({
         </TooltipTrigger>
         <TooltipContent>
           <Trans i18nKey="office:remove2" values={{ value1: label.toLowerCase() }}>
-            Remove {label.toLowerCase()}
+            {t("office:remove")} {label.toLowerCase()}
           </Trans>
         </TooltipContent>
       </Tooltip>

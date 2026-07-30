@@ -123,7 +123,7 @@ function CodeMirrorReloadButton({
         >
           <Trans i18nKey="editors:reload">
             <IconRefresh className="h-3.5 w-3.5" />
-            Reload
+            {t("editors:reload2")}
           </Trans>
         </Button>
       </TooltipTrigger>
@@ -162,6 +162,7 @@ function CodeMirrorSaveButton({
   isSaving: boolean;
   onSave: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Button
       size="sm"
@@ -180,7 +181,7 @@ function CodeMirrorSaveButton({
       ) : (
         <>
           <IconDeviceFloppy className="h-4 w-4" />
-          Save
+          {t("editors:save")}
           <span className="text-xs text-muted-foreground">({SAVE_SHORTCUT}+S)</span>
         </>
       )}
@@ -299,6 +300,7 @@ function CodeMirrorToolbar({
 type CodeMirrorEditorState = ReturnType<typeof useCodeMirrorEditorState>;
 
 function CodeMirrorOverlays({ state }: { state: CodeMirrorEditorState }) {
+  const { t } = useTranslation();
   return (
     <>
       {state.floatingButtonPos && !state.textSelection && (
@@ -312,7 +314,7 @@ function CodeMirrorOverlays({ state }: { state: CodeMirrorEditorState }) {
         >
           <Trans i18nKey="editors:comment">
             <IconMessagePlus className="h-3.5 w-3.5" />
-            Comment
+            {t("editors:comment2")}
           </Trans>
         </Button>
       )}

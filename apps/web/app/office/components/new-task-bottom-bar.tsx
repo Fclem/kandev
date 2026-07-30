@@ -137,7 +137,7 @@ export function NewTaskBottomBar({ draft, onUpdate }: Props) {
       <Button variant="outline" size="sm" className="cursor-pointer h-7 text-xs">
         <Trans i18nKey="office:upload">
           <IconUpload className="h-3.5 w-3.5 mr-1" />
-          Upload
+          {t("office:upload2")}
         </Trans>
       </Button>
       <Tooltip>

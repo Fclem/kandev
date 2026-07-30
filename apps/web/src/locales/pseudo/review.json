@@ -13,6 +13,7 @@
   "findings_one": "{{count}} ƒĩńďĩńĝ",
   "findings_other": "{{count}} ƒĩńďĩńĝś",
   "fixComments": "<0></0> Ƒĩx Ćōḿḿēńţś <2>{{commentCount}}</2>",
+  "fixComments2": "Ƒĩx Ćōḿḿēńţś",
   "loadingChanges": "Ĺōàďĩńĝ {{repo}} #{{pr_number}} ćĥàńĝēś…",
   "newWalkthrough": "Ńēŵ ŵàĺķţĥŕōũĝĥ",
   "noChangesToReviewYet": "Ńō ćĥàńĝēś ţō ŕēvĩēŵ ŷēţ.",
@@ -29,5 +30,6 @@
   "settingsUtilityAgents": "Śēţţĩńĝś → Ũţĩĺĩţŷ Àĝēńţś",
   "thisRemovesTheSavedWalkthroughFrom": "Ţĥĩś ŕēḿōvēś ţĥē śàvēď ŵàĺķţĥŕōũĝĥ ƒŕōḿ ţĥĩś ţàśķ. Ţĥē àĝēńţ ćàń ćŕēàţē à ńēŵ ōńē ĺàţēŕ.",
   "toggleWordWrap": "Ţōĝĝĺē ŵōŕď ŵŕàƥ",
-  "walkMeThroughTheseReviewChanges": "Ŵàĺķ ḿē ţĥŕōũĝĥ ţĥēśē ŕēvĩēŵ ćĥàńĝēś"
+  "walkMeThroughTheseReviewChanges": "Ŵàĺķ ḿē ţĥŕōũĝĥ ţĥēśē ŕēvĩēŵ ćĥàńĝēś",
+  "walkthrough": "Ŵàĺķţĥŕōũĝĥ"
 }

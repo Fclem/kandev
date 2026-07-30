@@ -157,7 +157,7 @@ export function ProjectExecutorSection({ project }: ProjectExecutorSectionProps)
           >
             <Trans i18nKey="office:save">
               <IconDeviceFloppy className="h-3.5 w-3.5 mr-1" />
-              Save
+              {t("office:save2")}
             </Trans>
           </Button>
         )}

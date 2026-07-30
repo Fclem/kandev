@@ -50,7 +50,7 @@ export function GenericAuthPanel({ onOpenTerminal }: { onOpenTerminal: () => voi
       >
         <Trans i18nKey="task:openTerminal">
           <IconTerminal2 className="h-3 w-3" />
-          Open terminal
+          {t("task:openTerminal2")}
         </Trans>
       </Button>
     </div>
@@ -117,7 +117,7 @@ function AuthMethodRow({
               >
                 <Trans i18nKey="task:runInTerminal">
                   <IconTerminal2 className="h-3 w-3" />
-                  Run in terminal
+                  {t("task:runInTerminal2")}
                 </Trans>
               </Button>
             </TooltipTrigger>

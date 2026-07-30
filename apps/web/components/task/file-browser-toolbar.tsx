@@ -208,7 +208,7 @@ function WorkspaceActionsMenu({
         >
           <Trans i18nKey="task:openWorkspaceFolder">
             <IconFolderOpen className="h-3.5 w-3.5" />
-            Open workspace folder
+            {t("task:openWorkspaceFolder2")}
           </Trans>
         </DropdownMenuItem>
       </DropdownMenuContent>

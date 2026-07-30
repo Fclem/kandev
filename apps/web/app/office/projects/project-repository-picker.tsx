@@ -170,6 +170,7 @@ function PickerCommandList({
   customQuery: string;
   onSelect: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <CommandList>
       <CommandEmpty>{discoveryLoading ? "Searching your machine…" : "No matches."}</CommandEmpty>
@@ -185,7 +186,8 @@ function PickerCommandList({
             <span className="flex flex-col min-w-0">
               <span className="truncate">
                 <Trans i18nKey="office:use" values={{ customQuery }}>
-                  Use “{customQuery}”
+                  {t("office:use2")}
+                  {customQuery}”
                 </Trans>
               </span>
               <span className="text-[11px] text-muted-foreground">

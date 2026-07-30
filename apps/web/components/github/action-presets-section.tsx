@@ -176,7 +176,7 @@ function PresetRow({
           </div>
           <p className="text-[11px] text-muted-foreground/60">
             <Trans i18nKey="github:typeAndAreSubstitutedWhenThe">
-              Type {"{{"} to see available placeholders.{" "}
+              {t("github:type")} {"{{"} to see available placeholders.{" "}
               <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{url}}"}</code> and{" "}
               <code className="bg-muted px-1 py-0.5 rounded text-[10px]">{"{{title}}"}</code> are
               substituted when the action runs.
@@ -369,7 +369,7 @@ export function ActionPresetsSection({ workspaceId }: { workspaceId: string }) {
           >
             <Trans i18nKey="github:reset2">
               <IconRefresh className="h-3.5 w-3.5 mr-1" />
-              Reset
+              {t("github:reset")}
             </Trans>
           </Button>
         </div>

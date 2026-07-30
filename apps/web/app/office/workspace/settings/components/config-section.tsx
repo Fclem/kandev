@@ -26,13 +26,13 @@ export function ConfigSection() {
         <Button variant="outline" onClick={handleSync} className="cursor-pointer">
           <Trans i18nKey="office:sync2">
             <IconArrowsLeftRight className="h-4 w-4 mr-1" />
-            Sync
+            {t("office:sync")}
           </Trans>
         </Button>
         <Button variant="outline" onClick={handleExport} className="cursor-pointer">
           <Trans i18nKey="office:export">
             <IconDownload className="h-4 w-4 mr-1" />
-            Export
+            {t("office:export2")}
           </Trans>
         </Button>
       </div>

@@ -157,7 +157,7 @@ function PrepareImportForm(props: {
       </Field>
       <Button type="submit" disabled={props.mutating} className="h-11 cursor-pointer">
         {props.mutating && <Spinner className="mr-2 h-4 w-4" />}
-        Generate setup instructions
+        {t("github:generateSetupInstructions")}
       </Button>
     </form>
   );

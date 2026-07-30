@@ -276,11 +276,12 @@ function PortRow({
 
 // PortListHeader renders the "Listening Ports" title plus the re-scan button.
 function PortListHeader({ loading, onRefresh }: { loading: boolean; onRefresh: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between">
       <span className="text-sm font-medium flex items-center gap-1.5">
         <Trans i18nKey="task:listeningPorts">
-          Listening Ports
+          {t("task:listeningPorts2")}
           <InfoTip text="TCP ports with active listeners inside the remote executor. Click refresh to re-scan." />
         </Trans>
       </span>
@@ -307,7 +308,7 @@ function PortListHeader({ loading, onRefresh }: { loading: boolean; onRefresh: (
           ) : (
             <IconRefresh className="h-3.5 w-3.5" />
           )}
-          Refresh
+          {t("task:refresh")}
         </Trans>
       </Button>
     </div>
@@ -405,7 +406,7 @@ function ManualPortInput({ onAdd }: { onAdd: (port: number) => void }) {
     <div className="space-y-2">
       <span className="text-sm font-medium flex items-center gap-1.5">
         <Trans i18nKey="task:addPortManually">
-          Add Port Manually
+          {t("task:addPortManually2")}
           <InfoTip text="Add a port that isn't auto-detected. Useful for services not yet started." />
         </Trans>
       </span>
@@ -430,7 +431,7 @@ function ManualPortInput({ onAdd }: { onAdd: (port: number) => void }) {
         >
           <Trans i18nKey="task:add">
             <IconPlus className="h-3.5 w-3.5" />
-            Add
+            {t("task:add2")}
           </Trans>
         </Button>
       </div>
@@ -505,7 +506,7 @@ function PortForwardDialogContent({
         <DialogTitle className="flex items-center gap-2">
           <Trans i18nKey="task:portForwarding">
             <IconNetwork className="h-5 w-5" />
-            Port Forwarding
+            {t("task:portForwarding2")}
           </Trans>
         </DialogTitle>
       </DialogHeader>

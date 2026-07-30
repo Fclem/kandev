@@ -33,8 +33,8 @@ export function StepImport({
             i18nKey="office:foundOnTheFilesystemImportSettings"
             values={{ value1: t("office:workspaces", { count: fsWorkspaces.length }) }}
           >
-            Found {t("office:workspaces", { count: fsWorkspaces.length })} on the filesystem. Import
-            settings to get started?
+            {t("office:found")} {t("office:workspaces", { count: fsWorkspaces.length })} on the
+            filesystem. Import settings to get started?
           </Trans>
         </p>
         <div className="mt-6 rounded-lg border bg-muted/50 p-4">

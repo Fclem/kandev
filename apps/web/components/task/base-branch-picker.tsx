@@ -193,7 +193,7 @@ function BranchListBody({
       <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
         <Trans i18nKey="task:loadingBranches3">
           <IconLoader2 className="h-3 w-3 animate-spin" />
-          Loading branches…
+          {t("task:loadingBranches2")}
         </Trans>
       </div>
     );

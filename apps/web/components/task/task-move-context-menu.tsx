@@ -90,13 +90,14 @@ function MoveToCurrentWorkflowSubmenu({
   disabled?: boolean;
   onMoveToStep?: (stepId: string) => void;
 }) {
+  const { t } = useTranslation();
   if (!onMoveToStep || steps.length <= 1) return null;
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger data-testid="task-context-move-to" disabled={disabled}>
         <Trans i18nKey="task:moveTo">
           <IconArrowRight className="mr-2 h-4 w-4" />
-          Move to
+          {t("task:moveTo2")}
         </Trans>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-48">
@@ -174,6 +175,7 @@ function SendToWorkflowSubmenu({
   disabled?: boolean;
   onSendToWorkflow?: (workflowId: string, stepId: string) => void;
 }) {
+  const { t } = useTranslation();
   const targets = workflows.filter((workflow) => workflow.id !== currentWorkflowId);
   if (!onSendToWorkflow || !currentWorkflowId || targets.length === 0) return null;
   return (
@@ -181,7 +183,7 @@ function SendToWorkflowSubmenu({
       <ContextMenuSubTrigger data-testid="task-context-send-to-workflow" disabled={disabled}>
         <Trans i18nKey="task:sendToWorkflow">
           <IconLogicBuffer className="mr-2 h-4 w-4" />
-          Send to workflow
+          {t("task:sendToWorkflow2")}
         </Trans>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-56">

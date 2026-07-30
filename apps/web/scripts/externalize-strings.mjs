@@ -159,6 +159,23 @@ function sentinelsIn(ast) {
  * sentence into per-fragment keys bakes in English word order and cannot be
  * translated correctly, so the codemod declines and reports it instead.
  */
+/**
+ * A short standalone label ("Save", "Add source") is independently translatable
+ * even when it sits beside other elements: there is no surrounding prose whose
+ * word order could differ per language. Requires an initial capital (a lowercase
+ * start signals continuation of a sentence) and no trailing/leading punctuation
+ * that implies the sentence carries on.
+ */
+function isStandaloneLabel(raw) {
+  const s = raw.trim();
+  if (!/^[A-Z]/.test(s)) return false;
+  if (/[,:;]$/.test(s) || /^[,:;.]/.test(s)) return false;
+  const words = s.split(/\s+/);
+  if (words.length > 3) return false;
+  // A trailing period means prose, not a label.
+  return !/\.$/.test(s);
+}
+
 function isSentenceFragment(node, parent) {
   if (!parent || !Array.isArray(parent.children)) return false;
   const siblings = parent.children.filter((c) => {
@@ -256,7 +273,7 @@ function handleJsxText(node, parent, { ns, sentinels, edits, noteHost }) {
     report.skippedSentinel += 1;
     return;
   }
-  if (isSentenceFragment(node, parent)) {
+  if (isSentenceFragment(node, parent) && !isStandaloneLabel(trimmed)) {
     // Part of a sentence interleaved with expressions or inline markup.
     // Externalizing each piece separately would hard-code English word order;
     // these need one <Trans> for the whole sentence, so decline and report.

@@ -163,6 +163,7 @@ function NewDocumentForm({
 // --- Document card ---
 
 function AttachmentBody({ doc }: { doc: TaskDocument }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 px-3 pb-3">
       <span className="text-sm text-muted-foreground flex-1">
@@ -170,7 +171,7 @@ function AttachmentBody({ doc }: { doc: TaskDocument }) {
         {doc.size !== undefined && (
           <span className="ml-1">
             <Trans i18nKey="task:kb" values={{ value1: Math.round(doc.size / 1024) }}>
-              ({Math.round(doc.size / 1024)} KB)
+              ({Math.round(doc.size / 1024)} {t("task:kb2")}
             </Trans>
           </span>
         )}
@@ -306,7 +307,7 @@ export function TaskDocuments({ taskId }: Props) {
         >
           <Trans i18nKey="task:newDocument">
             <IconPlus className="h-3.5 w-3.5 mr-1" />
-            New document
+            {t("task:newDocument2")}
           </Trans>
         </Button>
       </div>

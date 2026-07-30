@@ -86,6 +86,7 @@ type CardProps = {
 };
 
 function ClarificationCard(props: CardProps) {
+  const { t } = useTranslation();
   const {
     meta,
     index,
@@ -114,7 +115,7 @@ function ClarificationCard(props: CardProps) {
           {total > 1 && (
             <span data-testid="clarification-progress-chip">
               <Trans i18nKey="task:questionOf" values={{ value1: index + 1, total }}>
-                Question {index + 1} of {total}
+                {t("task:question")} {index + 1} of {total}
               </Trans>
             </span>
           )}

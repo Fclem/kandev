@@ -64,9 +64,9 @@ function ConfirmView({
               i18nKey="settings:typeTokenToEnableConfirmAndRelaunch"
               values={{ token: CONFIRM_TOKEN }}
             >
-              Type <code>{CONFIRM_TOKEN}</code> to enable the confirm button. After the wipe
-              completes you&apos;ll be asked to quit and relaunch Kandev - the backend does not
-              auto-restart.
+              {t("settings:type")} <code>{CONFIRM_TOKEN}</code> to enable the confirm button. After
+              the wipe completes you&apos;ll be asked to quit and relaunch Kandev - the backend does
+              not auto-restart.
             </Trans>
           </span>
         </DialogDescription>

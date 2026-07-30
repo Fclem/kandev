@@ -7,6 +7,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@kandev/ui/pagination";
+import { useTranslation } from "react-i18next";
 
 type ResultsPaginationProps = {
   page: number;
@@ -27,6 +28,7 @@ export function ResultsPagination({
   onNext,
   onPrev,
 }: ResultsPaginationProps) {
+  const { t } = useTranslation();
   if (page === 1 && isLast) return null;
   const start = (page - 1) * pageSize + 1;
   const end = (page - 1) * pageSize + itemCount;
@@ -52,7 +54,9 @@ export function ResultsPagination({
             />
           </PaginationItem>
           <PaginationItem>
-            <span className="px-3 text-sm tabular-nums">Page {page}</span>
+            <span className="px-3 text-sm tabular-nums">
+              {t("jira:page")} {page}
+            </span>
           </PaginationItem>
           <PaginationItem>
             <PaginationNext

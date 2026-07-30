@@ -277,6 +277,7 @@ function MarkdownPreviewCommentOverlays({
   overlayRoot: HTMLElement | null;
   commentState: MarkdownPreviewCommentState;
 }) {
+  const { t } = useTranslation();
   if (!commentsEnabled || !overlayRoot) return null;
 
   return createPortal(
@@ -296,7 +297,7 @@ function MarkdownPreviewCommentOverlays({
         >
           <Trans i18nKey="task:comment">
             <IconMessagePlus className="h-3.5 w-3.5" />
-            Comment
+            {t("task:comment2")}
           </Trans>
         </Button>
       )}

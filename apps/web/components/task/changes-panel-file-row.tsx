@@ -358,6 +358,7 @@ export function BulkActionBar({
   onBulkUnstage?: (paths: string[]) => void;
   onBulkDiscard?: (paths: string[]) => void;
 }) {
+  const { t } = useTranslation();
   const paths = [...selectedPaths];
 
   return (
@@ -376,7 +377,7 @@ export function BulkActionBar({
           onClick={() => onBulkStage(paths)}
         >
           <Trans i18nKey="task:stage" values={{ selectionCount }}>
-            Stage {selectionCount}
+            {t("task:stage2")} {selectionCount}
           </Trans>
         </Button>
       )}
@@ -389,7 +390,7 @@ export function BulkActionBar({
           onClick={() => onBulkUnstage(paths)}
         >
           <Trans i18nKey="task:unstage" values={{ selectionCount }}>
-            Unstage {selectionCount}
+            {t("task:unstage2")} {selectionCount}
           </Trans>
         </Button>
       )}
@@ -402,7 +403,7 @@ export function BulkActionBar({
           onClick={() => onBulkDiscard(paths)}
         >
           <Trans i18nKey="task:discard2" values={{ selectionCount }}>
-            Discard {selectionCount}
+            {t("task:discard")} {selectionCount}
           </Trans>
         </Button>
       )}

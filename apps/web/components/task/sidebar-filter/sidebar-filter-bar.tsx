@@ -103,7 +103,7 @@ export function SidebarFilterBar() {
       >
         <Trans i18nKey="task:newView">
           <IconPlus className="h-3.5 w-3.5" />
-          New view
+          {t("task:newView2")}
         </Trans>
       </Button>
       <SidebarFilterPopover

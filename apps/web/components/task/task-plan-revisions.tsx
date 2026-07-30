@@ -471,7 +471,7 @@ function RevisionRow({
         >
           <Trans i18nKey="task:restore">
             <IconRestore className="h-3.5 w-3.5" />
-            Restore
+            {t("task:restore2")}
           </Trans>
         </Button>
       )}
@@ -503,7 +503,7 @@ function RevertConfirmDialog({
         <DialogHeader>
           <DialogTitle>
             <Trans i18nKey="task:restoreToVersion" values={{ value1: target?.revision_number }}>
-              Restore to version {target?.revision_number}?
+              {t("task:restoreToVersion2")} {target?.revision_number}?
             </Trans>
           </DialogTitle>
           <DialogDescription>

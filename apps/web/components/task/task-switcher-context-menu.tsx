@@ -1,7 +1,12 @@
 "use client";
 import { Trans } from "react-i18next";
+import { cloneWithMenuOpen, selectTaskLinkActions } from "./task-switcher-menu-helpers";
 
-import { cloneElement, isValidElement, useState } from "react";
+// Re-exported: the helper moved to the sibling module, but this remains its
+// public entry point (task-switcher.test.tsx imports it from here).
+export { createTaskLinkSelectAction } from "./task-switcher-menu-helpers";
+
+import { useState } from "react";
 import {
   IconBrandGitlab,
   IconBrandSentry,
@@ -47,7 +52,7 @@ export type StepDef = {
   events?: { on_enter?: Array<{ type: string; config?: Record<string, unknown> }> };
 };
 
-type ContextMenuProps = {
+export type ContextMenuProps = {
   task: TaskSwitcherItem;
   workflows?: TaskMoveWorkflow[];
   stepsByWorkflowId?: Record<string, StepDef[]>;
@@ -379,49 +384,6 @@ function BulkSelectionMenuItems({
       )}
     </>
   );
-}
-
-export function createTaskLinkSelectAction(
-  task: Pick<TaskSwitcherItem, "id" | "title">,
-  handler: ((taskId: string, taskTitle?: string) => void) | undefined,
-  closeMenu: () => void,
-) {
-  if (!handler) return undefined;
-  return () => {
-    closeMenu();
-    handler(task.id, task.title);
-  };
-}
-
-function selectTaskLinkActions(
-  task: Pick<TaskSwitcherItem, "id" | "title">,
-  closeMenu: () => void,
-  handlers: Pick<
-    ContextMenuProps,
-    | "onLinkPullRequest"
-    | "onLinkIssue"
-    | "onLinkMergeRequest"
-    | "onLinkJiraTicket"
-    | "onLinkLinearIssue"
-    | "onLinkSentryIssue"
-  >,
-) {
-  return {
-    onLinkPullRequest: createTaskLinkSelectAction(task, handlers.onLinkPullRequest, closeMenu),
-    onLinkIssue: createTaskLinkSelectAction(task, handlers.onLinkIssue, closeMenu),
-    onLinkMergeRequest: createTaskLinkSelectAction(task, handlers.onLinkMergeRequest, closeMenu),
-    onLinkJiraTicket: createTaskLinkSelectAction(task, handlers.onLinkJiraTicket, closeMenu),
-    onLinkLinearIssue: createTaskLinkSelectAction(task, handlers.onLinkLinearIssue, closeMenu),
-    onLinkSentryIssue: createTaskLinkSelectAction(task, handlers.onLinkSentryIssue, closeMenu),
-  };
-}
-
-function cloneWithMenuOpen(
-  children: React.ReactElement<{ menuOpen?: boolean }>,
-  menuOpen: boolean,
-): React.ReactNode {
-  if (isValidElement(children)) return cloneElement(children, { menuOpen });
-  return children;
 }
 
 function TaskPinItem({

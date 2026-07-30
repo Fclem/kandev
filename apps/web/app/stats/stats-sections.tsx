@@ -124,7 +124,7 @@ function GitOrAveragesCard({ global, git_stats }: { global: GlobalStats; git_sta
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
             <Trans i18nKey="stats:gitActivity">
               <IconGitCommit className="h-4 w-4" />
-              Git Activity
+              {t("stats:gitActivity2")}
             </Trans>
           </CardTitle>
         </CardHeader>

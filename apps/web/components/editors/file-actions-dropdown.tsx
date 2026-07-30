@@ -125,13 +125,13 @@ export function FileActionsDropdown({
         <DropdownMenuItem className="cursor-pointer text-xs" onClick={handleCopyPath}>
           <Trans i18nKey="editors:copyPath">
             <IconCopy className="h-3.5 w-3.5 mr-1.5" />
-            Copy path
+            {t("editors:copyPath2")}
           </Trans>
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer text-xs" onClick={handleOpenFolder}>
           <Trans i18nKey="editors:openFolder">
             <IconFolderShare className="h-3.5 w-3.5 mr-1.5" />
-            Open folder
+            {t("editors:openFolder2")}
           </Trans>
         </DropdownMenuItem>
       </DropdownMenuContent>

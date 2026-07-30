@@ -61,6 +61,7 @@ type AttachmentRowProps = {
  * editing the message text.
  */
 function AttachmentRow({ attachments, interactive }: AttachmentRowProps) {
+  const { t } = useTranslation();
   if (attachments.length === 0) return null;
   const images = attachments.filter((a) => a.type === "image");
   const files = attachments.filter((a) => a.type !== "image");
@@ -85,7 +86,7 @@ function AttachmentRow({ attachments, interactive }: AttachmentRowProps) {
         >
           <Trans i18nKey="task:attachment">
             <IconFile className="h-3 w-3" />
-            Attachment
+            {t("task:attachment2")}
           </Trans>
         </span>
       ))}
@@ -237,7 +238,7 @@ function EditView({
         >
           <Trans i18nKey="task:save2">
             <IconCheck className="mr-1 h-3.5 w-3.5" />
-            Save
+            {t("task:save")}
           </Trans>
         </Button>
         <Button

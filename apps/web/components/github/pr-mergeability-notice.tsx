@@ -89,7 +89,7 @@ function ConflictBanner({
       <div className="min-w-0 flex-1">
         <div className="text-xs font-semibold text-red-600 dark:text-red-400">
           <Trans i18nKey="github:mergeConflictsWith" values={{ baseBranch }}>
-            Merge conflicts with <code className="font-mono">{baseBranch}</code>
+            {t("github:mergeConflictsWith2")} <code className="font-mono">{baseBranch}</code>
           </Trans>
         </div>
         <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
@@ -127,6 +127,7 @@ function MergeabilityChip({ label, popover }: { label: string; popover?: boolean
 }
 
 function NotMergeableText({ popover }: { popover?: boolean }) {
+  const { t } = useTranslation();
   return (
     <span
       className={cn(
@@ -136,7 +137,7 @@ function NotMergeableText({ popover }: { popover?: boolean }) {
     >
       <Trans i18nKey="github:notMergeable">
         <IconAlertTriangle className={popover ? "h-3.5 w-3.5" : "h-3 w-3"} />
-        Not mergeable
+        {t("github:notMergeable2")}
       </Trans>
     </span>
   );

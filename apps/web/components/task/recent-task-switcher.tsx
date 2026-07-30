@@ -138,16 +138,17 @@ function SwitcherFooter({
   shortcutLabel: string;
   reverseShortcutLabel: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-3 border-t px-4 py-2 text-[11px] text-muted-foreground">
       <span className="flex items-center gap-1.5">
         <Trans i18nKey="task:next2" values={{ shortcutLabel }}>
-          <Kbd>{shortcutLabel}</Kbd> Next
+          <Kbd>{shortcutLabel}</Kbd> {t("common:next")}
         </Trans>
       </span>
       <span className="flex items-center gap-1.5">
         <Trans i18nKey="task:previous" values={{ reverseShortcutLabel }}>
-          <Kbd>{reverseShortcutLabel}</Kbd> Previous
+          <Kbd>{reverseShortcutLabel}</Kbd> {t("common:previous")}
         </Trans>
       </span>
     </div>
@@ -168,7 +169,7 @@ function RecentTaskSwitcherDialog(props: RecentTaskSwitcherController) {
           <DialogTitle className="flex items-center gap-2 text-sm">
             <Trans i18nKey="task:recentTasks">
               <IconRefresh className="size-4 text-muted-foreground" />
-              Recent Tasks
+              {t("task:recentTasks2")}
             </Trans>
           </DialogTitle>
           <DialogDescription className="sr-only">{t("task:switchRecentTasks")}</DialogDescription>

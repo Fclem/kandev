@@ -33,6 +33,7 @@ function FindingActions({
   onReopen,
   onSendToAgent,
 }: Omit<ReviewFindingCardProps, "staleReason" | "showLocation">) {
+  const { t } = useTranslation();
   const isOpen = finding.status === "open";
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -46,7 +47,7 @@ function FindingActions({
         >
           <Trans i18nKey="diff:sendToAgent">
             <IconMessagePlus className="h-3.5 w-3.5" />
-            Send to agent
+            {t("diff:sendToAgent2")}
           </Trans>
         </Button>
       )}
@@ -60,7 +61,7 @@ function FindingActions({
         >
           <Trans i18nKey="diff:resolve">
             <IconCheck className="h-3.5 w-3.5" />
-            Resolve
+            {t("diff:resolve2")}
           </Trans>
         </Button>
       )}
@@ -74,7 +75,7 @@ function FindingActions({
         >
           <Trans i18nKey="diff:dismiss">
             <IconEyeOff className="h-3.5 w-3.5" />
-            Dismiss
+            {t("common:dismiss")}
           </Trans>
         </Button>
       )}
@@ -88,7 +89,7 @@ function FindingActions({
         >
           <Trans i18nKey="diff:reopen">
             <IconArrowBackUp className="h-3.5 w-3.5" />
-            Reopen
+            {t("diff:reopen2")}
           </Trans>
         </Button>
       )}

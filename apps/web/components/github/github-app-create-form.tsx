@@ -120,7 +120,7 @@ function ManifestHandoff({
           onClick={() => submitManifestToGitHub(handoff.registration_url, handoff.manifest)}
         >
           <Trans i18nKey="github:continueOnGithub">
-            Continue on GitHub
+            {t("github:continueOnGithub2")}
             <IconExternalLink className="ml-2 h-4 w-4" />
           </Trans>
         </Button>
@@ -181,12 +181,12 @@ function CreateAppFields(props: CreateFieldsProps) {
       >
         <Label className="flex cursor-pointer items-center gap-2">
           <Trans i18nKey="github:organization">
-            <RadioGroupItem value="organization" /> Organization
+            <RadioGroupItem value="organization" /> {t("github:organization2")}
           </Trans>
         </Label>
         <Label className="flex cursor-pointer items-center gap-2">
           <Trans i18nKey="github:personalAccount">
-            <RadioGroupItem value="user" /> Personal account
+            <RadioGroupItem value="user" /> {t("github:personalAccount2")}
           </Trans>
         </Label>
       </RadioGroup>

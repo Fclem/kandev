@@ -320,7 +320,7 @@ function SessionDropdownContent({
         >
           <Trans i18nKey="task:new">
             <IconPlus className="h-3.5 w-3.5" />
-            New
+            {t("task:new2")}
           </Trans>
         </button>
       </div>

@@ -341,7 +341,7 @@ function RepoSearchCombobox({
         >
           <Trans i18nKey="github:addRepository">
             <IconPlus className="h-3 w-3" />
-            Add repository
+            {t("common:addRepository")}
           </Trans>
         </Button>
       </PopoverTrigger>

@@ -378,6 +378,7 @@ function useSetupScriptSteps(sessionId: string): PrepareStepInfo[] {
 }
 
 function SessionInfo({ sessionId }: { sessionId: string }) {
+  const { t } = useTranslation();
   const session = useAppStore((state) => state.taskSessions.items[sessionId]);
   if (!session) return null;
 
@@ -392,14 +393,14 @@ function SessionInfo({ sessionId }: { sessionId: string }) {
       {isWorktree && worktree_path && (
         <InfoLine icon={<IconFolder className="h-3 w-3" />}>
           <Trans i18nKey="common:isolatedWorktreeAt" values={{ worktree_path }}>
-            Isolated worktree at <Mono>{worktree_path}</Mono>
+            {t("common:isolatedWorktreeAt2")} <Mono>{worktree_path}</Mono>
           </Trans>
         </InfoLine>
       )}
       {!isWorktree && worktree_path && (
         <InfoLine icon={<IconFolder className="h-3 w-3" />}>
           <Trans i18nKey="common:workingIn" values={{ worktree_path }}>
-            Working in <Mono>{worktree_path}</Mono>
+            {t("common:workingIn2")} <Mono>{worktree_path}</Mono>
           </Trans>
         </InfoLine>
       )}
@@ -408,13 +409,14 @@ function SessionInfo({ sessionId }: { sessionId: string }) {
           {base_branch ? (
             <>
               <Trans i18nKey="common:branchBasedOn" values={{ worktree_branch, base_branch }}>
-                Branch <Mono>{worktree_branch}</Mono>, based on <Mono>{base_branch}</Mono>
+                {t("common:branch")} <Mono>{worktree_branch}</Mono>, based on{" "}
+                <Mono>{base_branch}</Mono>
               </Trans>
             </>
           ) : (
             <>
               <Trans i18nKey="common:onBranch" values={{ worktree_branch }}>
-                On branch <Mono>{worktree_branch}</Mono>
+                {t("common:onBranch2")} <Mono>{worktree_branch}</Mono>
               </Trans>
             </>
           )}

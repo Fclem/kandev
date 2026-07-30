@@ -317,7 +317,7 @@ function SourceForm({
             onClick={() => onAdd("folder")}
           >
             <IconFolderPlus className="h-4 w-4" />
-            Add folder
+            {t("task:addFolder")}
           </Button>
         )}
       </div>
@@ -352,6 +352,7 @@ function RepositorySourceMenu({
   isMobile: boolean;
   onAdd: (kind: "saved_repository" | "local_repository" | "remote_repository") => void;
 }) {
+  const { t } = useTranslation();
   const itemClass = cn("cursor-pointer items-start gap-3", isMobile ? "min-h-11" : "py-2");
   return (
     <DropdownMenu modal={!isMobile}>
@@ -362,7 +363,7 @@ function RepositorySourceMenu({
           className={cn("cursor-pointer", isMobile ? "min-h-11" : "h-9 px-3")}
         >
           <IconPlus className="h-4 w-4" />
-          Add repository
+          {t("common:addRepository")}
           <IconChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>

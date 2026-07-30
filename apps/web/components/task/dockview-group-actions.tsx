@@ -151,6 +151,7 @@ function SplitCloseDropdown({
   onSplitDown,
   onCloseGroup,
 }: SplitCloseHandlers) {
+  const { t } = useTranslation();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -162,20 +163,20 @@ function SplitCloseDropdown({
         <DropdownMenuItem onClick={onSplitRight} className="cursor-pointer text-xs">
           <Trans i18nKey="task:splitRight2">
             <IconLayoutColumns className="h-3.5 w-3.5 mr-1.5" />
-            Split right
+            {t("task:splitRight")}
           </Trans>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onSplitDown} className="cursor-pointer text-xs">
           <Trans i18nKey="task:splitDown2">
             <IconLayoutRows className="h-3.5 w-3.5 mr-1.5" />
-            Split down
+            {t("task:splitDown")}
           </Trans>
         </DropdownMenuItem>
         {!isChatGroup && (
           <DropdownMenuItem onClick={onCloseGroup} className="cursor-pointer text-xs">
             <Trans i18nKey="task:closeGroup2">
               <IconX className="h-3.5 w-3.5 mr-1.5" />
-              Close group
+              {t("task:closeGroup")}
             </Trans>
           </DropdownMenuItem>
         )}

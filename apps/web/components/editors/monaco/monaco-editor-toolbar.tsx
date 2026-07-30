@@ -38,6 +38,7 @@ function SaveButton({
   isSaving: boolean;
   onSave: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Button
       size="sm"
@@ -56,7 +57,7 @@ function SaveButton({
       ) : (
         <>
           <IconDeviceFloppy className="h-4 w-4" />
-          Save
+          {t("editors:save")}
           <span className="text-xs text-muted-foreground">({SAVE_SHORTCUT}+S)</span>
         </>
       )}
@@ -177,7 +178,7 @@ function ReloadFromAgentButton({
         >
           <Trans i18nKey="editors:reload">
             <IconRefresh className="h-3.5 w-3.5" />
-            Reload
+            {t("editors:reload2")}
           </Trans>
         </Button>
       </TooltipTrigger>

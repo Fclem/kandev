@@ -110,7 +110,7 @@ export function AmendDialog({
           <DialogTitle className="flex items-center gap-2">
             <Trans i18nKey="task:amendCommitMessage2">
               <IconGitCommit className="h-5 w-5" />
-              Amend Commit Message
+              {t("task:amendCommitMessage3")}
             </Trans>
           </DialogTitle>
         </DialogHeader>
@@ -147,7 +147,7 @@ export function AmendDialog({
               <>
                 <Trans i18nKey="task:amend">
                   <IconCheck className="h-4 w-4 mr-2" />
-                  Amend
+                  {t("task:amend2")}
                 </Trans>
               </>
             )}
@@ -243,7 +243,7 @@ export function ResetDialog({
         <DialogHeader>
           <DialogTitle>
             <Trans i18nKey="task:resetToCommit" values={{ shortSha }}>
-              Reset to commit {shortSha}
+              {t("task:resetToCommit2")} {shortSha}
             </Trans>
           </DialogTitle>
         </DialogHeader>
@@ -254,7 +254,8 @@ export function ResetDialog({
             <div className="space-y-2 p-3 border border-destructive/50 rounded-md bg-destructive/5">
               <p className="text-xs text-destructive font-medium">
                 <Trans i18nKey="task:typeToConfirm" values={{ shortSha }}>
-                  Type <code className="bg-muted px-1 rounded">{shortSha}</code> to confirm:
+                  {t("task:type")} <code className="bg-muted px-1 rounded">{shortSha}</code> to
+                  confirm:
                 </Trans>
               </p>
               <Input

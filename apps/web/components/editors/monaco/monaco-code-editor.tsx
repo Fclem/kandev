@@ -263,7 +263,7 @@ export function MonacoCodeEditor(props: MonacoCodeEditorProps) {
           >
             <Trans i18nKey="editors:comment">
               <IconMessagePlus className="h-3.5 w-3.5" />
-              Comment
+              {t("editors:comment2")}
             </Trans>
           </Button>
         )}

@@ -407,7 +407,7 @@ const MobileSessionsList = memo(function MobileSessionsList({
         >
           <Trans i18nKey="task:newSession2">
             <IconPlus className="h-4 w-4" />
-            New session
+            {t("task:newSession3")}
           </Trans>
         </Button>
       </div>

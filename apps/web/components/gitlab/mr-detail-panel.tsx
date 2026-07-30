@@ -216,7 +216,7 @@ function MRActionButtons({
         onClick={() => void run("Approve", () => approveMR(identity), "Merge request approved")}
       >
         <Trans i18nKey="gitlab:approve">
-          <IconCheck className="h-4 w-4" /> Approve
+          <IconCheck className="h-4 w-4" /> {t("gitlab:approve2")}
         </Trans>
       </Button>
       <Button
@@ -236,7 +236,7 @@ function MRActionButtons({
         onClick={onMerge}
       >
         <Trans i18nKey="gitlab:merge">
-          <IconGitMerge className="h-4 w-4" /> Merge
+          <IconGitMerge className="h-4 w-4" /> {t("common:merge")}
         </Trans>
       </Button>
       <SubscriptionToggle {...identity} />
@@ -312,8 +312,8 @@ function MergeConfirmation({
               i18nKey="gitlab:gitlabWillMergeIntoUsingThe"
               values={{ project_path: taskMR.project_path, mr_iid: taskMR.mr_iid, baseBranch }}
             >
-              GitLab will merge {taskMR.project_path}!{taskMR.mr_iid} into {baseBranch} using the
-              project default.
+              {t("gitlab:gitlabWillMerge")} {taskMR.project_path}!{taskMR.mr_iid} into {baseBranch}{" "}
+              using the project default.
             </Trans>
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -352,7 +352,7 @@ function FeedbackPlaceholder({ error, onRetry }: { error: string | null; onRetry
   return (
     <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
       <Trans i18nKey="gitlab:loadingMergeRequest">
-        <IconLoader2 className="h-4 w-4 animate-spin" /> Loading merge request
+        <IconLoader2 className="h-4 w-4 animate-spin" /> {t("gitlab:loadingMergeRequest2")}
       </Trans>
     </div>
   );
@@ -523,7 +523,7 @@ export function MRDetailPanelComponent({
       <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
         <Trans i18nKey="gitlab:verifyingGitlabConnection">
           <IconLoader2 className="h-4 w-4 animate-spin" />
-          Verifying GitLab connection
+          {t("gitlab:verifyingGitlabConnection2")}
         </Trans>
       </div>
     );

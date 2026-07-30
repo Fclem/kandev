@@ -60,7 +60,7 @@ export function DockviewWatermark({ containerApi, group }: IWatermarkPanelProps)
           >
             <Trans i18nKey="task:addPanel2">
               <IconPlus className="h-3.5 w-3.5" />
-              Add panel
+              {t("task:addPanel")}
             </Trans>
           </Button>
         </DropdownMenuTrigger>

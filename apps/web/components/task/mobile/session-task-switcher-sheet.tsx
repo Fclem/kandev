@@ -186,7 +186,7 @@ function TaskSwitcherSurfaceHeader({
             >
               <Trans i18nKey="task:chat2">
                 <IconMessageCircle className="h-4 w-4" />
-                Chat
+                {t("task:chat")}
               </Trans>
             </Button>
           )}
@@ -198,7 +198,7 @@ function TaskSwitcherSurfaceHeader({
           >
             <Trans i18nKey="task:new">
               <IconPlus className="h-4 w-4" />
-              New
+              {t("task:new2")}
             </Trans>
           </Button>
         </div>

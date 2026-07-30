@@ -271,6 +271,7 @@ export function EditorFooter({
   isNew: boolean;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-3 pt-4">
       {!isNew && (
@@ -283,7 +284,7 @@ export function EditorFooter({
         >
           <Trans i18nKey="automations:delete">
             <IconTrash className="h-4 w-4 mr-1" />
-            Delete
+            {t("common:delete")}
           </Trans>
         </Button>
       )}

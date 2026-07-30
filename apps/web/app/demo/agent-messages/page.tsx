@@ -373,6 +373,7 @@ function ContentArea({
   filteredFixtures: NormalizedFixture[];
   messages: Message[];
 }) {
+  const { t } = useTranslation();
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -386,7 +387,7 @@ function ContentArea({
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
         <div className="font-medium">
           <Trans i18nKey="common:errorLoading" values={{ viewMode }}>
-            Error loading {viewMode}
+            {t("common:errorLoading2")} {viewMode}
           </Trans>
         </div>
         <div className="text-sm">{error}</div>
@@ -442,7 +443,7 @@ export default function AgentMessagesPage() {
             >
               <Trans i18nKey="common:refresh2">
                 <IconRefresh className={`h-4 w-4 ${data.loading ? "animate-spin" : ""}`} />
-                Refresh
+                {t("common:refresh3")}
               </Trans>
             </button>
           </div>
@@ -468,7 +469,7 @@ export default function AgentMessagesPage() {
               value5: data.viewMode === "events" ? "messages" : "fixtures",
             }}
           >
-            Showing {data.itemCount} of {data.totalCount}{" "}
+            {t("common:showing")} {data.itemCount} of {data.totalCount}{" "}
             {data.viewMode === "events" ? "messages" : "fixtures"}
           </Trans>
         </div>

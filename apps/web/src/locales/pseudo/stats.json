@@ -1,5 +1,6 @@
 {
   "activity": "Àćţĩvĩţŷ ({{value1}})",
+  "activity2": "Àćţĩvĩţŷ (",
   "averages": "Àvēŕàĝēś",
   "avgPerTask": "{{value0}} àvĝ ƥēŕ ţàśķ",
   "bestMonth": "Ɓēśţ ḿōńţĥ",
@@ -15,6 +16,7 @@
   "errorLoadingStats": "Ēŕŕōŕ ĺōàďĩńĝ śţàţś: {{initialError}}",
   "filesChanged": "{{total_files_changed}} ƒĩĺēś ćĥàńĝēď",
   "gitActivity": "<0></0> Ĝĩţ Àćţĩvĩţŷ",
+  "gitActivity2": "Ĝĩţ Àćţĩvĩţŷ",
   "inProgress": "{{in_progress_tasks}} ĩń ƥŕōĝŕēśś",
   "less": "Ĺēśś",
   "longestTasks": "Ĺōńĝēśţ Ţàśķś",

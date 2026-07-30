@@ -62,7 +62,7 @@ export function AgentsPageClient({ initialAgents }: AgentsPageClientProps) {
           <Button size="sm" className="cursor-pointer" onClick={() => setShowCreate(true)}>
             <Trans i18nKey="office:newAgent">
               <IconPlus className="h-4 w-4 mr-1" />
-              New Agent
+              {t("common:newAgent")}
             </Trans>
           </Button>
         }
@@ -81,7 +81,7 @@ export function AgentsPageClient({ initialAgents }: AgentsPageClientProps) {
             >
               <Trans i18nKey="office:createAgent2">
                 <IconPlus className="h-4 w-4 mr-1" />
-                Create Agent
+                {t("office:createAgent")}
               </Trans>
             </Button>
           }

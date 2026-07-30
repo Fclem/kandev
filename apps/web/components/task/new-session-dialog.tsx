@@ -569,6 +569,7 @@ export function NewSessionDialog({
   groupId,
   handoff,
 }: NewSessionDialogProps) {
+  const { t } = useTranslation();
   const {
     taskTitle,
     agentProfiles,
@@ -593,13 +594,13 @@ export function NewSessionDialog({
             {handoffLabel ? (
               <>
                 <Trans i18nKey="task:handOffTo" values={{ handoffLabel }}>
-                  Hand off to <span className="text-foreground">{handoffLabel}</span>
+                  {t("task:handOffTo2")} <span className="text-foreground">{handoffLabel}</span>
                 </Trans>
               </>
             ) : (
               <>
                 <Trans i18nKey="task:newAgentIn" values={{ taskTitle }}>
-                  New agent in <span className="text-foreground">{taskTitle}</span>
+                  {t("task:newAgentIn2")} <span className="text-foreground">{taskTitle}</span>
                 </Trans>
               </>
             )}

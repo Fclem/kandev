@@ -118,7 +118,7 @@ function Discussion({
               onClick={() => void onResolve(discussion.id)}
             >
               <Trans i18nKey="gitlab:resolve">
-                <IconCheck className="h-3.5 w-3.5" /> Resolve
+                <IconCheck className="h-3.5 w-3.5" /> {t("gitlab:resolve2")}
               </Trans>
             </Button>
           )}
@@ -129,7 +129,7 @@ function Discussion({
             onClick={() => void submitReply()}
           >
             <Trans i18nKey="gitlab:reply">
-              <IconSend className="h-3.5 w-3.5" /> Reply
+              <IconSend className="h-3.5 w-3.5" /> {t("gitlab:reply2")}
             </Trans>
           </Button>
         </div>

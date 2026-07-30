@@ -36,6 +36,7 @@ function countCompleted(items: TodoItem[]): number {
 }
 
 function SnapshotHistory({ snapshots }: { snapshots: TodoSnapshot[] }) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   return (
     <div className="mt-3 pt-2 border-t border-border/30">
@@ -61,7 +62,8 @@ function SnapshotHistory({ snapshots }: { snapshots: TodoSnapshot[] }) {
           ) : (
             <IconChevronRight className="h-3 w-3" />
           )}
-          Earlier updates ({snapshots.length})
+          {t("task:earlierUpdates2")}
+          {snapshots.length})
         </Trans>
       </button>
       {isOpen && (

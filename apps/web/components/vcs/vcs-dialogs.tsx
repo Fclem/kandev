@@ -214,7 +214,7 @@ function CommitDialog({
               <>
                 <Trans i18nKey="integrations:commit">
                   <IconCheck className="h-4 w-4 mr-2" />
-                  Commit
+                  {t("common:commit")}
                 </Trans>
               </>
             )}

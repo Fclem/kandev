@@ -278,7 +278,7 @@ export function SSHConnectionCard(props: SSHConnectionCardProps) {
             <CardTitle className="flex items-center gap-2">
               <Trans i18nKey="settings:connection">
                 <IconTerminal2 className="h-5 w-5" />
-                Connection
+                {t("settings:connection2")}
               </Trans>
             </CardTitle>
             <CardDescription>{t("settings:runAnAgentOnLinuxAmd64")}</CardDescription>
@@ -353,6 +353,7 @@ function SSHConnectionActions({
   onSave: () => void;
   showSave: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-3">
       <Button
@@ -378,7 +379,7 @@ function SSHConnectionActions({
           ) : (
             <IconTestPipe className="mr-1.5 h-4 w-4" />
           )}
-          Test connection
+          {t("settings:testConnection4")}
         </Trans>
       </Button>
       {showSave && (
@@ -396,7 +397,7 @@ function SSHConnectionActions({
             }}
           >
             {saving ? <IconLoader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-            Save
+            {t("settings:save")}
           </Trans>
         </Button>
       )}

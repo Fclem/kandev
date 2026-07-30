@@ -468,6 +468,7 @@ function ApproveButtonGroup({
   onApprove: () => void;
   onRequestChanges: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-0.5">
       <Button
@@ -478,7 +479,7 @@ function ApproveButtonGroup({
       >
         <Trans i18nKey="task:approve2">
           <IconCheck className="h-3.5 w-3.5" />
-          Approve
+          {t("task:approve3")}
         </Trans>
       </Button>
       <DropdownMenu>
@@ -495,7 +496,7 @@ function ApproveButtonGroup({
           <DropdownMenuItem onClick={onApprove} className="cursor-pointer">
             <Trans i18nKey="task:approveAndContinue">
               <IconCheck className="h-4 w-4 mr-2" />
-              Approve and continue
+              {t("task:approveAndContinue2")}
             </Trans>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -505,7 +506,7 @@ function ApproveButtonGroup({
           >
             <Trans i18nKey="task:requestChanges">
               <IconX className="h-4 w-4 mr-2" />
-              Request changes
+              {t("task:requestChanges2")}
             </Trans>
           </DropdownMenuItem>
         </DropdownMenuContent>

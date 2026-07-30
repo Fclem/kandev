@@ -51,7 +51,7 @@ export function GitHubAppRegistrationList({
               {registration.selected && (
                 <Badge variant="secondary">
                   <Trans i18nKey="github:inUse">
-                    <IconCheck className="mr-1 h-3 w-3" /> In use
+                    <IconCheck className="mr-1 h-3 w-3" /> {t("github:inUse2")}
                   </Trans>
                 </Badge>
               )}
@@ -67,8 +67,8 @@ export function GitHubAppRegistrationList({
                   values={{ workspace_binding_count: registration.workspace_binding_count }}
                 >
                   <IconAlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  Used by {registration.workspace_binding_count} workspaces. Editing or deleting it
-                  affects all of them.
+                  {t("github:usedBy")} {registration.workspace_binding_count} workspaces. Editing or
+                  deleting it affects all of them.
                 </Trans>
               </span>
             )}

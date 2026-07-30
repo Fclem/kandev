@@ -174,7 +174,7 @@ function RoutineActions({ onRunNow, onDelete }: { onRunNow: () => void; onDelete
           }}
         >
           <Trans i18nKey="office:runNow2">
-            <IconPlayerPlay className="h-4 w-4 mr-2" /> Run Now
+            <IconPlayerPlay className="h-4 w-4 mr-2" /> {t("office:runNow4")}
           </Trans>
         </DropdownMenuItem>
         <DropdownMenuItem
@@ -185,7 +185,7 @@ function RoutineActions({ onRunNow, onDelete }: { onRunNow: () => void; onDelete
           }}
         >
           <Trans i18nKey="office:delete2">
-            <IconTrash className="h-4 w-4 mr-2" /> Delete
+            <IconTrash className="h-4 w-4 mr-2" /> {t("common:delete")}
           </Trans>
         </DropdownMenuItem>
       </DropdownMenuContent>

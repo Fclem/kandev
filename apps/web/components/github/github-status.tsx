@@ -136,6 +136,7 @@ function AutomationActorExplanation({
 }
 
 function AppRegistrationDetails({ app }: { app?: GitHubAppRegistrationCatalogItem }) {
+  const { t } = useTranslation();
   if (!app) return null;
   return (
     <>
@@ -146,7 +147,7 @@ function AppRegistrationDetails({ app }: { app?: GitHubAppRegistrationCatalogIte
         </Badge>
         <Badge variant="outline" className="capitalize">
           <Trans i18nKey="github:webhook" values={{ webhook_status: app.webhook_status }}>
-            Webhook {app.webhook_status}
+            {t("github:webhook2")} {app.webhook_status}
           </Trans>
         </Badge>
         <span>{app.source === "managed" ? "Created by Kandev" : "Imported"}</span>
@@ -216,7 +217,7 @@ function AutomationActions({
         >
           <Trans i18nKey="github:disconnect">
             <IconTrash className="mr-2 h-4 w-4" />
-            Disconnect
+            {t("github:disconnect2")}
           </Trans>
         </Button>
       )}
@@ -311,6 +312,7 @@ function PersonalIdentityActions({
   onConnect: () => void;
   onDisconnect: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-2 sm:flex-row">
       {status.app_available && status.automation?.source === "github_app_installation" && (
@@ -329,7 +331,7 @@ function PersonalIdentityActions({
         >
           <Trans i18nKey="github:disconnect">
             <IconTrash className="mr-2 h-4 w-4" />
-            Disconnect
+            {t("github:disconnect2")}
           </Trans>
         </Button>
       )}

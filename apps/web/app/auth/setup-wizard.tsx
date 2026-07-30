@@ -131,7 +131,7 @@ export function SetupWizard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Trans i18nKey="auth:setUpKandev">
-              <IconShieldLock className="h-4 w-4" /> Set up Kandev
+              <IconShieldLock className="h-4 w-4" /> {t("auth:setUpKandev2")}
             </Trans>
           </CardTitle>
           <CardDescription>{t("auth:authenticationIsEnabledForThisDeployment")}</CardDescription>

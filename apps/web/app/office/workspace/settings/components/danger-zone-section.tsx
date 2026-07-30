@@ -93,7 +93,7 @@ function DeleteWorkspaceDialog({
           <div className="space-y-2">
             <Label htmlFor="delete-workspace-confirm">
               <Trans i18nKey="office:typeToConfirm" values={{ confirmName }}>
-                Type {confirmName} to confirm
+                {t("office:type")} {confirmName} to confirm
               </Trans>
             </Label>
             <Input

@@ -34,7 +34,7 @@ export function AutomationsListPage({ workspaceId }: AutomationsListPageProps) {
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Trans i18nKey="automations:automations">
               <IconBolt className="h-5 w-5" />
-              Automations
+              {t("common:automations")}
             </Trans>
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -48,7 +48,7 @@ export function AutomationsListPage({ workspaceId }: AutomationsListPageProps) {
         >
           <Trans i18nKey="automations:newAutomation">
             <IconPlus className="h-4 w-4 mr-1" />
-            New Automation
+            {t("automations:newAutomation2")}
           </Trans>
         </Button>
       </div>

@@ -60,7 +60,7 @@ function CopyConfigDialogBody({
       <DialogHeader>
         <DialogTitle>
           <Trans i18nKey="integrations:copyConfiguration" values={{ label }}>
-            Copy {label} configuration
+            {t("common:copy")} {label} configuration
           </Trans>
         </DialogTitle>
         <DialogDescription>
@@ -68,7 +68,7 @@ function CopyConfigDialogBody({
             i18nKey="integrations:copyTheSettingsFromIntoAnother"
             values={{ label, value3: slug === "github" ? "" : " and credentials", sourceName }}
           >
-            Copy the {label} settings
+            {t("integrations:copyThe")} {label} settings
             {slug === "github" ? "" : " and credentials"} from{" "}
             <span className="font-medium text-foreground">{sourceName}</span> into another
             workspace. This overwrites the target workspace&apos;s current {label} configuration.
@@ -111,7 +111,7 @@ function CopyConfigDialogBody({
         >
           <Trans i18nKey="integrations:copyConfig">
             <IconCopy className="h-4 w-4" />
-            Copy config
+            {t("integrations:copyConfig2")}
           </Trans>
         </Button>
       </DialogFooter>

@@ -142,7 +142,7 @@ function NewIssueDialogBody({
           {parentTaskId && (
             <Badge variant="secondary" className="text-xs">
               <Trans i18nKey="office:subIssueOf" values={{ parentTaskId }}>
-                Sub-issue of {parentTaskId}
+                {t("office:subIssueOf2")} {parentTaskId}
               </Trans>
             </Badge>
           )}

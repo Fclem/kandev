@@ -205,6 +205,7 @@ function PRSingleButton({ pr, refreshTaskPR }: { pr: TaskPR; refreshTaskPR: () =
 }
 
 function PRMultiButton({ prs, refreshTaskPR }: { prs: TaskPR[]; refreshTaskPR: () => void }) {
+  const { t } = useTranslation();
   // Click still drives the dropdown (the explicit "jump to this PR's panel"
   // affordance, and the only interaction on touch). Hover adds the aggregate
   // CI popover with a tab per PR — desktop only, suppressed on touch where
@@ -251,7 +252,7 @@ function PRMultiButton({ prs, refreshTaskPR }: { prs: TaskPR[]; refreshTaskPR: (
         <IconGitPullRequest className={`h-4 w-4 ${aggColor}`} />
         <span className="text-xs font-medium">
           <Trans i18nKey="github:prs" values={{ length: prs.length }}>
-            {prs.length} PRs
+            {prs.length} {t("github:prs2")}
           </Trans>
         </span>
         <IconChevronDown className="h-3 w-3 text-muted-foreground" />

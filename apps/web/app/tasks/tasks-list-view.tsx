@@ -120,6 +120,7 @@ function TasksListControls({
   tasksListGroup: TasksListGroup;
   onTasksListGroupChange: (group: TasksListGroup) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="hidden min-h-9 flex-wrap items-center justify-end gap-3 sm:flex">
       <ListOptionSelect
@@ -143,7 +144,7 @@ function TasksListControls({
             onCheckedChange={(checked) => onShowArchivedChange(checked === true)}
             className="cursor-pointer"
           />
-          Show archived
+          {t("common:showArchived2")}
         </Trans>
       </Label>
     </div>

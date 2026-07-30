@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { memo, useMemo, useState } from "react";
 import { IconPlus } from "@tabler/icons-react";
@@ -36,6 +36,7 @@ export const NewTaskButton = memo(function NewTaskButton({
   steps,
   onSuccess,
 }: NewTaskButtonProps) {
+  const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const keyboardShortcuts = useAppStore((s) => s.userSettings.keyboardShortcuts);
@@ -67,7 +68,7 @@ export const NewTaskButton = memo(function NewTaskButton({
       >
         <Trans i18nKey="task:task">
           <IconPlus className="h-4 w-4" />
-          Task
+          {t("common:task")}
         </Trans>
       </Button>
       <TaskCreateDialog

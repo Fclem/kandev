@@ -51,6 +51,7 @@ type HealthIssuesDialogProps = {
 };
 
 export function HealthIssuesDialog({ open, onOpenChange, issues }: HealthIssuesDialogProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const workspaceId = useAppStore((state) => state.workspaces.activeId);
 
@@ -63,7 +64,7 @@ export function HealthIssuesDialog({ open, onOpenChange, issues }: HealthIssuesD
           <DialogTitle className="flex items-center gap-2">
             <Trans i18nKey="common:setupIssues2">
               <IconAlertTriangle className="h-5 w-5 text-amber-500" />
-              Setup Issues
+              {t("common:setupIssues")}
             </Trans>
           </DialogTitle>
           <DialogDescription>

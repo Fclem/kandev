@@ -183,7 +183,7 @@ function UtilityAgentForm({
         </div>
         <p className="text-xs text-muted-foreground">
           <Trans i18nKey="settings:typeToSeeAvailableVariablesWith">
-            Type {"{{"} to see available variables with autocomplete
+            {t("settings:type")} {"{{"} to see available variables with autocomplete
           </Trans>
         </p>
       </div>

@@ -117,6 +117,7 @@ function AppActionButtons({
   onImport: () => void;
   onCreate: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
       <Button
@@ -136,12 +137,12 @@ function AppActionButtons({
       </Button>
       <Button variant="outline" className="h-11 cursor-pointer" onClick={onImport}>
         <Trans i18nKey="github:addExistingApp">
-          <IconPlus className="mr-2 h-4 w-4" /> Add existing App
+          <IconPlus className="mr-2 h-4 w-4" /> {t("github:addExistingApp2")}
         </Trans>
       </Button>
       <Button variant="outline" className="h-11 cursor-pointer" onClick={onCreate}>
         <Trans i18nKey="github:createNewApp">
-          <IconPlus className="mr-2 h-4 w-4" /> Create new App
+          <IconPlus className="mr-2 h-4 w-4" /> {t("github:createNewApp2")}
         </Trans>
       </Button>
     </div>

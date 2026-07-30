@@ -138,7 +138,7 @@ export function MRReviewerControl({
           onClick={() => void onSave(selectedIds)}
         >
           <Trans i18nKey="gitlab:apply">
-            <IconUserCheck className="mr-1 h-3.5 w-3.5" /> Apply
+            <IconUserCheck className="mr-1 h-3.5 w-3.5" /> {t("common:apply")}
           </Trans>
         </Button>
       </div>

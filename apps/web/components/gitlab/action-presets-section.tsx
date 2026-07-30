@@ -176,7 +176,7 @@ export function GitLabActionPresetsSection({ workspaceId }: { workspaceId: strin
           onClick={() => void resetDefaults()}
         >
           <Trans i18nKey="gitlab:reset">
-            <IconRefresh className="h-4 w-4" /> Reset
+            <IconRefresh className="h-4 w-4" /> {t("gitlab:reset2")}
           </Trans>
         </Button>
       }

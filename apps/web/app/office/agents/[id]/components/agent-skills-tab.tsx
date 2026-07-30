@@ -84,7 +84,8 @@ function SkillRow({
               i18nKey="office:bundledWithKandev"
               values={{ value1: skill.systemVersion ? ` v${skill.systemVersion}` : "" }}
             >
-              Bundled with kandev{skill.systemVersion ? ` v${skill.systemVersion}` : ""}
+              {t("office:bundledWithKandev2")}
+              {skill.systemVersion ? ` v${skill.systemVersion}` : ""}
             </Trans>
           </TooltipContent>
         </Tooltip>

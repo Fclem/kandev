@@ -525,7 +525,7 @@ function SearchActionRow({ state }: { state: DialogState }) {
         ) : (
           <IconSearch className="h-4 w-4" />
         )}
-        Search
+        {t("sentry:search")}
       </Button>
     </div>
   );

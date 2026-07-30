@@ -145,7 +145,7 @@ function CommentEntry({
             <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground mt-1 cursor-pointer hover:text-foreground transition-colors">
               <Trans i18nKey="task:workedRanCommands" values={{ length: comment.toolCalls.length }}>
                 <IconCode className="h-3 w-3" />
-                Worked -- ran {comment.toolCalls.length} commands
+                {t("task:workedRan")} {comment.toolCalls.length} commands
                 <IconChevronDown className="h-3 w-3" />
               </Trans>
             </CollapsibleTrigger>
@@ -203,12 +203,14 @@ function DecisionTimelineEntry({ decision }: { decision: TaskDecision }) {
 }
 
 function TimelineEntry({ event }: { event: TimelineEvent }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground">
       {event.type === "status_change" && event.from && event.to ? (
         <span>
           <Trans i18nKey="task:statusChangedFromTo" values={{ from: event.from, to: event.to }}>
-            Status changed from <strong>{event.from}</strong> to <strong>{event.to}</strong>
+            {t("task:statusChangedFrom")} <strong>{event.from}</strong> to{" "}
+            <strong>{event.to}</strong>
           </Trans>
         </span>
       ) : (
@@ -566,7 +568,7 @@ export function TaskChat({
           className="self-start text-xs text-muted-foreground hover:text-foreground underline cursor-pointer mb-2"
           data-testid="show-older-sessions"
         >
-          Show {olderGroups.length} older session{olderGroups.length === 1 ? "" : "s"}
+          {t("task:show")} {olderGroups.length} older session{olderGroups.length === 1 ? "" : "s"}
         </button>
       )}
       {isEmpty ? (

@@ -190,7 +190,7 @@ export function JiraIssueWatchersSection() {
         <Button size="sm" onClick={openCreate} className="cursor-pointer">
           <Trans i18nKey="jira:newWatcher">
             <IconPlus className="h-4 w-4 mr-1" />
-            New watcher
+            {t("jira:newWatcher2")}
           </Trans>
         </Button>
       }

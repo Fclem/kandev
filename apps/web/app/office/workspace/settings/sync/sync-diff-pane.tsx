@@ -125,11 +125,13 @@ function ParseErrorsSection({
 }: {
   errors: { workspace_id: string; file_path: string; error: string }[];
 }) {
+  const { t } = useTranslation();
   return (
     <div>
       <p className="text-xs font-medium text-destructive mb-1.5 uppercase tracking-wide">
         <Trans i18nKey="office:parseErrors" values={{ length: errors.length }}>
-          Parse errors ({errors.length})
+          {t("office:parseErrors2")}
+          {errors.length})
         </Trans>
       </p>
       <ul className="space-y-1">

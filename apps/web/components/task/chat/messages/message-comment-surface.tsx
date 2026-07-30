@@ -220,7 +220,7 @@ function DrawerCommentActions({
           >
             <Trans i18nKey="task:run">
               <IconPlayerPlay className="h-4 w-4" />
-              Run
+              {t("task:run2")}
             </Trans>
           </Button>
         ) : null}

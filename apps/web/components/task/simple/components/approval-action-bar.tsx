@@ -153,7 +153,7 @@ export function ApprovalActionBar({ task }: ApprovalActionBarProps) {
             onClick={() => setMode("approve")}
           >
             <Trans i18nKey="task:approve2">
-              <IconCheck className="h-3.5 w-3.5 mr-1" /> Approve
+              <IconCheck className="h-3.5 w-3.5 mr-1" /> {t("task:approve3")}
             </Trans>
           </Button>
           <Button
@@ -165,7 +165,7 @@ export function ApprovalActionBar({ task }: ApprovalActionBarProps) {
             onClick={() => setMode("request_changes")}
           >
             <Trans i18nKey="task:requestChanges">
-              <IconX className="h-3.5 w-3.5 mr-1" /> Request changes
+              <IconX className="h-3.5 w-3.5 mr-1" /> {t("task:requestChanges2")}
             </Trans>
           </Button>
         </div>

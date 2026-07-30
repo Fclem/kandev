@@ -98,7 +98,7 @@ export function SkillList(props: SkillListProps) {
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
         >
           <Trans i18nKey="office:browseSkillsSh">
-            Browse skills.sh
+            {t("office:browseSkillsSh2")}
             <IconExternalLink className="h-3.5 w-3.5" />
           </Trans>
         </a>

@@ -237,7 +237,7 @@ function ChatToggleButton({
           ) : (
             <IconMessageCircle className="h-3.5 w-3.5" />
           )}
-          Chat
+          {t("task:chat")}
         </Button>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs">
@@ -245,8 +245,8 @@ function ChatToggleButton({
           <div className="space-y-1">
             <p>
               <Trans i18nKey="task:closeComposeBoxHint" values={{ esc: t("task:esc") }}>
-                Close the compose box (or press <kbd>Esc</kbd> inside it). The CLI agent terminal
-                keeps focus.
+                Close the compose box (or press <kbd>{t("task:esc")}</kbd> inside it). The CLI agent
+                terminal keeps focus.
               </Trans>
             </p>
             <PassthroughChatShortcutHint shortcut={focusShortcut} />
@@ -259,7 +259,8 @@ function ChatToggleButton({
                 values={{ enter: t("task:enter"), shiftEnter: t("task:shiftEnter") }}
               >
                 Open a kandev-controlled compose box above the terminal to type a follow-up message.
-                Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for a newline.
+                Press <kbd>{t("task:enter")}</kbd> to send, <kbd>{t("task:shiftEnter")}</kbd> for a
+                newline.
               </Trans>
             </p>
             <PassthroughChatShortcutHint shortcut={focusShortcut} />
@@ -302,6 +303,7 @@ function CommentsToggleButton({
   onToggle: () => void;
   pendingCommentsCount: number;
 }) {
+  const { t } = useTranslation();
   const disabled = pendingCommentsCount === 0;
   return (
     <Tooltip>
@@ -321,7 +323,7 @@ function CommentsToggleButton({
           ) : (
             <IconMessageDots className="h-3.5 w-3.5" />
           )}
-          Comments
+          {t("task:comments2")}
           {pendingCommentsCount > 0 && (
             <span
               data-testid="passthrough-pending-count"
@@ -360,9 +362,9 @@ function CommentsTooltipBody({ commentsOpen, count }: { commentsOpen: boolean; c
         comment, click the file path to jump to the source, or remove a comment with the trash icon.
       </p>
       <p className="text-muted-foreground">
-        Hit <strong>{t("task:sendToAgent")}</strong> inside the panel to deliver them to the CLI
-        agent right away, or just open the chat box and type a follow-up — the comments will be
-        prepended.
+        {t("task:hit")} <strong>{t("task:sendToAgent")}</strong> inside the panel to deliver them to
+        the CLI agent right away, or just open the chat box and type a follow-up — the comments will
+        be prepended.
       </p>
     </div>
   );
@@ -414,7 +416,7 @@ function CommentsPanel({
               data-testid="passthrough-send-comments"
             >
               <IconSend className="h-3.5 w-3.5" />
-              Send to agent
+              {t("task:sendToAgent")}
             </Button>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs">

@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { IconPencil, IconTrash } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -30,6 +30,7 @@ type SentryInstanceCardProps = {
 // SentryInstanceCard renders one saved instance: its name, URL, per-instance
 // auth-health banner, and edit/delete actions.
 export function SentryInstanceCard({ instance, onEdit, onDelete }: SentryInstanceCardProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3 rounded-md border p-4" data-testid="sentry-instance-card">
       <div className="flex items-start justify-between gap-3">
@@ -51,7 +52,7 @@ export function SentryInstanceCard({ instance, onEdit, onDelete }: SentryInstanc
           >
             <Trans i18nKey="sentry:edit">
               <IconPencil className="h-3.5 w-3.5" />
-              Edit
+              {t("common:edit")}
             </Trans>
           </Button>
           <Button
@@ -65,7 +66,7 @@ export function SentryInstanceCard({ instance, onEdit, onDelete }: SentryInstanc
           >
             <Trans i18nKey="sentry:delete">
               <IconTrash className="h-3.5 w-3.5" />
-              Delete
+              {t("common:delete")}
             </Trans>
           </Button>
         </div>

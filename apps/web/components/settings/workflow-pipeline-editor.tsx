@@ -153,7 +153,7 @@ function PipelineNode({
           >
             <Trans i18nKey="settings:cycle">
               <IconAlertTriangle className="size-3 shrink-0" aria-hidden="true" />
-              Cycle
+              {t("settings:cycle2")}
             </Trans>
           </span>
         )}

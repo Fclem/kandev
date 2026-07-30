@@ -183,7 +183,7 @@ export function LinearIssueWatchersSection() {
         <Button size="sm" onClick={openCreate} className="cursor-pointer">
           <Trans i18nKey="linear:newWatcher">
             <IconPlus className="h-4 w-4 mr-1" />
-            New watcher
+            {t("linear:newWatcher2")}
           </Trans>
         </Button>
       }

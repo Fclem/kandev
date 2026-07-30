@@ -136,6 +136,7 @@ function PerRepoPullMenu({
   onRepoMerge: (repo: string) => void;
   repoDisplayName?: (repositoryName: string) => string | undefined;
 }) {
+  const { t } = useTranslation();
   const statusByName = new Map(perRepoStatus.map((s) => [s.repository_name, s]));
   return (
     <>
@@ -162,7 +163,7 @@ function PerRepoPullMenu({
             >
               <Trans i18nKey="task:pull">
                 <IconCloudDownload className="h-3.5 w-3.5 text-muted-foreground" />
-                Pull
+                {t("common:pull")}
               </Trans>
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -171,7 +172,7 @@ function PerRepoPullMenu({
             >
               <Trans i18nKey="task:rebase">
                 <IconGitCherryPick className="h-3.5 w-3.5 text-muted-foreground" />
-                Rebase
+                {t("common:rebase")}
               </Trans>
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -180,7 +181,7 @@ function PerRepoPullMenu({
             >
               <Trans i18nKey="task:merge">
                 <IconGitMerge className="h-3.5 w-3.5 text-muted-foreground" />
-                Merge
+                {t("common:merge")}
               </Trans>
             </DropdownMenuItem>
           </div>
@@ -203,6 +204,7 @@ function ChangesPanelHeaderLeft({
   onRequestWalkthrough?: () => void;
   requestWalkthroughDisabled?: boolean;
 }) {
+  const { t } = useTranslation();
   if (!showDiffReview) return null;
   return (
     <>
@@ -214,7 +216,7 @@ function ChangesPanelHeaderLeft({
       >
         <Trans i18nKey="task:diff2">
           <IconGitMerge className="h-3 w-3" />
-          Diff
+          {t("task:diff")}
         </Trans>
       </Button>
       <Button
@@ -225,7 +227,7 @@ function ChangesPanelHeaderLeft({
       >
         <Trans i18nKey="task:review">
           <IconEye className="h-3 w-3" />
-          Review
+          {t("task:review2")}
         </Trans>
       </Button>
       {onRequestWalkthrough ? (

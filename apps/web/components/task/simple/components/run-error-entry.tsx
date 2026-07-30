@@ -76,7 +76,7 @@ export function RunErrorEntry({ taskId, error }: RunErrorEntryProps) {
                 <IconChevronDown
                   className={`h-3.5 w-3.5 transition-transform ${showDetails ? "rotate-180" : ""}`}
                 />
-                Show details
+                {t("task:showDetails2")}
               </Trans>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -99,7 +99,7 @@ export function RunErrorEntry({ taskId, error }: RunErrorEntryProps) {
           >
             <Trans i18nKey="task:resumeSession">
               <IconRefresh className="h-3 w-3" />
-              Resume session
+              {t("task:resumeSession2")}
             </Trans>
           </Button>
           <Button
@@ -111,7 +111,7 @@ export function RunErrorEntry({ taskId, error }: RunErrorEntryProps) {
           >
             <Trans i18nKey="task:startFreshSession">
               <IconPlayerPlay className="h-3 w-3" />
-              Start fresh session
+              {t("task:startFreshSession2")}
             </Trans>
           </Button>
         </div>

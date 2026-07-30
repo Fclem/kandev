@@ -278,8 +278,9 @@ function IntroExplanation({
         <IntroBullet>{t("common:youVerifyAndTestTheChange")}</IntroBullet>
         <IntroBullet>
           <Trans i18nKey="common:theAgentForksKdlbsKandevTo">
-            The agent forks <code className="font-mono text-xs">{t("common:kdlbsKandev")}</code> to
-            your GitHub account and opens a PR from your fork, credited to you
+            {t("common:theAgentForks")}{" "}
+            <code className="font-mono text-xs">{t("common:kdlbsKandev")}</code> to your GitHub
+            account and opens a PR from your fork, credited to you
           </Trans>
         </IntroBullet>
       </ul>

@@ -104,6 +104,7 @@ function PopoverActions({
   handleSubmit: () => void;
   handleSubmitAndRun?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <TooltipProvider delayDuration={400}>
       <div className="inline-flex">
@@ -118,7 +119,7 @@ function PopoverActions({
             >
               <Trans i18nKey="task:add">
                 <IconPlus className="h-3.5 w-3.5" />
-                Add
+                {t("task:add2")}
               </Trans>
             </Button>
           </TooltipTrigger>
@@ -141,7 +142,7 @@ function PopoverActions({
               >
                 <Trans i18nKey="task:run">
                   <IconPlayerPlay className="h-3.5 w-3.5" />
-                  Run
+                  {t("task:run2")}
                 </Trans>
               </Button>
             </TooltipTrigger>

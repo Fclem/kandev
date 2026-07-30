@@ -526,7 +526,7 @@ function VoiceShortcutCard() {
             i18nKey="settings:shortcut"
             values={{ label: CONFIGURABLE_SHORTCUTS.VOICE_INPUT_TOGGLE.label }}
           >
-            {CONFIGURABLE_SHORTCUTS.VOICE_INPUT_TOGGLE.label} Shortcut
+            {CONFIGURABLE_SHORTCUTS.VOICE_INPUT_TOGGLE.label} {t("settings:shortcut2")}
           </Trans>
         </CardTitle>
       </CardHeader>

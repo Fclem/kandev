@@ -48,6 +48,7 @@ function CommitContextMenu({
   onRevertCommit?: (sha: string, repo?: string) => void;
   onResetToCommit?: (sha: string, repo?: string) => void;
 }) {
+  const { t } = useTranslation();
   const hasActions = onAmendCommit || onRevertCommit || onResetToCommit;
 
   if (!hasActions) {
@@ -64,7 +65,7 @@ function CommitContextMenu({
           >
             <Trans i18nKey="task:amendMessage">
               <IconPencil className="h-3.5 w-3.5" />
-              Amend message
+              {t("task:amendMessage2")}
             </Trans>
           </ContextMenuItem>
         )}
@@ -74,7 +75,7 @@ function CommitContextMenu({
           >
             <Trans i18nKey="task:revertCommit2">
               <IconArrowBackUp className="h-3.5 w-3.5" />
-              Revert commit
+              {t("task:revertCommit")}
             </Trans>
           </ContextMenuItem>
         )}

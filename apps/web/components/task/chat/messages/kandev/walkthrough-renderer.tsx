@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { IconRoute } from "@tabler/icons-react";
 import {
@@ -78,6 +78,7 @@ function stepPreview(step: WalkthroughStepLike): string | null {
 }
 
 export const ShowWalkthroughRenderer: KandevRenderer = ({ args, result, status }) => {
+  const { t } = useTranslation();
   const taskId = pickString(args, "task_id");
   const title = titleFrom(args, result);
   const steps = stepsFrom(args, result);
@@ -110,7 +111,7 @@ export const ShowWalkthroughRenderer: KandevRenderer = ({ args, result, status }
                 <div className="flex min-w-0 items-baseline gap-2">
                   <span className="shrink-0 text-muted-foreground/70">
                     <Trans i18nKey="task:step" values={{ value1: index + 1 }}>
-                      Step {index + 1}
+                      {t("task:step2")} {index + 1}
                     </Trans>
                   </span>
                   {location && (

@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { IconCircleDot } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 type IssueInfo = { url: string; number: number };
 
 export function IssueTaskIcon({ issueInfo }: { issueInfo: IssueInfo }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -24,7 +25,8 @@ export function IssueTaskIcon({ issueInfo }: { issueInfo: IssueInfo }) {
       </TooltipTrigger>
       <TooltipContent>
         <Trans i18nKey="github:issue" values={{ number: issueInfo.number }}>
-          Issue #{issueInfo.number}
+          {t("github:issue2")}
+          {issueInfo.number}
         </Trans>
       </TooltipContent>
     </Tooltip>

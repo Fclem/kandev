@@ -34,6 +34,7 @@ export function AzureDevOpsWorkItemResults({
   error: string | null;
   onStartTask: (item: AzureDevOpsWorkItem) => void;
 }) {
+  const { t } = useTranslation();
   if (loading || error || items.length === 0)
     return <EmptyResult loading={loading} error={error} />;
   return (
@@ -74,7 +75,7 @@ export function AzureDevOpsWorkItemResults({
             >
               <Trans i18nKey="azureDevops:startTask">
                 <IconPlus className="h-4 w-4" />
-                Start task
+                {t("azureDevops:startTask2")}
               </Trans>
             </Button>
           </div>
@@ -133,7 +134,7 @@ export function AzureDevOpsPullRequestResults({
             >
               <Trans i18nKey="azureDevops:feedback">
                 <IconMessageCircle className="h-4 w-4" />
-                Feedback
+                {t("azureDevops:feedback2")}
               </Trans>
             </Button>
             <Button
@@ -145,7 +146,7 @@ export function AzureDevOpsPullRequestResults({
             >
               <Trans i18nKey="azureDevops:startTask">
                 <IconPlus className="h-4 w-4" />
-                Start task
+                {t("azureDevops:startTask2")}
               </Trans>
             </Button>
             <Button asChild variant="ghost" size="icon-sm" className="cursor-pointer">

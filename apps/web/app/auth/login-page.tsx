@@ -15,6 +15,7 @@ import { Trans, useTranslation } from "react-i18next";
 // plugin-contributed SSO provider, below a divider. Each button is a plain
 // navigation to the plugin's login-initiate webhook.
 function LoginSsoButtons({ providers }: { providers: SsoProvider[] }) {
+  const { t } = useTranslation();
   if (providers.length === 0) return null;
   return (
     <div className="mt-4 flex flex-col gap-2" data-testid="login-sso">
@@ -35,7 +36,7 @@ function LoginSsoButtons({ providers }: { providers: SsoProvider[] }) {
         >
           <a href={provider.initiateUrl}>
             <Trans i18nKey="auth:continueWith" values={{ displayName: provider.displayName }}>
-              Continue with {provider.displayName}
+              {t("auth:continueWith2")} {provider.displayName}
             </Trans>
           </a>
         </Button>
@@ -81,7 +82,7 @@ export function LoginPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Trans i18nKey="auth:signIn">
-              <IconLock className="h-4 w-4" /> Sign in
+              <IconLock className="h-4 w-4" /> {t("auth:signIn2")}
             </Trans>
           </CardTitle>
           <CardDescription>{t("auth:signInToYourKandevAccount")}</CardDescription>

@@ -51,7 +51,7 @@ export function TaskNestContextMenuItems({ task, disabled }: TaskNestContextMenu
       <ContextMenuSubTrigger disabled={disabled}>
         <Trans i18nKey="task:nestUnder">
           <IconSubtask className="mr-2 h-4 w-4" />
-          Nest under
+          {t("task:nestUnder2")}
         </Trans>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="max-h-72 w-56 overflow-y-auto">
@@ -63,7 +63,7 @@ export function TaskNestContextMenuItems({ task, disabled }: TaskNestContextMenu
             >
               <Trans i18nKey="task:unNestRemoveParent">
                 <IconArrowUpRight className="mr-2 h-4 w-4" />
-                Un-nest (remove parent)
+                {t("task:unNestRemoveParent2")}
               </Trans>
             </ContextMenuItem>
             <ContextMenuSeparator />

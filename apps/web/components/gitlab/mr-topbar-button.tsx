@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { memo, useEffect, useState } from "react";
 import Link from "@/components/routing/app-link";
@@ -98,6 +98,7 @@ function MRTriggerContent({
   single: TaskMR | null;
   count: number;
 }) {
+  const { t } = useTranslation();
   if (compact) return <IconBrandGitlab className="h-4 w-4 text-orange-500" />;
   if (single) {
     return (
@@ -113,7 +114,7 @@ function MRTriggerContent({
       <IconBrandGitlab className="h-4 w-4 text-orange-500" />
       <span className="text-xs font-medium">
         <Trans i18nKey="gitlab:mrs" values={{ count }}>
-          {count} MRs
+          {count} {t("gitlab:mrs2")}
         </Trans>
       </span>
     </>
@@ -130,6 +131,7 @@ function MRMenuEntry({
   onReview: (mr: TaskMR) => void;
   onUnlink: (associationId: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div>
       <DropdownMenuItem className="cursor-pointer" onSelect={() => onReview(mr)}>
@@ -139,14 +141,14 @@ function MRMenuEntry({
             i18nKey="gitlab:review"
             values={{ project_path: mr.project_path, mr_iid: mr.mr_iid }}
           >
-            Review {mr.project_path}!{mr.mr_iid}
+            {t("gitlab:review2")} {mr.project_path}!{mr.mr_iid}
           </Trans>
         </span>
       </DropdownMenuItem>
       <DropdownMenuItem asChild className="cursor-pointer">
         <Link href={mr.mr_url} target="_blank" rel="noopener noreferrer">
           <Trans i18nKey="gitlab:openInGitlab">
-            <IconExternalLink className="h-4 w-4" /> Open in GitLab
+            <IconExternalLink className="h-4 w-4" /> {t("gitlab:openInGitlab2")}
           </Trans>
         </Link>
       </DropdownMenuItem>
@@ -156,7 +158,8 @@ function MRMenuEntry({
       >
         <Trans i18nKey="gitlab:unlink" values={{ mr_iid: mr.mr_iid }}>
           <IconUnlink className="h-4 w-4" />
-          Unlink !{mr.mr_iid}
+          {t("gitlab:unlink2")}
+          {mr.mr_iid}
         </Trans>
       </DropdownMenuItem>
     </div>

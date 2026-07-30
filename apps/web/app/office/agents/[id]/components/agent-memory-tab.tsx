@@ -236,7 +236,7 @@ function MemoryToolbar({
         >
           <Trans i18nKey="office:export">
             <IconDownload className="h-4 w-4 mr-1" />
-            Export
+            {t("office:export2")}
           </Trans>
         </Button>
         <Button

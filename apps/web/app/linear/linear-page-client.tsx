@@ -172,7 +172,7 @@ function IssueRow({
         >
           <Trans i18nKey="linear:startTask">
             <IconPlus className="h-3.5 w-3.5" />
-            Start task
+            {t("linear:startTask2")}
           </Trans>
         </Button>
       </div>
@@ -257,6 +257,7 @@ function PaginationBar({
   onNext: () => void;
   onPrev: () => void;
 }) {
+  const { t } = useTranslation();
   if (page === 1 && isLast) return null;
   const start = (page - 1) * pageSize + 1;
   const end = (page - 1) * pageSize + itemCount;
@@ -281,7 +282,9 @@ function PaginationBar({
             />
           </PaginationItem>
           <PaginationItem>
-            <span className="px-3 text-sm tabular-nums">Page {page}</span>
+            <span className="px-3 text-sm tabular-nums">
+              {t("linear:page")} {page}
+            </span>
           </PaginationItem>
           <PaginationItem>
             <PaginationNext

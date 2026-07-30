@@ -142,7 +142,7 @@ export function TasksToolbar({
       <Button className="cursor-pointer" onClick={onNewIssue}>
         <Trans i18nKey="office:newTask">
           <IconPlus className="h-4 w-4 mr-1" />
-          New Task
+          {t("office:newTask2")}
         </Trans>
       </Button>
       <div className="relative flex-1 max-w-[300px]">
@@ -161,7 +161,7 @@ export function TasksToolbar({
             onCheckedChange={(v) => onShowSystemChange(v === true)}
             className="cursor-pointer"
           />
-          Show system tasks
+          {t("office:showSystemTasks2")}
         </Trans>
       </Label>
       <div className="ml-auto flex items-center gap-1">

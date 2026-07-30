@@ -57,7 +57,7 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
             <CardTitle className="flex items-center gap-2">
               <Trans i18nKey="settings:connection">
                 <IconSparkles className="h-5 w-5" />
-                Connection
+                {t("settings:connection2")}
               </Trans>
             </CardTitle>
             <CardDescription>
@@ -82,8 +82,9 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
           ) : (
             <p>
               <Trans i18nKey="settings:configureASpritesApiTokenEnvironment">
-                Configure a <code className="text-xs">SPRITES_API_TOKEN</code> environment variable
-                in the executor profile, referencing a secret with your Sprites.dev API token.
+                {t("settings:configureA")} <code className="text-xs">SPRITES_API_TOKEN</code>{" "}
+                environment variable in the executor profile, referencing a secret with your
+                Sprites.dev API token.
               </Trans>
             </p>
           )}
@@ -111,7 +112,7 @@ export function SpritesConnectionCard({ secretId }: { secretId?: string }) {
               ) : (
                 <IconTestPipe className="mr-1.5 h-4 w-4" />
               )}
-              Test Connection
+              {t("settings:testConnection")}
             </Trans>
           </Button>
         </div>
@@ -246,7 +247,7 @@ export function SpritesInstancesCard({ secretId }: { secretId?: string }) {
                 ) : (
                   <IconTrash className="mr-1.5 h-4 w-4" />
                 )}
-                Destroy All
+                {t("settings:destroyAll2")}
               </Trans>
             </Button>
           )}

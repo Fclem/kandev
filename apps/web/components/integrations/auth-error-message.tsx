@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import Link from "@/components/routing/app-link";
 import { IconLockExclamation } from "@tabler/icons-react";
@@ -44,6 +44,7 @@ export function IntegrationAuthErrorMessage({
   authErrorBody,
   compact,
 }: IntegrationAuthErrorMessageProps) {
+  const { t } = useTranslation();
   const isAuth = isAuthError(error);
 
   if (compact) {
@@ -56,7 +57,7 @@ export function IntegrationAuthErrorMessage({
           <Button asChild size="sm" variant="outline" className="cursor-pointer h-7 text-xs">
             <Link href={reconnectHref}>
               <Trans i18nKey="integrations:reconnect" values={{ name }}>
-                Reconnect {name}
+                {t("integrations:reconnect2")} {name}
               </Trans>
             </Link>
           </Button>
@@ -81,7 +82,7 @@ export function IntegrationAuthErrorMessage({
           <Button asChild size="sm" className="cursor-pointer">
             <Link href={reconnectHref}>
               <Trans i18nKey="integrations:reconnect" values={{ name }}>
-                Reconnect {name}
+                {t("integrations:reconnect2")} {name}
               </Trans>
             </Link>
           </Button>

@@ -285,7 +285,7 @@ function PATSetupHelp({ organizationUrl }: { organizationUrl: string }) {
             <li>{t("azureDevops:openTokenSettingsAndSelectNew")}</li>
             <li>{t("azureDevops:chooseThisOrganizationAShortExpiration")}</li>
             <li>
-              Under{" "}
+              {t("azureDevops:under")}{" "}
               <span className="font-medium text-foreground">{t("azureDevops:workItems")}</span>,
               check Read. Under{" "}
               <span className="font-medium text-foreground">{t("azureDevops:code")}</span>, check
@@ -403,6 +403,7 @@ function saveButtonLabel(state: SettingsState): string {
 }
 
 function ConnectionActions({ state, disabled }: { state: SettingsState; disabled: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center">
       <Button
@@ -435,7 +436,7 @@ function ConnectionActions({ state, disabled }: { state: SettingsState; disabled
           data-testid="azure-devops-delete-button"
         >
           <IconTrash className="h-4 w-4" />
-          Remove
+          {t("azureDevops:remove")}
         </Button>
       )}
     </div>

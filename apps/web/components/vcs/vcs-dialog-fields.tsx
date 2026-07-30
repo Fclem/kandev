@@ -192,6 +192,7 @@ export function PRBranchSummary({
   baseBranch?: string;
   terminology: ChangeRequestTerminology;
 }) {
+  const { t } = useTranslation();
   if (!displayBranch) return null;
   return (
     <div className="text-sm text-muted-foreground">
@@ -201,7 +202,7 @@ export function PRBranchSummary({
             i18nKey="integrations:creatingFrom"
             values={{ shortName: terminology.shortName, displayBranch, baseBranch }}
           >
-            Creating {terminology.shortName} from{" "}
+            {t("integrations:creating2")} {terminology.shortName} from{" "}
             <span className="font-medium text-foreground">{displayBranch}</span>
             {" → "}
             <span className="font-medium text-foreground">{baseBranch}</span>
@@ -213,7 +214,7 @@ export function PRBranchSummary({
             i18nKey="integrations:creatingFrom2"
             values={{ shortName: terminology.shortName, displayBranch }}
           >
-            Creating {terminology.shortName} from{" "}
+            {t("integrations:creating2")} {terminology.shortName} from{" "}
             <span className="font-medium text-foreground">{displayBranch}</span>
           </Trans>
         </span>

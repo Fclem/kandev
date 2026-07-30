@@ -160,6 +160,7 @@ function AdvancedFilters({
   compact?: boolean;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} className={cn(compact && "contents")}>
       <Button
@@ -172,7 +173,7 @@ function AdvancedFilters({
       >
         <Trans i18nKey="azureDevops:advanced">
           <IconAdjustments className="h-4 w-4" />
-          Advanced
+          {t("azureDevops:advanced2")}
           <IconChevronDown
             className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")}
           />

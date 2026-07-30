@@ -128,7 +128,7 @@ function ResetEnvironmentAction({
               onClick={onRequestReset}
             >
               <Trans i18nKey="task:resetEnvironment3">
-                <IconTrash className="h-3.5 w-3.5 mr-1" /> Reset environment
+                <IconTrash className="h-3.5 w-3.5 mr-1" /> {t("task:resetEnvironment")}
               </Trans>
             </Button>
           </span>

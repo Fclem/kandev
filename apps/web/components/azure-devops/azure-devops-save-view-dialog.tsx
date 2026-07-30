@@ -50,8 +50,8 @@ function SaveViewForm({
             i18nKey="azureDevops:saveTheCurrentForThisWorkspace"
             values={{ value1: kind === "work_item" ? "work-item query" : "pull-request filters" }}
           >
-            Save the current {kind === "work_item" ? "work-item query" : "pull-request filters"} for
-            this workspace.
+            {t("azureDevops:saveTheCurrent")}{" "}
+            {kind === "work_item" ? "work-item query" : "pull-request filters"} for this workspace.
           </Trans>
         </DialogDescription>
       </DialogHeader>

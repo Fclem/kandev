@@ -1,5 +1,6 @@
 {
   "activity": "Activity ({{value1}})",
+  "activity2": "Activity (",
   "averages": "Averages",
   "avgPerTask": "{{value0}} avg per task",
   "bestMonth": "Best month",
@@ -15,6 +16,7 @@
   "errorLoadingStats": "Error loading stats: {{initialError}}",
   "filesChanged": "{{total_files_changed}} files changed",
   "gitActivity": "<0></0> Git Activity",
+  "gitActivity2": "Git Activity",
   "inProgress": "{{in_progress_tasks}} in progress",
   "less": "Less",
   "longestTasks": "Longest Tasks",

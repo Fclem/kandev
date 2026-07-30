@@ -35,6 +35,7 @@ export function TasksPagination({
   pagination,
   onPaginationChange,
 }: TasksPaginationProps) {
+  const { t } = useTranslation();
   if (total === 0) return null;
 
   const currentPage = pagination.pageIndex + 1;
@@ -57,7 +58,7 @@ export function TasksPagination({
     >
       <div className="flex-1 text-muted-foreground">
         <Trans i18nKey="common:showingToOfResults2" values={{ start, end, total }}>
-          Showing {start} to {end} of {total} results
+          {t("common:showing")} {start} to {end} of {total} results
         </Trans>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">

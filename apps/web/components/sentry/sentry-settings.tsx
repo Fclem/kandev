@@ -231,7 +231,7 @@ export function SentryConnectionSection({ workspaceId }: { workspaceId: string }
             >
               <Trans i18nKey="sentry:addInstance">
                 <IconPlus className="h-4 w-4" />
-                Add instance
+                {t("sentry:addInstance2")}
               </Trans>
             </Button>
           )}

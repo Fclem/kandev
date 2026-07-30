@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import {
   IconBrandVscode,
@@ -50,6 +50,7 @@ export function AddPanelMenuItems({
   onRunScript,
   onRunDevScript,
 }: AddPanelMenuItemsProps) {
+  const { t } = useTranslation();
   const addBrowserPanel = useDockviewStore((s) => s.addBrowserPanel);
   const addVscodePanel = useDockviewStore((s) => s.addVscodePanel);
   const addPlanPanel = useDockviewStore((s) => s.addPlanPanel);
@@ -75,20 +76,20 @@ export function AddPanelMenuItems({
       >
         <Trans i18nKey="task:browser" values={{ MENU_ICON_CLASS }}>
           <IconDeviceDesktop className={MENU_ICON_CLASS} />
-          Browser
+          {t("task:browser2")}
         </Trans>
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => addVscodePanel()} className={MENU_ITEM_CLASS}>
         <Trans i18nKey="task:vsCode2" values={{ MENU_ICON_CLASS }}>
           <IconBrandVscode className={MENU_ICON_CLASS} />
-          VS Code
+          {t("task:vsCode")}
         </Trans>
       </DropdownMenuItem>
       {!state.isPassthrough && (
         <DropdownMenuItem onClick={() => addPlanPanel({ groupId })} className={MENU_ITEM_CLASS}>
           <Trans i18nKey="task:plan2" values={{ MENU_ICON_CLASS }}>
             <IconFileText className={MENU_ICON_CLASS} />
-            Plan
+            {t("task:plan")}
           </Trans>
         </DropdownMenuItem>
       )}
@@ -96,7 +97,7 @@ export function AddPanelMenuItems({
         <DropdownMenuItem onClick={() => addChangesPanel(groupId)} className={MENU_ITEM_CLASS}>
           <Trans i18nKey="task:changes" values={{ MENU_ICON_CLASS }}>
             <IconGitBranch className={MENU_ICON_CLASS} />
-            Changes
+            {t("task:changes2")}
           </Trans>
         </DropdownMenuItem>
       )}
@@ -104,7 +105,7 @@ export function AddPanelMenuItems({
         <DropdownMenuItem onClick={() => addFilesPanel(groupId)} className={MENU_ITEM_CLASS}>
           <Trans i18nKey="task:files" values={{ MENU_ICON_CLASS }}>
             <IconFolder className={MENU_ICON_CLASS} />
-            Files
+            {t("common:files")}
           </Trans>
         </DropdownMenuItem>
       )}

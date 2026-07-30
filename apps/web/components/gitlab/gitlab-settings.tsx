@@ -35,12 +35,13 @@ import { Trans, useTranslation } from "react-i18next";
 const DEFAULT_HOST = "https://gitlab.com";
 
 function StatusBadge({ status }: { status: GitLabStatus | null }) {
+  const { t } = useTranslation();
   if (!status) return null;
   if (status.authenticated) {
     return (
       <Badge variant="secondary" className="gap-1">
         <Trans i18nKey="gitlab:connected">
-          <IconCheck className="h-3 w-3" /> Connected
+          <IconCheck className="h-3 w-3" /> {t("common:connected")}
         </Trans>
       </Badge>
     );
@@ -55,7 +56,7 @@ function StatusBadge({ status }: { status: GitLabStatus | null }) {
         className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-300"
       >
         <Trans i18nKey="gitlab:unreachable">
-          <IconAlertTriangle className="h-3 w-3" /> Unreachable
+          <IconAlertTriangle className="h-3 w-3" /> {t("gitlab:unreachable2")}
         </Trans>
       </Badge>
     );
@@ -67,7 +68,7 @@ function StatusBadge({ status }: { status: GitLabStatus | null }) {
         className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-300"
       >
         <Trans i18nKey="gitlab:reconnectRequired">
-          <IconAlertTriangle className="h-3 w-3" /> Reconnect required
+          <IconAlertTriangle className="h-3 w-3" /> {t("gitlab:reconnectRequired2")}
         </Trans>
       </Badge>
     );
@@ -75,7 +76,7 @@ function StatusBadge({ status }: { status: GitLabStatus | null }) {
   return (
     <Badge variant="outline" className="gap-1">
       <Trans i18nKey="gitlab:notConnected">
-        <IconX className="h-3 w-3" /> Not connected
+        <IconX className="h-3 w-3" /> {t("gitlab:notConnected2")}
       </Trans>
     </Badge>
   );
@@ -96,7 +97,7 @@ function ConnectionErrorAlert({ status }: { status: GitLabStatus | null }) {
           i18nKey="gitlab:couldnTReach"
           values={{ host: status.host, connection_error: status.connection_error }}
         >
-          Couldn&apos;t reach <code className="font-mono text-xs">{status.host}</code>:{" "}
+          {t("gitlab:couldnTReach2")} <code className="font-mono text-xs">{status.host}</code>:{" "}
           {status.connection_error}
           <span className="block text-xs opacity-80 mt-1">
             {t("gitlab:yourTokenMayStillBeValid")}
@@ -312,6 +313,7 @@ function ClearTokenButton({
   workspaceId: string;
   onCleared: () => void;
 }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const { toast } = useToast();
   return (
@@ -343,7 +345,7 @@ function ClearTokenButton({
         }}
       >
         {busy ? <Spinner className="h-3 w-3" /> : <IconTrash className="h-3 w-3" />}
-        Clear token
+        {t("gitlab:clearToken2")}
       </Trans>
     </Button>
   );
@@ -387,6 +389,7 @@ type ConnectionCardProps = {
 };
 
 function ConnectionStatusRow({ status }: { status: GitLabStatus | null }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
@@ -403,7 +406,7 @@ function ConnectionStatusRow({ status }: { status: GitLabStatus | null }) {
       {status?.username ? (
         <span className="text-xs text-muted-foreground">
           <Trans i18nKey="gitlab:loggedInAs" values={{ username: status.username }}>
-            Logged in as <span className="font-medium">{status.username}</span>
+            {t("gitlab:loggedInAs2")} <span className="font-medium">{status.username}</span>
           </Trans>
         </span>
       ) : null}
@@ -439,7 +442,7 @@ function GitLabConnectionCard(props: ConnectionCardProps) {
           className="gap-1 cursor-pointer"
         >
           <Trans i18nKey="gitlab:refresh2">
-            <IconRefresh className="h-3 w-3" /> Refresh
+            <IconRefresh className="h-3 w-3" /> {t("gitlab:refresh")}
           </Trans>
         </Button>
       }

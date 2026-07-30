@@ -136,7 +136,8 @@ function RoutingBlockBadge({ status, retryAt }: { status: string; retryAt?: stri
           i18nKey="office:waitingForCapacity"
           values={{ value1: retryAt ? ` · retry ${retryAt}` : "" }}
         >
-          Waiting for capacity{retryAt ? ` · retry ${retryAt}` : ""}
+          {t("office:waitingForCapacity2")}
+          {retryAt ? ` · retry ${retryAt}` : ""}
         </Trans>
       </Badge>
     );
@@ -180,7 +181,7 @@ function StatsGrid({ run }: { run: RunDetail }) {
       <div>
         <div className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1">
           <Trans i18nKey="office:duration">
-            <IconClock className="h-3 w-3" /> Duration
+            <IconClock className="h-3 w-3" /> {t("office:duration2")}
           </Trans>
         </div>
         <div data-testid="run-duration">{formatDuration(run.duration_ms)}</div>
@@ -188,7 +189,7 @@ function StatsGrid({ run }: { run: RunDetail }) {
       <div>
         <div className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1">
           <Trans i18nKey="office:cost2">
-            <IconCoin className="h-3 w-3" /> Cost
+            <IconCoin className="h-3 w-3" /> {t("office:cost")}
           </Trans>
         </div>
         <div data-testid="run-cost">{formatCostSubcents(run.costs.cost_subcents)}</div>
@@ -238,6 +239,7 @@ type ActionBarProps = {
 };
 
 function ActionBar({ runId, sessionId, isRunning, isFailed }: ActionBarProps) {
+  const { t } = useTranslation();
   const handleRecover = async (action: "resume" | "fresh_start") => {
     const client = getWebSocketClient();
     if (!client || !runId || !sessionId) return;
@@ -273,7 +275,7 @@ function ActionBar({ runId, sessionId, isRunning, isFailed }: ActionBarProps) {
           data-testid="run-cancel-button"
         >
           <Trans i18nKey="office:cancel">
-            <IconPlayerStop className="h-3.5 w-3.5" /> Cancel
+            <IconPlayerStop className="h-3.5 w-3.5" /> {t("common:cancel")}
           </Trans>
         </Button>
       )}
@@ -287,7 +289,7 @@ function ActionBar({ runId, sessionId, isRunning, isFailed }: ActionBarProps) {
             data-testid="run-resume-button"
           >
             <Trans i18nKey="office:resumeSession">
-              <IconRefresh className="h-3.5 w-3.5" /> Resume session
+              <IconRefresh className="h-3.5 w-3.5" /> {t("office:resumeSession2")}
             </Trans>
           </Button>
           <Button
@@ -298,7 +300,7 @@ function ActionBar({ runId, sessionId, isRunning, isFailed }: ActionBarProps) {
             data-testid="run-fresh-start-button"
           >
             <Trans i18nKey="office:startFresh2">
-              <IconPlayerPlay className="h-3.5 w-3.5" /> Start fresh
+              <IconPlayerPlay className="h-3.5 w-3.5" /> {t("office:startFresh3")}
             </Trans>
           </Button>
         </>

@@ -167,7 +167,7 @@ export function TaskArchiveConfirmDialog({
               data-testid="archive-cascade-checkbox"
             />
             <span>
-              Also archive {t("task:subtasks", { count: subtaskCount })}
+              {t("task:alsoArchive")} {t("task:subtasks", { count: subtaskCount })}
               <span className="block text-xs text-muted-foreground">
                 {t("task:subtasksStayActiveUnlessYouTick")}
               </span>
@@ -193,7 +193,7 @@ export function TaskArchiveConfirmDialog({
               }}
             >
               {isArchiving ? <IconLoader className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Archive
+              {t("task:archive")}
             </Trans>
           </AlertDialogAction>
         </AlertDialogFooter>

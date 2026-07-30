@@ -38,7 +38,7 @@ export function WorkspaceChangeConsequences({ restartsWorkspace }: { restartsWor
           <p className="border-t border-amber-500/20 pt-2 text-muted-foreground">
             <Trans i18nKey="task:cancelLeavesWorkspaceUnchangedBatch">
               <strong className="font-medium text-foreground">
-                Cancel leaves the workspace unchanged.
+                {t("task:cancelLeavesTheWorkspaceUnchanged")}
               </strong>{" "}
               If you continue, the batch is all-or-nothing: when any source fails, none of the new
               sources are attached.

@@ -51,7 +51,7 @@ export function WorkflowCardHeaderActions({
             >
               <Trans i18nKey="settings:export">
                 <IconDownload className="h-4 w-4 mr-2" />
-                Export
+                {t("settings:export2")}
               </Trans>
             </Button>
           </span>
@@ -81,7 +81,7 @@ export function WorkflowCardHeaderActions({
             >
               <Trans i18nKey="settings:deleteWorkflow">
                 <IconTrash className="h-4 w-4 mr-2" />
-                Delete Workflow
+                {t("settings:deleteWorkflow3")}
               </Trans>
             </Button>
           </span>

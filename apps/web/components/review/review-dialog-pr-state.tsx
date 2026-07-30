@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { IconLoader2, IconRefresh } from "@tabler/icons-react";
@@ -130,6 +130,7 @@ export function ReviewPRDiffBoundary({
   onRetry,
   children,
 }: ReviewPRDiffBoundaryProps) {
+  const { t } = useTranslation();
   if (selectedPR && loading) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
@@ -139,7 +140,7 @@ export function ReviewPRDiffBoundary({
             i18nKey="review:loadingChanges"
             values={{ repo: selectedPR.repo, pr_number: selectedPR.pr_number }}
           >
-            Loading {selectedPR.repo} #{selectedPR.pr_number} changes…
+            {t("common:loading")} {selectedPR.repo} #{selectedPR.pr_number} changes…
           </Trans>
         </span>
       </div>
@@ -153,7 +154,7 @@ export function ReviewPRDiffBoundary({
           <Button className="min-h-11" variant="outline" size="sm" onClick={onRetry}>
             <Trans i18nKey="review:retry">
               <IconRefresh className="h-4 w-4" />
-              Retry
+              {t("common:retry")}
             </Trans>
           </Button>
         )}

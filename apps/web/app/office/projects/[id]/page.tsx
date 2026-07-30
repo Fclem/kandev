@@ -101,7 +101,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
           <Button variant="destructive" size="sm" onClick={handleDelete} className="cursor-pointer">
             <Trans i18nKey="office:deleteProject">
               <IconTrash className="h-4 w-4 mr-1" />
-              Delete Project
+              {t("office:deleteProject2")}
             </Trans>
           </Button>
         </div>

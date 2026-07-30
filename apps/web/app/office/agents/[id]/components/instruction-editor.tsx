@@ -134,7 +134,7 @@ function DeleteConfirmDialog({
         <DialogHeader>
           <DialogTitle>
             <Trans i18nKey="office:delete" values={{ filename }}>
-              Delete {filename}?
+              {t("common:delete")} {filename}?
             </Trans>
           </DialogTitle>
         </DialogHeader>

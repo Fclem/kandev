@@ -146,7 +146,7 @@ function TerminalsListHeader({ count, onAdd }: { count: number; onAdd: () => voi
       >
         <Trans i18nKey="task:newTerminal2">
           <IconPlus className="h-4 w-4" />
-          New terminal
+          {t("task:newTerminal3")}
         </Trans>
       </Button>
     </div>

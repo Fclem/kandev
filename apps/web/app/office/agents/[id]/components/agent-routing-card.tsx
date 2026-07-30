@@ -231,11 +231,12 @@ function TierToggleGroup({ value, onChange }: { value: string; onChange: (t: Tie
 }
 
 function InheritedTierHint({ defaultTier }: { defaultTier?: Tier }) {
+  const { t } = useTranslation();
   if (!defaultTier) return null;
   return (
     <p className="text-xs text-muted-foreground">
       <Trans i18nKey="office:inheritsFromWorkspace" values={{ defaultTier }}>
-        Inherits{" "}
+        {t("office:inherits")}{" "}
         <Badge variant="secondary" className="capitalize">
           {defaultTier}
         </Badge>{" "}

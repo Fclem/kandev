@@ -31,7 +31,7 @@ export function StartTaskMenu({
         >
           <Trans i18nKey="gitlab:task">
             <IconPlus className="h-3.5 w-3.5" />
-            Task
+            {t("common:task")}
             <IconChevronDown className="h-3 w-3" />
           </Trans>
         </Button>

@@ -313,7 +313,7 @@ function AutomationFlagBadges({ automation }: { automation: AutomationFlags }) {
             i18nKey="github:autoFix"
             values={{ current: autoFixRound.current, max: autoFixRound.max }}
           >
-            Auto-fix {autoFixRound.current}/{autoFixRound.max}
+            {t("github:autoFix2")} {autoFixRound.current}/{autoFixRound.max}
           </Trans>
         </span>
       )}
@@ -536,7 +536,8 @@ function PRStatusChipDrawer({ pr, automation, refreshTaskPR }: SingleChipProps) 
         <DrawerHeader className="flex flex-row items-center justify-between border-b py-2">
           <DrawerTitle className="text-sm">
             <Trans i18nKey="github:pr" values={{ pr_number: pr.pr_number }}>
-              PR #{pr.pr_number}
+              {t("github:pr2")}
+              {pr.pr_number}
             </Trans>
           </DrawerTitle>
           <DrawerDescription className="sr-only">

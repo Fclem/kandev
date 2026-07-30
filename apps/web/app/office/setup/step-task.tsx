@@ -26,7 +26,7 @@ export function StepTask({ agentName, taskTitle, taskDescription, onChange }: St
       <div>
         <h2 className="text-xl font-semibold">
           <Trans i18nKey="office:giveYourSomethingToDo" values={{ name }}>
-            Give your {name} something to do
+            {t("office:giveYour")} {name} something to do
           </Trans>
         </h2>
         <p className="text-sm text-muted-foreground mt-1">

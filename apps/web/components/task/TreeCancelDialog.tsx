@@ -38,8 +38,8 @@ export function TreeCancelDialog({
               i18nKey="task:thisWillCancelTasksAndInterrupt"
               values={{ taskCount, activeRunCount }}
             >
-              This will cancel {taskCount} tasks and interrupt {activeRunCount} active agent
-              sessions. This action can be undone with Restore.
+              {t("task:thisWillCancel")} {taskCount} tasks and interrupt {activeRunCount} active
+              agent sessions. This action can be undone with Restore.
             </Trans>
           </AlertDialogDescription>
         </AlertDialogHeader>

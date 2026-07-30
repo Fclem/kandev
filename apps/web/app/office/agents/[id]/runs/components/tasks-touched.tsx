@@ -93,12 +93,13 @@ function rowKey(row: RowState): string {
 }
 
 function TaskTableRow({ row }: { row: RowState }) {
+  const { t } = useTranslation();
   if (row.kind === "loading") {
     return (
       <TableRow data-testid="tasks-touched-row-loading">
         <TableCell colSpan={4} className="text-xs text-muted-foreground">
           <Trans i18nKey="office:loading" values={{ value1: shortId(row.id) }}>
-            Loading {shortId(row.id)}…
+            {t("common:loading")} {shortId(row.id)}…
           </Trans>
         </TableCell>
       </TableRow>
@@ -109,7 +110,7 @@ function TaskTableRow({ row }: { row: RowState }) {
       <TableRow data-testid="tasks-touched-row-error">
         <TableCell colSpan={4} className="text-xs text-muted-foreground">
           <Trans i18nKey="office:failedToLoad" values={{ value1: shortId(row.id) }}>
-            Failed to load {shortId(row.id)}
+            {t("office:failedToLoad2")} {shortId(row.id)}
           </Trans>
         </TableCell>
       </TableRow>

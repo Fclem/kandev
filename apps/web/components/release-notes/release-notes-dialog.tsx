@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import ReactMarkdown from "react-markdown";
 import {
@@ -37,6 +37,7 @@ export function ReleaseNotesDialog({
   entries,
   latestVersion,
 }: ReleaseNotesDialogProps) {
+  const { t } = useTranslation();
   const releaseUrl = getReleaseUrl(latestVersion);
 
   return (
@@ -44,7 +45,7 @@ export function ReleaseNotesDialog({
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            What&apos;s New
+            {t("common:whatSNew")}
             <Badge variant="secondary">v{latestVersion}</Badge>
           </DialogTitle>
           <DialogDescription>{buildDescription(entries)}</DialogDescription>

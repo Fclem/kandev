@@ -187,8 +187,8 @@ function TierIndicator({
           i18nKey="office:weLlTreatAsTheTier"
           values={{ value, value6: selectedProfile?.agent_name || "this provider" }}
         >
-          We&apos;ll treat <span className="font-mono">{modelHint || "your model"}</span> as the{" "}
-          {value} tier for {selectedProfile?.agent_name || "this provider"}. Change it later in
+          {t("office:weLlTreat")} <span className="font-mono">{modelHint || "your model"}</span> as
+          the {value} tier for {selectedProfile?.agent_name || "this provider"}. Change it later in
           Workspace → Provider routing.
         </Trans>
       </p>

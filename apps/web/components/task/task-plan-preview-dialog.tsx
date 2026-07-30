@@ -71,7 +71,7 @@ export function PlanRevisionPreviewDialog({
           <DialogTitle className="flex items-center gap-2">
             <span>
               <Trans i18nKey="task:version" values={{ value1: revision?.revision_number }}>
-                Version {revision?.revision_number}
+                {t("task:version2")} {revision?.revision_number}
               </Trans>
             </span>
             {isCurrent && (
@@ -187,7 +187,7 @@ function PreviewBodyInner({ content, error }: { content: string | null; error: s
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Trans i18nKey="task:loading2">
           <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading…
+          {t("common:loading3")}
         </Trans>
       </div>
     );

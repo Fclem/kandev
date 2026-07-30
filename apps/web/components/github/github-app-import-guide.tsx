@@ -38,8 +38,8 @@ export function GitHubAppImportGuide({
           key. This one-time setup expires {new Date(preparation.expires_at).toLocaleString()}.
         </p>
         <p className="text-xs leading-5 text-muted-foreground">
-          For webhooks, choose <strong>{t("github:applicationJson")}</strong> as the content type
-          and keep SSL verification enabled.
+          {t("github:forWebhooksChoose")} <strong>{t("github:applicationJson")}</strong> as the
+          content type and keep SSL verification enabled.
         </p>
       </div>
       <div className="divide-y rounded-md border">

@@ -52,6 +52,7 @@ function ProviderHealthRow({
   h: ProviderHealth;
   onRetry: (providerId: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const meta = STATE_BADGE[h.state];
   const handleRetry = async () => {
@@ -77,7 +78,7 @@ function ProviderHealthRow({
         {h.retry_at && (
           <p className="text-xs text-muted-foreground">
             <Trans i18nKey="office:retryAt" values={{ retry_at: h.retry_at }}>
-              Retry at {h.retry_at}
+              {t("office:retryAt2")} {h.retry_at}
             </Trans>
           </p>
         )}

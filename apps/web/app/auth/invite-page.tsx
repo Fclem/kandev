@@ -175,7 +175,7 @@ export function InvitePage({ token }: InvitePageProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Trans i18nKey="auth:acceptInvite">
-              <IconUserPlus className="h-4 w-4" /> Accept invite
+              <IconUserPlus className="h-4 w-4" /> {t("auth:acceptInvite2")}
             </Trans>
           </CardTitle>
           <CardDescription>

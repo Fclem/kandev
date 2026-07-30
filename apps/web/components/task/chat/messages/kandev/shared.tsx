@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { createContext, useContext, type ReactNode } from "react";
 import { Badge } from "@kandev/ui/badge";
@@ -183,10 +183,11 @@ export function TaskStateBadge({ state }: { state: string | undefined }) {
 // items. Plain "No results" rendered inside the body rather than the header so
 // the header stays consistent across all states.
 export function EmptyListNote({ noun }: { noun: string }) {
+  const { t } = useTranslation();
   return (
     <div className="text-xs text-muted-foreground italic">
       <Trans i18nKey="task:noFound" values={{ noun }}>
-        No {noun} found.
+        {t("task:no")} {noun} found.
       </Trans>
     </div>
   );

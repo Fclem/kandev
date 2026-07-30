@@ -171,7 +171,7 @@ export function SentryIssueWatchersSection({ workspaceId }: { workspaceId: strin
         <Button size="sm" onClick={openCreate} className="cursor-pointer">
           <Trans i18nKey="sentry:newWatcher">
             <IconPlus className="h-4 w-4 mr-1" />
-            New watcher
+            {t("sentry:newWatcher2")}
           </Trans>
         </Button>
       }

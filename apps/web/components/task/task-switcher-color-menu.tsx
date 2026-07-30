@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { IconCheck, IconPalette } from "@tabler/icons-react";
 import {
@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export function TaskColorMenu({ taskId, disabled }: { taskId: string; disabled?: boolean }) {
+  const { t } = useTranslation();
   const currentColor = useTaskColor(taskId);
   const setColor = useSetTaskColor();
   return (
@@ -38,7 +39,7 @@ export function TaskColorMenu({ taskId, disabled }: { taskId: string; disabled?:
           }}
         >
           <IconPalette className="mr-2 h-4 w-4" />
-          Color
+          {t("task:color2")}
           {currentColor && (
             <span
               className={cn(
@@ -62,7 +63,7 @@ export function TaskColorMenu({ taskId, disabled }: { taskId: string; disabled?:
         <ContextMenuItem disabled={!currentColor} onSelect={() => setColor(taskId, null)}>
           <Trans i18nKey="task:none">
             <span className="mr-2 inline-block h-2 w-2 rounded-full border border-muted-foreground/40" />
-            None
+            {t("common:none")}
           </Trans>
         </ContextMenuItem>
       </ContextMenuSubContent>

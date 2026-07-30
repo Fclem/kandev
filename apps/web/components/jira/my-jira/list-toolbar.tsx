@@ -306,7 +306,7 @@ function SaveViewButton({ onSave }: { onSave: (name: string) => void }) {
         >
           <Trans i18nKey="jira:saveView">
             <IconPlus className="h-3.5 w-3.5" />
-            Save view
+            {t("jira:saveView2")}
           </Trans>
         </Button>
       </PopoverTrigger>

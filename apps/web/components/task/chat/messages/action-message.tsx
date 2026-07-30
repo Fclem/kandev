@@ -168,12 +168,13 @@ function MissingBranchRecovery({
 }
 
 function TechnicalDetails({ children }: { children: string }) {
+  const { t } = useTranslation();
   return (
     <details className="mt-2 min-w-0 text-xs text-muted-foreground">
       <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 sm:min-h-8">
         <Trans i18nKey="task:technicalDetails">
           <IconChevronDown className="h-3.5 w-3.5" />
-          Technical details
+          {t("task:technicalDetails2")}
         </Trans>
       </summary>
       <pre className="max-h-[300px] max-w-full overflow-y-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-2 font-mono text-[11px]">

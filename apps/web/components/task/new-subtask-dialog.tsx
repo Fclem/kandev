@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RefObject } from "react";
@@ -477,6 +477,7 @@ export function NewSubtaskDialog({
   parentTaskId,
   parentTaskTitle,
 }: NewSubtaskDialogProps) {
+  const { t } = useTranslation();
   const { sessions: parentSessions } = useTaskSessions(parentTaskId);
   const {
     agentProfiles,
@@ -513,7 +514,7 @@ export function NewSubtaskDialog({
         <DialogHeader>
           <DialogTitle className="min-w-0 wrap-break-word pr-6 text-sm font-medium">
             <Trans i18nKey="task:newSubtaskFor" values={{ parentTaskTitle }}>
-              New subtask for <span className="text-foreground">{parentTaskTitle}</span>
+              {t("task:newSubtaskFor2")} <span className="text-foreground">{parentTaskTitle}</span>
             </Trans>
           </DialogTitle>
         </DialogHeader>

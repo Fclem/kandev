@@ -35,7 +35,7 @@ export function WizardFooter({
           <Button variant="ghost" onClick={onBack} className="cursor-pointer">
             <Trans i18nKey="office:back">
               <IconArrowLeft className="h-4 w-4 mr-1" />
-              Back
+              {t("common:back")}
             </Trans>
           </Button>
         )}
@@ -54,7 +54,7 @@ export function WizardFooter({
         ) : (
           <Button onClick={onNext} disabled={!canAdvance} className="cursor-pointer">
             <Trans i18nKey="office:next">
-              Next
+              {t("common:next")}
               <IconArrowRight className="h-4 w-4 ml-1" />
             </Trans>
           </Button>

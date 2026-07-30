@@ -62,7 +62,7 @@ export function TriggerPicker({ triggerTypes, onSelect }: TriggerPickerProps) {
         >
           <Trans i18nKey="automations:addCondition">
             <IconPlus className="h-4 w-4 mr-1" />
-            Add Condition
+            {t("automations:addCondition2")}
           </Trans>
         </Button>
       </PopoverTrigger>

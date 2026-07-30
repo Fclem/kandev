@@ -29,7 +29,7 @@ export function ExecutionIndicator({ status, className }: ExecutionIndicatorProp
           >
             <Trans i18nKey="office:live2">
               <IconPointFilled className="h-3 w-3 animate-pulse" />
-              Live
+              {t("office:live3")}
             </Trans>
           </span>
         </TooltipTrigger>
@@ -45,7 +45,7 @@ export function ExecutionIndicator({ status, className }: ExecutionIndicatorProp
           <span className={cn("inline-flex items-center gap-1 text-xs text-amber-500", className)}>
             <Trans i18nKey="office:ready2">
               <IconPointFilled className="h-3 w-3" />
-              Ready
+              {t("office:ready")}
             </Trans>
           </span>
         </TooltipTrigger>

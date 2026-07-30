@@ -33,7 +33,7 @@ function GitHubCLIAccountNotice({
   return (
     <p className="text-xs text-muted-foreground">
       <Trans i18nKey="github:signInWithThenReopenThis">
-        Sign in with <code>{t("github:ghAuthLogin")}</code>, then reopen this dialog.
+        {t("github:signInWith")} <code>{t("github:ghAuthLogin")}</code>, then reopen this dialog.
       </Trans>
     </p>
   );
@@ -150,7 +150,7 @@ export function GitHubCLIForm({
             values={{ value0: saving && <Spinner className="mr-2 h-4 w-4" /> }}
           >
             {saving && <Spinner className="mr-2 h-4 w-4" />}
-            Use account
+            {t("github:useAccount2")}
           </Trans>
         </Button>
       </div>

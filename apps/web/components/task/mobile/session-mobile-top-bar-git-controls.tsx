@@ -165,7 +165,7 @@ export function CommitDialog({
           <DialogTitle className="flex items-center gap-2">
             <Trans i18nKey="task:commitChanges">
               <IconGitCommit className="h-5 w-5 text-amber-500" />
-              Commit Changes
+              {t("common:commitChanges")}
             </Trans>
           </DialogTitle>
         </DialogHeader>
@@ -252,7 +252,7 @@ function CommitDialogFooter({
           <>
             <Trans i18nKey="task:commit">
               <IconCheck className="h-4 w-4 mr-2" />
-              Commit
+              {t("common:commit")}
             </Trans>
           </>
         )}
@@ -305,7 +305,7 @@ export function PRDialog({
           <DialogTitle className="flex items-center gap-2">
             <Trans i18nKey="task:create" values={{ longName: terminology.longName }}>
               <IconGitPullRequest className="h-5 w-5 text-cyan-500" />
-              Create {terminology.longName}
+              {t("task:create3")} {terminology.longName}
             </Trans>
           </DialogTitle>
         </DialogHeader>
@@ -476,7 +476,7 @@ export function GitActionsDropdown({
           <IconGitPullRequest className="h-4 w-4 text-cyan-500" />
           <span className="flex-1">
             <Trans i18nKey="task:create2" values={{ shortName: terminology.shortName }}>
-              Create {terminology.shortName}
+              {t("task:create3")} {terminology.shortName}
             </Trans>
           </span>
         </DropdownMenuItem>

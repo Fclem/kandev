@@ -75,7 +75,7 @@ function SecretField({
             ),
           }}
         >
-          API key
+          {t("linear:apiKey2")}
           {hasSavedSecret && (
             <span className="text-xs text-muted-foreground ml-2">
               {t("linear:savedLeaveBlankToKeepThe")}

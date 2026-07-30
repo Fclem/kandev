@@ -327,7 +327,7 @@ function DeleteLayoutDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>
             <Trans i18nKey="task:delete" values={{ value1: layout?.name ?? "saved layout" }}>
-              Delete {layout?.name ?? "saved layout"}?
+              {t("common:delete")} {layout?.name ?? "saved layout"}?
             </Trans>
           </AlertDialogTitle>
           <AlertDialogDescription>

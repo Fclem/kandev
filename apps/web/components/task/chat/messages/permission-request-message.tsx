@@ -19,7 +19,7 @@ function getPermissionStatusBadge(status: PermissionRequestMetadata["status"]) {
       return (
         <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
           <Trans i18nKey="task:approved">
-            <IconCheck className="h-3 w-3" /> Approved
+            <IconCheck className="h-3 w-3" /> {t("task:approved2")}
           </Trans>
         </span>
       );
@@ -27,7 +27,7 @@ function getPermissionStatusBadge(status: PermissionRequestMetadata["status"]) {
       return (
         <span className="inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
           <Trans i18nKey="task:rejected">
-            <IconX className="h-3 w-3" /> Rejected
+            <IconX className="h-3 w-3" /> {t("task:rejected2")}
           </Trans>
         </span>
       );

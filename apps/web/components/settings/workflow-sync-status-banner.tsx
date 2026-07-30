@@ -1,5 +1,5 @@
 "use client";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -84,6 +84,7 @@ export function WorkflowSyncStatusCard({
   syncing,
   onSyncNow,
 }: WorkflowSyncStatusCardProps) {
+  const { t } = useTranslation();
   const state = syncState(config);
   return (
     <div
@@ -95,7 +96,7 @@ export function WorkflowSyncStatusCard({
         <div className="flex items-center gap-2 text-sm">
           <StateIcon state={state} />
           <span>
-            Syncing from{" "}
+            {t("settings:syncingFrom")}{" "}
             <span className="font-semibold">
               {config.repo_owner}/{config.repo_name}
             </span>
@@ -126,7 +127,7 @@ export function WorkflowSyncStatusCard({
             ) : (
               <IconRefresh className="h-4 w-4 mr-2" />
             )}
-            Sync now
+            {t("settings:syncNow2")}
           </Trans>
         </Button>
       </div>

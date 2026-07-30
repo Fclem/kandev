@@ -210,11 +210,10 @@ function NativeMessageListBody({
         footerActionMessages={footerActionMessages}
       />
 
-      {/* Bottom anchor — browser keeps scroll pinned here when new content
-          appends, but only while auto-scroll is enabled: without disabling
-          the anchor too, the browser's native scroll-anchoring keeps
-          tracking the bottom on its own and defeats the toggle for a user
-          who disables from the current bottom. */}
+      {/* Bottom anchor keeps the view pinned while auto-scroll is enabled.
+          The scroll container disables anchoring entirely while it is off,
+          so status/footer updates cannot choose a different anchor and move
+          the frozen transcript. */}
       <div style={{ overflowAnchor: autoScrollEnabled ? "auto" : "none", height: 1 }} />
     </div>
   );
@@ -287,7 +286,12 @@ export const NativeMessageList = memo(
     );
 
     return (
-      <SessionPanelContent ref={scrollRef} className="relative chat-message-list p-0">
+      <SessionPanelContent
+        ref={scrollRef}
+        className={`relative chat-message-list p-0 ${
+          autoScrollEnabled ? "[overflow-anchor:auto]" : "[overflow-anchor:none]"
+        }`}
+      >
         {stickyPromptBar}
         <NativeMessageListBody
           items={items}

@@ -12,7 +12,7 @@ export type AzureDevOpsPresetKind = "work_item" | "pull_request";
 
 export type AzureDevOpsPreset = {
   value: string;
-  label: string;
+  labelKey: string;
   icon: typeof IconInbox;
   group: "inbox" | "created";
   filters: Partial<AzureDevOpsFiltersState>;
@@ -28,28 +28,28 @@ function wiql(condition?: string): string {
 export const AZURE_WORK_ITEM_PRESETS: AzureDevOpsPreset[] = [
   {
     value: "recent",
-    label: "Recently updated",
+    labelKey: "azureDevops:recentlyUpdated",
     icon: IconCalendarClock,
     group: "inbox",
     filters: { wiql: wiql(), top: 50 },
   },
   {
     value: "assigned",
-    label: "Assigned to me",
+    labelKey: "azureDevops:assignedToMe",
     icon: IconInbox,
     group: "inbox",
     filters: { wiql: wiql("[System.AssignedTo] = @Me"), top: 50 },
   },
   {
     value: "active",
-    label: "Active",
+    labelKey: "azureDevops:active",
     icon: IconActivity,
     group: "inbox",
     filters: { wiql: wiql("[System.State] <> 'Closed' AND [System.State] <> 'Done'"), top: 50 },
   },
   {
     value: "created",
-    label: "Created by me",
+    labelKey: "azureDevops:createdByMe",
     icon: IconUser,
     group: "created",
     filters: { wiql: wiql("[System.CreatedBy] = @Me"), top: 50 },
@@ -59,28 +59,28 @@ export const AZURE_WORK_ITEM_PRESETS: AzureDevOpsPreset[] = [
 export const AZURE_PULL_REQUEST_PRESETS: AzureDevOpsPreset[] = [
   {
     value: "review-requested",
-    label: "Review requested",
+    labelKey: "azureDevops:reviewRequested",
     icon: IconInbox,
     group: "inbox",
     filters: { status: "active", reviewer: "@me", creator: "" },
   },
   {
     value: "active",
-    label: "Open",
+    labelKey: "azureDevops:open",
     icon: IconGitPullRequest,
     group: "inbox",
     filters: { status: "active", creator: "", reviewer: "" },
   },
   {
     value: "completed",
-    label: "Completed",
+    labelKey: "azureDevops:completed",
     icon: IconChecks,
     group: "created",
     filters: { status: "completed", creator: "", reviewer: "" },
   },
   {
     value: "created",
-    label: "Created by me",
+    labelKey: "azureDevops:createdByMe",
     icon: IconUser,
     group: "created",
     filters: { status: "active", creator: "@me", reviewer: "" },

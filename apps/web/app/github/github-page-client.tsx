@@ -49,6 +49,8 @@ import { useGitHubActionPresets } from "@/hooks/domains/github/use-github-action
 import { useAllWorkflowSnapshots } from "@/hooks/domains/kanban/use-all-workflow-snapshots";
 import { hasGitHubPersonalActor } from "@/lib/github-auth";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
+import { t } from "@/lib/i18n";
 
 type GitHubPageClientProps = {
   workspaceId?: string;
@@ -140,12 +142,14 @@ function resolveTitle(
   issuePresets: PresetOption[],
 ): string {
   if (selection.source === "saved") {
-    return saved.find((p) => p.id === selection.id)?.label ?? "Saved query";
+    // A saved query's name is the user's own text.
+    return saved.find((p) => p.id === selection.id)?.label ?? t("github:savedQuery");
   }
   const presets = selection.kind === "pr" ? prPresets : issuePresets;
+  const preset = presets.find((p) => p.value === selection.id);
   return (
-    presets.find((p) => p.value === selection.id)?.label ??
-    (selection.kind === "pr" ? "Pull requests" : "Issues")
+    resolveOptionLabel(t, preset) ||
+    t(selection.kind === "pr" ? "github:pullRequests" : "github:issues")
   );
 }
 

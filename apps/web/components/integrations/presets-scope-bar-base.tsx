@@ -11,6 +11,7 @@ import {
 } from "@kandev/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel, type OptionLabel } from "@/lib/i18n/option-label";
 
 /**
  * Shared, domain-agnostic scope bar for the integration dashboards (/github,
@@ -22,9 +23,13 @@ import { useTranslation } from "react-i18next";
  * Each integration wraps this with its own kinds/presets/types — see
  * `my-github/presets-scope-bar.tsx` and `my-gitlab/presets-scope-bar.tsx`.
  */
-export type ScopePreset = {
+/**
+ * A built-in scope preset. Carries a catalog key for the copy we author and a
+ * verbatim label for rows a user renamed — see {@link OptionLabel}. Distinct from
+ * {@link ScopeSavedPreset}, whose label is always the user's own text.
+ */
+export type ScopePreset = OptionLabel & {
   value: string;
-  label: string;
   icon: Icon;
   group: "inbox" | "created";
 };
@@ -55,13 +60,14 @@ function KindSegment<K extends string>({
   active,
   onChange,
 }: {
-  kinds: ReadonlyArray<{ value: K; label: string }>;
+  kinds: ReadonlyArray<{ value: K; labelKey: string }>;
   active: K;
   onChange: (k: K) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex shrink-0 items-center rounded-md border p-0.5 text-xs">
-      {kinds.map(({ value, label }) => (
+      {kinds.map(({ value, labelKey }) => (
         <button
           key={value}
           type="button"
@@ -71,7 +77,7 @@ function KindSegment<K extends string>({
             active === value ? PILL_ACTIVE : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {label}
+          {t(labelKey)}
         </button>
       ))}
     </div>
@@ -182,7 +188,7 @@ export type IntegrationScopeBarProps<K extends string> = {
   className?: string;
   testId: string;
   savedMenuTestId: string;
-  kinds: ReadonlyArray<{ value: K; label: string }>;
+  kinds: ReadonlyArray<{ value: K; labelKey: string }>;
   selected: ScopeSelection<K>;
   onSelect: (s: ScopeSelection<K>) => void;
   presetsByKind: (kind: K) => ScopePreset[];
@@ -205,6 +211,7 @@ export function IntegrationScopeBar<K extends string>({
   canSaveCurrent,
   onSaveCurrent,
 }: IntegrationScopeBarProps<K>) {
+  const { t } = useTranslation();
   const presets = presetsByKind(selected.kind);
   const saved = savedPresets.filter((p) => p.kind === selected.kind);
   const inbox = presets.filter((p) => p.group === "inbox");
@@ -217,7 +224,7 @@ export function IntegrationScopeBar<K extends string>({
   const renderPill = (p: ScopePreset) => (
     <PresetPill
       key={`${selected.kind}-${p.value}`}
-      label={p.label}
+      label={resolveOptionLabel(t, p)}
       Icon={p.icon}
       active={selected.source === "preset" && selected.id === p.value}
       onClick={() => onSelect({ kind: selected.kind, source: "preset", id: p.value })}

@@ -14,6 +14,7 @@ import type { ExecutionMode, TriggerType } from "@/lib/types/automation";
 import { RequiredFieldLabel } from "./required-field-label";
 import { useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
+import type { OptionLabel } from "@/lib/i18n/option-label";
 
 // RepositorySelection mirrors the task-create dialog's two-tier model: a
 // registered workspace repository (keyed by id) OR a filesystem-discovered
@@ -73,14 +74,14 @@ function selectionToOptionId(sel: RepositorySelection): string {
 function buildRepositoryItems(
   workspaceRepos: Repository[],
   discoveredRepos: LocalRepository[],
-): Array<{ id: string; label: string }> {
+): Array<{ id: string } & OptionLabel> {
   const registeredPaths = new Set(
     workspaceRepos
       .map((r) => r.local_path)
       .filter(Boolean)
       .map((p) => p.replace(/\/+$/, "")),
   );
-  const items: Array<{ id: string; label: string }> = [
+  const items: Array<{ id: string } & OptionLabel> = [
     { id: REPO_NONE_OPTION_ID, label: t("automations:noneNoRepository") },
   ];
   for (const r of workspaceRepos) {
@@ -114,8 +115,8 @@ function pickSelectionFromOptionId(
 }
 
 const EXECUTION_MODE_ITEMS = [
-  { id: "task", label: "Task — creates a tracked kanban task" },
-  { id: "run", label: "Run — fire-and-forget, hidden from kanban" },
+  { id: "task", labelKey: "automations:taskCreatesATrackedKanbanTask" },
+  { id: "run", labelKey: "automations:runFireAndForgetHiddenFrom" },
 ];
 
 function useDiscoveredRepositories(workspaceId: string) {
@@ -346,7 +347,7 @@ function SelectField({
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
-  items: Array<{ id: string; label: string }>;
+  items: Array<{ id: string } & OptionLabel>;
   disabled?: boolean;
   helpText?: string;
   required?: boolean;

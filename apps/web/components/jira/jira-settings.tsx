@@ -218,14 +218,20 @@ type SecretFieldProps = FieldsRowProps & { hasSavedSecret: boolean };
 // SECRET_COPY centralizes the field label and empty-state placeholder per
 // auth method. Keyed by JiraAuthMethod so adding a new method causes the
 // type system to flag the missing entry.
-const SECRET_COPY: Record<JiraAuthMethod, { label: string; placeholder: string }> = {
-  api_token: { label: "API token", placeholder: "paste API token here" },
-  pat: { label: "Personal Access Token", placeholder: "paste personal access token here" },
-  session_cookie: { label: "Session token value", placeholder: "paste cloud.session.token value" },
+const SECRET_COPY: Record<JiraAuthMethod, { labelKey: string; placeholderKey: string }> = {
+  api_token: { labelKey: "jira:apiToken", placeholderKey: "jira:pasteApiTokenHere" },
+  pat: {
+    labelKey: "jira:personalAccessToken",
+    placeholderKey: "jira:pastePersonalAccessTokenHere",
+  },
+  session_cookie: {
+    labelKey: "jira:sessionTokenValue",
+    placeholderKey: "jira:pasteCloudSessionTokenValue",
+  },
 };
 
 function secretPlaceholder(method: JiraAuthMethod, hasSavedSecret: boolean): string {
-  return hasSavedSecret ? "••••••••" : SECRET_COPY[method].placeholder;
+  return hasSavedSecret ? "••••••••" : t(SECRET_COPY[method].placeholderKey);
 }
 
 function formatExpiry(expiresAt: string): { label: string; tone: "ok" | "warn" | "danger" } {
@@ -235,11 +241,11 @@ function formatExpiry(expiresAt: string): { label: string; tone: "ok" | "warn" |
   const hours = diffMs / (60 * 60 * 1000);
   if (hours < 24) {
     const h = Math.max(1, Math.round(hours));
-    return { label: `Cookie expires in ${h}h`, tone: "danger" };
+    return { label: t("jira:cookieExpiresInHours", { count: h }), tone: "danger" };
   }
   const days = Math.round(hours / 24);
   return {
-    label: `Cookie expires in ${days} day${days === 1 ? "" : "s"}`,
+    label: t("jira:cookieExpiresInDays", { count: days }),
     tone: days < 7 ? "warn" : "ok",
   };
 }
@@ -277,7 +283,7 @@ function SecretField({
   return (
     <div className="space-y-1.5">
       <Label htmlFor="jira-secret">
-        {SECRET_COPY[method].label}
+        {t(SECRET_COPY[method].labelKey)}
         {hasSavedSecret && (
           <span className="text-xs text-muted-foreground ml-2">
             {t("jira:savedLeaveBlankToKeepThe")}

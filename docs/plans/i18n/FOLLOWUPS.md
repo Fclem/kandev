@@ -111,19 +111,34 @@ gone. The `i18n:check` gate would catch a malformed placeholder as a missing key
 
 ---
 
-## 5. Display copy in module-scope config objects — MOSTLY DONE
+## 5. Display copy in module-scope config objects — FIXED
 
-Config objects at module scope hold catalog KEYS and are translated at the render
-site. `label: t("task:todo")` there would call `t()` at import, pinning the copy to
+Config objects at module scope hold catalog KEYS, translated at the render site.
+`label: t("task:todo")` there would call `t()` at import, pinning the copy to
 whatever locale was active at boot and never updating on a switch — a worse bug
 than the hardcoded string, because it looks correct until someone switches
 language.
 
-**286 of 325 strings across 47 files are done.** Re-check the remainder with:
+**All 294 in-scope strings across 58 files are done.** Verify with:
 
 ```bash
 cd apps/web && DUMP_MODULE_SCOPE=1 node scripts/externalize-strings.mjs components app
 ```
+
+### The shape that kept recurring
+
+An option list fed from two places at once — a static list we wrote, plus runtime
+values we were handed (a user's agent-profile names, a repo slug, Docker's own
+state text, an acronym like `CEO`). One field cannot be both, so these carry the
+two separately:
+
+- `lib/i18n/option-label.ts` — `OptionLabel` + `resolveOptionLabel(t, option)`
+- `ExecutorEnvironmentStatus` — `labelKey` / `rawLabel`
+- `ScriptPlaceholder` — `descriptionKey` / `description`
+
+**Both fields are optional, so reading `item.label` directly type-checks and
+renders blank.** That bit once, in the watch dialogs' `SelectField`. Always go
+through the resolver — the shared `WatchSelectField` now does.
 
 ### Tooling
 
@@ -131,33 +146,24 @@ cd apps/web && DUMP_MODULE_SCOPE=1 node scripts/externalize-strings.mjs componen
   the property (`label` -> `labelKey`), so a consumer still reading `.label` fails
   to compile instead of rendering a raw key to a user.
 - `fix-config-label-reads.mjs` reads `tsc` output and applies the mechanical half
-  of each break (`{opt.label}` -> `{t(opt.labelKey)}`, plus cross-file type-member
-  renames).
+  of each break, driven by compiler positions rather than re-parsing.
 - `fix-missing-t.mjs` binds `t` where a rewrite introduced a call to it.
 
 Hard limits, each learned from wrong output:
 
-- **`lib/types/**` and `lib/api/**` are off limits.** Those types describe the
+- **`lib/types/**` and `lib/api/**` are off limits** — those types describe the
   server's JSON, so a member name is a wire contract.
-- **Fixture modules and keyboard key names are not copy.** `*-mock-data`, `demo/`,
-  and `Esc`/`Tab`/`PgUp` are excluded.
-- **A named type annotation is a warning sign.** Such a type is frequently ALSO
-  satisfied by runtime data, so `--include-named-types` is opt-in per file.
+- **Fixture modules and keyboard key names are not copy.**
+- **A named type annotation is a warning sign**; `--include-named-types` is opt-in
+  per file, because such a type is often also satisfied by runtime data.
 - **Component props are not config items.** A `SelectField`-style component
   receives `label={t(...)}` — already translated. Only the *item* types in its
   option arrays need the key treatment.
+- **Never bulk-rewrite a call inside the helper that implements it.** Rewriting
+  `t(x.descriptionKey)` into the new accessor also rewrote the accessor's own
+  body, making it recurse until the stack blew. Only a render-time test caught it.
 
-### The shape that keeps recurring
-
-An option list fed from two places at once — a static list we wrote, plus runtime
-values we were handed (a user's agent-profile names, a repo slug, an acronym like
-`CEO`). One field cannot be both, so these carry the two separately:
-
-- `lib/i18n/option-label.ts` — `OptionLabel` + `resolveOptionLabel(t, option)`
-- `ExecutorEnvironmentStatus` — `labelKey` / `rawLabel` (Docker's own state text)
-- `ScriptPlaceholder` — `descriptionKey` / `description` (backend-supplied)
-
-### Out of scope (31 strings)
+### Deliberately not translated (31 strings)
 
 | Count | File | Why |
 |---|---|---|
@@ -165,31 +171,3 @@ values we were handed (a user's agent-profile names, a repo slug, an acronym lik
 | 5 | `app/demo/agent-messages/page.tsx` | Demo fixture data |
 | 3 | `office/workspace/routing/components/provider-tier-mapping.tsx` | Label is typed `Tier`, a union used for matching — translating breaks the comparison |
 | 2 | `app/layout.tsx` | Dead Next.js `metadata` export; `index.html` owns the real `<title>` |
-
-### Still to do (39 strings, 11 files)
-
-All of them hang off the shared preset shapes — `PresetOption` (declared twice:
-`my-github/search-bar.tsx` and `my-gitlab/presets.ts`), `ScopePreset` in
-`integrations/presets-scope-bar-base.tsx`, and the `SelectField`/`CategoryMeta`
-props in the watch dialogs and automations config:
-
-```
-components/github/my-github/search-bar.tsx            9
-components/github/issue-watch-dialog.tsx              6
-components/github/review-watch-dialog.tsx             6
-components/jira/jira-settings.tsx                     3
-components/jira/my-jira/filter-pills.tsx              3
-components/jira/my-jira/list-toolbar.tsx              3
-components/automations/config-section.tsx             2
-components/azure-devops/azure-devops-scope-bar.tsx    2
-components/github/my-github/presets-scope-bar.tsx     2
-components/gitlab/my-gitlab/presets-scope-bar.tsx     2
-components/automations/trigger-picker.tsx             1
-```
-
-These need one coordinated change, not a sweep: the type moves in
-`presets-scope-bar-base.tsx`, both `PresetOption` declarations, the three
-integration scope bars, `use-default-query-presets.ts`, and four test files all
-have to land together, and the props-vs-item distinction has to be made per
-member rather than per file. Attempting it as a batch produced 58 compile errors
-that would not converge, so it was reverted rather than landed half-done.

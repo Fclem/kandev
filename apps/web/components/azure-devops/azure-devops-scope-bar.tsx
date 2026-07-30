@@ -10,8 +10,8 @@ import { presetsForKind, type AzureDevOpsPresetKind } from "./azure-devops-prese
 export type AzureDevOpsScopeSelection = ScopeSelection<AzureDevOpsPresetKind>;
 
 const KINDS = [
-  { value: "work_item", label: "Work items" },
-  { value: "pull_request", label: "Pull requests" },
+  { value: "work_item", labelKey: "azureDevops:workItemsKind" },
+  { value: "pull_request", labelKey: "azureDevops:pullRequestsKind" },
 ] as const;
 
 export function AzureDevOpsScopeBar({

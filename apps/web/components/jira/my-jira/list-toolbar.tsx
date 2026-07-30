@@ -23,11 +23,12 @@ import {
 import type { SavedView } from "./use-saved-views";
 import type { SortKey } from "./filter-model";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
-const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: "updated", label: "Updated" },
-  { value: "created", label: "Created" },
-  { value: "priority", label: "Priority" },
+const SORT_OPTIONS: { value: SortKey; labelKey: string }[] = [
+  { value: "updated", labelKey: "jira:updated3" },
+  { value: "created", labelKey: "jira:created" },
+  { value: "priority", labelKey: "jira:priority" },
 ];
 
 type ListToolbarProps = {
@@ -65,7 +66,11 @@ export function ListToolbar({
 }: ListToolbarProps) {
   const { t } = useTranslation();
   const activeView = views.find((v) => v.id === activeViewId);
-  const sortLabel = SORT_OPTIONS.find((o) => o.value === sort)?.label ?? "Updated";
+  const sortLabel =
+    resolveOptionLabel(
+      t,
+      SORT_OPTIONS.find((o) => o.value === sort),
+    ) || t("jira:updated");
   return (
     <div className="flex items-center gap-2 px-6 py-2.5 border-b shrink-0 flex-wrap">
       <SearchInput value={searchText} onChange={onSearchChange} />
@@ -118,6 +123,7 @@ function SortDropdown({
   sortLabel: string;
   onSortChange: (sort: SortKey) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -136,7 +142,7 @@ function SortDropdown({
             onCheckedChange={() => onSortChange(o.value)}
             className="cursor-pointer"
           >
-            {o.label}
+            {t(o.labelKey)}
           </DropdownMenuCheckboxItem>
         ))}
       </DropdownMenuContent>

@@ -15,7 +15,10 @@ import { createQueuedUserSettingsSync } from "@/lib/user-settings-sync";
 
 export type StoredQueryPreset = {
   value: string;
-  label: string;
+  /** Verbatim label for a preset the user renamed. */
+  label?: string;
+  /** Catalog key when this row came from a builtin, so its copy stays localized. */
+  labelKey?: string;
   filter: string;
   group: "inbox" | "created";
 };
@@ -26,7 +29,13 @@ type StoredDefaults = {
 };
 
 export function toStored(presets: PresetOption[]): StoredQueryPreset[] {
-  return presets.map(({ value, label, filter, group }) => ({ value, label, filter, group }));
+  return presets.map(({ value, label, labelKey, filter, group }) => ({
+    value,
+    label,
+    labelKey,
+    filter,
+    group,
+  }));
 }
 
 let snapshot: StoredDefaults | null | undefined = undefined;

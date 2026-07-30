@@ -39,6 +39,8 @@ import {
 import { toGitLabTaskPreset } from "@/components/gitlab/my-gitlab/task-presets";
 import { useAppStore } from "@/components/state-provider";
 import { Trans, useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
+import { t } from "@/lib/i18n";
 
 type GitLabPageClientProps = {
   workspaceId?: string;
@@ -109,12 +111,14 @@ function NotConnectedNotice({ reconnect }: { reconnect?: boolean }) {
 
 function resolveTitle(selection: SidebarSelection, saved: SavedPreset[]): string {
   if (selection.source === "saved") {
-    return saved.find((p) => p.id === selection.id)?.label ?? "Saved query";
+    // A saved query's name is the user's own text.
+    return saved.find((p) => p.id === selection.id)?.label ?? t("gitlab:savedQuery");
   }
   const presets = selection.kind === "mr" ? MR_PRESETS : ISSUE_PRESETS;
+  const preset = presets.find((p) => p.value === selection.id);
   return (
-    presets.find((p) => p.value === selection.id)?.label ??
-    (selection.kind === "mr" ? "Merge requests" : "Issues")
+    resolveOptionLabel(t, preset) ||
+    t(selection.kind === "mr" ? "gitlab:mergeRequests" : "gitlab:issues")
   );
 }
 

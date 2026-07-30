@@ -9,9 +9,16 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import type { JiraProject, JiraStatus } from "@/lib/types/jira";
 import { type AssigneeFilter } from "./filter-model";
 import { useTranslation } from "react-i18next";
+import { resolveOptionLabel } from "@/lib/i18n/option-label";
 
 type PillShellProps = {
+  /** Already-translated pill label. */
   label: string;
+  /**
+   * Stable id for `data-testid`. Derived ids used to come from the label, which
+   * silently changes with the locale — e2e selectors must not move.
+   */
+  testId: string;
   summary: string | null;
   active: boolean;
   onClear?: () => void;
@@ -25,20 +32,22 @@ type PillShellProps = {
 
 function DisabledPill({
   label,
+  testId,
   summary,
   disabledHint,
-}: Pick<PillShellProps, "label" | "summary" | "disabledHint">) {
+}: Pick<PillShellProps, "label" | "testId" | "summary" | "disabledHint">) {
+  const { t } = useTranslation();
   // Radix Tooltip on a focusable wrapper (per apps/web/AGENTS.md) so keyboard
   // and screen-reader users reach the disabled pill and learn why it's off,
   // instead of the reason being mouse-hover-only via a raw title attribute.
   const pill = (
     <div
-      data-testid={`jira-filter-pill-${label.toLowerCase()}`}
+      data-testid={`jira-filter-pill-${testId}`}
       data-disabled="true"
       tabIndex={0}
       role="button"
       aria-disabled="true"
-      aria-label={disabledHint ?? `${label} filter disabled`}
+      aria-label={disabledHint ?? t("jira:filterDisabled", { filter: label })}
       className="inline-flex items-stretch rounded-md border text-xs overflow-hidden bg-background opacity-50"
     >
       <span className="px-2.5 py-1.5 flex items-center gap-1.5 cursor-not-allowed">
@@ -59,6 +68,7 @@ function DisabledPill({
 
 function PillShell({
   label,
+  testId,
   summary,
   active,
   onClear,
@@ -68,7 +78,9 @@ function PillShell({
 }: PillShellProps) {
   const [open, setOpen] = useState(false);
   if (disabled) {
-    return <DisabledPill label={label} summary={summary} disabledHint={disabledHint} />;
+    return (
+      <DisabledPill label={label} testId={testId} summary={summary} disabledHint={disabledHint} />
+    );
   }
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -80,7 +92,7 @@ function PillShell({
         <PopoverTrigger asChild>
           <button
             type="button"
-            data-testid={`jira-filter-pill-${label.toLowerCase()}`}
+            data-testid={`jira-filter-pill-${testId}`}
             className="cursor-pointer px-2.5 py-1.5 flex items-center gap-1.5 hover:bg-muted/50 transition-colors"
           >
             <span className="text-muted-foreground">{label}</span>
@@ -137,6 +149,7 @@ export function ProjectPill({ projects, value, onChange }: ProjectPillProps) {
   return (
     <PillShell
       label={t("jira:project")}
+      testId="project"
       summary={value.length > 0 ? joinSummary(value, 2) : null}
       active={value.length > 0}
       onClear={() => onChange([])}
@@ -204,6 +217,7 @@ export function StatusPill({ options, value, onChange, hasProjectSelected }: Sta
   return (
     <PillShell
       label={t("common:status")}
+      testId="status"
       summary={summary}
       active={value.length > 0}
       onClear={() => onChange([])}
@@ -242,19 +256,25 @@ type AssigneePillProps = {
   onChange: (a: AssigneeFilter) => void;
 };
 
-const ASSIGNEE_OPTIONS: { value: AssigneeFilter; label: string }[] = [
-  { value: "anyone", label: "Anyone" },
-  { value: "me", label: "Me" },
-  { value: "unassigned", label: "Unassigned" },
+const ASSIGNEE_OPTIONS: { value: AssigneeFilter; labelKey: string }[] = [
+  { value: "anyone", labelKey: "jira:anyone" },
+  { value: "me", labelKey: "jira:me" },
+  { value: "unassigned", labelKey: "jira:unassigned" },
 ];
 
 export function AssigneePill({ value, onChange }: AssigneePillProps) {
   const { t } = useTranslation();
   const active = value !== "anyone";
-  const summary = active ? (ASSIGNEE_OPTIONS.find((o) => o.value === value)?.label ?? null) : null;
+  const summary = active
+    ? resolveOptionLabel(
+        t,
+        ASSIGNEE_OPTIONS.find((o) => o.value === value),
+      ) || null
+    : null;
   return (
     <PillShell
       label={t("jira:assignee")}
+      testId="assignee"
       summary={summary}
       active={active}
       onClear={() => onChange("anyone")}
@@ -269,7 +289,7 @@ export function AssigneePill({ value, onChange }: AssigneePillProps) {
               value === o.value ? "font-medium" : ""
             }`}
           >
-            {o.label}
+            {t(o.labelKey)}
           </button>
         ))}
       </div>

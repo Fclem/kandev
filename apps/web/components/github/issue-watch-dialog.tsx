@@ -13,7 +13,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@kandev/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { Textarea } from "@kandev/ui/textarea";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kandev/ui/tooltip";
@@ -41,6 +40,7 @@ import type {
 } from "@/lib/types/github";
 import { Trans, useTranslation } from "react-i18next";
 import { placeholderDescription } from "@/components/settings/profile-edit/script-editor-completions";
+import { WatchSelectField } from "@/components/integrations/watch-select-field";
 
 type IssueWatchDialogProps = {
   open: boolean;
@@ -71,21 +71,25 @@ type FormState = {
 
 const DEFAULT_QUERY = "type:issue state:open";
 
-const CLEANUP_POLICY_OPTIONS: Array<{ id: CleanupPolicy; label: string; description: string }> = [
+const CLEANUP_POLICY_OPTIONS: Array<{
+  id: CleanupPolicy;
+  labelKey: string;
+  descriptionKey: string;
+}> = [
   {
     id: "auto",
-    label: "Auto (recommended)",
-    description: "Delete closed-issue tasks unless you typed a message in them.",
+    labelKey: "github:autoRecommended",
+    descriptionKey: "github:deleteClosedIssueTasksUnlessYou",
   },
   {
     id: "always",
-    label: "Always delete",
-    description: "Delete on close even if you engaged with the task.",
+    labelKey: "github:alwaysDelete",
+    descriptionKey: "github:deleteOnCloseEvenIfYou",
   },
   {
     id: "never",
-    label: "Never auto-delete",
-    description: "Keep all tasks. Delete them manually from the task list.",
+    labelKey: "github:neverAutoDelete",
+    descriptionKey: "github:keepAllTasksDeleteThemManually",
   },
 ];
 
@@ -286,7 +290,7 @@ function IssueAutomationFields({
     <>
       <SectionHeader>{t("github:automation")}</SectionHeader>
       <div className="grid grid-cols-2 gap-4">
-        <SelectField
+        <WatchSelectField
           label={t("common:workflow")}
           description={t("github:theWorkflowToCreateTasksIn")}
           value={form.workflowId}
@@ -294,7 +298,7 @@ function IssueAutomationFields({
           placeholder={t("common:selectWorkflow")}
           items={workflows.map((w) => ({ id: w.id, label: w.name }))}
         />
-        <SelectField
+        <WatchSelectField
           label={t("github:workflowStep")}
           description={t("github:initialStepForNewTasks")}
           value={form.workflowStepId}
@@ -305,7 +309,7 @@ function IssueAutomationFields({
         />
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <SelectField
+        <WatchSelectField
           label={t("github:agentProfile")}
           description={t("github:optionalFallsBackToStepDefault2")}
           value={form.agentProfileId || STEP_DEFAULT}
@@ -320,7 +324,7 @@ function IssueAutomationFields({
             })),
           ]}
         />
-        <SelectField
+        <WatchSelectField
           label={t("github:executorProfile")}
           description={t("github:optionalFallsBackToStepDefault2")}
           value={form.executorProfileId || STEP_DEFAULT}
@@ -390,15 +394,16 @@ function IssueSettingsFields({
           className="cursor-pointer"
         />
       </div>
-      <SelectField
+      <WatchSelectField
         label={t("github:cleanupBehavior")}
-        description={
-          CLEANUP_POLICY_OPTIONS.find((p) => p.id === form.cleanupPolicy)?.description ?? ""
-        }
+        description={(() => {
+          const policy = CLEANUP_POLICY_OPTIONS.find((p) => p.id === form.cleanupPolicy);
+          return policy ? t(policy.descriptionKey) : "";
+        })()}
         value={form.cleanupPolicy}
         onChange={(v) => setForm((prev) => ({ ...prev, cleanupPolicy: v as CleanupPolicy }))}
         placeholder={t("github:auto")}
-        items={CLEANUP_POLICY_OPTIONS.map((p) => ({ id: p.id, label: p.label }))}
+        items={CLEANUP_POLICY_OPTIONS.map((p) => ({ id: p.id, labelKey: p.labelKey }))}
       />
     </>
   );
@@ -515,48 +520,6 @@ export function IssueWatchDialog({
   );
 }
 
-type SelectFieldItem = { id: string; label: string; icon?: React.ReactNode };
-
-function SelectField(props: {
-  label: string;
-  description?: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  items: SelectFieldItem[];
-  disabled?: boolean;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label>{props.label}</Label>
-      {props.description && <p className="text-xs text-muted-foreground">{props.description}</p>}
-      <Select
-        value={props.value || undefined}
-        onValueChange={props.onChange}
-        disabled={props.disabled}
-      >
-        <SelectTrigger className="cursor-pointer">
-          <SelectValue placeholder={props.placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {props.items.map((item) => (
-            <SelectItem key={item.id} value={item.id}>
-              {item.icon ? (
-                <span className="flex items-center gap-1.5">
-                  <span>{item.label}</span>
-                  {item.icon}
-                </span>
-              ) : (
-                item.label
-              )}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-
 function WorkspacePicker({
   value,
   onChange,
@@ -569,7 +532,7 @@ function WorkspacePicker({
   const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
-    <SelectField
+    <WatchSelectField
       label={t("common:workspace")}
       description={t("github:tasksCreatedByThisWatcherLand")}
       value={value}

@@ -18,8 +18,8 @@ type PresetsScopeBarProps = {
 };
 
 const KINDS = [
-  { value: "mr", label: "Merge requests" },
-  { value: "issue", label: "Issues" },
+  { value: "mr", labelKey: "gitlab:mergeRequests" },
+  { value: "issue", labelKey: "gitlab:issues" },
 ] as const;
 
 /**

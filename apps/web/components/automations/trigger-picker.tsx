@@ -8,21 +8,24 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { IconPlus, IconBrandGithub, IconWebhook, IconInfoCircle } from "@tabler/icons-react";
 import type { TriggerType, TriggerTypeInfo } from "@/lib/types/automation";
 import { Trans, useTranslation } from "react-i18next";
+import { type OptionLabel } from "@/lib/i18n/option-label";
 
 type TriggerPickerProps = {
   triggerTypes: TriggerTypeInfo[];
   onSelect: (type: TriggerType, config: Record<string, unknown>) => void;
 };
 
-type CategoryMeta = {
-  heading: string;
+type CategoryMeta = OptionLabel & {
+  /** Brand names ("GitHub") stay verbatim; our own wording uses `labelKey`. */
+  heading?: string;
+  headingKey?: string;
   icon: typeof IconBrandGithub;
   color: string;
 };
 
 const CATEGORY_META: Record<string, CategoryMeta> = {
   github: { heading: "GitHub", icon: IconBrandGithub, color: "text-purple-400" },
-  webhook: { heading: "Webhook", icon: IconWebhook, color: "text-blue-400" },
+  webhook: { headingKey: "automations:webhook", icon: IconWebhook, color: "text-blue-400" },
 };
 
 export function TriggerPicker({ triggerTypes, onSelect }: TriggerPickerProps) {
@@ -76,7 +79,7 @@ export function TriggerPicker({ triggerTypes, onSelect }: TriggerPickerProps) {
               return (
                 <PickerGroup
                   key={category}
-                  heading={meta.heading}
+                  heading={meta.headingKey ? t(meta.headingKey) : (meta.heading ?? "")}
                   icon={meta.icon}
                   color={meta.color}
                   items={items}

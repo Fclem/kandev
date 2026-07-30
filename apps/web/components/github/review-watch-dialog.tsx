@@ -38,6 +38,8 @@ import type {
   CleanupPolicy,
 } from "@/lib/types/github";
 import { useTranslation } from "react-i18next";
+import type { OptionLabel } from "@/lib/i18n/option-label";
+import { WatchSelectField } from "@/components/integrations/watch-select-field";
 
 type ReviewWatchDialogProps = {
   open: boolean;
@@ -105,73 +107,29 @@ function formStateFromWatch(watch: ReviewWatch): FormState {
   };
 }
 
-const CLEANUP_POLICY_OPTIONS: Array<{ id: CleanupPolicy; label: string; description: string }> = [
+const CLEANUP_POLICY_OPTIONS: Array<{
+  id: CleanupPolicy;
+  labelKey: string;
+  descriptionKey: string;
+}> = [
   {
     id: "auto",
-    label: "Auto (recommended)",
-    description: "Delete merged/closed PR tasks unless you typed a message in them.",
+    labelKey: "github:autoRecommended",
+    descriptionKey: "github:deleteMergedClosedPrTasksUnless",
   },
   {
     id: "always",
-    label: "Always delete",
-    description: "Delete on merge/close even if you engaged with the task.",
+    labelKey: "github:alwaysDelete",
+    descriptionKey: "github:deleteOnMergeCloseEvenIf",
   },
   {
     id: "never",
-    label: "Never auto-delete",
-    description: "Keep all tasks. Delete them manually from the task list.",
+    labelKey: "github:neverAutoDelete",
+    descriptionKey: "github:keepAllTasksDeleteThemManually",
   },
 ];
 
 // --- Generic select field with description ---
-
-type SelectFieldItem = { id: string; label: string; icon?: React.ReactNode };
-
-type SelectFieldProps = {
-  label: string;
-  description?: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  items: SelectFieldItem[];
-  disabled?: boolean;
-};
-
-function SelectField({
-  label,
-  description,
-  value,
-  onChange,
-  placeholder,
-  items,
-  disabled,
-}: SelectFieldProps) {
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {description && <p className="text-xs text-muted-foreground">{description}</p>}
-      <Select value={value || undefined} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger className="cursor-pointer">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map((item) => (
-            <SelectItem key={item.id} value={item.id}>
-              {item.icon ? (
-                <span className="flex items-center gap-1.5">
-                  <span>{item.label}</span>
-                  {item.icon}
-                </span>
-              ) : (
-                item.label
-              )}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
 
 function WorkspacePicker({
   value,
@@ -185,7 +143,7 @@ function WorkspacePicker({
   const { t } = useTranslation();
   const workspaces = useAppStore((s) => s.workspaces.items);
   return (
-    <SelectField
+    <WatchSelectField
       label={t("common:workspace")}
       description={t("github:tasksCreatedByThisWatcherLand")}
       value={value}
@@ -399,7 +357,7 @@ function WorkflowFields({
   const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
-      <SelectField
+      <WatchSelectField
         label={t("common:workflow")}
         description={t("github:theWorkflowToCreateTasksIn")}
         value={form.workflowId}
@@ -407,7 +365,7 @@ function WorkflowFields({
         placeholder={t("common:selectWorkflow")}
         items={workflows.map((w) => ({ id: w.id, label: w.name }))}
       />
-      <SelectField
+      <WatchSelectField
         label={t("github:workflowStep")}
         description={t("github:initialStepForNewTasksAuto")}
         value={form.workflowStepId}
@@ -441,13 +399,13 @@ function ProfileFields({
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
-  agentProfiles: Array<{ id: string; label: string; cli_passthrough?: boolean }>;
+  agentProfiles: Array<{ id: string; cli_passthrough?: boolean } & OptionLabel>;
   executorProfiles: Array<{ id: string; name: string }>;
 }) {
   const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4">
-      <SelectField
+      <WatchSelectField
         label={t("github:agentProfile")}
         description={t("github:optionalFallsBackToStepDefault2")}
         value={form.agentProfileId || STEP_DEFAULT}
@@ -525,15 +483,16 @@ function SettingsFields({
           className="cursor-pointer"
         />
       </div>
-      <SelectField
+      <WatchSelectField
         label={t("github:cleanupBehavior")}
-        description={
-          CLEANUP_POLICY_OPTIONS.find((p) => p.id === form.cleanupPolicy)?.description ?? ""
-        }
+        description={(() => {
+          const policy = CLEANUP_POLICY_OPTIONS.find((p) => p.id === form.cleanupPolicy);
+          return policy ? t(policy.descriptionKey) : "";
+        })()}
         value={form.cleanupPolicy}
         onChange={(v) => setForm((prev) => ({ ...prev, cleanupPolicy: v as CleanupPolicy }))}
         placeholder={t("github:auto")}
-        items={CLEANUP_POLICY_OPTIONS.map((p) => ({ id: p.id, label: p.label }))}
+        items={CLEANUP_POLICY_OPTIONS.map((p) => ({ id: p.id, labelKey: p.labelKey }))}
       />
     </>
   );

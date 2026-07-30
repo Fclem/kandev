@@ -388,11 +388,35 @@ function useScrollToMessage(runGuardedScroll: (performScroll: () => void) => voi
   );
 }
 
+/** Upper bound on the number of animation frames the initial restore keeps
+ * re-applying a saved offset the scroll container can't hold yet. After a
+ * dockview remount (navigating away and back) the message rows lay out — and
+ * grow `scrollHeight` — over the frame or two following the first paint, so
+ * the very first write is clamped to a still-too-short height. Re-applying for
+ * a few frames lands the offset once the content catches up. ~20 frames
+ * (~300ms at 60fps) is comfortably longer than that settle window while
+ * staying bounded so a transcript that legitimately can never reach the saved
+ * offset (its content genuinely shrank) can't loop forever. */
+const INITIAL_RESTORE_MAX_FRAMES = 20;
+
 /**
  * Applies the initial scrollTop once items are available: bottom when
  * enabled, or the last captured offset for this session when disabled (see
  * `resolveNativeInitialScrollTop`). Skips while a dockview layout-rebuild
  * restore is pending — that separate mechanism owns the position instead.
+ *
+ * When restoring a concrete saved offset (auto-scroll disabled), the first
+ * write can be clamped short: on a dockview remount the container's content is
+ * still laying out, so `scrollHeight - clientHeight` momentarily sits below
+ * the target and the browser caps the write. The content grows to full height
+ * a frame or two later, so the offset is re-applied across a bounded run of
+ * animation frames until it lands (or the budget runs out). That re-apply loop
+ * is deliberately NOT torn down on unmount: dockview detaches (rather than
+ * destroys) the panel's DOM as it finalizes the layout, so the component that
+ * seeded the restore unmounts while its scroll element stays on screen — the
+ * loop keeps a direct reference to that element and self-terminates once the
+ * offset lands, so it stays correct and can't leak. The enabled "scroll to
+ * bottom" path needs no retry and settles in a single write.
  */
 function useInitialScrollPosition(
   scrollRef: React.RefObject<HTMLDivElement | null>,
@@ -419,15 +443,34 @@ function useInitialScrollPosition(
       savedScrollTop,
       scrollHeight: el.scrollHeight,
     });
-    if (scrollTop !== null) {
-      el.scrollTop = scrollTop;
+    didInitialScroll.current = true;
+    if (scrollTop === null) return;
+
+    const syncNearBottom = () => {
       isNearBottomRef.current = !hasTranscriptProgressedPastView({
         scrollTop,
         scrollHeight: el.scrollHeight,
         clientHeight: el.clientHeight,
       });
-    }
-    didInitialScroll.current = true;
+    };
+
+    el.scrollTop = scrollTop;
+    syncNearBottom();
+
+    // Only a concrete disabled-restore offset can be clamped by a not-yet-
+    // settled layout; the enabled bottom target lands in one write, and a
+    // write that already reached its target needs no follow-up.
+    if (enabled || scrollTop <= 0 || el.scrollTop >= scrollTop - 1) return;
+
+    let framesLeft = INITIAL_RESTORE_MAX_FRAMES;
+    const reapply = () => {
+      el.scrollTop = scrollTop;
+      syncNearBottom();
+      if (el.scrollTop < scrollTop - 1 && framesLeft-- > 0) {
+        requestAnimationFrame(reapply);
+      }
+    };
+    requestAnimationFrame(reapply);
   }, [itemCount, sessionId, enabled, isNearBottomRef, storeApi]);
 }
 

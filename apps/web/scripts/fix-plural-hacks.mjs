@@ -102,7 +102,7 @@ function listFiles() {
 // sides, otherwise this is not a simple plural and we leave it alone.
 // Both suffix orders occur: `n !== 1 ? "s" : ""` and `n === 1 ? "" : "s"`.
 const HACK =
-  /\{\s*([A-Za-z_$][\w$.?[\]]*)\s*\}(\s+)([A-Za-z][A-Za-z-]*)\{\s*([A-Za-z_$][\w$.?[\]]*)\s*(?:!==|===|>|<|!=|==)\s*1\s*\?\s*(?:"s"\s*:\s*""|""\s*:\s*"s")\s*\}/g;
+  /\{\s*([A-Za-z_$][\w$.?[\]]*)\s*\}(\s+)([A-Za-z][A-Za-z-]*)\s*\{\s*([A-Za-z_$][\w$.?[\]]*)\s*(?:!==|===|>|<|!=|==)\s*1\s*\?\s*(?:"s"\s*:\s*""|""\s*:\s*"s")\s*\}/gs;
 
 const report = { files: 0, converted: 0, skippedMismatch: 0, skippedIrregular: 0 };
 const IRREGULAR = /^(entr|categor|repositor|propert|activit|director|famil)/i;

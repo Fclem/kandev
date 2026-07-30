@@ -71,28 +71,32 @@ function LiveUpdateSummary() {
 }
 
 function RestartConsequences() {
-  const { t } = useTranslation();
   return (
     <ul className="list-disc space-y-1.5 pl-4 text-muted-foreground">
       <li>
-        <strong className="font-medium text-foreground">{t("task:workspace")}</strong> The task root
-        becomes the agent&apos;s working directory. For a single-repository task, this moves the CWD
-        up one level and shows every source as a named top-level entry. Existing files and Git
-        changes are not moved or discarded.
+        <Trans i18nKey="task:restartWorkspaceBullet">
+          <strong className="font-medium text-foreground">Workspace</strong> The task root becomes
+          the agent&apos;s working directory. For a single-repository task, this moves the CWD up
+          one level and shows every source as a named top-level entry. Existing files and Git
+          changes are not moved or discarded.
+        </Trans>
       </li>
       <li>
-        <strong className="font-medium text-foreground">{t("task:sessionContext")}</strong> Kandev
-        restarts the idle agent while preserving the task, session, task state, messages, plan,
-        attached sources, and selected model and mode. Providers that support cross-directory resume
-        keep their native session. Other providers start a new session and receive Kandev&apos;s
-        recorded conversation with the next prompt. Provider-private context that Kandev did not
-        record may not carry over.
+        <Trans i18nKey="task:restartSessionContextBullet">
+          <strong className="font-medium text-foreground">Session context</strong> Kandev restarts
+          the idle agent while preserving the task, session, task state, messages, plan, attached
+          sources, and selected model and mode. Providers that support cross-directory resume keep
+          their native session. Other providers start a new session and receive Kandev&apos;s
+          recorded conversation with the next prompt. Provider-private context that Kandev did not
+          record may not carry over.
+        </Trans>
       </li>
       <li>
-        <strong className="font-medium text-foreground">{t("task:runningProcesses")}</strong> Open
-        terminals, dev servers, and other workspace processes stop. This includes the task editor
-        server. Save unsaved work, then reopen or restart those processes after the sources are
-        attached.
+        <Trans i18nKey="task:restartRunningProcessesBullet">
+          <strong className="font-medium text-foreground">Running processes</strong> Open terminals,
+          dev servers, and other workspace processes stop. This includes the task editor server.
+          Save unsaved work, then reopen or restart those processes after the sources are attached.
+        </Trans>
       </li>
     </ul>
   );
@@ -103,10 +107,11 @@ function LiveUpdateConsequences() {
   return (
     <ul className="list-disc space-y-1.5 pl-4 text-muted-foreground">
       <li>
-        <strong className="font-medium text-foreground">{t("task:workspace")}</strong> Repositories
-        are cloned as named top-level entries under the current remote workspace. The agent&apos;s
-        working directory does not change, and existing files and Git changes are not moved or
-        discarded.
+        <Trans i18nKey="task:liveWorkspaceBullet">
+          <strong className="font-medium text-foreground">Workspace</strong> Repositories are cloned
+          as named top-level entries under the current remote workspace. The agent&apos;s working
+          directory does not change, and existing files and Git changes are not moved or discarded.
+        </Trans>
       </li>
       <li>
         <strong className="font-medium text-foreground">{t("task:sessionAndProcesses")}</strong> The

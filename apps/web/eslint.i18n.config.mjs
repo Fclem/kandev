@@ -44,6 +44,9 @@ export default defineConfig([
               "^(v|ms\\)?|s|m|h|d|K|B|KB|MB|GB|TB|esc)$",
               "^\\+[A-Z]\\)?$",
               "^[·+\\-|/(),.:\\s]+$",
+              // All-caps acronym badges (ENTRY, KAN, MTD, WIQL, JQL) label a
+              // field or entity; they are identifiers, not prose.
+              "^[A-Z][A-Z0-9_]{1,9}$",
             ],
           },
           "jsx-attributes": {

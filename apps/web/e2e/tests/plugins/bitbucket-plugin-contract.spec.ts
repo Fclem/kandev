@@ -2,6 +2,7 @@ import path from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../../fixtures/test-base";
 import type { ApiClient } from "../../helpers/api-client";
+import { PrAssetCapture } from "../../helpers/pr-asset-capture";
 import { KanbanPage } from "../../pages/kanban-page";
 import { SessionPage } from "../../pages/session-page";
 
@@ -58,8 +59,9 @@ test.describe("Bitbucket plugin contract", () => {
     testPage,
     apiClient,
     seedData,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(120_000);
+    const capture = new PrAssetCapture(testPage, testInfo.file);
     await installFixture(testPage);
 
     // A declared browser action is authenticated by the host. The fixture
@@ -122,6 +124,10 @@ test.describe("Bitbucket plugin contract", () => {
       "data-review-key",
       "pull-request-42",
     );
+    await capture.screenshot("desktop-native-review", {
+      caption: "Desktop native review panel supplied by a source-control plugin",
+    });
+    capture.flush();
 
     // A candidate that is revoked after search must fail at send time and the
     // error must not disclose the fixture's credential value. Exercise this

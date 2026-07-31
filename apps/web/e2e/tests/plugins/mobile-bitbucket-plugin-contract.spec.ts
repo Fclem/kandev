@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../../fixtures/test-base";
+import { PrAssetCapture } from "../../helpers/pr-asset-capture";
 import { MobileKanbanPage } from "../../pages/mobile-kanban-page";
 import { SessionPage } from "../../pages/session-page";
 
@@ -32,8 +33,9 @@ test.describe("mobile Bitbucket plugin contract", () => {
     testPage,
     apiClient,
     seedData,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(120_000);
+    const capture = new PrAssetCapture(testPage, testInfo.file);
     await installFixture(testPage);
 
     // The plugin provider is a first-class option in the phone's native
@@ -108,6 +110,11 @@ test.describe("mobile Bitbucket plugin contract", () => {
       "data-review-key",
       "pull-request-42",
     );
+    await expect(reviewOption).not.toBeVisible();
+    await capture.screenshot("mobile-native-review", {
+      caption: "Mobile native review panel supplied by the same source-control plugin",
+    });
+    capture.flush();
 
     // A touch-selected composer result still travels through submit-time
     // authorization before the message may be persisted.

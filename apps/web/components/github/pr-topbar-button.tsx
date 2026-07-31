@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, type ReactNode } from "react";
+import { memo, useRef, useState, type ReactNode } from "react";
 import {
   IconGitPullRequest,
   IconCheck,
@@ -42,6 +42,12 @@ import type { TaskPR } from "@/lib/types/github";
 
 const POPOVER_OPEN_DELAY_MS = 150;
 const POPOVER_CLOSE_DELAY_MS = 150;
+type TriggerRef = { current: HTMLButtonElement | null };
+
+function focusAfterCollapse(triggerRef?: TriggerRef) {
+  if (!triggerRef) return;
+  setTimeout(() => triggerRef.current?.focus(), 0);
+}
 
 // Badge for the hard merge blockers that must beat ready/awaiting-review:
 // conflicts (red) and behind-base (amber). Mirrors openMergeBlockerColor so
@@ -101,10 +107,14 @@ export const PRTopbarButton = memo(function PRTopbarButton() {
   // multi-repo tasks can surface every PR (one button for single-repo, a
   // dropdown summary for 2+ so the topbar doesn't blow up horizontally).
   const { prs, refresh, unlink } = useTaskPR(activeTaskId);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   if (prs.length === 0) return null;
-  if (prs.length === 1) return <PRSingleButton pr={prs[0]} refreshTaskPR={refresh} />;
-  return <PRMultiButton prs={prs} refreshTaskPR={refresh} onRemovePR={unlink} />;
+  if (prs.length === 1)
+    return <PRSingleButton pr={prs[0]} refreshTaskPR={refresh} triggerRef={triggerRef} />;
+  return (
+    <PRMultiButton prs={prs} refreshTaskPR={refresh} onRemovePR={unlink} triggerRef={triggerRef} />
+  );
 });
 
 /**
@@ -128,7 +138,15 @@ function usePopoverInteractions() {
   return { usesTouchDrawer, ...hover };
 }
 
-function PRSingleButton({ pr, refreshTaskPR }: { pr: TaskPR; refreshTaskPR: () => void }) {
+function PRSingleButton({
+  pr,
+  refreshTaskPR,
+  triggerRef,
+}: {
+  pr: TaskPR;
+  refreshTaskPR: () => void;
+  triggerRef?: TriggerRef;
+}) {
   const addPRPanel = useDockviewStore((s) => s.addPRPanel);
   const activeSessionId = useAppStore((s) => s.tasks.activeSessionId);
   const tooltip = `${pr.owner}/${pr.repo} #${pr.pr_number} — ${pr.pr_title}`;
@@ -147,6 +165,7 @@ function PRSingleButton({ pr, refreshTaskPR }: { pr: TaskPR; refreshTaskPR: () =
 
   const button = (
     <Button
+      ref={triggerRef}
       data-testid="pr-topbar-button"
       data-pr-number={pr.pr_number}
       data-pr-state={pr.state}
@@ -207,10 +226,12 @@ function PRMultiButton({
   prs,
   refreshTaskPR,
   onRemovePR,
+  triggerRef,
 }: {
   prs: TaskPR[];
   refreshTaskPR: () => void;
   onRemovePR: (associationId: string) => Promise<void>;
+  triggerRef?: TriggerRef;
 }) {
   // Click still drives the dropdown (the explicit "jump to this PR's panel"
   // affordance, and the only interaction on touch). Hover adds the aggregate
@@ -239,6 +260,7 @@ function PRMultiButton({
   const triggerButton = (
     <DropdownMenuTrigger asChild>
       <Button
+        ref={triggerRef}
         data-testid="pr-topbar-button"
         data-pr-count={prs.length}
         size="sm"
@@ -299,6 +321,7 @@ function PRMultiButton({
           enabled={open}
           refreshTaskPR={refreshTaskPR}
           onRemovePR={(pr) => onRemovePR(pr.id)}
+          onCollapseFocus={() => focusAfterCollapse(triggerRef)}
           onOpenDetailPanel={(pr) => {
             addPRPanel(prTaskKey(pr), activeSessionId);
             onOpenChange(false);

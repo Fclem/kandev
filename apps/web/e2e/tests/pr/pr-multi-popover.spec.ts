@@ -257,6 +257,7 @@ test.describe("Multi-PR CI popover", () => {
     // Removing the first association collapses the multi-PR control to the
     // remaining single PR without touching the remote PR itself.
     await expect(session.prTopbarButton()).toHaveAttribute("data-pr-number", "77");
+    await expect(session.prTopbarButton()).toBeFocused();
     await expect(session.prMultiPopoverRemove(OWNER, "web", 42)).toHaveCount(0);
 
     // The tombstone is persisted in Kandev, so a fresh page load does not

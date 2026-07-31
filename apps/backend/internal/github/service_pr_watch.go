@@ -312,7 +312,7 @@ func (s *Service) associatePRWithTask(
 	}
 	if existing != nil {
 		if existing.DetachedAt != nil && restoreDetached {
-			restored, restoreErr := s.store.RestoreTaskPR(ctx, taskID, repositoryID, pr.Number)
+			restored, restoreErr := s.store.RestoreTaskPR(ctx, taskID, repositoryID, pr)
 			if restoreErr != nil || restored == nil {
 				return restored, restoreErr
 			}

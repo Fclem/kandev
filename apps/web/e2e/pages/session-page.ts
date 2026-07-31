@@ -671,7 +671,8 @@ export class SessionPage {
 
   /** Unlink control for one PR association in the multi-PR popover. */
   prMultiPopoverRemove(owner: string, repo: string, prNumber: number): Locator {
-    return this.page.getByTestId(`pr-popover-remove-${owner}-${repo}-${prNumber}`);
+    const activePopover = this.page.locator("[data-testid='pr-multi-popover']:visible").last();
+    return activePopover.getByTestId(`pr-popover-remove-${owner}-${repo}-${prNumber}`);
   }
 
   /**

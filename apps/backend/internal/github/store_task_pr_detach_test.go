@@ -10,7 +10,7 @@ import (
 func TestTaskPRDetachFiltersActiveRowsAndPersistsTombstone(t *testing.T) {
 	store := newTestStore(t)
 	detacher, ok := any(store).(interface {
-		DetachTaskPR(context.Context, string) (*TaskPR, error)
+		DetachTaskPR(context.Context, string) (*TaskPR, bool, error)
 	})
 	if !ok {
 		t.Fatal("Store does not implement DetachTaskPR")
@@ -34,9 +34,12 @@ func TestTaskPRDetachFiltersActiveRowsAndPersistsTombstone(t *testing.T) {
 		t.Fatalf("create second PR: %v", err)
 	}
 
-	detached, err := detacher.DetachTaskPR(ctx, first.ID)
+	detached, transitioned, err := detacher.DetachTaskPR(ctx, first.ID)
 	if err != nil {
 		t.Fatalf("detach first PR: %v", err)
+	}
+	if !transitioned {
+		t.Fatal("first detach did not report a transition")
 	}
 	detachedAt := reflect.Value{}
 	if detached != nil {
@@ -52,6 +55,13 @@ func TestTaskPRDetachFiltersActiveRowsAndPersistsTombstone(t *testing.T) {
 	}
 	if len(active) != 1 || active[0].ID != second.ID {
 		t.Fatalf("active PRs = %+v, want only second PR", active)
+	}
+	_, transitioned, err = detacher.DetachTaskPR(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("repeat detach first PR: %v", err)
+	}
+	if transitioned {
+		t.Fatal("repeat detach reported a transition")
 	}
 
 	reopened, err := NewStore(store.db, store.ro)

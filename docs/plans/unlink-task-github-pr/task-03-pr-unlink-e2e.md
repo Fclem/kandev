@@ -24,7 +24,8 @@ spec: "../../specs/tasks/link-existing-task-github-issue.md"
 ## Verification
 
 ```bash
-cd apps/web && pnpm exec playwright test --config e2e/playwright.config.ts e2e/tests/pr/pr-multi-popover.spec.ts e2e/tests/pr/mobile-pr-ci-chip.spec.ts
+cd apps/web && pnpm e2e:run --host --project chromium e2e/tests/pr/pr-multi-popover.spec.ts
+cd apps/web && pnpm e2e:run --host --project mobile-chrome e2e/tests/pr/mobile-pr-ci-chip.spec.ts
 ```
 
 ## Files likely touched

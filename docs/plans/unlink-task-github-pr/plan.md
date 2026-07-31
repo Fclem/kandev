@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/tasks/link-existing-task-github-issue.md
 created: 2026-07-31
-status: draft
+status: implemented
 ---
 
 # Implementation Plan: Unlink A Task GitHub Pull Request
@@ -80,8 +80,9 @@ share one mutation path and receive focused Playwright coverage.
   pointer/click activation from selecting or opening the PR, disable it while
   its request is pending, and retain the tab with an error toast on failure.
 - After a successful removal, select/focus a deterministic adjacent remaining
-  tab when the multi-PR surface remains mounted. When two PRs become one, allow
-  the existing parent surface to collapse naturally to its single-PR variant.
+  tab when the multi-PR surface remains mounted. When two PRs become one, the
+  existing parent surface collapses naturally to its single-PR variant and
+  restores focus to that surviving trigger.
 - Wire the same mutation into both
   `apps/web/components/github/pr-topbar-button.tsx` and
   `apps/web/components/github/pr-status-chip.tsx`.

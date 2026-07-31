@@ -99,6 +99,47 @@ func TestServiceDetachTaskPRFailsClosedForWorkspaceMismatch(t *testing.T) {
 	}
 }
 
+func TestServiceDetachTaskPRAllowsLegacyEmptyWorkspace(t *testing.T) {
+	svc, store, eventBus := setupSyncTest(t)
+	ctx := context.Background()
+	pr := &TaskPR{
+		TaskID: "task-legacy", Owner: "acme", Repo: "demo", PRNumber: 7,
+		PRURL: "https://github.com/acme/demo/pull/7", CreatedAt: time.Now().UTC(),
+	}
+	if err := store.CreateTaskPR(ctx, pr); err != nil {
+		t.Fatalf("create legacy PR: %v", err)
+	}
+	var authorizedWorkspace string
+	svc.SetWorkspaceAuthorizer(func(_ context.Context, workspaceID string) error {
+		authorizedWorkspace = workspaceID
+		return nil
+	})
+
+	detached, err := svc.DetachTaskPR(ctx, "ws-legacy", pr.ID)
+	if err != nil {
+		t.Fatalf("detach legacy PR: %v", err)
+	}
+	if detached == nil || detached.DetachedAt == nil {
+		t.Fatalf("detached legacy PR = %+v, want stamped row", detached)
+	}
+	if authorizedWorkspace != "ws-legacy" {
+		t.Fatalf("authorized workspace = %q, want ws-legacy", authorizedWorkspace)
+	}
+	if eventBus.publishedCount() != 1 {
+		t.Fatalf("published events = %d, want one deletion event", eventBus.publishedCount())
+	}
+	eventBus.mu.Lock()
+	event := eventBus.events[0]
+	eventBus.mu.Unlock()
+	payload := reflect.ValueOf(event.Data)
+	if payload.Kind() == reflect.Pointer {
+		payload = payload.Elem()
+	}
+	if payload.FieldByName("WorkspaceID").String() != "ws-legacy" {
+		t.Fatalf("event workspace = %q, want ws-legacy", payload.FieldByName("WorkspaceID").String())
+	}
+}
+
 func TestAssociatePRWithTaskDoesNotResurrectDetachedAssociation(t *testing.T) {
 	svc, store, _ := setupSyncTest(t)
 	ctx := context.Background()
@@ -110,7 +151,7 @@ func TestAssociatePRWithTaskDoesNotResurrectDetachedAssociation(t *testing.T) {
 	if err := store.CreateTaskPR(ctx, row); err != nil {
 		t.Fatalf("create PR: %v", err)
 	}
-	if _, err := store.DetachTaskPR(ctx, row.ID); err != nil {
+	if _, _, err := store.DetachTaskPR(ctx, row.ID); err != nil {
 		t.Fatalf("detach PR: %v", err)
 	}
 
@@ -143,18 +184,28 @@ func TestAssociatePRWithTaskExplicitLinkRestoresDetachedAssociation(t *testing.T
 	if err := store.CreateTaskPR(ctx, row); err != nil {
 		t.Fatalf("create PR: %v", err)
 	}
-	if _, err := store.DetachTaskPR(ctx, row.ID); err != nil {
+	if _, _, err := store.DetachTaskPR(ctx, row.ID); err != nil {
 		t.Fatalf("detach PR: %v", err)
 	}
 
-	associated, err := svc.associatePRWithTask(ctx, row.WorkspaceID, row.TaskID, row.RepositoryID, &PR{
-		Number: 4, RepoOwner: "acme", RepoName: "demo", HTMLURL: row.PRURL, Title: "old", HeadBranch: "old", BaseBranch: "main", State: "open",
-	}, true)
+	freshPR := &PR{
+		Number: 4, RepoOwner: "acme", RepoName: "demo", HTMLURL: "https://github.com/acme/demo/pull/4",
+		Title: "fresh title", HeadBranch: "fresh-branch", BaseBranch: "develop", AuthorLogin: "bob",
+		State: "closed", MergeableState: "dirty", Additions: 8, Deletions: 3,
+	}
+	associated, err := svc.associatePRWithTask(ctx, row.WorkspaceID, row.TaskID, row.RepositoryID, freshPR, true)
 	if err != nil {
 		t.Fatalf("explicitly associate PR: %v", err)
 	}
 	if associated == nil || associated.DetachedAt != nil {
 		t.Fatalf("associated = %+v, want active restored row", associated)
+	}
+	if associated.PRURL != freshPR.HTMLURL || associated.PRTitle != freshPR.Title ||
+		associated.HeadBranch != freshPR.HeadBranch || associated.BaseBranch != freshPR.BaseBranch ||
+		associated.AuthorLogin != freshPR.AuthorLogin || associated.State != freshPR.State ||
+		associated.MergeableState != freshPR.MergeableState || associated.Additions != freshPR.Additions ||
+		associated.Deletions != freshPR.Deletions {
+		t.Fatalf("restored PR = %+v, want fresh GitHub data", associated)
 	}
 	active, err := store.ListTaskPRsByTask(ctx, row.TaskID)
 	if err != nil {

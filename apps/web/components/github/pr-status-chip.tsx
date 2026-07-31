@@ -63,10 +63,12 @@ type AutomationFlags = {
   autoMerge: boolean;
   autoFixRound: AutoFixRoundInfo | null;
 };
+type TriggerRef = { current: HTMLButtonElement | null };
 type SingleChipProps = {
   pr: TaskPR;
   automation: AutomationFlags;
   refreshTaskPR: () => void;
+  triggerRef?: TriggerRef;
 };
 type MultiChipProps = {
   prs: TaskPR[];
@@ -74,7 +76,13 @@ type MultiChipProps = {
   automation: AutomationFlags;
   refreshTaskPR: () => void;
   onRemovePR?: (pr: TaskPR) => Promise<void>;
+  triggerRef?: TriggerRef;
 };
+
+function focusAfterCollapse(triggerRef?: TriggerRef) {
+  if (!triggerRef) return;
+  setTimeout(() => triggerRef.current?.focus(), 0);
+}
 
 function chipStatus(pr: TaskPR): ChipStatus {
   if (pr.review_state === "changes_requested" || pr.checks_state === "failure") return "failed";
@@ -134,8 +142,9 @@ const CHIP_BUTTON_CLASS =
  * via hover. Returns the trigger ref plus a memoised handler that reads the ref
  * lazily (inside the callback, never during render).
  */
-function useChipTriggerGuard() {
-  const ref = useRef<HTMLButtonElement>(null);
+function useChipTriggerGuard(externalRef?: TriggerRef) {
+  const fallbackRef = useRef<HTMLButtonElement>(null);
+  const ref = externalRef ?? fallbackRef;
   const onPointerDownOutside = useCallback(
     (e: { target: EventTarget | null; preventDefault: () => void }) => {
       if (ref.current && ref.current.contains(e.target as Node)) {
@@ -182,6 +191,7 @@ export function PRStatusChip({ taskId }: { taskId: string | null }) {
   const workspaceId = useAppStore((state) => state.workspaces.activeId);
   const { prs, refresh, unlink } = useTaskPR(taskId);
   const { options: automationOptions } = useTaskCIAutomationOptions(taskId);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   // Defensive Array.isArray: a partial hydration can briefly seed the store
   // with a non-array value (same guard as PRTaskIcon).
   const allPRs = Array.isArray(prs) ? prs : [];
@@ -201,6 +211,7 @@ export function PRStatusChip({ taskId }: { taskId: string | null }) {
         pr={openPRs[0]}
         automation={automationForPR(automationOptions, openPRs[0])}
         refreshTaskPR={refresh}
+        triggerRef={triggerRef}
       />
     );
   return (
@@ -210,6 +221,7 @@ export function PRStatusChip({ taskId }: { taskId: string | null }) {
       automation={automationForPRs(automationOptions, openPRs)}
       refreshTaskPR={refresh}
       onRemovePR={(pr) => unlink(pr.id)}
+      triggerRef={triggerRef}
     />
   );
 }
@@ -331,9 +343,9 @@ function PRStatusChipInner(props: SingleChipProps) {
   return <PRStatusChipHoverCard {...props} />;
 }
 
-function PRStatusChipHoverCard({ pr, automation, refreshTaskPR }: SingleChipProps) {
+function PRStatusChipHoverCard({ pr, automation, refreshTaskPR, triggerRef }: SingleChipProps) {
   const status = chipStatus(pr);
-  const { ref, onPointerDownOutside } = useChipTriggerGuard();
+  const { ref, onPointerDownOutside } = useChipTriggerGuard(triggerRef);
   const { open, onOpenChange, onTriggerEnter, onTriggerLeave, onContentEnter, onContentLeave } =
     useChipPopoverInteractions();
   return (
@@ -429,9 +441,10 @@ function PRStatusChipMultiHoverCard({
   automation,
   refreshTaskPR,
   onRemovePR,
+  triggerRef,
 }: MultiChipProps) {
   const status = aggregateChipStatus(statusPrs ?? prs);
-  const { ref, onPointerDownOutside } = useChipTriggerGuard();
+  const { ref, onPointerDownOutside } = useChipTriggerGuard(triggerRef);
   const { open, onOpenChange, onTriggerEnter, onTriggerLeave, onContentEnter, onContentLeave } =
     useChipPopoverInteractions();
   return (
@@ -471,6 +484,7 @@ function PRStatusChipMultiHoverCard({
           enabled={open}
           refreshTaskPR={refreshTaskPR}
           onRemovePR={onRemovePR}
+          onCollapseFocus={() => focusAfterCollapse(triggerRef)}
         />
       </PopoverContent>
     </Popover>
@@ -483,12 +497,14 @@ function PRStatusChipMultiDrawer({
   automation,
   refreshTaskPR,
   onRemovePR,
+  triggerRef,
 }: MultiChipProps) {
   const status = aggregateChipStatus(statusPrs ?? prs);
   const [open, setOpen] = useState(false);
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <button
+        ref={triggerRef}
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -521,6 +537,7 @@ function PRStatusChipMultiDrawer({
             enabled={open}
             refreshTaskPR={refreshTaskPR}
             onRemovePR={onRemovePR}
+            onCollapseFocus={() => focusAfterCollapse(triggerRef)}
           />
         </div>
       </DrawerContent>
@@ -528,12 +545,13 @@ function PRStatusChipMultiDrawer({
   );
 }
 
-function PRStatusChipDrawer({ pr, automation, refreshTaskPR }: SingleChipProps) {
+function PRStatusChipDrawer({ pr, automation, refreshTaskPR, triggerRef }: SingleChipProps) {
   const status = chipStatus(pr);
   const [open, setOpen] = useState(false);
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <button
+        ref={triggerRef}
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}

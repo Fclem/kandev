@@ -258,8 +258,19 @@ test.describe("mobile PR CI chip drawer", () => {
     await removeFirst.tap();
 
     await expect(session.prStatusChip()).toHaveAttribute("data-pr-number", "100");
+    await expect(session.prStatusChip()).toBeFocused();
     await expect(session.prMultiPopoverRemove(OWNER, REPO, PR_NUMBER)).toHaveCount(0);
     await expect(session.prStatusChipDrawer()).toHaveCount(0);
+    await expect
+      .poll(() =>
+        testPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      )
+      .toBe(true);
+
+    await testPage.reload();
+    const reloaded = new SessionPage(testPage);
+    await reloaded.waitForLoad();
+    await expect(reloaded.prStatusChip()).toHaveAttribute("data-pr-number", "100");
   });
 
   test("keeps a terminal sibling unlinkable on touch", async ({

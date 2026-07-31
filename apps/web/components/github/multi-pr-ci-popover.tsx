@@ -115,12 +115,14 @@ export function MultiPRCIPopover({
   onOpenDetailPanel,
   refreshTaskPR,
   onRemovePR,
+  onCollapseFocus,
 }: {
   prs: TaskPR[];
   enabled: boolean;
   onOpenDetailPanel?: (pr: TaskPR) => void;
   refreshTaskPR?: () => void;
   onRemovePR?: (pr: TaskPR) => Promise<void>;
+  onCollapseFocus?: (remainingPR: TaskPR) => void;
 }) {
   // `overrideId` is only set when the user activates a tab. The displayed PR is
   // derived: honour the override while it still exists, otherwise fall back to
@@ -142,15 +144,18 @@ export function MultiPRCIPopover({
     setRemovingId(pr.id);
     try {
       await onRemovePR(pr);
-      if (selected.id === pr.id && prs.length > 2) {
+      if (selected.id === pr.id) {
         const removedIndex = prs.findIndex((candidate) => candidate.id === pr.id);
         const next = prs[removedIndex + 1] ?? prs[removedIndex - 1];
-        if (next) {
+        if (next && prs.length > 2) {
           setOverrideId(next.id);
           // Keep keyboard focus on the deterministic adjacent tab while the
-          // multi-PR surface remains mounted. Two-to-one removal can instead
-          // collapse the parent into its single-PR variant.
+          // multi-PR surface remains mounted.
           document.getElementById(prTabDomId(uid, next))?.focus();
+        } else if (next) {
+          // The parent collapses to its single-PR surface after a two-to-one
+          // removal, so let it restore focus to the surviving trigger.
+          onCollapseFocus?.(next);
         }
       }
     } catch (error) {

@@ -303,10 +303,11 @@ describe("MultiPRCIPopover unlink", () => {
   });
 
   it("unlinks one multi-PR tab while keeping its sibling visible", async () => {
+    const onCollapseFocus = vi.fn();
     function RemovablePopover() {
       const [prs, setPrs] = useState([
-        makePR({ id: "a", pr_number: 1, pr_title: "First PR", checks_state: "success" }),
-        makePR({ id: "b", pr_number: 2, pr_title: "Second PR" }),
+        makePR({ id: "a", pr_number: 1, pr_title: "First PR" }),
+        makePR({ id: "b", pr_number: 2, pr_title: "Second PR", checks_state: "success" }),
       ]);
       return (
         <MultiPRCIPopover
@@ -315,6 +316,7 @@ describe("MultiPRCIPopover unlink", () => {
           onRemovePR={async (pr) =>
             setPrs((current) => current.filter((item) => item.id !== pr.id))
           }
+          onCollapseFocus={onCollapseFocus}
         />
       );
     }
@@ -335,6 +337,7 @@ describe("MultiPRCIPopover unlink", () => {
       expect(screen.queryByRole("button", { name: REMOVE_FIRST_PR_LABEL })).toBeNull(),
     );
     expect(screen.getByRole("tab", { name: "r #2" })).not.toBeNull();
+    expect(onCollapseFocus).toHaveBeenCalledWith(expect.objectContaining({ id: "b" }));
   });
 
   it("keeps a failed unlink tab and reports the error", async () => {

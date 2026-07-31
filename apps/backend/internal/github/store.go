@@ -1585,31 +1585,40 @@ func (s *Store) ListTaskPRsByTask(ctx context.Context, taskID string) ([]*TaskPR
 
 // DetachTaskPR marks an association as removed from active task surfaces while
 // retaining the row so automatic PR discovery cannot silently resurrect it.
-func (s *Store) DetachTaskPR(ctx context.Context, associationID string) (*TaskPR, error) {
+// The bool return reports whether this call performed the transition.
+func (s *Store) DetachTaskPR(ctx context.Context, associationID string) (*TaskPR, bool, error) {
 	now := time.Now().UTC()
 	result, err := s.db.ExecContext(ctx,
 		`UPDATE github_task_prs SET detached_at = ?, updated_at = ?
 		 WHERE id = ? AND detached_at IS NULL`, now, now, associationID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if count, err := result.RowsAffected(); err != nil {
-		return nil, err
-	} else if count == 0 {
-		return s.GetTaskPRByID(ctx, associationID)
+	count, err := result.RowsAffected()
+	if err != nil {
+		return nil, false, err
 	}
-	return s.GetTaskPRByID(ctx, associationID)
+	tp, err := s.GetTaskPRByID(ctx, associationID)
+	return tp, count > 0, err
 }
 
-// RestoreTaskPR clears a detached tombstone for an explicit link action.
-func (s *Store) RestoreTaskPR(ctx context.Context, taskID, repositoryID string, prNumber int) (*TaskPR, error) {
+// RestoreTaskPR clears a detached tombstone for an explicit link action and
+// refreshes the persisted fields available from the fetched GitHub PR.
+func (s *Store) RestoreTaskPR(ctx context.Context, taskID, repositoryID string, pr *PR) (*TaskPR, error) {
+	if pr == nil {
+		return nil, errors.New("restore task PR: missing PR data")
+	}
 	if _, err := s.db.ExecContext(ctx,
-		`UPDATE github_task_prs SET detached_at = NULL, updated_at = ?
+		`UPDATE github_task_prs SET owner = ?, repo = ?, pr_url = ?, pr_title = ?,
+			head_branch = ?, base_branch = ?, author_login = ?, state = ?, mergeable_state = ?,
+			additions = ?, deletions = ?, merged_at = ?, closed_at = ?, detached_at = NULL, updated_at = ?
 		 WHERE task_id = ? AND repository_id = ? AND pr_number = ?`,
-		time.Now().UTC(), taskID, repositoryID, prNumber); err != nil {
+		pr.RepoOwner, pr.RepoName, pr.HTMLURL, pr.Title, pr.HeadBranch, pr.BaseBranch, pr.AuthorLogin,
+		pr.State, pr.MergeableState, pr.Additions, pr.Deletions, pr.MergedAt, pr.ClosedAt, time.Now().UTC(),
+		taskID, repositoryID, pr.Number); err != nil {
 		return nil, err
 	}
-	return s.GetTaskPRByRepoAndNumber(ctx, taskID, repositoryID, prNumber)
+	return s.GetTaskPRByRepoAndNumber(ctx, taskID, repositoryID, pr.Number)
 }
 
 // ListTaskPRsByTaskIDs returns PR associations for multiple tasks. Each task

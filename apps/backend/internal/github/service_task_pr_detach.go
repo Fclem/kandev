@@ -34,25 +34,28 @@ func (s *Service) DetachTaskPR(ctx context.Context, workspaceID, associationID s
 	if err != nil {
 		return nil, err
 	}
-	if tp == nil || tp.WorkspaceID != workspaceID {
+	if tp == nil || (tp.WorkspaceID != "" && tp.WorkspaceID != workspaceID) {
 		return nil, ErrTaskPRNotFound
 	}
-	if err := s.authorizeWorkspaceAccess(ctx, tp.WorkspaceID); err != nil {
+	if err := s.authorizeWorkspaceAccess(ctx, workspaceID); err != nil {
 		return nil, err
 	}
 	if tp.DetachedAt != nil {
 		return tp, nil
 	}
-	detached, err := s.store.DetachTaskPR(ctx, associationID)
+	detached, transitioned, err := s.store.DetachTaskPR(ctx, associationID)
 	if err != nil {
 		return nil, err
 	}
 	if detached == nil {
 		return nil, ErrTaskPRNotFound
 	}
+	if !transitioned {
+		return detached, nil
+	}
 	if s.eventBus != nil {
 		event := bus.NewEvent(events.GitHubTaskPRDeleted, "github", &TaskPRDeletedEvent{
-			WorkspaceID:   detached.WorkspaceID,
+			WorkspaceID:   workspaceID,
 			TaskID:        detached.TaskID,
 			AssociationID: detached.ID,
 		})

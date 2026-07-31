@@ -191,11 +191,67 @@ function IntegrationCopyConfigAction() {
   );
 }
 
+/**
+ * Status entry in the mobile settings menu. Extracted from SettingsMobileMenu to
+ * keep that function under the max-lines-per-function limit.
+ */
+function SettingsMobileStatusButton({
+  issueSeverity,
+  issueDescription,
+  dotClass,
+  onClick,
+}: {
+  issueSeverity: string;
+  issueDescription: string | null;
+  dotClass: string | undefined;
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      className={cn(
+        "relative h-11 cursor-pointer justify-start gap-2.5 px-2.5",
+        issueSeverity === "lost" && "text-destructive",
+        issueSeverity === "unstable" && "text-amber-500",
+      )}
+      onClick={onClick}
+      data-testid="settings-mobile-status-button"
+      // Keeps the visible "Status" label inside the accessible name (WCAG 2.5.3):
+      // the raw description alone replaced it.
+      aria-label={
+        issueDescription
+          ? t("settings:statusWithConnectionIssue", { description: issueDescription })
+          : undefined
+      }
+      data-connection-severity={issueSeverity === "none" ? undefined : issueSeverity}
+    >
+      <IconActivity className="h-4 w-4 shrink-0" />
+      <span>{t("common:status")}</span>
+      {dotClass && (
+        <span className={cn("ml-auto size-2 rounded-full", dotClass)} aria-hidden="true" />
+      )}
+    </Button>
+  );
+}
+
 function SettingsMobileMenu({ pathname }: { pathname: string }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { enabled: statusDrawerEnabled, issueSeverity, openStatusDrawer } = useAppStatusDrawer();
   const issueDetails = issueSeverity === "none" ? null : connectionIssueDetails(issueSeverity);
+  // `connectionIssueDetails` lives in a directory that has not been migrated yet
+  // and returns English, so the severity is mapped to a catalog key here rather
+  // than interpolating its `description` into an otherwise-translated label.
+  const issueDescription =
+    issueSeverity === "none"
+      ? null
+      : t(
+          issueSeverity === "lost"
+            ? "settings:connectionLostDescription"
+            : "settings:connectionUnstableDescription",
+        );
 
   const closeOnLinkClick = (event: MouseEvent<HTMLDivElement>) => {
     if (event.target instanceof Element && event.target.closest("a[href]")) {
@@ -220,9 +276,9 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
             issueSeverity === "unstable" && "text-amber-500",
           )}
           aria-label={
-            issueDetails
+            issueDescription
               ? t("settings:openSettingsMenuWithConnectionIssue", {
-                  description: issueDetails.description,
+                  description: issueDescription,
                 })
               : t("settings:openSettingsMenu")
           }
@@ -251,28 +307,12 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
         </SheetHeader>
         <nav className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
           {statusDrawerEnabled && (
-            <Button
-              type="button"
-              variant="ghost"
-              className={cn(
-                "relative h-11 cursor-pointer justify-start gap-2.5 px-2.5",
-                issueSeverity === "lost" && "text-destructive",
-                issueSeverity === "unstable" && "text-amber-500",
-              )}
+            <SettingsMobileStatusButton
+              issueSeverity={issueSeverity}
+              issueDescription={issueDescription}
+              dotClass={issueDetails?.dotClass}
               onClick={openStatus}
-              data-testid="settings-mobile-status-button"
-              aria-label={issueDetails?.description}
-              data-connection-severity={issueSeverity === "none" ? undefined : issueSeverity}
-            >
-              <IconActivity className="h-4 w-4 shrink-0" />
-              <span>{t("common:status")}</span>
-              {issueDetails && (
-                <span
-                  className={cn("ml-auto size-2 rounded-full", issueDetails.dotClass)}
-                  aria-hidden="true"
-                />
-              )}
-            </Button>
+            />
           )}
           <Link
             href="/"

@@ -42,7 +42,7 @@
   "layouts": "Layouts",
   "light": "Light",
   "makesAgentctlValuesAvailableToPlugins": "Makes agentctl values available to plugins and other consumers. The built-in status bar remains host-only.",
-  "mcpTaskDefaultsAndArchiveSafeguards": "MCP task defaults and archive safeguards",
+  "mcpTaskDefaultsAndArchiveSafeguards": "MCP task defaults, archive safeguards, and transcript preferences",
   "memory": "Memory %",
   "messageSubmitKey": "Message Submit Key",
   "metrics": "Metrics",

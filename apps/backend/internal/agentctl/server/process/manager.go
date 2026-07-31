@@ -969,7 +969,7 @@ func (m *Manager) Start(ctx context.Context) error {
 
 	// Forward adapter updates to our channel
 	m.wg.Add(1)
-	go m.forwardUpdates()
+	go m.forwardUpdates(m.adapter, m.stopCh)
 
 	// Start workspace tracker with background context (not tied to HTTP request)
 	root, trackers := m.snapshotTrackers()
@@ -1000,7 +1000,7 @@ func (m *Manager) startOneShot() error {
 
 	// Forward adapter updates to our channel
 	m.wg.Add(1)
-	go m.forwardUpdates()
+	go m.forwardUpdates(m.adapter, m.stopCh)
 
 	// Start workspace tracker with background context (not tied to HTTP request)
 	root, trackers := m.snapshotTrackers()
@@ -1385,10 +1385,10 @@ func (m *Manager) createAdapter() error {
 }
 
 // forwardUpdates forwards updates from the adapter to the manager's channel
-func (m *Manager) forwardUpdates() {
+func (m *Manager) forwardUpdates(agentAdapter adapter.AgentAdapter, stopCh <-chan struct{}) {
 	defer m.wg.Done()
 
-	updatesCh := m.adapter.Updates()
+	updatesCh := agentAdapter.Updates()
 	for {
 		select {
 		case update, ok := <-updatesCh:
@@ -1400,7 +1400,7 @@ func (m *Manager) forwardUpdates() {
 			default:
 				m.logger.Warn("updates channel full, dropping notification")
 			}
-		case <-m.stopCh:
+		case <-stopCh:
 			return
 		}
 	}

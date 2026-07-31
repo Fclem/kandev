@@ -1139,6 +1139,7 @@ func (s *Store) migratePRTablesForMultiRepo() error {
 			merged_at DATETIME,
 			closed_at DATETIME,
 			last_synced_at DATETIME,
+			detached_at DATETIME,
 			updated_at DATETIME NOT NULL,
 			UNIQUE(task_id, repository_id, pr_number)
 		)`,
@@ -1146,12 +1147,12 @@ func (s *Store) migratePRTablesForMultiRepo() error {
 			id, workspace_id, task_id, repository_id, owner, repo, pr_number, pr_url, pr_title,
 			head_branch, base_branch, author_login, state, review_state, checks_state,
 			mergeable_state, review_count, pending_review_count, comment_count,
-			additions, deletions, created_at, merged_at, closed_at, last_synced_at, updated_at
+			additions, deletions, created_at, merged_at, closed_at, last_synced_at, detached_at, updated_at
 		) SELECT
 			id, COALESCE(workspace_id, ''), task_id, COALESCE(repository_id, ''), owner, repo, pr_number, pr_url, pr_title,
 			head_branch, base_branch, author_login, state, review_state, checks_state,
 			mergeable_state, review_count, pending_review_count, comment_count,
-			additions, deletions, created_at, merged_at, closed_at, last_synced_at, updated_at
+			additions, deletions, created_at, merged_at, closed_at, last_synced_at, detached_at, updated_at
 		FROM github_task_prs`,
 	)
 }

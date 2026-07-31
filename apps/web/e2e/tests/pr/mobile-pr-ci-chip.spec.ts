@@ -261,4 +261,34 @@ test.describe("mobile PR CI chip drawer", () => {
     await expect(session.prMultiPopoverRemove(OWNER, REPO, PR_NUMBER)).toHaveCount(0);
     await expect(session.prStatusChipDrawer()).toHaveCount(0);
   });
+
+  test("keeps a terminal sibling unlinkable on touch", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    test.setTimeout(120_000);
+    const taskId = await seedTaskWithTwoPRs({
+      apiClient,
+      seedData,
+      title: "Mobile terminal PR unlink",
+      prOverrides: {
+        state: "merged",
+      },
+    });
+    const session = await openTask(testPage, taskId);
+
+    await expect(session.prStatusChip()).toHaveAttribute("data-pr-count", "2", {
+      timeout: 15_000,
+    });
+    await session.tapPRStatusChip();
+
+    const removeMerged = session.prMultiPopoverRemove(OWNER, REPO, PR_NUMBER);
+    await expect(removeMerged).toBeVisible();
+    await removeMerged.tap();
+
+    await expect(session.prStatusChip()).toHaveAttribute("data-pr-number", "100");
+    await expect(session.prMultiPopoverRemove(OWNER, REPO, PR_NUMBER)).toHaveCount(0);
+    await expect(session.prStatusChipDrawer()).toHaveCount(0);
+  });
 });

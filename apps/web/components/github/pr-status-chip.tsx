@@ -46,8 +46,8 @@ import type { TaskCIAutomationOptions, TaskPR } from "@/lib/types/github";
 const HOVER_OPEN_DELAY_MS = 150;
 const HOVER_CLOSE_DELAY_MS = 150;
 
-// Terminal states (merged / closed) never reach here — PRStatusChip returns
-// null for them before rendering — so the chip status union omits them.
+// Terminal states (merged / closed) are omitted from CI status aggregation,
+// but remain in multi-PR surfaces so users can unlink old associations.
 type ChipStatus =
   | "passed"
   | "failed"
@@ -70,6 +70,7 @@ type SingleChipProps = {
 };
 type MultiChipProps = {
   prs: TaskPR[];
+  statusPrs?: TaskPR[];
   automation: AutomationFlags;
   refreshTaskPR: () => void;
   onRemovePR?: (pr: TaskPR) => Promise<void>;
@@ -172,9 +173,10 @@ function useChipPopoverInteractions() {
  * Mobile: tapping opens the same popover content inside a bottom-sheet Drawer
  * — hover is unreachable on touch devices.
  *
- * Returns null when the task has no PR yet, or once the PR reaches a terminal
- * state (merged / closed) — the chat-input banner already conveys that, so the
- * CI chip would be redundant.
+ * Returns null when the task has no PR yet, or when its only PR is terminal
+ * (merged / closed). With multiple associations, terminal PRs stay in the
+ * multi-PR surface so old links can still be removed while CI status continues
+ * to reflect open PRs only.
  */
 export function PRStatusChip({ taskId }: { taskId: string | null }) {
   const workspaceId = useAppStore((state) => state.workspaces.activeId);
@@ -182,20 +184,18 @@ export function PRStatusChip({ taskId }: { taskId: string | null }) {
   const { options: automationOptions } = useTaskCIAutomationOptions(taskId);
   // Defensive Array.isArray: a partial hydration can briefly seed the store
   // with a non-array value (same guard as PRTaskIcon).
-  // Only open PRs are worth a CI chip — terminal PRs (merged/closed) are
-  // already conveyed by the chat-input banner. With multiple PRs the chip
-  // stays visible as long as at least one is still open.
-  const openPRs = Array.isArray(prs)
-    ? prs.filter((p) => p.state !== "merged" && p.state !== "closed")
-    : [];
+  const allPRs = Array.isArray(prs) ? prs : [];
+  // Terminal PRs are excluded from CI status and background warming, but are
+  // kept in the multi-PR association list so old links remain unlinkable.
+  const openPRs = allPRs.filter((p) => p.state !== "merged" && p.state !== "closed");
   // Subscribe at the chip level so the cache warms even when the top-bar PR
   // button isn't mounted (e.g. small viewport that hides it). Warm the PR the
   // popover will actually open first (worst-status via pickDefaultPR — for a
   // single PR that's just the PR itself); the remaining PRs in a multi-PR
   // task warm when the popover opens.
   usePRFeedbackBackgroundSync(workspaceId, pickDefaultPR(openPRs));
-  if (openPRs.length === 0) return null;
-  if (openPRs.length === 1)
+  if (allPRs.length === 0 || (allPRs.length === 1 && openPRs.length === 0)) return null;
+  if (allPRs.length === 1)
     return (
       <PRStatusChipInner
         pr={openPRs[0]}
@@ -205,7 +205,8 @@ export function PRStatusChip({ taskId }: { taskId: string | null }) {
     );
   return (
     <PRStatusChipMultiInner
-      prs={openPRs}
+      prs={allPRs}
+      statusPrs={openPRs}
       automation={automationForPRs(automationOptions, openPRs)}
       refreshTaskPR={refresh}
       onRemovePR={(pr) => unlink(pr.id)}
@@ -424,11 +425,12 @@ function MultiChipGlyph({
 
 function PRStatusChipMultiHoverCard({
   prs,
+  statusPrs,
   automation,
   refreshTaskPR,
   onRemovePR,
 }: MultiChipProps) {
-  const status = aggregateChipStatus(prs);
+  const status = aggregateChipStatus(statusPrs ?? prs);
   const { ref, onPointerDownOutside } = useChipTriggerGuard();
   const { open, onOpenChange, onTriggerEnter, onTriggerLeave, onContentEnter, onContentLeave } =
     useChipPopoverInteractions();
@@ -475,8 +477,14 @@ function PRStatusChipMultiHoverCard({
   );
 }
 
-function PRStatusChipMultiDrawer({ prs, automation, refreshTaskPR, onRemovePR }: MultiChipProps) {
-  const status = aggregateChipStatus(prs);
+function PRStatusChipMultiDrawer({
+  prs,
+  statusPrs,
+  automation,
+  refreshTaskPR,
+  onRemovePR,
+}: MultiChipProps) {
+  const status = aggregateChipStatus(statusPrs ?? prs);
   const [open, setOpen] = useState(false);
   return (
     <Drawer open={open} onOpenChange={setOpen}>

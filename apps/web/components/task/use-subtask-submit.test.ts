@@ -53,6 +53,8 @@ const GENERATED_RESULT = {
   durationMs: 1_200,
 } satisfies UtilityGenerationResult;
 const ORIGINAL_PROMPT = "original prompt";
+const CREATED_TASK_ID = "created-task";
+const CREATED_SESSION_ID = "created-session";
 
 function useSubtaskPromptHarness(initialPrompt = ORIGINAL_PROMPT) {
   const [promptValue, setPromptValue] = useState(initialPrompt);
@@ -238,7 +240,7 @@ function makeSubmitOptions(
 describe("useSubtaskSubmit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCreateTask.mockResolvedValue({ id: "created-task", session_id: "created-session" });
+    mockCreateTask.mockResolvedValue({ id: CREATED_TASK_ID, session_id: CREATED_SESSION_ID });
   });
 
   it("sends the auto-title contract without a title", async () => {
@@ -254,6 +256,9 @@ describe("useSubtaskSubmit", () => {
     );
     expect(mockCreateTask.mock.calls[0][0]).not.toHaveProperty("title");
     expect(opts.onClose).toHaveBeenCalledOnce();
+    expect(mockSetActiveTask).toHaveBeenCalledWith(CREATED_TASK_ID);
+    expect(mockSetActiveSession).toHaveBeenCalledWith(CREATED_TASK_ID, CREATED_SESSION_ID);
+    expect(mockReplaceTaskUrl).toHaveBeenCalledWith(CREATED_TASK_ID);
   });
 
   it("requires a title when auto-title mode is omitted", async () => {

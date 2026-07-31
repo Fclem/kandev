@@ -229,13 +229,14 @@ function useDialogSetupData(
     preserveBranch: initialValues?.checkoutBranch || initialValues?.branch,
   });
   useLockedFieldSync(open, workflowId, initialValues, fs);
+  const handlers = useDialogHandlers(fs, repositories, {
+    workspaceId,
+    executors,
+    upsertWorkspaceRepository,
+  });
   return {
     ...data,
-    handlers: useDialogHandlers(fs, repositories, {
-      workspaceId,
-      executors,
-      upsertWorkspaceRepository,
-    }),
+    handlers,
     repositoryLocalPath: resolveSingleRowLocalPath(fs, repositories),
   };
 }
@@ -288,6 +289,9 @@ export function useTaskCreateDialogSetup(
   const handleKeyDown = useKeyboardShortcutHandler(SHORTCUTS.SUBMIT, (event) => {
     guardedHandleSubmit(event as unknown as FormEvent);
   });
+  const enhance = useEnhanceForDialog(fs, resolvedProps.taskId, resolvedProps.open);
+  const handleJiraImport = useJiraImportHandler(fs);
+  const handleLinearImport = useLinearImportHandler(fs);
   const freshBranchAvailable =
     !fs.useRemote && computed.isLocalExecutor && fs.repositories.length === 1;
   return {
@@ -312,9 +316,9 @@ export function useTaskCreateDialogSetup(
     taskCreateLastUsed,
     userSettingsLoaded,
     guardedHandleSubmit,
-    enhance: useEnhanceForDialog(fs, resolvedProps.taskId, resolvedProps.open),
-    handleJiraImport: useJiraImportHandler(fs),
-    handleLinearImport: useLinearImportHandler(fs),
+    enhance,
+    handleJiraImport,
+    handleLinearImport,
   };
 }
 

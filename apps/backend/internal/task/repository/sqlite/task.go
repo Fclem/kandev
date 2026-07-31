@@ -458,15 +458,16 @@ func (r *Repository) UpdateTask(ctx context.Context, task *models.Task) error {
 	`
 	if models.IsAgentTitlePending(task.Metadata) {
 		pending := agentTitlePendingPredicate(r.db.DriverName())
+		metadataMerge := pendingTaskMetadataMergeExpression(r.db.DriverName())
 		updateQuery = fmt.Sprintf(`
 			UPDATE tasks SET workspace_id = ?, workflow_id = ?, workflow_step_id = ?,
 				title = CASE WHEN %s THEN ? ELSE title END,
 				description = ?, state = ?, priority = ?, position = ?, wip_admitted = ?,
 				queued_for_step_id = ?, queued_at = ?,
-				metadata = CASE WHEN %s THEN ? ELSE metadata END,
+				metadata = %s,
 				parent_id = ?, updated_at = ?, origin = ?, project_id = ?, labels = ?, identifier = ?
 			WHERE id = ?
-		`, pending, pending)
+		`, pending, metadataMerge)
 	}
 	result, err := tx.ExecContext(ctx, r.db.Rebind(updateQuery), task.WorkspaceID, task.WorkflowID, task.WorkflowStepID, task.Title, task.Description, task.State, task.Priority, task.Position, task.WIPAdmitted, task.QueuedForStepID, task.QueuedAt, string(metadata), task.ParentID, task.UpdatedAt, task.Origin, task.ProjectID, task.Labels, task.Identifier, task.ID)
 	if err != nil {
@@ -576,6 +577,13 @@ func agentTitlePendingPredicate(driver string) string {
 		return "jsonb_extract_path(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}'::jsonb ELSE metadata::jsonb END, 'agent_title_pending') = 'true'::jsonb"
 	}
 	return "json_type(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}' ELSE metadata END, '$.agent_title_pending') = 'true'"
+}
+
+func pendingTaskMetadataMergeExpression(driver string) string {
+	if dialect.IsPostgres(driver) {
+		return "(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}'::jsonb ELSE metadata::jsonb END || (?::jsonb - 'agent_title_pending'))::text"
+	}
+	return "json_patch(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}' ELSE metadata END, json_remove(?, '$.agent_title_pending'))"
 }
 
 // DetachTask clears only the hierarchy fields involved in detachment. Keeping

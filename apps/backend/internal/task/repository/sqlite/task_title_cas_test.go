@@ -62,6 +62,7 @@ func TestUpdateTaskPreservesWinningTitleAgainstStaleUpdate(t *testing.T) {
 	// This models an ordinary task update that started before the CAS and
 	// writes after it. Its stale title/marker must not overwrite the winner.
 	stale.Description = "updated concurrently"
+	stale.Metadata["stale_change"] = "retained"
 	if err := repo.UpdateTask(ctx, stale); err != nil {
 		t.Fatalf("stale UpdateTask: %v", err)
 	}
@@ -78,5 +79,8 @@ func TestUpdateTaskPreservesWinningTitleAgainstStaleUpdate(t *testing.T) {
 	}
 	if current.Description != "updated concurrently" {
 		t.Fatalf("description = %q, want stale update to retain its unrelated change", current.Description)
+	}
+	if current.Metadata["stale_change"] != "retained" {
+		t.Fatalf("metadata = %#v, want unrelated stale metadata change retained", current.Metadata)
 	}
 }

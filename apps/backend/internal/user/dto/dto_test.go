@@ -113,6 +113,14 @@ func TestAgentGeneratedTaskTitlesDTOAndPatchSemantics(t *testing.T) {
 	if explicit.AgentGeneratedTaskTitles == nil || !*explicit.AgentGeneratedTaskTitles {
 		t.Fatalf("AgentGeneratedTaskTitles = %#v, want true", explicit.AgentGeneratedTaskTitles)
 	}
+
+	var disabled UpdateUserSettingsRequest
+	if err := json.Unmarshal([]byte(`{"agent_generated_task_titles":false}`), &disabled); err != nil {
+		t.Fatalf("decode explicit false request: %v", err)
+	}
+	if disabled.AgentGeneratedTaskTitles == nil || *disabled.AgentGeneratedTaskTitles {
+		t.Fatalf("AgentGeneratedTaskTitles = %#v, want false", disabled.AgentGeneratedTaskTitles)
+	}
 }
 
 func TestFromUserSettingsIncludesNormalizedMCPTaskAgentProfileDefault(t *testing.T) {

@@ -3098,7 +3098,10 @@ func TestStartCreatedSession_ConfigModeOmitsCoordinatorTaskControls(t *testing.T
 	require.NoError(t, repo.UpdateSessionMetadata(ctx, "session1", map[string]interface{}{"config_mode": true}))
 
 	taskRepo := newMockTaskRepo()
-	taskRepo.tasks["task1"] = &v1.Task{ID: "task1", Title: "Config chat", State: v1.TaskStateInProgress}
+	taskRepo.tasks["task1"] = &v1.Task{
+		ID: "task1", Title: "Config chat", State: v1.TaskStateInProgress,
+		Metadata: map[string]interface{}{models.MetaKeyAgentTitlePending: true},
+	}
 	agentMgr := &mockAgentManager{repoForExecutionLookup: repo}
 	svc := createTestServiceWithScheduler(repo, newMockStepGetter(), taskRepo, agentMgr)
 	messages := &mockMessageCreator{}
@@ -3110,6 +3113,8 @@ func TestStartCreatedSession_ConfigModeOmitsCoordinatorTaskControls(t *testing.T
 	assert.Contains(t, messages.userMessages[0].content, "KANDEV CONFIG MCP TOOLS")
 	assert.NotContains(t, messages.userMessages[0].content, "stop_task_kandev",
 		"Config first-turn context must not advertise a task-mode-only tool")
+	assert.NotContains(t, messages.userMessages[0].content, "set_task_title_kandev",
+		"Config first-turn context must not advertise the title tool")
 }
 
 func TestStartCreatedSession_AssignedKanbanTaskUsesTaskMode(t *testing.T) {

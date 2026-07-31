@@ -8,10 +8,8 @@
 // ReturnType<>), so the `import type` form makes the otherwise-circular
 // dependency with task-create-dialog.tsx explicitly type-only — bundlers
 // and analysis tools won't treat it as a real runtime cycle.
-import type {
-  TaskCreateDialogProps,
-  useTaskCreateDialogSetup,
-} from "@/components/task-create-dialog";
+import type { TaskCreateDialogProps } from "@/components/task-create-dialog";
+import type { useTaskCreateDialogSetup } from "@/components/task-create-dialog-setup";
 import type { DialogFormBodyProps, DialogFormState } from "@/components/task-create-dialog-types";
 
 export function computeHasAllBranches(fs: DialogFormState): boolean {

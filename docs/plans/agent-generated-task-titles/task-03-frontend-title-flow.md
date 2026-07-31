@@ -22,12 +22,13 @@ spec: "../../specs/tasks/agent-generated-titles.md"
 ## Verification
 
 ```bash
-cd apps && pnpm --filter @kandev/web test -- components/settings/agent-generated-task-title-settings.test.tsx lib/ssr/user-settings.test.ts lib/ws/handlers/users.test.ts components/task-create-dialog.test.tsx components/task-create-dialog-footer.test.ts components/task-create-dialog-form-body.test.tsx components/task/new-subtask-form-parts.test.tsx components/task/use-subtask-submit.test.ts
+cd apps && pnpm --filter @kandev/web test -- components/settings/agent-generated-task-title-settings.test.tsx lib/ssr/user-settings.test.ts lib/ws/handlers/users.test.ts components/task-create-dialog.test.tsx components/task-create-dialog-footer.test.ts components/task-create-dialog-form-body.test.tsx components/task-create-dialog-helpers.test.ts components/task/new-subtask-form-parts.test.tsx components/task/use-subtask-submit.test.ts
+cd apps && pnpm --filter @kandev/web lint
 cd apps/web && pnpm run typecheck
 ```
 
-The focused Vitest suite passed 98 tests across 9 files; frontend lint and TypeScript typecheck also
-passed.
+The focused Vitest suite passed 104 tests across 9 files; frontend lint (`cd apps && pnpm --filter
+@kandev/web lint`) and TypeScript typecheck also passed.
 
 ## Files likely touched
 

@@ -198,6 +198,13 @@ func TestApplyBasicSettingsAgentGeneratedTaskTitles(t *testing.T) {
 	if !settings.AgentGeneratedTaskTitles {
 		t.Fatal("AgentGeneratedTaskTitles = false, want true")
 	}
+
+	if err := applyBasicSettings(settings, &UpdateUserSettingsRequest{AgentGeneratedTaskTitles: ptr(false)}); err != nil {
+		t.Fatalf("apply disabled setting: %v", err)
+	}
+	if settings.AgentGeneratedTaskTitles {
+		t.Fatal("AgentGeneratedTaskTitles = true, want false")
+	}
 }
 
 func TestApplyBasicSettingsAppStatusBarOrder(t *testing.T) {

@@ -841,7 +841,7 @@ func (h *TaskHandlers) httpCreateTask(c *gin.Context) {
 		}
 	}
 
-	if !h.commitFreshBranch(c, task.ID, title, body.WorkspaceID, body.Repositories, repos) {
+	if !h.commitFreshBranch(c, task.ID, task.Title, body.WorkspaceID, body.Repositories, repos) {
 		return
 	}
 	taskDTO := dto.FromTask(task)

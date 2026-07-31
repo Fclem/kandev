@@ -452,10 +452,23 @@ func (r *Repository) UpdateTask(ctx context.Context, task *models.Task) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	result, err := tx.ExecContext(ctx, r.db.Rebind(`
+	updateQuery := `
 		UPDATE tasks SET workspace_id = ?, workflow_id = ?, workflow_step_id = ?, title = ?, description = ?, state = ?, priority = ?, position = ?, wip_admitted = ?, queued_for_step_id = ?, queued_at = ?, metadata = ?, parent_id = ?, updated_at = ?, origin = ?, project_id = ?, labels = ?, identifier = ?
 		WHERE id = ?
-	`), task.WorkspaceID, task.WorkflowID, task.WorkflowStepID, task.Title, task.Description, task.State, task.Priority, task.Position, task.WIPAdmitted, task.QueuedForStepID, task.QueuedAt, string(metadata), task.ParentID, task.UpdatedAt, task.Origin, task.ProjectID, task.Labels, task.Identifier, task.ID)
+	`
+	if models.IsAgentTitlePending(task.Metadata) {
+		pending := agentTitlePendingPredicate(r.db.DriverName())
+		updateQuery = fmt.Sprintf(`
+			UPDATE tasks SET workspace_id = ?, workflow_id = ?, workflow_step_id = ?,
+				title = CASE WHEN %s THEN ? ELSE title END,
+				description = ?, state = ?, priority = ?, position = ?, wip_admitted = ?,
+				queued_for_step_id = ?, queued_at = ?,
+				metadata = CASE WHEN %s THEN ? ELSE metadata END,
+				parent_id = ?, updated_at = ?, origin = ?, project_id = ?, labels = ?, identifier = ?
+			WHERE id = ?
+		`, pending, pending)
+	}
+	result, err := tx.ExecContext(ctx, r.db.Rebind(updateQuery), task.WorkspaceID, task.WorkflowID, task.WorkflowStepID, task.Title, task.Description, task.State, task.Priority, task.Position, task.WIPAdmitted, task.QueuedForStepID, task.QueuedAt, string(metadata), task.ParentID, task.UpdatedAt, task.Origin, task.ProjectID, task.Labels, task.Identifier, task.ID)
 	if err != nil {
 		return err
 	}
@@ -511,7 +524,7 @@ func (r *Repository) SetTaskTitleIfPending(ctx context.Context, taskID, title st
 				metadata = (CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}'::jsonb ELSE metadata::jsonb END #- ARRAY[?]::text[])::text,
 				updated_at = ?
 			WHERE id = ?
-			  AND jsonb_extract_path(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}'::jsonb ELSE metadata::jsonb END, ?) IS NOT NULL
+			  AND jsonb_extract_path(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}'::jsonb ELSE metadata::jsonb END, ?) = 'true'::jsonb
 		`
 	} else {
 		query = `
@@ -520,7 +533,7 @@ func (r *Repository) SetTaskTitleIfPending(ctx context.Context, taskID, title st
 				metadata = json_remove(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}' ELSE metadata END, ?),
 				updated_at = ?
 			WHERE id = ?
-			  AND json_type(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}' ELSE metadata END, ?) IS NOT NULL
+			  AND json_type(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}' ELSE metadata END, ?) = 'true'
 			`
 	}
 	path := jsonPath(models.MetaKeyAgentTitlePending)
@@ -557,6 +570,13 @@ func (r *Repository) SetTaskMetadataKey(ctx context.Context, taskID, key string,
 }
 
 func jsonPath(key string) string { return "$." + key }
+
+func agentTitlePendingPredicate(driver string) string {
+	if dialect.IsPostgres(driver) {
+		return "jsonb_extract_path(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}'::jsonb ELSE metadata::jsonb END, 'agent_title_pending') = 'true'::jsonb"
+	}
+	return "json_type(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}' ELSE metadata END, '$.agent_title_pending') = 'true'"
+}
 
 // DetachTask clears only the hierarchy fields involved in detachment. Keeping
 // this as a targeted update prevents concurrent task edits from being replaced

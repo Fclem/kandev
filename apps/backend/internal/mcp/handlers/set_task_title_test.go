@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +77,33 @@ func TestHandleSetTaskTitle_ValidatesInput(t *testing.T) {
 	resp, err := h.handleSetTaskTitle(context.Background(), makeWSMessage(t, ws.ActionMCPSetTaskTitle, map[string]interface{}{
 		"task_id": "task-title",
 		"title":   "  ",
+	}))
+	require.NoError(t, err)
+	assertWSError(t, resp, ws.ErrorCodeValidation)
+}
+
+func TestHandleSetTaskTitle_RejectsOverlongTitle(t *testing.T) {
+	svc, repo := newTestTaskService(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreateWorkspace(ctx, &models.Workspace{
+		ID: "ws-title-long", Name: "Titles", CreatedAt: now, UpdatedAt: now,
+	}))
+	require.NoError(t, repo.CreateTask(ctx, &models.Task{
+		ID:          "task-title-long",
+		WorkspaceID: "ws-title-long",
+		Title:       "Temporary title",
+		Description: "Prompt",
+		State:       v1.TaskStateInProgress,
+		Metadata:    map[string]interface{}{models.MetaKeyAgentTitlePending: true},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}))
+	h := &Handlers{taskSvc: svc, logger: testLogger(t).WithFields()}
+
+	resp, err := h.handleSetTaskTitle(ctx, makeWSMessage(t, ws.ActionMCPSetTaskTitle, map[string]interface{}{
+		"task_id": "task-title-long",
+		"title":   strings.Repeat("x", 501),
 	}))
 	require.NoError(t, err)
 	assertWSError(t, resp, ws.ErrorCodeValidation)

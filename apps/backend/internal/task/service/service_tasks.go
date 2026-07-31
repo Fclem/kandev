@@ -59,6 +59,15 @@ var ErrTaskAlreadyArchived = errors.New("task is already archived")
 // prompt from which to derive a provisional title.
 var ErrAutoTitlePromptRequired = errors.New("description is required when auto_title is enabled")
 
+// ErrAutoTitleUnsupportedForOffice is returned when prompt-first title
+// generation is requested for an Office task. Office agents use a restricted
+// MCP surface that does not expose the one-shot title tool.
+var ErrAutoTitleUnsupportedForOffice = errors.New("auto_title is not supported for Office tasks")
+
+// ErrTaskTitleTooLong is returned when an agent-generated title exceeds the
+// task title length limit.
+var ErrTaskTitleTooLong = errors.New("task title is too long")
+
 const maxTaskTitleRunes = 500
 
 type pendingTaskTitleSetter interface {
@@ -211,6 +220,9 @@ func deriveProvisionalTaskTitle(description string) (string, error) {
 func prepareAutoTitle(req *CreateTaskRequest) error {
 	if !req.AutoTitle {
 		return nil
+	}
+	if isOfficeRequest(req) {
+		return ErrAutoTitleUnsupportedForOffice
 	}
 	title, err := deriveProvisionalTaskTitle(req.Description)
 	if err != nil {
@@ -1219,6 +1231,10 @@ func (s *Service) UpdateTask(ctx context.Context, id string, req *UpdateTaskRequ
 		s.logger.Error("failed to update task", zap.String("task_id", id), zap.Error(err))
 		return nil, err
 	}
+	// UpdateTask may have applied a conditional title/metadata patch because
+	// this snapshot was stale. Publish and return the row that actually won so
+	// callers never receive the provisional title or pending marker again.
+	task = s.reloadTaskAfterMutation(ctx, id, task, "update")
 
 	// Update task repositories if provided
 	if req.Repositories != nil {
@@ -1252,6 +1268,19 @@ func (s *Service) UpdateTask(ctx context.Context, id string, req *UpdateTaskRequ
 	return task, nil
 }
 
+func (s *Service) reloadTaskAfterMutation(ctx context.Context, id string, fallback *models.Task, operation string) *models.Task {
+	current, err := s.tasks.GetTask(ctx, id)
+	if err != nil {
+		s.logger.Warn("failed to reload task after mutation",
+			zap.String("task_id", id), zap.String("operation", operation), zap.Error(err))
+		return fallback
+	}
+	if current != nil {
+		return current
+	}
+	return fallback
+}
+
 // SetPendingAgentTitle replaces a prompt-first provisional title exactly once.
 // A missing pending marker is an idempotent no-op so a human rename or an
 // earlier agent call always wins a late request.
@@ -1271,7 +1300,7 @@ func (s *Service) SetPendingAgentTitle(ctx context.Context, id, title string) (*
 		return nil, false, errors.New("title is required")
 	}
 	if utf8.RuneCountInString(title) > maxTaskTitleRunes {
-		return nil, false, fmt.Errorf("title must be %d characters or fewer", maxTaskTitleRunes)
+		return nil, false, fmt.Errorf("%w: title must be %d characters or fewer", ErrTaskTitleTooLong, maxTaskTitleRunes)
 	}
 	if setter, ok := s.tasks.(pendingTaskTitleSetter); ok {
 		accepted, err := setter.SetTaskTitleIfPending(ctx, id, title)
@@ -1286,12 +1315,9 @@ func (s *Service) SetPendingAgentTitle(ctx context.Context, id, title string) (*
 			}
 			return current, false, nil
 		}
-		// The conditional repository update already removed the marker. Keep
-		// the response/event representation in sync without replacing other
-		// metadata changed concurrently by another update.
-		task.Title = title
-		delete(task.Metadata, models.MetaKeyAgentTitlePending)
-		task.UpdatedAt = time.Now().UTC()
+		// Reload the winning row so the response/event includes any ordinary
+		// task update that raced the conditional title write.
+		task = s.reloadTaskAfterMutation(ctx, id, task, "set pending agent title")
 		s.publishTaskEvent(ctx, events.TaskUpdated, task, nil)
 		return task, true, nil
 	}

@@ -50,7 +50,8 @@ Use **New Task** in the sidebar. In an open task, the **Task** split button also
 
 1. Enter a title. If **Settings → General → Task Actions → Agent-generated task titles** is enabled,
    the New Task dialog hides this field, requires a nonempty prompt, and uses the prompt's first six
-   words as a provisional title while the first eligible agent session chooses the final title.
+   words as a provisional title while the first eligible agent session chooses the final title. The
+   empty-description Plan Mode exception applies only when this setting is disabled.
 2. Select the workspace and workflow when Kandev cannot infer them. A regular non-ephemeral task must belong to a workflow.
 3. Select a source:
 
@@ -61,7 +62,7 @@ Use **New Task** in the sidebar. In an open task, the **Task** split button also
    | **None**   | Planning, research, or work outside Git           | Use a scratch workspace or an optional folder on the Kandev host. Git worktree execution and repository-aware Changes, branch, and pull-request features are unavailable.                                                                                                                                                                                                                                            |
 
 4. Select a compatible executor profile and agent profile. A workflow default agent profile locks the task-level agent selector. Executor and agent compatibility is validated before launch.
-5. Enter the initial description. In the **New Task** dialog, an empty description changes the primary action to **Start Plan Mode**; the other dialog actions require a description. Agent-facing task MCP has different empty-description rules. A nonempty description exposes the standard split actions.
+5. Enter the initial description. In the **New Task** dialog, an empty description changes the primary action to **Start Plan Mode**; the other dialog actions require a description. Agent-facing task MCP has different empty-description rules. When agent-generated task titles are enabled, every task and subtask action requires a nonempty prompt; the empty-description Plan Mode exception is disabled. A nonempty description exposes the standard split actions.
 6. Choose the applicable action:
    - **Start Plan Mode** is the primary empty-description action and creates the task through the plan-mode path.
    - **Start task** requires a nonempty description, creates the task, and starts its agent.

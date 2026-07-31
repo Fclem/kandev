@@ -880,6 +880,10 @@ func (s *Service) startTask(ctx context.Context, taskID string, agentProfileID s
 	// strictly less harmful than leaking hidden <kandev-system> content into
 	// a real passthrough session's PTY.
 	isPassthrough := s.resolveIsPassthroughForLaunch(ctx, sessionID)
+	launchSession, err := s.repo.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reload launch session: %w", err)
+	}
 
 	effectivePrompt, planModeActive, promptReferenceContext := s.applyWorkflowAndPlanMode(
 		ctx, effectivePrompt, task.ID, sessionID, workflowStepID,
@@ -888,7 +892,7 @@ func (s *Service) startTask(ctx context.Context, taskID string, agentProfileID s
 
 	// Inject config context for config-mode sessions (dedicated settings chat)
 	configMode := false
-	if cm, ok := task.Metadata["config_mode"].(bool); ok && cm {
+	if cm, ok := launchSession.Metadata["config_mode"].(bool); ok && cm {
 		configMode = true
 		effectivePrompt = sysprompt.InjectConfigContext(sessionID, effectivePrompt)
 	}

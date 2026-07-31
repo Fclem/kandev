@@ -37,6 +37,17 @@ func TestDeriveProvisionalTaskTitle(t *testing.T) {
 	}
 }
 
+func TestPrepareAutoTitleRejectsOfficeRequests(t *testing.T) {
+	err := prepareAutoTitle(&CreateTaskRequest{
+		ProjectID:   "office-project",
+		AutoTitle:   true,
+		Description: "Create an Office task",
+	})
+	if !errors.Is(err, ErrAutoTitleUnsupportedForOffice) {
+		t.Fatalf("prepare office auto title error = %v, want %v", err, ErrAutoTitleUnsupportedForOffice)
+	}
+}
+
 func TestCreateTaskAutoTitlePersistsPendingMarker(t *testing.T) {
 	svc, eventBus, repo := createTestService(t)
 	ctx := context.Background()

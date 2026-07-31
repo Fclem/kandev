@@ -4,7 +4,7 @@ import type { AppState } from "@/lib/state/store";
 import type { KanbanState } from "@/lib/state/slices";
 import type { TaskSession } from "@/lib/types/http";
 import { replaceTaskUrl } from "@/lib/links";
-import { listTaskSessions } from "@/lib/api";
+import { fetchTask, listTaskSessions } from "@/lib/api";
 import { performLayoutSwitch } from "@/lib/state/dockview-store";
 import { getRecentTasks } from "@/lib/recent-tasks";
 
@@ -99,37 +99,51 @@ function collectRemainingTasks(store: StoreApi<AppState>): KanbanState["tasks"] 
   return allRemainingTasks;
 }
 
-/** Ids of every task currently on the authoritative board (both kanbans). */
-function liveTaskIds(store: StoreApi<AppState>): Set<string> {
-  const ids = new Set<string>();
-  for (const snapshot of Object.values(store.getState().kanbanMulti.snapshots)) {
-    for (const t of snapshot.tasks) ids.add(t.id);
+/**
+ * Orders next-task candidates by recent use, then board order, without trusting
+ * either list as proof that a task still exists.
+ */
+function orderedTaskCandidates(
+  remainingTasks: KanbanState["tasks"],
+  removedTaskId: string,
+): KanbanState["tasks"] {
+  const candidates = remainingTasks.filter((task) => task.id !== removedTaskId);
+  const remainingById = new Map(candidates.map((task) => [task.id, task]));
+  const ordered: KanbanState["tasks"] = [];
+  for (const recent of getRecentTasks()) {
+    const task = remainingById.get(recent.taskId);
+    if (!task) continue;
+    ordered.push(task);
+    remainingById.delete(task.id);
   }
-  for (const t of store.getState().kanban.tasks) ids.add(t.id);
-  return ids;
+  ordered.push(...candidates.filter((task) => remainingById.has(task.id)));
+  return ordered;
+}
+
+async function taskIsLive(taskId: string): Promise<boolean> {
+  try {
+    const task = await fetchTask(taskId, { cache: "no-store" });
+    return !task.archived_at;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Pick the next task to switch to after a removal. A candidate must not be the
- * removed task and must still be a live board member: a task deleted moments
- * earlier can linger in a snapshot (the WS `task.deleted` removal or a lagging
- * `kanban.update` rebuild races the local delete), and switching to that stale
- * id would strand the user on a dead `/t/<id>` route instead of redirecting
- * home. Rejecting non-members lets the caller fall through to the home redirect.
+ * Picks the first candidate that the task API still reports as unarchived.
+ * Workflow snapshots and the active kanban are both cached projections and can
+ * lag the same delete/archive event, so neither can independently validate
+ * membership.
  */
-export function selectNextTaskAfterRemoval(
+export async function selectNextTaskAfterRemoval(
   remainingTasks: KanbanState["tasks"],
   removedTaskId: string,
-  liveIds: Set<string>,
-): KanbanState["tasks"][number] | null {
-  const isValid = (task: KanbanState["tasks"][number]) =>
-    task.id !== removedTaskId && liveIds.has(task.id);
-  const remainingById = new Map(remainingTasks.filter(isValid).map((task) => [task.id, task]));
-  for (const recent of getRecentTasks()) {
-    const task = remainingById.get(recent.taskId);
-    if (task) return task;
+  isLive: (taskId: string) => Promise<boolean> = taskIsLive,
+): Promise<KanbanState["tasks"][number] | null> {
+  for (const task of orderedTaskCandidates(remainingTasks, removedTaskId)) {
+    if (await isLive(task.id)) return task;
   }
-  return remainingTasks.find(isValid) ?? null;
+  return null;
 }
 
 function switchToSessionForTask(params: {
@@ -247,7 +261,7 @@ export function useTaskRemoval({ store, useLayoutSwitch = false }: TaskRemovalOp
       }
 
       const oldEnvId = resolveOldEnvId(store, opts);
-      const nextTask = selectNextTaskAfterRemoval(allRemainingTasks, taskId, liveTaskIds(store));
+      const nextTask = await selectNextTaskAfterRemoval(allRemainingTasks, taskId);
       if (nextTask) {
         await switchToNextTask({
           store,

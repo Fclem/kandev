@@ -697,105 +697,6 @@ func (s *Server) computeMergeBase(
 	return gitOp.GetMergeBase(ctx, "HEAD", targetBranch)
 }
 
-// integrationMergeBaseCandidates lists the bare integration branch names, in
-// priority order, used to detect a stale stored base. computeMergeBase already
-// prefers origin/<name>, so these stay bare. Mirrors branchDiffCandidates in
-// process/workspace_git_status.go so the commits panel and the task-card stats
-// land on the same anchor.
-var integrationMergeBaseCandidates = []string{"main", "master"}
-
-// integrationMergeBase returns merge-base(HEAD, <integration ref>) for the
-// first integration candidate that resolves, or "" when none do (no
-// integration ref, unrelated history). Used to detect a stale stored base.
-//
-// Every remote candidate is probed before any local fallback, enforcing the
-// order origin/main → origin/master → main → master. Folding the local
-// fallback into each computeMergeBase call would let a stale local `main`
-// win over a live `origin/master` in a master-based repo.
-func (s *Server) integrationMergeBase(ctx context.Context, gitOp *process.GitOperator) string {
-	for _, candidate := range integrationMergeBaseCandidates {
-		if mb, err := gitOp.GetMergeBase(ctx, "HEAD", "origin/"+candidate); err == nil && mb != "" {
-			return mb
-		}
-	}
-	for _, candidate := range integrationMergeBaseCandidates {
-		if mb, err := gitOp.GetMergeBase(ctx, "HEAD", candidate); err == nil && mb != "" {
-			return mb
-		}
-	}
-	return ""
-}
-
-// correctStaleBase re-anchors a stored base commit to the live integration
-// merge-base when the stored base is a STRICT ancestor of it. This fixes the
-// stacked-PR / merged-parent / rebase case where the target branch's own
-// upstream ref was deleted after merge and the resolved base falls back to a
-// stale local ref, so the commits panel enumerates commits that already landed
-// on the integration branch.
-//
-// The correction only applies when targetHasUpstream is false — the target's
-// own origin/<name> ref no longer resolves a merge-base. When the target IS a
-// live upstream branch (e.g. a feature comparing against origin/develop that
-// has merged newer origin/main commits), its merge-base is authoritative and
-// must NOT be overridden merely because it is an ancestor of the main
-// merge-base; doing so would hide commits that are genuinely part of the
-// develop comparison.
-//
-// The stored base is otherwise returned unchanged when: targetBranch is itself
-// an integration candidate (redundant self-compare), the target has a live
-// upstream, no integration merge-base resolves, the integration merge-base
-// equals the base, the base is not a strict ancestor of it, or the ancestry
-// probe errors — every case falls back to today's behavior.
-func (s *Server) correctStaleBase(
-	ctx context.Context,
-	gitOp *process.GitOperator,
-	baseCommit, targetBranch string,
-	targetHasUpstream bool,
-) string {
-	if baseCommit == "" || targetHasUpstream || isIntegrationCandidate(targetBranch) {
-		return baseCommit
-	}
-	integ := s.integrationMergeBase(ctx, gitOp)
-	if integ == "" || integ == baseCommit {
-		return baseCommit
-	}
-	anc, err := gitOp.IsAncestor(ctx, baseCommit, integ)
-	if err == nil && anc {
-		return integ
-	}
-	return baseCommit
-}
-
-// targetHasUpstreamRef reports whether the target branch still resolves an
-// upstream integration ref (origin/<name>). A merged/deleted stacked-parent
-// branch that lingers only as a local ref returns false, marking its resolved
-// merge-base as non-authoritative for stale-base correction.
-func (s *Server) targetHasUpstreamRef(
-	ctx context.Context,
-	gitOp *process.GitOperator,
-	targetBranch string,
-) bool {
-	name := strings.TrimPrefix(targetBranch, "origin/")
-	if name == "" {
-		return false
-	}
-	mb, err := gitOp.GetMergeBase(ctx, "HEAD", "origin/"+name)
-	return err == nil && mb != ""
-}
-
-// isIntegrationCandidate reports whether branch is one of the integration
-// candidates (with or without an origin/ prefix). Used to skip the redundant
-// self-compare when the stored target branch already IS the integration line.
-func isIntegrationCandidate(branch string) bool {
-	name := strings.TrimPrefix(branch, "origin/")
-	for _, candidate := range integrationMergeBaseCandidates {
-		if name == candidate {
-			return true
-		}
-	}
-	return false
-}
-
 // runGitLogForRepo runs git log against a single repo subpath. Returns a
 // result-with-error or a non-nil error for transport failures.
 func (s *Server) runGitLogForRepo(
@@ -851,8 +752,11 @@ func (s *Server) runGitLogForRepo(
 		// branch's own commits. Only fires when the target has no live upstream
 		// ref, so a live non-default target (e.g. origin/develop) keeps its own
 		// authoritative merge-base. No-op when the base is already current.
-		targetHasUpstream := s.targetHasUpstreamRef(c.Request.Context(), gitOp, req.TargetBranch)
-		baseCommit = s.correctStaleBase(c.Request.Context(), gitOp, baseCommit, req.TargetBranch, targetHasUpstream)
+		baseCommit = gitOp.CorrectStaleComparisonBase(
+			c.Request.Context(),
+			baseCommit,
+			req.TargetBranch,
+		)
 	}
 
 	return gitOp.GetLog(c.Request.Context(), baseCommit, limit)
@@ -1069,8 +973,7 @@ func (s *Server) runGitCumulativeDiffForRepo(
 		// the diff excludes changes that already landed on the integration
 		// branch. Only fires when the target has no live upstream ref. No-op
 		// when the base is already current.
-		targetHasUpstream := s.targetHasUpstreamRef(c.Request.Context(), gitOp, targetBranch)
-		base = s.correctStaleBase(c.Request.Context(), gitOp, base, targetBranch, targetHasUpstream)
+		base = gitOp.CorrectStaleComparisonBase(c.Request.Context(), base, targetBranch)
 	}
 	result, err := gitOp.GetCumulativeDiff(c.Request.Context(), base)
 	if err != nil {
@@ -1138,9 +1041,9 @@ func (s *Server) handleGitCumulativeDiffMultiRepo(
 // workspace tracker. Multi-repo tasks share no single base commit across
 // repos, and each tracker carries that repository's configured task base.
 //
-// The single-repo path re-anchors a stale stored base via correctStaleBase off
-// req.TargetBranch, but the multi-repo fan-out clears TargetBranch, so it must
-// apply the same correction here using the tracker's resolved base branch.
+// The single-repo path re-anchors a stale stored base from req.TargetBranch,
+// but the multi-repo fan-out clears TargetBranch, so it must apply the shared
+// comparison policy here using the tracker's resolved base branch.
 // Without this, a repo whose base branch is a merged/deleted stacked parent
 // lingering only as a local ref keeps inflating the commit count and diff.
 func (s *Server) resolvePerRepoBase(c *gin.Context, repo string) string {
@@ -1157,8 +1060,7 @@ func (s *Server) resolvePerRepoBase(c *gin.Context, repo string) string {
 	if gitOpErr != nil {
 		return base
 	}
-	targetHasUpstream := s.targetHasUpstreamRef(ctx, gitOp, baseBranch)
-	return s.correctStaleBase(ctx, gitOp, base, baseBranch, targetHasUpstream)
+	return gitOp.CorrectStaleComparisonBase(ctx, base, baseBranch)
 }
 
 // mergeCumulativeFiles copies per-repo files into the merged map under a

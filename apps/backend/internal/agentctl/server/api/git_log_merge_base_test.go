@@ -2,12 +2,16 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/kandev/kandev/internal/agentctl/server/config"
 	"github.com/kandev/kandev/internal/agentctl/server/process"
 	"github.com/kandev/kandev/internal/common/logger"
 )
@@ -152,9 +156,8 @@ func TestComputeMergeBase_CorrectAnchorForCumulativeDiff(t *testing.T) {
 // the merge, so the stale local parent merge-base is a STRICT ancestor of
 // merge-base(HEAD, origin/main) rather than equal to it. That exercises the
 // IsAncestor-based correction: a no-op implementation (returning its input) or
-// one gated only on the equality check would fail this test. correctStaleBase
-// must re-anchor to the integration merge-base. Regression test — fails before
-// the code change.
+// one gated only on the equality check would fail this test. The shared
+// comparison policy must re-anchor to the integration merge-base.
 func TestCorrectStaleBase_MergedStackedParent(t *testing.T) {
 	repoDir, cleanup := setupAPITestRepo(t)
 	t.Cleanup(cleanup)
@@ -213,13 +216,13 @@ func TestCorrectStaleBase_MergedStackedParent(t *testing.T) {
 			"correction would be a no-op", staleBase, integ)
 	}
 
-	// feature/parent has no origin ref (merged+deleted), so it is not a live
-	// upstream target — the correction applies and re-anchors to integ.
-	hasUpstream := srv.targetHasUpstreamRef(context.Background(), gitOp, "feature/parent")
-	if hasUpstream {
-		t.Fatalf("expected feature/parent to have NO upstream ref after merge+delete")
-	}
-	corrected := srv.correctStaleBase(context.Background(), gitOp, staleBase, "feature/parent", hasUpstream)
+	// feature/parent has no origin ref (merged+deleted), so the shared
+	// comparison policy applies and re-anchors to integ.
+	corrected := gitOp.CorrectStaleComparisonBase(
+		context.Background(),
+		staleBase,
+		"feature/parent",
+	)
 	if corrected != integ {
 		t.Errorf("expected corrected base = integration merge-base %s, got %s", integ, corrected)
 	}
@@ -239,9 +242,65 @@ func TestCorrectStaleBase_MergedStackedParent(t *testing.T) {
 	}
 }
 
+func TestGitReviewEndpointsCorrectStaleBase(t *testing.T) {
+	repoDir := t.TempDir()
+	integrationBase := setupStaleComparisonRepoAt(t, repoDir)
+
+	log, _ := logger.NewLogger(logger.LoggingConfig{Level: "error"})
+	cfg := &config.InstanceConfig{WorkDir: repoDir}
+	srv := NewServer(cfg, process.NewManager(cfg, log), nil, nil, log)
+
+	logResponse := httptest.NewRecorder()
+	srv.Router().ServeHTTP(
+		logResponse,
+		httptest.NewRequest(
+			http.MethodGet,
+			"/api/v1/git/log?limit=100&target_branch=feature%2Fparent",
+			nil,
+		),
+	)
+	if logResponse.Code != http.StatusOK {
+		t.Fatalf("git log status = %d: %s", logResponse.Code, logResponse.Body.String())
+	}
+	var commits process.GitLogResult
+	if err := json.Unmarshal(logResponse.Body.Bytes(), &commits); err != nil {
+		t.Fatalf("decode git log: %v", err)
+	}
+	if len(commits.Commits) != 1 || commits.Commits[0].CommitMessage != "feat: child work" {
+		t.Fatalf("git log did not use corrected base: %s", logResponse.Body.String())
+	}
+
+	diffResponse := httptest.NewRecorder()
+	srv.Router().ServeHTTP(
+		diffResponse,
+		httptest.NewRequest(
+			http.MethodGet,
+			"/api/v1/git/cumulative-diff?base="+integrationBase+
+				"&target_branch=feature%2Fparent",
+			nil,
+		),
+	)
+	if diffResponse.Code != http.StatusOK {
+		t.Fatalf("cumulative diff status = %d: %s", diffResponse.Code, diffResponse.Body.String())
+	}
+	var diff process.CumulativeDiffResult
+	if err := json.Unmarshal(diffResponse.Body.Bytes(), &diff); err != nil {
+		t.Fatalf("decode cumulative diff: %v", err)
+	}
+	if diff.BaseCommit != integrationBase {
+		t.Errorf("cumulative diff base = %q, want integration base %q", diff.BaseCommit, integrationBase)
+	}
+	if _, ok := diff.Files["child.txt"]; !ok {
+		t.Errorf("cumulative diff missing child.txt: %s", diffResponse.Body.String())
+	}
+	if _, ok := diff.Files["parent.txt"]; ok {
+		t.Errorf("cumulative diff includes parent work from stale range: %s", diffResponse.Body.String())
+	}
+}
+
 // TestCorrectStaleBase_CurrentBaseUnchanged verifies the correction does not
 // over-reach: when the resolved base already equals (or descends from) the
-// integration merge-base, correctStaleBase returns it unchanged.
+// integration merge-base, the shared comparison policy returns it unchanged.
 func TestCorrectStaleBase_CurrentBaseUnchanged(t *testing.T) {
 	repoDir, cleanup := setupAPITestRepo(t)
 	t.Cleanup(cleanup)
@@ -263,9 +322,9 @@ func TestCorrectStaleBase_CurrentBaseUnchanged(t *testing.T) {
 	}
 	// A non-integration target with no live upstream clears the first guard, so
 	// the integration-merge-base equality branch is the one under test: because
-	// feature/x branches straight off current main, integrationMergeBase equals
-	// base, exercising the `integ == baseCommit → unchanged` path.
-	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "feature/gone", false)
+	// feature/x branches straight off current main, so the integration base
+	// equals base and exercises the unchanged path.
+	corrected := gitOp.CorrectStaleComparisonBase(context.Background(), base, "feature/gone")
 	if corrected != base {
 		t.Errorf("expected unchanged base %s, got %s", base, corrected)
 	}
@@ -325,11 +384,7 @@ func TestCorrectStaleBase_LiveUpstreamTargetPreserved(t *testing.T) {
 		t.Fatalf("test setup invalid: develop merge-base equals main merge-base %s", integ)
 	}
 
-	hasUpstream := srv.targetHasUpstreamRef(context.Background(), gitOp, "develop")
-	if !hasUpstream {
-		t.Fatalf("expected develop to have a live upstream ref")
-	}
-	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "develop", hasUpstream)
+	corrected := gitOp.CorrectStaleComparisonBase(context.Background(), base, "develop")
 	if corrected != base {
 		t.Errorf("expected live-upstream develop base %s preserved, got %s (integ=%s)",
 			base, corrected, integ)
@@ -356,17 +411,10 @@ func TestCorrectStaleBase_NoIntegrationRefFallsBack(t *testing.T) {
 	runGitAPI(t, repoDir, "commit", "-m", "feat: work")
 
 	log, _ := logger.NewLogger(logger.LoggingConfig{Level: "error"})
-	srv := &Server{logger: log}
 	gitOp := process.NewGitOperator(repoDir, log, nil)
 
-	// Confirm the integration merge-base genuinely resolves to nothing — this is
-	// what makes the fallback assertion meaningful rather than incidental.
-	if integ := srv.integrationMergeBase(context.Background(), gitOp); integ != "" {
-		t.Fatalf("expected no integration merge-base, got %s", integ)
-	}
-
 	base := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "trunk"))
-	corrected := srv.correctStaleBase(context.Background(), gitOp, base, "trunk", false)
+	corrected := gitOp.CorrectStaleComparisonBase(context.Background(), base, "trunk")
 	if corrected != base {
 		t.Errorf("expected unchanged base %s when no integration ref, got %s", base, corrected)
 	}
@@ -401,6 +449,40 @@ func setupAPITestRepo(t *testing.T) (string, func()) {
 	runGitAPI(t, localDir, "remote", "add", "origin", remoteDir)
 	runGitAPI(t, localDir, "push", "-u", "origin", "main")
 	return localDir, cleanup
+}
+
+func setupStaleComparisonRepoAt(t *testing.T, repoDir string) string {
+	t.Helper()
+	remoteDir := t.TempDir()
+	runGitAPI(t, remoteDir, "init", "--bare", "--initial-branch=main")
+	runGitAPI(t, repoDir, "init", "--initial-branch=main")
+	runGitAPI(t, repoDir, "config", "user.email", "test@test.com")
+	runGitAPI(t, repoDir, "config", "user.name", "Test User")
+	runGitAPI(t, repoDir, "config", "core.hooksPath", "/dev/null")
+	writeFileAPI(t, repoDir, "README.md", "# Test")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "initial")
+	runGitAPI(t, repoDir, "remote", "add", "origin", remoteDir)
+	runGitAPI(t, repoDir, "push", "-u", "origin", "main")
+
+	runGitAPI(t, repoDir, "checkout", "-b", "feature/parent")
+	writeFileAPI(t, repoDir, "parent.txt", "parent work\n")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "feat: parent work")
+
+	runGitAPI(t, repoDir, "checkout", "main")
+	runGitAPI(t, repoDir, "merge", "--ff-only", "feature/parent")
+	writeFileAPI(t, repoDir, "main-after.txt", "main advances past parent\n")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "chore: main past parent")
+	runGitAPI(t, repoDir, "push", "origin", "main")
+	integrationBase := strings.TrimSpace(runGitAPI(t, repoDir, "rev-parse", "origin/main"))
+
+	runGitAPI(t, repoDir, "checkout", "-b", "feature/child", "origin/main")
+	writeFileAPI(t, repoDir, "child.txt", "child work\n")
+	runGitAPI(t, repoDir, "add", ".")
+	runGitAPI(t, repoDir, "commit", "-m", "feat: child work")
+	return integrationBase
 }
 
 func runGitAPI(t *testing.T, dir string, args ...string) string {

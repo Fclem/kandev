@@ -71,8 +71,20 @@ The true `merge-base(HEAD, origin/master)` is `19646efc83` → 1 commit (matches
 
 ## Frontend
 
-> No user-facing changes. The panel already renders whatever count agentctl returns; the fix
-> only changes the computed base. No component, API client, or store changes.
+> No new UI surface or payload contract. The panel still renders the agentctl result.
+
+PR validation exposed three existing client races that made the new session-isolation E2E
+coverage flaky. The remediation keeps those follow-ups explicit rather than hiding production
+changes inside test-only commits:
+
+- `apps/web/hooks/domains/session/session-state-reconciler.ts` owns one keyed, reference-counted
+  HTTP reconciliation loop per store/session. `useSession` consumers share that owner, stale HTTP
+  snapshots cannot replace newer WebSocket state, and the last consumer cancels pending work.
+- `apps/web/hooks/use-task-removal.ts` validates ordered next-task candidates through the
+  authoritative task API before navigation. Cached workflow snapshots are candidate sources, not
+  proof that a deleted or archived task remains live.
+- `apps/web/components/task/chat/clamped-scroll-restore.ts` bounds delayed scroll restoration and
+  stops when Dockview removes the target element.
 
 ---
 
@@ -94,8 +106,24 @@ The true `merge-base(HEAD, origin/master)` is `19646efc83` → 1 commit (matches
 - **`GitOperator.IsAncestor` unit test.** File:
   `apps/backend/internal/agentctl/server/process/git_log_test.go`. Table-driven: ancestor,
   descendant, equal, and unrelated cases via `setupTestRepo`.
+- **Production route wiring.** Files:
+  `apps/backend/internal/agentctl/server/api/git_log_merge_base_test.go` and
+  `git_multi_repo_review_test.go`. Exercise commits and cumulative-diff routes for single- and
+  multi-repository stale-parent histories.
+- **Shared tracker policy.** File:
+  `apps/backend/internal/agentctl/server/process/workspace_git_status_base_branch_test.go`.
+  Assert task-card status, commits, and cumulative diff all resolve the same corrected anchor.
+- **Client race coverage.** Files:
+  `apps/web/hooks/domains/session/use-session.test.ts`,
+  `apps/web/hooks/use-task-removal.test.ts`, and
+  `apps/web/components/task/chat/clamped-scroll-restore.test.ts`. Cover poller deduplication,
+  stale/late snapshots, authoritative next-task validation, and bounded/detached scroll restore.
+- **Cross-platform Git shim coverage.** File:
+  `apps/web/lib/git-shim-integration.test.ts`. Exercise single-token, two-token, and equals-form
+  Git global options before `push`.
 
 Targeted commands:
+
 ```shell
 cd apps/backend && go test -run 'TestComputeMergeBase|TestRunGitLogForRepo|TestGetLog|IsAncestor' ./internal/agentctl/server/api/... ./internal/agentctl/server/process/...
 ```
@@ -104,8 +132,15 @@ cd apps/backend && go test -run 'TestComputeMergeBase|TestRunGitLogForRepo|TestG
 
 ## E2E Tests
 
-> Skipped: zero user-visible UI changes. The behavior is verified at the agentctl git layer,
-> which E2E cannot deterministically drive (requires a merged/deleted stacked-parent upstream).
+- The stale Git-anchor behavior remains at the agentctl integration layer; a browser scenario
+  would require nondeterministic upstream merge/deletion setup.
+- `apps/web/e2e/tests/task/session-isolation.spec.ts` covers the user-visible session state and
+  task-removal races uncovered while validating the PR.
+- `apps/web/e2e/tests/chat/mobile-auto-scroll-toggle.spec.ts` already covers the same scroll
+  restoration value on the mobile composition; the remediation changes state/scroll mechanics,
+  not responsive layout or touch entry points.
+- The backend fixture uses a Node Git shim and `path.delimiter`; the runner summary avoids GNU-only
+  `paste` behavior so host execution remains portable on macOS.
 
 ---
 
@@ -127,6 +162,7 @@ agentctl git area and task 02 imports the task 01 helper.
 ---
 
 ## Open Questions
+
 - RESOLVED (Area 2): the live cumulative-diff handler `runGitCumulativeDiffForRepo` computes its
   own base via the shared `computeMergeBase` (a separate call site from `runGitLogForRepo`, not a
   shared resolver). Task 02 applied the same `correctStaleBase` call in both places, so the

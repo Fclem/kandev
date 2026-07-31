@@ -361,7 +361,9 @@ export const backendFixture = base.extend<object, { backend: BackendContext }>({
           // the `mock-agent` binary via PATH. In production that dir is the
           // same as the running kandev binary's dir, but e2e spawns via an
           // absolute path and doesn't inherit that location.
-          PATH: `${shimDir}:${path.join(BACKEND_DIR, "bin")}:${originalPath}`,
+          PATH: [shimDir, path.join(BACKEND_DIR, "bin"), originalPath]
+            .filter(Boolean)
+            .join(path.delimiter),
           KANDEV_E2E_ORIGINAL_PATH: originalPath,
           KANDEV_E2E_GIT_DELAY_FILE: shimDelayFile,
           KANDEV_E2E_GITLAB_PUSH_FILE: shimGitLabPushFile,
@@ -496,7 +498,7 @@ function writeGitShimLauncher(shimDir: string, shimScript: string): void {
 
 /** Strip GH_TOKEN / GITHUB_TOKEN so the mock client is used. */
 // Sanitize the inherited environment before handing it to the e2e backend.
-// Two classes of vars must not leak through the `...process.env` spread:
+// Three classes of vars must not leak through the `...process.env` spread:
 //   - GitHub tokens — tests must hit the mock GitHub, never a real token.
 //   - KANDEV_FEATURES_* flags — these are profile-managed (profiles.yaml `e2e:`
 //     column turns them on). When the suite is launched from inside a kandev
@@ -506,12 +508,16 @@ function writeGitShimLauncher(shimDir: string, shimScript: string): void {
 //     in the test backend → /api/v1/office/* 404s. Dropping the whole
 //     KANDEV_FEATURES_* namespace lets the e2e profile govern feature flags so
 //     the suite always exercises them, regardless of where it's launched.
+//   - PATH casing aliases — Windows commonly inherits `Path`; retaining it
+//     beside the fixture's new `PATH` makes child-process lookup order
+//     ambiguous. The caller restores one canonical PATH after sanitizing.
 function sanitizeInheritedEnv(env: Record<string, string>): Record<string, string> {
   const cleaned = { ...env };
   delete cleaned.GH_TOKEN;
   delete cleaned.GITHUB_TOKEN;
   for (const key of Object.keys(cleaned)) {
     if (key.startsWith("KANDEV_FEATURES_")) delete cleaned[key];
+    if (key.toUpperCase() === "PATH") delete cleaned[key];
   }
   return cleaned;
 }

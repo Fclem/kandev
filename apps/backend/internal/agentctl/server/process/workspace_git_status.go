@@ -304,11 +304,22 @@ func (wt *WorkspaceTracker) computeBaseCommit(ctx context.Context, baseBranch st
 	}
 	if out, err := wt.runGitOutput(ctx, "merge-base", baseBranch, "HEAD"); err == nil {
 		if sha := strings.TrimSpace(string(out)); sha != "" {
-			return sha
+			return correctStaleComparisonBase(
+				ctx,
+				workspaceTrackerComparisonGit{tracker: wt},
+				sha,
+				baseBranch,
+			)
 		}
 	}
 	if out, err := wt.runGitOutput(ctx, "rev-parse", baseBranch); err == nil {
-		return strings.TrimSpace(string(out))
+		base := strings.TrimSpace(string(out))
+		return correctStaleComparisonBase(
+			ctx,
+			workspaceTrackerComparisonGit{tracker: wt},
+			base,
+			baseBranch,
+		)
 	}
 	return ""
 }
@@ -385,13 +396,13 @@ func (wt *WorkspaceTracker) getAheadBehindCounts(ctx context.Context, update *ty
 // branchDiffCandidates is the integration-branch priority list used when the
 // task has no recorded base_branch (legacy tasks / external branches). Kept
 // in sync between base-commit and ahead/behind resolution.
-var branchDiffCandidates = []string{"origin/main", "origin/master", "main", "master"}
+var branchDiffCandidates = integrationBranchRefs(true)
 
 // aheadBehindFallbackCandidates is the subset of branchDiffCandidates used by
 // ahead/behind counts. Local main/master are intentionally excluded — the
 // counts are meant to reflect divergence from the remote integration line,
 // and falling back to a local branch can show stale, in-progress work.
-var aheadBehindFallbackCandidates = []string{"origin/main", "origin/master"}
+var aheadBehindFallbackCandidates = integrationBranchRefs(false)
 
 // resolveBaseBranch picks the ref that workspace_git_diff uses as the
 // merge-base for BranchAdditions/BranchDeletions. Prefers the task's

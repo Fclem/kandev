@@ -13,6 +13,7 @@ import {
   resolveNativeInitialScrollTop,
   createFrameCoalescer,
 } from "./transcript-auto-scroll";
+import { scheduleClampedScrollRestore } from "./clamped-scroll-restore";
 
 /**
  * Continuously captures scroll state via scroll listener.
@@ -388,17 +389,6 @@ function useScrollToMessage(runGuardedScroll: (performScroll: () => void) => voi
   );
 }
 
-/** Upper bound on the number of animation frames the initial restore keeps
- * re-applying a saved offset the scroll container can't hold yet. After a
- * dockview remount (navigating away and back) the message rows lay out — and
- * grow `scrollHeight` — over the frame or two following the first paint, so
- * the very first write is clamped to a still-too-short height. Re-applying for
- * a few frames lands the offset once the content catches up. ~20 frames
- * (~300ms at 60fps) is comfortably longer than that settle window while
- * staying bounded so a transcript that legitimately can never reach the saved
- * offset (its content genuinely shrank) can't loop forever. */
-const INITIAL_RESTORE_MAX_FRAMES = 20;
-
 /**
  * Applies the initial scrollTop once items are available: bottom when
  * enabled, or the last captured offset for this session when disabled (see
@@ -415,8 +405,9 @@ const INITIAL_RESTORE_MAX_FRAMES = 20;
  * destroys) the panel's DOM as it finalizes the layout, so the component that
  * seeded the restore unmounts while its scroll element stays on screen — the
  * loop keeps a direct reference to that element and self-terminates once the
- * offset lands, so it stays correct and can't leak. The enabled "scroll to
- * bottom" path needs no retry and settles in a single write.
+ * offset lands, reaches its frame budget, or the element leaves the document.
+ * The enabled "scroll to bottom" path needs no retry and settles in a single
+ * write.
  */
 function useInitialScrollPosition(
   scrollRef: React.RefObject<HTMLDivElement | null>,
@@ -462,15 +453,11 @@ function useInitialScrollPosition(
     // write that already reached its target needs no follow-up.
     if (enabled || scrollTop <= 0 || el.scrollTop >= scrollTop - 1) return;
 
-    let framesLeft = INITIAL_RESTORE_MAX_FRAMES;
-    const reapply = () => {
-      el.scrollTop = scrollTop;
-      syncNearBottom();
-      if (el.scrollTop < scrollTop - 1 && framesLeft-- > 0) {
-        requestAnimationFrame(reapply);
-      }
-    };
-    requestAnimationFrame(reapply);
+    scheduleClampedScrollRestore({
+      element: el,
+      targetScrollTop: scrollTop,
+      onApply: syncNearBottom,
+    });
   }, [itemCount, sessionId, enabled, isNearBottomRef, storeApi]);
 }
 

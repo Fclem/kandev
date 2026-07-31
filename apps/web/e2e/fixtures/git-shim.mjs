@@ -9,8 +9,7 @@
 // failed every checkout routed through it.
 //
 // Behavior (all opt-in via env vars, absent files = transparent passthrough):
-//   - Skip a leading `-c key=val` pair when finding the git subcommand (the
-//     worktree manager always calls `git -c core.longpaths=true ...`).
+//   - Skip leading Git global options when finding the subcommand.
 //   - If KANDEV_E2E_GIT_DELAY_FILE holds a positive ms value and the subcommand
 //     is `fetch`/`pull`, sleep that long before running real git (simulates slow
 //     network git so prepare-panel streaming stays observable).
@@ -22,15 +21,20 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
-/** Returns the git subcommand, skipping a single leading `-c key=val` pair. */
+/** Returns the first non-option token after Git's leading global options. */
 function findSubcommand(args) {
   let i = 0;
   while (i < args.length) {
-    if (args[i] === "-c") {
-      i += 2; // skip the flag and its value
+    const arg = args[i];
+    if (arg === "-c" || arg === "-C") {
+      i += 2;
       continue;
     }
-    return args[i];
+    if (arg.startsWith("-")) {
+      i += 1;
+      continue;
+    }
+    return arg;
   }
   return "";
 }

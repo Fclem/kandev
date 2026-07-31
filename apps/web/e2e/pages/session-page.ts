@@ -166,7 +166,7 @@ export class SessionPage {
       }
 
       const now = Date.now();
-      const remaining = softTotalTimeout - (now - start);
+      const remaining = Math.max(1, softTotalTimeout - (now - start));
       // Re-drive SSR hydration once per attemptTimeout slice (not just once):
       // under CI shard load a single reload isn't always enough for the
       // idle-input state to hydrate. Only reload while enough budget remains

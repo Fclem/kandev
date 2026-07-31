@@ -14,9 +14,18 @@ export function readLocaleCookie(doc: Document = document): string | undefined {
   for (const part of cookie.split(";")) {
     const [rawName, ...rawValue] = part.split("=");
     if (rawName?.trim() === LOCALE_COOKIE) {
-      const value = decodeURIComponent(rawValue.join("=").trim());
-      // An empty value (e.g. a cleared cookie) reads as "not set".
-      return value || undefined;
+      try {
+        const value = decodeURIComponent(rawValue.join("=").trim());
+        // An empty value (e.g. a cleared cookie) reads as "not set".
+        return value || undefined;
+      } catch {
+        // `decodeURIComponent` throws on a malformed percent-escape. The cookie is
+        // external input — it can be truncated or hand-edited — and this runs at
+        // module scope via resolveInitialLocale, before React mounts. An escaping
+        // throw there is unrecoverable and renders a blank page with no error of
+        // any kind (see provider.tsx). Treat it exactly like an unset cookie.
+        return undefined;
+      }
     }
   }
   return undefined;

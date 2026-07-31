@@ -12,8 +12,8 @@
  * The fix is always to defer: store the catalog key and resolve it at render
  * (see `lib/i18n/option-label.ts`), or turn the element into a component.
  *
- * The pseudo-locale cannot catch this class (docs/i18n.md), which the
- * pseudo-locale cannot catch — the text *is* translated, just not reactively.
+ * The pseudo-locale cannot catch this class — the text *is* translated, just
+ * frozen at the boot locale — which is why this check exists (docs/i18n.md).
  *
  * Usage: node scripts/check-module-scope-t.mjs [<dir> ...]
  */

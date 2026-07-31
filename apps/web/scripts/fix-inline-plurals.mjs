@@ -24,8 +24,12 @@
  * alone. `check-inline-plurals.mjs` fails the build if one reappears.
  *
  * LIMITATION: the flat key is deleted in favour of the `_one`/`_other` pair, so a
- * second call site sharing that key loses it. That shows up as a missing key in
- * `check-i18n-keys.mjs` rather than at runtime — run `i18n:check` afterwards.
+ * second call site sharing that key loses it — and NOTHING catches that for you.
+ * `check-i18n-keys.mjs` treats a bare `ns:key` as satisfied by `_one`/`_other`
+ * (see `isSatisfied`), while i18next does NOT fall back to the base key when the
+ * call passes no `count` — so the other call site renders the raw key at runtime.
+ * After running this, grep the converted keys for call sites without a `count`
+ * argument and give them their own key.
  *
  * Usage: node scripts/fix-inline-plurals.mjs [--write] <dir|file> [...]
  */

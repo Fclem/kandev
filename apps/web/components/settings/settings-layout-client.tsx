@@ -151,7 +151,7 @@ export function SettingsLayoutClient({ children }: { children: React.ReactNode }
   }
 
   const pageLabel = deriveCurrentPageLabel(pathname, t);
-  const title = pageLabel ?? "Settings";
+  const title = pageLabel ?? t("settings:settings");
   const parents = deriveParents(pathname);
 
   return (

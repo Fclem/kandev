@@ -47,8 +47,8 @@ export function SettingsFloatingSave({
   const isSaved = status === "saved";
   const isInvalid = Boolean(invalidReason);
   const isBusy = isSaving || isDiscarding;
-  const buttonLabel = status === "error" ? "Retry save" : "Save changes";
-  const accessibleLabel = getAccessibleLabel(status, buttonLabel);
+  const { label: labelKey, accessible: accessibleKey } = saveButtonKeys(status);
+  const accessibleLabel = t(accessibleKey);
   const configChatFloatingActionsHost = useConfigChatFloatingActionsHost();
   const isHostedByConfigChat = configChatFloatingActionsHost !== null;
   const saveAction = (
@@ -84,7 +84,7 @@ export function SettingsFloatingSave({
           onClick={() => void onSave()}
         >
           <SaveButtonIcon status={status} />
-          {accessibleLabel === "Saving changes" ? t("settings:saving") : accessibleLabel}
+          {t(labelKey)}
         </Button>
       </div>
     </div>
@@ -179,8 +179,19 @@ function SaveButtonIcon({ status }: { status: SettingsSaveStatus }) {
   return <IconDeviceFloppy className="size-4" />;
 }
 
-function getAccessibleLabel(status: SettingsSaveStatus, buttonLabel: string): string {
-  if (status === "saving") return "Saving changes";
-  if (status === "saved") return "Saved";
-  return buttonLabel;
+/**
+ * Catalog keys for the save button, by status.
+ *
+ * Returns KEYS, not resolved copy: the caller resolves them with `t()` at render
+ * so a locale switch re-renders. The visible label is deliberately shorter than
+ * the accessible name while saving ("Saving…" vs "Saving changes"), so the two
+ * are separate keys rather than one string compared against itself.
+ */
+function saveButtonKeys(status: SettingsSaveStatus): { label: string; accessible: string } {
+  if (status === "saving") {
+    return { label: "settings:saving", accessible: "settings:savingChanges" };
+  }
+  if (status === "saved") return { label: "settings:saved", accessible: "settings:saved" };
+  if (status === "error") return { label: "settings:retrySave", accessible: "settings:retrySave" };
+  return { label: "settings:saveChanges", accessible: "settings:saveChanges" };
 }

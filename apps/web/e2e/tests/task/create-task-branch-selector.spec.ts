@@ -587,10 +587,9 @@ test.describe("Branch refresh + filter", () => {
     await testPage.getByTestId("task-title-input").fill("Refresh button test");
     await testPage.getByTestId("task-description-input").fill("triggers git fetch");
     await testPage.getByTestId("repo-chip-trigger").first().click();
-    await testPage
-      .getByRole("option", { name: new RegExp(`^${escapeRe(seededRepoName)}\\b`, "i") })
-      .first()
-      .click();
+    // Repository names are not unique after earlier specs register additional
+    // worktrees. cmdk's stable data-value is the repository ID.
+    await testPage.locator(`[cmdk-item][data-value="${seedData.repositoryId}"]`).click();
     // Worktree executor → branch selector enabled and refresh button visible.
     await testPage.getByTestId("executor-profile-selector").click();
     await testPage.getByRole("option", { name: worktreeProfileName }).click();

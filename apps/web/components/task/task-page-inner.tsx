@@ -14,7 +14,7 @@ import type { Layout } from "react-resizable-panels";
 import { TaskArchivedProvider } from "./task-archived-context";
 import { SessionCommands } from "@/components/session-commands";
 import { TaskPRShortcut } from "@/components/task/task-pr-shortcut";
-import { getEmbeddedVscodeSupported } from "@/components/task/task-page-editor-capability";
+import { useEmbeddedVscodeSupport } from "@/components/task/task-page-editor-capability";
 import { VcsDialogsProvider } from "@/components/vcs/vcs-dialogs";
 import {
   buildDebugEntries,
@@ -244,7 +244,7 @@ export function TaskPageInner({
   const { t } = useTranslation();
   const taskProps = resolveTaskProps(task, repository);
   const remote = resolveRemoteExecutor(resumption.sessionStatus as RemoteExecutorStatus | null);
-  const embeddedVscodeSupported = getEmbeddedVscodeSupported(resumption.sessionStatus);
+  const embeddedVscode = useEmbeddedVscodeSupport(effectiveSessionId, resumption.sessionStatus);
   const debugEntries = useTaskDebugEntries({
     isVisible: isDebugUI() && showDebugOverlay,
     connectionStatus,
@@ -266,7 +266,7 @@ export function TaskPageInner({
     remote,
     sessionWorkflowStepId: sessionPanel.sessionWorkflowStepId,
     agentctlReady: agentctlStatus.isReady,
-    embeddedVscodeSupported,
+    embeddedVscodeSupported: embeddedVscode,
     officeTaskHref,
     onTaskUnarchived,
   });

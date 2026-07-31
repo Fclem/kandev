@@ -77,7 +77,7 @@ function AgentMultiSelect({
           <button
             key={agent.id}
             type="button"
-            className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-accent cursor-pointer flex items-center gap-2"
+            className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted cursor-pointer flex items-center gap-2"
             onClick={() => toggle(agent.id)}
           >
             <span
@@ -118,7 +118,7 @@ function AgentSingleSelect({
       <PopoverContent className="w-48 p-1" align="start">
         <button
           type="button"
-          className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-accent cursor-pointer"
+          className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted cursor-pointer"
           onClick={() => onChange("")}
         >
           {t("common:none")}
@@ -127,7 +127,7 @@ function AgentSingleSelect({
           <button
             key={agent.id}
             type="button"
-            className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-accent cursor-pointer"
+            className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted cursor-pointer"
             onClick={() => onChange(agent.id)}
           >
             {agent.name}
@@ -153,7 +153,7 @@ export function NewTaskStages({ stages, onUpdate }: Props) {
     <div className="border border-border rounded-lg overflow-hidden">
       <button
         type="button"
-        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent/50 transition-colors cursor-pointer"
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors cursor-pointer"
         onClick={() => onUpdate({ enabled: !stages.enabled })}
       >
         {stages.enabled ? (

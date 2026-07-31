@@ -1652,7 +1652,18 @@ func (s *Service) setSessionRunningForExecution(ctx context.Context, taskID, ses
 	// (2,000+ redundant writes observed on long-running turns).
 	wasAlreadyRunning := session.State == models.TaskSessionStateRunning
 
-	if updatedSession := s.updateTaskSessionState(ctx, taskID, sessionID, models.TaskSessionStateRunning, "", true, session); updatedSession != nil {
+	if updatedSession, _ := s.updateTaskSessionStateWithHook(
+		ctx,
+		taskID,
+		sessionID,
+		models.TaskSessionStateRunning,
+		"",
+		true,
+		func() {
+			s.reconcileRunningTaskStateLocked(ctx, taskID, sessionID)
+		},
+		session,
+	); updatedSession != nil {
 		if len(preloadedSession) > 0 && preloadedSession[0] != nil && preloadedSession[0] != updatedSession {
 			*preloadedSession[0] = *updatedSession
 		}
@@ -1661,7 +1672,10 @@ func (s *Service) setSessionRunningForExecution(ctx context.Context, taskID, ses
 	if wasAlreadyRunning {
 		return
 	}
+}
 
+// reconcileRunningTaskStateLocked requires taskRuntimeStateMu to be held.
+func (s *Service) reconcileRunningTaskStateLocked(ctx context.Context, taskID, sessionID string) {
 	if err := s.reconcileTaskStateForRuntimeLocked(
 		ctx,
 		taskID,

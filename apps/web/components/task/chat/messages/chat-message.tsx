@@ -102,6 +102,7 @@ type UserMessageBodyOptions = {
   content: string;
   rawContent?: string;
   promptMentionComponents?: Components;
+  taskId: string;
   worktreePath?: string;
   onOpenFile?: (path: string) => void;
 };
@@ -113,6 +114,7 @@ function renderUserMessageBody({
   content,
   rawContent,
   promptMentionComponents,
+  taskId,
   worktreePath,
   onOpenFile,
 }: UserMessageBodyOptions): React.ReactNode {
@@ -124,6 +126,7 @@ function renderUserMessageBody({
       <div className="markdown-body markdown-body-user max-w-none">
         <MemoizedMarkdown
           content={content}
+          taskId={taskId}
           components={promptMentionComponents}
           worktreePath={worktreePath}
           onOpenFile={onOpenFile}
@@ -500,6 +503,7 @@ function UserMessageContent({
             content: comment.content,
             rawContent: comment.raw_content,
             promptMentionComponents,
+            taskId: comment.task_id,
             worktreePath,
             onOpenFile,
           })}

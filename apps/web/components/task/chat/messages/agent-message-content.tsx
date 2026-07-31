@@ -55,6 +55,7 @@ export const AgentMessageContent = memo(function AgentMessageContent({
             <div className="markdown-body max-w-none">
               <MemoizedMarkdown
                 content={comment.content || t("task:emptyComment")}
+                taskId={comment.task_id}
                 worktreePath={worktreePath}
                 onOpenFile={onOpenFile}
               />

@@ -38,6 +38,7 @@
   "optional": "(optional)",
   "quickChatsStayOutsideYourTask": "Quick chats stay outside your task board.",
   "renameChat": "Rename chat",
+  "renameSavedOnThisDeviceOnly": "Rename saved on this device only",
   "repositoriesOptional": "Repositories <2>(optional)</2>",
   "repositoryOptional": "Repository (optional)",
   "resizeQuickChatFrom": "Resize quick chat from {{edge}}",
@@ -57,5 +58,6 @@
   "updateTheMcpServersForThe": "Update the MCP servers for the default agent profile",
   "useWorkspaceDefault": "Use workspace default",
   "useWorkspaceDefault2": "Use workspace default...",
+  "weCouldNotSyncTheNew": "We could not sync the new name to your other devices.",
   "whatWouldYouLikeToConfigure": "What would you like to configure?"
 }

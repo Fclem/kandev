@@ -226,6 +226,7 @@ function PlanPanelContent({
       >
         <PlanEditor
           key={`${taskId}-${state.editorKey}`}
+          taskId={taskId}
           value={state.draftContent}
           onChange={state.setDraftContent}
           placeholder={t("task:startTypingYourPlan")}

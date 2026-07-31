@@ -31,6 +31,11 @@ import {
   countFilesInTree,
 } from "./file-tree-utils";
 import { Trans, useTranslation } from "react-i18next";
+import {
+  OpenInEditorMenuItems,
+  canOpenNodeInEditor,
+  useFileTreeEditorActions,
+} from "./file-tree-editor-menu";
 
 type GitFileStatus = FileInfo["status"] | undefined;
 
@@ -208,8 +213,12 @@ export function FileContextMenu({
   selectedPaths?: Set<string>;
 }) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const editorActions = useFileTreeEditorActions();
   const isBulk = selectedCount > 1;
   const needsConfirmation = node.is_dir || isBulk;
+  // A bulk selection would make a single-node "Open in <editor>" ambiguous.
+  const showOpenInEditor = !isBulk && canOpenNodeInEditor(editorActions, node);
+  const hasFileActions = !!onDeleteFile || !!onRenameFile || !!onDownloadFile;
 
   const handleConfirmDelete = useCallback(() => {
     setDeleteDialogOpen(false);
@@ -243,13 +252,15 @@ export function FileContextMenu({
     }
   }, [tree, setTree, node.path, onDeleteFile, needsConfirmation]);
 
-  if (!onDeleteFile && !onRenameFile && !onDownloadFile) return <>{children}</>;
+  if (!hasFileActions && !showOpenInEditor) return <>{children}</>;
 
   return (
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent>
+          {showOpenInEditor && <OpenInEditorMenuItems node={node} />}
+          {showOpenInEditor && hasFileActions && <ContextMenuSeparator />}
           <FileContextMenuItems
             node={node}
             isBulk={isBulk}

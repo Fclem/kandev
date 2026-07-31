@@ -154,7 +154,13 @@ type MessageAdapter = {
 const adapters: MessageAdapter[] = [
   {
     matches: (comment) => comment.type === "thinking",
-    render: (comment) => <ThinkingMessage comment={comment} />,
+    render: (comment, ctx) => (
+      <ThinkingMessage
+        comment={comment}
+        worktreePath={ctx.worktreePath}
+        onOpenFile={ctx.onOpenFile}
+      />
+    ),
   },
   {
     matches: (comment) => comment.type === "todo",

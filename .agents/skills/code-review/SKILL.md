@@ -140,6 +140,11 @@ Check every changed file for the following layers. Skip layers that don't apply 
 - For changed Makefiles, shell scripts, or CI path filters, trace each changed
   target through the shell and platform branches. Distinguish executable naming
   from recipe-shell syntax; inspect `OS`, `MSYSTEM`, and `SHELL` assumptions.
+- When simulating a Windows Make branch from POSIX, prefer
+  `scripts/check-make-shells`. If a manual `make -n` is necessary, neutralize
+  its parse-time probes as that checker does (`NULL_REDIR= BUILD_TIME=simulated`)
+  so POSIX does not create `NUL` artifacts. Compare `git status --short` with
+  the initial snapshot afterward.
 - Use `make -n <changed-target>` for every affected platform branch that is
   available, and confirm CI invokes the changed target. Include docs or
   configuration paths when a validator or test reads them.
@@ -165,6 +170,10 @@ the user asks for a review only, or when reviewing an external contributor's
 branch, do not edit the checkout or push code; report findings through the
 channel the user requested. Do not submit or resolve reviews unless explicitly
 asked.
+
+Before a read-only review ends, compare `git status --short` with the initial
+snapshot. Remove only diagnostic artifacts demonstrably created during the
+review; preserve all pre-existing user changes.
 
 Report findings with a concrete suggested fix. Do not edit the checkout during
 a review-only request; otherwise remediate in the same primary conversation.

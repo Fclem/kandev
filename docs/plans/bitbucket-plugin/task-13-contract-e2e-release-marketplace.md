@@ -71,9 +71,15 @@ leakage checks as release gates.
   surfaces, `#` search with submit-time rejection, plugin-owned task provenance, and
   disable/re-enable cleanup.
 - Plugin unit/race/vet/build checks and host/all-platform package checksum verification
-  pass. The real package also installs active on an isolated current development host;
-  authenticated `connection.get` and its desktop/mobile workbench pass. Public docs
-  and the marketplace index baseline validate.
+  pass. The real package installs active on an isolated current development host;
+  unconfigured `connection.get`, repository, and pull-request actions return safe empty
+  states; disable/re-enable revokes and restores its route; and its desktop/mobile
+  workbench, mobile drawer target, and overflow checks pass.
+- The real plugin accepts the host's canonical `id`/`key` composer reference, derives
+  repository and pull-request identity, rejects mismatched identities, and still
+  live-fetches the PR before authorizing submission. A configured Cloud/Data Center
+  cross-repository run still requires disposable provider credentials and fixtures.
+- Public docs and the marketplace index baseline validate.
 - Container credential specs are present for Docker and SSH, but this workspace lacks
   `KANDEV_E2E_CREDENTIAL_BROKER_PUBLIC_BASE_URL`; both tests therefore skip rather than
   claiming real HTTPS clone/push evidence.

@@ -98,12 +98,15 @@ Wave 4:
 ## Current status
 
 Tasks 01–12 are implemented. The packaged generic host contract passes on desktop and
-mobile, and plugin unit, race, build, and five-platform archive checks pass. Task 13
-remains in progress until a disposable compatible host and a container-reachable HTTPS
-credential-broker URL are available, the host changes ship in a release that can be
-named by `min_kandev_version`, and an explicit signing key/trust policy exists. No
-plugin tag, release, signature claim, or marketplace entry is created before those
-gates pass.
+mobile. The actual package passes its unconfigured action, disable/re-enable, desktop,
+and mobile lifecycle checks; its canonical composer reference now rehydrates the
+repository/PR identity and performs live submit-time authorization. Plugin unit, race,
+build, and five-platform archive checks pass. Task 13 remains in progress until a
+configured disposable Cloud/Data Center target, a compatible disposable host, and a
+container-reachable HTTPS credential-broker URL are available, the host changes ship
+in a release that can be named by `min_kandev_version`, and an explicit signing
+key/trust policy exists. No plugin tag, release, signature claim, or marketplace entry
+is created before those gates pass.
 
 ## Risks
 

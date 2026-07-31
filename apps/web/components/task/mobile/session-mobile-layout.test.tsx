@@ -41,7 +41,11 @@ vi.mock("../review-detail-panel", async () => {
   };
 });
 
-import { MobilePanelArea, useMobilePanelHandlers } from "./session-mobile-layout";
+import {
+  MobilePanelArea,
+  useMobilePanelHandlers,
+  useMobileReviewPanelFallback,
+} from "./session-mobile-layout";
 
 const MOCK_FILE: OpenFileTab = {
   path: "src/foo.ts",
@@ -237,6 +241,20 @@ describe("useMobilePanelHandlers request cancellation", () => {
     rerender({ sid: "s2" });
 
     expect(firstOptions.signal.aborted).toBe(true);
+  });
+});
+
+describe("useMobileReviewPanelFallback", () => {
+  it("persists chat when the last linked review disappears", () => {
+    const handlePanelChange = vi.fn();
+
+    const { result } = renderHook(() =>
+      useMobileReviewPanelFallback("review", false, handlePanelChange),
+    );
+
+    expect(result.current).toBe("chat");
+    expect(handlePanelChange).toHaveBeenCalledOnce();
+    expect(handlePanelChange).toHaveBeenCalledWith("chat");
   });
 });
 

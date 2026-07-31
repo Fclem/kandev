@@ -38,6 +38,18 @@ function useMobilePanelChangeHandler(
   );
 }
 
+export function useMobileReviewPanelFallback(
+  currentMobilePanel: MobileSessionPanel,
+  hasReview: boolean,
+  handlePanelChangeAndClearSheet: (panel: MobileSessionPanel) => void,
+): MobileSessionPanel {
+  const shouldReturnToChat = currentMobilePanel === "review" && !hasReview;
+  useEffect(() => {
+    if (shouldReturnToChat) handlePanelChangeAndClearSheet("chat");
+  }, [handlePanelChangeAndClearSheet, shouldReturnToChat]);
+  return shouldReturnToChat ? "chat" : currentMobilePanel;
+}
+
 const TOP_NAV_HEIGHT = "3.5rem";
 const BOTTOM_NAV_HEIGHT = "3.25rem";
 
@@ -225,12 +237,16 @@ function useMobileReviewPanelState({
 }) {
   const reviews = useNormalizedTaskReviews(activeTaskId);
   const { selectedReview, selectReview } = useReviewItemSelection(activeTaskId, reviews);
+  const effectiveMobilePanel = useMobileReviewPanelFallback(
+    currentMobilePanel,
+    reviews.length > 0,
+    handlePanelChangeAndClearSheet,
+  );
   return {
     reviews,
     selectedReview,
     selectReview,
-    effectiveMobilePanel:
-      currentMobilePanel === "review" && reviews.length === 0 ? "chat" : currentMobilePanel,
+    effectiveMobilePanel,
     handleMobilePanelChange: useMobilePanelChangeHandler(handlePanelChangeAndClearSheet),
   };
 }

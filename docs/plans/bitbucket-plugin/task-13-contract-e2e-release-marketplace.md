@@ -71,13 +71,16 @@ leakage checks as release gates.
   surfaces, `#` search with submit-time rejection, plugin-owned task provenance, and
   disable/re-enable cleanup.
 - Plugin unit/race/vet/build checks and host/all-platform package checksum verification
-  pass. Public docs and the marketplace index baseline validate.
+  pass. The real package also installs active on an isolated current development host;
+  authenticated `connection.get` and its desktop/mobile workbench pass. Public docs
+  and the marketplace index baseline validate.
 - Container credential specs are present for Docker and SSH, but this workspace lacks
   `KANDEV_E2E_CREDENTIAL_BROKER_PUBLIC_BASE_URL`; both tests therefore skip rather than
   claiming real HTTPS clone/push evidence.
-- Packaged plugin E2E fails closed without `KANDEV_PLUGIN_E2E_URL`. The manifest also
-  intentionally omits `min_kandev_version` until these host contracts ship in a named
-  release.
+- The release workflow's independent packaged-plugin runner still fails closed without
+  `KANDEV_PLUGIN_E2E_URL`. The manifest intentionally omits `min_kandev_version` until
+  these host contracts ship in a named release and the same package passes against
+  that released host.
 - A signed release is not yet trustworthy: the host has no production verifier/trust
   policy and the release has no approved signing key. Keep the plugin unreleased and
   absent from `plugin-registry/plugins.yaml` until those decisions and external gates

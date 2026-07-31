@@ -26,6 +26,7 @@ import { Dialog } from "@kandev/ui/dialog";
 - Use `useTouchDrawer` when a hover/popover disclosure needs a coarse-pointer `Drawer` alternative. Width-based phone composition and pointer-based disclosure behavior are related but not interchangeable.
 - Existing Radix DropdownMenu and ContextMenu surfaces receive inset, safe-area-aware bottom-sheet treatment below 640px in `app/globals.css`. Reuse those primitives for contextual actions and add focused coverage for long or nested menus instead of creating a parallel mobile menu.
 - Mobile capability parity does not require desktop layout parity. Load `/mobile-parity` for the Kandev surface decision guide, mobile design contract, and verification requirements.
+- For container-query layouts, test just below and at the breakpoint plus the component's minimum supported width; preserve action order and prove clipped controls remain hit-target reachable.
 
 ## Data Flow Pattern (Critical)
 

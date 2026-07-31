@@ -195,6 +195,11 @@ Run the assertion in the relevant desktop and mobile projects when responsive
 layout can change the result. Do not rely on fixed pixels when the product
 contract is equality or alignment.
 
+For narrow-width clipping or overlap regressions, visibility and containment
+are insufficient: assert a real hit target. Check `document.elementFromPoint()`
+at the control center resolves to the control (or its descendant), then prove
+the action remains clickable at the legal minimum width.
+
 ### IDs and response shapes — common pitfalls
 
 - **`apiClient.createTaskWithAgent(...)` returns `CreateTaskResponse`**, which is `Task & { session_id?: string; agent_execution_id?: string }`. Read `created.session_id` directly — don't call `listTaskSessions(taskId)` just to fetch the session that was auto-started by the same call.

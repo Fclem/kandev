@@ -93,6 +93,8 @@ CI-specific Go lint often needs `golangci-lint run ./... --new-from-rev=<base>
 
 For unfamiliar, infrastructure, or E2E failures, load
 `references/ci-troubleshooting.md` before changing code.
+Also load it for unexpected zero-duration or no-op manual-review runs: event
+and workflow provenance can explain them without a product-code change.
 
 Fix with `/tdd` or `/e2e` as applicable, run focused checks, and keep each
 remediation scoped to the reported failure. Do not suppress a failure or mark a
@@ -121,6 +123,11 @@ transport → gateway/client path. Sequential publishes do not prove delivery
 order when a remote bus uses separate subscriptions; consolidate one stream or
 add sequence-aware buffering when order is contractual, and cover both the
 transport boundary and local emulator.
+
+When feedback says an action must remain reachable, add and run a regression at
+the legal minimum width. Verify the actual hit target (for example,
+`elementFromPoint()` at the control center) and clickability, not only
+`toBeVisible`, before pushing.
 
 ## 4. Commit, Verify, Push
 

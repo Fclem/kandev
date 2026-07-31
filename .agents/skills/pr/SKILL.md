@@ -140,14 +140,16 @@ required screenshot embedding in step 7 is complete.
    ```
    `gh pr edit` fails on this repo (GraphQL touches the deprecated Projects-classic API). Fall back to REST — build the payload with `jq --rawfile`, never by hand-escaping shell strings:
    ```bash
+   set -euo pipefail
+   PAYLOAD="/tmp/pr-body-<PR_NUMBER>-payload.json"
    if command -v rtk >/dev/null 2>&1; then
-     rtk proxy jq -n --rawfile body "<body-file>" '{body: $body}' > /tmp/pr-body-payload.json
-     rtk proxy jq empty /tmp/pr-body-payload.json
+     rtk proxy jq -n --rawfile body "<body-file>" '{body: $body}' > "$PAYLOAD"
+     rtk proxy jq empty "$PAYLOAD"
    else
-     jq -n --rawfile body "<body-file>" '{body: $body}' > /tmp/pr-body-payload.json
-     jq empty /tmp/pr-body-payload.json
+     jq -n --rawfile body "<body-file>" '{body: $body}' > "$PAYLOAD"
+     jq empty "$PAYLOAD"
    fi
-   gh api --method PATCH repos/:owner/:repo/pulls/<PR_NUMBER> --input /tmp/pr-body-payload.json
+   gh api --method PATCH repos/:owner/:repo/pulls/<PR_NUMBER> --input "$PAYLOAD"
    ```
    **RTK and JSON payloads:** RTK is optional. If it is installed, it
    summarizes normal stdout, so it must not sit between a JSON producer and a
@@ -172,8 +174,11 @@ required screenshot embedding in step 7 is complete.
       `<!-- kandev-preview-start --> ... <!-- kandev-preview-end -->`.
    3. Build a separate merged candidate, then re-fetch the live body immediately
       before PATCH and compare the two live snapshots (not the candidate with a
-      snapshot). If it changed, discard the candidate, re-fetch, and merge
-      again; do not overwrite the newer body.
+      snapshot). Use PR-scoped temporary filenames, fail immediately on a
+      differing `cmp`, and discard any payload on failure; never reuse a prior
+      `/tmp` payload. Verify the payload contains this PR's current body and
+      required sentinels before PATCH. If it changed, re-fetch and merge again;
+      do not overwrite the newer body.
    4. After PATCH, read the body back and verify both the intended change and
       all previously present sentinel sections are still present.
 

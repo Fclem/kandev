@@ -92,6 +92,14 @@ is usually a superseded GitHub run, not a code failure. Confirm the
 non-cancelled run for the same head SHA passed, then trigger one clean run
 (rebase onto main + force-push, or `gh run rerun <id>`).
 
+**Manual-review event provenance:** For an unexpected zero-duration or no-op
+manual bot-mention run, inspect the workflow at the repository default branch
+and the event payload before assuming the PR is behind `main`. Privileged
+`issue_comment` and `pull_request_target` runs use the trusted default-branch
+workflow definition, not a newly synced PR workflow. Compare the run's
+workflow path, event, and head metadata with that definition; land a workflow
+fix on the default branch, then reproduce with a fresh comment.
+
 **Semantic PR title transport failures:** If `pr-title` /
 `amannn/action-semantic-pull-request` fails with transport or response parsing
 errors such as `invalid json response body ... Unexpected end of JSON input`,

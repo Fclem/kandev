@@ -13,17 +13,24 @@ export function reviewItemId(review: Pick<ReviewItemSummary, "providerId" | "rev
 }
 
 /**
- * A single review is the only unambiguous default. Multiple reviews require an
- * explicit user choice so a newly registered provider cannot be hidden behind
- * an earlier GitHub or GitLab result.
+ * A provider owns the ordering of its reviews, so its first item remains the
+ * default when it is the only provider present. Mixed-provider results require
+ * an explicit choice so a newly registered provider cannot be hidden behind a
+ * built-in result.
  */
 export function selectReviewItem(
   reviews: readonly ReviewItemSummary[],
   selectedReviewId: string | null,
 ): ReviewItemSummary | null {
-  if (reviews.length === 1) return reviews[0] ?? null;
-  if (!selectedReviewId) return null;
-  return reviews.find((review) => reviewItemId(review) === selectedReviewId) ?? null;
+  if (selectedReviewId) {
+    const selected = reviews.find((review) => reviewItemId(review) === selectedReviewId);
+    if (selected) return selected;
+  }
+  const primary = reviews[0];
+  if (primary && reviews.every((review) => review.providerId === primary.providerId)) {
+    return primary;
+  }
+  return null;
 }
 
 export function useReviewItemSelection(

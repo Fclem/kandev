@@ -20,6 +20,13 @@ const bitbucketReview: ReviewItemSummary = {
   state: "OPEN",
 };
 
+const secondGithubReview: ReviewItemSummary = {
+  ...githubReview,
+  reviewKey: "owner/repository/13",
+  title: "Second GitHub pull request",
+  url: "https://github.test/owner/repository/pull/13",
+};
+
 describe("selectReviewItem", () => {
   it("requires an explicit choice when built-in and plugin reviews coexist", () => {
     expect(selectReviewItem([githubReview, bitbucketReview], null)).toBeNull();
@@ -33,5 +40,9 @@ describe("selectReviewItem", () => {
 
   it("opens a lone review without an unnecessary chooser", () => {
     expect(selectReviewItem([bitbucketReview], null)).toBe(bitbucketReview);
+  });
+
+  it("preserves the provider's primary review when every choice has the same owner", () => {
+    expect(selectReviewItem([githubReview, secondGithubReview], null)).toBe(githubReview);
   });
 });

@@ -63,6 +63,11 @@ signals, or queue ownership. Cover stale events acting after a replacement
 operation begins, cancellation/retry ownership, and at-most-once delivery when
 they apply. Run affected Go packages with `-race`.
 
+When delayed state has a lifecycle owner, pair the boundary tests: disposal
+before the threshold must cancel timers and emit nothing later; disposal or
+replacement after publication must immediately clear externally observable
+state; and stale callbacks must not mutate the replacement.
+
 ## Steps
 
 ### 1. RED — Write a failing test
@@ -124,6 +129,9 @@ a later patch.
 
 **Don't use incomplete mocks:**
 - Mock the complete data structure as it exists in reality, not just fields your test uses. Partial mocks hide bugs when downstream code accesses omitted fields.
+- When adding a named export to a shared module, search for full-module
+  `vi.mock()` factories and add the export to each factory. Focused tests can
+  pass while a full suite fails on an out-of-date module shape.
 
 **Never swallow errors in tests:**
 - `try/catch` that silently ignores failures in test helpers or setup — these hide real failures.

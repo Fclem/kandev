@@ -14,6 +14,7 @@
 #   - checks: [{ type, name, workflow, status, conclusion, details_url, target_url, run_id, job_id }]
 #   - checks_head_sha: <SHA or null>
 #   - checks_snapshot_complete: <boolean>
+#   - approval_required_runs: [{ run_id, name, workflow, status, conclusion, head_sha, url }]
 #   - review_threads: [{ thread_id, is_resolved, path, comment_id, comment_created_at, author, body_preview }]
 #   - hidden_unresolved_threads: [{ thread_id, comment_id, author, path, body_preview }]
 #   - unresolved_review_thread_count: <N>
@@ -38,6 +39,7 @@
 #   - passed_check_count: <N>
 #   - checks_head_sha: <SHA or null>
 #   - checks_snapshot_complete: <boolean>
+#   - approval_required_runs: [{ run_id, name, workflow, status, conclusion, head_sha, url }]
 #   - unresolved_review_thread_count: <N>
 #   - filtered_review_thread_count: <N>
 #   - unresolved_threads: [{ thread_id, comment_id, author, path, body_preview }]
@@ -147,6 +149,7 @@ pr_json='{}'
 checks_json='[]'
 checks_head_sha=''
 checks_snapshot_complete=false
+approval_required_runs_json='[]'
 review_threads_json='[]'
 hidden_unresolved_threads_json='[]'
 reviews_json='[]'
@@ -555,6 +558,7 @@ summarize_state_json() {
       since,
       checks_head_sha,
       checks_snapshot_complete,
+      approval_required_runs: (.approval_required_runs // []),
       failed_checks: [
         effective_checks[]
         | select(terminal_failure_status and bad_conclusion)
@@ -600,6 +604,41 @@ summarize_state_json() {
       errors
     }
   '
+}
+
+fetch_approval_required_runs_json() {
+  local owner=$1 repo=$2 pr_number=$3 head_sha=$4
+  if [[ "$is_cross_repository" != "true" || -z "$owner" || -z "$repo" || -z "$pr_number" || -z "$head_sha" ]]; then
+    printf '%s\n' '[]'
+    return
+  fi
+
+  local runs_pages
+  if ! runs_pages="$(gh_json api --paginate "repos/$owner/$repo/actions/runs?event=pull_request&head_sha=$head_sha&per_page=100")"; then
+    add_error "approval_required_runs" "workflow runs API failed"
+    printf '%s\n' '[]'
+    return
+  fi
+
+  jq -cs --argjson pr "$pr_number" --arg head "$head_sha" '
+    [.[].workflow_runs[]?
+      | select(
+          .status == "completed"
+          and .conclusion == "action_required"
+          and .head_sha == $head
+          and any(.pull_requests[]?; .number == $pr and .head.sha == $head)
+        )
+      | {
+          run_id: (.id | tostring),
+          name: (.name // "unknown"),
+          workflow: (.path // null),
+          status: (.status // null),
+          conclusion: (.conclusion // null),
+          head_sha: (.head_sha // null),
+          url: (.html_url // null)
+        }
+    ] | sort_by(.run_id | tonumber)
+  ' <<<"$runs_pages"
 }
 
 fetch_head_commit_json() {
@@ -752,6 +791,8 @@ else
   add_error "pr_view" "gh pr view failed"
 fi
 
+approval_required_runs_json="$(fetch_approval_required_runs_json "$repo_owner" "$repo_name" "$resolved_pr_number" "$checks_head_sha")"
+
 since=''
 if [[ "$INCLUDE_ALL" != "1" && -n "$repo_owner" && -n "$repo_name" && -n "$resolved_pr_number" ]]; then
   if since_json="$(fetch_head_commit_json "$repo_owner" "$repo_name" "$resolved_pr_number")"; then
@@ -838,6 +879,7 @@ trap cleanup_state_tmp EXIT
 printf '%s\n' "$pr_json" >"$state_tmp_dir/pr.json"
 printf '%s\n' "$since_json" >"$state_tmp_dir/since.json"
 printf '%s\n' "$checks_json" >"$state_tmp_dir/checks.json"
+printf '%s\n' "$approval_required_runs_json" >"$state_tmp_dir/approval_required_runs.json"
 printf '%s\n' "$review_threads_json" >"$state_tmp_dir/review_threads.json"
 printf '%s\n' "$hidden_unresolved_threads_json" >"$state_tmp_dir/hidden_unresolved_threads.json"
 printf '%s\n' "$reviews_json" >"$state_tmp_dir/reviews.json"
@@ -849,6 +891,7 @@ state_json="$(jq -cn \
   --slurpfile pr "$state_tmp_dir/pr.json" \
   --slurpfile since "$state_tmp_dir/since.json" \
   --slurpfile checks "$state_tmp_dir/checks.json" \
+  --slurpfile approval_required_runs "$state_tmp_dir/approval_required_runs.json" \
   --slurpfile review_threads "$state_tmp_dir/review_threads.json" \
   --slurpfile hidden_unresolved_threads "$state_tmp_dir/hidden_unresolved_threads.json" \
   --slurpfile reviews "$state_tmp_dir/reviews.json" \
@@ -865,6 +908,7 @@ state_json="$(jq -cn \
     checks: $checks[0],
     checks_head_sha: (if $checks_head_sha == "" then null else $checks_head_sha end),
     checks_snapshot_complete: $checks_snapshot_complete,
+    approval_required_runs: $approval_required_runs[0],
     review_threads: $review_threads[0],
     hidden_unresolved_threads: $hidden_unresolved_threads[0],
     unresolved_review_thread_count: $unresolved_review_thread_count,

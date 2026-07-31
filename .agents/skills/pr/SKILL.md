@@ -84,6 +84,11 @@ required screenshot embedding in step 7 is complete.
 7. **Screenshots — publish already captured assets.** If the diff touches user-visible UI (typically under `apps/web/`, excluding e2e-only or backend-only edits), publish the affected-viewport assets captured and validated in step 4 through the host-specific flow before treating the PR as complete — do not wait to be asked. Preserve any structural-absence rationale recorded in step 4.
 
    **Capture prerequisite:**
+   - If `npx --no-install playwright-cli list` has no local browser, use the
+     managed `apps/web` E2E runner with a disposable capture spec instead of
+     treating capture as blocked. Name mobile specs `mobile-*.spec.ts`, write
+     assets to ignored `apps/web/.pr-assets`, inspect/compress them, then remove
+     the temporary spec and confirm `git status` is clean.
    - Reuse only fresh entries from `apps/web/.pr-assets/manifest.json`. After
      every capture, require a non-empty manifest with the intended fresh asset
      entries: `test -s apps/web/.pr-assets/manifest.json`. If it is absent or

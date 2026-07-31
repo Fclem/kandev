@@ -92,6 +92,17 @@ JSON
   exit 0
 fi
 
+if [[ "$*" == *"repos/kdlbs/kandev/actions/runs?event=pull_request&head_sha=abc123&per_page=100"* ]]; then
+  if [[ "${GH_APPROVAL_REQUIRED:-0}" == "1" ]]; then
+    cat <<'JSON'
+{"workflow_runs":[{"id":444,"name":"Backend tests","path":".github/workflows/ci.yml","event":"pull_request","status":"completed","conclusion":"action_required","head_sha":"abc123","html_url":"https://github.com/kdlbs/kandev/actions/runs/444","pull_requests":[{"number":123,"head":{"sha":"abc123"}}]},{"id":443,"name":"Stale run","path":".github/workflows/ci.yml","event":"pull_request","status":"completed","conclusion":"action_required","head_sha":"old-head","html_url":"https://github.com/kdlbs/kandev/actions/runs/443","pull_requests":[{"number":123,"head":{"sha":"old-head"}}]}]}
+JSON
+  else
+    printf '%s\n' '{"workflow_runs":[]}'
+  fi
+  exit 0
+fi
+
 if [[ "$1" == "api" && "$2" == "repos/kdlbs/kandev/actions/jobs/55150000002/logs" ]]; then
   log_file="$(mktemp)"
   {
@@ -1181,6 +1192,7 @@ test_summary_mode_returns_compact_fixup_state() {
   assert_jq "summary keeps pr" '.pr.number == 123' "$json"
   assert_jq "summary keeps authoritative head delivery target" '.pr.head_repository_owner == "kdlbs" and .pr.head_repository_name == "kandev" and .pr.head_ref_name == "feat/pr-state" and .pr.head_ref_oid == "abc123" and .pr.maintainer_can_modify == true' "$json"
   assert_jq "summary keeps since" '.since.committed_at == "2026-06-01T12:00:00Z"' "$json"
+  assert_jq "summary has no approval-required runs by default" '.approval_required_runs == []' "$json"
   assert_jq "summary failed check count" '.failed_checks | length == 3' "$json"
   assert_jq "summary failed check" '.failed_checks[] | select(.name == "e2e") | .conclusion == "failure" and .run_id == "27340000002"' "$json"
   assert_jq "summary reports failed duplicate over skipped" '.failed_checks[] | select(.name == "opencode-review-fork") | .conclusion == "failure" and .run_id == "27340000007"' "$json"
@@ -1200,6 +1212,21 @@ test_summary_mode_returns_compact_fixup_state() {
   assert_jq "summary omits raw arrays" 'has("checks") | not' "$json"
   assert_jq "summary no errors" '.errors == []' "$json"
   pass "--summary returns compact fixup state"
+}
+
+test_summary_reports_current_head_fork_approval_runs() {
+  local tmp
+  make_tmp_dir tmp
+  make_mock_gh "$tmp/bin"
+
+  local json
+  GH_CROSS_REPOSITORY=true GH_APPROVAL_REQUIRED=1 PATH="$tmp/bin:$PATH" "$SCRIPT" --summary 123 >"$tmp/out.json"
+  json="$(<"$tmp/out.json")"
+
+  assert_jq "summary reports only current-head approval run" \
+    '.approval_required_runs | length == 1 and .[0].run_id == "444" and .[0].head_sha == "abc123" and .[0].conclusion == "action_required"' \
+    "$json"
+  pass "--summary reports current-head fork approval runs"
 }
 
 test_job_log_mode_emits_bounded_failure_context() {
@@ -1393,6 +1420,7 @@ test_graphql_failure_records_error_but_keeps_other_data
 test_graphql_pagination_collects_all_threads
 test_all_flag_includes_historical_comments_and_reviews
 test_summary_mode_returns_compact_fixup_state
+test_summary_reports_current_head_fork_approval_runs
 test_summary_all_flag_includes_historical_unresolved_threads
 test_job_log_mode_emits_bounded_failure_context
 test_job_log_mode_unpacks_zip_responses

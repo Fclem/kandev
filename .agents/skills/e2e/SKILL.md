@@ -88,6 +88,12 @@ without `--no-build` or first run `make -C apps/backend e2e-plugin-package`.
 Prefer a normal managed build after source or base-branch changes and reserve
 `--no-build` for repeated runs against unchanged artifacts.
 
+For a raw Docker/SSH/container run, `make build-backend` alone does not build
+the Linux mock-agent fixture. Prefer the managed runner; otherwise run
+`make build-backend build-backend-remote-helpers build-web`. If the fixture
+reports a missing `KANDEV_MOCK_AGENT_LINUX_BINARY`, run
+`make -C apps/backend build-mock-agent-linux` before diagnosing product code.
+
 ### Raw commands (when you need fine control)
 
 ```bash
@@ -124,6 +130,13 @@ Start by matching CI as closely as possible, then add pressure deliberately:
 3. Preserve nearby test ordering when a single-test repeat stays green. Run the
    full spec file or full shard with the same resource limits before declaring
    a flake non-reproducible.
+
+A test that passes only after a Playwright retry is still a failure signal.
+During triage disable per-spec retry overrides and use `--retries=0`. When
+isolated repeats pass but the same shard position fails, binary-search the
+preceding spec files under one worker until the smallest ordered sequence
+reproduces the shared-state leak; the fix is complete only when that sequence
+passes with retries disabled.
 
 Record the exact command, resource limits, repeat number, and failure artifact
 path. Always inspect `error-context.md`; mobile/terminal flakes often show
@@ -317,6 +330,13 @@ Tests are grouped by feature area in subdirectories under `tests/`. When creatin
 - **Test through the UI, not the API.** E2E tests verify user-facing behavior. Don't write tests that only call the API and assert the response -- those are integration tests. Instead, navigate to the page, interact with UI elements, and assert what the user sees.
 - **Verify persistence with page reload.** After changing a setting or creating data, reload the page (`testPage.reload()`) and assert the state is still correct. This catches hydration bugs and Go boot-payload/client-store mismatches.
 - **Restore patched persisted settings.** When a test PATCHes user settings, capture the baseline and restore it in `test.afterEach`. The backend is worker-scoped, and `e2eReset` does not reset every persisted setting, including `system_metrics_display`; leaking one can affect later tests in the same worker. Fixtures are lazy: acquire `testPage` before setting a non-default persisted value in `beforeEach`, otherwise page initialization can reapply the default and silently undo setup. Verify with the focused test that depends on that setting.
+- **Restore patched shared persisted state.** The worker-scoped backend and
+  `e2eReset` do not reset every seeded record. A test that PATCHes a canonical
+  `seedData` profile, repository, executor, or setting must capture its
+  baseline and restore it in `test.afterEach` (so cleanup also runs after
+  failure); prefer a disposable record when the UI can select it. Verify by
+  running the mutating spec followed by its affected neighbour with
+  `--workers=1 --retries=0`.
 - **Pass browser-evaluation values explicitly.** `locator.evaluate` and
   `page.evaluate` callbacks execute in the browser, so they cannot close over
   Node/test variables. Pass expected values as the argument instead, for
@@ -327,6 +347,11 @@ Tests are grouped by feature area in subdirectories under `tests/`. When creatin
   assert the absolute deviation after the asynchronous content appears. This
   attributes movement to the result rather than the initiating action and
   catches movement in either direction.
+- **Scroll-positioned markers.** For unread dividers, restore points, or search
+  anchors, seed content taller than the viewport and assert the marker's bounds
+  are inside the viewport after navigation. A short transcript's DOM-visible
+  marker does not prove initial scroll behavior; cover every renderer/viewport
+  strategy selected at runtime.
 - **Nested Escape controls.** If an inner panel inside a Radix Dialog handles Escape, intercept the key in capture phase and call both `preventDefault()` and `stopPropagation()` before dismissing the inner panel. A bubble-phase window handler runs after Radix can dismiss the outer dialog. Add a regression that asserts the inner panel collapses while the outer dialog remains open.
 - **Seed via API, assert via UI.** Use `apiClient` to set up preconditions quickly, but always verify the result by opening the page and checking the DOM.
 - **Workflow/session invariants.** For session-primary/profile behavior, prefer polling backend state with `apiClient.listTaskSessions(taskId)` for invariants such as `agent_profile_id`, `is_primary`, `state`, and session count, then add UI assertions as secondary evidence. UI tab markers can lag or be absent when the backend invariant is the behavior under test.

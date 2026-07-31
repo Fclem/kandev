@@ -59,6 +59,18 @@ then run the same summary again. Stop after about 20 minutes and report the
 exact pending checks as "CI in progress." If the user specifies a fixed
 monitoring duration, remain in this direct loop until that duration elapses or
 the PR reaches a terminal clean/failed state; do not return an early status.
+Do not use interactive `gh pr checks --watch` in the primary conversation: its
+TTY redraws make captured output unusable. Use saved `scripts/pr-state --summary`
+snapshots about 60–90 seconds apart, or the read-only `pr-poller` only when the
+user explicitly asked to wait or monitor.
+
+For a cross-repository PR whose current-head snapshot is unexpectedly sparse,
+inspect `approval_required_runs`. A current-head workflow with
+`conclusion=action_required` is blocked verification, not green or skipped CI.
+Only after the user authorizes PR fixup, approve the exact run with
+`gh api --method POST repos/<base-owner>/<base-repo>/actions/runs/<run-id>/approve`,
+then re-run the summary and require jobs to materialize before polling. `gh run
+approve` is not a valid command.
 
 Treat the state as clean only when the current head has no failed or pending
 checks, no merge conflict, no actionable review thread or issue comment, and
@@ -96,12 +108,19 @@ the current head, the spec, and existing architecture before editing or
 replying.
 
 Make only valid changes. GitHub replies and thread resolution are external
-writes: do not perform either unless the user explicitly authorizes them. For
-an invalid comment, reply with concrete reasoning only when that authorization
-includes a response. When writes are not authorized, report valid comments as
-addressed in code but still unresolved; do not declare the PR clean solely from
-the code change. Resolve an authorized thread only when the change or response
-genuinely addresses it.
+writes. A direction to "address" valid review comments explicitly authorizes a
+concise reply and resolution after the fix is pushed and targeted verification
+passes; a review-only request does not. For an invalid comment, reply with
+concrete reasoning only when that authorization includes a response. When
+writes are not authorized, report valid comments as addressed in code but still
+unresolved; do not declare the PR clean solely from the code change. Resolve an
+authorized thread only when the change or response genuinely addresses it.
+
+For an ordering or concurrency finding, trace the complete producer → event-bus
+transport → gateway/client path. Sequential publishes do not prove delivery
+order when a remote bus uses separate subscriptions; consolidate one stream or
+add sequence-aware buffering when order is contractual, and cover both the
+transport boundary and local emulator.
 
 ## 4. Commit, Verify, Push
 
@@ -114,6 +133,13 @@ summary's authoritative head repository and ref only when
 sufficient. Run broad `/verify` only if the user explicitly requests it or the
 PR/CI finding requires it.
 
+Immediately before a remediation commit or push—and again after long-running
+remediation—refresh PR state. Require the PR to remain open and its head ref to
+match the local branch. Before a push, compare the remote head OID with the
+local upstream tip; after the push, require the PR head OID to equal local
+`HEAD`. If the PR merged or closed, do not recreate its deleted branch with a
+stale push: preserve the local fix and ask before creating a clean follow-up.
+
 ## 5. Re-check
 
 After every push, run `scripts/pr-state --summary <PR>` again for the new head.
@@ -125,7 +151,7 @@ resolution once current source proves the finding is already fixed, including a
 thread surfaced only in `hidden_unresolved_threads`; only current-head
 actionable threads drive code changes. Declare the PR clean only when
 `checks_snapshot_complete=true`, `failed_checks=[]`, `pending_checks=[]`,
-`actionable_issue_comment_count=0`, there is no merge conflict, and
+`approval_required_runs=[]`, `actionable_issue_comment_count=0`, there is no merge conflict, and
 `scripts/pr-resolve list <PR>` is empty. Within
 the user's monitoring limit, continue checking after resolutions until automated
 review jobs are terminal; otherwise report the exact pending check names.

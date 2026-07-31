@@ -93,7 +93,11 @@ if (!base) {
 }
 
 const added = changedFiles(base, "A");
-const modified = changedFiles(base, "M");
+// Renames and copies are judged like modifications, NOT like additions: moving a
+// legacy file must not suddenly demand that its whole contents be migrated. A
+// pure rename adds no lines and so reports nothing; a rename-plus-edit is judged
+// on the edited lines, same as any other modification.
+const modified = changedFiles(base, "MRC");
 const targets = [...added, ...modified];
 
 if (targets.length === 0) {
@@ -102,11 +106,16 @@ if (targets.length === 0) {
 }
 
 // Line attribution only matters for modified files; added files are judged whole.
-// Guard the empty case: `git diff -- ` with no pathspec would diff everything.
+//
+// Scoped to apps/web rather than to the individual files, because narrowing the
+// pathspec to only the NEW path of a rename hides the matching deletion and git
+// then reports the whole file as added — which would demand a full migration for
+// a pure `git mv`. Keeping both sides in scope lets rename detection pair them,
+// so a pure rename yields no hunks and reports nothing.
 const addedRanges =
   modified.length === 0
     ? new Map()
-    : parseAddedLineRanges(git(["diff", "--unified=0", base, "--", ...modified]));
+    : parseAddedLineRanges(git(["diff", "--unified=0", "--find-renames", base, "--", WEB_PREFIX]));
 
 const eslint = new ESLint({
   cwd: WEB_DIR,

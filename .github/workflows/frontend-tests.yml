@@ -164,6 +164,8 @@ jobs:
       # as the Prettier step above.
       - name: Run i18n new-code ratchet
         shell: bash
+        # The job defaults to `apps`; these scripts live one level deeper.
+        working-directory: apps/web
         run: |
           set -euo pipefail
 
@@ -178,7 +180,6 @@ jobs:
             exit 0
           fi
 
-          cd apps/web
           node scripts/check-new-code-i18n.mjs --base "${BASE_SHA}"
           node scripts/check-guard-allowlist.mjs --base "${BASE_SHA}"
 

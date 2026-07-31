@@ -76,6 +76,26 @@ describe("useSession reconciliation", () => {
     second.unmount();
   });
 
+  it("reuses an in-flight poll when a consumer is replaced", async () => {
+    let resolveFetch: ((value: { session: TaskSession }) => void) | undefined;
+    mocks.fetchTaskSession.mockImplementation(
+      () =>
+        new Promise<{ session: TaskSession }>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    const first = renderHook(() => useSession(SESSION_ID));
+    first.unmount();
+    const replacement = renderHook(() => useSession(SESSION_ID));
+
+    expect(mocks.fetchTaskSession).toHaveBeenCalledTimes(1);
+
+    resolveFetch?.({ session: session("WAITING_FOR_INPUT", "2026-07-31T08:00:05Z") });
+    await flushPromises();
+    replacement.unmount();
+  });
+
   it("polls while the authoritative session remains busy", async () => {
     const hook = renderHook(() => useSession(SESSION_ID));
     await flushPromises();

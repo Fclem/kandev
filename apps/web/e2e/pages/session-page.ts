@@ -1,5 +1,9 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Maps state-section labels to the per-task state icon data-testid. */
 function sectionLabelToStateTestId(label: string): string {
   if (label === "Running") return "task-state-running";
@@ -119,7 +123,7 @@ export class SessionPage {
    * already foregrounded.
    */
   async showSessionContext(timeout = 15_000): Promise<void> {
-    const tab = this.page.locator("[data-testid^='session-tab-']").first();
+    const tab = this.page.locator("[data-testid^='session-tab-']:visible").first();
     await tab.waitFor({ state: "visible", timeout });
     // Clicking a tab that's already active is harmless; clicking a background
     // one promotes its panel to the foreground.
@@ -869,7 +873,11 @@ export class SessionPage {
 
   /** Click a dockview tab by its visible label (e.g. "Changes", "Files", "Terminal"). */
   async clickTab(label: string): Promise<void> {
-    const tab = this.page.locator(`.dv-default-tab:has-text('${label}')`);
+    const tab = this.page
+      .locator(".dv-default-tab:visible")
+      .filter({ hasText: new RegExp(`^${escapeRegExp(label)}(?: \\(\\d+\\))?$`) })
+      .first();
+    await expect(tab).toBeVisible();
     await tab.click();
   }
 
@@ -879,7 +887,7 @@ export class SessionPage {
    * so this uses the stable data-testid on the ContextMenuTrigger instead.
    */
   async clickSessionChatTab(): Promise<void> {
-    await this.page.locator('[data-testid^="session-tab-"]').first().click();
+    await this.page.locator('[data-testid^="session-tab-"]:visible').first().click();
   }
 
   /** Main Changes-panel button that asks the agent to create a walkthrough. */
@@ -1009,7 +1017,8 @@ export class SessionPage {
    * TipTap maps "Mod" to Meta on macOS and Control on Linux/Windows.
    */
   async sendMessage(text: string) {
-    const editor = this.page.locator(".tiptap.ProseMirror").first();
+    const editor = this.activeChat().locator('.tiptap.ProseMirror[contenteditable="true"]').first();
+    await expect(editor).toBeEditable();
     await editor.click();
     await editor.fill(text);
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
@@ -1021,7 +1030,8 @@ export class SessionPage {
    * don't submit on Ctrl/Cmd+Enter, so mobile specs use this instead.
    */
   async sendMessageViaButton(text: string) {
-    const editor = this.page.locator(".tiptap.ProseMirror").first();
+    const editor = this.activeChat().locator('.tiptap.ProseMirror[contenteditable="true"]').first();
+    await expect(editor).toBeEditable();
     await editor.click();
     await editor.fill(text);
     await this.page.getByTestId("submit-message-button").click();

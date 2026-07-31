@@ -9,6 +9,7 @@ const RECONCILE_POLL_MAX_MS = 30_000;
 
 type Reconciliation = {
   consumers: number;
+  inFlight: boolean;
   startedAt: number;
   timer?: ReturnType<typeof setTimeout>;
 };
@@ -50,12 +51,18 @@ export function acquireSessionStateReconciliation(
 
   const reconciliation: Reconciliation = {
     consumers: 1,
+    inFlight: false,
     startedAt: Date.now(),
   };
   reconciliations.set(sessionId, reconciliation);
 
   const scheduleNext = () => {
     if (!stillOwnsReconciliation(reconciliations, sessionId, reconciliation)) return;
+    reconciliation.inFlight = false;
+    if (reconciliation.consumers === 0) {
+      reconciliations.delete(sessionId);
+      return;
+    }
     const current = store.getState().taskSessions.items[sessionId];
     if (current && !BUSY_SESSION_STATES.has(current.state)) return;
     if (Date.now() - reconciliation.startedAt >= RECONCILE_POLL_MAX_MS) return;
@@ -63,9 +70,14 @@ export function acquireSessionStateReconciliation(
   };
 
   function reconcile() {
+    reconciliation.inFlight = true;
     fetchTaskSession(sessionId)
       .then((res) => {
-        if (!res.session || !stillOwnsReconciliation(reconciliations, sessionId, reconciliation)) {
+        if (
+          !res.session ||
+          reconciliation.consumers === 0 ||
+          !stillOwnsReconciliation(reconciliations, sessionId, reconciliation)
+        ) {
           return;
         }
         const current = store.getState().taskSessions.items[sessionId];
@@ -89,5 +101,10 @@ function releaseReconciliation(
   reconciliation.consumers -= 1;
   if (reconciliation.consumers > 0) return;
   if (reconciliation.timer) clearTimeout(reconciliation.timer);
+  // Keep an in-flight owner registered until its request settles. React can
+  // replace one useSession consumer with another during the same navigation;
+  // deleting immediately would start a duplicate authoritative fetch while
+  // the first request is still pending.
+  if (reconciliation.inFlight) return;
   reconciliations.delete(sessionId);
 }

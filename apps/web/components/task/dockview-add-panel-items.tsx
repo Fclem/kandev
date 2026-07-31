@@ -11,7 +11,6 @@ import {
 import { DropdownMenuItem } from "@kandev/ui/dropdown-menu";
 import { prPanelLabel, prIdentitySlug, prTaskKey } from "@/components/github/pr-utils";
 import { useDockviewStore } from "@/lib/state/dockview-store";
-import { useAppStore } from "@/components/state-provider";
 import type { TaskPR } from "@/lib/types/github";
 import type { TaskMR } from "@/lib/types/gitlab";
 import { mrTaskKey } from "@/components/gitlab/mr-detail-panel";
@@ -57,7 +56,6 @@ export function AddPanelMenuItems({
   const addChangesPanel = useDockviewStore((s) => s.addChangesPanel);
   const addPRPanel = useDockviewStore((s) => s.addPRPanel);
   const addMRPanel = useDockviewStore((s) => s.addMRPanel);
-  const activeSessionId = useAppStore((s) => s.tasks.activeSessionId);
 
   return (
     <>
@@ -101,7 +99,7 @@ export function AddPanelMenuItems({
       {state.prs.map((pr) => (
         <DropdownMenuItem
           key={pr.id}
-          onClick={() => addPRPanel(prTaskKey(pr), activeSessionId)}
+          onClick={() => addPRPanel(prTaskKey(pr))}
           className={MENU_ITEM_CLASS}
           data-testid={`add-panel-pr-item-${prIdentitySlug(pr)}`}
         >
@@ -114,7 +112,7 @@ export function AddPanelMenuItems({
       {state.mrs.map((mr) => (
         <DropdownMenuItem
           key={mr.id}
-          onClick={() => addMRPanel(mrTaskKey(mr), activeSessionId)}
+          onClick={() => addMRPanel(mrTaskKey(mr))}
           className={MENU_ITEM_CLASS}
           data-testid={`add-panel-mr-item-${mr.id}`}
         >
@@ -124,19 +122,13 @@ export function AddPanelMenuItems({
             : `Merge Request !${mr.mr_iid}`}
         </DropdownMenuItem>
       ))}
-      <PluginReviewPanelMenuItems taskId={state.taskId} activeSessionId={activeSessionId} />
+      <PluginReviewPanelMenuItems taskId={state.taskId} />
       <RepositoryScriptsMenuItems onRunScript={onRunScript} onRunDevScript={onRunDevScript} />
     </>
   );
 }
 
-function PluginReviewPanelMenuItems({
-  taskId,
-  activeSessionId,
-}: {
-  taskId: string | null;
-  activeSessionId: string | null;
-}) {
+function PluginReviewPanelMenuItems({ taskId }: { taskId: string | null }) {
   const addReviewPanel = useDockviewStore((s) => s.addReviewPanel);
   const reviews = useNormalizedTaskReviews(taskId).filter(
     (review) => review.providerId !== "github" && review.providerId !== "gitlab",
@@ -144,9 +136,7 @@ function PluginReviewPanelMenuItems({
   return reviews.map((review) => (
     <DropdownMenuItem
       key={`${review.providerId}:${review.reviewKey}`}
-      onClick={() =>
-        addReviewPanel(review.providerId, review.reviewKey, review.title, activeSessionId)
-      }
+      onClick={() => addReviewPanel(review.providerId, review.reviewKey, review.title)}
       className={MENU_ITEM_CLASS}
       data-testid={`add-panel-review-item-${review.providerId}-${review.reviewKey}`}
     >

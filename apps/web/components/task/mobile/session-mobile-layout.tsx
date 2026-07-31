@@ -391,6 +391,7 @@ type SessionMobileFooterProps = {
   hasReview: boolean;
   showStatus: boolean;
   onOpenStatus: () => void;
+  connectionIssueSeverity: import("@/lib/types/connection").ConnectionIssueSeverity;
 };
 
 function SessionMobileFooter({
@@ -402,6 +403,7 @@ function SessionMobileFooter({
   hasReview,
   showStatus,
   onOpenStatus,
+  connectionIssueSeverity,
 }: SessionMobileFooterProps) {
   return (
     <>
@@ -418,15 +420,29 @@ function SessionMobileFooter({
         hasReview={hasReview}
         showStatus={showStatus}
         onOpenStatus={onOpenStatus}
+        connectionIssueSeverity={connectionIssueSeverity}
       />
     </>
+  );
+}
+
+function StatusAwareSessionMobileFooter(
+  props: Omit<SessionMobileFooterProps, "showStatus" | "onOpenStatus" | "connectionIssueSeverity">,
+) {
+  const { enabled, issueSeverity, openStatusDrawer } = useAppStatusDrawer();
+  return (
+    <SessionMobileFooter
+      {...props}
+      showStatus={enabled}
+      onOpenStatus={openStatusDrawer}
+      connectionIssueSeverity={issueSeverity}
+    />
   );
 }
 
 export const SessionMobileLayout = memo(function SessionMobileLayout(
   props: SessionMobileLayoutProps,
 ) {
-  const { enabled: statusDrawerEnabled, openStatusDrawer } = useAppStatusDrawer();
   const {
     activeTaskId,
     effectiveSessionId,
@@ -484,15 +500,13 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
         selectedReview={selectedReview}
         onSelectReview={selectReview}
       />
-      <SessionMobileFooter
+      <StatusAwareSessionMobileFooter
         sessionId={effectiveSessionId ?? null}
         activePanel={effectiveMobilePanel}
         onPanelChange={handleMobilePanelChange}
         planBadge={hasUnseenPlanUpdate}
         changesBadge={totalChangesCount}
         hasReview={reviews.length > 0}
-        showStatus={statusDrawerEnabled}
-        onOpenStatus={openStatusDrawer}
       />
       <SessionTaskSwitcherSheet
         open={isTaskSwitcherOpen}

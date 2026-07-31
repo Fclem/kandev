@@ -92,6 +92,31 @@ func TestScanUserSettingsConfirmTaskArchiveDefault(t *testing.T) {
 	}
 }
 
+func TestScanUserSettingsUnreadDividerDefault(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{name: "empty settings disable the divider", raw: `{}`, want: false},
+		{name: "missing setting disables the divider", raw: `{"chat_submit_key":"enter"}`, want: false},
+		{name: "explicit false disables the divider", raw: `{"unread_divider":false}`, want: false},
+		{name: "explicit true enables the divider", raw: `{"unread_divider":true}`, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings, err := scanUserSettings(settingsScanner{raw: tt.raw}, DefaultUserID)
+			if err != nil {
+				t.Fatalf("scan settings: %v", err)
+			}
+			if settings.UnreadDivider != tt.want {
+				t.Fatalf("UnreadDivider = %v, want %v", settings.UnreadDivider, tt.want)
+			}
+		})
+	}
+}
+
 func TestScanUserSettingsMCPTaskAgentProfileDefault(t *testing.T) {
 	tests := []struct {
 		name string
@@ -170,29 +195,29 @@ func TestScanUserSettingsTranscriptNavigationDefaults(t *testing.T) {
 			settings.ShowScrollToStart,
 		)
 	}
-	if !settings.ShowTranscriptAutoScrollControl {
-		t.Fatal("ShowTranscriptAutoScrollControl = false, want true (default)")
+	if settings.ShowTranscriptAutoScrollControl {
+		t.Fatal("ShowTranscriptAutoScrollControl = true, want false (default)")
 	}
 
 	settings, err = scanUserSettings(
-		settingsScanner{raw: `{"show_transcript_auto_scroll_control":false}`},
+		settingsScanner{raw: `{"show_transcript_auto_scroll_control":true}`},
 		DefaultUserID,
 	)
 	if err != nil {
 		t.Fatalf("scan stored auto-scroll-control preference: %v", err)
 	}
-	if settings.ShowTranscriptAutoScrollControl {
-		t.Fatal("ShowTranscriptAutoScrollControl = true, want false (stored)")
+	if !settings.ShowTranscriptAutoScrollControl {
+		t.Fatal("ShowTranscriptAutoScrollControl = false, want true (stored)")
 	}
 }
 
-func TestScanUserSettingsDefaultsTranscriptAutoScrollControlToVisible(t *testing.T) {
+func TestScanUserSettingsDefaultsTranscriptAutoScrollControlToHidden(t *testing.T) {
 	settings, err := scanUserSettings(settingsScanner{raw: "{}"}, DefaultUserID)
 	if err != nil {
 		t.Fatalf("scan settings: %v", err)
 	}
-	if !settings.ShowTranscriptAutoScrollControl {
-		t.Fatal("ShowTranscriptAutoScrollControl = false, want true (default)")
+	if settings.ShowTranscriptAutoScrollControl {
+		t.Fatal("ShowTranscriptAutoScrollControl = true, want false (default)")
 	}
 }
 

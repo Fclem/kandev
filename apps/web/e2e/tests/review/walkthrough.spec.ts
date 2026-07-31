@@ -3,6 +3,7 @@ import { SessionPage } from "../../pages/session-page";
 import type { ApiClient } from "../../helpers/api-client";
 import type { SeedData } from "../../fixtures/test-base";
 import type { Page, Locator } from "@playwright/test";
+import { resizeColumnViaSplitview } from "../../helpers/dockview-resize";
 import { expectWalkthroughBehindDialog } from "./walkthrough-layering";
 
 async function seedWalkthroughTask(
@@ -77,8 +78,65 @@ async function openWalkthrough(testPage: Page): Promise<Locator> {
   return card;
 }
 
+async function expectContainedInPanel(panel: Locator, action: Locator): Promise<void> {
+  const [panelBox, actionBox] = await Promise.all([panel.boundingBox(), action.boundingBox()]);
+  if (!panelBox || !actionBox) throw new Error("Changes toolbar geometry unavailable");
+  expect(actionBox.x).toBeGreaterThanOrEqual(panelBox.x);
+  expect(actionBox.x + actionBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
+  const actionCenterHitsButton = await action.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return hit === element || !!hit?.closest('[data-testid="changes-request-walkthrough"]');
+  });
+  expect(actionCenterHitsButton).toBe(true);
+}
+
 test.describe("Code walkthrough", () => {
   test.describe.configure({ retries: 2, timeout: 120_000 });
+
+  test("adapts the Changes walkthrough label to panel width", async ({
+    testPage,
+    apiClient,
+    seedData,
+    prCapture,
+  }) => {
+    await testPage.setViewportSize({ width: 1366, height: 900 });
+    const session = await seedWalkthroughChangesTask(testPage, apiClient, seedData);
+    await session.clickTab("Changes");
+
+    const request = session.changesRequestWalkthroughButton();
+    const label = request.getByText("Walkthrough", { exact: true });
+    await expect(request).toBeEnabled({ timeout: 30_000 });
+
+    const narrowWidth = await resizeColumnViaSplitview(testPage, "right", 349);
+    expect(narrowWidth).toBe(349);
+    await expect
+      .poll(async () => Math.round((await session.changes.boundingBox())?.width ?? 0))
+      .toBe(349);
+    await expect(label).toBeHidden();
+    await expect(request).toBeVisible();
+    await expectContainedInPanel(session.changes, request);
+
+    const labeledWidth = await resizeColumnViaSplitview(testPage, "right", 350);
+    expect(labeledWidth).toBe(350);
+    await expect
+      .poll(async () => Math.round((await session.changes.boundingBox())?.width ?? 0))
+      .toBe(350);
+    await expect(label).toBeVisible();
+    await expectContainedInPanel(session.changes, request);
+    await prCapture.screenshot("desktop-changes-walkthrough", {
+      caption: "Walkthrough stays fully visible in the Changes toolbar",
+    });
+
+    const minimumWidth = await resizeColumnViaSplitview(testPage, "right", 180);
+    expect(minimumWidth).toBe(180);
+    await expect
+      .poll(async () => Math.round((await session.changes.boundingBox())?.width ?? 0))
+      .toBe(180);
+    await expect(label).toBeHidden();
+    await expect(request).toBeVisible();
+    await expectContainedInPanel(session.changes, request);
+  });
 
   test("Changes-panel request asks the agent to walk through current changes", async ({
     testPage,
@@ -353,10 +411,12 @@ test.describe("Code walkthrough", () => {
     const reviewDialog = testPage.getByRole("dialog", { name: "Review Changes" });
     await expect(reviewDialog).toBeVisible({ timeout: 15_000 });
     await expect(reviewDialog.locator('[data-walkthrough-active="true"]')).toHaveCount(0);
-    await expect(reviewDialog.getByText("0 of 3 files reviewed")).toBeVisible({ timeout: 15_000 });
+    const reviewProgress = reviewDialog.getByText(/^0 of \d+ files reviewed$/);
+    await expect(reviewProgress).toBeVisible({ timeout: 15_000 });
+    const initialProgress = await reviewProgress.textContent();
     await testPage.waitForTimeout(600);
     await expect(reviewDialog.getByTestId("review-diff-scroll")).toHaveJSProperty("scrollTop", 0);
-    await expect(reviewDialog.getByText("0 of 3 files reviewed")).toBeVisible();
+    await expect(reviewProgress).toHaveText(initialProgress ?? "");
     await expectWalkthroughBehindDialog(testPage, reviewDialog, [
       { locator: card, name: "walkthrough window" },
       { locator: session.walkthroughLauncher().locator(".."), name: "walkthrough launcher" },

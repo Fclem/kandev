@@ -8,6 +8,7 @@ import {
   buildKanbanCardMenuEntries,
   useKanbanCardMoveTargets,
 } from "@/components/kanban-card-menu-items";
+import { useTaskPluginLinkActions } from "@/components/task/task-session-sidebar-link-actions";
 import { useAppStore } from "@/components/state-provider";
 import { TaskArchiveConfirmDialog } from "@/components/task/task-archive-confirm-dialog";
 import { TaskDeleteConfirmDialog } from "@/components/task/task-delete-confirm-dialog";
@@ -213,6 +214,7 @@ function useKanbanCardMenus({
   | "onArchive"
   | "onMove"
 >) {
+  const pluginLinkActions = useTaskPluginLinkActions(task.id, task.repositories ?? []);
   const moveMenu = useKanbanCardMoveMenuActions({ task, steps, isSelected, selectedIds, onMove });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
@@ -255,6 +257,7 @@ function useKanbanCardMenus({
     onLinkPullRequest: () => setShowPRDialog(true),
     onLinkIssue: () => setShowIssueDialog(true),
     onLinkMergeRequest: externalLinkAvailability.gitlab ? () => setShowMRDialog(true) : undefined,
+    pluginLinkActions,
     ...externalLinkHandlers(externalLinkAvailability, setExternalLinkProvider),
   };
 

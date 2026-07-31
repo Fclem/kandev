@@ -219,7 +219,7 @@ func TestServiceInitializeLocalRepositoryRejectsExistingTargetWithoutMutation(t 
 			if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: "ws-1", Name: "Workspace"}); err != nil {
 				t.Fatalf("CreateWorkspace: %v", err)
 			}
-			parent := t.TempDir()
+			parent := trustedTempDir(t)
 			target := filepath.Join(parent, "existing")
 			if err := os.Mkdir(target, 0o755); err != nil {
 				t.Fatalf("Mkdir target: %v", err)
@@ -249,7 +249,7 @@ func TestServiceInitializeLocalRepositoryRejectsExistingTargetWithoutMutation(t 
 
 func TestServiceInitializeLocalRepositoryValidatesWorkspaceBeforeMutation(t *testing.T) {
 	svc, _, repo := createTestService(t)
-	parent := t.TempDir()
+	parent := trustedTempDir(t)
 	target := filepath.Join(parent, "new-project")
 
 	_, err := svc.InitializeLocalRepository(context.Background(), &InitializeLocalRepositoryRequest{
@@ -270,7 +270,7 @@ func TestServiceInitializeLocalRepositoryCleansUpGitFailure(t *testing.T) {
 	if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: "ws-1", Name: "Workspace"}); err != nil {
 		t.Fatalf("CreateWorkspace: %v", err)
 	}
-	parent := t.TempDir()
+	parent := trustedTempDir(t)
 	t.Setenv("PATH", t.TempDir())
 
 	_, err := svc.InitializeLocalRepository(ctx, &InitializeLocalRepositoryRequest{
@@ -291,7 +291,7 @@ func TestServiceInitializeLocalRepositoryDoesNotRemoveReplacedTarget(t *testing.
 	if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: "ws-1", Name: "Workspace"}); err != nil {
 		t.Fatalf("CreateWorkspace: %v", err)
 	}
-	parent := t.TempDir()
+	parent := trustedTempDir(t)
 	target := filepath.Join(parent, "new-project")
 	movedTarget := filepath.Join(parent, "request-owned")
 	replacementPath := ""
@@ -333,7 +333,7 @@ func TestServiceInitializeLocalRepositoryDoesNotPublishOverRacingTarget(t *testi
 	if err := repo.CreateWorkspace(ctx, &models.Workspace{ID: "ws-1", Name: "Workspace"}); err != nil {
 		t.Fatalf("CreateWorkspace: %v", err)
 	}
-	parent := t.TempDir()
+	parent := trustedTempDir(t)
 	target := filepath.Join(parent, "new-project")
 	marker := filepath.Join(target, "keep")
 
@@ -374,7 +374,7 @@ func TestServiceInitializeLocalRepositoryCleansUpPersistenceFailure(t *testing.T
 	}
 	wantErr := errors.New("database unavailable")
 	svc.repoEntities = failingCreateRepository{RepositoryEntityRepository: repo, err: wantErr}
-	parent := t.TempDir()
+	parent := trustedTempDir(t)
 
 	_, err := svc.InitializeLocalRepository(ctx, &InitializeLocalRepositoryRequest{
 		WorkspaceID: "ws-1", Name: "new-project", ParentPath: parent,

@@ -35,7 +35,6 @@ import { VscodePanel } from "./vscode-panel";
 import { CommitDetailPanel } from "./commit-detail-panel";
 import type { OpenDiffOptions } from "./changes-diff-target";
 import { ReviewDetailPanelComponent } from "./review-detail-panel";
-import { MRDetailPanelComponent } from "@/components/gitlab/mr-detail-panel";
 
 import { setPanelTitle, panelPortalManager } from "@/lib/layout/panel-portal-manager";
 import { getWebSocketClient } from "@/lib/ws/connection";
@@ -115,6 +114,7 @@ export const dockviewComponents: Record<string, React.FunctionComponent<IDockvie
   plan: PortalSlot,
   "pr-detail": PortalSlot,
   "mr-detail": PortalSlot,
+  "review-detail": PortalSlot,
   // Backwards compat aliases for saved layouts
   "diff-files": PortalSlot,
   "all-files": PortalSlot,
@@ -401,12 +401,8 @@ export function renderPanel(
     case "pr-detail":
       return <ReviewDetailPanelComponent panelId={panelId} params={params} />;
     case "mr-detail":
-      return (
-        <MRDetailPanelComponent
-          panelId={panelId}
-          params={{ mrKey: typeof params.mrKey === "string" ? params.mrKey : undefined }}
-        />
-      );
+    case "review-detail":
+      return <ReviewDetailPanelComponent panelId={panelId} params={params} />;
     default:
       return <div className="p-4 text-muted-foreground">Unknown panel: {component}</div>;
   }

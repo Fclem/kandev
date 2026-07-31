@@ -41,8 +41,8 @@ import { remoteRepositoryMatchesSelection } from "./task-create-dialog-remote-re
 
 export { selectedRemoteRepositoryIdentity } from "./task-create-dialog-remote-repo-identity";
 import {
-  looksLikeSupportedRemoteURL,
   looksLikeURL,
+  looksLikeSupportedRemoteURL,
 } from "@/components/workspace-source-picker/remote-url";
 
 const TRUNCATE_THRESHOLD = 30;
@@ -60,9 +60,11 @@ export type RemoteRepoChipProps = {
     url: string,
     source: "picker" | "paste",
     metadata?: {
-      provider: "github" | "gitlab" | "azure_devops";
+      provider: RemoteRepositoryProvider;
       fullName: string;
       defaultBranch: string;
+      remoteUrl?: string;
+      providerHost?: string;
       providerRepoId?: string;
       providerOwner?: string;
       providerName?: string;
@@ -269,6 +271,8 @@ function RemoteRepoPill({
               provider: repo.provider,
               fullName: repo.fullName,
               defaultBranch: repo.defaultBranch,
+              ...(repo.provider === "github" ? {} : { remoteUrl: repo.url }),
+              ...(repo.providerHost ? { providerHost: repo.providerHost } : {}),
               providerRepoId: repo.id,
               providerOwner: repo.owner,
               providerName: repo.name,
@@ -331,12 +335,13 @@ function RemoteRepoPopoverContent({
   const [urlError, setUrlError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<RemoteRepositoryProvider | null>(null);
   const { search: triggerSearch } = accessible;
+  const matchesURL = accessible.matchesURL ?? looksLikeSupportedRemoteURL;
   useEffect(() => {
     triggerSearch(value);
   }, [value, triggerSearch]);
   const commitURL = (candidate: string) => {
     const trimmed = candidate.trim();
-    if (!isSupportedRemoteURL(trimmed)) {
+    if (!isSupportedRemoteURL(trimmed, matchesURL)) {
       if (looksLikeURL(trimmed)) {
         setUrlError("Enter a GitHub, GitLab, or Azure DevOps repository URL.");
       }
@@ -347,7 +352,7 @@ function RemoteRepoPopoverContent({
     return true;
   };
   const visibleUrlError = accessible.unavailable ? null : urlError;
-  const hasStagedURL = isSupportedRemoteURL(value.trim());
+  const hasStagedURL = isSupportedRemoteURL(value.trim(), matchesURL);
   const { showProviderTabs, selectedProvider, visibleRepos } = visibleProviderRepositories(
     accessible,
     activeProvider,
@@ -430,8 +435,8 @@ function visibleProviderRepositories(
     : accessible.repos;
   return { showProviderTabs, selectedProvider, visibleRepos };
 }
-function isSupportedRemoteURL(value: string): boolean {
-  return !!parseGitHubAnyUrl(value) || looksLikeSupportedRemoteURL(value);
+function isSupportedRemoteURL(value: string, matchesURL: (url: string) => boolean): boolean {
+  return !!parseGitHubAnyUrl(value) || matchesURL(value);
 }
 function PickerList({
   accessible,

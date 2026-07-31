@@ -15,7 +15,11 @@ import type {
   NavItem,
   PluginRegistry,
   PluginRouteOptions,
+  RepositoryProviderRegistration,
+  ReviewItemSummary,
+  ReviewProviderRegistration,
   SlotComponent,
+  TaskActionRegistration,
   WsHandler,
 } from "./types";
 import type { ComponentType } from "react";
@@ -40,6 +44,21 @@ export interface RouteRegistration {
 
 /** Route registration plus the owning pluginId — what `getRoutes()` returns. */
 export interface PluginRouteRegistration extends RouteRegistration {
+  pluginId: string;
+}
+
+/** A repository provider paired with the plugin that currently owns it. */
+export interface PluginRepositoryProviderRegistration extends RepositoryProviderRegistration {
+  pluginId: string;
+}
+
+/** A task action paired with the plugin that registered it. */
+export interface PluginTaskActionRegistration extends TaskActionRegistration {
+  pluginId: string;
+}
+
+/** A review provider paired with the plugin that currently owns it. */
+export interface PluginReviewProviderRegistration extends ReviewProviderRegistration {
   pluginId: string;
 }
 
@@ -74,6 +93,15 @@ class PluginRegistryStore {
   private slotComponents: Owned<SlotRegistration>[] = [];
   private wsHandlers: Owned<WsHandlerRegistration>[] = [];
   private keybindingHandlers: Owned<PluginKeybindingHandler>[] = [];
+  private repositoryProviders = new Map<string, Owned<RepositoryProviderRegistration>>();
+  private taskActions = new Map<string, Owned<TaskActionRegistration>>();
+  private reviewProviders = new Map<string, Owned<ReviewProviderRegistration>>();
+  /** One live plugin owns each provider ID across repository and review registrations. */
+  private providerOwners = new Map<string, string>();
+  /** Present only after the host has supplied manifest-declared provider IDs. */
+  private declaredRepositoryProviderIds = new Map<string, Set<string>>();
+  private abortControllersByPlugin = new Map<string, Set<AbortController>>();
+  private reviewUnsubscribersByPlugin = new Map<string, Set<() => void>>();
   private nextSlotRegistrationId = 0;
   /** Display names from the boot payload, used for derived page-chrome titles. */
   private pluginNames = new Map<string, string>();
@@ -158,6 +186,51 @@ class PluginRegistryStore {
     this.declaredKeybindingIds.set(pluginId, new Set(ids));
   }
 
+  /**
+   * Supplies manifest-backed repository provider declarations for a plugin.
+   * Kept separate from `forPlugin` so older boot payloads/plugins retain their
+   * existing routes, slots, websocket handlers, and keybindings during the
+   * additive contract rollout.
+   */
+  setDeclaredRepositoryProviderIds(pluginId: string, ids: string[]): void {
+    this.declaredRepositoryProviderIds.set(pluginId, new Set(ids));
+  }
+
+  registerRepositoryProvider(pluginId: string, provider: RepositoryProviderRegistration): void {
+    this.claimProvider(pluginId, provider.id);
+    if (this.repositoryProviders.has(provider.id)) {
+      throw new Error(`[plugins] repository provider "${provider.id}" is already registered`);
+    }
+    this.repositoryProviders.set(provider.id, {
+      pluginId,
+      value: this.withRepositoryProviderLifecycle(pluginId, provider),
+    });
+    this.notify();
+  }
+
+  registerTaskAction(pluginId: string, action: TaskActionRegistration): void {
+    const key = taskActionKey(pluginId, action.id);
+    if (this.taskActions.has(key)) {
+      throw new Error(
+        `[plugins] task action "${action.id}" is already registered by "${pluginId}"`,
+      );
+    }
+    this.taskActions.set(key, { pluginId, value: action });
+    this.notify();
+  }
+
+  registerReviewProvider(pluginId: string, provider: ReviewProviderRegistration): void {
+    this.claimProvider(pluginId, provider.id);
+    if (this.reviewProviders.has(provider.id)) {
+      throw new Error(`[plugins] review provider "${provider.id}" is already registered`);
+    }
+    this.reviewProviders.set(provider.id, {
+      pluginId,
+      value: this.withReviewProviderLifecycle(pluginId, provider),
+    });
+    this.notify();
+  }
+
   /** Bulk-revoke every registration owned by `pluginId` (disable/uninstall). */
   unregisterPlugin(pluginId: string): void {
     const before = this.totalCount();
@@ -167,8 +240,22 @@ class PluginRegistryStore {
     this.slotComponents = removeByPlugin(this.slotComponents, pluginId);
     this.wsHandlers = removeByPlugin(this.wsHandlers, pluginId);
     this.keybindingHandlers = removeByPlugin(this.keybindingHandlers, pluginId);
+    this.repositoryProviders.forEach((entry, id) => {
+      if (entry.pluginId === pluginId) this.repositoryProviders.delete(id);
+    });
+    this.taskActions.forEach((entry, id) => {
+      if (entry.pluginId === pluginId) this.taskActions.delete(id);
+    });
+    this.reviewProviders.forEach((entry, id) => {
+      if (entry.pluginId === pluginId) this.reviewProviders.delete(id);
+    });
+    this.abortPluginWork(pluginId);
+    this.providerOwners.forEach((owner, providerId) => {
+      if (owner === pluginId) this.providerOwners.delete(providerId);
+    });
     this.pluginNames.delete(pluginId);
     this.declaredKeybindingIds.delete(pluginId);
+    this.declaredRepositoryProviderIds.delete(pluginId);
     if (this.totalCount() !== before) this.notify();
   }
 
@@ -240,6 +327,40 @@ class PluginRegistryStore {
     )?.value.handler;
   }
 
+  /** Every active repository provider in registration order. */
+  getRepositoryProviders(): PluginRepositoryProviderRegistration[] {
+    return Array.from(this.repositoryProviders.values()).map((entry) => ({
+      ...entry.value,
+      pluginId: entry.pluginId,
+    }));
+  }
+
+  /** The active owner and lifecycle-wrapped provider for `providerId`, if any. */
+  getRepositoryProvider(providerId: string): PluginRepositoryProviderRegistration | undefined {
+    const entry = this.repositoryProviders.get(providerId);
+    return entry ? { ...entry.value, pluginId: entry.pluginId } : undefined;
+  }
+
+  /** Active task actions, optionally filtered by their target menu placement. */
+  getTaskActions(placement?: TaskActionRegistration["placement"]): PluginTaskActionRegistration[] {
+    return Array.from(this.taskActions.values())
+      .filter((entry) => !placement || entry.value.placement === placement)
+      .map((entry) => ({ ...entry.value, pluginId: entry.pluginId }));
+  }
+
+  /** Active review providers in deterministic display order. */
+  getReviewProviders(): PluginReviewProviderRegistration[] {
+    return Array.from(this.reviewProviders.values())
+      .map((entry) => ({ ...entry.value, pluginId: entry.pluginId }))
+      .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+  }
+
+  /** The active owner and lifecycle-wrapped review provider for `providerId`, if any. */
+  getReviewProvider(providerId: string): PluginReviewProviderRegistration | undefined {
+    const entry = this.reviewProviders.get(providerId);
+    return entry ? { ...entry.value, pluginId: entry.pluginId } : undefined;
+  }
+
   /** Registry view scoped to one plugin — matches the frozen `PluginRegistry` contract. */
   forPlugin(pluginId: string, pluginName?: string): PluginRegistry {
     if (pluginName) this.pluginNames.set(pluginId, pluginName);
@@ -252,7 +373,108 @@ class PluginRegistryStore {
       registerComponent: (slot, Component) => this.registerComponent(pluginId, slot, Component),
       registerWsHandler: (action, handler) => this.registerWsHandler(pluginId, action, handler),
       registerKeybinding: (id, handler) => this.registerKeybinding(pluginId, id, handler),
+      registerRepositoryProvider: (provider) => this.registerRepositoryProvider(pluginId, provider),
+      registerTaskAction: (action) => this.registerTaskAction(pluginId, action),
+      registerReviewProvider: (provider) => this.registerReviewProvider(pluginId, provider),
     };
+  }
+
+  private claimProvider(pluginId: string, providerId: string): void {
+    const declared = this.declaredRepositoryProviderIds.get(pluginId);
+    if (declared && !declared.has(providerId)) {
+      throw new Error(
+        `[plugins] "${pluginId}" does not declare repository provider "${providerId}"`,
+      );
+    }
+    const owner = this.providerOwners.get(providerId);
+    if (owner && owner !== pluginId) {
+      throw new Error(`[plugins] provider "${providerId}" is already owned by "${owner}"`);
+    }
+    this.providerOwners.set(providerId, pluginId);
+  }
+
+  private withRepositoryProviderLifecycle(
+    pluginId: string,
+    provider: RepositoryProviderRegistration,
+  ): RepositoryProviderRegistration {
+    return {
+      ...provider,
+      listRepositories: ({ workspaceId, signal }) =>
+        this.runAbortable(pluginId, signal, (lifecycleSignal) =>
+          provider.listRepositories({ workspaceId, signal: lifecycleSignal }),
+        ),
+      listBranches: ({ workspaceId, repository, signal }) =>
+        this.runAbortable(pluginId, signal, (lifecycleSignal) =>
+          provider.listBranches({ workspaceId, repository, signal: lifecycleSignal }),
+        ),
+      inspectURL: ({ workspaceId, url, signal }) =>
+        this.runAbortable(pluginId, signal, (lifecycleSignal) =>
+          provider.inspectURL({ workspaceId, url, signal: lifecycleSignal }),
+        ),
+    };
+  }
+
+  private withReviewProviderLifecycle(
+    pluginId: string,
+    provider: ReviewProviderRegistration,
+  ): ReviewProviderRegistration {
+    return {
+      ...provider,
+      getSnapshot: (taskId) => normalizeReviewItems(provider.id, provider.getSnapshot(taskId)),
+      subscribe: (taskId, listener) =>
+        this.trackReviewSubscription(pluginId, provider.subscribe(taskId, listener)),
+      refresh: (taskId, signal) =>
+        this.runAbortable(pluginId, signal, (lifecycleSignal) =>
+          provider.refresh(taskId, lifecycleSignal),
+        ),
+    };
+  }
+
+  private runAbortable<T>(
+    pluginId: string,
+    sourceSignal: AbortSignal,
+    operation: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const controllers = this.abortControllersByPlugin.get(pluginId) ?? new Set<AbortController>();
+    this.abortControllersByPlugin.set(pluginId, controllers);
+    controllers.add(controller);
+    const forwardAbort = () => controller.abort();
+    if (sourceSignal.aborted) {
+      forwardAbort();
+    } else {
+      sourceSignal.addEventListener("abort", forwardAbort, { once: true });
+    }
+
+    return Promise.resolve()
+      .then(() => operation(controller.signal))
+      .finally(() => {
+        sourceSignal.removeEventListener("abort", forwardAbort);
+        controllers.delete(controller);
+        if (controllers.size === 0) this.abortControllersByPlugin.delete(pluginId);
+      });
+  }
+
+  private trackReviewSubscription(pluginId: string, unsubscribe: () => void): () => void {
+    const unsubscribers = this.reviewUnsubscribersByPlugin.get(pluginId) ?? new Set<() => void>();
+    this.reviewUnsubscribersByPlugin.set(pluginId, unsubscribers);
+    let closed = false;
+    const trackedUnsubscribe = () => {
+      if (closed) return;
+      closed = true;
+      unsubscribers.delete(trackedUnsubscribe);
+      if (unsubscribers.size === 0) this.reviewUnsubscribersByPlugin.delete(pluginId);
+      unsubscribe();
+    };
+    unsubscribers.add(trackedUnsubscribe);
+    return trackedUnsubscribe;
+  }
+
+  private abortPluginWork(pluginId: string): void {
+    this.abortControllersByPlugin.get(pluginId)?.forEach((controller) => controller.abort());
+    this.abortControllersByPlugin.delete(pluginId);
+    this.reviewUnsubscribersByPlugin.get(pluginId)?.forEach((unsubscribe) => unsubscribe());
+    this.reviewUnsubscribersByPlugin.delete(pluginId);
   }
 
   private totalCount(): number {
@@ -262,7 +484,10 @@ class PluginRegistryStore {
       this.navItems.length +
       this.slotComponents.length +
       this.wsHandlers.length +
-      this.keybindingHandlers.length
+      this.keybindingHandlers.length +
+      this.repositoryProviders.size +
+      this.taskActions.size +
+      this.reviewProviders.size
     );
   }
 
@@ -270,6 +495,45 @@ class PluginRegistryStore {
     this.version += 1;
     this.listeners.forEach((listener) => listener());
   }
+}
+
+function taskActionKey(pluginId: string, actionId: string): string {
+  return `${pluginId}:${actionId}`;
+}
+
+function normalizeReviewItems(
+  providerId: string,
+  items: readonly ReviewItemSummary[],
+): readonly ReviewItemSummary[] {
+  return items.flatMap((item) => {
+    if (
+      item.providerId !== providerId ||
+      !item.reviewKey ||
+      !item.title ||
+      !item.url ||
+      !item.repositoryId ||
+      !item.state
+    ) {
+      return [];
+    }
+    const statusBadge = item.statusBadge?.label
+      ? {
+          label: item.statusBadge.label,
+          ...(item.statusBadge.tone ? { tone: item.statusBadge.tone } : {}),
+        }
+      : undefined;
+    return [
+      {
+        providerId,
+        reviewKey: item.reviewKey,
+        title: item.title,
+        url: item.url,
+        repositoryId: item.repositoryId,
+        state: item.state,
+        ...(statusBadge ? { statusBadge } : {}),
+      },
+    ];
+  });
 }
 
 function pluginSlotOrderingId(pluginId: string, slot: string, ordinal: number): string {

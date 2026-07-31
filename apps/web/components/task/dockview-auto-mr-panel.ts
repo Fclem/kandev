@@ -6,7 +6,7 @@ import { focusOrAddPanel } from "@/lib/state/dockview-layout-builders";
 import { useDockviewStore } from "@/lib/state/dockview-store";
 import type { AppState } from "@/lib/state/store";
 import type { TaskMR } from "@/lib/types/gitlab";
-import { resolvePRPanelTargetGroup } from "./dockview-session-tabs";
+import { resolvePRPanelTargetGroup } from "./dockview-review-panel-target-group";
 
 export function resolveAutoMRPanelAction(params: {
   hasMR: boolean;

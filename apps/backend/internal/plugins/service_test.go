@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	goruntime "runtime"
 	"sync"
 	"testing"
@@ -306,6 +307,124 @@ func installTestPlugin(t *testing.T, svc *Service, id string) *store.Record {
 	return rec
 }
 
+func TestServiceRejectsActiveRepositoryProviderOwnerCollision(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	if _, err := svc.Install(t.Context(), testPackageWithRepositoryProvider(t, "kandev-plugin-first", "bitbucket")); err != nil {
+		t.Fatalf("install first provider owner: %v", err)
+	}
+
+	if _, err := svc.Install(t.Context(), testPackageWithRepositoryProvider(t, "kandev-plugin-second", "bitbucket")); err == nil {
+		t.Fatal("Install() expected active repository provider ownership collision, got nil")
+	}
+}
+
+func TestServiceRejectsCaseInsensitiveRepositoryProviderOwnerCollision(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	if _, err := svc.Install(t.Context(), testPackageWithRepositoryProvider(t, "kandev-plugin-first", "Bitbucket")); err != nil {
+		t.Fatalf("install first provider owner: %v", err)
+	}
+
+	if _, err := svc.Install(t.Context(), testPackageWithRepositoryProvider(t, "kandev-plugin-second", "bitbucket")); err == nil {
+		t.Fatal("Install() expected case-insensitive repository provider ownership collision, got nil")
+	}
+}
+
+func TestServiceRejectsActiveReferenceSourceOwnerCollisionAndReleasesOnDisable(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	if _, err := svc.Install(t.Context(), testPackageWithReferenceSource(t, "kandev-plugin-first", "bitbucket.pull-requests")); err != nil {
+		t.Fatalf("install first reference source owner: %v", err)
+	}
+	if _, err := svc.Install(t.Context(), testPackageWithReferenceSource(t, "kandev-plugin-second", "bitbucket.pull-requests")); err == nil {
+		t.Fatal("Install() expected active reference source ownership collision, got nil")
+	}
+
+	if err := svc.Disable("kandev-plugin-first"); err != nil {
+		t.Fatalf("Disable first reference source owner: %v", err)
+	}
+	if _, err := svc.Install(t.Context(), testPackageWithReferenceSource(t, "kandev-plugin-second", "bitbucket.pull-requests")); err != nil {
+		t.Fatalf("install reference source after owner disable: %v", err)
+	}
+}
+
+func TestServiceRejectsActiveReferenceProviderKindOwnerCollision(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	if _, err := svc.Install(t.Context(), testPackageWithReferenceSourceDescriptor(t, "kandev-plugin-first", "bitbucket.pull-requests", "bitbucket", "pull_request")); err != nil {
+		t.Fatalf("install first reference owner: %v", err)
+	}
+
+	if _, err := svc.Install(t.Context(), testPackageWithReferenceSourceDescriptor(t, "kandev-plugin-second", "bitbucket.prs", "bitbucket", "pull_request")); err == nil {
+		t.Fatal("Install() expected active reference provider/kind ownership collision, got nil")
+	}
+
+	if err := svc.Disable("kandev-plugin-first"); err != nil {
+		t.Fatalf("Disable first reference provider/kind owner: %v", err)
+	}
+	if _, err := svc.Install(t.Context(), testPackageWithReferenceSourceDescriptor(t, "kandev-plugin-second", "bitbucket.prs", "bitbucket", "pull_request")); err != nil {
+		t.Fatalf("install reference provider/kind after owner disable: %v", err)
+	}
+}
+
+func testPackageWithRepositoryProvider(t *testing.T, id, provider string) *bytes.Buffer {
+	return testPackageWithRepositoryProviderVersion(t, id, "1.0.0", provider)
+}
+
+func testPackageWithRepositoryProviderVersion(t *testing.T, id, version, provider string) *bytes.Buffer {
+	t.Helper()
+	platformKey := goruntime.GOOS + "-" + goruntime.GOARCH
+	manifestYAML := fmt.Sprintf(`
+id: %s
+api_version: 1
+version: %q
+display_name: Test Plugin
+repository_providers: [%s]
+runtime:
+  type: binary
+  executables:
+    %s: server/plugin
+`, id, version, provider, platformKey)
+	var buf bytes.Buffer
+	if err := pkgtartest.WritePackage(&buf, map[string][]byte{
+		"manifest.yaml": []byte(manifestYAML),
+		"server/plugin": []byte("#!/bin/sh\necho fake\n"),
+	}); err != nil {
+		t.Fatalf("WritePackage: %v", err)
+	}
+	return &buf
+}
+
+func testPackageWithReferenceSource(t *testing.T, id, source string) *bytes.Buffer {
+	return testPackageWithReferenceSourceDescriptor(t, id, source, "bitbucket", "pull_request")
+}
+
+func testPackageWithReferenceSourceDescriptor(t *testing.T, id, source, provider, kind string) *bytes.Buffer {
+	t.Helper()
+	platformKey := goruntime.GOOS + "-" + goruntime.GOARCH
+	manifestYAML := fmt.Sprintf(`
+id: %s
+api_version: 1
+version: "1.0.0"
+display_name: Test Plugin
+reference_sources:
+  - source: %s
+    provider: %s
+    kind: %s
+    display_name: Bitbucket
+    kind_label: Pull request
+runtime:
+  type: binary
+  executables:
+    %s: server/plugin
+`, id, source, provider, kind, platformKey)
+	var buf bytes.Buffer
+	if err := pkgtartest.WritePackage(&buf, map[string][]byte{
+		"manifest.yaml": []byte(manifestYAML),
+		"server/plugin": []byte("#!/bin/sh\necho fake\n"),
+	}); err != nil {
+		t.Fatalf("WritePackage: %v", err)
+	}
+	return &buf
+}
+
 func TestServiceListReturnsInstalledPlugins(t *testing.T) {
 	svc, _, _ := newTestService(t)
 	installTestPlugin(t, svc, "kandev-plugin-slack")
@@ -455,6 +574,51 @@ func TestServiceDisableFromActiveStopsRuntime(t *testing.T) {
 	}
 	if !rt.stopped("kandev-plugin-slack") {
 		t.Fatal("Disable() did not stop the runtime process")
+	}
+}
+
+func TestServiceRevokesDeclaredProviderLeasesWhenPluginBecomesInactive(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	if _, err := svc.Install(t.Context(), testPackageWithRepositoryProvider(t, "kandev-plugin-bitbucket", "bitbucket")); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+
+	var revoked []string
+	svc.SetGitCredentialLeaseRevoker(func(providerID string) {
+		revoked = append(revoked, providerID)
+	})
+
+	if err := svc.Disable("kandev-plugin-bitbucket"); err != nil {
+		t.Fatalf("Disable: %v", err)
+	}
+	if got, want := revoked, []string{"bitbucket"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("revoked provider leases = %#v, want %#v", got, want)
+	}
+
+	if err := svc.Uninstall(t.Context(), "kandev-plugin-bitbucket"); err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	if got, want := revoked, []string{"bitbucket", "bitbucket"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("revoked provider leases after uninstall = %#v, want %#v", got, want)
+	}
+}
+
+func TestServiceRevokesProviderLeasesBeforeReplacingActivePlugin(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	if _, err := svc.Install(t.Context(), testPackageWithRepositoryProviderVersion(t, "kandev-plugin-bitbucket", "1.0.0", "bitbucket")); err != nil {
+		t.Fatalf("install initial plugin: %v", err)
+	}
+
+	var revoked []string
+	svc.SetGitCredentialLeaseRevoker(func(providerID string) {
+		revoked = append(revoked, providerID)
+	})
+
+	if _, err := svc.Install(t.Context(), testPackageWithRepositoryProviderVersion(t, "kandev-plugin-bitbucket", "1.1.0", "bitbucket")); err != nil {
+		t.Fatalf("upgrade plugin: %v", err)
+	}
+	if got, want := revoked, []string{"bitbucket"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("revoked provider leases during active upgrade = %#v, want %#v", got, want)
 	}
 }
 

@@ -4,15 +4,9 @@ import { useMemo, type ReactNode } from "react";
 import {
   IconArchive,
   IconArrowRight,
-  IconBrandGitlab,
-  IconBrandSentry,
-  IconCircleDot,
-  IconGitPullRequest,
-  IconLink,
   IconLoader,
   IconLogicBuffer,
   IconPencil,
-  IconTicket,
   IconTrash,
   IconUnlink,
 } from "@tabler/icons-react";
@@ -39,6 +33,7 @@ import {
   type TaskMoveWorkflow,
 } from "@/components/task/task-move-context-menu";
 import { cn } from "@/lib/utils";
+import { buildLinkSubmenu } from "./kanban-card-link-submenu";
 
 type ItemEntry = {
   kind: "item";
@@ -74,6 +69,14 @@ export type KanbanCardMoveTargets = {
   stepsByWorkflowId: Record<string, TaskMoveStep[]>;
 };
 
+/** Registry action already bound to this card's immutable task context. */
+export type KanbanPluginLinkAction = {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  onSelect: () => void;
+};
+
 type BuildKanbanCardMenuEntriesArgs = {
   currentWorkflowId?: string | null;
   currentStepId?: string | null;
@@ -94,6 +97,7 @@ type BuildKanbanCardMenuEntriesArgs = {
   onLinkJiraTicket?: () => void;
   onLinkLinearIssue?: () => void;
   onLinkSentryIssue?: () => void;
+  pluginLinkActions?: KanbanPluginLinkAction[];
   onMoveToStep?: (stepId: string) => void;
   onSendToWorkflow?: (workflowId: string, stepId: string) => void;
 };
@@ -229,122 +233,6 @@ function buildSendToWorkflowSubmenu({
   };
 }
 
-function buildGitLabMergeRequestLinkEntry({
-  disabled,
-  onLinkMergeRequest,
-}: {
-  disabled?: boolean;
-  onLinkMergeRequest?: () => void;
-}): KanbanCardMenuEntry | null {
-  if (!onLinkMergeRequest) return null;
-  return {
-    kind: "item",
-    key: "link-gitlab-merge-request",
-    testId: "task-context-link-gitlab-merge-request",
-    icon: <IconBrandGitlab className="mr-2 h-4 w-4" />,
-    label: "GitLab Merge Request",
-    disabled,
-    onSelect: onLinkMergeRequest,
-  };
-}
-
-function buildLinkSubmenu({
-  disabled,
-  onLinkPullRequest,
-  onLinkIssue,
-  onLinkMergeRequest,
-  onLinkJiraTicket,
-  onLinkLinearIssue,
-  onLinkSentryIssue,
-}: {
-  disabled?: boolean;
-  onLinkPullRequest?: () => void;
-  onLinkIssue?: () => void;
-  onLinkMergeRequest?: () => void;
-  onLinkJiraTicket?: () => void;
-  onLinkLinearIssue?: () => void;
-  onLinkSentryIssue?: () => void;
-}): KanbanCardMenuEntry | null {
-  if (
-    !onLinkPullRequest &&
-    !onLinkIssue &&
-    !onLinkMergeRequest &&
-    !onLinkJiraTicket &&
-    !onLinkLinearIssue &&
-    !onLinkSentryIssue
-  ) {
-    return null;
-  }
-  const children: KanbanCardMenuEntry[] = [];
-  if (onLinkPullRequest) {
-    children.push({
-      kind: "item",
-      key: "link-github-pull-request",
-      testId: "task-context-link-github-pull-request",
-      icon: <IconGitPullRequest className="mr-2 h-4 w-4" />,
-      label: "GitHub Pull Request",
-      disabled,
-      onSelect: onLinkPullRequest,
-    });
-  }
-  if (onLinkIssue) {
-    children.push({
-      kind: "item",
-      key: "link-github-issue",
-      testId: "task-context-link-github-issue",
-      icon: <IconCircleDot className="mr-2 h-4 w-4" />,
-      label: "GitHub Issue",
-      disabled,
-      onSelect: onLinkIssue,
-    });
-  }
-  const gitLabEntry = buildGitLabMergeRequestLinkEntry({ disabled, onLinkMergeRequest });
-  if (gitLabEntry) children.push(gitLabEntry);
-  if (onLinkJiraTicket) {
-    children.push({
-      kind: "item",
-      key: "link-jira-ticket",
-      testId: "task-context-link-jira-ticket",
-      icon: <IconTicket className="mr-2 h-4 w-4" />,
-      label: "Jira Ticket",
-      disabled,
-      onSelect: onLinkJiraTicket,
-    });
-  }
-  if (onLinkLinearIssue) {
-    children.push({
-      kind: "item",
-      key: "link-linear-issue",
-      testId: "task-context-link-linear-issue",
-      icon: <IconCircleDot className="mr-2 h-4 w-4" />,
-      label: "Linear Issue",
-      disabled,
-      onSelect: onLinkLinearIssue,
-    });
-  }
-  if (onLinkSentryIssue) {
-    children.push({
-      kind: "item",
-      key: "link-sentry-issue",
-      testId: "task-context-link-sentry-issue",
-      icon: <IconBrandSentry className="mr-2 h-4 w-4" />,
-      label: "Sentry Issue",
-      disabled,
-      onSelect: onLinkSentryIssue,
-    });
-  }
-  return {
-    kind: "submenu",
-    key: "link",
-    testId: "task-context-link",
-    icon: <IconLink className="mr-2 h-4 w-4" />,
-    label: "Link",
-    disabled,
-    className: "w-56",
-    children,
-  };
-}
-
 export function buildKanbanCardMenuEntries({
   currentWorkflowId,
   currentStepId,
@@ -365,6 +253,7 @@ export function buildKanbanCardMenuEntries({
   onLinkJiraTicket,
   onLinkLinearIssue,
   onLinkSentryIssue,
+  pluginLinkActions,
   onMoveToStep,
   onSendToWorkflow,
 }: BuildKanbanCardMenuEntriesArgs): KanbanCardMenuEntry[] {
@@ -407,6 +296,7 @@ export function buildKanbanCardMenuEntries({
     onLinkJiraTicket,
     onLinkLinearIssue,
     onLinkSentryIssue,
+    pluginLinkActions,
   });
   if (linkEntry) entries.push(linkEntry);
 

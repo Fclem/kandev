@@ -354,11 +354,23 @@ func TestResolveGitDir(t *testing.T) {
 // different namespaces and equality checks fail. On Linux this is a no-op.
 func canonicalTempDir(t *testing.T) string {
 	t.Helper()
-	resolved, err := filepath.EvalSymlinks(t.TempDir())
+	resolved, err := filepath.EvalSymlinks(trustedTempDir(t))
 	if err != nil {
 		t.Fatalf("eval temp dir: %v", err)
 	}
 	return resolved
+}
+
+// trustedTempDir makes fixture permissions independent of the caller's umask.
+// Local-repository production code intentionally rejects shared-writable parent
+// directories, while Go's t.TempDir uses mode 0777 before applying that umask.
+func trustedTempDir(t *testing.T) string {
+	t.Helper()
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatalf("chmod trusted temp dir: %v", err)
+	}
+	return directory
 }
 
 // TestResolveGitDirWithin_RejectsEscapedGitdir exercises the security-critical

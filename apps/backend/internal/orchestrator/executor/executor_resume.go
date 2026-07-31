@@ -183,13 +183,16 @@ func (e *Executor) ensureRepoCloned(ctx context.Context, repo *models.Repository
 		return "", nil
 	}
 
-	cloneURL, urlErr := e.repoCloner.BuildCloneURLWithHost(
-		repo.Provider, repo.ProviderHost, repo.ProviderOwner, repo.ProviderName,
-	)
-	if urlErr != nil || cloneURL == "" {
-		// Fall back to HTTPS URL if BuildCloneURL fails
-		cloneURL = repositoryCloneURL(repo)
-		if cloneURL == "" {
+	// RemoteURL is the canonical provider-declared transport. In particular,
+	// plugin providers may use a path shape that cannot be reconstructed from
+	// owner/name. Only derive a URL for legacy rows that do not have one.
+	cloneURL := repositoryCloneURL(repo)
+	if cloneURL == "" {
+		var urlErr error
+		cloneURL, urlErr = e.repoCloner.BuildCloneURLWithHost(
+			repo.Provider, repo.ProviderHost, repo.ProviderOwner, repo.ProviderName,
+		)
+		if urlErr != nil || cloneURL == "" {
 			return "", ErrNoCloneURL
 		}
 	}
@@ -767,7 +770,7 @@ func (e *Executor) buildResumeRequest(ctx context.Context, task *v1.Task, sessio
 	if err != nil {
 		return nil, "", execConfig, nil, nil, err
 	}
-	if err := e.configureGitHubCredentialBrokerForRepositories(ctx, req, allRepos); err != nil {
+	if err := e.configureGitCredentialBrokerForRepositories(ctx, req, allRepos); err != nil {
 		return nil, "", execConfig, nil, nil, err
 	}
 	if err := e.applyGitCredentialSnapshot(ctx, req, session); err != nil {

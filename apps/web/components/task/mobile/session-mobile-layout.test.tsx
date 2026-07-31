@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, renderHook, act, screen } from "@testing-library/react";
 import { useState } from "react";
 import type { OpenFileTab } from "@/lib/types/backend";
+import type { ReviewItemSummary } from "@/lib/plugins/types";
 
 vi.mock("@/components/toast-provider", () => ({
   useToast: () => ({ toast: vi.fn() }),
@@ -16,29 +17,31 @@ vi.mock("@/hooks/use-visual-viewport-offset", () => ({
   useVisualViewportOffset: () => ({ keyboardOpen: false, bottomOffset: 0 }),
 }));
 
-vi.mock("@/components/review/review-pr-selector", () => ({
-  ReviewPRSelector: ({ onSelectPR }: { onSelectPR: (pr: { id: string }) => void }) => (
-    <button type="button" onClick={() => onSelectPR({ id: "pr-b" })}>
-      Select PR B
+vi.mock("../review-item-selector", () => ({
+  ReviewItemSelector: ({
+    reviews,
+    onSelectReview,
+  }: {
+    reviews: ReviewItemSummary[];
+    onSelectReview: (review: ReviewItemSummary) => void;
+  }) => (
+    <button type="button" onClick={() => onSelectReview(reviews[1]!)}>
+      Select review B
     </button>
   ),
 }));
 
-vi.mock("@/components/github/pr-detail-panel", async () => {
+vi.mock("../review-detail-panel", async () => {
   const React = await import("react");
   return {
-    PRDetailPanelComponent: ({ params }: { params: { prKey: string } }) => {
-      const [feedback] = React.useState(`feedback for ${params.prKey}`);
+    ReviewDetailPanelComponent: ({ params }: { params: { reviewKey: string } }) => {
+      const [feedback] = React.useState(`feedback for ${params.reviewKey}`);
       return <button type="button">{feedback}</button>;
     },
   };
 });
 
-import {
-  MobilePanelArea,
-  resolveMobileReviewSource,
-  useMobilePanelHandlers,
-} from "./session-mobile-layout";
+import { MobilePanelArea, useMobilePanelHandlers } from "./session-mobile-layout";
 
 const MOCK_FILE: OpenFileTab = {
   path: "src/foo.ts",
@@ -237,24 +240,28 @@ describe("useMobilePanelHandlers request cancellation", () => {
   });
 });
 
-describe("resolveMobileReviewSource", () => {
-  it("prefers GitHub when a task has both review providers", () => {
-    expect(resolveMobileReviewSource(true, true)).toBe("github");
-  });
-
-  it("makes GitHub Review available without a GitLab MR", () => {
-    expect(resolveMobileReviewSource(true, false)).toBe("github");
-  });
-
-  it("keeps GitLab Review when no GitHub PR exists", () => {
-    expect(resolveMobileReviewSource(false, true)).toBe("gitlab");
-  });
-});
-
 describe("MobilePanelArea PR identity", () => {
-  it("remounts PR detail feedback before the selected PR changes", () => {
+  it("remounts detail feedback when the user chooses another mixed-provider review", () => {
     function MobileReviewHarness() {
-      const [prKey, setPrKey] = useState("pr-a");
+      const reviews: ReviewItemSummary[] = [
+        {
+          providerId: "github",
+          reviewKey: "pr-a",
+          title: "GitHub pull request",
+          url: "https://github.test/a",
+          repositoryId: "owner/repository",
+          state: "OPEN",
+        },
+        {
+          providerId: "bitbucket",
+          reviewKey: "pr-b",
+          title: "Bitbucket pull request",
+          url: "https://bitbucket.test/b",
+          repositoryId: "workspace/repository",
+          state: "OPEN",
+        },
+      ];
+      const [selectedReview, setSelectedReview] = useState<ReviewItemSummary | null>(reviews[0]!);
       return (
         <MobilePanelArea
           currentMobilePanel="review"
@@ -270,11 +277,9 @@ describe("MobilePanelArea PR identity", () => {
           handlePanelChangeAndClearSheet={vi.fn()}
           topNavHeight="3.5rem"
           bottomNavHeight="3.25rem"
-          reviewSource="github"
-          prKey={prKey}
-          reviewPRs={[]}
-          selectedReviewPR={null}
-          onSelectReviewPR={() => setPrKey("pr-b")}
+          reviews={reviews}
+          selectedReview={selectedReview}
+          onSelectReview={setSelectedReview}
         />
       );
     }
@@ -282,7 +287,7 @@ describe("MobilePanelArea PR identity", () => {
     render(<MobileReviewHarness />);
     expect(screen.getByRole("button", { name: "feedback for pr-a" })).not.toBeNull();
 
-    act(() => screen.getByRole("button", { name: "Select PR B" }).click());
+    act(() => screen.getByRole("button", { name: "Select review B" }).click());
 
     expect(screen.queryByRole("button", { name: "feedback for pr-a" })).toBeNull();
     expect(screen.getByRole("button", { name: "feedback for pr-b" })).not.toBeNull();

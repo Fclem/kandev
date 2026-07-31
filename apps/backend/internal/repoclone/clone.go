@@ -3,7 +3,6 @@ package repoclone
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -26,7 +25,7 @@ const (
 	protocolHTTP            = "http"
 	gitHubCredentialEnv     = "KANDEV_REPOCLONE_GITHUB_TOKEN"
 	gitHubCredentialUserEnv = "KANDEV_REPOCLONE_GITHUB_USERNAME"
-	gitCredentialHelper     = `!f() { if [ "$1" = get ]; then printf '%s\n' "username=$KANDEV_REPOCLONE_GITHUB_USERNAME" "password=$KANDEV_REPOCLONE_GITHUB_TOKEN"; fi; }; f`
+	gitCredentialMaxBytes   = 16 * 1024
 	managedWorkspacesDir    = "workspaces"
 	providerCloneDir        = "_providers"
 )
@@ -337,7 +336,11 @@ func (c *Cloner) SetOriginURL(ctx context.Context, repositoryPath, originURL str
 	defer mu.Unlock()
 
 	cmd := exec.CommandContext(ctx, "git", "-C", repositoryPath, "remote", "set-url", "origin", "--", originURL)
-	configureGitCommand(cmd, nil)
+	cleanup, err := configureGitCommand(cmd, nil)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 	if _, err := subproc.RunGitCombinedOutput(ctx, cmd); err != nil {
 		return fmt.Errorf("set repository origin: %w", err)
 	}
@@ -361,7 +364,7 @@ func (c *Cloner) workspaceCloneAuth(
 		auth, err := credentialAuth(cloneURL, credentialOrigin, token)
 		return cloneURL, auth, err
 	}
-	httpsURL, err := CloneURL(provider, owner, name, ProtocolHTTPS)
+	httpsURL, err := githubHTTPSCloneURL(cloneURL, owner, name)
 	if err != nil {
 		return "", nil, err
 	}
@@ -385,6 +388,15 @@ func (c *Cloner) workspaceCloneAuth(
 	return httpsURL, &cloneAuth{
 		origin: parsed.Scheme + "://" + parsed.Host, username: username, password: password,
 	}, nil
+}
+
+func githubHTTPSCloneURL(cloneURL, owner, name string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(cloneURL))
+	if err == nil && parsed.Scheme == ProtocolHTTPS && parsed.Host != "" && parsed.User == nil &&
+		parsed.RawQuery == "" && parsed.Fragment == "" && parsed.Path != "" {
+		return parsed.String(), nil
+	}
+	return CloneURL(githubProvider, owner, name, ProtocolHTTPS)
 }
 
 func credentialAuth(cloneURL, credentialOrigin, token string) (*cloneAuth, error) {
@@ -427,8 +439,9 @@ func (c *Cloner) EnsureClonedWithBasicAuth(
 	return c.ensureClonedWithBasicAuth(ctx, targetPath, cloneURL, username, password)
 }
 
-// EnsureWorkspaceClonedWithBasicAuth uses an ephemeral Authorization header
-// and stores the clone under the workspace/provider/origin path.
+// EnsureWorkspaceClonedWithBasicAuth keeps basic authentication in the
+// short-lived Git helper file descriptors and stores the clone under the
+// workspace/provider/origin path.
 func (c *Cloner) EnsureWorkspaceClonedWithBasicAuth(
 	ctx context.Context, workspaceID, provider, providerHost,
 	cloneURL, owner, name, username, password string,
@@ -446,13 +459,26 @@ func (c *Cloner) ensureClonedWithBasicAuth(
 	mu := c.repoMu(targetPath)
 	mu.Lock()
 	defer mu.Unlock()
-	header := "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte(username+":"+password))
+	origin, err := gitCredentialOrigin(cloneURL)
+	if err != nil {
+		return targetPath, err
+	}
+	auth := &cloneAuth{origin: origin, username: username, password: password}
 	gitDir := filepath.Join(targetPath, ".git")
 	if info, statErr := os.Stat(gitDir); statErr == nil && info.IsDir() {
-		c.fetchWithHTTPHeader(ctx, targetPath, cloneURL, header)
+		c.fetch(ctx, targetPath, auth)
 		return targetPath, nil
 	}
-	return targetPath, c.cloneWithHTTPHeader(ctx, cloneURL, targetPath, header)
+	return targetPath, c.clone(ctx, cloneURL, targetPath, auth)
+}
+
+func gitCredentialOrigin(cloneURL string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(cloneURL))
+	if err != nil || parsed.Scheme != ProtocolHTTPS || parsed.Host == "" || parsed.User != nil ||
+		parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("parse managed clone URL %q: HTTPS host is required", cloneURL)
+	}
+	return parsed.Scheme + "://" + parsed.Host, nil
 }
 
 func (c *Cloner) fetch(ctx context.Context, repoPath string, auth *cloneAuth) {
@@ -460,7 +486,12 @@ func (c *Cloner) fetch(ctx context.Context, repoPath string, auth *cloneAuth) {
 	cmd := exec.CommandContext(
 		ctx, "git", "-C", repoPath, "fetch", "--all", "--prune", "--force", gitNoTags,
 	)
-	configureGitCommand(cmd, auth)
+	cleanup, err := configureGitCommand(cmd, auth)
+	if err != nil {
+		c.logger.Warn("configure Git fetch credentials failed", zap.String("path", repoPath), zap.Error(err))
+		return
+	}
+	defer cleanup()
 	if out, err := subproc.RunGitCombinedOutput(ctx, cmd); err != nil {
 		c.logger.Warn("git fetch failed (non-fatal)",
 			zap.String("path", repoPath), zap.String("output", redactCloneOutput(string(out), authToken(auth))), zap.Error(err))
@@ -475,66 +506,96 @@ func (c *Cloner) clone(ctx context.Context, cloneURL, targetPath string, auth *c
 	cmd := exec.CommandContext(
 		ctx, "git", "clone", "--filter=blob:none", gitNoTags, "--", cloneURL, targetPath,
 	)
-	configureGitCommand(cmd, auth)
+	cleanup, err := configureGitCommand(cmd, auth)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 	if out, err := subproc.RunGitCombinedOutput(ctx, cmd); err != nil {
 		return fmt.Errorf("git clone failed: %s: %w", redactCloneOutput(string(out), authToken(auth)), err)
 	}
 	return nil
 }
 
-func (c *Cloner) fetchWithHTTPHeader(ctx context.Context, repoPath, authURL, header string) {
-	c.logger.Debug("repository already cloned, fetching", zap.String("path", repoPath))
-	cmd := exec.CommandContext(
-		ctx, "git", "-C", repoPath, "fetch", "--all", "--prune", "--force", gitNoTags,
-	)
-	configureHTTPHeaderCommand(cmd, authURL, header)
-	if out, err := subproc.RunGitCombinedOutput(ctx, cmd); err != nil {
-		c.logger.Warn("authenticated git fetch failed (non-fatal)",
-			zap.String("path", repoPath), zap.String("output", string(out)), zap.Error(err))
-	}
-}
-
-func (c *Cloner) cloneWithHTTPHeader(ctx context.Context, cloneURL, targetPath, header string) error {
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-		return fmt.Errorf("create parent directory: %w", err)
-	}
-	c.logger.Info("cloning authenticated repository", zap.String("url", redactCloneURL(cloneURL)), zap.String("target", targetPath))
-	cmd := exec.CommandContext(
-		ctx, "git", "clone", "--filter=blob:none", gitNoTags, "--", cloneURL, targetPath,
-	)
-	configureHTTPHeaderCommand(cmd, cloneURL, header)
-	if out, err := subproc.RunGitCombinedOutput(ctx, cmd); err != nil {
-		return fmt.Errorf("git clone failed: %s: %w", string(out), err)
-	}
-	return nil
-}
-
-func configureGitCommand(cmd *exec.Cmd, auth *cloneAuth) {
+func configureGitCommand(cmd *exec.Cmd, auth *cloneAuth) (func(), error) {
 	env := cleanGitEnvironment()
 	if auth == nil {
 		env = append(env,
 			"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=",
 		)
 		cmd.Env = env
-		return
+		return func() {}, nil
+	}
+	helperPath, files, cleanup, err := gitCredentialHelperFiles(auth)
+	if err != nil {
+		return nil, err
 	}
 	env = append(env,
 		"GIT_CONFIG_COUNT=3",
 		"GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=",
-		"GIT_CONFIG_KEY_1=credential."+auth.origin+".helper", "GIT_CONFIG_VALUE_1="+gitCredentialHelper,
+		"GIT_CONFIG_KEY_1=credential."+auth.origin+".helper", "GIT_CONFIG_VALUE_1=!"+helperPath,
 		"GIT_CONFIG_KEY_2=credential.useHttpPath", "GIT_CONFIG_VALUE_2=true",
-		gitHubCredentialEnv+"="+auth.password,
-		gitHubCredentialUserEnv+"="+auth.username,
 	)
 	cmd.Env = env
+	cmd.ExtraFiles = files
+	return cleanup, nil
 }
 
-func configureHTTPHeaderCommand(cmd *exec.Cmd, authURL, header string) {
-	cmd.Env = append(cleanGitEnvironment(),
-		"GIT_CONFIG_COUNT=2",
-		"GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=",
-		"GIT_CONFIG_KEY_1=http."+authURL+".extraHeader", "GIT_CONFIG_VALUE_1="+header,
-	)
+func gitCredentialHelperFiles(auth *cloneAuth) (string, []*os.File, func(), error) {
+	if auth == nil || strings.TrimSpace(auth.password) == "" || len(auth.password) > gitCredentialMaxBytes ||
+		strings.ContainsAny(auth.username, "\r\n") || strings.ContainsAny(auth.password, "\r\n") {
+		return "", nil, nil, ErrWorkspaceCredentialUnavailable
+	}
+	helper, err := os.CreateTemp("", "kandev-git-credential-helper-*")
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("create Git credential helper: %w", err)
+	}
+	cleanup := func() { _ = os.Remove(helper.Name()) }
+	if _, err := helper.WriteString("#!/bin/sh\nif [ \"$1\" = get ]; then\n  printf 'username='; cat <&4\n  printf 'password='; cat <&3\nfi\n"); err != nil {
+		_ = helper.Close()
+		cleanup()
+		return "", nil, nil, fmt.Errorf("write Git credential helper: %w", err)
+	}
+	if err := helper.Close(); err != nil {
+		cleanup()
+		return "", nil, nil, fmt.Errorf("close Git credential helper: %w", err)
+	}
+	if err := os.Chmod(helper.Name(), 0o700); err != nil {
+		cleanup()
+		return "", nil, nil, fmt.Errorf("set Git credential helper permissions: %w", err)
+	}
+	passwordReader, passwordWriter, err := credentialPipe(auth.password)
+	if err != nil {
+		cleanup()
+		return "", nil, nil, err
+	}
+	usernameReader, usernameWriter, err := credentialPipe(auth.username)
+	if err != nil {
+		_ = passwordReader.Close()
+		_ = passwordWriter.Close()
+		cleanup()
+		return "", nil, nil, err
+	}
+	_ = passwordWriter.Close()
+	_ = usernameWriter.Close()
+	return helper.Name(), []*os.File{passwordReader, usernameReader}, func() {
+		_ = passwordReader.Close()
+		_ = usernameReader.Close()
+		cleanup()
+	}, nil
+}
+
+func credentialPipe(value string) (*os.File, *os.File, error) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Git credential pipe: %w", err)
+	}
+	if _, err := writer.WriteString(value + "\n"); err != nil {
+		_ = reader.Close()
+		_ = writer.Close()
+		return nil, nil, fmt.Errorf("write Git credential pipe: %w", err)
+	}
+	return reader, writer, nil
 }
 
 func cleanGitEnvironment() []string {

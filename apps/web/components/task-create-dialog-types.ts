@@ -56,13 +56,16 @@ export type TaskRepoRow = {
 export type TaskRemoteRepoRow = {
   key: string; // stable client-side React key
   url: string; // canonical https://… or paste-as-typed
+  /** Exact credential-free clone URL returned by provider URL inspection. */
+  remoteUrl?: string;
   branch: string;
   source: "picker" | "paste";
   prNumber?: number;
   prBaseBranch?: string;
   prHeadBranch?: string;
   // Optional metadata when source === "picker":
-  provider?: "github" | "gitlab" | "azure_devops";
+  provider?: string;
+  providerHost?: string;
   providerRepoId?: string;
   providerOwner?: string;
   providerName?: string;
@@ -91,8 +94,9 @@ export type TaskCreateDialogInitialValues = {
    * instead of creating a new branch off `branch`. */
   checkoutBranch?: string;
   state?: Task["state"];
-  /** When set, opens the dialog in GitHub URL mode pre-filled with this value
-   * (e.g. "github.com/owner/repo"). Used when no matching workspace repo exists. */
+  /** Provider-neutral remote URL used to seed remote mode. */
+  remoteUrl?: string;
+  /** @deprecated Use remoteUrl. Kept for GitHub launch callers during migration. */
   githubUrl?: string;
   prNumber?: number;
   prBaseBranch?: string;

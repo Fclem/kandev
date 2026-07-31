@@ -1,6 +1,7 @@
 "use client";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@kandev/ui/dialog";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@kandev/ui/drawer";
 import {
   pluginModalManager,
   usePluginModals,
@@ -33,6 +34,28 @@ function PluginModalInstance({ modal }: { modal: OpenPluginModal }) {
     if (open || !dismissible) return;
     pluginModalManager.close(instanceId);
   };
+
+  if (options.presentation === "drawer") {
+    return (
+      <Drawer open dismissible={dismissible} onOpenChange={handleOpenChange}>
+        <DrawerContent
+          aria-describedby={undefined}
+          className="max-h-[90dvh] pb-[max(1rem,env(safe-area-inset-bottom))]"
+        >
+          {options.title && (
+            <DrawerHeader>
+              <DrawerTitle>{options.title}</DrawerTitle>
+            </DrawerHeader>
+          )}
+          <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4">
+            <PluginErrorBoundary context={`drawer "${instanceId}" (plugin "${pluginId}")`}>
+              <Content />
+            </PluginErrorBoundary>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
 
   return (
     <Dialog open onOpenChange={handleOpenChange}>

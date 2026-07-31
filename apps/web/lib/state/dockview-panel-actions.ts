@@ -455,6 +455,28 @@ export function removeSessionPanel(api: DockviewApi, sessionId: string): void {
   if (panel) api.removePanel(panel);
 }
 
+function addRegisteredReviewPanel(
+  get: StoreGet,
+  providerId: string,
+  reviewKey: string,
+  title = "Review",
+  activeSessionId?: string | null,
+) {
+  const { api, centerGroupId } = get();
+  if (!api) return;
+  const id = `review-detail|${providerId}|${reviewKey}`;
+  const targetGroupId = activeSessionId
+    ? (api.getPanel(`session:${activeSessionId}`)?.group?.id ?? centerGroupId)
+    : centerGroupId;
+  focusOrAddPanel(api, {
+    id,
+    component: "review-detail",
+    title,
+    position: { referenceGroup: targetGroupId },
+    params: { providerId, reviewKey },
+  });
+}
+
 export function buildExtraPanelActions(get: StoreGet) {
   return {
     addVscodePanel: () => {
@@ -559,6 +581,12 @@ export function buildExtraPanelActions(get: StoreGet) {
         params: { mrKey },
       });
     },
+    addReviewPanel: (
+      providerId: string,
+      reviewKey: string,
+      title?: string,
+      activeSessionId?: string | null,
+    ) => addRegisteredReviewPanel(get, providerId, reviewKey, title, activeSessionId),
     addTerminalPanel: (
       terminalId?: string,
       groupId?: string,

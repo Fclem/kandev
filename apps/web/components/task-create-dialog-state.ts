@@ -111,7 +111,7 @@ function useFormResetEffects({
     if (!open) return;
     stateDebug("discovery-reset", {
       workspace_id: workspaceId ?? "-",
-      github_url: initialValues?.githubUrl ?? "-",
+      remote_url: initialValues?.remoteUrl ?? initialValues?.githubUrl ?? "-",
       seeded_remote_branch: initialValues?.checkoutBranch ?? initialValues?.branch ?? "-",
     });
     resetDiscoveryState(resetters, initialValues);
@@ -186,21 +186,21 @@ function resetTaskForm(
 
 /** Resets repository discovery state */
 function resetDiscoveryState(resetters: FormResetters, iv?: TaskCreateDialogInitialValues) {
-  const ghUrl = iv?.githubUrl ?? "";
+  const remoteUrl = iv?.remoteUrl ?? iv?.githubUrl ?? "";
   resetters.setDiscoveredRepositories([]);
   resetters.setDiscoverReposLoaded(false);
-  resetters.setUseRemote(Boolean(ghUrl));
+  resetters.setUseRemote(Boolean(remoteUrl));
   // Seed remoteRepos with a single paste row when the dialog opens with a
   // pre-filled URL (Quick-task launcher path). When `checkoutBranch` is set
   // (PR launch flow), seed the row's branch with it so the chip pill shows
   // the PR head immediately. Otherwise start empty — the seed effect creates
   // an empty row on mode toggle.
-  if (ghUrl) {
+  if (remoteUrl) {
     const seededBranch = iv?.checkoutBranch ?? iv?.branch ?? "";
     resetters.setRemoteRepos([
       {
         key: "remote-0",
-        url: ghUrl,
+        url: remoteUrl,
         branch: seededBranch,
         source: "paste",
         prNumber: iv?.prNumber,

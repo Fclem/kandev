@@ -11,6 +11,16 @@ const EXPECTED_UI_PRIMITIVES = [
   "Card",
   "Checkbox",
   "Dialog",
+  "Drawer",
+  "DrawerClose",
+  "DrawerContent",
+  "DrawerDescription",
+  "DrawerFooter",
+  "DrawerHeader",
+  "DrawerOverlay",
+  "DrawerPortal",
+  "DrawerTitle",
+  "DrawerTrigger",
   "DropdownMenu",
   "Input",
   "Label",
@@ -33,14 +43,14 @@ const EXPECTED_UI_PRIMITIVES = [
   "Tooltip",
 ];
 
-describe("buildHostApi", () => {
-  const originalFetch = global.fetch;
+const originalFetch = global.fetch;
 
-  afterEach(() => {
-    global.fetch = originalFetch;
-    vi.unstubAllEnvs();
-  });
+afterEach(() => {
+  global.fetch = originalFetch;
+  vi.unstubAllEnvs();
+});
 
+describe("buildHostApi — API", () => {
   it("scopes api.fetch to /api/plugins/{pluginId}/... and forwards init", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -65,6 +75,44 @@ describe("buildHostApi", () => {
     expect(url).toContain("/api/plugins/jira/issues");
   });
 
+  it("invokes declared authenticated actions with scoped resources and parses their response", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ connected: true }), { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const host = buildHostApi("jira", createAppStore(), "light");
+    const controller = new AbortController();
+    await expect(
+      host.api.invokeAction<{ connected: boolean }>(
+        "connection.save",
+        {
+          workspaceId: "workspace-a",
+          taskId: "task-a",
+          repositoryId: "repository-a",
+          body: { token: "redacted" },
+        },
+        { signal: controller.signal },
+      ),
+    ).resolves.toEqual({ connected: true });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/api/plugins/jira/actions/connection.save");
+    expect(init).toMatchObject({
+      method: "POST",
+      credentials: "include",
+      signal: controller.signal,
+    });
+    expect(JSON.parse(init.body)).toEqual({
+      workspaceId: "workspace-a",
+      taskId: "task-a",
+      repositoryId: "repository-a",
+      body: { token: "redacted" },
+    });
+  });
+});
+
+describe("buildHostApi — host contract", () => {
   it("exposes the host React instance and a jsx alias for React.createElement", () => {
     const host = buildHostApi("jira", createAppStore(), "dark");
 
@@ -99,6 +147,12 @@ describe("buildHostApi", () => {
     for (const name of EXPECTED_UI_PRIMITIVES) {
       expect(host.ui[name], `host.ui.${name}`).toBeDefined();
     }
+  });
+
+  it("exports the supported responsive breakpoint hook", () => {
+    const host = buildHostApi("jira", createAppStore(), "dark");
+
+    expect(host.useResponsiveBreakpoint).toBeTypeOf("function");
   });
 
   it("exposes first-party app components for native flows and page chrome", () => {

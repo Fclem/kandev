@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/gitconfigenv"
+	"github.com/kandev/kandev/internal/gitcredentials"
 	"github.com/kandev/kandev/internal/githubauth"
 	"github.com/kandev/kandev/internal/task/models"
 )
@@ -27,28 +28,16 @@ const (
 	envGitLabHost       = "GITLAB_HOST"
 	envKandevGitLabHost = "KANDEV_GITLAB_HOST"
 
-	gitHubCredentialHelper         = "!agentctl git-credential"
+	gitCredentialHelper            = "!agentctl git-credential"
 	defaultGitHubHost              = "github.com"
+	gitHubProviderID               = "github"
+	httpsScheme                    = "https"
 	gitLabCredentialHelper         = `!f() { echo "username=oauth2"; echo "password=$GITLAB_TOKEN"; }; f`
 	taskGitCredentialsModeManaged  = "managed"
 	taskGitCredentialsModeExecutor = "executor"
 )
 
-var ErrGitHubCredentialBrokerURL = errors.New("invalid GitHub credential broker URL")
-
-type GitHubCredentialLeaseRequest struct {
-	WorkspaceID  string
-	TaskID       string
-	SessionID    string
-	RepositoryID string
-	Owner        string
-	Repo         string
-	Host         string
-}
-
-type GitHubCredentialLease struct {
-	Token string
-}
+var ErrGitHubCredentialBrokerURL = errors.New("invalid Git credential broker URL")
 
 type githubCredentialScope struct {
 	Lease        string `json:"lease"`
@@ -60,9 +49,15 @@ type githubCredentialScope struct {
 	Host         string `json:"host"`
 }
 
-type GitHubCredentialLeaseIssuer interface {
-	IssueGitHubCredentialLease(context.Context, GitHubCredentialLeaseRequest) (GitHubCredentialLease, error)
+// GitCredentialLeaseIssuer creates opaque helper leases. *gitcredentials.Broker
+// satisfies it directly; credentials never enter an executor payload.
+type GitCredentialLeaseIssuer interface {
+	Issue(context.Context, gitcredentials.Scope) (gitcredentials.Lease, error)
 }
+
+// GitHubCredentialLeaseIssuer is retained as a source-compatible name for
+// callers which configure the same generic HTTPS helper broker.
+type GitHubCredentialLeaseIssuer = GitCredentialLeaseIssuer
 
 // TaskGitCredentialPolicy is the non-secret routing contract resolved for a workspace.
 type TaskGitCredentialPolicy struct {
@@ -78,9 +73,9 @@ type TaskGitCredentialPolicyResolver interface {
 
 // SetGitHubCredentialBroker configures renewable workspace automation credentials.
 // brokerURL is the full credential-resolution endpoint URL.
-func (e *Executor) SetGitHubCredentialBroker(issuer GitHubCredentialLeaseIssuer, brokerURL string) {
-	e.githubCredentialIssuer = issuer
-	e.githubCredentialBrokerURL = strings.TrimSpace(brokerURL)
+func (e *Executor) SetGitHubCredentialBroker(issuer GitCredentialLeaseIssuer, brokerURL string) {
+	e.gitCredentialIssuer = issuer
+	e.gitCredentialBrokerURL = strings.TrimSpace(brokerURL)
 }
 
 // SetTaskGitCredentialPolicyResolver configures workspace-specific task Git routing.
@@ -100,10 +95,18 @@ func (e *Executor) applyGitCredentialSnapshot(
 	if e.githubCredentialPolicyResolver != nil {
 		resolved, err := e.githubCredentialPolicyResolver.ResolveTaskGitCredentialPolicy(ctx, req.WorkspaceID)
 		if err != nil {
-			return fmt.Errorf("resolve task Git credential policy: %w", err)
+			if req.Env[githubauth.CredentialBrokerURLEnv] == "" {
+				return fmt.Errorf("resolve task Git credential policy: %w", err)
+			}
+			// A plugin-only repository does not require a GitHub workspace
+			// policy. Its opaque lease has already been scoped and issued.
+			// Keep the non-secret snapshot rather than making that launch
+			// depend on an unrelated GitHub configuration.
+		} else {
+			policy = resolved
 		}
-		policy = resolved
 	}
+
 	snapshot := models.GitCredentialSnapshot{
 		Version:      1,
 		Policy:       policy.Mode,
@@ -141,7 +144,7 @@ func (e *Executor) configureGitHubCredentialBroker(
 	req *LaunchAgentRequest,
 	info *repoInfo,
 ) error {
-	return e.configureGitHubCredentialBrokerForRepositories(ctx, req, []*repoInfo{info})
+	return e.configureGitCredentialBrokerForRepositories(ctx, req, []*repoInfo{info})
 }
 
 func (e *Executor) configureGitHubCredentialBrokerForRepositories(
@@ -149,32 +152,43 @@ func (e *Executor) configureGitHubCredentialBrokerForRepositories(
 	req *LaunchAgentRequest,
 	infos []*repoInfo,
 ) error {
-	if e.githubCredentialIssuer == nil || len(infos) == 0 {
+	return e.configureGitCredentialBrokerForRepositories(ctx, req, infos)
+}
+
+func (e *Executor) configureGitCredentialBrokerForRepositories(
+	ctx context.Context,
+	req *LaunchAgentRequest,
+	infos []*repoInfo,
+) error {
+	if e.gitCredentialIssuer == nil || len(infos) == 0 {
 		return nil
 	}
-	if e.githubCredentialPolicyResolver != nil {
+	githubManaged := true
+	if e.githubCredentialPolicyResolver != nil && includesGitHubRepository(infos) {
 		policy, err := e.githubCredentialPolicyResolver.ResolveTaskGitCredentialPolicy(ctx, req.WorkspaceID)
 		if err != nil {
 			return fmt.Errorf("resolve task Git credential policy: %w", err)
 		}
 		if policy.Mode == taskGitCredentialsModeExecutor {
-			return removeManagedGitHubCredentials(req)
+			githubManaged = false
+			if err := removeManagedGitCredentials(req); err != nil {
+				return err
+			}
 		}
 	}
 	if req.Env == nil {
 		req.Env = make(map[string]string)
 	}
-	if req.Env[envGitHubToken] != "" || req.Env[envGHToken] != "" {
-		return nil
-	}
 	scopes := make([]githubCredentialScope, 0, len(infos))
+	helpers := make(map[string]struct{}, len(infos))
 	for _, info := range infos {
-		scope, err := e.issueGitHubCredentialScope(ctx, req, info)
+		scope, err := e.issueGitCredentialScope(ctx, req, info, githubManaged)
 		if err != nil {
 			return err
 		}
 		if scope != nil {
 			scopes = append(scopes, *scope)
+			helpers[scope.Host] = struct{}{}
 		}
 	}
 	if len(scopes) == 0 {
@@ -185,7 +199,7 @@ func (e *Executor) configureGitHubCredentialBrokerForRepositories(
 		return fmt.Errorf("encode GitHub credential scopes: %w", err)
 	}
 	primary := scopes[0]
-	req.Env[githubauth.CredentialBrokerURLEnv] = e.githubCredentialBrokerURL
+	req.Env[githubauth.CredentialBrokerURLEnv] = e.gitCredentialBrokerURL
 	req.Env[githubauth.CredentialLeaseEnv] = primary.Lease
 	req.Env[githubauth.CredentialTaskIDEnv] = primary.TaskID
 	req.Env[githubauth.CredentialSessionIDEnv] = primary.SessionID
@@ -195,15 +209,24 @@ func (e *Executor) configureGitHubCredentialBrokerForRepositories(
 	req.Env[githubauth.CredentialHostEnv] = primary.Host
 	req.Env[githubauth.CredentialScopesEnv] = string(encodedScopes)
 	req.Env["GIT_TERMINAL_PROMPT"] = "0"
-	// An empty helper resets inherited GitHub HTTPS helpers before the scoped
-	// broker helper is appended. Other indexed Git configuration remains intact.
-	appendGitConfig(req.Env, "credential.https://github.com.helper", "")
-	appendGitConfig(req.Env, "credential.https://github.com.helper", gitHubCredentialHelper)
+	for host := range helpers {
+		appendGitConfig(req.Env, "credential.https://"+host+".helper", "")
+		appendGitConfig(req.Env, "credential.https://"+host+".helper", gitCredentialHelper)
+	}
 	appendGitConfig(req.Env, "credential.useHttpPath", "true")
 	return nil
 }
 
-func removeManagedGitHubCredentials(req *LaunchAgentRequest) error {
+func includesGitHubRepository(infos []*repoInfo) bool {
+	for _, info := range infos {
+		if info != nil && info.Repository != nil && strings.EqualFold(info.Repository.Provider, gitHubProviderID) {
+			return true
+		}
+	}
+	return false
+}
+
+func removeManagedGitCredentials(req *LaunchAgentRequest) error {
 	if req == nil || req.Env == nil {
 		return nil
 	}
@@ -222,12 +245,11 @@ func removeManagedGitHubCredentials(req *LaunchAgentRequest) error {
 	}
 	entries, err := gitconfigenv.Filter(req.Env, func(index int, entries []gitconfigenv.Entry) bool {
 		entry := entries[index]
-		if entry.Key == "credential.https://github.com.helper" && entry.Value == gitHubCredentialHelper {
+		if strings.HasPrefix(strings.ToLower(entry.Key), "credential.https://") && entry.Value == gitCredentialHelper {
 			return false
 		}
-		return entry.Key != "credential.https://github.com.helper" || entry.Value != "" ||
-			index+1 >= len(entries) || entries[index+1].Key != entry.Key ||
-			entries[index+1].Value != gitHubCredentialHelper
+		return entry.Value != "" || index+1 >= len(entries) || entries[index+1].Key != entry.Key ||
+			entries[index+1].Value != gitCredentialHelper
 	})
 	if err != nil {
 		return fmt.Errorf("remove managed GitHub credential helper: %w", err)
@@ -236,40 +258,75 @@ func removeManagedGitHubCredentials(req *LaunchAgentRequest) error {
 	return nil
 }
 
-func (e *Executor) issueGitHubCredentialScope(
+func (e *Executor) issueGitCredentialScope(
 	ctx context.Context,
 	req *LaunchAgentRequest,
 	info *repoInfo,
+	githubManaged bool,
 ) (*githubCredentialScope, error) {
 	if info == nil || info.Repository == nil {
 		return nil, nil
 	}
 	repository := info.Repository
-	if repository.Provider != "" && !strings.EqualFold(repository.Provider, "github") {
+	providerID := managedGitCredentialProvider(repository, githubManaged, req.Env)
+	if providerID == "" {
 		return nil, nil
 	}
-	owner := strings.TrimSpace(repository.ProviderOwner)
-	repo := strings.TrimSpace(repository.ProviderName)
-	if owner == "" || repo == "" || info.RepositoryID == "" {
-		return nil, nil
-	}
-	if err := validateGitHubCredentialBrokerURL(e.githubCredentialBrokerURL, req.ExecutorType); err != nil {
+	host, path, owner, repo, err := gitCredentialCloneIdentity(repository, info.RepositoryID)
+	if err != nil {
 		return nil, err
 	}
-	lease, err := e.githubCredentialIssuer.IssueGitHubCredentialLease(ctx, GitHubCredentialLeaseRequest{
-		WorkspaceID: req.WorkspaceID, TaskID: req.TaskID, SessionID: req.SessionID,
-		RepositoryID: info.RepositoryID, Owner: owner, Repo: repo, Host: defaultGitHubHost,
+	if err := validateGitHubCredentialBrokerURL(e.gitCredentialBrokerURL, req.ExecutorType); err != nil {
+		return nil, err
+	}
+	lease, err := e.gitCredentialIssuer.Issue(ctx, gitcredentials.Scope{
+		ProviderID: providerID, WorkspaceID: req.WorkspaceID, TaskID: req.TaskID, SessionID: req.SessionID,
+		RepositoryID: info.RepositoryID, Host: host, Path: path,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("issue GitHub credential lease: %w", err)
+		return nil, fmt.Errorf("issue Git credential lease: %w", err)
 	}
 	if strings.TrimSpace(lease.Token) == "" {
-		return nil, fmt.Errorf("issue GitHub credential lease: empty lease")
+		return nil, fmt.Errorf("issue Git credential lease: empty lease")
 	}
 	return &githubCredentialScope{
 		Lease: lease.Token, TaskID: req.TaskID, SessionID: req.SessionID,
-		RepositoryID: info.RepositoryID, Owner: owner, Repo: repo, Host: defaultGitHubHost,
+		RepositoryID: info.RepositoryID, Owner: owner, Repo: repo, Host: host,
 	}, nil
+}
+
+func managedGitCredentialProvider(repository *models.Repository, githubManaged bool, env map[string]string) string {
+	providerID := strings.ToLower(strings.TrimSpace(repository.Provider))
+	if providerID == gitHubProviderID && (!githubManaged || env[envGitHubToken] != "" || env[envGHToken] != "") {
+		return ""
+	}
+	return providerID
+}
+
+func gitCredentialCloneIdentity(repository *models.Repository, repositoryID string) (string, string, string, string, error) {
+	cloneURL := repositoryCloneURL(repository)
+	if cloneURL == "" {
+		return "", "", "", "", fmt.Errorf("repository %q has no HTTPS clone URL for managed credentials", repositoryID)
+	}
+	parsed, err := url.Parse(cloneURL)
+	if err != nil || parsed.Scheme != httpsScheme || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" ||
+		parsed.Fragment != "" || parsed.Path == "" {
+		return "", "", "", "", fmt.Errorf("repository %q must use an HTTPS clone URL for managed credentials", repositoryID)
+	}
+	owner, repo, err := credentialHelperPath(parsed.Path)
+	if err != nil || repositoryID == "" {
+		return "", "", "", "", fmt.Errorf("repository %q has an invalid HTTPS clone path", repositoryID)
+	}
+	return parsed.Host, parsed.Path, owner, repo, nil
+}
+
+func credentialHelperPath(path string) (string, string, error) {
+	trimmed := strings.TrimSuffix(strings.Trim(path, "/"), ".git")
+	owner, repo, found := strings.Cut(trimmed, "/")
+	if !found || owner == "" || repo == "" {
+		return "", "", errors.New("repository path needs owner and name")
+	}
+	return owner, repo, nil
 }
 
 func validateGitHubCredentialBrokerURL(raw, executorType string) error {
@@ -277,7 +334,7 @@ func validateGitHubCredentialBrokerURL(raw, executorType string) error {
 	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
 		return fmt.Errorf("%w: absolute endpoint is required", ErrGitHubCredentialBrokerURL)
 	}
-	if parsed.Scheme == "https" {
+	if parsed.Scheme == httpsScheme {
 		return nil
 	}
 	if parsed.Scheme != "http" || executorNeedsResolvedCredentials(executorType) || !isLoopbackHost(parsed.Hostname()) {
@@ -353,7 +410,7 @@ func removeGitLabCredentialHelpers(env map[string]string) {
 
 func appendGitLabCredentialHelper(env map[string]string, host string) {
 	origin, err := url.Parse(strings.TrimSpace(host))
-	if err != nil || (origin.Scheme != "http" && origin.Scheme != "https") || origin.Host == "" ||
+	if err != nil || (origin.Scheme != "http" && origin.Scheme != httpsScheme) || origin.Host == "" ||
 		origin.User != nil || (origin.Path != "" && origin.Path != "/") {
 		return
 	}

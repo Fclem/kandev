@@ -6,7 +6,11 @@ diverge without updating this file.
 ## Loading model
 
 1. Backend boot payload gains `plugins: ActivePlugin[]` where
-   `ActivePlugin = { id: string; name: string; bundleUrl: string; styleUrls?: string[] }`.
+   `ActivePlugin = { id: string; name: string; bundleUrl: string; styleUrls?: string[];
+   repositoryProviderIds?: string[] }`. `repositoryProviderIds` is JSON
+   `repositoryProviderIds`, copied from manifest `repository_providers`. It is optional
+   only for additive compatibility with older boot payloads; a present empty list means
+   the plugin declared no repository providers.
    `bundleUrl` = `/api/plugins/{id}/bundle` — kandev serves this **directly from the
    extracted package directory** on local disk
    (`~/.kandev/plugins/<id>/<version>/ui/...`, per manifest `ui.bundle`). There is no
@@ -14,7 +18,12 @@ diverge without updating this file.
    be running to serve the UI bundle, since installation already extracted the file.
 2. On SPA boot, the **plugin host** (`apps/web/lib/plugins/host.ts`) iterates
    `bootPayload.plugins`, injects any `styleUrls` as `<link>`, and dynamically
-   `import(/* @vite-ignore */ bundleUrl)` each bundle as a native ES module.
+   `import(/* @vite-ignore */ bundleUrl)` each bundle as a native ES module. Before a
+   bundle can initialize, the loader supplies its `repositoryProviderIds` to the
+   registry (for example `setDeclaredRepositoryProviderIds(pluginId, ids)`). The scoped
+   registry then rejects `registerRepositoryProvider` or `registerReviewProvider` IDs
+   absent from that declared set. An absent field preserves older-host compatibility;
+   it does not invent provider ownership.
 3. Each bundle, when evaluated, calls the global:
    ```ts
    window.registerKandevPlugin(pluginId, {
@@ -22,7 +31,9 @@ diverge without updating this file.
      destroy?(): void,
    })
    ```
-4. After the module resolves, the host calls `initialize(registry, host)`. On
+4. After the module resolves, the host calls `initialize(registry, host)`. Activation
+   is transactional: failure or timeout unregisters partial contributions, aborts
+   plugin-owned work, and fences late registrations from that expired attempt. On
    plugin disable/uninstall the host calls `destroy?.()` and unregisters everything
    that plugin added (registrations are tracked per pluginId).
 
@@ -45,9 +56,17 @@ interface PluginHostApi {
     subscribe(listener): () => void;
   };
   api: {
-    // fetch scoped to this plugin's backend via kandev proxy:
-    // GET/POST {method} /api/plugins/{id}/... ; returns parsed JSON
+    // Low-level request scoped to this plugin's host path. It MUST NOT target a
+    // public webhook path or be used for authenticated provider commands.
     fetch(path: string, init?: RequestInit): Promise<Response>;
+    // Authenticated action declared in this plugin's manifest. The host verifies the
+    // indicated resource and passes it to the plugin separately from body JSON. This
+    // is the only browser-to-plugin command path; never call a public webhook route.
+    invokeAction<TResponse>(
+      key: string,
+      input?: { workspaceId?: string; taskId?: string; repositoryId?: string; body?: unknown },
+      options?: { signal?: AbortSignal },
+    ): Promise<TResponse>;
     // Backend API origin ("" when SPA and API share an origin) — for reaching
     // first-party kandev REST endpoints without re-deriving the split-origin
     // dev/desktop base URL from window internals.
@@ -70,6 +89,7 @@ interface PluginModalOptions {
   content: React.ComponentType<{ slotProps?: unknown }>; // reuses the slot-component contract
   size?: "sm" | "md" | "lg" | "xl";         // maps to the host's Dialog width classes; default "md"
   dismissible?: boolean;                    // overlay click / Escape close the modal; default true
+  presentation?: "dialog" | "drawer";       // default dialog; use drawer for native phone actions
 }
 
 interface PluginModalHandle {
@@ -187,6 +207,60 @@ interface PluginRegistry {
   // a browser reports for those keys, so the combo could never dispatch; both
   // the manifest validator and the frontend parser reject it.
   registerKeybinding(id: string, handler: (event: KeyboardEvent) => void): void;
+
+  // Requires manifest ownership of provider.id. One active plugin owns one provider;
+  // unload revokes it and aborts in-flight provider work. inspectURL returns a complete
+  // credential-free HTTPS descriptor—host does not parse plugin provider URLs.
+  registerRepositoryProvider(provider: RepositoryProviderRegistration): void;
+
+  // Native task-menu contribution. placement "link" renders in Link menus on desktop
+  // and visible mobile action surfaces; host closes the menu before handler invocation.
+  registerTaskAction(action: TaskActionRegistration): void;
+
+  // Native desktop/mobile review integration. Use external-store callbacks, never a
+  // plugin hook, so enable/disable does not alter host hook ordering.
+  registerReviewProvider(provider: ReviewProviderRegistration): void;
+}
+
+interface RepositoryProviderRegistration {
+  id: string;
+  label: string;
+  icon?: string;
+  listRepositories(context: { workspaceId: string; signal: AbortSignal }): Promise<unknown[]>;
+  matchesURL(url: string): boolean;
+  listBranches(context: { workspaceId: string; repository: unknown; signal: AbortSignal }): Promise<unknown[]>;
+  inspectURL(context: { workspaceId: string; url: string; signal: AbortSignal }): Promise<RepositoryInspection | null>;
+}
+interface RepositoryInspection {
+  providerId: string; providerHost: string; ownerOrProject: string;
+  repositoryId: string; repositoryName: string; cloneUrl: string;
+  defaultBranch?: string; baseBranch?: string; headBranch?: string;
+  pullRequest?: { number: number; title: string };
+}
+interface TaskActionRegistration {
+  id: string; label: string; icon?: string; placement: "link" | "action";
+  group?: string; visible?(context: PluginTaskActionContext): boolean;
+  singleTaskOnly?: boolean; run(context: PluginTaskActionContext): Promise<void>;
+}
+interface PluginTaskActionContext {
+  workspaceId: string; taskId: string; repositories: readonly unknown[]; pathname: string;
+  presentation: "desktop" | "mobile";
+}
+interface ReviewProviderRegistration {
+  id: string; label: string; icon?: string; changeRequestNoun: string; order: number;
+  getSnapshot(taskId: string): readonly ReviewItemSummary[];
+  subscribe(taskId: string, listener: () => void): () => void;
+  refresh(taskId: string, signal: AbortSignal): Promise<void>;
+  ReviewPanel: React.ComponentType<PluginReviewPanelProps>;
+  Selector?: React.ComponentType; EmptyState?: React.ComponentType;
+}
+interface ReviewItemSummary {
+  providerId: string; reviewKey: string; title: string; url: string; repositoryId: string;
+  state: string; statusBadge?: { label: string; tone?: string };
+}
+interface PluginReviewPanelProps {
+  panelId: string; presentation: "desktop" | "mobile"; workspaceId: string;
+  taskId: string; sessionId?: string; reviewKey: string;
 }
 ```
 
@@ -241,6 +315,13 @@ re-render when registrations change. Every registration records the owning
 `getPluginName(pluginId)` (display name recorded by `forPlugin(id, name)`, used
 for derived page-chrome titles).
 
+Before `initialize`, the loader records `ActivePlugin.repositoryProviderIds` for the
+plugin ID. A present declaration is an allowlist for provider/review registration; an
+absent declaration is tolerated only for older payload compatibility. Disable/unload
+removes this declaration with the plugin's registrations. Failed/timed-out activation
+performs the same cleanup and an attempt token prevents late async registrations from
+reappearing.
+
 Plugin top-level routes render inside `PluginPageFrame`
 (`apps/web/components/plugins/plugin-page.tsx`): a `PageTopbar` title bar above
 a scrollable content area, resolved from `options.topbar` with derived
@@ -271,8 +352,9 @@ Plugin JS runs in the kandev origin with store access — this is the accepted
 tradeoff of option C. v1 mitigations: only **active, operator-installed** plugins
 load; bundles are served by kandev from the extracted package directory (same-origin,
 no third-party CDN, no upstream network hop); host wraps `initialize` in try/catch so
-a broken plugin can't crash boot; registrations namespaced + bulk-revocable per
-plugin. No credentials are ever displayed to the operator — installing a plugin (via
+a broken plugin can't crash boot; failed/timed-out activation is rolled back; and
+registrations are namespaced + bulk-revocable per plugin. No credentials are ever
+displayed to the operator — installing a plugin (via
 URL or upload) has nothing to copy or reveal, unlike the old register flow's one-time
 API key/webhook secret. Sandboxing plugin JS (worker/realms) is explicit future work.
 

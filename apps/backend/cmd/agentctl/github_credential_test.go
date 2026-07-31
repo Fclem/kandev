@@ -88,6 +88,23 @@ func TestGitHubCredentialHelperRejectsRepositoryScopeMismatch(t *testing.T) {
 	}
 }
 
+func TestGitHubCredentialHelperRejectsRepositoryPathCaseMismatch(t *testing.T) {
+	env := githubCredentialTestEnv("https://broker.example/resolve")
+	env[envGitHubCredentialOwner] = "Team"
+	env[envGitHubCredentialRepo] = "Repo"
+	err := runGitHubCredentialHelper(
+		context.Background(),
+		[]string{"get"},
+		strings.NewReader("protocol=https\nhost=github.com\npath=team/repo.git\n\n"),
+		io.Discard,
+		lookupEnv(env),
+		http.DefaultClient,
+	)
+	if err == nil || !strings.Contains(err.Error(), "does not match credential lease scope") {
+		t.Fatalf("runGitHubCredentialHelper() error = %v, want case-sensitive scope mismatch", err)
+	}
+}
+
 func TestGitHubCredentialHelperRequiresCompleteScope(t *testing.T) {
 	for name, input := range map[string]string{
 		"protocol": "host=github.com\npath=acme/widgets.git\n\n",

@@ -2,7 +2,6 @@ package repoclone
 
 import (
 	"context"
-	"encoding/base64"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,30 +12,19 @@ import (
 	"github.com/kandev/kandev/internal/common/logger"
 )
 
-func TestGitCmdWithHTTPHeaderKeepsCredentialOutOfArguments(t *testing.T) {
+func TestGitCmdKeepsCredentialOutOfArgumentsAndEnvironment(t *testing.T) {
 	t.Parallel()
 	cloneURL := "https://dev.azure.com/acme/p/_git/r"
-	header := "Authorization: Basic c2VjcmV0"
 	cmd := exec.CommandContext(context.Background(), "git", "clone", "--", cloneURL)
-	configureHTTPHeaderCommand(cmd, cloneURL, header)
-	if strings.Contains(strings.Join(cmd.Args, " "), "c2VjcmV0") {
+	configureTestGitCommand(t, cmd, &cloneAuth{
+		origin: "https://dev.azure.com", username: "kandev", password: "secret-pat",
+	})
+	if strings.Contains(strings.Join(cmd.Args, " "), "secret-pat") {
 		t.Fatal("credential leaked into command arguments")
 	}
-	foundHeader := false
-	foundScope := false
-	for _, value := range cmd.Env {
-		if value == "GIT_CONFIG_VALUE_1="+header {
-			foundHeader = true
-		}
-		if value == "GIT_CONFIG_KEY_1=http."+cloneURL+".extraHeader" {
-			foundScope = true
-		}
-	}
-	if !foundHeader {
-		t.Fatal("authorization header was not provided through the Git child environment")
-	}
-	if !foundScope {
-		t.Fatal("authorization header was not scoped to the authenticated repository URL")
+	if joined := strings.Join(cmd.Env, "\n"); strings.Contains(joined, "secret-pat") ||
+		!strings.Contains(joined, "GIT_CONFIG_KEY_1=credential.https://dev.azure.com.helper") {
+		t.Fatalf("credential environment = %s", joined)
 	}
 }
 
@@ -53,6 +41,7 @@ func TestEnsureWorkspaceClonedWithBasicAuthKeepsCredentialScopedToGitChild(t *te
 			binDir := t.TempDir()
 			capturePath := filepath.Join(t.TempDir(), "git-env")
 			fakeGit := "#!/bin/sh\nprintf '%s\\n%s' \"$GIT_CONFIG_KEY_1\" \"$GIT_CONFIG_VALUE_1\" > \"$CAPTURE_PATH\"\n" +
+				"helper=${GIT_CONFIG_VALUE_1#!}\n\"$helper\" get > \"$CAPTURE_PATH.helper\"\n" +
 				"if [ \"$BLOCK_GIT\" = 1 ]; then exec sleep 10; fi\nexit 1\n"
 			if err := os.WriteFile(filepath.Join(binDir, "git"), []byte(fakeGit), 0o755); err != nil {
 				t.Fatal(err)
@@ -88,13 +77,16 @@ func TestEnsureWorkspaceClonedWithBasicAuthKeepsCredentialScopedToGitChild(t *te
 			if readErr != nil {
 				t.Fatal(readErr)
 			}
-			expectedCredential := base64.StdEncoding.EncodeToString([]byte("kandev:secret-pat"))
-			if !strings.Contains(string(captured), expectedCredential) {
-				t.Fatal("credential was not passed to Git child")
+			if strings.Contains(string(captured), "secret-pat") {
+				t.Fatal("credential leaked into Git child environment")
 			}
-			expectedScope := "http.https://dev.azure.com/acme/p/_git/r.extraHeader"
+			expectedScope := "credential.https://dev.azure.com.helper"
 			if !strings.Contains(string(captured), expectedScope) {
-				t.Fatal("credential was not scoped to the authenticated repository URL")
+				t.Fatal("credential helper was not scoped to the authenticated repository host")
+			}
+			helperOutput, helperErr := os.ReadFile(capturePath + ".helper")
+			if helperErr != nil || string(helperOutput) != "username=kandev\npassword=secret-pat\n" {
+				t.Fatalf("credential helper output = %q, error = %v", helperOutput, helperErr)
 			}
 			if os.Getenv("GIT_CONFIG_VALUE_0") != "" {
 				t.Fatal("credential escaped into the parent process environment")

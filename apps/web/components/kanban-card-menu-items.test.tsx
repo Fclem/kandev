@@ -131,6 +131,24 @@ describe("buildKanbanCardMenuEntries — external issue links", () => {
 
     expect(itemLabels(linkMenu)).toEqual(["GitHub Pull Request", "GitHub Issue", "Jira Ticket"]);
   });
+
+  it("adds registered Link actions to the native Link submenu", () => {
+    const entries = buildKanbanCardMenuEntries({
+      workflows: [],
+      stepsByWorkflowId: {},
+      onLinkPullRequest: vi.fn(),
+      pluginLinkActions: [
+        {
+          id: "bitbucket-pull-request",
+          label: "Bitbucket Pull Request",
+          onSelect: vi.fn(),
+        },
+      ],
+    } as never);
+
+    const linkMenu = entries.find((entry) => entry.kind === "submenu" && entry.key === "link");
+    expect(itemLabels(linkMenu)).toContain("Bitbucket Pull Request");
+  });
 });
 
 describe("buildKanbanCardMenuEntries — detach", () => {

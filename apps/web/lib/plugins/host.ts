@@ -192,6 +192,13 @@ async function loadPlugin(
     // registrations here so a reload always converges to exactly one set,
     // whatever the caller did — a no-op on a genuine first load.
     pluginRegistry.unregisterPlugin(plugin.id);
+    // Newer boot payloads carry manifest-owned provider IDs. Set them after
+    // revoking prior state and before plugin initialize(), so a re-enable
+    // cannot retain stale declarations and registration is checked eagerly.
+    // Omit this call for older payloads to preserve their existing registry API.
+    if (plugin.repositoryProviderIds) {
+      pluginRegistry.setDeclaredRepositoryProviderIds(plugin.id, plugin.repositoryProviderIds);
+    }
     // Fence the scoped registry on this generation so that if an even-newer
     // load supersedes us while initialize() is awaiting, a plugin that
     // registers post-await can't append onto the successor.
@@ -203,10 +210,22 @@ async function loadPlugin(
       console.warn(
         `[plugins] "${plugin.id}" initialize() timed out after ${initTimeoutMs}ms; continuing without it`,
       );
+      revokeFailedLoad(plugin.id, generation);
     });
   } catch (error) {
     console.error(`[plugins] failed to load plugin "${plugin.id}"`, error);
+    revokeFailedLoad(plugin.id, generation);
   }
+}
+
+/** Removes a failed generation without disturbing a newer concurrent load. */
+function revokeFailedLoad(pluginId: string, generation: number): void {
+  if (!isCurrentLoad(pluginId, generation)) return;
+  pluginRegistry.unregisterPlugin(pluginId);
+  pluginModalManager.closeAllForPlugin(pluginId);
+  removeStyles(pluginId);
+  // Fence delayed registrations from an initializer that timed out.
+  claimLoadGeneration(pluginId);
 }
 
 /**

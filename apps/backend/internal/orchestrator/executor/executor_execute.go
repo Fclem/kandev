@@ -1231,7 +1231,7 @@ func (e *Executor) buildLaunchAgentRequest(ctx context.Context, task *v1.Task, s
 	if err != nil {
 		return nil, execConfig, err
 	}
-	if err := e.configureGitHubCredentialBrokerForRepositories(ctx, req, allRepos); err != nil {
+	if err := e.configureGitCredentialBrokerForRepositories(ctx, req, allRepos); err != nil {
 		return nil, execConfig, err
 	}
 	if err := e.applyGitCredentialSnapshot(ctx, req, session); err != nil {

@@ -30,6 +30,19 @@ describe("PluginModalHost", () => {
     expect(screen.getByTestId("modal-content")).not.toBeNull();
   });
 
+  it("renders a host-owned drawer when the plugin requests mobile presentation", () => {
+    pluginModalManager.openModal("plugin-a", {
+      title: "Link pull request",
+      content: () => <div data-testid="drawer-content">Mobile action</div>,
+      presentation: "drawer",
+    });
+
+    render(<PluginModalHost />);
+
+    expect(document.querySelector('[data-slot="drawer-content"]')).not.toBeNull();
+    expect(screen.getByTestId("drawer-content")).not.toBeNull();
+  });
+
   it("removes the modal from the DOM once its handle is closed", () => {
     const handle = pluginModalManager.openModal("plugin-a", {
       content: () => <div data-testid="modal-content">Hello</div>,

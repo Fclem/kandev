@@ -42,6 +42,7 @@ import {
   useAutoPRPanel,
 } from "./dockview-session-tabs";
 import { useAutoMRPanel } from "./dockview-auto-mr-panel";
+import { useAutoRegisteredReviewPanel } from "./dockview-auto-registered-review-panel";
 import {
   useCompactDockviewDefault,
   useDockviewUnmountCleanup,
@@ -134,6 +135,7 @@ const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   plan: PortalSlot,
   "pr-detail": PortalSlot,
   "mr-detail": PortalSlot,
+  "review-detail": PortalSlot,
   // Backwards compat aliases for saved layouts
   "diff-files": PortalSlot,
   "all-files": PortalSlot,
@@ -414,6 +416,7 @@ export const DockviewDesktopLayout = memo(function DockviewDesktopLayout({
 
   useAutoPRPanel();
   useAutoMRPanel();
+  useAutoRegisteredReviewPanel();
   useDockviewUnmountCleanup(saveTimerRef, readyDisposersRef);
 
   // Visual masking: hide the dockview container during slow-path layout

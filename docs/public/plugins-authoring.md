@@ -151,10 +151,8 @@ type Host interface {
 	EmitEvent(ctx context.Context, name string, payload map[string]any) error
 
 	// Tasks/Sessions/Workspaces/Workflows/AgentProfiles/Repositories return
-	// read-only accessors for the Host data API (ADR 0043), each gated on
-	// its own capabilities.api_read entry (e.g. "tasks", "sessions").
-	// Write RPCs (capabilities.api_write) are reserved and not yet
-	// implemented.
+	// Host data accessors. List/Get operations require their own api_read
+	// resource; task Create/Update require api_write:tasks.
 	Tasks() TaskReader
 	Sessions() SessionReader
 	Workspaces() WorkspaceReader
@@ -162,9 +160,8 @@ type Host interface {
 	AgentProfiles() AgentProfileReader
 	Repositories() RepositoryReader
 
-	// Messages reads historical user/agent conversation content
-	// (capability api_read:messages). kandev-injected system blocks are
-	// stripped; raw system prompts are never returned.
+	// Messages.List reads historical content (api_read:messages); Send
+	// delivers a user prompt through the task session (api_write:messages).
 	Messages() MessageReader
 
 	// InvokeUtilityAgent runs a one-shot completion using this plugin's
@@ -253,6 +250,87 @@ its resource in `capabilities.api_read` (e.g. `tasks`, `sessions`, `messages`,
 Calling one without the declared capability returns gRPC `PermissionDenied`
 with a message naming the missing capability — declare what you use.
 
+### Live Host writes
+
+`api_write` is live, not advisory. Declare only the exact resource you mutate:
+`api_write: ["tasks"]` enables `host.Tasks().Create(ctx, CreateTaskInput{...})`
+and `.Update(ctx, UpdateTaskInput{...})`; `api_write: ["messages"]` enables
+`host.Messages().Send(ctx, taskID, sessionID, text)`. A blank `sessionID`
+targets the task's primary session. Send queues behind a running session or
+resumes/starts it when appropriate, returning `queued`, `sent`, or `started`.
+
+Task writes use Kandev's first-party service layer, so normal task events and
+browser updates occur. Kandev stamps the source as `plugin:<id>` and reserves
+the `metadata.source` key; plugin metadata is stored under that source. A task
+write can update only title, description, state, and workflow step. Creating a
+task can select an existing repository or provide a complete, credential-free
+remote descriptor only when the plugin owns that `repository_providers` id.
+Treat all write calls as user-visible mutations and honor `ctx.Done()`.
+
+## Authenticated declared actions
+
+Use a manifest `actions` entry for a browser action that needs the current
+Kandev identity and a Kandev resource—not a public webhook. The bundle calls
+`host.api.invokeAction`; Kandev authenticates the request, authorizes the
+declared `scope`, strips selectors from the untrusted body, and calls the
+plugin's optional `ActionHandler` with a `VerifiedActionContext`.
+
+```yaml
+actions:
+  - key: "pullrequests.link"
+    scope: "task"
+    max_body_bytes: 32768
+```
+
+```ts
+const result = await host.api.invokeAction("pullrequests.link", {
+  taskId,
+  body: { pullRequestId },
+}, { signal: controller.signal });
+```
+
+The JSON envelope uses camelCase resource selectors:
+`{ workspaceId?, taskId?, repositoryId?, body? }`. It is not a source of
+authority. A `workspace` action requires only `workspaceId`; a `task` action
+requires `taskId` (an optional matching `workspaceId` is checked); a
+`repository` action requires `workspaceId` and `repositoryId`. The plugin gets
+only host-verified `actorID`, `workspaceID`, `taskID`, and `repositoryID` plus
+the bounded JSON `Body`. Unknown actions return 404; bad envelopes and
+scope-selector combinations return 400; unauthenticated calls return 401.
+
+The host gives each action 15 seconds and cancels its RPC when the browser
+abandons the request. Pass the `AbortSignal` supplied to your UI calls, and in
+the backend check `ctx.Done()` before and during provider I/O. An action reply
+is capped at 1 MiB and may set only `Content-Type`, `Cache-Control`, or `ETag`;
+the host rejects redirects, cookies, and arbitrary response headers.
+
+## Provider, task, review, and reference registrations
+
+A native bundle can register a manifest-owned repository provider with
+`registry.registerRepositoryProvider(...)`, task-menu contributions with
+`registerTaskAction(...)`, and review data/panels with
+`registerReviewProvider(...)`. These registrations are revoked automatically
+when the plugin disables or uninstalls. Repository and review providers are
+exclusive by provider id; declare the id in `repository_providers` before
+registering it. Provider callbacks receive an `AbortSignal` and must cancel
+fetches rather than publishing results after their host surface has gone away.
+
+`reference_sources` declares dynamic `#` composer sources. Implement both
+`SearchEntityReferences` and `AuthorizeEntityReference`: search candidates are
+display data only. At submission Kandev reconstructs the canonical reference,
+checks its workspace/provider/kind, and calls the active plugin again with the
+`submission` purpose. Return allow only after a current provider-side access
+check; timeout, error, disabled plugin, or denial fails closed.
+
+For a manifest-owned repository provider, `ResolveGitCredential` and
+`GetGitCredentialBinding` are optional SDK extensions used by the generic Git
+credential broker. Credentials are transient and must never be logged or
+persisted. The binding is a non-secret, opaque revision for the exact verified
+provider/workspace/task/session/repository/host/path scope. Change it whenever
+credentials rotate or disconnect; Kandev compares it around redemption and
+revokes provider leases when the plugin becomes inactive, so stale helpers fail
+closed.
+
 **External login (`capabilities.auth`).** An auth-capable plugin can log a
 visitor in against an external IdP (OIDC/SAML). Handle the IdP callback / SAML
 ACS in a `webhook`, validate the token yourself, then set the reserved
@@ -292,10 +370,10 @@ func (p *myPlugin) OnEvent(ctx context.Context, e *pluginsdk.Event) error {
 
 ## Optional: native UI
 
-A plugin may ship `ui.bundle` in its manifest: a **hand-written, no-build**
-plain-JS ES module. There is no bundler step — kandev serves the file
-verbatim from the extracted package directory, so you edit the bundle and
-repackage.
+A plugin may ship `ui.bundle` in its manifest: a static browser ES module
+served verbatim from the extracted package directory. It may be hand-written or
+generated by your checked-in UI build; package the resulting bundle and never
+bundle a second React or Radix runtime.
 
 ![A native plugin route rendered inside kandev: a sidebar nav item the plugin registered, the host's page title bar, and page content reading live task data from the shared app store.](../screenshots/plugin-native-page.png)
 

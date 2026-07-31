@@ -646,8 +646,8 @@ type Executor struct {
 	gitlabCredentials GitLabCredentialResolver
 	logger            *logger.Logger
 
-	githubCredentialIssuer         GitHubCredentialLeaseIssuer
-	githubCredentialBrokerURL      string
+	gitCredentialIssuer            GitCredentialLeaseIssuer
+	gitCredentialBrokerURL         string
 	githubCredentialPolicyResolver TaskGitCredentialPolicyResolver
 
 	// Configuration

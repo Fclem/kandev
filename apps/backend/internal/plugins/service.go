@@ -82,6 +82,11 @@ type Service struct {
 	runtime   PluginRuntime
 	secrets   SecretVault
 
+	// revokeGitCredentialProvider invalidates leases for a repository provider
+	// when its owning plugin is no longer active. It is wired by backendapp to
+	// the provider-neutral broker after both subsystems are constructed.
+	revokeGitCredentialProvider func(string)
+
 	// Host data API (ADR 0043) service-layer dependencies, wired via
 	// SetDataSources and handed to every pluginHost hostForPlugin builds.
 	// nil until backendapp calls SetDataSources (see its doc comment); a
@@ -144,6 +149,27 @@ func NewService(pluginStore store.Store, registry *Registry, eventBus bus.EventB
 		log:            log,
 		httpClient:     &http.Client{},
 		lifecycleLocks: newKeyedMutex(),
+	}
+}
+
+// SetGitCredentialLeaseRevoker wires immediate provider-lease revocation for
+// plugin lifecycle changes. The callback receives manifest-declared provider
+// IDs, never a plugin ID, because broker leases are scoped by provider.
+func (s *Service) SetGitCredentialLeaseRevoker(revoker func(string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.revokeGitCredentialProvider = revoker
+}
+
+func (s *Service) revokeGitCredentialProviderLeases(providers []string) {
+	s.mu.Lock()
+	revoker := s.revokeGitCredentialProvider
+	s.mu.Unlock()
+	if revoker == nil {
+		return
+	}
+	for _, provider := range providers {
+		revoker(provider)
 	}
 }
 
@@ -314,11 +340,9 @@ func (s *Service) authLoginBridge() AuthLoginBridge {
 // SetKandevVersion wires the currently running kandev build version,
 // enabling Install to enforce a package's manifest.min_kandev_version
 // (checkMinKandevVersion): a package requiring a newer kandev is rejected
-// rather than installed and left to fail confusingly at spawn time. Not
-// currently called by Provide — the running build version needs to be
-// threaded down from internal/backendapp's ldflags-injected Version, which
-// is outside this package; until a caller wires it, min_kandev_version
-// remains parsed and stored but unenforced (the pre-existing behavior).
+// rather than installed and left to fail confusingly at spawn time. Provide
+// does not own executable build metadata; internal/backendapp wires its
+// ldflags-injected Version after constructing the service.
 func (s *Service) SetKandevVersion(v string) {
 	s.kandevVersion = v
 }
@@ -396,22 +420,23 @@ func (s *Service) hostForPlugin(pluginID string) pluginsdk.Host {
 		rec = &store.Record{} // every capability check below denies; should not happen in practice
 	}
 	return &pluginHost{
-		pluginID:         pluginID,
-		capabilities:     rec.Capabilities,
-		configSchema:     rec.ConfigSchema,
-		state:            s.state,
-		secrets:          s.secrets,
-		bus:              s.eventBus,
-		configs:          s.store,
-		taskData:         s.taskData,
-		workflows:        s.workflows,
-		workflowSteps:    s.workflowSteps,
-		agentProfiles:    s.agentProfiles,
-		sessionCodeStats: s.sessionCodeStats,
-		messageData:      s.messageData,
-		taskWriter:       s.taskWriter,
-		utilityDeps:      s.utilityAgentDeps,
-		writeDeps:        s.writeDependencies,
+		pluginID:            pluginID,
+		capabilities:        rec.Capabilities,
+		repositoryProviders: rec.RepositoryProviders,
+		configSchema:        rec.ConfigSchema,
+		state:               s.state,
+		secrets:             s.secrets,
+		bus:                 s.eventBus,
+		configs:             s.store,
+		taskData:            s.taskData,
+		workflows:           s.workflows,
+		workflowSteps:       s.workflowSteps,
+		agentProfiles:       s.agentProfiles,
+		sessionCodeStats:    s.sessionCodeStats,
+		messageData:         s.messageData,
+		taskWriter:          s.taskWriter,
+		utilityDeps:         s.utilityAgentDeps,
+		writeDeps:           s.writeDependencies,
 	}
 }
 
@@ -718,7 +743,22 @@ func (s *Service) Install(ctx context.Context, r io.Reader) (*store.Record, erro
 	defer lock.Unlock()
 
 	oldRec, hadOldRec := s.registry.Get(result.Manifest.ID)
+	if err := s.ensureOwnershipAvailable(result.Manifest); err != nil {
+		// pkgtar.Install has already atomically extracted exactly this new
+		// version before manifest-wide active-owner checks can run. Remove
+		// only that fresh version on rejection; otherwise a failed ownership
+		// check strands it and turns a later valid install into ErrVersionExists.
+		_ = os.RemoveAll(result.InstallPath)
+		return nil, err
+	}
 	wasRunning := s.runtime != nil && s.runtime.Running(result.Manifest.ID)
+	// Replacing an active plugin is an unload/reload boundary. Its old
+	// credential binding may no longer describe the successor, even when both
+	// package versions declare the same provider, so revoke before stopping the
+	// old runtime and exposing the new record.
+	if hadOldRec && oldRec.Status == StatusActive {
+		s.revokeGitCredentialProviderLeases(oldRec.RepositoryProviders)
+	}
 	if wasRunning {
 		s.runtime.Stop(result.Manifest.ID)
 	}
@@ -754,16 +794,23 @@ func (s *Service) Install(ctx context.Context, r io.Reader) (*store.Record, erro
 }
 
 // checkMinKandevVersion rejects a package whose manifest declares a
-// min_kandev_version newer than the currently running kandev build
-// (manifest.CompareVersions). A no-op (nil error) when either side is
-// unset: minVersion == "" (the manifest doesn't declare one, the common
-// case today) or s.kandevVersion == "" (no running version wired via
-// SetKandevVersion).
+// min_kandev_version newer than the currently running release build. Release
+// tags may carry a leading `v`; development and git-describe build strings do
+// not provide a trustworthy release boundary, so they deliberately skip this
+// release-only compatibility gate. An invalid manifest minimum is rejected.
 func (s *Service) checkMinKandevVersion(minVersion string) error {
 	if minVersion == "" || s.kandevVersion == "" {
 		return nil
 	}
-	if manifest.CompareVersions(s.kandevVersion, minVersion) < 0 {
+	runningVersion, runningRelease := manifest.NormalizeReleaseVersion(s.kandevVersion)
+	if !runningRelease {
+		return nil
+	}
+	minimumVersion, minimumRelease := manifest.NormalizeReleaseVersion(minVersion)
+	if !minimumRelease {
+		return fmt.Errorf("plugins: min_kandev_version %q is not a release version", minVersion)
+	}
+	if manifest.CompareVersions(runningVersion, minimumVersion) < 0 {
 		return fmt.Errorf("plugins: requires kandev >= %s, running %s", minVersion, s.kandevVersion)
 	}
 	return nil
@@ -880,13 +927,15 @@ func (s *Service) Uninstall(ctx context.Context, id string) error {
 	lock.Lock()
 	defer lock.Unlock()
 
-	if _, err := s.Get(id); err != nil {
+	rec, err := s.Get(id)
+	if err != nil {
 		return err
 	}
 	wasRunning := s.runtime != nil && s.runtime.Running(id)
 	if s.runtime != nil {
 		s.runtime.Stop(id)
 	}
+	s.revokeGitCredentialProviderLeases(rec.RepositoryProviders)
 	if err := s.deletePluginSecrets(ctx, id); err != nil {
 		// The process is stopped but nothing else was removed. If it had been
 		// running, its persisted status still says active — reconcile it to
@@ -1014,6 +1063,9 @@ const activateStartTimeout = 30 * time.Second
 // record to StatusError (ignoring an invalid-transition failure, e.g. from
 // "disabled") and returns the spawn error.
 func (s *Service) activate(rec *store.Record) error {
+	if err := s.ensureOwnershipAvailable(&rec.Manifest); err != nil {
+		return err
+	}
 	if s.runtime != nil && !s.runtime.Running(rec.ID) {
 		ctx, cancel := context.WithTimeout(context.Background(), activateStartTimeout)
 		defer cancel()
@@ -1023,6 +1075,26 @@ func (s *Service) activate(rec *store.Record) error {
 		}
 	}
 	return s.SetStatus(rec.ID, StatusActive)
+}
+
+// ensureOwnershipAvailable rejects duplicate ownership among active plugins.
+// Disabled plugins release ownership immediately; an in-place upgrade excludes
+// its previous record by plugin ID.
+func (s *Service) ensureOwnershipAvailable(candidate *manifest.Manifest) error {
+	for _, provider := range candidate.RepositoryProviders {
+		if owner, found := s.registry.activeRepositoryProviderOwner(provider, candidate.ID); found {
+			return fmt.Errorf("plugins: repository provider %q is already owned by active plugin %q", provider, owner)
+		}
+	}
+	for _, source := range candidate.ReferenceSources {
+		if owner, found := s.registry.activeReferenceSourceOwner(source.Source, candidate.ID); found {
+			return fmt.Errorf("plugins: reference source %q is already owned by active plugin %q", source.Source, owner)
+		}
+		if owner, found := s.registry.activeReferenceProviderKindOwner(source.Provider, source.Kind, candidate.ID); found {
+			return fmt.Errorf("plugins: reference provider and kind %q/%q is already owned by active plugin %q", source.Provider, source.Kind, owner)
+		}
+	}
+	return nil
 }
 
 // SetStatus applies a single-hop status transition for id, enforcing the
@@ -1059,6 +1131,9 @@ func (s *Service) SetStatus(id string, status Status) error {
 		return err
 	}
 	s.mu.Unlock()
+	if status != StatusActive {
+		s.revokeGitCredentialProviderLeases(updated.RepositoryProviders)
+	}
 	return nil
 }
 
@@ -1117,6 +1192,11 @@ func (s *Service) StartActivePlugins(ctx context.Context) {
 	}
 	for _, rec := range s.List() {
 		if rec.Status != StatusActive || !rec.IsManaged() || s.runtime.Running(rec.ID) {
+			continue
+		}
+		if err := s.ensureOwnershipAvailable(&rec.Manifest); err != nil {
+			s.log.Warn("plugins: active ownership collision", zap.String("plugin_id", rec.ID), zap.Error(err))
+			_ = s.SetStatus(rec.ID, StatusError)
 			continue
 		}
 		if err := s.runtime.Start(ctx, rec, s.hostForPlugin); err != nil {

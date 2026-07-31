@@ -25,6 +25,9 @@ import {
   shouldPreserveActivePanel,
 } from "./dockview-session-tab-activation";
 import { anchorIncomingSessionPanel, ensureSessionPanel } from "./dockview-session-handoff";
+import { resolvePRPanelTargetGroup } from "./dockview-review-panel-target-group";
+
+export { resolvePRPanelTargetGroup } from "./dockview-review-panel-target-group";
 
 const debug = createDebugLogger("dockview:session-tabs");
 
@@ -167,25 +170,6 @@ export function shouldAutoAddPRPanel(params: {
   if (params.isMaximized) return "none";
   if (params.wasOffered) return "none";
   return "add";
-}
-
-/**
- * Resolve the group ID to anchor the PR detail panel to.
- *
- * Preference: the live session chat panel's group. It's the group the user is
- * actively looking at, and reading it directly avoids the stale-id window the
- * store's centerGroupId has across layout transitions (which caused the PR
- * panel to land in a split instead of as a tab next to the session).
- */
-export function resolvePRPanelTargetGroup(
-  api: DockviewApi,
-  sessionId: string,
-  centerGroupId: string,
-): string {
-  const sessionPanel = api.getPanel(`session:${sessionId}`);
-  const sessionGroupId = sessionPanel?.group?.id;
-  if (sessionGroupId && isCenterCandidateGroupId(sessionGroupId)) return sessionGroupId;
-  return isCenterCandidateGroupId(centerGroupId) ? centerGroupId : CENTER_GROUP;
 }
 
 /**
@@ -353,7 +337,7 @@ export function useAutoPRPanel() {
  * variant `<id>|<key>` (multi-repo PR panels use `pr-detail|owner/repo/N`,
  * see `addPRPanel` in dockview-panel-actions.ts).
  */
-const SESSION_ANCHOR_PANEL_IDS = ["pr-detail", "mr-detail"];
+const SESSION_ANCHOR_PANEL_IDS = ["pr-detail", "mr-detail", "review-detail"];
 
 export function findSessionAnchorGroupId(api: DockviewApi): string | null {
   for (const id of SESSION_ANCHOR_PANEL_IDS) {

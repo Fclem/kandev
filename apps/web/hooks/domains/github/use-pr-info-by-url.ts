@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchIssueInfo, fetchPRInfo } from "@/lib/api/domains/github-api";
 import { parseGitHubRepoUrl } from "@/lib/github/parse-url";
+import { pluginRegistry } from "@/lib/plugins/registry";
+import type { RepositoryInspection, RepositoryProviderRegistration } from "@/lib/plugins/types";
 
 /**
  * Per-URL PR-info loader for GitHub PR URLs. Mirrors the shape of
@@ -36,6 +38,7 @@ export type PRInfo = {
 
 type URLState = {
   info: PRInfo | undefined;
+  inspection?: RepositoryInspection;
   loading: boolean;
   error?: Error;
 };
@@ -45,6 +48,7 @@ export type UsePRInfoByURLResult = {
   info: (url: string) => PRInfo | undefined;
   loading: (url: string) => boolean;
   error: (url: string) => Error | undefined;
+  inspection?: (url: string) => RepositoryInspection | undefined;
   clear: (url: string) => void;
 };
 
@@ -117,7 +121,8 @@ type SuccessArgs<T> = {
   url: string;
   request: RequestIdentity;
   value: T;
-  buildInfo: (value: T) => PRInfo;
+  buildInfo: (value: T) => PRInfo | undefined;
+  inspection?: RepositoryInspection;
 };
 
 /** Marks the entry as loading=true (preserving any prior info) and bumps the
@@ -160,7 +165,14 @@ function handleSuccess<T>(args: SuccessArgs<T>): void {
   if (!refs.mountedRef.current) return;
   if (!isCurrentRequest(refs, url, request)) return;
   refs.loadedRef.current.add(url);
-  setState((prev) => ({ ...prev, [url]: { info: buildInfo(value), loading: false } }));
+  setState((prev) => ({
+    ...prev,
+    [url]: {
+      info: buildInfo(value),
+      inspection: args.inspection ?? prev[url]?.inspection,
+      loading: false,
+    },
+  }));
 }
 
 /** Marks loaded on failure (we don't want to retry in a tight loop) and
@@ -246,6 +258,80 @@ function runGitHubInfoRequest(args: {
     .finally(() => finalizeRequest(refs, url, request));
 }
 
+function registeredProviderForURL(url: string): RepositoryProviderRegistration | undefined {
+  return pluginRegistry.getRepositoryProviders().find((provider) => provider.matchesURL(url));
+}
+
+function providerPRInfo(inspection: RepositoryInspection | null): PRInfo | undefined {
+  const pullRequest = inspection?.pullRequest;
+  if (!pullRequest) return undefined;
+  return {
+    prHeadBranch: inspection.headBranch,
+    prBaseBranch: inspection.baseBranch,
+    prNumber: pullRequest.number,
+    suggestedTitle: `PR #${pullRequest.number}: ${pullRequest.title}`,
+  };
+}
+
+function runRegisteredProviderInfoRequest(args: {
+  workspaceId: string;
+  provider: RepositoryProviderRegistration;
+  refs: Refs;
+  setState: SetState;
+  url: string;
+  request: RequestIdentity;
+  signal: AbortSignal;
+}): void {
+  const { workspaceId, provider, refs, setState, url, request, signal } = args;
+  provider
+    .inspectURL({ workspaceId, url, signal })
+    .then((inspection) =>
+      handleSuccess({
+        refs,
+        setState,
+        url,
+        request,
+        value: inspection,
+        buildInfo: providerPRInfo,
+        inspection: inspection ?? undefined,
+      }),
+    )
+    .catch((error) => handleFailure(refs, setState, url, request, error))
+    .finally(() => finalizeRequest(refs, url, request));
+}
+
+function useWorkspaceScope(workspaceId: string | null, refs: Refs, setState: SetState): void {
+  useEffect(() => {
+    refs.workspaceIdRef.current = workspaceId;
+    refs.workspaceEpochRef.current += 1;
+    for (const controller of refs.abortersRef.current.values()) controller.abort();
+    refs.abortersRef.current.clear();
+    refs.inFlightRef.current.clear();
+    refs.loadedRef.current.clear();
+    setState({});
+  }, [refs, setState, workspaceId]);
+}
+
+function useURLStateAccessors(state: Record<string, URLState>) {
+  const info = useCallback(
+    (rawUrl: string): PRInfo | undefined => state[rawUrl.trim()]?.info,
+    [state],
+  );
+  const loading = useCallback(
+    (rawUrl: string): boolean => Boolean(state[rawUrl.trim()]?.loading),
+    [state],
+  );
+  const error = useCallback(
+    (rawUrl: string): Error | undefined => state[rawUrl.trim()]?.error,
+    [state],
+  );
+  const inspection = useCallback(
+    (rawUrl: string): RepositoryInspection | undefined => state[rawUrl.trim()]?.inspection,
+    [state],
+  );
+  return { info, loading, error, inspection };
+}
+
 export function usePRInfoByURL(workspaceId: string | null): UsePRInfoByURLResult {
   const [state, setState] = useState<Record<string, URLState>>({});
   const inFlightRef = useRef<Set<string>>(new Set());
@@ -283,15 +369,7 @@ export function usePRInfoByURL(workspaceId: string | null): UsePRInfoByURLResult
     };
   }, []);
 
-  useEffect(() => {
-    workspaceIdRef.current = workspaceId;
-    workspaceEpochRef.current += 1;
-    for (const controller of abortersRef.current.values()) controller.abort();
-    abortersRef.current.clear();
-    inFlightRef.current.clear();
-    loadedRef.current.clear();
-    setState({});
-  }, [workspaceId]);
+  useWorkspaceScope(workspaceId, refsRef.current, setState);
 
   const ensure = useCallback(
     (rawUrl: string) => {
@@ -303,6 +381,21 @@ export function usePRInfoByURL(workspaceId: string | null): UsePRInfoByURLResult
       const url = rawUrl.trim();
       if (!url || !workspaceId) return;
       if (inFlightRef.current.has(url) || loadedRef.current.has(url)) return;
+      const registeredProvider = registeredProviderForURL(url);
+      if (registeredProvider) {
+        const refs = refsRef.current;
+        const { request: requestIdentity, signal } = initRequest(refs, setState, url);
+        runRegisteredProviderInfoRequest({
+          workspaceId,
+          provider: registeredProvider,
+          refs,
+          setState,
+          url,
+          request: requestIdentity,
+          signal,
+        });
+        return;
+      }
       const pr = parseGitHubPrUrl(url);
       const issue = pr ? null : parseGitHubIssueUrl(url);
       if (!pr && !issue) {
@@ -328,18 +421,7 @@ export function usePRInfoByURL(workspaceId: string | null): UsePRInfoByURLResult
     [workspaceId],
   );
 
-  const info = useCallback(
-    (rawUrl: string): PRInfo | undefined => state[rawUrl.trim()]?.info,
-    [state],
-  );
-  const loading = useCallback(
-    (rawUrl: string): boolean => Boolean(state[rawUrl.trim()]?.loading),
-    [state],
-  );
-  const error = useCallback(
-    (rawUrl: string): Error | undefined => state[rawUrl.trim()]?.error,
-    [state],
-  );
+  const { info, loading, error, inspection } = useURLStateAccessors(state);
   const clear = useCallback((rawUrl: string) => {
     const url = rawUrl.trim();
     if (!url) return;
@@ -361,5 +443,5 @@ export function usePRInfoByURL(workspaceId: string | null): UsePRInfoByURLResult
     });
   }, []);
 
-  return { ensure, info, loading, error, clear };
+  return { ensure, info, loading, error, inspection, clear };
 }

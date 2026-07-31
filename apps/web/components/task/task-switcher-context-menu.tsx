@@ -31,6 +31,8 @@ import {
 import { TaskNestContextMenuItems } from "@/components/task/task-nest-context-menu";
 import { useTaskWorkflowMove } from "@/hooks/use-task-workflow-move";
 import { TaskColorMenu } from "./task-switcher-color-menu";
+import { useTaskPluginLinkActions } from "./task-session-sidebar-link-actions";
+import { clearSelectionBeforeAction } from "./task-switcher-context-menu-helpers";
 import {
   TaskArchiveItem,
   TaskCreateSubtaskItem,
@@ -222,12 +224,7 @@ function TaskContextMenuItems(props: TaskContextMenuItemsProps) {
   // Acting on a lone selected row (Pin / Delete) must drop it from the selection
   // so later plain clicks navigate instead of toggling.
   const withClear = (handler?: (id: string) => void) =>
-    actingOnSelection && onClearSelection && handler
-      ? (id: string) => {
-          onClearSelection();
-          handler(id);
-        }
-      : handler;
+    clearSelectionBeforeAction(actingOnSelection, onClearSelection, handler);
   const onDelete = withClear(onDeleteTask);
   const onDetach = withClear(onDetachTask);
   return (
@@ -254,7 +251,12 @@ function TaskContextMenuItems(props: TaskContextMenuItemsProps) {
       />
       <TaskColorMenu taskId={task.id} disabled={isDeleting} />
       <TaskNestContextMenuItems task={task} disabled={isDeleting} />
-      <TaskLinkMenu disabled={isDeleting} {...selectTaskLinkActions(task, closeMenu, props)} />
+      <TaskPluginLinkMenu
+        task={task}
+        disabled={isDeleting}
+        closeMenu={closeMenu}
+        linkActions={selectTaskLinkActions(task, closeMenu, props)}
+      />
       <TaskMoveItems
         task={task}
         workflows={workflows}
@@ -272,6 +274,33 @@ function TaskContextMenuItems(props: TaskContextMenuItemsProps) {
       <TaskDetachItem task={task} disabled={isDeleting} onDetachTask={onDetach} />
       <TaskDeleteItem taskId={task.id} isDeleting={isDeleting} onDeleteTask={onDelete} />
     </>
+  );
+}
+
+function TaskPluginLinkMenu({
+  task,
+  disabled,
+  closeMenu,
+  linkActions,
+}: {
+  task: TaskSwitcherItem;
+  disabled?: boolean;
+  closeMenu: () => void;
+  linkActions: ReturnType<typeof selectTaskLinkActions>;
+}) {
+  const pluginLinkActions = useTaskPluginLinkActions(task.id, task.repositories ?? []);
+  return (
+    <TaskLinkMenu
+      disabled={disabled}
+      pluginLinkActions={pluginLinkActions.map((action) => ({
+        ...action,
+        onSelect: () => {
+          closeMenu();
+          queueMicrotask(action.onSelect);
+        },
+      }))}
+      {...linkActions}
+    />
   );
 }
 
@@ -526,6 +555,7 @@ function TaskLinkMenu({
   onLinkJiraTicket,
   onLinkLinearIssue,
   onLinkSentryIssue,
+  pluginLinkActions = [],
 }: {
   disabled?: boolean;
   onLinkPullRequest?: () => void;
@@ -534,6 +564,7 @@ function TaskLinkMenu({
   onLinkJiraTicket?: () => void;
   onLinkLinearIssue?: () => void;
   onLinkSentryIssue?: () => void;
+  pluginLinkActions?: { id: string; label: string; onSelect: () => void }[];
 }) {
   if (
     !onLinkPullRequest &&
@@ -541,7 +572,8 @@ function TaskLinkMenu({
     !onLinkMergeRequest &&
     !onLinkJiraTicket &&
     !onLinkLinearIssue &&
-    !onLinkSentryIssue
+    !onLinkSentryIssue &&
+    pluginLinkActions.length === 0
   ) {
     return null;
   }
@@ -592,6 +624,17 @@ function TaskLinkMenu({
             Sentry Issue
           </ContextMenuItem>
         )}
+        {pluginLinkActions.map((action) => (
+          <ContextMenuItem
+            key={action.id}
+            data-testid={`task-context-link-plugin-${action.id}`}
+            disabled={disabled}
+            onSelect={action.onSelect}
+          >
+            <IconLink className="mr-2 h-4 w-4" />
+            {action.label}
+          </ContextMenuItem>
+        ))}
       </ContextMenuSubContent>
     </ContextMenuSub>
   );

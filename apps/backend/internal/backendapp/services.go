@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"go.uber.org/zap"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/kandev/kandev/internal/db"
 	editorservice "github.com/kandev/kandev/internal/editors/service"
 	"github.com/kandev/kandev/internal/events/bus"
+	"github.com/kandev/kandev/internal/gitcredentials"
 	"github.com/kandev/kandev/internal/github"
 	"github.com/kandev/kandev/internal/gitlab"
 	"github.com/kandev/kandev/internal/integrations/secretadapter"
@@ -42,6 +42,7 @@ import (
 	workflowservice "github.com/kandev/kandev/internal/workflow/service"
 	"github.com/kandev/kandev/internal/workflowsync"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
+	"github.com/kandev/kandev/pkg/pluginsdk"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -113,9 +114,6 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 	githubSvc := initGitHubService(cfg, dbPool, eventBus, repos.Secrets, log)
 	if githubSvc != nil {
 		githubSvc.SetPromptResolver(promptSvc)
-		if brokerErr := githubSvc.ConfigureCredentialBroker(&githubBrokerScopeAuthorizer{repo: repos.Task}); brokerErr != nil {
-			log.Warn("GitHub credential broker initialization failed", zap.Error(brokerErr))
-		}
 	}
 	gitlabSvc := initGitLabService(dbPool, eventBus, repos.Secrets, log)
 	azureDevOpsSvc := initAzureDevOpsService(dbPool, eventBus, repos.Secrets, log)
@@ -127,9 +125,16 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 	sentrySvc := initSentryService(dbPool, eventBus, repos.Secrets, log)
 	slackSvc := initSlackService(dbPool, repos.Secrets, log)
 	workflowSyncSvc := initWorkflowSyncService(dbPool, githubSvc, workflowSvc, taskSvc, log)
-	pluginsSvc := initPluginsService(cfg, dbPool, eventBus, repos.Secrets, log)
+	pluginsSvc := initPluginsService(cfg, dbPool, eventBus, repos.Secrets, log, version)
 	if pluginsSvc != nil {
 		pluginsSvc.SetDataSources(taskSvc, taskSvc, workflowSvc, agentSettingsController, analyticsservice.New(repos.Analytics), taskSvc, pluginsTaskWriterAdapter{svc: taskSvc})
+	}
+	gitCredentialBroker := newGitCredentialBroker(githubSvc, pluginsSvc, repos.Task)
+	if pluginsSvc != nil {
+		pluginsSvc.SetGitCredentialLeaseRevoker(gitCredentialBroker.RevokeProvider)
+	}
+	if githubSvc != nil {
+		githubSvc.SetCredentialBroker(github.NewCredentialBrokerFromBroker(gitCredentialBroker))
 	}
 	shareHTTP := initShareHandlers(dbPool, repos.Task, githubSvc, log, version)
 
@@ -155,23 +160,24 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 	}
 
 	services := &Services{
-		Task:         taskSvc,
-		User:         userSvc,
-		Editor:       editorSvc,
-		Prompts:      promptSvc,
-		Utility:      utilitySvc,
-		Workflow:     workflowSvc,
-		GitHub:       githubSvc,
-		GitLab:       gitlabSvc,
-		AzureDevOps:  azureDevOpsSvc,
-		Jira:         jiraSvc,
-		Linear:       linearSvc,
-		Sentry:       sentrySvc,
-		Slack:        slackSvc,
-		WorkflowSync: workflowSyncSvc,
-		Share:        shareHTTP,
-		Automation:   automationComponents,
-		Plugins:      pluginsSvc,
+		Task:           taskSvc,
+		User:           userSvc,
+		Editor:         editorSvc,
+		Prompts:        promptSvc,
+		Utility:        utilitySvc,
+		Workflow:       workflowSvc,
+		GitHub:         githubSvc,
+		GitLab:         gitlabSvc,
+		AzureDevOps:    azureDevOpsSvc,
+		Jira:           jiraSvc,
+		Linear:         linearSvc,
+		Sentry:         sentrySvc,
+		Slack:          slackSvc,
+		WorkflowSync:   workflowSyncSvc,
+		Share:          shareHTTP,
+		Automation:     automationComponents,
+		Plugins:        pluginsSvc,
+		GitCredentials: gitCredentialBroker,
 		// Office is constructed later in initOfficeServices once all
 		// of its dependencies (config loader, task integrations, etc.) are available.
 		Office: nil,
@@ -203,16 +209,10 @@ func (a *githubBrokerScopeAuthorizer) AuthorizeGitHubRepository(
 	ctx context.Context,
 	workspaceID, taskID, sessionID, repositoryID, owner, repoName string,
 ) error {
-	if a == nil || a.repo == nil {
-		return fmt.Errorf("task repository is unavailable")
-	}
-	if err := a.authorizeTaskSession(ctx, workspaceID, taskID, sessionID); err != nil {
-		return err
-	}
-	if err := a.authorizeTaskRepository(ctx, taskID, repositoryID); err != nil {
-		return err
-	}
-	return a.authorizeRepositoryIdentity(ctx, workspaceID, repositoryID, owner, repoName)
+	return a.AuthorizeGitCredential(ctx, gitcredentials.Scope{
+		ProviderID: gitCredentialGitHubProviderID, WorkspaceID: workspaceID, TaskID: taskID, SessionID: sessionID,
+		RepositoryID: repositoryID, Host: gitCredentialGitHubHost, Path: "/" + owner + "/" + repoName + ".git",
+	})
 }
 
 func (a *githubBrokerScopeAuthorizer) authorizeTaskSession(
@@ -259,23 +259,6 @@ func (a *githubBrokerScopeAuthorizer) authorizeTaskRepository(
 	}
 	if !linked {
 		return fmt.Errorf("repository is not linked to task")
-	}
-	return nil
-}
-
-func (a *githubBrokerScopeAuthorizer) authorizeRepositoryIdentity(
-	ctx context.Context,
-	workspaceID, repositoryID, owner, repoName string,
-) error {
-	repository, err := a.repo.GetRepository(ctx, repositoryID)
-	if err != nil {
-		return err
-	}
-	if repository == nil || repository.WorkspaceID != workspaceID ||
-		!strings.EqualFold(repository.Provider, "github") ||
-		!strings.EqualFold(repository.ProviderOwner, owner) ||
-		!strings.EqualFold(repository.ProviderName, repoName) {
-		return fmt.Errorf("repository identity does not match lease scope")
 	}
 	return nil
 }
@@ -629,12 +612,25 @@ func initSlackService(dbPool *db.Pool, secretsStore secrets.SecretStore, log *lo
 // startPluginsSubsystems (plugins.go), once addCleanup and ctx are
 // available, mirroring how the Jira/Linear/Sentry pollers are started in
 // startAgentInfrastructure rather than inside their init*Service functions.
-func initPluginsService(cfg *config.Config, dbPool *db.Pool, eventBus bus.EventBus, secretsStore secrets.SecretStore, log *logger.Logger) *plugins.Service {
+func initPluginsService(
+	cfg *config.Config,
+	dbPool *db.Pool,
+	eventBus bus.EventBus,
+	secretsStore secrets.SecretStore,
+	log *logger.Logger,
+	version string,
+) *plugins.Service {
 	svc, _, err := plugins.Provide(cfg, dbPool, secretadapter.New(secretsStore), eventBus, log)
 	if err != nil {
 		log.Warn("Plugins service initialization failed (non-fatal)", zap.Error(err))
 		return nil
 	}
+	// Plugin manifests use min_kandev_version to prevent a package from
+	// installing against a host that cannot satisfy its contract. The version
+	// is ldflags-injected at backend startup and is deliberately wired here,
+	// outside the plugins package, so that package remains independent of the
+	// executable build metadata.
+	svc.SetKandevVersion(version)
 	return svc
 }
 
@@ -727,6 +723,7 @@ func (a pluginsUtilityAgentAdapter) GetAgentByID(ctx context.Context, id string)
 type pluginTaskWriteService interface {
 	CreateTask(ctx context.Context, req *taskservice.CreateTaskRequest) (*taskmodels.Task, error)
 	UpdateTask(ctx context.Context, id string, req *taskservice.UpdateTaskRequest) (*taskmodels.Task, error)
+	DeleteTask(ctx context.Context, id string) error
 }
 
 type pluginsTaskWriterAdapter struct {
@@ -734,9 +731,13 @@ type pluginsTaskWriterAdapter struct {
 }
 
 func (a pluginsTaskWriterAdapter) CreateTask(ctx context.Context, in plugins.TaskCreateInput) (*taskmodels.Task, error) {
-	var metadata map[string]interface{}
-	if in.Source != "" {
-		metadata = map[string]interface{}{"source": in.Source}
+	metadata, err := pluginTaskMetadata(in)
+	if err != nil {
+		return nil, err
+	}
+	repositories, err := pluginTaskRepositoryInputs(in.Repositories)
+	if err != nil {
+		return nil, err
 	}
 	return a.svc.CreateTask(ctx, &taskservice.CreateTaskRequest{
 		WorkspaceID:    in.WorkspaceID,
@@ -746,7 +747,104 @@ func (a pluginsTaskWriterAdapter) CreateTask(ctx context.Context, in plugins.Tas
 		Description:    in.Description,
 		ParentID:       in.ParentID,
 		Metadata:       metadata,
+		Repositories:   repositories,
+		PlanMode:       in.PlanMode,
 	})
+}
+
+func (a pluginsTaskWriterAdapter) DeleteTask(ctx context.Context, id string) error {
+	return a.svc.DeleteTask(ctx, id)
+}
+
+func pluginTaskMetadata(in plugins.TaskCreateInput) (map[string]interface{}, error) {
+	if in.Metadata == nil && in.Source == "" {
+		return nil, nil
+	}
+	metadata := make(map[string]interface{}, len(in.Metadata)+1)
+	for key, value := range in.Metadata {
+		metadata[key] = value
+	}
+	if in.Source == "" {
+		return metadata, nil
+	}
+	if source, found := metadata["source"]; found && source != in.Source {
+		return nil, fmt.Errorf("plugin task metadata source does not match host provenance")
+	}
+	metadata["source"] = in.Source
+	return metadata, nil
+}
+
+func pluginTaskRepositoryInputs(repositories []pluginsdk.PluginTaskRepository) ([]taskservice.TaskRepositoryInput, error) {
+	if len(repositories) == 0 {
+		return nil, nil
+	}
+	inputs := make([]taskservice.TaskRepositoryInput, len(repositories))
+	for index, repository := range repositories {
+		input, err := pluginTaskRepositoryInput(repository)
+		if err != nil {
+			return nil, err
+		}
+		inputs[index] = input
+	}
+	return inputs, nil
+}
+
+func pluginTaskRepositoryInput(repository pluginsdk.PluginTaskRepository) (taskservice.TaskRepositoryInput, error) {
+	if repository.Remote == nil {
+		return taskservice.TaskRepositoryInput{
+			RepositoryID:   repository.RepositoryID,
+			BaseBranch:     stringValue(repository.BaseBranch),
+			CheckoutBranch: stringValue(repository.CheckoutBranch),
+			PRNumber:       pluginPRNumber(repository.PullRequestNumber),
+		}, nil
+	}
+	remote := repository.Remote
+	return taskservice.TaskRepositoryInput{
+		RepositoryID:              repository.RepositoryID,
+		BaseBranch:                firstStringValue(repository.BaseBranch, remote.BaseBranch),
+		CheckoutBranch:            firstStringValue(repository.CheckoutBranch, remote.HeadBranch),
+		PRNumber:                  firstPluginPRNumber(repository.PullRequestNumber, remote.PullRequestNumber),
+		RemoteURL:                 remote.CloneURL,
+		Provider:                  remote.ProviderID,
+		ProviderHost:              remote.ProviderHost,
+		ProviderRepoID:            remote.ProviderRepositoryID,
+		ProviderOwner:             remote.OwnerOrProject,
+		ProviderName:              remote.Name,
+		DefaultBranch:             stringValue(remote.DefaultBranch),
+		TrustedProviderDescriptor: true,
+	}, nil
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func firstStringValue(values ...*string) string {
+	for _, value := range values {
+		if value != nil {
+			return *value
+		}
+	}
+	return ""
+}
+
+func pluginPRNumber(value *int64) int {
+	if value == nil || *value < 1 || *value > int64(^uint(0)>>1) {
+		return 0
+	}
+	return int(*value)
+}
+
+func firstPluginPRNumber(values ...*int64) int {
+	for _, value := range values {
+		if number := pluginPRNumber(value); number > 0 {
+			return number
+		}
+	}
+	return 0
 }
 
 func (a pluginsTaskWriterAdapter) UpdateTask(ctx context.Context, in plugins.TaskUpdateInput) (*taskmodels.Task, error) {

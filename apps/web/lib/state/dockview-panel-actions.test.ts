@@ -662,3 +662,37 @@ describe("addMRPanel — dedup with legacy auto-shown panel", () => {
     expect(api.panels.filter((panel) => panel.id.startsWith(LEGACY_MR_ID))).toHaveLength(2);
   });
 });
+
+describe("addReviewPanel", () => {
+  it("opens a provider-neutral panel with normalized params beside the active session", () => {
+    const { api, actions } = (() => {
+      const api = makeApi();
+      const store = makeStore(api);
+      return { api, actions: buildExtraPanelActions(store.get) };
+    })();
+    const sessionId = "session-bitbucket";
+    api.addPanel({
+      id: `session:${sessionId}`,
+      component: "chat",
+      title: "Agent",
+      params: { sessionId },
+      position: { referenceGroup: "provider-review-group" },
+    });
+
+    actions.addReviewPanel(
+      "bitbucket",
+      "project/repository/42",
+      "Bitbucket Pull Request",
+      sessionId,
+    );
+
+    const panel = api.getPanel(
+      "review-detail|bitbucket|project/repository/42",
+    ) as unknown as MockPanel;
+    expect(panel).toMatchObject({
+      title: "Bitbucket Pull Request",
+      params: { providerId: "bitbucket", reviewKey: "project/repository/42" },
+      group: { id: "provider-review-group" },
+    });
+  });
+});

@@ -130,6 +130,9 @@ func (m *Manifest) Validate() error {
 	errs = append(errs, m.validateUIBundle()...)
 	errs = append(errs, m.validateUIKeybindings()...)
 	errs = append(errs, m.validateWebhooks()...)
+	errs = append(errs, m.validateActions()...)
+	errs = append(errs, m.validateRepositoryProviders()...)
+	errs = append(errs, m.validateReferenceSources()...)
 	return errors.Join(errs...)
 }
 
@@ -400,6 +403,74 @@ func (m *Manifest) validateWebhooks() []error {
 			continue
 		}
 		seen[wh.Key] = true
+	}
+	return errs
+}
+
+func (m *Manifest) validateActions() []error {
+	seen := make(map[string]bool, len(m.Actions))
+	var errs []error
+	for _, action := range m.Actions {
+		if action.Key == "" || strings.TrimSpace(action.Key) != action.Key {
+			errs = append(errs, errors.New("action key must not be empty or contain surrounding whitespace"))
+		}
+		if seen[action.Key] {
+			errs = append(errs, fmt.Errorf("duplicate action key %q", action.Key))
+			continue
+		}
+		seen[action.Key] = true
+		if action.ResourceScope != "workspace" && action.ResourceScope != "task" && action.ResourceScope != "repository" {
+			errs = append(errs, fmt.Errorf("action %q has invalid scope %q", action.Key, action.ResourceScope))
+		}
+		if action.MaxBodyBytes <= 0 || action.MaxBodyBytes > MaxActionBodyBytes {
+			errs = append(errs, fmt.Errorf("action %q max_body_bytes must be between 1 and %d", action.Key, MaxActionBodyBytes))
+		}
+	}
+	return errs
+}
+
+func (m *Manifest) validateRepositoryProviders() []error {
+	seen := make(map[string]bool, len(m.RepositoryProviders))
+	var errs []error
+	for _, provider := range m.RepositoryProviders {
+		normalized := strings.ToLower(strings.TrimSpace(provider))
+		if normalized == "" {
+			errs = append(errs, fmt.Errorf("repository provider must not be empty"))
+			continue
+		}
+		if strings.TrimSpace(provider) != provider {
+			errs = append(errs, fmt.Errorf("repository provider %q must not contain surrounding whitespace", provider))
+			continue
+		}
+		if seen[normalized] {
+			errs = append(errs, fmt.Errorf("duplicate repository provider %q", provider))
+			continue
+		}
+		seen[normalized] = true
+	}
+	return errs
+}
+
+func (m *Manifest) validateReferenceSources() []error {
+	seenSources := make(map[string]bool, len(m.ReferenceSources))
+	seenProviderKinds := make(map[string]bool, len(m.ReferenceSources))
+	var errs []error
+	for _, source := range m.ReferenceSources {
+		if source.Source == "" || source.Provider == "" || source.Kind == "" || source.DisplayName == "" || source.KindLabel == "" {
+			errs = append(errs, fmt.Errorf("reference source must declare source, provider, kind, display_name, and kind_label"))
+			continue
+		}
+		if seenSources[source.Source] {
+			errs = append(errs, fmt.Errorf("duplicate reference source %q", source.Source))
+			continue
+		}
+		providerKind := source.Provider + "\x00" + source.Kind
+		if seenProviderKinds[providerKind] {
+			errs = append(errs, fmt.Errorf("duplicate reference provider and kind %q/%q", source.Provider, source.Kind))
+			continue
+		}
+		seenSources[source.Source] = true
+		seenProviderKinds[providerKind] = true
 	}
 	return errs
 }

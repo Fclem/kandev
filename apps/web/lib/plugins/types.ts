@@ -4,6 +4,7 @@
  */
 import type * as ReactType from "react";
 import type { StoreApi } from "zustand";
+import type { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import type { AppState } from "@/lib/state/store";
 
 /** Entry in the boot payload's `plugins` array (backend `ActivePlugin`). */
@@ -12,6 +13,8 @@ export interface ActivePlugin {
   name: string;
   bundleUrl: string;
   styleUrls?: string[];
+  /** Manifest-owned repository provider IDs, supplied by newer boot payloads. */
+  repositoryProviderIds?: string[];
 }
 
 /** Sidebar/main nav entry registered by a plugin. */
@@ -112,6 +115,115 @@ export type SlotComponent = ReactType.ComponentType<{ slotProps?: unknown }>;
 /** WS action payload handler registered by a plugin. */
 export type WsHandler = (payload: unknown) => void;
 
+/** Resource IDs plus untrusted JSON accepted by a declared plugin action. */
+export interface PluginActionInput {
+  workspaceId?: string;
+  taskId?: string;
+  repositoryId?: string;
+  body?: unknown;
+}
+
+/** Transport controls for an authenticated plugin action. */
+export interface PluginActionOptions {
+  signal?: AbortSignal;
+}
+
+/** A provider-neutral repository/pull-request description returned by URL inspection. */
+export interface RepositoryInspection {
+  providerId: string;
+  providerHost: string;
+  ownerOrProject: string;
+  repositoryId: string;
+  repositoryName: string;
+  cloneUrl: string;
+  defaultBranch?: string;
+  baseBranch?: string;
+  headBranch?: string;
+  pullRequest?: {
+    number: number;
+    title: string;
+  };
+}
+
+/** Repository-provider functions receive a host-managed cancellation signal. */
+export interface RepositoryProviderRegistration {
+  id: string;
+  label: string;
+  icon?: string;
+  listRepositories(context: { workspaceId: string; signal: AbortSignal }): Promise<unknown[]>;
+  matchesURL(url: string): boolean;
+  listBranches(context: {
+    workspaceId: string;
+    repository: unknown;
+    signal: AbortSignal;
+  }): Promise<unknown[]>;
+  inspectURL(context: {
+    workspaceId: string;
+    url: string;
+    signal: AbortSignal;
+  }): Promise<RepositoryInspection | null>;
+}
+
+/** Immutable current-task context supplied when a plugin action runs. */
+export interface PluginTaskActionContext {
+  workspaceId: string;
+  taskId: string;
+  repositories: readonly unknown[];
+  pathname: string;
+  presentation: "desktop" | "mobile";
+}
+
+/** Native task-menu action supplied by a plugin. */
+export interface TaskActionRegistration {
+  id: string;
+  label: string;
+  icon?: string;
+  placement: "link" | "action";
+  group?: string;
+  visible?(context: PluginTaskActionContext): boolean;
+  singleTaskOnly?: boolean;
+  run(context: PluginTaskActionContext): Promise<void>;
+}
+
+/** Normalized summary consumed by shared host review selectors and panels. */
+export interface ReviewItemSummary {
+  providerId: string;
+  reviewKey: string;
+  title: string;
+  url: string;
+  repositoryId: string;
+  state: string;
+  statusBadge?: {
+    label: string;
+    tone?: string;
+  };
+}
+
+/** Props supplied to a provider-owned panel inside the host review surface. */
+export interface PluginReviewPanelProps {
+  panelId: string;
+  presentation: "desktop" | "mobile";
+  workspaceId: string;
+  taskId: string;
+  sessionId?: string;
+  reviewKey: string;
+}
+
+/** External-store review provider; lifecycle-safe because it registers no React hooks. */
+export interface ReviewProviderRegistration {
+  id: string;
+  label: string;
+  icon?: string;
+  changeRequestNoun: string;
+  order: number;
+  getSnapshot(taskId: string): readonly ReviewItemSummary[];
+  subscribe(taskId: string, listener: () => void): () => void;
+  refresh(taskId: string, signal: AbortSignal): Promise<void>;
+  ReviewPanel: ReactType.ComponentType<PluginReviewPanelProps>;
+  Selector?: ReactType.ComponentType;
+  EmptyState?: ReactType.ComponentType;
+}
+
 /** Options accepted by `host.openModal(...)`. */
 export interface PluginModalOptions {
   /** Modal title, rendered in a `DialogHeader`/`DialogTitle`. Omit to render no header title. */
@@ -122,6 +234,8 @@ export interface PluginModalOptions {
   size?: "sm" | "md" | "lg" | "xl";
   /** Whether the modal can be dismissed via overlay click or Escape. Default: true. */
   dismissible?: boolean;
+  /** Host-native presentation. Use `drawer` for phone/coarse-pointer task actions. */
+  presentation?: "dialog" | "drawer";
 }
 
 /** Handle returned by `host.openModal(...)`, used to close that modal instance. */
@@ -145,6 +259,12 @@ export interface PluginHostApi {
   api: {
     /** fetch scoped to `/api/plugins/{id}/...` via the kandev reverse proxy. */
     fetch(path: string, init?: RequestInit): Promise<Response>;
+    /** Authenticated, manifest-declared browser action; never calls public webhooks. */
+    invokeAction<TResponse>(
+      key: string,
+      input?: PluginActionInput,
+      options?: PluginActionOptions,
+    ): Promise<TResponse>;
     /**
      * Backend API origin ("" when the SPA and API share an origin). Lets a
      * plugin reach first-party kandev REST endpoints without re-deriving the
@@ -158,6 +278,8 @@ export interface PluginHostApi {
    * TaskCreateDialog). See `lib/plugins/host-api.ts` for the full list.
    */
   ui: Record<string, unknown>;
+  /** Canonical responsive breakpoint hook for host-native plugin composition. */
+  useResponsiveBreakpoint: typeof useResponsiveBreakpoint;
   theme: "light" | "dark";
   /** Soft SPA navigation (history push/replace + re-render), same as the app's router. */
   navigate(href: string, options?: { replace?: boolean }): void;
@@ -208,6 +330,12 @@ export interface PluginRegistry {
    * still keys off the manifest list.
    */
   registerKeybinding(id: string, handler: (event: KeyboardEvent) => void): void;
+  /** Native repository discovery/inspection provider, revoked with this plugin. */
+  registerRepositoryProvider(provider: RepositoryProviderRegistration): void;
+  /** Native task-menu contribution, revoked with this plugin. */
+  registerTaskAction(action: TaskActionRegistration): void;
+  /** Native review-provider source and panel, revoked with this plugin. */
+  registerReviewProvider(provider: ReviewProviderRegistration): void;
 }
 
 /** Shape every plugin bundle registers via `window.registerKandevPlugin(id, plugin)`. */

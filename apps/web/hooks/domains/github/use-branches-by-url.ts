@@ -6,6 +6,8 @@ import { listProjectBranches } from "@/lib/api/domains/gitlab-api";
 import { listAzureDevOpsBranches } from "@/lib/api/domains/azure-devops-api";
 import { parseGitHubAnyUrl } from "@/hooks/domains/github/use-pr-info-by-url";
 import type { Branch } from "@/lib/types/http";
+import { pluginRegistry } from "@/lib/plugins/registry";
+import type { RepositoryProviderRegistration } from "@/lib/plugins/types";
 
 /**
  * Per-URL branches loader for GitHub remote-repo URLs. Lifted from the single-
@@ -275,6 +277,9 @@ export function useBranchesByURL(workspaceId: string | null = null): UseBranches
 type BranchRequest = (signal: AbortSignal) => Promise<{ branches?: Array<{ name: string }> }>;
 
 function branchRequestForURL(rawURL: string, workspaceId: string | null): BranchRequest | null {
+  const registeredProvider = registeredProviderForURL(rawURL);
+  if (registeredProvider)
+    return registeredProviderBranchRequest(registeredProvider, rawURL, workspaceId);
   const github = parseGitHubAnyUrl(rawURL);
   if (github) {
     if (!workspaceId) return null;
@@ -294,8 +299,39 @@ function branchRequestForURL(rawURL: string, workspaceId: string | null): Branch
     case "ssh.dev.azure.com":
       return azureSSHBranchRequest(parsed, workspaceId);
     default:
-      return selfManagedGitLabBranchRequest(parsed, workspaceId);
+      return null;
   }
+}
+
+function registeredProviderForURL(rawURL: string): RepositoryProviderRegistration | undefined {
+  return pluginRegistry.getRepositoryProviders().find((provider) => provider.matchesURL(rawURL));
+}
+
+function registeredProviderBranchRequest(
+  provider: RepositoryProviderRegistration,
+  url: string,
+  workspaceId: string | null,
+): BranchRequest | null {
+  if (!workspaceId) return null;
+  return async (signal) => {
+    const repository = await provider.inspectURL({ workspaceId, url, signal });
+    if (!repository) return { branches: [] };
+    const entries = await provider.listBranches({ workspaceId, repository, signal });
+    return { branches: entries.flatMap(branchEntry) };
+  };
+}
+
+function branchEntry(entry: unknown): Array<{ name: string }> {
+  if (typeof entry === "string" && entry) return [{ name: entry }];
+  if (
+    entry &&
+    typeof entry === "object" &&
+    "name" in entry &&
+    typeof (entry as { name?: unknown }).name === "string"
+  ) {
+    return [{ name: (entry as { name: string }).name }];
+  }
+  return [];
 }
 
 function githubBranchRequest(parsed: URL, workspaceId: string | null): BranchRequest | null {
@@ -330,14 +366,6 @@ function azureSSHBranchRequest(parsed: URL, workspaceId: string | null): BranchR
   if (parts.length !== 4 || parts[0] !== "v3") return null;
   return (signal) =>
     listAzureDevOpsBranches(workspaceId, parts[1], parts[2], parts[3], { init: { signal } });
-}
-
-function selfManagedGitLabBranchRequest(
-  parsed: URL,
-  workspaceId: string | null,
-): BranchRequest | null {
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-  return gitLabBranchRequest(parsed, workspaceId);
 }
 
 function parseRemoteURL(raw: string): URL | null {

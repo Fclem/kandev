@@ -33,11 +33,10 @@ import { useSessionCommits } from "@/hooks/domains/session/use-session-commits";
 import { calculateHash } from "@/lib/utils/file-diff";
 import { useToast } from "@/components/toast-provider";
 import { useFileTabRestoration, useFileSaveDelete } from "./task-center-panel-restoration";
-import { useActiveTaskPR } from "@/hooks/domains/github/use-task-pr";
-import { PRDetailContent } from "@/components/github/pr-detail-panel";
-import { MRDetailPanelComponent, mrTaskKey } from "@/components/gitlab/mr-detail-panel";
-import { useTaskMRs } from "@/hooks/domains/gitlab/use-task-mr";
+import { useNormalizedTaskReviews } from "./review-panel-provider";
+import { useReviewItemSelection } from "./review-selection";
 import { getFileTabKey, upsertOpenFileTab } from "./task-center-panel-file-tabs";
+import { TaskCenterReviewContent } from "./task-center-review-content";
 
 import type { SelectedDiff } from "./task-layout";
 
@@ -238,7 +237,7 @@ function useCenterPanelTabs(
   openFileTabs: OpenFileTab[],
   handleCloseFileTab: (fileKey: string) => void,
   hasChanges: boolean | undefined,
-  reviewLabel: "Pull Request" | "Merge Request" | null,
+  reviewLabel: string | null,
 ) {
   const tabs: SessionTab[] = useMemo(() => {
     const staticTabs: SessionTab[] = [
@@ -268,12 +267,23 @@ function useCenterPanelTabs(
 }
 
 function useTaskReview(taskId: string | null) {
-  const taskPR = useActiveTaskPR();
-  const taskMR = useTaskMRs(taskId)[0] ?? null;
-  let reviewLabel: "Pull Request" | "Merge Request" | null = null;
-  if (taskPR) reviewLabel = "Pull Request";
-  else if (taskMR) reviewLabel = "Merge Request";
-  return { taskPR, taskMR, reviewLabel };
+  const reviews = useNormalizedTaskReviews(taskId);
+  const { selectedReview, selectReview } = useReviewItemSelection(taskId, reviews);
+  return {
+    reviews,
+    selectedReview,
+    selectReview,
+    reviewLabel: reviewLabelForReviews(reviews),
+  };
+}
+
+function reviewLabelForReviews(reviews: readonly { providerId: string }[]): string | null {
+  if (reviews.length === 0) return null;
+  if (reviews.length > 1) return `Reviews (${reviews.length})`;
+  const providerId = reviews[0]?.providerId;
+  if (providerId === "github") return "Pull Request";
+  if (providerId === "gitlab") return "Merge Request";
+  return "Review";
 }
 
 function usePersistOpenFileTabs(activeSessionId: string | null, openFileTabs: OpenFileTab[]) {
@@ -311,7 +321,7 @@ function useCenterPanelState(props: TaskCenterPanelProps) {
     activeSessionId,
     activeTaskId,
   );
-  const { taskPR, taskMR, reviewLabel } = useTaskReview(activeTaskId);
+  const { reviews, selectedReview, selectReview, reviewLabel } = useTaskReview(activeTaskId);
   const [openFileTabs, setOpenFileTabs] = useState<OpenFileTab[]>([]);
   const [savingFiles, setSavingFiles] = useState<Set<string>>(new Set());
   const [selectedDiff, setSelectedDiff] = useState<SelectedDiff | null>(null);
@@ -372,8 +382,9 @@ function useCenterPanelState(props: TaskCenterPanelProps) {
     isPassthroughMode,
     showApproveButton,
     handleApprove,
-    taskPR,
-    taskMR,
+    reviews,
+    selectedReview,
+    selectReview,
     openFileTabs,
     savingFiles,
     selectedDiff,
@@ -399,8 +410,9 @@ export const TaskCenterPanel = memo(function TaskCenterPanel(props: TaskCenterPa
     isPassthroughMode,
     showApproveButton,
     handleApprove,
-    taskPR,
-    taskMR,
+    reviews,
+    selectedReview,
+    selectReview,
     openFileTabs,
     savingFiles,
     selectedDiff,
@@ -452,18 +464,12 @@ export const TaskCenterPanel = memo(function TaskCenterPanel(props: TaskCenterPa
           onDismissTooltip={() => setShowRequestChangesTooltip(false)}
           onOpenFile={handleOpenFileFromChat}
         />
-        {taskPR && activeSessionId && (
-          <TabsContent value="pr" className="flex-1 min-h-0" data-testid="pr-detail-panel">
-            <PRDetailContent taskPR={taskPR} sessionId={activeSessionId} />
-          </TabsContent>
-        )}
-        {!taskPR && taskMR && activeSessionId && (
-          <TabsContent value="pr" className="flex-1 min-h-0" data-testid="mr-detail-panel">
-            <MRDetailPanelComponent
-              panelId="task-center-mr"
-              params={{ mrKey: mrTaskKey(taskMR) }}
-            />
-          </TabsContent>
+        {reviews.length > 0 && activeSessionId && (
+          <TaskCenterReviewContent
+            reviews={reviews}
+            selectedReview={selectedReview}
+            onSelectReview={selectReview}
+          />
         )}
         {openFileTabs.map((tab) => (
           <FileTabContent
@@ -483,8 +489,6 @@ export const TaskCenterPanel = memo(function TaskCenterPanel(props: TaskCenterPa
     </SessionPanel>
   );
 });
-
-// --- Extracted sub-components ---
 
 function ApproveButtonGroup({
   onApprove,

@@ -2502,9 +2502,9 @@ func TestRepositoryCloneURL(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "bitbucket repo",
+			name: "plugin provider without persisted clone URL fails closed",
 			repo: &models.Repository{Provider: "bitbucket", ProviderOwner: "acme", ProviderName: "app"},
-			want: "https://bitbucket.org/acme/app.git",
+			want: "",
 		},
 		{
 			name: "unknown provider returns empty",

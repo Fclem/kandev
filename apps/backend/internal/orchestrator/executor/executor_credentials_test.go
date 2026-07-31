@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kandev/kandev/internal/gitcredentials"
 	"github.com/kandev/kandev/internal/githubauth"
 	"github.com/kandev/kandev/internal/secrets"
 	"github.com/kandev/kandev/internal/task/models"
@@ -29,9 +30,9 @@ const (
 )
 
 type fakeGitHubCredentialLeaseIssuer struct {
-	request  GitHubCredentialLeaseRequest
-	requests []GitHubCredentialLeaseRequest
-	lease    GitHubCredentialLease
+	request  gitcredentials.Scope
+	requests []gitcredentials.Scope
+	lease    gitcredentials.Lease
 	err      error
 	calls    int
 }
@@ -48,10 +49,10 @@ func (r fakeTaskGitCredentialPolicyResolver) ResolveTaskGitCredentialPolicy(
 	return r.policy, r.err
 }
 
-func (f *fakeGitHubCredentialLeaseIssuer) IssueGitHubCredentialLease(
+func (f *fakeGitHubCredentialLeaseIssuer) Issue(
 	_ context.Context,
-	req GitHubCredentialLeaseRequest,
-) (GitHubCredentialLease, error) {
+	req gitcredentials.Scope,
+) (gitcredentials.Lease, error) {
 	f.calls++
 	f.request = req
 	f.requests = append(f.requests, req)
@@ -59,7 +60,7 @@ func (f *fakeGitHubCredentialLeaseIssuer) IssueGitHubCredentialLease(
 }
 
 func TestConfigureGitHubCredentialBroker(t *testing.T) {
-	issuer := &fakeGitHubCredentialLeaseIssuer{lease: GitHubCredentialLease{Token: "opaque-lease"}}
+	issuer := &fakeGitHubCredentialLeaseIssuer{lease: gitcredentials.Lease{Token: "opaque-lease"}}
 	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
 	exec.SetGitHubCredentialBroker(issuer, "https://kandev.example/api/github/credentials/resolve")
 	req := &LaunchAgentRequest{
@@ -195,6 +196,24 @@ func TestApplyGitCredentialSnapshotReturnsResolverError(t *testing.T) {
 	}
 }
 
+func TestApplyGitCredentialSnapshotAllowsPluginBrokerWithoutGitHubPolicy(t *testing.T) {
+	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
+	exec.SetTaskGitCredentialPolicyResolver(fakeTaskGitCredentialPolicyResolver{err: errors.New("GitHub not configured")})
+	session := &models.TaskSession{ID: "session-1"}
+	req := &LaunchAgentRequest{
+		WorkspaceID: "workspace-1",
+		Env:         map[string]string{githubauth.CredentialBrokerURLEnv: "https://broker.example/api/v1/github/credentials/resolve"},
+	}
+
+	if err := exec.applyGitCredentialSnapshot(context.Background(), req, session); err != nil {
+		t.Fatalf("applyGitCredentialSnapshot(): %v", err)
+	}
+	snapshot, ok := session.Metadata[models.SessionMetaKeyGitCredentialSnapshot].(models.GitCredentialSnapshot)
+	if !ok || snapshot.Source != "workspace" || snapshot.Transport != "managed_https" {
+		t.Fatalf("snapshot = %#v", session.Metadata)
+	}
+}
+
 func TestConfigureGitHubCredentialBrokerIssuesOneLeasePerRepository(t *testing.T) {
 	issuer := &fakeGitHubCredentialLeaseIssuer{}
 	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
@@ -211,7 +230,7 @@ func TestConfigureGitHubCredentialBrokerIssuesOneLeasePerRepository(t *testing.T
 			Provider: "github", ProviderOwner: "acme", ProviderName: "backend",
 		}},
 	}
-	issuer.lease = GitHubCredentialLease{Token: "opaque-lease"}
+	issuer.lease = gitcredentials.Lease{Token: "opaque-lease"}
 
 	if err := exec.configureGitHubCredentialBrokerForRepositories(context.Background(), req, infos); err != nil {
 		t.Fatalf("configureGitHubCredentialBrokerForRepositories() error = %v", err)
@@ -234,8 +253,49 @@ func TestConfigureGitHubCredentialBrokerIssuesOneLeasePerRepository(t *testing.T
 	}
 }
 
+func TestConfigureGitCredentialBrokerUsesRepositoryCloneURLForCustomProvider(t *testing.T) {
+	issuer := &fakeGitHubCredentialLeaseIssuer{lease: gitcredentials.Lease{Token: "opaque-lease"}}
+	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
+	exec.SetGitHubCredentialBroker(issuer, "https://kandev.example/api/v1/github/credentials/resolve")
+	req := &LaunchAgentRequest{
+		TaskID: "task-1", WorkspaceID: "workspace-1", SessionID: "session-1",
+		ExecutorType: string(models.ExecutorTypeRemoteDocker), Env: map[string]string{},
+	}
+	info := &repoInfo{RepositoryID: "repo-1", Repository: &models.Repository{
+		Provider: "bitbucket", ProviderOwner: "ignored", ProviderName: "ignored",
+		RemoteURL: "https://bitbucket.example/scm/ENG/widgets.git",
+	}}
+
+	if err := exec.configureGitCredentialBrokerForRepositories(context.Background(), req, []*repoInfo{info}); err != nil {
+		t.Fatalf("configureGitCredentialBrokerForRepositories() error = %v", err)
+	}
+	if issuer.calls != 1 {
+		t.Fatalf("Issue calls = %d, want 1", issuer.calls)
+	}
+	if got := issuer.request; got.ProviderID != "bitbucket" || got.Host != "bitbucket.example" || got.Path != "/scm/ENG/widgets.git" {
+		t.Fatalf("lease scope = %#v", got)
+	}
+	if strings.Contains(strings.Join(mapValues(req.Env), "\n"), "secret") || req.Env[envGitHubToken] != "" || req.Env[envGHToken] != "" {
+		t.Fatalf("executor env leaked credential: %#v", req.Env)
+	}
+	if got := req.Env["GIT_CONFIG_VALUE_0"]; got != "" {
+		t.Fatalf("first custom-host helper reset = %q, want empty", got)
+	}
+	if got := req.Env["GIT_CONFIG_VALUE_1"]; got != gitCredentialHelper {
+		t.Fatalf("custom-host helper = %q, want helper", got)
+	}
+}
+
+func mapValues(values map[string]string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, value)
+	}
+	return result
+}
+
 func TestConfigureGitHubCredentialBrokerPreservesExplicitProfileToken(t *testing.T) {
-	issuer := &fakeGitHubCredentialLeaseIssuer{lease: GitHubCredentialLease{Token: "opaque-lease"}}
+	issuer := &fakeGitHubCredentialLeaseIssuer{lease: gitcredentials.Lease{Token: "opaque-lease"}}
 	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
 	exec.SetGitHubCredentialBroker(issuer, "https://kandev.example/api/github/credentials/resolve")
 	req := &LaunchAgentRequest{
@@ -262,7 +322,7 @@ func TestConfigureGitHubCredentialBrokerPreservesExplicitProfileToken(t *testing
 }
 
 func TestConfigureGitHubCredentialBrokerSkipsExecutorInheritedPolicy(t *testing.T) {
-	issuer := &fakeGitHubCredentialLeaseIssuer{lease: GitHubCredentialLease{Token: "opaque-lease"}}
+	issuer := &fakeGitHubCredentialLeaseIssuer{lease: gitcredentials.Lease{Token: "opaque-lease"}}
 	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
 	exec.SetGitHubCredentialBroker(issuer, "https://kandev.example/api/github/credentials/resolve")
 	exec.SetTaskGitCredentialPolicyResolver(fakeTaskGitCredentialPolicyResolver{
@@ -313,7 +373,7 @@ func TestConfigureGitHubCredentialBrokerSkipsExecutorInheritedPolicy(t *testing.
 }
 
 func TestConfigureGitHubCredentialBrokerRejectsRemoteLoopbackURL(t *testing.T) {
-	issuer := &fakeGitHubCredentialLeaseIssuer{lease: GitHubCredentialLease{Token: "opaque-lease"}}
+	issuer := &fakeGitHubCredentialLeaseIssuer{lease: gitcredentials.Lease{Token: "opaque-lease"}}
 	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
 	exec.SetGitHubCredentialBroker(issuer, "http://127.0.0.1:8080/api/github/credentials/resolve")
 	req := &LaunchAgentRequest{
@@ -334,7 +394,7 @@ func TestConfigureGitHubCredentialBrokerRejectsRemoteLoopbackURL(t *testing.T) {
 }
 
 func TestConfigureGitHubCredentialBrokerAllowsLocalLoopbackURL(t *testing.T) {
-	issuer := &fakeGitHubCredentialLeaseIssuer{lease: GitHubCredentialLease{Token: "opaque-lease"}}
+	issuer := &fakeGitHubCredentialLeaseIssuer{lease: gitcredentials.Lease{Token: "opaque-lease"}}
 	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
 	exec.SetGitHubCredentialBroker(issuer, "http://localhost:8080/api/github/credentials/resolve")
 	req := &LaunchAgentRequest{

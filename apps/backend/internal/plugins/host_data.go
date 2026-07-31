@@ -38,13 +38,14 @@ import (
 // Resource names gating the Host data API's read RPCs, per ADR 0043: each
 // accessor requires "api_read:<resource>" in the plugin's manifest.
 const (
-	resourceTasks         = "tasks"
-	resourceSessions      = "sessions"
-	resourceWorkspaces    = "workspaces"
-	resourceWorkflows     = "workflows"
-	resourceAgentProfiles = "agent_profiles"
-	resourceRepositories  = "repositories"
-	resourceMessages      = "messages"
+	resourceTasks            = "tasks"
+	resourceSessions         = "sessions"
+	resourceWorkspaces       = "workspaces"
+	resourceWorkflows        = "workflows"
+	resourceAgentProfiles    = "agent_profiles"
+	resourceExecutorProfiles = "executor_profiles"
+	resourceRepositories     = "repositories"
+	resourceMessages         = "messages"
 )
 
 // apiReadCapability formats resource as the api_read:<resource> capability
@@ -139,6 +140,8 @@ type taskDataSource interface {
 	ListRepositories(ctx context.Context, workspaceID string) ([]*taskmodels.Repository, error)
 	ListTaskSessions(ctx context.Context, taskID string) ([]*taskmodels.TaskSession, error)
 	GetExecutorRunningBySessionID(ctx context.Context, sessionID string) (*taskmodels.ExecutorRunning, error)
+	ListAllExecutorProfiles(ctx context.Context) ([]*taskmodels.ExecutorProfile, error)
+	GetExecutor(ctx context.Context, id string) (*taskmodels.Executor, error)
 }
 
 // workflowLister is the narrow slice of internal/task/service.Service the
@@ -237,6 +240,16 @@ func (h *pluginHost) AgentProfiles() pluginsdk.AgentProfileReader {
 	return agentProfileReader{host: h}
 }
 
+func (h *pluginHost) ExecutorProfiles() pluginsdk.ExecutorProfileReader {
+	if !h.capabilities.CanRead(resourceExecutorProfiles) {
+		return deniedExecutorProfileReader{}
+	}
+	if h.taskData == nil {
+		return h.UnimplementedHostData.ExecutorProfiles()
+	}
+	return executorProfileReader{host: h}
+}
+
 func (h *pluginHost) Repositories() pluginsdk.RepositoryReader {
 	if !h.capabilities.CanRead(resourceRepositories) {
 		return deniedRepositoryReader{}
@@ -287,6 +300,12 @@ type deniedAgentProfileReader struct{}
 
 func (deniedAgentProfileReader) List(context.Context, pluginsdk.Page) ([]pluginsdk.AgentProfile, *pluginsdk.PageInfo, error) {
 	return nil, nil, permissionDenied(apiReadCapability(resourceAgentProfiles))
+}
+
+type deniedExecutorProfileReader struct{}
+
+func (deniedExecutorProfileReader) List(context.Context, pluginsdk.Page) ([]pluginsdk.ExecutorProfile, *pluginsdk.PageInfo, error) {
+	return nil, nil, permissionDenied(apiReadCapability(resourceExecutorProfiles))
 }
 
 type deniedRepositoryReader struct{}
@@ -470,6 +489,34 @@ func (r agentProfileReader) List(ctx context.Context, page pluginsdk.Page) ([]pl
 		for _, profile := range agent.Profiles {
 			dtos = append(dtos, agentProfileDTOToSDK(profile))
 		}
+	}
+	items, info := paginate(dtos, page)
+	return items, info, nil
+}
+
+type executorProfileReader struct{ host *pluginHost }
+
+func (r executorProfileReader) List(ctx context.Context, page pluginsdk.Page) ([]pluginsdk.ExecutorProfile, *pluginsdk.PageInfo, error) {
+	profiles, err := r.host.taskData.ListAllExecutorProfiles(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	dtos := make([]pluginsdk.ExecutorProfile, 0, len(profiles))
+	for _, profile := range profiles {
+		if profile == nil {
+			continue
+		}
+		executor, err := r.host.taskData.GetExecutor(ctx, profile.ExecutorID)
+		if err != nil {
+			return nil, nil, err
+		}
+		executorType := ""
+		if executor != nil {
+			executorType = string(executor.Type)
+		}
+		dtos = append(dtos, pluginsdk.ExecutorProfile{
+			ID: profile.ID, DisplayName: profile.Name, ExecutorType: executorType,
+		})
 	}
 	items, info := paginate(dtos, page)
 	return items, info, nil
@@ -879,10 +926,11 @@ func taskModelToDTO(t *taskmodels.Task) pluginsdk.Task {
 	repos := make([]pluginsdk.TaskRepository, len(t.Repositories))
 	for i, r := range t.Repositories {
 		repos[i] = pluginsdk.TaskRepository{
-			ID:           r.ID,
-			RepositoryID: r.RepositoryID,
-			BaseBranch:   r.BaseBranch,
-			Position:     int32(r.Position),
+			ID:             r.ID,
+			RepositoryID:   r.RepositoryID,
+			BaseBranch:     r.BaseBranch,
+			Position:       int32(r.Position),
+			CheckoutBranch: r.CheckoutBranch,
 		}
 	}
 	return pluginsdk.Task{
@@ -946,10 +994,17 @@ func workflowStepModelToDTO(s *wfmodels.WorkflowStep) pluginsdk.WorkflowStep {
 
 func repositoryModelToDTO(r *taskmodels.Repository) pluginsdk.Repository {
 	return pluginsdk.Repository{
-		ID:            r.ID,
-		WorkspaceID:   r.WorkspaceID,
-		Name:          r.Name,
-		DefaultBranch: stringPtrOrNil(r.DefaultBranch),
+		ID:                   r.ID,
+		WorkspaceID:          r.WorkspaceID,
+		Name:                 r.Name,
+		DefaultBranch:        stringPtrOrNil(r.DefaultBranch),
+		SourceType:           r.SourceType,
+		ProviderID:           r.Provider,
+		ProviderRepositoryID: r.ProviderRepoID,
+		ProviderHost:         r.ProviderHost,
+		OwnerOrProject:       r.ProviderOwner,
+		ProviderName:         r.ProviderName,
+		RemoteURL:            r.RemoteURL,
 	}
 }
 

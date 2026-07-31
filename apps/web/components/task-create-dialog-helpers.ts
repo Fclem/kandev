@@ -420,14 +420,21 @@ function remoteRepositoryLocator(
   url: string,
 ): Pick<
   CreateTaskRepositoryPayload,
-  "github_url" | "remote_url" | "provider" | "provider_repo_id" | "provider_owner" | "provider_name"
+  | "github_url"
+  | "remote_url"
+  | "provider"
+  | "provider_host"
+  | "provider_repo_id"
+  | "provider_owner"
+  | "provider_name"
 > {
   if (!row.provider || row.provider === "github") {
     return { github_url: url };
   }
   return {
-    remote_url: url,
+    remote_url: row.remoteUrl?.trim() || url,
     provider: row.provider,
+    provider_host: row.providerHost,
     provider_repo_id: row.providerRepoId,
     provider_owner: row.providerOwner,
     provider_name: row.providerName,

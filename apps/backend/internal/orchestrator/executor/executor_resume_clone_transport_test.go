@@ -186,6 +186,24 @@ func TestEnsureRepoLocalPath_PersistsFreshCloneBeforeOriginFailure(t *testing.T)
 	}
 }
 
+func TestEnsureRepoClonedPrefersDeclaredRemoteURL(t *testing.T) {
+	cloner := &cloneTransportTestCloner{cloneURL: "https://wrong.example/acme/widgets.git"}
+	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
+	exec.SetRepoCloner(cloner, nil)
+
+	_, err := exec.ensureRepoCloned(context.Background(), &models.Repository{
+		ID: "repo-1", WorkspaceID: "workspace-1", Provider: "bitbucket",
+		ProviderOwner: "acme", ProviderName: "widgets",
+		RemoteURL: "https://bitbucket.example/scm/ENG/widgets.git",
+	})
+	if err != nil {
+		t.Fatalf("ensureRepoCloned(): %v", err)
+	}
+	if got, want := cloner.requestedCloneURL, "https://bitbucket.example/scm/ENG/widgets.git"; got != want {
+		t.Fatalf("clone URL = %q, want declared remote %q", got, want)
+	}
+}
+
 type localPathRecordingRepoUpdater struct {
 	localPath string
 }
@@ -200,14 +218,16 @@ func (u *localPathRecordingRepoUpdater) UpdateRepositoryDefaultBranch(context.Co
 }
 
 type cloneTransportTestCloner struct {
-	cloneURL     string
-	returnPath   string
-	setOriginErr error
+	cloneURL          string
+	requestedCloneURL string
+	returnPath        string
+	setOriginErr      error
 }
 
 func (c *cloneTransportTestCloner) EnsureWorkspaceClonedForProvider(
-	context.Context, string, string, string, string, string, string, string, string,
+	_ context.Context, _ string, cloneURL string, _ string, _ string, _ string, _ string, _ string, _ string,
 ) (string, error) {
+	c.requestedCloneURL = cloneURL
 	return c.returnPath, nil
 }
 

@@ -13,7 +13,7 @@ export type WorkspaceSourceRow = {
   repositoryId?: string;
   localPath?: string;
   remoteUrl?: string;
-  provider?: "github" | "gitlab" | "azure_devops";
+  provider?: string;
   providerRepoId?: string;
   providerOwner?: string;
   providerName?: string;

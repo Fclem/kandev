@@ -187,6 +187,25 @@ describe("useDialogFormState — remoteRepos mode", () => {
       source: "paste",
     });
   });
+
+  it("prefers provider-neutral remoteUrl while retaining githubUrl compatibility", () => {
+    const initialValues = {
+      title: "",
+      remoteUrl: "https://bitbucket.example.test/bitbucket/scm/PLATFORM/web.git",
+      githubUrl: "https://github.com/acme/legacy",
+      branch: "main",
+    };
+    const { result } = renderHook(() => useDialogFormState(true, "ws-1", null, initialValues));
+
+    expect(result.current.useRemote).toBe(true);
+    expect(result.current.remoteRepos).toEqual([
+      expect.objectContaining({
+        url: "https://bitbucket.example.test/bitbucket/scm/PLATFORM/web.git",
+        branch: "main",
+        source: "paste",
+      }),
+    ]);
+  });
 });
 
 describe("useDialogFormState — remote PR metadata", () => {

@@ -28,6 +28,18 @@ import {
   DialogTrigger,
 } from "@kandev/ui/dialog";
 import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerOverlay,
+  DrawerPortal,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@kandev/ui/drawer";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -69,10 +81,12 @@ import { Combobox } from "@/components/combobox";
 import { PageTopbar } from "@/components/page-topbar";
 import { TaskCreateDialog } from "@/components/task-create-dialog";
 import { getBackendConfig } from "@/lib/config";
+import { fetchJson } from "@/lib/api/client";
 import { softNavigate } from "@/lib/routing/client-router";
 import type { AppState } from "@/lib/state/store";
+import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { pluginModalManager } from "./modal-manager";
-import type { PluginHostApi } from "./types";
+import type { PluginActionInput, PluginActionOptions, PluginHostApi } from "./types";
 
 /**
  * Curated `@kandev/ui` subset exposed on `host.ui`, plus a handful of
@@ -105,6 +119,16 @@ const PLUGIN_UI: Record<string, unknown> = {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerOverlay,
+  DrawerPortal,
+  DrawerTitle,
+  DrawerTrigger,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -181,6 +205,11 @@ export function buildHostApi(
     },
     api: {
       fetch: (path, init) => fetchPluginApi(pluginId, path, init),
+      invokeAction: <TResponse>(
+        key: string,
+        input?: PluginActionInput,
+        options?: PluginActionOptions,
+      ) => invokePluginAction<TResponse>(pluginId, key, input, options),
       // Getter so split-origin dev/desktop always sees the current backend
       // origin, matching what fetchPluginApi resolves per call.
       get baseUrl() {
@@ -188,6 +217,7 @@ export function buildHostApi(
       },
     },
     ui: PLUGIN_UI,
+    useResponsiveBreakpoint,
     theme,
     navigate: (href, options) => softNavigate(href, options?.replace ? "replace" : "push"),
     openModal: (options) => pluginModalManager.openModal(pluginId, options),
@@ -200,4 +230,23 @@ function fetchPluginApi(pluginId: string, path: string, init?: RequestInit): Pro
   const suffix = path.startsWith("/") ? path : `/${path}`;
   const url = `${apiBaseUrl}/api/plugins/${encodeURIComponent(pluginId)}${suffix}`;
   return fetch(url, init);
+}
+
+/** Calls the authenticated declared-action route; public webhook paths stay out of this API. */
+function invokePluginAction<TResponse>(
+  pluginId: string,
+  key: string,
+  input?: PluginActionInput,
+  options?: PluginActionOptions,
+): Promise<TResponse> {
+  const payload = {
+    ...(input?.workspaceId ? { workspaceId: input.workspaceId } : {}),
+    ...(input?.taskId ? { taskId: input.taskId } : {}),
+    ...(input?.repositoryId ? { repositoryId: input.repositoryId } : {}),
+    ...(input && "body" in input ? { body: input.body } : {}),
+  };
+  return fetchJson<TResponse>(
+    `/api/plugins/${encodeURIComponent(pluginId)}/actions/${encodeURIComponent(key)}`,
+    { init: { method: "POST", body: JSON.stringify(payload), signal: options?.signal } },
+  );
 }

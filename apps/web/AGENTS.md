@@ -219,9 +219,16 @@ drifting back. Never delete an entry to make a build pass. Use
 `pnpm run lint:i18n <path>` to preview the guard on a path that is not on the
 list yet.
 
-The rule also **only sees plain literals in JSX** — template literals,
-`confirm()` arguments and copy in plain `.ts` helpers are invisible to it, so a
-clean lint is not proof a file is done. `pnpm run i18n:check` gates key/catalog
+Separately, `pnpm run i18n:ratchet` (pre-commit + CI) guards **new code
+everywhere**, regardless of the allowlist: a file you added must be clean outright,
+and a file you modified is judged on the lines you touched. Untouched literals are
+never reported, so it cannot ask you to migrate code you did not write — the same
+contract as `golangci-lint --new-from-rev` for Go.
+
+The rule **only sees literals in JSX** — `confirm()` arguments and copy in plain
+`.ts` helpers are invisible to it — and it **skips anything assigned to a
+SCREAMING_CASE identifier**, so `const ROWS = [{ label: "Disk usage" }]` passes
+silently. A clean lint is not proof a file is done. `pnpm run i18n:check` gates key/catalog
 drift, `<Trans>` tag indices, inline plurals and module-scope `t()`, and the
 **pseudo-locale** (Settings → General → Appearance, dev/e2e) is the completeness
 check — any plain-English text under it was never externalized. The tooling needs

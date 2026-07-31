@@ -14,7 +14,12 @@ export const noLiteralStringOptions = {
   // now checked, so the `words.exclude` list below has to carry the
   // weight of separating copy from prop enum values.
   mode: "jsx-only",
-  "should-validate-template": false,
+  // Template literals in JSX ARE copy: `Select task ${title}`, `${label} tasks,
+  // over WIP limit`. Leaving them unchecked was the largest hole in the guard, and
+  // turning it on measured cheap — +2 to +5 findings per un-migrated directory,
+  // every one of them a real string, and zero new findings across the allowlist
+  // (className templates are already covered by the Tailwind patterns below).
+  "should-validate-template": true,
   // Brand/proper nouns and symbol-only strings are not translatable copy.
   //
   // NOTE: the plugin wraps each pattern as `^<pattern>$`

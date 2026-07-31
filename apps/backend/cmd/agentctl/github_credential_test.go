@@ -152,6 +152,33 @@ func TestGitHubCredentialHelperSelectsRepositoryLease(t *testing.T) {
 	}
 }
 
+func TestGitHubCredentialHelperPreservesExactProviderPath(t *testing.T) {
+	var got githubBrokerResolveRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		_, _ = io.WriteString(w, `{"username":"x-token-auth","password":"fresh-token"}`)
+	}))
+	t.Cleanup(server.Close)
+	env := githubCredentialTestEnv(server.URL)
+	env[envGitHubCredentialScopes] = `[
+		{"lease":"opaque-lease","task_id":"task-1","session_id":"session-1","repository_id":"repo-1","owner":"context","repo":"scm/ENG/widgets","host":"bitbucket.example","path":"/context/scm/ENG/widgets"}
+	]`
+
+	err := runGitHubCredentialHelper(
+		context.Background(), []string{"get"},
+		strings.NewReader("protocol=https\nhost=bitbucket.example\npath=context/scm/ENG/widgets\n\n"),
+		io.Discard, lookupEnv(env), server.Client(),
+	)
+	if err != nil {
+		t.Fatalf("runGitHubCredentialHelper() error = %v", err)
+	}
+	if got.Path != "/context/scm/ENG/widgets" {
+		t.Fatalf("broker path = %q, want exact provider path", got.Path)
+	}
+}
+
 func TestGitHubCredentialHelperIgnoresStoreAndErase(t *testing.T) {
 	for _, operation := range []string{"store", "erase"} {
 		t.Run(operation, func(t *testing.T) {

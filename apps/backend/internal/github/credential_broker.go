@@ -53,6 +53,7 @@ type BrokerCredentialRequest struct {
 	Owner        string
 	Repo         string
 	Host         string
+	Path         string
 }
 
 type BrokerCredential struct {
@@ -112,9 +113,13 @@ func (b *CredentialBroker) Resolve(ctx context.Context, req BrokerCredentialRequ
 	if b == nil || b.broker == nil {
 		return nil, ErrGitHubNotConfigured
 	}
+	path := req.Path
+	if strings.TrimSpace(path) == "" {
+		path = githubCredentialPath(req.Owner, req.Repo)
+	}
 	credential, err := b.broker.Redeem(ctx, gitcredentials.Redemption{
 		Lease: req.Lease, TaskID: req.TaskID, SessionID: req.SessionID, RepositoryID: req.RepositoryID,
-		Host: req.Host, Path: githubCredentialPath(req.Owner, req.Repo),
+		Host: req.Host, Path: path,
 	})
 	if err != nil {
 		return nil, err

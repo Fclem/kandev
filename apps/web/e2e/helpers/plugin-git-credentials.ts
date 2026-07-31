@@ -5,6 +5,7 @@ import { connect } from "node:net";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Duplex } from "node:stream";
 
 export const fixtureGitProvider = "fixture-source-control";
 export const fixtureGitHost = "bitbucket.example.test";
@@ -260,9 +261,18 @@ function createFixtureConnectProxy(gitPort: number): Server {
       if (head.length > 0) upstream.write(head);
       client.pipe(upstream).pipe(client);
     });
-    upstream.once("error", () => client.destroy());
+    bindFixtureConnectErrors(client, upstream);
   });
   return proxy;
+}
+
+export function bindFixtureConnectErrors(client: Duplex, upstream: Duplex): void {
+  const destroyBoth = () => {
+    client.destroy();
+    upstream.destroy();
+  };
+  client.once("error", destroyBoth);
+  upstream.once("error", destroyBoth);
 }
 
 function dockerBridgeGateway(): string {

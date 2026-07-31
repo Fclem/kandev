@@ -23,6 +23,7 @@ type githubBrokerResolveRequest struct {
 	Owner        string `json:"owner"`
 	Repo         string `json:"repo"`
 	Host         string `json:"host"`
+	Path         string `json:"path,omitempty"`
 }
 
 type githubBrokerCredential struct {
@@ -222,16 +223,27 @@ func gitCredentialRequestForInput(input map[string]string, scope githubBrokerRes
 	if host == "" || !strings.EqualFold(host, scope.Host) {
 		return githubBrokerResolveRequest{}, fmt.Errorf("git credential host does not match credential lease scope")
 	}
-	path, err := url.PathUnescape(strings.Trim(input["path"], "/"))
+	path, err := url.PathUnescape(strings.TrimSpace(input["path"]))
 	if err != nil {
 		return githubBrokerResolveRequest{}, fmt.Errorf("decode git credential path: %w", err)
 	}
-	path = strings.TrimSuffix(path, ".git")
-	owner, repo, found := strings.Cut(path, "/")
-	if !found || owner == "" || repo == "" || path != scope.Owner+"/"+scope.Repo {
+	path = "/" + strings.TrimLeft(path, "/")
+	if path == "/" {
 		return githubBrokerResolveRequest{}, fmt.Errorf("git repository does not match credential lease scope")
 	}
-	scope.Owner = owner
-	scope.Repo = repo
+	if scope.Path != "" {
+		if path != scope.Path {
+			return githubBrokerResolveRequest{}, fmt.Errorf("git repository does not match credential lease scope")
+		}
+	} else {
+		legacyPath := strings.TrimSuffix(strings.Trim(path, "/"), ".git")
+		owner, repo, found := strings.Cut(legacyPath, "/")
+		if !found || owner == "" || repo == "" || legacyPath != scope.Owner+"/"+scope.Repo {
+			return githubBrokerResolveRequest{}, fmt.Errorf("git repository does not match credential lease scope")
+		}
+		scope.Owner = owner
+		scope.Repo = repo
+	}
+	scope.Path = path
 	return scope, nil
 }

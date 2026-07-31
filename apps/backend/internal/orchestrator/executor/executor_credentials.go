@@ -31,6 +31,7 @@ const (
 	gitCredentialHelper            = "!agentctl git-credential"
 	defaultGitHubHost              = "github.com"
 	gitHubProviderID               = "github"
+	gitLabProviderID               = "gitlab"
 	httpsScheme                    = "https"
 	gitLabCredentialHelper         = `!f() { echo "username=oauth2"; echo "password=$GITLAB_TOKEN"; }; f`
 	taskGitCredentialsModeManaged  = "managed"
@@ -47,6 +48,7 @@ type githubCredentialScope struct {
 	Owner        string `json:"owner"`
 	Repo         string `json:"repo"`
 	Host         string `json:"host"`
+	Path         string `json:"path"`
 }
 
 // GitCredentialLeaseIssuer creates opaque helper leases. *gitcredentials.Broker
@@ -291,12 +293,15 @@ func (e *Executor) issueGitCredentialScope(
 	}
 	return &githubCredentialScope{
 		Lease: lease.Token, TaskID: req.TaskID, SessionID: req.SessionID,
-		RepositoryID: info.RepositoryID, Owner: owner, Repo: repo, Host: host,
+		RepositoryID: info.RepositoryID, Owner: owner, Repo: repo, Host: host, Path: path,
 	}, nil
 }
 
 func managedGitCredentialProvider(repository *models.Repository, githubManaged bool, env map[string]string) string {
 	providerID := strings.ToLower(strings.TrimSpace(repository.Provider))
+	if providerID == gitLabProviderID {
+		return ""
+	}
 	if providerID == gitHubProviderID && (!githubManaged || env[envGitHubToken] != "" || env[envGHToken] != "") {
 		return ""
 	}

@@ -33,8 +33,9 @@ scoped to exact workspace, task, session, repository, host, and path; they revok
 teardown, plugin disable/error/uninstall, credential-generation change, and connection
 reset. Disabling, failing, or uninstalling a plugin immediately revokes every lease for
 each provider it declared; later redemption does not wait for expiry. Host matching is
-normalized, while repository paths remain case-sensitive with only an exact trailing
-`.git` treated as equivalent. Remote executor transport uses HTTPS.
+normalized, while repository paths remain case-sensitive and exact. The helper carries
+the requested path without appending or removing `.git`. Remote executor transport uses
+HTTPS.
 `RepositoryCloneURL` remains authoritative and is never reconstructed from provider
 fragments.
 

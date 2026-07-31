@@ -63,6 +63,9 @@ Do not use interactive `gh pr checks --watch` in the primary conversation: its
 TTY redraws make captured output unusable. Use saved `scripts/pr-state --summary`
 snapshots about 60–90 seconds apart, or the read-only `pr-poller` only when the
 user explicitly asked to wait or monitor.
+Treat a poller's unresolved/pending snapshot as provisional: it can predate a
+primary-session push or thread resolution. Re-run `scripts/pr-state --summary
+<PR>` at the current head before acting on it or declaring completion.
 
 For a cross-repository PR whose current-head snapshot is unexpectedly sparse,
 inspect `approval_required_runs`. A current-head workflow with
@@ -162,6 +165,11 @@ actionable threads drive code changes. Declare the PR clean only when
 `scripts/pr-resolve list <PR>` is empty. Within
 the user's monitoring limit, continue checking after resolutions until automated
 review jobs are terminal; otherwise report the exact pending check names.
+
+If the task has a persisted Kandev plan, update it after fixup with the
+remediation commit, final exact-head check counts, resolved-thread state, and
+mergeability. Do not leave planned verification marked unstarted after it has
+run.
 
 ## 6. User-Requested Merge
 

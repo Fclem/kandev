@@ -46,6 +46,12 @@ explicitly requests task tracking.
 3. **Remote state:** Confirm the branch has an upstream and the remote contains
    the local `HEAD`. If not, run `/push` before creating the PR.
 
+   **CI artifact bootstrap:** If the diff introduces a CI-consumed registry tag
+   or artifact that a workflow on this branch must publish first, follow that
+   publisher's documented bootstrap path before rerunning consumer checks.
+   Request explicit user approval before a `workflow_dispatch` or other action
+   writes a shared registry, and verify the target tag/digest exists.
+
 4. **Screenshots — capture and validate before publication.** For a UI-visible
    change, capture fresh screenshots for every affected viewport before creating
    the PR. When the changed surface is structurally absent on another viewport,

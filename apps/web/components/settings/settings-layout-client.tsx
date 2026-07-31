@@ -15,6 +15,8 @@ import { IntegrationCopyConfigMenu } from "@/components/integrations/integration
 import { integrationFromPathname } from "@/components/integrations/integration-copy-config";
 import { safeDecodePathSegment } from "@/lib/routing/path";
 import { SettingsSaveProvider } from "@/components/settings/settings-save-provider";
+import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 // Brand/initialism overrides so the derived label matches how the rest of the
 // app spells these (e.g. "github" → "GitHub", not "Github"). Anything not
@@ -30,7 +32,52 @@ const SEGMENT_LABEL_OVERRIDES: Record<string, string> = {
   vscode: "VS Code",
 };
 
-function titleCase(segment: string): string {
+/**
+ * Catalog key per settings path segment. The breadcrumb's page title used to be
+ * title-cased straight off the URL, which no lint rule can catch (there is no
+ * literal to flag) and no locale can translate — the pseudo-locale QA pass is
+ * what surfaced it. `SEGMENT_LABEL_OVERRIDES` above stays for brand names, which
+ * are the same in every language.
+ */
+const SEGMENT_LABEL_KEYS: Record<string, string> = {
+  agent: "settings:agent",
+  agents: "common:agents",
+  appearance: "settings:appearance",
+  automations: "common:automations",
+  changelog: "common:changelog",
+  "changes-panel": "settings:changesPanel",
+  "chat-input": "settings:chatInput",
+  editors: "settings:editors",
+  executor: "settings:executor",
+  executors: "common:executors",
+  "external-mcp": "common:externalMcp",
+  general: "settings:general",
+  integrations: "common:integrations",
+  "keyboard-shortcuts": "settings:keyboardShortcuts",
+  layouts: "settings:layouts",
+  new: "settings:new",
+  notifications: "settings:notifications",
+  plugins: "common:plugins",
+  prompts: "common:prompts",
+  "resource-metrics": "settings:resourceMetrics",
+  secrets: "settings:secrets",
+  shell: "common:shell",
+  sprites: "settings:sprites",
+  system: "common:system",
+  "task-actions": "settings:taskActions",
+  terminal: "settings:terminal",
+  "utility-agents": "settings:utilityAgents",
+  "voice-mode": "settings:voiceMode",
+  workspace: "common:workspace",
+  workspaces: "common:workspaces",
+};
+
+/**
+ * Display name for a path segment: a translated page name, a brand override, or
+ * (for an unmapped route) dash-aware title casing, which stays English.
+ */
+function segmentLabel(segment: string, t: (key: string) => string): string {
+  if (SEGMENT_LABEL_KEYS[segment]) return t(SEGMENT_LABEL_KEYS[segment]);
   if (SEGMENT_LABEL_OVERRIDES[segment]) return SEGMENT_LABEL_OVERRIDES[segment];
   return segment
     .split("-")
@@ -42,13 +89,13 @@ function titleCase(segment: string): string {
 // deepest non-id path segment. /settings → null (the topbar still shows
 // "Settings" as the page itself). UUID-looking segments are skipped so e.g.
 // /settings/workspace/<uuid> resolves to "Workspace" not the raw id.
-function deriveCurrentPageLabel(pathname: string): string | null {
+function deriveCurrentPageLabel(pathname: string, t: (key: string) => string): string | null {
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length <= 1) return null; // just /settings
   for (let i = segments.length - 1; i >= 1; i--) {
     const seg = segments[i];
     if (/^[0-9a-f-]{8,}$/i.test(seg)) continue; // skip ids
-    return titleCase(seg);
+    return segmentLabel(seg, t);
   }
   return null;
 }
@@ -62,7 +109,7 @@ function deriveParents(pathname: string): Array<{ label: string; href: string }>
   if (segments.length <= 1) return [];
 
   const parents: Array<{ label: string; href: string }> = [
-    { label: "Settings", href: "/settings" },
+    { label: t("common:settings"), href: "/settings" },
   ];
 
   const automationsMatch = pathname.match(
@@ -73,7 +120,7 @@ function deriveParents(pathname: string): Array<{ label: string; href: string }>
     // edit), not on the listing page itself — the listing page title is
     // already "Automations".
     parents.push({
-      label: "Automations",
+      label: t("common:automations"),
       href: `/settings/workspace/${automationsMatch[1]}/automations`,
     });
   }
@@ -82,6 +129,7 @@ function deriveParents(pathname: string): Array<{ label: string; href: string }>
 }
 
 export function SettingsLayoutClient({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const isAgentDetail = pathname.startsWith("/settings/agents/") && pathname !== "/settings/agents";
   const showIntegrationCopyAction = integrationFromPathname(pathname) !== null;
@@ -89,9 +137,9 @@ export function SettingsLayoutClient({ children }: { children: React.ReactNode }
   if (isAgentDetail) {
     return (
       <SettingsShell
-        title="Agent"
+        title={t("settings:agent")}
         backHref="/settings/agents"
-        backLabel="Agents"
+        backLabel={t("common:agents")}
         parents={[]}
         showIntegrationCopyAction={showIntegrationCopyAction}
       >
@@ -100,7 +148,7 @@ export function SettingsLayoutClient({ children }: { children: React.ReactNode }
     );
   }
 
-  const pageLabel = deriveCurrentPageLabel(pathname);
+  const pageLabel = deriveCurrentPageLabel(pathname, t);
   const title = pageLabel ?? "Settings";
   const parents = deriveParents(pathname);
 
@@ -142,6 +190,7 @@ function IntegrationCopyConfigAction() {
 }
 
 function SettingsMobileMenu({ pathname }: { pathname: string }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { enabled: statusDrawerEnabled, openStatusDrawer } = useAppStatusDrawer();
 
@@ -163,7 +212,7 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
           variant="ghost"
           size="icon"
           className="h-11 w-11 cursor-pointer md:hidden"
-          aria-label="Open settings menu"
+          aria-label={t("settings:openSettingsMenu")}
           data-testid="settings-mobile-menu-button"
         >
           <IconMenu2 className="h-4 w-4" />
@@ -175,7 +224,7 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
         data-testid="settings-mobile-menu"
       >
         <SheetHeader className="border-b px-4 py-3 text-left">
-          <SheetTitle>Settings</SheetTitle>
+          <SheetTitle>{t("common:settings")}</SheetTitle>
         </SheetHeader>
         <nav className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
           {statusDrawerEnabled && (
@@ -187,7 +236,7 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
               data-testid="settings-mobile-status-button"
             >
               <IconActivity className="h-4 w-4 shrink-0" />
-              <span>Status</span>
+              <span>{t("common:status")}</span>
             </Button>
           )}
           <Link
@@ -196,7 +245,7 @@ function SettingsMobileMenu({ pathname }: { pathname: string }) {
             onClick={() => setOpen(false)}
           >
             <IconHome className="h-4 w-4 shrink-0" />
-            <span className="truncate">Home</span>
+            <span className="truncate">{t("settings:home")}</span>
           </Link>
           <div
             className="flex flex-col gap-0.5 [&_a]:min-h-10 [&_a]:text-sm [&_button]:min-h-10 [&_button]:text-sm [&_svg]:h-4 [&_svg]:w-4"

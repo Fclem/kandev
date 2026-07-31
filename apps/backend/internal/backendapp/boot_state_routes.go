@@ -457,6 +457,7 @@ func mapUserSettingsState(response userdto.UserSettingsResponse, workspaceID str
 		"reviewAutoMarkOnScroll":          settings.ReviewAutoMarkOnScroll,
 		"confirmTaskArchive":              settings.ConfirmTaskArchive,
 		"unreadDivider":                   settings.UnreadDivider,
+		"agentGeneratedTaskTitles":        settings.AgentGeneratedTaskTitles,
 		"mcpTaskAgentProfileDefault":      usermodels.NormalizeMCPTaskAgentProfileDefault(settings.MCPTaskAgentProfileDefault),
 		"showAnchoredPromptBar":           settings.ShowAnchoredPromptBar,
 		"showScrollToLastPrompt":          settings.ShowScrollToLastPrompt,

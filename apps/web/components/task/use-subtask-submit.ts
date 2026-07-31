@@ -25,6 +25,7 @@ type UseSubtaskSubmitOpts = {
   attachments: ReturnType<typeof useDialogAttachments>["attachments"];
   resolvePrompt: () => string;
   title: string;
+  autoTitle?: boolean;
   setIsCreating: (v: boolean) => void;
   onClose: () => void;
   /** Workspace mode for the new subtask (handoffs phase 5). */
@@ -36,6 +37,7 @@ type UseSubtaskSubmitOpts = {
  * calls createTask, and activates the new session. Returns `handleSubmit`
  * so the surrounding component stays under the per-function complexity cap.
  */
+// eslint-disable-next-line max-lines-per-function -- submit and retry lifecycle stay shared by both form layouts.
 export function useSubtaskSubmit(opts: UseSubtaskSubmitOpts) {
   const {
     fs,
@@ -47,6 +49,7 @@ export function useSubtaskSubmit(opts: UseSubtaskSubmitOpts) {
     attachments,
     resolvePrompt,
     title,
+    autoTitle = false,
     setIsCreating,
     onClose,
     workspaceMode,
@@ -77,7 +80,7 @@ export function useSubtaskSubmit(opts: UseSubtaskSubmitOpts) {
       const response = await createTask({
         workspace_id: workspaceId!,
         workflow_id: workflowId!,
-        title: trimmedTitle,
+        ...(autoTitle ? { auto_title: true } : { title: trimmedTitle }),
         description: prompt,
         repositories,
         start_agent: true,
@@ -110,6 +113,7 @@ export function useSubtaskSubmit(opts: UseSubtaskSubmitOpts) {
       setActiveTask,
       setActiveSession,
       workspaceMode,
+      autoTitle,
     ],
   );
 
@@ -118,9 +122,8 @@ export function useSubtaskSubmit(opts: UseSubtaskSubmitOpts) {
       e.preventDefault();
       if (isSubmittingRef.current) return;
       const trimmedTitle = title.trim();
-      if (!trimmedTitle || !workspaceId || !workflowId) return;
       const prompt = resolvePrompt();
-      if (!prompt) return;
+      if ((!autoTitle && !trimmedTitle) || !prompt || !workspaceId || !workflowId) return;
 
       isSubmittingRef.current = true;
       setIsCreating(true);
@@ -138,7 +141,17 @@ export function useSubtaskSubmit(opts: UseSubtaskSubmitOpts) {
         setIsCreating(false);
       }
     },
-    [title, workspaceId, workflowId, resolvePrompt, performCreate, setIsCreating, onClose, toast],
+    [
+      title,
+      autoTitle,
+      workspaceId,
+      workflowId,
+      resolvePrompt,
+      performCreate,
+      setIsCreating,
+      onClose,
+      toast,
+    ],
   );
 
   return { handleSubmit };

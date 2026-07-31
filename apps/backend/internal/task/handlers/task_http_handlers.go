@@ -667,6 +667,7 @@ type httpCreateTaskRequest struct {
 	WorkflowStepID    string                    `json:"workflow_step_id"`
 	Title             string                    `json:"title"`
 	Description       string                    `json:"description,omitempty"`
+	AutoTitle         bool                      `json:"auto_title,omitempty"`
 	Priority          string                    `json:"priority,omitempty"`
 	State             *v1.TaskState             `json:"state,omitempty"`
 	Repositories      []httpTaskRepositoryInput `json:"repositories,omitempty"`
@@ -807,6 +808,7 @@ func (h *TaskHandlers) httpCreateTask(c *gin.Context) {
 		WorkflowStepID: body.WorkflowStepID,
 		Title:          title,
 		Description:    description,
+		AutoTitle:      body.AutoTitle,
 		Priority:       body.Priority,
 		State:          body.State,
 		Repositories:   convertToServiceRepos(repos),

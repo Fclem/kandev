@@ -499,6 +499,42 @@ func (r *Repository) RemoveTaskMetadataKey(ctx context.Context, taskID, key stri
 	return rows > 0, err
 }
 
+// SetTaskTitleIfPending replaces a provisional title and removes its pending
+// marker in one conditional write. The compare-and-set prevents two agent
+// sessions (or a late agent call racing a human rename) from both winning.
+func (r *Repository) SetTaskTitleIfPending(ctx context.Context, taskID, title string) (bool, error) {
+	var query string
+	if dialect.IsPostgres(r.db.DriverName()) {
+		query = `
+			UPDATE tasks
+			SET title = ?,
+				metadata = (CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}'::jsonb ELSE metadata::jsonb END #- ARRAY[?]::text[])::text,
+				updated_at = ?
+			WHERE id = ?
+			  AND jsonb_extract_path(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}'::jsonb ELSE metadata::jsonb END, ?) IS NOT NULL
+		`
+	} else {
+		query = `
+			UPDATE tasks
+			SET title = ?,
+				metadata = json_remove(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}' ELSE metadata END, ?),
+				updated_at = ?
+			WHERE id = ?
+			  AND json_type(CASE WHEN metadata IS NULL OR metadata = 'null' OR metadata = '' THEN '{}' ELSE metadata END, ?) IS NOT NULL
+			`
+	}
+	path := jsonPath(models.MetaKeyAgentTitlePending)
+	if dialect.IsPostgres(r.db.DriverName()) {
+		path = models.MetaKeyAgentTitlePending
+	}
+	result, err := r.db.ExecContext(ctx, r.db.Rebind(query), title, path, time.Now().UTC(), taskID, path)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	return rows > 0, err
+}
+
 // SetTaskMetadataKey updates one metadata key without replacing concurrent
 // task fields. It is used to restore a deferred launch after a failed launch.
 func (r *Repository) SetTaskMetadataKey(ctx context.Context, taskID, key string, value interface{}) error {

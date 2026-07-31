@@ -48,7 +48,9 @@ Use **New Task** in the sidebar. In an open task, the **Task** split button also
   caption="A focused task is entered while its repository, agent profile, worktree isolation, and start mode remain visible for review."
 />
 
-1. Enter a title.
+1. Enter a title. If **Settings → General → Task Actions → Agent-generated task titles** is enabled,
+   the New Task dialog hides this field, requires a nonempty prompt, and uses the prompt's first six
+   words as a provisional title while the first eligible agent session chooses the final title.
 2. Select the workspace and workflow when Kandev cannot infer them. A regular non-ephemeral task must belong to a workflow.
 3. Select a source:
 
@@ -71,6 +73,20 @@ Use **New Task** in the sidebar. In an open task, the **Task** split button also
 Kandev remembers draft or recently used repository, branch, executor, and profile choices. Review the restored values before submitting, especially after changing workspace.
 
 Creating a repository is available only in an unlocked, single-repository **New Task** form. Kandev rejects an existing target path, creates no initial files or commit, registers the repository in the workspace, and switches the task to a direct **Local** executor profile. If no direct Local profile is available, repository creation stays disabled. Add more repository rows only after selecting existing repositories; empty multi-repository worktrees are not supported.
+
+### Let the agent name new tasks
+
+Open **Settings → General → Task Actions → Agent-generated task titles** and choose **Save changes**.
+The setting is disabled by default. When enabled, new task and subtask dialogs use the prompt as the
+source of the title: the prompt must contain text, and Kandev immediately displays its first six
+normalized words as a provisional title. The first eligible task-mode session receives the
+`set_task_title_kandev` MCP tool and is instructed to call it before doing any other work. Ask for a
+short noun phrase targeting about three words (no more than six when practical). If the agent never
+renames the task, the provisional title remains usable and can still be edited by a person.
+
+The setting affects only new task/subtask creation. Existing task edits keep the title field, and
+sessions for tasks created while the setting was disabled receive neither this instruction nor the
+tool. Config and Office sessions never receive the title tool.
 
 ### Choose the profile for tasks created by agents
 

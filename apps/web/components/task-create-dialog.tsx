@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable max-lines -- the dialog is the shared desktop/mobile orchestration boundary. */
+
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { JiraTicket } from "@/lib/types/jira";
 import type { LinearIssue } from "@/lib/types/linear";
@@ -113,6 +115,7 @@ export interface TaskCreateDialogProps {
 function CreateModeBody(props: DialogFormBodyProps) {
   const {
     isCreateMode,
+    autoTitle,
     isEditMode,
     isTaskStarted,
     workspaceId,
@@ -140,8 +143,9 @@ function CreateModeBody(props: DialogFormBodyProps) {
     isLocalExecutor,
     localRepositoryCreation,
   } = props;
-  const showTaskName = shouldShowTaskTitleField(isCreateMode, isEditMode, isTaskStarted);
-  const taskNameAutoFocus = !isEditMode && !fs.useRemote;
+  const showTaskName =
+    shouldShowTaskTitleField(isCreateMode, isEditMode, isTaskStarted) && !autoTitle;
+  const taskNameAutoFocus = !autoTitle && !isEditMode && !fs.useRemote;
   return (
     <>
       <RepoChipsRow
@@ -350,6 +354,7 @@ type SubmitWiringArgs = {
   repositoryLocalPath: string;
   isSessionMode: boolean;
   isEditMode: boolean;
+  autoTitle: boolean;
   preserveQueuedLastUsedOnClose: () => void;
 };
 
@@ -361,6 +366,7 @@ function useSubmitHandlersWiring({
   repositoryLocalPath,
   isSessionMode,
   isEditMode,
+  autoTitle,
   preserveQueuedLastUsedOnClose,
 }: SubmitWiringArgs) {
   const { workspaceId, workflowId, editingTask, onSuccess, onCreateSession, onOpenChange } = props;
@@ -369,6 +375,7 @@ function useSubmitHandlersWiring({
   return useTaskSubmitHandlers({
     isSessionMode,
     isEditMode,
+    autoTitle,
     isPassthroughProfile: computed.isPassthroughProfile,
     taskName: fs.taskName,
     workspaceId,
@@ -427,6 +434,7 @@ function resolveSingleRowLocalPath(fs: DialogFormState, repositories: Repository
   return "";
 }
 
+// eslint-disable-next-line max-lines-per-function -- this hook coordinates shared desktop/mobile form state.
 export function useTaskCreateDialogSetup(
   props: TaskCreateDialogProps,
   options: { preserveQueuedLastUsedOnClose?: () => void } = {},
@@ -437,6 +445,10 @@ export function useTaskCreateDialogSetup(
   const isSessionMode = mode === "session";
   const isEditMode = mode === "edit";
   const isTaskStarted = computeIsTaskStarted(isEditMode, editingTask);
+  const agentGeneratedTaskTitles = useAppStore(
+    (state) => state.userSettings.agentGeneratedTaskTitles,
+  );
+  const autoTitle = mode === "create" && agentGeneratedTaskTitles;
   const fs = useDialogFormState(open, workspaceId, workflowId, initialValues);
   const upsertWorkspaceRepository = useAppStore((state) => state.upsertRepository);
   const { toast } = useToast();
@@ -490,6 +502,7 @@ export function useTaskCreateDialogSetup(
     repositoryLocalPath,
     isSessionMode,
     isEditMode,
+    autoTitle,
     preserveQueuedLastUsedOnClose: options.preserveQueuedLastUsedOnClose ?? (() => undefined),
   });
   const guardedHandleSubmit = useGuardedSubmit(
@@ -506,6 +519,7 @@ export function useTaskCreateDialogSetup(
     isSessionMode,
     isEditMode,
     isCreateMode: mode === "create",
+    autoTitle,
     isTaskStarted,
     sessionRepoName,
     workflows,

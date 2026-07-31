@@ -353,6 +353,7 @@ func (h *MessageHandlers) wsAddMessage(ctx context.Context, msg *ws.Message) (*w
 			storedContent = sysprompt.InjectKandevContextWithOptions(req.TaskID, req.TaskSessionID, storedContent, sysprompt.KandevContextOptions{
 				RequiresCompletionSignal:       requiresSignal,
 				IncludeCoordinatorTaskControls: !configMode,
+				IncludeTaskTitleTool:           !configMode && models.IsAgentTitlePending(task.Metadata),
 			}, referenceContext)
 		}
 	}

@@ -51,8 +51,9 @@ export async function createTask(
     workspace_id: string;
     workflow_id: string;
     workflow_step_id?: string;
-    title: string;
+    title?: string;
     description?: string;
+    auto_title?: boolean;
     position?: number;
     repositories?: Array<{
       repository_id: string;

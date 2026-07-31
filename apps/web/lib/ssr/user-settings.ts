@@ -36,6 +36,7 @@ export function createDefaultUserSettings(): UserSettingsState {
     reviewAutoMarkOnScroll: true,
     confirmTaskArchive: true,
     unreadDivider: false,
+    agentGeneratedTaskTitles: false,
     mcpTaskAgentProfileDefault: "current_task",
     showAnchoredPromptBar: false,
     showScrollToLastPrompt: true,
@@ -223,6 +224,8 @@ function buildBehaviorFields(s: UserSettingsData, current: UserSettingsState) {
     reviewAutoMarkOnScroll: s.review_auto_mark_on_scroll ?? current.reviewAutoMarkOnScroll,
     confirmTaskArchive: s.confirm_task_archive ?? current.confirmTaskArchive,
     unreadDivider: s.unread_divider ?? current.unreadDivider,
+    agentGeneratedTaskTitles:
+      s.agent_generated_task_titles ?? current.agentGeneratedTaskTitles,
     mcpTaskAgentProfileDefault: mapDefined(
       s.mcp_task_agent_profile_default,
       current.mcpTaskAgentProfileDefault,

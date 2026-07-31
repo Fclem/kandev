@@ -372,6 +372,7 @@ const (
 	ActionMCPDeleteWalkthrough          = "mcp.delete_walkthrough"
 	ActionMCPPublishReviewFindings      = "mcp.publish_review_findings"
 	ActionMCPClarificationTimeout       = "mcp.clarification_timeout"
+	ActionMCPSetTaskTitle               = "mcp.set_task_title"
 
 	// Office task handoffs (cross-task context).
 	ActionMCPListRelatedTasks  = "mcp.list_related_tasks"

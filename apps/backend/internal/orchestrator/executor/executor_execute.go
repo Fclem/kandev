@@ -47,6 +47,9 @@ func (e *Executor) resolveTaskSessionMCPMode(ctx context.Context, taskID string,
 	if task != nil && task.IsFromOffice {
 		return McpModeOffice, nil
 	}
+	if task != nil && models.IsAgentTitlePending(task.Metadata) {
+		return McpModeTaskTitlePending, nil
+	}
 	return "", nil
 }
 

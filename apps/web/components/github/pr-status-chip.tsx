@@ -72,6 +72,7 @@ type MultiChipProps = {
   prs: TaskPR[];
   automation: AutomationFlags;
   refreshTaskPR: () => void;
+  onRemovePR?: (pr: TaskPR) => Promise<void>;
 };
 
 function chipStatus(pr: TaskPR): ChipStatus {
@@ -177,7 +178,7 @@ function useChipPopoverInteractions() {
  */
 export function PRStatusChip({ taskId }: { taskId: string | null }) {
   const workspaceId = useAppStore((state) => state.workspaces.activeId);
-  const { prs, refresh } = useTaskPR(taskId);
+  const { prs, refresh, unlink } = useTaskPR(taskId);
   const { options: automationOptions } = useTaskCIAutomationOptions(taskId);
   // Defensive Array.isArray: a partial hydration can briefly seed the store
   // with a non-array value (same guard as PRTaskIcon).
@@ -207,6 +208,7 @@ export function PRStatusChip({ taskId }: { taskId: string | null }) {
       prs={openPRs}
       automation={automationForPRs(automationOptions, openPRs)}
       refreshTaskPR={refresh}
+      onRemovePR={(pr) => unlink(pr.id)}
     />
   );
 }
@@ -420,7 +422,12 @@ function MultiChipGlyph({
   );
 }
 
-function PRStatusChipMultiHoverCard({ prs, automation, refreshTaskPR }: MultiChipProps) {
+function PRStatusChipMultiHoverCard({
+  prs,
+  automation,
+  refreshTaskPR,
+  onRemovePR,
+}: MultiChipProps) {
   const status = aggregateChipStatus(prs);
   const { ref, onPointerDownOutside } = useChipTriggerGuard();
   const { open, onOpenChange, onTriggerEnter, onTriggerLeave, onContentEnter, onContentLeave } =
@@ -457,13 +464,18 @@ function PRStatusChipMultiHoverCard({ prs, automation, refreshTaskPR }: MultiChi
         onPointerDownOutside={onPointerDownOutside}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <MultiPRCIPopover prs={prs} enabled={open} refreshTaskPR={refreshTaskPR} />
+        <MultiPRCIPopover
+          prs={prs}
+          enabled={open}
+          refreshTaskPR={refreshTaskPR}
+          onRemovePR={onRemovePR}
+        />
       </PopoverContent>
     </Popover>
   );
 }
 
-function PRStatusChipMultiDrawer({ prs, automation, refreshTaskPR }: MultiChipProps) {
+function PRStatusChipMultiDrawer({ prs, automation, refreshTaskPR, onRemovePR }: MultiChipProps) {
   const status = aggregateChipStatus(prs);
   const [open, setOpen] = useState(false);
   return (
@@ -496,7 +508,12 @@ function PRStatusChipMultiDrawer({ prs, automation, refreshTaskPR }: MultiChipPr
           </DrawerClose>
         </DrawerHeader>
         <div className="flex-1 min-h-0 overflow-y-auto p-3" data-vaul-no-drag>
-          <MultiPRCIPopover prs={prs} enabled={open} refreshTaskPR={refreshTaskPR} />
+          <MultiPRCIPopover
+            prs={prs}
+            enabled={open}
+            refreshTaskPR={refreshTaskPR}
+            onRemovePR={onRemovePR}
+          />
         </div>
       </DrawerContent>
     </Drawer>

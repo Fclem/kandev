@@ -21,7 +21,12 @@ import type {
 } from "@/lib/types/http";
 import type { SecretListItem } from "@/lib/types/http-secrets";
 import type { GitEventPayload } from "@/lib/types/git-events";
-import type { GitHubRateLimitUpdate, TaskCIAutomationOptions, TaskPR } from "@/lib/types/github";
+import type {
+  GitHubRateLimitUpdate,
+  TaskCIAutomationOptions,
+  TaskPR,
+  TaskPRDeletedEvent,
+} from "@/lib/types/github";
 import type { TaskMR } from "@/lib/types/gitlab";
 import type { SystemMetricsSnapshot } from "./system";
 import type { FileChangeNotificationPayload } from "./workspace-files";
@@ -615,6 +620,7 @@ export type BackendMessageMap = OfficeBackendMessageMap &
       QueueStatusChangedPayload
     >;
     "github.task_pr.updated": BackendMessage<"github.task_pr.updated", TaskPR>;
+    "github.task_pr.deleted": BackendMessage<"github.task_pr.deleted", TaskPRDeletedEvent>;
     "github.task_ci_options.updated": BackendMessage<
       "github.task_ci_options.updated",
       TaskCIAutomationOptions

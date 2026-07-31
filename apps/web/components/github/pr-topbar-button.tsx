@@ -100,11 +100,11 @@ export const PRTopbarButton = memo(function PRTopbarButton() {
   // useTaskPR fetches if not in store and returns the full per-task list so
   // multi-repo tasks can surface every PR (one button for single-repo, a
   // dropdown summary for 2+ so the topbar doesn't blow up horizontally).
-  const { prs, refresh } = useTaskPR(activeTaskId);
+  const { prs, refresh, unlink } = useTaskPR(activeTaskId);
 
   if (prs.length === 0) return null;
   if (prs.length === 1) return <PRSingleButton pr={prs[0]} refreshTaskPR={refresh} />;
-  return <PRMultiButton prs={prs} refreshTaskPR={refresh} />;
+  return <PRMultiButton prs={prs} refreshTaskPR={refresh} onRemovePR={unlink} />;
 });
 
 /**
@@ -203,7 +203,15 @@ function PRSingleButton({ pr, refreshTaskPR }: { pr: TaskPR; refreshTaskPR: () =
   );
 }
 
-function PRMultiButton({ prs, refreshTaskPR }: { prs: TaskPR[]; refreshTaskPR: () => void }) {
+function PRMultiButton({
+  prs,
+  refreshTaskPR,
+  onRemovePR,
+}: {
+  prs: TaskPR[];
+  refreshTaskPR: () => void;
+  onRemovePR: (associationId: string) => Promise<void>;
+}) {
   // Click still drives the dropdown (the explicit "jump to this PR's panel"
   // affordance, and the only interaction on touch). Hover adds the aggregate
   // CI popover with a tab per PR — desktop only, suppressed on touch where
@@ -290,6 +298,7 @@ function PRMultiButton({ prs, refreshTaskPR }: { prs: TaskPR[]; refreshTaskPR: (
           prs={prs}
           enabled={open}
           refreshTaskPR={refreshTaskPR}
+          onRemovePR={(pr) => onRemovePR(pr.id)}
           onOpenDetailPanel={(pr) => {
             addPRPanel(prTaskKey(pr), activeSessionId);
             onOpenChange(false);

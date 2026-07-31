@@ -138,8 +138,8 @@ func TestLegacyTaskPRRebuildPreservesDetachedAt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get migrated detached PR: %v", err)
 	}
-	if got == nil || got.DetachedAt == nil {
-		t.Fatalf("migrated detached PR = %+v, want detached_at preserved", got)
+	if got == nil || got.DetachedAt == nil || !got.DetachedAt.Equal(now) {
+		t.Fatalf("migrated detached PR = %+v, want detached_at %s", got, now)
 	}
 	active, err := reopened.ListTaskPRsByTask(ctx, "task-legacy")
 	if err != nil {

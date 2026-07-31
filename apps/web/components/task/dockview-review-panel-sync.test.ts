@@ -3,23 +3,25 @@ import type { DockviewApi } from "dockview-react";
 import type { TaskPR } from "@/lib/types/github";
 import type { TaskMR } from "@/lib/types/gitlab";
 import {
-  resolveCanonicalReviewParams,
+  resolveCanonicalReviewPanelState,
   syncCanonicalReviewPanel,
 } from "./dockview-review-panel-sync";
 
-function makeApi(panel?: { params?: Record<string, unknown>; groupId?: string }): {
+function makeApi(panel?: { params?: Record<string, unknown>; groupId?: string; title?: string }): {
   api: DockviewApi;
   updateParameters: ReturnType<typeof vi.fn>;
+  setTitle: ReturnType<typeof vi.fn>;
 } {
   const updateParameters = vi.fn((next: Record<string, unknown>) => {
     Object.assign(panel?.params ?? {}, next);
   });
+  const setTitle = vi.fn();
   const reviewPanel = panel
     ? {
         id: "pr-detail",
         params: panel.params ?? {},
         group: { id: panel.groupId ?? "group-right-top" },
-        api: { updateParameters },
+        api: { title: panel.title, updateParameters, setTitle },
       }
     : undefined;
   return {
@@ -29,6 +31,7 @@ function makeApi(panel?: { params?: Record<string, unknown>; groupId?: string })
       removePanel: vi.fn(),
     } as unknown as DockviewApi,
     updateParameters,
+    setTitle,
   };
 }
 
@@ -45,47 +48,57 @@ const gitlabMR = {
 } as TaskMR;
 const githubPRKey = "kandev/kandev/42";
 const gitlabMRKey = "https://gitlab.example.test|group/project|7";
+const bitbucketReviewKey = "workspace/repository/42";
 
-describe("resolveCanonicalReviewParams", () => {
+describe("resolveCanonicalReviewPanelState", () => {
   it("prefers the primary GitHub pull request when both providers are linked", () => {
-    expect(resolveCanonicalReviewParams([githubPR], [gitlabMR])).toEqual({
-      providerId: "github",
-      provider: "github",
-      reviewKey: githubPRKey,
-      prKey: githubPRKey,
-      mrKey: undefined,
+    expect(resolveCanonicalReviewPanelState([githubPR], [gitlabMR])).toEqual({
+      params: {
+        providerId: "github",
+        provider: "github",
+        reviewKey: githubPRKey,
+        prKey: githubPRKey,
+        mrKey: undefined,
+      },
+      title: "Pull Request",
     });
   });
 
   it("selects the first linked GitLab merge request when GitHub is absent", () => {
-    expect(resolveCanonicalReviewParams([], [gitlabMR])).toEqual({
-      providerId: "gitlab",
-      provider: "gitlab",
-      reviewKey: gitlabMRKey,
-      prKey: undefined,
-      mrKey: gitlabMRKey,
+    expect(resolveCanonicalReviewPanelState([], [gitlabMR])).toEqual({
+      params: {
+        providerId: "gitlab",
+        provider: "gitlab",
+        reviewKey: gitlabMRKey,
+        prKey: undefined,
+        mrKey: gitlabMRKey,
+      },
+      title: "Merge Request",
     });
   });
 
   it("clears review identity when the active task has no linked review", () => {
-    expect(resolveCanonicalReviewParams([], [])).toEqual({
-      providerId: undefined,
-      provider: undefined,
-      reviewKey: undefined,
-      prKey: undefined,
-      mrKey: undefined,
+    expect(resolveCanonicalReviewPanelState([], [])).toEqual({
+      params: {
+        providerId: undefined,
+        provider: undefined,
+        reviewKey: undefined,
+        prKey: undefined,
+        mrKey: undefined,
+      },
+      title: "PR Details",
     });
   });
 
   it("selects a registered review when no built-in review is linked", () => {
     expect(
-      resolveCanonicalReviewParams(
+      resolveCanonicalReviewPanelState(
         [],
         [],
         [
           {
             providerId: "bitbucket",
-            reviewKey: "workspace/repository/42",
+            reviewKey: bitbucketReviewKey,
             title: "Bitbucket pull request",
             url: "https://bitbucket.example/workspace/repository/pull-requests/42",
             repositoryId: "repository-1",
@@ -94,11 +107,14 @@ describe("resolveCanonicalReviewParams", () => {
         ],
       ),
     ).toEqual({
-      providerId: "bitbucket",
-      provider: undefined,
-      reviewKey: "workspace/repository/42",
-      prKey: undefined,
-      mrKey: undefined,
+      params: {
+        providerId: "bitbucket",
+        provider: undefined,
+        reviewKey: bitbucketReviewKey,
+        prKey: undefined,
+        mrKey: undefined,
+      },
+      title: "Bitbucket pull request",
     });
   });
 });
@@ -107,7 +123,9 @@ describe("syncCanonicalReviewPanel", () => {
   it("leaves a layout without PR Details structurally untouched", () => {
     const { api, updateParameters } = makeApi();
 
-    expect(syncCanonicalReviewPanel(api, resolveCanonicalReviewParams([githubPR], []))).toBe(false);
+    expect(syncCanonicalReviewPanel(api, resolveCanonicalReviewPanelState([githubPR], []))).toBe(
+      false,
+    );
     expect(updateParameters).not.toHaveBeenCalled();
     expect(api.addPanel).not.toHaveBeenCalled();
     expect(api.removePanel).not.toHaveBeenCalled();
@@ -115,9 +133,15 @@ describe("syncCanonicalReviewPanel", () => {
 
   it("updates an existing panel's identity without changing its configured group", () => {
     const params: Record<string, unknown> = { provider: "gitlab", mrKey: "old/mr" };
-    const { api, updateParameters } = makeApi({ params, groupId: "custom-review-group" });
+    const { api, updateParameters, setTitle } = makeApi({
+      params,
+      groupId: "custom-review-group",
+      title: "Merge Request",
+    });
 
-    expect(syncCanonicalReviewPanel(api, resolveCanonicalReviewParams([githubPR], []))).toBe(true);
+    expect(syncCanonicalReviewPanel(api, resolveCanonicalReviewPanelState([githubPR], []))).toBe(
+      true,
+    );
     expect(updateParameters).toHaveBeenCalledWith({
       providerId: "github",
       provider: "github",
@@ -125,8 +149,38 @@ describe("syncCanonicalReviewPanel", () => {
       prKey: githubPRKey,
       mrKey: undefined,
     });
+    expect(setTitle).toHaveBeenCalledWith("Pull Request");
     expect(api.getPanel("pr-detail")?.group.id).toBe("custom-review-group");
     expect(params).toMatchObject({ provider: "github", prKey: githubPRKey });
     expect(params.mrKey).toBeUndefined();
+  });
+
+  it("updates a registered review title even when its identity is already current", () => {
+    const params: Record<string, unknown> = {
+      providerId: "bitbucket",
+      provider: undefined,
+      reviewKey: bitbucketReviewKey,
+      prKey: undefined,
+      mrKey: undefined,
+    };
+    const { api, updateParameters, setTitle } = makeApi({ params, title: "Pull Request" });
+    const next = resolveCanonicalReviewPanelState(
+      [],
+      [],
+      [
+        {
+          providerId: "bitbucket",
+          reviewKey: bitbucketReviewKey,
+          title: "Bitbucket Pull Request #42",
+          url: "https://bitbucket.example/workspace/repository/pull-requests/42",
+          repositoryId: "repository-1",
+          state: "OPEN",
+        },
+      ],
+    );
+
+    expect(syncCanonicalReviewPanel(api, next)).toBe(true);
+    expect(updateParameters).not.toHaveBeenCalled();
+    expect(setTitle).toHaveBeenCalledWith("Bitbucket Pull Request #42");
   });
 });

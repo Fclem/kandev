@@ -69,7 +69,9 @@ leakage checks as release gates.
 - The packaged fixture passes the desktop and native-mobile host contract, including
   authenticated action dispatch, repository selection, native Link and review
   surfaces, `#` search with submit-time rejection, plugin-owned task provenance, and
-  disable/re-enable cleanup.
+  disable/re-enable cleanup. The layout-owned desktop review tab now adopts the
+  registered provider's review title; the exact packaged Bitbucket contract passes
+  against a freshly built host bundle.
 - Mobile review selection now persists provider-neutral review IDs. Exact selections
   from built-in topbar actions and plugin/built-in review choosers share one path; a
   two-MR GitLab regression E2E proves the selected review is not replaced by the

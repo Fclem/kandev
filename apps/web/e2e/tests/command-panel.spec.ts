@@ -139,7 +139,7 @@ test.describe("Command Panel", () => {
 
     await testPage.goto(`/t/${task.id}`);
     const session = new SessionPage(testPage);
-    await session.waitForLoad();
+    await session.showSessionContext();
 
     await openCommandPanel(testPage);
     const dialog = commandDialog(testPage);

@@ -6,10 +6,13 @@ test.describe("Workflow sorting", () => {
     const { workspaceId } = seedData;
     await apiClient.e2eReset(workspaceId, [seedData.workflowId]);
 
-    // Create additional workflows
+    // Create every workflow asserted by this API-only test. The seeded
+    // workflow belongs to the worker fixture and can be removed by an earlier
+    // API-only reset because `testPage` (which normally resets state) is lazy.
+    const wfA = await apiClient.createWorkflow(workspaceId, "Workflow A", "simple");
     const wfB = await apiClient.createWorkflow(workspaceId, "Workflow B", "simple");
     const wfC = await apiClient.createWorkflow(workspaceId, "Workflow C", "simple");
-    const expectedNames = ["E2E Workflow", "Workflow B", "Workflow C"];
+    const expectedNames = ["Workflow A", "Workflow B", "Workflow C"];
     const workflowNames = new Set(expectedNames);
 
     // Verify initial order: sorted by sort_order ASC (0, 1, 2)
@@ -19,13 +22,13 @@ test.describe("Workflow sorting", () => {
       .filter((name) => workflowNames.has(name));
     expect(namesBefore).toEqual(expectedNames);
 
-    // Reorder: C, E2E, B
-    await apiClient.reorderWorkflows(workspaceId, [wfC.id, seedData.workflowId, wfB.id]);
+    // Reorder: C, A, B
+    await apiClient.reorderWorkflows(workspaceId, [wfC.id, wfA.id, wfB.id]);
 
     // Verify new order persists
     const after = await apiClient.listWorkflows(workspaceId);
     const namesAfter = after.workflows.map((w) => w.name).filter((name) => workflowNames.has(name));
-    expect(namesAfter).toEqual(["Workflow C", "E2E Workflow", "Workflow B"]);
+    expect(namesAfter).toEqual(["Workflow C", "Workflow A", "Workflow B"]);
   });
 
   test("settings page displays workflows in sort order", async ({

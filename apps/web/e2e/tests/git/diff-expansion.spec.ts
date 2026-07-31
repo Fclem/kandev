@@ -327,31 +327,24 @@ test.describe("Diff expansion — Pierre Diffs provider", () => {
 
     await waitForDiffText(testPage, "HUNK_TOP", 15_000);
 
-    // Wait for expand buttons to appear in the shadow DOM. They load
-    // asynchronously after full file content is fetched via WebSocket.
+    // Find and click the intended separator atomically. Pierre may replace its
+    // shadow tree while full-file context is loading, so a separate "exists"
+    // wait followed by evaluate can retain a stale generation of the tree.
     await testPage.waitForFunction(
       () => {
         const container = document.querySelector("diffs-container");
         const shadow = container?.shadowRoot;
         if (!shadow) return false;
-        return shadow.querySelectorAll("[data-expand-button]").length >= 3;
+        const selector =
+          "[data-separator='line-info']:not([data-separator-first]):not([data-separator-last])";
+        const button = shadow.querySelector<HTMLElement>(`${selector} [data-expand-up]`);
+        if (!button) return false;
+        button.click();
+        return true;
       },
       null,
       { timeout: 20_000 },
     );
-
-    // Click the middle separator's expand-up button to reveal lines from the
-    // top of the collapsed gap. The middle separator is the only one without
-    // data-separator-first or data-separator-last attributes.
-    await testPage.evaluate(() => {
-      const container = document.querySelector("diffs-container");
-      const shadow = container!.shadowRoot!;
-      const sel =
-        "[data-separator='line-info']:not([data-separator-first]):not([data-separator-last])";
-      const btn = shadow.querySelector<HTMLElement>(`${sel} [data-expand-up]`);
-      if (!btn) throw new Error("Middle separator expand-up button not found");
-      btn.click();
-    });
 
     // Line 60 is within the first 20 lines revealed by expanding from the top hunk.
     await expect(testPage.getByText("original_060", { exact: false })).toBeVisible({

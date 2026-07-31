@@ -47,7 +47,7 @@ export type MobileSessionPanel = "chat" | "plan" | "changes" | "files" | "termin
 
 export type MobileSessionState = {
   activePanelBySessionId: Record<string, MobileSessionPanel>;
-  reviewMRKeyBySessionId: Record<string, string>;
+  reviewItemIdBySessionId: Record<string, string>;
   isTaskSwitcherOpen: boolean;
 };
 
@@ -219,7 +219,7 @@ export type UISliceActions = {
   setMobileKanbanMenuOpen: (open: boolean) => void;
   setMobileKanbanSearchOpen: (open: boolean) => void;
   setMobileSessionPanel: (sessionId: string, panel: MobileSessionPanel) => void;
-  setMobileSessionReview: (sessionId: string, mrKey: string | null) => void;
+  setMobileSessionReview: (sessionId: string, reviewItemId: string | null) => void;
   setMobileSessionTaskSwitcherOpen: (open: boolean) => void;
   setPlanMode: (sessionId: string, enabled: boolean) => void;
   setTranscriptAutoScrollEnabled: (sessionId: string, enabled: boolean) => void;

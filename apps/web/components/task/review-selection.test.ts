@@ -1,6 +1,7 @@
+import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { ReviewItemSummary } from "@/lib/plugins/types";
-import { reviewItemId, selectReviewItem } from "./review-selection";
+import { reviewItemId, selectReviewItem, useReviewItemSelection } from "./review-selection";
 
 const githubReview: ReviewItemSummary = {
   providerId: "github",
@@ -44,5 +45,43 @@ describe("selectReviewItem", () => {
 
   it("preserves the provider's primary review when every choice has the same owner", () => {
     expect(selectReviewItem([githubReview, secondGithubReview], null)).toBe(githubReview);
+  });
+});
+
+describe("useReviewItemSelection", () => {
+  it("honors an externally requested review from a same-provider list", () => {
+    const { result } = renderHook(() =>
+      useReviewItemSelection(
+        "task-1",
+        [githubReview, secondGithubReview],
+        reviewItemId(secondGithubReview),
+      ),
+    );
+
+    expect(result.current.selectedReview).toBe(secondGithubReview);
+  });
+
+  it("keeps an explicit local choice while the external request is unchanged", () => {
+    const preferredReviewId = reviewItemId(githubReview);
+    const { result, rerender } = renderHook(() =>
+      useReviewItemSelection("task-1", [githubReview, bitbucketReview], preferredReviewId),
+    );
+
+    act(() => result.current.selectReview(bitbucketReview));
+    rerender();
+
+    expect(result.current.selectedReview).toBe(bitbucketReview);
+  });
+
+  it("follows a changed external review request", () => {
+    const { result, rerender } = renderHook(
+      ({ preferredReviewId }) =>
+        useReviewItemSelection("task-1", [githubReview, secondGithubReview], preferredReviewId),
+      { initialProps: { preferredReviewId: reviewItemId(githubReview) } },
+    );
+
+    rerender({ preferredReviewId: reviewItemId(secondGithubReview) });
+
+    expect(result.current.selectedReview).toBe(secondGithubReview);
   });
 });

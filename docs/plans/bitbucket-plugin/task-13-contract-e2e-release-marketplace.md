@@ -70,6 +70,10 @@ leakage checks as release gates.
   authenticated action dispatch, repository selection, native Link and review
   surfaces, `#` search with submit-time rejection, plugin-owned task provenance, and
   disable/re-enable cleanup.
+- Mobile review selection now persists provider-neutral review IDs. Exact selections
+  from built-in topbar actions and plugin/built-in review choosers share one path; a
+  two-MR GitLab regression E2E proves the selected review is not replaced by the
+  provider's primary item.
 - Plugin unit/race/vet/build checks and host/all-platform package checksum verification
   pass. The real package installs active on an isolated current development host;
   unconfigured `connection.get`, repository, and pull-request actions return safe empty

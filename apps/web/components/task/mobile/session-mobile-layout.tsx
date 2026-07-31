@@ -23,9 +23,10 @@ import { fetchAndOpenFile } from "../file-browser-hooks";
 import { MobileReviewPanel } from "./mobile-review-panel";
 import type { MobileSessionPanel } from "@/lib/state/slices/ui/types";
 import type { OpenFileTab } from "@/lib/types/backend";
+import { useAppStore } from "@/components/state-provider";
 import { useNormalizedTaskReviews } from "../review-panel-provider";
 import type { ReviewItemSummary } from "@/lib/plugins/types";
-import { useReviewItemSelection } from "../review-selection";
+import { reviewItemId, useReviewItemSelection } from "../review-selection";
 
 function useMobilePanelChangeHandler(
   handlePanelChangeAndClearSheet: (panel: MobileSessionPanel) => void,
@@ -228,15 +229,36 @@ export function MobilePanelArea({
 
 function useMobileReviewPanelState({
   activeTaskId,
+  effectiveSessionId,
   currentMobilePanel,
   handlePanelChangeAndClearSheet,
 }: {
   activeTaskId: string | null;
+  effectiveSessionId: string | null;
   currentMobilePanel: MobileSessionPanel;
   handlePanelChangeAndClearSheet: (panel: MobileSessionPanel) => void;
 }) {
+  const preferredReviewId = useAppStore((state) =>
+    effectiveSessionId
+      ? (state.mobileSession.reviewItemIdBySessionId?.[effectiveSessionId] ?? null)
+      : null,
+  );
+  const setMobileSessionReview = useAppStore((state) => state.setMobileSessionReview);
   const reviews = useNormalizedTaskReviews(activeTaskId);
-  const { selectedReview, selectReview } = useReviewItemSelection(activeTaskId, reviews);
+  const { selectedReview, selectReview: selectReviewItem } = useReviewItemSelection(
+    activeTaskId,
+    reviews,
+    preferredReviewId,
+  );
+  const selectReview = useCallback(
+    (review: ReviewItemSummary) => {
+      selectReviewItem(review);
+      if (effectiveSessionId) {
+        setMobileSessionReview(effectiveSessionId, reviewItemId(review));
+      }
+    },
+    [effectiveSessionId, selectReviewItem, setMobileSessionReview],
+  );
   const effectiveMobilePanel = useMobileReviewPanelFallback(
     currentMobilePanel,
     reviews.length > 0,
@@ -485,6 +507,7 @@ export const SessionMobileLayout = memo(function SessionMobileLayout(
   const { reviews, selectedReview, selectReview, effectiveMobilePanel, handleMobilePanelChange } =
     useMobileReviewPanelState({
       activeTaskId,
+      effectiveSessionId,
       currentMobilePanel,
       handlePanelChangeAndClearSheet,
     });

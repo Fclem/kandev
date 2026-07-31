@@ -33,6 +33,7 @@ import type { TaskMR } from "@/lib/types/gitlab";
 import type { Repository } from "@/lib/types/http";
 import { TaskMRLinkDialog } from "./task-mr-link-dialog";
 import { useDockviewStore } from "@/lib/state/dockview-store";
+import { reviewItemId } from "@/components/task/review-selection";
 import { mrTaskKey } from "./mr-detail-panel";
 
 /**
@@ -72,7 +73,7 @@ export function openMobileMRReview(
   sessionId: string,
   mr: TaskMR,
 ) {
-  setReview(sessionId, mrTaskKey(mr));
+  setReview(sessionId, reviewItemId({ providerId: "gitlab", reviewKey: mrTaskKey(mr) }));
 }
 
 export function openDesktopMRReview(

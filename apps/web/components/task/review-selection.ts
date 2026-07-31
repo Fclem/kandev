@@ -6,6 +6,7 @@ import type { ReviewItemSummary } from "@/lib/plugins/types";
 type ReviewSelection = {
   taskId: string | null;
   reviewId: string | null;
+  preferredReviewId: string | null;
 };
 
 export function reviewItemId(review: Pick<ReviewItemSummary, "providerId" | "reviewKey">): string {
@@ -36,16 +37,23 @@ export function selectReviewItem(
 export function useReviewItemSelection(
   taskId: string | null,
   reviews: readonly ReviewItemSummary[],
+  preferredReviewId: string | null = null,
 ) {
-  const [selection, setSelection] = useState<ReviewSelection>({ taskId, reviewId: null });
-  if (selection.taskId !== taskId) setSelection({ taskId, reviewId: null });
+  const [selection, setSelection] = useState<ReviewSelection>({
+    taskId,
+    reviewId: preferredReviewId,
+    preferredReviewId,
+  });
+  if (selection.taskId !== taskId || selection.preferredReviewId !== preferredReviewId) {
+    setSelection({ taskId, reviewId: preferredReviewId, preferredReviewId });
+  }
 
   const selectedReview = selectReviewItem(reviews, selection.reviewId);
   const selectReview = useCallback(
     (review: ReviewItemSummary) => {
-      setSelection({ taskId, reviewId: reviewItemId(review) });
+      setSelection({ taskId, reviewId: reviewItemId(review), preferredReviewId });
     },
-    [taskId],
+    [preferredReviewId, taskId],
   );
   return { selectedReview, selectReview };
 }

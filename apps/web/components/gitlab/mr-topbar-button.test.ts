@@ -73,7 +73,7 @@ describe("mrTriggerClass", () => {
       project_path: "group/b",
       mr_iid: 22,
     } as TaskMR);
-    expect(setReview).toHaveBeenCalledWith("session-1", "https://gitlab.example|group/b|22");
+    expect(setReview).toHaveBeenCalledWith("session-1", "gitlab:https://gitlab.example|group/b|22");
   });
 
   it("confirms desktop MR focus after dockview finishes its layout work", () => {

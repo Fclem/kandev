@@ -1,8 +1,10 @@
 import { expect, test } from "../../fixtures/test-base";
+import type { Page } from "@playwright/test";
 
 test.describe("App status bar", () => {
   test("uses one 24px in-flow footer across sidebar and route content", async ({ testPage }) => {
     await testPage.goto("/");
+    await setConnectionIssueSeverity(testPage, "unstable");
 
     const bar = testPage.getByTestId("app-status-bar");
     await expect(bar).toBeVisible();
@@ -40,6 +42,7 @@ test.describe("App status bar", () => {
 
   test("persists a modifier-mouse move across the spacer", async ({ testPage }) => {
     await testPage.goto("/");
+    await setConnectionIssueSeverity(testPage, "unstable");
     const bar = testPage.getByTestId("app-status-bar");
     const connection = bar.locator('[data-status-item-id="builtin:connection"]');
     const [sourceBox, barBox] = await Promise.all([connection.boundingBox(), bar.boundingBox()]);
@@ -69,3 +72,17 @@ test.describe("App status bar", () => {
     ).toHaveAttribute("data-status-side", "right");
   });
 });
+
+async function setConnectionIssueSeverity(page: Page, severity: "none" | "unstable" | "lost") {
+  await page.evaluate((nextSeverity) => {
+    const store = (
+      window as Window & {
+        __KANDEV_E2E_STORE__?: {
+          getState: () => { setConnectionIssueSeverity: (severity: typeof nextSeverity) => void };
+        };
+      }
+    ).__KANDEV_E2E_STORE__;
+    if (!store) throw new Error("E2E store bridge missing");
+    store.getState().setConnectionIssueSeverity(nextSeverity);
+  }, severity);
+}

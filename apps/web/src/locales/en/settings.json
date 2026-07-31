@@ -49,6 +49,7 @@
   "new": "New",
   "notifications": "Notifications",
   "openSettingsMenu": "Open settings menu",
+  "openSettingsMenuWithConnectionIssue": "{{description}} Open settings menu",
   "pressCmdCtrlEnterToSend": "Press Cmd/Ctrl+Enter to send messages. Press Enter for newlines.",
   "pressEnterToSendMessagesPress": "Press Enter to send messages. Press Shift+Enter for newlines.",
   "providersAndNotificationEvents": "Providers and notification events",

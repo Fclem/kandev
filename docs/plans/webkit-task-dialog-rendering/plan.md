@@ -130,6 +130,13 @@ lib/browser/rendering-engine.test.ts lib/browser/rendering-engine.ts
 tests/task/create-task-webkit-rendering.spec.ts --workers=1` — 2 passed.
 - `pnpm --filter @kandev/web e2e:run --no-build --host --project mobile-chrome --
 tests/task/mobile-create-task-webkit-rendering.spec.ts --workers=1` — 1 passed.
+- `pnpm --filter @kandev/web e2e:run --no-build --host --project chromium --
+tests/task/create-task-branch-selector.spec.ts --grep "confirm modal lists files" --workers=1` — 1
+  passed, confirming the nested WebKit discard confirmation's motion and stacking.
+- `pnpm --filter @kandev/web e2e:run --no-build --host --project chromium --
+tests/task/dialog-body-lock.spec.ts --workers=1` — 1 passed.
+- `pnpm --filter @kandev/web e2e:run --no-build --host --project mobile-chrome --
+tests/task/mobile-dialog-body-lock.spec.ts --workers=1` — 1 passed.
 - Native macOS Safari/Tauri visual comparison — not run; this Linux worktree cannot launch those
   engines. PR screenshots document the desktop and mobile states for native review.
 

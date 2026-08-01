@@ -108,6 +108,12 @@ func (s *Service) SelectChannel(ctx context.Context, value string) (UpdatesRespo
 	if channel == ChannelNightly && !editable {
 		return UpdatesResponse{}, fmt.Errorf("%w: %s", ErrChannelUnsupported, reason)
 	}
+	if ok, _ := s.limiter.Allow(); !ok {
+		return UpdatesResponse{}, ErrRateLimited
+	}
+
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 
 	version, targetURL, err := s.resolveLatest(ctx, channel)
 	if err != nil {

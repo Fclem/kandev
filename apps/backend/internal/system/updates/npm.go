@@ -1,6 +1,7 @@
 package updates
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 )
 
 const DefaultNPMRegistryURL = "https://registry.npmjs.org/kandev"
+const maxNPMPackageResponseBytes = 8 << 20
 
 type npmPackagePayload struct {
 	DistTags map[string]string          `json:"dist-tags"`
@@ -38,8 +40,7 @@ func FetchLatestNightlyFrom(ctx context.Context, client *http.Client, registryUR
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", "", fmt.Errorf("npm status %d: %s", resp.StatusCode, string(body))
+		return "", "", fmt.Errorf("npm registry returned status %d", resp.StatusCode)
 	}
 
 	payload, err := decodeNPMPackagePayload(resp.Body)
@@ -73,7 +74,14 @@ func isCanonicalNPMNightlyVersion(version string) bool {
 }
 
 func decodeNPMPackagePayload(reader io.Reader) (npmPackagePayload, error) {
-	decoder := json.NewDecoder(reader)
+	body, err := io.ReadAll(io.LimitReader(reader, maxNPMPackageResponseBytes+1))
+	if err != nil {
+		return npmPackagePayload{}, fmt.Errorf("read npm response: %w", err)
+	}
+	if len(body) > maxNPMPackageResponseBytes {
+		return npmPackagePayload{}, fmt.Errorf("npm response exceeds %d bytes", maxNPMPackageResponseBytes)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
 	var payload npmPackagePayload
 	if err := decoder.Decode(&payload); err != nil {
 		return npmPackagePayload{}, fmt.Errorf("decode npm response: %w", err)

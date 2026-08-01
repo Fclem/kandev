@@ -11,20 +11,22 @@ export function useUpdates() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
-  const latestRequest = useRef(0);
+  const latestRead = useRef(0);
   const latestReload = useRef(0);
   const latestCheck = useRef(0);
+  const latestSave = useRef(0);
+  const activeSaves = useRef(0);
 
   const reload = useCallback(async () => {
-    const request = ++latestRequest.current;
+    const request = ++latestRead.current;
     const reloadRequest = ++latestReload.current;
     setIsLoading(true);
     setError(null);
     try {
       const res = await fetchUpdates({ cache: "no-store" });
-      if (request === latestRequest.current) setSystemUpdates(res);
+      if (request === latestRead.current && activeSaves.current === 0) setSystemUpdates(res);
     } catch (e) {
-      if (request === latestRequest.current) {
+      if (request === latestRead.current && activeSaves.current === 0) {
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
@@ -38,16 +40,16 @@ export function useUpdates() {
    * with the fresh row (or 429 — surfaced via the returned promise).
    */
   const check = useCallback(async () => {
-    const request = ++latestRequest.current;
+    const request = ++latestRead.current;
     const checkRequest = ++latestCheck.current;
     setIsChecking(true);
     setError(null);
     try {
       const res = await checkUpdates();
-      if (request === latestRequest.current) setSystemUpdates(res);
+      if (request === latestRead.current && activeSaves.current === 0) setSystemUpdates(res);
       return res;
     } catch (e) {
-      if (request !== latestRequest.current) return undefined;
+      if (request !== latestRead.current || activeSaves.current > 0) return undefined;
       setError(e instanceof Error ? e.message : String(e));
       throw e;
     } finally {
@@ -57,17 +59,22 @@ export function useUpdates() {
 
   const saveChannel = useCallback(
     async (channel: UpdatesChannel) => {
-      const request = ++latestRequest.current;
+      const request = ++latestSave.current;
+      activeSaves.current += 1;
+      latestRead.current += 1;
       setError(null);
       try {
         const res = await saveUpdatesChannel(channel);
-        if (request === latestRequest.current) setSystemUpdates(res);
+        if (request === latestSave.current) setSystemUpdates(res);
         return res;
       } catch (e) {
-        if (request === latestRequest.current) {
+        if (request === latestSave.current) {
           setError(e instanceof Error ? e.message : String(e));
         }
         throw e;
+      } finally {
+        activeSaves.current -= 1;
+        latestRead.current += 1;
       }
     },
     [setSystemUpdates],

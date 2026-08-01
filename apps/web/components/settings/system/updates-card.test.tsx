@@ -37,6 +37,7 @@ import { UpdatesCard } from "./updates-card";
 const APPLY_TESTID = "system-updates-apply";
 const ARIA_CHECKED = "aria-checked";
 const CHANNEL_TESTID = "system-updates-channel";
+const LATEST_TESTID = "system-updates-latest";
 const SETTINGS_DIRTY_ATTRIBUTE = "data-settings-dirty";
 const SAVE_CHANGES_NAME = "Save changes";
 
@@ -230,7 +231,7 @@ describe("UpdatesCard desktop package updates", () => {
 
     renderUpdatesCard();
 
-    expect(screen.getByTestId("system-updates-latest").textContent).toBe("1.1.0");
+    expect(screen.getByTestId(LATEST_TESTID).textContent).toBe("1.1.0");
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
     expect(screen.getByTestId("system-updates-manual").textContent).toContain("package manager");
   });
@@ -265,7 +266,7 @@ describe("UpdatesCard desktop updater", () => {
     renderUpdatesCard();
 
     expect(screen.getByTestId("system-updates-current").textContent).toBe("1.0.0");
-    expect(screen.getByTestId("system-updates-latest").textContent).toBe("1.1.0");
+    expect(screen.getByTestId(LATEST_TESTID).textContent).toBe("1.1.0");
     expect(screen.getByTestId(APPLY_TESTID)).toBeTruthy();
     expect(screen.queryByTestId("system-updates-manual")).toBeNull();
     expect(screen.getByTestId("system-updates-actions").className).toContain("flex-col");
@@ -363,6 +364,13 @@ describe("UpdatesCard channel setting", () => {
     expect(nightly.getAttribute(ARIA_CHECKED)).toBe("true");
     expect(saveChannel).not.toHaveBeenCalled();
     expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe("true");
+    expect(screen.getByTestId(LATEST_TESTID).textContent).toBe("-");
+    expect(screen.getByTestId("system-updates-check").hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
+    expect(screen.queryByTestId("system-updates-release-link")).toBeNull();
+    expect(screen.getByTestId("system-updates-channel-pending").textContent).toContain(
+      "Save channel changes",
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_NAME }));
 
@@ -481,7 +489,9 @@ describe("UpdatesCard channel availability", () => {
 
     renderUpdatesCard();
 
-    expect(screen.getByRole("radio", { name: /^Stable/ }).getAttribute(ARIA_CHECKED)).toBe("true");
+    const stable = screen.getByRole("radio", { name: /^Stable/ });
+    expect(stable.getAttribute(ARIA_CHECKED)).toBe("true");
+    expect(stable.hasAttribute("disabled")).toBe(true);
     expect(screen.getByRole("radio", { name: /^Nightly/ }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByTestId("system-updates-channel-reason").textContent).toContain(
       "managed npm user service",
@@ -503,7 +513,7 @@ describe("UpdatesCard channel availability", () => {
     renderUpdatesCard();
 
     expect(screen.getByTestId("system-updates-channel-nightly").className).toContain("min-h-11");
-    expect(screen.getByTestId("system-updates-latest").className).toContain("break-all");
+    expect(screen.getByTestId(LATEST_TESTID).className).toContain("break-all");
     expect(screen.getByTestId("system-updates-versions").className).toContain("grid-cols-1");
   });
 

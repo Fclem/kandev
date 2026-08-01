@@ -69,11 +69,29 @@ func TestFetchLatestNightlyFromRejectsInvalidRegistryDocuments(t *testing.T) {
 
 func TestFetchLatestNightlyFromReturnsHTTPFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "registry down", http.StatusServiceUnavailable)
+		http.Error(w, "registry down: upstream-secret", http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
 	_, _, err := FetchLatestNightlyFrom(context.Background(), server.Client(), server.URL)
-	if err == nil || !strings.Contains(err.Error(), "npm status 503") {
+	if err == nil || !strings.Contains(err.Error(), "npm registry returned status 503") {
+		t.Fatalf("error=%v", err)
+	}
+	if strings.Contains(err.Error(), "upstream-secret") {
+		t.Fatalf("error exposes registry response body: %v", err)
+	}
+}
+
+func TestFetchLatestNightlyFromRejectsOversizedResponse(t *testing.T) {
+	const version = "1.2.4-nightly.shaabc123def456"
+	body := strings.Repeat(" ", (8<<20)+1) +
+		`{"dist-tags":{"nightly":"` + version + `"},"versions":{"` + version + `":{"name":"kandev"}}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	_, _, err := FetchLatestNightlyFrom(context.Background(), server.Client(), server.URL)
+	if err == nil || !strings.Contains(err.Error(), "npm response exceeds") {
 		t.Fatalf("error=%v", err)
 	}
 }

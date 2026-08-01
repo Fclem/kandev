@@ -120,6 +120,11 @@ type Service struct {
 	// the backend cannot wedge apply behind a permanent 409.
 	applyStartedAt atomic.Int64
 
+	// updateMu serializes source resolution and cache persistence across the
+	// poller, manual checks, channel changes, and apply preflight. A slower,
+	// older resolution therefore cannot overwrite a newer operation's cache.
+	updateMu sync.Mutex
+
 	// releaseURL is the GitHub endpoint hit by Check + the poller; defaults
 	// to DefaultReleaseURL and can be overridden by SetReleaseURL for tests.
 	releaseURL string
@@ -324,10 +329,6 @@ func (s *Service) Apply(ctx context.Context, confirm string) (string, error) {
 	if s.jobs == nil {
 		return "", ErrApplyUnsupported
 	}
-	resp, metadata, err := s.applyPreflight(ctx)
-	if err != nil {
-		return "", err
-	}
 	// Claim the in-flight guard across the launch. A successful launch keeps it
 	// held because the helper restarts the backend shortly (which clears it by
 	// replacing the process); a launch error releases it for an immediate retry.
@@ -335,6 +336,11 @@ func (s *Service) Apply(ctx context.Context, confirm string) (string, error) {
 	// helper that exits 0 but never restarts cannot block apply forever.
 	if !s.claimApplyGuard() {
 		return "", ErrApplyInProgress
+	}
+	resp, metadata, err := s.applyPreflight(ctx)
+	if err != nil {
+		s.applyStartedAt.Store(0)
+		return "", err
 	}
 	intentPath, intent, err := s.writeApplyIntent(resp, metadata)
 	if err != nil {
@@ -397,6 +403,9 @@ func (s *Service) peekLimiter() (bool, time.Duration) {
 // fetchAndPersist resolves the effective channel and persists its isolated
 // cache on success. A fetch failure preserves both caches.
 func (s *Service) fetchAndPersist(ctx context.Context) (UpdatesResponse, error) {
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+
 	install, _ := s.detectInstallState()
 	channel, err := s.effectiveChannel(ctx, install)
 	if err != nil {
@@ -404,9 +413,14 @@ func (s *Service) fetchAndPersist(ctx context.Context) (UpdatesResponse, error) 
 	}
 	tag, releaseURL, err := s.resolveLatest(ctx, channel)
 	if err != nil {
-		// Preserve persisted state; surface the error to caller.
-		current, _ := s.Get(ctx)
-		return current, err
+		// Preserve persisted state without re-reading settings through a context
+		// the failed upstream request may already have canceled.
+		version, url, checkedAt, readErr := s.readLatestVersion(channel)
+		if readErr != nil {
+			s.log.Warn("updates: read cached version after fetch failure", zap.Error(readErr))
+			return UpdatesResponse{}, err
+		}
+		return s.buildResponseFromChannel(channel, install, version, url, checkedAt), err
 	}
 	now := s.now().UTC()
 	if werr := s.writeLatestVersion(channel, tag, releaseURL, now); werr != nil {

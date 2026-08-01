@@ -2,7 +2,11 @@
 
 Install Kandev as an OS-managed service (systemd on Linux, launchd on macOS) so it auto-starts and stays running. User-mode services installed by `kandev service install` can self-update from the System → Updates page. A verified managed npm/npx user service can select Stable (the default) or the npm Nightly channel there. Homebrew, non-service, local-checkout, and `--system` installs remain Stable-only.
 
-Manual updates must preserve the install type: global npm uses `npm i -g kandev@latest`; npx reruns the desired `kandev@<tag>` service command; Homebrew uses `brew upgrade kandev`; and a local checkout is rebuilt with `make service-install`. Reuse custom `--port`, `--home-dir`, and `--no-boot-start` values on `service install`; `service restart` carries only `--system` when applicable.
+Manual updates must preserve the install type and selected channel: global npm and npx use
+`kandev@latest` for Stable or `kandev@nightly` for Nightly; Homebrew uses `brew upgrade kandev`;
+and a local checkout is rebuilt with `make service-install`. Reuse custom `--port`, `--home-dir`,
+and `--no-boot-start` values on `service install`; `service restart` carries only `--system` when
+applicable.
 
 This guide assumes you've already installed kandev via [Homebrew or npm](../apps/cli/README.md#quick-start) and that `kandev` works when run interactively.
 
@@ -105,15 +109,18 @@ Use the commands for the original install type:
 ```bash
 # Reuse these install-time options only if the original service used them:
 # --home-dir /path/to/kandev-home --port 38429 --no-boot-start
+# Keep latest for Stable; change to nightly when the saved channel is Nightly.
+CHANNEL_TAG=latest
 
 # Global npm user service
-npm i -g kandev@latest
+npm i -g "kandev@$CHANNEL_TAG"
 kandev service install  # append original install-time options here
 kandev service restart
 
-# Managed npx user service
-npx -y kandev@latest service install  # append original install-time options here
-npx -y kandev@latest service restart
+# Managed npx user service. This points into npm's cache; rerun install after
+# upgrades, and prefer global npm for a service that must survive npm cache cleanup.
+npx -y "kandev@$CHANNEL_TAG" service install  # append original install-time options here
+npx -y "kandev@$CHANNEL_TAG" service restart
 
 # Homebrew user service (Stable only)
 brew upgrade kandev
@@ -121,7 +128,7 @@ kandev service install  # append original install-time options here
 kandev service restart
 
 # Local checkout service
-make service-install HOME_DIR=/path/to/kandev-home PORT=38429  # preserve values when used
+make service-install HOME_DIR=/path/to/kandev-home PORT=38429 NO_BOOT_START=1  # preserve values when used
 make service-restart
 ```
 
@@ -221,8 +228,8 @@ reinstall the service, and restart it. There is no Homebrew or Desktop Nightly c
 ## Updating: TL;DR
 
 - Managed npm/npx user service: use **Settings → System → Updates → Apply update**. Eligible services can first save Stable or Nightly.
-- Manual global npm service: run `npm i -g kandev@latest`, then `kandev service install` with the original install-time options and plain `kandev service restart`.
-- Manual npx service: run `npx -y kandev@latest service install` with the original install-time options, then plain npx `service restart`.
+- Manual global npm service: install `kandev@latest` for Stable or `kandev@nightly` for Nightly, then run `kandev service install` with the original install-time options and plain `kandev service restart`.
+- Manual npx service: run `npx -y kandev@latest service install` for Stable or replace `latest` with `nightly`, then rerun the matching npx `service restart`.
 - Manual Homebrew service: run `brew upgrade kandev`, then `kandev service install` with the original install-time options and plain `kandev service restart`.
 - Local checkout service: preserve `HOME_DIR`, `PORT`, and `NO_BOOT_START` values on `make service-install`; then run `make service-restart` without them.
 - System service: use the matching manual path through a privileged shell; retain `--system` on both service commands and put other original options only on `service install`.

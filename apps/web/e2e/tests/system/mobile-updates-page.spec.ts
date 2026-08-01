@@ -1,6 +1,6 @@
 import { test, expect } from "../../fixtures/test-base";
 import { assertNoDocumentHorizontalOverflow } from "../../helpers/layout-assertions";
-import { NIGHTLY_VERSION, useManagedNPMUpdates } from "./updates-channel-helpers";
+import { NIGHTLY_TAG, useManagedNPMUpdates } from "./updates-channel-helpers";
 
 test.describe("System update channel on mobile", () => {
   test("selects, saves, and reloads Nightly with touch-safe rows", async ({
@@ -24,11 +24,11 @@ test.describe("System update channel on mobile", () => {
         .getByTestId("settings-floating-save")
         .getByRole("button", { name: "Save changes" })
         .tap();
-      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_VERSION);
+      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_TAG);
 
       await testPage.reload();
       await expect(nightly).toBeChecked();
-      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_VERSION);
+      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_TAG);
       await assertNoDocumentHorizontalOverflow(testPage, "Updates after Nightly reload");
     } finally {
       await fixture.release();

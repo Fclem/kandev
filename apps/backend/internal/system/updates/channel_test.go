@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,6 +41,21 @@ type memorySettingsStore struct {
 	present bool
 	getErr  error
 	saveErr error
+}
+
+type cancelAwareSettingsStore struct {
+	calls atomic.Int32
+}
+
+func (s *cancelAwareSettingsStore) Get(ctx context.Context, _ string) ([]byte, bool, error) {
+	if s.calls.Add(1) == 1 {
+		return []byte(ChannelNightly), true, nil
+	}
+	return nil, false, ctx.Err()
+}
+
+func (*cancelAwareSettingsStore) Save(context.Context, string, []byte) error {
+	return nil
 }
 
 func (s *memorySettingsStore) Get(context.Context, string) ([]byte, bool, error) {
@@ -154,6 +171,16 @@ func TestNightlyAvailabilityRejectsLowerNumericVersion(t *testing.T) {
 	}
 }
 
+func TestNightlyChannelDoesNotOfferPrereleaseOfInstalledStable(t *testing.T) {
+	svc := NewService(nil, "v1.2.4", nil, logger.Default())
+	if svc.updateAvailableFor(ChannelNightly, "v1.2.4-nightly.shaaaaaaaaaaaaa") {
+		t.Fatal("a prerelease of the installed stable version must not be offered as an update")
+	}
+	if !svc.updateAvailableFor(ChannelNightly, "v1.2.5-nightly.shaaaaaaaaaaaaa") {
+		t.Fatal("the next patch nightly should be offered to a stable install")
+	}
+}
+
 func TestCheckUsesNightlyResolverAndWritesOnlyNightlyCache(t *testing.T) {
 	homeDir := configureManagedNPMInstall(t)
 	pool := newTestPool(t)
@@ -212,5 +239,121 @@ func TestUnsupportedInstallForcesPersistedNightlyPreferenceToStable(t *testing.T
 	}
 	if resp.Channel != ChannelStable || resp.Latest != "v1.2.3" || resp.ChannelEditable {
 		t.Fatalf("unsupported effective response=%+v", resp)
+	}
+}
+
+func TestFailedCheckReturnsCapturedChannelCacheAfterContextCancellation(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	pool := newTestPool(t)
+	checkedAt := time.Unix(1_700_000_000, 0).UTC()
+	if err := persistence.WriteLatestNightlyVersion(
+		pool.Writer(),
+		"v1.2.4-nightly.shaabc123def456",
+		"https://example/nightly",
+		checkedAt,
+	); err != nil {
+		t.Fatal(err)
+	}
+	store := &cancelAwareSettingsStore{}
+	svc := NewService(pool, "v1.2.3", nil, logger.Default(), WithHomeDir(homeDir), WithSettingsStore(store))
+	ctx, cancel := context.WithCancel(context.Background())
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		cancel()
+		return "", "", errors.New("registry unavailable")
+	})
+
+	resp, err := svc.fetchAndPersist(ctx)
+	if err == nil || !strings.Contains(err.Error(), "registry unavailable") {
+		t.Fatalf("error=%v", err)
+	}
+	if resp.Latest != "v1.2.4-nightly.shaabc123def456" || !resp.LatestCheckedAt.Equal(checkedAt) {
+		t.Fatalf("fallback response lost cached state: %+v", resp)
+	}
+	if got := store.calls.Load(); got != 1 {
+		t.Fatalf("settings reads=%d want 1", got)
+	}
+}
+
+func TestSelectChannelSharesManualUpstreamRateLimit(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	svc := NewService(
+		newTestPool(t),
+		"v1.2.3",
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(&memorySettingsStore{}),
+	)
+	var resolutions atomic.Int32
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		resolutions.Add(1)
+		return "v1.2.4-nightly.shaabc123def456", "https://example/nightly", nil
+	})
+
+	if _, err := svc.SelectChannel(context.Background(), string(ChannelNightly)); err != nil {
+		t.Fatalf("first SelectChannel: %v", err)
+	}
+	if _, err := svc.SelectChannel(context.Background(), string(ChannelNightly)); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("second SelectChannel error=%v want ErrRateLimited", err)
+	}
+	if got := resolutions.Load(); got != 1 {
+		t.Fatalf("upstream resolutions=%d want 1", got)
+	}
+}
+
+func TestFetchAndPersistSerializesCacheRefreshes(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	pool := newTestPool(t)
+	store := &memorySettingsStore{value: []byte(ChannelNightly), present: true}
+	svc := NewService(pool, "v1.2.3", nil, logger.Default(), WithHomeDir(homeDir), WithSettingsStore(store))
+	firstEntered := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var calls atomic.Int32
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		if calls.Add(1) == 1 {
+			close(firstEntered)
+			<-releaseFirst
+			return "v1.2.4-nightly.shaaaaaaaaaaaaa", "https://example/first", nil
+		}
+		return "v1.2.5-nightly.shabbbbbbbbbbbb", "https://example/second", nil
+	})
+
+	firstDone := make(chan error, 1)
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := svc.fetchAndPersist(context.Background())
+		firstDone <- err
+	}()
+	<-firstEntered
+	go func() {
+		_, err := svc.fetchAndPersist(context.Background())
+		secondDone <- err
+	}()
+
+	secondFinishedEarly := false
+	select {
+	case err := <-secondDone:
+		if err != nil {
+			t.Fatalf("second refresh: %v", err)
+		}
+		secondFinishedEarly = true
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseFirst)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first refresh: %v", err)
+	}
+	if !secondFinishedEarly {
+		if err := <-secondDone; err != nil {
+			t.Fatalf("second refresh: %v", err)
+		}
+	}
+
+	version, targetURL, _, err := persistence.ReadLatestNightlyVersion(pool.Reader())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != "v1.2.5-nightly.shabbbbbbbbbbbb" || targetURL != "https://example/second" {
+		t.Fatalf("final cache version=%q url=%q", version, targetURL)
 	}
 }

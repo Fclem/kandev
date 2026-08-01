@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,8 +15,6 @@ import {
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
-import { Label } from "@kandev/ui/label";
-import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import { Spinner } from "@kandev/ui/spinner";
 import { IconDownload, IconExternalLink, IconRefresh } from "@tabler/icons-react";
 import { useSelfUpdate, type SelfUpdateController } from "@/hooks/domains/system/use-self-update";
@@ -25,10 +23,10 @@ import {
   type DesktopUpdaterController,
 } from "@/hooks/domains/system/use-desktop-updater";
 import { useUpdates } from "@/hooks/domains/system/use-updates";
-import type { UpdatesChannel, UpdatesResponse } from "@/lib/types/system";
+import type { UpdatesResponse } from "@/lib/types/system";
 import { SettingsCard } from "../settings-card";
-import { useSettingsSaveContributor } from "../settings-save-provider";
 import { SelfUpdateProgress } from "./self-update-progress";
+import { UpdateChannelControl, useUpdateChannelDraft } from "./update-channel-control";
 
 interface ApplyGate {
   canApply: boolean;
@@ -121,30 +119,37 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
   };
 
   const view = serviceCardView(updates, selfUpdate);
+  const channelPending = channel.isDirty;
 
   return (
     <SettingsCard isDirty={channel.isDirty} data-testid="system-updates-card">
       <CardHeader>
-        <UpdatesHeader available={view.available} />
+        <UpdatesHeader available={view.available && !channelPending} />
       </CardHeader>
       <CardContent className="space-y-4">
         <UpdateChannelControl {...channel} />
+        {channelPending && (
+          <p className="text-xs text-muted-foreground" data-testid="system-updates-channel-pending">
+            Save channel changes before checking or applying an update.
+          </p>
+        )}
         <VersionGrid
           current={view.current}
-          latest={view.latest}
-          latestLabel={updates?.channel === "nightly" ? "Latest nightly" : "Latest release"}
+          latest={channelPending ? "-" : view.latest}
+          latestLabel={channel.draft === "nightly" ? "Latest nightly" : "Latest release"}
         />
         <LastChecked checkedAt={updates?.latest_checked_at} />
         <UpdateActions
           checking={checking}
-          showApply={view.showApply}
+          disabled={channelPending}
+          showApply={view.showApply && !channelPending}
           latest={view.latest}
-          url={updates?.latest_url}
+          url={channelPending ? undefined : updates?.latest_url}
           onCheck={onCheck}
           onApply={selfUpdate.start}
         />
         <ManualUpdateInstructions
-          show={view.showManual}
+          show={view.showManual && !channelPending}
           reason={view.cannotApplyReason}
           commands={view.manualCommands}
         />
@@ -157,165 +162,6 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
         <UpdateError error={error ?? updatesError} retryAfter={retryAfter} />
       </CardContent>
     </SettingsCard>
-  );
-}
-
-function useUpdateChannelDraft(
-  updates: UpdatesResponse | null | undefined,
-  saveChannel: (channel: UpdatesChannel) => Promise<UpdatesResponse>,
-  serviceUpdater: boolean,
-) {
-  const authoritative = updates?.channel ?? "stable";
-  const editable = serviceUpdater && updates?.channel_editable === true;
-  const [saved, setSaved] = useState<UpdatesChannel>(authoritative);
-  const savedRef = useRef(saved);
-  const [draft, setDraftState] = useState<UpdatesChannel>(authoritative);
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
-  const isDirty = editable && draft !== saved;
-
-  const setDraft = (channel: UpdatesChannel) => {
-    draftRef.current = channel;
-    setDraftState(channel);
-  };
-
-  useEffect(() => {
-    const previous = savedRef.current;
-    savedRef.current = authoritative;
-    setSaved(authoritative);
-    if (!editable || draftRef.current === previous) {
-      draftRef.current = authoritative;
-      setDraftState(authoritative);
-    }
-  }, [authoritative, editable]);
-
-  useSettingsSaveContributor({
-    id: "system-updates-channel",
-    order: 10,
-    revision: draft,
-    isDirty,
-    save: async (revision) => {
-      const submitted = revision as UpdatesChannel;
-      const response = await saveChannel(submitted);
-      savedRef.current = response.channel;
-      setSaved(response.channel);
-      if (draftRef.current === submitted) setDraft(response.channel);
-    },
-    discard: () => setDraft(savedRef.current),
-  });
-
-  return {
-    draft,
-    editable,
-    isDirty,
-    unsupportedReason: updates?.channel_unsupported_reason ?? "",
-    setDraft,
-  };
-}
-
-type UpdateChannelControlProps = ReturnType<typeof useUpdateChannelDraft>;
-
-function UpdateChannelControl({
-  draft,
-  editable,
-  isDirty,
-  unsupportedReason,
-  setDraft,
-}: UpdateChannelControlProps) {
-  const reasonId = "system-updates-channel-reason";
-  return (
-    <div
-      className="min-w-0 space-y-2"
-      data-testid="system-updates-channel"
-      data-settings-dirty={isDirty}
-    >
-      <div>
-        <div className="text-sm font-medium">Update channel</div>
-        <p className="text-xs text-muted-foreground">
-          Choose which releases this managed service checks and applies.
-        </p>
-      </div>
-      <RadioGroup
-        aria-label="Update channel"
-        value={draft}
-        onValueChange={(value) => {
-          if (value === "stable" || (value === "nightly" && editable)) setDraft(value);
-        }}
-        className="gap-2"
-        data-settings-dirty={isDirty}
-      >
-        <UpdateChannelOption
-          channel="stable"
-          label="Stable"
-          description="Signed GitHub releases. Recommended for most users."
-          disabled={false}
-        />
-        <UpdateChannelOption
-          channel="nightly"
-          label="Nightly"
-          description="Prerelease builds from main, delivered through npm."
-          disabled={!editable}
-          reasonId={!editable && unsupportedReason ? reasonId : undefined}
-        />
-      </RadioGroup>
-      {!editable && unsupportedReason && (
-        <p
-          id={reasonId}
-          className="break-words text-xs text-muted-foreground"
-          data-testid="system-updates-channel-reason"
-        >
-          {unsupportedReason}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function UpdateChannelOption({
-  channel,
-  label,
-  description,
-  disabled,
-  reasonId,
-}: {
-  channel: UpdatesChannel;
-  label: string;
-  description: string;
-  disabled: boolean;
-  reasonId?: string;
-}) {
-  const inputId = `system-updates-channel-${channel}-input`;
-  const labelId = `system-updates-channel-${channel}-label`;
-  const descriptionId = `system-updates-channel-${channel}-description`;
-  const describedBy = reasonId ? `${descriptionId} ${reasonId}` : descriptionId;
-  return (
-    <Label
-      htmlFor={inputId}
-      className={`flex min-h-11 w-full min-w-0 items-start gap-3 rounded-md border p-3 ${
-        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-muted/30"
-      }`}
-      data-testid={`system-updates-channel-${channel}`}
-    >
-      <RadioGroupItem
-        id={inputId}
-        value={channel}
-        disabled={disabled}
-        aria-labelledby={labelId}
-        aria-describedby={describedBy}
-        className="mt-0.5"
-      />
-      <span className="min-w-0 space-y-1">
-        <span id={labelId} className="block text-sm font-medium">
-          {label}
-        </span>
-        <span
-          id={descriptionId}
-          className="block whitespace-normal break-words text-xs text-muted-foreground"
-        >
-          {description}
-        </span>
-      </span>
-    </Label>
   );
 }
 
@@ -467,6 +313,7 @@ function LastChecked({ checkedAt }: { checkedAt?: string | number | null }) {
 
 interface UpdateActionsProps {
   checking: boolean;
+  disabled?: boolean;
   showApply: boolean;
   latest: string;
   url?: string;
@@ -481,7 +328,7 @@ function UpdateActions(props: UpdateActionsProps) {
       className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
       data-testid="system-updates-actions"
     >
-      <CheckNowButton checking={props.checking} onCheck={props.onCheck} />
+      <CheckNowButton checking={props.checking} disabled={props.disabled} onCheck={props.onCheck} />
       <ReleaseNotesLink url={props.url} />
       <ApplyUpdateDialog
         showApply={props.showApply}
@@ -495,16 +342,18 @@ function UpdateActions(props: UpdateActionsProps) {
 
 function CheckNowButton({
   checking,
+  disabled,
   onCheck,
 }: {
   checking: boolean;
+  disabled?: boolean;
   onCheck: () => Promise<void>;
 }) {
   return (
     <Button
       variant="outline"
       size="sm"
-      disabled={checking}
+      disabled={checking || disabled}
       onClick={() => void onCheck()}
       className="cursor-pointer"
       data-testid="system-updates-check"

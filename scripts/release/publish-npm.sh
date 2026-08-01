@@ -36,6 +36,10 @@ die() {
   exit 1
 }
 
+npm_view_version() {
+  bash "$ROOT_DIR/scripts/release/npm-view-version.sh" "$1"
+}
+
 VERSION=""
 DIST_TAG=""
 RELEASE_TAG=""
@@ -102,14 +106,20 @@ fi
 
 package_already_published() {
   local pkg="$1"
-  npm view "${pkg}@${VERSION}" version --silent >/dev/null 2>&1
+  local published_version
+  if ! published_version="$(npm_view_version "${pkg}@${VERSION}")"; then
+    die "could not verify whether $pkg@$VERSION is already published"
+  fi
+  [[ -n "$published_version" ]]
 }
 
 record_already_published() {
   local pkg="$1"
   if [[ "$DIST_TAG" == "nightly" ]]; then
     local tagged_version
-    tagged_version="$(npm view "${pkg}@${DIST_TAG}" version --silent 2>/dev/null || true)"
+    if ! tagged_version="$(npm_view_version "${pkg}@${DIST_TAG}")"; then
+      die "could not verify $pkg@$DIST_TAG for idempotent publication"
+    fi
     if [[ "$tagged_version" != "$VERSION" ]]; then
       die "$pkg@$VERSION exists, but $pkg@$DIST_TAG resolves to '${tagged_version:-nothing}'; refusing idempotent success"
     fi
@@ -121,7 +131,16 @@ record_already_published() {
 REQUIRED_PLATFORMS=(linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64)
 
 WORK_DIR="$(mktemp -d)"
-trap 'rm -rf "$WORK_DIR"' EXIT
+CLI_PACKAGE_JSON="$ROOT_DIR/apps/cli/package.json"
+CLI_PACKAGE_BACKUP="$WORK_DIR/cli-package.json"
+cp "$CLI_PACKAGE_JSON" "$CLI_PACKAGE_BACKUP"
+cleanup() {
+  if [[ -f "$CLI_PACKAGE_BACKUP" ]]; then
+    cp "$CLI_PACKAGE_BACKUP" "$CLI_PACKAGE_JSON"
+  fi
+  rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT
 
 # -- Resolve and verify release assets ----------------------------------------
 
@@ -222,7 +241,7 @@ fi
 # so users get matching runtime bundles. The runtime packages were just
 # published above, so this version exists on npm now.
 log "Setting the launcher version and optionalDependencies to $VERSION..."
-node - "$ROOT_DIR/apps/cli/package.json" "$VERSION" <<'NODE'
+node - "$CLI_PACKAGE_JSON" "$VERSION" <<'NODE'
   const fs = require("fs");
   const [path, version] = process.argv.slice(2);
   const pkg = JSON.parse(fs.readFileSync(path, "utf8"));

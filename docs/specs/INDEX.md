@@ -158,7 +158,6 @@ System pages (Radarr/Sonarr-style) for status, disk usage, database maintenance,
 | Spec | Status |
 |---|---|
 | [system-page](system-page/spec.md) | draft |
-| [npm-nightly-channel](npm-nightly-channel/spec.md) | shipped |
 | [storage-maintenance](system-page/storage-maintenance.md) | building |
 | [feature-toggles](feature-toggles/spec.md) | draft |
 
@@ -168,6 +167,7 @@ System pages (Radarr/Sonarr-style) for status, disk usage, database maintenance,
 
 | Spec | Status |
 |---|---|
+| [npm-nightly-channel](npm-nightly-channel/spec.md) | shipped |
 | [agent-resume-runtime-recovery](agent-resume-runtime-recovery/spec.md) | shipped |
 | [agent-stall-recovery](agent-stall-recovery/spec.md) | draft |
 | [mcp-session-observability](mcp-session-observability/spec.md) | approved |

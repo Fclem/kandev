@@ -54,13 +54,20 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("if: ${{ github.event_name == 'schedule' }}", nightly)
         self.assertIn("ref: ${{ github.sha }}", nightly)
         self.assertIn('MAIN_SHA="$(git rev-parse HEAD)"', nightly)
-        self.assertIn('LATEST_STABLE="$(npm view kandev@latest version --silent)"', nightly)
+        self.assertIn(
+            'LATEST_STABLE="$(bash scripts/release/npm-view-version.sh kandev@latest)"',
+            nightly,
+        )
         self.assertIn('echo "stable_version=$LATEST_STABLE" >> "$GITHUB_OUTPUT"', nightly)
         self.assertIn('STABLE_COMMIT="$(git rev-parse "v${LATEST_STABLE}^{commit}")"', nightly)
         self.assertIn('node scripts/release/nightly-version.mjs "$LATEST_STABLE" "$MAIN_SHA"', nightly)
         self.assertIn('if [[ "$MAIN_SHA" == "$STABLE_COMMIT" ]]', nightly)
-        self.assertIn('npm view "kandev@$NIGHTLY_VERSION" version --silent', nightly)
-        self.assertIn('npm view "kandev@nightly" version --silent', nightly)
+        self.assertIn(
+            'bash scripts/release/npm-view-version.sh "kandev@$NIGHTLY_VERSION"', nightly
+        )
+        self.assertIn(
+            'bash scripts/release/npm-view-version.sh kandev@nightly', nightly
+        )
         self.assertIn('echo "nightly_version_at_start=$PUBLISHED_NIGHTLY" >> "$GITHUB_OUTPUT"', nightly)
         self.assertIn('PUBLISHED_SHA="${BASH_REMATCH[1]}"', nightly)
         self.assertIn('git merge-base --is-ancestor "$MAIN_SHA" "$PUBLISHED_COMMIT"', nightly)
@@ -113,9 +120,15 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn('--version "${{ needs.nightly-prepare.outputs.version }}"', nightly)
         self.assertIn('--dist-tag nightly', nightly)
         self.assertIn('--assets-dir dist/nightly-assets', nightly)
-        self.assertIn('CURRENT_LATEST="$(npm view kandev@latest version --silent)"', nightly)
+        self.assertIn(
+            'CURRENT_LATEST="$(bash scripts/release/npm-view-version.sh kandev@latest)"',
+            nightly,
+        )
         self.assertIn('if [[ "$CURRENT_LATEST" != "$NIGHTLY_BASELINE" ]]', nightly)
-        self.assertIn('CURRENT_NIGHTLY="$(npm view kandev@nightly version --silent 2>/dev/null || true)"', nightly)
+        self.assertIn(
+            'CURRENT_NIGHTLY="$(bash scripts/release/npm-view-version.sh kandev@nightly)"',
+            nightly,
+        )
         self.assertIn('if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]', nightly)
         self.assertLess(
             nightly.index('if [[ "$CURRENT_LATEST" != "$NIGHTLY_BASELINE" ]]'),
@@ -135,6 +148,9 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             'elif [[ "$DIST_TAG" == "nightly" && -z "$SOURCE_ASSETS_DIR" ]]',
             PUBLISH_NPM,
         )
+        self.assertIn('bash "$ROOT_DIR/scripts/release/npm-view-version.sh"', PUBLISH_NPM)
+        self.assertIn('CLI_PACKAGE_BACKUP="$WORK_DIR/cli-package.json"', PUBLISH_NPM)
+        self.assertIn('cp "$CLI_PACKAGE_BACKUP" "$CLI_PACKAGE_JSON"', PUBLISH_NPM)
 
     def test_publish_npm_rejects_version_dist_tag_mismatches(self) -> None:
         cases = (

@@ -168,8 +168,9 @@ For a user service installed by `kandev service install`, use **Settings → Sys
 For a verified npm/npx user service, the same page also provides an install-wide **Stable** or
 **Nightly** choice. Stable reads signed GitHub Releases and remains selected by default. Nightly
 reads npm's `kandev@nightly` tag and may contain unstable code from `main`. Select the row, use
-**Save changes**, inspect the exact version, and then apply it separately. Apply re-resolves the
-mutable npm tag and installs the exact immutable version it names.
+**Save changes**, inspect the exact version, and then apply it separately. Nightly apply re-resolves
+the mutable npm tag and installs the exact immutable version it names; Stable re-resolves its
+GitHub release.
 
 To leave Nightly, select Stable, save, and apply the displayed stable release. If the UI cannot do
 that, use the manual stable recovery below. Homebrew, Desktop, system-service, unmanaged,
@@ -186,6 +187,8 @@ kandev service restart
 kandev service status
 
 # Managed npx service (run each service command through npx)
+# This service points into npm's cache. Reinstall after upgrades; npm cache cleanup invalidates it.
+# Prefer a global npm installation when the service must survive cache cleanup.
 # Append original install-time flags to service install when used.
 npx -y kandev@latest service install
 npx -y kandev@latest service restart

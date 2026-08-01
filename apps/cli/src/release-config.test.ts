@@ -248,6 +248,8 @@ describe("release npm publishing", () => {
 
     expect(script).toContain('npm publish --access public --provenance --tag "$DIST_TAG"');
     expect(script).toContain("pkg.version = version;");
+    expect(script).toContain('CLI_PACKAGE_BACKUP="$WORK_DIR/cli-package.json"');
+    expect(script).toContain('cp "$CLI_PACKAGE_BACKUP" "$CLI_PACKAGE_JSON"');
     expect(script).toMatch(
       /RUNTIME_PACKAGES=\([\s\S]+@kdlbs\/runtime-linux-x64[\s\S]+@kdlbs\/runtime-win32-x64[\s\S]+\)[\s\S]+for pkg in "\$\{RUNTIME_PACKAGES\[@\]\}"[\s\S]+Publishing kandev@\$VERSION/,
     );
@@ -256,8 +258,8 @@ describe("release npm publishing", () => {
   it("only treats an existing nightly version as idempotent when the nightly tag matches", () => {
     const script = readRepoFile("scripts/release/publish-npm.sh");
 
-    expect(script).toContain('npm view "${pkg}@${VERSION}" version --silent');
-    expect(script).toContain('npm view "${pkg}@${DIST_TAG}" version --silent');
+    expect(script).toContain('npm_view_version "${pkg}@${VERSION}"');
+    expect(script).toContain('npm_view_version "${pkg}@${DIST_TAG}"');
     expect(script).toContain('if [[ "$DIST_TAG" == "nightly" ]]');
     expect(script).toContain('if [[ "$tagged_version" != "$VERSION" ]]');
     expect(script).toContain("refusing idempotent success");

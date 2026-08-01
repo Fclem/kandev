@@ -34,14 +34,21 @@ kandev
 ```
 
 Stable is the default and is selected by npm's `latest` tag. To test the current prerelease from
-`main`, use the npm-only `nightly` tag instead:
+`main` without changing a global installation, run a one-off copy from the npm-only `nightly` tag:
 
 ```bash
 npx -y kandev@nightly
-# or
+```
+
+To replace a global Stable installation with Nightly, use:
+
+```bash
 npm install -g kandev@nightly
 kandev
 ```
+
+The global command replaces the installed `kandev` channel. Return to Stable with
+`npm install -g kandev@latest`.
 
 Nightly builds may be unstable. They are best-effort builds scheduled for 12:00 UTC only when
 `main` has commits after the latest stable release and that exact commit has not already been

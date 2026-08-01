@@ -1,7 +1,7 @@
 import { test, expect } from "../../fixtures/test-base";
 import type { Page } from "@playwright/test";
 import { PrAssetCapture } from "../../helpers/pr-asset-capture";
-import { NIGHTLY_VERSION, useManagedNPMUpdates } from "./updates-channel-helpers";
+import { NIGHTLY_TAG, NIGHTLY_VERSION, useManagedNPMUpdates } from "./updates-channel-helpers";
 
 test.describe("System update channel", () => {
   test("selects and persists Nightly before offering the exact target", async ({
@@ -31,12 +31,12 @@ test.describe("System update channel", () => {
       expect((await saved).status()).toBe(200);
 
       await expect(nightly).toBeChecked();
-      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_VERSION);
+      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_TAG);
       expect(fixture.registryRequests()).toBeGreaterThanOrEqual(1);
 
       await testPage.reload();
       await expect(nightly).toBeChecked();
-      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_VERSION);
+      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_TAG);
 
       const desktopViewport = testPage.viewportSize();
       await capture.screenshot("desktop-nightly-update-channel", {
@@ -75,7 +75,7 @@ test.describe("System update channel", () => {
         });
       });
       await testPage.getByTestId("system-updates-apply").click();
-      await expect(testPage.getByRole("alertdialog")).toContainText(NIGHTLY_VERSION);
+      await expect(testPage.getByRole("alertdialog")).toContainText(NIGHTLY_TAG);
       await testPage.getByTestId("system-updates-apply-confirm").click();
       await expect.poll(() => applyBody).toEqual({ confirm: "UPDATE" });
       await expect.poll(() => jobRequests).toBeGreaterThan(0);
@@ -116,7 +116,7 @@ async function makeExactNightlyAvailable(testPage: Page): Promise<void> {
       contentType: "application/json",
       body: JSON.stringify({
         current: "v1.0.0",
-        latest: NIGHTLY_VERSION,
+        latest: NIGHTLY_TAG,
         latest_url: `https://www.npmjs.com/package/kandev/v/${NIGHTLY_VERSION}`,
         latest_checked_at: new Date().toISOString(),
         update_available: true,

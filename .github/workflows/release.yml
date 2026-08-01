@@ -612,7 +612,14 @@ jobs:
             exit 1
           fi
 
-          LATEST_STABLE="$(npm view kandev@latest version --silent)"
+          if ! LATEST_STABLE="$(bash scripts/release/npm-view-version.sh kandev@latest)"; then
+            echo "Could not resolve npm @latest; skipping this best-effort Nightly run."
+            exit 0
+          fi
+          if [[ -z "$LATEST_STABLE" ]]; then
+            echo "npm @latest is missing; skipping this best-effort Nightly run."
+            exit 0
+          fi
           echo "stable_version=$LATEST_STABLE" >> "$GITHUB_OUTPUT"
           NIGHTLY_VERSION="$(node scripts/release/nightly-version.mjs "$LATEST_STABLE" "$MAIN_SHA")"
           STABLE_COMMIT="$(git rev-parse "v${LATEST_STABLE}^{commit}")"
@@ -631,10 +638,17 @@ jobs:
             exit 0
           fi
 
-          PUBLISHED_NIGHTLY="$(npm view "kandev@nightly" version --silent 2>/dev/null || true)"
+          if ! PUBLISHED_NIGHTLY="$(bash scripts/release/npm-view-version.sh kandev@nightly)"; then
+            echo "Could not resolve npm @nightly; skipping this best-effort Nightly run."
+            exit 0
+          fi
           echo "nightly_version_at_start=$PUBLISHED_NIGHTLY" >> "$GITHUB_OUTPUT"
 
-          if npm view "kandev@$NIGHTLY_VERSION" version --silent >/dev/null 2>&1; then
+          if ! PUBLISHED_VERSION="$(bash scripts/release/npm-view-version.sh "kandev@$NIGHTLY_VERSION")"; then
+            echo "Could not verify kandev@$NIGHTLY_VERSION; skipping this best-effort Nightly run."
+            exit 0
+          fi
+          if [[ -n "$PUBLISHED_VERSION" ]]; then
             if [[ "$PUBLISHED_NIGHTLY" != "$NIGHTLY_VERSION" ]]; then
               echo "kandev@$NIGHTLY_VERSION exists but @nightly resolves to '${PUBLISHED_NIGHTLY:-nothing}'." >&2
               exit 1
@@ -1945,12 +1959,22 @@ jobs:
           NIGHTLY_AT_START: ${{ needs.nightly-prepare.outputs.nightly_version_at_start }}
         run: |
           set -euo pipefail
-          CURRENT_LATEST="$(npm view kandev@latest version --silent)"
+          if ! CURRENT_LATEST="$(bash scripts/release/npm-view-version.sh kandev@latest)"; then
+            echo "Could not revalidate npm @latest; skipping Nightly publication."
+            exit 0
+          fi
+          if [[ -z "$CURRENT_LATEST" ]]; then
+            echo "npm @latest is missing; skipping Nightly publication."
+            exit 0
+          fi
           if [[ "$CURRENT_LATEST" != "$NIGHTLY_BASELINE" ]]; then
             echo "Stable npm baseline moved from $NIGHTLY_BASELINE to $CURRENT_LATEST while this run was building; skipping stale Nightly publication."
             exit 0
           fi
-          CURRENT_NIGHTLY="$(npm view kandev@nightly version --silent 2>/dev/null || true)"
+          if ! CURRENT_NIGHTLY="$(bash scripts/release/npm-view-version.sh kandev@nightly)"; then
+            echo "Could not revalidate npm @nightly; skipping Nightly publication."
+            exit 0
+          fi
           if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]; then
             echo "npm @nightly moved from ${NIGHTLY_AT_START:-nothing} to ${CURRENT_NIGHTLY:-nothing} while this run was building; skipping superseded publication."
             exit 0

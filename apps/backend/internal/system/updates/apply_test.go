@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -82,21 +83,6 @@ func TestService_ApplyUsesSelectedExactNightlyTarget(t *testing.T) {
 	pool := newTestPool(t)
 	const packageVersion = "1.2.4-nightly.shaabc123def456"
 	const targetTag = "v" + packageVersion
-	if err := persistence.WriteLatestNightlyVersion(
-		pool.Writer(),
-		"1.2.4-nightly.sha000000000000",
-		"https://example/old-nightly",
-		time.Now().UTC(),
-	); err != nil {
-		t.Fatalf("write nightly: %v", err)
-	}
-	if _, err := pool.Writer().Exec(
-		`UPDATE kandev_meta SET value = ? WHERE key = ?`,
-		"not-a-timestamp",
-		"latest_version_nightly_checked_at",
-	); err != nil {
-		t.Fatalf("corrupt stale nightly timestamp: %v", err)
-	}
 	store := &memorySettingsStore{value: []byte(ChannelNightly), present: true}
 	tracker := jobs.NewTracker(nil, logger.Default())
 	var gotReq applyRequest
@@ -131,6 +117,79 @@ func TestService_ApplyUsesSelectedExactNightlyTarget(t *testing.T) {
 			packageVersion,
 		)
 	}
+}
+
+func TestService_ApplyDoesNotPersistRejectedExactNightly(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	pool := newTestPool(t)
+	const target = "v1.2.4-nightly.shaabc123def456"
+	originalCheckedAt := time.Unix(1_700_000_000, 0).UTC()
+	if err := persistence.WriteLatestNightlyVersion(
+		pool.Writer(),
+		target,
+		"https://example/original",
+		originalCheckedAt,
+	); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(
+		pool,
+		target,
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(&memorySettingsStore{value: []byte(ChannelNightly), present: true}),
+		WithJobs(jobs.NewTracker(nil, logger.Default())),
+	)
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		return target, "https://example/resolved", nil
+	})
+
+	if _, err := svc.Apply(context.Background(), "UPDATE"); !errors.Is(err, ErrNoUpdateAvailable) {
+		t.Fatalf("Apply error=%v want ErrNoUpdateAvailable", err)
+	}
+	version, targetURL, checkedAt, err := persistence.ReadLatestNightlyVersion(pool.Reader())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != target || targetURL != "https://example/original" || !checkedAt.Equal(originalCheckedAt) {
+		t.Fatalf("rejected apply rewrote cache: version=%q url=%q checkedAt=%v", version, targetURL, checkedAt)
+	}
+}
+
+func TestService_ApplyRejectsConcurrentNightlyBeforeSecondResolution(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	pool := newTestPool(t)
+	release := make(chan struct{})
+	svc := NewService(
+		pool,
+		"v1.2.3",
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(&memorySettingsStore{value: []byte(ChannelNightly), present: true}),
+		WithJobs(jobs.NewTracker(nil, logger.Default())),
+		WithApplyRunner(func(_ context.Context, _ applyRequest) (map[string]interface{}, error) {
+			<-release
+			return map[string]interface{}{"status": "started"}, nil
+		}),
+	)
+	var resolutions atomic.Int32
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		resolutions.Add(1)
+		return "v1.2.4-nightly.shaabc123def456", "https://example/nightly", nil
+	})
+
+	if _, err := svc.Apply(context.Background(), "UPDATE"); err != nil {
+		t.Fatalf("first Apply: %v", err)
+	}
+	if _, err := svc.Apply(context.Background(), "UPDATE"); !errors.Is(err, ErrApplyInProgress) {
+		t.Fatalf("second Apply error=%v want ErrApplyInProgress", err)
+	}
+	if got := resolutions.Load(); got != 1 {
+		t.Fatalf("nightly resolutions=%d want 1", got)
+	}
+	close(release)
 }
 
 func TestWriteApplyIntentPreservesNativeNoBootStart(t *testing.T) {

@@ -49,6 +49,8 @@ func HandleSetChannel(svc *Service) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, ErrChannelUnsupported):
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, ErrRateLimited):
+			writeRateLimited(c, svc)
 		case errors.Is(err, ErrUpdateResolve):
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		case err != nil:
@@ -67,15 +69,7 @@ func HandleCheck(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		resp, err := svc.Check(c.Request.Context())
 		if errors.Is(err, ErrRateLimited) {
-			retry := svc.RetryAfter()
-			seconds := int64(math.Ceil(retry.Seconds()))
-			if seconds < 1 {
-				seconds = 1
-			}
-			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error":               ErrRateLimited.Error(),
-				"retry_after_seconds": seconds,
-			})
+			writeRateLimited(c, svc)
 			return
 		}
 		if err != nil {
@@ -84,6 +78,18 @@ func HandleCheck(svc *Service) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, resp)
 	}
+}
+
+func writeRateLimited(c *gin.Context, svc *Service) {
+	retry := svc.RetryAfter()
+	seconds := int64(math.Ceil(retry.Seconds()))
+	if seconds < 1 {
+		seconds = 1
+	}
+	c.JSON(http.StatusTooManyRequests, gin.H{
+		"error":               ErrRateLimited.Error(),
+		"retry_after_seconds": seconds,
+	})
 }
 
 // HandleApply queues a service-managed self-update. It is deliberately gated

@@ -197,4 +197,34 @@ describe("useUpdates channel saving", () => {
     expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
     expect(mocks.setSystemUpdates).toHaveBeenLastCalledWith(nightly);
   });
+
+  it("keeps a channel save authoritative over a check started while it is pending", async () => {
+    const pendingSave = deferred<UpdatesResponse>();
+    const pendingCheck = deferred<UpdatesResponse>();
+    mocks.saveUpdatesChannel.mockReturnValue(pendingSave.promise);
+    mocks.checkUpdates.mockReturnValue(pendingCheck.promise);
+    const { result } = renderHook(() => useUpdates());
+
+    let savePromise!: Promise<UpdatesResponse>;
+    let checkPromise!: Promise<UpdatesResponse | undefined>;
+    act(() => {
+      savePromise = result.current.saveChannel("nightly");
+      checkPromise = result.current.check();
+    });
+
+    await act(async () => {
+      pendingCheck.resolve(updates("stable"));
+      await checkPromise;
+    });
+    expect(mocks.setSystemUpdates).not.toHaveBeenCalled();
+
+    const nightly = updates("nightly");
+    await act(async () => {
+      pendingSave.resolve(nightly);
+      await savePromise;
+    });
+
+    expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
+    expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
+  });
 });

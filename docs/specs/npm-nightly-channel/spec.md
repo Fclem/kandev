@@ -20,8 +20,8 @@ launcher and native runtime packages users install in production.
   `X.Y.(Z+1)-nightly.shaabcdef123456`.
 - Every nightly publishes `kandev` and all five `@kdlbs/runtime-*` packages at the same immutable
   version under the npm `nightly` dist-tag. The stable `latest` dist-tag does not move.
-- Users install the channel with `npm install -g kandev@nightly` or
-  `npx -y kandev@nightly`.
+- Users persistently install the channel with `npm install -g kandev@nightly`. The command
+  `npx -y kandev@nightly` runs a transient Nightly copy without changing a global installation.
 - Settings > System > Updates exposes Stable and Nightly for a verified, Kandev-managed npm or
   npx user service. Stable is the default and the setting is install-wide.
 - Desktop, Homebrew, local-checkout, unknown, unmanaged, and system-service installations remain

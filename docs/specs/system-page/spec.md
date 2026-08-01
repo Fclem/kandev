@@ -68,7 +68,10 @@ The **System** group header (and the **Status** child entry) show a numeric badg
 
 ### Backend surface
 
-A new package `apps/backend/internal/system/` owns these endpoints. It absorbs the existing `internal/health/` package as a sub-component. Endpoints use the same auth model as the rest of `/api/v1/settings/*` (no separate admin tier); see [Permissions](#permissions) for the destructive-action confirmation pattern.
+A new package `apps/backend/internal/system/` owns these endpoints. It absorbs the existing
+`internal/health/` package as a sub-component. Read routes use the normal authenticated install
+identity; selected mutation routes use the existing admin guard. See [Permissions](#permissions)
+for the exact split and destructive-action confirmation pattern.
 
 ```
 GET    /api/v1/system/health                      (existing; unchanged)

@@ -5,6 +5,7 @@ import path from "node:path";
 import type { BackendContext } from "../../fixtures/backend";
 
 export const NIGHTLY_VERSION = "1.0.1-nightly.shaabcdef123456";
+export const NIGHTLY_TAG = `v${NIGHTLY_VERSION}`;
 
 type ManagedNPMUpdatesFixture = {
   registryRequests: () => number;
@@ -16,9 +17,9 @@ export async function useManagedNPMUpdates(
   version = NIGHTLY_VERSION,
 ): Promise<ManagedNPMUpdatesFixture> {
   const registry = await startRegistry(version);
-  const metadataPath = writeManagedServiceMetadata(backend);
   let releaseEnv: (() => Promise<void>) | undefined;
   try {
+    const metadataPath = writeManagedServiceMetadata(backend);
     releaseEnv = await backend.useEnv({
       KANDEV_RUNNING_AS_SERVICE: "true",
       KANDEV_SERVICE_MODE: "user",

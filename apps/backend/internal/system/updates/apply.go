@@ -42,9 +42,19 @@ type updateIntent struct {
 }
 
 func (s *Service) applyPreflight(ctx context.Context) (UpdatesResponse, *serviceInstallMetadata, error) {
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+
 	// Read install state once so channel capability, ApplySupported, and the
 	// intent file all reflect the same service metadata snapshot.
 	install, metadata := s.detectInstallState()
+	applySupported, reason := install.applySupport()
+	if !applySupported {
+		return UpdatesResponse{}, nil, fmt.Errorf("%w: %s", ErrApplyUnsupported, reason)
+	}
+	if metadata == nil {
+		return UpdatesResponse{}, nil, ErrApplyUnsupported
+	}
 	channel, err := s.effectiveChannel(ctx, install)
 	if err != nil {
 		return UpdatesResponse{}, nil, err
@@ -57,9 +67,6 @@ func (s *Service) applyPreflight(ctx context.Context) (UpdatesResponse, *service
 			return UpdatesResponse{}, nil, fmt.Errorf("%w: %v", ErrUpdateResolve, err)
 		}
 		checkedAt = s.now().UTC()
-		if err := s.writeLatestVersion(channel, version, releaseURL, checkedAt); err != nil {
-			return UpdatesResponse{}, nil, err
-		}
 	} else {
 		version, releaseURL, checkedAt, err = s.readLatestVersion(channel)
 		if err != nil {
@@ -70,11 +77,10 @@ func (s *Service) applyPreflight(ctx context.Context) (UpdatesResponse, *service
 	if !resp.UpdateAvailable {
 		return UpdatesResponse{}, nil, ErrNoUpdateAvailable
 	}
-	if !resp.ApplySupported {
-		return UpdatesResponse{}, nil, fmt.Errorf("%w: %s", ErrApplyUnsupported, resp.ApplyUnsupportedReason)
-	}
-	if metadata == nil {
-		return UpdatesResponse{}, nil, ErrApplyUnsupported
+	if channel == ChannelNightly {
+		if err := s.writeLatestVersion(channel, version, releaseURL, checkedAt); err != nil {
+			return UpdatesResponse{}, nil, err
+		}
 	}
 	return resp, metadata, nil
 }

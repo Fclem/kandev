@@ -2,7 +2,7 @@
 
 Install Kandev as an OS-managed service (systemd on Linux, launchd on macOS) so it auto-starts and stays running. User-mode services installed by `kandev service install` can self-update from the System → Updates page. A verified managed npm/npx user service can select Stable (the default) or the npm Nightly channel there. Homebrew, non-service, local-checkout, and `--system` installs remain Stable-only.
 
-Manual updates must preserve the install type: global npm uses `npm i -g kandev@latest`; npx reruns the desired `kandev@<tag>` service command; Homebrew uses `brew upgrade kandev`; and a local checkout is rebuilt with `make service-install`. Managed services must then refresh and restart the unit with the same mode and flags.
+Manual updates must preserve the install type: global npm uses `npm i -g kandev@latest`; npx reruns the desired `kandev@<tag>` service command; Homebrew uses `brew upgrade kandev`; and a local checkout is rebuilt with `make service-install`. Reuse custom `--port`, `--home-dir`, and `--no-boot-start` values on `service install`; `service restart` carries only `--system` when applicable.
 
 This guide assumes you've already installed kandev via [Homebrew or npm](../apps/cli/README.md#quick-start) and that `kandev` works when run interactively.
 
@@ -103,28 +103,31 @@ Package-manager installs use versioned paths. Manual upgrades replace those path
 Use the commands for the original install type:
 
 ```bash
+# Reuse these install-time options only if the original service used them:
+# --home-dir /path/to/kandev-home --port 38429 --no-boot-start
+
 # Global npm user service
 npm i -g kandev@latest
-kandev service install
+kandev service install  # append original install-time options here
 kandev service restart
 
 # Managed npx user service
-npx -y kandev@latest service install
+npx -y kandev@latest service install  # append original install-time options here
 npx -y kandev@latest service restart
 
 # Homebrew user service (Stable only)
 brew upgrade kandev
-kandev service install
+kandev service install  # append original install-time options here
 kandev service restart
 
 # Local checkout service
-make service-install
+make service-install HOME_DIR=/path/to/kandev-home PORT=38429  # preserve values when used
 make service-restart
 ```
 
 If you launch `kandev` interactively after an upgrade, it will detect a stale unit and print a one-line reminder. You can also check with `kandev service config` to see the paths that would be baked in by the next install.
 
-System services (`kandev service install --system`) do not expose UI self-update. Update them with their original package manager from a privileged shell, then rerun the matching executable with `service install --system` and `service restart --system`, preserving any custom flags.
+System services (`kandev service install --system`) do not expose UI self-update. Update them with their original package manager from a privileged shell, then rerun the matching executable. Preserve custom install-time flags on `service install --system`; use only `--system` on `service restart --system`.
 
 ## Linux Boot-Start (`loginctl enable-linger`)
 
@@ -218,11 +221,11 @@ reinstall the service, and restart it. There is no Homebrew or Desktop Nightly c
 ## Updating: TL;DR
 
 - Managed npm/npx user service: use **Settings → System → Updates → Apply update**. Eligible services can first save Stable or Nightly.
-- Manual global npm service: run `npm i -g kandev@latest`, then `kandev service install` and `kandev service restart` with the original flags.
-- Manual npx service: run `npx -y kandev@latest service install`, then the matching npx `service restart`, with the original flags.
-- Manual Homebrew service: run `brew upgrade kandev`, then `kandev service install` and `kandev service restart` with the original flags.
-- Local checkout service: run `make service-install` and `make service-restart`.
-- System service: use the matching manual path through a privileged shell and retain `--system` on service commands.
+- Manual global npm service: run `npm i -g kandev@latest`, then `kandev service install` with the original install-time options and plain `kandev service restart`.
+- Manual npx service: run `npx -y kandev@latest service install` with the original install-time options, then plain npx `service restart`.
+- Manual Homebrew service: run `brew upgrade kandev`, then `kandev service install` with the original install-time options and plain `kandev service restart`.
+- Local checkout service: preserve `HOME_DIR`, `PORT`, and `NO_BOOT_START` values on `make service-install`; then run `make service-restart` without them.
+- System service: use the matching manual path through a privileged shell; retain `--system` on both service commands and put other original options only on `service install`.
 
 ## Uninstalling
 

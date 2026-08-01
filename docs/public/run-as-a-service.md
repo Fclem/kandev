@@ -175,23 +175,26 @@ To leave Nightly, select Stable, save, and apply the displayed stable release. I
 that, use the manual stable recovery below. Homebrew, Desktop, system-service, unmanaged,
 local-checkout, unknown, and invalid-metadata installs cannot select Nightly.
 
-If the Apply action is unavailable or fails, use the recovery command that matches the original install, keeping the same mode and home flags so absolute paths and bundle metadata are refreshed:
+If the Apply action is unavailable or fails, use the recovery command that matches the original install. Repeat custom `--home-dir`, `--port`, and `--no-boot-start` values only on `service install`; `service restart` and `service status` accept `--system` but not those install-time flags.
 
 ```bash
 # Global npm service
 npm install --global kandev@latest
-kandev service install --home-dir "$HOME/.kandev"
+# Append original install-time flags here when used.
+kandev service install
 kandev service restart
 kandev service status
 
 # Managed npx service (run each service command through npx)
-npx -y kandev@latest service install --home-dir "$HOME/.kandev"
-npx -y kandev@latest service restart --home-dir "$HOME/.kandev"
-npx -y kandev@latest service status --home-dir "$HOME/.kandev"
+# Append original install-time flags to service install when used.
+npx -y kandev@latest service install
+npx -y kandev@latest service restart
+npx -y kandev@latest service status
 
 # Homebrew service (Stable only)
 brew upgrade kandev
-kandev service install --home-dir "$HOME/.kandev"
+# Append original install-time flags here when used.
+kandev service install
 kandev service restart
 ```
 

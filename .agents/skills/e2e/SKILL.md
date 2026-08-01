@@ -427,7 +427,21 @@ E2E tests run against the **production Vite build served by the Go backend**, no
 unzip report-*.zip -d report-shard && cat report-shard/*.jsonl
 ```
 
-When a CI shard fails, download its report-*.zip artifact and unzip it; the report is a *.jsonl event stream. Build a testId map by walking the events: test titles and locations come from the testBegin events, and final status plus duration come from the testEnd events. Match them by test id. This surfaces the slow but passing specs (the timing markers in Playwright output) that never show up as outright failures but are latent flake risks. Specs whose duration approaches the 60s per-test timeout (defined in playwright.config.ts) are the flake candidates to harden. Typically by converting raw chat-flow assertions to the waitForChatIdle() / expectChatResponseVisible() recovery helpers documented earlier in this file.
+When a CI shard fails, distinguish its two useful artifacts. Download and unzip
+the blob `report-*.zip` to map test IDs, titles, locations, final status, and
+timings from its JSONL events. Download `test-results-<shard>` for the exact
+failed assertion, `error-context.md`, screenshot, and trace:
+
+```bash
+gh run download <run-id> --name test-results-<shard> --dir <temp-dir>
+```
+
+The blob report surfaces slow-but-passing specs that are latent flake risks;
+the test-results artifact identifies the concrete failure to reproduce. Specs
+whose duration approaches the 60s per-test timeout (defined in
+`playwright.config.ts`) are candidates to harden, typically by converting raw
+chat-flow assertions to the `waitForChatIdle()` / `expectChatResponseVisible()`
+recovery helpers documented earlier in this file.
 
 ### Flake triage: intrinsic race vs. contention
 

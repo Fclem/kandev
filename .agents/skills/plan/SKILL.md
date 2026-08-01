@@ -209,7 +209,8 @@ Each task should be small enough for one focused implementation pass:
 Pending. Before marking the task done, replace this with every exact command
 actually run and its outcome/count, generated artifact paths, and cleanup or
 teardown evidence (including temporary capture-spec removal and
-`git diff --check` when used).
+`git diff --check` when used). Record security/trust and external side-effect
+boundaries when applicable, or explicitly state `None`.
 
 Break a task down further if it touches unrelated subsystems, needs more than one focused session, or the title contains "and".
 

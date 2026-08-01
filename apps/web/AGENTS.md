@@ -69,6 +69,19 @@ lib/api/domains/                    # API clients
 
 **Hydration:** Go injects `window.__KANDEV_BOOT_PAYLOAD__` into the SPA shell before React mounts. `lib/state/hydration/merge-strategies.ts` has `deepMerge()`, `mergeSessionMap()`, `mergeLoadingState()` to avoid overwriting live client state. Pass `activeSessionId` to protect active sessions.
 
+**Same-resource refreshes:** Preserve an already-loaded snapshot while
+refreshing the same workspace or resource. Surface the refresh separately for
+the local spinner, busy control, or disabled action; clear data only for the
+initial load or an identity change. A deferred hook test should show stale
+content with `loading=true`, and desktop/mobile E2E should keep the content
+visible during refresh.
+
+**Live update provenance:** A WebSocket snapshot may omit optional fields that
+the boot payload or hydrated store already established. Merge those fields in
+provenance order—live payload, persisted session metadata, then existing store
+value—rather than replacing known immutable metadata with `undefined`. Add a
+handler regression test for an omitted-field update.
+
 For rebasing or finishing PRs written against the old Next.js runtime, follow
 [`docs/nextjs-spa-migration.md`](../../docs/nextjs-spa-migration.md).
 

@@ -42,6 +42,15 @@ failure from each shard before changing code:
 scripts/pr-state --job-log <job_id>
 ```
 
+If that summary still names only the aggregate gate, enumerate the failed jobs
+from the workflow and inspect the concrete shard (then load its test-results
+artifact as described in `/e2e`):
+
+```bash
+gh run view <run-id> --json jobs \
+  --jq '.jobs[] | select(.conclusion == "failure") | {name, databaseId}'
+```
+
 Verify the output names the actual failing spec or assertion, rather than only
 the merge-report exit code.
 

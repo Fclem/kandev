@@ -229,7 +229,7 @@ reinstall the service, and restart it. There is no Homebrew or Desktop Nightly c
 
 - Managed npm/npx user service: use **Settings → System → Updates → Apply update**. Eligible services can first save Stable or Nightly.
 - Manual global npm service: install `kandev@latest` for Stable or `kandev@nightly` for Nightly, then run `kandev service install` with the original install-time options and plain `kandev service restart`.
-- Manual npx service: run `npx -y kandev@latest service install` for Stable or replace `latest` with `nightly`, then rerun the matching npx `service restart`.
+- Manual npx service: run `npx -y kandev@latest service install` for Stable or replace `latest` with `nightly`, then rerun the matching npx `service restart`. The unit points into `~/.npm/_npx`; prefer a global npm install for a service that must survive npm cache cleanup.
 - Manual Homebrew service: run `brew upgrade kandev`, then `kandev service install` with the original install-time options and plain `kandev service restart`.
 - Local checkout service: preserve `HOME_DIR`, `PORT`, and `NO_BOOT_START` values on `make service-install`; then run `make service-restart` without them.
 - System service: use the matching manual path through a privileged shell; retain `--system` on both service commands and put other original options only on `service install`.

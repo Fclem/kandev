@@ -90,6 +90,17 @@ function serviceCardView(
   };
 }
 
+function ChannelPendingNotice({ pending, saving }: { pending: boolean; saving: boolean }) {
+  if (!pending) return null;
+  return (
+    <p className="text-xs text-muted-foreground" data-testid="system-updates-channel-pending">
+      {saving
+        ? "Saving channel change before checking or applying an update."
+        : "Save channel changes before checking or applying an update."}
+    </p>
+  );
+}
+
 export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesCardProps = {}) {
   const { updates, check, saveChannel, error: updatesError } = useUpdates();
   const selfUpdate = useSelfUpdate({ latestVersion: updates?.latest, onComplete: reloadDocument });
@@ -128,7 +139,7 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
   };
 
   const view = serviceCardView(updates, selfUpdate);
-  const channelPending = channel.isDirty;
+  const channelPending = channel.isDirty || channel.isSaving;
 
   return (
     <SettingsCard isDirty={channel.isDirty} data-testid="system-updates-card">
@@ -137,11 +148,7 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
       </CardHeader>
       <CardContent className="space-y-4">
         <UpdateChannelControl {...channel} />
-        {channelPending && (
-          <p className="text-xs text-muted-foreground" data-testid="system-updates-channel-pending">
-            Save channel changes before checking or applying an update.
-          </p>
-        )}
+        <ChannelPendingNotice pending={channelPending} saving={channel.isSaving} />
         <VersionGrid
           current={view.current}
           latest={channelPending ? "-" : view.latest}

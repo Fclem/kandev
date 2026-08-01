@@ -252,7 +252,9 @@ describe("useUpdates channel saving", () => {
     expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
     expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
   });
+});
 
+describe("useUpdates save serialization", () => {
   it("keeps the newest save authoritative across hook instances", async () => {
     const firstSave = deferred<UpdatesResponse>();
     const secondSave = deferred<UpdatesResponse>();
@@ -264,19 +266,25 @@ describe("useUpdates channel saving", () => {
 
     let firstPromise!: Promise<UpdatesResponse>;
     let secondPromise!: Promise<UpdatesResponse>;
-    act(() => {
+    await act(async () => {
       firstPromise = first.result.current.saveChannel("nightly");
       secondPromise = second.result.current.saveChannel("stable");
+      await Promise.resolve();
     });
+    expect(mocks.saveUpdatesChannel).toHaveBeenCalledOnce();
+    expect(mocks.saveUpdatesChannel).toHaveBeenCalledWith("nightly");
+
+    await act(async () => {
+      firstSave.resolve(updates("nightly"));
+      await firstPromise;
+    });
+    expect(mocks.saveUpdatesChannel).toHaveBeenCalledTimes(2);
+    expect(mocks.saveUpdatesChannel).toHaveBeenLastCalledWith("stable");
 
     const stable = updates("stable");
     await act(async () => {
       secondSave.resolve(stable);
       await secondPromise;
-    });
-    await act(async () => {
-      firstSave.resolve(updates("nightly"));
-      await firstPromise;
     });
 
     expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();

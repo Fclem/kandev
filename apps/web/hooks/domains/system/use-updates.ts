@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { checkUpdates, fetchUpdates, saveUpdatesChannel } from "@/lib/api/domains/system-api";
-import type { UpdatesChannel } from "@/lib/types/system";
+import type { UpdatesChannel, UpdatesResponse } from "@/lib/types/system";
 
 type UpdatesRequestCoordinator = {
   readRevision: number;
   saveRevision: number;
   activeSaves: number;
+  saveTail: Promise<void>;
 };
 
 // Hooks own their loading/error UI, but every instance writes the same Zustand
@@ -19,7 +20,12 @@ const coordinators = new WeakMap<object, UpdatesRequestCoordinator>();
 function coordinatorFor(store: object): UpdatesRequestCoordinator {
   let coordinator = coordinators.get(store);
   if (!coordinator) {
-    coordinator = { readRevision: 0, saveRevision: 0, activeSaves: 0 };
+    coordinator = {
+      readRevision: 0,
+      saveRevision: 0,
+      activeSaves: 0,
+      saveTail: Promise.resolve(),
+    };
     coordinators.set(store, coordinator);
   }
   return coordinator;
@@ -81,24 +87,33 @@ export function useUpdates() {
   }, [coordinator, setSystemUpdates]);
 
   const saveChannel = useCallback(
-    async (channel: UpdatesChannel) => {
+    (channel: UpdatesChannel): Promise<UpdatesResponse> => {
       const request = ++coordinator.saveRevision;
       coordinator.activeSaves += 1;
       coordinator.readRevision += 1;
       setError(null);
-      try {
-        const res = await saveUpdatesChannel(channel);
-        if (request === coordinator.saveRevision) setSystemUpdates(res);
-        return res;
-      } catch (e) {
-        if (request === coordinator.saveRevision) {
-          setError(e instanceof Error ? e.message : String(e));
+      const previousSave = coordinator.saveTail;
+      const operation = (async () => {
+        await previousSave;
+        try {
+          const res = await saveUpdatesChannel(channel);
+          if (request === coordinator.saveRevision) setSystemUpdates(res);
+          return res;
+        } catch (e) {
+          if (request === coordinator.saveRevision) {
+            setError(e instanceof Error ? e.message : String(e));
+          }
+          throw e;
+        } finally {
+          coordinator.activeSaves -= 1;
+          coordinator.readRevision += 1;
         }
-        throw e;
-      } finally {
-        coordinator.activeSaves -= 1;
-        coordinator.readRevision += 1;
-      }
+      })();
+      coordinator.saveTail = operation.then(
+        () => undefined,
+        () => undefined,
+      );
+      return operation;
     },
     [coordinator, setSystemUpdates],
   );

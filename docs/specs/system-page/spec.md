@@ -99,9 +99,10 @@ GET    /api/v1/system/restart-capability           - whether this launch mode su
 POST   /api/v1/system/restart                      - ask the configured supervisor to restart Kandev
 ```
 
-The Updates routes retain their existing snake_case JSON fields for wire compatibility. This is a
-deliberate exception to the newer System routes' camelCase fields; clients must not translate or
-rename either established contract.
+The live Updates API has always used the snake_case JSON fields shown above. Earlier camelCase
+names in this draft (`latestCheckedAt`, `releaseUrl`, and `applySupported`) were documentation
+errors, corrected here without renaming any wire field. Clients follow each System endpoint's
+documented contract; newer endpoints may use camelCase.
 
 Storage endpoints are defined separately in [Storage Maintenance](storage-maintenance.md).
 

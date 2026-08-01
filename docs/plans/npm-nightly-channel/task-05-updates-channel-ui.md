@@ -20,6 +20,8 @@ spec: "../../specs/npm-nightly-channel/spec.md"
   stale manual-check errors while leaving the draft retryable.
 - **Acceptance:** all `useUpdates` instances sharing one Zustand store coordinate read/save
   authority so an older response cannot overwrite a newer saved channel.
+- **Acceptance:** channel PATCH requests are serialized in invocation order, and update actions
+  remain blocked for the full save even when a newer draft temporarily matches the old baseline.
 - **Verification:** `cd apps && pnpm --filter @kandev/web exec vitest run lib/api/domains/system-api.test.ts hooks/domains/system/use-updates.test.ts components/settings/system/updates-card.test.tsx`
 - **Verification:** `cd apps/web && pnpm run typecheck`
 - **Files likely touched:** `apps/web/lib/types/system.ts`, `lib/api/domains/system-api.ts`,
@@ -34,6 +36,6 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 ## Verification results
 
 - `cd apps && pnpm --filter @kandev/web exec vitest run lib/api/domains/system-api.test.ts hooks/domains/system/use-updates.test.ts components/settings/system/updates-card.test.tsx`
-  — passed, 55 tests, including cross-instance stale-read and save-order races.
+  — passed, 56 tests, including cross-instance stale-read, serialized-save, and save-gating races.
 - `cd apps/web && pnpm run typecheck` — passed.
 - Focused ESLint for the changed frontend unit/API files — passed with no warnings.

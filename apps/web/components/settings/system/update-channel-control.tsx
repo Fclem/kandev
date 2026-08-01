@@ -17,6 +17,7 @@ export function useUpdateChannelDraft(
   const savedRef = useRef(saved);
   const [draft, setDraftState] = useState<UpdatesChannel>(authoritative);
   const draftRef = useRef(draft);
+  const [isSaving, setIsSaving] = useState(false);
   // A newer edit can circle back to the old saved value, so value equality
   // alone cannot decide whether an in-flight save response may rebase it.
   const draftRevisionRef = useRef(0);
@@ -51,6 +52,7 @@ export function useUpdateChannelDraft(
       const submitted = revision as UpdatesChannel;
       const submittedRevision = draftRevisionRef.current;
       pendingSaveRevisionRef.current = submittedRevision;
+      setIsSaving(true);
       try {
         const response = await saveChannel(submitted);
         savedRef.current = response.channel;
@@ -63,6 +65,7 @@ export function useUpdateChannelDraft(
         if (pendingSaveRevisionRef.current === submittedRevision) {
           pendingSaveRevisionRef.current = null;
         }
+        setIsSaving(false);
       }
     },
     discard: () => setDraft(savedRef.current),
@@ -72,6 +75,7 @@ export function useUpdateChannelDraft(
     draft,
     editable,
     isDirty,
+    isSaving,
     unsupportedReason: updates?.channel_unsupported_reason ?? "",
     setDraft,
   };

@@ -16,6 +16,8 @@ spec: "../../specs/npm-nightly-channel/spec.md"
   exact target; downgrade-like channel returns are not sent as normal upgrade notifications.
 - **Acceptance:** verified npm/npx user services can use Nightly; all other install kinds remain
   Stable.
+- **Acceptance:** update-status read failures are logged with their internal detail while the API
+  returns a generic error body.
 - **Verification:** `cd apps/backend && go test -v ./internal/system/...`
 - **Verification:** `cd apps && pnpm --filter kandev exec vitest run src/service/self_update.test.ts`
 - **Files likely touched:** `apps/backend/internal/system/system.go`, updates `handler.go`,

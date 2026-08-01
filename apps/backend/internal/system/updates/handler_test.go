@@ -123,6 +123,12 @@ func TestHandleGetPropagatesRequestContext(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s want 500", w.Code, w.Body.String())
 	}
+	if strings.Contains(w.Body.String(), context.Canceled.Error()) {
+		t.Fatalf("response exposed settings read details: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "failed to load updates") {
+		t.Fatalf("response=%s want generic error", w.Body.String())
+	}
 }
 
 func TestHandleCheck_FirstCall200(t *testing.T) {

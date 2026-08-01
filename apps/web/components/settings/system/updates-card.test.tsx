@@ -36,6 +36,7 @@ import { UpdatesCard } from "./updates-card";
 
 const APPLY_TESTID = "system-updates-apply";
 const ARIA_CHECKED = "aria-checked";
+const CHECK_TESTID = "system-updates-check";
 const CHANNEL_TESTID = "system-updates-channel";
 const ERROR_TESTID = "system-updates-error";
 const LATEST_TESTID = "system-updates-latest";
@@ -364,7 +365,7 @@ describe("UpdatesCard channel setting", () => {
     expect(saveChannel).not.toHaveBeenCalled();
     expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe("true");
     expect(screen.getByTestId(LATEST_TESTID).textContent).toBe("-");
-    expect(screen.getByTestId("system-updates-check").hasAttribute("disabled")).toBe(true);
+    expect(screen.getByTestId(CHECK_TESTID).hasAttribute("disabled")).toBe(true);
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
     expect(screen.queryByTestId("system-updates-release-link")).toBeNull();
     expect(screen.getByTestId("system-updates-channel-pending").textContent).toContain(
@@ -395,7 +396,7 @@ describe("UpdatesCard channel save errors", () => {
     });
 
     renderUpdatesCard();
-    fireEvent.click(screen.getByTestId("system-updates-check"));
+    fireEvent.click(screen.getByTestId(CHECK_TESTID));
     await waitFor(() =>
       expect(screen.getByTestId(ERROR_TESTID).textContent).toContain("npm registry unavailable"),
     );
@@ -455,7 +456,7 @@ describe("UpdatesCard channel save errors", () => {
     }));
 
     renderUpdatesCard();
-    fireEvent.click(screen.getByTestId("system-updates-check"));
+    fireEvent.click(screen.getByTestId(CHECK_TESTID));
     await waitFor(() => expect(screen.getByTestId(ERROR_TESTID).textContent).toContain("27s"));
 
     fireEvent.click(screen.getByRole("radio", { name: /^Nightly/ }));
@@ -468,6 +469,45 @@ describe("UpdatesCard channel save errors", () => {
 });
 
 describe("UpdatesCard concurrent channel edits", () => {
+  it("keeps update actions blocked when the draft reverts during a save", async () => {
+    let resolveSave!: (value: UpdatesResponse) => void;
+    const saveChannel = vi.fn(
+      () =>
+        new Promise<UpdatesResponse>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    mocks.useUpdates.mockReturnValue({
+      updates: updates(),
+      check: vi.fn(),
+      reload: vi.fn(),
+      saveChannel,
+      error: null,
+    });
+
+    renderUpdatesCard();
+    const stable = screen.getByRole("radio", { name: /^Stable/ });
+    fireEvent.click(screen.getByRole("radio", { name: /^Nightly/ }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_NAME }));
+    await waitFor(() => expect(saveChannel).toHaveBeenCalledWith("nightly"));
+
+    fireEvent.click(stable);
+
+    expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe("false");
+    expect(screen.getByTestId(CHECK_TESTID).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
+    expect(screen.getByTestId("system-updates-channel-pending").textContent).toContain("Saving");
+
+    await act(async () => {
+      resolveSave(updates({ channel: "nightly" }));
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe(
+        "true",
+      ),
+    );
+  });
+
   it("preserves a newer channel choice while an earlier save is pending", async () => {
     let resolveSave!: (value: UpdatesResponse) => void;
     const saveChannel = vi.fn(

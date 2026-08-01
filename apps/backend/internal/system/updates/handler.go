@@ -12,13 +12,17 @@ import (
 	"github.com/kandev/kandev/internal/common/httpmw"
 )
 
+const errorResponseKey = "error"
+
 // HandleGet returns the cached kandev_meta view of the selected channel. It
-// never contacts an upstream. Errors from the meta read are surfaced as 500.
+// never contacts an upstream. Read failures are logged and returned as a
+// generic 500 so storage details do not cross the API boundary.
 func HandleGet(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		resp, err := svc.Get(c.Request.Context())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			svc.log.Error("updates: get failed", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{errorResponseKey: "failed to load updates"})
 			return
 		}
 		c.JSON(http.StatusOK, resp)
@@ -38,27 +42,27 @@ func HandleSetChannel(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 		if origin != "" && !httpmw.AllowedOrigin(origin, c.Request.Host) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "cross-origin update channel change is not allowed"})
+			c.JSON(http.StatusForbidden, gin.H{errorResponseKey: "cross-origin update channel change is not allowed"})
 			return
 		}
 		var req channelRequestBody
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel request"})
+			c.JSON(http.StatusBadRequest, gin.H{errorResponseKey: "invalid channel request"})
 			return
 		}
 		resp, err := svc.SelectChannel(c.Request.Context(), req.Channel)
 		switch {
 		case errors.Is(err, ErrInvalidChannel):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{errorResponseKey: err.Error()})
 		case errors.Is(err, ErrChannelUnsupported):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{errorResponseKey: err.Error()})
 		case errors.Is(err, ErrRateLimited):
 			writeRateLimited(c, svc)
 		case errors.Is(err, ErrUpdateResolve):
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{errorResponseKey: err.Error()})
 		case err != nil:
 			svc.log.Error("updates: set channel failed", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to set update channel"})
+			c.JSON(http.StatusInternalServerError, gin.H{errorResponseKey: "failed to set update channel"})
 		default:
 			c.JSON(http.StatusOK, resp)
 		}
@@ -76,7 +80,7 @@ func HandleCheck(svc *Service) gin.HandlerFunc {
 			return
 		}
 		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{errorResponseKey: err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, resp)
@@ -90,7 +94,7 @@ func writeRateLimited(c *gin.Context, svc *Service) {
 		seconds = 1
 	}
 	c.JSON(http.StatusTooManyRequests, gin.H{
-		"error":               ErrRateLimited.Error(),
+		errorResponseKey:      ErrRateLimited.Error(),
 		"retry_after_seconds": seconds,
 	})
 }
@@ -101,27 +105,27 @@ func writeRateLimited(c *gin.Context, svc *Service) {
 func HandleApply(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !sameOriginOrNoOrigin(c.Request) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "cross-origin update apply is not allowed"})
+			c.JSON(http.StatusForbidden, gin.H{errorResponseKey: "cross-origin update apply is not allowed"})
 			return
 		}
 		var req applyRequestBody
 		_ = c.ShouldBindJSON(&req)
 		jobID, err := svc.Apply(context.Background(), req.Confirm)
 		if errors.Is(err, ErrApplyConfirm) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{errorResponseKey: err.Error()})
 			return
 		}
 		if errors.Is(err, ErrUpdateResolve) {
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadGateway, gin.H{errorResponseKey: err.Error()})
 			return
 		}
 		if errors.Is(err, ErrNoUpdateAvailable) || errors.Is(err, ErrApplyUnsupported) ||
 			errors.Is(err, ErrApplyInProgress) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			c.JSON(http.StatusConflict, gin.H{errorResponseKey: err.Error()})
 			return
 		}
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{errorResponseKey: err.Error()})
 			return
 		}
 		c.JSON(http.StatusAccepted, ApplyResponse{JobID: jobID})

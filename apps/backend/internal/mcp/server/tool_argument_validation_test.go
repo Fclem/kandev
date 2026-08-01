@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -26,7 +27,9 @@ func TestToolArgumentValidationRejectsUnknownTopLevelArgument(t *testing.T) {
 	require.NotEmpty(t, result.Content)
 	content, ok := result.Content[0].(mcp.TextContent)
 	require.True(t, ok)
-	assert.Contains(t, content.Text, "unexpected")
+	assert.Equal(t,
+		"invalid arguments for list_workspaces_kandev: validation failed at $ (keyword: additionalProperties)",
+		content.Text)
 }
 
 func TestToolArgumentValidation(t *testing.T) {
@@ -106,6 +109,40 @@ func TestToolArgumentValidation(t *testing.T) {
 		assert.False(t, result.IsError)
 		assert.Equal(t, ws.ActionMCPCreateExecutorProfile, backend.lastAction)
 	})
+}
+
+func TestToolArgumentValidationDoesNotExposeRejectedValues(t *testing.T) {
+	const secret = "api-key-super-secret-123"
+	backend := &testBackend{}
+	s := newTaskModeServer(t, backend, "task-current")
+	s.mcpServer.AddTool(
+		mcp.NewToolWithRawSchema(
+			"secret_pattern_tool",
+			"Validates a secret without exposing it.",
+			json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"token": {"type": "string", "pattern": "^safe$"}
+				},
+				"required": ["token"]
+			}`),
+		),
+		s.wrapHandler("secret_pattern_tool", s.listWorkspacesHandler()),
+	)
+	s.rebuildToolArgumentValidators()
+
+	result := callTool(t, s, "secret_pattern_tool", map[string]interface{}{
+		"token": secret,
+	})
+
+	assert.True(t, result.IsError)
+	assert.Empty(t, backend.lastAction)
+	require.NotEmpty(t, result.Content)
+	content, ok := result.Content[0].(mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, content.Text, "/token")
+	assert.Contains(t, content.Text, "pattern")
+	assert.NotContains(t, content.Text, secret)
 }
 
 func TestAllRegisteredToolSchemasCompile(t *testing.T) {

@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
@@ -93,9 +95,56 @@ func (s *Server) validateToolArguments(toolName string, req mcp.CallToolRequest)
 		return req, fmt.Errorf("invalid arguments for %s: registered schema is invalid", toolName)
 	}
 	if err := validator.schema.Validate(arguments); err != nil {
-		return req, fmt.Errorf("invalid arguments for %s: %w", toolName, err)
+		return req, sanitizedToolArgumentError(toolName, err)
 	}
 	return req, nil
+}
+
+func sanitizedToolArgumentError(toolName string, err error) error {
+	var validationErr *jsonschema.ValidationError
+	if !errors.As(err, &validationErr) {
+		return fmt.Errorf("invalid arguments for %s: validation failed", toolName)
+	}
+
+	failure, keyword := firstKeywordFailure(validationErr)
+	if failure == nil {
+		failure = validationErr
+		keyword = "schema"
+	}
+	return fmt.Errorf("invalid arguments for %s: validation failed at %s (keyword: %s)",
+		toolName, validationInstancePath(failure.InstanceLocation), keyword)
+}
+
+func firstKeywordFailure(err *jsonschema.ValidationError) (*jsonschema.ValidationError, string) {
+	if err == nil {
+		return nil, ""
+	}
+	if err.ErrorKind != nil {
+		keywordPath := err.ErrorKind.KeywordPath()
+		if len(keywordPath) > 0 && keywordPath[0] != "" {
+			return err, keywordPath[0]
+		}
+	}
+	for _, cause := range err.Causes {
+		if failure, keyword := firstKeywordFailure(cause); failure != nil {
+			return failure, keyword
+		}
+	}
+	return nil, ""
+}
+
+func validationInstancePath(tokens []string) string {
+	if len(tokens) == 0 {
+		return "$"
+	}
+
+	var path strings.Builder
+	for _, token := range tokens {
+		path.WriteByte('/')
+		token = strings.ReplaceAll(token, "~", "~0")
+		path.WriteString(strings.ReplaceAll(token, "/", "~1"))
+	}
+	return path.String()
 }
 
 func normalizeToolArguments(toolName string, arguments any) (any, error) {

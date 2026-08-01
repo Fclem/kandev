@@ -77,6 +77,48 @@ func TestService_ApplyQueuesSelfUpdateJobAndWritesIntent(t *testing.T) {
 	}
 }
 
+func TestService_ApplyUsesSelectedExactNightlyTarget(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	pool := newTestPool(t)
+	const target = "1.2.4-nightly.shaabc123def456"
+	if err := persistence.WriteLatestNightlyVersion(
+		pool.Writer(),
+		"1.2.4-nightly.sha000000000000",
+		"https://example/old-nightly",
+		time.Now().UTC(),
+	); err != nil {
+		t.Fatalf("write nightly: %v", err)
+	}
+	store := &memorySettingsStore{value: []byte(ChannelNightly), present: true}
+	tracker := jobs.NewTracker(nil, logger.Default())
+	var gotReq applyRequest
+	svc := NewService(
+		pool,
+		"v1.2.3",
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(store),
+		WithJobs(tracker),
+		WithApplyRunner(func(_ context.Context, req applyRequest) (map[string]interface{}, error) {
+			gotReq = req
+			return map[string]interface{}{"status": "started"}, nil
+		}),
+	)
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		return target, "https://example/nightly", nil
+	})
+
+	jobID, err := svc.Apply(context.Background(), "UPDATE")
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	waitForJobState(t, tracker, jobID, jobs.StateSucceeded)
+	if gotReq.Intent.TargetTag != target || gotReq.Intent.TargetVersion != target {
+		t.Fatalf("intent target tag=%q version=%q want %q", gotReq.Intent.TargetTag, gotReq.Intent.TargetVersion, target)
+	}
+}
+
 func TestWriteApplyIntentPreservesNativeNoBootStart(t *testing.T) {
 	homeDir := t.TempDir()
 	metadataPath := filepath.Join(homeDir, "service", "install.json")

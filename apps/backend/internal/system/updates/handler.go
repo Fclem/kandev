@@ -9,8 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// HandleGet returns the cached kandev_meta view of latest version. It never
-// hits GitHub. Errors from the meta read are surfaced as 500.
+// HandleGet returns the cached kandev_meta view of the selected channel. It
+// never contacts an upstream. Errors from the meta read are surfaced as 500.
 func HandleGet(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		resp, err := svc.Get()
@@ -26,9 +26,37 @@ type applyRequestBody struct {
 	Confirm string `json:"confirm"`
 }
 
-// HandleCheck triggers a synchronous GitHub poll. When the per-process
-// limiter denies the request a 429 is returned with retry_after_seconds.
-// Other errors are surfaced as 502 since the upstream is GitHub.
+type channelRequestBody struct {
+	Channel string `json:"channel"`
+}
+
+// HandleSetChannel changes the install-wide update source.
+func HandleSetChannel(svc *Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req channelRequestBody
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel request"})
+			return
+		}
+		resp, err := svc.SelectChannel(c.Request.Context(), req.Channel)
+		switch {
+		case errors.Is(err, ErrInvalidChannel):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, ErrChannelUnsupported):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, ErrUpdateResolve):
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		case err != nil:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusOK, resp)
+		}
+	}
+}
+
+// HandleCheck triggers a synchronous poll of the selected source. When the
+// per-process limiter denies the request a 429 is returned with
+// retry_after_seconds. Other upstream errors are surfaced as 502.
 func HandleCheck(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		resp, err := svc.Check(c.Request.Context())
@@ -66,6 +94,10 @@ func HandleApply(svc *Service) gin.HandlerFunc {
 		jobID, err := svc.Apply(context.Background(), req.Confirm)
 		if errors.Is(err, ErrApplyConfirm) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, ErrUpdateResolve) {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
 		if errors.Is(err, ErrNoUpdateAvailable) || errors.Is(err, ErrApplyUnsupported) ||

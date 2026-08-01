@@ -1,7 +1,7 @@
 name: release
 
-# Maintainer-only release workflow.
-# Trigger: GitHub Actions UI → "Run workflow" (workflow_dispatch).
+# Stable releases are maintainer-dispatched. npm nightlies run from main at
+# 12:00 UTC when main has changed since the latest stable npm release.
 #
 # Flow (one click → everything below):
 #   1. prepare           — bump version, regen CHANGELOG, open + merge release PR, push tag vX.Y.Z
@@ -39,6 +39,8 @@ name: release
 #   TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD — updater artifact signing
 
 on:
+  schedule:
+    - cron: "0 12 * * *"
   workflow_dispatch:
     inputs:
       bump:
@@ -72,6 +74,7 @@ permissions:
 jobs:
   prepare:
     name: Prepare release (bump version, PR, tag)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     environment: ${{ (!inputs.dry_run && !inputs.desktop_validation_only && inputs.backfill_tag == '') && 'release' || 'release-validation' }}
     permissions:
@@ -574,15 +577,107 @@ jobs:
           echo "DRY RUN: apps/cli/package.json bumped to $NEXT (in-runner only)."
           echo "DRY RUN: CHANGELOG.md regenerated (in-runner only)."
 
+  nightly-prepare:
+    name: Prepare npm nightly metadata
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.metadata.outputs.should_publish }}
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      ref: ${{ steps.metadata.outputs.ref }}
+      stable_version: ${{ steps.metadata.outputs.stable_version }}
+      nightly_version_at_start: ${{ steps.metadata.outputs.nightly_version_at_start }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Resolve nightly metadata
+        id: metadata
+        run: |
+          set -euo pipefail
+          echo "should_publish=false" >> "$GITHUB_OUTPUT"
+
+          MAIN_SHA="$(git rev-parse HEAD)"
+          if [[ "$MAIN_SHA" != "${{ github.sha }}" ]]; then
+            echo "Checked out $MAIN_SHA instead of scheduled SHA ${{ github.sha }}." >&2
+            exit 1
+          fi
+
+          LATEST_STABLE="$(npm view kandev@latest version --silent)"
+          echo "stable_version=$LATEST_STABLE" >> "$GITHUB_OUTPUT"
+          NIGHTLY_VERSION="$(node scripts/release/nightly-version.mjs "$LATEST_STABLE" "$MAIN_SHA")"
+          STABLE_COMMIT="$(git rev-parse "v${LATEST_STABLE}^{commit}")"
+
+          if ! git merge-base --is-ancestor "$STABLE_COMMIT" "$MAIN_SHA"; then
+            echo "Latest stable v$LATEST_STABLE is not an ancestor of scheduled main $MAIN_SHA." >&2
+            exit 1
+          fi
+
+          echo "version=$NIGHTLY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NIGHTLY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref=$MAIN_SHA" >> "$GITHUB_OUTPUT"
+
+          if [[ "$MAIN_SHA" == "$STABLE_COMMIT" ]]; then
+            echo "No commits on main since stable v$LATEST_STABLE; skipping nightly."
+            exit 0
+          fi
+
+          PUBLISHED_NIGHTLY="$(npm view "kandev@nightly" version --silent 2>/dev/null || true)"
+          echo "nightly_version_at_start=$PUBLISHED_NIGHTLY" >> "$GITHUB_OUTPUT"
+
+          if npm view "kandev@$NIGHTLY_VERSION" version --silent >/dev/null 2>&1; then
+            if [[ "$PUBLISHED_NIGHTLY" != "$NIGHTLY_VERSION" ]]; then
+              echo "kandev@$NIGHTLY_VERSION exists but @nightly resolves to '${PUBLISHED_NIGHTLY:-nothing}'." >&2
+              exit 1
+            fi
+            echo "kandev@$NIGHTLY_VERSION is already published under @nightly; skipping."
+            exit 0
+          fi
+
+          if [[ -n "$PUBLISHED_NIGHTLY" ]]; then
+            if [[ ! "$PUBLISHED_NIGHTLY" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.sha([0-9a-f]{12})$ ]]; then
+              echo "kandev@nightly has unsupported version '$PUBLISHED_NIGHTLY'; refusing to infer publication order." >&2
+              exit 1
+            fi
+            PUBLISHED_SHA="${BASH_REMATCH[1]}"
+            if ! PUBLISHED_COMMIT="$(git rev-parse --verify "${PUBLISHED_SHA}^{commit}" 2>/dev/null)"; then
+              echo "Cannot resolve published Nightly commit prefix $PUBLISHED_SHA in main history." >&2
+              exit 1
+            fi
+            if git merge-base --is-ancestor "$MAIN_SHA" "$PUBLISHED_COMMIT"; then
+              echo "A Nightly from the same or a newer main commit is already published; skipping superseded commit $MAIN_SHA."
+              exit 0
+            fi
+            if ! git merge-base --is-ancestor "$PUBLISHED_COMMIT" "$MAIN_SHA"; then
+              echo "Published Nightly commit $PUBLISHED_COMMIT is not an ancestor of scheduled main $MAIN_SHA." >&2
+              exit 1
+            fi
+          fi
+
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+
   build-web:
     name: Build web SPA
-    needs: prepare
-    if: ${{ !inputs.dry_run }}
+    needs: [prepare, nightly-prepare]
+    if: >-
+      ${{ !cancelled() && (
+        (github.event_name == 'workflow_dispatch' && needs.prepare.result == 'success' && !inputs.dry_run) ||
+        (github.event_name == 'schedule' && needs.nightly-prepare.result == 'success' && needs.nightly-prepare.outputs.should_publish == 'true')
+      ) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          ref: ${{ needs.prepare.outputs.ref }}
+          ref: ${{ github.event_name == 'schedule' && needs.nightly-prepare.outputs.ref || needs.prepare.outputs.ref }}
           persist-credentials: false
       - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
         with:
@@ -596,7 +691,7 @@ jobs:
         run: pnpm -C apps install --frozen-lockfile
       - name: Build web (Vite)
         env:
-          KANDEV_VERSION: ${{ needs.prepare.outputs.tag }}
+          KANDEV_VERSION: ${{ github.event_name == 'schedule' && needs.nightly-prepare.outputs.tag || needs.prepare.outputs.tag }}
           VITE_KANDEV_API_PORT: ""
           VITE_KANDEV_DEBUG: ""
         run: pnpm -C apps --filter @kandev/web build
@@ -608,8 +703,12 @@ jobs:
 
   build-bundles:
     name: Build platform bundle (${{ matrix.platform }})
-    needs: [prepare, build-web]
-    if: ${{ !inputs.dry_run }}
+    needs: [prepare, nightly-prepare, build-web]
+    if: >-
+      ${{ !cancelled() && (
+        (github.event_name == 'workflow_dispatch' && needs.prepare.result == 'success' && !inputs.dry_run) ||
+        (github.event_name == 'schedule' && needs.nightly-prepare.result == 'success' && needs.nightly-prepare.outputs.should_publish == 'true')
+      ) }}
     strategy:
       matrix:
         include:
@@ -642,7 +741,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          ref: ${{ needs.prepare.outputs.ref }}
+          ref: ${{ github.event_name == 'schedule' && needs.nightly-prepare.outputs.ref || needs.prepare.outputs.ref }}
           persist-credentials: false
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -671,7 +770,7 @@ jobs:
       - name: Build backend binaries
         env:
           CC: ${{ matrix.cc || '' }}
-          KANDEV_VERSION: ${{ needs.prepare.outputs.tag }}
+          KANDEV_VERSION: ${{ github.event_name == 'schedule' && needs.nightly-prepare.outputs.tag || needs.prepare.outputs.tag }}
         run: |
           test -f apps/backend/internal/webapp/embedded/generated/index.html
           cd apps/backend
@@ -725,7 +824,7 @@ jobs:
   build-desktop:
     name: Build desktop app (${{ matrix.platform }})
     needs: [prepare, build-bundles]
-    if: ${{ !inputs.dry_run }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run }}
     strategy:
       matrix:
         include:
@@ -1271,7 +1370,7 @@ jobs:
   docker-amd64:
     name: Build & push container image (amd64)
     needs: [prepare, build-bundles]
-    if: ${{ !inputs.dry_run && !inputs.desktop_validation_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && !inputs.desktop_validation_only }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1342,7 +1441,7 @@ jobs:
   docker-arm64:
     name: Build & push container image (arm64)
     needs: [prepare, build-bundles]
-    if: ${{ !inputs.dry_run && !inputs.desktop_validation_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && !inputs.desktop_validation_only }}
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -1401,7 +1500,7 @@ jobs:
   docker-manifest:
     name: Assemble multi-arch base manifest
     needs: [prepare, docker-amd64, docker-arm64]
-    if: ${{ !inputs.dry_run && !inputs.desktop_validation_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && !inputs.desktop_validation_only }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1455,7 +1554,7 @@ jobs:
   docker-universal-amd64:
     name: Build & push universal image (amd64)
     needs: [prepare, docker-manifest]
-    if: ${{ !inputs.dry_run && !inputs.desktop_validation_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && !inputs.desktop_validation_only }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1507,7 +1606,7 @@ jobs:
   docker-universal-arm64:
     name: Build & push universal image (arm64)
     needs: [prepare, docker-manifest]
-    if: ${{ !inputs.dry_run && !inputs.desktop_validation_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && !inputs.desktop_validation_only }}
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -1558,7 +1657,7 @@ jobs:
     # docker-universal-manifest is included in publish-release's `needs` so
     # its size gate (and any per-arch build failure) blocks the release.
     needs: [prepare, docker-universal-amd64, docker-universal-arm64]
-    if: ${{ !inputs.dry_run && !inputs.desktop_validation_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && !inputs.desktop_validation_only }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1615,7 +1714,7 @@ jobs:
   publish-release:
     name: Publish GitHub release
     needs: [prepare, build-bundles, build-desktop, docker-universal-manifest]
-    if: ${{ !inputs.dry_run && !inputs.desktop_validation_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && !inputs.desktop_validation_only }}
     runs-on: ubuntu-latest
     permissions:
       contents: write    # softprops/action-gh-release creates the release
@@ -1765,11 +1864,14 @@ jobs:
   publish-npm:
     name: Publish npm packages
     needs: [prepare, publish-release]
-    if: ${{ !inputs.dry_run && !inputs.desktop_validation_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && !inputs.desktop_validation_only }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write    # Required for OIDC trusted publishing
       contents: read
+    concurrency:
+      group: release-npm-publication
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -1794,13 +1896,72 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           bash scripts/release/publish-npm.sh \
-            "${{ needs.prepare.outputs.version }}" \
-            "${{ needs.prepare.outputs.tag }}"
+            --version "${{ needs.prepare.outputs.version }}" \
+            --dist-tag latest \
+            --release-tag "${{ needs.prepare.outputs.tag }}"
+
+  publish-npm-nightly:
+    name: Publish npm nightly packages
+    needs: [nightly-prepare, build-bundles]
+    if: ${{ !cancelled() && github.event_name == 'schedule' && needs.nightly-prepare.result == 'success' && needs.nightly-prepare.outputs.should_publish == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write    # Required for OIDC trusted publishing
+      contents: read
+    concurrency:
+      group: release-npm-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.nightly-prepare.outputs.ref }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          version: "9.15.9"
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: pnpm
+          cache-dependency-path: apps/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm -C apps install --frozen-lockfile
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: bundle-*
+          path: dist/nightly-assets
+          merge-multiple: true
+
+      - name: Publish npm nightly packages
+        env:
+          NIGHTLY_BASELINE: ${{ needs.nightly-prepare.outputs.stable_version }}
+          NIGHTLY_AT_START: ${{ needs.nightly-prepare.outputs.nightly_version_at_start }}
+        run: |
+          set -euo pipefail
+          CURRENT_LATEST="$(npm view kandev@latest version --silent)"
+          if [[ "$CURRENT_LATEST" != "$NIGHTLY_BASELINE" ]]; then
+            echo "Stable npm baseline moved from $NIGHTLY_BASELINE to $CURRENT_LATEST while this run was building; skipping stale Nightly publication."
+            exit 0
+          fi
+          CURRENT_NIGHTLY="$(npm view kandev@nightly version --silent 2>/dev/null || true)"
+          if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]; then
+            echo "npm @nightly moved from ${NIGHTLY_AT_START:-nothing} to ${CURRENT_NIGHTLY:-nothing} while this run was building; skipping superseded publication."
+            exit 0
+          fi
+          bash scripts/release/publish-npm.sh \
+            --version "${{ needs.nightly-prepare.outputs.version }}" \
+            --dist-tag nightly \
+            --assets-dir dist/nightly-assets
 
   update-homebrew-tap:
     name: Update Homebrew tap
     needs: [prepare, publish-release]
-    if: ${{ !inputs.dry_run && !inputs.desktop_validation_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && !inputs.desktop_validation_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6

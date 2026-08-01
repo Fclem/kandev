@@ -13,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/kandev/kandev/internal/persistence"
 )
 
 type applyRunner func(context.Context, applyRequest) (map[string]interface{}, error)
@@ -43,15 +41,29 @@ type updateIntent struct {
 	CreatedAt     string                 `json:"created_at"`
 }
 
-func (s *Service) applyPreflight() (UpdatesResponse, *serviceInstallMetadata, error) {
-	version, releaseURL, checkedAt, err := persistence.ReadLatestVersion(s.pool.Reader())
+func (s *Service) applyPreflight(ctx context.Context) (UpdatesResponse, *serviceInstallMetadata, error) {
+	// Read install state once so channel capability, ApplySupported, and the
+	// intent file all reflect the same service metadata snapshot.
+	install, metadata := s.detectInstallState()
+	channel, err := s.effectiveChannel(ctx, install)
 	if err != nil {
 		return UpdatesResponse{}, nil, err
 	}
-	// Read install state once so the ApplySupported gate below and the intent
-	// file written by the caller both reflect the same snapshot.
-	install, metadata := s.detectInstallState()
-	resp := s.buildResponseFrom(install, version, releaseURL, checkedAt)
+	version, releaseURL, checkedAt, err := s.readLatestVersion(channel)
+	if err != nil {
+		return UpdatesResponse{}, nil, err
+	}
+	if channel == ChannelNightly {
+		version, releaseURL, err = s.resolveLatest(ctx, channel)
+		if err != nil {
+			return UpdatesResponse{}, nil, fmt.Errorf("%w: %v", ErrUpdateResolve, err)
+		}
+		checkedAt = s.now().UTC()
+		if err := s.writeLatestVersion(channel, version, releaseURL, checkedAt); err != nil {
+			return UpdatesResponse{}, nil, err
+		}
+	}
+	resp := s.buildResponseFromChannel(channel, install, version, releaseURL, checkedAt)
 	if !resp.UpdateAvailable {
 		return UpdatesResponse{}, nil, ErrNoUpdateAvailable
 	}

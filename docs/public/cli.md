@@ -47,6 +47,29 @@ npx -y kandev@latest
 
 If an npm policy such as `--omit=optional` prevents optional dependencies from being installed, Kandev cannot find its native runtime.
 
+### npm nightly
+
+Stable remains npm's default `latest` tag. To opt into the current prerelease from `main`, install
+or run the `nightly` tag explicitly:
+
+```bash
+npm install -g kandev@nightly
+kandev --version
+
+# One-off launch
+npx -y kandev@nightly
+```
+
+A nightly version has the form `X.Y.(Z+1)-nightly.sha<12-character-commit>`, based on the latest
+stable `X.Y.Z`. The launcher and all five platform runtime packages use that same immutable
+version. A best-effort GitHub schedule starts at 12:00 UTC and publishes only when `main` has
+changed since the latest stable release and that commit has not already been published. GitHub may
+start a scheduled run later than 12:00 UTC.
+
+Nightly does not move `latest` and does not publish a Homebrew formula, Desktop updater feed,
+container tag, Git tag, or GitHub Release. Use it for prerelease testing, not unattended production
+rollout.
+
 ## Start and stop
 
 `run` is the default command. These are equivalent:
@@ -193,13 +216,18 @@ Uninstalling the package does not remove `<home>`. Before removing that director
 
 ## Update
 
-The installer owns CLI updates:
+The installer owns CLI updates. Stable commands are:
 
 ```bash
 brew upgrade kandev
 npm install -g kandev@latest
 npx -y kandev@latest
 ```
+
+For the npm-only prerelease channel, replace `latest` with `nightly`. A verified managed npm/npx
+user service can also select **Nightly** under **Settings > System > Updates**. Stable is selected
+by default; Desktop, Homebrew, system-service, unmanaged, local-checkout, and unknown installs
+cannot change this setting.
 
 Release packages pin the shim and native runtime packages to the same SemVer. Do not copy only one binary from a different release into a bundle. A service unit contains installation-specific executable and bundle paths; after the package upgrade, reinstall it with the same service flags and restart it as described above.
 

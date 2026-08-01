@@ -159,6 +159,25 @@ func (s InstallStateResponse) applySupport() (bool, string) {
 	return true, ""
 }
 
+func (s InstallStateResponse) nightlySupport() (bool, string) {
+	if !s.RunningAsService {
+		return false, "Nightly updates require a Kandev-managed npm or npx user service."
+	}
+	if !s.ManagedService {
+		return false, "Nightly updates require valid Kandev service metadata."
+	}
+	if s.Mode != installModeUser {
+		return false, "Nightly updates are only available for user services."
+	}
+	if s.Manager != serviceManagerSystemd && s.Manager != serviceManagerLaunchd {
+		return false, "This service manager does not support nightly updates."
+	}
+	if s.Kind != installKindNPM && s.Kind != installKindNPX {
+		return false, "Nightly updates are only available for npm or npx installations."
+	}
+	return true, ""
+}
+
 func manualCommands(install InstallStateResponse, latest string) []string {
 	target := strings.TrimPrefix(latest, "v")
 	if target == "" {

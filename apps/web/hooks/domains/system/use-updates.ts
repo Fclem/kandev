@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "@/components/state-provider";
-import { checkUpdates, fetchUpdates } from "@/lib/api/domains/system-api";
+import { checkUpdates, fetchUpdates, saveUpdatesChannel } from "@/lib/api/domains/system-api";
+import type { UpdatesChannel } from "@/lib/types/system";
 
 export function useUpdates() {
   const updates = useAppStore((s) => s.system.updates);
@@ -25,7 +26,7 @@ export function useUpdates() {
   }, [setSystemUpdates]);
 
   /**
-   * Triggers a server-side re-poll of the GitHub releases endpoint. The
+   * Triggers a server-side re-poll of the selected update channel. The
    * backend rate-limits this per-process to one call per 30s and replies
    * with the fresh row (or 429 — surfaced via the returned promise).
    */
@@ -44,10 +45,25 @@ export function useUpdates() {
     }
   }, [setSystemUpdates]);
 
+  const saveChannel = useCallback(
+    async (channel: UpdatesChannel) => {
+      setError(null);
+      try {
+        const res = await saveUpdatesChannel(channel);
+        setSystemUpdates(res);
+        return res;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        throw e;
+      }
+    },
+    [setSystemUpdates],
+  );
+
   useEffect(() => {
     if (updates) return;
     void reload();
   }, [updates, reload]);
 
-  return { updates, isLoading, isChecking, error, reload, check };
+  return { updates, isLoading, isChecking, error, reload, check, saveChannel };
 }

@@ -11,10 +11,31 @@ import (
 )
 
 const (
-	metaKeyLatestVersion          = "latest_version"
-	metaKeyLatestVersionURL       = "latest_version_url"
-	metaKeyLatestVersionCheckedAt = "latest_version_checked_at"
+	metaKeyLatestVersion                 = "latest_version"
+	metaKeyLatestVersionURL              = "latest_version_url"
+	metaKeyLatestVersionCheckedAt        = "latest_version_checked_at"
+	metaKeyLatestNightlyVersion          = "latest_version_nightly"
+	metaKeyLatestNightlyVersionURL       = "latest_version_nightly_url"
+	metaKeyLatestNightlyVersionCheckedAt = "latest_version_nightly_checked_at"
 )
+
+type latestVersionKeys struct {
+	version   string
+	url       string
+	checkedAt string
+}
+
+var stableLatestVersionKeys = latestVersionKeys{
+	version:   metaKeyLatestVersion,
+	url:       metaKeyLatestVersionURL,
+	checkedAt: metaKeyLatestVersionCheckedAt,
+}
+
+var nightlyLatestVersionKeys = latestVersionKeys{
+	version:   metaKeyLatestNightlyVersion,
+	url:       metaKeyLatestNightlyVersionURL,
+	checkedAt: metaKeyLatestNightlyVersionCheckedAt,
+}
 
 const metaTableDDL = `
 CREATE TABLE IF NOT EXISTS kandev_meta (
@@ -72,14 +93,18 @@ func WriteVersion(db *sqlx.DB, version string) error {
 // latest_version_url, latest_version_checked_at) on the existing key/value
 // kandev_meta table.
 func WriteLatestVersion(db *sqlx.DB, version, url string, checkedAt time.Time) error {
-	if err := writeKey(db, metaKeyLatestVersion, version); err != nil {
+	return writeLatestVersion(db, stableLatestVersionKeys, version, url, checkedAt)
+}
+
+func writeLatestVersion(db *sqlx.DB, keys latestVersionKeys, version, url string, checkedAt time.Time) error {
+	if err := writeKey(db, keys.version, version); err != nil {
 		return err
 	}
-	if err := writeKey(db, metaKeyLatestVersionURL, url); err != nil {
+	if err := writeKey(db, keys.url, url); err != nil {
 		return err
 	}
 	ts := strconv.FormatInt(checkedAt.UTC().Unix(), 10)
-	return writeKey(db, metaKeyLatestVersionCheckedAt, ts)
+	return writeKey(db, keys.checkedAt, ts)
 }
 
 // ReadLatestVersion returns the last-known latest release tag, its URL, and
@@ -87,15 +112,19 @@ func WriteLatestVersion(db *sqlx.DB, version, url string, checkedAt time.Time) e
 // the keys are absent (e.g. on a fresh install before the first poll
 // completes) and tolerates a subset of the three keys being missing.
 func ReadLatestVersion(db *sqlx.DB) (string, string, time.Time, error) {
-	version, err := readKey(db, metaKeyLatestVersion)
+	return readLatestVersion(db, stableLatestVersionKeys)
+}
+
+func readLatestVersion(db *sqlx.DB, keys latestVersionKeys) (string, string, time.Time, error) {
+	version, err := readKey(db, keys.version)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
-	url, err := readKey(db, metaKeyLatestVersionURL)
+	url, err := readKey(db, keys.url)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
-	tsRaw, err := readKey(db, metaKeyLatestVersionCheckedAt)
+	tsRaw, err := readKey(db, keys.checkedAt)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
@@ -103,11 +132,22 @@ func ReadLatestVersion(db *sqlx.DB) (string, string, time.Time, error) {
 	if tsRaw != "" {
 		secs, perr := strconv.ParseInt(tsRaw, 10, 64)
 		if perr != nil {
-			return "", "", time.Time{}, fmt.Errorf("parse latest_version_checked_at %q: %w", tsRaw, perr)
+			return "", "", time.Time{}, fmt.Errorf("parse %s %q: %w", keys.checkedAt, tsRaw, perr)
 		}
 		checkedAt = time.Unix(secs, 0).UTC()
 	}
 	return version, url, checkedAt, nil
+}
+
+// WriteLatestNightlyVersion persists the npm nightly target independently
+// from the stable GitHub release cache.
+func WriteLatestNightlyVersion(db *sqlx.DB, version, url string, checkedAt time.Time) error {
+	return writeLatestVersion(db, nightlyLatestVersionKeys, version, url, checkedAt)
+}
+
+// ReadLatestNightlyVersion returns the isolated npm nightly target cache.
+func ReadLatestNightlyVersion(db *sqlx.DB) (string, string, time.Time, error) {
+	return readLatestVersion(db, nightlyLatestVersionKeys)
 }
 
 // hasUserTables returns true when the DB contains at least one table that is

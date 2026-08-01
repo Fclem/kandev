@@ -47,6 +47,84 @@ def job_block(name: str) -> str:
 
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
+    def test_nightly_runs_at_noon_utc_and_skips_before_building(self) -> None:
+        self.assertIn('schedule:\n    - cron: "0 12 * * *"', WORKFLOW)
+
+        nightly = job_block("nightly-prepare")
+        self.assertIn("if: ${{ github.event_name == 'schedule' }}", nightly)
+        self.assertIn("ref: ${{ github.sha }}", nightly)
+        self.assertIn('MAIN_SHA="$(git rev-parse HEAD)"', nightly)
+        self.assertIn('LATEST_STABLE="$(npm view kandev@latest version --silent)"', nightly)
+        self.assertIn('echo "stable_version=$LATEST_STABLE" >> "$GITHUB_OUTPUT"', nightly)
+        self.assertIn('STABLE_COMMIT="$(git rev-parse "v${LATEST_STABLE}^{commit}")"', nightly)
+        self.assertIn('node scripts/release/nightly-version.mjs "$LATEST_STABLE" "$MAIN_SHA"', nightly)
+        self.assertIn('if [[ "$MAIN_SHA" == "$STABLE_COMMIT" ]]', nightly)
+        self.assertIn('npm view "kandev@$NIGHTLY_VERSION" version --silent', nightly)
+        self.assertIn('npm view "kandev@nightly" version --silent', nightly)
+        self.assertIn('echo "nightly_version_at_start=$PUBLISHED_NIGHTLY" >> "$GITHUB_OUTPUT"', nightly)
+        self.assertIn('PUBLISHED_SHA="${BASH_REMATCH[1]}"', nightly)
+        self.assertIn('git merge-base --is-ancestor "$MAIN_SHA" "$PUBLISHED_COMMIT"', nightly)
+        self.assertIn('git merge-base --is-ancestor "$PUBLISHED_COMMIT" "$MAIN_SHA"', nightly)
+        self.assertIn('echo "should_publish=false" >> "$GITHUB_OUTPUT"', nightly)
+        self.assertIn('echo "should_publish=true" >> "$GITHUB_OUTPUT"', nightly)
+
+    def test_only_shared_runtime_builds_run_for_a_scheduled_nightly(self) -> None:
+        for name in ("build-web", "build-bundles"):
+            block = job_block(name)
+            self.assertIn("prepare", block)
+            self.assertIn("nightly-prepare", block)
+            self.assertIn("github.event_name == 'workflow_dispatch'", block)
+            self.assertIn("github.event_name == 'schedule'", block)
+            self.assertIn("needs.nightly-prepare.outputs.should_publish == 'true'", block)
+
+        for name in (
+            "prepare",
+            "build-desktop",
+            "docker-amd64",
+            "docker-arm64",
+            "docker-manifest",
+            "docker-universal-amd64",
+            "docker-universal-arm64",
+            "docker-universal-manifest",
+            "publish-release",
+            "publish-npm",
+            "update-homebrew-tap",
+        ):
+            self.assertIn("github.event_name == 'workflow_dispatch'", job_block(name))
+
+    def test_nightly_publish_uses_exact_sha_local_assets_and_shared_serialization(self) -> None:
+        stable = job_block("publish-npm")
+        nightly = job_block("publish-npm-nightly")
+
+        for block in (stable, nightly):
+            self.assertIn("group: release-npm-publication", block)
+            self.assertIn("cancel-in-progress: false", block)
+            self.assertIn("id-token: write", block)
+
+        self.assertIn("needs: [nightly-prepare, build-bundles]", nightly)
+        self.assertIn("ref: ${{ needs.nightly-prepare.outputs.ref }}", nightly)
+        self.assertIn("pattern: bundle-*", nightly)
+        self.assertIn("merge-multiple: true", nightly)
+        self.assertIn('--version "${{ needs.nightly-prepare.outputs.version }}"', nightly)
+        self.assertIn('--dist-tag nightly', nightly)
+        self.assertIn('--assets-dir dist/nightly-assets', nightly)
+        self.assertIn('CURRENT_LATEST="$(npm view kandev@latest version --silent)"', nightly)
+        self.assertIn('if [[ "$CURRENT_LATEST" != "$NIGHTLY_BASELINE" ]]', nightly)
+        self.assertIn('CURRENT_NIGHTLY="$(npm view kandev@nightly version --silent 2>/dev/null || true)"', nightly)
+        self.assertIn('if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]', nightly)
+        self.assertLess(
+            nightly.index('if [[ "$CURRENT_LATEST" != "$NIGHTLY_BASELINE" ]]'),
+            nightly.index("bash scripts/release/publish-npm.sh"),
+        )
+        self.assertLess(
+            nightly.index('if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]'),
+            nightly.index("bash scripts/release/publish-npm.sh"),
+        )
+
+        self.assertIn('--version "${{ needs.prepare.outputs.version }}"', stable)
+        self.assertIn('--dist-tag latest', stable)
+        self.assertIn('--release-tag "${{ needs.prepare.outputs.tag }}"', stable)
+
     def test_normal_release_uses_release_environment_and_requires_main(self) -> None:
         prepare = job_block("prepare")
         self.assertIn(
@@ -284,7 +362,8 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "update-homebrew-tap",
         ):
             block = job_block(name)
-            self.assertIn("if: ${{ !inputs.dry_run", block)
+            self.assertIn("github.event_name == 'workflow_dispatch'", block)
+            self.assertIn("!inputs.dry_run", block)
             self.assertNotIn("inputs.backfill_tag == ''", block)
 
     def test_updater_signing_validation_uses_workflow_control_revision(self) -> None:

@@ -41,6 +41,9 @@ A new **System** group is added to the existing settings sidebar (`apps/web/comp
 6. **Updates** — `/settings/system/updates`
    - Shows running version, latest available version, and a "new version available" badge if newer.
    - **Check now** button — forces a re-poll (rate-limited 30s per process).
+   - **Update channel** — Stable is the install-wide default. A verified managed npm/npx user
+     service can select Nightly through the shared Settings save flow. Desktop, Homebrew,
+     unmanaged, system-service, local, and unknown installs remain Stable with a visible reason.
    - A service update keeps its progress surface while the backend restarts. Once `/system/info` confirms the target version, the page reloads the document so the tab runs the new frontend bundle.
    - Update alerts are configured with the existing provider/event matrix under
      **Settings > General > Notifications**. The Updates page does not own a
@@ -85,7 +88,8 @@ GET    /api/v1/system/logs                        - { files: [{ name, size, mtim
 GET    /api/v1/system/logs/tail?n=1000            - last N lines of current log
 GET    /api/v1/system/logs/:name/download         - stream log file
 GET    /api/v1/system/updates                     - { current, latest, latestCheckedAt, releaseUrl, install, applySupported }
-POST   /api/v1/system/updates/check               - force GitHub re-poll; rate-limited 30s
+POST   /api/v1/system/updates/check               - force selected-source re-poll; rate-limited 30s
+PATCH  /api/v1/system/updates/channel             - persist Stable/Nightly; body { channel }
 POST   /api/v1/system/updates/apply               - queue service-only self-update; body { confirm: "UPDATE" }
 ```
 
@@ -95,15 +99,24 @@ Long-running operations (vacuum, optimize, reset, restore, snapshot create, disk
 
 ### Updates poller
 
-A background goroutine in `internal/system/updates/poller.go` starts on backend boot and polls GitHub releases for `kdlbs/kandev` every 6 hours (unauthenticated; well under the 60 req/hr/IP unauth limit). It compares `tag_name` to the running version (semver) and persists the result to `kandev_meta`:
+A background goroutine in `internal/system/updates/poller.go` starts on backend boot and polls the
+selected channel every 6 hours. Stable reads GitHub Releases for `kdlbs/kandev`; Nightly reads the
+public npm `kandev@nightly` dist-tag. It persists isolated channel targets in `kandev_meta`:
 
 - `latest_version TEXT` — highest published semver tag (e.g., `1.2.4`)
 - `latest_version_url TEXT` — URL to that GitHub release
 - `latest_version_checked_at INTEGER` — unix timestamp of last successful poll
+- `latest_version_nightly`, `latest_version_nightly_url`,
+  `latest_version_nightly_checked_at` — equivalent npm Nightly cache keys
 
-The `GET /api/v1/system/updates` handler reads from `kandev_meta` only; it never calls GitHub synchronously. It also reports the current service install state (`running_as_service`, `managed_service`, `mode`, `manager`, `kind`) so the UI can decide whether one-click apply is allowed. `POST /api/v1/system/updates/check` triggers an out-of-band refresh, rate-limited per-process to one call per 30 seconds. If the GitHub call fails (offline, rate limited, 5xx), the handler returns the last-known value and the `latestCheckedAt` exposes the staleness.
+The `GET /api/v1/system/updates` handler reads from `kandev_meta` only; it never contacts an
+upstream synchronously. It also reports the current service install state (`running_as_service`,
+`managed_service`, `mode`, `manager`, `kind`) so the UI can decide whether one-click apply is
+allowed. `POST /api/v1/system/updates/check` triggers a selected-source refresh, rate-limited
+per-process to one call per 30 seconds. If the GitHub or npm call fails (offline, rate limited,
+5xx), the channel's last-known value remains cached and `latestCheckedAt` exposes the staleness.
 
-`POST /api/v1/system/updates/apply` is available only when Kandev is running as a kandev-managed user service (`systemd --user` or launchd user agent) and the latest release is newer than the current binary. It writes an update intent under `<KANDEV_HOME_DIR>/service/update-intents/`, starts a manager-owned helper (`systemd-run --user` on Linux, or a one-shot transient LaunchAgent plist bootstrapped via `launchctl bootstrap` on macOS), and returns a `self-update` system job id. Under `KANDEV_E2E_MOCK=true`, the helper path is fake so UI and backend tests can exercise the flow without mutating npm/Homebrew or restarting the service.
+`POST /api/v1/system/updates/apply` is available only when Kandev is running as a kandev-managed user service (`systemd --user` or launchd user agent) and the selected channel exposes an applicable target. It writes the exact resolved version to an update intent under `<KANDEV_HOME_DIR>/service/update-intents/`, starts a manager-owned helper (`systemd-run --user` on Linux, or a one-shot transient LaunchAgent plist bootstrapped via `launchctl bootstrap` on macOS), and returns a `self-update` system job id. Under `KANDEV_E2E_MOCK=true`, the helper path is fake so UI and backend tests can exercise the flow without mutating npm/Homebrew or restarting the service.
 
 ### Disk-usage cache
 
@@ -141,6 +154,11 @@ The page reads the JSON statically; no backend endpoint is needed.
   Notifications provider/event settings instead of rendering a separate
   update-notification channel control.
 - **GIVEN** the user is running a kandev-managed user service and a newer release exists, **WHEN** they open `/settings/system/updates`, **THEN** the page shows **Apply update** and the confirmation queues a `self-update` job.
+- **GIVEN** the user runs a verified managed npm/npx user service, **WHEN** they select and save
+  Nightly, **THEN** the choice survives reload and update discovery follows `kandev@nightly`.
+- **GIVEN** the install is Desktop, Homebrew, unmanaged, system-service, local, or unknown,
+  **WHEN** Updates renders, **THEN** Stable remains effective and Nightly shows a visible
+  unsupported reason.
 - **GIVEN** a service update is in progress, **WHEN** `/system/info` first reports the requested target version, **THEN** the tab reloads exactly once and renders from the confirmed backend's frontend assets; an older version or temporary outage does not trigger the reload.
 - **GIVEN** the user is not running as a kandev-managed service or is running a `--system` service, **WHEN** they open `/settings/system/updates`, **THEN** the page does not render an update-apply control and instead shows the manual update commands.
 - **GIVEN** the user clicks **VACUUM** on the Database page, **WHEN** the operation completes, **THEN** the DB size delta is shown ("Reclaimed 12.3 MB"), the page Database stats refresh, and a transient info issue appears on the Status page.
@@ -153,15 +171,12 @@ The page reads the JSON statically; no backend endpoint is needed.
 
 ## Data model
 
-Two new columns on the existing `kandev_meta` table (key/value or pivoted to columns — match the existing schema). One new in-memory cache in the system package. No new SQLite tables.
-
-```
-ALTER TABLE kandev_meta ADD COLUMN latest_version TEXT;
-ALTER TABLE kandev_meta ADD COLUMN latest_version_url TEXT;
-ALTER TABLE kandev_meta ADD COLUMN latest_version_checked_at INTEGER;
-```
-
-(If `kandev_meta` is key/value-shaped, write three rows with these keys instead.)
+The existing key/value `kandev_meta` table stores stable target keys `latest_version`,
+`latest_version_url`, and `latest_version_checked_at`. Nightly uses the isolated keys
+`latest_version_nightly`, `latest_version_nightly_url`, and
+`latest_version_nightly_checked_at`. The install-wide `settings` table contains
+`updates_channel` with value `stable` or `nightly`; missing or invalid values read as Stable.
+No new SQLite table is required.
 
 ## State machine — long-running jobs
 
@@ -176,11 +191,16 @@ Each transition publishes `system.job.update` with `{ jobId, kind, state, messag
 
 ## Permissions
 
-All System endpoints require the same "logged-in install user" check as the existing `/api/v1/settings/*` endpoints — there is no admin tier in v1. Factory reset and restore endpoints additionally validate the `confirm` body field server-side as a defence-in-depth check against accidental fetches.
+System read endpoints use the normal authenticated/synthetic install identity. Mutating endpoints,
+including manual update checks, update-channel changes, update apply, maintenance, reset, and
+restore, require the existing admin guard. Destructive endpoints additionally validate their
+confirmation body server-side as defence in depth.
 
 ## Failure modes
 
 - **GitHub poll failure** — log + keep the previous `kandev_meta` row; `/api/v1/system/updates` returns the stale value.
+- **npm Nightly poll failure** — log + keep the previous Nightly cache; malformed or missing
+  `dist-tags.nightly` fails closed and is never offered.
 - **Disk walk failure** (permission error on a subdir) — return the partial result with a `warnings: [...]` array per subdir; the page renders a per-row warning icon.
 - **VACUUM failure** — DB is unaffected (VACUUM is atomic); the job ends `failed` with the SQLite error string. Status page shows a recoverable error issue.
 - **Non-SQLite maintenance call** — `vacuum`, `optimize`, and `reset` jobs fail with `not supported for <driver> driver` before running SQLite-only SQL; factory reset also rejects before stopping active executions.
@@ -201,8 +221,6 @@ All System endpoints require the same "logged-in install user" check as the exis
 ## Out of scope (v1)
 
 - Live log tail (WS streaming of new lines as they're written).
-- Channel-aware upgrade hints (npm vs homebrew vs binary install path).
-- Admin/role gating of destructive actions; everyone who can sign in can VACUUM/Reset.
 - Importing or analyzing older log files beyond filename listing + download.
 - Inline editing of `kandev_meta` or other system tables.
 - A separate top-level "System" nav entry alongside "Settings" (chose nested-in-Settings instead).
@@ -212,7 +230,6 @@ All System endpoints require the same "logged-in install user" check as the exis
 ## Future scope
 
 - Live log tail via WS subscription.
-- Channel-aware update flow (detect install method, surface the right upgrade command, optionally invoke `kandev upgrade` from the UI for binary installs).
 - Selective reset (drop only tasks, only sessions, etc.) — only if users actually need finer-grained recovery than Restore-from-snapshot.
 - Backup scheduling (e.g., daily snapshot) beyond the existing pre-migration trigger.
 - Health-issue → action wiring (e.g., a "VACUUM" CTA inline on the "Database is XYZ MB" health issue).

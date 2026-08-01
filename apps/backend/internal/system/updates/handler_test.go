@@ -2,14 +2,18 @@ package updates
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/kandev/kandev/internal/common/logger"
+	"github.com/kandev/kandev/internal/system/jobs"
 )
 
 func init() {
@@ -21,6 +25,7 @@ func newRouter(svc *Service) *gin.Engine {
 	api := r.Group("/api/v1/system")
 	api.GET("/updates", HandleGet(svc))
 	api.POST("/updates/check", HandleCheck(svc))
+	api.PATCH("/updates/channel", HandleSetChannel(svc))
 	api.POST("/updates/apply", HandleApply(svc))
 	return r
 }
@@ -74,6 +79,15 @@ func TestHandleGet_IncludesNonServiceInstallState(t *testing.T) {
 	}
 	if got := body["apply_supported"]; got != false {
 		t.Errorf("apply_supported=%v want false", got)
+	}
+	if got := body["channel"]; got != "stable" {
+		t.Errorf("channel=%v want stable", got)
+	}
+	if got := body["channel_editable"]; got != false {
+		t.Errorf("channel_editable=%v want false", got)
+	}
+	if got, ok := body["channel_unsupported_reason"].(string); !ok || got == "" {
+		t.Errorf("channel_unsupported_reason=%v want non-empty string", body["channel_unsupported_reason"])
 	}
 }
 
@@ -154,6 +168,141 @@ func TestHandleCheck_GitHubFailureReturns502(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func newManagedNPMServiceForHandler(t *testing.T) (*Service, *memorySettingsStore) {
+	t.Helper()
+	homeDir := t.TempDir()
+	metadataPath, _ := writeServiceInstallForTest(t, homeDir, serviceInstallMetadata{
+		Manager:     serviceManagerSystemd,
+		Mode:        installModeUser,
+		Kind:        installKindNPM,
+		HomeDir:     homeDir,
+		LogDir:      filepath.Join(homeDir, "logs"),
+		ServicePath: filepath.Join(homeDir, "kandev.service"),
+		NodePath:    "/usr/bin/node",
+		CLIEntry:    "/usr/lib/node_modules/kandev/bin/cli.js",
+	})
+	t.Setenv(envRunningAsService, "true")
+	t.Setenv(envServiceMode, installModeUser)
+	t.Setenv(envServiceManager, serviceManagerSystemd)
+	t.Setenv(envInstallKind, installKindNPM)
+	t.Setenv(envServiceMetadata, metadataPath)
+	store := &memorySettingsStore{}
+	svc := NewService(
+		newTestPool(t),
+		"v1.2.3",
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(store),
+	)
+	return svc, store
+}
+
+func TestHandleSetChannelPersistsSupportedNightlyAndReturnsResolvedTarget(t *testing.T) {
+	svc, store := newManagedNPMServiceForHandler(t)
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		return "1.2.4-nightly.shaabc123def456", "https://example/nightly", nil
+	})
+	r := newRouter(svc)
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/system/updates/channel",
+		bytes.NewBufferString(`{"channel":"nightly"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var resp UpdatesResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Channel != ChannelNightly || !resp.ChannelEditable {
+		t.Fatalf("channel response=%+v", resp)
+	}
+	if resp.Latest != "1.2.4-nightly.shaabc123def456" || !resp.UpdateAvailable {
+		t.Fatalf("resolved response=%+v", resp)
+	}
+	selected, err := svc.selectedChannel(context.Background())
+	if err != nil || selected != ChannelNightly || string(store.value) != string(ChannelNightly) {
+		t.Fatalf("persisted channel=%q raw=%q err=%v", selected, store.value, err)
+	}
+}
+
+func TestHandleSetChannelRejectsInvalidAndUnsupportedNightly(t *testing.T) {
+	t.Run("invalid", func(t *testing.T) {
+		svc, _ := newManagedNPMServiceForHandler(t)
+		r := newRouter(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/system/updates/channel", bytes.NewBufferString(`{"channel":"preview"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("unsupported install", func(t *testing.T) {
+		store := &memorySettingsStore{}
+		svc := NewService(newTestPool(t), "v1.2.3", nil, logger.Default(), WithSettingsStore(store))
+		r := newRouter(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/system/updates/channel", bytes.NewBufferString(`{"channel":"nightly"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+		}
+		if store.present {
+			t.Fatal("unsupported channel selection was persisted")
+		}
+	})
+}
+
+func TestHandleSetChannelResolverFailureReturns502WithoutPersisting(t *testing.T) {
+	svc, store := newManagedNPMServiceForHandler(t)
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		return "", "", errors.New("registry down")
+	})
+	r := newRouter(svc)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/system/updates/channel", bytes.NewBufferString(`{"channel":"nightly"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if store.present {
+		t.Fatal("failed resolver selection was persisted")
+	}
+}
+
+func TestHandleApplyNightlyResolverFailureReturns502(t *testing.T) {
+	svc, store := newManagedNPMServiceForHandler(t)
+	if err := store.Save(context.Background(), updatesChannelSettingKey, []byte(ChannelNightly)); err != nil {
+		t.Fatal(err)
+	}
+	svc.jobs = jobs.NewTracker(nil, logger.Default())
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		return "", "", errors.New("registry down")
+	})
+	r := newRouter(svc)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/system/updates/apply",
+		bytes.NewBufferString(`{"confirm":"UPDATE"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}

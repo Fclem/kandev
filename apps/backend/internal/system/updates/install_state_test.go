@@ -39,6 +39,9 @@ func TestService_GetManagedUserServiceSupportsApply(t *testing.T) {
 	if !resp.ApplySupported {
 		t.Fatalf("ApplySupported=false reason=%q", resp.ApplyUnsupportedReason)
 	}
+	if !resp.ChannelEditable || resp.ChannelUnsupportedReason != "" {
+		t.Fatalf("nightly capability editable=%v reason=%q", resp.ChannelEditable, resp.ChannelUnsupportedReason)
+	}
 }
 
 func TestService_GetManagedNativeServiceSupportsApply(t *testing.T) {
@@ -86,6 +89,9 @@ func TestService_GetManagedNativeServiceSupportsApply(t *testing.T) {
 	}
 	if !resp.Install.ManagedService || !resp.ApplySupported {
 		t.Fatalf("native install state = %+v apply_supported=%v reason=%q", resp.Install, resp.ApplySupported, resp.ApplyUnsupportedReason)
+	}
+	if resp.ChannelEditable || resp.ChannelUnsupportedReason == "" {
+		t.Fatalf("Homebrew nightly capability editable=%v reason=%q", resp.ChannelEditable, resp.ChannelUnsupportedReason)
 	}
 }
 

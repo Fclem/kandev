@@ -18,6 +18,7 @@ import type {
   StorageQuarantineEntry,
   StorageQuarantinePurgeScope,
   StorageSettingsResponse,
+  UpdatesChannel,
 } from "@/lib/types/system";
 
 const SYSTEM_BASE = "/api/v1/system";
@@ -164,6 +165,20 @@ export function checkUpdates(options?: ApiRequestOptions): Promise<UpdatesRespon
   return fetchJson<UpdatesResponse>(`${SYSTEM_BASE}/updates/check`, {
     ...options,
     init: { method: "POST", ...(options?.init ?? {}) },
+  });
+}
+
+export function saveUpdatesChannel(
+  channel: UpdatesChannel,
+  options?: ApiRequestOptions,
+): Promise<UpdatesResponse> {
+  return fetchJson<UpdatesResponse>(`${SYSTEM_BASE}/updates/channel`, {
+    ...options,
+    init: {
+      ...(options?.init ?? {}),
+      method: "PATCH",
+      body: JSON.stringify({ channel }),
+    },
   });
 }
 

@@ -5,7 +5,7 @@ description: "Run and verify Kandev's version, runtime, desktop, container, npm,
 
 # Release Process
 
-Kandev uses one semantic version across the Git tag, native runtime bundles, desktop app, npm packages, GitHub release, container images, and Homebrew formula. Publish through the manual **Release** GitHub Actions workflow; do not update channels independently.
+Stable Kandev releases use one semantic version across the Git tag, native runtime bundles, desktop app, npm packages, GitHub release, container images, and Homebrew formula. Publish Stable through the manual **Release** GitHub Actions workflow; do not update its channels independently. The same workflow also owns the scheduled npm-only Nightly path described below.
 
 ## Choose the workflow mode
 
@@ -41,6 +41,7 @@ For release automation changes, run:
 
 ```bash
 python3 .github/scripts/release-workflow-contract_test.py
+node --test scripts/release/nightly-version.test.mjs
 bash scripts/release-desktop.test.sh
 make test-cli
 ```
@@ -64,6 +65,32 @@ GHCR images are built before the GitHub Release. npm and Homebrew start only aft
 
 Base image tags include `X.Y.Z`, `vX.Y.Z`, `sha-*`, and `latest`. Universal tags include `X.Y.Z-universal`, `vX.Y.Z-universal`, and the floating `universal`. The weekly universal rebuild updates only floating/dated weekly tags, never a version-specific release tag.
 
+## Scheduled npm Nightly flow
+
+The same workflow runs on cron `0 12 * * *`. This means GitHub schedules it for 12:00 UTC; it may
+start later when Actions is delayed. The metadata job checks out the exact scheduled `main` commit,
+resolves `kandev@latest`, and requires that Stable tag's commit to be an ancestor of `main`.
+
+For stable `X.Y.Z` and commit `abcdef123456...`, the version is
+`X.Y.(Z+1)-nightly.shaabcdef123456`. The run exits successfully without building when `main` is
+still the Stable commit. It also skips an already-published exact version only when
+`kandev@nightly` resolves to that same version; a mismatch fails for operator review. The current
+Nightly SHA must resolve in `main` history and be an ancestor of the scheduled commit. An older
+rerun is superseded instead of moving the tag backward; divergent or unresolvable history fails
+for operator review.
+
+An eligible run builds the shared web application and all five native runtime archives from the
+exact scheduled SHA. It publishes the five `@kdlbs/runtime-*` packages before the `kandev`
+launcher, all at the same immutable version with provenance under npm's `nightly` dist-tag. Stable
+and Nightly npm jobs share non-cancelling publication concurrency so their package writes cannot
+overlap. After acquiring that publication slot, Nightly rechecks `kandev@latest`; if Stable moved
+while the native bundles were building, the stale Nightly exits without publishing. It also
+requires `kandev@nightly` to match the value observed before building, so overlapping reruns cannot
+move the tag backward.
+
+A Nightly run creates no version commit, release PR, Git tag, GitHub Release, changelog update,
+Desktop build/feed, GHCR tag, or Homebrew formula. It never moves npm's `latest` tag.
+
 ## Signing and updater behavior
 
 npm uses GitHub OIDC trusted publishers; there is no `NPM_TOKEN` release path. The main `kandev` package and all five `@kdlbs/runtime-*` packages publish provenance attestations. Homebrew requires its repository deploy key.
@@ -86,6 +113,10 @@ After publication, verify:
 - desktop launch on affected platforms and signed/notarized status where configured;
 - backend health, a minimal task, agentctl startup, and Updates-screen behavior;
 - public docs describe the released behavior rather than unreleased `main` where version differences matter.
+
+For a Nightly publication, instead verify `kandev@nightly` and all five exact runtime versions,
+their provenance, a clean `npx -y kandev@nightly`, and `kandev --version`. Confirm that
+`kandev@latest`, GitHub Releases, Homebrew, Desktop updater metadata, and GHCR did not move.
 
 Record artifact URLs/digests and the workflow run. Do not treat a successful tag or one working installer as a complete release.
 
@@ -129,5 +160,12 @@ Before pushing, confirm that `git tag -v` reports the full `RELEASE_GPG_FINGERPR
 Use `backfill_tag` only for the latest release when shipped source is correct and the failure is missing artifacts or a recoverable publication step. Backfill checks out application source from the tag, validates all version manifests, and uses the current workflow's control-plane helpers to rebuild or reconcile GitHub Release, GHCR, npm, desktop/updater, and Homebrew channels. Existing npm versions are not overwritten.
 
 Publish a new patch instead when code is defective, an immutable npm package or version-specific image is wrong, manifests disagree, or repair would require changing tagged source. Never delete/reuse a published tag or move an npm version as a routine fix.
+
+For a partial Nightly, rerun the workflow for the same scheduled commit. The publisher accepts an
+existing package only when its exact immutable version matches, publishes any missing runtime
+packages, and publishes `kandev` last. If `kandev@<nightly-version>` already exists but the
+`nightly` dist-tag points elsewhere, stop and reconcile npm manually; trusted-publisher OIDC does
+not provide a token-based `npm dist-tag add` recovery path. Do not delete or reuse a Nightly
+version.
 
 For implementation detail, inspect `.github/workflows/release.yml`, `.github/workflows/universal-rebuild.yml`, `scripts/release/`, `apps/cli/README_internal.md`, and desktop packaging scripts. Those files are automation source; this page is the contributor operating contract.

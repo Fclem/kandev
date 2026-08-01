@@ -92,3 +92,4 @@ Read individual ADRs for full context. Create new ones via `/record decision` or
 | 2026-07-30-embedded-editor-executor-capabilities | [Derive Embedded Editor Availability from the Active Executor](2026-07-30-embedded-editor-executor-capabilities.md) | accepted | backend, frontend, protocol | 2026-07-30 |
 | 2026-07-30-session-owned-mcp-observability | [Keep MCP Attachment Evidence Session Owned](2026-07-30-session-owned-mcp-observability.md) | accepted | backend, frontend, protocol, security | 2026-07-30 |
 | 2026-07-30-runtime-task-state-before-running-event | [Publish Task State Before Running Session State](2026-07-30-runtime-task-state-before-running-event.md) | accepted | backend, frontend, protocol, workflow | 2026-07-30 |
+| 2026-07-31-npm-nightly-release-channel | [Publish deterministic npm-only nightlies](2026-07-31-npm-nightly-release-channel.md) | accepted | workflow, backend, frontend, cli | 2026-07-31 |

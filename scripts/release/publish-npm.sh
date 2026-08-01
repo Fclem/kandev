@@ -7,23 +7,17 @@
 # short-lived publish token. No NPM_TOKEN secret is needed.
 #
 # Prerequisites:
-#   - GitHub release assets for <tag> must already exist (verified before publishing).
+#   - Five runtime archives from either a GitHub release or a local directory.
 #   - Running inside GitHub Actions with `id-token: write` permission set on
 #     the publish-npm job. (npm publish from a local shell will fall back to
 #     classic auth — but tokens are not the recommended path going forward.)
 #
 # Usage:
-#   publish-npm.sh <version> <tag>
-#
-# Arguments:
-#   version  SemVer string (e.g. 0.17.0)
-#   tag      Git tag (e.g. v0.17.0) — used to verify GitHub release assets exist
+#   publish-npm.sh --version <semver> --dist-tag <latest|nightly> \
+#     (--release-tag <git-tag> | --assets-dir <path>)
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-
-VERSION="${1:?Usage: $0 <version> <tag>}"
-TAG="${2:?Usage: $0 <version> <tag>}"
 
 bold()  { printf '\033[1m%s\033[0m' "$*"; }
 green() { printf '\033[32m%s\033[0m' "$*"; }
@@ -33,15 +27,8 @@ yellow(){ printf '\033[33m%s\033[0m' "$*"; }
 log()    { echo "  >> $*"; }
 log_ok() { echo "  $(green "ok") $*"; }
 
-package_already_published() {
-  local pkg="$1"
-  npm view "${pkg}@${VERSION}" version --silent >/dev/null 2>&1
-}
-
-record_already_published() {
-  local pkg="$1"
-  echo "  $(yellow "skip") $pkg@$VERSION already published (treated as idempotent success)" >&2
-  ALREADY_PUBLISHED+=("$pkg")
+usage() {
+  echo "Usage: $0 --version <semver> --dist-tag <latest|nightly> (--release-tag <git-tag> | --assets-dir <path>)" >&2
 }
 
 die() {
@@ -49,33 +36,106 @@ die() {
   exit 1
 }
 
-# -- Verify GitHub release assets exist before publishing ---------------------
+VERSION=""
+DIST_TAG=""
+RELEASE_TAG=""
+SOURCE_ASSETS_DIR=""
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --version)
+      [[ "$#" -ge 2 ]] || die "--version requires a value"
+      VERSION="$2"
+      shift 2
+      ;;
+    --dist-tag)
+      [[ "$#" -ge 2 ]] || die "--dist-tag requires a value"
+      DIST_TAG="$2"
+      shift 2
+      ;;
+    --release-tag)
+      [[ "$#" -ge 2 ]] || die "--release-tag requires a value"
+      RELEASE_TAG="$2"
+      shift 2
+      ;;
+    --assets-dir)
+      [[ "$#" -ge 2 ]] || die "--assets-dir requires a value"
+      SOURCE_ASSETS_DIR="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      die "unknown argument: $1"
+      ;;
+  esac
+done
+
+[[ -n "$VERSION" ]] || die "--version is required"
+[[ -n "$DIST_TAG" ]] || die "--dist-tag is required"
+case "$DIST_TAG" in
+  latest|nightly)
+    ;;
+  *)
+    die "--dist-tag must be latest or nightly"
+    ;;
+esac
+
+if [[ -n "$RELEASE_TAG" && -n "$SOURCE_ASSETS_DIR" ]]; then
+  die "provide exactly one asset source: --release-tag or --assets-dir"
+elif [[ -z "$RELEASE_TAG" && -z "$SOURCE_ASSETS_DIR" ]]; then
+  die "provide exactly one asset source: --release-tag or --assets-dir"
+fi
+
+package_already_published() {
+  local pkg="$1"
+  npm view "${pkg}@${VERSION}" version --silent >/dev/null 2>&1
+}
+
+record_already_published() {
+  local pkg="$1"
+  if [[ "$DIST_TAG" == "nightly" ]]; then
+    local tagged_version
+    tagged_version="$(npm view "${pkg}@${DIST_TAG}" version --silent 2>/dev/null || true)"
+    if [[ "$tagged_version" != "$VERSION" ]]; then
+      die "$pkg@$VERSION exists, but $pkg@$DIST_TAG resolves to '${tagged_version:-nothing}'; refusing idempotent success"
+    fi
+  fi
+  echo "  $(yellow "skip") $pkg@$VERSION already published (treated as idempotent success)" >&2
+  ALREADY_PUBLISHED+=("$pkg")
+}
 
 REQUIRED_PLATFORMS=(linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64)
 
-log "Verifying GitHub release assets exist for $TAG..."
-for platform in "${REQUIRED_PLATFORMS[@]}"; do
-  asset="kandev-${platform}.tar.gz"
-  if ! gh release view "$TAG" --json assets --jq ".assets[].name" 2>/dev/null | grep -q "^${asset}$"; then
-    die "GitHub release asset missing: $asset in release $TAG. Run release workflow first."
-  fi
-done
-log_ok "All 5 platform assets present in GitHub release $TAG"
-
-# -- Download release assets for packaging ------------------------------------
-
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
-ASSETS_DIR="$WORK_DIR/assets"
-mkdir -p "$ASSETS_DIR"
 
-log "Downloading release assets for $TAG..."
+# -- Resolve and verify release assets ----------------------------------------
+
+if [[ -n "$RELEASE_TAG" ]]; then
+  ASSETS_DIR="$WORK_DIR/assets"
+  mkdir -p "$ASSETS_DIR"
+  log "Downloading release assets for $RELEASE_TAG..."
+  for platform in "${REQUIRED_PLATFORMS[@]}"; do
+    asset="kandev-${platform}.tar.gz"
+    log "  downloading $asset..."
+    gh release download "$RELEASE_TAG" --pattern "$asset" --dir "$ASSETS_DIR" || \
+      die "GitHub release asset missing: $asset in release $RELEASE_TAG"
+  done
+else
+  ASSETS_DIR="$SOURCE_ASSETS_DIR"
+  [[ -d "$ASSETS_DIR" ]] || die "asset directory does not exist: $ASSETS_DIR"
+  log "Using release assets from $ASSETS_DIR..."
+fi
+
 for platform in "${REQUIRED_PLATFORMS[@]}"; do
   asset="kandev-${platform}.tar.gz"
-  log "  downloading $asset..."
-  gh release download "$TAG" --pattern "$asset" --dir "$ASSETS_DIR"
+  [[ -f "$ASSETS_DIR/$asset" ]] || die "release asset missing: $ASSETS_DIR/$asset"
 done
-log_ok "Assets downloaded to $ASSETS_DIR"
+log_ok "All 5 platform assets present"
 
 # -- Generate npm runtime packages --------------------------------------------
 
@@ -117,7 +177,7 @@ for pkg in "${RUNTIME_PACKAGES[@]}"; do
   # Capture full npm output so we can show the real error on failure rather
   # than just a generic warning. Distinguish "already published" (idempotent
   # case — fine) from real failures (must abort).
-  if output="$(cd "$pkg_dir" && npm publish --access public --provenance 2>&1)"; then
+  if output="$(cd "$pkg_dir" && npm publish --access public --provenance --tag "$DIST_TAG" 2>&1)"; then
     log_ok "$pkg@$VERSION published"
   elif echo "$output" | grep -qE "EPUBLISHCONFLICT|cannot publish over the previously published versions|You cannot publish over"; then
     record_already_published "$pkg"
@@ -151,19 +211,20 @@ fi
 # package, we want optionalDependencies to point at @kdlbs/runtime-*@VERSION
 # so users get matching runtime bundles. The runtime packages were just
 # published above, so this version exists on npm now.
-log "Pinning optionalDependencies to $VERSION before publishing main package..."
-node -e "
-  const fs = require('fs');
-  const path = '$ROOT_DIR/apps/cli/package.json';
-  const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+log "Setting the launcher version and optionalDependencies to $VERSION..."
+node - "$ROOT_DIR/apps/cli/package.json" "$VERSION" <<'NODE'
+  const fs = require("fs");
+  const [path, version] = process.argv.slice(2);
+  const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+  pkg.version = version;
   if (pkg.optionalDependencies) {
     for (const k of Object.keys(pkg.optionalDependencies)) {
-      pkg.optionalDependencies[k] = '$VERSION';
+      pkg.optionalDependencies[k] = version;
     }
   }
-  fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
-"
-log_ok "optionalDependencies pinned to $VERSION"
+  fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+NODE
+log_ok "Launcher metadata pinned to $VERSION"
 
 # -- Publish main kandev package ----------------------------------------------
 
@@ -174,7 +235,7 @@ echo "$(bold "Publishing kandev@$VERSION...")"
 # `prepublishOnly` (in package.json) runs `pnpm build` automatically.
 if package_already_published "kandev"; then
   record_already_published "kandev"
-elif main_output="$(cd "$ROOT_DIR/apps/cli" && npm publish --access public --provenance 2>&1)"; then
+elif main_output="$(cd "$ROOT_DIR/apps/cli" && npm publish --access public --provenance --tag "$DIST_TAG" 2>&1)"; then
   log_ok "kandev@$VERSION published"
 elif echo "$main_output" | grep -qE "EPUBLISHCONFLICT|cannot publish over the previously published versions|You cannot publish over"; then
   record_already_published "kandev"

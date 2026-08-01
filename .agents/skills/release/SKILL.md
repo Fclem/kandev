@@ -1,11 +1,13 @@
 ---
 name: release
-description: Kandev release & versioning conventions — single SemVer across npm, Homebrew, GitHub release. Use when cutting a release, debugging release artifacts, or answering questions about version channels.
+description: Kandev release and version-channel conventions — unified Stable SemVer plus deterministic npm-only Nightlies. Use when cutting a release, changing channels, debugging artifacts, or answering version-channel questions.
 ---
 
 # Release & Versioning
 
-Kandev uses a **single SemVer** `X.Y.Z` shared across all distribution channels.
+Kandev Stable releases use a **single SemVer** `X.Y.Z` shared across all distribution channels.
+npm also has an explicit prerelease-only `nightly` channel; it is not part of the unified Stable
+artifact set.
 
 ## Version targets
 
@@ -18,9 +20,14 @@ Kandev uses a **single SemVer** `X.Y.Z` shared across all distribution channels.
 
 **npm and Homebrew are sibling channels**, not chained. Both consume the same GitHub release artifacts; neither depends on the other.
 
+For npm Nightly, Stable `X.Y.Z` plus a full `main` SHA produces
+`X.Y.(Z+1)-nightly.sha<first-12-lowercase-hex>`. `kandev` and all five runtime packages publish at
+that exact version under npm's `nightly` dist-tag. Nightly never moves `latest` and creates no Git
+tag, GitHub Release, Homebrew formula, Desktop feed/build, or container tag.
+
 ## Release flow
 
-Entirely in CI via `.github/workflows/release.yml`, triggered by a maintainer from the GitHub Actions UI:
+Stable runs entirely in CI via `.github/workflows/release.yml`, triggered by a maintainer from the GitHub Actions UI:
 
 1. Maintainer clicks "Run workflow" → picks `bump` (patch/minor/major) → optional `dry_run` or `desktop_validation_only`.
 2. `prepare` job bumps version + regenerates CHANGELOG, opens release PR, squash-merges, tags `vX.Y.Z`.
@@ -30,6 +37,22 @@ Entirely in CI via `.github/workflows/release.yml`, triggered by a maintainer fr
 6. `update-homebrew-tap` pushes updated `Formula/kandev.rb` to `kdlbs/homebrew-kandev` via SSH deploy key.
 
 There is no local release script — the entire flow runs in GHA.
+
+The same workflow schedules npm Nightly with cron `0 12 * * *`. It skips before building when
+`main` has no commit after the latest Stable tag, the exact commit is already published, or a same
+or newer `main` Nightly supersedes the scheduled commit. Eligible runs build only the shared web
+bundle and five native runtime archives, then publish runtimes first and `kandev` last with OIDC
+provenance. Stable and Nightly npm writes share non-cancelling concurrency. After acquiring that
+slot, Nightly rechecks both the Stable baseline and the previously observed `nightly` tag; a moved
+value safely suppresses the stale publication.
+
+Validate Nightly automation changes with:
+
+```bash
+node --test scripts/release/nightly-version.test.mjs
+python3 .github/scripts/release-workflow-contract_test.py
+bash -n scripts/release/publish-npm.sh
+```
 
 ## Release-tag signing configuration
 

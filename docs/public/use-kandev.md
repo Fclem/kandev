@@ -33,6 +33,20 @@ npm install -g kandev@latest
 kandev
 ```
 
+Stable is the default and is selected by npm's `latest` tag. To test the current prerelease from
+`main`, use the npm-only `nightly` tag instead:
+
+```bash
+npx -y kandev@nightly
+# or
+npm install -g kandev@nightly
+kandev
+```
+
+Nightly builds may be unstable. They are best-effort builds scheduled for 12:00 UTC only when
+`main` has commits after the latest stable release and that exact commit has not already been
+published. Homebrew, Desktop, and container installs have no Nightly channel.
+
 The launcher selects the platform runtime, starts the Go backend and agent runtime, serves the web app, and opens its local URL. The preferred backend port is `38429`; if it is unavailable, the launcher chooses another free port and prints the actual URL. Use `kandev --headless` (or `KANDEV_NO_BROWSER=1`) when a browser must not open.
 
 By default, persistent state is under `~/.kandev`, including the SQLite database, repository materializations, sessions, logs, and backups. `KANDEV_HOME_DIR` relocates that root; `KANDEV_DATABASE_PATH` overrides only the database. Kandev creates its data directory with owner-only permissions and rejects symlinked components in that path, but file permissions do not replace host access controls.

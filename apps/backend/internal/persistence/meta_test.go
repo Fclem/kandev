@@ -170,6 +170,41 @@ func TestReadLatestVersion_PartialPersistedState(t *testing.T) {
 	}
 }
 
+func TestStableAndNightlyLatestVersionsAreIsolated(t *testing.T) {
+	db := memSQLiteDB(t)
+	if err := ensureMetaTable(db); err != nil {
+		t.Fatalf("ensureMetaTable: %v", err)
+	}
+	stableAt := time.Unix(1_700_000_000, 0).UTC()
+	nightlyAt := stableAt.Add(time.Hour)
+	if err := WriteLatestVersion(db, "v1.2.3", "https://example/stable", stableAt); err != nil {
+		t.Fatalf("WriteLatestVersion: %v", err)
+	}
+	if err := WriteLatestNightlyVersion(
+		db,
+		"1.2.4-nightly.shaabc123def456",
+		"https://example/nightly",
+		nightlyAt,
+	); err != nil {
+		t.Fatalf("WriteLatestNightlyVersion: %v", err)
+	}
+
+	stable, stableURL, stableChecked, err := ReadLatestVersion(db)
+	if err != nil {
+		t.Fatalf("ReadLatestVersion: %v", err)
+	}
+	nightly, nightlyURL, nightlyChecked, err := ReadLatestNightlyVersion(db)
+	if err != nil {
+		t.Fatalf("ReadLatestNightlyVersion: %v", err)
+	}
+	if stable != "v1.2.3" || stableURL != "https://example/stable" || !stableChecked.Equal(stableAt) {
+		t.Fatalf("stable cache changed: version=%q url=%q checked=%v", stable, stableURL, stableChecked)
+	}
+	if nightly != "1.2.4-nightly.shaabc123def456" || nightlyURL != "https://example/nightly" || !nightlyChecked.Equal(nightlyAt) {
+		t.Fatalf("nightly cache mismatch: version=%q url=%q checked=%v", nightly, nightlyURL, nightlyChecked)
+	}
+}
+
 // TestShouldBackup verifies the backup decision logic.
 func TestShouldBackup(t *testing.T) {
 	tests := []struct {

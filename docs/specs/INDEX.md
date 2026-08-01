@@ -153,6 +153,7 @@ System pages (Radarr/Sonarr-style) for status, disk usage, database maintenance,
 | Spec | Status |
 |---|---|
 | [system-page](system-page/spec.md) | draft |
+| [npm-nightly-channel](npm-nightly-channel/spec.md) | shipped |
 | [storage-maintenance](system-page/storage-maintenance.md) | building |
 | [feature-toggles](feature-toggles/spec.md) | draft |
 

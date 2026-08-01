@@ -1,9 +1,12 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UpdatesResponse } from "@/lib/types/system";
 import type { SelfUpdateController } from "@/hooks/domains/system/use-self-update";
 import type { DesktopUpdaterController } from "@/hooks/domains/system/use-desktop-updater";
+import { requestNavigation } from "@/lib/routing/navigation-guard";
+import { SettingsSaveProvider } from "../settings-save-provider";
 
 const mocks = vi.hoisted(() => ({
   useUpdates: vi.fn(),
@@ -32,6 +35,7 @@ vi.mock("@kandev/ui/spinner", () => ({
 import { UpdatesCard } from "./updates-card";
 
 const APPLY_TESTID = "system-updates-apply";
+const ARIA_CHECKED = "aria-checked";
 
 function updates(overrides: Partial<UpdatesResponse> = {}): UpdatesResponse {
   return {
@@ -40,6 +44,9 @@ function updates(overrides: Partial<UpdatesResponse> = {}): UpdatesResponse {
     latest_url: "https://example/v1.0.1",
     latest_checked_at: "2026-05-29T00:00:00.000Z",
     update_available: true,
+    channel: "stable",
+    channel_editable: true,
+    channel_unsupported_reason: "",
     install: {
       running_as_service: true,
       managed_service: true,
@@ -50,6 +57,18 @@ function updates(overrides: Partial<UpdatesResponse> = {}): UpdatesResponse {
     apply_supported: true,
     ...overrides,
   };
+}
+
+function updatesCard(props: ComponentProps<typeof UpdatesCard> = {}) {
+  return (
+    <SettingsSaveProvider>
+      <UpdatesCard {...props} />
+    </SettingsSaveProvider>
+  );
+}
+
+function renderUpdatesCard(props: ComponentProps<typeof UpdatesCard> = {}) {
+  return render(updatesCard(props));
 }
 
 function selfUpdate(overrides: Partial<SelfUpdateController> = {}): SelfUpdateController {
@@ -108,10 +127,10 @@ describe("UpdatesCard self-update", () => {
         reload: reloadMetadataSecond,
       });
 
-    const { rerender } = render(<UpdatesCard reloadDocument={reloadDocument} />);
+    const { rerender } = renderUpdatesCard({ reloadDocument });
     const firstCompletion = mocks.useSelfUpdate.mock.calls.at(-1)?.[0]?.onComplete;
 
-    rerender(<UpdatesCard reloadDocument={reloadDocument} />);
+    rerender(updatesCard({ reloadDocument }));
     const secondCompletion = mocks.useSelfUpdate.mock.calls.at(-1)?.[0]?.onComplete;
 
     expect(firstCompletion).toBe(reloadDocument);
@@ -134,7 +153,7 @@ describe("UpdatesCard self-update", () => {
       reload: vi.fn(),
     });
 
-    render(<UpdatesCard />);
+    renderUpdatesCard();
 
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
     expect(screen.getByTestId("system-updates-manual").textContent).toContain(
@@ -147,7 +166,7 @@ describe("UpdatesCard self-update", () => {
     mocks.useUpdates.mockReturnValue({ updates: updates(), check: vi.fn(), reload: vi.fn() });
     mocks.useSelfUpdate.mockReturnValue(selfUpdate({ start }));
 
-    render(<UpdatesCard />);
+    renderUpdatesCard();
     fireEvent.click(screen.getByTestId(APPLY_TESTID));
     fireEvent.click(await screen.findByTestId("system-updates-apply-confirm"));
 
@@ -160,7 +179,7 @@ describe("UpdatesCard self-update", () => {
       selfUpdate({ phase: "restarting", targetVersion: "v1.0.1", isUpdating: true }),
     );
 
-    render(<UpdatesCard />);
+    renderUpdatesCard();
 
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
     const progress = screen.getByTestId("system-updates-progress");
@@ -174,7 +193,7 @@ describe("UpdatesCard self-update", () => {
       selfUpdate({ phase: "done", targetVersion: "v1.0.1", isUpdating: false }),
     );
 
-    render(<UpdatesCard />);
+    renderUpdatesCard();
 
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
     expect(screen.getByTestId("system-updates-progress").textContent).toContain(
@@ -206,7 +225,7 @@ describe("UpdatesCard desktop package updates", () => {
       }),
     );
 
-    render(<UpdatesCard />);
+    renderUpdatesCard();
 
     expect(screen.getByTestId("system-updates-latest").textContent).toBe("1.1.0");
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
@@ -240,7 +259,7 @@ describe("UpdatesCard desktop updater", () => {
       }),
     );
 
-    render(<UpdatesCard />);
+    renderUpdatesCard();
 
     expect(screen.getByTestId("system-updates-current").textContent).toBe("1.0.0");
     expect(screen.getByTestId("system-updates-latest").textContent).toBe("1.1.0");
@@ -272,7 +291,7 @@ describe("UpdatesCard desktop updater", () => {
       }),
     );
 
-    render(<UpdatesCard />);
+    renderUpdatesCard();
     fireEvent.click(screen.getByTestId(APPLY_TESTID));
     expect(install).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByTestId("system-updates-apply-confirm"));
@@ -303,12 +322,173 @@ describe("UpdatesCard desktop updater", () => {
       }),
     );
 
-    render(<UpdatesCard />);
+    renderUpdatesCard();
 
     expect(screen.getByTestId("system-updates-progress").textContent).toContain("25 of 100 bytes");
     expect(screen.getByTestId("system-updates-error").textContent).toContain(
       "Signature verification failed",
     );
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
+  });
+});
+
+describe("UpdatesCard channel setting", () => {
+  it("keeps Nightly local until the shared settings action saves it", async () => {
+    const saveChannel = vi.fn().mockResolvedValue(
+      updates({
+        channel: "nightly",
+        latest: "1.0.1-nightly.shaabcdef123456",
+        latest_url: "https://www.npmjs.com/package/kandev/v/1.0.1-nightly.shaabcdef123456",
+      }),
+    );
+    mocks.useUpdates.mockReturnValue({
+      updates: updates(),
+      check: vi.fn(),
+      reload: vi.fn(),
+      saveChannel,
+      error: null,
+    });
+
+    renderUpdatesCard();
+    const stable = screen.getByRole("radio", { name: /^Stable/ });
+    const nightly = screen.getByRole("radio", { name: /^Nightly/ });
+
+    expect(stable.getAttribute(ARIA_CHECKED)).toBe("true");
+    expect(nightly.getAttribute(ARIA_CHECKED)).toBe("false");
+    fireEvent.click(nightly);
+
+    expect(nightly.getAttribute(ARIA_CHECKED)).toBe("true");
+    expect(saveChannel).not.toHaveBeenCalled();
+    expect(screen.getByTestId("system-updates-channel").getAttribute("data-settings-dirty")).toBe(
+      "true",
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(saveChannel).toHaveBeenCalledWith("nightly"));
+    await waitFor(() =>
+      expect(screen.getByTestId("system-updates-channel").getAttribute("data-settings-dirty")).toBe(
+        "false",
+      ),
+    );
+  });
+
+  it("keeps a failed channel save dirty and retryable", async () => {
+    const saveChannel = vi.fn().mockRejectedValue(new Error("npm registry unavailable"));
+    mocks.useUpdates.mockReturnValue({
+      updates: updates(),
+      check: vi.fn(),
+      reload: vi.fn(),
+      saveChannel,
+      error: null,
+    });
+
+    renderUpdatesCard();
+    const nightly = screen.getByRole("radio", { name: /^Nightly/ });
+    fireEvent.click(nightly);
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(screen.getByText("Couldn't save")).toBeTruthy());
+    expect(nightly.getAttribute(ARIA_CHECKED)).toBe("true");
+    expect(screen.getByRole("button", { name: "Retry save" })).toBeTruthy();
+  });
+
+  it("discards an unsaved Nightly choice through the shared navigation guard", async () => {
+    const saveChannel = vi.fn();
+    const proceed = vi.fn();
+    mocks.useUpdates.mockReturnValue({
+      updates: updates(),
+      check: vi.fn(),
+      reload: vi.fn(),
+      saveChannel,
+      error: null,
+    });
+
+    renderUpdatesCard();
+    const stable = screen.getByRole("radio", { name: /^Stable/ });
+    const nightly = screen.getByRole("radio", { name: /^Nightly/ });
+    fireEvent.click(nightly);
+    await screen.findByRole("button", { name: "Save changes" });
+
+    act(() => requestNavigation(proceed));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard and leave" }));
+
+    await waitFor(() => expect(stable.getAttribute(ARIA_CHECKED)).toBe("true"));
+    expect(saveChannel).not.toHaveBeenCalled();
+    expect(proceed).toHaveBeenCalledOnce();
+  });
+});
+
+describe("UpdatesCard channel availability", () => {
+  it("disables Nightly and renders the server capability reason", () => {
+    mocks.useUpdates.mockReturnValue({
+      updates: updates({
+        channel_editable: false,
+        channel_unsupported_reason: "Nightly is available only for a managed npm user service.",
+      }),
+      check: vi.fn(),
+      reload: vi.fn(),
+      saveChannel: vi.fn(),
+      error: null,
+    });
+
+    renderUpdatesCard();
+
+    expect(screen.getByRole("radio", { name: /^Stable/ }).getAttribute(ARIA_CHECKED)).toBe("true");
+    expect(screen.getByRole("radio", { name: /^Nightly/ }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByTestId("system-updates-channel-reason").textContent).toContain(
+      "managed npm user service",
+    );
+  });
+
+  it("uses full-width touch rows and protects long nightly versions from overflow", () => {
+    mocks.useUpdates.mockReturnValue({
+      updates: updates({
+        channel: "nightly",
+        latest: "1.0.1-nightly.shaabcdef123456",
+      }),
+      check: vi.fn(),
+      reload: vi.fn(),
+      saveChannel: vi.fn(),
+      error: null,
+    });
+
+    renderUpdatesCard();
+
+    expect(screen.getByTestId("system-updates-channel-nightly").className).toContain("min-h-11");
+    expect(screen.getByTestId("system-updates-latest").className).toContain("break-all");
+    expect(screen.getByTestId("system-updates-versions").className).toContain("grid-cols-1");
+  });
+
+  it("does not expose an npm channel selector in the Desktop updater", () => {
+    mocks.useUpdates.mockReturnValue({
+      updates: updates(),
+      check: vi.fn(),
+      reload: vi.fn(),
+      saveChannel: vi.fn(),
+      error: null,
+    });
+    mocks.useDesktopUpdater.mockReturnValue(
+      desktopUpdater({
+        available: true,
+        state: {
+          phase: "up-to-date",
+          currentVersion: "1.0.0",
+          latestVersion: "1.0.0",
+          releaseNotes: null,
+          releaseUrl: null,
+          checkedAtEpochMs: 42,
+          downloadedBytes: null,
+          totalBytes: null,
+          installSupported: true,
+          installUnsupportedReason: null,
+          error: null,
+        },
+      }),
+    );
+
+    renderUpdatesCard();
+
+    expect(screen.queryByTestId("system-updates-channel")).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,6 +15,8 @@ import {
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
+import { Label } from "@kandev/ui/label";
+import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import { Spinner } from "@kandev/ui/spinner";
 import { IconDownload, IconExternalLink, IconRefresh } from "@tabler/icons-react";
 import { useSelfUpdate, type SelfUpdateController } from "@/hooks/domains/system/use-self-update";
@@ -23,7 +25,9 @@ import {
   type DesktopUpdaterController,
 } from "@/hooks/domains/system/use-desktop-updater";
 import { useUpdates } from "@/hooks/domains/system/use-updates";
-import type { UpdatesResponse } from "@/lib/types/system";
+import type { UpdatesChannel, UpdatesResponse } from "@/lib/types/system";
+import { SettingsCard } from "../settings-card";
+import { useSettingsSaveContributor } from "../settings-save-provider";
 import { SelfUpdateProgress } from "./self-update-progress";
 
 interface ApplyGate {
@@ -89,12 +93,13 @@ function serviceCardView(
 }
 
 export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesCardProps = {}) {
-  const { updates, check } = useUpdates();
+  const { updates, check, saveChannel, error: updatesError } = useUpdates();
   const selfUpdate = useSelfUpdate({ latestVersion: updates?.latest, onComplete: reloadDocument });
   const desktopUpdater = useDesktopUpdater();
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
+  const channel = useUpdateChannelDraft(updates, saveChannel, !desktopUpdater.available);
 
   if (desktopUpdater.available) {
     return <DesktopUpdatesCard updater={desktopUpdater} />;
@@ -118,12 +123,17 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
   const view = serviceCardView(updates, selfUpdate);
 
   return (
-    <Card data-testid="system-updates-card">
+    <SettingsCard isDirty={channel.isDirty} data-testid="system-updates-card">
       <CardHeader>
         <UpdatesHeader available={view.available} />
       </CardHeader>
       <CardContent className="space-y-4">
-        <VersionGrid current={view.current} latest={view.latest} />
+        <UpdateChannelControl {...channel} />
+        <VersionGrid
+          current={view.current}
+          latest={view.latest}
+          latestLabel={updates?.channel === "nightly" ? "Latest nightly" : "Latest release"}
+        />
         <LastChecked checkedAt={updates?.latest_checked_at} />
         <UpdateActions
           checking={checking}
@@ -144,9 +154,157 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
           errorMessage={selfUpdate.errorMessage}
           onDismiss={selfUpdate.dismiss}
         />
-        <UpdateError error={error} retryAfter={retryAfter} />
+        <UpdateError error={error ?? updatesError} retryAfter={retryAfter} />
       </CardContent>
-    </Card>
+    </SettingsCard>
+  );
+}
+
+function useUpdateChannelDraft(
+  updates: UpdatesResponse | null | undefined,
+  saveChannel: (channel: UpdatesChannel) => Promise<UpdatesResponse>,
+  serviceUpdater: boolean,
+) {
+  const authoritative = updates?.channel ?? "stable";
+  const editable = serviceUpdater && updates?.channel_editable === true;
+  const [saved, setSaved] = useState<UpdatesChannel>(authoritative);
+  const [draft, setDraft] = useState<UpdatesChannel>(authoritative);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const isDirty = editable && draft !== saved;
+
+  useEffect(() => {
+    setSaved((previous) => {
+      if (!editable || draftRef.current === previous) setDraft(authoritative);
+      return authoritative;
+    });
+  }, [authoritative, editable]);
+
+  useSettingsSaveContributor({
+    id: "system-updates-channel",
+    order: 10,
+    revision: draft,
+    isDirty,
+    save: async (revision) => {
+      const response = await saveChannel(revision as UpdatesChannel);
+      setSaved(response.channel);
+      setDraft(response.channel);
+    },
+    discard: () => setDraft(saved),
+  });
+
+  return {
+    draft,
+    editable,
+    isDirty,
+    unsupportedReason: updates?.channel_unsupported_reason ?? "",
+    setDraft,
+  };
+}
+
+type UpdateChannelControlProps = ReturnType<typeof useUpdateChannelDraft>;
+
+function UpdateChannelControl({
+  draft,
+  editable,
+  isDirty,
+  unsupportedReason,
+  setDraft,
+}: UpdateChannelControlProps) {
+  const reasonId = "system-updates-channel-reason";
+  return (
+    <div
+      className="min-w-0 space-y-2"
+      data-testid="system-updates-channel"
+      data-settings-dirty={isDirty}
+    >
+      <div>
+        <div className="text-sm font-medium">Update channel</div>
+        <p className="text-xs text-muted-foreground">
+          Choose which releases this managed service checks and applies.
+        </p>
+      </div>
+      <RadioGroup
+        aria-label="Update channel"
+        value={draft}
+        onValueChange={(value) => {
+          if (value === "stable" || (value === "nightly" && editable)) setDraft(value);
+        }}
+        className="gap-2"
+        data-settings-dirty={isDirty}
+      >
+        <UpdateChannelOption
+          channel="stable"
+          label="Stable"
+          description="Signed GitHub releases. Recommended for most users."
+          disabled={false}
+        />
+        <UpdateChannelOption
+          channel="nightly"
+          label="Nightly"
+          description="Prerelease builds from main, delivered through npm."
+          disabled={!editable}
+          reasonId={!editable && unsupportedReason ? reasonId : undefined}
+        />
+      </RadioGroup>
+      {!editable && unsupportedReason && (
+        <p
+          id={reasonId}
+          className="break-words text-xs text-muted-foreground"
+          data-testid="system-updates-channel-reason"
+        >
+          {unsupportedReason}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function UpdateChannelOption({
+  channel,
+  label,
+  description,
+  disabled,
+  reasonId,
+}: {
+  channel: UpdatesChannel;
+  label: string;
+  description: string;
+  disabled: boolean;
+  reasonId?: string;
+}) {
+  const inputId = `system-updates-channel-${channel}-input`;
+  const labelId = `system-updates-channel-${channel}-label`;
+  const descriptionId = `system-updates-channel-${channel}-description`;
+  const describedBy = reasonId ? `${descriptionId} ${reasonId}` : descriptionId;
+  return (
+    <Label
+      htmlFor={inputId}
+      className={`flex min-h-11 w-full min-w-0 items-start gap-3 rounded-md border p-3 ${
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-muted/30"
+      }`}
+      data-testid={`system-updates-channel-${channel}`}
+    >
+      <RadioGroupItem
+        id={inputId}
+        value={channel}
+        disabled={disabled}
+        aria-labelledby={labelId}
+        aria-describedby={describedBy}
+        className="mt-0.5"
+      />
+      <span className="min-w-0 space-y-1">
+        <span id={labelId} className="block text-sm font-medium">
+          {label}
+        </span>
+        <span
+          id={descriptionId}
+          className="block whitespace-normal break-words text-xs text-muted-foreground"
+        >
+          {description}
+        </span>
+      </span>
+    </Label>
   );
 }
 
@@ -257,20 +415,31 @@ function UpdatesHeader({ available }: { available: boolean }) {
   );
 }
 
-function VersionGrid({ current, latest }: { current: string; latest: string }) {
+function VersionGrid({
+  current,
+  latest,
+  latestLabel = "Latest release",
+}: {
+  current: string;
+  latest: string;
+  latestLabel?: string;
+}) {
   return (
-    <div className="grid grid-cols-2 gap-3 text-sm">
+    <div
+      className="grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-2"
+      data-testid="system-updates-versions"
+    >
       <VersionValue label="Current version" value={current} testId="system-updates-current" />
-      <VersionValue label="Latest release" value={latest} testId="system-updates-latest" />
+      <VersionValue label={latestLabel} value={latest} testId="system-updates-latest" />
     </div>
   );
 }
 
 function VersionValue({ label, value, testId }: { label: string; value: string; testId: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="font-mono text-sm" data-testid={testId}>
+      <div className="break-all font-mono text-sm" data-testid={testId}>
         {value}
       </div>
     </div>

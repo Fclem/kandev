@@ -1,6 +1,6 @@
 # Run Kandev as a Service
 
-Install Kandev as an OS-managed service (systemd on Linux, launchd on macOS) so it auto-starts and stays running. User-mode services installed by `kandev service install` can self-update from the System → Updates page. Non-service installs and `--system` services still update manually: `npm i -g kandev@latest` or `brew upgrade kandev`, then re-run `kandev service install`.
+Install Kandev as an OS-managed service (systemd on Linux, launchd on macOS) so it auto-starts and stays running. User-mode services installed by `kandev service install` can self-update from the System → Updates page. A verified managed npm/npx user service can select Stable (the default) or the npm Nightly channel there. Homebrew, non-service, local-checkout, and `--system` installs remain Stable-only; update them manually with `npm i -g kandev@latest` or `brew upgrade kandev`, then re-run `kandev service install`.
 
 This guide assumes you've already installed kandev via [Homebrew or npm](../apps/cli/README.md#quick-start) and that `kandev` works when run interactively.
 
@@ -193,11 +193,17 @@ This happens with `--system` if `SUDO_USER` isn't set (e.g. you logged in as roo
 
 The OS service manager keeps running whatever `ExecStart` it has — it doesn't know about npm/brew upgrades. For managed user services, use **Apply update** on the Updates page. Otherwise, **always re-run `kandev service install` after an upgrade** so the unit picks up the new paths, then `kandev service restart` to pick up new code.
 
+On a managed npm/npx user service, **Settings → System → Updates** also owns the install-wide
+Stable/Nightly choice. Nightly follows npm's `kandev@nightly` tag; save the choice before applying
+the exact version shown. To recover, select Stable and apply, or manually install `kandev@latest`,
+reinstall the service, and restart it. There is no Homebrew or Desktop Nightly channel.
+
 ## Updating: TL;DR
 
 ```bash
 # Option A: managed user service
 # Use Settings -> System -> Updates -> Apply update
+# Verified npm/npx user services can first select and save Stable or Nightly.
 
 # Option B: manual / system service
 # 1. Update the binary

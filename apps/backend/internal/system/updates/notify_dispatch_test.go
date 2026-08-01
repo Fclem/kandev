@@ -69,6 +69,69 @@ func TestService_FetchAndPersist_NotifiesCanonicalServiceForNewerRelease(t *test
 	}
 }
 
+func TestService_ReplayNightlyNotifiesForUnequalAuthoritativeSHA(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	pool := newTestPool(t)
+	store := &memorySettingsStore{value: []byte(ChannelNightly), present: true}
+	if err := persistence.WriteLatestNightlyVersion(
+		pool.Writer(),
+		"1.2.4-nightly.sha000000000000",
+		"https://example.test/nightly",
+		time.Now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(
+		pool,
+		"v1.2.4-nightly.shaffffffffffff",
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(store),
+	)
+	notifier := &capturingNotifier{}
+	svc.SetNotifier(notifier)
+	if err := svc.ReplayCachedUpdate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(notifier.calls) != 1 {
+		t.Fatalf("notifier calls=%d want 1", len(notifier.calls))
+	}
+}
+
+func TestService_ReturnToOlderStableIsAvailableWithoutUpgradeNotification(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	pool := newTestPool(t)
+	store := &memorySettingsStore{value: []byte(ChannelStable), present: true}
+	if err := persistence.WriteLatestVersion(pool.Writer(), "v1.2.3", "https://example.test/stable", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(
+		pool,
+		"v1.2.4-nightly.shaabc123def456",
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(store),
+	)
+	notifier := &capturingNotifier{}
+	svc.SetNotifier(notifier)
+
+	resp, err := svc.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resp.UpdateAvailable {
+		t.Fatal("explicit stable return should be available")
+	}
+	if err := svc.ReplayCachedUpdate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(notifier.calls) != 0 {
+		t.Fatalf("downgrade-like stable return sent %d notification(s)", len(notifier.calls))
+	}
+}
+
 func TestService_PollBeforeLocalSubscription_ReplaysCachedUpdateExactlyOnce(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv("KANDEV_DESKTOP_NATIVE_NOTIFICATIONS", "true")

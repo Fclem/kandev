@@ -9,6 +9,10 @@ The native Kandev launcher can install itself as a systemd service on Linux or a
 
 Install Kandev first using a persistent [CLI installation](cli.md#install). Do not install a long-lived service from an ephemeral `npx` invocation: the generated unit records the absolute native executable and release-bundle paths.
 
+Stable is the default release channel. A verified Kandev-managed npm/npx user service can opt into
+the npm Nightly channel from **Settings > System > Updates**. Homebrew and system services remain
+Stable-only.
+
 > **Network security:** the backend listens on `0.0.0.0` by default and ships with authentication **disabled**. Before allowing remote access, enable [opt-in authentication](authentication.md) (the **Authentication & users** feature toggle, or `KANDEV_FEATURES_AUTH=true`) and terminate TLS in a reverse proxy — authentication does not replace HTTPS. A server bound to non-loopback interfaces without authentication logs a startup warning. See [server configuration](configuration.md#root-and-server).
 
 ## Choose a service mode
@@ -161,6 +165,16 @@ sudo journalctl -u kandev.service -n 200 --no-pager
 
 For a user service installed by `kandev service install`, use **Settings → System → Updates → Apply update** when a newer release is available. Kandev verifies the managed unit or plist and its owner-only `<home>/service/install.json` metadata before enabling this action. System services still require a terminal update because they need elevated privileges.
 
+For a verified npm/npx user service, the same page also provides an install-wide **Stable** or
+**Nightly** choice. Stable reads signed GitHub Releases and remains selected by default. Nightly
+reads npm's `kandev@nightly` tag and may contain unstable code from `main`. Select the row, use
+**Save changes**, inspect the exact version, and then apply it separately. Apply re-resolves the
+mutable npm tag and installs the exact immutable version it names.
+
+To leave Nightly, select Stable, save, and apply the displayed stable release. If the UI cannot do
+that, use the manual stable recovery below. Homebrew, Desktop, system-service, unmanaged,
+local-checkout, unknown, and invalid-metadata installs cannot select Nightly.
+
 If the Apply action is unavailable or fails, upgrade the package manually, reinstall with the same mode and home flags so absolute paths and bundle metadata are refreshed, then restart explicitly:
 
 ```bash
@@ -170,6 +184,9 @@ kandev service install --home-dir "$HOME/.kandev"
 kandev service restart
 kandev service status
 ```
+
+To remain on Nightly during a manual npm recovery, use `kandev@nightly` in the install command.
+Do not use a Homebrew `HEAD` build as an equivalent channel; no Homebrew Nightly is published.
 
 For system mode:
 

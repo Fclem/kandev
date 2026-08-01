@@ -11,6 +11,7 @@ import {
   IconGitBranch,
   IconArchive,
   IconArrowBackUp,
+  IconHome,
 } from "@tabler/icons-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Label } from "@kandev/ui/label";
@@ -27,11 +28,13 @@ import type { Theme } from "@/lib/settings/types";
 import type { UserSettingsState } from "@/lib/state/slices/settings/types";
 import { ArchiveConfirmationSettings } from "@/components/settings/archive-confirmation-settings";
 import { MCPTaskAgentProfileDefaultSettings } from "@/components/settings/mcp-task-agent-profile-default-settings";
+import { UnreadDividerSettings } from "@/components/settings/unread-divider-settings";
 import { AnchoredPromptBarSettings } from "@/components/settings/anchored-prompt-bar-settings";
 import { useSettingsSaveContributor } from "@/components/settings/settings-save-provider";
 import type { StoredShortcutOverrides } from "@/lib/keyboard/shortcut-overrides";
 import { buildPluginShortcutEntries } from "@/lib/keyboard/plugin-shortcuts";
 import { usePlugins } from "@/hooks/domains/plugins/use-plugins";
+import { StartupPageSettingsCard } from "@/components/settings/startup-page-settings-card";
 
 function ThemeSettingsCard({
   theme,
@@ -144,14 +147,64 @@ function ChangesPanelLayoutCard({
 
 function createAppearanceSavedState(
   theme: Theme,
-  userSettings: Pick<UserSettingsState, "changesPanelLayout" | "systemMetricsDisplay">,
+  userSettings: Pick<
+    UserSettingsState,
+    "changesPanelLayout" | "startupPage" | "systemMetricsDisplay"
+  >,
 ) {
   return {
     theme,
     changesPanelLayout: userSettings.changesPanelLayout,
+    startupPage: userSettings.startupPage,
     showMetrics: userSettings.systemMetricsDisplay.showInTopbar,
     simplifiedMetrics: userSettings.systemMetricsDisplay.simplified,
   };
+}
+
+function StartupPageSettingsSection({
+  value,
+  isDirty,
+  onChange,
+}: {
+  value: UserSettingsState["startupPage"];
+  isDirty: boolean;
+  onChange: (startupPage: UserSettingsState["startupPage"]) => void;
+}) {
+  return (
+    <>
+      <Separator />
+
+      <SettingsSection
+        icon={<IconHome className="h-5 w-5" />}
+        title="Startup Page"
+        description="Choose what opens when Kandev starts or you visit its bare home page"
+      >
+        <StartupPageSettingsCard value={value} isDirty={isDirty} onChange={onChange} />
+      </SettingsSection>
+
+      <Separator />
+    </>
+  );
+}
+
+function AppearanceThemeSection({
+  theme,
+  isDirty,
+  onChange,
+}: {
+  theme: Theme;
+  isDirty: boolean;
+  onChange: (theme: Theme) => void;
+}) {
+  return (
+    <SettingsSection
+      icon={<IconPalette className="h-5 w-5" />}
+      title="Appearance"
+      description="Customize how the application looks"
+    >
+      <ThemeSettingsCard theme={theme} isDirty={isDirty} onChange={onChange} />
+    </SettingsSection>
+  );
 }
 
 export function GeneralSettings() {
@@ -189,6 +242,7 @@ export function TaskActionsSettings() {
         <div className="space-y-4">
           <MCPTaskAgentProfileDefaultSettings />
           <ArchiveConfirmationSettings />
+          <UnreadDividerSettings />
         </div>
       </SettingsSection>
 
@@ -228,6 +282,7 @@ export function AppearanceSettings() {
       await updateUserSettings({
         workspace_id: current.workspaceId || "",
         repository_ids: current.repositoryIds || [],
+        startup_page: submitted.startupPage,
         changes_panel_layout: submitted.changesPanelLayout,
         system_metrics_display: {
           show_in_topbar: submitted.showMetrics,
@@ -242,6 +297,7 @@ export function AppearanceSettings() {
       setUserSettings({
         ...storeApi.getState().userSettings,
         changesPanelLayout: submitted.changesPanelLayout,
+        startupPage: submitted.startupPage,
         systemMetricsDisplay: {
           showInTopbar: submitted.showMetrics,
           simplified: submitted.simplifiedMetrics,
@@ -261,22 +317,20 @@ export function AppearanceSettings() {
 
   return (
     <div className="space-y-8">
-      <SettingsSection
-        icon={<IconPalette className="h-5 w-5" />}
-        title="Appearance"
-        description="Customize how the application looks"
-      >
-        <ThemeSettingsCard
-          theme={draft.theme}
-          isDirty={draft.theme !== saved.theme}
-          onChange={(theme) => {
-            updateDraft({ theme });
-            previewTheme(theme);
-          }}
-        />
-      </SettingsSection>
+      <AppearanceThemeSection
+        theme={draft.theme}
+        isDirty={draft.theme !== saved.theme}
+        onChange={(theme) => {
+          updateDraft({ theme });
+          previewTheme(theme);
+        }}
+      />
 
-      <Separator />
+      <StartupPageSettingsSection
+        value={draft.startupPage}
+        isDirty={draft.startupPage !== saved.startupPage}
+        onChange={(startupPage) => updateDraft({ startupPage })}
+      />
 
       <SettingsSection
         icon={<IconGitBranch className="h-5 w-5" />}

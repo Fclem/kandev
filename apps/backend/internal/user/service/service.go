@@ -37,6 +37,7 @@ type Service struct {
 type UpdateUserSettingsRequest struct {
 	WorkspaceID                     *string
 	KanbanViewMode                  *string
+	StartupPage                     *string
 	WorkflowFilterID                *string
 	RepositoryIDs                   *[]string
 	TasksListSort                   *string
@@ -49,6 +50,7 @@ type UpdateUserSettingsRequest struct {
 	ChatSubmitKey                   *string
 	ReviewAutoMarkOnScroll          *bool
 	ConfirmTaskArchive              *bool
+	UnreadDivider                   *bool
 	MCPTaskAgentProfileDefault      *string
 	ShowAnchoredPromptBar           *bool
 	ShowScrollToLastPrompt          *bool
@@ -229,6 +231,9 @@ func applyWorkspaceAndTaskListPreferences(settings *models.UserSettings, req *Up
 	if req.KanbanViewMode != nil {
 		settings.KanbanViewMode = *req.KanbanViewMode
 	}
+	if err := applyStartupPage(settings, req.StartupPage); err != nil {
+		return err
+	}
 	if req.WorkflowFilterID != nil {
 		settings.WorkflowFilterID = *req.WorkflowFilterID
 	}
@@ -256,12 +261,29 @@ func applyWorkspaceAndTaskListPreferences(settings *models.UserSettings, req *Up
 	return nil
 }
 
+func applyStartupPage(settings *models.UserSettings, value *string) error {
+	if value == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*value)
+	switch v {
+	case models.StartupPageTaskOverview, models.StartupPageLastTask:
+		settings.StartupPage = v
+		return nil
+	default:
+		return fmt.Errorf("startup_page must be %q or %q", models.StartupPageTaskOverview, models.StartupPageLastTask)
+	}
+}
+
 func applyTaskActionPreferences(settings *models.UserSettings, req *UpdateUserSettingsRequest) error {
 	if req.ReviewAutoMarkOnScroll != nil {
 		settings.ReviewAutoMarkOnScroll = *req.ReviewAutoMarkOnScroll
 	}
 	if req.ConfirmTaskArchive != nil {
 		settings.ConfirmTaskArchive = *req.ConfirmTaskArchive
+	}
+	if req.UnreadDivider != nil {
+		settings.UnreadDivider = *req.UnreadDivider
 	}
 	if err := applyMCPTaskAgentProfileDefault(settings, req.MCPTaskAgentProfileDefault); err != nil {
 		return err
@@ -644,6 +666,7 @@ func (s *Service) publishUserSettingsEvent(ctx context.Context, settings *models
 		"user_id":                             settings.UserID,
 		"workspace_id":                        settings.WorkspaceID,
 		"kanban_view_mode":                    settings.KanbanViewMode,
+		"startup_page":                        models.NormalizeStartupPage(settings.StartupPage),
 		"workflow_filter_id":                  settings.WorkflowFilterID,
 		"repository_ids":                      settings.RepositoryIDs,
 		"tasks_list_sort":                     settings.TasksListSort,
@@ -656,6 +679,7 @@ func (s *Service) publishUserSettingsEvent(ctx context.Context, settings *models
 		"chat_submit_key":                     settings.ChatSubmitKey,
 		"review_auto_mark_on_scroll":          settings.ReviewAutoMarkOnScroll,
 		"confirm_task_archive":                settings.ConfirmTaskArchive,
+		"unread_divider":                      settings.UnreadDivider,
 		"mcp_task_agent_profile_default":      models.NormalizeMCPTaskAgentProfileDefault(settings.MCPTaskAgentProfileDefault),
 		"show_anchored_prompt_bar":            settings.ShowAnchoredPromptBar,
 		"show_scroll_to_last_prompt":          settings.ShowScrollToLastPrompt,

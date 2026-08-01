@@ -19,18 +19,20 @@ import {
 } from "@tabler/icons-react";
 import { AppSidebarWorkspacePicker } from "@/components/app-sidebar/app-sidebar-workspace-picker";
 import { MobileIntegrationsSection } from "@/components/integrations/integrations-menu";
+import { MobilePluginNavSection } from "@/components/plugins/mobile-plugin-nav-section";
 import { TaskSearchInput } from "./task-search-input";
 import {
   MobileTasksListOptions,
   type TasksListDisplayOptions,
 } from "./mobile-menu-task-list-options";
 import { useKanbanDisplaySettings } from "@/hooks/use-kanban-display-settings";
-import { linkToTask, linkToTasks } from "@/lib/links";
+import { linkToTask, linkToTaskOverview, linkToTasks } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import type { Repository, Task } from "@/lib/types/http";
 import type { WorkflowsState } from "@/lib/state/slices";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useAppStatusDrawer } from "@/components/app-status-bar/app-status-surface-provider";
+import { connectionIssueDetails } from "@/components/app-status-bar/connection-status-item";
 import { ImproveKandevDialog } from "@/components/improve-kandev-dialog";
 type MobileMenuSheetProps = {
   open: boolean;
@@ -289,7 +291,8 @@ function MobileUtilityActions({
   onOpenImproveKandev: () => void;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { enabled: statusDrawerEnabled, openStatusDrawer } = useAppStatusDrawer();
+  const { enabled: statusDrawerEnabled, issueSeverity, openStatusDrawer } = useAppStatusDrawer();
+  const issueDetails = issueSeverity === "none" ? null : connectionIssueDetails(issueSeverity);
   const closeSheet = () => onOpenChange(false);
   const openHealth = () => {
     closeSheet();
@@ -307,12 +310,24 @@ function MobileUtilityActions({
         <Button
           type="button"
           variant="outline"
-          className="h-11 w-full cursor-pointer justify-start gap-3 px-3 text-sm"
+          className={cn(
+            "relative h-11 w-full cursor-pointer justify-start gap-3 px-3 text-sm",
+            issueSeverity === "lost" && "border-destructive/40 text-destructive",
+            issueSeverity === "unstable" && "border-amber-500/40 text-amber-500",
+          )}
           onClick={openStatus}
           data-testid="mobile-home-status-button"
+          aria-label={issueDetails?.description}
+          data-connection-severity={issueSeverity === "none" ? undefined : issueSeverity}
         >
           <IconActivity className={mobileControlIconClass} />
           Status
+          {issueDetails && (
+            <span
+              className={cn("ml-auto size-2 rounded-full", issueDetails.dotClass)}
+              aria-hidden="true"
+            />
+          )}
         </Button>
       )}
       <Button
@@ -449,6 +464,7 @@ function MobileMenuContent({
         showPipeline={showPipeline}
       />
       <MobileDisplayOptions {...displayOptions} />
+      <MobilePluginNavSection onNavigate={() => onOpenChange(false)} />
       <MobileIntegrationsSection onNavigate={() => onOpenChange(false)} />
       <MobileUtilityActions
         showHealthIndicator={showHealthIndicator}
@@ -502,11 +518,13 @@ export function MobileMenuSheet({
       onOpenChange(false);
     } else if (value === "kanban") {
       onViewModeChange("kanban");
-      if (currentPage !== "kanban") router.push("/");
+      if (currentPage !== "kanban")
+        router.push(linkToTaskOverview({ workspaceId, workflowId: activeWorkflowId ?? undefined }));
       onOpenChange(false);
     } else if (value === "pipeline" && !isMobile) {
       onViewModeChange("pipeline");
-      if (currentPage !== "kanban") router.push("/");
+      if (currentPage !== "kanban")
+        router.push(linkToTaskOverview({ workspaceId, workflowId: activeWorkflowId ?? undefined }));
       onOpenChange(false);
     }
   };

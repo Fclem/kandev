@@ -11,6 +11,7 @@ import type {
   SavedLayout,
   ToolStatus,
   MCPTaskAgentProfileDefault,
+  StartupPage,
 } from "@/lib/types/http";
 import type {
   VoiceInputActivationMode,
@@ -168,6 +169,7 @@ export type SettingsDataState = {
 export type UserSettingsState = {
   workspaceId: string | null;
   kanbanViewMode: string | null;
+  startupPage: StartupPage;
   workflowId: string | null;
   repositoryIds: string[];
   tasksListSort: TasksListSort;
@@ -180,6 +182,7 @@ export type UserSettingsState = {
   chatSubmitKey: "enter" | "cmd_enter";
   reviewAutoMarkOnScroll: boolean;
   confirmTaskArchive: boolean;
+  unreadDivider: boolean;
   mcpTaskAgentProfileDefault: MCPTaskAgentProfileDefault;
   showAnchoredPromptBar: boolean;
   showScrollToLastPrompt: boolean;

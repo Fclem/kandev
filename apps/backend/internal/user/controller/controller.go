@@ -46,6 +46,7 @@ func (c *Controller) UpdateUserSettings(ctx context.Context, req dto.UpdateUserS
 	settings, err := c.svc.UpdateUserSettings(ctx, &service.UpdateUserSettingsRequest{
 		WorkspaceID:                     req.WorkspaceID,
 		KanbanViewMode:                  req.KanbanViewMode,
+		StartupPage:                     req.StartupPage,
 		WorkflowFilterID:                req.WorkflowFilterID,
 		RepositoryIDs:                   req.RepositoryIDs,
 		TasksListSort:                   req.TasksListSort,
@@ -58,6 +59,7 @@ func (c *Controller) UpdateUserSettings(ctx context.Context, req dto.UpdateUserS
 		ChatSubmitKey:                   req.ChatSubmitKey,
 		ReviewAutoMarkOnScroll:          req.ReviewAutoMarkOnScroll,
 		ConfirmTaskArchive:              req.ConfirmTaskArchive,
+		UnreadDivider:                   req.UnreadDivider,
 		MCPTaskAgentProfileDefault:      req.MCPTaskAgentProfileDefault,
 		ShowAnchoredPromptBar:           req.ShowAnchoredPromptBar,
 		ShowScrollToLastPrompt:          req.ShowScrollToLastPrompt,

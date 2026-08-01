@@ -20,13 +20,16 @@ test.describe("Sidebar workspace mode navigation", () => {
     await testPage.getByTestId("sidebar-workspace-trigger").click();
     await testPage.getByTestId(`sidebar-workspace-item-${kanbanWorkspace.id}`).click();
     await expect(testPage).toHaveURL(
-      (url) => url.pathname === "/" && url.searchParams.get("workspaceId") === kanbanWorkspace.id,
+      (url) =>
+        url.pathname === "/" &&
+        url.searchParams.get("home") === "overview" &&
+        url.searchParams.get("workspaceId") === kanbanWorkspace.id,
       { timeout: 10_000 },
     );
 
     await expect(sidebar.root.getByRole("link", { name: "Kandev home" })).toHaveAttribute(
       "href",
-      `/?workspaceId=${kanbanWorkspace.id}`,
+      `/?home=overview&workspaceId=${kanbanWorkspace.id}`,
     );
     await expect(sidebar.root.getByRole("button", { name: "Office" })).toBeVisible();
     await sidebar.root.getByRole("button", { name: "Office" }).click();
@@ -46,12 +49,15 @@ test.describe("Sidebar workspace mode navigation", () => {
     await sidebar.root.getByRole("button", { name: "Kanban" }).click();
 
     await expect(testPage).toHaveURL(
-      (url) => url.pathname === "/" && url.searchParams.get("workspaceId") === kanbanWorkspace.id,
+      (url) =>
+        url.pathname === "/" &&
+        url.searchParams.get("home") === "overview" &&
+        url.searchParams.get("workspaceId") === kanbanWorkspace.id,
       { timeout: 10_000 },
     );
     await expect(sidebar.root.getByRole("link", { name: "Kandev home" })).toHaveAttribute(
       "href",
-      `/?workspaceId=${kanbanWorkspace.id}`,
+      `/?home=overview&workspaceId=${kanbanWorkspace.id}`,
     );
   });
 
@@ -125,7 +131,10 @@ test.describe("Sidebar workspace mode navigation", () => {
     officeApi,
     officeSeed,
   }) => {
-    await officeApi.listSkills(officeSeed.workspaceId);
+    const initial = (await officeApi.listSkills(officeSeed.workspaceId)) as {
+      skills?: Array<{ is_system?: boolean }>;
+    };
+    const initialUserSkillCount = (initial.skills ?? []).filter((skill) => !skill.is_system).length;
     await testPage.goto("/office");
     await expect(testPage.getByText("Agents Enabled")).toBeVisible({ timeout: 10_000 });
 
@@ -144,7 +153,7 @@ test.describe("Sidebar workspace mode navigation", () => {
     await expect(testPage.getByText("Agents Enabled")).toBeVisible({ timeout: 10_000 });
 
     await expect(skillsNavLink).toBeVisible();
-    const badge = skillsNavLink.getByText("1");
+    const badge = skillsNavLink.getByText(String(initialUserSkillCount + 1), { exact: true });
     await expect(badge).toBeVisible();
     await expect(badge).toHaveClass(/bg-muted/);
     await expect(badge).toHaveClass(/text-muted-foreground/);

@@ -12,6 +12,7 @@ import {
 } from "@kandev/ui/breadcrumb";
 import { cn } from "@kandev/ui/lib/utils";
 import { AppStatusDrawerTrigger } from "@/components/app-status-bar/app-status-surface-provider";
+import { linkToTaskOverview } from "@/lib/links";
 
 type PageTopbarProps = {
   /** Page title shown as the rightmost (current) breadcrumb */
@@ -46,8 +47,16 @@ type PageTopbarProps = {
   showStatusTrigger?: boolean;
 };
 
-function BackLink({ href, label }: { href: string; label: string }) {
-  if (href === "/") {
+function BackLink({
+  href,
+  label,
+  isHome = href === "/",
+}: {
+  href: string;
+  label: string;
+  isHome?: boolean;
+}) {
+  if (isHome) {
     return (
       <Link
         href={href}
@@ -73,6 +82,7 @@ function TopbarBreadcrumb({
   title,
   subtitle,
   icon,
+  showPhoneHome,
 }: {
   backHref: string;
   backLabel: string;
@@ -80,11 +90,16 @@ function TopbarBreadcrumb({
   title: string;
   subtitle?: string;
   icon?: ReactNode;
+  showPhoneHome: boolean;
 }) {
-  // The Home prefix is redundant now that the AppSidebar always shows a Home
-  // nav item. Only render the back link when a page sets a non-root backHref
-  // (e.g. a true ancestor route within a section).
+  // The Home prefix is redundant on desktop, where the AppSidebar always shows
+  // a Home nav item. Only render the back link when a page sets a non-root
+  // backHref (e.g. a true ancestor route within a section).
   const showBackLink = backHref !== "/" && !!backLabel;
+  // Below md the sidebar is hidden, so a root-level page that brings no nav of
+  // its own (a plugin route with default chrome) would otherwise strand phone
+  // users with no way back. Keep the home crumb phone-only.
+  const showHomeCrumb = !showBackLink && showPhoneHome;
   return (
     <Breadcrumb className="relative z-10 min-w-0">
       <BreadcrumbList className="flex-nowrap text-sm">
@@ -96,6 +111,16 @@ function TopbarBreadcrumb({
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator className="shrink-0" />
+          </>
+        )}
+        {showHomeCrumb && (
+          <>
+            <BreadcrumbItem className="shrink-0 md:hidden" data-testid="topbar-phone-home">
+              <BreadcrumbLink asChild>
+                <BackLink href={linkToTaskOverview()} label="Home" isHome />
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator className="shrink-0 md:hidden" />
           </>
         )}
         {parents?.flatMap((p) => [
@@ -138,6 +163,7 @@ type TopbarLeadingProps = {
   title: string;
   subtitle?: string;
   icon?: ReactNode;
+  showPhoneHome: boolean;
 };
 
 function TopbarLeading({
@@ -148,6 +174,7 @@ function TopbarLeading({
   title,
   subtitle,
   icon,
+  showPhoneHome,
 }: TopbarLeadingProps) {
   if (variant === "root") {
     if (!backLabel) return null;
@@ -165,6 +192,7 @@ function TopbarLeading({
       title={title}
       subtitle={subtitle}
       icon={icon}
+      showPhoneHome={showPhoneHome}
     />
   );
 }
@@ -206,6 +234,9 @@ export const PageTopbar = forwardRef<HTMLElement, PageTopbarProps>(function Page
         title={title}
         subtitle={subtitle}
         icon={icon}
+        // A page that supplies its own `leading` nav (Settings' menu sheet)
+        // already gets phone users home; don't add a second affordance.
+        showPhoneHome={!leading}
       />
       {leftActions && (
         <div className="relative z-10 flex shrink-0 items-center gap-1 [&:empty]:hidden">

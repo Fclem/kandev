@@ -444,6 +444,7 @@ func mapUserSettingsState(response userdto.UserSettingsResponse, workspaceID str
 	return map[string]any{
 		"workspaceId":                     effectiveWorkspaceID,
 		"kanbanViewMode":                  nullString(settings.KanbanViewMode),
+		"startupPage":                     usermodels.NormalizeStartupPage(settings.StartupPage),
 		"workflowId":                      nullString(settings.WorkflowFilterID),
 		"repositoryIds":                   stringSlice(settings.RepositoryIDs),
 		"tasksListSort":                   usermodels.NormalizeTasksListSort(settings.TasksListSort),
@@ -456,6 +457,7 @@ func mapUserSettingsState(response userdto.UserSettingsResponse, workspaceID str
 		"chatSubmitKey":                   defaultString(settings.ChatSubmitKey, "cmd_enter"),
 		"reviewAutoMarkOnScroll":          settings.ReviewAutoMarkOnScroll,
 		"confirmTaskArchive":              settings.ConfirmTaskArchive,
+		"unreadDivider":                   settings.UnreadDivider,
 		"mcpTaskAgentProfileDefault":      usermodels.NormalizeMCPTaskAgentProfileDefault(settings.MCPTaskAgentProfileDefault),
 		"showAnchoredPromptBar":           settings.ShowAnchoredPromptBar,
 		"showScrollToLastPrompt":          settings.ShowScrollToLastPrompt,

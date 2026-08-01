@@ -3,6 +3,7 @@ import {
   buildCoreFields,
   mapUserSettingsResponse,
   parseChangesPanelLayout,
+  parseStartupPage,
   parseSystemMetricsDisplay,
   parseVoiceMode,
 } from "./user-settings";
@@ -10,6 +11,30 @@ import { workspaceId as toWorkspaceId } from "@/lib/types/ids";
 
 const UPDATED_AT = "2026-01-01T00:00:00Z";
 const DEFAULT_USER_ID = "default-user";
+
+describe("startup page user settings", () => {
+  it("normalizes startup page preferences", () => {
+    expect(parseStartupPage("last_task")).toBe("last_task");
+    expect(parseStartupPage(undefined)).toBe("task_overview");
+    expect(parseStartupPage("future_value")).toBe("task_overview");
+  });
+
+  it("defaults startup page and maps the last-task choice", () => {
+    expect(mapUserSettingsResponse(null).startupPage).toBe("task_overview");
+
+    const result = mapUserSettingsResponse({
+      settings: {
+        user_id: DEFAULT_USER_ID,
+        workspace_id: toWorkspaceId(""),
+        repository_ids: [],
+        startup_page: "last_task",
+        updated_at: UPDATED_AT,
+      },
+    });
+
+    expect(result.startupPage).toBe("last_task");
+  });
+});
 
 describe("buildCoreFields", () => {
   it("normalizes the simplified metrics preference and defaults old rows to detailed", () => {
@@ -248,6 +273,24 @@ describe("mapUserSettingsResponse", () => {
   });
 });
 
+describe("mapUserSettingsResponse unread divider", () => {
+  it("defaults the preference to disabled and preserves explicit enablement", () => {
+    const fallback = mapUserSettingsResponse(null) as { unreadDivider?: boolean };
+    const disabled = mapUserSettingsResponse({
+      settings: {
+        user_id: DEFAULT_USER_ID,
+        workspace_id: toWorkspaceId(""),
+        repository_ids: [],
+        unread_divider: true,
+        updated_at: UPDATED_AT,
+      } as unknown as NonNullable<Parameters<typeof mapUserSettingsResponse>[0]>["settings"],
+    }) as { unreadDivider?: boolean };
+
+    expect(fallback.unreadDivider).toBe(false);
+    expect(disabled.unreadDivider).toBe(true);
+  });
+});
+
 describe("transcript navigation settings", () => {
   it("uses the requested defaults when settings are unavailable", () => {
     const settings = mapUserSettingsResponse(null);
@@ -256,7 +299,7 @@ describe("transcript navigation settings", () => {
       showAnchoredPromptBar: false,
       showScrollToLastPrompt: true,
       showScrollToStart: false,
-      showTranscriptAutoScrollControl: true,
+      showTranscriptAutoScrollControl: false,
     });
   });
 });

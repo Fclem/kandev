@@ -18,6 +18,18 @@ func NormalizeMCPTaskAgentProfileDefault(value string) string {
 }
 
 const (
+	StartupPageTaskOverview = "task_overview"
+	StartupPageLastTask     = "last_task"
+)
+
+func NormalizeStartupPage(value string) string {
+	if value == StartupPageLastTask {
+		return value
+	}
+	return StartupPageTaskOverview
+}
+
+const (
 	// RoleAdmin unlocks user management and system settings mutation when
 	// authentication is enabled. It does NOT grant visibility into other
 	// users' workspaces (hard privacy isolation).
@@ -46,6 +58,7 @@ type UserSettings struct {
 	UserID                          string                            `json:"user_id"`
 	WorkspaceID                     string                            `json:"workspace_id"`
 	KanbanViewMode                  string                            `json:"kanban_view_mode"`
+	StartupPage                     string                            `json:"startup_page"`
 	WorkflowFilterID                string                            `json:"workflow_filter_id"`
 	RepositoryIDs                   []string                          `json:"repository_ids"`
 	TasksListSort                   string                            `json:"tasks_list_sort"`
@@ -58,6 +71,7 @@ type UserSettings struct {
 	ChatSubmitKey                   string                            `json:"chat_submit_key"` // "enter" | "cmd_enter"
 	ReviewAutoMarkOnScroll          bool                              `json:"review_auto_mark_on_scroll"`
 	ConfirmTaskArchive              bool                              `json:"confirm_task_archive"`
+	UnreadDivider                   bool                              `json:"unread_divider"`
 	MCPTaskAgentProfileDefault      string                            `json:"mcp_task_agent_profile_default"`
 	ShowAnchoredPromptBar           bool                              `json:"show_anchored_prompt_bar"` // desktop-only sticky last-prompt bar
 	ShowScrollToLastPrompt          bool                              `json:"show_scroll_to_last_prompt"`

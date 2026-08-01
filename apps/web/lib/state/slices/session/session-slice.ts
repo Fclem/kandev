@@ -483,6 +483,17 @@ function buildTaskSessionActions(set: ImmerSet) {
         syncEnvironmentMapping(draft, session.id, mergedSession.task_environment_id);
         reconcileActiveTurnForIdleSession(draft, mergedSession);
       }),
+    updateSessionReadCursor: (sessionId: string, lastReadMessageId: string) =>
+      set((draft) => {
+        const session = draft.taskSessions.items[sessionId];
+        if (!session) return;
+        session.last_read_message_id = lastReadMessageId;
+        const sessionsByTask = draft.taskSessionsByTask.itemsByTaskId[session.task_id];
+        if (sessionsByTask) {
+          const match = sessionsByTask.find((s) => s.id === sessionId);
+          if (match) match.last_read_message_id = lastReadMessageId;
+        }
+      }),
     removeTaskSession: (taskId: string, sessionId: string) =>
       set((draft) => {
         delete draft.taskSessions.items[sessionId];
@@ -526,6 +537,12 @@ function buildTaskSessionActions(set: ImmerSet) {
     ) =>
       set((draft) => {
         const existing = draft.taskSessions.items[session.id];
+        if (!existing && draft.taskSessionsByTask.loadedByTaskId[taskId]) {
+          // State events intentionally carry partial session rows. When one
+          // introduces a new session, let useTaskSessions hydrate fields such
+          // as repository_id instead of treating the old list as authoritative.
+          draft.taskSessionsByTask.loadedByTaskId[taskId] = false;
+        }
         const merged = existing ? mergeTaskSession(existing, session) : session;
         draft.taskSessions.items[session.id] = merged;
         const list = draft.taskSessionsByTask.itemsByTaskId[taskId];

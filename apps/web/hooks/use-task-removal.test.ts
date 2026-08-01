@@ -5,8 +5,10 @@ import type { StoreApi } from "zustand";
 const replaceTaskUrlMock = vi.fn();
 const performLayoutSwitchMock = vi.fn();
 const listTaskSessionsMock = vi.fn();
+const fetchTaskMock = vi.fn();
 
 vi.mock("@/lib/links", () => ({
+  linkToTaskOverview: () => "/?home=overview",
   replaceTaskUrl: (...args: unknown[]) => replaceTaskUrlMock(...args),
 }));
 
@@ -16,9 +18,10 @@ vi.mock("@/lib/state/dockview-store", () => ({
 
 vi.mock("@/lib/api", () => ({
   listTaskSessions: (...args: unknown[]) => listTaskSessionsMock(...args),
+  fetchTask: (...args: unknown[]) => fetchTaskMock(...args),
 }));
 
-import { useTaskRemoval } from "./use-task-removal";
+import { useTaskRemoval, selectNextTaskAfterRemoval } from "./use-task-removal";
 import { setRecentTasks } from "@/lib/recent-tasks";
 
 type TaskRow = { id: string; primarySessionId: string | null };
@@ -44,13 +47,14 @@ function makeStore(init: {
   activeTaskId: string | null;
   activeSessionId?: string | null;
   remainingTasks: TaskRow[];
+  canonicalTasks?: TaskRow[];
 }): StoreApi<FakeState> & { getRecorded: () => FakeState } {
   const state: FakeState = {
     tasks: {
       activeTaskId: init.activeTaskId,
       activeSessionId: init.activeSessionId ?? null,
     },
-    kanban: { tasks: [] },
+    kanban: { tasks: init.canonicalTasks ?? [] },
     kanbanMulti: {
       snapshots: { "wf-1": { tasks: init.remainingTasks } },
     },
@@ -93,6 +97,7 @@ const recentSessionId = "sess-recent";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  fetchTaskMock.mockResolvedValue({ archived_at: null });
   window.localStorage.clear();
 });
 
@@ -250,7 +255,7 @@ describe("useTaskRemoval — switch guard (WS-clear fallback)", () => {
     expect(replaceTaskUrlMock).not.toHaveBeenCalled();
   });
 
-  it("redirects to / when no remaining tasks AND user still on removed task", async () => {
+  it("redirects to the explicit overview when no remaining tasks AND user is still on removed task", async () => {
     const store = makeStore({
       activeTaskId: "task-A",
       activeSessionId: "sess-A",
@@ -279,7 +284,7 @@ describe("useTaskRemoval — switch guard (WS-clear fallback)", () => {
         wasActiveSessionId: "sess-A",
       });
       expect(removeResult.switchedTaskId).toBeNull();
-      expect(hrefSetter).toHaveBeenCalledWith("/");
+      expect(hrefSetter).toHaveBeenCalledWith("/?home=overview");
     } finally {
       Object.defineProperty(window, "location", {
         configurable: true,
@@ -290,6 +295,51 @@ describe("useTaskRemoval — switch guard (WS-clear fallback)", () => {
 });
 
 describe("useTaskRemoval — next task selection", () => {
+  it("redirects home when a stale snapshot candidate is absent from the canonical board", async () => {
+    const staleTask = { id: "task-stale", primarySessionId: "sess-stale" };
+    const store = makeStore({
+      activeTaskId: "task-A",
+      activeSessionId: "sess-A",
+      remainingTasks: [{ id: "task-A", primarySessionId: "sess-A" }, staleTask],
+      canonicalTasks: [],
+    });
+    fetchTaskMock.mockRejectedValueOnce(new Error("task not found"));
+    const hrefSetter = vi.fn();
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        get href() {
+          return "";
+        },
+        set href(value: string) {
+          hrefSetter(value);
+        },
+      },
+    });
+
+    try {
+      const { result } = renderHook(() =>
+        useTaskRemoval({ store: store as unknown as StoreApi<never> }),
+      );
+
+      const removal = await result.current.removeTaskFromBoard("task-A", {
+        wasActiveTaskId: "task-A",
+        wasActiveSessionId: "sess-A",
+      });
+
+      expect(removal.switchedTaskId).toBeNull();
+      expect(store.getRecorded().setActiveSession).not.toHaveBeenCalled();
+      expect(replaceTaskUrlMock).not.toHaveBeenCalled();
+      expect(hrefSetter).toHaveBeenCalledWith("/?home=overview");
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
+
   it("switches to the most recent remaining task instead of the first snapshot task", async () => {
     const store = makeStoreWithOldAndRecentTasks("task-A");
     setRecentTaskFirst();
@@ -350,5 +400,31 @@ describe("useTaskRemoval — next task selection", () => {
       recentSessionId,
     );
     expect(replaceTaskUrlMock).toHaveBeenCalledWith(recentTaskId);
+  });
+});
+
+describe("selectNextTaskAfterRemoval — stale-candidate rejection", () => {
+  // The exported helper takes the full kanban task shape; the tests use the
+  // minimal TaskRow, so cast at the boundary exactly as the store-based tests do.
+  const select = selectNextTaskAfterRemoval as unknown as (
+    remaining: TaskRow[],
+    removedTaskId: string,
+    isLive: (taskId: string) => Promise<boolean>,
+  ) => Promise<TaskRow | null>;
+
+  it("returns null (redirect home) when the only remaining candidate is not a live board member", async () => {
+    // A task deleted moments earlier can linger in a snapshot that races the
+    // local delete. It is not the removed task, but it is no longer a live
+    // board member, so it must not be chosen — the caller then redirects home.
+    const stale: TaskRow = { id: "task-A-stale", primarySessionId: "sess-A" };
+
+    await expect(select([stale], "task-B", async () => false)).resolves.toBeNull();
+  });
+
+  it("returns the candidate when it is a live board member", async () => {
+    // Guards against over-rejection: a genuinely present task is still selected.
+    const live: TaskRow = { id: "task-A-live", primarySessionId: "sess-A" };
+
+    await expect(select([live], "task-B", async () => true)).resolves.toBe(live);
   });
 });

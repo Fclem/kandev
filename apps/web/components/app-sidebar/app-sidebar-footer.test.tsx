@@ -22,9 +22,11 @@ const state = {
     mode: "disabled" as string,
     user: null as { display_name: string; email: string } | null,
   },
+  connection: { issueSeverity: "none" as "none" | "unstable" | "lost" },
 };
 
 let officeEnabled = false;
+let appStatusBarEnabled = true;
 const DEFAULT_PATHNAME = "/tasks/session-1";
 let pathname = DEFAULT_PATHNAME;
 
@@ -38,7 +40,7 @@ vi.mock("@/components/state-provider", () => ({
 }));
 
 vi.mock("@/hooks/domains/features/use-feature", () => ({
-  useFeature: () => officeEnabled,
+  useFeature: (name: string) => (name === "office" ? officeEnabled : appStatusBarEnabled),
 }));
 
 vi.mock("@/hooks/use-release-notes", () => ({
@@ -114,6 +116,8 @@ describe("AppSidebarFooter", () => {
     ];
     state.appSidebar.settingsMode = false;
     state.auth = { mode: "disabled", user: null };
+    state.connection.issueSeverity = "none";
+    appStatusBarEnabled = true;
     window.localStorage.clear();
     document.cookie = "office-active-workspace=; path=/; max-age=0";
     mocks.routerPush.mockClear();
@@ -183,7 +187,7 @@ describe("AppSidebarFooter", () => {
     expect(screen.queryByRole("button", { name: "Office" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Kanban" }));
 
-    expect(mocks.routerPush).toHaveBeenCalledWith("/?workspaceId=kanban-1");
+    expect(mocks.routerPush).toHaveBeenCalledWith("/?home=overview&workspaceId=kanban-1");
   });
 
   it("remembers the current office workspace when toggling back to kanban", () => {
@@ -196,7 +200,7 @@ describe("AppSidebarFooter", () => {
     fireEvent.click(screen.getByRole("button", { name: "Kanban" }));
 
     expect(document.cookie).toContain("office-active-workspace=office-2");
-    expect(mocks.routerPush).toHaveBeenCalledWith("/?workspaceId=kanban-1");
+    expect(mocks.routerPush).toHaveBeenCalledWith("/?home=overview&workspaceId=kanban-1");
   });
   it("navigates to /settings when the gear opens settings mode from a non-settings route", () => {
     pathname = DEFAULT_PATHNAME;
@@ -229,6 +233,35 @@ describe("AppSidebarFooter", () => {
 
     expect(mocks.routerPush).not.toHaveBeenCalled();
     expect(mocks.toggleSettingsMode).toHaveBeenCalledOnce();
+  });
+});
+
+describe("AppSidebarFooter connection fallback", () => {
+  beforeEach(() => {
+    appStatusBarEnabled = true;
+    state.connection.issueSeverity = "none";
+  });
+
+  afterEach(cleanup);
+
+  it("shows the connection fallback immediately after the theme control during an outage", () => {
+    appStatusBarEnabled = false;
+    state.connection.issueSeverity = "unstable";
+
+    renderFooter();
+
+    const warning = screen.getByTestId("sidebar-connection-warning");
+    expect(warning.getAttribute("aria-label")).toBe("Connection unstable. Reconnecting to Kandev.");
+    expect(warning.getAttribute("data-connection-severity")).toBe("unstable");
+    expect(screen.getByRole("button", { name: "Theme" }).nextElementSibling).toBe(warning);
+  });
+
+  it("does not duplicate the warning fallback when the app status bar is enabled", () => {
+    state.connection.issueSeverity = "lost";
+
+    renderFooter();
+
+    expect(screen.queryByTestId("sidebar-connection-warning")).toBeNull();
   });
 });
 

@@ -18,6 +18,7 @@ type UserSettingsDTO struct {
 	UserID                          string                              `json:"user_id"`
 	WorkspaceID                     string                              `json:"workspace_id"`
 	KanbanViewMode                  string                              `json:"kanban_view_mode"`
+	StartupPage                     string                              `json:"startup_page"`
 	WorkflowFilterID                string                              `json:"workflow_filter_id"`
 	RepositoryIDs                   []string                            `json:"repository_ids"`
 	TasksListSort                   string                              `json:"tasks_list_sort"`
@@ -30,6 +31,7 @@ type UserSettingsDTO struct {
 	ChatSubmitKey                   string                              `json:"chat_submit_key"`
 	ReviewAutoMarkOnScroll          bool                                `json:"review_auto_mark_on_scroll"`
 	ConfirmTaskArchive              bool                                `json:"confirm_task_archive"`
+	UnreadDivider                   bool                                `json:"unread_divider"`
 	MCPTaskAgentProfileDefault      string                              `json:"mcp_task_agent_profile_default"`
 	ShowAnchoredPromptBar           bool                                `json:"show_anchored_prompt_bar"`
 	ShowScrollToLastPrompt          bool                                `json:"show_scroll_to_last_prompt"`
@@ -82,6 +84,7 @@ type ShellOption struct {
 type UpdateUserSettingsRequest struct {
 	WorkspaceID                     *string                            `json:"workspace_id,omitempty"`
 	KanbanViewMode                  *string                            `json:"kanban_view_mode,omitempty"`
+	StartupPage                     *string                            `json:"startup_page,omitempty"`
 	WorkflowFilterID                *string                            `json:"workflow_filter_id,omitempty"`
 	RepositoryIDs                   *[]string                          `json:"repository_ids,omitempty"`
 	TasksListSort                   *string                            `json:"tasks_list_sort,omitempty"`
@@ -94,6 +97,7 @@ type UpdateUserSettingsRequest struct {
 	ChatSubmitKey                   *string                            `json:"chat_submit_key,omitempty"`
 	ReviewAutoMarkOnScroll          *bool                              `json:"review_auto_mark_on_scroll,omitempty"`
 	ConfirmTaskArchive              *bool                              `json:"confirm_task_archive,omitempty"`
+	UnreadDivider                   *bool                              `json:"unread_divider,omitempty"`
 	MCPTaskAgentProfileDefault      *string                            `json:"mcp_task_agent_profile_default,omitempty"`
 	ShowAnchoredPromptBar           *bool                              `json:"show_anchored_prompt_bar,omitempty"`
 	ShowScrollToLastPrompt          *bool                              `json:"show_scroll_to_last_prompt,omitempty"`
@@ -207,6 +211,7 @@ func FromUserSettings(settings *models.UserSettings) UserSettingsDTO {
 		UserID:                          settings.UserID,
 		WorkspaceID:                     settings.WorkspaceID,
 		KanbanViewMode:                  settings.KanbanViewMode,
+		StartupPage:                     models.NormalizeStartupPage(settings.StartupPage),
 		WorkflowFilterID:                settings.WorkflowFilterID,
 		RepositoryIDs:                   settings.RepositoryIDs,
 		TasksListSort:                   settings.TasksListSort,
@@ -219,6 +224,7 @@ func FromUserSettings(settings *models.UserSettings) UserSettingsDTO {
 		ChatSubmitKey:                   settings.ChatSubmitKey,
 		ReviewAutoMarkOnScroll:          settings.ReviewAutoMarkOnScroll,
 		ConfirmTaskArchive:              settings.ConfirmTaskArchive,
+		UnreadDivider:                   settings.UnreadDivider,
 		MCPTaskAgentProfileDefault:      models.NormalizeMCPTaskAgentProfileDefault(settings.MCPTaskAgentProfileDefault),
 		ShowAnchoredPromptBar:           settings.ShowAnchoredPromptBar,
 		ShowScrollToLastPrompt:          settings.ShowScrollToLastPrompt,

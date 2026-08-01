@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/ui/webkit-task-dialog-rendering.md
 created: 2026-08-01
-status: draft
+status: complete
 ---
 
 # Implementation Plan: WebKit Task Dialog Rendering
@@ -99,8 +99,8 @@ does not configure vibrancy or transparency.
 
 ## Implementation Tasks
 
-- [ ] [Task 01: Classify the rendering engine](task-01-rendering-engine-marker.md)
-- [ ] [Task 02: Apply WebKit-safe task dialog rendering](task-02-webkit-dialog-rendering.md)
+- [x] [Task 01: Classify the rendering engine](task-01-rendering-engine-marker.md)
+- [x] [Task 02: Apply WebKit-safe task dialog rendering](task-02-webkit-dialog-rendering.md)
 
 Execution is sequential in the primary conversation. No subagent delegation is planned or
 authorized.

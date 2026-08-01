@@ -1,7 +1,7 @@
 ---
 id: "02-webkit-dialog-rendering"
 title: "Apply WebKit-safe task dialog rendering"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-rendering-engine-marker"]
 plan: "plan.md"
@@ -85,3 +85,14 @@ Red-Green-Refactor cycle.
 Report the observed desktop/mobile RED failures, selectors and geometry applied, files changed,
 both final focused command results, the macOS native visual-check status, remaining risks, and
 updated task/plan statuses in this conversation.
+
+## Results
+
+- RED: the Chromium harness observed the shared `enter` animation and transform-based centering
+  under the forced WebKit marker; the mobile path likewise had the shared motion before the
+  opt-in CSS existed.
+- GREEN: the desktop Chromium/WebKit-branch spec passes 2 tests and the mobile WebKit-branch spec
+  passes 1 test after the opt-in CSS was added.
+- Native visual check: not available in this Linux worktree; the selector behavior and geometry
+  are covered by the focused Chromium and mobile viewport checks, with a macOS Safari/Tauri check
+  remaining for the PR reviewer.

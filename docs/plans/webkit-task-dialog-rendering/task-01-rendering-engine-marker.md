@@ -1,7 +1,7 @@
 ---
 id: "01-rendering-engine-marker"
 title: "Classify the rendering engine"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"

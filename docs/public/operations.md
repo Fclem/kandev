@@ -277,8 +277,9 @@ Before any update, finish or stop active sessions, create and export a database 
 - Managed npm/npx user service: choose Stable or Nightly, save, check the resolved exact version,
   then use **Apply update**. Kandev resolves the mutable npm tag immediately before applying and
   installs the exact immutable version. To recover from Nightly, select Stable and apply the shown
-  release, or run `npm install -g kandev@latest`, rerun `kandev service install` with the same
-  flags, and restart.
+  release. For terminal recovery, an npm-managed service runs `npm install -g kandev@latest` and
+  then `kandev service install` with the same flags; an npx-managed service runs
+  `npx -y kandev@latest service install` with the same flags. Restart afterward.
 - Managed Homebrew user service: Stable only. Use **Apply update** when available; otherwise run
   `brew upgrade kandev`, reinstall the service with the same flags, and restart.
 - System service: Stable only. Upgrade with the required privileges, reinstall with the same

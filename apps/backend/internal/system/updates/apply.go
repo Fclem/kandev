@@ -49,10 +49,8 @@ func (s *Service) applyPreflight(ctx context.Context) (UpdatesResponse, *service
 	if err != nil {
 		return UpdatesResponse{}, nil, err
 	}
-	version, releaseURL, checkedAt, err := s.readLatestVersion(channel)
-	if err != nil {
-		return UpdatesResponse{}, nil, err
-	}
+	var version, releaseURL string
+	var checkedAt time.Time
 	if channel == ChannelNightly {
 		version, releaseURL, err = s.resolveLatest(ctx, channel)
 		if err != nil {
@@ -60,6 +58,11 @@ func (s *Service) applyPreflight(ctx context.Context) (UpdatesResponse, *service
 		}
 		checkedAt = s.now().UTC()
 		if err := s.writeLatestVersion(channel, version, releaseURL, checkedAt); err != nil {
+			return UpdatesResponse{}, nil, err
+		}
+	} else {
+		version, releaseURL, checkedAt, err = s.readLatestVersion(channel)
+		if err != nil {
 			return UpdatesResponse{}, nil, err
 		}
 	}

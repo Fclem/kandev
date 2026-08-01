@@ -216,18 +216,18 @@ Uninstalling the package does not remove `<home>`. Before removing that director
 
 ## Update
 
-The installer owns CLI updates. Stable commands are:
+The installer owns CLI updates. Update persistent Stable installs with:
 
 ```bash
 brew upgrade kandev
 npm install -g kandev@latest
-npx -y kandev@latest
 ```
 
-For the npm-only prerelease channel, replace `latest` with `nightly`. A verified managed npm/npx
-user service can also select **Nightly** under **Settings > System > Updates**. Stable is selected
-by default; Desktop, Homebrew, system-service, unmanaged, local-checkout, and unknown installs
-cannot change this setting.
+Use `npm install -g kandev@nightly` for a persistent npm Nightly install. `npx -y kandev@latest`
+and `npx -y kandev@nightly` launch one-off copies from the requested channel; they do not update a
+global package. A verified managed npm/npx user service can also select **Nightly** under
+**Settings > System > Updates**. Stable is selected by default; Desktop, Homebrew, system-service,
+unmanaged, local-checkout, and unknown installs cannot change this setting.
 
 Release packages pin the shim and native runtime packages to the same SemVer. Do not copy only one binary from a different release into a bundle. A service unit contains installation-specific executable and bundle paths; after the package upgrade, reinstall it with the same service flags and restart it as described above.
 

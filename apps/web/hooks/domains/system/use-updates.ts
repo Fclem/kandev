@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/components/state-provider";
 import { checkUpdates, fetchUpdates, saveUpdatesChannel } from "@/lib/api/domains/system-api";
 import type { UpdatesChannel } from "@/lib/types/system";
@@ -11,15 +11,19 @@ export function useUpdates() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
+  const latestRequest = useRef(0);
 
   const reload = useCallback(async () => {
+    const request = ++latestRequest.current;
     setIsLoading(true);
     setError(null);
     try {
       const res = await fetchUpdates({ cache: "no-store" });
-      setSystemUpdates(res);
+      if (request === latestRequest.current) setSystemUpdates(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (request === latestRequest.current) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -31,14 +35,17 @@ export function useUpdates() {
    * with the fresh row (or 429 — surfaced via the returned promise).
    */
   const check = useCallback(async () => {
+    const request = ++latestRequest.current;
     setIsChecking(true);
     setError(null);
     try {
       const res = await checkUpdates();
-      setSystemUpdates(res);
+      if (request === latestRequest.current) setSystemUpdates(res);
       return res;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (request === latestRequest.current) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
       throw e;
     } finally {
       setIsChecking(false);
@@ -47,13 +54,16 @@ export function useUpdates() {
 
   const saveChannel = useCallback(
     async (channel: UpdatesChannel) => {
+      const request = ++latestRequest.current;
       setError(null);
       try {
         const res = await saveUpdatesChannel(channel);
-        setSystemUpdates(res);
+        if (request === latestRequest.current) setSystemUpdates(res);
         return res;
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        if (request === latestRequest.current) {
+          setError(e instanceof Error ? e.message : String(e));
+        }
         throw e;
       }
     },

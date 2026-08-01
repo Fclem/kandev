@@ -705,7 +705,7 @@ jobs:
     name: Build platform bundle (${{ matrix.platform }})
     needs: [prepare, nightly-prepare, build-web]
     if: >-
-      ${{ !cancelled() && (
+      ${{ !cancelled() && needs.build-web.result == 'success' && (
         (github.event_name == 'workflow_dispatch' && needs.prepare.result == 'success' && !inputs.dry_run) ||
         (github.event_name == 'schedule' && needs.nightly-prepare.result == 'success' && needs.nightly-prepare.outputs.should_publish == 'true')
       ) }}
@@ -1903,7 +1903,7 @@ jobs:
   publish-npm-nightly:
     name: Publish npm nightly packages
     needs: [nightly-prepare, build-bundles]
-    if: ${{ !cancelled() && github.event_name == 'schedule' && needs.nightly-prepare.result == 'success' && needs.nightly-prepare.outputs.should_publish == 'true' }}
+    if: ${{ !cancelled() && github.event_name == 'schedule' && needs.nightly-prepare.result == 'success' && needs.nightly-prepare.outputs.should_publish == 'true' && needs.build-bundles.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write    # Required for OIDC trusted publishing

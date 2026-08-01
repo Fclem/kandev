@@ -36,6 +36,9 @@ import { UpdatesCard } from "./updates-card";
 
 const APPLY_TESTID = "system-updates-apply";
 const ARIA_CHECKED = "aria-checked";
+const CHANNEL_TESTID = "system-updates-channel";
+const SETTINGS_DIRTY_ATTRIBUTE = "data-settings-dirty";
+const SAVE_CHANGES_NAME = "Save changes";
 
 function updates(overrides: Partial<UpdatesResponse> = {}): UpdatesResponse {
   return {
@@ -359,22 +362,25 @@ describe("UpdatesCard channel setting", () => {
 
     expect(nightly.getAttribute(ARIA_CHECKED)).toBe("true");
     expect(saveChannel).not.toHaveBeenCalled();
-    expect(screen.getByTestId("system-updates-channel").getAttribute("data-settings-dirty")).toBe(
-      "true",
-    );
+    expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe("true");
 
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_NAME }));
 
     await waitFor(() => expect(saveChannel).toHaveBeenCalledWith("nightly"));
     await waitFor(() =>
-      expect(screen.getByTestId("system-updates-channel").getAttribute("data-settings-dirty")).toBe(
+      expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe(
         "false",
       ),
     );
   });
+});
 
+describe("UpdatesCard channel save coordination", () => {
   it("keeps a failed channel save dirty and retryable", async () => {
-    const saveChannel = vi.fn().mockRejectedValue(new Error("npm registry unavailable"));
+    const saveChannel = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("npm registry unavailable"))
+      .mockResolvedValueOnce(updates({ channel: "nightly" }));
     mocks.useUpdates.mockReturnValue({
       updates: updates(),
       check: vi.fn(),
@@ -386,11 +392,52 @@ describe("UpdatesCard channel setting", () => {
     renderUpdatesCard();
     const nightly = screen.getByRole("radio", { name: /^Nightly/ });
     fireEvent.click(nightly);
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_NAME }));
 
     await waitFor(() => expect(screen.getByText("Couldn't save")).toBeTruthy());
     expect(nightly.getAttribute(ARIA_CHECKED)).toBe("true");
-    expect(screen.getByRole("button", { name: "Retry save" })).toBeTruthy();
+    expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry save" }));
+
+    await waitFor(() => expect(saveChannel).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe(
+        "false",
+      ),
+    );
+  });
+
+  it("preserves a newer channel choice while an earlier save is pending", async () => {
+    let resolveSave!: (value: UpdatesResponse) => void;
+    const saveChannel = vi.fn(
+      () =>
+        new Promise<UpdatesResponse>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    mocks.useUpdates.mockReturnValue({
+      updates: updates(),
+      check: vi.fn(),
+      reload: vi.fn(),
+      saveChannel,
+      error: null,
+    });
+
+    renderUpdatesCard();
+    const stable = screen.getByRole("radio", { name: /^Stable/ });
+    const nightly = screen.getByRole("radio", { name: /^Nightly/ });
+    fireEvent.click(nightly);
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_NAME }));
+    await waitFor(() => expect(saveChannel).toHaveBeenCalledWith("nightly"));
+
+    fireEvent.click(stable);
+    await act(async () => {
+      resolveSave(updates({ channel: "nightly" }));
+    });
+
+    expect(stable.getAttribute(ARIA_CHECKED)).toBe("true");
+    expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe("true");
   });
 
   it("discards an unsaved Nightly choice through the shared navigation guard", async () => {
@@ -408,7 +455,7 @@ describe("UpdatesCard channel setting", () => {
     const stable = screen.getByRole("radio", { name: /^Stable/ });
     const nightly = screen.getByRole("radio", { name: /^Nightly/ });
     fireEvent.click(nightly);
-    await screen.findByRole("button", { name: "Save changes" });
+    await screen.findByRole("button", { name: SAVE_CHANGES_NAME });
 
     act(() => requestNavigation(proceed));
     fireEvent.click(await screen.findByRole("button", { name: "Discard and leave" }));
@@ -489,6 +536,6 @@ describe("UpdatesCard channel availability", () => {
 
     renderUpdatesCard();
 
-    expect(screen.queryByTestId("system-updates-channel")).toBeNull();
+    expect(screen.queryByTestId(CHANNEL_TESTID)).toBeNull();
   });
 });

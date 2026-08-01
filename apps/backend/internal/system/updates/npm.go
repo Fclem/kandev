@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 const DefaultNPMRegistryURL = "https://registry.npmjs.org/kandev"
@@ -41,9 +42,9 @@ func FetchLatestNightlyFrom(ctx context.Context, client *http.Client, registryUR
 		return "", "", fmt.Errorf("npm status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var payload npmPackagePayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return "", "", fmt.Errorf("decode npm response: %w", err)
+	payload, err := decodeNPMPackagePayload(resp.Body)
+	if err != nil {
+		return "", "", err
 	}
 	version := payload.DistTags[string(ChannelNightly)]
 	if version == "" {
@@ -61,5 +62,21 @@ func FetchLatestNightlyFrom(ctx context.Context, client *http.Client, registryUR
 		return "", "", fmt.Errorf("npm response has invalid exact version record %q", version)
 	}
 
-	return version, "https://www.npmjs.com/package/kandev/v/" + url.PathEscape(version), nil
+	packageVersion := strings.TrimPrefix(version, "v")
+	return "v" + packageVersion, "https://www.npmjs.com/package/kandev/v/" + url.PathEscape(packageVersion), nil
+}
+
+func decodeNPMPackagePayload(reader io.Reader) (npmPackagePayload, error) {
+	decoder := json.NewDecoder(reader)
+	var payload npmPackagePayload
+	if err := decoder.Decode(&payload); err != nil {
+		return npmPackagePayload{}, fmt.Errorf("decode npm response: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("multiple JSON values")
+		}
+		return npmPackagePayload{}, fmt.Errorf("decode npm response: %w", err)
+	}
+	return payload, nil
 }

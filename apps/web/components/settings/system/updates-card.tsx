@@ -168,16 +168,25 @@ function useUpdateChannelDraft(
   const authoritative = updates?.channel ?? "stable";
   const editable = serviceUpdater && updates?.channel_editable === true;
   const [saved, setSaved] = useState<UpdatesChannel>(authoritative);
-  const [draft, setDraft] = useState<UpdatesChannel>(authoritative);
+  const savedRef = useRef(saved);
+  const [draft, setDraftState] = useState<UpdatesChannel>(authoritative);
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const isDirty = editable && draft !== saved;
 
+  const setDraft = (channel: UpdatesChannel) => {
+    draftRef.current = channel;
+    setDraftState(channel);
+  };
+
   useEffect(() => {
-    setSaved((previous) => {
-      if (!editable || draftRef.current === previous) setDraft(authoritative);
-      return authoritative;
-    });
+    const previous = savedRef.current;
+    savedRef.current = authoritative;
+    setSaved(authoritative);
+    if (!editable || draftRef.current === previous) {
+      draftRef.current = authoritative;
+      setDraftState(authoritative);
+    }
   }, [authoritative, editable]);
 
   useSettingsSaveContributor({
@@ -186,11 +195,13 @@ function useUpdateChannelDraft(
     revision: draft,
     isDirty,
     save: async (revision) => {
-      const response = await saveChannel(revision as UpdatesChannel);
+      const submitted = revision as UpdatesChannel;
+      const response = await saveChannel(submitted);
+      savedRef.current = response.channel;
       setSaved(response.channel);
-      setDraft(response.channel);
+      if (draftRef.current === submitted) setDraft(response.channel);
     },
-    discard: () => setDraft(saved),
+    discard: () => setDraft(savedRef.current),
   });
 
   return {

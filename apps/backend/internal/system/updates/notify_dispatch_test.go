@@ -97,6 +97,9 @@ func TestService_ReplayNightlyNotifiesForUnequalAuthoritativeSHA(t *testing.T) {
 	if len(notifier.calls) != 1 {
 		t.Fatalf("notifier calls=%d want 1", len(notifier.calls))
 	}
+	if got := notifier.calls[0]; got.version != "1.2.4-nightly.sha000000000000" || got.url != "https://example.test/nightly" {
+		t.Errorf("notifier call = %+v, want cached nightly", got)
+	}
 }
 
 func TestService_ReturnToOlderStableIsAvailableWithoutUpgradeNotification(t *testing.T) {

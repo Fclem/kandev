@@ -90,7 +90,9 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "publish-npm",
             "update-homebrew-tap",
         ):
-            self.assertIn("github.event_name == 'workflow_dispatch'", job_block(name))
+            block = job_block(name)
+            self.assertIn("github.event_name == 'workflow_dispatch'", block)
+            self.assertNotIn("github.event_name == 'schedule'", block)
 
     def test_nightly_publish_uses_exact_sha_local_assets_and_shared_serialization(self) -> None:
         stable = job_block("publish-npm")
@@ -102,6 +104,8 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             self.assertIn("id-token: write", block)
 
         self.assertIn("needs: [nightly-prepare, build-bundles]", nightly)
+        self.assertIn("needs.build-bundles.result == 'success'", nightly)
+        self.assertIn("needs.build-web.result == 'success'", job_block("build-bundles"))
         self.assertIn("ref: ${{ needs.nightly-prepare.outputs.ref }}", nightly)
         self.assertIn("pattern: bundle-*", nightly)
         self.assertIn("merge-multiple: true", nightly)
@@ -124,6 +128,38 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn('--version "${{ needs.prepare.outputs.version }}"', stable)
         self.assertIn('--dist-tag latest', stable)
         self.assertIn('--release-tag "${{ needs.prepare.outputs.tag }}"', stable)
+
+    def test_publish_npm_rejects_version_dist_tag_mismatches(self) -> None:
+        cases = (
+            (
+                "1.2.3-nightly.shaabcdef123456",
+                "latest",
+                "--version must be stable X.Y.Z for --dist-tag latest",
+            ),
+            (
+                "1.2.3",
+                "nightly",
+                "--version must be X.Y.Z-nightly.sha<12-hex> for --dist-tag nightly",
+            ),
+        )
+        for version, dist_tag, expected in cases:
+            with self.subTest(dist_tag=dist_tag):
+                result = subprocess.run(
+                    [
+                        "bash",
+                        str(PUBLISH_NPM_PATH),
+                        "--version",
+                        version,
+                        "--dist-tag",
+                        dist_tag,
+                    ],
+                    cwd=REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected, result.stderr)
 
     def test_normal_release_uses_release_environment_and_requires_main(self) -> None:
         prepare = job_block("prepare")

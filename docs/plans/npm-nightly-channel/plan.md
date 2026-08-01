@@ -75,7 +75,7 @@ Pixel 5 test proves select, save, reload, and zero horizontal overflow.
 ## E2E Tests
 
 - **Scenario:** a managed npm service selects Nightly, saves, reloads, and applies the resolved exact
-  version. **File:** `apps/web/e2e/tests/system/updates-page.spec.ts`.
+  version. **File:** `apps/web/e2e/tests/system/updates-channel.spec.ts`.
 - **Scenario:** the same selection and persistence work at Pixel 5 width with 44px rows and no
   horizontal overflow. **File:** `apps/web/e2e/tests/system/mobile-updates-page.spec.ts`.
 - **Scenario:** an unsupported install stays Stable and explains why. **Files:** both specs where

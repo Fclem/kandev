@@ -77,7 +77,13 @@ done
 [[ -n "$VERSION" ]] || die "--version is required"
 [[ -n "$DIST_TAG" ]] || die "--dist-tag is required"
 case "$DIST_TAG" in
-  latest|nightly)
+  latest)
+    [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || \
+      die "--version must be stable X.Y.Z for --dist-tag latest"
+    ;;
+  nightly)
+    [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-nightly\.sha[0-9a-f]{12}$ ]] || \
+      die "--version must be X.Y.Z-nightly.sha<12-hex> for --dist-tag nightly"
     ;;
   *)
     die "--dist-tag must be latest or nightly"

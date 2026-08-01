@@ -23,8 +23,8 @@ func TestFetchLatestNightlyFromResolvesDistTagAndExactVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchLatestNightlyFrom: %v", err)
 	}
-	if got != version {
-		t.Fatalf("version=%q want %q", got, version)
+	if got != "v"+version {
+		t.Fatalf("version=%q want %q", got, "v"+version)
 	}
 	if packageURL != "https://www.npmjs.com/package/kandev/v/"+version {
 		t.Fatalf("packageURL=%q", packageURL)
@@ -42,6 +42,11 @@ func TestFetchLatestNightlyFromRejectsInvalidRegistryDocuments(t *testing.T) {
 		{name: "invalid version", body: `{"dist-tags":{"nightly":"1.2.4-nightly.shaBAD"},"versions":{}}`, want: "invalid nightly version"},
 		{name: "missing exact record", body: `{"dist-tags":{"nightly":"` + valid + `"},"versions":{}}`, want: "missing exact version"},
 		{name: "malformed json", body: `{`, want: "decode npm response"},
+		{
+			name: "trailing json value",
+			body: `{"dist-tags":{"nightly":"` + valid + `"},"versions":{"` + valid + `":{"name":"kandev"}}} {}`,
+			want: "decode npm response",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

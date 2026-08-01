@@ -356,7 +356,7 @@ test.describe("Fresh-branch flow", () => {
       expect(["none", "matrix(1, 0, 0, 1, 0, 0)"]).toContain(modalRendering.transform);
       expect(["none", "0px", "0px 0px"]).toContain(modalRendering.translate);
       expect(modalRendering.zIndex).toBe("53");
-      expect(modalRendering.overlayZIndex).toBe("50");
+      expect(modalRendering.overlayZIndex).toBe("52");
 
       // Cancel returns to the form with the toggle still on.
       await testPage.getByTestId("discard-local-changes-cancel").click();

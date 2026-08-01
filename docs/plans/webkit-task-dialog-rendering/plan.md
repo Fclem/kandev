@@ -43,12 +43,15 @@ does not configure vibrancy or transparency.
 - Add a semantic nested-confirmation marker to
   `apps/web/components/discard-local-changes-dialog.tsx` so the WebKit stack can elevate that
   confirmation without styling by test IDs.
+- Allow the shared `AlertDialogContent` primitive to pass a scoped overlay class to its portaled
+  overlay, keeping the nested stack rule local to the discard confirmation.
 - Add scoped WebKit selectors and opacity-only keyframes in `apps/web/app/globals.css`.
 - Under `html[data-rendering-engine="webkit"]`, override the opted-in Create Task and nested
   confirmation surfaces' animation names so their keyframes never write `transform`; replace
   translated centering with `inset: 0`, automatic margins, and desktop `height: fit-content`; lower
   only the task dialog's own overlay to `z-49` while keeping content at the shared `z-50` modal
-  level; and elevate the nested discard confirmation to `z-53`.
+  level; and elevate the nested discard confirmation to an explicit `z-52` overlay and `z-53`
+  content layer with `height: fit-content` at every viewport width.
 - Preserve the current mobile `width: 100%` and `height: 100%`, desktop 900px width, 85vh maximum
   height, form overflow ownership, rounded corners, focus, and dismissal behavior.
 - Pass `showCloseButton={false}` only to the Create Task dialog so the generic top-right close
@@ -104,6 +107,11 @@ does not configure vibrancy or transparency.
   - **What to verify:** force the WebKit marker, open from `MobileKanbanPage.mobileFab`, assert
     viewport containment, task-name and prompt reachability, internal scrolling when required, and
     no document horizontal overflow.
+- **Scenario:** a nested dirty-tree confirmation remains compact and above the task form.
+  - **File:** `apps/web/e2e/tests/task/create-task-branch-selector.spec.ts`
+  - **What to verify:** force the WebKit marker, trigger the discard confirmation, and assert
+    opacity-only motion, transform-free centering, the explicit `z-52` overlay / `z-53` content
+    stack, and preserved form state after Cancel.
 
 ## Implementation Tasks
 
@@ -134,7 +142,8 @@ tests/task/create-task-webkit-rendering.spec.ts --workers=1` — 2 passed.
 tests/task/mobile-create-task-webkit-rendering.spec.ts --workers=1` — 1 passed.
 - `pnpm --filter @kandev/web e2e:run --no-build --host --project chromium --
 tests/task/create-task-branch-selector.spec.ts --grep "confirm modal lists files" --workers=1` — 1
-  passed, confirming the nested WebKit discard confirmation's motion and stacking.
+  passed, confirming the nested WebKit discard confirmation's motion and explicit z-52/z-53
+  stacking.
 - `pnpm --filter @kandev/web e2e:run --no-build --host --project chromium --
 tests/task/dialog-body-lock.spec.ts --workers=1` — 1 passed.
 - `pnpm --filter @kandev/web e2e:run --no-build --host --project mobile-chrome --

@@ -264,8 +264,13 @@ html[data-rendering-engine="webkit"] .create-task-dialog-overlay {
   z-index: 49;
 }
 
+html[data-rendering-engine="webkit"] .discard-confirmation-overlay {
+  z-index: 52;
+}
+
 html[data-rendering-engine="webkit"] [data-webkit-modal-layer="discard-confirmation"] {
   z-index: 53;
+  height: fit-content;
 }
 
 html[data-rendering-engine="webkit"] [data-webkit-safe-motion="true"][data-state="open"] {

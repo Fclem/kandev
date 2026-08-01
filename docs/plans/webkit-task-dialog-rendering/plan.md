@@ -116,7 +116,7 @@ authorized.
 Run from `apps` unless noted otherwise:
 
 - `pnpm --filter @kandev/web test -- --run lib/browser/rendering-engine.test.ts` — 14 passed,
-  including the touch-capable desktop Mac Chrome regression.
+  including the desktop Mac Chrome Blink-token regression.
 - `pnpm run typecheck` from `apps/web` — no errors.
 - `pnpm --filter @kandev/web lint` — passed.
 - `pnpm exec prettier --check app/globals.css components/discard-local-changes-dialog.tsx

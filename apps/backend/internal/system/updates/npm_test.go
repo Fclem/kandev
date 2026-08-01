@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestFetchLatestNightlyFromResolvesDistTagAndExactVersion(t *testing.T) {
+func TestFetchLatestNightlyFromAcceptsCanonicalUnprefixedVersion(t *testing.T) {
 	const version = "1.2.4-nightly.shaabc123def456"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Accept"); got != "application/vnd.npm.install-v1+json" {
@@ -40,6 +40,11 @@ func TestFetchLatestNightlyFromRejectsInvalidRegistryDocuments(t *testing.T) {
 	}{
 		{name: "missing tag", body: `{"dist-tags":{},"versions":{}}`, want: "missing nightly dist-tag"},
 		{name: "invalid version", body: `{"dist-tags":{"nightly":"1.2.4-nightly.shaBAD"},"versions":{}}`, want: "invalid nightly version"},
+		{
+			name: "prefixed npm version",
+			body: `{"dist-tags":{"nightly":"v` + valid + `"},"versions":{"v` + valid + `":{"name":"kandev"}}}`,
+			want: "invalid nightly version",
+		},
 		{name: "missing exact record", body: `{"dist-tags":{"nightly":"` + valid + `"},"versions":{}}`, want: "missing exact version"},
 		{name: "malformed json", body: `{`, want: "decode npm response"},
 		{

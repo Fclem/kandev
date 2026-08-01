@@ -50,7 +50,9 @@ func FetchLatestNightlyFrom(ctx context.Context, client *http.Client, registryUR
 	if version == "" {
 		return "", "", errors.New("npm response missing nightly dist-tag")
 	}
-	if !isNightlyVersion(version) {
+	// npm package versions and dist-tag targets use canonical bare SemVer.
+	// Internal update tags add v only after this registry integrity check.
+	if !isCanonicalNPMNightlyVersion(version) {
 		return "", "", fmt.Errorf("npm response has invalid nightly version %q", version)
 	}
 	record, ok := payload.Versions[version]
@@ -64,6 +66,10 @@ func FetchLatestNightlyFrom(ctx context.Context, client *http.Client, registryUR
 
 	packageVersion := strings.TrimPrefix(version, "v")
 	return "v" + packageVersion, "https://www.npmjs.com/package/kandev/v/" + url.PathEscape(packageVersion), nil
+}
+
+func isCanonicalNPMNightlyVersion(version string) bool {
+	return !strings.HasPrefix(version, "v") && isNightlyVersion(version)
 }
 
 func decodeNPMPackagePayload(reader io.Reader) (npmPackagePayload, error) {

@@ -12,8 +12,9 @@ spec: "../../specs/ui/webkit-task-dialog-rendering.md"
 
 ## Acceptance
 
-- The WebKit Create Task dialog uses opacity-only motion, has no transform on its text-bearing
-  surface, is centered without stretching, and is explicitly stacked above the overlay.
+- The WebKit Create Task dialog uses opacity-only motion, has no non-identity transform on its
+  text-bearing surface, is centered without stretching, and is explicitly stacked above its own
+  overlay while nested discard confirmations remain above it.
 - Desktop Chromium keeps the existing scale-and-fade motion, translated centering, dimensions,
   focus behavior, and task-creation controls.
 - The narrow WebKit path remains full-height, viewport-contained, internally usable, and free of
@@ -33,6 +34,7 @@ spec: "../../specs/ui/webkit-task-dialog-rendering.md"
 ## Files likely touched
 
 - `apps/web/components/task-create-dialog.tsx`
+- `apps/web/components/discard-local-changes-dialog.tsx`
 - `apps/web/app/globals.css`
 - `apps/web/e2e/tests/task/create-task-webkit-rendering.spec.ts`
 - `apps/web/e2e/tests/task/mobile-create-task-webkit-rendering.spec.ts`

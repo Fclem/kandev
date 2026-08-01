@@ -238,7 +238,9 @@
 /* WebKit can leave a fixed dialog's transform animation on a separate layer,
    which makes the Create Task surface look soft or briefly sit below its
    overlay. Keep the workaround scoped to the dialog opt-in and the engine
-   marker so Chromium keeps the existing motion and geometry. */
+   marker so Chromium keeps the existing motion and geometry. The task's own
+   overlay is one level lower so a nested confirmation can reuse the shared
+   modal level and still paint above the task form. */
 @keyframes kandev-dialog-webkit-enter {
   from {
     opacity: 0;
@@ -255,7 +257,15 @@ html[data-rendering-engine="webkit"] [data-webkit-safe-motion="true"] {
   inset: 0;
   margin: auto;
   translate: 0 0;
-  z-index: 51;
+  z-index: 50;
+}
+
+html[data-rendering-engine="webkit"] .create-task-dialog-overlay {
+  z-index: 49;
+}
+
+html[data-rendering-engine="webkit"] [data-webkit-modal-layer="discard-confirmation"] {
+  z-index: 53;
 }
 
 html[data-rendering-engine="webkit"] [data-webkit-safe-motion="true"][data-state="open"] {

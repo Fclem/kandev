@@ -10,6 +10,7 @@ type DialogRenderingMetrics = {
   transform: string;
   translate: string;
   zIndex: string;
+  overlayZIndex: string;
   centerX: number;
   centerY: number;
   width: number;
@@ -35,11 +36,13 @@ async function readDialogRenderingMetrics(dialog: Locator): Promise<DialogRender
     const style = getComputedStyle(element);
     const box = element.getBoundingClientRect();
     const center = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-overlay"]');
     return {
       animationName: style.animationName,
       transform: style.transform,
       translate: style.translate,
       zIndex: style.zIndex,
+      overlayZIndex: overlay ? getComputedStyle(overlay).zIndex : "",
       centerX: box.left + box.width / 2,
       centerY: box.top + box.height / 2,
       width: box.width,
@@ -60,6 +63,7 @@ test.describe("Create Task WebKit rendering", () => {
     expect(metrics.animationName).toBe("enter");
     expect(metrics.translate).toContain("-50%");
     expect(metrics.zIndex).toBe("50");
+    expect(metrics.overlayZIndex).toBe("50");
     expect(metrics.width).toBe(900);
     expect(metrics.centerX).toBeCloseTo(viewport!.width / 2, 0);
     expect(metrics.centerY).toBeCloseTo(viewport!.height / 2, 0);
@@ -86,7 +90,8 @@ test.describe("Create Task WebKit rendering", () => {
     expect(metrics.animationName).toBe("kandev-dialog-webkit-enter");
     expect(["none", "matrix(1, 0, 0, 1, 0, 0)"]).toContain(metrics.transform);
     expect(["none", "0px", "0px 0px"]).toContain(metrics.translate);
-    expect(metrics.zIndex).toBe("51");
+    expect(metrics.zIndex).toBe("50");
+    expect(metrics.overlayZIndex).toBe("49");
     expect(metrics.width).toBe(900);
     expect(metrics.centerX).toBeCloseTo(viewport!.width / 2, 0);
     expect(metrics.centerY).toBeCloseTo(viewport!.height / 2, 0);

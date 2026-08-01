@@ -82,6 +82,17 @@ describe("detectRenderingEngine", () => {
   ] satisfies Array<[string, string]>)("%s is not WebKit", (_name, userAgent) => {
     expect(detectRenderingEngine({ userAgent, platform: "unknown" })).toBe("other");
   });
+
+  it("keeps touch-capable desktop Mac Chrome on the non-WebKit path", () => {
+    expect(
+      detectRenderingEngine({
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        platform: "MacIntel",
+        maxTouchPoints: 5,
+      }),
+    ).toBe("other");
+  });
 });
 
 describe("markRenderingEngine", () => {

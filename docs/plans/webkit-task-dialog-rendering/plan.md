@@ -40,11 +40,14 @@ does not configure vibrancy or transparency.
 - Add a semantic opt-in data attribute to the Create Task `DialogContent` in
   `apps/web/components/task-create-dialog.tsx`; do not modify the shared default motion in
   `apps/packages/ui/src/dialog.tsx`.
+- Add a semantic nested-confirmation marker to
+  `apps/web/components/discard-local-changes-dialog.tsx` so the WebKit stack can elevate that
+  confirmation without styling by test IDs.
 - Add scoped WebKit selectors and opacity-only keyframes in `apps/web/app/globals.css`.
 - Under `html[data-rendering-engine="webkit"]`, override only the opted-in dialog's animation name
   so its keyframes never write `transform`; replace translated centering with `inset: 0`, automatic
-  margins, and desktop `height: fit-content`; and place content one stacking level above the
-  `z-50` overlay.
+  margins, and desktop `height: fit-content`; lower only its own overlay to `z-49` while keeping
+  content at the shared `z-50` modal level; and elevate the nested discard confirmation to `z-53`.
 - Preserve the current mobile `width: 100%` and `height: 100%`, desktop 900px width, 85vh maximum
   height, form overflow ownership, rounded corners, focus, and dismissal behavior.
 - Leave the existing scale-and-fade utility classes active for non-WebKit engines.
@@ -89,8 +92,8 @@ does not configure vibrancy or transparency.
 - **Scenario:** the WebKit override removes transforms while preserving centered desktop geometry.
   - **File:** `apps/web/e2e/tests/task/create-task-webkit-rendering.spec.ts`
   - **What to verify:** force the root marker to `webkit` before opening the dialog; assert the
-    opacity-only animation name, `transform`/`translate` absence, explicit stacking level, 900px
-    capped width, viewport-centered bounds, and focused task-name input.
+    opacity-only animation name, identity `transform`/zero `translate`, explicit overlay/content
+    stacking levels, 900px capped width, viewport-centered bounds, and focused task-name input.
 - **Scenario:** a narrow WebKit Create Task dialog keeps its full-height usable composition.
   - **File:** `apps/web/e2e/tests/task/mobile-create-task-webkit-rendering.spec.ts`
   - **What to verify:** force the WebKit marker, open from `MobileKanbanPage.mobileFab`, assert

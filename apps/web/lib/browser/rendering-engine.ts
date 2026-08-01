@@ -34,8 +34,8 @@ export function detectRenderingEngine(
 
   const userAgent = navigatorLike.userAgent ?? "";
   if (!/AppleWebKit\//i.test(userAgent)) return "other";
-  if (isIOSLike(navigatorLike, userAgent)) return "webkit";
   if (BLINK_USER_AGENT_TOKENS.test(userAgent)) return "other";
+  if (isIOSLike(navigatorLike, userAgent)) return "webkit";
 
   return "webkit";
 }

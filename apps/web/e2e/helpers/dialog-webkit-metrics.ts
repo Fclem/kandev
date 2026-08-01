@@ -26,7 +26,12 @@ export async function readDialogRenderingMetrics(
   }: DialogRenderingMetricsOptions = {},
 ): Promise<DialogRenderingMetrics> {
   await dialog.evaluate(async (element) => {
-    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    const animations = element.getAnimations().filter((animation) => {
+      if (animation.playState !== "running") return false;
+      const iterations = animation.effect?.getComputedTiming().iterations;
+      return typeof iterations === "number" && Number.isFinite(iterations);
+    });
+    await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
   });
 
   return dialog.evaluate(

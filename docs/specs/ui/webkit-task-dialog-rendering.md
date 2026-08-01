@@ -1,5 +1,5 @@
 ---
-status: complete
+status: shipped
 created: 2026-08-01
 owner: product
 ---

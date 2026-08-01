@@ -32,7 +32,8 @@ spec: "../../specs/npm-nightly-channel/spec.md"
   reload, and cleared progress state.
 - `cd apps/web && pnpm e2e:run --no-build --project mobile-chrome
   tests/system/mobile-updates-page.spec.ts` — passed, 2 tests on the Pixel 5 project against the
-  desktop run's production assets, including the unsupported-channel reason copy.
+  desktop run's production assets, including a long canonical Nightly target and the
+  unsupported-channel reason copy.
 - The production Go-served E2E build used a loopback npm metadata fixture behind the strict
   `KANDEV_E2E_MOCK=true` gate; selection, real PATCH persistence, reload, unsupported capability,
   exact target display, 44px rows, and document overflow were exercised.

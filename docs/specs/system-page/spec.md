@@ -75,7 +75,7 @@ for the exact split and destructive-action confirmation pattern.
 
 ```
 GET    /api/v1/system/health                      (existing; unchanged)
-GET    /api/v1/system/info                        - versions, commit, build time, OS/arch
+GET    /api/v1/system/info                        - { version, commit, build_time, go_version, os, arch, boot_id, started_at }
 GET    /api/v1/system/disk-usage                  - cached breakdown + computedAt; null while computing
 POST   /api/v1/system/disk-usage/refresh          - kick async recompute; 202
 POST   /api/v1/system/disk-usage/open             - open the data folder on the backend host

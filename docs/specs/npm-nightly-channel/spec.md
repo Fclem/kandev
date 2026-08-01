@@ -27,6 +27,9 @@ launcher and native runtime packages users install in production.
   `npx -y kandev@nightly` runs a transient Nightly copy without changing a global installation.
 - Settings > System > Updates exposes Stable and Nightly for a verified, Kandev-managed npm or
   npx user service. Stable is the default and the setting is install-wide.
+- An npx run is managed only after it installs the service (for example,
+  `npx -y kandev@nightly service install`); a transient `npx -y kandev@nightly` run alone neither
+  creates a managed service nor persists an update-channel selection.
 - Desktop, Homebrew, local-checkout, unknown, unmanaged, and system-service installations remain
   on the Stable channel.
 - Stable update discovery continues to use GitHub Releases. Nightly discovery follows npm's

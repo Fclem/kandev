@@ -103,7 +103,7 @@ test.describe("System update channel", () => {
       await expect.poll(() => jobRequests).toBeGreaterThan(0);
       await completedReload;
       await testPage.waitForLoadState("domcontentloaded");
-      expect(targetVersionReports).toBeGreaterThan(0);
+      await expect.poll(() => targetVersionReports).toBeGreaterThan(0);
       await expect(testPage.getByTestId("system-page-title")).toHaveText("Updates");
       await expect(testPage.getByTestId("system-updates-progress")).toHaveCount(0);
     } finally {

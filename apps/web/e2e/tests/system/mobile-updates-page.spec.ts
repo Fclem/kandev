@@ -1,6 +1,9 @@
 import { test, expect } from "../../fixtures/test-base";
 import { assertNoDocumentHorizontalOverflow } from "../../helpers/layout-assertions";
-import { NIGHTLY_TAG, useManagedNPMUpdates } from "./updates-channel-helpers";
+import { useManagedNPMUpdates } from "./updates-channel-helpers";
+
+const LONG_NIGHTLY_VERSION = "999999999.999999999.999999999-nightly.shaabcdef123456";
+const LONG_NIGHTLY_TAG = `v${LONG_NIGHTLY_VERSION}`;
 
 test.describe("System update channel on mobile", () => {
   test("selects, saves, and reloads Nightly with touch-safe rows", async ({
@@ -8,7 +11,7 @@ test.describe("System update channel on mobile", () => {
     testPage,
   }) => {
     test.setTimeout(60_000);
-    const fixture = await useManagedNPMUpdates(backend);
+    const fixture = await useManagedNPMUpdates(backend, LONG_NIGHTLY_VERSION);
     try {
       await testPage.goto("/settings/system/updates");
       const nightly = testPage.getByRole("radio", { name: /^Nightly/ });
@@ -31,11 +34,11 @@ test.describe("System update channel on mobile", () => {
         .tap();
       expect((await saved).status()).toBe(200);
       expect(fixture.registryRequests()).toBeGreaterThanOrEqual(1);
-      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_TAG);
+      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(LONG_NIGHTLY_TAG);
 
       await testPage.reload();
       await expect(nightly).toBeChecked();
-      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_TAG);
+      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(LONG_NIGHTLY_TAG);
       await assertNoDocumentHorizontalOverflow(testPage, "Updates after Nightly reload");
     } finally {
       await fixture.release();

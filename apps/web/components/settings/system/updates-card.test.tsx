@@ -555,25 +555,6 @@ describe("UpdatesCard channel availability", () => {
     );
   });
 
-  it("uses full-width touch rows and protects long nightly versions from overflow", () => {
-    mocks.useUpdates.mockReturnValue({
-      updates: updates({
-        channel: "nightly",
-        latest: "1.0.1-nightly.shaabcdef123456",
-      }),
-      check: vi.fn(),
-      reload: vi.fn(),
-      saveChannel: vi.fn(),
-      error: null,
-    });
-
-    renderUpdatesCard();
-
-    expect(screen.getByTestId("system-updates-channel-nightly").className).toContain("min-h-11");
-    expect(screen.getByTestId(LATEST_TESTID).className).toContain("break-all");
-    expect(screen.getByTestId("system-updates-versions").className).toContain("grid-cols-1");
-  });
-
   it("does not expose an npm channel selector in the Desktop updater", () => {
     mocks.useUpdates.mockReturnValue({
       updates: updates(),

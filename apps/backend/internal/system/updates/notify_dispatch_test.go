@@ -120,7 +120,7 @@ func TestService_ReturnToOlderStableIsAvailableWithoutUpgradeNotification(t *tes
 	notifier := &capturingNotifier{}
 	svc.SetNotifier(notifier)
 
-	resp, err := svc.Get()
+	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

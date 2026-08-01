@@ -101,6 +101,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         for block in (stable, nightly):
             self.assertIn("group: release-npm-publication", block)
             self.assertIn("cancel-in-progress: false", block)
+            self.assertIn("queue: max", block)
             self.assertIn("id-token: write", block)
 
         self.assertIn("needs: [nightly-prepare, build-bundles]", nightly)

@@ -125,7 +125,7 @@ func TestGetReadsOnlyTheSelectedChannelCache(t *testing.T) {
 	}
 	store := &memorySettingsStore{value: []byte(ChannelNightly), present: true}
 	svc := NewService(pool, "v1.2.3", nil, logger.Default(), WithHomeDir(homeDir), WithSettingsStore(store))
-	resp, err := svc.Get()
+	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestUnsupportedInstallForcesPersistedNightlyPreferenceToStable(t *testing.T
 	}
 	store := &memorySettingsStore{value: []byte(ChannelNightly), present: true}
 	svc := NewService(pool, "v1.2.3", nil, logger.Default(), WithSettingsStore(store))
-	resp, err := svc.Get()
+	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

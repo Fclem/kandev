@@ -60,7 +60,7 @@ kandev --version
 npx -y kandev@nightly
 ```
 
-A nightly version has the form `X.Y.(Z+1)-nightly.sha<12-character-commit>`, based on the latest
+A nightly version has the form `X.Y.(Z+1)-nightly.sha<12-hex-character SHA prefix>`, based on the latest
 stable `X.Y.Z`. The launcher and all five platform runtime packages use that same immutable
 version. A best-effort GitHub schedule starts at 12:00 UTC and publishes only when `main` has
 changed since the latest stable release and that commit has not already been published. GitHub may

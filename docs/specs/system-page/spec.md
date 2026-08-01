@@ -87,7 +87,7 @@ DELETE /api/v1/system/backups/:name               - delete snapshot
 GET    /api/v1/system/logs                        - { files: [{ name, size, mtime }] }
 GET    /api/v1/system/logs/tail?n=1000            - last N lines of current log
 GET    /api/v1/system/logs/:name/download         - stream log file
-GET    /api/v1/system/updates                     - { current, latest, latestCheckedAt, releaseUrl, install, applySupported }
+GET    /api/v1/system/updates                     - { current, latest, latest_url, latest_checked_at, update_available, channel, channel_editable, channel_unsupported_reason, install, apply_supported, apply_unsupported_reason?, manual_commands? }
 POST   /api/v1/system/updates/check               - force selected-source re-poll; rate-limited 30s
 PATCH  /api/v1/system/updates/channel             - persist Stable/Nightly; body { channel }
 POST   /api/v1/system/updates/apply               - queue service-only self-update; body { confirm: "UPDATE" }
@@ -112,9 +112,12 @@ public npm `kandev@nightly` dist-tag. It persists isolated channel targets in `k
 The `GET /api/v1/system/updates` handler reads from `kandev_meta` only; it never contacts an
 upstream synchronously. It also reports the current service install state (`running_as_service`,
 `managed_service`, `mode`, `manager`, `kind`) so the UI can decide whether one-click apply is
-allowed. `POST /api/v1/system/updates/check` triggers a selected-source refresh, rate-limited
+allowed. The response's `channel` is the effective selected source for this install. Only a
+verified managed npm/npx user service can persist and expose Nightly; unsupported installs report
+Stable even if an old Nightly preference remains stored, set `channel_editable=false`, and include
+`channel_unsupported_reason`. `POST /api/v1/system/updates/check` triggers a selected-source refresh, rate-limited
 per-process to one call per 30 seconds. If the GitHub or npm call fails (offline, rate limited,
-5xx), the channel's last-known value remains cached and `latestCheckedAt` exposes the staleness.
+5xx), the channel's last-known value remains cached and `latest_checked_at` exposes the staleness.
 
 `POST /api/v1/system/updates/apply` is available only when Kandev is running as a kandev-managed user service (`systemd --user` or launchd user agent) and the selected channel exposes an applicable target. It writes the exact resolved version to an update intent under `<KANDEV_HOME_DIR>/service/update-intents/`, starts a manager-owned helper (`systemd-run --user` on Linux, or a one-shot transient LaunchAgent plist bootstrapped via `launchctl bootstrap` on macOS), and returns a `self-update` system job id. Under `KANDEV_E2E_MOCK=true`, the helper path is fake so UI and backend tests can exercise the flow without mutating npm/Homebrew or restarting the service.
 

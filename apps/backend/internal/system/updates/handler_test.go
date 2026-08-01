@@ -91,6 +91,37 @@ func TestHandleGet_IncludesNonServiceInstallState(t *testing.T) {
 	}
 }
 
+type requestContextSettingsStore struct{}
+
+func (requestContextSettingsStore) Get(ctx context.Context, _ string) ([]byte, bool, error) {
+	return nil, false, ctx.Err()
+}
+
+func (requestContextSettingsStore) Save(context.Context, string, []byte) error {
+	return nil
+}
+
+func TestHandleGetPropagatesRequestContext(t *testing.T) {
+	pool := newTestPool(t)
+	svc := NewService(
+		pool,
+		"v1.0.0",
+		nil,
+		logger.Default(),
+		WithSettingsStore(requestContextSettingsStore{}),
+	)
+	r := newRouter(svc)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/system/updates", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s want 500", w.Code, w.Body.String())
+	}
+}
+
 func TestHandleCheck_FirstCall200(t *testing.T) {
 	pool := newTestPool(t)
 	srv, _ := newStubGitHub(t, "v1.0.1", "https://example/v1.0.1")
@@ -282,6 +313,31 @@ func TestHandleSetChannelResolverFailureReturns502WithoutPersisting(t *testing.T
 	}
 	if store.present {
 		t.Fatal("failed resolver selection was persisted")
+	}
+}
+
+func TestHandleSetChannelRejectsCrossOrigin(t *testing.T) {
+	svc, store := newManagedNPMServiceForHandler(t)
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		return "1.2.4-nightly.shaabc123def456", "https://example/nightly", nil
+	})
+	r := newRouter(svc)
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/system/updates/channel",
+		bytes.NewBufferString(`{"channel":"nightly"}`),
+	)
+	req.Host = "kandev.local"
+	req.Header.Set("Origin", "https://evil.example")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status=%d body=%s want 403", w.Code, w.Body.String())
+	}
+	if store.present {
+		t.Fatal("cross-origin channel selection was persisted")
 	}
 }
 

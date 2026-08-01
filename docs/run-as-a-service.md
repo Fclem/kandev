@@ -1,6 +1,8 @@
 # Run Kandev as a Service
 
-Install Kandev as an OS-managed service (systemd on Linux, launchd on macOS) so it auto-starts and stays running. User-mode services installed by `kandev service install` can self-update from the System → Updates page. A verified managed npm/npx user service can select Stable (the default) or the npm Nightly channel there. Homebrew, non-service, local-checkout, and `--system` installs remain Stable-only; update them manually with `npm i -g kandev@latest` or `brew upgrade kandev`, then re-run `kandev service install`.
+Install Kandev as an OS-managed service (systemd on Linux, launchd on macOS) so it auto-starts and stays running. User-mode services installed by `kandev service install` can self-update from the System → Updates page. A verified managed npm/npx user service can select Stable (the default) or the npm Nightly channel there. Homebrew, non-service, local-checkout, and `--system` installs remain Stable-only.
+
+Manual updates must preserve the install type: global npm uses `npm i -g kandev@latest`; npx reruns the desired `kandev@<tag>` service command; Homebrew uses `brew upgrade kandev`; and a local checkout is rebuilt with `make service-install`. Managed services must then refresh and restart the unit with the same mode and flags.
 
 This guide assumes you've already installed kandev via [Homebrew or npm](../apps/cli/README.md#quick-start) and that `kandev` works when run interactively.
 
@@ -96,18 +98,33 @@ kandev service config [--system]
 
 If Kandev is running as a user-mode service installed by `kandev service install`, open **Settings → System → Updates** and use **Apply update** when it appears. The button is shown only when the backend can prove it is running from a kandev-managed service unit/plist with valid service metadata.
 
-Both npm runtime packages and Homebrew install kandev under versioned package-manager paths. Manual upgrades replace those paths, so the unit file must be refreshed afterward.
+Package-manager installs use versioned paths. Manual upgrades replace those paths, so a service unit must be refreshed afterward.
 
-**Manual fix:** re-run install. It's idempotent.
+Use the commands for the original install type:
 
 ```bash
-npm i -g kandev@latest          # or: brew upgrade kandev
-kandev service install          # rewrites the unit with the new paths
+# Global npm user service
+npm i -g kandev@latest
+kandev service install
+kandev service restart
+
+# Managed npx user service
+npx -y kandev@latest service install
+npx -y kandev@latest service restart
+
+# Homebrew user service (Stable only)
+brew upgrade kandev
+kandev service install
+kandev service restart
+
+# Local checkout service
+make service-install
+make service-restart
 ```
 
 If you launch `kandev` interactively after an upgrade, it will detect a stale unit and print a one-line reminder. You can also check with `kandev service config` to see the paths that would be baked in by the next install.
 
-System services (`kandev service install --system`) do not expose UI self-update. Update them from a privileged shell, then re-run `sudo kandev service install --system`.
+System services (`kandev service install --system`) do not expose UI self-update. Update them with their original package manager from a privileged shell, then rerun the matching executable with `service install --system` and `service restart --system`, preserving any custom flags.
 
 ## Linux Boot-Start (`loginctl enable-linger`)
 
@@ -200,21 +217,12 @@ reinstall the service, and restart it. There is no Homebrew or Desktop Nightly c
 
 ## Updating: TL;DR
 
-```bash
-# Option A: managed user service
-# Use Settings -> System -> Updates -> Apply update
-# Verified npm/npx user services can first select and save Stable or Nightly.
-
-# Option B: manual / system service
-# 1. Update the binary
-npm i -g kandev@latest          # or: brew upgrade kandev
-
-# 2. Refresh the unit file (rewrites paths to point at the new version)
-kandev service install          # add --system if that's what you used originally
-
-# 3. (install does this automatically) Verify it came back up
-kandev service status
-```
+- Managed npm/npx user service: use **Settings → System → Updates → Apply update**. Eligible services can first save Stable or Nightly.
+- Manual global npm service: run `npm i -g kandev@latest`, then `kandev service install` and `kandev service restart` with the original flags.
+- Manual npx service: run `npx -y kandev@latest service install`, then the matching npx `service restart`, with the original flags.
+- Manual Homebrew service: run `brew upgrade kandev`, then `kandev service install` and `kandev service restart` with the original flags.
+- Local checkout service: run `make service-install` and `make service-restart`.
+- System service: use the matching manual path through a privileged shell and retain `--system` on service commands.
 
 ## Uninstalling
 

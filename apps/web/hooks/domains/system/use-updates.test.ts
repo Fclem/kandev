@@ -63,6 +63,35 @@ beforeEach(() => {
 });
 
 describe("useUpdates", () => {
+  it("saves a channel and publishes the returned state", async () => {
+    const nightly = updates("nightly");
+    mocks.saveUpdatesChannel.mockResolvedValue(nightly);
+    const { result } = renderHook(() => useUpdates());
+
+    let response!: UpdatesResponse;
+    await act(async () => {
+      response = await result.current.saveChannel("nightly");
+    });
+
+    expect(mocks.saveUpdatesChannel).toHaveBeenCalledWith("nightly");
+    expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
+    expect(response).toBe(nightly);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("surfaces a channel save failure without replacing update state", async () => {
+    const failure = new Error("save failed");
+    mocks.saveUpdatesChannel.mockRejectedValue(failure);
+    const { result } = renderHook(() => useUpdates());
+
+    await act(async () => {
+      await expect(result.current.saveChannel("nightly")).rejects.toBe(failure);
+    });
+
+    expect(result.current.error).toBe("save failed");
+    expect(mocks.setSystemUpdates).not.toHaveBeenCalled();
+  });
+
   it("ignores an older check response after a channel save starts", async () => {
     const pendingCheck = deferred<UpdatesResponse>();
     const pendingSave = deferred<UpdatesResponse>();

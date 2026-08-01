@@ -7,7 +7,7 @@ description: "Install Kandev under systemd or launchd and operate it safely."
 
 The native Kandev launcher can install itself as a systemd service on Linux or a launchd service on macOS. Use this for a persistent workstation or server. Windows Service Control Manager, OpenRC, and SysV init are not supported.
 
-Install Kandev first using a persistent [CLI installation](cli.md#install). Do not install a long-lived service from an ephemeral `npx` invocation: the generated unit records the absolute native executable and release-bundle paths.
+For the simplest path, install Kandev persistently before creating the service; see [CLI installation](cli.md#install). A plain `npx -y kandev@...` launch is ephemeral, but `npx -y kandev@latest service install` is also a supported way to create a managed npx user service. The installer records that npx package's absolute native executable and release-bundle paths. Do not hand-write a long-lived service around an npx command.
 
 Stable is the default release channel. A verified Kandev-managed npm/npx user service can opt into
 the npm Nightly channel from **Settings > System > Updates**. Homebrew and system services remain
@@ -175,17 +175,27 @@ To leave Nightly, select Stable, save, and apply the displayed stable release. I
 that, use the manual stable recovery below. Homebrew, Desktop, system-service, unmanaged,
 local-checkout, unknown, and invalid-metadata installs cannot select Nightly.
 
-If the Apply action is unavailable or fails, upgrade the package manually, reinstall with the same mode and home flags so absolute paths and bundle metadata are refreshed, then restart explicitly:
+If the Apply action is unavailable or fails, use the recovery command that matches the original install, keeping the same mode and home flags so absolute paths and bundle metadata are refreshed:
 
 ```bash
-# npm example; use `brew upgrade kandev` for Homebrew
+# Global npm service
 npm install --global kandev@latest
 kandev service install --home-dir "$HOME/.kandev"
 kandev service restart
 kandev service status
+
+# Managed npx service (run each service command through npx)
+npx -y kandev@latest service install --home-dir "$HOME/.kandev"
+npx -y kandev@latest service restart --home-dir "$HOME/.kandev"
+npx -y kandev@latest service status --home-dir "$HOME/.kandev"
+
+# Homebrew service (Stable only)
+brew upgrade kandev
+kandev service install --home-dir "$HOME/.kandev"
+kandev service restart
 ```
 
-To remain on Nightly during a manual npm recovery, use `kandev@nightly` in the install command.
+To remain on Nightly during a manual npm or npx recovery, use `kandev@nightly` in the matching command.
 Do not use a Homebrew `HEAD` build as an equivalent channel; no Homebrew Nightly is published.
 
 For system mode:

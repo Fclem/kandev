@@ -1,6 +1,7 @@
 package updates
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -29,7 +30,7 @@ func TestService_GetManagedUserServiceSupportsApply(t *testing.T) {
 	t.Setenv(envServiceMetadata, metadataPath)
 
 	svc := NewService(newTestPool(t), "v1.0.0", nil, logger.Default(), WithHomeDir(homeDir))
-	resp, err := svc.Get()
+	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestService_GetManagedNativeServiceSupportsApply(t *testing.T) {
 	t.Setenv(envServiceMetadata, metadataPath)
 
 	svc := NewService(newTestPool(t), "v1.0.0", nil, logger.Default(), WithHomeDir(homeDir))
-	resp, err := svc.Get()
+	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestService_GetManagedSystemdServiceSupportsApplyWithPercentInMetadataPath(
 	t.Setenv(envServiceMetadata, metadataPath)
 
 	svc := NewService(newTestPool(t), "v1.0.0", nil, logger.Default(), WithHomeDir(homeDir))
-	resp, err := svc.Get()
+	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -147,7 +148,7 @@ func TestService_GetSystemServiceDisablesApply(t *testing.T) {
 	t.Setenv(envServiceMetadata, metadataPath)
 
 	svc := NewService(newTestPool(t), "v1.0.0", nil, logger.Default(), WithHomeDir(homeDir))
-	resp, err := svc.Get()
+	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -190,7 +191,7 @@ func TestService_GetForeignServiceDisablesApply(t *testing.T) {
 	t.Setenv(envServiceMetadata, metadataPath)
 
 	svc := NewService(newTestPool(t), "v1.0.0", nil, logger.Default(), WithHomeDir(homeDir))
-	resp, err := svc.Get()
+	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -222,7 +223,7 @@ func TestService_GetLocalBundleServiceDisablesApply(t *testing.T) {
 	t.Setenv(envServiceMetadata, metadataPath)
 
 	svc := NewService(newTestPool(t), "v1.0.0", nil, logger.Default(), WithHomeDir(homeDir))
-	resp, err := svc.Get()
+	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}

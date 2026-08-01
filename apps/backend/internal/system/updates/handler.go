@@ -13,7 +13,7 @@ import (
 // never contacts an upstream. Errors from the meta read are surfaced as 500.
 func HandleGet(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		resp, err := svc.Get()
+		resp, err := svc.Get(c.Request.Context())
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -33,6 +33,10 @@ type channelRequestBody struct {
 // HandleSetChannel changes the install-wide update source.
 func HandleSetChannel(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !sameOriginOrNoOrigin(c.Request) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "cross-origin update channel change is not allowed"})
+			return
+		}
 		var req channelRequestBody
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel request"})

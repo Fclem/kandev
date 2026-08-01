@@ -291,9 +291,9 @@ func (s *Service) SetNotifier(notifier UpdateNotifier) {
 
 // Get returns the selected channel's last-known state without contacting its
 // upstream. Safe to call on every page load.
-func (s *Service) Get() (UpdatesResponse, error) {
+func (s *Service) Get(ctx context.Context) (UpdatesResponse, error) {
 	install, _ := s.detectInstallState()
-	channel, err := s.effectiveChannel(context.Background(), install)
+	channel, err := s.effectiveChannel(ctx, install)
 	if err != nil {
 		return UpdatesResponse{}, err
 	}
@@ -405,7 +405,7 @@ func (s *Service) fetchAndPersist(ctx context.Context) (UpdatesResponse, error) 
 	tag, releaseURL, err := s.resolveLatest(ctx, channel)
 	if err != nil {
 		// Preserve persisted state; surface the error to caller.
-		current, _ := s.Get()
+		current, _ := s.Get(ctx)
 		return current, err
 	}
 	now := s.now().UTC()

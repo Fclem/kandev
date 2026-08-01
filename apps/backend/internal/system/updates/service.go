@@ -513,7 +513,7 @@ func (s *Service) updateAvailableFor(channel Channel, latest string) bool {
 		return false
 	}
 	if channel == ChannelNightly && isNightlyVersion(s.current) && isNightlyVersion(latest) {
-		return true
+		return compareSemverCore(latest, s.current) >= 0
 	}
 	if channel == ChannelStable && isNightlyVersion(s.current) && !isNightlyVersion(latest) {
 		return true

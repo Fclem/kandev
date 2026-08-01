@@ -144,6 +144,16 @@ func TestNightlyAvailabilityTreatsUnequalSHAsAsNewTargets(t *testing.T) {
 	}
 }
 
+func TestNightlyAvailabilityRejectsLowerNumericVersion(t *testing.T) {
+	svc := NewService(nil, "v1.2.5-nightly.shaaaaaaaaaaaaa", nil, logger.Default())
+	if svc.updateAvailableFor(ChannelNightly, "v1.2.4-nightly.shabbbbbbbbbbbb") {
+		t.Fatal("lower numeric nightly version must not be offered as an update")
+	}
+	if !svc.updateAvailableFor(ChannelNightly, "v1.2.6-nightly.shabbbbbbbbbbbb") {
+		t.Fatal("higher numeric nightly version should be offered as an update")
+	}
+}
+
 func TestCheckUsesNightlyResolverAndWritesOnlyNightlyCache(t *testing.T) {
 	homeDir := configureManagedNPMInstall(t)
 	pool := newTestPool(t)

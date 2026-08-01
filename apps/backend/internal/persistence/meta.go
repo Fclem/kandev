@@ -89,22 +89,35 @@ func WriteVersion(db *sqlx.DB, version string) error {
 
 // WriteLatestVersion persists the highest semver tag from the GitHub Releases
 // poll, its release URL, and the timestamp of the successful poll. The three
-// values are written under separate keys (latest_version,
-// latest_version_url, latest_version_checked_at) on the existing key/value
-// kandev_meta table.
+// values use separate keys (latest_version, latest_version_url,
+// latest_version_checked_at) on the existing key/value kandev_meta table, but
+// the tuple is committed atomically.
 func WriteLatestVersion(db *sqlx.DB, version, url string, checkedAt time.Time) error {
 	return writeLatestVersion(db, stableLatestVersionKeys, version, url, checkedAt)
 }
 
 func writeLatestVersion(db *sqlx.DB, keys latestVersionKeys, version, url string, checkedAt time.Time) error {
-	if err := writeKey(db, keys.version, version); err != nil {
+	tx, err := db.Beginx()
+	if err != nil {
+		return fmt.Errorf("begin latest version write: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	query := db.Rebind(`INSERT INTO kandev_meta (key, value) VALUES (?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+	if err := writeMetaKey(tx, query, keys.version, version); err != nil {
 		return err
 	}
-	if err := writeKey(db, keys.url, url); err != nil {
+	if err := writeMetaKey(tx, query, keys.url, url); err != nil {
 		return err
 	}
 	ts := strconv.FormatInt(checkedAt.UTC().Unix(), 10)
-	return writeKey(db, keys.checkedAt, ts)
+	if err := writeMetaKey(tx, query, keys.checkedAt, ts); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit latest version write: %w", err)
+	}
+	return nil
 }
 
 // ReadLatestVersion returns the last-known latest release tag, its URL, and
@@ -116,17 +129,18 @@ func ReadLatestVersion(db *sqlx.DB) (string, string, time.Time, error) {
 }
 
 func readLatestVersion(db *sqlx.DB, keys latestVersionKeys) (string, string, time.Time, error) {
-	version, err := readKey(db, keys.version)
-	if err != nil {
-		return "", "", time.Time{}, err
-	}
-	url, err := readKey(db, keys.url)
-	if err != nil {
-		return "", "", time.Time{}, err
-	}
-	tsRaw, err := readKey(db, keys.checkedAt)
-	if err != nil {
-		return "", "", time.Time{}, err
+	query := db.Rebind(`SELECT
+		COALESCE(MAX(CASE WHEN key = ? THEN value END), ''),
+		COALESCE(MAX(CASE WHEN key = ? THEN value END), ''),
+		COALESCE(MAX(CASE WHEN key = ? THEN value END), '')
+		FROM kandev_meta`)
+	var version, url, tsRaw string
+	if err := db.QueryRow(query, keys.version, keys.url, keys.checkedAt).Scan(
+		&version,
+		&url,
+		&tsRaw,
+	); err != nil {
+		return "", "", time.Time{}, fmt.Errorf("read latest version tuple: %w", err)
 	}
 	var checkedAt time.Time
 	if tsRaw != "" {
@@ -137,6 +151,13 @@ func readLatestVersion(db *sqlx.DB, keys latestVersionKeys) (string, string, tim
 		checkedAt = time.Unix(secs, 0).UTC()
 	}
 	return version, url, checkedAt, nil
+}
+
+func writeMetaKey(tx *sqlx.Tx, query, key, value string) error {
+	if _, err := tx.Exec(query, key, value); err != nil {
+		return fmt.Errorf("write meta key %q: %w", key, err)
+	}
+	return nil
 }
 
 // WriteLatestNightlyVersion persists the npm nightly target independently

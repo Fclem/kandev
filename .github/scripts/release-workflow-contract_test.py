@@ -130,6 +130,12 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn('--dist-tag latest', stable)
         self.assertIn('--release-tag "${{ needs.prepare.outputs.tag }}"', stable)
 
+        self.assertIn('elif [[ "$DIST_TAG" == "latest" && -z "$RELEASE_TAG" ]]', PUBLISH_NPM)
+        self.assertIn(
+            'elif [[ "$DIST_TAG" == "nightly" && -z "$SOURCE_ASSETS_DIR" ]]',
+            PUBLISH_NPM,
+        )
+
     def test_publish_npm_rejects_version_dist_tag_mismatches(self) -> None:
         cases = (
             (

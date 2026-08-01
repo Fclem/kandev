@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -313,6 +314,33 @@ func TestHandleSetChannelResolverFailureReturns502WithoutPersisting(t *testing.T
 	}
 	if store.present {
 		t.Fatal("failed resolver selection was persisted")
+	}
+}
+
+func TestHandleSetChannelPersistenceFailureDoesNotExposeStorageDetails(t *testing.T) {
+	svc, store := newManagedNPMServiceForHandler(t)
+	store.saveErr = errors.New("sqlite: secret storage detail")
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		return "1.2.4-nightly.shaabc123def456", "https://example/nightly", nil
+	})
+	r := newRouter(svc)
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/system/updates/channel",
+		bytes.NewBufferString(`{"channel":"nightly"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s want 500", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "secret storage detail") {
+		t.Fatalf("response exposed storage details: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "failed to set update channel") {
+		t.Fatalf("response=%s want generic error", w.Body.String())
 	}
 }
 

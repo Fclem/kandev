@@ -60,10 +60,25 @@ test.describe("System update channel", () => {
           body: JSON.stringify({ job_id: "nightly-update-1" }),
         });
       });
+      let jobRequests = 0;
+      await testPage.route("**/api/v1/system/jobs/nightly-update-1", async (route) => {
+        jobRequests += 1;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: "nightly-update-1",
+            kind: "self-update",
+            state: "succeeded",
+            started_at: new Date().toISOString(),
+          }),
+        });
+      });
       await testPage.getByTestId("system-updates-apply").click();
       await expect(testPage.getByRole("alertdialog")).toContainText(NIGHTLY_VERSION);
       await testPage.getByTestId("system-updates-apply-confirm").click();
       await expect.poll(() => applyBody).toEqual({ confirm: "UPDATE" });
+      await expect.poll(() => jobRequests).toBeGreaterThan(0);
     } finally {
       await fixture.release();
     }

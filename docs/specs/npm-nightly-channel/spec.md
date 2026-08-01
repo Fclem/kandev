@@ -1,7 +1,7 @@
 ---
 status: shipped
 created: 2026-07-31
-owner: tbd
+owner: kandev
 ---
 
 # npm nightly channel

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // HandleGet returns the cached kandev_meta view of the selected channel. It
@@ -51,7 +52,8 @@ func HandleSetChannel(svc *Service) gin.HandlerFunc {
 		case errors.Is(err, ErrUpdateResolve):
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		case err != nil:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			svc.log.Error("updates: set channel failed", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to set update channel"})
 		default:
 			c.JSON(http.StatusOK, resp)
 		}

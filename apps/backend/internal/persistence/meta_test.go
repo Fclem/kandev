@@ -170,6 +170,39 @@ func TestReadLatestVersion_PartialPersistedState(t *testing.T) {
 	}
 }
 
+func TestWriteLatestNightlyVersionRollsBackPartialTuple(t *testing.T) {
+	db := memSQLiteDB(t)
+	if err := ensureMetaTable(db); err != nil {
+		t.Fatalf("ensureMetaTable: %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER fail_nightly_url
+		BEFORE INSERT ON kandev_meta
+		WHEN NEW.key = 'latest_version_nightly_url'
+		BEGIN
+			SELECT RAISE(ABORT, 'forced nightly URL failure');
+		END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	err := WriteLatestNightlyVersion(
+		db,
+		"1.2.4-nightly.shaabc123def456",
+		"https://example/nightly",
+		time.Unix(1_700_000_000, 0).UTC(),
+	)
+	if err == nil {
+		t.Fatal("WriteLatestNightlyVersion error = nil, want forced failure")
+	}
+	version, readErr := readKey(db, metaKeyLatestNightlyVersion)
+	if readErr != nil {
+		t.Fatalf("read nightly version: %v", readErr)
+	}
+	if version != "" {
+		t.Fatalf("partial nightly version persisted: %q", version)
+	}
+}
+
 func TestStableAndNightlyLatestVersionsAreIsolated(t *testing.T) {
 	db := memSQLiteDB(t)
 	if err := ensureMetaTable(db); err != nil {

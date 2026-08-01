@@ -21,8 +21,10 @@ spec: "../../specs/npm-nightly-channel/spec.md"
   commit is the same or newer; unresolvable or divergent tag history fails closed.
 - **Verification:** `python3 .github/scripts/release-workflow-contract_test.py`
 - **Verification:** `cd apps && pnpm --filter kandev exec vitest run src/release-config.test.ts`
+- **Verification:** `make test-scripts`
 - **Files likely touched:** `.github/workflows/release.yml`,
-  `.github/scripts/release-workflow-contract_test.py`, `apps/cli/src/release-config.test.ts`.
+  `.github/scripts/release-workflow-contract_test.py`, `apps/cli/src/release-config.test.ts`,
+  `Makefile`.
 - **Dependencies:** Task 01.
 - **Parallelism:** sequential because the workflow consumes Task 01's interface.
 - **Inputs:** spec schedule/publication scenarios; existing `prepare`, `build-web`,
@@ -31,5 +33,6 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 
 ## Verification results
 
-- `python3 .github/scripts/release-workflow-contract_test.py` — passed, 19 tests.
+- `python3 .github/scripts/release-workflow-contract_test.py` — passed, 20 tests.
 - `cd apps && pnpm --filter kandev exec vitest run src/release-config.test.ts` — passed, 12 tests.
+- `make test-scripts` — passed, including the release workflow contract suite.

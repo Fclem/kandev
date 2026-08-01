@@ -234,9 +234,12 @@ describe("release npm publishing", () => {
     }
     expect(script).toContain('DIST_TAG=""');
     expect(script).toContain('case "$DIST_TAG" in');
-    expect(script).toContain("latest|nightly)");
+    expect(script).toContain("latest)");
+    expect(script).toContain("nightly)");
     expect(script).toContain('if [[ -n "$RELEASE_TAG" && -n "$SOURCE_ASSETS_DIR" ]]');
     expect(script).toContain('elif [[ -z "$RELEASE_TAG" && -z "$SOURCE_ASSETS_DIR" ]]');
+    expect(script).toContain('elif [[ "$DIST_TAG" == "latest" && -z "$RELEASE_TAG" ]]');
+    expect(script).toContain('elif [[ "$DIST_TAG" == "nightly" && -z "$SOURCE_ASSETS_DIR" ]]');
     expect(script).toContain('ASSETS_DIR="$SOURCE_ASSETS_DIR"');
   });
 

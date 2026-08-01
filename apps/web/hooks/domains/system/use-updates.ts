@@ -12,9 +12,12 @@ export function useUpdates() {
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const latestRequest = useRef(0);
+  const latestReload = useRef(0);
+  const latestCheck = useRef(0);
 
   const reload = useCallback(async () => {
     const request = ++latestRequest.current;
+    const reloadRequest = ++latestReload.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -25,7 +28,7 @@ export function useUpdates() {
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
-      setIsLoading(false);
+      if (reloadRequest === latestReload.current) setIsLoading(false);
     }
   }, [setSystemUpdates]);
 
@@ -36,6 +39,7 @@ export function useUpdates() {
    */
   const check = useCallback(async () => {
     const request = ++latestRequest.current;
+    const checkRequest = ++latestCheck.current;
     setIsChecking(true);
     setError(null);
     try {
@@ -43,12 +47,11 @@ export function useUpdates() {
       if (request === latestRequest.current) setSystemUpdates(res);
       return res;
     } catch (e) {
-      if (request === latestRequest.current) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
+      if (request !== latestRequest.current) return undefined;
+      setError(e instanceof Error ? e.message : String(e));
       throw e;
     } finally {
-      setIsChecking(false);
+      if (checkRequest === latestCheck.current) setIsChecking(false);
     }
   }, [setSystemUpdates]);
 

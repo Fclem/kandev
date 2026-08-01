@@ -94,6 +94,10 @@ if [[ -n "$RELEASE_TAG" && -n "$SOURCE_ASSETS_DIR" ]]; then
   die "provide exactly one asset source: --release-tag or --assets-dir"
 elif [[ -z "$RELEASE_TAG" && -z "$SOURCE_ASSETS_DIR" ]]; then
   die "provide exactly one asset source: --release-tag or --assets-dir"
+elif [[ "$DIST_TAG" == "latest" && -z "$RELEASE_TAG" ]]; then
+  die "--dist-tag latest requires --release-tag"
+elif [[ "$DIST_TAG" == "nightly" && -z "$SOURCE_ASSETS_DIR" ]]; then
+  die "--dist-tag nightly requires --assets-dir"
 fi
 
 package_already_published() {

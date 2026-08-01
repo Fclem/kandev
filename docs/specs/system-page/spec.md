@@ -194,10 +194,11 @@ Each transition publishes `system.job.update` with `{ jobId, kind, state, messag
 
 ## Permissions
 
-System read endpoints use the normal authenticated/synthetic install identity. Mutating endpoints,
-including manual update checks, update-channel changes, update apply, maintenance, reset, and
-restore, require the existing admin guard. Destructive endpoints additionally validate their
-confirmation body server-side as defence in depth.
+System read endpoints use the normal authenticated/synthetic install identity. The existing admin
+guard covers database vacuum/optimize/reset, opening the data folder, manual update checks,
+update-channel changes, update apply, and restart. Backup create/restore/delete and disk-usage
+refresh currently remain on the base authenticated group. Reset and restore additionally validate
+their confirmation bodies server-side as defence in depth.
 
 ## Failure modes
 

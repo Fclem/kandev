@@ -77,6 +77,12 @@ func (s *Server) validateToolArguments(toolName string, req mcp.CallToolRequest)
 	}
 	req.Params.Arguments = arguments
 
+	// SetMode replaces the MCP tool set before rebuilding its validators. Use
+	// the server read lock as a barrier so validation cannot observe that
+	// intermediate state or pair a newly selected handler with old validators.
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	s.validatorMu.RLock()
 	validator, ok := s.toolValidators[toolName]
 	s.validatorMu.RUnlock()

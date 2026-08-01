@@ -93,7 +93,7 @@ type Server struct {
 	httpServer         *server.StreamableHTTPServer
 	logger             *logger.Logger
 	mcpLogger          *zap.Logger // optional file logger for MCP debug traces
-	mu                 sync.Mutex
+	mu                 sync.RWMutex
 	running            bool
 	attachmentMu       sync.RWMutex
 	attachmentAttempt  streams.MCPAttachmentAttempt

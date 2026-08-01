@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"testing"
+	"time"
 
 	ws "github.com/kandev/kandev/pkg/websocket"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -139,4 +140,28 @@ func TestSetModeRebuildsToolValidators(t *testing.T) {
 
 	assert.False(t, result.IsError)
 	assert.Equal(t, ws.ActionMCPCreateWorkflow, backend.lastAction)
+}
+
+func TestToolValidationWaitsForModeChangeLock(t *testing.T) {
+	s := newTaskModeServer(t, &testBackend{}, "task-current")
+	req := mcp.CallToolRequest{}
+	req.Method = "tools/call"
+	req.Params.Name = "list_workspaces_kandev"
+	req.Params.Arguments = map[string]interface{}{}
+
+	s.mu.Lock()
+	validationDone := make(chan error, 1)
+	go func() {
+		_, err := s.validateToolArguments("list_workspaces_kandev", req)
+		validationDone <- err
+	}()
+
+	select {
+	case err := <-validationDone:
+		t.Fatalf("validation completed while a mode change held the write lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	s.mu.Unlock()
+
+	assert.NoError(t, <-validationDone)
 }

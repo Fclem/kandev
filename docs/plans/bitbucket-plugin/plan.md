@@ -104,9 +104,12 @@ repository/PR identity and performs live submit-time authorization. Plugin unit,
 build, and five-platform archive checks pass. Task 13 remains in progress until a
 configured disposable Cloud/Data Center target, a compatible disposable host, and a
 container-reachable HTTPS credential-broker URL are available, the host changes ship
-in a release that can be named by `min_kandev_version`, and an explicit signing
-key/trust policy exists. No plugin tag, release, signature claim, or marketplace entry
-is created before those gates pass.
+in a release that can be named by `min_kandev_version`, and the remaining live gates
+pass. The initial plugin release intentionally follows the current checksum-verified,
+unsigned marketplace contract under
+[ADR-2026-08-01-bitbucket-initial-release-remains-unsigned](../../decisions/2026-08-01-bitbucket-initial-release-remains-unsigned.md);
+no signature or cryptographic publisher-provenance claim is made. No plugin tag,
+release, or marketplace entry is created before the other gates pass.
 
 ## Risks
 

@@ -19,6 +19,12 @@ and reference work, while remaining independently releasable as an official plug
   repository. Its manifest pins `min_kandev_version` to the first released host
   version containing the required generic contracts; it never guesses an unreleased
   version.
+- The initial release follows Kandev's current unsigned marketplace trust contract:
+  the generated internal `checksums.txt` is mandatory, the host reports the package
+  as unsigned, and neither repository claims cryptographically verified publisher
+  provenance. Signing is future host-wide work rather than a Bitbucket release gate,
+  as recorded in
+  [ADR-2026-08-01-bitbucket-initial-release-remains-unsigned](../../decisions/2026-08-01-bitbucket-initial-release-remains-unsigned.md).
 - The plugin supports Bitbucket Cloud and Bitbucket Data Center through separate
   adapters behind one Bitbucket domain. Cloud and Data Center have full capability
   parity wherever their APIs provide an equivalent operation. Capability flags hide
@@ -179,6 +185,8 @@ for its declared provider; exact repository path matching remains case-sensitive
   provider-specific WebSocket contract.
 - External Bitbucket webhooks for watches; authenticated polling is v1 behavior.
 - Pretending Cloud Pipelines and Data Center build statuses have identical APIs.
+- A Bitbucket-specific signing verifier or trust-root policy. The initial release uses
+  the current checksum-verified, explicitly unsigned plugin contract.
 - Marketplace publication before required host contracts are released, package,
   desktop/mobile, and container credential-flow acceptance passes.
 

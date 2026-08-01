@@ -96,3 +96,4 @@ Read individual ADRs for full context. Create new ones via `/record decision` or
 | 2026-07-31-isolate-manual-pr-review-content | [Isolate Manual PR Review Content](2026-07-31-isolate-manual-pr-review-content.md) | accepted | infra, workflow, security | 2026-07-31 |
 | 2026-07-31-plugin-repository-provider-extensions | [Plugin Repository Provider Extensions](2026-07-31-plugin-repository-provider-extensions.md) | accepted | frontend, backend, protocol | 2026-07-31 |
 | 2026-07-31-provider-neutral-git-credential-broker | [Provider-Neutral Git Credential Broker](2026-07-31-provider-neutral-git-credential-broker.md) | accepted | backend, protocol, security | 2026-07-31 |
+| 2026-08-01-bitbucket-initial-release-remains-unsigned | [Bitbucket Initial Release Remains Unsigned](2026-08-01-bitbucket-initial-release-remains-unsigned.md) | accepted | infra, workflow, security | 2026-08-01 |

@@ -41,9 +41,10 @@ Tasks 03 through 12, integrated.
 2. Containers E2E proves real HTTPS clone/push through helper leases for host and
    remote executor paths. Packaged plugin installs against released minimum host
    version.
-3. Public signed plugin release and checksums precede final
-   `plugin-registry/plugins.yaml` entry; public docs accurately describe setup,
-   security, compatibility, and live `api_write` behavior.
+3. A public plugin release with the mandatory internal checksums and no false signing
+   or provenance claim precedes the final `plugin-registry/plugins.yaml` entry; public
+   docs accurately describe setup, security, compatibility, and live `api_write`
+   behavior.
 
 ## Verification
 
@@ -85,6 +86,14 @@ leakage checks as release gates.
   repository and pull-request identity, rejects mismatched identities, and still
   live-fetches the PR before authorizing submission. A configured Cloud/Data Center
   cross-repository run still requires disposable provider credentials and fixtures.
+- The plugin repository now provides an opt-in, fail-fast `make e2e-live` runner for
+  one configured product at a time. It installs the real package, saves the token
+  connection through the authenticated host action, exercises health/repositories/
+  branches/PR/review reads, optionally performs explicitly authorized comment,
+  approve/unapprove, and decline mutations, then disconnects in cleanup. Its live
+  Playwright config disables traces, screenshots, and video. No Cloud or Data Center
+  live pass is recorded until the required secret environment and disposable target
+  are supplied.
 - Public docs and the marketplace index baseline validate.
 - Container credential specs are present for Docker and SSH, but this workspace lacks
   `KANDEV_E2E_CREDENTIAL_BROKER_PUBLIC_BASE_URL`; both tests therefore skip rather than
@@ -93,7 +102,8 @@ leakage checks as release gates.
   `KANDEV_PLUGIN_E2E_URL`. The manifest intentionally omits `min_kandev_version` until
   these host contracts ship in a named release and the same package passes against
   that released host.
-- A signed release is not yet trustworthy: the host has no production verifier/trust
-  policy and the release has no approved signing key. Keep the plugin unreleased and
-  absent from `plugin-registry/plugins.yaml` until those decisions and external gates
-  are resolved.
+- Signing is intentionally deferred by
+  [ADR-2026-08-01-bitbucket-initial-release-remains-unsigned](../../decisions/2026-08-01-bitbucket-initial-release-remains-unsigned.md).
+  The initial package uses mandatory internal checksums, remains visibly unsigned,
+  and makes no cryptographic publisher-provenance claim. Signing is no longer a Task
+  13 blocker; the unreleased host version and external live-test gates still are.

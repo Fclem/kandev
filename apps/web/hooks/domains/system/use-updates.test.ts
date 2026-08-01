@@ -210,6 +210,38 @@ describe("useUpdates request ordering", () => {
   });
 });
 
+describe("useUpdates initial load recovery", () => {
+  it("revalidates an empty store after a check invalidates the initial reload and fails", async () => {
+    const initialReload = deferred<UpdatesResponse>();
+    const recoveryReload = deferred<UpdatesResponse>();
+    const checkFailure = new Error("check failed");
+    mocks.currentUpdates = null;
+    mocks.fetchUpdates
+      .mockReturnValueOnce(initialReload.promise)
+      .mockReturnValueOnce(recoveryReload.promise);
+    mocks.checkUpdates.mockRejectedValue(checkFailure);
+    const { result } = renderHook(() => useUpdates());
+
+    expect(mocks.fetchUpdates).toHaveBeenCalledOnce();
+    await act(async () => {
+      await expect(result.current.check()).rejects.toBe(checkFailure);
+    });
+    expect(mocks.fetchUpdates).toHaveBeenCalledTimes(2);
+
+    const stable = updates("stable");
+    await act(async () => {
+      initialReload.resolve(updates("nightly"));
+      recoveryReload.resolve(stable);
+      await Promise.all([initialReload.promise, recoveryReload.promise]);
+      await Promise.resolve();
+    });
+
+    expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
+    expect(mocks.setSystemUpdates).toHaveBeenCalledWith(stable);
+    expect(result.current.error).toBe("check failed");
+  });
+});
+
 describe("useUpdates channel saving", () => {
   it("saves a channel and publishes the returned state", async () => {
     const nightly = updates("nightly");

@@ -19,6 +19,10 @@
 #   <output-dir>/@kdlbs/runtime-darwin-x64/
 #   <output-dir>/@kdlbs/runtime-darwin-arm64/
 #   <output-dir>/@kdlbs/runtime-win32-x64/
+#
+# scripts/release/npm-packages.sh owns the publication inventory. Keep the
+# platform mapping below synchronized with it; release-config.test.ts enforces
+# equality across the packager, launcher mappings, package metadata, and tests.
 set -euo pipefail
 
 VERSION="${1:?Usage: $0 <version> <release-assets-dir> <output-dir>}"

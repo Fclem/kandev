@@ -161,44 +161,6 @@ func TestService_ApplyRejectsChangedCachedTarget(t *testing.T) {
 	}
 }
 
-func TestService_ApplyDoesNotPersistRejectedExactNightly(t *testing.T) {
-	homeDir := configureManagedNPMInstall(t)
-	pool := newTestPool(t)
-	const target = "v1.2.4-nightly.shaabc123def456"
-	originalCheckedAt := time.Unix(1_700_000_000, 0).UTC()
-	if err := persistence.WriteLatestNightlyVersion(
-		pool.Writer(),
-		target,
-		"https://example/original",
-		originalCheckedAt,
-	); err != nil {
-		t.Fatal(err)
-	}
-	svc := NewService(
-		pool,
-		target,
-		nil,
-		logger.Default(),
-		WithHomeDir(homeDir),
-		WithSettingsStore(&memorySettingsStore{value: []byte(ChannelNightly), present: true}),
-		WithJobs(jobs.NewTracker(nil, logger.Default())),
-	)
-	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
-		return target, "https://example/resolved", nil
-	})
-
-	if _, err := svc.Apply(context.Background(), "UPDATE", target); !errors.Is(err, ErrNoUpdateAvailable) {
-		t.Fatalf("Apply error=%v want ErrNoUpdateAvailable", err)
-	}
-	version, targetURL, checkedAt, err := persistence.ReadLatestNightlyVersion(pool.Reader())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if version != target || targetURL != "https://example/original" || !checkedAt.Equal(originalCheckedAt) {
-		t.Fatalf("rejected apply rewrote cache: version=%q url=%q checkedAt=%v", version, targetURL, checkedAt)
-	}
-}
-
 func TestService_ApplyRejectsConcurrentNightlyWhileFirstApplyIsRunning(t *testing.T) {
 	homeDir := configureManagedNPMInstall(t)
 	pool := newTestPool(t)

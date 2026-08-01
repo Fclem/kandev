@@ -34,7 +34,8 @@ kandev
 ```
 
 Stable is the default and is selected by npm's `latest` tag. To test the current prerelease from
-`main` without changing a global installation, run a one-off copy from the npm-only `nightly` tag:
+`main` without changing a global installation, launch the package once from the npm-only `nightly`
+tag:
 
 ```bash
 npx -y kandev@nightly

@@ -153,13 +153,17 @@ func TestService_ReplayCachedUpdateSerializesWithChannelSelection(t *testing.T) 
 		close(nightlyFetchEntered)
 		return "v1.2.5-nightly.shaabcdef123456", "https://example.test/nightly", nil
 	})
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
 
 	replayDone := make(chan error, 1)
-	go func() { replayDone <- svc.ReplayCachedUpdate(context.Background()) }()
+	go func() { replayDone <- svc.ReplayCachedUpdate(ctx) }()
 	select {
 	case <-notifier.entered:
 	case err := <-replayDone:
 		t.Fatalf("cached replay returned before notifier: %v", err)
+	case <-ctx.Done():
+		t.Fatal("cached replay did not reach notifier")
 	}
 	if svc.updateMu.TryLock() {
 		svc.updateMu.Unlock()
@@ -170,22 +174,38 @@ func TestService_ReplayCachedUpdateSerializesWithChannelSelection(t *testing.T) 
 	selectStarted := make(chan struct{})
 	go func() {
 		close(selectStarted)
-		_, err := svc.SelectChannel(context.Background(), string(ChannelNightly))
+		_, err := svc.SelectChannel(ctx, string(ChannelNightly))
 		selectDone <- err
 	}()
-	<-selectStarted
+	select {
+	case <-selectStarted:
+	case <-ctx.Done():
+		t.Fatal("channel selection did not start")
+	}
 
 	releaseReplay()
-	if err := <-replayDone; err != nil {
-		t.Fatalf("cached replay: %v", err)
+	select {
+	case err := <-replayDone:
+		if err != nil {
+			t.Fatalf("cached replay: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("cached replay did not finish")
 	}
 	select {
 	case <-nightlyFetchEntered:
 	case err := <-selectDone:
 		t.Fatalf("channel selection returned before resolving Nightly: %v", err)
+	case <-ctx.Done():
+		t.Fatal("channel selection did not resolve Nightly")
 	}
-	if err := <-selectDone; err != nil {
-		t.Fatalf("channel selection: %v", err)
+	select {
+	case err := <-selectDone:
+		if err != nil {
+			t.Fatalf("channel selection: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("channel selection did not finish")
 	}
 }
 

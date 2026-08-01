@@ -20,7 +20,7 @@ A new **System** group is added to the existing settings sidebar (`apps/web/comp
 
 1. **Status** — `/settings/system/status`
    - **Health issues** card: renders the existing `GET /api/v1/system/health` payload (warning/error/info issues with messages and links).
-   - **Disk usage** card: shows total kandev data footprint with a per-subdirectory breakdown (`data dir / worktrees / repos / sessions / tasks / quick-chat / backups`), an "as of HH:MM" timestamp, a **Refresh** button, and an admin-only **Open** action for the resolved Kandev data directory. The disk walk is lazy and asynchronous: the first visit after a cold start (or after the 2h cache expires) returns `null` immediately and the page shows a loading spinner while the walk runs in the background; subsequent visits within 2h return the cached value instantly.
+   - **Disk usage** card: shows total kandev data footprint with a per-subdirectory breakdown (`data dir / worktrees / repos / sessions / tasks / quick-chat / backups`), an "as of HH:MM" timestamp, a **Refresh** button, and an admin-only **Open** action for the resolved Kandev home directory. The disk walk is lazy and asynchronous: the first visit after a cold start (or after the 2h cache expires) returns `null` immediately and the page shows a loading spinner while the walk runs in the background; subsequent visits within 2h return the cached value instantly.
    - **Version + update** card: short summary of current version and "update available" badge, with a CTA to the Updates page.
 2. **Feature Toggles** — `/settings/system/feature-toggles`
    - Install-wide runtime flags, risk metadata, environment locks, and restart handling.
@@ -78,7 +78,7 @@ GET    /api/v1/system/health                      (existing; unchanged)
 GET    /api/v1/system/info                        - { version, commit, build_time, go_version, os, arch, boot_id, started_at }
 GET    /api/v1/system/disk-usage                  - cached breakdown + computedAt; null while computing
 POST   /api/v1/system/disk-usage/refresh          - kick async recompute; 202
-POST   /api/v1/system/disk-usage/open             - open the data folder on the backend host
+POST   /api/v1/system/disk-usage/open             - open the Kandev home directory on the backend host
 GET    /api/v1/system/database                    - driver, path, sizeBytes, walSizeBytes, schemaVersion, lastBackupAt
 POST   /api/v1/system/database/vacuum             - 202 + jobId
 POST   /api/v1/system/database/optimize           - 202 + jobId
@@ -213,7 +213,7 @@ Each transition publishes `system.job.update` with `{ jobId, kind, state, messag
 ## Permissions
 
 System read endpoints use the normal authenticated/synthetic install identity. The existing admin
-guard covers database vacuum/optimize/reset, opening the data folder, manual update checks,
+guard covers database vacuum/optimize/reset, opening the Kandev home directory, manual update checks,
 update-channel changes, update apply, and restart. Backup create/restore/delete and disk-usage
 refresh currently remain on the base authenticated group. Reset and restore additionally validate
 their confirmation bodies server-side as defence in depth.
@@ -224,7 +224,7 @@ their confirmation bodies server-side as defence in depth.
 - **npm Nightly poll failure** — log + keep the previous Nightly cache; malformed or missing
   `dist-tags.nightly` fails closed and is never offered.
 - **Disk walk failure** (permission error on a subdir) — return the partial result with a `warnings: [...]` array per subdir; the page renders a per-row warning icon.
-- **Open data folder failure** — return `503` when the home directory is unavailable, `501` on an
+- **Open Kandev home directory failure** — return `503` when the home directory is unavailable, `501` on an
   unsupported host OS, or `500` when the platform file-explorer process cannot be started.
 - **VACUUM failure** — DB is unaffected (VACUUM is atomic); the job ends `failed` with the SQLite error string. Status page shows a recoverable error issue.
 - **Non-SQLite maintenance call** — `vacuum`, `optimize`, and `reset` jobs fail with `not supported for <driver> driver` before running SQLite-only SQL; factory reset also rejects before stopping active executions.

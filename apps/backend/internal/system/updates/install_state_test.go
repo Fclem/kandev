@@ -261,6 +261,60 @@ func TestManualCommandsNPXHasNoDuplicateBinaryName(t *testing.T) {
 	}
 }
 
+func TestManagedUserServiceCapabilitiesShareBaseEligibility(t *testing.T) {
+	for name, state := range map[string]InstallStateResponse{
+		"not running": {
+			ManagedService: true,
+			Mode:           installModeUser,
+			Manager:        serviceManagerSystemd,
+			Kind:           installKindNPM,
+		},
+		"unmanaged": {
+			RunningAsService: true,
+			Mode:             installModeUser,
+			Manager:          serviceManagerSystemd,
+			Kind:             installKindNPM,
+		},
+		"system mode": {
+			RunningAsService: true,
+			ManagedService:   true,
+			Mode:             installModeSystem,
+			Manager:          serviceManagerSystemd,
+			Kind:             installKindNPM,
+		},
+		"unsupported manager": {
+			RunningAsService: true,
+			ManagedService:   true,
+			Mode:             installModeUser,
+			Manager:          "other",
+			Kind:             installKindNPM,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if supported, _ := state.applySupport(); supported {
+				t.Fatal("apply unexpectedly supported")
+			}
+			if supported, _ := state.nightlySupport(); supported {
+				t.Fatal("Nightly unexpectedly supported")
+			}
+		})
+	}
+
+	homebrew := InstallStateResponse{
+		RunningAsService: true,
+		ManagedService:   true,
+		Mode:             installModeUser,
+		Manager:          serviceManagerLaunchd,
+		Kind:             installKindHomebrew,
+	}
+	if supported, _ := homebrew.applySupport(); !supported {
+		t.Fatal("managed Homebrew user service should support Stable apply")
+	}
+	if supported, _ := homebrew.nightlySupport(); supported {
+		t.Fatal("managed Homebrew user service should not support Nightly")
+	}
+}
+
 func writeServiceInstallForTest(t *testing.T, homeDir string, metadata serviceInstallMetadata) (string, string) {
 	t.Helper()
 	metadata.Version = serviceMetadataVersion

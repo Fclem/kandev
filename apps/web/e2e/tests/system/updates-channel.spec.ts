@@ -108,6 +108,7 @@ test.describe("System update channel", () => {
       await completedReload;
       await testPage.waitForLoadState("domcontentloaded");
       await expect(testPage.getByTestId("system-page-title")).toHaveText("Updates");
+      await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_TAG);
       await expect(testPage.getByTestId("system-updates-progress")).toHaveCount(0);
     } finally {
       await fixture.release();

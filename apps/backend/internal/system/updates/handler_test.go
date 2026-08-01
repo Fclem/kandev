@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -218,22 +217,7 @@ func TestHandleCheck_GitHubFailureReturns502(t *testing.T) {
 
 func newManagedNPMServiceForHandler(t *testing.T) (*Service, *memorySettingsStore) {
 	t.Helper()
-	homeDir := t.TempDir()
-	metadataPath, _ := writeServiceInstallForTest(t, homeDir, serviceInstallMetadata{
-		Manager:     serviceManagerSystemd,
-		Mode:        installModeUser,
-		Kind:        installKindNPM,
-		HomeDir:     homeDir,
-		LogDir:      filepath.Join(homeDir, "logs"),
-		ServicePath: filepath.Join(homeDir, "kandev.service"),
-		NodePath:    "/usr/bin/node",
-		CLIEntry:    "/usr/lib/node_modules/kandev/bin/cli.js",
-	})
-	t.Setenv(envRunningAsService, "true")
-	t.Setenv(envServiceMode, installModeUser)
-	t.Setenv(envServiceManager, serviceManagerSystemd)
-	t.Setenv(envInstallKind, installKindNPM)
-	t.Setenv(envServiceMetadata, metadataPath)
+	homeDir := configureManagedNPMInstall(t)
 	store := &memorySettingsStore{}
 	svc := NewService(
 		newTestPool(t),

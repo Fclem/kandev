@@ -9,6 +9,10 @@ function readRepoFile(path: string): string {
   return readFileSync(resolve(repoRoot, path), "utf8");
 }
 
+function runtimePackagesIn(source: string): string[] {
+  return [...new Set(source.match(/@kdlbs\/runtime-[a-z0-9-]+/g) ?? [])].sort();
+}
+
 function workflowFiles(): string[] {
   const workflowDir = resolve(repoRoot, ".github/workflows");
   return readdirSync(workflowDir)
@@ -272,6 +276,21 @@ describe("release npm publishing", () => {
     }
     expect(packages).toContain('NIGHTLY_PACKAGES=("kandev" "${RUNTIME_PACKAGES[@]}")');
     expect(script).toContain('source "$ROOT_DIR/scripts/release/npm-packages.sh"');
+  });
+
+  it("keeps every runtime package consumer aligned with the publishing inventory", () => {
+    const inventory = runtimePackagesIn(readRepoFile("scripts/release/npm-packages.sh"));
+    expect(inventory.length).toBeGreaterThan(0);
+
+    for (const path of [
+      "scripts/release/package-npm-runtime.sh",
+      "scripts/release/publish-npm.test.mjs",
+      "apps/cli/src/runtime.ts",
+      "apps/cli/bin/native-shim.js",
+      "apps/cli/package.json",
+    ]) {
+      expect(runtimePackagesIn(readRepoFile(path)), path).toEqual(inventory);
+    }
   });
 
   it("only treats an existing nightly version as idempotent when the nightly tag matches", () => {

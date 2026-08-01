@@ -37,7 +37,7 @@ function coordinatorFor(store: object): UpdatesRequestCoordinator {
   return coordinator;
 }
 
-function revalidateAfterFailedSave(
+function revalidateWithoutReplacingError(
   coordinator: UpdatesRequestCoordinator,
   setSystemUpdates: (updates: UpdatesResponse) => void,
 ): void {
@@ -49,7 +49,7 @@ function revalidateAfterFailedSave(
       }
     })
     .catch(() => {
-      // Keep the channel-save error authoritative; a later manual reload can retry.
+      // Keep the triggering error authoritative; a later manual reload can retry.
     });
 }
 
@@ -81,7 +81,7 @@ function queueChannelSave(
       coordinator.activeSaves -= 1;
       coordinator.readRevision += 1;
       if (!saved && request === coordinator.saveRevision && coordinator.activeSaves === 0) {
-        revalidateAfterFailedSave(coordinator, setSystemUpdates);
+        revalidateWithoutReplacingError(coordinator, setSystemUpdates);
       }
     }
   })();
@@ -155,11 +155,12 @@ export function useUpdates() {
     } catch (e) {
       if (request !== coordinator.readRevision || coordinator.activeSaves > 0) return undefined;
       setError(e instanceof Error ? e.message : String(e));
+      if (!updates) revalidateWithoutReplacingError(coordinator, setSystemUpdates);
       throw e;
     } finally {
       if (checkRequest === latestCheck.current) setIsChecking(false);
     }
-  }, [coordinator, setSystemUpdates]);
+  }, [coordinator, setSystemUpdates, updates]);
 
   const saveChannel = useCallback(
     (channel: UpdatesChannel) => queueChannelSave(coordinator, channel, setSystemUpdates, setError),

@@ -5,8 +5,8 @@ Install Kandev as an OS-managed service (systemd on Linux, launchd on macOS) so 
 Manual updates must preserve the install type and selected channel: global npm uses `kandev@latest`
 for Stable or `kandev@nightly` for Nightly; the temporary npx recovery path accepts the same tags;
 Homebrew uses `brew upgrade kandev`; and a local checkout is rebuilt with `make service-install`.
-Reuse custom `--port`, `--home-dir`, and `--no-boot-start` values on `service install`; `service
-restart` carries only `--system` when applicable.
+Reuse custom `--port`, `--home-dir`, and `--no-boot-start` (Linux user mode only) values on
+`service install`; `service restart` carries only `--system` when applicable.
 
 This guide assumes you've already installed kandev via [Homebrew or npm](../apps/cli/README.md#quick-start) and that `kandev` works when run interactively.
 
@@ -108,7 +108,8 @@ Use the commands for the original install type:
 
 ```bash
 # Reuse these install-time options only if the original service used them:
-# --home-dir /path/to/kandev-home --port 38429 --no-boot-start
+# --home-dir /path/to/kandev-home --port 38429
+# --no-boot-start  # Linux user mode only
 # Keep latest for Stable; change to nightly when the saved channel is Nightly.
 CHANNEL_TAG=latest
 

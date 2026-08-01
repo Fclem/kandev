@@ -20,7 +20,7 @@ for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
     exit 0
   fi
 
-  if grep -qiE 'E404|404 Not Found|No match found for version|is not in this registry' "$ERROR_FILE"; then
+  if grep -qiE '^npm (error|ERR!) (code E404|404([[:space:]]|$)|No match found for version|[^[:space:]]+ is not in this registry)' "$ERROR_FILE"; then
     exit 0
   fi
 

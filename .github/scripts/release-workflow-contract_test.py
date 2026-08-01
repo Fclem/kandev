@@ -396,6 +396,14 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             self.assertIsNotNone(trigger_block)
             self.assertIn('".github/release-signing-key.asc"', trigger_block.group(0))
             self.assertIn('"docs/public/release-process.md"', trigger_block.group(0))
+            self.assertIn('"scripts/release/publish-npm.sh"', trigger_block.group(0))
+            self.assertIn('"scripts/release/publish-npm.test.mjs"', trigger_block.group(0))
+
+        self.assertIn(
+            "node --test scripts/release/npm-view-version.test.mjs "
+            "scripts/release/publish-npm.test.mjs",
+            LINT_WORKFLOW,
+        )
 
     def test_tag_push_recovery_recreates_tag_at_logged_merge_commit(self) -> None:
         tag = step_block("Create and push signed release tag")

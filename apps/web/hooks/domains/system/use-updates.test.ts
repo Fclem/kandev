@@ -98,29 +98,28 @@ describe("useUpdates", () => {
     expect(result.current.isChecking).toBe(false);
   });
 
-  it("keeps loading active until the newest overlapping reload settles", async () => {
-    const first = deferred<UpdatesResponse>();
-    const second = deferred<UpdatesResponse>();
-    mocks.fetchUpdates.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  it("deduplicates overlapping reloads so one failed request cannot hide another success", async () => {
+    const pending = deferred<UpdatesResponse>();
+    mocks.fetchUpdates.mockReturnValue(pending.promise);
     const { result } = renderHook(() => useUpdates());
 
+    let firstPromise!: Promise<void>;
+    let secondPromise!: Promise<void>;
     act(() => {
-      void result.current.reload();
-      void result.current.reload();
+      firstPromise = result.current.reload();
+      secondPromise = result.current.reload();
     });
     expect(result.current.isLoading).toBe(true);
+    expect(mocks.fetchUpdates).toHaveBeenCalledOnce();
 
+    const nightly = updates("nightly");
     await act(async () => {
-      first.resolve(updates("stable"));
-      await first.promise;
-    });
-    expect(result.current.isLoading).toBe(true);
-
-    await act(async () => {
-      second.resolve(updates("nightly"));
-      await second.promise;
+      pending.resolve(nightly);
+      await Promise.all([firstPromise, secondPromise]);
     });
     expect(result.current.isLoading).toBe(false);
+    expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
+    expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
   });
 
   it("suppresses an obsolete check failure after a newer channel save", async () => {

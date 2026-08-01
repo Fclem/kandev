@@ -1,5 +1,6 @@
 import { test, expect } from "../../fixtures/test-base";
 import { assertNoDocumentHorizontalOverflow } from "../../helpers/layout-assertions";
+import { PrAssetCapture } from "../../helpers/pr-asset-capture";
 import { useManagedNPMUpdates } from "./updates-channel-helpers";
 
 const LONG_NIGHTLY_VERSION = "999999999.999999999.999999999-nightly.shaabcdef123456";
@@ -9,8 +10,9 @@ test.describe("System update channel on mobile", () => {
   test("selects, saves, and reloads Nightly with touch-safe rows", async ({
     backend,
     testPage,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(60_000);
+    const capture = new PrAssetCapture(testPage, testInfo.file);
     const fixture = await useManagedNPMUpdates(backend, LONG_NIGHTLY_VERSION);
     try {
       await testPage.goto("/settings/system/updates");
@@ -40,6 +42,10 @@ test.describe("System update channel on mobile", () => {
       await expect(nightly).toBeChecked();
       await expect(testPage.getByTestId("system-updates-latest")).toHaveText(LONG_NIGHTLY_TAG);
       await assertNoDocumentHorizontalOverflow(testPage, "Updates after Nightly reload");
+      await capture.screenshot("mobile-nightly-update-channel", {
+        caption: "Mobile: saved Nightly channel and exact target",
+      });
+      capture.flush();
     } finally {
       await fixture.release();
     }

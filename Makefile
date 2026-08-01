@@ -502,6 +502,7 @@ test-scripts:
 	@python3 .github/scripts/release-workflow-contract_test.py
 	@node --test scripts/release/nightly-version.test.mjs
 	@node --test scripts/release/npm-view-version.test.mjs
+	@node --test scripts/release/publish-npm.test.mjs
 	@node --test scripts/validate-public-docs.test.mjs
 
 .PHONY: test-e2e

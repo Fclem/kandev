@@ -13,6 +13,7 @@ async function runView(mode) {
   const npm = path.join(fixtureDir, "npm");
   const sleep = path.join(fixtureDir, "sleep");
   const countFile = path.join(fixtureDir, "attempts");
+  const sleepFile = path.join(fixtureDir, "sleeps");
   await writeFile(
     npm,
     `#!/usr/bin/env bash
@@ -31,10 +32,15 @@ case "$MOCK_NPM_MODE" in
     printf '%s\\n' '1.2.4-nightly.shaabc123def456'
     ;;
   failure) printf '%s\\n' 'npm error code EAI_AGAIN' 'registry-secret-detail' >&2; exit 1 ;;
+  misleading) printf '%s\\n' 'npm error code EAI_AGAIN' 'npm error request to https://registry.test/e404/404-Not-Found/is-not-in-this-registry failed' >&2; exit 1 ;;
 esac
 `,
   );
-  await writeFile(sleep, "#!/usr/bin/env bash\nexit 0\n");
+  await writeFile(sleepFile, "");
+  await writeFile(
+    sleep,
+    '#!/usr/bin/env bash\nprintf \'%s\\n\' "$1" >> "$MOCK_SLEEP_FILE"\n',
+  );
   await chmod(npm, 0o755);
   await chmod(sleep, 0o755);
   try {
@@ -44,10 +50,15 @@ esac
         ...process.env,
         MOCK_NPM_COUNT_FILE: countFile,
         MOCK_NPM_MODE: mode,
+        MOCK_SLEEP_FILE: sleepFile,
         PATH: `${fixtureDir}${path.delimiter}${process.env.PATH ?? ""}`,
       },
     });
     result.attempts = Number(await readFile(countFile, "utf8"));
+    result.sleeps = (await readFile(sleepFile, "utf8"))
+      .trim()
+      .split("\n")
+      .filter(Boolean);
     return result;
   } finally {
     await rm(fixtureDir, { recursive: true, force: true });
@@ -58,6 +69,7 @@ test("prints a resolved npm version", async () => {
   const result = await runView("found");
   assert.equal(result.status, 0);
   assert.equal(result.stdout.trim(), "1.2.4-nightly.shaabc123def456");
+  assert.deepEqual(result.sleeps, []);
 });
 
 test("treats a missing version or dist-tag as an empty result", async () => {
@@ -66,6 +78,7 @@ test("treats a missing version or dist-tag as an empty result", async () => {
   assert.equal(result.stdout, "");
   assert.equal(result.stderr, "");
   assert.equal(result.attempts, 1);
+  assert.deepEqual(result.sleeps, []);
 });
 
 test("retries transient registry failures before succeeding", async () => {
@@ -73,6 +86,7 @@ test("retries transient registry failures before succeeding", async () => {
   assert.equal(result.status, 0);
   assert.equal(result.stdout.trim(), "1.2.4-nightly.shaabc123def456");
   assert.equal(result.attempts, 3);
+  assert.deepEqual(result.sleeps, ["2", "2"]);
 });
 
 test("fails closed on registry and network errors", async () => {
@@ -81,4 +95,13 @@ test("fails closed on registry and network errors", async () => {
   assert.match(result.stderr, /npm view failed for kandev@nightly/);
   assert.doesNotMatch(result.stderr, /registry-secret-detail/);
   assert.equal(result.attempts, 3);
+  assert.deepEqual(result.sleeps, ["2", "2"]);
+});
+
+test("does not mistake missing-looking request URLs for npm E404 diagnostics", async () => {
+  const result = await runView("misleading");
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /npm view failed for kandev@nightly/);
+  assert.equal(result.attempts, 3);
+  assert.deepEqual(result.sleeps, ["2", "2"]);
 });

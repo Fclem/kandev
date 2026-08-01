@@ -10,6 +10,11 @@ type UpdatesRequestCoordinator = {
   saveRevision: number;
   activeSaves: number;
   saveTail: Promise<void>;
+  reloadFlight: {
+    request: number;
+    promise: Promise<UpdatesResponse>;
+    published: boolean;
+  } | null;
 };
 
 // Hooks own their loading/error UI, but every instance writes the same Zustand
@@ -25,6 +30,7 @@ function coordinatorFor(store: object): UpdatesRequestCoordinator {
       saveRevision: 0,
       activeSaves: 0,
       saveTail: Promise.resolve(),
+      reloadFlight: null,
     };
     coordinators.set(store, coordinator);
   }
@@ -43,20 +49,34 @@ export function useUpdates() {
   const latestCheck = useRef(0);
 
   const reload = useCallback(async () => {
-    const request = ++coordinator.readRevision;
     const reloadRequest = ++latestReload.current;
     setIsLoading(true);
     setError(null);
+    let flight = coordinator.reloadFlight;
+    if (!flight) {
+      flight = {
+        request: ++coordinator.readRevision,
+        promise: fetchUpdates({ cache: "no-store" }),
+        published: false,
+      };
+      coordinator.reloadFlight = flight;
+    }
     try {
-      const res = await fetchUpdates({ cache: "no-store" });
-      if (request === coordinator.readRevision && coordinator.activeSaves === 0) {
+      const res = await flight.promise;
+      if (
+        !flight.published &&
+        flight.request === coordinator.readRevision &&
+        coordinator.activeSaves === 0
+      ) {
+        flight.published = true;
         setSystemUpdates(res);
       }
     } catch (e) {
-      if (request === coordinator.readRevision && coordinator.activeSaves === 0) {
+      if (flight.request === coordinator.readRevision && coordinator.activeSaves === 0) {
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
+      if (coordinator.reloadFlight === flight) coordinator.reloadFlight = null;
       if (reloadRequest === latestReload.current) setIsLoading(false);
     }
   }, [coordinator, setSystemUpdates]);

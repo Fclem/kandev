@@ -275,11 +275,14 @@ Before any update, finish or stop active sessions, create and export a database 
 
 - Desktop: use **Settings > System > Updates** when signed updater assets are available; otherwise install the new desktop package.
 - Managed npm/npx user service: choose Stable or Nightly, save, check the resolved exact version,
-  then use **Apply update**. Kandev resolves the mutable npm tag immediately before applying and
-  installs the exact immutable version. To recover from Nightly, select Stable and apply the shown
-  release. For terminal recovery, an npm-managed service runs `npm install -g kandev@latest` and
-  then `kandev service install` with the same flags; an npx-managed service runs
-  `npx -y kandev@latest service install` with the same flags. Restart afterward.
+  then use **Apply update**. Apply submits the exact immutable version shown; if a newer channel
+  target was cached meanwhile, the backend rejects the stale request so the page can refresh. To
+  recover from Nightly, select Stable and apply the shown release. For terminal recovery, an
+  npm-managed service runs `npm install -g kandev@latest` and then `kandev service install` with the
+  same flags; an npx-managed service runs
+  `npx -y kandev@latest service install` with the same flags. Restart afterward. An npx-managed
+  service points into npm's transient `_npx` cache and stops working if that cache is pruned; prefer
+  `npm install -g` for a durable service.
 - Managed Homebrew user service: Stable only. Use **Apply update** when available; otherwise run
   `brew upgrade kandev`, reinstall the service with the same flags, and restart.
 - System service: Stable only. Upgrade with the required privileges, reinstall with the same
@@ -331,7 +334,7 @@ drawer mirrors it as the saved left sequence followed by the saved right sequenc
 | Logs page has no downloadable files | `logging.outputPath` and service/container logs | `stdout` is the default; use in-memory tail or configure a file sink |
 | Update check returns HTTP 429 | Time since last **Check now** | Wait at least 30 seconds; background checks retry every six hours |
 | **Apply update** is absent | Install mode/method and `<home>/service/install.json` | Expected for system, unmanaged, local-checkout, or invalid-metadata installs. A managed npm, npx, or Homebrew user service should offer Apply; reinstall it with the same flags to refresh its identity and metadata, or use the manual package-manager flow. |
-| **Nightly** is disabled | Install mode/method and `<home>/service/install.json` | Expected unless this is a verified managed npm/npx user service. Homebrew, Desktop, system-service, unmanaged, local-checkout, and unknown installs are Stable-only. |
+| **Nightly** is disabled | Install mode/method and `<home>/service/install.json` | Expected unless this is a verified managed npm/npx user service. Homebrew, Desktop, system-service, unmanaged, local-checkout, invalid-metadata, and unknown installs are Stable-only. |
 | Nightly check or save fails | npm access and cached checked time | Verify access to `https://registry.npmjs.org/kandev`, retry after connectivity returns, or keep/select Stable. A malformed or missing npm `nightly` tag fails closed. |
 | Metrics show unavailable | OS support, disk path, executor connectivity | Select supported metrics and verify permissions/network; the collector reports errors per sample |
 | Disk total exceeds filesystem expectation | Separate `data` and `backups` rows | Backups are counted twice in the UI total; use volume metrics for capacity decisions |

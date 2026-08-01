@@ -445,6 +445,9 @@ func (s *Service) resolveLatest(ctx context.Context, channel Channel) (string, s
 // contacting the selected upstream. It is called when the default user becomes
 // eligible for Local delivery after an early startup poll.
 func (s *Service) ReplayCachedUpdate(ctx context.Context) error {
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+
 	install, _ := s.detectInstallState()
 	channel, err := s.effectiveChannel(ctx, install)
 	if err != nil {

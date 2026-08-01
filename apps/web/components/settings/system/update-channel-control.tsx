@@ -47,7 +47,10 @@ export function useUpdateChannelDraft(
     id: "system-updates-channel",
     order: 10,
     revision: draft,
-    isDirty,
+    // Keep the navigation guard active for the full save. A user can edit the
+    // draft back to the previously saved value while the submitted channel is
+    // still in flight, but leaving then would abandon an unresolved mutation.
+    isDirty: isDirty || isSaving,
     save: async (revision) => {
       const submitted = revision as UpdatesChannel;
       const submittedRevision = draftRevisionRef.current;

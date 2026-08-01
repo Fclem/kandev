@@ -38,16 +38,9 @@ test.describe("System update channel", () => {
       await expect(nightly).toBeChecked();
       await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_TAG);
 
-      const desktopViewport = testPage.viewportSize();
       await capture.screenshot("desktop-nightly-update-channel", {
         caption: "Desktop: managed npm service following the Nightly channel",
       });
-      await testPage.setViewportSize({ width: 393, height: 851 });
-      await expect(testPage.getByTestId("system-updates-channel")).toBeVisible();
-      await capture.screenshot("mobile-nightly-update-channel", {
-        caption: "Mobile: the same saved Nightly channel and exact target",
-      });
-      if (desktopViewport) await testPage.setViewportSize(desktopViewport);
       capture.flush();
 
       await makeExactNightlyAvailable(testPage);

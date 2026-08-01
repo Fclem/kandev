@@ -91,7 +91,7 @@ DELETE /api/v1/system/backups/:name               - delete snapshot
 GET    /api/v1/system/logs                        - { files: [{ name, size, mtime }] }
 GET    /api/v1/system/logs/tail?n=1000            - last N lines of current log
 GET    /api/v1/system/logs/:name/download         - stream log file
-GET    /api/v1/system/updates                     - { current, latest, latest_url, latest_checked_at, update_available, channel, channel_editable, channel_unsupported_reason, install, apply_supported, apply_unsupported_reason?, manual_commands? }
+GET    /api/v1/system/updates                     - { current, latest, latest_url, latest_checked_at, update_available, channel, channel_editable, channel_unsupported_reason, install: { running_as_service, managed_service, mode?, manager?, kind?, metadata_path? }, apply_supported, apply_unsupported_reason?, manual_commands? }
 POST   /api/v1/system/updates/check               - force selected-source re-poll; rate-limited 30s
 PATCH  /api/v1/system/updates/channel             - persist Stable/Nightly; body { channel }
 POST   /api/v1/system/updates/apply               - queue service-only self-update; body { confirm: "UPDATE", target_version }
@@ -121,9 +121,10 @@ public npm `kandev@nightly` dist-tag. It persists isolated channel targets in `k
   `latest_version_nightly_checked_at` — equivalent npm Nightly cache keys
 
 The `GET /api/v1/system/updates` handler reads from `kandev_meta` only; it never contacts an
-upstream synchronously. It also reports the current service install state (`running_as_service`,
-`managed_service`, `mode`, `manager`, `kind`) so the UI can decide whether one-click apply is
-allowed. The response's `channel` is the effective selected source for this install. Only a
+upstream synchronously. Its nested `install` object reports the current service install state
+(`running_as_service`, `managed_service`, `mode`, `manager`, `kind`, and `metadata_path`) so the UI
+can decide whether one-click apply is allowed. The response's `channel` is the effective selected
+source for this install. Only a
 verified managed npm/npx user service can persist and expose Nightly; unsupported installs report
 Stable even if an old Nightly preference remains stored, set `channel_editable=false`, and include
 `channel_unsupported_reason`. `POST /api/v1/system/updates/check` triggers a selected-source refresh, rate-limited

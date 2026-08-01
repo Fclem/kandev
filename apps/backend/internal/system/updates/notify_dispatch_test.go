@@ -2,6 +2,7 @@ package updates
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,23 @@ type capturingNotifier struct {
 type updateNotification struct {
 	version string
 	url     string
+}
+
+type firstCallBlockingNotifier struct {
+	calls   atomic.Int32
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (n *firstCallBlockingNotifier) HandleUpdateAvailable(ctx context.Context, _, _ string) {
+	if n.calls.Add(1) != 1 {
+		return
+	}
+	close(n.entered)
+	select {
+	case <-n.release:
+	case <-ctx.Done():
+	}
 }
 
 func (n *capturingNotifier) HandleUpdateAvailable(_ context.Context, version, releaseURL string) {
@@ -99,6 +117,83 @@ func TestService_ReplayNightlyNotifiesForUnequalAuthoritativeSHA(t *testing.T) {
 	}
 	if got := notifier.calls[0]; got.version != "1.2.4-nightly.sha000000000000" || got.url != "https://example.test/nightly" {
 		t.Errorf("notifier call = %+v, want cached nightly", got)
+	}
+}
+
+func TestService_ReplayCachedUpdateSerializesWithChannelSelection(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	pool := newTestPool(t)
+	store := &memorySettingsStore{value: []byte(ChannelStable), present: true}
+	if err := persistence.WriteLatestVersion(
+		pool.Writer(),
+		"v1.2.4",
+		"https://example.test/stable",
+		time.Now(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(
+		pool,
+		"v1.2.3",
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(store),
+	)
+	notifier := &firstCallBlockingNotifier{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	svc.SetNotifier(notifier)
+	nightlyFetchEntered := make(chan struct{})
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		close(nightlyFetchEntered)
+		return "v1.2.5-nightly.shaabcdef123456", "https://example.test/nightly", nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	replayDone := make(chan error, 1)
+	go func() { replayDone <- svc.ReplayCachedUpdate(ctx) }()
+	select {
+	case <-notifier.entered:
+	case <-ctx.Done():
+		t.Fatal("cached replay did not reach notifier")
+	}
+
+	selectDone := make(chan error, 1)
+	selectStarted := make(chan struct{})
+	go func() {
+		close(selectStarted)
+		_, err := svc.SelectChannel(ctx, string(ChannelNightly))
+		selectDone <- err
+	}()
+	select {
+	case <-selectStarted:
+	case <-ctx.Done():
+		t.Fatal("channel selection did not start")
+	}
+	select {
+	case <-nightlyFetchEntered:
+		t.Fatal("channel selection resolved while cached replay still held its snapshot")
+	case <-time.After(100 * time.Millisecond):
+	case <-ctx.Done():
+		t.Fatal("timed out checking replay serialization")
+	}
+
+	close(notifier.release)
+	for name, done := range map[string]<-chan error{
+		"cached replay":     replayDone,
+		"channel selection": selectDone,
+	} {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+		case <-ctx.Done():
+			t.Fatalf("%s did not finish", name)
+		}
 	}
 }
 

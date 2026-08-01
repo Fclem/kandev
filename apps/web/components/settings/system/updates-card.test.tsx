@@ -494,9 +494,20 @@ describe("UpdatesCard concurrent channel edits", () => {
     fireEvent.click(stable);
 
     expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe("false");
+    expect(screen.getByTestId("system-updates-card").getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe(
+      "true",
+    );
     expect(screen.getByTestId(CHECK_TESTID).hasAttribute("disabled")).toBe(true);
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
     expect(screen.getByTestId("system-updates-channel-pending").textContent).toContain("Saving");
+
+    const proceed = vi.fn();
+    act(() => requestNavigation(proceed));
+    expect(proceed).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alertdialog")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Discard and leave" }).hasAttribute("disabled")).toBe(
+      true,
+    );
 
     await act(async () => {
       resolveSave(updates({ channel: "nightly" }));
@@ -506,6 +517,8 @@ describe("UpdatesCard concurrent channel edits", () => {
         "true",
       ),
     );
+    expect(proceed).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Continue editing" }));
   });
 
   it("preserves a newer channel choice while an earlier save is pending", async () => {
@@ -544,7 +557,9 @@ describe("UpdatesCard concurrent channel edits", () => {
     expect(stable.getAttribute(ARIA_CHECKED)).toBe("true");
     expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe("true");
   });
+});
 
+describe("UpdatesCard channel navigation", () => {
   it("discards an unsaved Nightly choice through the shared navigation guard", async () => {
     const saveChannel = vi.fn();
     const proceed = vi.fn();

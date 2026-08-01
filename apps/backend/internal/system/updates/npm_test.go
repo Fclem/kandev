@@ -46,6 +46,8 @@ func TestFetchLatestNightlyFromRejectsInvalidRegistryDocuments(t *testing.T) {
 			want: "invalid nightly version",
 		},
 		{name: "missing exact record", body: `{"dist-tags":{"nightly":"` + valid + `"},"versions":{}}`, want: "missing exact version"},
+		{name: "null exact record", body: `{"dist-tags":{"nightly":"` + valid + `"},"versions":{"` + valid + `":null}}`, want: "missing exact version"},
+		{name: "empty string exact record", body: `{"dist-tags":{"nightly":"` + valid + `"},"versions":{"` + valid + `":""}}`, want: "invalid exact version record"},
 		{name: "malformed json", body: `{`, want: "decode npm response"},
 		{
 			name: "trailing json value",

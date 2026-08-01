@@ -183,8 +183,8 @@ export function saveUpdatesChannel(
 }
 
 export function applyUpdate(
-  confirm = "UPDATE",
-  targetVersion = "",
+  confirm: string,
+  targetVersion: string,
   options?: ApiRequestOptions,
 ): Promise<JobAcceptResponse> {
   return fetchJson<JobAcceptResponse>(`${SYSTEM_BASE}/updates/apply`, {

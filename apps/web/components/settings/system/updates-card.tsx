@@ -142,7 +142,7 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
   const channelPending = channel.isDirty || channel.isSaving;
 
   return (
-    <SettingsCard isDirty={channel.isDirty} data-testid="system-updates-card">
+    <SettingsCard isDirty={channelPending} data-testid="system-updates-card">
       <CardHeader>
         <UpdatesHeader available={view.available && !channelPending} />
       </CardHeader>

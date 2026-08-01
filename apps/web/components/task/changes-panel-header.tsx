@@ -253,7 +253,7 @@ function ChangesPanelWalkthroughButton({
     : "Walk me through these changes";
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
+      <TooltipTrigger asChild className="order-first @[350px]/changes-panel:order-none">
         <span className="inline-flex" tabIndex={requestWalkthroughDisabled ? 0 : undefined}>
           <Button
             size="sm"
@@ -265,7 +265,7 @@ function ChangesPanelWalkthroughButton({
             onClick={onRequestWalkthrough}
           >
             <IconRoute className="h-3 w-3" />
-            <span className="hidden min-[430px]:inline sm:inline">{t("task:walkthrough")}</span>
+            <span className="hidden @[350px]/changes-panel:inline">{t("task:walkthrough")}</span>
           </Button>
         </span>
       </TooltipTrigger>

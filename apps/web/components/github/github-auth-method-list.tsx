@@ -9,16 +9,16 @@ export type GitHubAutomationMethod = "pat" | "cli" | "app";
 
 const methods = [
   {
-    value: "pat" as const,
-    labelKey: "github:personalAccessToken",
-    descriptionKey: "github:storedEncryptedByKandevWorkspaceAutomation",
-    icon: IconKey,
-  },
-  {
     value: "cli" as const,
     labelKey: "github:githubCliAccount",
     descriptionKey: "github:resolvedFromOneNamedHostAccount",
     icon: IconTerminal2,
+  },
+  {
+    value: "pat" as const,
+    labelKey: "github:personalAccessToken",
+    descriptionKey: "github:storedEncryptedByKandevWorkspaceAutomation",
+    icon: IconKey,
   },
   {
     value: "app" as const,

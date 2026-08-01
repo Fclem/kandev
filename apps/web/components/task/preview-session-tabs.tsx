@@ -179,6 +179,9 @@ export function PreviewSessionBody({ session, taskId }: { session: TaskSession; 
         sessionId={session.id}
         taskId={taskId}
         hideSessionsDropdown
+        // Read-only kanban hover preview — a transient glance, not "opening"
+        // the task. Never advances the Slack-style read cursor.
+        isVisible={false}
       />
     </div>
   );

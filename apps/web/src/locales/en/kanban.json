@@ -54,6 +54,7 @@
   "noTasksYet": "No tasks yet",
   "noWorkflowsAvailableYet": "No workflows available yet.",
   "openMenu": "Open menu",
+  "openMenu2": "{{description}} Open menu",
   "openPreviewOnClick": "Open preview on click",
   "overWipLimit": "Over WIP limit",
   "pipeline": "Pipeline",

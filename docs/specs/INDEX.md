@@ -29,6 +29,7 @@ The office umbrella covers kandev's autonomous-agent product surface: workspaces
 | [assistant](office/assistant.md) | draft |
 | [automations-settings](office/automations-settings.md) | draft |
 | [testing](office/testing.md) | shipped |
+| [unread-divider](office/unread-divider.md) | shipped |
 
 ## platform/ — cross-cutting capabilities
 
@@ -134,18 +135,22 @@ Subscription quota tracking and per-agent cheap-model profile routing.
 | [mermaid-rendering](ui/mermaid-rendering.md) | shipped |
 | [settings-manual-save](ui/settings-manual-save.md) | shipped |
 | [transcript-navigation-settings](ui/transcript-navigation-settings.md) | shipped |
-| [app-status-bar](ui/app-status-bar.md) | draft |
+| [app-status-bar](ui/app-status-bar.md) | shipped |
 | [mobile-task-navigation](ui/mobile-task-navigation.md) | shipped |
 | [adaptive-kanban](ui/adaptive-kanban.md) | shipped |
 | [task-layout-profiles](ui/task-layout-profiles.md) | draft |
 | [task-surface-refresh](ui/task-surface-refresh.md) | draft |
 | [walkthrough-navigation-layout](walkthrough-navigation-layout/spec.md) | shipped |
+| [changes-walkthrough-toolbar-width](changes-walkthrough-toolbar-width/spec.md) | shipped |
 | [agent-message-comments](ui/agent-message-comments.md) | shipped |
 | [external-vcs-file-links](ui/external-vcs-file-links.md) | shipped |
 | [task-listing-display-preferences](ui/task-listing-display-preferences.md) | shipped |
 | [task-workspace-content-search](ui/task-workspace-content-search.md) | shipped |
+| [task-review-shortcut](ui/task-review-shortcut.md) | approved |
 | [embedded-vscode-executor-availability](ui/embedded-vscode-executor-availability.md) | approved |
 | [embedded-vscode-windows-availability](ui/embedded-vscode-windows-availability.md) | archived; superseded by embedded-vscode-executor-availability |
+| [ws-connectivity-warning](ui/ws-connectivity-warning.md) | approved |
+| [context-window reset freshness](context-window-reset-freshness/spec.md) | shipped |
 
 ## system-page/ — operational diagnostics & maintenance UI
 
@@ -176,6 +181,7 @@ System pages (Radarr/Sonarr-style) for status, disk usage, database maintenance,
 | [public-share-links](public-share-links/spec.md) | draft |
 | [ssh-executor](ssh-executor/spec.md) | draft |
 | [cli-mode-parity](cli-mode-parity/spec.md) | draft |
+| [claude-fork-review-allowlist](claude-fork-review-allowlist/spec.md) | building |
 | [workflow-settings-autosave](workflow-settings-autosave/spec.md) | archived; superseded by settings-manual-save |
 | [mobile-quick-chat-topbar](mobile-quick-chat-topbar/spec.md) | building |
 | [native-code-review](native-code-review/spec.md) | building |

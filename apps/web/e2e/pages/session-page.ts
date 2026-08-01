@@ -1,5 +1,9 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Maps state-section labels to the per-task state icon data-testid. */
 function sectionLabelToStateTestId(label: string): string {
   if (label === "Running") return "task-state-running";
@@ -119,7 +123,7 @@ export class SessionPage {
    * already foregrounded.
    */
   async showSessionContext(timeout = 15_000): Promise<void> {
-    const tab = this.page.locator("[data-testid^='session-tab-']").first();
+    const tab = this.page.locator("[data-testid^='session-tab-']:visible").first();
     await tab.waitFor({ state: "visible", timeout });
     // Clicking a tab that's already active is harmless; clicking a background
     // one promotes its panel to the foreground.
@@ -151,7 +155,7 @@ export class SessionPage {
     const pollSlice = 1_500;
     const idle = this.anyIdleInput();
     const start = Date.now();
-    let reloaded = false;
+    let lastReloadAt = start;
 
     while (Date.now() - start < softTotalTimeout) {
       if (await idle.isVisible()) return;
@@ -165,23 +169,29 @@ export class SessionPage {
         continue;
       }
 
-      const elapsed = Date.now() - start;
-      if (!reloaded && elapsed >= attemptTimeout) {
-        reloaded = true;
+      const now = Date.now();
+      const remaining = Math.max(1, softTotalTimeout - (now - start));
+      // Re-drive SSR hydration once per attemptTimeout slice (not just once):
+      // under CI shard load a single reload isn't always enough for the
+      // idle-input state to hydrate. Only reload while enough budget remains
+      // for the reloaded page to settle.
+      if (now - lastReloadAt >= attemptTimeout && remaining > pollSlice) {
+        lastReloadAt = now;
         await this.page.reload();
         await this.activeChat()
-          .waitFor({ state: "visible", timeout: attemptTimeout })
+          .waitFor({ state: "visible", timeout: Math.min(attemptTimeout, remaining) })
           .catch(() => undefined);
         continue;
       }
 
-      const remaining = softTotalTimeout - elapsed;
       await idle
         .waitFor({ state: "visible", timeout: Math.min(pollSlice, remaining) })
         .catch(() => undefined);
     }
 
-    await idle.waitFor({ state: "visible", timeout: 1_000 });
+    // Final bounded check: still throws on a genuinely stuck session, but gives
+    // the last hydration attempt a full attemptTimeout slice to land.
+    await idle.waitFor({ state: "visible", timeout: attemptTimeout });
   }
 
   /** Wait for the passthrough terminal to be visible (for TUI/passthrough sessions). */
@@ -590,7 +600,7 @@ export class SessionPage {
     return this.page.getByTestId("pr-topbar-button");
   }
 
-  /** PR detail panel (auto-shown when task has an associated PR). */
+  /** PR detail panel content when a linked GitHub pull request is selected. */
   prDetailPanel(): Locator {
     return this.page.getByTestId("pr-detail-panel");
   }
@@ -784,86 +794,20 @@ export class SessionPage {
     }).toPass({ timeout: 10_000 });
   }
 
-  /**
-   * Assert the `pr-detail` panel's dockview group contains at least one
-   * `session:{sessionId}` panel — i.e. the PR opened as a tab next to a
-   * session chat, not as a split in a separate group. Regression guard for
-   * the "PR opens in a split instead of the center tab" bug.
-   *
-   * Checks group membership of the PR panel directly rather than picking a
-   * session panel first, so the assertion is deterministic even when outgoing
-   * and incoming session panels briefly coexist during a task switch.
-   */
-  async expectPrPanelAndSessionShareGroup(): Promise<void> {
-    const result = await this.page.evaluate(() => {
-      type Panel = { id: string; group?: { id?: string } };
-      type Api = { panels: Panel[]; getPanel: (i: string) => Panel | undefined };
-      const api = (window as unknown as { __dockviewApi__?: Api }).__dockviewApi__;
-      if (!api) return { error: "dockview api not exposed" };
-      const pr = api.getPanel("pr-detail");
-      if (!pr) return { error: "pr-detail panel missing" };
-      const prGroupId = pr.group?.id ?? null;
-      const sessionPanels = api.panels.filter((p) => p.id.startsWith("session:"));
-      if (sessionPanels.length === 0) return { error: "no session panel" };
-      const sessionInPrGroup = sessionPanels.some((p) => p.group?.id === prGroupId);
-      return {
-        sessionInPrGroup,
-        prGroupId,
-        sessionLocations: sessionPanels.map((p) => `${p.id}@${p.group?.id ?? "?"}`),
-      };
-    });
-    expect(result.error, result.error).toBeUndefined();
-    expect(
-      result.sessionInPrGroup,
-      `PR panel landed in a dockview group that contains no session chat. ` +
-        `PR group=${result.prGroupId} sessions=[${result.sessionLocations?.join(", ")}]`,
-    ).toBe(true);
-  }
-
-  /**
-   * Like `expectPrPanelAndSessionShareGroup`, but matches any pr-detail panel
-   * (legacy `pr-detail` or keyed `pr-detail|owner/repo/N`). Use for flows that
-   * exercise the manual click path, which always creates a keyed panel.
-   */
-  async expectAnyPrPanelAndSessionShareGroup(): Promise<void> {
-    const result = await this.page.evaluate(() => {
-      type Panel = { id: string; group?: { id?: string } };
-      type Api = { panels: Panel[]; getPanel: (i: string) => Panel | undefined };
-      const api = (window as unknown as { __dockviewApi__?: Api }).__dockviewApi__;
-      if (!api) return { error: "dockview api not exposed" };
-      const prPanels = api.panels.filter(
-        (p) => p.id === "pr-detail" || p.id.startsWith("pr-detail|"),
-      );
-      if (prPanels.length === 0) return { error: "no pr-detail panel" };
-      const sessionPanels = api.panels.filter((p) => p.id.startsWith("session:"));
-      if (sessionPanels.length === 0) return { error: "no session panel" };
-      const sessionGroupIds = new Set(sessionPanels.map((p) => p.group?.id).filter(Boolean));
-      const allPrsInSessionGroup = prPanels.every((p) => {
-        const gid = p.group?.id;
-        return gid !== undefined && sessionGroupIds.has(gid);
-      });
-      return {
-        allPrsInSessionGroup,
-        prLocations: prPanels.map((p) => `${p.id}@${p.group?.id ?? "?"}`),
-        sessionLocations: sessionPanels.map((p) => `${p.id}@${p.group?.id ?? "?"}`),
-      };
-    });
-    expect(result.error, result.error).toBeUndefined();
-    expect(
-      result.allPrsInSessionGroup,
-      `PR panel(s) landed outside the session's group. ` +
-        `prs=[${result.prLocations?.join(", ")}] sessions=[${result.sessionLocations?.join(", ")}]`,
-    ).toBe(true);
-  }
-
-  /** Dockview tab for the PR detail panel (title starts as "Pull Request", updated to "PR #N"). */
+  /** Dockview tab for canonical or keyed PR detail content. */
   prDetailTab(): Locator {
-    return this.page.locator(".dv-default-tab").filter({ hasText: /^(Pull Request|PR #\d+)$/ });
+    return this.page
+      .locator(".dv-default-tab")
+      .filter({ hasText: /^(PR Details|Pull Request|PR #\d+)$/ });
   }
 
   /** Click a dockview tab by its visible label (e.g. "Changes", "Files", "Terminal"). */
   async clickTab(label: string): Promise<void> {
-    const tab = this.page.locator(`.dv-default-tab:has-text('${label}')`);
+    const tab = this.page
+      .locator(".dv-default-tab:visible")
+      .filter({ hasText: new RegExp(`^${escapeRegExp(label)}(?: \\(\\d+\\))?$`) })
+      .first();
+    await expect(tab).toBeVisible();
     await tab.click();
   }
 
@@ -873,7 +817,7 @@ export class SessionPage {
    * so this uses the stable data-testid on the ContextMenuTrigger instead.
    */
   async clickSessionChatTab(): Promise<void> {
-    await this.page.locator('[data-testid^="session-tab-"]').first().click();
+    await this.page.locator('[data-testid^="session-tab-"]:visible').first().click();
   }
 
   /** Main Changes-panel button that asks the agent to create a walkthrough. */
@@ -1003,7 +947,8 @@ export class SessionPage {
    * TipTap maps "Mod" to Meta on macOS and Control on Linux/Windows.
    */
   async sendMessage(text: string) {
-    const editor = this.page.locator(".tiptap.ProseMirror").first();
+    const editor = this.activeChat().locator('.tiptap.ProseMirror[contenteditable="true"]').first();
+    await expect(editor).toBeEditable();
     await editor.click();
     await editor.fill(text);
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
@@ -1015,7 +960,8 @@ export class SessionPage {
    * don't submit on Ctrl/Cmd+Enter, so mobile specs use this instead.
    */
   async sendMessageViaButton(text: string) {
-    const editor = this.page.locator(".tiptap.ProseMirror").first();
+    const editor = this.activeChat().locator('.tiptap.ProseMirror[contenteditable="true"]').first();
+    await expect(editor).toBeEditable();
     await editor.click();
     await editor.fill(text);
     await this.page.getByTestId("submit-message-button").click();

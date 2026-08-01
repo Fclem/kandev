@@ -5,8 +5,6 @@ import Link from "@/components/routing/app-link";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@kandev/ui/sheet";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@kandev/ui/drawer";
 import { Button } from "@kandev/ui/button";
-import { Checkbox } from "@kandev/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@kandev/ui/toggle-group";
 import {
   IconAlertTriangle,
@@ -19,18 +17,22 @@ import {
 } from "@tabler/icons-react";
 import { AppSidebarWorkspacePicker } from "@/components/app-sidebar/app-sidebar-workspace-picker";
 import { MobileIntegrationsSection } from "@/components/integrations/integrations-menu";
+import { MobilePluginNavSection } from "@/components/plugins/mobile-plugin-nav-section";
 import { TaskSearchInput } from "./task-search-input";
 import {
-  MobileTasksListOptions,
-  type TasksListDisplayOptions,
-} from "./mobile-menu-task-list-options";
+  MobileDisplayOptions,
+  mobileControlClass,
+  mobileSectionTitleClass,
+  type MobileDisplayOptionsProps,
+} from "./mobile-menu-display-options";
+import { type TasksListDisplayOptions } from "./mobile-menu-task-list-options";
 import { useKanbanDisplaySettings } from "@/hooks/use-kanban-display-settings";
 import { linkToTask, linkToTasks } from "@/lib/links";
 import { cn } from "@/lib/utils";
-import type { Repository, Task } from "@/lib/types/http";
-import type { WorkflowsState } from "@/lib/state/slices";
+import type { Task } from "@/lib/types/http";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useAppStatusDrawer } from "@/components/app-status-bar/app-status-surface-provider";
+import { connectionIssueDetails } from "@/components/app-status-bar/connection-status-item";
 import { ImproveKandevDialog } from "@/components/improve-kandev-dialog";
 import { useTranslation } from "react-i18next";
 type MobileMenuSheetProps = {
@@ -47,150 +49,7 @@ type MobileMenuSheetProps = {
 };
 
 const mobileSectionClass = "space-y-2";
-const mobileSectionTitleClass = "text-sm font-medium";
-const mobileFieldClass = "space-y-1.5";
-const mobileFieldLabelClass = "text-xs font-medium text-muted-foreground";
-const mobileControlClass = "h-10 w-full px-3 text-sm";
 const mobileControlIconClass = "h-4 w-4 shrink-0";
-
-function getRepositoryPlaceholder(loading: boolean, empty: boolean): string {
-  if (loading) return "Loading repositories...";
-  if (empty) return "No repositories";
-  return "Select repository";
-}
-
-type MobileDisplayOptionsProps = {
-  activeWorkflowId: string | null;
-  workflows: WorkflowsState["items"];
-  onWorkflowChange: (id: string | null) => void;
-  repositoryValue: string;
-  repositories: Repository[];
-  repositoriesLoading: boolean;
-  onRepositoryChange: (value: string | "all") => void;
-  enablePreviewOnClick: boolean | undefined;
-  onTogglePreviewOnClick: ((checked: boolean) => void) | undefined;
-  tasksListShowDetails: boolean;
-  onToggleTasksListShowDetails: (checked: boolean) => void;
-  showTaskDetails: boolean;
-  showWorkflow: boolean;
-  tasksListOptions?: TasksListDisplayOptions;
-};
-
-function MobileDisplaySelects({
-  activeWorkflowId,
-  workflows,
-  onWorkflowChange,
-  repositoryValue,
-  repositories,
-  repositoriesLoading,
-  onRepositoryChange,
-  showWorkflow,
-}: Omit<
-  MobileDisplayOptionsProps,
-  | "enablePreviewOnClick"
-  | "onTogglePreviewOnClick"
-  | "tasksListShowDetails"
-  | "onToggleTasksListShowDetails"
-  | "showTaskDetails"
-  | "tasksListOptions"
->) {
-  const { t } = useTranslation();
-  return (
-    <>
-      {showWorkflow && (
-        <div className={mobileFieldClass}>
-          <label className={mobileFieldLabelClass}>{t("common:workflow")}</label>
-          <Select
-            value={activeWorkflowId ?? "all"}
-            onValueChange={(value) => onWorkflowChange(value === "all" ? null : value)}
-          >
-            <SelectTrigger className={mobileControlClass}>
-              <SelectValue placeholder={t("kanban:allWorkflows")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("kanban:allWorkflows")}</SelectItem>
-              {workflows.map((workflow: WorkflowsState["items"][number]) => (
-                <SelectItem key={workflow.id} value={workflow.id}>
-                  {workflow.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      <div className={mobileFieldClass}>
-        <label className={mobileFieldLabelClass}>{t("common:repository")}</label>
-        <Select
-          value={repositoryValue}
-          onValueChange={(value) => onRepositoryChange(value as string | "all")}
-          disabled={repositories.length === 0}
-        >
-          <SelectTrigger className={mobileControlClass}>
-            <SelectValue
-              placeholder={getRepositoryPlaceholder(repositoriesLoading, repositories.length === 0)}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("kanban:allRepositories")}</SelectItem>
-            {repositories.map((repo: Repository) => (
-              <SelectItem key={repo.id} value={repo.id}>
-                {repo.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    </>
-  );
-}
-
-function MobileDisplayOptions(props: MobileDisplayOptionsProps) {
-  const { t } = useTranslation();
-  const {
-    enablePreviewOnClick,
-    onTogglePreviewOnClick,
-    tasksListShowDetails,
-    onToggleTasksListShowDetails,
-    showTaskDetails,
-    tasksListOptions,
-    ...selectProps
-  } = props;
-  return (
-    <div className="space-y-4">
-      <label className={mobileSectionTitleClass}>{t("kanban:displayOptions")}</label>
-      <MobileDisplaySelects {...selectProps} />
-      <div className={mobileFieldClass}>
-        <label className={mobileFieldLabelClass}>{t("kanban:previewPanel")}</label>
-        <label className="flex h-10 cursor-pointer items-center gap-3 rounded-md px-0 text-sm font-medium">
-          <Checkbox
-            checked={enablePreviewOnClick ?? false}
-            onCheckedChange={(checked) => {
-              onTogglePreviewOnClick?.(!!checked);
-            }}
-          />
-          <span className="text-sm">{t("kanban:openPreviewOnClick")}</span>
-        </label>
-      </div>
-      {showTaskDetails && (
-        <div className={mobileFieldClass}>
-          <label className={mobileFieldLabelClass}>{t("kanban:listRows")}</label>
-          <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-0 text-sm font-medium">
-            <Checkbox
-              checked={tasksListShowDetails}
-              onCheckedChange={(checked) => onToggleTasksListShowDetails(checked === true)}
-            />
-            <span>{t("kanban:showTaskDetails")}</span>
-          </label>
-          <p className="pl-6 text-xs text-muted-foreground">
-            {t("kanban:addRepositoryPullRequestSessionParent")}
-          </p>
-        </div>
-      )}
-      {tasksListOptions && <MobileTasksListOptions options={tasksListOptions} />}
-    </div>
-  );
-}
 
 function MobileSearchSection({
   searchQuery,
@@ -296,7 +155,8 @@ function MobileUtilityActions({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const { enabled: statusDrawerEnabled, openStatusDrawer } = useAppStatusDrawer();
+  const { enabled: statusDrawerEnabled, issueSeverity, openStatusDrawer } = useAppStatusDrawer();
+  const issueDetails = issueSeverity === "none" ? null : connectionIssueDetails(issueSeverity);
   const closeSheet = () => onOpenChange(false);
   const openHealth = () => {
     closeSheet();
@@ -314,12 +174,24 @@ function MobileUtilityActions({
         <Button
           type="button"
           variant="outline"
-          className="h-11 w-full cursor-pointer justify-start gap-3 px-3 text-sm"
+          className={cn(
+            "relative h-11 w-full cursor-pointer justify-start gap-3 px-3 text-sm",
+            issueSeverity === "lost" && "border-destructive/40 text-destructive",
+            issueSeverity === "unstable" && "border-amber-500/40 text-amber-500",
+          )}
           onClick={openStatus}
           data-testid="mobile-home-status-button"
+          aria-label={issueDetails?.description}
+          data-connection-severity={issueSeverity === "none" ? undefined : issueSeverity}
         >
           <IconActivity className={mobileControlIconClass} />
           {t("common:status")}
+          {issueDetails && (
+            <span
+              className={cn("ml-auto size-2 rounded-full", issueDetails.dotClass)}
+              aria-hidden="true"
+            />
+          )}
         </Button>
       )}
       <Button
@@ -457,6 +329,7 @@ function MobileMenuContent({
         showPipeline={showPipeline}
       />
       <MobileDisplayOptions {...displayOptions} />
+      <MobilePluginNavSection onNavigate={() => onOpenChange(false)} />
       <MobileIntegrationsSection onNavigate={() => onOpenChange(false)} />
       <MobileUtilityActions
         showHealthIndicator={showHealthIndicator}

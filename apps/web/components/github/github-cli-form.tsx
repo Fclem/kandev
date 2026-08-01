@@ -1,12 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "@kandev/ui/button";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Label } from "@kandev/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
-import { Spinner } from "@kandev/ui/spinner";
-import { useToast } from "@/components/toast-provider";
-import { fetchGitHubCLIAccounts, setGitHubWorkspaceConnection } from "@/lib/api/domains/github-api";
+import { fetchGitHubCLIAccounts } from "@/lib/api/domains/github-api";
 import type { GitHubCLIAccount } from "@/lib/types/github";
 import { Trans, useTranslation } from "react-i18next";
 
@@ -24,16 +21,14 @@ function GitHubCLIAccountNotice({
   if (loadError) {
     return (
       <p role="alert" className="text-xs text-destructive">
-        <Trans i18nKey="github:couldNotLoadGithubCliAccounts" values={{ loadError }}>
-          Could not load GitHub CLI accounts. {loadError}
-        </Trans>
+        {t("github:couldNotLoadGithubCliAccounts", { loadError })}
       </p>
     );
   }
   return (
     <p className="text-xs text-muted-foreground">
-      <Trans i18nKey="github:signInWithThenReopenThis">
-        {t("github:signInWith")} <code>{t("github:ghAuthLogin")}</code>, then reopen this dialog.
+      <Trans i18nKey="github:signInWithThenReopenThisDialog">
+        Sign in with <code>gh auth login</code>, then reopen this dialog.
       </Trans>
     </p>
   );
@@ -45,14 +40,22 @@ function accountPlaceholder(loading: boolean, loadError: string | null) {
   return "No gh accounts found";
 }
 
-// useGitHubCLIAccounts loads the gh CLI accounts for a workspace and keeps the
-// selected-account draft in sync with the fetched list.
-function useGitHubCLIAccounts(workspaceId: string) {
+export function GitHubCLIForm({
+  workspaceId,
+  onAccountChange,
+  disabled,
+}: {
+  workspaceId: string;
+  onAccountChange: (account: GitHubCLIAccount | null) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
   const [accounts, setAccounts] = useState<GitHubCLIAccount[]>([]);
   const [selected, setSelected] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const onAccountChangeRef = useRef(onAccountChange);
+  onAccountChangeRef.current = onAccountChange;
 
   useEffect(() => {
     let current = true;
@@ -60,7 +63,7 @@ function useGitHubCLIAccounts(workspaceId: string) {
     setSelected("");
     setLoadError(null);
     setLoading(true);
-    setSaving(false);
+    onAccountChangeRef.current(null);
     fetchGitHubCLIAccounts(workspaceId, { cache: "no-store" })
       .then((items) => {
         if (!current) return;
@@ -82,49 +85,14 @@ function useGitHubCLIAccounts(workspaceId: string) {
     };
   }, [workspaceId]);
 
-  return { accounts, selected, setSelected, loadError, loading, saving, setSaving };
-}
-
-export function GitHubCLIForm({
-  workspaceId,
-  onSaved,
-}: {
-  workspaceId: string;
-  onSaved: () => void;
-}) {
-  const { t } = useTranslation();
-  const { accounts, selected, setSelected, loadError, loading, saving, setSaving } =
-    useGitHubCLIAccounts(workspaceId);
-  const { toast } = useToast();
-
   const account = useMemo(() => {
     const [host, login] = selected.split("\n");
     return accounts.find((item) => item.host === host && item.login === login);
   }, [accounts, selected]);
 
-  const connect = useCallback(async () => {
-    if (!account) return;
-    setSaving(true);
-    try {
-      await setGitHubWorkspaceConnection(workspaceId, {
-        source: "gh_cli",
-        host: account.host,
-        login: account.login,
-      });
-      toast({
-        description: t("github:connectedForThisWorkspace", { login: account.login }),
-        variant: "success",
-      });
-      onSaved();
-    } catch (error) {
-      toast({
-        description: error instanceof Error ? error.message : t("github:connectionFailed"),
-        variant: "error",
-      });
-    } finally {
-      setSaving(false);
-    }
-  }, [account, onSaved, setSaving, toast, workspaceId]);
+  useEffect(() => {
+    onAccountChangeRef.current(account ?? null);
+  }, [account]);
 
   return (
     <div className="space-y-3">
@@ -135,7 +103,11 @@ export function GitHubCLIForm({
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-        <Select value={selected} onValueChange={setSelected} disabled={loading || !accounts.length}>
+        <Select
+          value={selected}
+          onValueChange={setSelected}
+          disabled={disabled || loading || !accounts.length}
+        >
           <SelectTrigger id="github-cli-account" className="min-h-11 min-w-0 flex-1">
             <SelectValue placeholder={accountPlaceholder(loading, loadError)} />
           </SelectTrigger>
@@ -147,10 +119,6 @@ export function GitHubCLIForm({
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={connect} disabled={!account || saving} className="h-11 cursor-pointer">
-          {saving && <Spinner className="mr-2 h-4 w-4" />}
-          {t("github:useAccount")}
-        </Button>
       </div>
       <GitHubCLIAccountNotice
         loadError={loadError}

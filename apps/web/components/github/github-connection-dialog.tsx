@@ -20,11 +20,10 @@ import {
   DrawerTrigger,
 } from "@kandev/ui/drawer";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
+import type { TaskGitCredentialsState } from "@/hooks/domains/github/use-task-git-credentials";
 import type { GitHubStatus } from "@/lib/types/github";
-import { GitHubAuthMethodList, type GitHubAutomationMethod } from "./github-auth-method-list";
-import { GitHubAppConnectionPanel } from "./github-app-connection-panel";
-import { GitHubCLIForm } from "./github-cli-form";
-import { GitHubPATForm } from "./github-pat-form";
+import type { GitHubAutomationMethod } from "./github-auth-method-list";
+import { GitHubConnectionSettingsForm } from "./github-connection-settings-form";
 import { useTranslation } from "react-i18next";
 
 function methodForStatus(status: GitHubStatus): GitHubAutomationMethod {
@@ -36,37 +35,16 @@ function methodForStatus(status: GitHubStatus): GitHubAutomationMethod {
 const description =
   "This workspace uses one credential for repository sync, watches, background jobs, and managed agent GitHub access. Executor profile credentials can still take precedence.";
 
-function ConnectionBody({
-  method,
-  workspaceId,
-  onMethodChange,
-  onSaved,
-}: {
-  method: GitHubAutomationMethod;
-  workspaceId: string;
-  onMethodChange: (method: GitHubAutomationMethod) => void;
-  onSaved: () => void;
-}) {
-  return (
-    <div className="space-y-5">
-      <GitHubAuthMethodList value={method} onChange={onMethodChange} />
-      <div className="border-t pt-5">
-        {method === "pat" && <GitHubPATForm workspaceId={workspaceId} onSaved={onSaved} />}
-        {method === "cli" && <GitHubCLIForm workspaceId={workspaceId} onSaved={onSaved} />}
-        {method === "app" && <GitHubAppConnectionPanel workspaceId={workspaceId} />}
-      </div>
-    </div>
-  );
-}
-
 export function GitHubConnectionDialog({
   status,
   workspaceId,
   onSaved,
+  taskAccess,
 }: {
   status: GitHubStatus;
   workspaceId: string;
   onSaved: () => void;
+  taskAccess: TaskGitCredentialsState;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -75,14 +53,13 @@ export function GitHubConnectionDialog({
   const connected = Boolean(status.automation);
 
   useEffect(() => {
-    setOpen(false);
     setMethod(methodForStatus(status));
-  }, [status, workspaceId]);
+  }, [status]);
 
-  const saved = useCallback(() => {
-    onSaved();
+  useEffect(() => {
     setOpen(false);
-  }, [onSaved]);
+  }, [workspaceId]);
+
   const openChange = useCallback(
     (next: boolean) => {
       if (next) setMethod(methodForStatus(status));
@@ -97,11 +74,16 @@ export function GitHubConnectionDialog({
     </Button>
   );
   const body = (
-    <ConnectionBody
+    <GitHubConnectionSettingsForm
+      status={status}
       method={method}
       workspaceId={workspaceId}
+      open={open}
       onMethodChange={setMethod}
-      onSaved={saved}
+      onSaved={onSaved}
+      onComplete={() => setOpen(false)}
+      taskAccess={taskAccess}
+      isMobile={isMobile}
     />
   );
 
@@ -119,9 +101,7 @@ export function GitHubConnectionDialog({
             </DrawerTitle>
             <DrawerDescription>{description}</DrawerDescription>
           </DrawerHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-4">
-            {body}
-          </div>
+          {body}
         </DrawerContent>
       </Drawer>
     );
@@ -132,7 +112,7 @@ export function GitHubConnectionDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent
         data-testid="github-connection-desktop"
-        className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-2xl"
+        className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-4xl"
       >
         <DialogHeader className="shrink-0">
           <DialogTitle>
@@ -140,7 +120,7 @@ export function GitHubConnectionDialog({
           </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">{body}</div>
+        {body}
       </DialogContent>
     </Dialog>
   );

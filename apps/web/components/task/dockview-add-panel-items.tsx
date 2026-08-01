@@ -12,7 +12,6 @@ import {
 import { DropdownMenuItem } from "@kandev/ui/dropdown-menu";
 import { prPanelLabel, prIdentitySlug, prTaskKey } from "@/components/github/pr-utils";
 import { useDockviewStore } from "@/lib/state/dockview-store";
-import { useAppStore } from "@/components/state-provider";
 import type { TaskPR } from "@/lib/types/github";
 import type { TaskMR } from "@/lib/types/gitlab";
 import { mrTaskKey } from "@/components/gitlab/mr-detail-panel";
@@ -58,7 +57,6 @@ export function AddPanelMenuItems({
   const addChangesPanel = useDockviewStore((s) => s.addChangesPanel);
   const addPRPanel = useDockviewStore((s) => s.addPRPanel);
   const addMRPanel = useDockviewStore((s) => s.addMRPanel);
-  const activeSessionId = useAppStore((s) => s.tasks.activeSessionId);
 
   return (
     <>
@@ -112,7 +110,7 @@ export function AddPanelMenuItems({
       {state.prs.map((pr) => (
         <DropdownMenuItem
           key={pr.id}
-          onClick={() => addPRPanel(prTaskKey(pr), activeSessionId)}
+          onClick={() => addPRPanel(prTaskKey(pr))}
           className={MENU_ITEM_CLASS}
           data-testid={`add-panel-pr-item-${prIdentitySlug(pr)}`}
         >
@@ -125,7 +123,7 @@ export function AddPanelMenuItems({
       {state.mrs.map((mr) => (
         <DropdownMenuItem
           key={mr.id}
-          onClick={() => addMRPanel(mrTaskKey(mr), activeSessionId)}
+          onClick={() => addMRPanel(mrTaskKey(mr))}
           className={MENU_ITEM_CLASS}
           data-testid={`add-panel-mr-item-${mr.id}`}
         >

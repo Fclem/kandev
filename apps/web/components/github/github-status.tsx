@@ -17,6 +17,10 @@ import { useToast } from "@/components/toast-provider";
 import { useGitHubStatus } from "@/hooks/domains/github/use-github-status";
 import { useGitHubAppRegistrations } from "@/hooks/domains/github/use-github-app-registrations";
 import {
+  useTaskGitCredentials,
+  type TaskGitCredentialsState,
+} from "@/hooks/domains/github/use-task-git-credentials";
+import {
   disconnectGitHubPersonal,
   disconnectGitHubWorkspace,
   startGitHubPersonalConnect,
@@ -29,8 +33,11 @@ import type {
   GitHubAppRegistrationCatalogItem,
 } from "@/lib/types/github";
 import { GitHubConnectionDialog } from "./github-connection-dialog";
+import { GitHubAccessHelp } from "./github-access-help";
 import { GitHubPermissionsDialog } from "./github-permissions-dialog";
-import { Trans, useTranslation } from "react-i18next";
+import { GitHubRateLimitDisplay } from "./github-rate-limit";
+import { GitHubTaskAccessSummary } from "./github-task-credentials-section";
+import { useTranslation } from "react-i18next";
 
 const sourceLabels: Record<GitHubConnectionSource, string> = {
   pat: "Personal access token",
@@ -85,6 +92,7 @@ function StatusLine({ status }: { status: GitHubStatus }) {
         {sourceLabels[connection.source]}
       </Badge>
       {connection.status !== "active" && <Badge variant="outline">{connection.status}</Badge>}
+      <GitHubRateLimitDisplay info={status.rate_limit} />
     </div>
   );
 }
@@ -103,9 +111,11 @@ function errorMessage(error: unknown, fallback: string) {
 function AutomationStatusSummary({
   status,
   app,
+  taskAccess,
 }: {
   status: GitHubStatus;
   app?: GitHubAppRegistrationCatalogItem;
+  taskAccess: Omit<TaskGitCredentialsState, "save">;
 }) {
   const appAutomation = status.automation?.source === "github_app_installation";
   return (
@@ -113,8 +123,8 @@ function AutomationStatusSummary({
       <StatusLine status={status} />
       <AutomationActorExplanation status={status} appAutomation={appAutomation} />
       {appAutomation && <AppRegistrationDetails app={app} />}
-      {!appAutomation && <HumanIdentityExplanation status={status} />}
       <AutomationError status={status} />
+      <GitHubTaskAccessSummary {...taskAccess} />
     </div>
   );
 }
@@ -129,12 +139,23 @@ function AutomationActorExplanation({
   const { t } = useTranslation();
   const actor = status.automation?.actor?.login;
   if (!status.authenticated || !actor) return null;
+  const humanIdentity = status.effective_personal_actor?.kind === "human";
   return (
-    <p className="text-xs text-muted-foreground">
-      {appAutomation
-        ? t("github:kandevManagedOperationsUseTheGithub", { actor })
-        : t("github:kandevManagedOperationsActAs", { actor })}
-    </p>
+    <div className="flex items-start gap-1 text-xs text-muted-foreground">
+      <GitHubAccessHelp
+        label={t("github:explainWorkspaceGithubIdentity")}
+        title={t("github:workspaceGithubIdentity")}
+        description={t("github:kandevUsesThisWorkspaceConnectionFor")}
+      />
+      <div className="min-w-0 space-y-1 pt-3 sm:pt-1">
+        <p>
+          {appAutomation
+            ? t("github:kandevManagedOperationsUseTheGithub", { actor })
+            : t("github:kandevManagedOperationsActAs", { actor })}
+        </p>
+        {!appAutomation && humanIdentity && <p>{t("github:thisAccountAlsoPowersMyGithub")}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -149,33 +170,18 @@ function AppRegistrationDetails({ app }: { app?: GitHubAppRegistrationCatalogIte
           {app.visibility}
         </Badge>
         <Badge variant="outline" className="capitalize">
-          <Trans i18nKey="github:webhook" values={{ webhook_status: app.webhook_status }}>
-            {t("github:webhook2")} {app.webhook_status}
-          </Trans>
+          {t("github:webhook2")} {app.webhook_status}
         </Badge>
         <span>{app.source === "managed" ? t("github:createdByKandev") : t("github:imported")}</span>
       </div>
       {app.shared && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          <Trans
-            i18nKey="github:thisAppRegistrationIsSharedBy"
-            values={{ workspace_binding_count: app.workspace_binding_count }}
-          >
-            This App registration is shared by {app.workspace_binding_count} workspaces.
-            Registration changes affect every workspace using it; installation access remains
-            workspace-specific.
-          </Trans>
+          {t("github:appRegistrationSharedByWorkspaces", {
+            count: app.workspace_binding_count,
+          })}
         </p>
       )}
     </>
-  );
-}
-
-function HumanIdentityExplanation({ status }: { status: GitHubStatus }) {
-  const { t } = useTranslation();
-  if (status.effective_personal_actor?.kind !== "human") return null;
-  return (
-    <p className="text-xs text-muted-foreground">{t("github:thisAccountAlsoPowersMyGithub")}</p>
   );
 }
 
@@ -188,28 +194,39 @@ function AutomationActions({
   status,
   workspaceId,
   busy,
+  refreshing,
   onDisconnect,
   onRefresh,
+  taskAccess,
 }: {
   status: GitHubStatus;
   workspaceId: string;
   busy: boolean;
+  refreshing: boolean;
   onDisconnect: () => void;
   onRefresh: () => void;
+  taskAccess: TaskGitCredentialsState;
 }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-2">
       <GitHubPermissionsDialog status={status} />
-      <GitHubConnectionDialog status={status} workspaceId={workspaceId} onSaved={onRefresh} />
+      <GitHubConnectionDialog
+        status={status}
+        workspaceId={workspaceId}
+        onSaved={onRefresh}
+        taskAccess={taskAccess}
+      />
       <Button
         variant="outline"
         size="icon"
         onClick={onRefresh}
+        disabled={refreshing}
+        aria-busy={refreshing}
         className="h-11 w-11 cursor-pointer"
         aria-label={t("github:refreshGithubConnection")}
       >
-        <IconRefresh className="h-4 w-4" />
+        <IconRefresh className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
       </Button>
       {status.automation && (
         <Button
@@ -218,10 +235,8 @@ function AutomationActions({
           disabled={busy}
           className="h-11 cursor-pointer text-destructive"
         >
-          <Trans i18nKey="github:disconnect">
-            <IconTrash className="mr-2 h-4 w-4" />
-            {t("github:disconnect2")}
-          </Trans>
+          <IconTrash className="mr-2 h-4 w-4" />
+          {t("github:disconnect2")}
         </Button>
       )}
     </div>
@@ -232,6 +247,7 @@ export function GitHubAutomationSettings({ workspaceId }: { workspaceId: string 
   const { t } = useTranslation();
   const { status, loaded, loading, refresh } = useGitHubStatus(workspaceId);
   const appRegistrations = useGitHubAppRegistrations(workspaceId);
+  const taskAccess = useTaskGitCredentials(workspaceId);
   const [busy, setBusy] = useState(false);
   const { toast } = useToast();
   const disconnect = useCallback(async () => {
@@ -249,7 +265,7 @@ export function GitHubAutomationSettings({ workspaceId }: { workspaceId: string 
       setBusy(false);
     }
   }, [refresh, toast, workspaceId]);
-  if (!loaded || loading || !status) return <LoadingStatus />;
+  if (!loaded || !status) return <LoadingStatus />;
   const activeRegistrationId =
     status.app_registration?.id ?? status.automation?.app_registration_id;
   const activeApp = appRegistrations.registrations.find((item) => item.id === activeRegistrationId);
@@ -258,13 +274,15 @@ export function GitHubAutomationSettings({ workspaceId }: { workspaceId: string 
       className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       data-testid="github-workspace-automation"
     >
-      <AutomationStatusSummary status={status} app={activeApp} />
+      <AutomationStatusSummary status={status} app={activeApp} taskAccess={taskAccess} />
       <AutomationActions
         status={status}
         workspaceId={workspaceId}
         busy={busy}
+        refreshing={loading}
         onDisconnect={disconnect}
         onRefresh={refresh}
+        taskAccess={taskAccess}
       />
     </div>
   );
@@ -333,10 +351,8 @@ function PersonalIdentityActions({
           disabled={busy}
           className="h-11 cursor-pointer text-destructive"
         >
-          <Trans i18nKey="github:disconnect">
-            <IconTrash className="mr-2 h-4 w-4" />
-            {t("github:disconnect2")}
-          </Trans>
+          <IconTrash className="mr-2 h-4 w-4" />
+          {t("github:disconnect2")}
         </Button>
       )}
     </div>
@@ -345,37 +361,14 @@ function PersonalIdentityActions({
 
 export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string }) {
   const { t } = useTranslation();
-  const { status, loaded, loading, refresh } = useGitHubStatus(workspaceId);
+  const { status, loaded, refresh } = useGitHubStatus(workspaceId);
   const [busy, setBusy] = useState(false);
   const { toast } = useToast();
-  if (!loaded || loading || !status) {
-    return (
-      <SettingsSection
-        title={t("github:myGithubIdentity")}
-        description={t("github:connectYourGithubUserForMy")}
-      >
-        <LoadingStatus />
-      </SettingsSection>
-    );
-  }
+  if (!loaded || !status) return null;
   const view = personalIdentityView(status);
   const appAutomation = status.automation?.source === "github_app_installation";
   if (!status.automation) return null;
-  if (!appAutomation) {
-    return (
-      <SettingsSection
-        title={t("github:myGithubIdentity")}
-        description={t("github:myGithubAndHumanAttributedActions")}
-      >
-        <div className="space-y-2" data-testid="github-personal-identity">
-          <PersonalIdentityStatus view={view} />
-          <p className="text-xs text-muted-foreground">
-            {t("github:aSeparatePersonalIdentityIsOnly")}
-          </p>
-        </div>
-      </SettingsSection>
-    );
-  }
+  if (!appAutomation) return null;
   const disconnect = async () => {
     setBusy(true);
     try {
@@ -421,12 +414,11 @@ export function GitHubPersonalSettings({ workspaceId }: { workspaceId: string })
 }
 
 function LoadingStatus() {
+  const { t } = useTranslation();
   return (
     <div className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-      <Trans i18nKey="github:checkingGithubConnection">
-        <Spinner className="h-4 w-4" />
-        Checking GitHub connection...
-      </Trans>
+      <Spinner className="h-4 w-4" />
+      {t("github:checkingGithubConnection")}
     </div>
   );
 }

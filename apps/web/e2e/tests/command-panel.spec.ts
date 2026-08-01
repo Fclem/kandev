@@ -1,6 +1,7 @@
 import { test, expect } from "../fixtures/test-base";
 import { KanbanPage } from "../pages/kanban-page";
 import { SessionPage } from "../pages/session-page";
+import { waitForSessionDone } from "../helpers/session";
 
 type CommandAliasExpectation = {
   query: string;
@@ -128,10 +129,22 @@ test.describe("Command Panel", () => {
         executor_profile_id: seedData.worktreeExecutorProfileId,
       },
     );
+    if (!task.session_id) throw new Error("Command alias task did not start a session");
+    await waitForSessionDone(
+      apiClient,
+      task.id,
+      task.session_id,
+      "command alias task session did not become ready",
+    );
+    await expect
+      .poll(async () => (await apiClient.getTaskEnvironment(task.id))?.status, {
+        timeout: 30_000,
+        message: "command alias task environment did not become ready",
+      })
+      .toBe("ready");
 
     await testPage.goto(`/t/${task.id}`);
-    const session = new SessionPage(testPage);
-    await session.waitForLoad();
+    await expect(testPage.getByTestId("task-topbar")).toBeVisible();
 
     await openCommandPanel(testPage);
     const dialog = commandDialog(testPage);

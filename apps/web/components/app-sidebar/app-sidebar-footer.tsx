@@ -1,4 +1,5 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter, usePathname } from "@/lib/routing/client-router";
 import {
@@ -8,6 +9,7 @@ import {
   IconSettings,
   IconSparkles,
   IconStethoscope,
+  IconWifiOff,
 } from "@tabler/icons-react";
 import type { Icon as TablerIcon } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -30,6 +32,8 @@ import {
   workspaceHomeHref,
 } from "./app-sidebar-workspace-navigation";
 import { isSettingsRoute } from "./app-sidebar-route";
+import { connectionIssueDetails } from "../app-status-bar/connection-status-item";
+import type { ConnectionIssueSeverity } from "@/lib/types/connection";
 import { useTranslation } from "react-i18next";
 
 type AppSidebarFooterProps = {
@@ -98,11 +102,91 @@ function FooterIconButton({
   );
 }
 
-/**
- * Resolves the workspace the Office/Kanban toggle should jump to: the last
- * workspace of the *other* kind.
- */
-function useWorkspaceSwitchTarget() {
+function SidebarConnectionWarning({
+  collapsed,
+  severity,
+}: {
+  collapsed: boolean;
+  severity: Exclude<ConnectionIssueSeverity, "none">;
+}) {
+  const details = connectionIssueDetails(severity);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          role="status"
+          aria-label={details.description}
+          tabIndex={0}
+          data-testid="sidebar-connection-warning"
+          data-connection-severity={severity}
+        >
+          <IconWifiOff className="size-4" aria-hidden="true" />
+          <span
+            className={cn(
+              "absolute right-1 top-1 size-2 rounded-full ring-2 ring-background",
+              details.dotClass,
+            )}
+            aria-hidden="true"
+          />
+          <span className="sr-only">{details.label}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side={collapsed ? "right" : "top"}>{details.description}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SidebarConnectionFallback({
+  collapsed,
+  appStatusBarEnabled,
+}: {
+  collapsed: boolean;
+  appStatusBarEnabled: boolean;
+}) {
+  const severity = useAppStore((state) => state.connection.issueSeverity);
+  if (appStatusBarEnabled || severity === "none") return null;
+  return <SidebarConnectionWarning collapsed={collapsed} severity={severity} />;
+}
+
+function SidebarFooterDialogs({
+  improveOpen,
+  onImproveOpenChange,
+  workspaceId,
+  onTaskCreated,
+  releaseNotes,
+}: {
+  improveOpen: boolean;
+  onImproveOpenChange: (open: boolean) => void;
+  workspaceId: string | null;
+  onTaskCreated: (task: { id: string }) => void;
+  releaseNotes: ReturnType<typeof useReleaseNotes>;
+}) {
+  return (
+    <>
+      <ImproveKandevDialog
+        open={improveOpen}
+        onOpenChange={onImproveOpenChange}
+        workspaceId={workspaceId}
+        onSuccess={onTaskCreated}
+      />
+      {releaseNotes.hasNotes && (
+        <ReleaseNotesDialog
+          open={releaseNotes.dialogOpen}
+          onOpenChange={releaseNotes.closeDialog}
+          entries={releaseNotes.unseenEntries}
+          latestVersion={releaseNotes.latestVersion}
+        />
+      )}
+    </>
+  );
+}
+
+export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebarFooterProps) {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const pathname = usePathname();
   const workspaces = useAppStore((s) => s.workspaces);
   const workspaceId = workspaces.activeId;
   const activeWorkspace = workspaces.items.find((workspace) => workspace.id === workspaceId);
@@ -110,15 +194,6 @@ function useWorkspaceSwitchTarget() {
   const targetWorkspace = activeIsOffice
     ? resolveLastKanbanWorkspace(workspaces.items)
     : resolveLastOfficeWorkspace(workspaces.items);
-  return { workspaceId, activeWorkspace, activeIsOffice, targetWorkspace };
-}
-
-export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebarFooterProps) {
-  const { t } = useTranslation();
-  const router = useRouter();
-  const pathname = usePathname();
-  const { workspaceId, activeWorkspace, activeIsOffice, targetWorkspace } =
-    useWorkspaceSwitchTarget();
   const settingsMode = useAppStore((s) => s.appSidebar.settingsMode);
   const enterSettings = () => {
     // The gear only swaps the sidebar's own content; without also
@@ -132,6 +207,7 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
     onToggleSettingsMode();
   };
   const officeEnabled = useFeature("office");
+  const appStatusBarEnabled = useFeature("appStatusBar");
   const releaseNotes = useReleaseNotes();
   const [improveOpen, setImproveOpen] = useState(false);
   const authMode = useAppStore((s) => s.auth.mode);
@@ -195,23 +271,17 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
         />
       )}
       <ThemeToggle />
+      <SidebarConnectionFallback collapsed={collapsed} appStatusBarEnabled={appStatusBarEnabled} />
       {showCurrentUser && (
         <CurrentUserChip collapsed={collapsed} className={cn(!collapsed && "ml-auto")} />
       )}
-      <ImproveKandevDialog
-        open={improveOpen}
-        onOpenChange={setImproveOpen}
+      <SidebarFooterDialogs
+        improveOpen={improveOpen}
+        onImproveOpenChange={setImproveOpen}
         workspaceId={workspaceId ?? null}
-        onSuccess={(task) => router.push(linkToTask(task.id))}
+        onTaskCreated={(task) => router.push(linkToTask(task.id))}
+        releaseNotes={releaseNotes}
       />
-      {releaseNotes.hasNotes && (
-        <ReleaseNotesDialog
-          open={releaseNotes.dialogOpen}
-          onOpenChange={releaseNotes.closeDialog}
-          entries={releaseNotes.unseenEntries}
-          latestVersion={releaseNotes.latestVersion}
-        />
-      )}
     </div>
   );
 }

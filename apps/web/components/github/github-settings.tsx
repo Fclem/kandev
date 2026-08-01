@@ -17,7 +17,6 @@ import { IssueWatchDialog } from "./issue-watch-dialog";
 import { ActionPresetsSection } from "./action-presets-section";
 import { DefaultQueriesSection } from "./default-queries-section";
 import { GitHubRepoScopeSection } from "./github-repo-scope-section";
-import { GitHubTaskCredentialsSection } from "./github-task-credentials-section";
 import { PRStatsPanel } from "./pr-stats";
 import { useReviewWatches } from "@/hooks/domains/github/use-review-watches";
 import { useIssueWatches } from "@/hooks/domains/github/use-issue-watches";
@@ -308,7 +307,6 @@ function PerWorkspaceSection({ workspaceId }: { workspaceId: string }) {
       <ReviewWatchSection workspaceId={workspaceId} />
       <IssueWatchSection workspaceId={workspaceId} />
       <GitHubRepoScopeSection workspaceId={workspaceId} />
-      <GitHubTaskCredentialsSection workspaceId={workspaceId} />
       <ActionPresetsSection workspaceId={workspaceId} />
       <SettingsSection
         title={t("github:prAnalytics")}

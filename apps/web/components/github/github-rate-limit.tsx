@@ -1,16 +1,18 @@
 "use client";
-import { Trans, useTranslation } from "react-i18next";
 
 import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { Alert, AlertDescription } from "@kandev/ui/alert";
 import type { GitHubRateLimitInfo, GitHubRateLimitSnapshot } from "@/lib/types/github";
+import { GitHubAccessHelp } from "./github-access-help";
+import { useTranslation } from "react-i18next";
+import { formatNumber } from "@/lib/i18n/formats";
 
-const RESOURCE_LABELS: Record<string, string> = {
-  core: "REST",
-  graphql: "GraphQL",
-  search: "Search",
+const RESOURCE_LABELS: Record<string, { label: string; unit: string }> = {
+  core: { label: "API rate limit", unit: "requests" },
+  graphql: { label: "GraphQL query limit", unit: "points" },
+  search: { label: "Search limit", unit: "requests" },
 };
 
 // useTickNow re-renders every intervalMs and exposes a stable now-value so the
@@ -63,36 +65,56 @@ export function GitHubRateLimitDisplay({ info }: { info?: GitHubRateLimitInfo })
   const exhausted = snapshots.filter((s) => isExhausted(s, now));
 
   return (
+    <GitHubAccessHelp
+      label={t("github:showGithubApiLimits")}
+      title={t("github:githubApiLimits")}
+      description={t("github:currentGithubApiRateAndQuery")}
+      content={<RateLimitDetails snapshots={snapshots} exhausted={exhausted} />}
+    />
+  );
+}
+
+function RateLimitDetails({
+  snapshots,
+  exhausted,
+}: {
+  snapshots: GitHubRateLimitSnapshot[];
+  exhausted: GitHubRateLimitSnapshot[];
+}) {
+  const { t } = useTranslation();
+  return (
     <div className="space-y-2" data-testid="github-rate-limit-display">
       {exhausted.length > 0 && (
         <Alert variant="destructive" data-testid="github-rate-limit-exhausted">
           <IconAlertTriangle className="h-4 w-4" />
-          <AlertDescription className="text-sm">
-            <Trans
-              i18nKey="github:githubApiRateLimitExhaustedOn"
-              values={{
-                value2: exhausted.map((s) => RESOURCE_LABELS[s.resource] ?? s.resource).join(", "),
-                value4: formatReset(latestReset(exhausted)),
-              }}
-            >
-              GitHub API rate limit exhausted on{" "}
-              {exhausted.map((s) => RESOURCE_LABELS[s.resource] ?? s.resource).join(", ")}.
-              Background PR/issue checks are paused until the limit resets{" "}
-              {formatReset(latestReset(exhausted))}.
-            </Trans>
+          <AlertDescription className="text-xs">
+            {t("github:githubApiAccessExhaustedFor", {
+              resources: exhausted
+                .map((snapshot) => RESOURCE_LABELS[snapshot.resource]?.label ?? snapshot.resource)
+                .join(", "),
+              reset: formatReset(latestReset(exhausted)),
+            })}
           </AlertDescription>
         </Alert>
       )}
-      <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-        {snapshots.map((snap) => {
-          const label = RESOURCE_LABELS[snap.resource] ?? snap.resource;
-          const limit = snap.limit > 0 ? snap.limit : "?";
-          const reset = formatReset(snap);
+      <div className="space-y-1 text-xs text-muted-foreground">
+        {snapshots.map((snapshot) => {
+          const resource = RESOURCE_LABELS[snapshot.resource] ?? {
+            label: snapshot.resource,
+            unit: "requests",
+          };
+          const limit = snapshot.limit > 0 ? formatNumber(snapshot.limit) : t("common:unknown");
+          const reset = formatReset(snapshot);
           return (
-            <span key={snap.resource} data-testid={`github-rate-limit-${snap.resource}`}>
-              {label}: <strong>{snap.remaining}</strong>/{limit}
+            <p key={snapshot.resource} data-testid={`github-rate-limit-${snapshot.resource}`}>
+              <span className="font-medium text-foreground">{resource.label}:</span>{" "}
+              {t("github:ofRemaining", {
+                remaining: formatNumber(snapshot.remaining),
+                limit,
+                unit: resource.unit,
+              })}
               {reset ? t("github:resets", { reset }) : ""}
-            </span>
+            </p>
           );
         })}
       </div>

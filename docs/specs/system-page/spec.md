@@ -161,6 +161,9 @@ The page reads the JSON statically; no backend endpoint is needed.
 - **GIVEN** a user opens `/settings/system/status` for the first time after backend boot, **WHEN** the page mounts, **THEN** the Disk Usage card shows a spinner and "Calculating…", the backend kicks off the walk, and the value populates within seconds without further interaction (via WS job update or 5s poll fallback).
 - **GIVEN** the disk-usage cache is 30 minutes old, **WHEN** the user reopens the Status page, **THEN** the cached value renders instantly with "as of <30 min ago>" and **no** refresh kicks off.
 - **GIVEN** the disk-usage cache is 3 hours old, **WHEN** the user reopens the Status page, **THEN** the stale value renders immediately, the page badge shows "Refreshing…", and the value updates when the background walk completes.
+- **GIVEN** the backend runs on macOS, Linux, or Windows with a configured data directory, **WHEN**
+  an admin clicks **Open** on the Disk Usage card, **THEN** the backend launches the host file
+  explorer at its resolved Kandev home directory without accepting a client-supplied path.
 - **GIVEN** the user is on `1.2.3` and the GitHub latest release is `1.2.4`, **WHEN** they open `/settings/system/updates`, **THEN** an "Update available" badge renders next to the version, the changelog list shows `1.2.4` highlighted as the new entry, and the System sidebar group shows a `1` badge.
 - **GIVEN** the user wants to change update-alert delivery, **WHEN** they open
   `/settings/system/updates`, **THEN** the page directs them to the existing
@@ -174,6 +177,9 @@ The page reads the JSON statically; no backend endpoint is needed.
   unsupported reason.
 - **GIVEN** a service update is in progress, **WHEN** `/system/info` first reports the requested target version, **THEN** the tab reloads exactly once and renders from the confirmed backend's frontend assets; an older version or temporary outage does not trigger the reload.
 - **GIVEN** the user is not running as a kandev-managed service or is running a `--system` service, **WHEN** they open `/settings/system/updates`, **THEN** the page does not render an update-apply control and instead shows the manual update commands.
+- **GIVEN** a saved runtime setting requires restart and the reported restart capability is
+  supported, **WHEN** an admin clicks **Restart**, **THEN** the backend accepts the supervisor
+  restart and the dialog polls System Info until a different boot ID confirms the new process.
 - **GIVEN** the user clicks **VACUUM** on the Database page, **WHEN** the operation completes, **THEN** the DB size delta is shown ("Reclaimed 12.3 MB"), the page Database stats refresh, and a transient info issue appears on the Status page.
 - **GIVEN** the backend uses Postgres, **WHEN** the user opens the Database page, **THEN** the page shows the PostgreSQL driver and database size without issuing SQLite-only PRAGMA queries, and SQLite-only maintenance controls are not rendered.
 - **GIVEN** the user clicks **Factory Reset**, types `RESET`, and confirms, **WHEN** the backend executes, **THEN** a fresh snapshot is created first, all tables are dropped and migrations re-run, the backend restarts, and the frontend redirects to the empty onboarding state once it reconnects.
@@ -216,11 +222,17 @@ their confirmation bodies server-side as defence in depth.
 - **npm Nightly poll failure** — log + keep the previous Nightly cache; malformed or missing
   `dist-tags.nightly` fails closed and is never offered.
 - **Disk walk failure** (permission error on a subdir) — return the partial result with a `warnings: [...]` array per subdir; the page renders a per-row warning icon.
+- **Open data folder failure** — return `503` when the home directory is unavailable, `501` on an
+  unsupported host OS, or `500` when the platform file-explorer process cannot be started.
 - **VACUUM failure** — DB is unaffected (VACUUM is atomic); the job ends `failed` with the SQLite error string. Status page shows a recoverable error issue.
 - **Non-SQLite maintenance call** — `vacuum`, `optimize`, and `reset` jobs fail with `not supported for <driver> driver` before running SQLite-only SQL; factory reset also rejects before stopping active executions.
 - **Factory reset failure mid-run** — the pre-reset snapshot remains in `<data-dir>/backups/`; the user can restore it from the Backups page on next boot. Recovery is documented inline in the failure UI.
 - **Restore failure** — original DB file is left untouched; restore writes to a temp file and atomic-renames only on success.
 - **Log file missing / unreadable** — viewer renders an empty state with the file path so the user can investigate manually.
+- **Restart unavailable or failed** — capability reports the unsupported launch-mode reason and the
+  UI omits the restart action; a rejected direct request returns `501`. Supervisor launch errors
+  return `500`, and failure to observe a new boot ID within three minutes leaves the dialog in an
+  actionable error state.
 
 ## Persistence guarantees
 

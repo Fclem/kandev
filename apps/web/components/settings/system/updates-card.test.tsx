@@ -37,6 +37,7 @@ import { UpdatesCard } from "./updates-card";
 const APPLY_TESTID = "system-updates-apply";
 const ARIA_CHECKED = "aria-checked";
 const CHANNEL_TESTID = "system-updates-channel";
+const ERROR_TESTID = "system-updates-error";
 const LATEST_TESTID = "system-updates-latest";
 const SETTINGS_DIRTY_ATTRIBUTE = "data-settings-dirty";
 const SAVE_CHANGES_NAME = "Save changes";
@@ -329,9 +330,7 @@ describe("UpdatesCard desktop updater", () => {
     renderUpdatesCard();
 
     expect(screen.getByTestId("system-updates-progress").textContent).toContain("25 of 100 bytes");
-    expect(screen.getByTestId("system-updates-error").textContent).toContain(
-      "Signature verification failed",
-    );
+    expect(screen.getByTestId(ERROR_TESTID).textContent).toContain("Signature verification failed");
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
   });
 });
@@ -383,7 +382,7 @@ describe("UpdatesCard channel setting", () => {
   });
 });
 
-describe("UpdatesCard channel save coordination", () => {
+describe("UpdatesCard channel save errors", () => {
   it("clears a previous check error after a channel save succeeds", async () => {
     const check = vi.fn().mockRejectedValue(new Error("npm registry unavailable"));
     const saveChannel = vi.fn().mockResolvedValue(updates({ channel: "nightly" }));
@@ -398,16 +397,14 @@ describe("UpdatesCard channel save coordination", () => {
     renderUpdatesCard();
     fireEvent.click(screen.getByTestId("system-updates-check"));
     await waitFor(() =>
-      expect(screen.getByTestId("system-updates-error").textContent).toContain(
-        "npm registry unavailable",
-      ),
+      expect(screen.getByTestId(ERROR_TESTID).textContent).toContain("npm registry unavailable"),
     );
 
     fireEvent.click(screen.getByRole("radio", { name: /^Nightly/ }));
     fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_NAME }));
 
     await waitFor(() => expect(saveChannel).toHaveBeenCalledWith("nightly"));
-    await waitFor(() => expect(screen.queryByTestId("system-updates-error")).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId(ERROR_TESTID)).toBeNull());
   });
 
   it("keeps a failed channel save dirty and retryable", async () => {
@@ -442,6 +439,35 @@ describe("UpdatesCard channel save coordination", () => {
     );
   });
 
+  it("replaces a previous check error with the channel save failure", async () => {
+    const check = vi.fn().mockRejectedValue(new Error("retry after 27 seconds"));
+    let updatesError: string | null = null;
+    const saveChannel = vi.fn(async () => {
+      updatesError = "channel save failed";
+      throw new Error(updatesError);
+    });
+    mocks.useUpdates.mockImplementation(() => ({
+      updates: updates(),
+      check,
+      reload: vi.fn(),
+      saveChannel,
+      error: updatesError,
+    }));
+
+    renderUpdatesCard();
+    fireEvent.click(screen.getByTestId("system-updates-check"));
+    await waitFor(() => expect(screen.getByTestId(ERROR_TESTID).textContent).toContain("27s"));
+
+    fireEvent.click(screen.getByRole("radio", { name: /^Nightly/ }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_NAME }));
+
+    await waitFor(() => expect(screen.getByText("Couldn't save")).toBeTruthy());
+    expect(screen.getByTestId(ERROR_TESTID).textContent).toContain("channel save failed");
+    expect(screen.getByTestId(ERROR_TESTID).textContent).not.toContain("27s");
+  });
+});
+
+describe("UpdatesCard concurrent channel edits", () => {
   it("preserves a newer channel choice while an earlier save is pending", async () => {
     let resolveSave!: (value: UpdatesResponse) => void;
     const saveChannel = vi.fn(
@@ -450,15 +476,16 @@ describe("UpdatesCard channel save coordination", () => {
           resolveSave = resolve;
         }),
     );
-    mocks.useUpdates.mockReturnValue({
-      updates: updates(),
+    let authoritative = updates();
+    mocks.useUpdates.mockImplementation(() => ({
+      updates: authoritative,
       check: vi.fn(),
       reload: vi.fn(),
       saveChannel,
       error: null,
-    });
+    }));
 
-    renderUpdatesCard();
+    const { rerender } = renderUpdatesCard();
     const stable = screen.getByRole("radio", { name: /^Stable/ });
     const nightly = screen.getByRole("radio", { name: /^Nightly/ });
     fireEvent.click(nightly);
@@ -466,8 +493,12 @@ describe("UpdatesCard channel save coordination", () => {
     await waitFor(() => expect(saveChannel).toHaveBeenCalledWith("nightly"));
 
     fireEvent.click(stable);
+    authoritative = updates({ channel: "nightly" });
+    rerender(updatesCard());
+    expect(stable.getAttribute(ARIA_CHECKED)).toBe("true");
+
     await act(async () => {
-      resolveSave(updates({ channel: "nightly" }));
+      resolveSave(authoritative);
     });
 
     expect(stable.getAttribute(ARIA_CHECKED)).toBe("true");

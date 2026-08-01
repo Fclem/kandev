@@ -96,6 +96,8 @@ the installation.
 - A GitHub or npm discovery failure preserves that channel's previous cache and surfaces the stale
   checked time plus the request error.
 - A malformed or missing npm `nightly` tag fails closed; it is never offered or installed.
+- A failed channel save keeps the draft dirty and surfaces that save failure instead of retaining a
+  stale manual-check error or retry countdown.
 - A scheduled run with no commits after the stable tag exits successfully without building.
 - A scheduled retry for an already-published commit exits successfully only when the main package
   and `nightly` tag agree.
@@ -145,6 +147,9 @@ the installation.
   target comes from GitHub Releases.
 - **GIVEN** a verified npm managed user service, **WHEN** an admin selects and saves Nightly,
   **THEN** the setting survives reload and the target resolves from `kandev@nightly`.
+- **GIVEN** a Nightly save is pending, **WHEN** the admin changes the draft back to Stable before
+  the response arrives, **THEN** the returned Nightly state becomes the saved baseline while the
+  newer Stable draft remains selected, dirty, and available for a follow-up save.
 - **GIVEN** a Homebrew, Desktop, unmanaged, system-service, local, or unknown installation,
   **WHEN** Updates renders, **THEN** Nightly is unavailable with a visible reason and Stable stays
   effective.

@@ -17,10 +17,15 @@ export function useUpdateChannelDraft(
   const savedRef = useRef(saved);
   const [draft, setDraftState] = useState<UpdatesChannel>(authoritative);
   const draftRef = useRef(draft);
+  // A newer edit can circle back to the old saved value, so value equality
+  // alone cannot decide whether an in-flight save response may rebase it.
+  const draftRevisionRef = useRef(0);
+  const pendingSaveRevisionRef = useRef<number | null>(null);
   draftRef.current = draft;
   const isDirty = editable && draft !== saved;
 
   const setDraft = (channel: UpdatesChannel) => {
+    draftRevisionRef.current += 1;
     draftRef.current = channel;
     setDraftState(channel);
   };
@@ -29,7 +34,9 @@ export function useUpdateChannelDraft(
     const previous = savedRef.current;
     savedRef.current = authoritative;
     setSaved(authoritative);
-    if (!editable || draftRef.current === previous) {
+    const pendingRevision = pendingSaveRevisionRef.current;
+    const hasNewerDraft = pendingRevision !== null && draftRevisionRef.current !== pendingRevision;
+    if (!editable || (draftRef.current === previous && !hasNewerDraft)) {
       draftRef.current = authoritative;
       setDraftState(authoritative);
     }
@@ -42,10 +49,21 @@ export function useUpdateChannelDraft(
     isDirty,
     save: async (revision) => {
       const submitted = revision as UpdatesChannel;
-      const response = await saveChannel(submitted);
-      savedRef.current = response.channel;
-      setSaved(response.channel);
-      if (draftRef.current === submitted) setDraft(response.channel);
+      const submittedRevision = draftRevisionRef.current;
+      pendingSaveRevisionRef.current = submittedRevision;
+      try {
+        const response = await saveChannel(submitted);
+        savedRef.current = response.channel;
+        setSaved(response.channel);
+        if (draftRevisionRef.current === submittedRevision) {
+          draftRef.current = response.channel;
+          setDraftState(response.channel);
+        }
+      } finally {
+        if (pendingSaveRevisionRef.current === submittedRevision) {
+          pendingSaveRevisionRef.current = null;
+        }
+      }
     },
     discard: () => setDraft(savedRef.current),
   });

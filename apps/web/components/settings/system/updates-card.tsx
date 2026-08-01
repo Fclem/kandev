@@ -100,9 +100,9 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
   const channel = useUpdateChannelDraft(
     updates,
     async (nextChannel) => {
-      const response = await saveChannel(nextChannel);
       setError(null);
       setRetryAfter(null);
+      const response = await saveChannel(nextChannel);
       return response;
     },
     !desktopUpdater.available,

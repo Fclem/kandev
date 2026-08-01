@@ -16,6 +16,8 @@ spec: "../../specs/npm-nightly-channel/spec.md"
   keeps its signed stable updater.
 - **Acceptance:** inline rows are keyboard accessible, at least 44px high on phone, and long target
   versions cannot create document overflow.
+- **Acceptance:** a save response cannot overwrite a newer channel draft, and save failures replace
+  stale manual-check errors while leaving the draft retryable.
 - **Verification:** `cd apps && pnpm --filter @kandev/web exec vitest run lib/api/domains/system-api.test.ts components/settings/system/updates-card.test.tsx`
 - **Verification:** `cd apps/web && pnpm run typecheck`
 - **Files likely touched:** `apps/web/lib/types/system.ts`, `lib/api/domains/system-api.ts`,
@@ -30,6 +32,6 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 ## Verification results
 
 - `cd apps && pnpm --filter @kandev/web exec vitest run lib/api/domains/system-api.test.ts components/settings/system/updates-card.test.tsx`
-  — passed, 46 tests.
+  — passed, 47 tests.
 - `cd apps/web && pnpm run typecheck` — passed.
 - Focused ESLint for the changed frontend unit/API files — passed with no warnings.

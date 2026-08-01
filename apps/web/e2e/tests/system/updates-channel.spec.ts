@@ -61,6 +61,7 @@ test.describe("System update channel", () => {
         });
       });
       let jobRequests = 0;
+      let targetVersionReports = 0;
       await testPage.route("**/api/v1/system/jobs/nightly-update-1", async (route) => {
         jobRequests += 1;
         await route.fulfill({
@@ -74,11 +75,37 @@ test.describe("System update channel", () => {
           }),
         });
       });
+      await testPage.route("**/api/v1/system/info", async (route) => {
+        if (jobRequests > 0) targetVersionReports += 1;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            version: jobRequests > 0 ? NIGHTLY_TAG : "v1.0.0",
+            commit: "abcdef123456",
+            build_time: new Date().toISOString(),
+            go_version: "go1.26",
+            os: "linux",
+            arch: "amd64",
+          }),
+        });
+      });
+      const completedReload = testPage.waitForRequest(
+        (request) =>
+          request.isNavigationRequest() &&
+          request.frame() === testPage.mainFrame() &&
+          new URL(request.url()).pathname === "/settings/system/updates",
+      );
       await testPage.getByTestId("system-updates-apply").click();
       await expect(testPage.getByRole("alertdialog")).toContainText(NIGHTLY_TAG);
       await testPage.getByTestId("system-updates-apply-confirm").click();
       await expect.poll(() => applyBody).toEqual({ confirm: "UPDATE" });
       await expect.poll(() => jobRequests).toBeGreaterThan(0);
+      await completedReload;
+      await testPage.waitForLoadState("domcontentloaded");
+      expect(targetVersionReports).toBeGreaterThan(0);
+      await expect(testPage.getByTestId("system-page-title")).toHaveText("Updates");
+      await expect(testPage.getByTestId("system-updates-progress")).toHaveCount(0);
     } finally {
       await fixture.release();
     }

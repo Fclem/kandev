@@ -59,7 +59,9 @@ test.describe("System update channel on mobile", () => {
 
     await expect(testPage.getByRole("radio", { name: /^Stable/ })).toBeChecked();
     await expect(testPage.getByRole("radio", { name: /^Nightly/ })).toBeDisabled();
-    await expect(testPage.getByTestId("system-updates-channel-reason")).toBeVisible();
+    await expect(testPage.getByTestId("system-updates-channel-reason")).toContainText(
+      /managed npm or npx user service/i,
+    );
     await expect(testPage.getByTestId("settings-floating-save")).toHaveCount(0);
     expect(channelMutations).toBe(0);
     await assertNoDocumentHorizontalOverflow(testPage, "Unsupported Updates channel");

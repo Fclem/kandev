@@ -384,6 +384,32 @@ describe("UpdatesCard channel setting", () => {
 });
 
 describe("UpdatesCard channel save coordination", () => {
+  it("clears a previous check error after a channel save succeeds", async () => {
+    const check = vi.fn().mockRejectedValue(new Error("npm registry unavailable"));
+    const saveChannel = vi.fn().mockResolvedValue(updates({ channel: "nightly" }));
+    mocks.useUpdates.mockReturnValue({
+      updates: updates(),
+      check,
+      reload: vi.fn(),
+      saveChannel,
+      error: null,
+    });
+
+    renderUpdatesCard();
+    fireEvent.click(screen.getByTestId("system-updates-check"));
+    await waitFor(() =>
+      expect(screen.getByTestId("system-updates-error").textContent).toContain(
+        "npm registry unavailable",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /^Nightly/ }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_NAME }));
+
+    await waitFor(() => expect(saveChannel).toHaveBeenCalledWith("nightly"));
+    await waitFor(() => expect(screen.queryByTestId("system-updates-error")).toBeNull());
+  });
+
   it("keeps a failed channel save dirty and retryable", async () => {
     const saveChannel = vi
       .fn()

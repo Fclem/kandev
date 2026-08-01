@@ -18,6 +18,9 @@ launcher and native runtime packages users install in production.
   latest stable release and that exact commit has not already been published.
 - A nightly for stable `X.Y.Z` and commit `abcdef123456...` has version
   `X.Y.(Z+1)-nightly.shaabcdef123456`.
+- The 12-hex abbreviation is an accepted compactness trade-off. Before an existing version can
+  skip publication, Git must resolve that abbreviation to the exact scheduled commit; an ambiguous
+  prefix or identity mismatch fails closed for maintainer resolution.
 - Every nightly publishes `kandev` and all five `@kdlbs/runtime-*` packages at the same immutable
   version under the npm `nightly` dist-tag. The stable `latest` dist-tag does not move.
 - Users persistently install the channel with `npm install -g kandev@nightly`. The command
@@ -99,6 +102,8 @@ the installation.
 - Before building, the workflow resolves the commit prefix in the current `nightly` tag. A
   scheduled or rerun commit at or behind that published commit is superseded and exits without
   building; divergent or unresolvable history fails closed.
+- A 12-hex collision makes Git abbreviation resolution ambiguous, so the run fails closed instead
+  of treating the colliding commit as already published.
 - After acquiring the shared npm publication slot, a Nightly run rechecks `kandev@latest`. If a
   Stable publish moved the baseline while Nightly was building, the stale run exits without
   publishing.
@@ -116,8 +121,9 @@ the installation.
 
 - Channel choice and both target caches survive backend restarts.
 - One source failure never overwrites the other source's cache.
-- Each commit maps to one npm version, so a retry never creates a second version for the same
-  source state.
+- Each full commit deterministically maps to one npm version, so a retry never creates a second
+  version for the same source state. The accepted 12-hex collision case halts automatic
+  publication rather than mapping a second commit to the existing package.
 - npm nightly versions are immutable and retained; this feature performs no automated deletion.
 
 ## Scenarios

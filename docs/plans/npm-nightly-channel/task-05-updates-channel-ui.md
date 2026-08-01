@@ -30,6 +30,6 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 ## Verification results
 
 - `cd apps && pnpm --filter @kandev/web exec vitest run lib/api/domains/system-api.test.ts components/settings/system/updates-card.test.tsx`
-  — passed, 44 tests.
+  — passed, 46 tests.
 - `cd apps/web && pnpm run typecheck` — passed.
 - Focused ESLint for the changed frontend unit/API files — passed with no warnings.

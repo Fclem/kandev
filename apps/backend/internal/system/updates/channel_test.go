@@ -322,33 +322,25 @@ func TestFetchAndPersistSerializesCacheRefreshes(t *testing.T) {
 
 	firstDone := make(chan error, 1)
 	secondDone := make(chan error, 1)
+	secondStarted := make(chan struct{})
 	go func() {
 		_, err := svc.fetchAndPersist(context.Background())
 		firstDone <- err
 	}()
 	<-firstEntered
 	go func() {
+		close(secondStarted)
 		_, err := svc.fetchAndPersist(context.Background())
 		secondDone <- err
 	}()
 
-	secondFinishedEarly := false
-	select {
-	case err := <-secondDone:
-		if err != nil {
-			t.Fatalf("second refresh: %v", err)
-		}
-		secondFinishedEarly = true
-	case <-time.After(100 * time.Millisecond):
-	}
+	<-secondStarted
 	closeReleaseFirst()
 	if err := <-firstDone; err != nil {
 		t.Fatalf("first refresh: %v", err)
 	}
-	if !secondFinishedEarly {
-		if err := <-secondDone; err != nil {
-			t.Fatalf("second refresh: %v", err)
-		}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second refresh: %v", err)
 	}
 
 	version, targetURL, _, err := persistence.ReadLatestNightlyVersion(pool.Reader())

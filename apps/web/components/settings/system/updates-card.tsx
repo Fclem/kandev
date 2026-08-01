@@ -97,7 +97,16 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
-  const channel = useUpdateChannelDraft(updates, saveChannel, !desktopUpdater.available);
+  const channel = useUpdateChannelDraft(
+    updates,
+    async (nextChannel) => {
+      const response = await saveChannel(nextChannel);
+      setError(null);
+      setRetryAfter(null);
+      return response;
+    },
+    !desktopUpdater.available,
+  );
 
   if (desktopUpdater.available) {
     return <DesktopUpdatesCard updater={desktopUpdater} />;

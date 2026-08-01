@@ -677,11 +677,6 @@ jobs:
               exit 1
             fi
           done
-          if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then
-            echo "All Nightly packages are already published under @nightly; skipping."
-            exit 0
-          fi
-
           if [[ -n "$PUBLISHED_NIGHTLY" ]]; then
             if [[ ! "$PUBLISHED_NIGHTLY" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.sha([0-9a-f]{12})$ ]]; then
               echo "kandev@nightly has unsupported version '$PUBLISHED_NIGHTLY'; refusing to infer publication order." >&2
@@ -691,6 +686,14 @@ jobs:
             if ! PUBLISHED_COMMIT="$(git rev-parse --verify "${PUBLISHED_SHA}^{commit}" 2>/dev/null)"; then
               echo "Cannot resolve published Nightly commit prefix $PUBLISHED_SHA in main history." >&2
               exit 1
+            fi
+            if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then
+              if [[ "$PUBLISHED_COMMIT" != "$MAIN_SHA" ]]; then
+                echo "Nightly version identity does not resolve to scheduled commit $MAIN_SHA." >&2
+                exit 1
+              fi
+              echo "All Nightly packages are already published under @nightly; skipping."
+              exit 0
             fi
             if git merge-base --is-ancestor "$MAIN_SHA" "$PUBLISHED_COMMIT"; then
               echo "A Nightly from the same or a newer main commit is already published; skipping superseded commit $MAIN_SHA."

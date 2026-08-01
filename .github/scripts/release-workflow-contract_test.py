@@ -93,6 +93,10 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn('"${package}@$NIGHTLY_VERSION"', prepare)
         self.assertIn('"${package}@nightly"', prepare)
         self.assertIn('if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then', prepare)
+        self.assertLess(
+            prepare.index('PUBLISHED_COMMIT="$(git rev-parse --verify'),
+            prepare.index('if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then'),
+        )
 
     def test_only_shared_runtime_builds_run_for_a_scheduled_nightly(self) -> None:
         for name in ("build-web", "build-bundles"):

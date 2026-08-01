@@ -21,6 +21,12 @@ Kandev has an npm-only `nightly` channel. A stable baseline `X.Y.Z` and current 
 the commit is the identity, and the `sha` prefix makes the SemVer identifier unambiguously
 nonnumeric.
 
+The 12-hex abbreviation is an accepted compactness trade-off. Before an already-published version
+can skip a run, the workflow resolves the abbreviation against full `main` history and requires the
+resolved commit to equal the scheduled SHA. Git rejects an ambiguous abbreviation, so a prefix
+collision fails closed for maintainer resolution rather than silently treating a different commit
+as published.
+
 The existing release workflow owns both stable and nightly npm publication because npm allows one
 trusted publisher per package and validates the workflow filename. Scheduled nightlies publish all
 five runtime packages before the launcher with `npm publish --tag nightly`; stable `latest` tags
@@ -37,9 +43,10 @@ availability follows dist-tag inequality, not SemVer ordering of SHA text.
 ## Consequences
 
 Users get one documented prerelease path without weakening stable channels or Desktop signing.
-One commit maps to one immutable version, making scheduled retries safe and observable. Publishing
-six packages can still fail partially, so runtime-first/main-last order and tag-consistency checks
-are required.
+One full commit deterministically maps to one immutable version, making scheduled retries safe and
+observable. A collision in the accepted 12-hex namespace blocks automatic publication and needs
+maintainer resolution. Publishing six packages can still fail partially, so
+runtime-first/main-last order and tag-consistency checks are required.
 
 npm accumulates immutable nightly versions. Homebrew and Desktop users do not receive channel
 parity in this iteration. The release workflow must explicitly gate every stable-only job when
@@ -51,6 +58,8 @@ handling scheduled events.
   versions for the same commit and complicates retries.
 - **Raw abbreviated SHA:** can become a numeric SemVer identifier with an illegal leading zero;
   `sha` is a small explicit validity guard.
+- **Full 40-hex SHA:** eliminates abbreviation collisions but makes every user-visible package
+  version substantially longer; the shorter identity plus fail-closed ambiguity check is preferred.
 - **Separate nightly workflow:** cleaner YAML isolation, but it conflicts with npm's single trusted
   publisher configuration for the existing six packages.
 - **GitHub prereleases:** would duplicate stable release artifacts and feeds when npm is the only

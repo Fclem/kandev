@@ -38,11 +38,23 @@ test.describe("System update channel on mobile", () => {
   test("explains an unsupported Nightly channel without horizontal overflow", async ({
     testPage,
   }) => {
+    let channelMutations = 0;
+    testPage.on("request", (request) => {
+      if (
+        request.method() === "PATCH" &&
+        new URL(request.url()).pathname === "/api/v1/system/updates/channel"
+      ) {
+        channelMutations += 1;
+      }
+    });
+
     await testPage.goto("/settings/system/updates");
 
     await expect(testPage.getByRole("radio", { name: /^Stable/ })).toBeChecked();
     await expect(testPage.getByRole("radio", { name: /^Nightly/ })).toBeDisabled();
     await expect(testPage.getByTestId("system-updates-channel-reason")).toBeVisible();
+    await expect(testPage.getByTestId("settings-floating-save")).toHaveCount(0);
+    expect(channelMutations).toBe(0);
     await assertNoDocumentHorizontalOverflow(testPage, "Unsupported Updates channel");
   });
 });

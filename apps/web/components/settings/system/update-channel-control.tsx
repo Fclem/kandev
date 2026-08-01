@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Label } from "@kandev/ui/label";
 import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import type { UpdatesChannel, UpdatesResponse } from "@/lib/types/system";
@@ -25,7 +25,7 @@ export function useUpdateChannelDraft(
     setDraftState(channel);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = savedRef.current;
     savedRef.current = authoritative;
     setSaved(authoritative);

@@ -78,6 +78,7 @@ GET    /api/v1/system/health                      (existing; unchanged)
 GET    /api/v1/system/info                        - versions, commit, build time, OS/arch
 GET    /api/v1/system/disk-usage                  - cached breakdown + computedAt; null while computing
 POST   /api/v1/system/disk-usage/refresh          - kick async recompute; 202
+POST   /api/v1/system/disk-usage/open             - open the data folder on the backend host
 GET    /api/v1/system/database                    - driver, path, sizeBytes, walSizeBytes, schemaVersion, lastBackupAt
 POST   /api/v1/system/database/vacuum             - 202 + jobId
 POST   /api/v1/system/database/optimize           - 202 + jobId
@@ -94,6 +95,8 @@ GET    /api/v1/system/updates                     - { current, latest, latest_ur
 POST   /api/v1/system/updates/check               - force selected-source re-poll; rate-limited 30s
 PATCH  /api/v1/system/updates/channel             - persist Stable/Nightly; body { channel }
 POST   /api/v1/system/updates/apply               - queue service-only self-update; body { confirm: "UPDATE" }
+GET    /api/v1/system/restart-capability           - whether this launch mode supports UI restart
+POST   /api/v1/system/restart                      - ask the configured supervisor to restart Kandev
 ```
 
 Storage endpoints are defined separately in [Storage Maintenance](storage-maintenance.md).

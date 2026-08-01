@@ -78,6 +78,20 @@ pnpm e2e:docker                                # force the docker CI image (full
 pnpm e2e:clean                                 # remove build/test artifacts, incl. root-owned ones from prior docker runs
 ```
 
+**Select the owning Playwright project.** The default `chromium` project
+intentionally excludes routing, auth, mobile, and container suites; a matching
+path with the wrong project exits with `No tests found`. Pass the project before
+the spec path, for example:
+
+```bash
+pnpm e2e:run --project auth tests/auth/auth-lifecycle.spec.ts
+pnpm e2e:run --project routing tests/office-routing-<name>.spec.ts
+pnpm e2e:run --project containers tests/docker/<name>.spec.ts
+```
+
+Use `mobile-chrome` only for `mobile-*.spec.ts` files. Confirm Playwright
+discovers the intended test count before treating a focused command as evidence.
+
 The runner solves the sharp edges hand-rolling would hit: in docker it builds the CGO backend on the **host** and runs it in the runtime image (forward-compatible when the host glibc ≤ the image's — the usual case; it smoke-tests this and only falls back to the build image if the host is newer), builds the Vite web assets on the host, runs them through the Go-served SPA, and keeps Playwright output container-local. See `apps/web/e2e/README.md` → "the managed runner".
 
 `--no-build` reuses every production E2E artifact, not only Vite assets and the

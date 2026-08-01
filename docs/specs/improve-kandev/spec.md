@@ -39,8 +39,13 @@ the user's own agent picks up immediately — turning every report into a contri
   task: recent backend logs, frontend logs, and a metadata snapshot. The bundle
   lives in a temporary folder and is referenced by file path in the task
   description so the agent can read it on demand.
-- Submitting the dialog creates the task in the user's active workspace, clones
-  the kandev repo if needed, and starts the agent on the first step.
+- Submitting the dialog creates the task in the dedicated **Improve Kandev**
+  workspace, clones the kandev repo if needed, and starts the agent on the
+  first step.
+- The dedicated workspace is created automatically on first bootstrap and
+  reused on every later use, keeping improve tasks isolated and segregated
+  from the user's regular work. It is named `Improve Kandev`, is a normal
+  visible workspace (with a kanban workflow), and persists across restarts.
 - The `improve-kandev` workflow has three manually-advanced steps:
   - **Improve** — agent implements the change with TDD; adds E2E tests when the
     change touches user-facing flows.
@@ -71,15 +76,19 @@ the user's own agent picks up immediately — turning every report into a contri
 
 ## API surface
 
-- `POST /api/v1/system/improve-kandev/bootstrap` continues to accept
-  `{ "workspace_id": string }`. Its success response includes the existing
-  repository, branch, context-bundle, GitHub-login, write-access, and
+- `POST /api/v1/system/improve-kandev/bootstrap` accepts an optional
+  `{ "workspace_id": string }` that is ignored (kept for backward
+  compatibility). The endpoint finds or creates the dedicated `Improve Kandev`
+  workspace and scopes everything to it. Its success response includes the
+  existing repository, branch, context-bundle, GitHub-login, write-access, and
   fork-status fields plus:
+  - `workspace_id: string` — the dedicated Improve Kandev workspace the task
+    must be created in.
   - `workflow_id: string` — the workspace instance of `improve-kandev`.
   - `issue_workflow_id: string` — the workspace instance of
     `report-kandev-issue`.
-- Both workflow IDs refer to hidden, workspace-scoped workflow instances and
-  are safe to request repeatedly.
+- Both workflow IDs refer to hidden, workspace-scoped workflow instances in
+  the returned workspace and are safe to request repeatedly.
 
 ## Persistence guarantees
 
@@ -87,8 +96,11 @@ the user's own agent picks up immediately — turning every report into a contri
   `kandev.improveKandev.skipIntro = "true"` in browser local storage. It
   survives reloads and Kandev restarts for that browser profile, but is not
   synchronized between browsers or users.
-- The two hidden workflow instances are workspace-scoped and remain idempotent:
-  opening the dialog again reuses the existing workflow for each template.
+- The dedicated `Improve Kandev` workspace is a normal persisted workspace
+  row created on first bootstrap and reused thereafter; it survives restarts.
+- The two hidden workflow instances live in the dedicated workspace and remain
+  idempotent: opening the dialog again reuses the existing workflow for each
+  template.
 
 ## Failure modes
 
@@ -97,6 +109,11 @@ the user's own agent picks up immediately — turning every report into a contri
 - If the saved preference skips the intro but GitHub authentication is missing,
   the GitHub-auth recovery explanation takes precedence over the direct-open
   preference.
+- If the dedicated workspace cannot be created or resolved, bootstrap fails
+  and the dialog surfaces the error with the task form blocked.
+- Concurrent bootstrap calls that race the workspace creation converge on a
+  single workspace: a creation failure re-reads the workspace list and reuses
+  an existing `Improve Kandev` row.
 - If bootstrap cannot create or resolve either hidden workflow, the task form
   remains blocked and surfaces the bootstrap error.
 - A fork restriction blocks only **Bug fix** and **Feature request** submission.
@@ -107,9 +124,23 @@ the user's own agent picks up immediately — turning every report into a contri
 
 - **GIVEN** the user opens the Improve Kandev dialog with the logs checkbox on,
   **WHEN** they submit a title and description, **THEN** a task is created in
-  their active workspace, the description references three files in a temp
-  folder (`metadata.json`, `backend.log`, `frontend.log`), and the agent starts
-  on the **Improve** step.
+  the dedicated `Improve Kandev` workspace (created automatically on first
+  use), the description references three files in a temp folder
+  (`metadata.json`, `backend.log`, `frontend.log`), and the agent starts on
+  the **Improve** step.
+
+- **GIVEN** no `Improve Kandev` workspace exists, **WHEN** bootstrap is called,
+  **THEN** a workspace named `Improve Kandev` is created, the kandev
+  repository and both hidden workflows live in it, and the response includes
+  its `workspace_id`.
+
+- **GIVEN** an `Improve Kandev` workspace already exists, **WHEN** bootstrap is
+  called again, **THEN** the same workspace (and the same hidden workflow
+  instances) are reused and the response's `workspace_id` is unchanged.
+
+- **GIVEN** the user's active workspace is not the dedicated workspace,
+  **WHEN** the dialog submits a task, **THEN** the task appears in the
+  dedicated workspace and no task is created in the active workspace.
 
 - **GIVEN** the agent reports the implementation is complete on the **Improve**
   step, **WHEN** the user moves the task to **Test**, **THEN** the agent
@@ -170,3 +201,7 @@ the user's own agent picks up immediately — turning every report into a contri
   not stored reports.
 - Cleanup of the temporary log bundle directory; left to OS/temp policy.
 - Windows-specific considerations for `make install` / `make dev`.
+- Migrating pre-existing improve tasks out of the workspace they were created
+  in before this feature shipped; old tasks stay where they are.
+- Hiding the dedicated workspace from the workspace switcher; it appears as a
+  normal workspace.

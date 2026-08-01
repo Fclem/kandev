@@ -1,0 +1,77 @@
+---
+id: "02-frontend-bootstrap-workspace"
+title: "Frontend: use the bootstrap workspace"
+status: pending
+wave: 2
+depends_on: ["01-backend-dedicated-workspace"]
+plan: "plan.md"
+spec: "../../specs/improve-kandev/spec.md"
+---
+
+# Task 02: Frontend — create tasks in the bootstrap workspace
+
+The Improve Kandev dialog must create tasks in the dedicated workspace the
+bootstrap response returns, not in the user's active workspace.
+
+## Acceptance
+
+1. `ImproveKandevBootstrapResponse` includes `workspace_id: string`.
+2. `useBootstrapKandev` lists repositories and populates the store for
+   `data.workspace_id` (not the active workspace), so the locked repo chip
+   resolves a label for the dedicated workspace's repository.
+3. `CreateModeView` passes `ready.data.workspace_id` to `TaskCreateDialog`
+   when bootstrap is ready, so the created task lands in the dedicated
+   workspace. While loading/error the active workspace id remains the fallback
+   and submit stays blocked.
+
+## Verification
+
+```sh
+cd apps && pnpm --filter @kandev/web typecheck
+```
+
+(No new unit tests are required here — the behavior is covered by the E2E
+isolation test in task 03. Run the existing web unit tests if any are touched:
+`cd apps/web && pnpm vitest run components/improve-kandev-dialog` — currently
+none exist, so this is a typecheck-only gate.)
+
+## Files likely touched
+
+- `apps/web/lib/api/domains/improve-kandev-api.ts`
+- `apps/web/components/improve-kandev-dialog.tsx`
+- `apps/web/components/improve-kandev-dialog-create.tsx`
+
+## Dependencies
+
+Task 01 (response contract: `workspace_id`).
+
+## Parallelism
+
+Sequential (wave 2).
+
+## Inputs
+
+- Spec: "API surface" (`workspace_id` in the bootstrap response) and
+  "Scenarios" (task lands in the dedicated workspace).
+- Plan: `docs/plans/improve-kandev-workspace/plan.md` Frontend section.
+- Existing wiring: `useBootstrapKandev` in `improve-kandev-dialog.tsx`
+  (currently `listRepositories(workspaceId)` + `setRepositories(workspaceId,
+  ...)`), `CreateModeView` in `improve-kandev-dialog-create.tsx` (currently
+  passes `props.workspaceId` to `TaskCreateDialog`).
+
+## Output contract
+
+Summary, files changed, typecheck result, blockers, risks, and task/plan
+status update in the same conversation.
+
+## Risks
+
+- The dialog's `useGitHubAuthCheck` keeps using the active workspace for the
+  fix URL — intentional; do not switch it to the dedicated workspace.
+- If `data.workspace_id` is missing (stale backend), `listRepositories(undefined)`
+  would 400 — the E2E mocks and the real backend both return it after task 01;
+  treat a missing field as a bootstrap error surfaced by the existing catch.
+
+## Results
+
+Pending.

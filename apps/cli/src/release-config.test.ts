@@ -283,14 +283,16 @@ describe("release npm publishing", () => {
     expect(inventory.length).toBeGreaterThan(0);
 
     for (const path of [
-      "scripts/release/package-npm-runtime.sh",
-      "scripts/release/publish-npm.test.mjs",
       "apps/cli/src/runtime.ts",
       "apps/cli/bin/native-shim.js",
       "apps/cli/package.json",
     ]) {
       expect(runtimePackagesIn(readRepoFile(path)), path).toEqual(inventory);
     }
+    expect(readRepoFile("scripts/release/package-npm-runtime.sh")).toContain(
+      'source "$ROOT_DIR/scripts/release/npm-packages.sh"',
+    );
+    expect(readRepoFile("scripts/release/publish-npm.test.mjs")).toContain("loadRuntimeInventory");
   });
 
   it("only treats an existing nightly version as idempotent when the nightly tag matches", () => {

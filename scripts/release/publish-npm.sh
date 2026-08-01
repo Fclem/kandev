@@ -130,8 +130,6 @@ record_already_published() {
   ALREADY_PUBLISHED+=("$pkg")
 }
 
-REQUIRED_PLATFORMS=(linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64)
-
 WORK_DIR="$(mktemp -d)"
 CLI_PACKAGE_JSON="$ROOT_DIR/apps/cli/package.json"
 CLI_PACKAGE_BACKUP="$WORK_DIR/cli-package.json"
@@ -150,7 +148,7 @@ if [[ -n "$RELEASE_TAG" ]]; then
   ASSETS_DIR="$WORK_DIR/assets"
   mkdir -p "$ASSETS_DIR"
   log "Downloading release assets for $RELEASE_TAG..."
-  for platform in "${REQUIRED_PLATFORMS[@]}"; do
+  for platform in "${RUNTIME_PLATFORMS[@]}"; do
     asset="kandev-${platform}.tar.gz"
     log "  downloading $asset..."
     gh release download "$RELEASE_TAG" --pattern "$asset" --dir "$ASSETS_DIR" || \
@@ -162,7 +160,7 @@ else
   log "Using release assets from $ASSETS_DIR..."
 fi
 
-for platform in "${REQUIRED_PLATFORMS[@]}"; do
+for platform in "${RUNTIME_PLATFORMS[@]}"; do
   asset="kandev-${platform}.tar.gz"
   [[ -f "$ASSETS_DIR/$asset" ]] || die "release asset missing: $ASSETS_DIR/$asset"
 done

@@ -35,6 +35,7 @@ vi.mock("@/lib/api/domains/system-api", () => ({
 import { useUpdates } from "./use-updates";
 
 const SAVE_FAILURE_MESSAGE = "save failed";
+const CHECK_FAILURE_MESSAGE = "check failed";
 
 function updates(channel: UpdatesResponse["channel"]): UpdatesResponse {
   const nightly = channel === "nightly";
@@ -69,7 +70,9 @@ beforeEach(() => {
   mocks.setSystemUpdates.mockImplementation((next: UpdatesResponse) => {
     mocks.currentUpdates = next;
   });
-  mocks.store = {};
+  mocks.store = {
+    getState: () => ({ system: { updates: mocks.currentUpdates } }),
+  };
 });
 
 describe("useUpdates", () => {
@@ -129,7 +132,7 @@ describe("useUpdates request ordering", () => {
   it("starts a fresh reload when a newer failed check makes the shared flight stale", async () => {
     const staleReload = deferred<UpdatesResponse>();
     const recoveryReload = deferred<UpdatesResponse>();
-    const checkFailure = new Error("check failed");
+    const checkFailure = new Error(CHECK_FAILURE_MESSAGE);
     mocks.fetchUpdates
       .mockReturnValueOnce(staleReload.promise)
       .mockReturnValueOnce(recoveryReload.promise);
@@ -211,10 +214,33 @@ describe("useUpdates request ordering", () => {
 });
 
 describe("useUpdates initial load recovery", () => {
+  it("does not revalidate when another hook populated the live store", async () => {
+    const initialReload = deferred<UpdatesResponse>();
+    const pendingCheck = deferred<UpdatesResponse>();
+    const checkFailure = new Error(CHECK_FAILURE_MESSAGE);
+    mocks.currentUpdates = null;
+    mocks.fetchUpdates.mockReturnValue(initialReload.promise);
+    mocks.checkUpdates.mockReturnValue(pendingCheck.promise);
+    const { result } = renderHook(() => useUpdates());
+
+    let checkPromise!: Promise<UpdatesResponse | undefined>;
+    act(() => {
+      checkPromise = result.current.check();
+    });
+    mocks.currentUpdates = updates("stable");
+    await act(async () => {
+      pendingCheck.reject(checkFailure);
+      await expect(checkPromise).rejects.toBe(checkFailure);
+    });
+
+    expect(mocks.fetchUpdates).toHaveBeenCalledOnce();
+    initialReload.resolve(updates("stable"));
+  });
+
   it("revalidates an empty store after a check invalidates the initial reload and fails", async () => {
     const initialReload = deferred<UpdatesResponse>();
     const recoveryReload = deferred<UpdatesResponse>();
-    const checkFailure = new Error("check failed");
+    const checkFailure = new Error(CHECK_FAILURE_MESSAGE);
     mocks.currentUpdates = null;
     mocks.fetchUpdates
       .mockReturnValueOnce(initialReload.promise)
@@ -238,7 +264,7 @@ describe("useUpdates initial load recovery", () => {
 
     expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
     expect(mocks.setSystemUpdates).toHaveBeenCalledWith(stable);
-    expect(result.current.error).toBe("check failed");
+    expect(result.current.error).toBe(CHECK_FAILURE_MESSAGE);
   });
 });
 

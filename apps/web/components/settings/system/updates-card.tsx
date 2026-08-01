@@ -97,6 +97,10 @@ function serviceCardView(
   };
 }
 
+function canShowServiceApply(showApply: boolean, channelPending: boolean, checking: boolean) {
+  return showApply && !channelPending && !checking;
+}
+
 function ChannelPendingNotice({ pending, saving }: { pending: boolean; saving: boolean }) {
   if (!pending) return null;
   return (
@@ -165,7 +169,7 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
         <UpdateActions
           checking={checking}
           disabled={channelPending}
-          showApply={view.showApply && !channelPending}
+          showApply={canShowServiceApply(view.showApply, channelPending, checking)}
           latest={view.latest}
           url={channelPending ? undefined : updates?.latest_url}
           onCheck={onCheck}

@@ -14,20 +14,30 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 const sourceRoot = path.resolve(import.meta.dirname, "../..");
-const runtimePackages = [
-  "@kdlbs/runtime-linux-x64",
-  "@kdlbs/runtime-linux-arm64",
-  "@kdlbs/runtime-darwin-x64",
-  "@kdlbs/runtime-darwin-arm64",
-  "@kdlbs/runtime-win32-x64",
-];
-const assets = [
-  "kandev-linux-x64.tar.gz",
-  "kandev-linux-arm64.tar.gz",
-  "kandev-macos-x64.tar.gz",
-  "kandev-macos-arm64.tar.gz",
-  "kandev-windows-x64.tar.gz",
-];
+
+function loadRuntimeInventory() {
+  const inventoryPath = path.join(sourceRoot, "scripts/release/npm-packages.sh");
+  const command =
+    'source "$1"\n' +
+    'for platform in "${RUNTIME_PLATFORMS[@]}"; do\n' +
+    '  printf \'%s\\t%s\\n\' "$platform" "${RUNTIME_PACKAGE_BY_PLATFORM[$platform]}"\n' +
+    "done\n";
+  const result = spawnSync("bash", ["-c", command, "inventory", inventoryPath], {
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout
+    .trim()
+    .split("\n")
+    .map((line) => {
+      const [platform, packageName] = line.split("\t");
+      return { platform, packageName };
+    });
+}
+
+const runtimeInventory = loadRuntimeInventory();
+const runtimePackages = runtimeInventory.map(({ packageName }) => packageName);
+const assets = runtimeInventory.map(({ platform }) => `kandev-${platform}.tar.gz`);
 
 async function createFixture() {
   const root = await mkdtemp(path.join(tmpdir(), "kandev-publish-npm-"));
@@ -72,7 +82,7 @@ async function createFixture() {
   )}\n`;
   await writeFile(path.join(cliDir, "package.json"), originalPackageJSON);
 
-  const runtimeInventory = runtimePackages
+  const runtimePackageLines = runtimePackages
     .map((name) => `${name} ${name.slice("@kdlbs/".length)}`)
     .join("\n");
   await writeExecutable(
@@ -86,7 +96,7 @@ while read -r package name; do
   mkdir -p "$dir"
   printf '{"name":"%s","version":"%s"}\n' "$package" "$version" > "$dir/package.json"
 done <<'PACKAGES'
-${runtimeInventory}
+${runtimePackageLines}
 PACKAGES
 `,
   );
@@ -101,7 +111,7 @@ case "$1" in
       printf '%s\n' 'npm error code EAI_AGAIN' >&2
       exit 1
     fi
-    if [[ "$MOCK_NPM_MODE" == "fresh" ]]; then
+    if [[ "$MOCK_NPM_MODE" == "fresh" || "$MOCK_NPM_MODE" == "runtime-publish-failure" ]]; then
       printf '%s\n' 'npm error code E404' >&2
       exit 1
     fi
@@ -120,6 +130,10 @@ case "$1" in
     printf '%s\n' "$package" >> "$MOCK_NPM_PUBLISH_LOG"
     if [[ "$package" == "kandev" ]]; then
       cp package.json "$MOCK_NPM_PUBLISHED_METADATA"
+    fi
+    if [[ "$MOCK_NPM_MODE" == "runtime-publish-failure" && "$package" == "$MOCK_RUNTIME_FAILURE_PACKAGE" ]]; then
+      printf '%s\n' 'npm error code E500' >&2
+      exit 1
     fi
     if [[ "$MOCK_NPM_MODE" == main-conflict* && "$package" == "kandev" ]]; then
       printf '%s\n' 'npm error code EPUBLISHCONFLICT' >&2
@@ -193,6 +207,7 @@ async function runPublish(fixture, { version, distTag, mode }) {
       MOCK_NPM_MODE: mode,
       MOCK_NPM_PUBLISH_LOG: fixture.publishLog,
       MOCK_NPM_PUBLISHED_METADATA: fixture.publishedMetadata,
+      MOCK_RUNTIME_FAILURE_PACKAGE: runtimePackages[1],
       MOCK_NPM_VERSION: version,
       PATH: `${fixture.binDir}${path.delimiter}${process.env.PATH ?? ""}`,
     },
@@ -312,6 +327,24 @@ test("a transient registry failure aborts before publishing and preserves metada
       /could not verify whether @kdlbs\/runtime-linux-x64/,
     );
     assert.deepEqual(result.published, []);
+    assert.equal(result.packageJSON, fixture.originalPackageJSON);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("a runtime publish failure withholds the launcher", async () => {
+  const fixture = await createFixture();
+  try {
+    const result = await runPublish(fixture, {
+      version: "1.2.4-nightly.shaabcdef123456",
+      distTag: "nightly",
+      mode: "runtime-publish-failure",
+    });
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(result.published, runtimePackages);
+    assert.ok(result.stderr.includes(`Failed to publish ${runtimePackages[1]}`));
+    assert.match(result.stderr, /Refusing to publish main kandev/);
     assert.equal(result.packageJSON, fixture.originalPackageJSON);
   } finally {
     await rm(fixture.root, { recursive: true, force: true });

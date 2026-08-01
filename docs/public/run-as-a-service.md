@@ -165,9 +165,11 @@ sudo journalctl -u kandev.service -n 200 --no-pager
 
 For a user service installed by `kandev service install`, use **Settings → System → Updates → Apply update** when a newer release is available. Kandev verifies the managed unit or plist and its owner-only `<home>/service/install.json` metadata before enabling this action. System services still require a terminal update because they need elevated privileges.
 
-For a verified npm/npx user service, the same page also provides an install-wide **Stable** or
-**Nightly** choice. Stable reads signed GitHub Releases and remains selected by default. Nightly
-reads npm's `kandev@nightly` tag and may contain unstable code from `main`. Select the row, use
+For a verified global npm user service, or an existing managed npx user service, the same page also
+provides an install-wide **Stable** or **Nightly** choice. A global npm install is the recommended
+durable service path. An npx-managed service is a recoverable but fragile fallback because its
+executable lives in npm's transient cache. Stable reads signed GitHub Releases and remains selected
+by default. Nightly reads npm's `kandev@nightly` tag and may contain unstable code from `main`. Select the row, use
 **Save changes**, inspect the exact version, and then apply it separately. Nightly apply re-resolves
 the mutable npm tag and installs the exact immutable version it names; Stable re-resolves its
 GitHub release.
@@ -186,9 +188,9 @@ kandev service install
 kandev service restart
 kandev service status
 
-# Managed npx service (run each service command through npx)
+# Existing managed npx service recovery only (run each service command through npx)
 # This service points into npm's cache. Reinstall after upgrades; npm cache cleanup invalidates it.
-# Prefer a global npm installation when the service must survive cache cleanup.
+# Prefer a global npm installation for a durable service.
 # Append original install-time flags to service install when used.
 npx -y kandev@latest service install
 npx -y kandev@latest service restart

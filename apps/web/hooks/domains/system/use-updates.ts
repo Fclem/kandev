@@ -155,12 +155,14 @@ export function useUpdates() {
     } catch (e) {
       if (request !== coordinator.readRevision || coordinator.activeSaves > 0) return undefined;
       setError(e instanceof Error ? e.message : String(e));
-      if (!updates) revalidateWithoutReplacingError(coordinator, setSystemUpdates);
+      if (!store.getState().system.updates) {
+        revalidateWithoutReplacingError(coordinator, setSystemUpdates);
+      }
       throw e;
     } finally {
       if (checkRequest === latestCheck.current) setIsChecking(false);
     }
-  }, [coordinator, setSystemUpdates, updates]);
+  }, [coordinator, setSystemUpdates, store]);
 
   const saveChannel = useCallback(
     (channel: UpdatesChannel) => queueChannelSave(coordinator, channel, setSystemUpdates, setError),

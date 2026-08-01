@@ -33,7 +33,7 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 ## Verification results
 
 - `node --test scripts/release/nightly-version.test.mjs` — passed, 6 tests.
-- `node --test scripts/release/publish-npm.test.mjs` — passed, 7 tests.
+- `node --test scripts/release/publish-npm.test.mjs` — passed, 8 tests.
 - `cd apps && pnpm --filter kandev exec vitest run src/release-config.test.ts src/service/self_update.test.ts`
   — passed, 24 tests.
 - `bash -n scripts/release/publish-npm.sh` — passed.

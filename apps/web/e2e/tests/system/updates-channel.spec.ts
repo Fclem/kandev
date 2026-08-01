@@ -44,9 +44,11 @@ test.describe("System update channel", () => {
       capture.flush();
 
       await makeExactNightlyAvailable(testPage);
+      let reportTargetVersion = false;
       let applyBody: unknown;
       await testPage.route("**/api/v1/system/updates/apply", async (route) => {
         applyBody = route.request().postDataJSON();
+        reportTargetVersion = true;
         await route.fulfill({
           status: 202,
           contentType: "application/json",
@@ -67,13 +69,7 @@ test.describe("System update channel", () => {
           }),
         });
       });
-      let reportTargetVersion = false;
-      let markOldVersionObserved = () => {};
-      const oldVersionObserved = new Promise<void>((resolve) => {
-        markOldVersionObserved = resolve;
-      });
       await testPage.route("**/api/v1/system/info", async (route) => {
-        if (!reportTargetVersion) markOldVersionObserved();
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -103,8 +99,6 @@ test.describe("System update channel", () => {
           target_version: NIGHTLY_TAG,
         });
       await expect.poll(() => jobRequests).toBeGreaterThan(0);
-      await oldVersionObserved;
-      reportTargetVersion = true;
       await completedReload;
       await testPage.waitForLoadState("domcontentloaded");
       await expect(testPage.getByTestId("system-page-title")).toHaveText("Updates");
@@ -136,6 +130,7 @@ test.describe("System update channel", () => {
       /managed npm or npx user service/i,
     );
     await expect(testPage.getByTestId("settings-floating-save")).toHaveCount(0);
+    await testPage.waitForLoadState("networkidle");
     expect(channelMutations).toBe(0);
   });
 });

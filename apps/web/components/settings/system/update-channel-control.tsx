@@ -125,6 +125,7 @@ export function UpdateChannelControl({
           label="Stable"
           description="Signed GitHub releases. Recommended for most users."
           disabled={!editable}
+          reasonId={!editable && unsupportedReason ? reasonId : undefined}
         />
         <UpdateChannelOption
           channel="nightly"

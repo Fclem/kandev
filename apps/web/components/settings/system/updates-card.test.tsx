@@ -117,6 +117,31 @@ afterEach(() => {
 });
 
 describe("UpdatesCard self-update", () => {
+  it("hides Apply update while a metadata check is pending", async () => {
+    let resolveCheck!: () => void;
+    const check = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCheck = resolve;
+        }),
+    );
+    mocks.useUpdates.mockReturnValue({
+      updates: updates(),
+      check,
+      reload: vi.fn(),
+      saveChannel: vi.fn(),
+      error: null,
+    });
+
+    renderUpdatesCard();
+    expect(screen.getByTestId(APPLY_TESTID)).toBeTruthy();
+    fireEvent.click(screen.getByTestId(CHECK_TESTID));
+    await waitFor(() => expect(screen.queryByTestId(APPLY_TESTID)).toBeNull());
+
+    await act(async () => resolveCheck());
+    await waitFor(() => expect(screen.getByTestId(APPLY_TESTID)).toBeTruthy());
+  });
+
   it("passes a stable document reload instead of the update-metadata refetch", () => {
     const reloadDocument = vi.fn();
     const reloadMetadataFirst = vi.fn();
@@ -609,9 +634,13 @@ describe("UpdatesCard channel availability", () => {
     renderUpdatesCard();
 
     const stable = screen.getByRole("radio", { name: /^Stable/ });
+    const nightly = screen.getByRole("radio", { name: /^Nightly/ });
+    const reasonId = screen.getByTestId("system-updates-channel-reason").id;
     expect(stable.getAttribute(ARIA_CHECKED)).toBe("true");
     expect(stable.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("radio", { name: /^Nightly/ }).hasAttribute("disabled")).toBe(true);
+    expect(nightly.hasAttribute("disabled")).toBe(true);
+    expect(stable.getAttribute("aria-describedby")).toContain(reasonId);
+    expect(nightly.getAttribute("aria-describedby")).toContain(reasonId);
     expect(screen.getByTestId("system-updates-channel-reason").textContent).toContain(
       "managed npm user service",
     );

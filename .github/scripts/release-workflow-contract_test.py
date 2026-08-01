@@ -49,7 +49,7 @@ def job_block(name: str) -> str:
 
 
 def job_condition(name: str) -> str:
-    match = re.search(r"(?m)^    if: [^\n]*(?:\n      [^\n]*)*", job_block(name))
+    match = re.search(r"(?m)^    if: [^\n]*(?:\n {6,}[^\n]*)*", job_block(name))
     if match is None:
         raise AssertionError(f"job condition not found: {name}")
     return " ".join(match.group().split())
@@ -412,9 +412,12 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             self.assertIn('"docs/public/release-process.md"', trigger_block.group(0))
             self.assertIn('"scripts/release/publish-npm.sh"', trigger_block.group(0))
             self.assertIn('"scripts/release/publish-npm.test.mjs"', trigger_block.group(0))
+            self.assertIn('"scripts/release/nightly-version.mjs"', trigger_block.group(0))
+            self.assertIn('"scripts/release/nightly-version.test.mjs"', trigger_block.group(0))
 
         self.assertIn(
-            "node --test scripts/release/npm-view-version.test.mjs "
+            "node --test scripts/release/nightly-version.test.mjs "
+            "scripts/release/npm-view-version.test.mjs "
             "scripts/release/publish-npm.test.mjs",
             LINT_WORKFLOW,
         )

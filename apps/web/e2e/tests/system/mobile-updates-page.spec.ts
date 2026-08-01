@@ -75,6 +75,7 @@ test.describe("System update channel on mobile", () => {
       /managed npm or npx user service/i,
     );
     await expect(testPage.getByTestId("settings-floating-save")).toHaveCount(0);
+    await testPage.waitForLoadState("networkidle");
     expect(channelMutations).toBe(0);
     await assertNoDocumentHorizontalOverflow(testPage, "Unsupported Updates channel");
   });

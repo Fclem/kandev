@@ -13,6 +13,8 @@ on:
       - ".github/release-signing-key.asc"
       - "docs/public/release-process.md"
       - "scripts/release/npm-packages.sh"
+      - "scripts/release/nightly-version.mjs"
+      - "scripts/release/nightly-version.test.mjs"
       - "scripts/release/npm-view-version.sh"
       - "scripts/release/npm-view-version.test.mjs"
       - "scripts/release/publish-npm.sh"
@@ -29,6 +31,8 @@ on:
       - ".github/release-signing-key.asc"
       - "docs/public/release-process.md"
       - "scripts/release/npm-packages.sh"
+      - "scripts/release/nightly-version.mjs"
+      - "scripts/release/nightly-version.test.mjs"
       - "scripts/release/npm-view-version.sh"
       - "scripts/release/npm-view-version.test.mjs"
       - "scripts/release/publish-npm.sh"
@@ -63,7 +67,7 @@ jobs:
         run: python3 .github/scripts/release-workflow-contract_test.py
 
       - name: Test npm release helpers
-        run: node --test scripts/release/npm-view-version.test.mjs scripts/release/publish-npm.test.mjs
+        run: node --test scripts/release/nightly-version.test.mjs scripts/release/npm-view-version.test.mjs scripts/release/publish-npm.test.mjs
 
       - name: Verify action refs
         run: python3 .github/scripts/lint-action-pinning.py

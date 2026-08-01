@@ -92,7 +92,7 @@ GET    /api/v1/system/logs/tail?n=1000            - last N lines of current log
 GET    /api/v1/system/logs/:name/download         - stream log file
 GET    /api/v1/system/updates                     - { current, latest, latest_url, latest_checked_at, update_available, channel, channel_editable, channel_unsupported_reason, install: { running_as_service, managed_service, mode?, manager?, kind?, metadata_path? }, apply_supported, apply_unsupported_reason?, manual_commands? }
 POST   /api/v1/system/updates/check               - force selected-source re-poll; rate-limited 30s
-PATCH  /api/v1/system/updates/channel             - persist Stable/Nightly; body { channel }
+PATCH  /api/v1/system/updates/channel             - persist Stable/Nightly for a verified managed npm/npx user service; body { channel }
 POST   /api/v1/system/updates/apply               - queue service-only self-update; body { confirm: "UPDATE", target_version }
 ```
 
@@ -124,7 +124,10 @@ can decide whether one-click apply is allowed. The response's `channel` is the e
 source for this install. Only a
 verified managed npm/npx user service can persist and expose Nightly; unsupported installs report
 Stable even if an old Nightly preference remains stored, set `channel_editable=false`, and include
-`channel_unsupported_reason`. `POST /api/v1/system/updates/check` triggers a selected-source refresh, rate-limited
+`channel_unsupported_reason`. The PATCH write path repeats the managed-service verification before
+resolving or persisting either channel and returns `409 Conflict` for an unsupported install.
+`channel_unsupported_reason` remains present with an empty string when channel editing is supported.
+`POST /api/v1/system/updates/check` triggers a selected-source refresh, rate-limited
 per-process to one call per 30 seconds. If the GitHub or npm call fails (offline, rate limited,
 5xx), the channel's last-known value remains cached and `latest_checked_at` exposes the staleness.
 

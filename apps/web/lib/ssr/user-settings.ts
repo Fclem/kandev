@@ -12,7 +12,7 @@ import {
   type VoiceModeState,
 } from "@/lib/state/slices/settings/types";
 import type { SidebarTaskPrefsApi, UserSettings, UserSettingsResponse } from "@/lib/types/http";
-import type { MCPTaskAgentProfileDefault } from "@/lib/types/http-user-settings";
+import type { MCPTaskAgentProfileDefault, StartupPage } from "@/lib/types/http-user-settings";
 import type { VoiceModeSettings } from "@/lib/types/http-voice";
 
 export type UserSettingsData = Omit<Partial<UserSettings>, "workspace_id"> & {
@@ -24,6 +24,7 @@ export function createDefaultUserSettings(): UserSettingsState {
     workspaceId: null,
     workflowId: null,
     kanbanViewMode: null,
+    startupPage: "task_overview",
     repositoryIds: [],
     tasksListSort: DEFAULT_TASKS_LIST_SORT,
     tasksListGroup: DEFAULT_TASKS_LIST_GROUP,
@@ -89,6 +90,10 @@ export function parseMCPTaskAgentProfileDefault(
   value: string | undefined,
 ): MCPTaskAgentProfileDefault {
   return value === "workspace_default" ? "workspace_default" : "current_task";
+}
+
+export function parseStartupPage(value: string | undefined): StartupPage {
+  return value === "last_task" ? "last_task" : "task_overview";
 }
 
 export function parseSystemMetricsDisplay(value: UserSettingsData["system_metrics_display"]) {
@@ -230,6 +235,7 @@ function buildBehaviorFields(s: UserSettingsData, current: UserSettingsState) {
       current.mcpTaskAgentProfileDefault,
       parseMCPTaskAgentProfileDefault,
     ),
+    startupPage: mapDefined(s.startup_page, current.startupPage, parseStartupPage),
     showAnchoredPromptBar: s.show_anchored_prompt_bar ?? current.showAnchoredPromptBar,
     showScrollToLastPrompt: s.show_scroll_to_last_prompt ?? current.showScrollToLastPrompt,
     showScrollToStart: s.show_scroll_to_start ?? current.showScrollToStart,

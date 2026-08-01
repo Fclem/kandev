@@ -17,6 +17,8 @@ import (
 const (
 	DefaultUserID    = "default-user"
 	DefaultUserEmail = "default@kandev.local"
+
+	defaultChangesPanelLayout = "tree"
 )
 
 type sqliteRepository struct {
@@ -444,6 +446,7 @@ func marshalUserSettingsPayload(settings *models.UserSettings) ([]byte, error) {
 	return json.Marshal(map[string]interface{}{
 		"workspace_id":                        settings.WorkspaceID,
 		"kanban_view_mode":                    settings.KanbanViewMode,
+		"startup_page":                        models.NormalizeStartupPage(settings.StartupPage),
 		"workflow_filter_id":                  settings.WorkflowFilterID,
 		"repository_ids":                      settings.RepositoryIDs,
 		"tasks_list_sort":                     models.NormalizeTasksListSort(settings.TasksListSort),
@@ -570,6 +573,7 @@ func mergeVoiceModeDefaults(stored *storedVoiceMode) models.VoiceModeSettings {
 func defaultUserSettings(userID string) *models.UserSettings {
 	return &models.UserSettings{
 		UserID:                          userID,
+		StartupPage:                     models.StartupPageTaskOverview,
 		RepositoryIDs:                   []string{},
 		TasksListSort:                   models.TasksListSortDefault,
 		TasksListGroup:                  models.TasksListGroupDefault,
@@ -590,7 +594,7 @@ func defaultUserSettings(userID string) *models.UserSettings {
 		ChatSubmitKey:                   "cmd_enter",
 		KeyboardShortcuts:               map[string]interface{}{},
 		TerminalLinkBehavior:            "new_tab",
-		ChangesPanelLayout:              "tree",
+		ChangesPanelLayout:              defaultChangesPanelLayout,
 		SidebarViews:                    []models.SidebarView{},
 		SidebarTaskPrefs:                normalizeSidebarTaskPrefs(models.SidebarTaskPrefs{}),
 		AppStatusBarOrder:               normalizeAppStatusBarOrder(models.AppStatusBarOrder{}),
@@ -610,6 +614,7 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 	var payload struct {
 		WorkspaceID                     string                              `json:"workspace_id"`
 		KanbanViewMode                  string                              `json:"kanban_view_mode"`
+		StartupPage                     string                              `json:"startup_page"`
 		WorkflowFilterID                string                              `json:"workflow_filter_id"`
 		RepositoryIDs                   []string                            `json:"repository_ids"`
 		TasksListSort                   string                              `json:"tasks_list_sort"`
@@ -661,6 +666,7 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 	}
 	settings.WorkspaceID = payload.WorkspaceID
 	settings.KanbanViewMode = payload.KanbanViewMode
+	settings.StartupPage = models.NormalizeStartupPage(payload.StartupPage)
 	settings.WorkflowFilterID = payload.WorkflowFilterID
 	settings.RepositoryIDs = payload.RepositoryIDs
 	if settings.RepositoryIDs == nil {
@@ -753,7 +759,7 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 	if payload.ChangesPanelLayout == "flat" {
 		settings.ChangesPanelLayout = "flat"
 	} else {
-		settings.ChangesPanelLayout = "tree"
+		settings.ChangesPanelLayout = defaultChangesPanelLayout
 	}
 	return settings, nil
 }

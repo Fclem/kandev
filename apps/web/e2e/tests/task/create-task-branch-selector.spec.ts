@@ -331,6 +331,9 @@ test.describe("Fresh-branch flow", () => {
       fs.writeFileSync(path.join(setup.repoDir, "WIP.txt"), "draft");
 
       await openDialogWithLocalProfile(testPage, setup.profileName, setup.repoName);
+      await testPage.locator("html").evaluate((root) => {
+        root.setAttribute("data-rendering-engine", "webkit");
+      });
       await testPage.getByTestId("fresh-branch-toggle").click();
       // Submit triggers the dirty preflight; the modal lists WIP.txt.
       await testPage.getByTestId("submit-start-agent").click();
@@ -338,6 +341,22 @@ test.describe("Fresh-branch flow", () => {
       const modal = testPage.getByTestId("discard-local-changes-dialog");
       await expect(modal).toBeVisible({ timeout: 5_000 });
       await expect(testPage.getByTestId("discard-local-changes-files")).toContainText("WIP.txt");
+      const modalRendering = await modal.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const overlay = document.querySelector<HTMLElement>('[data-slot="alert-dialog-overlay"]');
+        return {
+          animationName: style.animationName,
+          transform: style.transform,
+          translate: style.translate,
+          zIndex: style.zIndex,
+          overlayZIndex: overlay ? getComputedStyle(overlay).zIndex : "",
+        };
+      });
+      expect(modalRendering.animationName).toBe("kandev-dialog-webkit-enter");
+      expect(["none", "matrix(1, 0, 0, 1, 0, 0)"]).toContain(modalRendering.transform);
+      expect(["none", "0px", "0px 0px"]).toContain(modalRendering.translate);
+      expect(modalRendering.zIndex).toBe("53");
+      expect(modalRendering.overlayZIndex).toBe("50");
 
       // Cancel returns to the form with the toggle still on.
       await testPage.getByTestId("discard-local-changes-cancel").click();

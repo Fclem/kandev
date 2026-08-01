@@ -3,14 +3,11 @@ import { detectRenderingEngine, markRenderingEngine } from "./rendering-engine";
 
 type NavigatorFixture = {
   userAgent: string;
-  platform?: string;
-  maxTouchPoints?: number;
 };
 
 const safariMac: NavigatorFixture = {
   userAgent:
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
-  platform: "MacIntel",
 };
 
 describe("detectRenderingEngine", () => {
@@ -21,7 +18,6 @@ describe("detectRenderingEngine", () => {
       {
         userAgent:
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko)",
-        platform: "MacIntel",
       },
     ],
     [
@@ -29,7 +25,6 @@ describe("detectRenderingEngine", () => {
       {
         userAgent:
           "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/617.1 (KHTML, like Gecko) Version/18.0 Safari/617.1",
-        platform: "Linux x86_64",
       },
     ],
     [
@@ -37,7 +32,6 @@ describe("detectRenderingEngine", () => {
       {
         userAgent:
           "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.6422.99 Mobile/15E148 Safari/604.1",
-        platform: "iPhone",
       },
     ],
     [
@@ -45,7 +39,6 @@ describe("detectRenderingEngine", () => {
       {
         userAgent:
           "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/125.0.2535.85 Mobile/15E148 Safari/604.1",
-        platform: "iPhone",
       },
     ],
     [
@@ -53,8 +46,6 @@ describe("detectRenderingEngine", () => {
       {
         userAgent:
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
-        platform: "MacIntel",
-        maxTouchPoints: 5,
       },
     ],
   ] satisfies Array<[string, NavigatorFixture]>)("%s is WebKit", (_name, navigatorLike) => {
@@ -80,16 +71,14 @@ describe("detectRenderingEngine", () => {
     ],
     ["unknown", "TestBrowser/1.0"],
   ] satisfies Array<[string, string]>)("%s is not WebKit", (_name, userAgent) => {
-    expect(detectRenderingEngine({ userAgent, platform: "unknown" })).toBe("other");
+    expect(detectRenderingEngine({ userAgent })).toBe("other");
   });
 
-  it("keeps touch-capable desktop Mac Chrome on the non-WebKit path", () => {
+  it("keeps desktop Mac Chrome on the non-WebKit path", () => {
     expect(
       detectRenderingEngine({
         userAgent:
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        platform: "MacIntel",
-        maxTouchPoints: 5,
       }),
     ).toBe("other");
   });

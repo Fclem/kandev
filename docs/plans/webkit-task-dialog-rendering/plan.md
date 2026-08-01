@@ -44,10 +44,11 @@ does not configure vibrancy or transparency.
   `apps/web/components/discard-local-changes-dialog.tsx` so the WebKit stack can elevate that
   confirmation without styling by test IDs.
 - Add scoped WebKit selectors and opacity-only keyframes in `apps/web/app/globals.css`.
-- Under `html[data-rendering-engine="webkit"]`, override only the opted-in dialog's animation name
-  so its keyframes never write `transform`; replace translated centering with `inset: 0`, automatic
-  margins, and desktop `height: fit-content`; lower only its own overlay to `z-49` while keeping
-  content at the shared `z-50` modal level; and elevate the nested discard confirmation to `z-53`.
+- Under `html[data-rendering-engine="webkit"]`, override the opted-in Create Task and nested
+  confirmation surfaces' animation names so their keyframes never write `transform`; replace
+  translated centering with `inset: 0`, automatic margins, and desktop `height: fit-content`; lower
+  only the task dialog's own overlay to `z-49` while keeping content at the shared `z-50` modal
+  level; and elevate the nested discard confirmation to `z-53`.
 - Preserve the current mobile `width: 100%` and `height: 100%`, desktop 900px width, 85vh maximum
   height, form overflow ownership, rounded corners, focus, and dismissal behavior.
 - Pass `showCloseButton={false}` only to the Create Task dialog so the generic top-right close

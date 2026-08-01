@@ -12,9 +12,9 @@ spec: "../../specs/ui/webkit-task-dialog-rendering.md"
 
 ## Acceptance
 
-- The WebKit Create Task dialog uses opacity-only motion, has no non-identity transform on its
-  text-bearing surface, is centered without stretching, and is explicitly stacked above its own
-  overlay while nested discard confirmations remain above it.
+- The WebKit Create Task dialog and nested discard confirmation use opacity-only motion, have no
+  non-identity transform on their text-bearing surfaces, are centered without stretching, and are
+  explicitly stacked above their overlays with the nested confirmation above the task form.
 - Desktop Chromium keeps the existing scale-and-fade motion, translated centering, dimensions,
   focus behavior, and task-creation controls.
 - All engines omit the generic top-right close control while retaining the footer Cancel action.

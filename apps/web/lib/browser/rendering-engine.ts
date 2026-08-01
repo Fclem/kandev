@@ -2,24 +2,13 @@ export type RenderingEngine = "webkit" | "other";
 
 export type RenderingNavigator = {
   userAgent?: string;
-  platform?: string;
-  maxTouchPoints?: number;
 };
 
 const BLINK_USER_AGENT_TOKENS = /(?:Chrome|Chromium|HeadlessChrome|Edg|OPR|SamsungBrowser)\//i;
-const IOS_USER_AGENT_TOKENS = /\b(?:iPad|iPhone|iPod)\b/i;
 
 function browserNavigator(): RenderingNavigator | undefined {
   if (typeof navigator === "undefined") return undefined;
   return navigator;
-}
-
-function isIOSLike(navigatorLike: RenderingNavigator, userAgent: string): boolean {
-  if (IOS_USER_AGENT_TOKENS.test(userAgent)) return true;
-
-  return (
-    navigatorLike.platform?.toLowerCase() === "macintel" && (navigatorLike.maxTouchPoints ?? 0) > 1
-  );
 }
 
 /**
@@ -35,7 +24,6 @@ export function detectRenderingEngine(
   const userAgent = navigatorLike.userAgent ?? "";
   if (!/AppleWebKit\//i.test(userAgent)) return "other";
   if (BLINK_USER_AGENT_TOKENS.test(userAgent)) return "other";
-  if (isIOSLike(navigatorLike, userAgent)) return "webkit";
 
   return "webkit";
 }

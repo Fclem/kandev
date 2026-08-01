@@ -12,12 +12,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
 DIAGNOSTICS_PATH = REPO_ROOT / ".github" / "scripts" / "collect-macos-desktop-diagnostics.sh"
 PUBLISH_NPM_PATH = REPO_ROOT / "scripts" / "release" / "publish-npm.sh"
+NPM_PACKAGES_PATH = REPO_ROOT / "scripts" / "release" / "npm-packages.sh"
 PUBLIC_KEY_PATH = REPO_ROOT / ".github" / "release-signing-key.asc"
 RELEASE_PROCESS_PATH = REPO_ROOT / "docs" / "public" / "release-process.md"
 LINT_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "lint-action-pinning.yml"
 WORKFLOW = WORKFLOW_PATH.read_text()
 DIAGNOSTICS = DIAGNOSTICS_PATH.read_text()
 PUBLISH_NPM = PUBLISH_NPM_PATH.read_text()
+NPM_PACKAGES = NPM_PACKAGES_PATH.read_text()
 RELEASE_PROCESS = RELEASE_PROCESS_PATH.read_text()
 LINT_WORKFLOW = LINT_WORKFLOW_PATH.read_text()
 NORMAL_RELEASE_IF = (
@@ -69,7 +71,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             'bash scripts/release/npm-view-version.sh kandev@nightly', nightly
         )
         self.assertIn('echo "nightly_version_at_start=$PUBLISHED_NIGHTLY" >> "$GITHUB_OUTPUT"', nightly)
-        self.assertIn('PUBLISHED_SHA="${BASH_REMATCH[1]}"', nightly)
+        self.assertIn('resolve_nightly_commit "$PUBLISHED_NIGHTLY" "kandev@nightly"', nightly)
         self.assertIn('git merge-base --is-ancestor "$MAIN_SHA" "$PUBLISHED_COMMIT"', nightly)
         self.assertIn('git merge-base --is-ancestor "$PUBLISHED_COMMIT" "$MAIN_SHA"', nightly)
         self.assertIn('echo "should_publish=false" >> "$GITHUB_OUTPUT"', nightly)
@@ -78,6 +80,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
     def test_nightly_skip_requires_every_package_and_tag(self) -> None:
         prepare = job_block("nightly-prepare")
 
+        self.assertIn("source scripts/release/npm-packages.sh", prepare)
         for package in (
             "kandev",
             "@kdlbs/runtime-linux-x64",
@@ -86,23 +89,31 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "@kdlbs/runtime-darwin-arm64",
             "@kdlbs/runtime-win32-x64",
         ):
-            self.assertIn(package, prepare)
+            self.assertIn(package, NPM_PACKAGES)
 
-        self.assertIn("NIGHTLY_PACKAGES=(", prepare)
+        self.assertIn('NIGHTLY_PACKAGES=("kandev" "${RUNTIME_PACKAGES[@]}")', NPM_PACKAGES)
         self.assertIn('for package in "${NIGHTLY_PACKAGES[@]}"; do', prepare)
         self.assertIn('"${package}@$NIGHTLY_VERSION"', prepare)
         self.assertIn('"${package}@nightly"', prepare)
         self.assertIn('if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then', prepare)
         self.assertLess(
-            prepare.index('PUBLISHED_COMMIT="$(git rev-parse --verify'),
+            prepare.index('PUBLISHED_COMMIT="$(resolve_nightly_commit'),
             prepare.index('if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then'),
+        )
+        self.assertLess(
+            prepare.index('PUBLISHED_COMMIT="$(resolve_nightly_commit'),
+            prepare.index('for package in "${NIGHTLY_PACKAGES[@]}"; do'),
+        )
+        self.assertIn('git merge-base --is-ancestor "$TAGGED_COMMIT" "$MAIN_SHA"', prepare)
+        self.assertIn(
+            'if [[ "$PUBLISHED_COMMIT" != "$MAIN_SHA" ]] && git merge-base --is-ancestor "$MAIN_SHA" "$PUBLISHED_COMMIT"',
+            prepare,
         )
 
     def test_only_shared_runtime_builds_run_for_a_scheduled_nightly(self) -> None:
         for name in ("build-web", "build-bundles"):
             block = job_block(name)
-            self.assertIn("prepare", block)
-            self.assertIn("nightly-prepare", block)
+            self.assertIn("needs: [prepare, nightly-prepare", block)
             self.assertIn("github.event_name == 'workflow_dispatch'", block)
             self.assertIn("github.event_name == 'schedule'", block)
             self.assertIn("needs.nightly-prepare.outputs.should_publish == 'true'", block)
@@ -402,7 +413,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "@kdlbs/runtime-darwin-arm64",
             "@kdlbs/runtime-win32-x64",
         ):
-            self.assertIn(f'"{package}"', PUBLISH_NPM)
+            self.assertIn(f'"{package}"', NPM_PACKAGES)
 
     def test_backfill_tag_input_uses_existing_tag_without_recreating_it(self) -> None:
         self.assertIn("backfill_tag:", WORKFLOW)

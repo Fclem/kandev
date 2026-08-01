@@ -245,6 +245,7 @@ describe("release npm publishing", () => {
 
   it("publishes all packages under the requested dist-tag and pins the launcher version", () => {
     const script = readRepoFile("scripts/release/publish-npm.sh");
+    const packages = readRepoFile("scripts/release/npm-packages.sh");
 
     const loopStart = script.indexOf('for pkg in "${RUNTIME_PACKAGES[@]}"; do');
     const loopEnd = script.indexOf("\ndone", loopStart);
@@ -255,12 +256,22 @@ describe("release npm publishing", () => {
     expect(runtimePublishLoop).toContain(
       'npm publish --access public --provenance --tag "$DIST_TAG"',
     );
+    const mainPublish = script.slice(script.indexOf("Publishing kandev@$VERSION"));
+    expect(mainPublish).toContain('npm publish --access public --provenance --tag "$DIST_TAG"');
     expect(script).toContain("pkg.version = version;");
     expect(script).toContain('CLI_PACKAGE_BACKUP="$WORK_DIR/cli-package.json"');
     expect(script).toContain('cp "$CLI_PACKAGE_BACKUP" "$CLI_PACKAGE_JSON"');
-    expect(script).toMatch(
-      /RUNTIME_PACKAGES=\([\s\S]+@kdlbs\/runtime-linux-x64[\s\S]+@kdlbs\/runtime-win32-x64[\s\S]+\)[\s\S]+for pkg in "\$\{RUNTIME_PACKAGES\[@\]\}"[\s\S]+Publishing kandev@\$VERSION/,
-    );
+    for (const packageName of [
+      "@kdlbs/runtime-linux-x64",
+      "@kdlbs/runtime-linux-arm64",
+      "@kdlbs/runtime-darwin-x64",
+      "@kdlbs/runtime-darwin-arm64",
+      "@kdlbs/runtime-win32-x64",
+    ]) {
+      expect(packages).toContain(`"${packageName}"`);
+    }
+    expect(packages).toContain('NIGHTLY_PACKAGES=("kandev" "${RUNTIME_PACKAGES[@]}")');
+    expect(script).toContain('source "$ROOT_DIR/scripts/release/npm-packages.sh"');
   });
 
   it("only treats an existing nightly version as idempotent when the nightly tag matches", () => {

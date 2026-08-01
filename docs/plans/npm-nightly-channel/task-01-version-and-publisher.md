@@ -15,9 +15,12 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 - **Acceptance:** The publisher accepts stable release assets or local nightly assets, publishes
   all five exact runtime packages before `kandev`, and applies the requested dist-tag.
 - **Acceptance:** Nightly retries accept only already-published versions whose `nightly` tags match.
+- **Acceptance:** Scheduled preflight and publishing share one package inventory; an older partial
+  publication is recoverable only when its embedded commit is an ancestor of current `main`.
 - **Verification:** `node --test scripts/release/nightly-version.test.mjs`
 - **Verification:** `cd apps && pnpm --filter kandev exec vitest run src/release-config.test.ts src/service/self_update.test.ts`
 - **Files likely touched:** `scripts/release/nightly-version.mjs`, its test,
+  `scripts/release/npm-packages.sh`,
   `scripts/release/publish-npm.sh`, `apps/cli/src/release-config.test.ts`,
   `apps/cli/src/service/self_update.test.ts`.
 - **Dependencies:** None.
@@ -28,7 +31,7 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 
 ## Verification results
 
-- `node --test scripts/release/nightly-version.test.mjs` — passed, 6 tests.
+- `node --test scripts/release/nightly-version.test.mjs` — passed, 7 tests.
 - `cd apps && pnpm --filter kandev exec vitest run src/release-config.test.ts src/service/self_update.test.ts`
   — passed, 23 tests.
 - `bash -n scripts/release/publish-npm.sh` — passed.

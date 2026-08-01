@@ -99,9 +99,10 @@ the installation.
 - A scheduled run with no commits after the stable tag exits successfully without building.
 - A scheduled retry for an already-published commit exits successfully only when the main package
   and `nightly` tag agree.
-- Before building, the workflow resolves the commit prefix in the current `nightly` tag. A
-  scheduled or rerun commit at or behind that published commit is superseded and exits without
-  building; divergent or unresolvable history fails closed.
+- Before building, the workflow resolves the commit prefix in the current `nightly` tag. A rerun
+  behind a newer published commit is superseded and exits without building. The same commit skips
+  only when every package exists and its `nightly` tag matches; an incomplete current target
+  proceeds to repair. Divergent or unresolvable history fails closed.
 - A 12-hex collision makes Git abbreviation resolution ambiguous, so the run fails closed instead
   of treating the colliding commit as already published.
 - After acquiring the shared npm publication slot, a Nightly run rechecks `kandev@latest`. If a
@@ -137,6 +138,9 @@ the installation.
   the schedule runs again, **THEN** it exits successfully without rebuilding.
 - **GIVEN** a previous run published only some runtime packages, **WHEN** the same commit retries,
   **THEN** matching packages are accepted, missing packages publish, and `kandev` publishes last.
+- **GIVEN** an older run left only some runtime tags advanced, **WHEN** a later `main` commit runs,
+  **THEN** ancestor-tagged partial packages are repaired by the later publish without manual tag
+  edits.
 - **GIVEN** no channel setting, **WHEN** a user opens Updates, **THEN** Stable is selected and the
   target comes from GitHub Releases.
 - **GIVEN** a verified npm managed user service, **WHEN** an admin selects and saves Nightly,

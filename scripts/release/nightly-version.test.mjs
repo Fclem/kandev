@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -41,4 +41,15 @@ test("prints the nightly version when invoked as a CLI", () => {
     fullSha,
   ]);
   assert.equal(output.toString(), "0.82.1-nightly.shaabc123def456\n");
+});
+
+test("exits non-zero with usage when invoked without arguments", () => {
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("./nightly-version.mjs", import.meta.url))],
+    { encoding: "utf8" },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Usage:/);
 });

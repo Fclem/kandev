@@ -644,14 +644,37 @@ jobs:
           fi
           echo "nightly_version_at_start=$PUBLISHED_NIGHTLY" >> "$GITHUB_OUTPUT"
 
-          NIGHTLY_PACKAGES=(
-            "kandev"
-            "@kdlbs/runtime-linux-x64"
-            "@kdlbs/runtime-linux-arm64"
-            "@kdlbs/runtime-darwin-x64"
-            "@kdlbs/runtime-darwin-arm64"
-            "@kdlbs/runtime-win32-x64"
-          )
+          source scripts/release/npm-packages.sh
+
+          resolve_nightly_commit() {
+            local version="$1"
+            local label="$2"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.sha([0-9a-f]{12})$ ]]; then
+              echo "$label has unsupported version '$version'; refusing to infer publication order." >&2
+              return 1
+            fi
+            local sha="${BASH_REMATCH[1]}"
+            if ! git rev-parse --verify "${sha}^{commit}" 2>/dev/null; then
+              echo "Cannot resolve $label commit prefix $sha in main history." >&2
+              return 1
+            fi
+          }
+
+          PUBLISHED_COMMIT=""
+          if [[ -n "$PUBLISHED_NIGHTLY" ]]; then
+            if ! PUBLISHED_COMMIT="$(resolve_nightly_commit "$PUBLISHED_NIGHTLY" "kandev@nightly")"; then
+              exit 1
+            fi
+            if [[ "$PUBLISHED_COMMIT" != "$MAIN_SHA" ]] && git merge-base --is-ancestor "$MAIN_SHA" "$PUBLISHED_COMMIT"; then
+              echo "A Nightly from a newer main commit is already published; skipping superseded commit $MAIN_SHA."
+              exit 0
+            fi
+            if ! git merge-base --is-ancestor "$PUBLISHED_COMMIT" "$MAIN_SHA"; then
+              echo "Published Nightly commit $PUBLISHED_COMMIT is not an ancestor of scheduled main $MAIN_SHA." >&2
+              exit 1
+            fi
+          fi
+
           ALL_PACKAGES_PUBLISHED=true
           for package in "${NIGHTLY_PACKAGES[@]}"; do
             if ! published_version="$(bash scripts/release/npm-view-version.sh "${package}@$NIGHTLY_VERSION")"; then
@@ -673,20 +696,17 @@ jobs:
 
             ALL_PACKAGES_PUBLISHED=false
             if [[ -n "$tagged_version" && "$tagged_version" != "$PUBLISHED_NIGHTLY" ]]; then
-              echo "${package}@nightly resolves to unexpected partial version '$tagged_version'." >&2
-              exit 1
+              if ! TAGGED_COMMIT="$(resolve_nightly_commit "$tagged_version" "${package}@nightly")"; then
+                exit 1
+              fi
+              if ! git merge-base --is-ancestor "$TAGGED_COMMIT" "$MAIN_SHA"; then
+                echo "${package}@nightly commit $TAGGED_COMMIT is not an ancestor of scheduled main $MAIN_SHA." >&2
+                exit 1
+              fi
+              echo "${package}@nightly is an older partial publication; the current publish will repair it."
             fi
           done
           if [[ -n "$PUBLISHED_NIGHTLY" ]]; then
-            if [[ ! "$PUBLISHED_NIGHTLY" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.sha([0-9a-f]{12})$ ]]; then
-              echo "kandev@nightly has unsupported version '$PUBLISHED_NIGHTLY'; refusing to infer publication order." >&2
-              exit 1
-            fi
-            PUBLISHED_SHA="${BASH_REMATCH[1]}"
-            if ! PUBLISHED_COMMIT="$(git rev-parse --verify "${PUBLISHED_SHA}^{commit}" 2>/dev/null)"; then
-              echo "Cannot resolve published Nightly commit prefix $PUBLISHED_SHA in main history." >&2
-              exit 1
-            fi
             if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then
               if [[ "$PUBLISHED_COMMIT" != "$MAIN_SHA" ]]; then
                 echo "Nightly version identity does not resolve to scheduled commit $MAIN_SHA." >&2
@@ -694,14 +714,6 @@ jobs:
               fi
               echo "All Nightly packages are already published under @nightly; skipping."
               exit 0
-            fi
-            if git merge-base --is-ancestor "$MAIN_SHA" "$PUBLISHED_COMMIT"; then
-              echo "A Nightly from the same or a newer main commit is already published; skipping superseded commit $MAIN_SHA."
-              exit 0
-            fi
-            if ! git merge-base --is-ancestor "$PUBLISHED_COMMIT" "$MAIN_SHA"; then
-              echo "Published Nightly commit $PUBLISHED_COMMIT is not an ancestor of scheduled main $MAIN_SHA." >&2
-              exit 1
             fi
           fi
 

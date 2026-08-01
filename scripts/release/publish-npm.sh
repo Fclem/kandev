@@ -18,6 +18,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=scripts/release/npm-packages.sh
+source "$ROOT_DIR/scripts/release/npm-packages.sh"
 
 bold()  { printf '\033[1m%s\033[0m' "$*"; }
 green() { printf '\033[32m%s\033[0m' "$*"; }
@@ -172,14 +174,6 @@ NPM_PKG_DIR="$WORK_DIR/npm-packages"
 bash "$ROOT_DIR/scripts/release/package-npm-runtime.sh" "$VERSION" "$ASSETS_DIR" "$NPM_PKG_DIR"
 
 # -- Publish @kdlbs/runtime-* packages first ---------------------------------
-
-RUNTIME_PACKAGES=(
-  "@kdlbs/runtime-linux-x64"
-  "@kdlbs/runtime-linux-arm64"
-  "@kdlbs/runtime-darwin-x64"
-  "@kdlbs/runtime-darwin-arm64"
-  "@kdlbs/runtime-win32-x64"
-)
 
 echo
 echo "$(bold "Publishing @kdlbs/runtime-* packages...")"

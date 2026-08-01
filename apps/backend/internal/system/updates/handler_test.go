@@ -103,12 +103,14 @@ func (requestContextSettingsStore) Save(context.Context, string, []byte) error {
 }
 
 func TestHandleGetPropagatesRequestContext(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
 	pool := newTestPool(t)
 	svc := NewService(
 		pool,
 		"v1.0.0",
 		nil,
 		logger.Default(),
+		WithHomeDir(homeDir),
 		WithSettingsStore(requestContextSettingsStore{}),
 	)
 	r := newRouter(svc)

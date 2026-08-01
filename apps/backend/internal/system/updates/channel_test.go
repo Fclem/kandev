@@ -47,6 +47,19 @@ type cancelAwareSettingsStore struct {
 	calls atomic.Int32
 }
 
+type failingSettingsStore struct {
+	getCalls atomic.Int32
+}
+
+func (s *failingSettingsStore) Get(context.Context, string) ([]byte, bool, error) {
+	s.getCalls.Add(1)
+	return nil, false, errors.New("settings unavailable")
+}
+
+func (*failingSettingsStore) Save(context.Context, string, []byte) error {
+	return errors.New("settings unavailable")
+}
+
 func (s *cancelAwareSettingsStore) Get(ctx context.Context, _ string) ([]byte, bool, error) {
 	if s.calls.Add(1) == 1 {
 		return []byte(ChannelNightly), true, nil
@@ -239,6 +252,53 @@ func TestUnsupportedInstallForcesPersistedNightlyPreferenceToStable(t *testing.T
 	}
 	if resp.Channel != ChannelStable || resp.Latest != "v1.2.3" || resp.ChannelEditable {
 		t.Fatalf("unsupported effective response=%+v", resp)
+	}
+}
+
+func TestUnsupportedInstallDoesNotReadChannelSettings(t *testing.T) {
+	store := &failingSettingsStore{}
+	svc := NewService(newTestPool(t), "v1.2.3", nil, logger.Default(), WithSettingsStore(store))
+
+	resp, err := svc.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if resp.Channel != ChannelStable || resp.ChannelEditable {
+		t.Fatalf("unsupported effective response=%+v", resp)
+	}
+	if got := store.getCalls.Load(); got != 0 {
+		t.Fatalf("settings reads=%d want 0", got)
+	}
+}
+
+func TestManagedNPMInstallWithoutSettingsStoreIsNotChannelEditable(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	svc := NewService(newTestPool(t), "v1.2.3", nil, logger.Default(), WithHomeDir(homeDir))
+
+	resp, err := svc.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if resp.ChannelEditable || resp.ChannelUnsupportedReason == "" {
+		t.Fatalf("channel capability editable=%v reason=%q", resp.ChannelEditable, resp.ChannelUnsupportedReason)
+	}
+}
+
+func TestSelectChannelWithoutSettingsStoreRejectsBeforeResolution(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	svc := NewService(newTestPool(t), "v1.2.3", nil, logger.Default(), WithHomeDir(homeDir))
+	var resolutions atomic.Int32
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		resolutions.Add(1)
+		return "v1.2.4-nightly.shaabc123def456", "https://example/nightly", nil
+	})
+
+	_, err := svc.SelectChannel(context.Background(), string(ChannelNightly))
+	if !errors.Is(err, ErrChannelUnsupported) {
+		t.Fatalf("SelectChannel error=%v want ErrChannelUnsupported", err)
+	}
+	if got := resolutions.Load(); got != 0 {
+		t.Fatalf("upstream resolutions=%d want 0", got)
 	}
 }
 

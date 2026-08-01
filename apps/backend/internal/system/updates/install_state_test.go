@@ -29,7 +29,14 @@ func TestService_GetManagedUserServiceSupportsApply(t *testing.T) {
 	t.Setenv(envInstallKind, "npm")
 	t.Setenv(envServiceMetadata, metadataPath)
 
-	svc := NewService(newTestPool(t), "v1.0.0", nil, logger.Default(), WithHomeDir(homeDir))
+	svc := NewService(
+		newTestPool(t),
+		"v1.0.0",
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(&memorySettingsStore{}),
+	)
 	resp, err := svc.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Get: %v", err)

@@ -20,10 +20,17 @@ test.describe("System update channel on mobile", () => {
 
       await nightlyRow.tap();
       await expect(nightly).toBeChecked();
+      const saved = testPage.waitForResponse(
+        (response) =>
+          response.request().method() === "PATCH" &&
+          new URL(response.url()).pathname === "/api/v1/system/updates/channel",
+      );
       await testPage
         .getByTestId("settings-floating-save")
         .getByRole("button", { name: "Save changes" })
         .tap();
+      expect((await saved).status()).toBe(200);
+      expect(fixture.registryRequests()).toBeGreaterThanOrEqual(1);
       await expect(testPage.getByTestId("system-updates-latest")).toHaveText(NIGHTLY_TAG);
 
       await testPage.reload();

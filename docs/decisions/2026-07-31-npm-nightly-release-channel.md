@@ -30,9 +30,12 @@ as published.
 The existing release workflow owns both stable and nightly npm publication because npm allows one
 trusted publisher per package and validates the workflow filename. Scheduled nightlies publish all
 five runtime packages before the launcher with `npm publish --tag nightly`; stable `latest` tags
-remain untouched. Nightly jobs do not enter the Git tag, GitHub Release, Desktop, container, or
-Homebrew graph. Stable and Nightly publication is serialized. Before building, a Nightly target
-must be newer in `main` ancestry than the published Nightly; after acquiring the publication slot,
+remain untouched. The publisher and scheduled preflight load one shared package inventory. Nightly
+jobs do not enter the Git tag, GitHub Release, Desktop, container, or Homebrew graph. Stable and
+Nightly publication is serialized. Before building, a Nightly target must be newer in `main`
+ancestry than the published Nightly unless the current target is incomplete and needs repair. An
+older partial runtime publication is recoverable only when its embedded commit is an ancestor of
+current `main`. Divergent or newer partial tags fail closed. After acquiring the publication slot,
 both the Stable baseline and previously observed Nightly tag must still match.
 
 The backend owns an install-wide Stable/Nightly preference. Stable remains the default and resolves

@@ -15,8 +15,8 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 - **Acceptance:** Pixel 5 completes selection/save/reload with 44px rows and no horizontal overflow.
 - **Acceptance:** an unsupported install renders Stable plus the server reason without a Nightly
   mutation path.
-- **Verification:** `cd apps/web && pnpm e2e --project=chromium tests/system/updates-channel.spec.ts`
-- **Verification:** `cd apps/web && pnpm e2e --project=mobile-chrome tests/system/mobile-updates-page.spec.ts`
+- **Verification:** `cd apps/web && pnpm e2e:run --project chromium tests/system/updates-channel.spec.ts`
+- **Verification:** `cd apps/web && pnpm e2e:run --project mobile-chrome tests/system/mobile-updates-page.spec.ts`
 - **Files likely touched:** `apps/web/e2e/tests/system/updates-channel.spec.ts`,
   `mobile-updates-page.spec.ts`, fixture/API helpers only if the real UI precondition cannot be
   expressed today.
@@ -27,9 +27,9 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 
 ## Verification results
 
-- `cd apps/web && pnpm e2e --project=chromium tests/system/updates-channel.spec.ts` — passed,
+- `cd apps/web && pnpm e2e:run --project chromium tests/system/updates-channel.spec.ts` — passed,
   2 tests.
-- `cd apps/web && pnpm e2e --project=mobile-chrome tests/system/mobile-updates-page.spec.ts`
+- `cd apps/web && pnpm e2e:run --project mobile-chrome tests/system/mobile-updates-page.spec.ts`
   — passed, 2 tests on the Pixel 5 project.
 - The production Go-served E2E build used a loopback npm metadata fixture behind the strict
   `KANDEV_E2E_MOCK=true` gate; selection, real PATCH persistence, reload, unsupported capability,

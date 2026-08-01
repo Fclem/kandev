@@ -16,6 +16,8 @@ const (
 
 const updatesChannelSettingKey = "updates_channel"
 
+const channelSettingsUnavailableReason = "Update channel settings are unavailable."
+
 var ErrInvalidChannel = errors.New("invalid updates channel")
 var ErrChannelUnsupported = errors.New("updates channel unsupported")
 var ErrUpdateResolve = errors.New("update target resolution failed")
@@ -81,15 +83,22 @@ func (s *Service) effectiveChannel(
 	ctx context.Context,
 	install InstallStateResponse,
 ) (Channel, error) {
-	selected, err := s.selectedChannel(ctx)
-	if err != nil {
-		return ChannelStable, err
-	}
-	editable, _ := install.nightlySupport()
+	editable, _ := s.channelSupport(install)
 	if !editable {
 		return ChannelStable, nil
 	}
-	return selected, nil
+	return s.selectedChannel(ctx)
+}
+
+func (s *Service) channelSupport(install InstallStateResponse) (bool, string) {
+	editable, reason := install.nightlySupport()
+	if !editable {
+		return false, reason
+	}
+	if s.settings == nil {
+		return false, channelSettingsUnavailableReason
+	}
+	return true, ""
 }
 
 func isNightlyVersion(version string) bool {
@@ -104,8 +113,8 @@ func (s *Service) SelectChannel(ctx context.Context, value string) (UpdatesRespo
 		return UpdatesResponse{}, fmt.Errorf("%w: %q", ErrInvalidChannel, value)
 	}
 	install, _ := s.detectInstallState()
-	editable, reason := install.nightlySupport()
-	if channel == ChannelNightly && !editable {
+	editable, reason := s.channelSupport(install)
+	if !editable {
 		return UpdatesResponse{}, fmt.Errorf("%w: %s", ErrChannelUnsupported, reason)
 	}
 	if ok, _ := s.limiter.Allow(); !ok {

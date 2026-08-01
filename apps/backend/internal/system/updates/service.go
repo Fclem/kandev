@@ -488,7 +488,7 @@ func (s *Service) notificationAvailableFor(channel Channel, latest string) bool 
 // snapshot so capability gates and apply intent stay consistent.
 func (s *Service) buildResponseFromChannel(channel Channel, install InstallStateResponse, latest, url string, checkedAt time.Time) UpdatesResponse {
 	applySupported, reason := install.applySupport()
-	channelEditable, channelReason := install.nightlySupport()
+	channelEditable, channelReason := s.channelSupport(install)
 	return UpdatesResponse{
 		Current:                  s.current,
 		Latest:                   latest,

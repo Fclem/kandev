@@ -17,15 +17,18 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 - **Acceptance:** Publication uses the exact checked-out SHA and is serialized with stable release.
 - **Acceptance:** The locked publish step skips when Stable or the observed Nightly tag moved while
   bundles were building, preventing stale or backward tag movement.
-- **Acceptance:** An older scheduled rerun is skipped before building when the published Nightly
-  commit is the same or newer; unresolvable or divergent tag history fails closed.
+- **Acceptance:** An older scheduled rerun is skipped before building when a complete Nightly from
+  a newer commit exists; an incomplete current target and ancestor-tagged older partial publishes
+  are repaired, while unresolvable, divergent, or newer partial tag history fails closed.
+- **Acceptance:** Workflow preflight and the npm publisher consume one shared package inventory.
 - **Verification:** `python3 .github/scripts/release-workflow-contract_test.py`
 - **Verification:** `node --test scripts/release/npm-view-version.test.mjs`
 - **Verification:** `cd apps && pnpm --filter kandev exec vitest run src/release-config.test.ts`
 - **Verification:** `make test-scripts`
 - **Files likely touched:** `.github/workflows/release.yml`,
   `.github/scripts/release-workflow-contract_test.py`, `apps/cli/src/release-config.test.ts`,
-  `scripts/release/npm-view-version.sh`, `scripts/release/npm-view-version.test.mjs`, `Makefile`.
+  `scripts/release/npm-packages.sh`, `scripts/release/npm-view-version.sh`,
+  `scripts/release/npm-view-version.test.mjs`, `Makefile`.
 - **Dependencies:** Task 01.
 - **Parallelism:** sequential because the workflow consumes Task 01's interface.
 - **Inputs:** spec schedule/publication scenarios; existing `prepare`, `build-web`,

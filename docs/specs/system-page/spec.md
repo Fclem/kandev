@@ -99,6 +99,10 @@ GET    /api/v1/system/restart-capability           - whether this launch mode su
 POST   /api/v1/system/restart                      - ask the configured supervisor to restart Kandev
 ```
 
+The Updates routes retain their existing snake_case JSON fields for wire compatibility. This is a
+deliberate exception to the newer System routes' camelCase fields; clients must not translate or
+rename either established contract.
+
 Storage endpoints are defined separately in [Storage Maintenance](storage-maintenance.md).
 
 Long-running operations (vacuum, optimize, reset, restore, snapshot create, disk walk) return `202 Accepted` with a `jobId` and publish progress on the existing event bus. The frontend subscribes via WS (`system.job.update` event) to render progress and final result. On success/failure the operation flips a corresponding entry in the existing health surface (e.g., a "VACUUM completed: reclaimed X MB" info issue that auto-expires).

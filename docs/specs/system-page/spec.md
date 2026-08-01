@@ -20,7 +20,7 @@ A new **System** group is added to the existing settings sidebar (`apps/web/comp
 
 1. **Status** — `/settings/system/status`
    - **Health issues** card: renders the existing `GET /api/v1/system/health` payload (warning/error/info issues with messages and links).
-   - **Disk usage** card: shows total kandev data footprint with a per-subdirectory breakdown (`data dir / worktrees / repos / sessions / tasks / quick-chat / backups`), an "as of HH:MM" timestamp, and a **Refresh** button. The disk walk is lazy and asynchronous: the first visit after a cold start (or after the 2h cache expires) returns `null` immediately and the page shows a loading spinner while the walk runs in the background; subsequent visits within 2h return the cached value instantly.
+   - **Disk usage** card: shows total kandev data footprint with a per-subdirectory breakdown (`data dir / worktrees / repos / sessions / tasks / quick-chat / backups`), an "as of HH:MM" timestamp, a **Refresh** button, and an admin-only **Open** action for the resolved Kandev data directory. The disk walk is lazy and asynchronous: the first visit after a cold start (or after the 2h cache expires) returns `null` immediately and the page shows a loading spinner while the walk runs in the background; subsequent visits within 2h return the cached value instantly.
    - **Version + update** card: short summary of current version and "update available" badge, with a CTA to the Updates page.
 2. **Feature Toggles** — `/settings/system/feature-toggles`
    - Install-wide runtime flags, risk metadata, environment locks, and restart handling.

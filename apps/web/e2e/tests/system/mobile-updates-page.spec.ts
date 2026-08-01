@@ -45,9 +45,12 @@ test.describe("System update channel on mobile", () => {
       await capture.screenshot("mobile-nightly-update-channel", {
         caption: "Mobile: saved Nightly channel and exact target",
       });
-      capture.flush();
     } finally {
-      await fixture.release();
+      try {
+        capture.flush();
+      } finally {
+        await fixture.release();
+      }
     }
   });
 

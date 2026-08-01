@@ -36,6 +36,7 @@ async function createFixture() {
   const assetsDir = path.join(root, "assets");
   const binDir = path.join(root, "bin");
   const publishLog = path.join(root, "publish.log");
+  const publishedMetadata = path.join(root, "published-package.json");
   await Promise.all([
     mkdir(releaseDir, { recursive: true }),
     mkdir(cliDir, { recursive: true }),
@@ -53,7 +54,10 @@ async function createFixture() {
   await Promise.all(
     assets.map((name) => writeFile(path.join(assetsDir, name), "fixture")),
   );
-  await writeFile(publishLog, "");
+  await Promise.all([
+    writeFile(publishLog, ""),
+    writeFile(publishedMetadata, ""),
+  ]);
 
   const originalPackageJSON = `${JSON.stringify(
     {
@@ -97,6 +101,10 @@ case "$1" in
       printf '%s\n' 'npm error code EAI_AGAIN' >&2
       exit 1
     fi
+    if [[ "$MOCK_NPM_MODE" == "fresh" ]]; then
+      printf '%s\n' 'npm error code E404' >&2
+      exit 1
+    fi
     if [[ "$MOCK_NPM_MODE" == main-conflict* && "$spec" == "kandev@$MOCK_NPM_VERSION" ]]; then
       printf '%s\n' 'npm error code E404' >&2
       exit 1
@@ -110,6 +118,9 @@ case "$1" in
   publish)
     package="$(node -p "require('./package.json').name")"
     printf '%s\n' "$package" >> "$MOCK_NPM_PUBLISH_LOG"
+    if [[ "$package" == "kandev" ]]; then
+      cp package.json "$MOCK_NPM_PUBLISHED_METADATA"
+    fi
     if [[ "$MOCK_NPM_MODE" == main-conflict* && "$package" == "kandev" ]]; then
       printf '%s\n' 'npm error code EPUBLISHCONFLICT' >&2
       exit 1
@@ -151,6 +162,7 @@ mkdir -p "$directory"
     assetsDir,
     binDir,
     publishLog,
+    publishedMetadata,
     originalPackageJSON,
   };
 }
@@ -180,6 +192,7 @@ async function runPublish(fixture, { version, distTag, mode }) {
       ...process.env,
       MOCK_NPM_MODE: mode,
       MOCK_NPM_PUBLISH_LOG: fixture.publishLog,
+      MOCK_NPM_PUBLISHED_METADATA: fixture.publishedMetadata,
       MOCK_NPM_VERSION: version,
       PATH: `${fixture.binDir}${path.delimiter}${process.env.PATH ?? ""}`,
     },
@@ -190,6 +203,7 @@ async function runPublish(fixture, { version, distTag, mode }) {
       path.join(fixture.cliDir, "package.json"),
       "utf8",
     ),
+    publishedMetadata: await readFile(fixture.publishedMetadata, "utf8"),
     published: (await readFile(fixture.publishLog, "utf8"))
       .trim()
       .split("\n")
@@ -220,6 +234,30 @@ for (const release of [
     }
   });
 }
+
+test("a fresh Nightly publishes every package", async () => {
+  const fixture = await createFixture();
+  try {
+    const result = await runPublish(fixture, {
+      version: "1.2.4-nightly.shaabcdef123456",
+      distTag: "nightly",
+      mode: "fresh",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.published, [...runtimePackages, "kandev"]);
+    const metadata = JSON.parse(result.publishedMetadata);
+    assert.equal(metadata.version, "1.2.4-nightly.shaabcdef123456");
+    assert.deepEqual(
+      metadata.optionalDependencies,
+      Object.fromEntries(
+        runtimePackages.map((name) => [name, "1.2.4-nightly.shaabcdef123456"]),
+      ),
+    );
+    assert.equal(result.packageJSON, fixture.originalPackageJSON);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
 
 test("a conflicting Nightly launcher publish fails closed and restores package metadata", async () => {
   const fixture = await createFixture();

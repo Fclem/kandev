@@ -199,7 +199,7 @@ func TestService_ApplyDoesNotPersistRejectedExactNightly(t *testing.T) {
 	}
 }
 
-func TestService_ApplyRejectsConcurrentNightlyBeforeSecondPreflight(t *testing.T) {
+func TestService_ApplyRejectsConcurrentNightlyWhileFirstApplyIsRunning(t *testing.T) {
 	homeDir := configureManagedNPMInstall(t)
 	pool := newTestPool(t)
 	release := make(chan struct{})
@@ -218,7 +218,6 @@ func TestService_ApplyRejectsConcurrentNightlyBeforeSecondPreflight(t *testing.T
 			return map[string]interface{}{"status": "started"}, nil
 		}),
 	)
-	var resolutions atomic.Int32
 	const target = "v1.2.4-nightly.shaabc123def456"
 	if err := persistence.WriteLatestNightlyVersion(
 		pool.Writer(),
@@ -228,19 +227,11 @@ func TestService_ApplyRejectsConcurrentNightlyBeforeSecondPreflight(t *testing.T
 	); err != nil {
 		t.Fatal(err)
 	}
-	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
-		resolutions.Add(1)
-		return target, "https://example/nightly", nil
-	})
-
 	if _, err := svc.Apply(context.Background(), "UPDATE", target); err != nil {
 		t.Fatalf("first Apply: %v", err)
 	}
 	if _, err := svc.Apply(context.Background(), "UPDATE", target); !errors.Is(err, ErrApplyInProgress) {
 		t.Fatalf("second Apply error=%v want ErrApplyInProgress", err)
-	}
-	if got := resolutions.Load(); got != 0 {
-		t.Fatalf("nightly resolutions=%d want 0", got)
 	}
 	closeRelease()
 }

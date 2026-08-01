@@ -2,6 +2,7 @@ package updates
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -144,6 +145,8 @@ func TestService_ReplayCachedUpdateSerializesWithChannelSelection(t *testing.T) 
 		entered: make(chan struct{}),
 		release: make(chan struct{}),
 	}
+	releaseReplay := sync.OnceFunc(func() { close(notifier.release) })
+	t.Cleanup(releaseReplay)
 	svc.SetNotifier(notifier)
 	nightlyFetchEntered := make(chan struct{})
 	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
@@ -151,49 +154,38 @@ func TestService_ReplayCachedUpdateSerializesWithChannelSelection(t *testing.T) 
 		return "v1.2.5-nightly.shaabcdef123456", "https://example.test/nightly", nil
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
 	replayDone := make(chan error, 1)
-	go func() { replayDone <- svc.ReplayCachedUpdate(ctx) }()
+	go func() { replayDone <- svc.ReplayCachedUpdate(context.Background()) }()
 	select {
 	case <-notifier.entered:
-	case <-ctx.Done():
-		t.Fatal("cached replay did not reach notifier")
+	case err := <-replayDone:
+		t.Fatalf("cached replay returned before notifier: %v", err)
+	}
+	if svc.updateMu.TryLock() {
+		svc.updateMu.Unlock()
+		t.Fatal("update lock was not held while cached replay notified")
 	}
 
 	selectDone := make(chan error, 1)
 	selectStarted := make(chan struct{})
 	go func() {
 		close(selectStarted)
-		_, err := svc.SelectChannel(ctx, string(ChannelNightly))
+		_, err := svc.SelectChannel(context.Background(), string(ChannelNightly))
 		selectDone <- err
 	}()
-	select {
-	case <-selectStarted:
-	case <-ctx.Done():
-		t.Fatal("channel selection did not start")
+	<-selectStarted
+
+	releaseReplay()
+	if err := <-replayDone; err != nil {
+		t.Fatalf("cached replay: %v", err)
 	}
 	select {
 	case <-nightlyFetchEntered:
-		t.Fatal("channel selection resolved while cached replay still held its snapshot")
-	case <-time.After(100 * time.Millisecond):
-	case <-ctx.Done():
-		t.Fatal("timed out checking replay serialization")
+	case err := <-selectDone:
+		t.Fatalf("channel selection returned before resolving Nightly: %v", err)
 	}
-
-	close(notifier.release)
-	for name, done := range map[string]<-chan error{
-		"cached replay":     replayDone,
-		"channel selection": selectDone,
-	} {
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Fatalf("%s: %v", name, err)
-			}
-		case <-ctx.Done():
-			t.Fatalf("%s did not finish", name)
-		}
+	if err := <-selectDone; err != nil {
+		t.Fatalf("channel selection: %v", err)
 	}
 }
 

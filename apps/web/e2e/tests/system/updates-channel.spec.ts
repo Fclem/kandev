@@ -54,7 +54,6 @@ test.describe("System update channel", () => {
         });
       });
       let jobRequests = 0;
-      let targetVersionReports = 0;
       await testPage.route("**/api/v1/system/jobs/nightly-update-1", async (route) => {
         jobRequests += 1;
         await route.fulfill({
@@ -68,13 +67,18 @@ test.describe("System update channel", () => {
           }),
         });
       });
+      let reportTargetVersion = false;
+      let markOldVersionObserved = () => {};
+      const oldVersionObserved = new Promise<void>((resolve) => {
+        markOldVersionObserved = resolve;
+      });
       await testPage.route("**/api/v1/system/info", async (route) => {
-        if (jobRequests > 0) targetVersionReports += 1;
+        if (!reportTargetVersion) markOldVersionObserved();
         await route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
-            version: jobRequests > 0 ? NIGHTLY_TAG : "v1.0.0",
+            version: reportTargetVersion ? NIGHTLY_TAG : "v1.0.0",
             commit: "abcdef123456",
             build_time: new Date().toISOString(),
             go_version: "go1.26",
@@ -99,9 +103,10 @@ test.describe("System update channel", () => {
           target_version: NIGHTLY_TAG,
         });
       await expect.poll(() => jobRequests).toBeGreaterThan(0);
+      await oldVersionObserved;
+      reportTargetVersion = true;
       await completedReload;
       await testPage.waitForLoadState("domcontentloaded");
-      await expect.poll(() => targetVersionReports).toBeGreaterThan(0);
       await expect(testPage.getByTestId("system-page-title")).toHaveText("Updates");
       await expect(testPage.getByTestId("system-updates-progress")).toHaveCount(0);
     } finally {

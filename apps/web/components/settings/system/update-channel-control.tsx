@@ -124,7 +124,7 @@ export function UpdateChannelControl({
         <UpdateChannelOption
           channel="nightly"
           label="Nightly"
-          description="Prerelease builds from main, delivered through npm."
+          description="Install-wide prerelease builds from main via npm. Apply uses the exact version shown."
           disabled={!editable}
           reasonId={!editable && unsupportedReason ? reasonId : undefined}
         />

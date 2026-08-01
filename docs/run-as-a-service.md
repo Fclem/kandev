@@ -1,12 +1,12 @@
 # Run Kandev as a Service
 
-Install Kandev as an OS-managed service (systemd on Linux, launchd on macOS) so it auto-starts and stays running. User-mode services installed by `kandev service install` can self-update from the System → Updates page. A verified managed npm/npx user service can select Stable (the default) or the npm Nightly channel there. Homebrew, non-service, local-checkout, and `--system` installs remain Stable-only.
+Install Kandev as an OS-managed service (systemd on Linux, launchd on macOS) so it auto-starts and stays running. User-mode services installed by `kandev service install` can self-update from the System → Updates page. A verified managed global-npm user service can select Stable (the default) or the npm Nightly channel there. An npx-launched service has the same controls, but its executable lives in npm's disposable cache; use it only as a temporary or recovery path, and prefer global npm for persistent services. Homebrew, non-service, local-checkout, and `--system` installs remain Stable-only.
 
-Manual updates must preserve the install type and selected channel: global npm and npx use
-`kandev@latest` for Stable or `kandev@nightly` for Nightly; Homebrew uses `brew upgrade kandev`;
-and a local checkout is rebuilt with `make service-install`. Reuse custom `--port`, `--home-dir`,
-and `--no-boot-start` values on `service install`; `service restart` carries only `--system` when
-applicable.
+Manual updates must preserve the install type and selected channel: global npm uses `kandev@latest`
+for Stable or `kandev@nightly` for Nightly; the temporary npx recovery path accepts the same tags;
+Homebrew uses `brew upgrade kandev`; and a local checkout is rebuilt with `make service-install`.
+Reuse custom `--port`, `--home-dir`, and `--no-boot-start` values on `service install`; `service
+restart` carries only `--system` when applicable.
 
 This guide assumes you've already installed kandev via [Homebrew or npm](../apps/cli/README.md#quick-start) and that `kandev` works when run interactively.
 
@@ -117,8 +117,8 @@ npm i -g "kandev@$CHANNEL_TAG"
 kandev service install  # append original install-time options here
 kandev service restart
 
-# Managed npx user service. This points into npm's cache; rerun install after
-# upgrades, and prefer global npm for a service that must survive npm cache cleanup.
+# Temporary npx recovery path. This points into npm's disposable cache; do not
+# rely on it for a persistent service. Move to global npm when recovery is complete.
 npx -y "kandev@$CHANNEL_TAG" service install  # append original install-time options here
 npx -y "kandev@$CHANNEL_TAG" service restart
 
@@ -220,16 +220,17 @@ This happens with `--system` if `SUDO_USER` isn't set (e.g. you logged in as roo
 
 The OS service manager keeps running whatever `ExecStart` it has — it doesn't know about npm/brew upgrades. For managed user services, use **Apply update** on the Updates page. Otherwise, **always re-run `kandev service install` after an upgrade** so the unit picks up the new paths, then `kandev service restart` to pick up new code.
 
-On a managed npm/npx user service, **Settings → System → Updates** also owns the install-wide
-Stable/Nightly choice. Nightly follows npm's `kandev@nightly` tag; save the choice before applying
-the exact version shown. To recover, select Stable and apply, or manually install `kandev@latest`,
-reinstall the service, and restart it. There is no Homebrew or Desktop Nightly channel.
+On a managed global-npm user service (or a temporary cache-backed npx service), **Settings → System
+→ Updates** also owns the install-wide Stable/Nightly choice. Nightly follows npm's
+`kandev@nightly` tag; save the choice before applying the exact version shown. To recover, select
+Stable and apply, or manually install `kandev@latest`, reinstall the service, and restart it. There
+is no Homebrew or Desktop Nightly channel.
 
 ## Updating: TL;DR
 
-- Managed npm/npx user service: use **Settings → System → Updates → Apply update**. Eligible services can first save Stable or Nightly.
+- Managed global-npm user service: use **Settings → System → Updates → Apply update**. Eligible services can first save Stable or Nightly.
 - Manual global npm service: install `kandev@latest` for Stable or `kandev@nightly` for Nightly, then run `kandev service install` with the original install-time options and plain `kandev service restart`.
-- Manual npx service: run `npx -y kandev@latest service install` for Stable or replace `latest` with `nightly`, then rerun the matching npx `service restart`. The unit points into `~/.npm/_npx`; prefer a global npm install for a service that must survive npm cache cleanup.
+- Temporary npx recovery: run `npx -y kandev@latest service install` for Stable or replace `latest` with `nightly`, then rerun the matching npx `service restart`. The unit points into `~/.npm/_npx`; migrate to global npm rather than relying on this cache-backed path for a persistent service.
 - Manual Homebrew service: run `brew upgrade kandev`, then `kandev service install` with the original install-time options and plain `kandev service restart`.
 - Local checkout service: preserve `HOME_DIR`, `PORT`, and `NO_BOOT_START` values on `make service-install`; then run `make service-restart` without them.
 - System service: use the matching manual path through a privileged shell; retain `--system` on both service commands and put other original options only on `service install`.

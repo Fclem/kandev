@@ -37,6 +37,61 @@ function coordinatorFor(store: object): UpdatesRequestCoordinator {
   return coordinator;
 }
 
+function revalidateAfterFailedSave(
+  coordinator: UpdatesRequestCoordinator,
+  setSystemUpdates: (updates: UpdatesResponse) => void,
+): void {
+  const request = ++coordinator.readRevision;
+  void fetchUpdates({ cache: "no-store" })
+    .then((response) => {
+      if (request === coordinator.readRevision && coordinator.activeSaves === 0) {
+        setSystemUpdates(response);
+      }
+    })
+    .catch(() => {
+      // Keep the channel-save error authoritative; a later manual reload can retry.
+    });
+}
+
+function queueChannelSave(
+  coordinator: UpdatesRequestCoordinator,
+  channel: UpdatesChannel,
+  setSystemUpdates: (updates: UpdatesResponse) => void,
+  setError: (error: string | null) => void,
+): Promise<UpdatesResponse> {
+  const request = ++coordinator.saveRevision;
+  coordinator.activeSaves += 1;
+  coordinator.readRevision += 1;
+  setError(null);
+  const previousSave = coordinator.saveTail;
+  const operation = (async () => {
+    let saved = false;
+    await previousSave;
+    try {
+      const response = await saveUpdatesChannel(channel);
+      saved = true;
+      if (request === coordinator.saveRevision) setSystemUpdates(response);
+      return response;
+    } catch (error) {
+      if (request === coordinator.saveRevision) {
+        setError(error instanceof Error ? error.message : String(error));
+      }
+      throw error;
+    } finally {
+      coordinator.activeSaves -= 1;
+      coordinator.readRevision += 1;
+      if (!saved && request === coordinator.saveRevision && coordinator.activeSaves === 0) {
+        revalidateAfterFailedSave(coordinator, setSystemUpdates);
+      }
+    }
+  })();
+  coordinator.saveTail = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return operation;
+}
+
 export function useUpdates() {
   const store = useAppStoreApi();
   const coordinator = coordinatorFor(store);
@@ -107,34 +162,7 @@ export function useUpdates() {
   }, [coordinator, setSystemUpdates]);
 
   const saveChannel = useCallback(
-    (channel: UpdatesChannel): Promise<UpdatesResponse> => {
-      const request = ++coordinator.saveRevision;
-      coordinator.activeSaves += 1;
-      coordinator.readRevision += 1;
-      setError(null);
-      const previousSave = coordinator.saveTail;
-      const operation = (async () => {
-        await previousSave;
-        try {
-          const res = await saveUpdatesChannel(channel);
-          if (request === coordinator.saveRevision) setSystemUpdates(res);
-          return res;
-        } catch (e) {
-          if (request === coordinator.saveRevision) {
-            setError(e instanceof Error ? e.message : String(e));
-          }
-          throw e;
-        } finally {
-          coordinator.activeSaves -= 1;
-          coordinator.readRevision += 1;
-        }
-      })();
-      coordinator.saveTail = operation.then(
-        () => undefined,
-        () => undefined,
-      );
-      return operation;
-    },
+    (channel: UpdatesChannel) => queueChannelSave(coordinator, channel, setSystemUpdates, setError),
     [coordinator, setSystemUpdates],
   );
 

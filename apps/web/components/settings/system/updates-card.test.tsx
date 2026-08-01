@@ -365,6 +365,13 @@ describe("UpdatesCard channel setting", () => {
     expect(saveChannel).not.toHaveBeenCalled();
     expect(screen.getByTestId(CHANNEL_TESTID).getAttribute(SETTINGS_DIRTY_ATTRIBUTE)).toBe("true");
     expect(screen.getByTestId(LATEST_TESTID).textContent).toBe("-");
+    expect(screen.getByTestId("system-updates-checked-at").textContent).toBe("Last checked never");
+    expect(screen.getByTestId("system-updates-channel-nightly").textContent).toContain(
+      "Install-wide",
+    );
+    expect(screen.getByTestId("system-updates-channel-nightly").textContent).toContain(
+      "exact version shown",
+    );
     expect(screen.getByTestId(CHECK_TESTID).hasAttribute("disabled")).toBe(true);
     expect(screen.queryByTestId(APPLY_TESTID)).toBeNull();
     expect(screen.queryByTestId("system-updates-release-link")).toBeNull();

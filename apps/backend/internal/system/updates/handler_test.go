@@ -246,6 +246,15 @@ func newManagedNPMServiceForHandler(t *testing.T) (*Service, *memorySettingsStor
 	return svc, store
 }
 
+func readMemorySetting(t *testing.T, store *memorySettingsStore) ([]byte, bool) {
+	t.Helper()
+	value, present, err := store.Get(context.Background(), updatesChannelSettingKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value, present
+}
+
 func TestHandleSetChannelPersistsSupportedNightlyAndReturnsResolvedTarget(t *testing.T) {
 	svc, store := newManagedNPMServiceForHandler(t)
 	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
@@ -275,8 +284,9 @@ func TestHandleSetChannelPersistsSupportedNightlyAndReturnsResolvedTarget(t *tes
 		t.Fatalf("resolved response=%+v", resp)
 	}
 	selected, err := svc.selectedChannel(context.Background())
-	if err != nil || selected != ChannelNightly || string(store.value) != string(ChannelNightly) {
-		t.Fatalf("persisted channel=%q raw=%q err=%v", selected, store.value, err)
+	raw, present := readMemorySetting(t, store)
+	if err != nil || selected != ChannelNightly || !present || string(raw) != string(ChannelNightly) {
+		t.Fatalf("persisted channel=%q raw=%q present=%v err=%v", selected, raw, present, err)
 	}
 }
 
@@ -304,7 +314,8 @@ func TestHandleSetChannelRejectsInvalidAndUnsupportedNightly(t *testing.T) {
 		if w.Code != http.StatusConflict {
 			t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 		}
-		if store.present {
+		_, present := readMemorySetting(t, store)
+		if present {
 			t.Fatal("unsupported channel selection was persisted")
 		}
 	})
@@ -323,7 +334,8 @@ func TestHandleSetChannelResolverFailureReturns502WithoutPersisting(t *testing.T
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	if store.present {
+	_, present := readMemorySetting(t, store)
+	if present {
 		t.Fatal("failed resolver selection was persisted")
 	}
 }
@@ -375,7 +387,8 @@ func TestHandleSetChannelRejectsCrossOrigin(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status=%d body=%s want 403", w.Code, w.Body.String())
 	}
-	if store.present {
+	_, present := readMemorySetting(t, store)
+	if present {
 		t.Fatal("cross-origin channel selection was persisted")
 	}
 }
@@ -400,8 +413,9 @@ func TestHandleSetChannelAllowsTrustedDevOrigin(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s want 200", w.Code, w.Body.String())
 	}
-	if !store.present || string(store.value) != string(ChannelNightly) {
-		t.Fatalf("trusted dev-origin channel selection was not persisted: %+v", store)
+	raw, present := readMemorySetting(t, store)
+	if !present || string(raw) != string(ChannelNightly) {
+		t.Fatalf("trusted dev-origin channel selection raw=%q present=%v", raw, present)
 	}
 }
 

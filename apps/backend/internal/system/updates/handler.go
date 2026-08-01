@@ -119,10 +119,6 @@ func HandleApply(svc *Service) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{errorResponseKey: err.Error()})
 			return
 		}
-		if errors.Is(err, ErrUpdateResolve) {
-			c.JSON(http.StatusBadGateway, gin.H{errorResponseKey: err.Error()})
-			return
-		}
 		if errors.Is(err, ErrNoUpdateAvailable) || errors.Is(err, ErrUpdateTargetChanged) ||
 			errors.Is(err, ErrApplyUnsupported) ||
 			errors.Is(err, ErrApplyInProgress) {

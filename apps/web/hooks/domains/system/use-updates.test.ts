@@ -34,6 +34,8 @@ vi.mock("@/lib/api/domains/system-api", () => ({
 
 import { useUpdates } from "./use-updates";
 
+const SAVE_FAILURE_MESSAGE = "save failed";
+
 function updates(channel: UpdatesResponse["channel"]): UpdatesResponse {
   const nightly = channel === "nightly";
   return {
@@ -227,19 +229,64 @@ describe("useUpdates channel saving", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("surfaces a channel save failure without replacing update state", async () => {
-    const failure = new Error("save failed");
+  it("surfaces a channel save failure while revalidating the current state", async () => {
+    const failure = new Error(SAVE_FAILURE_MESSAGE);
+    const stable = updates("stable");
     mocks.saveUpdatesChannel.mockRejectedValue(failure);
+    mocks.fetchUpdates.mockResolvedValue(stable);
     const { result } = renderHook(() => useUpdates());
 
     await act(async () => {
       await expect(result.current.saveChannel("nightly")).rejects.toBe(failure);
     });
 
-    expect(result.current.error).toBe("save failed");
-    expect(mocks.setSystemUpdates).not.toHaveBeenCalled();
+    expect(result.current.error).toBe(SAVE_FAILURE_MESSAGE);
+    expect(mocks.fetchUpdates).toHaveBeenCalledOnce();
+    expect(mocks.setSystemUpdates).toHaveBeenCalledWith(stable);
   });
 
+  it("revalidates after a failed save suppresses a concurrent reload", async () => {
+    const pendingSave = deferred<UpdatesResponse>();
+    const suppressedReload = deferred<UpdatesResponse>();
+    const recoveryReload = deferred<UpdatesResponse>();
+    const failure = new Error(SAVE_FAILURE_MESSAGE);
+    mocks.saveUpdatesChannel.mockReturnValue(pendingSave.promise);
+    mocks.fetchUpdates
+      .mockReturnValueOnce(suppressedReload.promise)
+      .mockReturnValueOnce(recoveryReload.promise);
+    const { result } = renderHook(() => useUpdates());
+
+    let savePromise!: Promise<UpdatesResponse>;
+    let reloadPromise!: Promise<void>;
+    act(() => {
+      savePromise = result.current.saveChannel("nightly");
+      reloadPromise = result.current.reload();
+    });
+    await act(async () => {
+      suppressedReload.resolve(updates("stable"));
+      await reloadPromise;
+    });
+    expect(mocks.setSystemUpdates).not.toHaveBeenCalled();
+
+    await act(async () => {
+      pendingSave.reject(failure);
+      await expect(savePromise).rejects.toBe(failure);
+    });
+    expect(mocks.fetchUpdates).toHaveBeenCalledTimes(2);
+
+    const stable = updates("stable");
+    await act(async () => {
+      recoveryReload.resolve(stable);
+      await recoveryReload.promise;
+      await Promise.resolve();
+    });
+    expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
+    expect(mocks.setSystemUpdates).toHaveBeenCalledWith(stable);
+    expect(result.current.error).toBe(SAVE_FAILURE_MESSAGE);
+  });
+});
+
+describe("useUpdates save/read ordering", () => {
   it("ignores an older check response after a channel save starts", async () => {
     const pendingCheck = deferred<UpdatesResponse>();
     const pendingSave = deferred<UpdatesResponse>();

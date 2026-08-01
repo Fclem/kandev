@@ -49,6 +49,13 @@ function formatChecked(value: string | number | null | undefined): string {
   return d.toLocaleString();
 }
 
+function checkedAtForChannel(
+  pending: boolean,
+  checkedAt: string | number | null | undefined,
+): string | number | null | undefined {
+  return pending ? undefined : checkedAt;
+}
+
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
@@ -154,7 +161,7 @@ export function UpdatesCard({ reloadDocument = reloadCurrentDocument }: UpdatesC
           latest={channelPending ? "-" : view.latest}
           latestLabel={channel.draft === "nightly" ? "Latest nightly" : "Latest release"}
         />
-        <LastChecked checkedAt={updates?.latest_checked_at} />
+        <LastChecked checkedAt={checkedAtForChannel(channelPending, updates?.latest_checked_at)} />
         <UpdateActions
           checking={checking}
           disabled={channelPending}

@@ -24,6 +24,8 @@ async function openCreateTaskDialog(testPage: Page): Promise<Locator> {
   await kanban.createTaskButton.first().click();
   const dialog = testPage.getByTestId("create-task-dialog");
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
   return dialog;
 }
 
@@ -83,6 +85,8 @@ test.describe("Create Task WebKit rendering", () => {
     await kanban.createTaskButton.first().click();
     const dialog = testPage.getByTestId("create-task-dialog");
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
 
     const metrics = await readDialogRenderingMetrics(dialog);
     const viewport = testPage.viewportSize();

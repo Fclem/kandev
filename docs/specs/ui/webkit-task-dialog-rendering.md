@@ -27,6 +27,8 @@ renders correctly.
 - The WebKit rendering path preserves the existing task-creation form, focus behavior, dismissal,
   keyboard behavior, dimensions, internal scrolling, responsive full-height phone presentation,
   and safe-area behavior.
+- The Create Task dialog omits the generic top-right close control in every browser; the footer
+  Cancel action remains available for dismissal.
 - Rendering-engine classification is runtime-only and does not add a user setting or persisted
   preference.
 

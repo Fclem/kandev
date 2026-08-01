@@ -50,6 +50,8 @@ does not configure vibrancy or transparency.
   content at the shared `z-50` modal level; and elevate the nested discard confirmation to `z-53`.
 - Preserve the current mobile `width: 100%` and `height: 100%`, desktop 900px width, 85vh maximum
   height, form overflow ownership, rounded corners, focus, and dismissal behavior.
+- Pass `showCloseButton={false}` only to the Create Task dialog so the generic top-right close
+  control is absent in every browser while the footer Cancel action remains available.
 - Leave the existing scale-and-fade utility classes active for non-WebKit engines.
 
 ### Mobile design contract

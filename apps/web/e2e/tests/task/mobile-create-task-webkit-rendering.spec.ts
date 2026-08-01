@@ -18,6 +18,8 @@ test("keeps the WebKit Create Task dialog full-height and contained on mobile", 
 
   const dialog = testPage.getByTestId("create-task-dialog");
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
   await expect(dialog.getByTestId("task-title-input")).toBeVisible();
   await expect(dialog.getByTestId("task-description-input")).toBeVisible();
 

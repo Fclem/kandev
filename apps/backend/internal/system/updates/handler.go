@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	"github.com/kandev/kandev/internal/common/httpmw"
 )
 
 // HandleGet returns the cached kandev_meta view of the selected channel. It
@@ -34,7 +36,8 @@ type channelRequestBody struct {
 // HandleSetChannel changes the install-wide update source.
 func HandleSetChannel(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !sameOriginOrNoOrigin(c.Request) {
+		origin := c.Request.Header.Get("Origin")
+		if origin != "" && !httpmw.AllowedOrigin(origin, c.Request.Host) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "cross-origin update channel change is not allowed"})
 			return
 		}

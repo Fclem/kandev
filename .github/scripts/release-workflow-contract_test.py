@@ -63,7 +63,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn('node scripts/release/nightly-version.mjs "$LATEST_STABLE" "$MAIN_SHA"', nightly)
         self.assertIn('if [[ "$MAIN_SHA" == "$STABLE_COMMIT" ]]', nightly)
         self.assertIn(
-            'bash scripts/release/npm-view-version.sh "kandev@$NIGHTLY_VERSION"', nightly
+            'bash scripts/release/npm-view-version.sh "${package}@$NIGHTLY_VERSION"', nightly
         )
         self.assertIn(
             'bash scripts/release/npm-view-version.sh kandev@nightly', nightly
@@ -74,6 +74,25 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn('git merge-base --is-ancestor "$PUBLISHED_COMMIT" "$MAIN_SHA"', nightly)
         self.assertIn('echo "should_publish=false" >> "$GITHUB_OUTPUT"', nightly)
         self.assertIn('echo "should_publish=true" >> "$GITHUB_OUTPUT"', nightly)
+
+    def test_nightly_skip_requires_every_package_and_tag(self) -> None:
+        prepare = job_block("nightly-prepare")
+
+        for package in (
+            "kandev",
+            "@kdlbs/runtime-linux-x64",
+            "@kdlbs/runtime-linux-arm64",
+            "@kdlbs/runtime-darwin-x64",
+            "@kdlbs/runtime-darwin-arm64",
+            "@kdlbs/runtime-win32-x64",
+        ):
+            self.assertIn(package, prepare)
+
+        self.assertIn("NIGHTLY_PACKAGES=(", prepare)
+        self.assertIn('for package in "${NIGHTLY_PACKAGES[@]}"; do', prepare)
+        self.assertIn('"${package}@$NIGHTLY_VERSION"', prepare)
+        self.assertIn('"${package}@nightly"', prepare)
+        self.assertIn('if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then', prepare)
 
     def test_only_shared_runtime_builds_run_for_a_scheduled_nightly(self) -> None:
         for name in ("build-web", "build-bundles"):
@@ -130,6 +149,13 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             nightly,
         )
         self.assertIn('if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]', nightly)
+        for condition in (
+            'if [[ "$CURRENT_LATEST" != "$NIGHTLY_BASELINE" ]]; then',
+            'if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]; then',
+        ):
+            guard_start = nightly.index(condition)
+            guard_end = nightly.index("\n          fi", guard_start)
+            self.assertIn("exit 0", nightly[guard_start:guard_end])
         self.assertLess(
             nightly.index('if [[ "$CURRENT_LATEST" != "$NIGHTLY_BASELINE" ]]'),
             nightly.index("bash scripts/release/publish-npm.sh"),

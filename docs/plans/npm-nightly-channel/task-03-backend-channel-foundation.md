@@ -28,4 +28,6 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 ## Verification results
 
 - `cd apps/backend && go test -v ./internal/persistence ./internal/system/updates` — passed;
-  PostgreSQL-only persistence coverage skipped because `KANDEV_TEST_POSTGRES_DSN` was unset.
+  the local PostgreSQL cases skipped because `KANDEV_TEST_POSTGRES_DSN` was unset.
+- `Backend Postgres` CI — exercises stable/nightly cache isolation with
+  `KANDEV_TEST_POSTGRES_DSN` through `internal/persistence/postgres_meta_test.go`.

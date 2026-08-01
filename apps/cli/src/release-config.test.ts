@@ -246,7 +246,15 @@ describe("release npm publishing", () => {
   it("publishes all packages under the requested dist-tag and pins the launcher version", () => {
     const script = readRepoFile("scripts/release/publish-npm.sh");
 
-    expect(script).toContain('npm publish --access public --provenance --tag "$DIST_TAG"');
+    const loopStart = script.indexOf('for pkg in "${RUNTIME_PACKAGES[@]}"; do');
+    const loopEnd = script.indexOf("\ndone", loopStart);
+    expect(loopStart).toBeGreaterThanOrEqual(0);
+    expect(loopEnd).toBeGreaterThan(loopStart);
+    const runtimePublishLoop = script.slice(loopStart, loopEnd);
+
+    expect(runtimePublishLoop).toContain(
+      'npm publish --access public --provenance --tag "$DIST_TAG"',
+    );
     expect(script).toContain("pkg.version = version;");
     expect(script).toContain('CLI_PACKAGE_BACKUP="$WORK_DIR/cli-package.json"');
     expect(script).toContain('cp "$CLI_PACKAGE_BACKUP" "$CLI_PACKAGE_JSON"');

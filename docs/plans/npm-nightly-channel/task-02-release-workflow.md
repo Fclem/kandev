@@ -34,7 +34,7 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 
 ## Verification results
 
-- `python3 .github/scripts/release-workflow-contract_test.py` — passed, 20 tests.
+- `python3 .github/scripts/release-workflow-contract_test.py` — passed, 21 tests.
 - `node --test scripts/release/npm-view-version.test.mjs` — passed, 3 tests.
 - `cd apps && pnpm --filter kandev exec vitest run src/release-config.test.ts` — passed, 12 tests.
 - `make test-scripts` — passed, including both release workflow suites.

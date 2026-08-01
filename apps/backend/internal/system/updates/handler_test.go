@@ -369,6 +369,31 @@ func TestHandleSetChannelRejectsCrossOrigin(t *testing.T) {
 	}
 }
 
+func TestHandleSetChannelAllowsTrustedDevOrigin(t *testing.T) {
+	svc, store := newManagedNPMServiceForHandler(t)
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
+		return "1.2.4-nightly.shaabc123def456", "https://example/nightly", nil
+	})
+	r := newRouter(svc)
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/system/updates/channel",
+		bytes.NewBufferString(`{"channel":"nightly"}`),
+	)
+	req.Host = "localhost:38429"
+	req.Header.Set("Origin", "http://localhost:5173")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s want 200", w.Code, w.Body.String())
+	}
+	if !store.present || string(store.value) != string(ChannelNightly) {
+		t.Fatalf("trusted dev-origin channel selection was not persisted: %+v", store)
+	}
+}
+
 func TestHandleApplyNightlyResolverFailureReturns502(t *testing.T) {
 	svc, store := newManagedNPMServiceForHandler(t)
 	if err := store.Save(context.Background(), updatesChannelSettingKey, []byte(ChannelNightly)); err != nil {

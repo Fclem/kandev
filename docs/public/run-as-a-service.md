@@ -7,7 +7,7 @@ description: "Install Kandev under systemd or launchd and operate it safely."
 
 The native Kandev launcher can install itself as a systemd service on Linux or a launchd service on macOS. Use this for a persistent workstation or server. Windows Service Control Manager, OpenRC, and SysV init are not supported.
 
-For the simplest path, install Kandev persistently before creating the service; see [CLI installation](cli.md#install). A plain `npx -y kandev@...` launch is ephemeral, but `npx -y kandev@latest service install` is also a supported way to create a managed npx user service. The installer records that npx package's absolute native executable and release-bundle paths. Do not hand-write a long-lived service around an npx command.
+For the simplest path, install Kandev persistently before creating the service; see [CLI installation](cli.md#install). A plain `npx -y kandev@...` launch is ephemeral, but `npx -y kandev@latest service install` can create a managed npx user service. That service depends on the cached npx package remaining present: reinstall it after upgrades, and expect npm cache cleanup to invalidate its recorded absolute paths. Prefer global npm for a durable service. Do not hand-write a long-lived service around an npx command.
 
 Stable is the default release channel. A verified Kandev-managed npm/npx user service can opt into
 the npm Nightly channel from **Settings > System > Updates**. Homebrew and system services remain

@@ -644,16 +644,41 @@ jobs:
           fi
           echo "nightly_version_at_start=$PUBLISHED_NIGHTLY" >> "$GITHUB_OUTPUT"
 
-          if ! PUBLISHED_VERSION="$(bash scripts/release/npm-view-version.sh "kandev@$NIGHTLY_VERSION")"; then
-            echo "Could not verify kandev@$NIGHTLY_VERSION; skipping this best-effort Nightly run."
-            exit 0
-          fi
-          if [[ -n "$PUBLISHED_VERSION" ]]; then
-            if [[ "$PUBLISHED_NIGHTLY" != "$NIGHTLY_VERSION" ]]; then
-              echo "kandev@$NIGHTLY_VERSION exists but @nightly resolves to '${PUBLISHED_NIGHTLY:-nothing}'." >&2
+          NIGHTLY_PACKAGES=(
+            "kandev"
+            "@kdlbs/runtime-linux-x64"
+            "@kdlbs/runtime-linux-arm64"
+            "@kdlbs/runtime-darwin-x64"
+            "@kdlbs/runtime-darwin-arm64"
+            "@kdlbs/runtime-win32-x64"
+          )
+          ALL_PACKAGES_PUBLISHED=true
+          for package in "${NIGHTLY_PACKAGES[@]}"; do
+            if ! published_version="$(bash scripts/release/npm-view-version.sh "${package}@$NIGHTLY_VERSION")"; then
+              echo "Could not verify ${package}@$NIGHTLY_VERSION; skipping this best-effort Nightly run."
+              exit 0
+            fi
+            if ! tagged_version="$(bash scripts/release/npm-view-version.sh "${package}@nightly")"; then
+              echo "Could not verify ${package}@nightly; skipping this best-effort Nightly run."
+              exit 0
+            fi
+
+            if [[ -n "$published_version" ]]; then
+              if [[ "$tagged_version" != "$NIGHTLY_VERSION" ]]; then
+                echo "${package}@$NIGHTLY_VERSION exists but @nightly resolves to '${tagged_version:-nothing}'." >&2
+                exit 1
+              fi
+              continue
+            fi
+
+            ALL_PACKAGES_PUBLISHED=false
+            if [[ -n "$tagged_version" && "$tagged_version" != "$PUBLISHED_NIGHTLY" ]]; then
+              echo "${package}@nightly resolves to unexpected partial version '$tagged_version'." >&2
               exit 1
             fi
-            echo "kandev@$NIGHTLY_VERSION is already published under @nightly; skipping."
+          done
+          if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then
+            echo "All Nightly packages are already published under @nightly; skipping."
             exit 0
           fi
 

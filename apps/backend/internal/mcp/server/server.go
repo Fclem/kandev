@@ -99,6 +99,8 @@ type Server struct {
 	attachmentAttempt  streams.MCPAttachmentAttempt
 	attachmentAttempts map[string]streams.MCPAttachmentAttempt
 	attachmentReporter func(streams.MCPAttachmentEvidence)
+	validatorMu        sync.RWMutex
+	toolValidators     map[string]toolArgumentValidator
 }
 
 // New creates a new MCP server for agentctl.
@@ -363,7 +365,14 @@ func (s *Server) wrapHandler(toolName string, handler server.ToolHandlerFunc) se
 				zap.Any("args", args))
 		}
 
-		result, err := handler(ctx, req)
+		validatedReq, validationErr := s.validateToolArguments(toolName, req)
+		var result *mcp.CallToolResult
+		var err error
+		if validationErr != nil {
+			result = mcp.NewToolResultError(validationErr.Error())
+		} else {
+			result, err = handler(ctx, validatedReq)
+		}
 		duration := time.Since(start)
 
 		switch {
@@ -510,6 +519,7 @@ func (s *Server) registerTools() {
 		zap.String("mode", s.mode),
 		zap.Int("count", count),
 		zap.Bool("disable_ask_question", s.disableAskQuestion))
+	s.rebuildToolArgumentValidators()
 }
 
 func (s *Server) registerKanbanTools() {

@@ -308,6 +308,8 @@ func TestFetchAndPersistSerializesCacheRefreshes(t *testing.T) {
 	svc := NewService(pool, "v1.2.3", nil, logger.Default(), WithHomeDir(homeDir), WithSettingsStore(store))
 	firstEntered := make(chan struct{})
 	releaseFirst := make(chan struct{})
+	closeReleaseFirst := sync.OnceFunc(func() { close(releaseFirst) })
+	t.Cleanup(closeReleaseFirst)
 	var calls atomic.Int32
 	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
 		if calls.Add(1) == 1 {
@@ -339,7 +341,7 @@ func TestFetchAndPersistSerializesCacheRefreshes(t *testing.T) {
 		secondFinishedEarly = true
 	case <-time.After(100 * time.Millisecond):
 	}
-	close(releaseFirst)
+	closeReleaseFirst()
 	if err := <-firstDone; err != nil {
 		t.Fatalf("first refresh: %v", err)
 	}

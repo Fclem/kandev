@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -161,6 +162,8 @@ func TestService_ApplyRejectsConcurrentNightlyBeforeSecondResolution(t *testing.
 	homeDir := configureManagedNPMInstall(t)
 	pool := newTestPool(t)
 	release := make(chan struct{})
+	closeRelease := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(closeRelease)
 	svc := NewService(
 		pool,
 		"v1.2.3",
@@ -189,7 +192,7 @@ func TestService_ApplyRejectsConcurrentNightlyBeforeSecondResolution(t *testing.
 	if got := resolutions.Load(); got != 1 {
 		t.Fatalf("nightly resolutions=%d want 1", got)
 	}
-	close(release)
+	closeRelease()
 }
 
 func TestWriteApplyIntentPreservesNativeNoBootStart(t *testing.T) {
@@ -274,6 +277,8 @@ func TestService_ApplyRejectsConcurrentSelfUpdate(t *testing.T) {
 	// Block the first helper so its job stays running while the second apply is
 	// attempted, making the in-flight guard deterministic.
 	release := make(chan struct{})
+	closeRelease := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(closeRelease)
 	svc := NewService(pool, "v1.0.0", nil, logger.Default(),
 		WithHomeDir(homeDir),
 		WithJobs(jobs.NewTracker(nil, logger.Default())),
@@ -289,7 +294,7 @@ func TestService_ApplyRejectsConcurrentSelfUpdate(t *testing.T) {
 	if _, err := svc.Apply(context.Background(), "UPDATE"); !errors.Is(err, ErrApplyInProgress) {
 		t.Fatalf("second Apply err=%v want ErrApplyInProgress", err)
 	}
-	close(release)
+	closeRelease()
 }
 
 func TestService_ApplyGuardExpiresAfterTTL(t *testing.T) {

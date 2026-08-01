@@ -31,6 +31,11 @@ export function useUpdateChannelDraft(
     setDraftState(channel);
   };
 
+  // The settings coordinator snapshots this contributor before it begins
+  // saving earlier contributors. Capture the edit token in that snapshot; the
+  // matching save callback closes over this render's draft value.
+  const contributorRevision = draftRevisionRef.current;
+
   useLayoutEffect(() => {
     const previous = savedRef.current;
     savedRef.current = authoritative;
@@ -46,14 +51,14 @@ export function useUpdateChannelDraft(
   useSettingsSaveContributor({
     id: "system-updates-channel",
     order: 10,
-    revision: draft,
+    revision: contributorRevision,
     // Keep the navigation guard active for the full save. A user can edit the
     // draft back to the previously saved value while the submitted channel is
     // still in flight, but leaving then would abandon an unresolved mutation.
     isDirty: isDirty || isSaving,
     save: async (revision) => {
-      const submitted = revision as UpdatesChannel;
-      const submittedRevision = draftRevisionRef.current;
+      const submitted = draft;
+      const submittedRevision = revision as number;
       pendingSaveRevisionRef.current = submittedRevision;
       setIsSaving(true);
       try {

@@ -235,29 +235,32 @@ for (const release of [
   });
 }
 
-test("a fresh Nightly publishes every package", async () => {
-  const fixture = await createFixture();
-  try {
-    const result = await runPublish(fixture, {
-      version: "1.2.4-nightly.shaabcdef123456",
-      distTag: "nightly",
-      mode: "fresh",
-    });
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.published, [...runtimePackages, "kandev"]);
-    const metadata = JSON.parse(result.publishedMetadata);
-    assert.equal(metadata.version, "1.2.4-nightly.shaabcdef123456");
-    assert.deepEqual(
-      metadata.optionalDependencies,
-      Object.fromEntries(
-        runtimePackages.map((name) => [name, "1.2.4-nightly.shaabcdef123456"]),
-      ),
-    );
-    assert.equal(result.packageJSON, fixture.originalPackageJSON);
-  } finally {
-    await rm(fixture.root, { recursive: true, force: true });
-  }
-});
+for (const release of [
+  { name: "Stable", version: "1.2.3", distTag: "latest" },
+  {
+    name: "Nightly",
+    version: "1.2.4-nightly.shaabcdef123456",
+    distTag: "nightly",
+  },
+]) {
+  test(`a fresh ${release.name} publishes every package with pinned launcher metadata`, async () => {
+    const fixture = await createFixture();
+    try {
+      const result = await runPublish(fixture, { ...release, mode: "fresh" });
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(result.published, [...runtimePackages, "kandev"]);
+      const metadata = JSON.parse(result.publishedMetadata);
+      assert.equal(metadata.version, release.version);
+      assert.deepEqual(
+        metadata.optionalDependencies,
+        Object.fromEntries(runtimePackages.map((name) => [name, release.version])),
+      );
+      assert.equal(result.packageJSON, fixture.originalPackageJSON);
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+}
 
 test("a conflicting Nightly launcher publish fails closed and restores package metadata", async () => {
   const fixture = await createFixture();

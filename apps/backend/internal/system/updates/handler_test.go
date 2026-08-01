@@ -377,7 +377,7 @@ func TestHandleSetChannelRejectsCrossOrigin(t *testing.T) {
 	}
 }
 
-func TestHandleSetChannelAllowsTrustedDevOrigin(t *testing.T) {
+func TestHandleSetChannelRejectsCrossPortOrigin(t *testing.T) {
 	svc, store := newManagedNPMServiceForHandler(t)
 	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
 		return "1.2.4-nightly.shaabc123def456", "https://example/nightly", nil
@@ -394,12 +394,12 @@ func TestHandleSetChannelAllowsTrustedDevOrigin(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s want 200", w.Code, w.Body.String())
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status=%d body=%s want 403", w.Code, w.Body.String())
 	}
-	raw, present := readMemorySetting(t, store)
-	if !present || string(raw) != string(ChannelNightly) {
-		t.Fatalf("trusted dev-origin channel selection raw=%q present=%v", raw, present)
+	_, present := readMemorySetting(t, store)
+	if present {
+		t.Fatal("cross-port channel selection was persisted")
 	}
 }
 

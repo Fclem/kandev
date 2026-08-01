@@ -588,6 +588,7 @@ jobs:
       ref: ${{ steps.metadata.outputs.ref }}
       stable_version: ${{ steps.metadata.outputs.stable_version }}
       nightly_version_at_start: ${{ steps.metadata.outputs.nightly_version_at_start }}
+      nightly_tags_at_start: ${{ steps.metadata.outputs.nightly_tags_at_start }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -676,6 +677,7 @@ jobs:
           fi
 
           ALL_PACKAGES_PUBLISHED=true
+          NIGHTLY_TAGS_AT_START=""
           for package in "${NIGHTLY_PACKAGES[@]}"; do
             if ! published_version="$(bash scripts/release/npm-view-version.sh "${package}@$NIGHTLY_VERSION")"; then
               echo "Could not verify ${package}@$NIGHTLY_VERSION; skipping this best-effort Nightly run."
@@ -685,6 +687,7 @@ jobs:
               echo "Could not verify ${package}@nightly; skipping this best-effort Nightly run."
               exit 0
             fi
+            NIGHTLY_TAGS_AT_START+="${package}=${tagged_version};"
 
             if [[ -n "$published_version" ]]; then
               if [[ "$tagged_version" != "$NIGHTLY_VERSION" ]]; then
@@ -706,6 +709,7 @@ jobs:
               echo "${package}@nightly is an older partial publication; the current publish will repair it."
             fi
           done
+          echo "nightly_tags_at_start=$NIGHTLY_TAGS_AT_START" >> "$GITHUB_OUTPUT"
           if [[ -n "$PUBLISHED_NIGHTLY" ]]; then
             if [[ "$ALL_PACKAGES_PUBLISHED" == "true" ]]; then
               if [[ "$PUBLISHED_COMMIT" != "$MAIN_SHA" ]]; then
@@ -1997,6 +2001,7 @@ jobs:
         env:
           NIGHTLY_BASELINE: ${{ needs.nightly-prepare.outputs.stable_version }}
           NIGHTLY_AT_START: ${{ needs.nightly-prepare.outputs.nightly_version_at_start }}
+          NIGHTLY_TAGS_AT_START: ${{ needs.nightly-prepare.outputs.nightly_tags_at_start }}
         run: |
           set -euo pipefail
           if ! CURRENT_LATEST="$(bash scripts/release/npm-view-version.sh kandev@latest)"; then
@@ -2017,6 +2022,19 @@ jobs:
           fi
           if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]; then
             echo "npm @nightly moved from ${NIGHTLY_AT_START:-nothing} to ${CURRENT_NIGHTLY:-nothing} while this run was building; skipping superseded publication."
+            exit 0
+          fi
+          source scripts/release/npm-packages.sh
+          CURRENT_NIGHTLY_TAGS=""
+          for package in "${NIGHTLY_PACKAGES[@]}"; do
+            if ! tagged_version="$(bash scripts/release/npm-view-version.sh "${package}@nightly")"; then
+              echo "Could not revalidate ${package}@nightly; skipping Nightly publication."
+              exit 0
+            fi
+            CURRENT_NIGHTLY_TAGS+="${package}=${tagged_version};"
+          done
+          if [[ "$CURRENT_NIGHTLY_TAGS" != "$NIGHTLY_TAGS_AT_START" ]]; then
+            echo "One or more npm @nightly tags moved while this run was building; skipping superseded publication."
             exit 0
           fi
           bash scripts/release/publish-npm.sh \

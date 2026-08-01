@@ -78,6 +78,12 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             'bash scripts/release/npm-view-version.sh kandev@nightly', nightly
         )
         self.assertIn('echo "nightly_version_at_start=$PUBLISHED_NIGHTLY" >> "$GITHUB_OUTPUT"', nightly)
+        self.assertIn(
+            "nightly_tags_at_start: ${{ steps.metadata.outputs.nightly_tags_at_start }}",
+            nightly,
+        )
+        self.assertIn('NIGHTLY_TAGS_AT_START+="${package}=${tagged_version};"', nightly)
+        self.assertIn('echo "nightly_tags_at_start=$NIGHTLY_TAGS_AT_START" >> "$GITHUB_OUTPUT"', nightly)
         self.assertIn('resolve_nightly_commit "$PUBLISHED_NIGHTLY" "kandev@nightly"', nightly)
         self.assertIn('git merge-base --is-ancestor "$MAIN_SHA" "$PUBLISHED_COMMIT"', nightly)
         self.assertIn('git merge-base --is-ancestor "$PUBLISHED_COMMIT" "$MAIN_SHA"', nightly)
@@ -171,6 +177,14 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             nightly,
         )
         self.assertIn('if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]', nightly)
+        self.assertIn(
+            "NIGHTLY_TAGS_AT_START: ${{ needs.nightly-prepare.outputs.nightly_tags_at_start }}",
+            nightly,
+        )
+        self.assertIn("source scripts/release/npm-packages.sh", nightly)
+        self.assertIn('for package in "${NIGHTLY_PACKAGES[@]}"; do', nightly)
+        self.assertIn('"${package}@nightly"', nightly)
+        self.assertIn('if [[ "$CURRENT_NIGHTLY_TAGS" != "$NIGHTLY_TAGS_AT_START" ]]', nightly)
         for condition in (
             'if [[ "$CURRENT_LATEST" != "$NIGHTLY_BASELINE" ]]; then',
             'if [[ "$CURRENT_NIGHTLY" != "$NIGHTLY_AT_START" ]]; then',

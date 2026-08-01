@@ -8,8 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-
-	"github.com/kandev/kandev/internal/common/httpmw"
 )
 
 const errorResponseKey = "error"
@@ -41,8 +39,7 @@ type channelRequestBody struct {
 // HandleSetChannel changes the install-wide update source.
 func HandleSetChannel(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		origin := c.Request.Header.Get("Origin")
-		if origin != "" && !httpmw.AllowedOrigin(origin, c.Request.Host) {
+		if !sameOriginOrNoOrigin(c.Request) {
 			c.JSON(http.StatusForbidden, gin.H{errorResponseKey: "cross-origin update channel change is not allowed"})
 			return
 		}

@@ -43,6 +43,13 @@ CREATE TABLE IF NOT EXISTS kandev_meta (
   value TEXT NOT NULL DEFAULT ''
 )`
 
+const metaKeyUpsert = `INSERT INTO kandev_meta (key, value) VALUES (?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+
+type metaKeyExecutor interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
 // ensureMetaTable creates the kandev_meta table if it does not exist.
 func ensureMetaTable(db *sqlx.DB) error {
 	if _, err := db.Exec(metaTableDDL); err != nil {
@@ -66,15 +73,7 @@ func readKey(db *sqlx.DB, key string) (string, error) {
 
 // writeKey upserts key=value into kandev_meta.
 func writeKey(db *sqlx.DB, key, value string) error {
-	_, err := db.Exec(
-		db.Rebind(`INSERT INTO kandev_meta (key, value) VALUES (?, ?)
-		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`),
-		key, value,
-	)
-	if err != nil {
-		return fmt.Errorf("write meta key %q: %w", key, err)
-	}
-	return nil
+	return writeMetaKey(db, db.Rebind(metaKeyUpsert), key, value)
 }
 
 // WriteVersion records currentVersion as the binary version that last
@@ -102,8 +101,7 @@ func writeLatestVersion(db *sqlx.DB, keys latestVersionKeys, version, url string
 		return fmt.Errorf("begin latest version write: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	query := db.Rebind(`INSERT INTO kandev_meta (key, value) VALUES (?, ?)
-		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+	query := db.Rebind(metaKeyUpsert)
 	if err := writeMetaKey(tx, query, keys.version, version); err != nil {
 		return err
 	}
@@ -153,8 +151,8 @@ func readLatestVersion(db *sqlx.DB, keys latestVersionKeys) (string, string, tim
 	return version, url, checkedAt, nil
 }
 
-func writeMetaKey(tx *sqlx.Tx, query, key, value string) error {
-	if _, err := tx.Exec(query, key, value); err != nil {
+func writeMetaKey(executor metaKeyExecutor, query, key, value string) error {
+	if _, err := executor.Exec(query, key, value); err != nil {
 		return fmt.Errorf("write meta key %q: %w", key, err)
 	}
 	return nil

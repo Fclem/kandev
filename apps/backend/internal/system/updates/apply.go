@@ -55,9 +55,6 @@ func (s *Service) applyPreflight(
 	if !applySupported {
 		return UpdatesResponse{}, nil, fmt.Errorf("%w: %s", ErrApplyUnsupported, reason)
 	}
-	if metadata == nil {
-		return UpdatesResponse{}, nil, ErrApplyUnsupported
-	}
 	channel, err := s.effectiveChannel(ctx, install)
 	if err != nil {
 		return UpdatesResponse{}, nil, err

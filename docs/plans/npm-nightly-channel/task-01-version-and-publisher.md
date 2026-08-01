@@ -18,6 +18,7 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 - **Acceptance:** Scheduled preflight and publishing share one package inventory; an older partial
   publication is recoverable only when its embedded commit is an ancestor of current `main`.
 - **Verification:** `node --test scripts/release/nightly-version.test.mjs`
+- **Verification:** `node --test scripts/release/publish-npm.test.mjs`
 - **Verification:** `cd apps && pnpm --filter kandev exec vitest run src/release-config.test.ts src/service/self_update.test.ts`
 - **Files likely touched:** `scripts/release/nightly-version.mjs`, its test,
   `scripts/release/npm-packages.sh`,
@@ -31,7 +32,8 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 
 ## Verification results
 
-- `node --test scripts/release/nightly-version.test.mjs` — passed, 7 tests.
+- `node --test scripts/release/nightly-version.test.mjs` — passed, 6 tests.
+- `node --test scripts/release/publish-npm.test.mjs` — passed, 7 tests.
 - `cd apps && pnpm --filter kandev exec vitest run src/release-config.test.ts src/service/self_update.test.ts`
-  — passed, 23 tests.
+  — passed, 24 tests.
 - `bash -n scripts/release/publish-npm.sh` — passed.

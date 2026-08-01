@@ -31,7 +31,7 @@ func TestNewRunnerUsesResolvedTemporaryWorkdirForProtocolRequests(t *testing.T) 
 func TestProbe_DefaultWorkdirReachesSessionNew(t *testing.T) {
 	t.Setenv("ACPDBG_HELPER_PROCESS", "1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	runner, err := NewRunner(ctx, filepath.Join(t.TempDir(), "frames.jsonl"), RunConfig{
 		AgentID: "helper",

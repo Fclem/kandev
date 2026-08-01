@@ -83,6 +83,15 @@ prepare_pr_assets() {
   mkdir -p "$WEB_DIR/.pr-assets"
 }
 
+restore_pr_asset_ownership() {
+  [[ -n "${CAPTURE_PR_ASSETS:-}" ]] || return 0
+  docker run --rm -v "$WEB_DIR":/web alpine sh -c "chown -R $(id -u):$(id -g) /web/.pr-assets" \
+    >/dev/null || {
+      log "failed to restore PR asset ownership"
+      return 1
+    }
+}
+
 build_fe() {
   log "building Vite web assets"
   ( cd "$REPO_ROOT/apps" && pnpm --filter @kandev/web build ) \
@@ -238,7 +247,7 @@ run_docker() {
   if [[ "$SHARDS" -le 1 ]]; then
     run_one 0
     local rc=$?
-    [[ -z "${CAPTURE_PR_ASSETS:-}" ]] || docker run --rm -v "$WEB_DIR":/web alpine sh -c "chown -R $(id -u):$(id -g) /web/.pr-assets" >/dev/null
+    restore_pr_asset_ownership || return 1
     return $rc
   fi
   log "running $SHARDS isolated containers"
@@ -251,7 +260,7 @@ run_docker() {
   for ((i=1; i<=SHARDS; i++)); do
     printf '  shard %s: %s\n' "$i" "$(grep -Eo '[0-9]+ (passed|failed|flaky)' "/tmp/e2e-docker-shard-$i.log" | paste -sd' ')" >&2
   done
-  [[ -z "${CAPTURE_PR_ASSETS:-}" ]] || docker run --rm -v "$WEB_DIR":/web alpine sh -c "chown -R $(id -u):$(id -g) /web/.pr-assets" >/dev/null
+  restore_pr_asset_ownership || return 1
   log "docker shard logs: /tmp/e2e-docker-shard-*.log"
   return $rc
 }

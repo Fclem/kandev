@@ -112,12 +112,15 @@ func TestToolArgumentValidation(t *testing.T) {
 }
 
 func TestToolArgumentValidationDoesNotExposeRejectedValues(t *testing.T) {
-	const secret = "api-key-super-secret-123"
+	const (
+		secret   = "api-key-super-secret-123"
+		toolName = "secret_pattern_tool"
+	)
 	backend := &testBackend{}
 	s := newTaskModeServer(t, backend, "task-current")
 	s.mcpServer.AddTool(
 		mcp.NewToolWithRawSchema(
-			"secret_pattern_tool",
+			toolName,
 			"Validates a secret without exposing it.",
 			json.RawMessage(`{
 				"type": "object",
@@ -127,11 +130,11 @@ func TestToolArgumentValidationDoesNotExposeRejectedValues(t *testing.T) {
 				"required": ["token"]
 			}`),
 		),
-		s.wrapHandler("secret_pattern_tool", s.listWorkspacesHandler()),
+		s.wrapHandler(toolName, s.listWorkspacesHandler()),
 	)
 	s.rebuildToolArgumentValidators()
 
-	result := callTool(t, s, "secret_pattern_tool", map[string]interface{}{
+	result := callTool(t, s, toolName, map[string]interface{}{
 		"token": secret,
 	})
 

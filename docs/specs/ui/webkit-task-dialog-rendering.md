@@ -1,5 +1,5 @@
 ---
-status: draft
+status: complete
 created: 2026-08-01
 owner: product
 ---

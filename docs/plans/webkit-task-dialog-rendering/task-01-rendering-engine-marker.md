@@ -12,9 +12,9 @@ spec: "../../specs/ui/webkit-task-dialog-rendering.md"
 
 ## Acceptance
 
-- Safari, WKWebView/WebKitGTK-shaped user agents, iOS branded browsers, and iPadOS desktop mode
-  classify as `webkit`, while Blink, WebView2, Firefox, and unknown user agents classify as
-  `other`.
+- Safari, WKWebView/WebKitGTK-shaped user agents, iOS branded browsers, and iPadOS desktop-mode
+  Safari UAs classify as `webkit`, while Blink, WebView2, Firefox, unknown user agents, and
+  iPadOS desktop-mode Chrome/Edge UAs carrying Blink tokens classify as `other`.
 - The document root receives `data-rendering-engine="webkit|other"` before boot-payload loading and
   React rendering, without persistence or a user-visible setting.
 - Classification failure falls back to `other` and does not block application startup.

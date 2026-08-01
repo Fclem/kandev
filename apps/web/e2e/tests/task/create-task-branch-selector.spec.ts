@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { execSync } from "node:child_process";
 import { test, expect } from "../../fixtures/test-base";
+import { expectWebkitDialogMotion } from "../../helpers/dialog-webkit-metrics";
 import { useRegularMode } from "../../helpers/regular-mode";
 import { KanbanPage } from "../../pages/kanban-page";
 import { makeGitEnv } from "../../helpers/git-helper";
@@ -341,22 +342,11 @@ test.describe("Fresh-branch flow", () => {
       const modal = testPage.getByTestId("discard-local-changes-dialog");
       await expect(modal).toBeVisible({ timeout: 5_000 });
       await expect(testPage.getByTestId("discard-local-changes-files")).toContainText("WIP.txt");
-      const modalRendering = await modal.evaluate((element) => {
-        const style = getComputedStyle(element);
-        const overlay = document.querySelector<HTMLElement>('[data-slot="alert-dialog-overlay"]');
-        return {
-          animationName: style.animationName,
-          transform: style.transform,
-          translate: style.translate,
-          zIndex: style.zIndex,
-          overlayZIndex: overlay ? getComputedStyle(overlay).zIndex : "",
-        };
+      await expectWebkitDialogMotion(modal, {
+        overlaySelector: '[data-slot="alert-dialog-overlay"]',
+        contentZIndex: "53",
+        overlayZIndex: "52",
       });
-      expect(modalRendering.animationName).toBe("kandev-dialog-webkit-enter");
-      expect(["none", "matrix(1, 0, 0, 1, 0, 0)"]).toContain(modalRendering.transform);
-      expect(["none", "0px", "0px 0px"]).toContain(modalRendering.translate);
-      expect(modalRendering.zIndex).toBe("53");
-      expect(modalRendering.overlayZIndex).toBe("52");
 
       // Cancel returns to the form with the toggle still on.
       await testPage.getByTestId("discard-local-changes-cancel").click();

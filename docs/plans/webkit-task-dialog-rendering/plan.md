@@ -28,8 +28,9 @@ does not configure vibrancy or transparency.
 - Add `apps/web/lib/browser/rendering-engine.ts` with a pure classifier and a small document-marker
   helper.
 - Classify a user agent as WebKit when it contains `AppleWebKit` and is not a desktop Blink runtime.
-  Keep iPhone, iPad, iPod, and touch-capable iPadOS desktop-mode user agents on the WebKit path even
-  when their browser brand is Chrome, Edge, or Firefox.
+  iPhone, iPad, and iPod UAs without Blink compatibility tokens remain on the WebKit path. Branded
+  iPadOS desktop-mode Chrome/Edge UAs that carry `Chrome/` or `Edg/` are intentionally treated as
+  `other`; this token-based classifier does not infer touch capability from a desktop UA.
 - Treat desktop `Chrome`, `Chromium`, `HeadlessChrome`, `Edg`, `OPR`, and `SamsungBrowser` tokens as
   Blink/non-WebKit compatibility UAs. Firefox and unknown engines fall back to `other`.
 - In `apps/web/src/main.tsx`, apply `data-rendering-engine="webkit|other"` to the document root

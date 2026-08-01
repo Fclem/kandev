@@ -1,4 +1,5 @@
 import { expect, test } from "../../fixtures/test-base";
+import { expectWebkitDialogMotion } from "../../helpers/dialog-webkit-metrics";
 import { assertNoDocumentHorizontalOverflow } from "../../helpers/layout-assertions";
 import { useRegularMode } from "../../helpers/regular-mode";
 import { MobileKanbanPage } from "../../pages/mobile-kanban-page";
@@ -21,8 +22,9 @@ test("keeps the WebKit Create Task dialog full-height and contained on mobile", 
   await expect(dialog.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
   await expect(dialog).toHaveCSS("padding-top", "0px");
-  await dialog.evaluate(async (element) => {
-    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+  await expectWebkitDialogMotion(dialog, {
+    contentZIndex: "50",
+    overlayZIndex: "49",
   });
   await expect(dialog.getByTestId("task-title-input")).toBeVisible();
   await expect(dialog.getByTestId("task-description-input")).toBeVisible();
@@ -36,17 +38,6 @@ test("keeps the WebKit Create Task dialog full-height and contained on mobile", 
   expect(box!.width).toBeCloseTo(viewport!.width, 0);
   expect(box!.height).toBeCloseTo(viewport!.height, 0);
 
-  const motion = await dialog.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      animationName: style.animationName,
-      transform: style.transform,
-      translate: style.translate,
-    };
-  });
-  expect(motion.animationName).toBe("kandev-dialog-webkit-enter");
-  expect(["none", "matrix(1, 0, 0, 1, 0, 0)"]).toContain(motion.transform);
-  expect(["none", "0px", "0px 0px"]).toContain(motion.translate);
   await assertNoDocumentHorizontalOverflow(testPage, "WebKit Create Task dialog");
   await prCapture.screenshot("webkit-create-task-dialog-mobile", {
     caption: "The WebKit Create Task dialog remains full-height and contained on mobile.",

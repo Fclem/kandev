@@ -110,7 +110,10 @@ func HandleApply(svc *Service) gin.HandlerFunc {
 			return
 		}
 		var req applyRequestBody
-		_ = c.ShouldBindJSON(&req)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{errorResponseKey: "invalid update request"})
+			return
+		}
 		jobID, err := svc.Apply(context.Background(), req.Confirm, req.TargetVersion)
 		if errors.Is(err, ErrApplyConfirm) {
 			c.JSON(http.StatusBadRequest, gin.H{errorResponseKey: err.Error()})

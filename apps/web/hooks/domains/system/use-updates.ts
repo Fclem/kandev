@@ -53,7 +53,7 @@ export function useUpdates() {
     setIsLoading(true);
     setError(null);
     let flight = coordinator.reloadFlight;
-    if (!flight) {
+    if (!flight || flight.request !== coordinator.readRevision) {
       flight = {
         request: ++coordinator.readRevision,
         promise: fetchUpdates({ cache: "no-store" }),

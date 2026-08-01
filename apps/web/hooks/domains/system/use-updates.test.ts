@@ -98,7 +98,7 @@ describe("useUpdates", () => {
     expect(result.current.isChecking).toBe(false);
   });
 
-  it("deduplicates overlapping reloads so one failed request cannot hide another success", async () => {
+  it("deduplicates overlapping reloads and publishes their shared result once", async () => {
     const pending = deferred<UpdatesResponse>();
     mocks.fetchUpdates.mockReturnValue(pending.promise);
     const { result } = renderHook(() => useUpdates());
@@ -120,6 +120,47 @@ describe("useUpdates", () => {
     expect(result.current.isLoading).toBe(false);
     expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
     expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
+  });
+});
+
+describe("useUpdates request ordering", () => {
+  it("starts a fresh reload when a newer failed check makes the shared flight stale", async () => {
+    const staleReload = deferred<UpdatesResponse>();
+    const recoveryReload = deferred<UpdatesResponse>();
+    const checkFailure = new Error("check failed");
+    mocks.fetchUpdates
+      .mockReturnValueOnce(staleReload.promise)
+      .mockReturnValueOnce(recoveryReload.promise);
+    mocks.checkUpdates.mockRejectedValue(checkFailure);
+    const { result } = renderHook(() => useUpdates());
+
+    let stalePromise!: Promise<void>;
+    act(() => {
+      stalePromise = result.current.reload();
+    });
+    await act(async () => {
+      await expect(result.current.check()).rejects.toBe(checkFailure);
+    });
+
+    let recoveryPromise!: Promise<void>;
+    act(() => {
+      recoveryPromise = result.current.reload();
+    });
+    expect(mocks.fetchUpdates).toHaveBeenCalledTimes(2);
+
+    const nightly = updates("nightly");
+    await act(async () => {
+      recoveryReload.resolve(nightly);
+      await recoveryPromise;
+    });
+    await act(async () => {
+      staleReload.resolve(updates("stable"));
+      await stalePromise;
+    });
+
+    expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
+    expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
+    expect(result.current.error).toBeNull();
   });
 
   it("suppresses an obsolete check failure after a newer channel save", async () => {

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -432,6 +433,59 @@ func TestHandleApplyRejectsChangedNightlyTarget(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "update target changed") {
 		t.Fatalf("body=%s want target-changed error", w.Body.String())
+	}
+}
+
+func TestHandleApplyRejectsInvalidJSONBeforeApplying(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: "type mismatch after valid target",
+			body: `{"confirm":"UPDATE","target_version":"v1.2.4","target_version":123}`,
+		},
+		{
+			name: "truncated object after valid fields",
+			body: `{"confirm":"UPDATE","target_version":"v1.2.4","broken":`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _ := newManagedNPMServiceForHandler(t)
+			if err := persistence.WriteLatestVersion(
+				svc.pool.Writer(),
+				"v1.2.4",
+				"https://example/v1.2.4",
+				time.Now().UTC(),
+			); err != nil {
+				t.Fatal(err)
+			}
+			svc.jobs = jobs.NewTracker(nil, logger.Default())
+			var runnerCalls atomic.Int32
+			svc.applyRun = func(context.Context, applyRequest) (map[string]interface{}, error) {
+				runnerCalls.Add(1)
+				return map[string]interface{}{"status": "started"}, nil
+			}
+
+			req := httptest.NewRequest(
+				http.MethodPost,
+				"/api/v1/system/updates/apply",
+				bytes.NewBufferString(tc.body),
+			)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			newRouter(svc).ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("status=%d body=%s want 400", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "invalid update request") {
+				t.Errorf("body=%s want generic invalid-request error", w.Body.String())
+			}
+			if got := runnerCalls.Load(); got != 0 {
+				t.Errorf("apply runner calls=%d want 0", got)
+			}
+		})
 	}
 }
 

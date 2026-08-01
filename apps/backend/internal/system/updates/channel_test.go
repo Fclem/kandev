@@ -362,8 +362,6 @@ func TestSelectChannelSharesManualUpstreamRateLimit(t *testing.T) {
 }
 
 func TestFetchAndPersistSerializesCacheRefreshes(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
 	homeDir := configureManagedNPMInstall(t)
 	pool := newTestPool(t)
 	store := &memorySettingsStore{value: []byte(ChannelNightly), present: true}
@@ -377,71 +375,45 @@ func TestFetchAndPersistSerializesCacheRefreshes(t *testing.T) {
 	closeReleaseSecond := sync.OnceFunc(func() { close(releaseSecond) })
 	t.Cleanup(closeReleaseSecond)
 	var calls atomic.Int32
-	svc.SetNightlyFetcher(func(fetchCtx context.Context) (string, string, error) {
+	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
 		if calls.Add(1) == 1 {
 			close(firstEntered)
-			select {
-			case <-releaseFirst:
-			case <-fetchCtx.Done():
-				return "", "", fetchCtx.Err()
-			}
+			<-releaseFirst
 			return "v1.2.4-nightly.shaaaaaaaaaaaaa", "https://example/first", nil
 		}
 		close(secondEntered)
-		select {
-		case <-releaseSecond:
-		case <-fetchCtx.Done():
-			return "", "", fetchCtx.Err()
-		}
+		<-releaseSecond
 		return "v1.2.5-nightly.shabbbbbbbbbbbb", "https://example/second", nil
 	})
 
 	firstDone := make(chan error, 1)
 	secondDone := make(chan error, 1)
-	secondStarted := make(chan struct{})
 	go func() {
-		_, err := svc.fetchAndPersist(ctx)
+		_, err := svc.fetchAndPersist(context.Background())
 		firstDone <- err
 	}()
 	select {
 	case <-firstEntered:
-	case <-ctx.Done():
-		t.Fatal("first refresh did not enter resolver")
+	case err := <-firstDone:
+		t.Fatalf("first refresh returned before resolver: %v", err)
+	}
+	if svc.updateMu.TryLock() {
+		svc.updateMu.Unlock()
+		t.Fatal("refresh lock was not held while first resolver was active")
 	}
 	go func() {
-		close(secondStarted)
-		_, err := svc.fetchAndPersist(ctx)
+		_, err := svc.fetchAndPersist(context.Background())
 		secondDone <- err
 	}()
 
-	select {
-	case <-secondStarted:
-	case <-ctx.Done():
-		t.Fatal("second refresh did not start")
-	}
-	select {
-	case <-secondEntered:
-		t.Fatal("second refresh entered resolver before first refresh completed")
-	case <-time.After(100 * time.Millisecond):
-	case <-ctx.Done():
-		t.Fatal("timed out checking refresh serialization")
-	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("resolver calls before first release=%d want 1", got)
-	}
 	closeReleaseFirst()
-	select {
-	case err := <-firstDone:
-		if err != nil {
-			t.Fatalf("first refresh: %v", err)
-		}
-	case <-ctx.Done():
-		t.Fatal("first refresh did not finish")
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first refresh: %v", err)
 	}
 	select {
 	case <-secondEntered:
-	case <-ctx.Done():
-		t.Fatal("second refresh did not enter resolver")
+	case err := <-secondDone:
+		t.Fatalf("second refresh returned before resolver: %v", err)
 	}
 	version, targetURL, _, err := persistence.ReadLatestNightlyVersion(pool.Reader())
 	if err != nil {
@@ -450,16 +422,11 @@ func TestFetchAndPersistSerializesCacheRefreshes(t *testing.T) {
 	if version != "v1.2.4-nightly.shaaaaaaaaaaaaa" || targetURL != "https://example/first" {
 		t.Fatalf("cache before second release version=%q url=%q", version, targetURL)
 	}
-	closeReleaseSecond()
-	select {
-	case err := <-secondDone:
-		if err != nil {
-			t.Fatalf("second refresh: %v", err)
-		}
-	case <-ctx.Done():
-		t.Fatal("second refresh did not finish")
-	}
 
+	closeReleaseSecond()
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second refresh: %v", err)
+	}
 	version, targetURL, _, err = persistence.ReadLatestNightlyVersion(pool.Reader())
 	if err != nil {
 		t.Fatal(err)

@@ -9,9 +9,11 @@ const mocks = vi.hoisted(() => ({
   saveUpdatesChannel: vi.fn(),
   setSystemUpdates: vi.fn(),
   currentUpdates: null as UpdatesResponse | null,
+  store: {} as object,
 }));
 
 vi.mock("@/components/state-provider", () => ({
+  useAppStoreApi: () => mocks.store,
   useAppStore: (
     selector: (state: {
       system: { updates: UpdatesResponse | null };
@@ -62,6 +64,7 @@ beforeEach(() => {
   mocks.saveUpdatesChannel.mockReset();
   mocks.setSystemUpdates.mockReset();
   mocks.currentUpdates = updates("stable");
+  mocks.store = {};
 });
 
 describe("useUpdates", () => {
@@ -135,6 +138,28 @@ describe("useUpdates", () => {
     });
 
     expect(result.current.error).toBeNull();
+    expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
+    expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
+  });
+
+  it("keeps a save authoritative over an older reload from another hook instance", async () => {
+    const pendingReload = deferred<UpdatesResponse>();
+    const nightly = updates("nightly");
+    mocks.fetchUpdates.mockReturnValue(pendingReload.promise);
+    mocks.saveUpdatesChannel.mockResolvedValue(nightly);
+    const reader = renderHook(() => useUpdates());
+    const writer = renderHook(() => useUpdates());
+
+    let reloadPromise!: Promise<void>;
+    await act(async () => {
+      reloadPromise = reader.result.current.reload();
+      await writer.result.current.saveChannel("nightly");
+    });
+    await act(async () => {
+      pendingReload.resolve(updates("stable"));
+      await reloadPromise;
+    });
+
     expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
     expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
   });
@@ -226,5 +251,35 @@ describe("useUpdates channel saving", () => {
 
     expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
     expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
+  });
+
+  it("keeps the newest save authoritative across hook instances", async () => {
+    const firstSave = deferred<UpdatesResponse>();
+    const secondSave = deferred<UpdatesResponse>();
+    mocks.saveUpdatesChannel
+      .mockReturnValueOnce(firstSave.promise)
+      .mockReturnValueOnce(secondSave.promise);
+    const first = renderHook(() => useUpdates());
+    const second = renderHook(() => useUpdates());
+
+    let firstPromise!: Promise<UpdatesResponse>;
+    let secondPromise!: Promise<UpdatesResponse>;
+    act(() => {
+      firstPromise = first.result.current.saveChannel("nightly");
+      secondPromise = second.result.current.saveChannel("stable");
+    });
+
+    const stable = updates("stable");
+    await act(async () => {
+      secondSave.resolve(stable);
+      await secondPromise;
+    });
+    await act(async () => {
+      firstSave.resolve(updates("nightly"));
+      await firstPromise;
+    });
+
+    expect(mocks.setSystemUpdates).toHaveBeenCalledOnce();
+    expect(mocks.setSystemUpdates).toHaveBeenCalledWith(stable);
   });
 });

@@ -18,7 +18,9 @@ spec: "../../specs/npm-nightly-channel/spec.md"
   versions cannot create document overflow.
 - **Acceptance:** a save response cannot overwrite a newer channel draft, and save failures replace
   stale manual-check errors while leaving the draft retryable.
-- **Verification:** `cd apps && pnpm --filter @kandev/web exec vitest run lib/api/domains/system-api.test.ts components/settings/system/updates-card.test.tsx`
+- **Acceptance:** all `useUpdates` instances sharing one Zustand store coordinate read/save
+  authority so an older response cannot overwrite a newer saved channel.
+- **Verification:** `cd apps && pnpm --filter @kandev/web exec vitest run lib/api/domains/system-api.test.ts hooks/domains/system/use-updates.test.ts components/settings/system/updates-card.test.tsx`
 - **Verification:** `cd apps/web && pnpm run typecheck`
 - **Files likely touched:** `apps/web/lib/types/system.ts`, `lib/api/domains/system-api.ts`,
   `hooks/domains/system/use-updates.ts`, `components/settings/system/updates-card.tsx`, an extracted
@@ -31,7 +33,7 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 
 ## Verification results
 
-- `cd apps && pnpm --filter @kandev/web exec vitest run lib/api/domains/system-api.test.ts components/settings/system/updates-card.test.tsx`
-  — passed, 47 tests.
+- `cd apps && pnpm --filter @kandev/web exec vitest run lib/api/domains/system-api.test.ts hooks/domains/system/use-updates.test.ts components/settings/system/updates-card.test.tsx`
+  — passed, 56 tests, including cross-instance stale-read and save-order races.
 - `cd apps/web && pnpm run typecheck` — passed.
 - Focused ESLint for the changed frontend unit/API files — passed with no warnings.

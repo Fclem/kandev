@@ -1,38 +1,59 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAppStore } from "@/components/state-provider";
+import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { checkUpdates, fetchUpdates, saveUpdatesChannel } from "@/lib/api/domains/system-api";
 import type { UpdatesChannel } from "@/lib/types/system";
 
+type UpdatesRequestCoordinator = {
+  readRevision: number;
+  saveRevision: number;
+  activeSaves: number;
+};
+
+// Hooks own their loading/error UI, but every instance writes the same Zustand
+// store. Coordinate response authority per store so one mounted reader cannot
+// overwrite a newer channel save performed by another instance.
+const coordinators = new WeakMap<object, UpdatesRequestCoordinator>();
+
+function coordinatorFor(store: object): UpdatesRequestCoordinator {
+  let coordinator = coordinators.get(store);
+  if (!coordinator) {
+    coordinator = { readRevision: 0, saveRevision: 0, activeSaves: 0 };
+    coordinators.set(store, coordinator);
+  }
+  return coordinator;
+}
+
 export function useUpdates() {
+  const store = useAppStoreApi();
+  const coordinator = coordinatorFor(store);
   const updates = useAppStore((s) => s.system.updates);
   const setSystemUpdates = useAppStore((s) => s.setSystemUpdates);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
-  const latestRead = useRef(0);
   const latestReload = useRef(0);
   const latestCheck = useRef(0);
-  const latestSave = useRef(0);
-  const activeSaves = useRef(0);
 
   const reload = useCallback(async () => {
-    const request = ++latestRead.current;
+    const request = ++coordinator.readRevision;
     const reloadRequest = ++latestReload.current;
     setIsLoading(true);
     setError(null);
     try {
       const res = await fetchUpdates({ cache: "no-store" });
-      if (request === latestRead.current && activeSaves.current === 0) setSystemUpdates(res);
+      if (request === coordinator.readRevision && coordinator.activeSaves === 0) {
+        setSystemUpdates(res);
+      }
     } catch (e) {
-      if (request === latestRead.current && activeSaves.current === 0) {
+      if (request === coordinator.readRevision && coordinator.activeSaves === 0) {
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
       if (reloadRequest === latestReload.current) setIsLoading(false);
     }
-  }, [setSystemUpdates]);
+  }, [coordinator, setSystemUpdates]);
 
   /**
    * Triggers a server-side re-poll of the selected update channel. The
@@ -40,44 +61,46 @@ export function useUpdates() {
    * with the fresh row (or 429 — surfaced via the returned promise).
    */
   const check = useCallback(async () => {
-    const request = ++latestRead.current;
+    const request = ++coordinator.readRevision;
     const checkRequest = ++latestCheck.current;
     setIsChecking(true);
     setError(null);
     try {
       const res = await checkUpdates();
-      if (request === latestRead.current && activeSaves.current === 0) setSystemUpdates(res);
+      if (request === coordinator.readRevision && coordinator.activeSaves === 0) {
+        setSystemUpdates(res);
+      }
       return res;
     } catch (e) {
-      if (request !== latestRead.current || activeSaves.current > 0) return undefined;
+      if (request !== coordinator.readRevision || coordinator.activeSaves > 0) return undefined;
       setError(e instanceof Error ? e.message : String(e));
       throw e;
     } finally {
       if (checkRequest === latestCheck.current) setIsChecking(false);
     }
-  }, [setSystemUpdates]);
+  }, [coordinator, setSystemUpdates]);
 
   const saveChannel = useCallback(
     async (channel: UpdatesChannel) => {
-      const request = ++latestSave.current;
-      activeSaves.current += 1;
-      latestRead.current += 1;
+      const request = ++coordinator.saveRevision;
+      coordinator.activeSaves += 1;
+      coordinator.readRevision += 1;
       setError(null);
       try {
         const res = await saveUpdatesChannel(channel);
-        if (request === latestSave.current) setSystemUpdates(res);
+        if (request === coordinator.saveRevision) setSystemUpdates(res);
         return res;
       } catch (e) {
-        if (request === latestSave.current) {
+        if (request === coordinator.saveRevision) {
           setError(e instanceof Error ? e.message : String(e));
         }
         throw e;
       } finally {
-        activeSaves.current -= 1;
-        latestRead.current += 1;
+        coordinator.activeSaves -= 1;
+        coordinator.readRevision += 1;
       }
     },
-    [setSystemUpdates],
+    [coordinator, setSystemUpdates],
   );
 
   useEffect(() => {

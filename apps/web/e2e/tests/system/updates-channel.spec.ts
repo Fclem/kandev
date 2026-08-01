@@ -99,7 +99,12 @@ test.describe("System update channel", () => {
       await testPage.getByTestId("system-updates-apply").click();
       await expect(testPage.getByRole("alertdialog")).toContainText(NIGHTLY_TAG);
       await testPage.getByTestId("system-updates-apply-confirm").click();
-      await expect.poll(() => applyBody).toEqual({ confirm: "UPDATE" });
+      await expect
+        .poll(() => applyBody)
+        .toEqual({
+          confirm: "UPDATE",
+          target_version: NIGHTLY_TAG,
+        });
       await expect.poll(() => jobRequests).toBeGreaterThan(0);
       await completedReload;
       await testPage.waitForLoadState("domcontentloaded");

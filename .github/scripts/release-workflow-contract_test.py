@@ -48,6 +48,13 @@ def job_block(name: str) -> str:
     return WORKFLOW[start:end]
 
 
+def job_condition(name: str) -> str:
+    match = re.search(r"(?m)^    if: [^\n]*(?:\n      [^\n]*)*", job_block(name))
+    if match is None:
+        raise AssertionError(f"job condition not found: {name}")
+    return " ".join(match.group().split())
+
+
 class ReleaseWorkflowContractTest(unittest.TestCase):
     def test_nightly_runs_at_noon_utc_and_skips_before_building(self) -> None:
         self.assertIn('schedule:\n    - cron: "0 12 * * *"', WORKFLOW)
@@ -462,8 +469,10 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "update-homebrew-tap",
         ):
             block = job_block(name)
-            self.assertIn("github.event_name == 'workflow_dispatch'", block)
-            self.assertIn("!inputs.dry_run", block)
+            self.assertRegex(
+                job_condition(name),
+                r"github\.event_name == 'workflow_dispatch'.*!inputs\.dry_run",
+            )
             self.assertNotIn("inputs.backfill_tag == ''", block)
 
     def test_updater_signing_validation_uses_workflow_control_revision(self) -> None:

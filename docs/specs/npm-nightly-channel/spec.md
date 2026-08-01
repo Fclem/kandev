@@ -34,8 +34,9 @@ launcher and native runtime packages users install in production.
   on the Stable channel.
 - Stable update discovery continues to use GitHub Releases. Nightly discovery follows npm's
   `kandev@nightly` dist-tag.
-- Applying an npm/npx update resolves the mutable tag first, then installs the exact immutable
-  version.
+- Applying an npm/npx update submits the exact version shown in the Updates page. The backend
+  accepts it only while it still matches the selected channel's cached target, then installs that
+  immutable version; a changed cache returns `409 Conflict` and requires a refresh.
 - Nightly publication creates no Git tag, GitHub Release, changelog commit, desktop update,
   container tag, or Homebrew update.
 
@@ -98,6 +99,9 @@ the installation.
 
 - A GitHub or npm discovery failure preserves that channel's previous cache and surfaces the stale
   checked time plus the request error.
+- Apply never re-resolves a moving channel tag. It locks the selected-channel cache, rejects a
+  submitted `target_version` that no longer matches, and writes the matching exact version into the
+  update intent.
 - A malformed or missing npm `nightly` tag fails closed; it is never offered or installed.
 - A failed channel save keeps the draft dirty and surfaces that save failure instead of retaining a
   stale manual-check error or retry countdown.
@@ -162,6 +166,9 @@ the installation.
 - **GIVEN** a user running a nightly selects Stable, **WHEN** a valid stable target differs,
   **THEN** the UI offers an explicit return to that exact stable version without announcing it as
   a normal upgrade notification.
+- **GIVEN** the Updates page shows target A and discovery changes the selected-channel cache to B,
+  **WHEN** the user submits Apply for A, **THEN** the backend returns `409 Conflict` and installs
+  neither target.
 - **GIVEN** a Pixel 5 viewport, **WHEN** the user selects Nightly and saves, **THEN** the same
   persisted outcome is reachable through 44px rows with no horizontal document overflow.
 

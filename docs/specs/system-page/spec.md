@@ -94,15 +94,15 @@ GET    /api/v1/system/logs/:name/download         - stream log file
 GET    /api/v1/system/updates                     - { current, latest, latest_url, latest_checked_at, update_available, channel, channel_editable, channel_unsupported_reason, install, apply_supported, apply_unsupported_reason?, manual_commands? }
 POST   /api/v1/system/updates/check               - force selected-source re-poll; rate-limited 30s
 PATCH  /api/v1/system/updates/channel             - persist Stable/Nightly; body { channel }
-POST   /api/v1/system/updates/apply               - queue service-only self-update; body { confirm: "UPDATE" }
+POST   /api/v1/system/updates/apply               - queue service-only self-update; body { confirm: "UPDATE", target_version }
 GET    /api/v1/system/restart-capability           - whether this launch mode supports UI restart
 POST   /api/v1/system/restart                      - ask the configured supervisor to restart Kandev
 ```
 
-The live Updates API has always used the snake_case JSON fields shown above. Earlier camelCase
-names in this draft (`latestCheckedAt`, `releaseUrl`, and `applySupported`) were documentation
-errors, corrected here without renaming any wire field. Clients follow each System endpoint's
-documented contract; newer endpoints may use camelCase.
+The System API has no global casing convention. Updates and Info use the snake_case JSON fields
+shown above, while endpoints such as Disk Usage and Database use their documented camelCase
+fields. Earlier camelCase Updates names in this draft (`latestCheckedAt`, `releaseUrl`, and
+`applySupported`) were documentation errors, corrected here without renaming any wire field.
 
 Storage endpoints are defined separately in [Storage Maintenance](storage-maintenance.md).
 
@@ -130,7 +130,7 @@ Stable even if an old Nightly preference remains stored, set `channel_editable=f
 per-process to one call per 30 seconds. If the GitHub or npm call fails (offline, rate limited,
 5xx), the channel's last-known value remains cached and `latest_checked_at` exposes the staleness.
 
-`POST /api/v1/system/updates/apply` is available only when Kandev is running as a kandev-managed user service (`systemd --user` or launchd user agent) and the selected channel exposes an applicable target. It writes the exact resolved version to an update intent under `<KANDEV_HOME_DIR>/service/update-intents/`, starts a manager-owned helper (`systemd-run --user` on Linux, or a one-shot transient LaunchAgent plist bootstrapped via `launchctl bootstrap` on macOS), and returns a `self-update` system job id. Under `KANDEV_E2E_MOCK=true`, the helper path is fake so UI and backend tests can exercise the flow without mutating npm/Homebrew or restarting the service.
+`POST /api/v1/system/updates/apply` is available only when Kandev is running as a kandev-managed user service (`systemd --user` or launchd user agent) and the selected channel exposes an applicable target. The request includes the exact `target_version` shown to the user. While holding the update-cache lock, the backend rejects a stale target with `409 Conflict`; otherwise it writes that version to an update intent under `<KANDEV_HOME_DIR>/service/update-intents/`, starts a manager-owned helper (`systemd-run --user` on Linux, or a one-shot transient LaunchAgent plist bootstrapped via `launchctl bootstrap` on macOS), and returns a `self-update` system job id. Under `KANDEV_E2E_MOCK=true`, the helper path is fake so UI and backend tests can exercise the flow without mutating npm/Homebrew or restarting the service.
 
 ### Disk-usage cache
 

@@ -21,6 +21,7 @@ const channelSettingsUnavailableReason = "Update channel settings are unavailabl
 var ErrInvalidChannel = errors.New("invalid updates channel")
 var ErrChannelUnsupported = errors.New("updates channel unsupported")
 var ErrUpdateResolve = errors.New("update target resolution failed")
+var ErrUpdateTargetChanged = errors.New("update target changed; refresh updates before applying")
 
 var nightlyVersionPattern = regexp.MustCompile(
 	`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-nightly\.sha[0-9a-f]{12}$`,

@@ -64,6 +64,9 @@ beforeEach(() => {
   mocks.saveUpdatesChannel.mockReset();
   mocks.setSystemUpdates.mockReset();
   mocks.currentUpdates = updates("stable");
+  mocks.setSystemUpdates.mockImplementation((next: UpdatesResponse) => {
+    mocks.currentUpdates = next;
+  });
   mocks.store = {};
 });
 
@@ -169,7 +172,7 @@ describe("useUpdates channel saving", () => {
   it("saves a channel and publishes the returned state", async () => {
     const nightly = updates("nightly");
     mocks.saveUpdatesChannel.mockResolvedValue(nightly);
-    const { result } = renderHook(() => useUpdates());
+    const { result, rerender } = renderHook(() => useUpdates());
 
     let response!: UpdatesResponse;
     await act(async () => {
@@ -179,6 +182,8 @@ describe("useUpdates channel saving", () => {
     expect(mocks.saveUpdatesChannel).toHaveBeenCalledWith("nightly");
     expect(mocks.setSystemUpdates).toHaveBeenCalledWith(nightly);
     expect(response).toBe(nightly);
+    rerender();
+    expect(result.current.updates).toBe(nightly);
     expect(result.current.error).toBeNull();
   });
 

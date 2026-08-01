@@ -12,8 +12,9 @@ spec: "../../specs/npm-nightly-channel/spec.md"
 
 - **Acceptance:** Updates responses expose effective channel capability, and admin PATCH persists a
   valid supported selection while returning `400`/`409` for invalid/unsupported requests.
-- **Acceptance:** `Get`, `Check`, poller, notifications, manual commands, and apply use the selected
-  exact target; downgrade-like channel returns are not sent as normal upgrade notifications.
+- **Acceptance:** `Get`, `Check`, poller, notifications, and manual commands use the selected
+  channel; apply binds to the submitted cached target, returns 409 if stale, and installs the exact
+  immutable version; downgrade-like channel returns are not sent as normal upgrade notifications.
 - **Acceptance:** verified npm/npx user services can use Nightly; all other install kinds remain
   Stable.
 - **Acceptance:** update-status read failures are logged with their internal detail while the API

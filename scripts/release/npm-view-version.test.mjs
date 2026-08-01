@@ -64,6 +64,8 @@ test("treats a missing version or dist-tag as an empty result", async () => {
   const result = await runView("missing");
   assert.equal(result.status, 0);
   assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+  assert.equal(result.attempts, 1);
 });
 
 test("retries transient registry failures before succeeding", async () => {

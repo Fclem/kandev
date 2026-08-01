@@ -41,7 +41,9 @@ both the Stable baseline and previously observed Nightly tag must still match.
 The backend owns an install-wide Stable/Nightly preference. Stable remains the default and resolves
 GitHub Releases. Nightly resolves npm's `kandev@nightly` target and is selectable only for verified
 managed npm/npx user services. Update intents always contain an exact version. Nightly-to-nightly
-availability follows dist-tag inequality, not SemVer ordering of SHA text.
+availability follows dist-tag inequality, not SemVer ordering of SHA text. Apply requests bind to
+the exact cached version shown to the user; if discovery has since changed that cache, the backend
+rejects the stale target instead of re-resolving or installing a different artifact.
 
 ## Consequences
 

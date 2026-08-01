@@ -184,12 +184,17 @@ export function saveUpdatesChannel(
 
 export function applyUpdate(
   confirm = "UPDATE",
+  targetVersion = "",
   options?: ApiRequestOptions,
 ): Promise<JobAcceptResponse> {
   return fetchJson<JobAcceptResponse>(`${SYSTEM_BASE}/updates/apply`, {
     ...options,
     // Spread caller init first so the required method/body can't be overridden.
-    init: { ...(options?.init ?? {}), method: "POST", body: JSON.stringify({ confirm }) },
+    init: {
+      ...(options?.init ?? {}),
+      method: "POST",
+      body: JSON.stringify({ confirm, target_version: targetVersion }),
+    },
   });
 }
 

@@ -41,7 +41,10 @@ type updateIntent struct {
 	CreatedAt     string                 `json:"created_at"`
 }
 
-func (s *Service) applyPreflight(ctx context.Context) (UpdatesResponse, *serviceInstallMetadata, error) {
+func (s *Service) applyPreflight(
+	ctx context.Context,
+	expectedTarget string,
+) (UpdatesResponse, *serviceInstallMetadata, error) {
 	s.updateMu.Lock()
 	defer s.updateMu.Unlock()
 
@@ -59,28 +62,19 @@ func (s *Service) applyPreflight(ctx context.Context) (UpdatesResponse, *service
 	if err != nil {
 		return UpdatesResponse{}, nil, err
 	}
-	var version, releaseURL string
-	var checkedAt time.Time
-	if channel == ChannelNightly {
-		version, releaseURL, err = s.resolveLatest(ctx, channel)
-		if err != nil {
-			return UpdatesResponse{}, nil, fmt.Errorf("%w: %v", ErrUpdateResolve, err)
-		}
-		checkedAt = s.now().UTC()
-	} else {
-		version, releaseURL, checkedAt, err = s.readLatestVersion(channel)
-		if err != nil {
-			return UpdatesResponse{}, nil, err
-		}
+	version, releaseURL, checkedAt, err := s.readLatestVersion(channel)
+	if err != nil {
+		return UpdatesResponse{}, nil, err
+	}
+	// Bind Apply to the exact immutable version presented to the user. Update
+	// discovery may move the cache between rendering and confirmation; reject
+	// that stale request instead of silently installing a different artifact.
+	if expectedTarget == "" || version != expectedTarget {
+		return UpdatesResponse{}, nil, ErrUpdateTargetChanged
 	}
 	resp := s.buildResponseFromChannel(channel, install, version, releaseURL, checkedAt)
 	if !resp.UpdateAvailable {
 		return UpdatesResponse{}, nil, ErrNoUpdateAvailable
-	}
-	if channel == ChannelNightly {
-		if err := s.writeLatestVersion(channel, version, releaseURL, checkedAt); err != nil {
-			return UpdatesResponse{}, nil, err
-		}
 	}
 	return resp, metadata, nil
 }

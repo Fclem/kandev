@@ -10,10 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/kandev/kandev/internal/common/logger"
+	"github.com/kandev/kandev/internal/persistence"
 	"github.com/kandev/kandev/internal/system/jobs"
 )
 
@@ -402,26 +404,34 @@ func TestHandleSetChannelAllowsTrustedDevOrigin(t *testing.T) {
 	}
 }
 
-func TestHandleApplyNightlyResolverFailureReturns502(t *testing.T) {
+func TestHandleApplyRejectsChangedNightlyTarget(t *testing.T) {
 	svc, store := newManagedNPMServiceForHandler(t)
 	if err := store.Save(context.Background(), updatesChannelSettingKey, []byte(ChannelNightly)); err != nil {
 		t.Fatal(err)
 	}
+	if err := persistence.WriteLatestNightlyVersion(
+		svc.pool.Writer(),
+		"v1.2.5-nightly.shafedcba654321",
+		"https://example/new-nightly",
+		time.Now().UTC(),
+	); err != nil {
+		t.Fatal(err)
+	}
 	svc.jobs = jobs.NewTracker(nil, logger.Default())
-	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
-		return "", "", errors.New("registry down")
-	})
 	r := newRouter(svc)
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/system/updates/apply",
-		bytes.NewBufferString(`{"confirm":"UPDATE"}`),
+		bytes.NewBufferString(`{"confirm":"UPDATE","target_version":"v1.2.4-nightly.shaabc123def456"}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status=%d body=%s want 409", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "update target changed") {
+		t.Fatalf("body=%s want target-changed error", w.Body.String())
 	}
 }
 

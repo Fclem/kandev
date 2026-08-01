@@ -30,7 +30,8 @@ func HandleGet(svc *Service) gin.HandlerFunc {
 }
 
 type applyRequestBody struct {
-	Confirm string `json:"confirm"`
+	Confirm       string `json:"confirm"`
+	TargetVersion string `json:"target_version"`
 }
 
 type channelRequestBody struct {
@@ -110,7 +111,7 @@ func HandleApply(svc *Service) gin.HandlerFunc {
 		}
 		var req applyRequestBody
 		_ = c.ShouldBindJSON(&req)
-		jobID, err := svc.Apply(context.Background(), req.Confirm)
+		jobID, err := svc.Apply(context.Background(), req.Confirm, req.TargetVersion)
 		if errors.Is(err, ErrApplyConfirm) {
 			c.JSON(http.StatusBadRequest, gin.H{errorResponseKey: err.Error()})
 			return
@@ -119,7 +120,8 @@ func HandleApply(svc *Service) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{errorResponseKey: err.Error()})
 			return
 		}
-		if errors.Is(err, ErrNoUpdateAvailable) || errors.Is(err, ErrApplyUnsupported) ||
+		if errors.Is(err, ErrNoUpdateAvailable) || errors.Is(err, ErrUpdateTargetChanged) ||
+			errors.Is(err, ErrApplyUnsupported) ||
 			errors.Is(err, ErrApplyInProgress) {
 			c.JSON(http.StatusConflict, gin.H{errorResponseKey: err.Error()})
 			return

@@ -55,7 +55,7 @@ func TestService_ApplyQueuesSelfUpdateJobAndWritesIntent(t *testing.T) {
 		}),
 	)
 
-	jobID, err := svc.Apply(context.Background(), "UPDATE")
+	jobID, err := svc.Apply(context.Background(), "UPDATE", "v1.0.1")
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -79,11 +79,19 @@ func TestService_ApplyQueuesSelfUpdateJobAndWritesIntent(t *testing.T) {
 	}
 }
 
-func TestService_ApplyUsesSelectedExactNightlyTarget(t *testing.T) {
+func TestService_ApplyUsesCachedExactNightlyTarget(t *testing.T) {
 	homeDir := configureManagedNPMInstall(t)
 	pool := newTestPool(t)
 	const packageVersion = "1.2.4-nightly.shaabc123def456"
 	const targetTag = "v" + packageVersion
+	if err := persistence.WriteLatestNightlyVersion(
+		pool.Writer(),
+		targetTag,
+		"https://example/cached-nightly",
+		time.Now().UTC(),
+	); err != nil {
+		t.Fatal(err)
+	}
 	store := &memorySettingsStore{value: []byte(ChannelNightly), present: true}
 	tracker := jobs.NewTracker(nil, logger.Default())
 	var gotReq applyRequest
@@ -100,11 +108,13 @@ func TestService_ApplyUsesSelectedExactNightlyTarget(t *testing.T) {
 			return map[string]interface{}{"status": "started"}, nil
 		}),
 	)
+	var resolutions atomic.Int32
 	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
-		return targetTag, "https://example/nightly", nil
+		resolutions.Add(1)
+		return "v1.2.5-nightly.shafedcba654321", "https://example/new-nightly", nil
 	})
 
-	jobID, err := svc.Apply(context.Background(), "UPDATE")
+	jobID, err := svc.Apply(context.Background(), "UPDATE", targetTag)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -117,6 +127,37 @@ func TestService_ApplyUsesSelectedExactNightlyTarget(t *testing.T) {
 			targetTag,
 			packageVersion,
 		)
+	}
+	if got := resolutions.Load(); got != 0 {
+		t.Fatalf("nightly resolutions=%d want 0", got)
+	}
+}
+
+func TestService_ApplyRejectsChangedCachedTarget(t *testing.T) {
+	homeDir := configureManagedNPMInstall(t)
+	pool := newTestPool(t)
+	const cachedTarget = "v1.2.5-nightly.shafedcba654321"
+	if err := persistence.WriteLatestNightlyVersion(
+		pool.Writer(),
+		cachedTarget,
+		"https://example/new-nightly",
+		time.Now().UTC(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(
+		pool,
+		"v1.2.3",
+		nil,
+		logger.Default(),
+		WithHomeDir(homeDir),
+		WithSettingsStore(&memorySettingsStore{value: []byte(ChannelNightly), present: true}),
+		WithJobs(jobs.NewTracker(nil, logger.Default())),
+	)
+
+	_, err := svc.Apply(context.Background(), "UPDATE", "v1.2.4-nightly.shaabc123def456")
+	if !errors.Is(err, ErrUpdateTargetChanged) {
+		t.Fatalf("Apply error=%v want ErrUpdateTargetChanged", err)
 	}
 }
 
@@ -146,7 +187,7 @@ func TestService_ApplyDoesNotPersistRejectedExactNightly(t *testing.T) {
 		return target, "https://example/resolved", nil
 	})
 
-	if _, err := svc.Apply(context.Background(), "UPDATE"); !errors.Is(err, ErrNoUpdateAvailable) {
+	if _, err := svc.Apply(context.Background(), "UPDATE", target); !errors.Is(err, ErrNoUpdateAvailable) {
 		t.Fatalf("Apply error=%v want ErrNoUpdateAvailable", err)
 	}
 	version, targetURL, checkedAt, err := persistence.ReadLatestNightlyVersion(pool.Reader())
@@ -158,7 +199,7 @@ func TestService_ApplyDoesNotPersistRejectedExactNightly(t *testing.T) {
 	}
 }
 
-func TestService_ApplyRejectsConcurrentNightlyBeforeSecondResolution(t *testing.T) {
+func TestService_ApplyRejectsConcurrentNightlyBeforeSecondPreflight(t *testing.T) {
 	homeDir := configureManagedNPMInstall(t)
 	pool := newTestPool(t)
 	release := make(chan struct{})
@@ -178,19 +219,28 @@ func TestService_ApplyRejectsConcurrentNightlyBeforeSecondResolution(t *testing.
 		}),
 	)
 	var resolutions atomic.Int32
+	const target = "v1.2.4-nightly.shaabc123def456"
+	if err := persistence.WriteLatestNightlyVersion(
+		pool.Writer(),
+		target,
+		"https://example/nightly",
+		time.Now().UTC(),
+	); err != nil {
+		t.Fatal(err)
+	}
 	svc.SetNightlyFetcher(func(context.Context) (string, string, error) {
 		resolutions.Add(1)
-		return "v1.2.4-nightly.shaabc123def456", "https://example/nightly", nil
+		return target, "https://example/nightly", nil
 	})
 
-	if _, err := svc.Apply(context.Background(), "UPDATE"); err != nil {
+	if _, err := svc.Apply(context.Background(), "UPDATE", target); err != nil {
 		t.Fatalf("first Apply: %v", err)
 	}
-	if _, err := svc.Apply(context.Background(), "UPDATE"); !errors.Is(err, ErrApplyInProgress) {
+	if _, err := svc.Apply(context.Background(), "UPDATE", target); !errors.Is(err, ErrApplyInProgress) {
 		t.Fatalf("second Apply error=%v want ErrApplyInProgress", err)
 	}
-	if got := resolutions.Load(); got != 1 {
-		t.Fatalf("nightly resolutions=%d want 1", got)
+	if got := resolutions.Load(); got != 0 {
+		t.Fatalf("nightly resolutions=%d want 0", got)
 	}
 	closeRelease()
 }
@@ -246,7 +296,7 @@ func TestService_ApplyRejectsUnsupportedInstall(t *testing.T) {
 	}
 	svc := NewService(pool, "v1.0.0", nil, logger.Default(), WithJobs(jobs.NewTracker(nil, logger.Default())))
 
-	_, err := svc.Apply(context.Background(), "UPDATE")
+	_, err := svc.Apply(context.Background(), "UPDATE", "v1.0.1")
 	if !errors.Is(err, ErrApplyUnsupported) {
 		t.Fatalf("err=%v want ErrApplyUnsupported", err)
 	}
@@ -288,10 +338,10 @@ func TestService_ApplyRejectsConcurrentSelfUpdate(t *testing.T) {
 		}),
 	)
 
-	if _, err := svc.Apply(context.Background(), "UPDATE"); err != nil {
+	if _, err := svc.Apply(context.Background(), "UPDATE", "v1.0.1"); err != nil {
 		t.Fatalf("first Apply: %v", err)
 	}
-	if _, err := svc.Apply(context.Background(), "UPDATE"); !errors.Is(err, ErrApplyInProgress) {
+	if _, err := svc.Apply(context.Background(), "UPDATE", "v1.0.1"); !errors.Is(err, ErrApplyInProgress) {
 		t.Fatalf("second Apply err=%v want ErrApplyInProgress", err)
 	}
 	closeRelease()
@@ -331,23 +381,23 @@ func TestService_ApplyGuardExpiresAfterTTL(t *testing.T) {
 	clock := time.Now()
 	svc.now = func() time.Time { return clock }
 
-	if _, err := svc.Apply(context.Background(), "UPDATE"); err != nil {
+	if _, err := svc.Apply(context.Background(), "UPDATE", "v1.0.1"); err != nil {
 		t.Fatalf("first Apply: %v", err)
 	}
 	// Within the TTL a second apply is still refused.
-	if _, err := svc.Apply(context.Background(), "UPDATE"); !errors.Is(err, ErrApplyInProgress) {
+	if _, err := svc.Apply(context.Background(), "UPDATE", "v1.0.1"); !errors.Is(err, ErrApplyInProgress) {
 		t.Fatalf("within TTL err=%v want ErrApplyInProgress", err)
 	}
 	// Past the TTL the guard expires (helper assumed dead) and a retry succeeds.
 	clock = clock.Add(applyGuardTTL + time.Second)
-	if _, err := svc.Apply(context.Background(), "UPDATE"); err != nil {
+	if _, err := svc.Apply(context.Background(), "UPDATE", "v1.0.1"); err != nil {
 		t.Fatalf("after TTL Apply: %v", err)
 	}
 }
 
 func TestService_ApplyRejectsWrongConfirm(t *testing.T) {
 	svc := NewService(newTestPool(t), "v1.0.0", nil, logger.Default())
-	_, err := svc.Apply(context.Background(), "NOPE")
+	_, err := svc.Apply(context.Background(), "NOPE", "v1.0.1")
 	if !errors.Is(err, ErrApplyConfirm) {
 		t.Fatalf("err=%v want ErrApplyConfirm", err)
 	}

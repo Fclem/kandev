@@ -319,10 +319,10 @@ func (s *Service) Check(ctx context.Context) (UpdatesResponse, error) {
 	return s.fetchAndPersist(ctx)
 }
 
-// Apply validates the cached update and current service install, writes an
-// intent file, and queues the OS-manager helper that performs the actual
-// package upgrade + service reinstall.
-func (s *Service) Apply(ctx context.Context, confirm string) (string, error) {
+// Apply validates that the expected target still matches the cached update and
+// current service install, writes an exact-version intent, and queues the
+// OS-manager helper that performs the package upgrade + service reinstall.
+func (s *Service) Apply(ctx context.Context, confirm, expectedTarget string) (string, error) {
 	if confirm != "UPDATE" {
 		return "", ErrApplyConfirm
 	}
@@ -337,7 +337,7 @@ func (s *Service) Apply(ctx context.Context, confirm string) (string, error) {
 	if !s.claimApplyGuard() {
 		return "", ErrApplyInProgress
 	}
-	resp, metadata, err := s.applyPreflight(ctx)
+	resp, metadata, err := s.applyPreflight(ctx, expectedTarget)
 	if err != nil {
 		s.applyStartedAt.Store(0)
 		return "", err

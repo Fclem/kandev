@@ -156,6 +156,9 @@ npx -y kandev@nightly
 npm install -g kandev@nightly
 ```
 
+`npx` runs a transient Nightly without changing a global package. The global install replaces your
+installed Kandev until you reinstall `kandev@latest`.
+
 Nightlies are best-effort builds scheduled for 12:00 UTC when `main` has changed since the latest
 stable release. They do not move `latest`, and no Homebrew or Desktop nightly channel is published.
 A verified Kandev-managed npm/npx user service can switch between Stable and Nightly in

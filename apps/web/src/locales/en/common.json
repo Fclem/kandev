@@ -334,6 +334,7 @@
   "open": "Open",
   "openATaskSessionBeforeSending": "Open a task session before sending to the agent.",
   "openFullPage": "Open full page",
+  "openingLastTask": "Opening last task\u2026",
   "openIssue": "Open issue",
   "openSlackInYourBrowserCopy": "Open Slack in your browser, copy the value of the `d` cookie and the `xoxc-` token from local storage. Both are required.",
   "openVcsOptions": "Open VCS options",

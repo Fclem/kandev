@@ -35,6 +35,7 @@ import { MobilePillButton } from "./mobile-pill-button";
 import { MobilePickerSheet } from "./mobile-picker-sheet";
 import { formatTaskSessionStateLabel } from "@/lib/ui/state-labels";
 import { getSessionStateIcon } from "@/lib/ui/state-icons";
+import { repositorySlug } from "@/lib/repository-slug";
 import { useSessionPendingInput, type PendingInput } from "@/hooks/use-task-pending-input";
 import type { ForegroundActivity, TaskSession, TaskSessionState } from "@/lib/types/http";
 import type { AgentProfileOption } from "@/lib/state/slices";
@@ -44,6 +45,7 @@ type SessionRow = {
   id: string;
   agentName: string | null;
   agentLabel: string;
+  repositoryLabel: string | null;
   state: TaskSessionState | null;
   foregroundActivity: ForegroundActivity | null;
   isPrimary: boolean;
@@ -55,6 +57,7 @@ function buildSessionRows(
   sessions: TaskSession[],
   agentProfiles: AgentProfileOption[],
   primarySessionId: string | null | undefined,
+  repositoryLabelsById: ReadonlyMap<string, string>,
 ): SessionRow[] {
   const sorted = [...sessions].sort(
     (a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime(),
@@ -68,6 +71,7 @@ function buildSessionRows(
       // User-supplied session name wins over the derived profile label,
       // matching the desktop session tab title precedence.
       agentLabel: s.name || labelParts[1] || labelParts[0] || profile?.label || "Agent",
+      repositoryLabel: s.repository_id ? (repositoryLabelsById.get(s.repository_id) ?? null) : null,
       state: (s.state as TaskSessionState | undefined) ?? null,
       foregroundActivity: s.foreground_activity ?? null,
       isPrimary: primarySessionId ? s.id === primarySessionId : !!s.is_primary,
@@ -252,6 +256,22 @@ function DeleteSessionConfirmDialog({
   );
 }
 
+function SessionIdentity({ row }: { row: SessionRow }) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col">
+      <span className="truncate text-sm">{row.agentLabel}</span>
+      {row.repositoryLabel && (
+        <span
+          className="truncate text-[11px] text-muted-foreground"
+          data-testid={`mobile-session-repository-${row.id}`}
+        >
+          {row.repositoryLabel}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SessionRowItem({
   row,
   taskId,
@@ -306,7 +326,7 @@ function SessionRowItem({
           </span>
         )}
         {row.agentName && <AgentLogo agentName={row.agentName} size={16} className="shrink-0" />}
-        <span className="text-sm truncate flex-1">{row.agentLabel}</span>
+        <SessionIdentity row={row} />
         <StateBadge
           sessionId={row.id}
           state={row.state}
@@ -348,15 +368,29 @@ function SessionRowItem({
 
 function useSessionRows(taskId: string | null) {
   const agentProfiles = useAppStore((s) => s.agentProfiles.items);
+  const repositoriesByWorkspace = useAppStore((s) => s.repositories.itemsByWorkspaceId);
   const primarySessionId = useAppStore((s) => {
     if (!taskId) return null;
     const task = s.kanban.tasks.find((t: { id: string }) => t.id === taskId);
     return task?.primarySessionId ?? null;
   });
   const { sessions, isLoading } = useTaskSessions(taskId);
+  const repositoryLabelsById = useMemo(() => {
+    const sessionRepositoryIds = new Set(
+      sessions.flatMap((session) => (session.repository_id ? [session.repository_id] : [])),
+    );
+    if (sessionRepositoryIds.size <= 1) return new Map<string, string>();
+    const labels = new Map<string, string>();
+    for (const repository of Object.values(repositoriesByWorkspace).flat()) {
+      if (sessionRepositoryIds.has(repository.id)) {
+        labels.set(repository.id, repositorySlug(repository));
+      }
+    }
+    return labels;
+  }, [repositoriesByWorkspace, sessions]);
   const rows = useMemo(
-    () => buildSessionRows(sessions, agentProfiles, primarySessionId),
-    [sessions, agentProfiles, primarySessionId],
+    () => buildSessionRows(sessions, agentProfiles, primarySessionId, repositoryLabelsById),
+    [sessions, agentProfiles, primarySessionId, repositoryLabelsById],
   );
   return { rows, isLoading, primarySessionId };
 }
@@ -448,6 +482,7 @@ function useActiveSessionPillLabel(
   count: string | undefined;
   agentName: string | null;
   effectiveSessionId: string | null;
+  ariaLabel: string;
 } {
   const { t } = useTranslation();
   const storedActiveSessionId = useAppStore((s) => s.tasks.activeSessionId);
@@ -459,11 +494,16 @@ function useActiveSessionPillLabel(
   let count: string | undefined;
   if (total > 1 && idx) count = `${idx}/${total}`;
   else if (total > 1) count = `${total}`;
+  const agentLabel = activeRow?.agentLabel ?? t("task:session2");
+  const repositoryLabel = activeRow?.repositoryLabel;
   return {
-    label: activeRow?.agentLabel ?? t("task:session2"),
+    label: repositoryLabel ? `${agentLabel} · ${repositoryLabel}` : agentLabel,
     count,
     agentName: activeRow?.agentName ?? null,
     effectiveSessionId,
+    ariaLabel: repositoryLabel
+      ? t("task:activeSessionRepositoryTapToSwitch", { agentLabel, repositoryLabel })
+      : t("task:activeSessionTapToSwitch", { agentLabel }),
   };
 }
 
@@ -480,7 +520,7 @@ export const MobileSessionsPicker = memo(function MobileSessionsPicker({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const { label, count, agentName, effectiveSessionId } = useActiveSessionPillLabel(
+  const { label, count, agentName, effectiveSessionId, ariaLabel } = useActiveSessionPillLabel(
     taskId,
     sessionId,
   );
@@ -506,7 +546,7 @@ export const MobileSessionsPicker = memo(function MobileSessionsPicker({
         isOpen={open}
         onClick={() => setOpen(true)}
         data-testid="mobile-sessions-pill"
-        ariaLabel={t("task:activeSessionTapToSwitch", { label })}
+        ariaLabel={ariaLabel}
       />
       <MobilePickerSheet open={open} onOpenChange={setOpen} title={t("task:sessions")}>
         <MobileSessionsList

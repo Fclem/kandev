@@ -13,6 +13,7 @@ import {
 import { cn } from "@kandev/ui/lib/utils";
 import { AppStatusDrawerTrigger } from "@/components/app-status-bar/app-status-surface-provider";
 import { useTranslation } from "react-i18next";
+import { linkToTaskOverview } from "@/lib/links";
 
 type PageTopbarProps = {
   /** Page title shown as the rightmost (current) breadcrumb */
@@ -47,8 +48,16 @@ type PageTopbarProps = {
   showStatusTrigger?: boolean;
 };
 
-function BackLink({ href, label }: { href: string; label: string }) {
-  if (href === "/") {
+function BackLink({
+  href,
+  label,
+  isHome = href === "/",
+}: {
+  href: string;
+  label: string;
+  isHome?: boolean;
+}) {
+  if (isHome) {
     return (
       <Link
         href={href}
@@ -110,7 +119,7 @@ function TopbarBreadcrumb({
           <>
             <BreadcrumbItem className="shrink-0 md:hidden" data-testid="topbar-phone-home">
               <BreadcrumbLink asChild>
-                <BackLink href="/" label={t("common:home")} />
+                <BackLink href={linkToTaskOverview()} label={t("common:home")} isHome />
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator className="shrink-0 md:hidden" />

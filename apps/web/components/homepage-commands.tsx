@@ -5,7 +5,7 @@ import { IconLayoutKanban, IconGitBranch, IconList, IconPlus } from "@tabler/ico
 import { useTranslation } from "react-i18next";
 import { useRegisterCommands } from "@/hooks/use-register-commands";
 import { useKanbanDisplaySettings } from "@/hooks/use-kanban-display-settings";
-import { linkToTasks } from "@/lib/links";
+import { linkToTaskOverview, linkToTasks } from "@/lib/links";
 import type { CommandItem } from "@/lib/commands/types";
 import { useAppStore } from "@/components/state-provider";
 import { getShortcut } from "@/lib/keyboard/shortcut-overrides";
@@ -21,7 +21,14 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
   const { onViewModeChange } = useKanbanDisplaySettings();
   const { isMobile } = useResponsiveBreakpoint();
   const keyboardShortcuts = useAppStore((s) => s.userSettings.keyboardShortcuts);
+  const activeWorkspaceId = useAppStore((s) => s.workspaces.activeId);
+  const activeWorkflowId = useAppStore((s) => s.workflows.activeId);
   const newTaskShortcut = getShortcut("NEW_TASK", keyboardShortcuts);
+  const taskOverviewHref = linkToTaskOverview({
+    workspaceId: activeWorkspaceId ?? undefined,
+    workflowId: activeWorkflowId ?? undefined,
+  });
+  const tasksHref = linkToTasks(activeWorkspaceId ?? undefined);
 
   const commands = useMemo<CommandItem[]>(() => {
     const items: CommandItem[] = [
@@ -43,7 +50,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
         keywords: ["kanban", "board", "view"],
         priority: 0,
         action: () => {
-          router.push("/");
+          router.push(taskOverviewHref);
           if (!isMobile) onViewModeChange("");
         },
       },
@@ -58,7 +65,7 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
         keywords: ["pipeline", "graph", "view"],
         priority: 0,
         action: () => {
-          router.push("/");
+          router.push(taskOverviewHref);
           onViewModeChange("graph2");
         },
       });
@@ -71,11 +78,20 @@ export function HomepageCommands({ onCreateTask }: HomepageCommandsProps) {
       icon: <IconList className="size-3.5" />,
       keywords: ["list", "table", "view"],
       priority: 0,
-      action: () => router.push(linkToTasks()),
+      action: () => router.push(tasksHref),
     });
 
     return items;
-  }, [onCreateTask, router, onViewModeChange, newTaskShortcut, isMobile, t]);
+  }, [
+    onCreateTask,
+    router,
+    onViewModeChange,
+    newTaskShortcut,
+    isMobile,
+    taskOverviewHref,
+    tasksHref,
+    t,
+  ]);
 
   useRegisterCommands(commands);
 

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/components/state-provider";
 import { useInOffice } from "@/hooks/use-in-office";
 import { useQuickChatLauncher } from "@/hooks/use-quick-chat-launcher";
+import { linkToTaskOverview } from "@/lib/links";
 import { AppSidebarNavItem } from "./app-sidebar-nav-item";
 import { AppSidebarNewTaskItem } from "./app-sidebar-new-task-item";
 
@@ -23,7 +24,7 @@ export function AppSidebarPrimaryNav({ collapsed }: AppSidebarPrimaryNavProps) {
       <AppSidebarNavItem
         icon={IconHome}
         label={t("sidebar:home")}
-        href={inOffice ? "/office" : "/"}
+        href={inOffice ? "/office" : linkToTaskOverview({ workspaceId: workspaceId ?? undefined })}
         collapsed={collapsed}
         exactMatch
       />

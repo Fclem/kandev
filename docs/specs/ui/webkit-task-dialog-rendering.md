@@ -29,6 +29,8 @@ renders correctly.
   and safe-area behavior.
 - The Create Task dialog omits the generic top-right close control in every browser; the footer
   Cancel action remains available for dismissal.
+- The dialog does not reserve top padding for the removed control while retaining its side and
+  bottom spacing.
 - Rendering-engine classification is runtime-only and does not add a user setting or persisted
   preference.
 

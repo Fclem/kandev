@@ -18,6 +18,7 @@ spec: "../../specs/ui/webkit-task-dialog-rendering.md"
 - Desktop Chromium keeps the existing scale-and-fade motion, translated centering, dimensions,
   focus behavior, and task-creation controls.
 - All engines omit the generic top-right close control while retaining the footer Cancel action.
+- The dialog surface has zero top padding while retaining its side and bottom spacing.
 - The narrow WebKit path remains full-height, viewport-contained, internally usable, and free of
   document horizontal overflow.
 

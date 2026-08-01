@@ -26,6 +26,7 @@ async function openCreateTaskDialog(testPage: Page): Promise<Locator> {
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+  await expect(dialog).toHaveCSS("padding-top", "0px");
   return dialog;
 }
 
@@ -87,6 +88,7 @@ test.describe("Create Task WebKit rendering", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+    await expect(dialog).toHaveCSS("padding-top", "0px");
 
     const metrics = await readDialogRenderingMetrics(dialog);
     const viewport = testPage.viewportSize();

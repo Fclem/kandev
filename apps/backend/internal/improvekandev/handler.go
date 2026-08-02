@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/common/logger"
@@ -35,6 +34,12 @@ const (
 	issueTemplateID   = "report-kandev-issue"
 	issueWorkflowName = "Report Kandev Issue"
 	issueWorkflowDesc = "Hidden workflow for publishing a kdlbs/kandev issue without changing code."
+
+	improveWorkspaceName = "Improve Kandev"
+	improveWorkspaceDesc = "Dedicated workspace for Improve Kandev contribution tasks, isolated from regular work."
+
+	// errorKey is the JSON key every error response body uses.
+	errorKey = "error"
 )
 
 // Cloner is the minimal subset of repoclone.Cloner the bootstrap endpoint uses.
@@ -86,9 +91,11 @@ func RegisterRoutes(router *gin.Engine, h *Handler) {
 	api.POST("/bundle/frontend-log", h.httpFrontendLog)
 }
 
-// BootstrapRequest is the JSON body for POST /bootstrap.
+// BootstrapRequest is the JSON body for POST /bootstrap. WorkspaceID is
+// accepted for backward compatibility but ignored: all improve work is scoped
+// to the dedicated Improve Kandev workspace.
 type BootstrapRequest struct {
-	WorkspaceID string `json:"workspace_id"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
 }
 
 // ForkStatus reports the result of the bootstrap fork-capability probe. The
@@ -115,6 +122,7 @@ const (
 
 // BootstrapResponse describes the artifacts the dialog needs to submit a task.
 type BootstrapResponse struct {
+	WorkspaceID     string            `json:"workspace_id"`
 	RepositoryID    string            `json:"repository_id"`
 	WorkflowID      string            `json:"workflow_id"`
 	IssueWorkflowID string            `json:"issue_workflow_id"`
@@ -129,28 +137,31 @@ type BootstrapResponse struct {
 
 func (h *Handler) httpBootstrap(c *gin.Context) {
 	var req BootstrapRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.WorkspaceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "workspace_id is required"})
-		return
-	}
-	workspaceID, err := canonicalWorkspaceID(req.WorkspaceID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "workspace_id must be a UUID"})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid payload"})
 		return
 	}
 
 	ctx := c.Request.Context()
+	workspace, err := h.ensureImproveWorkspace(ctx)
+	if err != nil {
+		h.log.Error("improve-kandev: dedicated workspace resolution failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to resolve the Improve Kandev workspace"})
+		return
+	}
+	workspaceID := workspace.ID
+
 	repo, err := h.resolveOrCloneRepo(ctx, workspaceID)
 	if err != nil {
 		h.log.Error("improve-kandev: repository upsert failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register kandev repository"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to register kandev repository"})
 		return
 	}
 
 	workflows, err := h.taskSvc.ListWorkflows(ctx, workspaceID, true)
 	if err != nil {
 		h.log.Error("improve-kandev: workflow list failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list improve-kandev workflows"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to list improve-kandev workflows"})
 		return
 	}
 	workflow, err := h.ensureWorkflow(
@@ -163,7 +174,7 @@ func (h *Handler) httpBootstrap(c *gin.Context) {
 	)
 	if err != nil {
 		h.log.Error("improve-kandev: workflow upsert failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to ensure improve-kandev workflow"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to ensure improve-kandev workflow"})
 		return
 	}
 	issueWorkflow, err := h.ensureWorkflow(
@@ -176,30 +187,31 @@ func (h *Handler) httpBootstrap(c *gin.Context) {
 	)
 	if err != nil {
 		h.log.Error("improve-kandev: issue workflow upsert failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to ensure report-kandev-issue workflow"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to ensure report-kandev-issue workflow"})
 		return
 	}
 
 	dir, err := createBundleDir()
 	if err != nil {
 		h.log.Error("improve-kandev: bundle dir creation failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create bundle dir"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to create bundle dir"})
 		return
 	}
 	if err := writeMetadata(dir, h.version, nil); err != nil {
 		h.log.Error("improve-kandev: metadata write failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to write metadata"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to write metadata"})
 		return
 	}
 	if err := writeBackendLog(dir, h.snapshot()); err != nil {
 		h.log.Error("improve-kandev: backend log write failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to write backend log"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to write backend log"})
 		return
 	}
 
 	access := h.resolveGitHubAccess(ctx)
 
 	c.JSON(http.StatusOK, BootstrapResponse{
+		WorkspaceID:     workspaceID,
 		RepositoryID:    repo.ID,
 		WorkflowID:      workflow.ID,
 		IssueWorkflowID: issueWorkflow.ID,
@@ -217,12 +229,44 @@ func (h *Handler) httpBootstrap(c *gin.Context) {
 	})
 }
 
-func canonicalWorkspaceID(value string) (string, error) {
-	id, err := uuid.Parse(value)
-	if err != nil {
-		return "", err
+// ensureImproveWorkspace returns the dedicated Improve Kandev workspace,
+// creating it on first use. Idempotent: matches by exact name so repeated
+// bootstraps converge on a single row. A creation failure re-reads the list
+// to converge on a workspace a concurrent bootstrap may have created.
+func (h *Handler) ensureImproveWorkspace(ctx context.Context) (*taskmodels.Workspace, error) {
+	findByName := func(workspaces []*taskmodels.Workspace) *taskmodels.Workspace {
+		for _, workspace := range workspaces {
+			if workspace != nil && workspace.Name == improveWorkspaceName {
+				return workspace
+			}
+		}
+		return nil
 	}
-	return id.String(), nil
+
+	workspaces, err := h.taskSvc.ListWorkspaces(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if workspace := findByName(workspaces); workspace != nil {
+		return workspace, nil
+	}
+
+	created, err := h.taskSvc.CreateWorkspace(ctx, &taskservice.CreateWorkspaceRequest{
+		Name:                    improveWorkspaceName,
+		Description:             improveWorkspaceDesc,
+		BootstrapKanbanWorkflow: true,
+	})
+	if err == nil {
+		return created, nil
+	}
+
+	latest, listErr := h.taskSvc.ListWorkspaces(ctx)
+	if listErr == nil {
+		if workspace := findByName(latest); workspace != nil {
+			return workspace, nil
+		}
+	}
+	return nil, err
 }
 
 // resolveOrCloneRepo returns the workspace's kandev repository, preferring an
@@ -448,17 +492,17 @@ type FrontendLogRequest struct {
 func (h *Handler) httpFrontendLog(c *gin.Context) {
 	var req FrontendLogRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid payload"})
 		return
 	}
 	dir, err := validateBundleDir(req.BundleDir)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{errorKey: err.Error()})
 		return
 	}
 	if err := writeFrontendLog(dir, req.Entries); err != nil {
 		h.log.Error("improve-kandev: frontend log write failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to write frontend log"})
+		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to write frontend log"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"path": filepath.Join(dir, "frontend.log")})

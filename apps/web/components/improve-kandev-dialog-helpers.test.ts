@@ -16,6 +16,7 @@ vi.mock("@/lib/logger/buffer", () => ({
 }));
 
 const bootstrap: ImproveKandevBootstrapResponse = {
+  workspace_id: "ws-1",
   repository_id: "r1",
   workflow_id: "w1",
   issue_workflow_id: "w2",

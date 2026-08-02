@@ -28,11 +28,6 @@ func (c improveKandevTestCloner) EnsureWorkspaceCloned(
 
 func TestImproveKandevBootstrapCreatesBothHiddenWorkflowsIdempotently(t *testing.T) {
 	ts := NewOrchestratorTestServer(t)
-	workspaceID := "123e4567-e89b-12d3-a456-426614174000"
-	require.NoError(t, ts.TaskRepo.CreateWorkspace(context.Background(), &models.Workspace{
-		ID:   workspaceID,
-		Name: "Improve Kandev",
-	}))
 
 	repoPath := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", repoPath).Run())
@@ -42,7 +37,7 @@ func TestImproveKandevBootstrapCreatesBothHiddenWorkflowsIdempotently(t *testing
 
 	bootstrap := func() improvekandev.BootstrapResponse {
 		t.Helper()
-		body, err := json.Marshal(improvekandev.BootstrapRequest{WorkspaceID: workspaceID})
+		body, err := json.Marshal(improvekandev.BootstrapRequest{})
 		require.NoError(t, err)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/system/improve-kandev/bootstrap", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -56,13 +51,20 @@ func TestImproveKandevBootstrapCreatesBothHiddenWorkflowsIdempotently(t *testing
 
 	first := bootstrap()
 	second := bootstrap()
+	require.NotEmpty(t, first.WorkspaceID, "bootstrap must return the dedicated workspace id")
+	require.Equal(t, first.WorkspaceID, second.WorkspaceID)
 	require.NotEmpty(t, first.WorkflowID)
 	require.NotEmpty(t, first.IssueWorkflowID)
 	require.NotEqual(t, first.WorkflowID, first.IssueWorkflowID)
 	require.Equal(t, first.WorkflowID, second.WorkflowID)
 	require.Equal(t, first.IssueWorkflowID, second.IssueWorkflowID)
 
-	workflows, err := ts.TaskRepo.ListWorkflows(context.Background(), workspaceID, true)
+	// The bootstrap auto-created a workspace named "Improve Kandev".
+	workspace, err := ts.TaskRepo.GetWorkspace(context.Background(), first.WorkspaceID)
+	require.NoError(t, err)
+	require.Equal(t, "Improve Kandev", workspace.Name)
+
+	workflows, err := ts.TaskRepo.ListWorkflows(context.Background(), first.WorkspaceID, true)
 	require.NoError(t, err)
 	byTemplate := make(map[string]*models.Workflow, len(workflows))
 	for _, workflow := range workflows {
@@ -81,4 +83,36 @@ func TestImproveKandevBootstrapCreatesBothHiddenWorkflowsIdempotently(t *testing
 	require.Len(t, issueSteps, 1)
 	require.Equal(t, "Open issue", issueSteps[0].Name)
 	require.True(t, issueSteps[0].IsStartStep)
+}
+
+func TestImproveKandevBootstrapReusesExistingImproveWorkspace(t *testing.T) {
+	ts := NewOrchestratorTestServer(t)
+	workspaceID := "123e4567-e89b-12d3-a456-426614174000"
+	require.NoError(t, ts.TaskRepo.CreateWorkspace(context.Background(), &models.Workspace{
+		ID:   workspaceID,
+		Name: "Improve Kandev",
+	}))
+
+	repoPath := t.TempDir()
+	require.NoError(t, exec.Command("git", "init", repoPath).Run())
+	router := gin.New()
+	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, "test", ts.Logger)
+	improvekandev.RegisterRoutes(router, handler)
+
+	// The request may still carry a workspace_id from an older client; it must
+	// be ignored in favor of the dedicated Improve Kandev workspace.
+	body, err := json.Marshal(improvekandev.BootstrapRequest{WorkspaceID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/improve-kandev/bootstrap", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	var response improvekandev.BootstrapResponse
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
+
+	require.Equal(t, workspaceID, response.WorkspaceID)
+	workflows, err := ts.TaskRepo.ListWorkflows(context.Background(), workspaceID, true)
+	require.NoError(t, err)
+	require.NotEmpty(t, workflows, "hidden workflows must live in the pre-existing Improve Kandev workspace")
 }

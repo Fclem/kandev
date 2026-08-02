@@ -172,16 +172,17 @@ function useBootstrapKandev(
     (async () => {
       try {
         const data = await bootstrapImproveKandev(workspaceId);
-        // Refresh the workspace repository list so the newly-created kandev
-        // repo is in the store; otherwise the locked repo dropdown can't
-        // resolve a label for the bootstrapped repository_id.
+        // Refresh the dedicated workspace's repository list so the newly-created
+        // kandev repo is in the store; otherwise the locked repo dropdown can't
+        // resolve a label for the bootstrapped repository_id. All improve work
+        // is scoped to the workspace the bootstrap returns, not the active one.
         const [stepsRes, issueStepsRes, reposRes] = await Promise.all([
           listWorkflowSteps(data.workflow_id),
           listWorkflowSteps(data.issue_workflow_id),
-          listRepositories(workspaceId, undefined, { cache: "no-store" }),
+          listRepositories(data.workspace_id, undefined, { cache: "no-store" }),
         ]);
         if (cancelled) return;
-        setRepositories(workspaceId, reposRes.repositories);
+        setRepositories(data.workspace_id, reposRes.repositories);
         setBootstrap({
           kind: "ready",
           data,

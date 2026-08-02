@@ -11,6 +11,8 @@ import type { LogEntry } from "@/lib/logger/buffer";
 export type ForkStatus = "writable" | "ready" | "blocked_emu" | "unknown";
 
 export type ImproveKandevBootstrapResponse = {
+  /** Dedicated Improve Kandev workspace the task must be created in. */
+  workspace_id: string;
   repository_id: string;
   workflow_id: string;
   issue_workflow_id: string;

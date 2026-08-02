@@ -15,6 +15,12 @@ const HEALTH_URL = "**/api/v1/system/health";
 type ForkStatus = "writable" | "ready" | "blocked_emu" | "unknown";
 
 type BootstrapOverrides = {
+  /** Override the dedicated workspace the response points at. */
+  workspaceId?: string;
+  /** Override the repository id (must exist in the workspace's repo list). */
+  repositoryId?: string;
+  /** Override the workflow id (must belong to the workspace). */
+  workflowId?: string;
   github_login?: string;
   has_write_access?: boolean;
   fork_status?: ForkStatus;
@@ -30,7 +36,7 @@ type BootstrapOverrides = {
 
 async function mockImproveKandevApis(
   page: Page,
-  seed: { repositoryId: string; workflowId: string },
+  seed: { workspaceId: string; repositoryId: string; workflowId: string },
   overrides: BootstrapOverrides = {},
 ): Promise<void> {
   const bundleDir = "/tmp/kandev-improve-e2e";
@@ -56,8 +62,9 @@ async function mockImproveKandevApis(
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        repository_id: seed.repositoryId,
-        workflow_id: seed.workflowId,
+        workspace_id: overrides.workspaceId ?? seed.workspaceId,
+        repository_id: overrides.repositoryId ?? seed.repositoryId,
+        workflow_id: overrides.workflowId ?? seed.workflowId,
         issue_workflow_id: overrides.issueWorkflowId ?? seed.workflowId,
         branch: "main",
         bundle_dir: bundleDir,
@@ -164,6 +171,60 @@ test.describe("Improve Kandev dialog", () => {
           workflow_step_id: issueStartStep.id,
         }),
       );
+  });
+
+  test("improve task lands in the dedicated Improve Kandev workspace", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    // Seed a real dedicated workspace so the mocked bootstrap's workspace_id
+    // exists in the backend: after bootstrap the dialog lists that workspace's
+    // repositories and creates the task there.
+    const dedicated = await apiClient.createWorkspace("Improve Kandev");
+    const dedicatedWorkflow = await apiClient.createWorkflow(
+      dedicated.id,
+      "Improve Kandev",
+      "simple",
+    );
+    const dedicatedRepo = await apiClient.createRepository(
+      dedicated.id,
+      seedData.repositoryPath,
+      "main",
+    );
+    await mockImproveKandevApis(testPage, seedData, {
+      workspaceId: dedicated.id,
+      workflowId: dedicatedWorkflow.id,
+      repositoryId: dedicatedRepo.id,
+    });
+
+    await testPage.goto("/");
+    await testPage.getByTestId("sidebar-improve-kandev-button").click();
+    const contribute = testPage.getByTestId("improve-kandev-proceed");
+    await expect(contribute).toBeEnabled({ timeout: 10_000 });
+    await contribute.click();
+
+    const createDialog = testPage.getByTestId("create-task-dialog");
+    await expect(createDialog).toBeVisible({ timeout: 10_000 });
+
+    const title = "Isolate improve tasks in their own workspace";
+    await createDialog.getByTestId("task-title-input").fill(title);
+    await createDialog
+      .getByTestId("task-description-input")
+      .fill("Improve Kandev tasks must not mix with regular work.");
+    const submit = createDialog.getByTestId("submit-start-agent");
+    await expect(submit).toBeEnabled({ timeout: 10_000 });
+    await submit.click();
+    await expect(createDialog).toBeHidden({ timeout: 10_000 });
+
+    // The task lands in the dedicated workspace…
+    await expect
+      .poll(async () => (await apiClient.listTasks(dedicated.id)).tasks)
+      .toContainEqual(expect.objectContaining({ title }));
+    // …and never in the user's active workspace.
+    await expect
+      .poll(async () => (await apiClient.listTasks(seedData.workspaceId)).tasks)
+      .not.toContainEqual(expect.objectContaining({ title }));
   });
 
   test("intro → create flow shows workflow preview, useful info, and fork banner", async ({

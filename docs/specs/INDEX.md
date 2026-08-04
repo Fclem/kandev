@@ -64,6 +64,7 @@ Kandev's task model: documents, execution stages, labels, blocker escalation, su
 | [attach-workspace-sources](tasks/attach-workspace-sources.md) | building |
 | [subtask-checklist](tasks/subtask-checklist.md) | shipped |
 | [subtask-detachment](tasks/subtask-detachment.md) | shipped |
+| [subtask-reparenting-drag-drop](tasks/subtask-reparenting-drag-drop.md) | draft |
 | [subtask-completion-trigger](tasks/subtask-completion-trigger.md) | draft |
 | [subtree-controls](tasks/subtree-controls.md) | shipped |
 | [blocked-task-escalation](tasks/blocked-task-escalation.md) | draft |

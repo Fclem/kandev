@@ -56,8 +56,13 @@ type ProjectorConfig struct {
 	EventBus            bus.EventBus
 	ResolveWorkspace    WorkspaceResolver
 	LoadGitObservations GitObservationLoader
-	Logger              *logger.Logger
-	Now                 func() time.Time
+	// CountQueuedPrompts returns the number of prompts currently en-queued for
+	// a task across all of its sessions (pending semantics identical to
+	// message.queue.get). Wired from the messagequeue service at the
+	// composition root; nil disables queued-prompt projection.
+	CountQueuedPrompts func(context.Context, string) (int, error)
+	Logger             *logger.Logger
+	Now                func() time.Time
 }
 
 // Projector converts authoritative, bounded occurrences into one complete
@@ -69,6 +74,7 @@ type Projector struct {
 	eventBus            bus.EventBus
 	resolveWorkspace    WorkspaceResolver
 	loadGitObservations GitObservationLoader
+	countQueuedPrompts  func(context.Context, string) (int, error)
 	logger              *logger.Logger
 	now                 func() time.Time
 
@@ -88,6 +94,7 @@ type projectionState struct {
 	workspaceID      string
 	revision         uint64
 	current          *TaskStatusSummary
+	queuedCount      int
 	sessions         map[string]sessionObservation
 	pending          map[string]string
 	taskPending      string
@@ -139,6 +146,7 @@ func NewProjector(cfg ProjectorConfig) *Projector {
 		eventBus:            cfg.EventBus,
 		resolveWorkspace:    cfg.ResolveWorkspace,
 		loadGitObservations: cfg.LoadGitObservations,
+		countQueuedPrompts:  cfg.CountQueuedPrompts,
 		logger:              log.WithFields(zap.String("component", "task-status-summary-projector")),
 		now:                 now,
 		state:               make(map[string]*projectionState),
@@ -168,6 +176,7 @@ func (p *Projector) Start(ctx context.Context) error {
 		events.BuildPermissionRequestWildcardSubject(),
 		events.BuildGitEventWildcardSubject(),
 		events.GitHubTaskPRUpdated,
+		events.MessageQueueStatusChanged,
 	}
 	for _, pattern := range patterns {
 		sub, err := p.eventBus.Subscribe(pattern, p.handleEvent)
@@ -238,10 +247,33 @@ func (p *Projector) handleEvent(ctx context.Context, event *bus.Event) error {
 		return fmt.Errorf("task status summary %q has no workspace", taskID)
 	}
 
+	if event.Type == events.MessageQueueStatusChanged {
+		return p.applyQueueStatusEvent(ctx, state, taskID)
+	}
+
 	changed := p.applySourceEventLocked(state, event.Type, data)
 	if !changed {
 		return nil
 	}
+	return p.persistAndPublishLocked(ctx, taskID, state)
+}
+
+// applyQueueStatusEvent refreshes the task's queued prompt count from the
+// authoritative queue store. The event payload's per-session count is not
+// reused: the badge is per-task across all sessions, and the queue may have
+// changed between the status snapshot and this projection.
+func (p *Projector) applyQueueStatusEvent(ctx context.Context, state *projectionState, taskID string) error {
+	if p.countQueuedPrompts == nil {
+		return nil
+	}
+	count, err := p.countQueuedPrompts(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("count queued prompts for task %q: %w", taskID, err)
+	}
+	if count == state.queuedCount {
+		return nil
+	}
+	state.queuedCount = count
 	return p.persistAndPublishLocked(ctx, taskID, state)
 }
 
@@ -455,6 +487,7 @@ func (p *Projector) restorePersistedState(ctx context.Context, taskID string, st
 	}
 	state.current = cloneSummary(summary)
 	state.revision = summary.Revision
+	state.queuedCount = summary.QueuedPromptCount
 	state.taskPending = summary.PendingAction
 	if summary.PrimarySession != nil && summary.PrimarySession.ID != "" {
 		state.sessions[summary.PrimarySession.ID] = sessionObservation{
@@ -783,6 +816,7 @@ func deriveSummary(state *projectionState) TaskStatusSummary {
 		ActiveError:         deriveActiveError(state),
 		Git:                 deriveGitSummary(state),
 		PullRequest:         derivePullRequestSummary(state),
+		QueuedPromptCount:   state.queuedCount,
 	}
 }
 

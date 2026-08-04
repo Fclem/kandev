@@ -1,7 +1,7 @@
 ---
 id: "01-pending-prompt-count-queries"
 title: "Add pending prompt count queries to the message queue"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"

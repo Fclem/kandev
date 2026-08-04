@@ -957,6 +957,24 @@ func (s *Service) authorizeSession(ctx context.Context, sessionID string) error 
 	return s.sessionAccessCheck(ctx, sessionID)
 }
 
+// SessionTaskID returns the task that owns a session, or "" when the session
+// is unknown. Used to enrich message.queue.status_changed events with the
+// task_id so task-scoped consumers (e.g. the status summary projector) can
+// refresh per-task queued-prompt counts.
+func (s *Service) SessionTaskID(ctx context.Context, sessionID string) (string, error) {
+	if sessionID == "" || s.repo == nil {
+		return "", nil
+	}
+	session, err := s.repo.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	if session == nil {
+		return "", nil
+	}
+	return session.TaskID, nil
+}
+
 // authorizeTask applies the configured per-user task check. No-op when unwired.
 func (s *Service) authorizeTask(ctx context.Context, taskID string) error {
 	if s.taskAccessCheck == nil || taskID == "" {

@@ -143,6 +143,11 @@ func provideOrchestrator(
 	// boot payload and task.updated events.
 	taskSvc.SetForegroundActivityProvider(orchestratorSvc)
 
+	// Let the task service stamp status_summary.queued_prompt_count on task
+	// list/snapshot payloads (initial-load backstop for the sidebar badge; the
+	// status-summary projector keeps the field live between loads).
+	taskSvc.SetQueuedPromptCounter(orchestratorSvc.GetMessageQueue())
+
 	// Per-user scoping for the session-keyed WS actions. The orchestrator
 	// resolves sessions through its own repo handle, so it does not inherit the
 	// task service's authorize* checks.

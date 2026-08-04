@@ -1,7 +1,7 @@
 ---
 id: "05-e2e-and-verification"
 title: "E2E coverage and full verification"
-status: pending
+status: done
 wave: 4
 depends_on: ["03-attach-count-to-task-payloads", "04-sidebar-badge-ui"]
 plan: "plan.md"

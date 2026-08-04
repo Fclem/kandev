@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/ui/sidebar-queued-prompt-count.md
 created: 2026-08-04
-status: draft
+status: implemented
 ---
 
 # Implementation Plan: Sidebar Queued Prompt Count Badge
@@ -145,11 +145,11 @@ badge through the mobile sidebar flow.
 
 ## Implementation Waves
 
-- [ ] [Task 01: Add pending prompt count queries to the message queue](task-01-pending-prompt-count-queries.md) — wave 1
-- [ ] [Task 02: Add queued_prompt_count to the live status summary](task-02-status-summary-queued-count.md) — wave 2, after Task 01
-- [ ] [Task 03: Attach the count to task list/snapshot payloads](task-03-attach-count-to-task-payloads.md) — wave 3, after Task 02
-- [ ] [Task 04: Render the badge in the task sidebar](task-04-sidebar-badge-ui.md) — wave 3, after Task 02 (file-disjoint from Task 03; parallel-safe)
-- [ ] [Task 05: E2E coverage and verification](task-05-e2e-and-verification.md) — wave 4, after Tasks 03 and 04
+- [x] [Task 01: Add pending prompt count queries to the message queue](task-01-pending-prompt-count-queries.md) — wave 1
+- [x] [Task 02: Add queued_prompt_count to the live status summary](task-02-status-summary-queued-count.md) — wave 2, after Task 01
+- [x] [Task 03: Attach the count to task list/snapshot payloads](task-03-attach-count-to-task-payloads.md) — wave 3, after Task 02
+- [x] [Task 04: Render the badge in the task sidebar](task-04-sidebar-badge-ui.md) — wave 3, after Task 02 (file-disjoint from Task 03; parallel-safe)
+- [x] [Task 05: E2E coverage and verification](task-05-e2e-and-verification.md) — wave 4, after Tasks 03 and 04
 
 This package does not authorize subagents; implementation remains in the
 user-controlled primary session.

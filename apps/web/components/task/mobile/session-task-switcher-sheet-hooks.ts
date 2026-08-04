@@ -125,6 +125,9 @@ export function toSheetItem(
     isRemoteExecutor: task.isRemoteExecutor,
     remoteExecutorType: task.primaryExecutorType ?? undefined,
     remoteExecutorName: task.primaryExecutorName ?? undefined,
+    // Queued prompt count badge — same status summary source as the desktop
+    // sidebar mapper (buildSidebarItem) so both surfaces agree.
+    queuedCount: task.statusSummary?.queued_prompt_count,
   };
 }
 

@@ -1,7 +1,7 @@
 ---
 id: "04-sidebar-badge-ui"
 title: "Render the queued prompt count badge in the task sidebar"
-status: pending
+status: done
 wave: 3
 depends_on: ["02-status-summary-queued-count"]
 plan: "plan.md"

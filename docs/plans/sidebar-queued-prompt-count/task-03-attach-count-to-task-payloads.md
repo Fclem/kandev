@@ -1,7 +1,7 @@
 ---
 id: "03-attach-count-to-task-payloads"
 title: "Attach the count to task list/snapshot payloads"
-status: pending
+status: done
 wave: 3
 depends_on: ["02-status-summary-queued-count"]
 plan: "plan.md"

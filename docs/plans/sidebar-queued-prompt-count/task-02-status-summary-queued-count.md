@@ -1,7 +1,7 @@
 ---
 id: "02-status-summary-queued-count"
 title: "Add queued_prompt_count to the live status summary"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-pending-prompt-count-queries"]
 plan: "plan.md"

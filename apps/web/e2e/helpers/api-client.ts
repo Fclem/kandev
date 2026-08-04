@@ -2141,6 +2141,11 @@ export class ApiClient {
     });
   }
 
+  /** Removes every pending queued message for a session (message.queue.cancel). */
+  async clearQueue(sessionId: string): Promise<void> {
+    await this.wsRequest("message.queue.cancel", { session_id: sessionId });
+  }
+
   // --- Integration config seeding (real API, not mock) ---
 
   async setJiraConfig(payload: {

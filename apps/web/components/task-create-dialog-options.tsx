@@ -119,7 +119,10 @@ export function useBranchOptions(branchOptionsRaw: Branch[]) {
 
 export function useAgentProfileOptions(agentProfiles: AgentProfileOption[]): OptionItem[] {
   return useMemo(() => {
-    return agentProfiles.map((profile: AgentProfileOption) => {
+    // Disabled profiles stay in the store (existing sessions keep their
+    // labels) but are never offered as a choice for new work.
+    const selectable = agentProfiles.filter((profile) => profile.enabled !== false);
+    return selectable.map((profile: AgentProfileOption) => {
       const parts = profile.label.split(" \u2022 ");
       const agentLabel = parts[0] ?? profile.label;
       const profileLabel = parts[1] ?? "";

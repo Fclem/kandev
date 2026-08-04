@@ -9,6 +9,7 @@ import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Separator } from "@kandev/ui/separator";
+import { Switch } from "@kandev/ui/switch";
 import { useToast } from "@/components/toast-provider";
 import { useSettingsSaveContributor } from "@/components/settings/settings-save-provider";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -67,16 +68,20 @@ type ProfileEditorHeaderProps = {
   agentName: string;
   agentDisplayName: string;
   savedProfileName: string;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
 };
 
 function ProfileEditorHeader({
   agentName,
   agentDisplayName,
   savedProfileName,
+  enabled,
+  onEnabledChange,
 }: ProfileEditorHeaderProps) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-start justify-between">
+    <div className="flex items-start justify-between gap-4">
       <div>
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <AgentLogo agentName={agentName} size={28} className="shrink-0" />
@@ -85,6 +90,20 @@ function ProfileEditorHeader({
         <p className="text-sm text-muted-foreground mt-1">
           {t("agents:agentProfileSettings", { name: agentDisplayName })}
         </p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="text-right">
+          <p className="text-sm font-medium">{t("agents:enabled")}</p>
+          <p className="text-xs text-muted-foreground max-w-56">
+            {t("agents:enabledProfileHelper")}
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={onEnabledChange}
+          data-testid="profile-enabled-toggle"
+          aria-label={enabled ? t("agents:disableProfile") : t("agents:enableProfile")}
+        />
       </div>
     </div>
   );
@@ -372,6 +391,8 @@ function ProfileEditor({
         agentName={agent.name}
         agentDisplayName={profile.agentDisplayName ?? ""}
         savedProfileName={savedProfile.name}
+        enabled={draft.enabled ?? true}
+        onEnabledChange={(next) => updateDraft({ enabled: next })}
       />
 
       <Separator />

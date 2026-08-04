@@ -1,7 +1,7 @@
 ---
 id: "02-frontend-nest-drop-infrastructure"
 title: "Frontend nest-drop infrastructure"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-backend-composite-semantics"]
 plan: "plan.md"
@@ -42,3 +42,10 @@ Task 01 (semantics only — infra works against the existing `updateTask` path r
 ## Output contract
 
 Report the component/helper changes, exact commands and results, files changed, blockers, residual risks; update this task and `plan.md` when acceptance passes.
+
+## Results
+
+- `cd apps/web && pnpm test -- components/task/task-switcher-subtask-dnd.test.ts components/task/task-switcher.test.tsx components/task/task-switcher-direct-subtasks.test.tsx` — 31 passed (new helper tests + switcher regression suites).
+- `pnpm run typecheck` clean; `pnpm run lint` clean (0 warnings); `pnpm run i18n:ratchet` clean.
+- Hoisted per-level `DndContext` into `TaskTreeDndGroup` (one per group section; custom collision: `pointerWithin` → `nest:` ids win, else `closestCenter`); `SortableTaskLevel` gained `externalDragContext`; added `NestDropZone` + pure `resolveSidebarDrop`/`computeNestTargets` (unit-tested); `GroupSection` slimmed via props-object + new `task-switcher-tree-context.ts` (`flattenGroupTasks`/`buildTaskTreeContext`) to stay under lint line limits.
+- Files changed: `components/task/task-switcher-subtask-dnd.tsx`, `task-switcher-subtask-dnd.test.ts`, `task-switcher.tsx`, `task-switcher-tree-context.ts` (new), `src/locales/en/sidebar.json` (`sidebar:nestUnder`).

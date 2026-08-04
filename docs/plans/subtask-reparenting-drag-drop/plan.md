@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/tasks/subtask-reparenting-drag-drop.md
 created: 2026-08-04
-status: draft
+status: complete
 ---
 
 # Implementation Plan: Subtask re-parenting by drag and drop
@@ -90,22 +90,27 @@ See task 04. Desktop spec `apps/web/e2e/tests/task/subtask-reparent-drag-drop.sp
 
 ## Verification Results
 
-Pending. On completion, synchronize with each task's `## Results`.
+All task checks passed; see each task's `## Results` for exact commands and counts.
+
+- Backend: `go test ./internal/task/service ./internal/task/handlers ./internal/office/dashboard` — service + office/dashboard `ok`; handlers `ok` under `umask 022` (3 pre-existing env failures under umask 002, verified on base).
+- Web: full unit suite passes (8441+ of 8450; the 5 failures are pre-existing env issues: 3 Docker-bridge `http-git-server`, 2 load-sensitive file-browser timeouts that pass in isolation); typecheck, lint, i18n ratchet clean.
+- E2E: `subtask-reparent-drag-drop.spec.ts` 5/5 (chromium), `mobile-subtask-reparent-drag-drop.spec.ts` 1/1 (mobile-chrome touch).
+- Root: `make fmt`, `make typecheck`, `make lint` pass. `make test` residual failures are pre-existing environment-dependent tests (launchd/systemd/cli-shim) unrelated to this feature.
 
 ## Implementation Waves And Parallel Candidates
 
 ```
 Wave 1:
-- [ ] [task-01-backend-composite-semantics](task-01-backend-composite-semantics.md)
+- [x] [task-01-backend-composite-semantics](task-01-backend-composite-semantics.md)
 
 Wave 2:
-- [ ] [task-02-frontend-nest-drop-infrastructure](task-02-frontend-nest-drop-infrastructure.md)
+- [x] [task-02-frontend-nest-drop-infrastructure](task-02-frontend-nest-drop-infrastructure.md)
 
 Wave 3:
-- [ ] [task-03-frontend-wiring-and-affordances](task-03-frontend-wiring-and-affordances.md)
+- [x] [task-03-frontend-wiring-and-affordances](task-03-frontend-wiring-and-affordances.md)
 
 Wave 4:
-- [ ] [task-04-e2e-and-verification](task-04-e2e-and-verification.md)
+- [x] [task-04-e2e-and-verification](task-04-e2e-and-verification.md)
 ```
 
 All tasks are sequential (each depends on the previous). No parallel candidates.

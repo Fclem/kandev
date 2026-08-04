@@ -37,6 +37,7 @@
   "logOut": "Log out",
   "maxViews_one": "{{count}} max",
   "maxViews_other": "{{count}} max",
+  "nestUnder": "Nest under {{title}}",
   "newKanbanWorkspace": "New kanban workspace",
   "newOfficeWorkspace": "New office workspace",
   "newTask": "New Task",

@@ -9,6 +9,20 @@ import type { WorkflowSnapshotData } from "@/lib/state/slices/kanban/types";
 type StoreApi = ReturnType<typeof useAppStoreApi>;
 type SnapshotTask = WorkflowSnapshotData["tasks"][number];
 
+/**
+ * Resolves the workflow id a task belongs to from the multi-workflow
+ * snapshots. Snapshot tasks carry no workflow_id themselves; the snapshot
+ * key is the workflow. Returns null when the task is not in any snapshot
+ * (the caller then skips the optimistic patch and lets the WS event
+ * reconcile state).
+ */
+export function taskWorkflowIdFromSnapshots(store: StoreApi, taskId: string): string | null {
+  const snapshots = store.getState().kanbanMulti?.snapshots ?? {};
+  return (
+    Object.keys(snapshots).find((wf) => snapshots[wf]?.tasks.some((t) => t.id === taskId)) ?? null
+  );
+}
+
 // One re-parent operation's context, threaded to the optimistic helpers.
 type NestOp = {
   store: StoreApi;

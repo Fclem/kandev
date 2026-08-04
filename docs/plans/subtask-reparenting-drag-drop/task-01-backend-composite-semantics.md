@@ -1,7 +1,7 @@
 ---
 id: "01-backend-composite-semantics"
 title: "Backend composite re-parent semantics"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -44,3 +44,10 @@ None.
 ## Output contract
 
 Report the service/repo changes, exact commands and results, files changed, blockers, residual risks; update this task and `plan.md` when acceptance passes.
+
+## Results
+
+- `cd apps/backend && go test ./internal/task/service ./internal/task/handlers ./internal/office/dashboard` — service and office/dashboard `ok`; handlers `ok` (run with `umask 022`; this sandbox's default umask 002 makes 3 pre-existing local-repository handler tests fail — they pass under standard umask and fail identically on the stash-clean base).
+- Added `normalizeWorkspaceModeAfterReparent` to `Service.UpdateTask` (parent-change block): `inherit_parent` → `shared_group` on any effective parent change. TDD red→green: `TestService_UpdateTask_ReparentNormalizesInheritedWorkspaceMode`, `TestService_UpdateTask_UnnestNormalizesInheritedWorkspaceMode`, `TestService_UpdateTask_ReparentPreservesNonInheritedWorkspaceModes`.
+- Office parity: repo `UpdateTaskParentID` now sets `parent_id` AND normalizes mode in one dialect-aware UPDATE (SQLite JSON, mirroring `detachTaskQuery`); dashboard service publishes `["parent_id", "metadata"]`; parity test `TestUpdateTaskParentIDNormalizesInheritedWorkspaceMode`; added the missing `metadata` column to the office test-harness tasks DDL (matches production schema).
+- Files changed: `internal/task/service/service_tasks.go`, `service_reparent_test.go`, `internal/office/dashboard/service_tasks.go`, `service_detachment_test.go`, `handler_test.go`, `internal/office/repository/sqlite/tasks.go`.

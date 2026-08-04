@@ -1,7 +1,7 @@
 ---
 id: "04-e2e-and-verification"
 title: "E2E and full verification"
-status: pending
+status: done
 wave: 4
 depends_on: ["03-frontend-wiring-and-affordances"]
 plan: "plan.md"
@@ -41,3 +41,10 @@ Tasks 01–03.
 ## Output contract
 
 Report the spec files, exact commands and results (including per-scenario pass counts), files changed, blockers, residual risks; update this task and `plan.md` when acceptance passes.
+
+## Results
+
+- Desktop: `pnpm e2e:run tests/task/subtask-reparent-drag-drop.spec.ts --shards 1` — 5 passed (subtask→root reparent + workspace-mode normalization, root→root nest, no nest zones for a task with children, subtask-row drop no-op, sibling reorder regression).
+- Mobile: `pnpm e2e:run --project mobile-chrome tests/task/mobile-subtask-reparent-drag-drop.spec.ts --shards 1` — 1 passed (touch drag via CDP `Input.dispatchTouchEvent`; source handle and target zone are scrolled into view first — the sheet scrolls and off-viewport coordinates make raw mouse/touch events no-ops).
+- Root verification: `make fmt`, `make typecheck`, `make lint` pass (umask 022). `make test`: all changed packages pass; residual failures are pre-existing environment issues (launchd/systemd/cli-shim backend tests, Docker-bridge-dependent `http-git-server.test.ts`, load-sensitive file-browser timeouts that pass in isolation) — verified failing on the stash-clean base.
+- Files changed: `e2e/tests/task/subtask-reparent-drag-drop.spec.ts` (new), `e2e/tests/task/mobile-subtask-reparent-drag-drop.spec.ts` (new). Temporary diagnostic spec `mobile-drag-diag.spec.ts` created and removed.

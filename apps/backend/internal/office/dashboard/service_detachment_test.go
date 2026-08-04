@@ -2,6 +2,7 @@ package dashboard_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	taskmodels "github.com/kandev/kandev/internal/task/models"
@@ -81,5 +82,49 @@ func TestUpdateTaskParentIDKeepsNonEmptyReparentingInOffice(t *testing.T) {
 	}
 	if parentID != "new-parent" {
 		t.Fatalf("parent_id = %q, want new-parent", parentID)
+	}
+}
+
+// The Office non-empty reparent path must apply the same composite workspace
+// semantics as the canonical detach: an inherit_parent subtask re-parented to
+// a new parent keeps its materialized workspace as shared_group instead of
+// silently inheriting the new parent's.
+func TestUpdateTaskParentIDNormalizesInheritedWorkspaceMode(t *testing.T) {
+	deps := newTestDeps(t)
+	insertTestTask(t, deps.db, "child", "workspace", "Child", "todo", 1)
+	if _, err := deps.db.Exec(`UPDATE tasks SET parent_id = 'parent', metadata = '{"workspace":{"mode":"inherit_parent","group_id":"group-1"}}' WHERE id = 'child'`); err != nil {
+		t.Fatalf("set parent/metadata: %v", err)
+	}
+
+	if err := deps.svc.UpdateTaskParentID(context.Background(), "child", "new-parent"); err != nil {
+		t.Fatalf("UpdateTaskParentID: %v", err)
+	}
+
+	var parentID string
+	if err := deps.db.Get(&parentID, `SELECT parent_id FROM tasks WHERE id = 'child'`); err != nil {
+		t.Fatalf("select parent: %v", err)
+	}
+	if parentID != "new-parent" {
+		t.Fatalf("parent_id = %q, want new-parent", parentID)
+	}
+
+	var metadata string
+	if err := deps.db.Get(&metadata, `SELECT metadata FROM tasks WHERE id = 'child'`); err != nil {
+		t.Fatalf("select metadata: %v", err)
+	}
+	var parsed struct {
+		Workspace struct {
+			Mode    string `json:"mode"`
+			GroupID string `json:"group_id"`
+		} `json:"workspace"`
+	}
+	if err := json.Unmarshal([]byte(metadata), &parsed); err != nil {
+		t.Fatalf("parse metadata %q: %v", metadata, err)
+	}
+	if parsed.Workspace.Mode != "shared_group" {
+		t.Fatalf("workspace mode = %q, want shared_group", parsed.Workspace.Mode)
+	}
+	if parsed.Workspace.GroupID != "group-1" {
+		t.Fatalf("workspace group_id = %q, want group-1", parsed.Workspace.GroupID)
 	}
 }

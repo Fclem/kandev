@@ -9,6 +9,7 @@ import { buildPrepareRequest } from "@/lib/services/session-launch-helpers";
 import { useWorkspaceSidebarTasks } from "@/hooks/domains/kanban/use-workspace-sidebar-tasks";
 import { useTaskActions, useArchiveAndSwitchTask } from "@/hooks/use-task-actions";
 import { useTaskDetachDialog } from "@/hooks/use-detach-task";
+import { useNestTask, taskWorkflowIdFromSnapshots } from "@/hooks/use-nest-task";
 import { useTaskRemoval } from "@/hooks/use-task-removal";
 import { workspaceModeFromMetadata } from "@/lib/kanban/map-task";
 import {
@@ -511,6 +512,7 @@ export function useSheetActions(workspaceId: string | null, onOpenChange: (open:
   const { removeTaskFromBoard, loadTaskSessionsForTask } = useTaskRemoval({ store });
   const deleteActions = useSheetDeleteActions(store, removeTaskFromBoard);
   const detachActions = useTaskDetachDialog(store);
+  const nestTask = useNestTask();
 
   const handleSelectTask = useCallback(
     (taskId: string) => {
@@ -585,11 +587,23 @@ export function useSheetActions(workspaceId: string | null, onOpenChange: (open:
     onOpenChange,
   });
 
+  // Re-parent via drag: run the same composite nest operation the context
+  // menu uses, resolving the workflow from the snapshot keys.
+  const handleNestTask = useCallback(
+    (taskId: string, parentTaskId: string) => {
+      const workflowId = taskWorkflowIdFromSnapshots(store, taskId);
+      if (!workflowId) return;
+      void nestTask(taskId, workflowId, parentTaskId);
+    },
+    [store, nestTask],
+  );
+
   return {
     handleSelectTask,
     handleArchiveTask,
     handleWorkspaceChange,
     handleTaskCreated,
+    handleNestTask,
     archivingTask,
     setArchivingTask,
     isArchiving,

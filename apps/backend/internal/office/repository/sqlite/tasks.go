@@ -743,9 +743,34 @@ func (r *Repository) UpdateTaskProjectID(ctx context.Context, taskID, projectID 
 	return r.execTaskScalar(ctx, taskID, "project_id", projectID)
 }
 
-// UpdateTaskParentID sets the parent_id column. Empty string clears it.
+// UpdateTaskParentID sets the parent_id column and applies the canonical
+// re-parent workspace policy: an inherit_parent subtask whose parent is
+// changing keeps its materialized workspace as shared_group instead of
+// silently inheriting the new parent's. Empty string clears the parent.
 func (r *Repository) UpdateTaskParentID(ctx context.Context, taskID, parentID string) error {
-	return r.execTaskScalar(ctx, taskID, "parent_id", parentID)
+	query := `
+		UPDATE tasks
+		SET parent_id = ?,
+			metadata = CASE
+				WHEN json_valid(metadata) THEN CASE
+					WHEN json_extract(metadata, '$.workspace.mode') = 'inherit_parent'
+					THEN json_set(metadata, '$.workspace.mode', 'shared_group')
+					ELSE metadata
+				END
+				ELSE metadata
+			END,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`
+	result, err := r.db.ExecContext(ctx, r.db.Rebind(query), parentID, taskID)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("task not found: %s", taskID)
+	}
+	return nil
 }
 
 // taskScalarColumns enumerates the only columns execTaskScalar may target.
@@ -755,7 +780,6 @@ func (r *Repository) UpdateTaskParentID(ctx context.Context, taskID, parentID st
 var taskScalarColumns = map[string]struct{}{
 	"priority":   {},
 	"project_id": {},
-	"parent_id":  {},
 }
 
 // execTaskScalar updates a single TEXT column on a task and bumps updated_at.

@@ -59,6 +59,7 @@ function useSidebarGroupToggle(viewId: string) {
   );
 }
 
+// eslint-disable-next-line max-lines-per-function -- forwards the shared task-tree props onto TaskSwitcher.
 export function MobileTaskList({
   tasks,
   workflows,
@@ -72,6 +73,7 @@ export function MobileTaskList({
   onArchiveTask,
   onDeleteTask,
   onDetachTask,
+  onNestTask,
   onLinkPullRequest,
   onLinkIssue,
   onLinkMergeRequest,
@@ -93,6 +95,7 @@ export function MobileTaskList({
   onArchiveTask: (taskId: string) => void;
   onDeleteTask: (taskId: string) => Promise<void> | void;
   onDetachTask: (taskId: string) => Promise<void> | void;
+  onNestTask?: (taskId: string, parentTaskId: string) => void;
   onLinkPullRequest?: (taskId: string, taskTitle?: string) => void;
   onLinkIssue?: (taskId: string, taskTitle?: string) => void;
   onLinkMergeRequest?: (taskId: string, taskTitle?: string) => void;
@@ -141,6 +144,7 @@ export function MobileTaskList({
       onArchiveTask={onArchiveTask}
       onDeleteTask={onDeleteTask}
       onDetachTask={onDetachTask}
+      onNestTask={onNestTask}
       onLinkPullRequest={onLinkPullRequest}
       onLinkIssue={onLinkIssue}
       onLinkMergeRequest={onLinkMergeRequest}
@@ -319,6 +323,7 @@ function TaskSwitcherSurfaceContent({
           onArchiveTask={surfaceAction(presentation, onOpenChange, actions.handleArchiveTask)}
           onDeleteTask={surfaceAction(presentation, onOpenChange, actions.handleDeleteTask)}
           onDetachTask={surfaceAction(presentation, onOpenChange, actions.handleDetachTask)}
+          onNestTask={actions.handleNestTask}
           onLinkPullRequest={surfaceAction(
             presentation,
             onOpenChange,

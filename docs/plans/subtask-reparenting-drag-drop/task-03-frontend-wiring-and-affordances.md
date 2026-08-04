@@ -1,7 +1,7 @@
 ---
 id: "03-frontend-wiring-and-affordances"
 title: "Frontend wiring and affordances"
-status: pending
+status: done
 wave: 3
 depends_on: ["02-frontend-nest-drop-infrastructure"]
 plan: "plan.md"
@@ -47,3 +47,9 @@ Task 02 (props/context plumbing) and Task 01 (composite semantics behind `update
 ## Output contract
 
 Report wiring changes, exact commands and results, files changed, blockers, residual risks; update this task and `plan.md` when acceptance passes.
+
+## Results
+
+- `pnpm run typecheck` clean; `pnpm run lint` clean; `pnpm run i18n:ratchet` clean; task-component suites passed (249 files / 2140 tests in the `components/task` run).
+- Desktop sidebar and mobile sheet wire `onNestTask` through the existing `useNestTask` hook; workflow resolved from snapshot keys via the new shared helper `taskWorkflowIdFromSnapshots` in `hooks/use-nest-task.ts`; `MobileTaskList` gained `onNestTask` (sheet stays open on drop); new `sidebar:nestUnder` key.
+- Files changed: `components/task/task-session-sidebar.tsx`, `task-session-sidebar-switcher-props.ts`, `components/task/mobile/session-task-switcher-sheet.tsx`, `session-task-switcher-sheet-hooks.ts`, `hooks/use-nest-task.ts`.

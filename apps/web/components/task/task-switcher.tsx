@@ -10,7 +10,13 @@ import {
   type SidebarGroup,
 } from "@/lib/sidebar/apply-view";
 import { type TaskMoveWorkflow } from "@/components/task/task-move-context-menu";
-import { SortableTaskLevel, SortableTaskNode } from "./task-switcher-subtask-dnd";
+import {
+  SortableTaskLevel,
+  SortableTaskNode,
+  TaskTreeDndGroup,
+  NestDropZone,
+} from "./task-switcher-subtask-dnd";
+import { flattenGroupTasks, buildTaskTreeContext } from "./task-switcher-tree-context";
 import { GroupHeader, TaskSwitcherSkeleton } from "./task-switcher-group";
 
 export type TaskSwitcherItem = {
@@ -74,6 +80,8 @@ type TaskSwitcherProps = {
   onTogglePin?: (taskId: string) => void;
   onReorderGroup?: (groupTaskIds: string[]) => void;
   onReorderSubtasks?: (parentTaskId: string, orderedSubtaskIds: string[]) => void;
+  /** Re-parent a task under another task (drag onto a nest drop zone). */
+  onNestTask?: (taskId: string, parentTaskId: string) => void;
   pinnedTaskIds?: string[];
   deletingTaskId?: string | null;
   isLoading?: boolean;
@@ -135,7 +143,7 @@ type SubtaskToggleInfo = {
   onToggleSubtasks: () => void;
 };
 
-type TaskRowProps = {
+export type TaskRowProps = {
   task: TaskSwitcherItem;
   isSubTask?: boolean;
   depth?: number;
@@ -277,7 +285,7 @@ function TaskRow({
 // Shared, per-render context threaded through the recursive task tree so each
 // node can look up its children, collapse state, and reorder callbacks without
 // drilling a dozen props through every level.
-type TaskTreeContext = {
+export type TaskTreeContext = {
   subTasksByParentId: Map<string, TaskSwitcherItem[]>;
   collapsedSubs: Set<string>;
   onToggleSubtasks?: (parentTaskId: string) => void;
@@ -285,6 +293,13 @@ type TaskTreeContext = {
   rowProps: Omit<TaskRowProps, "task" | "subtaskToggle" | "isPinned" | "isSubTask" | "depth">;
   onReorderGroup?: (groupTaskIds: string[]) => void;
   onReorderSubtasks?: (parentTaskId: string, orderedSubtaskIds: string[]) => void;
+  onNestTask?: (taskId: string, parentTaskId: string) => void;
+  // Rows in nestTargetIds render a nest drop zone while a drag is active.
+  nestTargetIds: Set<string>;
+  activeDragId: string | null;
+  // The group renders one DndContext spanning every level (TaskTreeDndGroup),
+  // so levels must not create their own.
+  externalDragContext: boolean;
 };
 
 // One task row plus — when expanded — its nested subtree. Mutually recursive
@@ -312,18 +327,24 @@ function TaskTreeNode({
         }
       : undefined;
   const isRoot = depth === 0;
+  const isNestTarget = ctx.nestTargetIds.has(task.id);
   const handle = (
-    <TaskRow
-      task={task}
-      depth={depth}
-      isSubTask={!isRoot}
-      subtaskToggle={toggleInfo}
-      isPinned={isRoot && ctx.pinnedSet.has(task.id)}
-      {...ctx.rowProps}
-      // Only root tasks are pinnable — `floatPinnedToTop` reorders root tasks
-      // only, so a pin on a nested row would show an icon but never move it.
-      onTogglePin={isRoot ? ctx.rowProps.onTogglePin : undefined}
-    />
+    // The relative wrapper keeps the nest drop zone pinned to this row's
+    // left edge rather than spanning the nested subtree below it.
+    <div className="relative">
+      <TaskRow
+        task={task}
+        depth={depth}
+        isSubTask={!isRoot}
+        subtaskToggle={toggleInfo}
+        isPinned={isRoot && ctx.pinnedSet.has(task.id)}
+        {...ctx.rowProps}
+        // Only root tasks are pinnable — `floatPinnedToTop` reorders root tasks
+        // only, so a pin on a nested row would show an icon but never move it.
+        onTogglePin={isRoot ? ctx.rowProps.onTogglePin : undefined}
+      />
+      {isNestTarget && <NestDropZone taskId={task.id} title={task.title} />}
+    </div>
   );
   const nested =
     !subsHidden && hasSubs ? (
@@ -365,6 +386,7 @@ function TaskTreeLevel({
     <SortableTaskLevel
       tasks={tasks}
       onReorder={onReorder}
+      externalDragContext={ctx.externalDragContext}
       renderNode={(task, levelDraggable) => (
         <TaskTreeNode
           key={task.id}
@@ -378,7 +400,7 @@ function TaskTreeLevel({
   );
 }
 
-type GroupSectionProps = {
+export type GroupSectionProps = {
   group: SidebarGroup;
   subTasksByParentId: Map<string, TaskSwitcherItem[]>;
   workflows?: TaskMoveWorkflow[];
@@ -407,6 +429,7 @@ type GroupSectionProps = {
   onTogglePin?: (taskId: string) => void;
   onReorderGroup?: (groupTaskIds: string[]) => void;
   onReorderSubtasks?: (parentTaskId: string, orderedSubtaskIds: string[]) => void;
+  onNestTask?: (taskId: string, parentTaskId: string) => void;
   pinnedTaskIds?: string[];
   pinnedSet: Set<string>;
   deletingTaskId?: string | null;
@@ -421,104 +444,38 @@ type GroupSectionProps = {
   isMixedWorkflowSelection?: boolean;
 };
 
-function GroupSection({
-  group,
-  subTasksByParentId,
-  workflows,
-  stepsByWorkflowId,
-  activeTaskId,
-  selectedTaskId,
-  isCollapsed,
-  onToggleCollapsed,
-  collapsedSubtaskParentIds,
-  onToggleSubtasks,
-  showHeader,
-  onSelectTask,
-  onEditTask,
-  onRenameTask,
-  onArchiveTask,
-  onCreateSubtask,
-  onDeleteTask,
-  onDetachTask,
-  onLinkPullRequest,
-  onLinkIssue,
-  onLinkMergeRequest,
-  onLinkJiraTicket,
-  onLinkLinearIssue,
-  onLinkSentryIssue,
-  onMoveToStep,
-  onTogglePin,
-  onReorderGroup,
-  onReorderSubtasks,
-  pinnedTaskIds,
-  pinnedSet,
-  deletingTaskId,
-  selectedTaskIds,
-  onToggleSelectTask,
-  onSelectTaskRange,
-  onBulkArchive,
-  onBulkDelete,
-  onBulkPin,
-  onBulkMove,
-  onClearSelection,
-  isMixedWorkflowSelection,
-}: GroupSectionProps) {
-  const totalCount = countGroupTasks(group.tasks, subTasksByParentId);
-  const ctx: TaskTreeContext = {
-    subTasksByParentId,
-    collapsedSubs: new Set(collapsedSubtaskParentIds ?? []),
-    onToggleSubtasks,
-    pinnedSet,
-    rowProps: {
-      workflows,
-      stepsByWorkflowId,
-      activeTaskId,
-      selectedTaskId,
-      onSelectTask,
-      onEditTask,
-      onRenameTask,
-      onArchiveTask,
-      onCreateSubtask,
-      onDeleteTask,
-      onDetachTask,
-      onLinkPullRequest,
-      onLinkIssue,
-      onLinkMergeRequest,
-      onLinkJiraTicket,
-      onLinkLinearIssue,
-      onLinkSentryIssue,
-      onMoveToStep,
-      onTogglePin,
-      pinnedTaskIds,
-      deletingTaskId,
-      selectedTaskIds,
-      onToggleSelectTask,
-      onSelectTaskRange,
-      onBulkArchive,
-      onBulkDelete,
-      onBulkPin,
-      onBulkMove,
-      onClearSelection,
-      isMixedWorkflowSelection,
-    },
-    onReorderGroup,
-    onReorderSubtasks,
+function GroupSection(props: GroupSectionProps) {
+  const totalCount = countGroupTasks(props.group.tasks, props.subTasksByParentId);
+  const groupTasks = useMemo(
+    () => flattenGroupTasks(props.group.tasks, props.subTasksByParentId),
+    [props.group.tasks, props.subTasksByParentId],
+  );
+
+  const renderTree = (nestTargetIds: Set<string>, activeDragId: string | null) => {
+    if (props.isCollapsed) return null;
+    const ctx = buildTaskTreeContext(props, { nestTargetIds, activeDragId });
+    return <TaskTreeLevel parentTaskId={null} tasks={props.group.tasks} depth={0} ctx={ctx} />;
   };
 
   return (
     <div>
-      {showHeader && (
+      {props.showHeader && (
         <GroupHeader
-          label={group.label}
-          groupKey={group.key}
+          label={props.group.label}
+          groupKey={props.group.key}
           count={totalCount}
-          isCollapsed={isCollapsed}
-          onToggle={onToggleCollapsed}
+          isCollapsed={props.isCollapsed}
+          onToggle={props.onToggleCollapsed}
         />
       )}
-      {!isCollapsed && (
-        <TaskTreeLevel parentTaskId={null} tasks={group.tasks} depth={0} ctx={ctx} />
-      )}
+      <TaskTreeDndGroup
+        groupTasks={groupTasks}
+        onReorderGroup={props.onReorderGroup}
+        onReorderSubtasks={props.onReorderSubtasks}
+        onNestTask={props.onNestTask}
+      >
+        {renderTree}
+      </TaskTreeDndGroup>
     </div>
   );
 }
@@ -551,6 +508,7 @@ export const TaskSwitcher = memo(function TaskSwitcher({
   onTogglePin,
   onReorderGroup,
   onReorderSubtasks,
+  onNestTask,
   pinnedTaskIds,
   deletingTaskId,
   isLoading = false,
@@ -610,6 +568,7 @@ export const TaskSwitcher = memo(function TaskSwitcher({
           onTogglePin={onTogglePin}
           onReorderGroup={onReorderGroup}
           onReorderSubtasks={onReorderSubtasks}
+          onNestTask={onNestTask}
           pinnedTaskIds={pinnedTaskIds}
           pinnedSet={pinnedSet}
           deletingTaskId={deletingTaskId}

@@ -1,7 +1,7 @@
 ---
 id: "03-frontend-data-plumbing"
 title: "Frontend interrupted-field plumbing"
-status: pending
+status: done
 wave: 3
 depends_on: ["02-backend-dto-and-clearing"]
 plan: "plan.md"

@@ -1,7 +1,7 @@
 ---
 id: "02-backend-dto-and-clearing"
 title: "Backend DTO exposure and marker clearing"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-backend-startup-marker"]
 plan: "plan.md"

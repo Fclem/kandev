@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/tasks/interrupted-task-indicator.md
 created: 2026-08-02
-status: in_progress
+status: complete
 ---
 
 # Implementation Plan: Interrupted Task Indicator
@@ -139,23 +139,23 @@ Execution remains sequential in the primary conversation.
 
 Wave 1:
 
-- [ ] [task-01-backend-startup-marker](task-01-backend-startup-marker.md)
+- [x] [task-01-backend-startup-marker](task-01-backend-startup-marker.md)
 
 Wave 2:
 
-- [ ] [task-02-backend-dto-and-clearing](task-02-backend-dto-and-clearing.md)
+- [x] [task-02-backend-dto-and-clearing](task-02-backend-dto-and-clearing.md)
 
 Wave 3:
 
-- [ ] [task-03-frontend-data-plumbing](task-03-frontend-data-plumbing.md)
+- [x] [task-03-frontend-data-plumbing](task-03-frontend-data-plumbing.md)
 
 Wave 4:
 
-- [ ] [task-04-frontend-icon-rendering](task-04-frontend-icon-rendering.md)
+- [x] [task-04-frontend-icon-rendering](task-04-frontend-icon-rendering.md)
 
 Wave 5:
 
-- [ ] [task-05-e2e-verification](task-05-e2e-verification.md)
+- [x] [task-05-e2e-verification](task-05-e2e-verification.md)
 
 Task 02 depends on the marker key from Task 01; Task 03 depends on the DTO
 field from Task 02; Task 04 depends on the plumbed field from Task 03; Task 05

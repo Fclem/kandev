@@ -1,7 +1,7 @@
 ---
 id: "05-e2e-verification"
 title: "E2E verification and final checks"
-status: pending
+status: done
 wave: 5
 depends_on: ["04-frontend-icon-rendering"]
 plan: "plan.md"

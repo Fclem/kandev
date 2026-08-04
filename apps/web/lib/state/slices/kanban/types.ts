@@ -79,6 +79,8 @@ export type KanbanState = {
      * list background-running affordance.
      */
     foregroundActivity?: ForegroundActivity | null;
+    /** True when the task's session was mid-turn when the backend died. */
+    interrupted?: boolean;
     /** Live subagents across this task's sessions; reserved for future UI. */
     activeSubagentCount?: number;
     sessionCount?: number | null;

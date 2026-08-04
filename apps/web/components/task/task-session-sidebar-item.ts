@@ -77,6 +77,7 @@ export function buildSidebarItem(
     sessionState,
     // Use the task-level aggregate so multi-session and off-screen rows match other task views.
     foregroundActivity: task.foregroundActivity,
+    interrupted: task.interrupted,
     description: task.description,
     workflowId: task._workflowId,
     workflowName: context.workflowNameById.get(task._workflowId),

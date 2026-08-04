@@ -81,6 +81,9 @@ export function toSheetItem(
     // mobile task-switcher row shows background-running and agrees with the board for
     // multi-session tasks instead of missing it.
     foregroundActivity: task.foregroundActivity,
+    // Same interruption marker the desktop sidebar reads — the mobile
+    // task-switcher row shares TaskItem rendering.
+    interrupted: task.interrupted,
     description: task.description,
     workflowId: task._workflowId,
     workflowName: ctx.workflowNameById.get(task._workflowId),

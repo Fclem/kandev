@@ -1,7 +1,7 @@
 ---
 id: "04-frontend-icon-rendering"
 title: "Frontend interrupted icon rendering"
-status: pending
+status: done
 wave: 4
 depends_on: ["03-frontend-data-plumbing"]
 plan: "plan.md"

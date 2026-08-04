@@ -61,6 +61,8 @@ export interface Task {
    * affordance on the card status icon.
    */
   foregroundActivity?: ForegroundActivity | null;
+  /** True when the task's session was mid-turn when the backend died. */
+  interrupted?: boolean;
   reviewStatus?: "pending" | "approved" | "changes_requested" | "rejected" | null;
   primaryExecutorId?: string | null;
   primaryExecutorType?: string | null;

@@ -113,6 +113,7 @@ function simpleTaskHeaderData(task: Task | null) {
     title: task?.title ?? "Loading...",
     state: task?.state ?? null,
     foregroundActivity: task?.foreground_activity,
+    interrupted: task?.interrupted ?? false,
   };
 }
 
@@ -127,6 +128,7 @@ function SimpleTaskHeaderRow({ task }: { task: Task | null }) {
         foregroundActivity={data.foregroundActivity}
         hasPendingClarification={pendingInput.clarification}
         hasPendingPermission={pendingInput.permission}
+        interrupted={data.interrupted}
       />
       <TaskHeader
         identifier={data.identifier}

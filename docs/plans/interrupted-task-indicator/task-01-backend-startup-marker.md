@@ -1,7 +1,7 @@
 ---
 id: "01-backend-startup-marker"
 title: "Backend startup interruption marker"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"

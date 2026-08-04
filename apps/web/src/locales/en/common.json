@@ -15,5 +15,8 @@
   "status": "Status",
   "system": "System",
   "workspace": "Workspace",
-  "workspaces": "Workspaces"
+  "workspaces": "Workspaces",
+  "task": {
+    "interruptedByRestart": "Interrupted by restart"
+  }
 }

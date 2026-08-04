@@ -219,6 +219,12 @@ type sessionExecutorStore interface {
 	// Task
 	GetTask(ctx context.Context, id string) (*models.Task, error)
 	UpdateTask(ctx context.Context, task *models.Task) error
+	// SetTaskMetadataKey / RemoveTaskMetadataKey are concurrent-key-safe JSON
+	// patch helpers on tasks.metadata (implemented by the sqlite/Postgres
+	// repository). Used by startup reconciliation to mark interrupted tasks
+	// and by the session-start funnel to clear the marker.
+	SetTaskMetadataKey(ctx context.Context, taskID, key string, value interface{}) error
+	RemoveTaskMetadataKey(ctx context.Context, taskID, key string) (bool, error)
 	ListChildCompletionRows(ctx context.Context, parentID string) ([]models.ChildCompletionRow, error)
 	// Git snapshots and commits
 	GetLatestGitSnapshot(ctx context.Context, sessionID string) (*models.GitSnapshot, error)
@@ -1632,6 +1638,23 @@ func (s *Service) reconcileOneSessionOnStartup(ctx context.Context, running *mod
 				s.logger.Warn("failed to update task to REVIEW on startup",
 					zap.String("task_id", running.TaskID),
 					zap.Error(updateErr))
+			}
+		}
+	}
+
+	// Mark the task interrupted when its session was mid-turn when the backend
+	// died (STARTING/RUNNING) so task-list surfaces can show the red
+	// interruption icon. WAITING_FOR_INPUT sessions were idle, not interrupted;
+	// archived tasks are not marked because they do not appear in the active
+	// list. The marker is cleared when a session of the task next enters
+	// STARTING/RUNNING (see updateTaskSessionStateWithHook).
+	if running.TaskID != "" && (previousState == models.TaskSessionStateStarting || previousState == models.TaskSessionStateRunning) {
+		task, taskErr := s.repo.GetTask(ctx, running.TaskID)
+		if taskErr == nil && task != nil && !taskArchived(task) {
+			if setErr := s.repo.SetTaskMetadataKey(ctx, running.TaskID, models.MetaKeyInterruptedAt, time.Now().UTC().Format(time.RFC3339)); setErr != nil {
+				s.logger.Warn("failed to mark task interrupted on startup",
+					zap.String("task_id", running.TaskID),
+					zap.Error(setErr))
 			}
 		}
 	}

@@ -80,13 +80,12 @@ function DraggableTaskChip({
     primarySessionState: task.primarySessionState,
     primarySessionPendingAction: task.primarySessionPendingAction,
   });
-  const statusIcon = getTaskStateIcon(
-    task.state,
-    "h-3 w-3",
-    pendingInput.clarification,
-    task.foregroundActivity,
-    pendingInput.permission,
-  );
+  const statusIcon = getTaskStateIcon(task.state, "h-3 w-3", {
+    hasPendingClarification: pendingInput.clarification,
+    foregroundActivity: task.foregroundActivity,
+    hasPendingPermission: pendingInput.permission,
+    interrupted: task.interrupted,
+  });
 
   return (
     <button
@@ -118,13 +117,12 @@ function TaskChipPreview({ task }: { task: Task }) {
     primarySessionState: task.primarySessionState,
     primarySessionPendingAction: task.primarySessionPendingAction,
   });
-  const statusIcon = getTaskStateIcon(
-    task.state,
-    "h-3 w-3",
-    pendingInput.clarification,
-    task.foregroundActivity,
-    pendingInput.permission,
-  );
+  const statusIcon = getTaskStateIcon(task.state, "h-3 w-3", {
+    hasPendingClarification: pendingInput.clarification,
+    foregroundActivity: task.foregroundActivity,
+    hasPendingPermission: pendingInput.permission,
+    interrupted: task.interrupted,
+  });
   return (
     <div
       className={cn(

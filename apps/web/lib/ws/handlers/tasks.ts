@@ -46,6 +46,19 @@ function preservePrimaryExecutorFields(
   }
 }
 
+// Preserve the interruption marker when a lightweight task.updated omits it:
+// only an explicit field (true or false) may change the reading.
+function preserveInterruptedMarker(
+  existing: KanbanTask | undefined,
+  merged: KanbanTask,
+  payload: TaskEventPayload,
+  nextTask: KanbanTask,
+): void {
+  if (!hasPayloadField(payload, "interrupted") && nextTask.interrupted === undefined) {
+    merged.interrupted = existing?.interrupted;
+  }
+}
+
 function mergeTaskUpdate(
   existing: KanbanTask | undefined,
   nextTask: KanbanTask,
@@ -87,6 +100,7 @@ function mergeTaskUpdate(
   ) {
     merged.foregroundActivity = existing.foregroundActivity;
   }
+  preserveInterruptedMarker(existing, merged, payload, nextTask);
   if (
     !hasPayloadField(payload, "active_subagent_count") &&
     nextTask.activeSubagentCount === undefined

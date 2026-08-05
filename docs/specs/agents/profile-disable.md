@@ -44,7 +44,7 @@ leaving existing sessions untouched.
 
 `agent_profiles` table (SQLite, `apps/backend/internal/agent/settings/store`):
 
-```
+```sql
 enabled  INTEGER NOT NULL DEFAULT 1   -- 1 = selectable for new work, 0 = hidden from selection
 ```
 

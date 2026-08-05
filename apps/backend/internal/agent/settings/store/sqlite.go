@@ -797,7 +797,7 @@ func (r *sqliteRepository) UpdateAgentProfile(ctx context.Context, profile *mode
 // UpdateAgentProfileEnabled changes only the selection flag. Keeping this
 // update narrow avoids a settings-page toggle overwriting fields that were
 // read by another profile editor before its save completed.
-func (r *sqliteRepository) UpdateAgentProfileEnabled(ctx context.Context, id string, enabled bool) error {
+func (r *sqliteRepository) UpdateAgentProfileEnabled(ctx context.Context, id string, enabled bool) (time.Time, error) {
 	now := time.Now().UTC()
 	result, err := r.db.ExecContext(ctx, r.db.Rebind(`
 		UPDATE agent_profiles
@@ -805,13 +805,13 @@ func (r *sqliteRepository) UpdateAgentProfileEnabled(ctx context.Context, id str
 		WHERE id = ? AND deleted_at IS NULL
 	`), dialect.BoolToInt(enabled), now, id)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("agent profile not found: %s", id)
+		return time.Time{}, fmt.Errorf("agent profile not found: %s", id)
 	}
-	return nil
+	return now, nil
 }
 
 func (r *sqliteRepository) DeleteAgentProfile(ctx context.Context, id string) error {

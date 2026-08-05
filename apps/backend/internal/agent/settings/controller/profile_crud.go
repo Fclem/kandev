@@ -190,9 +190,11 @@ func (c *Controller) UpdateProfile(ctx context.Context, req UpdateProfileRequest
 	}
 	if enabledOnlyUpdate(req) {
 		profile.UserModified = true
-		if err := c.repo.UpdateAgentProfileEnabled(ctx, profile.ID, profile.Enabled); err != nil {
+		updatedAt, err := c.repo.UpdateAgentProfileEnabled(ctx, profile.ID, profile.Enabled)
+		if err != nil {
 			return nil, err
 		}
+		profile.UpdatedAt = updatedAt
 		result := toProfileDTO(profile)
 		return &result, nil
 	}

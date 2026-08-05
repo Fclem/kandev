@@ -366,6 +366,7 @@ function AgentProfilesSection({ savedAgents, onToggleEnabled }: AgentProfilesSec
       <div>
         <h3 className="text-lg font-semibold">{t("agents:agentProfiles")}</h3>
         <p className="text-sm text-muted-foreground">{t("agents:agentProfilesDescription")}</p>
+        <p className="text-sm text-muted-foreground">{t("agents:enabledProfileHelper")}</p>
       </div>
 
       <div className="space-y-2">

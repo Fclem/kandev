@@ -423,6 +423,9 @@ func TestUpdateProfile_SetsEnabled(t *testing.T) {
 	if updated.Enabled {
 		t.Fatal("expected updated DTO to be disabled")
 	}
+	if updated.UpdatedAt.IsZero() {
+		t.Fatal("expected enabled-only update to return the persisted updated_at")
+	}
 	if len(st.updated) != 1 || st.updated[0].Enabled {
 		t.Fatalf("expected stored profile to be disabled, got %+v", st.updated)
 	}

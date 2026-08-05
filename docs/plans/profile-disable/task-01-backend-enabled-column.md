@@ -14,7 +14,7 @@ spec: "../../specs/agents/profile-disable.md"
 - **Acceptance:** A profile created through `CreateProfile` is enabled by default (explicit `Enabled: true`, not the Go zero value).
 - **Acceptance:** Focused Go tests cover store create/update/scan round-trip, migration backfill, and the PATCH path.
 - **Verification:**
-  - `cd apps/backend && go test -run 'TestProfileEnabled|TestAgentProfilesEnabled|TestMigrate' ./internal/agent/settings/store/... ./internal/agent/settings/controller/...`
+  - `cd apps/backend && go test ./internal/agent/settings/store/... ./internal/agent/settings/controller/... ./internal/agent/settings/handlers/...`
   - `cd apps/backend && go build ./...`
 - **Files likely touched:**
   - `apps/backend/internal/agent/settings/models/models.go`

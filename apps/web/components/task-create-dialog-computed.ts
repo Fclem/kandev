@@ -24,6 +24,7 @@ import { useRemoteAuthSpecs } from "@/hooks/domains/settings/use-remote-auth-spe
 import { isAgentConfiguredOnExecutor } from "@/lib/agent-executor-compat";
 import type { RemoteAuthSpec } from "@/lib/api/domains/settings-api";
 import type { AgentProfileOption } from "@/lib/state/slices/settings/types";
+import { isSelectableAgentProfile } from "@/lib/state/slices/settings/types";
 import { getMultiRepoExecutorDisabledReason } from "@/components/task-create-dialog-multi-repo-guard";
 
 /**
@@ -95,7 +96,7 @@ export function filterCompatibleAgentProfiles(
   authLoaded: boolean,
   authSpecs: RemoteAuthSpec[],
 ): AgentProfileOption[] {
-  const selectable = agentProfiles.filter((profile) => profile.enabled !== false);
+  const selectable = agentProfiles.filter(isSelectableAgentProfile);
   if (!selectedExecutorProfile || !authLoaded) return selectable;
   return selectable.filter((profile) =>
     isAgentConfiguredOnExecutor(profile, selectedExecutorProfile, authSpecs),

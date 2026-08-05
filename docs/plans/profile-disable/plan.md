@@ -60,10 +60,15 @@ settings UI → E2E. Each layer is independently testable.
 
 ### Selection filtering (hide disabled profiles from choices only)
 
-- `apps/web/components/task-create-dialog-options.tsx`: `useAgentProfileOptions` filters `profile.enabled !== false` — covers new task, new subtask, new session, and quick-chat option lists.
+- Define one shared `isSelectableAgentProfile(profile)` predicate that returns
+  `profile.enabled !== false`, preserving the enabled-by-default behavior for
+  legacy payloads. Every selector path below must use this helper rather than
+  duplicating the enabled check.
+
+- `apps/web/components/task-create-dialog-options.tsx`: `useAgentProfileOptions` filters selectable profiles — covers new task, new subtask, new session, and quick-chat option lists.
 - `apps/web/components/task-create-dialog-computed.ts`: `useExecutorProfileCompat`'s `compatibleAgentProfiles` memo filters disabled profiles — feeds autopick (`decideAgentProfileAutopick` last-used / workspace-default / first candidates) and the `noCompatibleAgent` submit gate.
 - `apps/web/components/task/handoff-profile-menu-items.tsx`: `useHandoffProfiles` filters disabled profiles.
-- `apps/web/components/task/new-session-dialog.tsx`: `useNewSessionDialogState` default profile fallback picks the first enabled profile; `profileIsValid` for the *current* session stays on the raw list (existing sessions unaffected).
+- `apps/web/components/task/new-session-dialog.tsx`: `useNewSessionDialogState` keeps the raw current-session profile for existing-session labels and selector visibility, while the new-session initial fallback picks the first selectable profile.
 - `apps/web/components/quick-chat/quick-chat-setup.tsx`: only apply the workspace-default `default_agent_profile_id` when that profile is enabled, else start unselected.
 
 ### Settings UI
@@ -74,7 +79,7 @@ settings UI → E2E. Each layer is independently testable.
   - `useProfileSave` PATCH payload includes `enabled: draft.enabled`.
   - Wire the switch through `ProfileEditor` → header.
 - `apps/web/app/settings/agents/page.tsx`:
-  - `ProfileListItem` renders an `enabled` `Switch` beside the profile name; clicking it calls `updateAgentProfileAction(profile.id, { enabled: next })`, then syncs the store (`setSettingsAgents` with the updated profile + `setAgentProfiles` rebuilt via `toAgentProfileOption`) — the same shape as `useSyncAgentsToStore` in the profile page. The switch's click must not trigger the row's navigation (stopPropagation/preventDefault on the link).
+  - `ProfileListItem` renders an `enabled` `Switch` beside the profile name; clicking it calls `updateAgentProfileAction(profile.id, { enabled: next })`, then syncs the store (`setSettingsAgents` with the updated profile + `setAgentProfiles` rebuilt via `toAgentProfileOption`) — the same shape as `useSyncAgentsToStore` in the profile page. Keep the switch as a sibling outside the row's navigation link so toggling never navigates.
 
 ## Tests
 

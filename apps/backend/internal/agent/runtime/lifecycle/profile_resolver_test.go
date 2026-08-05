@@ -77,8 +77,8 @@ func (m *MockRepository) UpdateAgentProfile(ctx context.Context, profile *models
 	return nil
 }
 
-func (m *MockRepository) UpdateAgentProfileEnabled(_ context.Context, _ string, _ bool) error {
-	return nil
+func (m *MockRepository) UpdateAgentProfileEnabled(_ context.Context, _ string, _ bool) (time.Time, error) {
+	return time.Time{}, nil
 }
 
 func (m *MockRepository) DeleteAgentProfile(ctx context.Context, id string) error {

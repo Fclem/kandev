@@ -26,7 +26,7 @@ test.describe("Agent profile — enable/disable", () => {
     const profile = agent.profiles[0];
     const otherProfiles = agents
       .flatMap((a) => a.profiles ?? [])
-      .filter((p) => p.id !== profile.id && !p.workspaceId);
+      .filter((p) => p.id !== profile.id && !p.workspaceId && p.enabled !== false);
 
     try {
       // 1. Disable via the profile settings header toggle and save.
@@ -37,7 +37,8 @@ test.describe("Agent profile — enable/disable", () => {
       await headerToggle.click();
       await expect(headerToggle).toHaveAttribute("data-state", "unchecked");
 
-      const saveButton = testPage.getByRole("button", { name: /^Save( changes)?$/i }).first();
+      const saveButton = testPage.getByRole("button", { name: /^Save( changes)?$/i });
+      await expect(saveButton).toHaveCount(1);
       await expect(saveButton).toBeEnabled({ timeout: 10_000 });
       await saveButton.click();
       await expect(testPage.getByText(/unsaved changes/i)).toBeHidden({ timeout: 15_000 });

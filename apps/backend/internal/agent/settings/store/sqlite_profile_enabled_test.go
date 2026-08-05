@@ -54,8 +54,12 @@ func TestAgentProfileEnabled_RoundTrip(t *testing.T) {
 		t.Fatal("expected enabled=false after update round-trip")
 	}
 
-	if err := repo.UpdateAgentProfileEnabled(ctx, profile.ID, true); err != nil {
+	updatedAt, err := repo.UpdateAgentProfileEnabled(ctx, profile.ID, true)
+	if err != nil {
 		t.Fatalf("UpdateAgentProfileEnabled: %v", err)
+	}
+	if updatedAt.IsZero() {
+		t.Fatal("expected enabled-only update to return its persisted timestamp")
 	}
 	reEnabled, err := repo.GetAgentProfile(ctx, profile.ID)
 	if err != nil {

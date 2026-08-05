@@ -18,6 +18,7 @@ import { useRemoteAuthSpecs } from "@/hooks/domains/settings/use-remote-auth-spe
 import { useTaskExecutorProfile } from "@/hooks/domains/session/use-task-executor-profile";
 import { isAgentConfiguredOnExecutor } from "@/lib/agent-executor-compat";
 import type { AgentProfileOption } from "@/lib/state/slices";
+import { isSelectableAgentProfile } from "@/lib/state/slices/settings/types";
 import type { ExecutorProfile } from "@/lib/types/http";
 import { usePromptResultDelivery } from "@/hooks/use-prompt-result-delivery";
 import { buildHandoffInitialState, type HandoffPreset } from "./handoff-types";
@@ -95,7 +96,7 @@ function useNewSessionDialogState(taskId: string) {
   // The default for a NEW session must be selectable: a current session
   // that uses a now-disabled profile still runs (no effect on existing
   // sessions), but the dialog falls back to the first enabled profile.
-  const selectableProfiles = agentProfiles.filter((p) => p.enabled !== false);
+  const selectableProfiles = agentProfiles.filter(isSelectableAgentProfile);
   const profileIsValid = selectableProfiles.some((p: { id: string }) => p.id === sessionProfileId);
   const effectiveDefaultProfileId: string = profileIsValid
     ? sessionProfileId
@@ -163,7 +164,7 @@ function useCompatibleAgentProfiles(
 ): AgentProfileOption[] {
   const { specs: authSpecs, loaded: authLoaded } = useRemoteAuthSpecs();
   return useMemo(() => {
-    const selectable = agentProfiles.filter((profile) => profile.enabled !== false);
+    const selectable = agentProfiles.filter(isSelectableAgentProfile);
     if (!executorProfile || !authLoaded) return selectable;
     return selectable.filter((ap) => isAgentConfiguredOnExecutor(ap, executorProfile, authSpecs));
   }, [agentProfiles, executorProfile, authSpecs, authLoaded]);

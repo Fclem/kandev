@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -115,15 +116,16 @@ func (f *fakeStore) UpdateAgentProfile(_ context.Context, p *models.AgentProfile
 	return nil
 }
 
-func (f *fakeStore) UpdateAgentProfileEnabled(ctx context.Context, id string, enabled bool) error {
+func (f *fakeStore) UpdateAgentProfileEnabled(ctx context.Context, id string, enabled bool) (time.Time, error) {
 	profile, err := f.GetAgentProfile(ctx, id)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 	profile.Enabled = enabled
 	profile.UserModified = true
+	profile.UpdatedAt = time.Now().UTC()
 	f.updated = append(f.updated, profile)
-	return nil
+	return profile.UpdatedAt, nil
 }
 
 func (f *fakeStore) DeleteAgentProfile(_ context.Context, id string) error {

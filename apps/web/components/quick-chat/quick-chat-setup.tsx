@@ -12,6 +12,7 @@ import { useRepositoriesState } from "@/components/task-create-dialog-repositori
 import { useRepositories } from "@/hooks/domains/workspace/use-repositories";
 import type { QuickChatRepositoryInput } from "@/lib/api/domains/workspace-api";
 import type { AgentProfileOption } from "@/lib/state/slices";
+import { isSelectableAgentProfile } from "@/lib/state/slices/settings/types";
 import type { Repository } from "@/lib/types/http";
 import type { QuickChatSessionKind } from "@/lib/state/slices/ui/types";
 import { ConfigurationChatToggle } from "./configuration-chat-toggle";
@@ -201,12 +202,13 @@ export function QuickChatSetup({
   // the selector would otherwise auto-start a new chat with a profile the
   // user explicitly took out of rotation.
   const selectableDefault =
-    defaultAgentId && agentProfiles.some((p) => p.id === defaultAgentId && p.enabled !== false)
+    defaultAgentId &&
+    agentProfiles.some((p) => p.id === defaultAgentId && isSelectableAgentProfile(p))
       ? defaultAgentId
       : "";
   const [agentProfileId, setAgentProfileId] = useState(selectableDefault);
   const hasSelectedEnabledProfile = agentProfiles.some(
-    (profile) => profile.id === agentProfileId && profile.enabled !== false,
+    (profile) => profile.id === agentProfileId && isSelectableAgentProfile(profile),
   );
   useEffect(() => {
     if (hasSelectedEnabledProfile) return;

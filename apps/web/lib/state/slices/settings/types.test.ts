@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { agentProfileId } from "@/lib/types/ids";
-import { toAgentProfileOption } from "./types";
+import { isSelectableAgentProfile, toAgentProfileOption } from "./types";
+
+describe("isSelectableAgentProfile", () => {
+  it.each([
+    ["enabled", true, true],
+    ["disabled", false, false],
+    ["legacy", undefined, true],
+  ])("treats %s profiles correctly", (_label, enabled, expected) => {
+    expect(isSelectableAgentProfile({ enabled })).toBe(expected);
+  });
+});
 
 describe("toAgentProfileOption", () => {
   const agent = {

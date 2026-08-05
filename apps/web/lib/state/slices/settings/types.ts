@@ -66,6 +66,11 @@ export type AgentProfileOption = {
   capability_error?: string;
 };
 
+/** Profiles with an omitted enabled field remain selectable for compatibility. */
+export function isSelectableAgentProfile(profile: Pick<AgentProfileOption, "enabled">): boolean {
+  return profile.enabled !== false;
+}
+
 /** Single source of truth for mapping an API Agent+Profile to a store AgentProfileOption. */
 export function toAgentProfileOption(
   agent: Pick<Agent, "id" | "name" | "capability_status" | "capability_error">,

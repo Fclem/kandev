@@ -81,9 +81,9 @@ function ProfileEditorHeader({
 }: ProfileEditorHeaderProps) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <h2 className="text-2xl font-bold flex items-center gap-2">
+    <div className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-start">
+      <div className="min-w-0">
+        <h2 className="text-2xl font-bold flex min-w-0 items-center gap-2 wrap-break-word">
           <AgentLogo agentName={agentName} size={28} className="shrink-0" />
           {agentDisplayName} • {savedProfileName}
         </h2>
@@ -91,8 +91,8 @@ function ProfileEditorHeader({
           {t("agents:agentProfileSettings", { name: agentDisplayName })}
         </p>
       </div>
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="text-right">
+      <div className="flex items-center gap-3 sm:shrink-0">
+        <div className="text-left sm:text-right">
           <p className="text-sm font-medium">{t("agents:enabled")}</p>
           <p className="text-xs text-muted-foreground max-w-56">
             {t("agents:enabledProfileHelper")}
@@ -359,6 +359,7 @@ function ProfileEditor({
   const handleSave = useProfileSave({
     agent,
     draft,
+    savedProfile,
     setSavedProfile,
     setDraft,
     setSaveStatus,

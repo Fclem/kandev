@@ -205,10 +205,13 @@ export function QuickChatSetup({
       ? defaultAgentId
       : "";
   const [agentProfileId, setAgentProfileId] = useState(selectableDefault);
+  const hasSelectedEnabledProfile = agentProfiles.some(
+    (profile) => profile.id === agentProfileId && profile.enabled !== false,
+  );
   useEffect(() => {
-    if (!selectableDefault) return;
-    setAgentProfileId((current) => current || selectableDefault);
-  }, [selectableDefault]);
+    if (hasSelectedEnabledProfile) return;
+    setAgentProfileId(selectableDefault);
+  }, [hasSelectedEnabledProfile, selectableDefault]);
   const { repositories, isLoading } = useRepositories(workspaceId, true);
   const repoState = useRepositoriesState();
   const isStarting = pendingAgentId !== null;
@@ -235,7 +238,7 @@ export function QuickChatSetup({
         .map((row) => ({ repository_id: row.repositoryId as string, base_branch: row.branch })),
     [repoState.repositories],
   );
-  const startDisabled = !agentProfileId || hasIncompleteRow || isStarting;
+  const startDisabled = !hasSelectedEnabledProfile || hasIncompleteRow || isStarting;
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-popover" data-testid="quick-chat-setup">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
@@ -274,7 +277,9 @@ export function QuickChatSetup({
         isStarting={isStarting}
         startDisabled={startDisabled}
         onCancel={onCancel}
-        onStart={() => onStart(agentProfileId, selectedRepositories)}
+        onStart={() => {
+          if (hasSelectedEnabledProfile) onStart(agentProfileId, selectedRepositories);
+        }}
       />
     </div>
   );

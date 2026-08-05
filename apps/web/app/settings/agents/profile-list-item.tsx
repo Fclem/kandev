@@ -19,9 +19,9 @@ export function ProfileListItem({ agent, profile, onToggleEnabled }: ProfileList
   const profilePath = `/settings/agents/${encodeURIComponent(agent.name)}/profiles/${profile.id}`;
   const enabled = profile.enabled ?? true;
   return (
-    <Card className="hover:bg-accent transition-colors cursor-pointer">
+    <Card className="hover:bg-accent transition-colors">
       <CardContent className="py-2 flex items-center justify-between gap-3">
-        <Link href={profilePath} className="flex items-center gap-2 min-w-0 flex-1">
+        <Link href={profilePath} className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
           <AgentLogo agentName={agent.name} className="shrink-0" />
           <span className="text-sm font-medium">
             {agent.profiles[0]?.agentDisplayName ?? agent.name}

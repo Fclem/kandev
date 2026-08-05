@@ -293,4 +293,23 @@ describe("NewSessionDialog", () => {
     render(<NewSessionDialog open={true} onOpenChange={vi.fn()} taskId="task-1" />);
     expect(mockAgentSelectorValue).toBe("profile-2");
   });
+
+  it("reconciles the selection when the active profile becomes disabled", async () => {
+    mockState.agentProfiles.items = [
+      BASE_PROFILE,
+      { ...BASE_PROFILE, id: "profile-2", label: "Profile 2" },
+    ];
+    const { rerender } = render(
+      <NewSessionDialog open={true} onOpenChange={vi.fn()} taskId="task-1" />,
+    );
+    expect(mockAgentSelectorValue).toBe("profile-1");
+
+    mockState.agentProfiles.items = [
+      { ...BASE_PROFILE, enabled: false },
+      { ...BASE_PROFILE, id: "profile-2", label: "Profile 2" },
+    ];
+    rerender(<NewSessionDialog open={true} onOpenChange={vi.fn()} taskId="task-1" />);
+
+    await waitFor(() => expect(mockAgentSelectorValue).toBe("profile-2"));
+  });
 });

@@ -135,8 +135,7 @@ type UpdateProfileRequest struct {
 	AllowIndexing  *bool
 	AutoApprove    *bool
 	CLIPassthrough *bool
-	// Enabled replaces the value when non-nil. Nil means "leave unchanged" —
-	// the UI always sends the desired value on save.
+	// Enabled replaces the value when non-nil. Nil means "leave unchanged".
 	Enabled *bool
 	// CLIFlags replaces the entire list when non-nil. Nil means "leave
 	// unchanged" — the UI always sends the full desired list on save.
@@ -146,6 +145,13 @@ type UpdateProfileRequest struct {
 	// CommandPrefix replaces the value when non-nil. Nil means "leave
 	// unchanged" — the UI always sends the desired value on save.
 	CommandPrefix *string
+}
+
+func enabledOnlyUpdate(req UpdateProfileRequest) bool {
+	return req.Enabled != nil && req.Name == nil && req.Model == nil && req.Mode == nil &&
+		req.ConfigOptions == nil && req.AllowIndexing == nil && req.AutoApprove == nil &&
+		req.CLIPassthrough == nil && req.CLIFlags == nil && req.EnvVars == nil &&
+		req.CommandPrefix == nil
 }
 
 func (c *Controller) UpdateProfile(ctx context.Context, req UpdateProfileRequest) (*dto.AgentProfileDTO, error) {
@@ -181,6 +187,14 @@ func (c *Controller) UpdateProfile(ctx context.Context, req UpdateProfileRequest
 	}
 	if req.Enabled != nil {
 		profile.Enabled = *req.Enabled
+	}
+	if enabledOnlyUpdate(req) {
+		profile.UserModified = true
+		if err := c.repo.UpdateAgentProfileEnabled(ctx, profile.ID, profile.Enabled); err != nil {
+			return nil, err
+		}
+		result := toProfileDTO(profile)
+		return &result, nil
 	}
 	if req.CLIFlags != nil {
 		if err := validateCLIFlagDTOs(*req.CLIFlags); err != nil {

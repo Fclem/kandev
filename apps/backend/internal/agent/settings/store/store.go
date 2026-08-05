@@ -20,6 +20,7 @@ type Repository interface {
 
 	CreateAgentProfile(ctx context.Context, profile *models.AgentProfile) error
 	UpdateAgentProfile(ctx context.Context, profile *models.AgentProfile) error
+	UpdateAgentProfileEnabled(ctx context.Context, id string, enabled bool) error
 	DeleteAgentProfile(ctx context.Context, id string) error
 	GetAgentProfile(ctx context.Context, id string) (*models.AgentProfile, error)
 	// GetAgentProfileIncludingDeleted returns the row even when soft-deleted.

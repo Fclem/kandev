@@ -7,7 +7,7 @@ import { KanbanPage } from "../../pages/kanban-page";
  * - The profile settings header toggle persists across reload.
  * - A disabled profile is hidden from the new-task dialog agent selector.
  * - The /settings/agents profile list shows the toggle and re-enabling there
- *   restores the profile to the selector.
+ *   restores the profile to task creation.
  *
  * Uses the seeded default profile (like agent-profile-acp.spec.ts) rather
  * than creating one — the profile editor page reads from the agents list
@@ -26,7 +26,7 @@ test.describe("Agent profile — enable/disable", () => {
     const profile = agent.profiles[0];
     const otherProfiles = agents
       .flatMap((a) => a.profiles ?? [])
-      .filter((p) => p.id !== profile.id);
+      .filter((p) => p.id !== profile.id && !p.workspaceId);
 
     try {
       // 1. Disable via the profile settings header toggle and save.
@@ -75,13 +75,14 @@ test.describe("Agent profile — enable/disable", () => {
       } else {
         await expect(agentSelector).toBeVisible({ timeout: 15_000 });
         await agentSelector.click();
-        await expect(
-          testPage.getByRole("option", { name: new RegExp(profile.name, "i") }),
-        ).toHaveCount(0);
+        const listbox = testPage.getByRole("listbox");
+        await expect(listbox.getByRole("option", { name: profile.name, exact: false })).toHaveCount(
+          0,
+        );
         const other = otherProfiles[0];
-        await expect(
-          testPage.getByRole("option", { name: new RegExp(other.name, "i") }),
-        ).toHaveCount(1);
+        await expect(listbox.getByRole("option", { name: other.name, exact: false })).toHaveCount(
+          1,
+        );
       }
     } finally {
       // Always restore so worker-scoped seedData stays valid for later tests.
@@ -125,6 +126,25 @@ test.describe("Agent profile — enable/disable", () => {
         "data-state",
         "checked",
       );
+
+      // Re-enabling restores the profile to task creation. With a single
+      // enabled profile the dialog auto-selects it and hides the selector;
+      // with multiple profiles it appears as an option in the open listbox.
+      const kanban = new KanbanPage(testPage);
+      await kanban.goto();
+      await testPage.reload({ waitUntil: "networkidle" });
+      await kanban.createTaskButton.first().click();
+      const dialog = testPage.getByTestId("create-task-dialog");
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+      const selector = testPage.getByTestId("agent-profile-selector");
+      if (await selector.count()) {
+        await selector.click();
+        await expect(
+          testPage.getByRole("listbox").getByRole("option", { name: profile.name, exact: false }),
+        ).toHaveCount(1);
+      } else {
+        await expect(testPage.getByTestId("agent-profile-empty-state")).toHaveCount(0);
+      }
     } finally {
       await apiClient.updateAgentProfile(profile.id, { enabled: true }).catch(() => {});
     }

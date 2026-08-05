@@ -12,7 +12,7 @@ spec: "../../specs/agents/profile-disable.md"
 
 - **Acceptance:** `AgentProfile.enabled`, `AgentProfilePayload.enabled`, `AgentProfileOption.enabled`, `updateAgentProfileAction` payload, `normalizeAgentProfile` (missing → `true`), and `toAgentProfilePayload` all carry the field; `toAgentProfileOption` maps `enabled: profile.enabled ?? true`.
 - **Acceptance:** Disabled profiles are absent from: `useAgentProfileOptions` output (new task, new subtask, new session, quick chat), `useExecutorProfileCompat`'s `compatibleAgentProfiles` (autopick last-used / workspace-default / first fallback), `useHandoffProfiles`, the new-session default fallback, and the quick-chat workspace-default application. Existing session labels and the raw store list are untouched.
-- **Acceptance:** Unit tests cover the normalize mapping, `toAgentProfileOption`, `useAgentProfileOptions` filtering, autopick never resolving to a disabled profile, handoff filtering, and new-session default fallback.
+- **Acceptance:** Unit tests cover the normalize mapping, `toAgentProfileOption`, `useAgentProfileOptions` filtering, direct executor compatibility filtering of mixed raw profiles, autopick never resolving to a disabled profile, handoff filtering, and new-session default fallback.
 - **Verification:** `cd apps && pnpm --filter @kandev/web test -- task-create-dialog-options task-create-dialog-effects handoff-profile-menu-items new-session-dialog agent-profile-normalize settings/types`
 - **Files likely touched:**
   - `apps/web/lib/types/agent-profile.ts`

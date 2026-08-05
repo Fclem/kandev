@@ -8,7 +8,7 @@
 
 import type { ProfileEnvVar } from "@/lib/types/http";
 import type { AgentProfile, AgentProfilePayload, CLIFlag } from "@/lib/types/agent-profile";
-import { agentProfileId } from "@/lib/types/ids";
+import { agentProfileId, workspaceId as toWorkspaceId } from "@/lib/types/ids";
 
 type RawProfile = Partial<AgentProfilePayload> & Partial<AgentProfile> & Record<string, unknown>;
 
@@ -70,6 +70,10 @@ export function normalizeAgentProfile(raw: unknown): AgentProfile {
     cliPassthrough: pickBool(profile, "cliPassthrough", "cli_passthrough"),
     // Absent on legacy payloads → enabled by default.
     enabled: pickBool(profile, "enabled", "enabled", true),
+    workspaceId: (() => {
+      const value = pickOptionalString(profile, "workspaceId", "workspace_id");
+      return value ? toWorkspaceId(value) : undefined;
+    })(),
     userModified: (profile.userModified ?? profile.user_modified) as boolean | undefined,
     createdAt: pickString(profile, "createdAt", "created_at"),
     updatedAt: pickString(profile, "updatedAt", "updated_at"),

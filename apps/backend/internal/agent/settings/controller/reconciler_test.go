@@ -115,6 +115,17 @@ func (f *fakeStore) UpdateAgentProfile(_ context.Context, p *models.AgentProfile
 	return nil
 }
 
+func (f *fakeStore) UpdateAgentProfileEnabled(ctx context.Context, id string, enabled bool) error {
+	profile, err := f.GetAgentProfile(ctx, id)
+	if err != nil {
+		return err
+	}
+	profile.Enabled = enabled
+	profile.UserModified = true
+	f.updated = append(f.updated, profile)
+	return nil
+}
+
 func (f *fakeStore) DeleteAgentProfile(_ context.Context, id string) error {
 	f.softDeleted = append(f.softDeleted, id)
 	// Faithfully model soft-delete: move the row out of the live list into the

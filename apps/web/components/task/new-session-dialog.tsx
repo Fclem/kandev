@@ -163,10 +163,9 @@ function useCompatibleAgentProfiles(
 ): AgentProfileOption[] {
   const { specs: authSpecs, loaded: authLoaded } = useRemoteAuthSpecs();
   return useMemo(() => {
-    if (!executorProfile || !authLoaded) return agentProfiles;
-    return agentProfiles.filter((ap) =>
-      isAgentConfiguredOnExecutor(ap, executorProfile, authSpecs),
-    );
+    const selectable = agentProfiles.filter((profile) => profile.enabled !== false);
+    if (!executorProfile || !authLoaded) return selectable;
+    return selectable.filter((ap) => isAgentConfiguredOnExecutor(ap, executorProfile, authSpecs));
   }, [agentProfiles, executorProfile, authSpecs, authLoaded]);
 }
 
@@ -233,16 +232,18 @@ function shouldDisableSubmit(isBusy: boolean, hasPrompt: boolean, hasProfiles: b
 }
 
 function useEnforceCompatibleProfile(
-  hasExecutorProfile: boolean,
   compatible: AgentProfileOption[],
   selectedId: string,
   setSelected: (id: string) => void,
 ) {
   useEffect(() => {
-    if (!hasExecutorProfile) return;
     if (compatible.some((p) => p.id === selectedId)) return;
-    if (compatible.length > 0) setSelected(compatible[0].id);
-  }, [hasExecutorProfile, compatible, selectedId, setSelected]);
+    if (compatible.length > 0) {
+      setSelected(compatible[0].id);
+    } else if (selectedId) {
+      setSelected("");
+    }
+  }, [compatible, selectedId, setSelected]);
 }
 
 function useSessionProfileSelection({
@@ -259,12 +260,7 @@ function useSessionProfileSelection({
   setSelectedProfileId: (value: string) => void;
 }) {
   const compatibleAgentProfiles = useCompatibleAgentProfiles(agentProfiles, executorProfile);
-  useEnforceCompatibleProfile(
-    Boolean(executorProfile),
-    compatibleAgentProfiles,
-    selectedProfileId,
-    setSelectedProfileId,
-  );
+  useEnforceCompatibleProfile(compatibleAgentProfiles, selectedProfileId, setSelectedProfileId);
   const profileOptions = useAgentProfileOptions(compatibleAgentProfiles);
   const hasProfiles = profileOptions.length > 0;
   const noCompatibleProfiles = isMissingCompatibleProfile(

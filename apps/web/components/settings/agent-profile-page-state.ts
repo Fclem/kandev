@@ -58,6 +58,7 @@ export function errorMessage(error: unknown): string {
 type ProfileEditorActionsOptions = {
   agent: Agent;
   draft: AgentProfile;
+  savedProfile: AgentProfile;
   setSavedProfile: (p: AgentProfile) => void;
   setDraft: React.Dispatch<React.SetStateAction<AgentProfile>>;
   setSaveStatus: (s: SaveStatus) => void;
@@ -69,6 +70,7 @@ type ProfileEditorActionsOptions = {
 export function useProfileSave({
   agent,
   draft,
+  savedProfile,
   setSavedProfile,
   setDraft,
   setSaveStatus,
@@ -96,7 +98,12 @@ export function useProfileSave({
         config_options: draft.configOptions ?? {},
         ...permissionsToProfilePatch(draft),
         cli_passthrough: draft.cliPassthrough,
-        enabled: draft.enabled ?? true,
+        // Omit an unchanged enabled value so a profile editor save cannot
+        // resurrect a concurrent list-toggle response from its stale draft.
+        enabled:
+          (draft.enabled ?? true) !== (savedProfile.enabled ?? true)
+            ? (draft.enabled ?? true)
+            : undefined,
         cli_flags: draft.cliFlags,
         command_prefix: draft.commandPrefix ?? "",
         env_vars: draft.envVars ?? [],

@@ -36,7 +36,7 @@ import { InstallAgentCard } from "@/components/settings/install-agent-card";
 import { InstalledAgentCard } from "@/components/settings/installed-agent-card";
 import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
 import { ProfileListItem } from "@/app/settings/agents/profile-list-item";
-import { useProfileEnabledToggle } from "@/app/settings/agents/use-profile-enabled-toggle";
+import { useProfileEnabledToggle } from "@/hooks/domains/settings/use-profile-enabled-toggle";
 import type {
   AgentDiscovery,
   Agent,
@@ -500,11 +500,7 @@ function useAgentPageState() {
 
   const { installJobs, handleInstall } = useInstallAgent(handleRescan);
   const { updateJobs, previewUpdate, startUpdate } = useAgentRuntimeUpdates();
-  const handleToggleProfileEnabled = useProfileEnabledToggle(
-    savedAgents,
-    setSettingsAgents,
-    setAgentProfiles,
-  );
+  const handleToggleProfileEnabled = useProfileEnabledToggle();
 
   const handleCreateCustomTUI = async (data: {
     display_name: string;

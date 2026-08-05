@@ -428,11 +428,18 @@ func TestUpdateProfile_SetsEnabled(t *testing.T) {
 	}
 
 	// Leaving Enabled nil must not touch the stored value.
+	if _, err := ctrl.UpdateProfile(context.Background(), UpdateProfileRequest{ID: "profile-1"}); err != nil {
+		t.Fatalf("nil Enabled UpdateProfile: %v", err)
+	}
+	if len(st.updated) != 2 || st.updated[1].Enabled {
+		t.Fatalf("expected omitted Enabled to preserve false, got %+v", st.updated)
+	}
+
 	enable := true
 	if _, err := ctrl.UpdateProfile(context.Background(), UpdateProfileRequest{ID: "profile-1", Enabled: &enable}); err != nil {
 		t.Fatalf("re-enable UpdateProfile: %v", err)
 	}
-	if len(st.updated) != 2 || !st.updated[1].Enabled {
+	if len(st.updated) != 3 || !st.updated[2].Enabled {
 		t.Fatalf("expected stored profile to be re-enabled, got %+v", st.updated)
 	}
 }

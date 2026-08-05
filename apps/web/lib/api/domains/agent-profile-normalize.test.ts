@@ -5,6 +5,7 @@ import { agentProfileId as toAgentProfileId } from "@/lib/types/ids";
 const sampleEnvVar = { key: "ANTHROPIC_BASE_URL", value: "https://api.example" };
 const SAMPLE_ID = "p1";
 const SAMPLE_PREFIX = "greywall --";
+const WORKSPACE_ID = "workspace-1";
 
 describe("normalizeAgentProfile", () => {
   it("converts snake_case wire payload to canonical camelCase", () => {
@@ -21,6 +22,7 @@ describe("normalizeAgentProfile", () => {
       env_vars: [sampleEnvVar],
       cli_passthrough: false,
       enabled: false,
+      workspace_id: WORKSPACE_ID,
       user_modified: true,
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-02T00:00:00Z",
@@ -39,6 +41,7 @@ describe("normalizeAgentProfile", () => {
       envVars: [sampleEnvVar],
       cliPassthrough: false,
       enabled: false,
+      workspaceId: WORKSPACE_ID,
       userModified: true,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-02T00:00:00Z",
@@ -55,6 +58,12 @@ describe("normalizeAgentProfile", () => {
     expect(result.agentDisplayName).toBe("");
     // Legacy payloads without the flag are treated as enabled.
     expect(result.enabled).toBe(true);
+  });
+
+  it("preserves the office workspace scope when it is present", () => {
+    expect(normalizeAgentProfile({ id: "x", workspace_id: WORKSPACE_ID }).workspaceId).toBe(
+      WORKSPACE_ID,
+    );
   });
 
   it("accepts already-camelCase input", () => {

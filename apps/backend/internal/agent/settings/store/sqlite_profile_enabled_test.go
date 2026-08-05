@@ -53,6 +53,17 @@ func TestAgentProfileEnabled_RoundTrip(t *testing.T) {
 	if reRead.Enabled {
 		t.Fatal("expected enabled=false after update round-trip")
 	}
+
+	if err := repo.UpdateAgentProfileEnabled(ctx, profile.ID, true); err != nil {
+		t.Fatalf("UpdateAgentProfileEnabled: %v", err)
+	}
+	reEnabled, err := repo.GetAgentProfile(ctx, profile.ID)
+	if err != nil {
+		t.Fatalf("GetAgentProfile after enabled-only update: %v", err)
+	}
+	if !reEnabled.Enabled {
+		t.Fatal("expected enabled=true after enabled-only update")
+	}
 }
 
 // TestMigration_LegacyDB_BackfillsEnabled verifies that a database created

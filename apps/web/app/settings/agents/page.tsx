@@ -37,6 +37,7 @@ import { InstalledAgentCard } from "@/components/settings/installed-agent-card";
 import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
 import { ProfileListItem } from "@/app/settings/agents/profile-list-item";
 import { useProfileEnabledToggle } from "@/hooks/domains/settings/use-profile-enabled-toggle";
+import { ProfileEnabledHelp } from "@/components/settings/profile-enabled-help";
 import type {
   AgentDiscovery,
   Agent,
@@ -364,9 +365,11 @@ function AgentProfilesSection({ savedAgents, onToggleEnabled }: AgentProfilesSec
     <div className="space-y-4">
       <Separator />
       <div>
-        <h3 className="text-lg font-semibold">{t("agents:agentProfiles")}</h3>
+        <div className="flex items-center gap-1">
+          <h3 className="text-lg font-semibold">{t("agents:agentProfiles")}</h3>
+          <ProfileEnabledHelp />
+        </div>
         <p className="text-sm text-muted-foreground">{t("agents:agentProfilesDescription")}</p>
-        <p className="text-sm text-muted-foreground">{t("agents:enabledProfileHelper")}</p>
       </div>
 
       <div className="space-y-2">

@@ -33,6 +33,7 @@ import {
   useSyncAgentsToStore,
 } from "@/components/settings/agent-profile-page-state";
 import { CustomCLIFlagsCard } from "@/components/settings/cli-flags-field";
+import { ProfileEnabledHelp } from "@/components/settings/profile-enabled-help";
 
 export {
   ProfileEnvVarsEditor,
@@ -92,11 +93,9 @@ function ProfileEditorHeader({
         </p>
       </div>
       <div className="flex items-center gap-3 sm:shrink-0">
-        <div className="text-left sm:text-right">
+        <div className="flex items-center gap-1 text-left sm:text-right">
           <p className="text-sm font-medium">{t("agents:enabled")}</p>
-          <p className="text-xs text-muted-foreground max-w-56">
-            {t("agents:enabledProfileHelper")}
-          </p>
+          <ProfileEnabledHelp />
         </div>
         <Switch
           checked={enabled}

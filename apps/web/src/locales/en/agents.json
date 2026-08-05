@@ -85,6 +85,7 @@
   "enableProfileNamed": "Enable {{name}}",
   "enableSetting": "Enable {{name}}",
   "enabled": "Enabled",
+  "enabledProfileInfo": "More information about profile availability",
   "enabledProfileHelper": "Disabled profiles keep serving existing sessions but are not offered when creating new tasks or agents.",
   "everyProfileNeedsNameAndModel": "Every profile needs a name and model.",
   "exampleValue": "e.g. {{example}}",

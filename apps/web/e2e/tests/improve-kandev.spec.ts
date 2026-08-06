@@ -227,6 +227,33 @@ test.describe("Improve Kandev dialog", () => {
       .not.toContainEqual(expect.objectContaining({ title }));
   });
 
+  test("New task button opens the Improve Kandev dialog in the dedicated workspace", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const dedicated = await apiClient.createWorkspace("Improve Kandev");
+    // Mock the health/bootstrap APIs so the dialog intro is reachable without
+    // a real GitHub connection (same as the other tests in this file).
+    await mockImproveKandevApis(testPage, seedData, {
+      workspaceId: dedicated.id,
+    });
+
+    await testPage.goto("/");
+    await testPage.getByTestId("sidebar-workspace-trigger").click();
+    await testPage.getByTestId(`sidebar-workspace-item-${dedicated.id}`).click();
+    await expect(testPage.getByTestId("kanban-board")).toBeVisible();
+    await expect(testPage.getByTestId("sidebar-workspace-trigger")).toHaveText(/Improve Kandev/);
+
+    await testPage.getByTestId("create-task-button").click();
+
+    // Inside the dedicated workspace the New Task entry opens the Improve
+    // Kandev dialog — never the generic create-task dialog.
+    await expect(testPage.getByRole("dialog", { name: "Improve Kandev" })).toBeVisible();
+    await expect(testPage.getByTestId("improve-kandev-proceed")).toBeEnabled();
+    await expect(testPage.getByTestId("create-task-dialog")).toHaveCount(0);
+  });
+
   test("intro → create flow shows workflow preview, useful info, and fork banner", async ({
     testPage,
     seedData,

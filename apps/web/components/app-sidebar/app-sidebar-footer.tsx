@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter, usePathname } from "@/lib/routing/client-router";
 import {
   IconBuildings,
@@ -207,7 +206,8 @@ export function AppSidebarFooter({ collapsed, onToggleSettingsMode }: AppSidebar
   const officeEnabled = useFeature("office");
   const appStatusBarEnabled = useFeature("appStatusBar");
   const releaseNotes = useReleaseNotes();
-  const [improveOpen, setImproveOpen] = useState(false);
+  const improveOpen = useAppStore((s) => s.appSidebar.improveDialogOpen);
+  const setImproveOpen = useAppStore((s) => s.setImproveDialogOpen);
   const authMode = useAppStore((s) => s.auth.mode);
   const authUser = useAppStore((s) => s.auth.user);
   const showCurrentUser = authMode === "enabled" && authUser !== null;

@@ -88,6 +88,7 @@ vi.mock("@kandev/ui/collapsible", async () => {
 });
 
 import { SettingsTree } from "./settings-tree";
+import { AgentsGroup } from "./agents-group";
 import { GeneralGroup } from "./general-group";
 import { SystemGroup } from "./system-group";
 import { WorkspacesGroup } from "./workspaces-group";
@@ -226,6 +227,36 @@ describe("SettingsTree integration status", () => {
     expect(screen.getByRole("link", { name: "Azure DevOps Enabled" })).toBeTruthy();
     expect(screen.getByTestId("azure-devops-icon")).toBeTruthy();
     expect(screen.getByRole("link", { name: "GitHub" })).toBeTruthy();
+  });
+});
+
+describe("SettingsTree agents group", () => {
+  beforeEach(() => {
+    state.settingsAgents.items = [
+      {
+        id: "agent-1",
+        name: "mock-agent",
+        profiles: [
+          { id: "p-on", name: "default", agentDisplayName: "Mock", enabled: true },
+          { id: "p-off", name: "alt", agentDisplayName: "Mock", enabled: false },
+          { id: "p-legacy", name: "legacy", agentDisplayName: "Mock" },
+        ],
+      },
+    ] as unknown as typeof state.settingsAgents.items;
+  });
+
+  afterEach(() => {
+    cleanup();
+    state.settingsAgents.items = [];
+  });
+
+  it("labels disabled profiles with a badge and leaves others unlabeled", () => {
+    render(<AgentsGroup pathname="/settings/agents" expanded />);
+
+    expect(screen.getByRole("link", { name: "Mock • default" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Mock • alt Disabled" })).toBeTruthy();
+    // Legacy payloads without the flag are treated as enabled — no badge.
+    expect(screen.getByRole("link", { name: "Mock • legacy" })).toBeTruthy();
   });
 });
 

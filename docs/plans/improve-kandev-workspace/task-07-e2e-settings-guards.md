@@ -1,0 +1,48 @@
+# task-07: E2E settings guards for the dedicated workspace
+
+Spec: `docs/specs/improve-kandev/spec.md` — "Dedicated workspace immutability"
+Plan: `docs/plans/improve-kandev-workspace/plan.md` — Phase 2, Wave 7.
+Depends on: task-06.
+
+## Goal
+
+Playwright evidence that the dedicated workspace's settings pages are
+read-only and the backend rejects mutations, while a normal workspace stays
+editable.
+
+## Target
+
+- `apps/web/e2e/tests/improve-kandev.spec.ts` (desktop; extend the existing
+  improve-kandev suite).
+
+## Change
+
+Add tests (desktop chromium):
+
+1. **Workflows settings read-only**: seed the dedicated workspace
+   (`apiClient.createWorkspace("Improve Kandev")` + workflow via
+   `createWorkflow`); `goto("/settings/workspace/<id>/workflows")`; assert:
+   - The `improve-kandev` workflow card is listed with steps Improve → Test →
+     PR (locate by card title / step text).
+   - No "Add workflow" / "New workflow" control is present (assert the create
+     control testid count is 0).
+   - A read-only notice is visible.
+   - (Optional) attempt a backend mutation via `apiClient` (e.g. create a
+     workflow in the dedicated workspace) and assert it 409s — put the API
+     rejection assertion here if the api client has a workflow-create helper,
+     else rely on the integration tests.
+2. **Repositories settings read-only**: with the dedicated workspace seeded
+   (repo via `apiClient.createRepository`), `goto` the repositories settings
+   page; assert the kandev repo card is listed and no add/delete controls are
+   present.
+3. **Sanity contrast**: the seed workspace's workflows page still shows the
+   Add control (guards are workspace-scoped, not global).
+
+## Acceptance
+
+- `cd apps/web && pnpm build:vite && playwright test --config e2e/playwright.config.ts improve-kandev.spec` — all pass (desktop + mobile suites).
+- No changes to unrelated e2e specs.
+
+## Results
+
+Pending — record exact commands, outcomes, and any deviations here.

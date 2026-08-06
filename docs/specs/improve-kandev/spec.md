@@ -55,7 +55,9 @@ the user's own agent picks up immediately — turning every report into a contri
     request against `main` in `kdlbs/kandev`.
 - The `improve-kandev` workflow is hidden from the workflow management page in
   workspace settings and from the workflow picker in the standard task-create
-  dialog. It is reachable only through the Improve Kandev entry point.
+  dialog, except in the dedicated `Improve Kandev` workspace itself where the
+  workflows settings page lists it (and `report-kandev-issue`) **read-only**.
+  It is reachable through the Improve Kandev entry point.
 - Hidden workflows do not count as choices in the standard task-create dialog.
   When the active workspace has exactly one visible workflow, the dialog uses
   that workflow implicitly and omits the redundant workflow selector. This
@@ -186,6 +188,73 @@ the user's own agent picks up immediately — turning every report into a contri
 - **GIVEN** the user has not configured `gh auth`, **WHEN** they open the
   Improve Kandev dialog, **THEN** the dialog shows a blocking error referencing
   the health-check result and disables the submit button.
+
+- **GIVEN** the user opens the dedicated workspace's workflows settings page,
+  **WHEN** the page loads, **THEN** it lists `improve-kandev` with steps
+  Improve → Test → PR and `report-kandev-issue` read-only, and no
+  create/edit/delete/import/export controls are available.
+
+- **GIVEN** the user opens the dedicated workspace's repositories settings
+  page, **WHEN** the page loads, **THEN** the registered kandev repository is
+  listed read-only and no add/edit/delete controls are available.
+
+- **GIVEN** a mutation request (workflow create/update/delete/reorder/step
+  mutation or repository create/update/delete/initialize) is scoped to the
+  dedicated workspace, **WHEN** it reaches the backend, **THEN** it is
+  rejected with HTTP 409 before any write.
+
+- **GIVEN** bootstrap creates the `Improve Kandev` workspace for the first
+  time and the user's default workspace has a GitHub connection, **WHEN** the
+  workspace is created, **THEN** the new workspace carries the same GitHub
+  connection (and PAT secret where applicable), and no other integration
+  configurations, automations, workflows, or repositories beyond the bootstrap
+  defaults.
+
+- **GIVEN** bootstrap creates the `Improve Kandev` workspace for the first
+  time and the user's default workspace has **no** GitHub connection, **WHEN**
+  the workspace is created, **THEN** no connection is copied and the workspace
+  starts without a GitHub connection.
+
+- **GIVEN** the `Improve Kandev` workspace already exists, **WHEN** bootstrap
+  is called again, **THEN** the workspace's configuration (including its
+  GitHub connection) is untouched — nothing is re-copied.
+
+## Dedicated workspace immutability
+
+- The dedicated `Improve Kandev` workspace is configuration-immutable for the
+  surfaces that define how tasks run there:
+  - **Workflows**: the settings page
+    (`/settings/workspace/<id>/workflows`) lists the workspace's workflows —
+    including the hidden `improve-kandev` (Improve → Test → PR) and
+    `report-kandev-issue` instances — read-only. Creating, editing, deleting,
+    reordering, importing, exporting, and GitHub-syncing workflows is not
+    possible; no workflow may be added. Step mutations are equally rejected.
+  - **Repositories**: the settings page lists the workspace's repositories
+    (the registered kandev repo) read-only. Creating, initializing, editing,
+    and deleting repositories is not possible.
+- Enforcement is backend-side: the workflow and repository mutation endpoints
+  reject requests scoped to the dedicated workspace (HTTP 409) before any
+  write. The settings pages additionally hide/disable the mutation controls so
+  the state is visible up front.
+- Task creation, agent runs, step advancement, and the kanban board are
+  unaffected — only configuration mutations are restricted.
+
+## Workspace creation semantics
+
+- When bootstrap creates the `Improve Kandev` workspace for the **first time**
+  (the find-or-create miss path only), it additionally:
+  - **Copies the GitHub workspace connection** (source, login, installation
+    metadata, and the underlying PAT secret where applicable) from the user's
+    **default workspace** — resolved the same way legacy integrations resolve
+    it: the active workspace recorded in the user's settings, else the
+    workspace created first, else the literal `default` id. If the source
+    workspace has no GitHub connection, nothing is copied.
+  - **Copies nothing else**: no other integration configurations
+    (Jira/Linear/GitLab/Azure DevOps/Sentry stay unconfigured in the new
+    workspace; they remain manually configurable), no automations, no
+    workflow/repository rows beyond the bootstrap defaults.
+- Reuse path (workspace already exists): bootstrap makes no further changes —
+  the GitHub connection and configuration are never re-copied or synced.
 
 ## Out of scope
 

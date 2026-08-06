@@ -122,13 +122,34 @@ evidence.
 ## Implementation Waves And Parallel Candidates
 
 Wave 1 (sequential):
-- [ ] [task-01-backend-dedicated-workspace](task-01-backend-dedicated-workspace.md)
+- [x] [task-01-backend-dedicated-workspace](task-01-backend-dedicated-workspace.md)
 
 Wave 2 (depends on 01):
-- [ ] [task-02-frontend-bootstrap-workspace](task-02-frontend-bootstrap-workspace.md)
+- [x] [task-02-frontend-bootstrap-workspace](task-02-frontend-bootstrap-workspace.md)
 
 Wave 3 (depends on 02):
-- [ ] [task-03-e2e-workspace-isolation](task-03-e2e-workspace-isolation.md)
+- [x] [task-03-e2e-workspace-isolation](task-03-e2e-workspace-isolation.md)
+
+## Phase 2 — Dedicated workspace immutability + GitHub carry-over
+
+Follow-up requirements: the dedicated workspace is configuration-immutable
+(workflows and repositories read-only) and, on first creation only, inherits
+the GitHub workspace connection from the user's default workspace — nothing
+else (no other integrations, no automations).
+
+### Waves
+
+Wave 4 (backend guards — sequential):
+- [ ] [task-04-backend-workspace-guards](task-04-backend-workspace-guards.md)
+
+Wave 5 (depends on 04):
+- [ ] [task-05-backend-github-carryover](task-05-backend-github-carryover.md)
+
+Wave 6 (depends on 04, 05):
+- [ ] [task-06-frontend-settings-readonly](task-06-frontend-settings-readonly.md)
+
+Wave 7 (depends on 06):
+- [ ] [task-07-e2e-settings-guards](task-07-e2e-settings-guards.md)
 
 The default is sequential execution in the primary conversation. No subagents
 unless the user explicitly asks after selecting the implementation model.

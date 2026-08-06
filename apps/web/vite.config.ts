@@ -7,6 +7,12 @@ export default defineConfig({
   server: {
     port: readPort(process.env.PORT),
     strictPort: Boolean(process.env.PORT),
+    // Vite's DNS-rebinding guard rejects non-loopback Host headers by
+    // default. Dev instances served from another machine (LAN hostname,
+    // tailnet name) must opt those hosts in via VITE_ALLOWED_HOSTS
+    // (comma-separated); production serves the built SPA from Go and is
+    // unaffected.
+    allowedHosts: readAllowedHosts(process.env.VITE_ALLOWED_HOSTS),
   },
   preview: {
     port: readPort(process.env.PORT),
@@ -30,4 +36,13 @@ function readPort(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const port = Number(value);
   return Number.isInteger(port) && port > 0 ? port : undefined;
+}
+
+function readAllowedHosts(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  const hosts = value
+    .split(",")
+    .map((host) => host.trim())
+    .filter(Boolean);
+  return hosts.length > 0 ? hosts : undefined;
 }

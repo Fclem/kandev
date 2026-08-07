@@ -656,6 +656,14 @@ func (b bootStateBuilder) taskDTOsWithSessionInfo(ctx context.Context, tasks []*
 			b.logBootError("repair missing task status summaries", err)
 		}
 	}
+	// Stamp the authoritative per-task queued prompt count onto every summary so
+	// the boot payload shows the sidebar badge on first paint, matching the
+	// shared list/snapshot assembly. Best-effort: a counter failure omits the
+	// badge instead of failing the boot payload.
+	queuedByTask, queuedErr := b.p.taskSvc.CountPendingQueuedByTaskIDs(ctx, taskIDs)
+	if queuedErr != nil {
+		b.logBootError("queued prompt counts", queuedErr)
+	}
 	result := make([]taskdto.TaskDTO, 0, len(tasks))
 	for _, task := range tasks {
 		if task == nil {
@@ -698,6 +706,9 @@ func (b bootStateBuilder) taskDTOsWithSessionInfo(ctx context.Context, tasks []*
 			taskdto.EnrichTaskForegroundActivity(&dto, sessions, b.p.orchestratorSvc)
 		}
 		dto.StatusSummary = statusSummaries[task.ID]
+		if dto.StatusSummary != nil && queuedErr == nil {
+			dto.StatusSummary.QueuedPromptCount = queuedByTask[task.ID]
+		}
 		result = append(result, dto)
 	}
 	return result

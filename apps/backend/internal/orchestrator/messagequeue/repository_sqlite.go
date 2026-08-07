@@ -537,6 +537,8 @@ func (r *sqliteRepository) CountBySession(ctx context.Context, sessionID string)
 	return n, err
 }
 
+// CountPendingByTaskIDs counts pending entries per task, excluding durable
+// lifecycle rows reserved in flight (filtered in Go via IsReservedInFlight).
 func (r *sqliteRepository) CountPendingByTaskIDs(ctx context.Context, taskIDs []string) (map[string]int, error) {
 	counts := make(map[string]int, len(taskIDs))
 	for _, taskID := range taskIDs {

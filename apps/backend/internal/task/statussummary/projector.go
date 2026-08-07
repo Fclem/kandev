@@ -255,8 +255,16 @@ func (p *Projector) handleEvent(ctx context.Context, event *bus.Event) error {
 	if !changed {
 		return nil
 	}
-	return p.persistAndPublishLocked(ctx, taskID, state)
+	_, err = p.persistAndPublishLocked(ctx, taskID, state)
+	return err
 }
+
+// maxQueueCountPersistAttempts bounds the retry loop when a competing writer
+// keeps winning the compare-and-set. Each attempt re-reads the stored summary
+// (which persistAndPublishLocked syncs into state on rejection) and re-queries
+// the authoritative count, so a rejection can never suppress the update by
+// leaving state.queuedCount ahead of the persisted value.
+const maxQueueCountPersistAttempts = 3
 
 // applyQueueStatusEvent refreshes the task's queued prompt count from the
 // authoritative queue store. The event payload's per-session count is not
@@ -266,15 +274,24 @@ func (p *Projector) applyQueueStatusEvent(ctx context.Context, state *projection
 	if p.countQueuedPrompts == nil {
 		return nil
 	}
-	count, err := p.countQueuedPrompts(ctx, taskID)
-	if err != nil {
-		return fmt.Errorf("count queued prompts for task %q: %w", taskID, err)
+	for attempt := 0; attempt < maxQueueCountPersistAttempts; attempt++ {
+		count, err := p.countQueuedPrompts(ctx, taskID)
+		if err != nil {
+			return fmt.Errorf("count queued prompts for task %q: %w", taskID, err)
+		}
+		if count == state.queuedCount {
+			return nil
+		}
+		state.queuedCount = count
+		accepted, err := p.persistAndPublishLocked(ctx, taskID, state)
+		if err != nil {
+			return err
+		}
+		if accepted {
+			return nil
+		}
 	}
-	if count == state.queuedCount {
-		return nil
-	}
-	state.queuedCount = count
-	return p.persistAndPublishLocked(ctx, taskID, state)
+	return nil
 }
 
 func (p *Projector) applySourceEventLocked(state *projectionState, eventType string, data map[string]interface{}) bool {
@@ -759,21 +776,26 @@ func pullRequestObservationKey(data map[string]interface{}) string {
 	return ""
 }
 
-func (p *Projector) persistAndPublishLocked(ctx context.Context, taskID string, state *projectionState) error {
+// persistAndPublishLocked persists the projected summary and publishes the
+// replacement event. The boolean reports whether the write was accepted (or a
+// no-op because the derived summary is already current); false means a
+// competing writer won and the stored summary was reloaded into state,
+// including queuedCount, so callers can retry against the refreshed revision.
+func (p *Projector) persistAndPublishLocked(ctx context.Context, taskID string, state *projectionState) (bool, error) {
 	next := deriveSummary(state)
 	if state.current != nil && state.current.SemanticEqual(next) {
-		return nil
+		return true, nil
 	}
 	if state.revision == ^uint64(0) {
-		return fmt.Errorf("task status summary %q revision overflow", taskID)
+		return false, fmt.Errorf("task status summary %q revision overflow", taskID)
 	}
 	next.Revision = state.revision + 1
 	next.UpdatedAt = p.now().UTC()
 	if err := next.Validate(); err != nil {
-		return fmt.Errorf("validate projected task status summary %q: %w", taskID, err)
+		return false, fmt.Errorf("validate projected task status summary %q: %w", taskID, err)
 	}
 	if p.store == nil {
-		return fmt.Errorf("task status summary store is unavailable")
+		return false, fmt.Errorf("task status summary store is unavailable")
 	}
 	accepted, err := p.store.CompareAndUpdateTaskStatusSummary(ctx, &StoredTaskStatusSummary{
 		TaskID:      taskID,
@@ -781,18 +803,19 @@ func (p *Projector) persistAndPublishLocked(ctx context.Context, taskID string, 
 		Summary:     next,
 	})
 	if err != nil {
-		return fmt.Errorf("persist projected task status summary %q: %w", taskID, err)
+		return false, fmt.Errorf("persist projected task status summary %q: %w", taskID, err)
 	}
 	if !accepted {
 		rows, loadErr := p.store.LoadTaskStatusSummaries(ctx, []string{taskID})
 		if loadErr != nil {
-			return fmt.Errorf("reload projected task status summary %q: %w", taskID, loadErr)
+			return false, fmt.Errorf("reload projected task status summary %q: %w", taskID, loadErr)
 		}
 		if stored := rows[taskID]; stored != nil {
 			state.current = cloneSummary(stored)
 			state.revision = stored.Revision
+			state.queuedCount = stored.QueuedPromptCount
 		}
-		return nil
+		return false, nil
 	}
 	state.current = cloneSummary(&next)
 	state.revision = next.Revision
@@ -800,10 +823,10 @@ func (p *Projector) persistAndPublishLocked(ctx context.Context, taskID string, 
 		payload := SummaryUpdated{TaskID: taskID, WorkspaceID: state.workspaceID, Summary: next}
 		if err := p.eventBus.Publish(ctx, events.TaskStatusSummaryUpdated,
 			bus.NewEvent(events.TaskStatusSummaryUpdated, "task-status-summary", payload)); err != nil {
-			return fmt.Errorf("publish task status summary %q: %w", taskID, err)
+			return false, fmt.Errorf("publish task status summary %q: %w", taskID, err)
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func deriveSummary(state *projectionState) TaskStatusSummary {

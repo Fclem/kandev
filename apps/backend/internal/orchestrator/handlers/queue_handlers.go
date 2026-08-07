@@ -107,6 +107,12 @@ type QueueHandlers struct {
 	attachmentClaimer   QueueAttachmentClaimer
 }
 
+// SetAttachmentClaimer wires the task attachment registry into queue adds.
+// It is optional so queue-focused tests and non-task consumers remain small.
+func (h *QueueHandlers) SetAttachmentClaimer(claimer QueueAttachmentClaimer) {
+	h.attachmentClaimer = claimer
+}
+
 // NewQueueHandlers creates a new QueueHandlers instance. sessionTaskResolver
 // enriches published queue status events with the owning task_id; nil keeps
 // the payload unchanged.

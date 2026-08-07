@@ -60,6 +60,8 @@ func (r *memoryRepository) PurgeTask(_ context.Context, taskID string) (int, err
 	return removed, nil
 }
 
+// CountPendingByTaskIDs counts pending entries per task, excluding durable
+// lifecycle rows reserved in flight (filtered via IsReservedInFlight).
 func (r *memoryRepository) CountPendingByTaskIDs(_ context.Context, taskIDs []string) (map[string]int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -2,9 +2,13 @@ package statussummary
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/events"
+	"github.com/kandev/kandev/internal/events/bus"
 )
 
 func TestProjectorQueueEventUpdatesQueuedPromptCount(t *testing.T) {
@@ -102,5 +106,97 @@ func TestProjectorQueueEventWithoutTaskIDIsIgnored(t *testing.T) {
 
 	if summary := store.summary("any-task"); summary != nil {
 		t.Fatalf("queue event without task_id created a summary: %+v", summary)
+	}
+}
+
+// competingWriterStore rejects the projector's first compare-and-update by
+// landing a higher revision carrying the STALE queued count (simulating
+// another writer persisting between the projector's count query and its
+// write), then accepts subsequent writes.
+type competingWriterStore struct {
+	base     *projectorTestStore
+	rejected bool
+}
+
+func (s *competingWriterStore) LoadTaskStatusSummaries(
+	ctx context.Context,
+	taskIDs []string,
+) (map[string]*TaskStatusSummary, error) {
+	return s.base.LoadTaskStatusSummaries(ctx, taskIDs)
+}
+
+func (s *competingWriterStore) CompareAndUpdateTaskStatusSummary(
+	ctx context.Context,
+	stored *StoredTaskStatusSummary,
+) (bool, error) {
+	if !s.rejected {
+		s.rejected = true
+		rows, _ := s.base.LoadTaskStatusSummaries(ctx, []string{stored.TaskID})
+		if row := rows[stored.TaskID]; row != nil {
+			competing := *row
+			competing.Revision = stored.Summary.Revision + 1 // beat the projector's attempt
+			_, _ = s.base.CompareAndUpdateTaskStatusSummary(ctx, &StoredTaskStatusSummary{
+				TaskID:      stored.TaskID,
+				WorkspaceID: stored.WorkspaceID,
+				Summary:     competing,
+			})
+		}
+	}
+	return s.base.CompareAndUpdateTaskStatusSummary(ctx, stored)
+}
+
+func TestProjectorQueueEventRetriesAfterRejectedWrite(t *testing.T) {
+	const taskID = "task-queued-retry"
+	store := &competingWriterStore{base: newProjectorTestStore()}
+	store.base.rows[taskID] = &StoredTaskStatusSummary{
+		TaskID:      taskID,
+		WorkspaceID: "workspace-1",
+		Summary:     TaskStatusSummary{Revision: 5, QueuedPromptCount: 0},
+	}
+	eventBus := bus.NewMemoryEventBus(logger.Default())
+	updates := new(atomic.Int64)
+	if _, err := eventBus.Subscribe(events.TaskStatusSummaryUpdated, func(_ context.Context, event *bus.Event) error {
+		updates.Add(1)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	projector := NewProjector(ProjectorConfig{
+		Store:    store,
+		EventBus: eventBus,
+		ResolveWorkspace: func(context.Context, string) (string, error) {
+			return "workspace-1", nil
+		},
+		CountQueuedPrompts: func(context.Context, string) (int, error) {
+			return 3, nil
+		},
+		Now: func() time.Time { return time.Date(2026, 8, 1, 18, 0, 0, 0, time.UTC) },
+	})
+	if err := projector.Start(ctx); err != nil {
+		cancel()
+		eventBus.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		projector.Close()
+		eventBus.Close()
+	})
+
+	publishProjectorEvent(t, eventBus, events.MessageQueueStatusChanged, events.MessageQueueStatusChanged, map[string]interface{}{
+		"task_id":    taskID,
+		"session_id": "session-1",
+	})
+
+	summary := store.base.summary(taskID)
+	if summary == nil || summary.QueuedPromptCount != 3 {
+		t.Fatalf("stored queued prompt count = %+v, want 3 after rejected-write retry", summary)
+	}
+	if summary.Revision != 8 {
+		t.Fatalf("revision = %d, want 8 (5 -> competing 7 -> accepted 8)", summary.Revision)
+	}
+	if got := updates.Load(); got != 1 {
+		t.Fatalf("publishes = %d, want exactly 1 (the retried write)", got)
 	}
 }

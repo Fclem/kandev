@@ -325,10 +325,43 @@ type httpInitializeLocalRepositoryRequest struct {
 	ParentPath string `json:"parent_path"`
 }
 
+// rejectReadOnlyWorkspaceHTTP returns 409 when the workspace is the dedicated
+// Improve Kandev workspace, whose repositories are read-only. Lookup errors
+// surface as not-found so callers keep their existing error handling.
+func (h *RepositoryHandlers) rejectReadOnlyWorkspaceHTTP(c *gin.Context, workspaceID string) bool {
+	if workspaceID == "" {
+		return false
+	}
+	workspace, err := h.service.GetWorkspace(c.Request.Context(), workspaceID)
+	if err != nil {
+		handleNotFound(c, h.logger, err, "workspace not found")
+		return true
+	}
+	if workspace.IsImproveKandev() {
+		c.JSON(http.StatusConflict, gin.H{"error": workspaceReadOnlyMsg})
+		return true
+	}
+	return false
+}
+
+// rejectReadOnlyRepositoryHTTP loads the repository and returns 409 when it
+// lives in the read-only Improve Kandev workspace.
+func (h *RepositoryHandlers) rejectReadOnlyRepositoryHTTP(c *gin.Context, id string) bool {
+	repository, err := h.service.GetRepository(c.Request.Context(), id)
+	if err != nil {
+		handleNotFound(c, h.logger, err, "repository not found")
+		return true
+	}
+	return h.rejectReadOnlyWorkspaceHTTP(c, repository.WorkspaceID)
+}
+
 func (h *RepositoryHandlers) httpInitializeLocalRepository(c *gin.Context) {
 	var body httpInitializeLocalRepositoryRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	if h.rejectReadOnlyWorkspaceHTTP(c, c.Param("id")) {
 		return
 	}
 	initialized, err := h.service.InitializeLocalRepository(c.Request.Context(), &service.InitializeLocalRepositoryRequest{
@@ -361,6 +394,9 @@ func (h *RepositoryHandlers) httpCreateRepository(c *gin.Context) {
 	}
 	if body.Name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+	if h.rejectReadOnlyWorkspaceHTTP(c, c.Param("id")) {
 		return
 	}
 	repository, err := h.service.CreateRepository(c.Request.Context(), &service.CreateRepositoryRequest{
@@ -478,6 +514,9 @@ func (h *RepositoryHandlers) httpUpdateRepository(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
+	if h.rejectReadOnlyRepositoryHTTP(c, c.Param("id")) {
+		return
+	}
 	repository, err := h.service.UpdateRepository(c.Request.Context(), c.Param("id"), &service.UpdateRepositoryRequest{
 		Name:                   body.Name,
 		SourceType:             body.SourceType,
@@ -508,6 +547,9 @@ func (h *RepositoryHandlers) httpUpdateRepository(c *gin.Context) {
 }
 
 func (h *RepositoryHandlers) httpDeleteRepository(c *gin.Context) {
+	if h.rejectReadOnlyRepositoryHTTP(c, c.Param("id")) {
+		return
+	}
 	if err := h.service.DeleteRepository(c.Request.Context(), c.Param("id")); err != nil {
 		if errors.Is(err, service.ErrActiveTaskSessions) {
 			c.JSON(http.StatusConflict, gin.H{"error": "repository is used by an active agent session"})

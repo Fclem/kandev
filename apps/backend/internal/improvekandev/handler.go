@@ -2,6 +2,7 @@ package improvekandev
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"path/filepath"
 
@@ -35,7 +36,9 @@ const (
 	issueWorkflowName = "Report Kandev Issue"
 	issueWorkflowDesc = "Hidden workflow for publishing a kdlbs/kandev issue without changing code."
 
-	improveWorkspaceName = "Improve Kandev"
+	// improveWorkspaceName aliases the canonical identity in task/models so
+	// every guard and the bootstrap agree on the exact name.
+	improveWorkspaceName = taskmodels.WorkspaceNameImproveKandev
 	improveWorkspaceDesc = "Dedicated workspace for Improve Kandev contribution tasks, isolated from regular work."
 
 	// errorKey is the JSON key every error response body uses.
@@ -51,12 +54,29 @@ type Cloner interface {
 	) (string, error)
 }
 
+// GitHubWorkspaceCopier copies a workspace's GitHub connection onto another
+// workspace. Implemented by the github service; nil disables the copy.
+type GitHubWorkspaceCopier interface {
+	CopyWorkspaceConnectionToWorkspace(ctx context.Context, srcWorkspaceID, dstWorkspaceID string) error
+}
+
+// DefaultWorkspaceResolver resolves the workspace whose GitHub configuration
+// the dedicated workspace inherits on creation (active workspace in user
+// settings → first-created workspace → literal "default").
+type DefaultWorkspaceResolver func(ctx context.Context) (string, error)
+
 // Handler exposes the improve-kandev HTTP endpoints.
 type Handler struct {
 	taskSvc *taskservice.Service
 	cloner  Cloner
 	log     *logger.Logger
 	version string
+	// ghCopier copies the default workspace's GitHub connection onto the
+	// dedicated workspace when bootstrap creates it. Nil disables the copy.
+	ghCopier GitHubWorkspaceCopier
+	// defaultWorkspaceResolver picks the source workspace for the copy. Nil
+	// disables the copy.
+	defaultWorkspaceResolver DefaultWorkspaceResolver
 	// snapshot returns the current backend log buffer; defaults to logger's
 	// process-wide buffer but can be overridden for tests.
 	snapshot func() []buffer.Entry
@@ -69,15 +89,24 @@ type Handler struct {
 }
 
 // NewHandler constructs a Handler. version is embedded into bundle metadata.
-func NewHandler(taskSvc *taskservice.Service, cloner Cloner, version string, log *logger.Logger) *Handler {
+func NewHandler(
+	taskSvc *taskservice.Service,
+	cloner Cloner,
+	ghCopier GitHubWorkspaceCopier,
+	defaultWorkspaceResolver DefaultWorkspaceResolver,
+	version string,
+	log *logger.Logger,
+) *Handler {
 	return &Handler{
-		taskSvc:       taskSvc,
-		cloner:        cloner,
-		log:           log,
-		version:       version,
-		snapshot:      func() []buffer.Entry { return buffer.Default().Snapshot() },
-		gh:            newDefaultGitHubInfo(),
-		resolveRemote: taskservice.ResolveGitRemoteProvider,
+		taskSvc:                  taskSvc,
+		cloner:                   cloner,
+		ghCopier:                 ghCopier,
+		defaultWorkspaceResolver: defaultWorkspaceResolver,
+		log:                      log,
+		version:                  version,
+		snapshot:                 func() []buffer.Entry { return buffer.Default().Snapshot() },
+		gh:                       newDefaultGitHubInfo(),
+		resolveRemote:            taskservice.ResolveGitRemoteProvider,
 	}
 }
 
@@ -91,11 +120,19 @@ func RegisterRoutes(router *gin.Engine, h *Handler) {
 	api.POST("/bundle/frontend-log", h.httpFrontendLog)
 }
 
-// BootstrapRequest is the JSON body for POST /bootstrap. WorkspaceID is
-// accepted for backward compatibility but ignored: all improve work is scoped
-// to the dedicated Improve Kandev workspace.
+// BootstrapRequest is the JSON body for POST /bootstrap.
+//
+// WorkspaceID is the fallback workspace (the user's active workspace) used
+// when the dedicated Improve Kandev workspace does not exist and the user
+// declines to create it (CreateWorkspace=false). It is ignored when the
+// dedicated workspace exists or is being created.
 type BootstrapRequest struct {
 	WorkspaceID string `json:"workspace_id,omitempty"`
+	// CreateWorkspace opts into creating the dedicated Improve Kandev
+	// workspace when it does not exist (surfaced to the user as a checkbox in
+	// the dialog). When false and the workspace is missing, bootstrap falls
+	// back to WorkspaceID (legacy behavior).
+	CreateWorkspace bool `json:"create_workspace,omitempty"`
 }
 
 // ForkStatus reports the result of the bootstrap fork-capability probe. The
@@ -143,7 +180,7 @@ func (h *Handler) httpBootstrap(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	workspace, err := h.ensureImproveWorkspace(ctx)
+	workspace, err := h.ensureImproveWorkspace(ctx, req.CreateWorkspace, req.WorkspaceID)
 	if err != nil {
 		h.log.Error("improve-kandev: dedicated workspace resolution failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to resolve the Improve Kandev workspace"})
@@ -229,11 +266,18 @@ func (h *Handler) httpBootstrap(c *gin.Context) {
 	})
 }
 
-// ensureImproveWorkspace returns the dedicated Improve Kandev workspace,
-// creating it on first use. Idempotent: matches by exact name so repeated
-// bootstraps converge on a single row. A creation failure re-reads the list
-// to converge on a workspace a concurrent bootstrap may have created.
-func (h *Handler) ensureImproveWorkspace(ctx context.Context) (*taskmodels.Workspace, error) {
+// ensureImproveWorkspace returns the dedicated Improve Kandev workspace.
+//
+//   - Exists (matched by exact name): returned as-is; create_workspace and
+//     workspace_id are ignored.
+//   - Missing + createWorkspace: created (kanban-bootstrapped), and the GitHub
+//     connection from the user's default workspace is copied onto it
+//     (best-effort). A creation failure re-reads the list to converge on a
+//     workspace a concurrent bootstrap may have created.
+//   - Missing + !createWorkspace: legacy fallback — returns the requested
+//     fallbackWorkspaceID (the user's active workspace) so improve tasks land
+//     there without a dedicated workspace.
+func (h *Handler) ensureImproveWorkspace(ctx context.Context, createWorkspace bool, fallbackWorkspaceID string) (*taskmodels.Workspace, error) {
 	findByName := func(workspaces []*taskmodels.Workspace) *taskmodels.Workspace {
 		for _, workspace := range workspaces {
 			if workspace != nil && workspace.Name == improveWorkspaceName {
@@ -251,12 +295,24 @@ func (h *Handler) ensureImproveWorkspace(ctx context.Context) (*taskmodels.Works
 		return workspace, nil
 	}
 
+	if !createWorkspace {
+		if fallbackWorkspaceID == "" {
+			return nil, errors.New("workspace_id is required when the Improve Kandev workspace does not exist")
+		}
+		workspace, err := h.taskSvc.GetWorkspace(ctx, fallbackWorkspaceID)
+		if err != nil {
+			return nil, err
+		}
+		return workspace, nil
+	}
+
 	created, err := h.taskSvc.CreateWorkspace(ctx, &taskservice.CreateWorkspaceRequest{
 		Name:                    improveWorkspaceName,
 		Description:             improveWorkspaceDesc,
 		BootstrapKanbanWorkflow: true,
 	})
 	if err == nil {
+		h.copyGitHubConnectionFromDefaultWorkspace(ctx, created.ID)
 		return created, nil
 	}
 
@@ -267,6 +323,25 @@ func (h *Handler) ensureImproveWorkspace(ctx context.Context) (*taskmodels.Works
 		}
 	}
 	return nil, err
+}
+
+// copyGitHubConnectionFromDefaultWorkspace copies the user's default
+// workspace GitHub connection onto the newly created dedicated workspace.
+// Best-effort: failures are logged, never fail bootstrap.
+func (h *Handler) copyGitHubConnectionFromDefaultWorkspace(ctx context.Context, workspaceID string) {
+	if h.ghCopier == nil || h.defaultWorkspaceResolver == nil {
+		return
+	}
+	srcWorkspaceID, err := h.defaultWorkspaceResolver(ctx)
+	if err != nil || srcWorkspaceID == "" {
+		if err != nil {
+			h.log.Warn("improve-kandev: default workspace resolution failed; skipping GitHub connection copy", zap.Error(err))
+		}
+		return
+	}
+	if err := h.ghCopier.CopyWorkspaceConnectionToWorkspace(ctx, srcWorkspaceID, workspaceID); err != nil {
+		h.log.Warn("improve-kandev: GitHub connection copy failed; improve workspace starts without one", zap.Error(err))
+	}
 }
 
 // resolveOrCloneRepo returns the workspace's kandev repository, preferring an

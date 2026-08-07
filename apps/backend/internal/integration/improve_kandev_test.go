@@ -32,12 +32,12 @@ func TestImproveKandevBootstrapCreatesBothHiddenWorkflowsIdempotently(t *testing
 	repoPath := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", repoPath).Run())
 	router := gin.New()
-	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, "test", ts.Logger)
+	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
 	improvekandev.RegisterRoutes(router, handler)
 
 	bootstrap := func() improvekandev.BootstrapResponse {
 		t.Helper()
-		body, err := json.Marshal(improvekandev.BootstrapRequest{})
+		body, err := json.Marshal(improvekandev.BootstrapRequest{CreateWorkspace: true})
 		require.NoError(t, err)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/system/improve-kandev/bootstrap", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -96,7 +96,7 @@ func TestImproveKandevBootstrapReusesExistingImproveWorkspace(t *testing.T) {
 	repoPath := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", repoPath).Run())
 	router := gin.New()
-	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, "test", ts.Logger)
+	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
 	improvekandev.RegisterRoutes(router, handler)
 
 	// The request may still carry a workspace_id from an older client; it must
@@ -115,4 +115,99 @@ func TestImproveKandevBootstrapReusesExistingImproveWorkspace(t *testing.T) {
 	workflows, err := ts.TaskRepo.ListWorkflows(context.Background(), workspaceID, true)
 	require.NoError(t, err)
 	require.NotEmpty(t, workflows, "hidden workflows must live in the pre-existing Improve Kandev workspace")
+}
+
+func TestImproveKandevBootstrapFallsBackToRequestedWorkspaceWhenCreationDeclined(t *testing.T) {
+	ts := NewOrchestratorTestServer(t)
+	fallbackID := "123e4567-e89b-12d3-a456-426614174000"
+	require.NoError(t, ts.TaskRepo.CreateWorkspace(context.Background(), &models.Workspace{
+		ID:   fallbackID,
+		Name: "Active Workspace",
+	}))
+
+	repoPath := t.TempDir()
+	require.NoError(t, exec.Command("git", "init", repoPath).Run())
+	router := gin.New()
+	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
+	improvekandev.RegisterRoutes(router, handler)
+
+	// No dedicated workspace exists and the caller declines creation
+	// (create_workspace=false): bootstrap falls back to the requested
+	// workspace and scopes the hidden workflows there.
+	body, err := json.Marshal(improvekandev.BootstrapRequest{WorkspaceID: fallbackID})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/improve-kandev/bootstrap", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	var response improvekandev.BootstrapResponse
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
+	require.Equal(t, fallbackID, response.WorkspaceID)
+
+	workflows, err := ts.TaskRepo.ListWorkflows(context.Background(), fallbackID, true)
+	require.NoError(t, err)
+	require.NotEmpty(t, workflows, "hidden workflows must live in the fallback workspace")
+}
+
+type fakeGitHubWorkspaceCopier struct {
+	calls []struct{ src, dst string }
+}
+
+func (f *fakeGitHubWorkspaceCopier) CopyWorkspaceConnectionToWorkspace(_ context.Context, src, dst string) error {
+	f.calls = append(f.calls, struct{ src, dst string }{src, dst})
+	return nil
+}
+
+func TestImproveKandevBootstrapCopiesGitHubConnectionOnWorkspaceCreation(t *testing.T) {
+	ts := NewOrchestratorTestServer(t)
+	copier := &fakeGitHubWorkspaceCopier{}
+
+	repoPath := t.TempDir()
+	require.NoError(t, exec.Command("git", "init", repoPath).Run())
+	router := gin.New()
+	resolveDefault := func(context.Context) (string, error) {
+		return "default-workspace-id", nil
+	}
+	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, copier, resolveDefault, "test", ts.Logger)
+	improvekandev.RegisterRoutes(router, handler)
+
+	body, err := json.Marshal(improvekandev.BootstrapRequest{CreateWorkspace: true})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/improve-kandev/bootstrap", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	var response improvekandev.BootstrapResponse
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
+
+	require.Len(t, copier.calls, 1, "connection must be copied exactly once on workspace creation")
+	require.Equal(t, "default-workspace-id", copier.calls[0].src)
+	require.Equal(t, response.WorkspaceID, copier.calls[0].dst)
+
+	// A second bootstrap (workspace now exists) must not copy again.
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/system/improve-kandev/bootstrap", bytes.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	res2 := httptest.NewRecorder()
+	router.ServeHTTP(res2, req2)
+	require.Equal(t, http.StatusOK, res2.Code, res2.Body.String())
+	require.Len(t, copier.calls, 1, "existing workspace must not re-copy the connection")
+}
+
+func TestImproveKandevBootstrapRequiresWorkspaceIDWhenCreationDeclined(t *testing.T) {
+	ts := NewOrchestratorTestServer(t)
+	repoPath := t.TempDir()
+	require.NoError(t, exec.Command("git", "init", repoPath).Run())
+	router := gin.New()
+	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
+	improvekandev.RegisterRoutes(router, handler)
+
+	body, err := json.Marshal(improvekandev.BootstrapRequest{})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/improve-kandev/bootstrap", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	require.Equal(t, http.StatusInternalServerError, res.Code, res.Body.String())
 }

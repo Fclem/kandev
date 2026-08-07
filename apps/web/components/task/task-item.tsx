@@ -22,10 +22,14 @@ import { TaskItemStatsRow } from "./task-item-stats-row";
 import { useTaskColor } from "@/hooks/use-task-color";
 import { TASK_COLOR_BAR_CLASS, type TaskColor } from "@/lib/task-colors";
 import type { ForegroundActivity, TaskState, TaskSessionState } from "@/lib/types/http";
-import { shouldUseQuestionTaskIcon, shouldUsePermissionTaskIcon } from "@/lib/ui/state-icons";
+import {
+  InterruptedTaskIcon,
+  isTerminalInterruptedState,
+  shouldUseQuestionTaskIcon,
+  shouldUsePermissionTaskIcon,
+} from "@/lib/ui/state-icons";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { RemoteCloudTooltip } from "./remote-cloud-tooltip";
-import { InterruptedTaskIcon, isTerminalInterruptedState } from "./task-interrupted-icon";
 import { classifyTask } from "./task-classify";
 import { ScrollOnOverflow } from "@kandev/ui/scroll-on-overflow";
 import { useTranslation } from "react-i18next";
@@ -259,7 +263,7 @@ function TaskStateIcon({
   // idle/done affordances; every active/pending state above already won, and
   // terminal states keep their own icons.
   if (interrupted && !isTerminalInterruptedState(state, sessionState)) {
-    return <InterruptedTaskIcon />;
+    return <InterruptedTaskIcon className="mt-[1px] h-3.5 w-3.5 shrink-0" />;
   }
   if (classifyTask(sessionState, state) === "review") {
     if (isOnLastWorkflowStep) {

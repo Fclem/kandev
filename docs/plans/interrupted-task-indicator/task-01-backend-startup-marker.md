@@ -54,9 +54,10 @@ None.
 
 ## Risks
 
-- Marking a task whose taskID is empty or whose session row is preserved but
-  the task was archived in the same window — reuse the existing
-  `taskArchived(task)` guard ordering.
+- Marking a task whose taskID is empty, or an archive committing between a
+  guard read and the metadata write — the marker write must be archive-atomic
+  (`SetTaskMetadataKeyIfNotArchived`, `archived_at IS NULL` in the same
+  statement), so a concurrent archive can never leave a stale marker.
 - Test wrappers embedding `sessionExecutorStore` compile unchanged because they
   embed the interface.
 

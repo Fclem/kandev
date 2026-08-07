@@ -1,4 +1,6 @@
 import type { ComponentType } from "react";
+import { useTranslation } from "react-i18next";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import {
   IconAlertCircle,
   IconAlertTriangle,
@@ -154,6 +156,53 @@ const TERMINAL_TASK_STATES: ReadonlySet<TaskState | undefined> = new Set([
 ]);
 
 /**
+ * True when the task or its primary session is in a terminal state whose own
+ * icon (done check, failure X, cancel pause) must win over the interrupted
+ * marker.
+ */
+export function isTerminalInterruptedState(
+  state?: TaskState,
+  sessionState?: TaskSessionState,
+): boolean {
+  return (
+    state === "COMPLETED" ||
+    state === "FAILED" ||
+    state === "CANCELLED" ||
+    sessionState === "COMPLETED" ||
+    sessionState === "FAILED" ||
+    sessionState === "CANCELLED"
+  );
+}
+
+/**
+ * Shared red alert affordance for a task whose session was mid-turn when the
+ * backend died. Carries the accessible "Interrupted by restart" label and
+ * tooltip, so every surface that renders the interrupted state (sidebar rows,
+ * board cards, graph nodes, open-task header) presents it consistently.
+ */
+export function InterruptedTaskIcon({ className }: { className?: string }) {
+  const { t } = useTranslation();
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          aria-label={t("common:task.interruptedByRestart")}
+          tabIndex={0}
+          className="flex shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
+        >
+          <IconAlertCircle
+            aria-hidden="true"
+            data-testid="task-state-interrupted"
+            className={cn("text-red-500", className)}
+          />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="right">{t("common:task.interruptedByRestart")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
  * Returns true when the kanban card should show the spinning loader. The task
  * workflow state and the primary session's runtime state are decoupled — the
  * workflow can keep a task in `IN_PROGRESS` after the agent has finished, or
@@ -237,6 +286,11 @@ export function getTaskStateIcon(
   options: TaskStateIconOptions = {},
 ) {
   const config = getTaskStateIconConfig(state, options);
+  // The interrupted affordance carries its own tooltip and accessible label,
+  // so it must render through the shared component rather than a bare icon.
+  if (config === TASK_INTERRUPTED_ICON) {
+    return <InterruptedTaskIcon className={cn("h-4 w-4", className)} />;
+  }
   return <config.Icon className={cn("h-4 w-4", config.className, className)} />;
 }
 

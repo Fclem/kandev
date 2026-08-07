@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { isValidElement, type ReactNode } from "react";
+import { render } from "@testing-library/react";
+import { TooltipProvider } from "@kandev/ui/tooltip";
 import {
-  IconAlertCircle,
   IconCheck,
   IconCircleCheck,
   IconCircleFilled,
@@ -166,13 +167,18 @@ describe("getTaskStateIcon — task-level activity tri-state", () => {
     expect(iconType(getTaskStateIcon("COMPLETED", undefined))).toBe(IconCheck);
   });
 
-  it("uses the red alert icon for an interrupted task", () => {
-    expect(iconType(getTaskStateIcon("REVIEW", undefined, { interrupted: true }))).toBe(
-      IconAlertCircle,
+  it("renders the accessible interrupted icon with the tooltip label", () => {
+    const { container } = render(
+      <TooltipProvider>
+        {getTaskStateIcon("REVIEW", undefined, { interrupted: true })}
+      </TooltipProvider>,
     );
-    expect(iconClassName(getTaskStateIcon("REVIEW", undefined, { interrupted: true }))).toContain(
-      "text-red-500",
-    );
+    const icon = container.querySelector('[data-testid="task-state-interrupted"]');
+    expect(icon).not.toBeNull();
+    expect(icon?.className).toContain("text-red-500");
+    expect(container.querySelector('[aria-label="Interrupted by restart"]')).not.toBeNull();
+    // The icon itself is decorative; the label lives on the trigger.
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("keeps terminal state icons over a lingering interrupted marker", () => {

@@ -23,14 +23,17 @@ No schema migration; no new task/session state; no new events or routes.
   block).
 - In `apps/backend/internal/orchestrator/service.go` `reconcileOneSessionOnStartup`,
   in the active-states branch (`STARTING`/`RUNNING`/`WAITING_FOR_INPUT`), when
-  `previousState` is `TaskSessionStateStarting` or `TaskSessionStateRunning`
-  and the task exists and is not archived, write the marker:
-  `SetTaskMetadataKey(ctx, running.TaskID, models.MetaKeyInterruptedAt, time.Now().UTC().Format(time.RFC3339))`,
-  logging a warning on failure without aborting reconciliation.
+  `previousState` is `TaskSessionStateStarting` or `TaskSessionStateRunning`,
+  write the marker with the archive-atomic conditional
+  `SetTaskMetadataKeyIfNotArchived(ctx, running.TaskID, models.MetaKeyInterruptedAt, time.Now().UTC().Format(time.RFC3339))`
+  — the SQL guards `archived_at IS NULL` in the same statement, so an archive
+  that commits concurrently can never leave a marker on an archived task.
+  Log a warning on failure without aborting reconciliation.
 - The `sessionExecutorStore` interface in the same file must gain
-  `SetTaskMetadataKey(ctx, taskID, key string, value interface{}) error` and
-  `RemoveTaskMetadataKey(ctx, taskID, key string) (bool, error)`. The concrete
-  sqlite/Postgres repository already implements both
+  `SetTaskMetadataKey(ctx, taskID, key string, value interface{}) error`,
+  `SetTaskMetadataKeyIfNotArchived(ctx, taskID, key string, value interface{}) (bool, error)`,
+  and `RemoveTaskMetadataKey(ctx, taskID, key string) (bool, error)`. The
+  concrete sqlite/Postgres repository implements all three
   (`apps/backend/internal/task/repository/sqlite/task.go`); test wrappers that
   embed the interface inherit them.
 

@@ -241,6 +241,42 @@ type WorkflowCardBodyProps = {
   readOnly: boolean;
 };
 
+function WorkflowNameField({
+  workflow,
+  savedWorkflow,
+  onUpdateWorkflow,
+  readOnly,
+  isImproveWorkspace,
+}: Pick<
+  WorkflowCardBodyProps,
+  "workflow" | "savedWorkflow" | "onUpdateWorkflow" | "readOnly" | "isImproveWorkspace"
+>) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex-1 space-y-1.5">
+      <Label className="flex items-center gap-2">
+        <span>{t("workflows:workflowName")}</span>
+        {readOnly && workflow.source === "github" && (
+          <WorkflowSyncedBadge sourcePath={workflow.source_path} />
+        )}
+        {readOnly && (
+          <span className="text-xs text-muted-foreground">
+            {isImproveWorkspace
+              ? t("workflows:readOnlyManagedByImproveKandev")
+              : t("workflows:readOnlyManagedBySync")}
+          </span>
+        )}
+      </Label>
+      <Input
+        value={workflow.name}
+        onChange={(e) => onUpdateWorkflow({ name: e.target.value })}
+        disabled={readOnly}
+        data-settings-dirty={isWorkflowFieldDirty(workflow, savedWorkflow, "name")}
+      />
+    </div>
+  );
+}
+
 function WorkflowCardBody({
   workflow,
   savedWorkflow,
@@ -261,27 +297,13 @@ function WorkflowCardBody({
     <>
       <Label>{t("workflows:workflowDetails")}</Label>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-2">
-        <div className="flex-1 space-y-1.5">
-          <Label className="flex items-center gap-2">
-            <span>{t("workflows:workflowName")}</span>
-            {readOnly && workflow.source === "github" && (
-              <WorkflowSyncedBadge sourcePath={workflow.source_path} />
-            )}
-            {readOnly && (
-              <span className="text-xs text-muted-foreground">
-                {isImproveWorkspace
-                  ? t("workflows:readOnlyManagedByImproveKandev")
-                  : t("workflows:readOnlyManagedBySync")}
-              </span>
-            )}
-          </Label>
-          <Input
-            value={workflow.name}
-            onChange={(e) => onUpdateWorkflow({ name: e.target.value })}
-            disabled={readOnly}
-            data-settings-dirty={isWorkflowFieldDirty(workflow, savedWorkflow, "name")}
-          />
-        </div>
+        <WorkflowNameField
+          workflow={workflow}
+          savedWorkflow={savedWorkflow}
+          onUpdateWorkflow={onUpdateWorkflow}
+          readOnly={readOnly}
+          isImproveWorkspace={isImproveWorkspace}
+        />
         <div className="w-full space-y-1.5 sm:w-[240px] sm:shrink-0">
           <Label className="flex items-center gap-1">
             <span>{t("workflows:agentProfile")}</span>

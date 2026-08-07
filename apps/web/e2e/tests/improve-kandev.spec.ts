@@ -9,7 +9,6 @@ import { test, expect } from "../fixtures/test-base";
  */
 
 const BOOTSTRAP_URL = "**/api/v1/system/improve-kandev/bootstrap";
-const FRONTEND_LOG_URL = "**/api/v1/system/improve-kandev/bundle/frontend-log";
 const HEALTH_URL = "**/api/v1/system/health";
 
 type ForkStatus = "writable" | "ready" | "blocked_emu" | "unknown";
@@ -68,11 +67,7 @@ async function mockImproveKandevApis(
         issue_workflow_id: overrides.issueWorkflowId ?? seed.workflowId,
         branch: "main",
         bundle_dir: bundleDir,
-        bundle_files: {
-          metadata: `${bundleDir}/metadata.json`,
-          backend_log: `${bundleDir}/backend.log`,
-          frontend_log: `${bundleDir}/frontend.log`,
-        },
+        bundle_file: `${bundleDir}/diagnostic-bundle.zip`,
         github_login: overrides.github_login ?? "octocat",
         has_write_access: hasWrite,
         fork_status: forkStatus,
@@ -80,14 +75,6 @@ async function mockImproveKandevApis(
       }),
     });
   });
-
-  await page.route(FRONTEND_LOG_URL, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ path: `${bundleDir}/frontend.log` }),
-    }),
-  );
 }
 
 test.describe("Improve Kandev dialog", () => {
@@ -139,8 +126,10 @@ test.describe("Improve Kandev dialog", () => {
     const issueStartStep =
       issueSteps.steps.find((step) => step.is_start_step) ?? issueSteps.steps[0];
     await apiClient.createWorkspace("Improve Kandev");
+    // The upstream create dialog hides the title field when auto-generated
+    // task titles are enabled; disable them so the tests can type titles.
+    await apiClient.saveUserSettings({ agent_generated_task_titles: false });
     await mockImproveKandevApis(testPage, seedData, { issueWorkflowId: issueWorkflow.id });
-
     await testPage.goto("/");
     await testPage.getByTestId("sidebar-improve-kandev-button").click();
     const contribute = testPage.getByTestId("improve-kandev-proceed");
@@ -198,6 +187,7 @@ test.describe("Improve Kandev dialog", () => {
       "main",
     );
     await apiClient.updateWorkspace(staging.id, { name: "Improve Kandev" });
+    await apiClient.saveUserSettings({ agent_generated_task_titles: false });
     const dedicated = staging;
     await mockImproveKandevApis(testPage, seedData, {
       workspaceId: dedicated.id,
@@ -350,6 +340,7 @@ test.describe("Improve Kandev dialog", () => {
     seedData,
   }) => {
     await apiClient.createWorkspace("Improve Kandev");
+    await apiClient.saveUserSettings({ agent_generated_task_titles: false });
     const blockedMessage =
       "Your GitHub account appears to be an Enterprise Managed User (EMU) account, " +
       "which typically cannot fork repositories outside your owning enterprise. " +
@@ -424,6 +415,7 @@ test.describe("Improve Kandev dialog", () => {
     seedData,
   }) => {
     await apiClient.createWorkspace("Improve Kandev");
+    await apiClient.saveUserSettings({ agent_generated_task_titles: false });
     let releaseBootstrap: () => void = () => {};
     const bootstrapHold = new Promise<void>((resolve) => {
       releaseBootstrap = resolve;
@@ -558,6 +550,7 @@ test.describe("Improve Kandev dialog", () => {
     const staging = await apiClient.createWorkspace("Improve Kandev Setup");
     await apiClient.createRepository(staging.id, seedData.repositoryPath, "main");
     await apiClient.updateWorkspace(staging.id, { name: "Improve Kandev" });
+    await apiClient.saveUserSettings({ agent_generated_task_titles: false });
     const dedicated = staging;
 
     await testPage.goto(`/settings/workspace/${dedicated.id}/repositories`);

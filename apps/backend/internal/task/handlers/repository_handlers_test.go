@@ -56,7 +56,7 @@ func TestHTTPCreateRepositoryRejectsInvalidLocalPathWithoutPersistence(t *testin
 
 func TestHTTPInitializeLocalRepositoryCreatesRepository(t *testing.T) {
 	router, repo := newRepositoryHTTPTestRouter(t)
-	parentPath := t.TempDir()
+	parentPath := canonicalTempDir(t)
 	body := []byte(`{"name":"new-project","parent_path":` + strconv.Quote(parentPath) + `}`)
 	request := httptest.NewRequest(
 		http.MethodPost,
@@ -317,7 +317,7 @@ func TestHTTPListDirectoryIncludesChoosableContract(t *testing.T) {
 
 func TestHTTPCreateDirectoryCreatesFolder(t *testing.T) {
 	router, _ := newRepositoryHTTPTestRouter(t)
-	parent := t.TempDir()
+	parent := canonicalTempDir(t)
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/fs/create-dir",

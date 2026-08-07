@@ -2,6 +2,7 @@
 
 import Link from "@/components/routing/app-link";
 import { Button } from "@kandev/ui/button";
+import { useTranslation } from "react-i18next";
 import type { Workspace } from "@/lib/types/http";
 
 export function WorkspaceSettingsHeader({
@@ -11,6 +12,7 @@ export function WorkspaceSettingsHeader({
   workspace: Workspace;
   description: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div>
@@ -18,7 +20,9 @@ export function WorkspaceSettingsHeader({
         <p className="text-sm text-muted-foreground mt-1">{description}</p>
       </div>
       <Button asChild variant="outline" size="sm">
-        <Link href={`/settings/workspace/${workspace.id}`}>Workspace settings</Link>
+        <Link href={`/settings/workspace/${workspace.id}`}>
+          {t("workspaces:workspaceSettingsLink")}
+        </Link>
       </Button>
     </div>
   );

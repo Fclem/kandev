@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { WorkspaceSettingsHeader } from "@/app/settings/workspace/workspace-settings-header";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useRouter } from "@/lib/routing/client-router";
 import { IconGitBranch } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
@@ -59,6 +61,8 @@ function buildDraftRepo(
   manualRepoPath: string,
 ): RepositoryItem {
   const path = selectedRepo?.path ?? manualValidation.path ?? manualRepoPath.trim();
+  // "New Repository" is PERSISTED as the repository's name, not rendered copy —
+  // a stored name must not depend on the locale it was created in.
   const name =
     selectedRepo?.name ?? path.split("/").filter(Boolean).slice(-1)[0] ?? "New Repository";
   return {
@@ -80,6 +84,7 @@ function buildDraftRepo(
     cleanup_script: "",
     dev_script: "",
     copy_files: "",
+    secret_bindings: [],
     created_at: "",
     updated_at: "",
     scripts: [],
@@ -121,7 +126,10 @@ async function saveNewRepository(
     cleanup_script: repo.cleanup_script,
     dev_script: repo.dev_script,
     copy_files: repo.copy_files,
+    secret_bindings: repo.secret_bindings ?? [],
   });
+  // Like the repository name above, the seeded script name and command are
+  // PERSISTED and sent to a shell verbatim, so both stay in English.
   const scripts = await Promise.all(
     repo.scripts.map((script, index) =>
       createRepositoryScriptAction({
@@ -175,6 +183,7 @@ async function saveExistingRepository({
     cleanup_script: repo.cleanup_script,
     dev_script: repo.dev_script,
     copy_files: repo.copy_files,
+    secret_bindings: repo.secret_bindings ?? [],
   });
   const savedScripts = savedRepositoriesById.get(repoId)?.scripts ?? [];
   const currentScriptIds = new Set(repo.scripts.map((s) => s.id));
@@ -307,6 +316,7 @@ function useRepositoryHandlers({
 function useDiscoverDialog(
   workspace: Workspace | null,
   toast: ReturnType<typeof useToast>["toast"],
+  t: TFunction,
 ) {
   const [localRepoDialogOpen, setLocalRepoDialogOpen] = useState(false);
   const [discoveredRepositories, setDiscoveredRepositories] = useState<LocalRepository[]>([]);
@@ -332,8 +342,8 @@ function useDiscoverDialog(
       setDiscoveredRepositories(result.repositories);
     } catch (error) {
       toast({
-        title: "Failed to discover repositories",
-        description: error instanceof Error ? error.message : "Request failed",
+        title: t("workspaces:failedToDiscoverRepositories"),
+        description: error instanceof Error ? error.message : t("common:requestFailed"),
         variant: "error",
       });
     }
@@ -357,21 +367,23 @@ function useDiscoverDialog(
         setManualValidation({
           status: "success",
           isValid: true,
-          message: "Valid git repository",
+          message: t("workspaces:validGitRepository"),
           path: result.path,
         });
       else
+        // `result.message` is the backend's diagnostic and stays English by
+        // design; only the fallback for a missing payload is copy.
         setManualValidation({
           status: "error",
           isValid: false,
-          message: result.message || "Invalid repository path",
+          message: result.message || t("workspaces:invalidRepositoryPath"),
           path: result.path,
         });
     } catch (error) {
       setManualValidation({
         status: "error",
         isValid: false,
-        message: error instanceof Error ? error.message : "Request failed",
+        message: error instanceof Error ? error.message : t("common:requestFailed"),
       });
     }
   };
@@ -415,6 +427,7 @@ function useWorkspaceRepositoriesPage(
 ) {
   const router = useRouter();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const clearRepositoryScripts = useAppStore((state) => state.clearRepositoryScripts);
   const [repositoryItems, setRepositoryItems] = useState<RepositoryItem[]>(repositories);
   const [savedRepositoryItems, setSavedRepositoryItems] =
@@ -441,7 +454,7 @@ function useWorkspaceRepositoriesPage(
     handleDeleteRepository,
   } = handlers;
 
-  const discover = useDiscoverDialog(workspace, toast);
+  const discover = useDiscoverDialog(workspace, toast, t);
   const {
     localRepoDialogOpen,
     setLocalRepoDialogOpen,
@@ -504,30 +517,15 @@ function useWorkspaceRepositoriesPage(
   };
 }
 
-function WorkspacePageHeader({
-  workspace,
-  isImproveWorkspace,
-}: {
-  workspace: Workspace;
-  isImproveWorkspace: boolean;
-}) {
-  return (
-    <WorkspaceSettingsHeader
-      workspace={workspace}
-      description={
-        isImproveWorkspace
-          ? "This workspace is managed by Improve Kandev and cannot be changed."
-          : "Manage repositories connected to this workspace."
-      }
-    />
-  );
-}
-
 export function WorkspaceRepositoriesClient({
   workspace,
   repositories,
   isImproveWorkspace = false,
 }: WorkspaceRepositoriesClientProps) {
+  const { t } = useTranslation();
+  const pageDescription = isImproveWorkspace
+    ? t("workspaces:repositoriesReadOnlyImprove")
+    : t("workspaces:manageRepositoriesConnected");
   const state = useWorkspaceRepositoriesPage(workspace, repositories);
   const {
     router,
@@ -562,16 +560,16 @@ export function WorkspaceRepositoriesClient({
 
   return (
     <div className="space-y-8">
-      <WorkspacePageHeader workspace={workspace} isImproveWorkspace={isImproveWorkspace} />
+      <WorkspaceSettingsHeader workspace={workspace} description={pageDescription} />
       <Separator />
       <SettingsSection
         icon={<IconGitBranch className="h-5 w-5" />}
-        title="Repositories"
-        description="Repositories in this workspace"
+        title={t("workspaces:repositories")}
+        description={t("workspaces:repositoriesInThisWorkspace")}
         action={
           isImproveWorkspace ? undefined : (
             <Button size="sm" className="cursor-pointer" onClick={openDialog}>
-              Add Local Repository
+              {t("workspaces:addLocalRepository")}
             </Button>
           )
         }

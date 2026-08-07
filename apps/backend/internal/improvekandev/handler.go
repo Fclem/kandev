@@ -3,14 +3,18 @@ package improvekandev
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/common/logger"
-	"github.com/kandev/kandev/internal/common/logger/buffer"
+	"github.com/kandev/kandev/internal/system/logbundle"
 	taskmodels "github.com/kandev/kandev/internal/task/models"
 	taskservice "github.com/kandev/kandev/internal/task/service"
 )
@@ -67,25 +71,26 @@ type DefaultWorkspaceResolver func(ctx context.Context) (string, error)
 
 // Handler exposes the improve-kandev HTTP endpoints.
 type Handler struct {
-	taskSvc *taskservice.Service
-	cloner  Cloner
-	log     *logger.Logger
-	version string
+	taskSvc    *taskservice.Service
+	cloner     Cloner
+	log        *logger.Logger
+	logBundles diagnosticBundleService
 	// ghCopier copies the default workspace's GitHub connection onto the
 	// dedicated workspace when bootstrap creates it. Nil disables the copy.
 	ghCopier GitHubWorkspaceCopier
 	// defaultWorkspaceResolver picks the source workspace for the copy. Nil
 	// disables the copy.
 	defaultWorkspaceResolver DefaultWorkspaceResolver
-	// snapshot returns the current backend log buffer; defaults to logger's
-	// process-wide buffer but can be overridden for tests.
-	snapshot func() []buffer.Entry
 	// gh resolves the authenticated user's login and write access. Defaults
 	// to a gh-CLI shell-out; tests can substitute a fake.
 	gh GitHubInfo
 	// resolveRemote resolves a local repo path's origin remote. Defaults to
 	// service.ResolveGitRemoteProvider; tests can substitute a fake.
 	resolveRemote remoteResolver
+}
+
+type diagnosticBundleService interface {
+	OpenArchive(owner, id string) (*os.File, logbundle.JobView, error)
 }
 
 // NewHandler constructs a Handler. version is embedded into bundle metadata.
@@ -97,36 +102,38 @@ func NewHandler(
 	version string,
 	log *logger.Logger,
 ) *Handler {
+	_ = version
 	return &Handler{
 		taskSvc:                  taskSvc,
 		cloner:                   cloner,
+		log:                      log,
 		ghCopier:                 ghCopier,
 		defaultWorkspaceResolver: defaultWorkspaceResolver,
-		log:                      log,
-		version:                  version,
-		snapshot:                 func() []buffer.Entry { return buffer.Default().Snapshot() },
 		gh:                       newDefaultGitHubInfo(),
 		resolveRemote:            taskservice.ResolveGitRemoteProvider,
 	}
 }
 
-// RegisterRoutes registers the bootstrap and frontend-log endpoints.
+func (h *Handler) SetLogBundles(service diagnosticBundleService) {
+	h.logBundles = service
+}
+
+// RegisterRoutes registers the bootstrap and diagnostic-bundle lease endpoints.
 func RegisterRoutes(router *gin.Engine, h *Handler) {
 	if h == nil {
 		return
 	}
 	api := router.Group("/api/v1/system/improve-kandev")
 	api.POST("/bootstrap", h.httpBootstrap)
-	api.POST("/bundle/frontend-log", h.httpFrontendLog)
+	api.POST("/bundle/lease", h.httpLeaseBundle)
 }
 
 // BootstrapRequest is the JSON body for POST /bootstrap.
-//
-// WorkspaceID is the fallback workspace (the user's active workspace) used
-// when the dedicated Improve Kandev workspace does not exist and the user
-// declines to create it (CreateWorkspace=false). It is ignored when the
-// dedicated workspace exists or is being created.
 type BootstrapRequest struct {
+	// WorkspaceID is the fallback workspace (the user's active workspace) used
+	// when the dedicated Improve Kandev workspace does not exist and the user
+	// declines to create it (CreateWorkspace=false). It is ignored when the
+	// dedicated workspace exists or is being created.
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	// CreateWorkspace opts into creating the dedicated Improve Kandev
 	// workspace when it does not exist (surfaced to the user as a checkbox in
@@ -159,20 +166,27 @@ const (
 
 // BootstrapResponse describes the artifacts the dialog needs to submit a task.
 type BootstrapResponse struct {
-	WorkspaceID     string            `json:"workspace_id"`
-	RepositoryID    string            `json:"repository_id"`
-	WorkflowID      string            `json:"workflow_id"`
-	IssueWorkflowID string            `json:"issue_workflow_id"`
-	Branch          string            `json:"branch"`
-	BundleDir       string            `json:"bundle_dir"`
-	BundleFiles     map[string]string `json:"bundle_files"`
-	GitHubLogin     string            `json:"github_login"`
-	HasWriteAccess  bool              `json:"has_write_access"`
-	ForkStatus      ForkStatus        `json:"fork_status"`
-	ForkMessage     string            `json:"fork_message,omitempty"`
+	// WorkspaceID is the dedicated Improve Kandev workspace the task must be
+	// created in.
+	WorkspaceID     string     `json:"workspace_id"`
+	RepositoryID    string     `json:"repository_id"`
+	WorkflowID      string     `json:"workflow_id"`
+	IssueWorkflowID string     `json:"issue_workflow_id"`
+	Branch          string     `json:"branch"`
+	BundleDir       string     `json:"bundle_dir"`
+	BundleFile      string     `json:"bundle_file"`
+	GitHubLogin     string     `json:"github_login"`
+	HasWriteAccess  bool       `json:"has_write_access"`
+	ForkStatus      ForkStatus `json:"fork_status"`
+	ForkMessage     string     `json:"fork_message,omitempty"`
 }
 
 func (h *Handler) httpBootstrap(c *gin.Context) {
+	identity, ok := authn.FromGin(c)
+	if !ok || identity.UserID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "authentication required"})
+		return
+	}
 	var req BootstrapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid payload"})
@@ -228,23 +242,12 @@ func (h *Handler) httpBootstrap(c *gin.Context) {
 		return
 	}
 
-	dir, err := createBundleDir()
+	dir, err := createBundleDir(identity.UserID)
 	if err != nil {
 		h.log.Error("improve-kandev: bundle dir creation failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to create bundle dir"})
 		return
 	}
-	if err := writeMetadata(dir, h.version, nil); err != nil {
-		h.log.Error("improve-kandev: metadata write failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to write metadata"})
-		return
-	}
-	if err := writeBackendLog(dir, h.snapshot()); err != nil {
-		h.log.Error("improve-kandev: backend log write failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to write backend log"})
-		return
-	}
-
 	access := h.resolveGitHubAccess(ctx)
 
 	c.JSON(http.StatusOK, BootstrapResponse{
@@ -254,15 +257,11 @@ func (h *Handler) httpBootstrap(c *gin.Context) {
 		IssueWorkflowID: issueWorkflow.ID,
 		Branch:          defaultBranch,
 		BundleDir:       dir,
-		BundleFiles: map[string]string{
-			"metadata":     filepath.Join(dir, "metadata.json"),
-			"backend_log":  filepath.Join(dir, "backend.log"),
-			"frontend_log": filepath.Join(dir, "frontend.log"),
-		},
-		GitHubLogin:    access.login,
-		HasWriteAccess: access.hasWrite,
-		ForkStatus:     access.forkStatus,
-		ForkMessage:    access.forkMessage,
+		BundleFile:      filepath.Join(dir, diagnosticFileName),
+		GitHubLogin:     access.login,
+		HasWriteAccess:  access.hasWrite,
+		ForkStatus:      access.forkStatus,
+		ForkMessage:     access.forkMessage,
 	})
 }
 
@@ -569,27 +568,83 @@ func (h *Handler) findAndHealWorkflow(
 	return nil
 }
 
-// FrontendLogRequest is the JSON body for POST /bundle/frontend-log.
-type FrontendLogRequest struct {
-	BundleDir string             `json:"bundle_dir"`
-	Entries   []FrontendLogEntry `json:"entries"`
+const maxLeasedBundleBytes = int64(256 * 1024 * 1024)
+
+type leaseBundleRequest struct {
+	BundleDir string `json:"bundle_dir"`
+	BundleID  string `json:"bundle_id"`
 }
 
-func (h *Handler) httpFrontendLog(c *gin.Context) {
-	var req FrontendLogRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+func (h *Handler) httpLeaseBundle(c *gin.Context) {
+	identity, ok := authn.FromGin(c)
+	if !ok || identity.UserID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{errorKey: "authentication required"})
+		return
+	}
+	var req leaseBundleRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.BundleID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{errorKey: "invalid payload"})
 		return
 	}
-	dir, err := validateBundleDir(req.BundleDir)
+	dir, err := validateBundleDir(req.BundleDir, identity.UserID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{errorKey: err.Error()})
+		c.JSON(http.StatusForbidden, gin.H{errorKey: err.Error()})
 		return
 	}
-	if err := writeFrontendLog(dir, req.Entries); err != nil {
-		h.log.Error("improve-kandev: frontend log write failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{errorKey: "failed to write frontend log"})
+	if h.logBundles == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{errorKey: "diagnostic bundles unavailable"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"path": filepath.Join(dir, "frontend.log")})
+	archive, view, err := h.logBundles.OpenArchive(identity.UserID, req.BundleID)
+	if err != nil {
+		c.JSON(http.StatusConflict, gin.H{errorKey: "diagnostic bundle is not ready"})
+		return
+	}
+	defer func() { _ = archive.Close() }()
+
+	path := filepath.Join(dir, diagnosticFileName)
+	if err := leaseArchive(archive, path); err != nil {
+		h.log.Error("improve-kandev: diagnostic bundle lease failed", zap.Error(err))
+		status := http.StatusInternalServerError
+		if errors.Is(err, errBundleTooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		c.JSON(status, gin.H{errorKey: "failed to lease diagnostic bundle"})
+		return
+	}
+	time.AfterFunc(staleBundleAge, func() { _ = os.Remove(path) })
+	c.JSON(http.StatusOK, gin.H{
+		"path": path, "status": view.Status, "sources": view.Sources,
+	})
+}
+
+var errBundleTooLarge = errors.New("diagnostic bundle exceeds lease limit")
+
+func leaseArchive(source io.Reader, path string) error {
+	temp, err := os.CreateTemp(filepath.Dir(path), ".diagnostic-bundle-*.tmp")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	defer func() {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+	}()
+	if err := temp.Chmod(0o600); err != nil {
+		return err
+	}
+	written, err := io.Copy(temp, io.LimitReader(source, maxLeasedBundleBytes+1))
+	if err != nil {
+		return err
+	}
+	if written > maxLeasedBundleBytes {
+		return errBundleTooLarge
+	}
+	if err := temp.Sync(); err != nil {
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, path)
 }

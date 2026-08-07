@@ -12,12 +12,26 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/improvekandev"
 	"github.com/kandev/kandev/internal/task/models"
 )
 
 type improveKandevTestCloner struct {
 	path string
+}
+
+// newImproveKandevTestRouter registers the improve-kandev routes with a
+// synthetic identity, mirroring the production auth middleware (bootstrap
+// requires an authenticated identity).
+func newImproveKandevTestRouter(handler *improvekandev.Handler) *gin.Engine {
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		authn.SetOnGin(c, authn.Identity{UserID: "test-user"})
+		c.Next()
+	})
+	improvekandev.RegisterRoutes(router, handler)
+	return router
 }
 
 func (c improveKandevTestCloner) EnsureWorkspaceCloned(
@@ -31,9 +45,8 @@ func TestImproveKandevBootstrapCreatesBothHiddenWorkflowsIdempotently(t *testing
 
 	repoPath := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", repoPath).Run())
-	router := gin.New()
 	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
-	improvekandev.RegisterRoutes(router, handler)
+	router := newImproveKandevTestRouter(handler)
 
 	bootstrap := func() improvekandev.BootstrapResponse {
 		t.Helper()
@@ -95,9 +108,8 @@ func TestImproveKandevBootstrapReusesExistingImproveWorkspace(t *testing.T) {
 
 	repoPath := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", repoPath).Run())
-	router := gin.New()
 	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
-	improvekandev.RegisterRoutes(router, handler)
+	router := newImproveKandevTestRouter(handler)
 
 	// The request may still carry a workspace_id from an older client; it must
 	// be ignored in favor of the dedicated Improve Kandev workspace.
@@ -127,9 +139,8 @@ func TestImproveKandevBootstrapFallsBackToRequestedWorkspaceWhenCreationDeclined
 
 	repoPath := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", repoPath).Run())
-	router := gin.New()
 	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
-	improvekandev.RegisterRoutes(router, handler)
+	router := newImproveKandevTestRouter(handler)
 
 	// No dedicated workspace exists and the caller declines creation
 	// (create_workspace=false): bootstrap falls back to the requested
@@ -165,12 +176,11 @@ func TestImproveKandevBootstrapCopiesGitHubConnectionOnWorkspaceCreation(t *test
 
 	repoPath := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", repoPath).Run())
-	router := gin.New()
 	resolveDefault := func(context.Context) (string, error) {
 		return "default-workspace-id", nil
 	}
 	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, copier, resolveDefault, "test", ts.Logger)
-	improvekandev.RegisterRoutes(router, handler)
+	router := newImproveKandevTestRouter(handler)
 
 	body, err := json.Marshal(improvekandev.BootstrapRequest{CreateWorkspace: true})
 	require.NoError(t, err)
@@ -199,9 +209,8 @@ func TestImproveKandevBootstrapRequiresWorkspaceIDWhenCreationDeclined(t *testin
 	ts := NewOrchestratorTestServer(t)
 	repoPath := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", repoPath).Run())
-	router := gin.New()
 	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
-	improvekandev.RegisterRoutes(router, handler)
+	router := newImproveKandevTestRouter(handler)
 
 	body, err := json.Marshal(improvekandev.BootstrapRequest{})
 	require.NoError(t, err)
@@ -229,9 +238,8 @@ func TestImproveKandevBootstrapConvergesOnSingleWorkspace(t *testing.T) {
 
 	repoPath := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", repoPath).Run())
-	router := gin.New()
 	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
-	improvekandev.RegisterRoutes(router, handler)
+	router := newImproveKandevTestRouter(handler)
 
 	bootstrap := func() improvekandev.BootstrapResponse {
 		t.Helper()

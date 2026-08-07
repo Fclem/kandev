@@ -154,6 +154,7 @@ type httpCreateWorkflowRequest struct {
 	WorkspaceID        string  `json:"workspace_id"`
 	Name               string  `json:"name"`
 	Description        string  `json:"description,omitempty"`
+	Prompt             string  `json:"prompt,omitempty"`
 	WorkflowTemplateID *string `json:"workflow_template_id,omitempty"`
 }
 
@@ -174,6 +175,7 @@ func (h *WorkflowHandlers) httpCreateWorkflow(c *gin.Context) {
 		WorkspaceID:        body.WorkspaceID,
 		Name:               body.Name,
 		Description:        body.Description,
+		Prompt:             body.Prompt,
 		WorkflowTemplateID: body.WorkflowTemplateID,
 	})
 	if err != nil {
@@ -265,6 +267,7 @@ func (h *WorkflowHandlers) wsRejectReadOnlyWorkspace(ctx context.Context, msg *w
 type httpUpdateWorkflowRequest struct {
 	Name           *string `json:"name"`
 	Description    *string `json:"description"`
+	Prompt         *string `json:"prompt"`
 	AgentProfileID *string `json:"agent_profile_id"`
 }
 
@@ -281,6 +284,7 @@ func (h *WorkflowHandlers) httpUpdateWorkflow(c *gin.Context) {
 	workflow, err := h.service.UpdateWorkflow(c.Request.Context(), id, &service.UpdateWorkflowRequest{
 		Name:           body.Name,
 		Description:    body.Description,
+		Prompt:         body.Prompt,
 		AgentProfileID: body.AgentProfileID,
 	})
 	if err != nil {
@@ -437,6 +441,7 @@ type wsCreateWorkflowRequest struct {
 	WorkspaceID        string  `json:"workspace_id"`
 	Name               string  `json:"name"`
 	Description        string  `json:"description,omitempty"`
+	Prompt             string  `json:"prompt,omitempty"`
 	WorkflowTemplateID *string `json:"workflow_template_id,omitempty"`
 }
 
@@ -459,6 +464,7 @@ func (h *WorkflowHandlers) wsCreateWorkflow(ctx context.Context, msg *ws.Message
 		WorkspaceID:        req.WorkspaceID,
 		Name:               req.Name,
 		Description:        req.Description,
+		Prompt:             req.Prompt,
 		WorkflowTemplateID: req.WorkflowTemplateID,
 	})
 	if err != nil {
@@ -492,6 +498,7 @@ type wsUpdateWorkflowRequest struct {
 	ID             string  `json:"id"`
 	Name           *string `json:"name,omitempty"`
 	Description    *string `json:"description,omitempty"`
+	Prompt         *string `json:"prompt,omitempty"`
 	AgentProfileID *string `json:"agent_profile_id,omitempty"`
 }
 
@@ -510,6 +517,7 @@ func (h *WorkflowHandlers) wsUpdateWorkflow(ctx context.Context, msg *ws.Message
 	workflow, err := h.service.UpdateWorkflow(ctx, req.ID, &service.UpdateWorkflowRequest{
 		Name:           req.Name,
 		Description:    req.Description,
+		Prompt:         req.Prompt,
 		AgentProfileID: req.AgentProfileID,
 	})
 	if err != nil {

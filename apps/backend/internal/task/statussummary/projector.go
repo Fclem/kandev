@@ -291,6 +291,12 @@ func (p *Projector) applyQueueStatusEvent(ctx context.Context, state *projection
 			return nil
 		}
 	}
+	// The count self-corrects on the next queue event or list load, but a
+	// sustained contention run is worth surfacing so a repeated rejector is not
+	// silently starved.
+	p.logger.Warn("exhausted CAS retries updating queued prompt count",
+		zap.String("task_id", taskID),
+		zap.Int("attempts", maxQueueCountPersistAttempts))
 	return nil
 }
 

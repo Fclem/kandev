@@ -96,16 +96,26 @@ func TestProjectorRestoresQueuedPromptCountFromPersistedSummary(t *testing.T) {
 }
 
 func TestProjectorQueueEventWithoutTaskIDIsIgnored(t *testing.T) {
-	projector, store, eventBus, _, _ := newProjectorTest(t)
+	projector, store, eventBus, updates, _ := newProjectorTest(t)
 
-	projector.countQueuedPrompts = func(_ context.Context, id string) (int, error) { return 1, nil }
+	calls := 0
+	projector.countQueuedPrompts = func(_ context.Context, id string) (int, error) {
+		calls++
+		return 1, nil
+	}
 
 	publishProjectorEvent(t, eventBus, events.MessageQueueStatusChanged, events.MessageQueueStatusChanged, map[string]interface{}{
 		"session_id": "session-1",
 	})
 
-	if summary := store.summary("any-task"); summary != nil {
-		t.Fatalf("queue event without task_id created a summary: %+v", summary)
+	if calls != 0 {
+		t.Fatalf("counter calls = %d, want 0 for an event without task_id", calls)
+	}
+	if got := updates.Load(); got != 0 {
+		t.Fatalf("summary publishes = %d, want 0", got)
+	}
+	if len(store.rows) != 0 {
+		t.Fatalf("queue event without task_id persisted summaries: %d rows", len(store.rows))
 	}
 }
 

@@ -21,11 +21,12 @@ func (s *Service) SetQueuedPromptCounter(counter QueuedPromptCounter) {
 }
 
 // CountPendingQueuedByTaskIDs returns the pending prompt count for each
-// requested task, keyed by task_id. Returns an empty map when no counter is
-// wired so callers can treat a missing provider as "nothing queued".
+// requested task, keyed by task_id. Returns nil (no error) when no counter is
+// wired or no tasks were requested, so callers can distinguish "provider
+// unavailable — preserve the projected count" from a successful zero lookup.
 func (s *Service) CountPendingQueuedByTaskIDs(ctx context.Context, taskIDs []string) (map[string]int, error) {
 	if s == nil || s.queuedPromptCounter == nil || len(taskIDs) == 0 {
-		return map[string]int{}, nil
+		return nil, nil
 	}
 	return s.queuedPromptCounter.CountPendingByTaskIDs(ctx, taskIDs)
 }

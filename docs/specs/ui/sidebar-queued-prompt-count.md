@@ -110,8 +110,14 @@ existing `SemanticJSON` envelope; old rows decode with the field absent
   absent on that row until a summary exists; the queue panel remains the
   fallback surface. Same degradation class as other summary-only fields.
 - **Count query failure at assembly:** the list endpoint logs and serves the
-  rest of the row without the badge (compatibility fallback), matching the
-  existing status-summary load behavior.
+  rest of the row without the badge: the response DTO clears any existing
+  `queued_prompt_count` to `0` for that request only. The cleared value is
+  never persisted back to the summary store, so a later successful count or
+  projector event restores the badge. Matching the existing status-summary
+  load behavior.
+- **Queued-counter provider unavailable (unwired):** the DTO leaves the
+  projected `queued_prompt_count` untouched instead of stamping a zero over
+  it, so a previously projected positive count survives list loads.
 
 ## Scenarios
 

@@ -57,9 +57,10 @@ func TestCountPendingByTaskIDsExcludesReservedInFlight(t *testing.T) {
 					t.Fatalf("insert: %v", err)
 				}
 			}
-			// One pending user row and one durable lifecycle row for the same task.
-			insert("s1", "t1", "pending", nil)
+			// The durable lifecycle row must be the head so ReserveHead marks IT
+			// in flight; the ordinary pending row stays pending below it.
 			insert("s1", "t1", "lifecycle", map[string]interface{}{MetadataLifecycleDurable: true})
+			insert("s1", "t1", "pending", nil)
 			// Reserve the durable head: it becomes in-flight and must not count.
 			if _, err := repo.ReserveHead(ctx, "s1"); err != nil {
 				t.Fatalf("reserve: %v", err)

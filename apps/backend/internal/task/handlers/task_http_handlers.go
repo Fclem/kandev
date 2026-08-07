@@ -280,11 +280,19 @@ func buildTaskDTOsWithSessionInfo(
 		taskDTO.TaskPendingAction = taskPendingActionPtr(sessions, pendingActionsBySession)
 		dto.EnrichTaskForegroundActivity(&taskDTO, sessions, activityProvider)
 		taskDTO.StatusSummary = statusSummaries[task.ID]
-		if taskDTO.StatusSummary != nil && queuedErr == nil {
-			// Fresh per-task count from the queue store; the projector keeps this
-			// field live between list loads, this batch read is the authoritative
-			// initial-load backstop. See the comment above the batch load.
-			taskDTO.StatusSummary.QueuedPromptCount = queuedByTask[task.ID]
+		if taskDTO.StatusSummary != nil {
+			switch {
+			case queuedErr != nil:
+				// Counter failed: honor the documented no-badge fallback in the
+				// response without persisting the cleared value.
+				taskDTO.StatusSummary.QueuedPromptCount = 0
+			case queuedByTask != nil:
+				// Fresh per-task count from the queue store; the projector keeps
+				// this field live between list loads, this batch read is the
+				// authoritative initial-load backstop. See the comment above the
+				// batch load.
+				taskDTO.StatusSummary.QueuedPromptCount = queuedByTask[task.ID]
+			}
 		}
 		result = append(result, taskDTO)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/kandev/kandev/internal/task/repository"
 	taskrepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 	"github.com/kandev/kandev/internal/task/service"
+	"github.com/kandev/kandev/internal/task/statussummary"
 )
 
 type fakeQueuedPromptCounter struct {
@@ -41,11 +42,13 @@ func newQueuedTaskDTOBuilder(t *testing.T) (*service.Service, *TaskHandlers, *ta
 	dbConn, err := db.OpenSQLite(filepath.Join(t.TempDir(), "test.db"))
 	require.NoError(t, err)
 	sqlxDB := sqlx.NewDb(dbConn, "sqlite3")
+	t.Cleanup(func() {
+		_ = sqlxDB.Close()
+	})
 	repo, cleanup, err := repository.Provide(sqlxDB, sqlxDB, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = cleanup()
-		_ = sqlxDB.Close()
 	})
 	require.NoError(t, repo.CreateWorkspace(context.Background(), &models.Workspace{ID: "ws-1", Name: "Workspace"}))
 	log, err := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "json", OutputPath: "stdout"})
@@ -118,7 +121,33 @@ func TestTaskDTOBuilderDegradesWhenQueuedCounterFails(t *testing.T) {
 	result, err := h.toTaskDTOsWithSessionInfo(ctx, []*models.Task{task})
 	require.NoError(t, err, "a failed queued counter must not fail the task list")
 	require.Len(t, result, 1)
-	if result[0].StatusSummary != nil {
-		assert.Zero(t, result[0].StatusSummary.QueuedPromptCount)
-	}
+	require.NotNil(t, result[0].StatusSummary, "the summary must survive a queued counter failure")
+	assert.Zero(t, result[0].StatusSummary.QueuedPromptCount,
+		"a failed counter must clear the badge in the response (documented fallback)")
+}
+
+func TestTaskDTOBuilderPreservesProjectedCountWhenCounterUnwired(t *testing.T) {
+	_, h, repo := newQueuedTaskDTOBuilder(t)
+	ctx := context.Background()
+	task := &models.Task{ID: "task-1", WorkspaceID: "ws-1", Title: "Unwired counter task"}
+	require.NoError(t, repo.CreateTask(ctx, task))
+	require.NoError(t, repo.CreateTaskSession(ctx, &models.TaskSession{
+		ID: "s1", TaskID: "task-1", State: models.TaskSessionStateIdle, IsPrimary: true,
+	}))
+	// A projected summary with a positive count, as if the projector had
+	// persisted it. With no counter wired, the assembly must NOT overwrite it.
+	changed, err := repo.CompareAndUpdateTaskStatusSummary(ctx, &statussummary.StoredTaskStatusSummary{
+		TaskID:      task.ID,
+		WorkspaceID: "ws-1",
+		Summary:     statussummary.TaskStatusSummary{Revision: 3, QueuedPromptCount: 5},
+	})
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	result, err := h.toTaskDTOsWithSessionInfo(ctx, []*models.Task{task})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.NotNil(t, result[0].StatusSummary)
+	assert.Equal(t, 5, result[0].StatusSummary.QueuedPromptCount,
+		"an unwired counter must preserve the projected count, not zero it")
 }

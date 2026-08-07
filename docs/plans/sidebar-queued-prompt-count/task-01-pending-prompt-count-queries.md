@@ -57,3 +57,11 @@ None.
 
 Report RED/GREEN evidence, the final method signatures, and changed files.
 Update this task and `plan.md` status in the same implementation conversation.
+
+## Results
+
+- RED: `TestCountPendingByTaskIDs*` and `TestServiceCountPendingByTask` failed to compile (methods absent).
+- GREEN: `go test -tags fts5 ./internal/orchestrator/messagequeue/` passes — SQLite and memory both cover
+  multi-session accumulation, reserved-in-flight exclusion, empty/missing task IDs, and cross-task isolation.
+- Final signatures: `Repository.CountPendingByTaskIDs(ctx, taskIDs []string) (map[string]int, error)`
+  (SQLite + memory), `Service.CountPendingByTaskIDs`, `Service.CountPendingByTask(ctx, taskID) (int, error)`.

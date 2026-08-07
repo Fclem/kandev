@@ -34,6 +34,12 @@ spec: "../../specs/ui/sidebar-queued-prompt-count.md"
   summaries include counts; tasks without summaries omit the field; counter
   failure degrades to no badge without failing the list; the JSON payload of a
   list/snapshot response carries `status_summary.queued_prompt_count`.
+- Counter-failure DTO contract: when the counter errors, the response DTO
+  clears `queued_prompt_count` to `0` for that request only — never persisted.
+  When the counter is unwired (provider unavailable), the DTO preserves the
+  projected count instead of stamping a zero. Regression tests cover both: an
+  errored counter yields a non-nil summary with count `0`; an unwired counter
+  preserves a positive projected count (`TestTaskDTOBuilderPreservesProjectedCountWhenCounterUnwired`).
 
 ## TDD Sequence
 
@@ -75,3 +81,15 @@ underlying count query.
 Report RED/GREEN evidence, the final DTO JSON for a task with and without a
 summary, and changed files. Update this task and `plan.md` status in the same
 implementation conversation.
+
+## Results
+
+- RED: assembly/hydration/rebuild tests failed against the missing count plumbing.
+- GREEN: `go test -tags fts5 ./internal/task/... ./internal/backendapp/...` — assembly stamps fresh counts on
+  existing summaries, hydration includes counts in repaired rows, tasks without summaries omit the field,
+  and a counter failure clears the response count without persisting.
+- `TestBootKanbanSnapshotStampsQueuedPromptCount` proves the boot kanban snapshot carries `queued_prompt_count`;
+  `TestTaskDTOBuilderPreservesProjectedCountWhenCounterUnwired` proves an unwired counter leaves a projected
+  positive count intact.
+- DTO JSON for a queued task carries `"queued_prompt_count":3` inside `status_summary`; a task with no summary
+  carries no count field.

@@ -46,8 +46,12 @@ test.describe("Mobile sidebar — queued prompt count", () => {
       fullPage: false,
     });
 
-    // No horizontal overflow from the badge on a phone viewport.
-    const sheetBox = await sheet.boundingBox();
+    // No horizontal overflow from the badge on a phone viewport: the badge
+    // stays within the sheet's horizontal bounds.
+    const [sheetBox, badgeBox] = await Promise.all([sheet.boundingBox(), badge.boundingBox()]);
     expect(sheetBox).not.toBeNull();
+    expect(badgeBox).not.toBeNull();
+    expect(badgeBox!.x).toBeGreaterThanOrEqual(sheetBox!.x);
+    expect(badgeBox!.x + badgeBox!.width).toBeLessThanOrEqual(sheetBox!.x + sheetBox!.width);
   });
 });

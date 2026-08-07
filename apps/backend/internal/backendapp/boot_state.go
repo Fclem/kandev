@@ -706,8 +706,15 @@ func (b bootStateBuilder) taskDTOsWithSessionInfo(ctx context.Context, tasks []*
 			taskdto.EnrichTaskForegroundActivity(&dto, sessions, b.p.orchestratorSvc)
 		}
 		dto.StatusSummary = statusSummaries[task.ID]
-		if dto.StatusSummary != nil && queuedErr == nil {
-			dto.StatusSummary.QueuedPromptCount = queuedByTask[task.ID]
+		if dto.StatusSummary != nil {
+			switch {
+			case queuedErr != nil:
+				// Counter failed: honor the documented no-badge fallback in the
+				// boot payload without persisting the cleared value.
+				dto.StatusSummary.QueuedPromptCount = 0
+			case queuedByTask != nil:
+				dto.StatusSummary.QueuedPromptCount = queuedByTask[task.ID]
+			}
 		}
 		result = append(result, dto)
 	}

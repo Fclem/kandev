@@ -140,8 +140,8 @@ badge through the mobile sidebar flow.
 5. Full gates: `make -C apps/backend test lint build`, then from `apps`:
    web typecheck, lint, `i18n:check`, `i18n:ratchet`.
 6. E2E (desktop + mobile) as Task 05:
-   `cd apps/web && pnpm e2e -- tests/task/sidebar-queued-count.spec.ts` (and the
-   mobile variant), preserving/restoring queue state in teardown.
+   `cd apps/web && pnpm e2e -- tests/task/sidebar-queued-count.spec.ts tests/task/mobile-sidebar-queued-count.spec.ts`,
+   preserving/restoring queue state in teardown.
 
 ## Implementation Waves
 
@@ -153,6 +153,14 @@ badge through the mobile sidebar flow.
 
 This package does not authorize subagents; implementation remains in the
 user-controlled primary session.
+
+## Results
+
+All five tasks implemented and verified: backend package tests, vet and golangci-lint on touched packages
+green; 50 frontend unit tests plus typecheck/lint/i18n gates green; E2E desktop + mobile 4/4 on the built
+artifact (badge visible, live clear, hidden at 0, subtasks). Full per-task command results are recorded in
+each task file's Results section. Pre-existing VM-environment test failures (launcher/agentctl/local-repo)
+reproduce at HEAD and are unrelated.
 
 ## Environment Prerequisite
 

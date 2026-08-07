@@ -8,16 +8,20 @@ import { isDebugUI } from "@/lib/config";
 import type { SessionPollMode } from "@/lib/state/slices/session-runtime/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
-/** Debug-overlay-only poll-mode legend. `label` stays English on purpose: the
- * row is gated behind `isDebugUI()`, so these are developer diagnostics rather
- * than user copy — and a SCREAMING_CASE const is invisible to
- * `i18next/no-literal-string`, so nothing would have flagged it either way. */
-const POLL_MODE_CONFIG: Record<SessionPollMode, { letter: string; color: string; label: string }> =
-  {
-    fast: { letter: "F", color: "text-emerald-500", label: "focused, 2s polling" },
-    slow: { letter: "S", color: "text-yellow-500", label: "subscribed, 30s polling" },
-    paused: { letter: "P", color: "text-muted-foreground/40", label: "no subscribers" },
-  };
+/** Debug-overlay-only poll-mode legend. Labels resolve through `t()` so the
+ * pseudo-locale stays complete; the row itself is gated behind `isDebugUI()`. */
+const POLL_MODE_CONFIG: Record<
+  SessionPollMode,
+  { letter: string; color: string; labelKey: string }
+> = {
+  fast: { letter: "F", color: "text-emerald-500", labelKey: "sidebar:pollModeFastLabel" },
+  slow: { letter: "S", color: "text-yellow-500", labelKey: "sidebar:pollModeSlowLabel" },
+  paused: {
+    letter: "P",
+    color: "text-muted-foreground/40",
+    labelKey: "sidebar:pollModePausedLabel",
+  },
+};
 
 /**
  * The sidebar row's metadata line: relative last-update time, PR number,
@@ -44,6 +48,7 @@ export function TaskItemStatsRow({
   if (!updatedAt && !prInfo && !pollMode && !queuedCount) return null;
 
   const modeConfig = pollMode ? POLL_MODE_CONFIG[pollMode] : null;
+  const modeLabel = modeConfig ? t(modeConfig.labelKey) : "";
 
   return (
     <span className="flex items-center gap-1.5 text-[11px]">
@@ -70,7 +75,7 @@ export function TaskItemStatsRow({
             </span>
           </TooltipTrigger>
           <TooltipContent side="right">
-            {t("task:gitPollMode", { mode: pollMode, label: modeConfig.label })}
+            {t("task:gitPollMode", { mode: pollMode, label: modeLabel })}
           </TooltipContent>
         </Tooltip>
       )}

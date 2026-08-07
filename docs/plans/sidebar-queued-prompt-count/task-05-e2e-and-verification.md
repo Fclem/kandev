@@ -37,19 +37,18 @@ spec: "../../specs/ui/sidebar-queued-prompt-count.md"
 
 ## Verification
 
+Every command below runs from the repository root (repo root is the parent of
+`apps/`); subshells keep each block independent.
+
 ```bash
-cd apps/web
-pnpm e2e -- tests/task/sidebar-queued-count.spec.ts
-# mobile variant per repo convention (e.g. mobile-sidebar-queued-count.spec.ts)
+# Desktop + mobile E2E (exact specs; both run in one Playwright invocation)
+( cd apps/web && pnpm e2e -- tests/task/sidebar-queued-count.spec.ts tests/task/mobile-sidebar-queued-count.spec.ts )
 
-cd apps/backend
-make test lint build
+# Backend gates
+( cd apps/backend && make test lint build )
 
-cd apps
-pnpm --filter @kandev/web run typecheck
-pnpm --filter @kandev/web run lint
-pnpm --filter @kandev/web run i18n:check
-pnpm --filter @kandev/web run i18n:ratchet
+# Frontend gates
+( cd apps && pnpm --filter @kandev/web run typecheck && pnpm --filter @kandev/web run lint && pnpm --filter @kandev/web run i18n:check && pnpm --filter @kandev/web run i18n:ratchet )
 ```
 
 ## Files Likely Touched
@@ -69,3 +68,14 @@ to end on desktop and mobile.
 Report the E2E run results (badge visible, live clear, hidden at 0), the full
 verification command results, and changed files. Update this task and
 `plan.md` status in the same implementation conversation.
+
+## Results
+
+- E2E: `sidebar-queued-count.spec.ts` (3 tests) + `mobile-sidebar-queued-count.spec.ts` (1 test) — 4/4 pass on
+  the built artifact: badge shows the queued count with the mail icon, clears live with no reload, is absent at 0,
+  and covers subtask rows; mobile asserts the badge in the task-switcher sheet.
+- Full gates: backend `go build ./...`, package tests, vet and golangci-lint on touched packages green;
+  web typecheck, lint, `i18n:check`, `i18n:ratchet` green. (Pre-existing VM-environment failures in
+  launcher/agentctl/local-repo packages reproduce at HEAD and are unrelated.)
+- Manual: secondary dev instance on the LAN — badge rendered `📧 3` after enqueuing prompts and disappeared
+  without reload after `message.queue.cancel`.

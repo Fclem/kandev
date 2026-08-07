@@ -76,3 +76,11 @@ Task 02 fixes the summary JSON shape (`queued_prompt_count`) this task reads.
 Report RED/GREEN unit evidence, the badge markup, i18n status, typecheck/lint
 status, and changed files. Update this task and `plan.md` status in the same
 implementation conversation.
+
+## Results
+
+- RED: buildSidebarItem/TaskItem badge tests failed against the missing prop and rendering.
+- GREEN: 50 focused unit tests pass (task-item, task-session-sidebar-item, mobile sheet-hooks, task-switcher);
+  web typecheck, lint, `i18n:check`, and `i18n:ratchet` all pass.
+- The badge renders `IconMail` + count on the metadata line when > 0 (desktop and mobile sheet share
+  `TaskItem`), with localized `sidebar:queuedPromptCount_one/_other` aria; count 0 renders nothing.

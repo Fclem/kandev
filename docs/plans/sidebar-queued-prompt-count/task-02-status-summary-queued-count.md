@@ -12,11 +12,14 @@ spec: "../../specs/ui/sidebar-queued-prompt-count.md"
 
 ## Acceptance
 
-- `statussummary.TaskStatusSummary` gains
-  `QueuedPromptCount int \`json:"queued_prompt_count,omitempty"\``. `Validate`
+- `statussummary.TaskStatusSummary` gains a new field; `Validate`
   rejects negative values; `SemanticJSON`/`semanticPayload` include the field
   so the persisted `task_status_summaries` payload round-trips it; old stored
   rows decode with the field absent (0).
+
+  ```go
+  QueuedPromptCount int `json:"queued_prompt_count,omitempty"`
+  ```
 - The projector (`internal/task/statussummary/projector.go`) subscribes to
   `events.MessageQueueStatusChanged` and refreshes the affected task's count
   through a new `CountQueuedPrompts func(ctx, taskID string) (int, error)` in
@@ -79,3 +82,13 @@ Task 01 supplies `messagequeue.Service.CountPendingByTask`.
 
 Report RED/GREEN evidence, the new event payload shape, and changed files.
 Update this task and `plan.md` status in the same implementation conversation.
+
+## Results
+
+- RED: model/projector/publish-site tests failed against the unimplemented field and payload.
+- GREEN: `go test -tags fts5 ./internal/task/statussummary/ ./internal/orchestrator/... ./internal/backendapp/...` —
+  round-trip + negative validation, queue-event count updates, no-change suppression, restore, missing-task_id ignore.
+- The internal and WS `message.queue.status_changed` payload now carries `task_id` alongside
+  `{session_id, entries, count, max}`; session-scoped routing unchanged.
+- Follow-up: `TestProjectorQueueEventRetriesAfterRejectedWrite` — competing writer lands a higher revision with
+  the stale count; the retried write wins (final stored count 3, revision 8, exactly one publish).

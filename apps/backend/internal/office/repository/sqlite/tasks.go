@@ -764,12 +764,15 @@ func (r *Repository) UpdateTaskProjectID(ctx context.Context, taskID, projectID 
 // re-parent workspace policy: an inherit_parent subtask whose parent is
 // changing keeps its materialized workspace as shared_group instead of
 // silently inheriting the new parent's. Empty string clears the parent.
+// The metadata normalization is conditioned on the parent actually changing,
+// so a repeated PATCH with the same parent_id is a no-op for workspace
+// semantics.
 func (r *Repository) UpdateTaskParentID(ctx context.Context, taskID, parentID string) error {
 	query := `
 		UPDATE tasks
 		SET parent_id = ?,
 			metadata = CASE
-				WHEN json_valid(metadata) THEN CASE
+				WHEN parent_id IS NOT ? AND json_valid(metadata) THEN CASE
 					WHEN json_extract(metadata, '$.workspace.mode') = 'inherit_parent'
 					THEN json_set(metadata, '$.workspace.mode', 'shared_group')
 					ELSE metadata
@@ -779,7 +782,7 @@ func (r *Repository) UpdateTaskParentID(ctx context.Context, taskID, parentID st
 			updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`
-	result, err := r.db.ExecContext(ctx, r.db.Rebind(query), parentID, taskID)
+	result, err := r.db.ExecContext(ctx, r.db.Rebind(query), parentID, parentID, taskID)
 	if err != nil {
 		return err
 	}

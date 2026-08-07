@@ -17,7 +17,7 @@ import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { useWorkspaceSidebarTasks } from "@/hooks/domains/kanban/use-workspace-sidebar-tasks";
 import { useTaskActions, useArchiveAndSwitchTask } from "@/hooks/use-task-actions";
 import { useTaskDetachDialog } from "@/hooks/use-detach-task";
-import { useNestTask, taskWorkflowIdFromSnapshots } from "@/hooks/use-nest-task";
+import { useNestTaskByDrag } from "@/hooks/use-nest-task";
 import { useSidebarSelection, SidebarBulkDialogs } from "./task-session-sidebar-selection";
 import { useTaskRemoval } from "@/hooks/use-task-removal";
 import { findTaskInSnapshots } from "@/lib/kanban/find-task";
@@ -343,7 +343,7 @@ export function useSidebarActions(store: StoreApi) {
   const archiveActions = useArchiveActions(store);
   const deleteActions = useDeleteActions(store, removeTaskFromBoard);
   const detachActions = useTaskDetachDialog(store);
-  const nestTask = useNestTask();
+  const handleNestTask = useNestTaskByDrag();
   const linkActions = useSidebarLinkActions(store);
   const editActions = useSidebarTaskEdit();
 
@@ -374,17 +374,6 @@ export function useSidebarActions(store: StoreApi) {
   );
 
   const handleMoveToStep = useMoveToStep(store);
-
-  // Re-parent via drag: run the same composite nest operation the context
-  // menu uses, resolving the workflow from the snapshot keys.
-  const handleNestTask = useCallback(
-    (taskId: string, parentTaskId: string) => {
-      const workflowId = taskWorkflowIdFromSnapshots(store, taskId);
-      if (!workflowId) return;
-      void nestTask(taskId, workflowId, parentTaskId);
-    },
-    [store, nestTask],
-  );
 
   return {
     preparingTaskId,

@@ -41,7 +41,7 @@ No new endpoint. Reuses and extends existing contracts:
 
 ## Failure modes
 
-- **Invalid target** (self, descendant, subtask, archived, missing, cross-workspace, or depth violation): backend returns `400`; the UI keeps the task in its original tree position, rolls back the optimistic update, and shows a request-error toast.
+- **Invalid target** (self, descendant, subtask, archived, missing, cross-workspace, or depth violation): the UI filters these targets out before a drop can land, so a drop outside every nest zone is a no-op. If a request is nevertheless rejected by the backend (e.g. a valid-zone target became invalid between render and drop), the UI keeps the task in its original tree position, rolls back the optimistic update, and shows a request-error toast.
 - **Persistence failure**: no successful response is returned; the UI rolls back to the original tree.
 - **Concurrent submissions** are safe: setting the same parent twice is idempotent, and the optimistic update is reconciled by the authoritative `task.updated` event.
 - **No valid targets**: the drag offers no nest zones; only reorder remains possible.
@@ -55,7 +55,7 @@ No new endpoint. Reuses and extends existing contracts:
 - **GIVEN** a drag over a subtask row or over a task in a different workflow, **WHEN** the pointer rests on the row, **THEN** no nest drop zone is offered.
 - **GIVEN** a subtask dragged toward its current parent, **WHEN** the pointer rests on that parent row, **THEN** no nest drop zone is offered.
 - **GIVEN** a drag dropped between two sibling rows, **WHEN** the drop lands outside every nest zone, **THEN** the siblings reorder as before.
-- **GIVEN** a drop on an invalid target, **WHEN** the drop completes, **THEN** the task keeps its original parent and an error toast appears.
+- **GIVEN** a drop that lands outside every nest zone, **WHEN** the drop completes, **THEN** the task keeps its original parent and no request is sent (a plain no-op); a request-error toast appears only when a valid-zone drop's request is rejected by the backend.
 - **GIVEN** a re-parented task, **WHEN** its `task.updated` event arrives over WebSocket, **THEN** cached parent relationships in sidebar, board, and task-detail views are updated.
 - **GIVEN** the mobile task switcher sheet, **WHEN** a user touch-drags a subtask onto a root's nest zone, **THEN** the same re-parenting occurs.
 

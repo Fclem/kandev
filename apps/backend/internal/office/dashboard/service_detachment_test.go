@@ -128,3 +128,33 @@ func TestUpdateTaskParentIDNormalizesInheritedWorkspaceMode(t *testing.T) {
 		t.Fatalf("workspace group_id = %q, want group-1", parsed.Workspace.GroupID)
 	}
 }
+
+// A repeated PATCH with the same parent_id must not flip workspace semantics:
+// the task was not re-parented, so an inherit_parent mode is preserved.
+func TestUpdateTaskParentIDSameParentDoesNotNormalizeMetadata(t *testing.T) {
+	deps := newTestDeps(t)
+	insertTestTask(t, deps.db, "child", "workspace", "Child", "todo", 1)
+	if _, err := deps.db.Exec(`UPDATE tasks SET parent_id = 'parent', metadata = '{"workspace":{"mode":"inherit_parent","group_id":"group-1"}}' WHERE id = 'child'`); err != nil {
+		t.Fatalf("set parent/metadata: %v", err)
+	}
+
+	if err := deps.svc.UpdateTaskParentID(context.Background(), "child", "parent"); err != nil {
+		t.Fatalf("UpdateTaskParentID: %v", err)
+	}
+
+	var metadata string
+	if err := deps.db.Get(&metadata, `SELECT metadata FROM tasks WHERE id = 'child'`); err != nil {
+		t.Fatalf("select metadata: %v", err)
+	}
+	var parsed struct {
+		Workspace struct {
+			Mode string `json:"mode"`
+		} `json:"workspace"`
+	}
+	if err := json.Unmarshal([]byte(metadata), &parsed); err != nil {
+		t.Fatalf("parse metadata %q: %v", metadata, err)
+	}
+	if parsed.Workspace.Mode != "inherit_parent" {
+		t.Fatalf("workspace mode = %q, want inherit_parent (same-parent update must not normalize)", parsed.Workspace.Mode)
+	}
+}

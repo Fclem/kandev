@@ -143,14 +143,19 @@ export type GroupSectionProps = {
 /**
  * Flattens one group's subtree (roots + every descendant, in rendered order)
  * so the group-spanning DndContext can resolve reorder levels and nest
- * targets without consulting other groups' children.
+ * targets without consulting other groups' children. Tracks visited ids so a
+ * corrupted cycle in `subTasksByParentId` cannot recurse forever (mirrors
+ * countGroupTasks' protection).
  */
 function flattenGroupTasks(
   roots: TaskSwitcherItem[],
   subTasksByParentId: Map<string, TaskSwitcherItem[]>,
 ): TaskSwitcherItem[] {
   const out: TaskSwitcherItem[] = [];
+  const visited = new Set<string>();
   const visit = (task: TaskSwitcherItem) => {
+    if (visited.has(task.id)) return;
+    visited.add(task.id);
     out.push(task);
     const subs = subTasksByParentId.get(task.id);
     if (subs) {

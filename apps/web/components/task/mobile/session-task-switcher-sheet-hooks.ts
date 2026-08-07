@@ -9,7 +9,7 @@ import { buildPrepareRequest } from "@/lib/services/session-launch-helpers";
 import { useWorkspaceSidebarTasks } from "@/hooks/domains/kanban/use-workspace-sidebar-tasks";
 import { useTaskActions, useArchiveAndSwitchTask } from "@/hooks/use-task-actions";
 import { useTaskDetachDialog } from "@/hooks/use-detach-task";
-import { useNestTask, taskWorkflowIdFromSnapshots } from "@/hooks/use-nest-task";
+import { useNestTaskByDrag } from "@/hooks/use-nest-task";
 import { useTaskRemoval } from "@/hooks/use-task-removal";
 import { workspaceModeFromMetadata } from "@/lib/kanban/map-task";
 import {
@@ -529,16 +529,7 @@ function useSheetDeleteActions(
  * uses, resolving the workflow from the snapshot keys.
  */
 function useSheetNestTask() {
-  const store = useAppStoreApi();
-  const nestTask = useNestTask();
-  return useCallback(
-    (taskId: string, parentTaskId: string) => {
-      const workflowId = taskWorkflowIdFromSnapshots(store, taskId);
-      if (!workflowId) return;
-      void nestTask(taskId, workflowId, parentTaskId);
-    },
-    [store, nestTask],
-  );
+  return useNestTaskByDrag();
 }
 
 export function useSheetActions(workspaceId: string | null, onOpenChange: (open: boolean) => void) {

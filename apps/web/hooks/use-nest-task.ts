@@ -73,6 +73,26 @@ function rollbackParent(op: NestOp): void {
 }
 
 /**
+ * useNestTaskByDrag returns the drag-drop nesting action used by the sidebar
+ * and the mobile task sheet: it resolves the dragged task's workflow from the
+ * snapshot keys (snapshot tasks carry no workflow_id themselves) and runs the
+ * same composite nest operation the context menu uses. No-ops when the task
+ * is not in any snapshot (the WS event reconciles state either way).
+ */
+export function useNestTaskByDrag() {
+  const store = useAppStoreApi();
+  const nestTask = useNestTask();
+  return useCallback(
+    (taskId: string, parentTaskId: string) => {
+      const workflowId = taskWorkflowIdFromSnapshots(store, taskId);
+      if (!workflowId) return;
+      void nestTask(taskId, workflowId, parentTaskId);
+    },
+    [store, nestTask],
+  );
+}
+
+/**
  * useNestTask returns a function that nests a task under a parent (or un-nests
  * it when `parentId` is null). The multi-workflow snapshot may not be
  * populated yet (e.g. initial /t/:id load renders the sidebar from the active

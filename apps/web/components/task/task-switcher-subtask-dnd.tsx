@@ -38,6 +38,7 @@ const TASK_SWITCHER_DRAG_ACTIVATION_CONSTRAINTS = {
   },
 };
 
+/** Shared mouse/touch activation constraints for the sidebar tree drags. */
 export function taskSwitcherDragActivationConstraints() {
   return TASK_SWITCHER_DRAG_ACTIVATION_CONSTRAINTS;
 }
@@ -54,10 +55,12 @@ const OFFSCREEN_SKIP = "[content-visibility:auto] [contain-intrinsic-block-size:
 // existing sibling-reorder semantics.
 export const NEST_DROPPABLE_PREFIX = "nest:";
 
+/** Droppable id of a row's nest drop zone: `nest:<taskId>`. */
 export function nestDroppableId(taskId: string): string {
   return NEST_DROPPABLE_PREFIX + taskId;
 }
 
+/** Returns the task id when `id` is a nest droppable id, else null. */
 export function parseNestDroppableId(id: string): string | null {
   return id.startsWith(NEST_DROPPABLE_PREFIX) ? id.slice(NEST_DROPPABLE_PREFIX.length) : null;
 }

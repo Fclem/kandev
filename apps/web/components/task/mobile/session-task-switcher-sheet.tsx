@@ -87,6 +87,11 @@ type MobileTaskListProps = {
   retryLabel?: string;
 };
 
+/**
+ * Assembles the TaskSwitcher props for the mobile task list, mirroring the
+ * desktop `buildTaskSwitcherProps` so the prop-forwarding surface stays a
+ * thin mapping layer.
+ */
 function buildMobileTaskSwitcherProps(
   props: MobileTaskListProps,
   helpers: {
@@ -138,6 +143,10 @@ function buildMobileTaskSwitcherProps(
   };
 }
 
+/**
+ * The mobile task tree surface: renders the shared TaskSwitcher with the
+ * mobile drawer's view state (grouping, ordering, collapse, reorder, nest).
+ */
 export function MobileTaskList(props: MobileTaskListProps) {
   const view = useEffectiveSidebarView();
   const {

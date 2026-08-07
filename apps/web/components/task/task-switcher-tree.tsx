@@ -166,6 +166,10 @@ function flattenGroupTasks(
   return out;
 }
 
+/**
+ * Renders one sidebar group's task tree (header + the recursive tree wrapped
+ * in the group-spanning DndContext that enables nest-by-drag).
+ */
 export function GroupSection({
   group,
   subTasksByParentId,

@@ -37,6 +37,8 @@ type WorkflowCardProps = {
   isOrderDirty?: boolean;
   initialWorkflowSteps?: WorkflowStep[];
   otherWorkflows?: Workflow[];
+  /** Workflows in the dedicated Improve Kandev workspace are read-only. */
+  isImproveWorkspace?: boolean;
   onUpdateWorkflow: (updates: {
     name?: string;
     description?: string;
@@ -396,7 +398,7 @@ function useWorkflowCardState(props: WorkflowCardProps) {
   // Workflows synced from a configured GitHub repo are read-only: the
   // backend rejects definition mutations with a 409, so the UI disables the
   // matching affordances (name/agent-profile/steps/delete) up front.
-  const readOnly = workflow.source === "github";
+  const readOnly = workflow.source === "github" || props.isImproveWorkspace === true;
   const deleteWorkflowRequest = useRequest(onDeleteWorkflow);
   const {
     workflowSteps,

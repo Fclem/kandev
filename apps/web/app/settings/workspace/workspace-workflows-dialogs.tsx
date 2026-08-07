@@ -7,6 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@kandev/ui/dialog";
 import { Textarea } from "@kandev/ui/textarea";
 import { cn } from "@/lib/utils";
+import { WorkflowExportDialog } from "@/components/settings/workflow-export-dialog";
 import type { WorkflowTemplate } from "@/lib/types/http";
 
 type ImportWorkflowsDialogProps = {
@@ -221,5 +222,64 @@ export function CreateWorkflowDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function WorkflowDialogs({
+  page,
+}: {
+  page: {
+    isExportDialogOpen: boolean;
+    setIsExportDialogOpen: (open: boolean) => void;
+    exportYaml: string;
+    isImportDialogOpen: boolean;
+    setIsImportDialogOpen: (open: boolean) => void;
+    importYaml: string;
+    setImportYaml: (value: string) => void;
+    handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    fileInputRef: React.RefObject<HTMLInputElement | null>;
+    handleImport: () => Promise<void>;
+    importLoading: boolean;
+    isAddWorkflowDialogOpen: boolean;
+    setIsAddWorkflowDialogOpen: (open: boolean) => void;
+    newWorkflowName: string;
+    setNewWorkflowName: (name: string) => void;
+    selectedTemplateId: string | null;
+    setSelectedTemplateId: (id: string | null) => void;
+    workflowTemplates: WorkflowTemplate[];
+    handleCreateWorkflow: () => Promise<void> | void;
+    createWorkflowLoading: boolean;
+  };
+}) {
+  return (
+    <>
+      <WorkflowExportDialog
+        open={page.isExportDialogOpen}
+        onOpenChange={page.setIsExportDialogOpen}
+        title="Export Workflows"
+        content={page.exportYaml}
+      />
+      <ImportWorkflowsDialog
+        open={page.isImportDialogOpen}
+        onOpenChange={page.setIsImportDialogOpen}
+        importYaml={page.importYaml}
+        onImportYamlChange={page.setImportYaml}
+        onFileUpload={page.handleFileUpload}
+        fileInputRef={page.fileInputRef}
+        onImport={page.handleImport}
+        importLoading={page.importLoading}
+      />
+      <CreateWorkflowDialog
+        open={page.isAddWorkflowDialogOpen}
+        onOpenChange={page.setIsAddWorkflowDialogOpen}
+        workflowName={page.newWorkflowName}
+        onWorkflowNameChange={page.setNewWorkflowName}
+        selectedTemplateId={page.selectedTemplateId}
+        onSelectedTemplateChange={page.setSelectedTemplateId}
+        workflowTemplates={page.workflowTemplates}
+        onCreate={page.handleCreateWorkflow}
+        createLoading={page.createWorkflowLoading}
+      />
+    </>
   );
 }

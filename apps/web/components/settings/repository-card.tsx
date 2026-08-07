@@ -428,6 +428,8 @@ type RepositoryCardProps = {
   isRepositoryDirty: boolean;
   areScriptsDirty: boolean;
   autoOpen?: boolean;
+  /** Repositories in the dedicated Improve Kandev workspace are read-only. */
+  readOnly?: boolean;
   onUpdate: (repoId: string, updates: Partial<Repository>) => void;
   onAddScript: (repoId: string) => void;
   onUpdateScript: (repoId: string, scriptId: string, updates: Partial<RepositoryScript>) => void;
@@ -505,6 +507,7 @@ export function RepositoryCard({
   isRepositoryDirty,
   areScriptsDirty,
   autoOpen = false,
+  readOnly = false,
   onUpdate,
   onAddScript,
   onUpdateScript,
@@ -537,6 +540,20 @@ export function RepositoryCard({
     save: handleSave,
     discard: () => undefined,
   });
+
+  // Read-only (dedicated Improve Kandev workspace): show the repository
+  // without edit/delete affordances.
+  if (readOnly) {
+    return (
+      <RepositoryPreview
+        repository={repository}
+        isDirty={false}
+        deleteLoading={false}
+        onOpenDelete={() => {}}
+        open={() => {}}
+      />
+    );
+  }
 
   return (
     <>

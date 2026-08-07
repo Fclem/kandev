@@ -93,8 +93,10 @@ async function mockImproveKandevApis(
 test.describe("Improve Kandev dialog", () => {
   test("dismissed intro is persisted and later opens the create dialog directly", async ({
     testPage,
+    apiClient,
     seedData,
   }) => {
+    await apiClient.createWorkspace("Improve Kandev");
     await mockImproveKandevApis(testPage, seedData);
     await testPage.goto("/");
 
@@ -136,6 +138,7 @@ test.describe("Improve Kandev dialog", () => {
     const issueSteps = await apiClient.listWorkflowSteps(issueWorkflow.id);
     const issueStartStep =
       issueSteps.steps.find((step) => step.is_start_step) ?? issueSteps.steps[0];
+    await apiClient.createWorkspace("Improve Kandev");
     await mockImproveKandevApis(testPage, seedData, { issueWorkflowId: issueWorkflow.id });
 
     await testPage.goto("/");
@@ -256,8 +259,10 @@ test.describe("Improve Kandev dialog", () => {
 
   test("intro → create flow shows workflow preview, useful info, and fork banner", async ({
     testPage,
+    apiClient,
     seedData,
   }) => {
+    await apiClient.createWorkspace("Improve Kandev");
     await mockImproveKandevApis(testPage, seedData, {
       github_login: "octocat",
       has_write_access: false,
@@ -309,8 +314,10 @@ test.describe("Improve Kandev dialog", () => {
 
   test("contributor banner shows direct-push copy when user has write access", async ({
     testPage,
+    apiClient,
     seedData,
   }) => {
+    await apiClient.createWorkspace("Improve Kandev");
     await mockImproveKandevApis(testPage, seedData, {
       github_login: "kandev-maint",
       has_write_access: true,
@@ -334,8 +341,10 @@ test.describe("Improve Kandev dialog", () => {
 
   test("blocks implementation but allows issue reporting for an Enterprise Managed User", async ({
     testPage,
+    apiClient,
     seedData,
   }) => {
+    await apiClient.createWorkspace("Improve Kandev");
     const blockedMessage =
       "Your GitHub account appears to be an Enterprise Managed User (EMU) account, " +
       "which typically cannot fork repositories outside your owning enterprise. " +
@@ -372,6 +381,7 @@ test.describe("Improve Kandev dialog", () => {
     apiClient,
     seedData,
   }) => {
+    await apiClient.createWorkspace("Improve Kandev");
     // Add a second workflow to the seeded workspace so the create dialog
     // would normally render the workflow selector (workflows.length > 1).
     // The locked-fields path in WorkflowSection must still suppress it.
@@ -405,8 +415,10 @@ test.describe("Improve Kandev dialog", () => {
 
   test("submit button stays disabled with bootstrap reason while bootstrap is in flight", async ({
     testPage,
+    apiClient,
     seedData,
   }) => {
+    await apiClient.createWorkspace("Improve Kandev");
     let releaseBootstrap: () => void = () => {};
     const bootstrapHold = new Promise<void>((resolve) => {
       releaseBootstrap = resolve;
@@ -461,5 +473,87 @@ test.describe("Improve Kandev dialog", () => {
     // the submit button must become actionable.
     releaseBootstrap();
     await expect(submit).toBeEnabled({ timeout: 10_000 });
+  });
+
+  test("offers creating the dedicated workspace when it does not exist", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    // Deterministic precondition: the dedicated workspace must not exist.
+    const existing = (await apiClient.listWorkspaces()).workspaces.filter(
+      (w) => w.name === "Improve Kandev",
+    );
+    for (const workspace of existing) {
+      await apiClient.deleteWorkspace(workspace.id, "Improve Kandev");
+    }
+    await mockImproveKandevApis(testPage, seedData);
+    await testPage.goto("/");
+
+    await testPage.getByTestId("sidebar-improve-kandev-button").click();
+    const introDialog = testPage.getByRole("dialog", { name: "Improve Kandev" });
+    const choice = introDialog.getByTestId("improve-kandev-create-workspace");
+    await expect(choice).toBeVisible({ timeout: 10_000 });
+    await expect(choice.getByRole("checkbox")).toBeChecked();
+
+    await testPage.getByTestId("improve-kandev-proceed").click();
+    await expect(testPage.getByTestId("create-task-dialog")).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("skip-intro users confirm workspace creation before the create form", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const existing = (await apiClient.listWorkspaces()).workspaces.filter(
+      (w) => w.name === "Improve Kandev",
+    );
+    for (const workspace of existing) {
+      await apiClient.deleteWorkspace(workspace.id, "Improve Kandev");
+    }
+    await mockImproveKandevApis(testPage, seedData);
+    // The preference must exist before the dialog component mounts (the
+    // footer mounts it on page load), so seed it via an init script.
+    await testPage.addInitScript(() =>
+      window.localStorage.setItem("kandev.improveKandev.skipIntro", "true"),
+    );
+    await testPage.goto("/");
+
+    await testPage.getByTestId("sidebar-improve-kandev-button").click();
+
+    // The dedicated workspace does not exist: the choice panel gates the
+    // create form even for users who dismissed the intro.
+    const choicePanel = testPage.getByTestId("improve-kandev-create-workspace-confirm");
+    await expect(choicePanel).toBeVisible();
+    await expect(testPage.getByTestId("create-task-dialog")).toHaveCount(0);
+
+    await choicePanel.click();
+    await expect(testPage.getByTestId("create-task-dialog")).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("workflows settings are read-only in the dedicated workspace", async ({
+    testPage,
+    apiClient,
+  }) => {
+    const dedicated = await apiClient.createWorkspace("Improve Kandev");
+
+    await testPage.goto(`/settings/workspace/${dedicated.id}/workflows`);
+
+    await expect(testPage.getByText(/cannot be changed/i)).toBeVisible({ timeout: 15_000 });
+    await expect(testPage.getByTestId("add-workflow-button")).toHaveCount(0);
+  });
+
+  test("repositories settings are read-only in the dedicated workspace", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const dedicated = await apiClient.createWorkspace("Improve Kandev");
+    await apiClient.createRepository(dedicated.id, seedData.repositoryPath, "main");
+
+    await testPage.goto(`/settings/workspace/${dedicated.id}/repositories`);
+
+    await expect(testPage.getByText(/cannot be changed/i)).toBeVisible({ timeout: 15_000 });
+    await expect(testPage.getByRole("button", { name: /Add Local Repository/i })).toHaveCount(0);
   });
 });

@@ -82,6 +82,7 @@ import { listWorkflowTemplates } from "@/lib/api/domains/workflow-api";
 import { listRepositories, listWorkspaces } from "@/lib/api/domains/workspace-api";
 import { useRouter } from "@/lib/routing/client-router";
 import { safeDecodePathSegment } from "@/lib/routing/path";
+import { IMPROVE_KANDEV_WORKSPACE_NAME } from "@/components/improve-kandev-dialog-model";
 import {
   mapWorkspaceItem,
   readActiveWorkspaceCookie,
@@ -559,7 +560,11 @@ function WorkspaceRepositoriesRoute({ workspaceId }: { workspaceId: string }) {
 
   if (!state) return null;
   return (
-    <WorkspaceRepositoriesClient workspace={state.workspace} repositories={state.repositories} />
+    <WorkspaceRepositoriesClient
+      workspace={state.workspace}
+      repositories={state.repositories}
+      isImproveWorkspace={state.workspace?.name === IMPROVE_KANDEV_WORKSPACE_NAME}
+    />
   );
 }
 
@@ -587,6 +592,7 @@ function WorkspaceWorkflowsRoute({ workspaceId }: { workspaceId: string }) {
       workspace={state.workspace}
       workflows={state.workflows}
       workflowTemplates={state.workflowTemplates}
+      isImproveWorkspace={state.workspace?.name === IMPROVE_KANDEV_WORKSPACE_NAME}
     />
   );
 }
@@ -611,9 +617,17 @@ async function loadWorkspaceRepositoriesRoute(
 async function loadWorkspaceWorkflowsRoute(
   workspaceId: string,
 ): Promise<WorkspaceWorkflowsRouteState> {
-  const [workspace, workflowResponse, templateResponse] = await Promise.all([
-    fetchJson<Workspace>(`/api/v1/workspaces/${workspaceId}`, { cache: "no-store" }),
-    listWorkflows(workspaceId, { cache: "no-store" }),
+  const workspace = await fetchJson<Workspace>(`/api/v1/workspaces/${workspaceId}`, {
+    cache: "no-store",
+  });
+  // The dedicated Improve Kandev workspace lists its hidden workflows
+  // (improve-kandev, report-kandev-issue) read-only; other workspaces keep
+  // them hidden.
+  const [workflowResponse, templateResponse] = await Promise.all([
+    listWorkflows(workspaceId, {
+      includeHidden: workspace.name === IMPROVE_KANDEV_WORKSPACE_NAME,
+      cache: "no-store",
+    }),
     listWorkflowTemplates({ cache: "no-store" }),
   ]);
 

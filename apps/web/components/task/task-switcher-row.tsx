@@ -155,6 +155,7 @@ function TaskRowItem({
       updatedAt={task.updatedAt}
       repositories={task.repositories}
       prInfo={task.prInfo}
+      queuedCount={task.queuedCount}
       issueInfo={task.issueInfo}
       agentErrorMessage={task.agentErrorMessage}
       isSubTask={isSubTask}

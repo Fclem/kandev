@@ -200,6 +200,8 @@ export type Workflow = {
   workspace_id: WorkspaceId;
   name: string;
   description?: string | null;
+  /** Optional workflow-level agent instructions prepended at every step entry. */
+  prompt?: string;
   workflow_template_id?: string | null;
   agent_profile_id?: AgentProfileId;
   sort_order?: number;
@@ -763,6 +765,7 @@ export type WorkflowExportData = {
 export type WorkflowPortable = {
   name: string;
   description?: string;
+  prompt?: string;
   steps: StepPortable[];
 };
 

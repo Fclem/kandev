@@ -108,6 +108,7 @@ function sidebarStatus(
     hasPendingPermission: pending.permission,
     prInfo: summaryPRInfo(summary),
     issueInfo: issueInfoForTask(task),
+    queuedCount: summary?.queued_prompt_count,
   };
 }
 

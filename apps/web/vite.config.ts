@@ -7,6 +7,16 @@ export default defineConfig({
   server: {
     port: readPort(process.env.PORT),
     strictPort: Boolean(process.env.PORT),
+    // Dev/demo servers reached by hostname (e.g. a LAN box) must extend
+    // Vite's Host allowlist; defaults to the localhost-only behavior when the
+    // env var is unset.
+    ...(process.env.KANDEV_VITE_ALLOWED_HOSTS
+      ? {
+          allowedHosts: process.env.KANDEV_VITE_ALLOWED_HOSTS.split(",")
+            .map((host) => host.trim())
+            .filter(Boolean),
+        }
+      : {}),
   },
   preview: {
     port: readPort(process.env.PORT),

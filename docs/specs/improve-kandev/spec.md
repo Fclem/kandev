@@ -79,11 +79,14 @@ the user's own agent picks up immediately — turning every report into a contri
 ## API surface
 
 - `POST /api/v1/system/improve-kandev/bootstrap` accepts an optional
-  `{ "workspace_id": string }` that is ignored (kept for backward
-  compatibility). The endpoint finds or creates the dedicated `Improve Kandev`
-  workspace and scopes everything to it. Its success response includes the
-  existing repository, branch, context-bundle, GitHub-login, write-access, and
-  fork-status fields plus:
+  `{ "workspace_id": string, "create_workspace": boolean }`. When the
+  dedicated `Improve Kandev` workspace exists, both fields are ignored and
+  everything is scoped to it. When it is missing, `create_workspace: true`
+  creates it (with the GitHub connection carried over from the user's default
+  workspace); `create_workspace: false` falls back to `workspace_id` (the
+  user's active workspace, legacy behavior). Its success response includes
+  the existing repository, branch, context-bundle, GitHub-login, write-access,
+  and fork-status fields plus:
   - `workspace_id: string` — the dedicated Improve Kandev workspace the task
     must be created in.
   - `workflow_id: string` — the workspace instance of `improve-kandev`.
@@ -219,6 +222,16 @@ the user's own agent picks up immediately — turning every report into a contri
   is called again, **THEN** the workspace's configuration (including its
   GitHub connection) is untouched — nothing is re-copied.
 
+- **GIVEN** the dedicated workspace does not exist, **WHEN** the user opens
+  the Improve Kandev dialog, **THEN** the dialog offers a "Create a dedicated
+  Improve Kandev workspace" checkbox (default checked) — in the intro, or as a
+  gate before the create form when the intro was dismissed.
+
+- **GIVEN** the dedicated workspace does not exist and the user unchecks the
+  creation checkbox, **WHEN** they proceed, **THEN** bootstrap falls back to
+  the active workspace: the hidden workflows and kandev repo are scoped there
+  and the task lands in it (legacy behavior).
+
 ## Dedicated workspace immutability
 
 - The dedicated `Improve Kandev` workspace is configuration-immutable for the
@@ -241,8 +254,13 @@ the user's own agent picks up immediately — turning every report into a contri
 
 ## Workspace creation semantics
 
+- Creating the dedicated `Improve Kandev` workspace is an **opt-in checkbox**
+  in the dialog, offered whenever the workspace does not exist yet: in the
+  intro screen, and as a gate before the create form for users who dismissed
+  the intro. It defaults to checked.
 - When bootstrap creates the `Improve Kandev` workspace for the **first time**
-  (the find-or-create miss path only), it additionally:
+  (the find-or-create miss path with `create_workspace: true`), it
+  additionally:
   - **Copies the GitHub workspace connection** (source, login, installation
     metadata, and the underlying PAT secret where applicable) from the user's
     **default workspace** — resolved the same way legacy integrations resolve
@@ -253,8 +271,13 @@ the user's own agent picks up immediately — turning every report into a contri
     (Jira/Linear/GitLab/Azure DevOps/Sentry stay unconfigured in the new
     workspace; they remain manually configurable), no automations, no
     workflow/repository rows beyond the bootstrap defaults.
+- When the workspace does not exist and the checkbox is unchecked
+  (`create_workspace: false`), bootstrap falls back to the request's
+  `workspace_id` (the user's active workspace) and scopes the repo and hidden
+  workflows there — the legacy behavior.
 - Reuse path (workspace already exists): bootstrap makes no further changes —
-  the GitHub connection and configuration are never re-copied or synced.
+  the GitHub connection and configuration are never re-copied or synced, and
+  new improve tasks land in the dedicated workspace systematically.
 
 ## Out of scope
 

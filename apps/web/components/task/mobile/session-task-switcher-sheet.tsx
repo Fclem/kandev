@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, memo } from "react";
+import { useTranslation } from "react-i18next";
 import { IconMessageCircle, IconPlus } from "@tabler/icons-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@kandev/ui/sheet";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@kandev/ui/drawer";
@@ -59,7 +60,7 @@ function useSidebarGroupToggle(viewId: string) {
   );
 }
 
-// eslint-disable-next-line max-lines-per-function -- forwards the shared task-tree props onto TaskSwitcher.
+// eslint-disable-next-line max-lines-per-function -- assembles the shared task tree with the mobile drawer's view state.
 export function MobileTaskList({
   tasks,
   workflows,
@@ -82,6 +83,9 @@ export function MobileTaskList({
   onLinkSentryIssue,
   deletingTaskId,
   isLoading,
+  loadError,
+  onRetryLoad,
+  retryLabel,
 }: {
   tasks: TaskSwitcherItem[];
   workflows: TaskMoveWorkflow[];
@@ -104,6 +108,9 @@ export function MobileTaskList({
   onLinkSentryIssue?: (taskId: string, taskTitle?: string) => void;
   deletingTaskId: string | null;
   isLoading?: boolean;
+  loadError?: string | null;
+  onRetryLoad?: () => void;
+  retryLabel?: string;
 }) {
   const view = useEffectiveSidebarView();
   const {
@@ -117,6 +124,8 @@ export function MobileTaskList({
   const collapsedSubtaskParents = useAppStore((s) => s.collapsedSubtaskParents);
   const toggleSubtaskCollapsed = useAppStore((s) => s.toggleSubtaskCollapsed);
   const handleToggleGroup = useSidebarGroupToggle(view.id);
+  // See useGroupedSidebarView: the executorType group label is catalog-backed.
+  const { i18n } = useTranslation();
   const grouped = useMemo(
     () =>
       applyView(tasks, view, {
@@ -124,7 +133,7 @@ export function MobileTaskList({
         orderedTaskIds,
         subtaskOrderByParentId,
       }),
-    [tasks, view, pinnedTaskIds, orderedTaskIds, subtaskOrderByParentId],
+    [tasks, view, pinnedTaskIds, orderedTaskIds, subtaskOrderByParentId, i18n.language],
   );
   return (
     <TaskSwitcher
@@ -157,6 +166,9 @@ export function MobileTaskList({
       pinnedTaskIds={pinnedTaskIds}
       deletingTaskId={deletingTaskId}
       isLoading={isLoading}
+      loadError={loadError}
+      onRetryLoad={onRetryLoad}
+      retryLabel={retryLabel}
       totalTaskCount={tasks.length}
     />
   );
@@ -177,13 +189,14 @@ function TaskSwitcherSurfaceHeader({
   onNewTask: () => void;
   presentation: "sheet" | "drawer";
 }) {
+  const { t } = useTranslation();
   const content = (
     <>
       <div className="flex items-center justify-between">
         {presentation === "drawer" ? (
-          <DrawerTitle className="text-base">Tasks</DrawerTitle>
+          <DrawerTitle className="text-base">{t("task:tasks")}</DrawerTitle>
         ) : (
-          <SheetTitle className="text-base">Tasks</SheetTitle>
+          <SheetTitle className="text-base">{t("task:tasks")}</SheetTitle>
         )}
         <div className="flex items-center gap-2">
           {workspaceId && (
@@ -195,7 +208,7 @@ function TaskSwitcherSurfaceHeader({
               data-testid="mobile-sheet-quick-chat"
             >
               <IconMessageCircle className="h-4 w-4" />
-              Chat
+              {t("task:chat")}
             </Button>
           )}
           <Button
@@ -205,7 +218,7 @@ function TaskSwitcherSurfaceHeader({
             onClick={onNewTask}
           >
             <IconPlus className="h-4 w-4" />
-            New
+            {t("task:new")}
           </Button>
         </div>
       </div>
@@ -296,6 +309,7 @@ function TaskSwitcherSurfaceContent({
   edit,
   linking,
 }: TaskSwitcherSurfaceContentProps) {
+  const { t } = useTranslation();
   return (
     <>
       <TaskSwitcherSurfaceHeader
@@ -309,7 +323,7 @@ function TaskSwitcherSurfaceContent({
       <div className="shrink-0">
         <SidebarFilterBar />
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-2">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2" data-testid="mobile-task-switcher-list">
         <MobileTaskList
           tasks={data.tasksWithRepositories}
           workflows={data.workflows}
@@ -356,6 +370,9 @@ function TaskSwitcherSurfaceContent({
           )}
           deletingTaskId={actions.deletingTaskId}
           isLoading={data.tasksLoading}
+          loadError={data.archivedError ? t("sidebar:archivedLoadFailed") : null}
+          onRetryLoad={data.retryArchivedTasks}
+          retryLabel={t("sidebar:retry")}
         />
       </div>
     </>

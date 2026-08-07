@@ -138,6 +138,7 @@ func newTestDeps(t *testing.T) *testDeps {
 			metadata TEXT DEFAULT '{}',
 			identifier TEXT DEFAULT '',
 			is_ephemeral INTEGER DEFAULT 0,
+			origin TEXT DEFAULT 'manual',
 			execution_policy TEXT DEFAULT '',
 			execution_state TEXT DEFAULT '',
 			workflow_id TEXT NOT NULL DEFAULT '',

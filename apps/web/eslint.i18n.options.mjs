@@ -77,7 +77,16 @@ export const noLiteralStringOptions = {
       // separator, which the token patterns above do not cover. Copy chunks
       // ("Select task ", " tasks, over WIP limit") carry a capital, a space or
       // punctuation and so still get flagged.
-      "[a-z0-9]+(?:[-_][a-z0-9]*)*|[-_][a-z0-9]+(?:[-_][a-z0-9]*)*",
+      //
+      // The outer `(?:…)` is load-bearing. `^` and `$` bind tighter than `|`, so
+      // the ungrouped form compiled to `(^A)|(B$)` — a first branch with no end
+      // anchor, which matched ANY string starting with a lowercase letter or a
+      // digit. That swallowed every `<Trans>` split fragment that happens to
+      // begin lowercase ("open pull requests assigned to you") in silence, for
+      // the whole repo, for as long as the pattern has existed. See the compiled
+      // -pattern test in `eslint.i18n.options.test.ts`, which fails without the
+      // group.
+      "(?:[a-z0-9]+(?:[-_][a-z0-9]*)*|[-_][a-z0-9]+(?:[-_][a-z0-9]*)*)",
       // Single lowercase/camel/kebab tokens are prop enum values,
       // classnames, and identifiers (variant="ghost", side="top",
       // value="work-items") — never display copy, which is capitalized
@@ -92,7 +101,19 @@ export const noLiteralStringOptions = {
       "^(noopener|noreferrer)( (noopener|noreferrer))*$",
       "^__[a-z_]+__$",
       "^/[\\w/\\-\\[\\]:.]*(\\?[\\w=&%.\\-]*)?$",
-      "(?:-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*\\s+)*-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*",
+      // Whitespace-separated token lists: Tailwind class lists that reach the
+      // guard as an object property (`{ className: "h-4 w-4" }`) rather than as
+      // a `className` JSX attribute, plus `owner/repo` and `ns:key` values.
+      //
+      // At least ONE token must carry a `-`, `:` or `/` (the middle branch).
+      // Without that requirement the pattern was "any run of lowercase words
+      // separated by spaces", which is a description of TYPOGRAPHY, not of
+      // syntax — and so it silently excluded every lowercase English sentence
+      // that happens to carry no punctuation ("open pull requests assigned to
+      // you"). Separators are what make a token a class name or a path rather
+      // than a word; English copy that needs one is rare, English copy that
+      // needs none is most of it.
+      "(?:-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*\\s+)*-?[a-z0-9]+(?:[:/-][a-z0-9.]+)+(?:\\s+-?[a-z0-9]+(?:[:/-][a-z0-9.]+)*)*",
     ],
   },
   "jsx-attributes": {
@@ -111,9 +132,23 @@ export const noLiteralStringOptions = {
       "to",
       "htmlFor",
       "data-.*",
+      // `PluginErrorBoundary`'s console-log identifier (`slot "task-sidebar"`,
+      // `route "/plugins/hello"`). It is written to console.error in
+      // componentDidCatch and never reaches the DOM, so it is a developer
+      // diagnostic rather than copy. The only literal `context=` values in the
+      // tree are that boundary's four call sites.
+      "context",
       // Identifiers and prefixes the caller composes into ids/testids.
       "id",
       "k",
+      // A prop whose NAME ends in `Key` carries a catalog key, not copy:
+      // `titleKey`, `descriptionKey`, `labelKey`, `i18nKey`. Migrating a surface
+      // that resolves its copy at render (`SystemRouteShell`, the preset-icon
+      // catalogs) produces exactly this shape, and the value is by construction
+      // `namespace:someKey` — already-migrated copy, flagged only for being a
+      // string. This keys off the prop NAME, a syntactic category, not off what
+      // the value happens to look like.
+      ".*[Kk]ey$",
       // Option/badge values are data the app compares and submits.
       "value",
       "cmd",
@@ -225,6 +260,7 @@ export const i18nGuardFiles = [
   "components/settings/editor-form.tsx",
   "components/settings/editors-settings-state.tsx",
   "components/settings/editors-settings.tsx",
+  "components/settings/lsp-status-location-setting.tsx",
   "components/settings/lsp-language-options.ts",
   // Settings → General → Sprites.
   "app/settings/general/sprites/**/*.{ts,tsx}",
@@ -1128,11 +1164,13 @@ export const i18nGuardFiles = [
   //   - `components/settings/config-chat-agent-section.tsx`, the Configuration
   //     Chat card on Settings → Utility Agents. #2218 migrates it with the page
   //     that owns it, into `settings:configChatAgent*`.
-  //   - `components/quick-chat/**`. `quick-chat-modal.tsx` renders
-  //     `ConfigChatSetup` in its `presentation="dialog"` form and calls
-  //     `useConfigChat`, so it inherits everything migrated here, but its own
-  //     chrome — and `configuration-chat-toggle.tsx`, which `ConfigChatSetup`
-  //     renders — is still English and belongs to the quick-chat migration.
+  //
+  // `components/quick-chat/**` was the other entry here until #2300 migrated it
+  // — `quick-chat-modal.tsx` renders `ConfigChatSetup` in its
+  // `presentation="dialog"` form and calls `useConfigChat`, so it inherited
+  // everything migrated here, and its own chrome (plus
+  // `configuration-chat-toggle.tsx`, which `ConfigChatSetup` renders) now lands
+  // on the same `chat:` namespace. It is listed at the end of this file.
   "components/config-chat/*.{ts,tsx}",
 
   // Automations — `components/automations/**` (incl. `trigger-configs/`) and
@@ -1199,4 +1237,478 @@ export const i18nGuardFiles = [
   "app/settings/automations/page.tsx",
   "app/settings/workspace/[[]id[]]/automations/**/*.tsx",
   "hooks/domains/settings/use-automation-runs.ts",
+  // Settings → Plugins, Settings → Account, and the plural
+  // `app/settings/executors/` tree (the executor list, the typed create
+  // routes, and the SSH connection pages). Copy lives in two new namespaces,
+  // `plugins` and `account`, plus additions to `executors`.
+  //
+  // `components/plugins/**` is reached from OUTSIDE Settings — the app
+  // sidebar, the mobile menu sheet, the chat top bar, the chat input, the task
+  // sidebar and the kanban top bar all render `PluginSlot`, and
+  // `PluginModalHost` mounts at the app root. It is listed here because this
+  // migration owns the Plugins feature end to end, not because those routes
+  // are migrated; only the two strings those files own (`PluginRouteFallback`
+  // and the mobile nav heading) went through `t()`. Everything else they
+  // render — a slot component, a modal title, a nav item's label — is
+  // plugin-authored and is third-party data, not our copy.
+  //
+  // Nine entries hold no JSX, or none that carries copy, so `mode: "jsx-only"`
+  // never inspects them and the string count reported them as ZERO while they
+  // owned copy that reaches the user. Each records that it was read by eye,
+  // and only the pseudo-locale can prove it stays that way:
+  //   - `app/settings/executors/new/[type]/executor-types.ts` — reported 0 and
+  //     carried ELEVEN strings, the six type labels and their descriptions.
+  //   - `lib/executor-icons.ts` and `components/settings/executor-description.ts`
+  //     — plain functions returning copy, the shape one step out from a config
+  //     table and just as invisible.
+  //   - `components/settings/plugins/use-plugin-actions.ts` (eight toasts),
+  //     `use-plugin-config-form.ts` (five toasts plus the required-fields
+  //     reason), `lib/plugins/sync-summary.ts` (the sync toast), and the three
+  //     `hooks/domains/plugins/*.ts` error fallbacks. All import the
+  //     module-level `t` rather than the hook, so each resolves when its
+  //     callback fires and stays out of the dependency array.
+  //   - `app/settings/executors/new/[type]/ssh-config.ts` carries no copy at
+  //     all (snake_case config mapping); it is listed to pin that.
+  //
+  // This PR also closes the residual #2218 recorded against it:
+  // `validateMcpPolicy` in `profile-edit/mcp-policy-card.tsx` returned English
+  // ("Invalid JSON", "MCP policy must be a JSON object") because its only
+  // callers were the un-migrated plural tree. It now returns catalog keys and
+  // the card's prop is `mcpPolicyErrorKey`, matching the local validator in
+  // `app/settings/executor/[id]/page.tsx`.
+  //
+  // `src/settings-routes.tsx` is listed for the first time. docs/i18n.md's
+  // "Copy that belongs to no directory" rule says the LAST area to migrate
+  // adds it, because allowlisting it earlier claims a completeness nobody has:
+  // the two Account routes were the final inline English entries in
+  // `SETTINGS_ROUTES`, so every entry in that table now resolves from a
+  // catalog. Read the entry as a claim about that FILE, not about all of
+  // Settings — `app/settings/automations/page.tsx`,
+  // `app/settings/integrations/page.tsx` and `components/settings/agent-card.tsx`
+  // still hold English and belong to their own migrations. They render no
+  // route-table copy, which is why they do not block this entry.
+  //
+  // THREE surfaces describe the same six executor types and had already
+  // drifted from one another: the hub cards use the imperative mood ("Run
+  // agents directly…"), while the create and edit headers use the third person
+  // ("Runs agents directly…") — and the edit header's SSH sentence differs
+  // from the create header's again. Sentences that are byte-identical share a
+  // key (the create page reuses `executors:description*`, which
+  // `/settings/executor/:id` already owned); the ones that differ keep their
+  // own. Folding them together would have rewritten shipping English on two of
+  // the three with every gate green.
+  // `components/settings/executor-copy.test.ts` pins all three tables
+  // byte-for-byte, and `account/account-route-copy.test.ts` does the same for
+  // the two route headers. De-duplicating the tables is a behaviour change and
+  // belongs in its own PR.
+  //
+  // Deliberately left in English, none of it copy:
+  //   - The executor type keys `local` / `worktree` / `local_docker` /
+  //     `remote_docker` / `sprites` / `ssh`. They are the persisted enum, the
+  //     create route's path segment, and a `===` comparison in four places.
+  //     The `exec-*` executorIds are backend row ids. Only the labels beside
+  //     them are copy.
+  //   - The brand and protocol names `Docker`, `Sprites.dev` and `SSH` when
+  //     they ARE the whole label. They read the same in every locale (the
+  //     guard's own `words.exclude` lists all three), and keeping them out of
+  //     the catalog stops the pseudo-locale transliterating a name the user
+  //     must match against their SSH config or Sprites dashboard.
+  //   - Every SSH fingerprint and known-hosts value. `ssh-fingerprint-trust-block`
+  //     is a security surface: the user compares those strings
+  //     character-for-character against what their own host reports, so both
+  //     the observed and the pinned fingerprint are interpolated as values.
+  //   - The SSH example values `prod`, `dev.example.com`, `22`, `ubuntu`,
+  //     `~/.ssh/id_ed25519` and `bastion.example.com`, and the
+  //     `ssh-agent (SSH_AUTH_SOCK)` option — a program name plus the
+  //     environment variable it reads. `My VPS` beside them IS copy and does
+  //     go through `t()`. `~/.ssh/config`, `$PATH`, `.tar.gz` and `index.json`
+  //     are interpolated into their sentences for the same reason.
+  //   - The throw in `ssh-connection-card`'s `handleSave`. It is unreachable
+  //     while `canSave` gates the button and it signals the settings save
+  //     coordinator, not the user — the same shape docs/i18n.md records for
+  //     the migrated GitHub and Jira settings.
+  //   - Plugin ids, versions, manifest keys (`config_schema`), permission
+  //     scopes (`events:*`, `read:*`, `write:*`), webhook keys, marketplace
+  //     source URLs, and the raw manifest JSON dump. Those are the contract.
+  //     A plugin's display name, description, categories, icon, config-field
+  //     labels and modal titles come from its manifest or an untrusted
+  //     index.json, so they are third-party data — interpolated as values,
+  //     never written into a message.
+  //   - Account data: emails, usernames, user agents, IP addresses, and every
+  //     API token VALUE, which never passes through `t()` at all. Token names
+  //     are user data; only the column headers and role labels are copy.
+  //   - `PluginErrorBoundary`'s `context` prop, now in `jsx-attributes.exclude`
+  //     above — it is a console.error identifier that never reaches the DOM.
+  //
+  // `getExecutorLabel` returns catalog text now, so a caller that does not
+  // subscribe to i18n renders the previous locale until something else makes it
+  // re-render. All three consumers are covered: `ProfileCard` subscribes,
+  // `use-filter-value-options.ts` (the task sidebar's executor filter) carries
+  // `i18n.language` in its memo deps, and both `applyView` consumers — the
+  // desktop sidebar and the mobile task-switcher sheet — do the same for
+  // `applyGroup`'s executorType heading in `lib/sidebar/apply-view.ts`.
+  //
+  // This bug class is invisible to BOTH the guard and the pseudo-locale: the
+  // text is translated, just frozen at the previous locale, so it renders
+  // accented and reads as done. `check-module-scope-t.mjs` does not fire
+  // either — the `t()` call sits inside a function, which is correct, since it
+  // does resolve at call time. Only a locale-switch test covers it, which is
+  // what `use-filter-value-options-locale.test.tsx` is for.
+  //
+  // Still English in `lib/sidebar/apply-view.ts` and belonging to whoever
+  // migrates `lib/sidebar`: `UNASSIGNED_LABEL` and `MULTI_REPO_LABEL`.
+  //
+  // One deliberate English change, the only one in this PR: the SSH
+  // running-sessions confirm read "This executor has 3 running session(s)."
+  // The `(s)` is the inline-plural shape docs/i18n.md rejects — the plural rule
+  // cannot be expressed at the call site in a language with three or six forms
+  // — so it is now `_one`/`_other` and reads "1 running session" /
+  // "3 running sessions".
+  //
+  // Four dates moved off `toLocaleString()` onto `lib/i18n/formats`'
+  // `formatDateTime`, and the marketplace star count off `toLocaleString()`
+  // onto `formatNumber`, so they follow the active locale rather than the
+  // browser's — the same call `storage-quarantine.ts` made.
+  "app/settings/executors/**/*.{ts,tsx}",
+  "components/settings/account/**/*.{ts,tsx}",
+  "components/settings/executor-description.ts",
+  "components/settings/plugins/**/*.{ts,tsx}",
+  "components/settings/ssh-agent-readiness-card.tsx",
+  "components/settings/ssh-connection-card.tsx",
+  "components/settings/ssh-connection-form.tsx",
+  "components/settings/ssh-fingerprint-trust-block.tsx",
+  "components/settings/ssh-sessions-card.tsx",
+  "components/settings/ssh-settings.tsx",
+  "components/plugins/**/*.{ts,tsx}",
+  "hooks/domains/plugins/*.ts",
+  "lib/executor-icons.ts",
+  "lib/plugins/sync-summary.ts",
+  "src/settings-routes.tsx",
+  // GitHub + GitLab TASK surfaces: the PR/MR detail panels and their sections,
+  // the topbar buttons and CI popovers, the My-GitHub / My-GitLab browse lists
+  // and their preset sidebars and dialogs, and the two `/github` + `/gitlab`
+  // page clients. Together with the settings entries listed far above, this
+  // completes both directories; the file lists are kept rather than collapsed to
+  // `components/github/**` because collapsing would mean REMOVING entries, which
+  // `check-guard-allowlist.mjs` cannot distinguish from un-protecting a path.
+  //
+  // `hooks/domains/gitlab/use-mr-actions.ts` is listed because the task surface
+  // reaches its toasts. Its `run()` first argument used to be the human label —
+  // one string serving as both `pendingAction` state and the interpolated
+  // failure title `${label} failed`. That is the dual-use shape AGENTS.md warns
+  // about, so it is now an `MRActionKind` id plus a per-action catalog key.
+  // `mr-reviewer-control.tsx` had the same shape in a prop typed
+  // `"Reviewers" | "Assignees"`, which TypeScript caught the moment the codemod
+  // translated it; it is now a `kind` discriminant.
+  //
+  // Deliberately left in English, all of it protocol or provider data: GitHub
+  // and GitLab state values (`open`/`merged`/`closed`/`opened`, review states,
+  // check conclusions) which are compared with `===`; every id, branch name,
+  // repo/project path, label and username from the provider API; and the
+  // `PR_FEEDBACK_PLACEHOLDER` token, which the agent prompt matches verbatim and
+  // which therefore travels as an interpolation value rather than as catalog
+  // text. The example values in `placeholder` attributes (`kdlbs, example-org`,
+  // `group/api, group/web`, `state=opened`) are data a user types, not copy.
+  "app/github/github-page-client.tsx",
+  "app/gitlab/gitlab-page-client.tsx",
+  "components/github/issue-task-icon.tsx",
+  "components/github/multi-pr-ci-popover.tsx",
+  "components/github/my-github/issue-list.tsx",
+  "components/github/my-github/list-toolbar.tsx",
+  "components/github/my-github/pr-list.tsx",
+  "components/github/my-github/pr-row-task-indicator.tsx",
+  "components/github/my-github/pr-status-badges.tsx",
+  "components/github/my-github/presets-sidebar.tsx",
+  "components/github/my-github/repo-filter-combobox.tsx",
+  "components/github/my-github/save-preset-dialog.tsx",
+  "components/github/my-github/task-row-indicator.tsx",
+  "components/github/my-github/use-pr-statuses.ts",
+  "components/github/pr-checks-section.tsx",
+  "components/github/pr-ci-automation-controls.tsx",
+  "components/github/pr-ci-popover.tsx",
+  "components/github/pr-comments-section.tsx",
+  "components/github/pr-detail-panel.tsx",
+  "components/github/pr-merge-button.tsx",
+  "components/github/pr-mergeability-notice.tsx",
+  "components/github/pr-mergeability-row.tsx",
+  "components/github/pr-reviews-section.tsx",
+  "components/github/pr-shared.tsx",
+  "components/github/pr-status-chip.tsx",
+  "components/github/pr-topbar-button.tsx",
+  "components/gitlab/mr-commits-section.tsx",
+  "components/gitlab/mr-detail-panel.tsx",
+  "components/gitlab/mr-discussions-section.tsx",
+  "components/gitlab/mr-files-section.tsx",
+  "components/gitlab/mr-overview-section.tsx",
+  "components/gitlab/mr-reviewer-control.tsx",
+  "components/gitlab/mr-topbar-button.tsx",
+  "components/gitlab/my-gitlab/issue-list.tsx",
+  "components/gitlab/my-gitlab/list-toolbar.tsx",
+  "components/gitlab/my-gitlab/mr-list.tsx",
+  "components/gitlab/my-gitlab/mr-row-task-indicator.tsx",
+  "components/gitlab/my-gitlab/presets-sidebar.tsx",
+  "components/gitlab/my-gitlab/save-preset-dialog.tsx",
+  "components/gitlab/my-gitlab/start-task-menu.tsx",
+  "components/gitlab/subscription-toggle.tsx",
+  "components/gitlab/task-mr-link-dialog.tsx",
+  "hooks/domains/gitlab/use-mr-actions.ts",
+  // The shared scope bar the `/github` and `/gitlab` dashboards render through
+  // their thin wrappers. Listed because this migration converts it COMPLETELY —
+  // all four of its own strings — not because integration chrome belongs to this
+  // PR. `azure-devops-scope-bar.tsx` also wraps it and is untouched; it passes
+  // its own labels in and inherits the base already done. Copy lives in a new
+  // `integrations` namespace, the home `NAMESPACE_RULES` in
+  // externalize-strings.mjs already designates for `components/integrations/`.
+  //
+  // Review caught this: the pseudo walk of `/github` and `/gitlab` reported them
+  // clean because both pages rendered the NOT-CONNECTED alert, so the scope bar
+  // never mounted. A surface that does not render cannot be verified by looking
+  // at it, and "clean" there meant "absent", not "migrated".
+  //
+  // The `KINDS` tables in the two wrappers are SCREAMING_CASE, so the guard
+  // skipped them entirely; their labels now travel as `labelKey`.
+  "components/integrations/presets-scope-bar-base.tsx",
+  "components/github/my-github/presets-scope-bar.tsx",
+  "components/gitlab/my-gitlab/presets-scope-bar.tsx",
+  // Azure DevOps, Jira, Linear and Sentry TASK surfaces: the board / work-item /
+  // PR views, the ticket and issue dialogs and their launchers, the My-Jira and
+  // My-Linear browse pages, and the four `/azure-devops`, `/jira`, `/linear`
+  // page clients. With the settings halves listed far above, this completes all
+  // four directories.
+  //
+  // Two shared files ride along because each is now converted COMPLETELY, which
+  // is the criterion for listing — shared-ness is not:
+  //   - `components/integrations/auth-error-message.tsx`: props-driven apart from
+  //     one heading and one link label, rendered by the Jira, Linear and Sentry
+  //     issue-common surfaces.
+  //   - `components/task-create-dialog-multi-repo-guard.ts`: migrated by the
+  //     Automations PR, which then argued itself out of listing it. See the
+  //     corrected comment in that file.
+  //
+  // `components/jira/my-jira/filter-pills.tsx` carried the same defect review
+  // found in the GitLab sidebar: `data-testid` was built as
+  // `jira-filter-pill-${label.toLowerCase()}` from a label this PR translates.
+  // Here it was a LIVE break — `e2e/tests/integrations/jira-default-project.spec.ts`
+  // selects `jira-filter-pill-project` and `-status` by name. The pill id and the
+  // visible label are now separate props.
+  //
+  // Deliberately left in English: JQL and WIQL (query languages, and the bare
+  // acronyms label them), every Azure DevOps / Jira / Linear / Sentry state,
+  // level, priority and work-item type, all provider ids, keys and names, and
+  // the persisted prompt templates the settings halves already recorded.
+  "app/azure-devops/azure-devops-page-client.tsx",
+  "app/jira/jira-page-client.tsx",
+  "app/linear/linear-page-client.tsx",
+  "components/azure-devops/azure-devops-board.tsx",
+  "components/azure-devops/azure-devops-feedback-dialog.tsx",
+  "components/azure-devops/azure-devops-filters.tsx",
+  "components/azure-devops/azure-devops-pull-request-pagination.tsx",
+  "components/azure-devops/azure-devops-results.tsx",
+  "components/azure-devops/azure-devops-save-view-dialog.tsx",
+  "components/azure-devops/azure-devops-work-item-detail.tsx",
+  "components/integrations/auth-error-message.tsx",
+  "components/jira/jira-import-bar.tsx",
+  "components/jira/jira-ticket-button.tsx",
+  "components/jira/jira-ticket-common.tsx",
+  "components/jira/jira-ticket-dialog.tsx",
+  "components/jira/my-jira/filter-pills.tsx",
+  "components/jira/my-jira/jql-editor.tsx",
+  "components/jira/my-jira/list-toolbar.tsx",
+  "components/jira/my-jira/results-pagination.tsx",
+  "components/jira/my-jira/ticket-row.tsx",
+  "components/linear/linear-import-bar.tsx",
+  "components/linear/linear-issue-button.tsx",
+  "components/linear/linear-issue-common.tsx",
+  "components/linear/linear-issue-dialog.tsx",
+  "components/sentry/sentry-issue-button.tsx",
+  "components/sentry/sentry-issue-common.tsx",
+  "components/jira/my-jira/filter-bar.tsx",
+  "components/sentry/sentry-issue-dialog.tsx",
+  "components/task-create-dialog-multi-repo-guard.ts",
+  // Stats dashboard.
+  "app/stats/stats-sections.tsx",
+  "app/stats/stats-page-client.tsx",
+  "app/stats/stats-charts.tsx",
+  // Tasks list view.
+  "app/tasks/tasks-list-view.tsx",
+  "app/tasks/tasks-list-controls.tsx",
+  "app/tasks/tasks-pagination.tsx",
+  "app/tasks/rich-task-list-row.tsx",
+  "app/tasks/[[]id[]]/kanban-task-shell.tsx",
+  "app/tasks/columns.tsx",
+  // Auth: login, invite, first-run setup.
+  "app/auth/invite-page.tsx",
+  "app/auth/setup-wizard.tsx",
+  "app/auth/login-page.tsx",
+  // Settings → Integrations index.
+  "app/settings/integrations/page.tsx",
+  // Settings → Agents: already fully migrated to the `agents:` namespace by
+  // #2193 and #2281, before this list caught up. No `settings:` copy here —
+  // recorded so the guard covers them going forward.
+  "app/settings/agents/[[]agentId[]]/use-profile-mcp-config.ts",
+  "app/settings/agents/page.tsx",
+  "app/settings/agents/[[]agentId[]]/profiles/[[]profileId[]]/command-preview-card.tsx",
+  // Home route redirect shell.
+  "app/page-client.tsx",
+  // Review dialog: top bar, file tree, diff toolbar/header/list, walkthrough.
+  "components/review/review-comments-overview.tsx",
+  "components/review/review-dialog-pr-state.tsx",
+  "components/review/review-dialog-surface.tsx",
+  "components/review/review-diff-header.tsx",
+  "components/review/review-diff-list.tsx",
+  "components/review/review-diff-toolbar.tsx",
+  "components/review/review-file-tree.tsx",
+  "components/review/review-findings-button.tsx",
+  "components/review/review-findings-overview.tsx",
+  "components/review/review-fix-comments-button.tsx",
+  "components/review/review-markdown-diff-preview-content.tsx",
+  "components/review/review-pr-selector.tsx",
+  "components/review/review-run-button.tsx",
+  "components/review/review-top-bar.tsx",
+  "components/review/walkthrough-overlay.tsx",
+  // Plain-TS label helpers the review diff list renders — guard-blind, so they
+  // are listed to keep the entries above honest rather than because lint sees
+  // anything here.
+  "components/review/types.ts",
+  // Kanban board: swimlanes, graph pipeline, and the mobile board shell.
+  "components/kanban/graph2-task-pipeline.tsx",
+  "components/kanban/kanban-header-mobile.tsx",
+  "components/kanban/kanban-header.tsx",
+  "components/kanban/mobile-column-tabs.tsx",
+  "components/kanban/mobile-drop-targets.tsx",
+  "components/kanban/mobile-fab.tsx",
+  "components/kanban/mobile-menu-sheet.tsx",
+  // Extracted out of mobile-menu-sheet.tsx to stay under the 600-line limit.
+  "components/kanban/mobile-menu-styles.ts",
+  "components/kanban/mobile-menu-utility-actions.tsx",
+  "components/kanban/mobile-menu-task-list-options.tsx",
+  "components/kanban/mobile-search-bar.tsx",
+  "components/kanban/swimlane-graph-content.tsx",
+  "components/kanban/swimlane-graph2-content.tsx",
+  "components/kanban/swimlane-header.tsx",
+  "components/kanban/swimlane-kanban-content.tsx",
+  "components/kanban/task-multi-select-toolbar.tsx",
+  // Kanban board: loose card/column/dropdown components on the same namespace.
+  "components/kanban-board.tsx",
+  "components/kanban-card-content.tsx",
+  "components/kanban-card-menu-items.tsx",
+  "components/kanban-column.tsx",
+  "components/kanban-display-dropdown.tsx",
+  "components/kanban-with-preview.tsx",
+  // Shared by the desktop dropdown and the mobile sheet; returns catalog keys.
+  "lib/kanban/repository-placeholder.ts",
+  // The editor surfaces: Monaco/CodeMirror editors and diff viewers, the Shiki
+  // and Monaco code blocks, the TipTap plan editor, and the file-actions menu.
+  // Copy lands in the `editors:` namespace.
+  //
+  // Two of these files hold copy the rule cannot see, so it is recorded here
+  // rather than enforced: `tiptap-mermaid-extension.ts` and the CodeMirror
+  // gutter marker in `use-codemirror-editor-state.ts` build DOM imperatively
+  // from ProseMirror/CodeMirror callbacks, which have no hook scope, so both
+  // resolve through the module-level `t` from `@/lib/i18n`.
+  "components/editors/**/*.{ts,tsx}",
+  // Quick chat: the modal, its tabs, the setup form and the delete dialog.
+  // Copy lands in the existing `chat:` namespace, shared with config chat.
+  "components/quick-chat/**/*.{ts,tsx}",
+  // Diff viewer: the pierre-backed viewer shell, its toolbar, the inline
+  // comment/finding surfaces and the walkthrough overlay. Whole directory —
+  // every file in it is migrated, and the `diff` namespace is not shared with
+  // anything outside it.
+  //
+  // Git statuses, file modes, hunk markers and the pierre option keys in here
+  // are protocol values, not copy, and stay in English by design; only their
+  // labels are translated.
+  "components/diff/**/*.{ts,tsx}",
+  // Change-request (PR/MR) and commit dialogs, plus the shared integration
+  // settings widgets: the auth-status banner, the copy-config menu, the
+  // watcher card shell and the integrations nav menu. Both directories share
+  // the `integrations` namespace.
+  //
+  // `change-request-feedback.ts` holds no JSX, so `mode: "jsx-only"` never
+  // inspects it; the glob records that it is migrated, and only the
+  // pseudo-locale can prove it stays that way. Branch names, remotes and VCS
+  // provider ids travel through it as data and are never translated.
+  "components/vcs/**/*.{ts,tsx}",
+  "components/integrations/**/*.{ts,tsx}",
+  // The CLI agent-profile editor. `components/agent/` has no namespace rule of
+  // its own, so its copy lives in `common`.
+  "components/agent/**/*.{ts,tsx}",
+  // SPA entry: the route tables, their Suspense/loading placeholders and the
+  // root/route error boundaries. `src/**` has no namespace rule either, so this
+  // copy is also on `common`. Route names reach `RouteLoading` as catalog keys
+  // rather than resolved copy — see the comment there.
+  "src/*.{ts,tsx}",
+  // Task chat surface: the composer, the transcript, the message renderers and
+  // the Kandev tool-call renderers. A directory glob rather than a file list —
+  // the whole tree is migrated, including the `.ts` helpers that hold copy
+  // (`subagent-meta.ts`, `use-attachment-file-feedback.ts`, `agent-error-label.ts`)
+  // which `mode: "jsx-only"` never inspects; only the pseudo-locale can prove
+  // those stay clean.
+  //
+  // Deliberately left in English inside this tree, because they are protocol
+  // rather than copy: message `author_type` values, the `prompt:<id>` context
+  // path, the `null` rendered in the debug-metadata dialog, the highlight CSS
+  // in `message-comment-decorations.tsx`, and the programming-language names in
+  // `tiptap-code-block-view.tsx`.
+  "components/task/chat/**/*.{ts,tsx}",
+  // Seven task subdirectories, one glob each. Whole trees — including the
+  // `.ts` helpers and the module-scope config tables that `mode: "jsx-only"`
+  // never inspects, so only the pseudo-locale can prove those stay clean.
+  //
+  // The pattern used throughout these trees for copy the rule cannot see: a
+  // module-level table stores a `labelKey` (a catalog key) rather than a
+  // resolved string, and the component resolves it at render. That keeps the
+  // sibling `value` / `key` field — which is persisted or compared with `===`
+  // — in English while the label follows the locale.
+  //
+  // Deliberately left in English inside these trees, because they are data or
+  // protocol rather than copy: sidebar-filter *values* (`state`, `in_progress`,
+  // …) and sort/group keys, which are persisted in a saved view; the `"main"`
+  // default base-branch name in `session-mobile-top-bar-git-controls.tsx`; the
+  // share API's `applied_rules` redaction ids and share URLs/tokens; terminal
+  // key sequences and key-cap glyphs in `mobile-terminal-keybar-helpers.tsx`
+  // (only their spoken aria-labels are translated); and the `group:` bucket on
+  // the command-palette entry in `sidebar-filter-bar.tsx`, which is shared
+  // taxonomy owned by `components/session-commands.tsx` and migrates with it.
+  "components/task/simple/**/*.{ts,tsx}",
+  "components/task/mobile/**/*.{ts,tsx}",
+  "components/task/add-workspace-sources/**/*.{ts,tsx}",
+  "components/task/sidebar-filter/**/*.{ts,tsx}",
+  "components/task/share/**/*.{ts,tsx}",
+  "components/task/inspector/**/*.{ts,tsx}",
+  "components/task/document/**/*.{ts,tsx}",
+  // Loose components directly under `components/`. Individual file entries
+  // rather than a `components/*.tsx` glob: the sibling `components/task-*.tsx`
+  // files match the `components/(task\/|task-)` namespace rule and belong with
+  // the `components/task` batches, so a glob here would falsely claim them.
+  //
+  // These have no namespace rule of their own, so they are on `common` — except
+  // the two `vcs-*` menus and `workflow-selector-row`, which were placed on
+  // `integrations` / `workflows` by hand to sit with the copy they share.
+  //
+  // Deliberately left in English inside these files, because they are protocol
+  // or data rather than copy: the `gh` CLI binary name and the `kdlbs/kandev`
+  // repository slug in the Improve Kandev dialogs, the `esc` key name in the
+  // onboarding preview and the command-panel footer, the `make install`/`/commit`
+  // shell and slash commands, git refs reaching `ontoBranch`/`fromBranch`, and
+  // the `ActionDef.key` / `RUNTIMES[].id` discriminants that keep React keys
+  // locale-independent.
+  "components/branch-refresh-button.tsx",
+  "components/cli-mode-icon.tsx",
+  "components/command-panel-footer.tsx",
+  "components/command-panel-scope-switcher.tsx",
+  "components/create-local-repository-surface.tsx",
+  "components/discard-local-changes-dialog.tsx",
+  "components/enhance-prompt-button.tsx",
+  "components/folder-picker.tsx",
+  "components/grid-spinner.tsx",
+  "components/improve-kandev-dialog-create.tsx",
+  "components/improve-kandev-dialog.tsx",
+  "components/onboarding-dialog.tsx",
+  "components/prompt-result-recovery.tsx",
+  "components/vcs-multi-repo-menu.tsx",
+  "components/vcs-split-button.tsx",
+  "components/watcher-repository-fields.tsx",
+  "components/workflow-selector-row.tsx",
+  "components/workspace-content-search.tsx",
 ];

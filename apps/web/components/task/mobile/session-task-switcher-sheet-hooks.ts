@@ -25,6 +25,7 @@ import { repositorySlug } from "@/lib/repository-slug";
 import { statusSummaryActiveErrorPreview } from "@/lib/task-status-summary";
 import { resolvePreferredSessionId } from "../task-select-helpers";
 import { mapSnapshotToKanban, sortByUpdatedAtDesc } from "./session-task-switcher-sheet-helpers";
+import { useTranslation } from "react-i18next";
 
 type SheetItemCtx = {
   repositoryPathsById: Map<string, string | undefined>;
@@ -85,6 +86,19 @@ function sheetStatus(task: KanbanState["tasks"][number], ctx: SheetItemCtx) {
   };
 }
 
+function findSheetTask(
+  state: ReturnType<ReturnType<typeof useAppStoreApi>["getState"]>,
+  taskId: string,
+) {
+  const activeTask = findTaskInSnapshots(taskId, state.kanbanMulti.snapshots, state.kanban.tasks);
+  if (activeTask) return activeTask;
+  for (const tasks of Object.values(state.sidebarArchivedTasks?.itemsByWorkspaceId ?? {})) {
+    const archivedTask = tasks.find((task) => task.id === taskId);
+    if (archivedTask) return archivedTask;
+  }
+  return undefined;
+}
+
 export function toSheetItem(
   task: KanbanState["tasks"][number] & { _workflowId: string },
   ctx: SheetItemCtx,
@@ -108,6 +122,7 @@ export function toSheetItem(
     workflowName: ctx.workflowNameById.get(task._workflowId),
     workflowStepId: task.workflowStepId,
     workflowStepTitle: ctx.stepTitleById.get(task.workflowStepId),
+    isArchived: task.isArchived === true,
     isRemoteExecutor: task.isRemoteExecutor,
     remoteExecutorType: task.primaryExecutorType ?? undefined,
     remoteExecutorName: task.primaryExecutorName ?? undefined,
@@ -122,6 +137,8 @@ export function useSheetData(workspaceId: string | null) {
     stepsByWorkflowId,
     workflows,
     isLoading: tasksLoading,
+    archivedError,
+    retryArchivedTasks,
   } = useWorkspaceSidebarTasks(workspaceId);
   const steps = useAppStore((state) => state.kanban.steps);
   const workspaces = useAppStore((state) => state.workspaces.items);
@@ -172,6 +189,8 @@ export function useSheetData(workspaceId: string | null) {
     stepsByWorkflowId,
     // Skeleton while the first snapshot fetch is in flight — otherwise shows "No tasks yet." even when tasks exist.
     tasksLoading,
+    archivedError,
+    retryArchivedTasks,
     tasksWithRepositories,
     dialogSteps,
   };
@@ -449,6 +468,7 @@ function useSheetDeleteActions(
   store: ReturnType<typeof useAppStoreApi>,
   removeTaskFromBoard: ReturnType<typeof useTaskRemoval>["removeTaskFromBoard"],
 ) {
+  const { t } = useTranslation();
   const { deleteTaskById } = useTaskActions();
   const [deletingTask, setDeletingTask] = useState<{
     id: string;
@@ -460,14 +480,14 @@ function useSheetDeleteActions(
   const handleDeleteTask = useCallback(
     (taskId: string) => {
       const state = store.getState();
-      const task = findTaskInSnapshots(taskId, state.kanbanMulti.snapshots, state.kanban.tasks);
+      const task = findSheetTask(state, taskId);
       setDeletingTask({
         id: taskId,
-        title: task?.title ?? "this task",
+        title: task?.title ?? t("task:thisTask"),
         executorType: task?.primaryExecutorType,
       });
     },
-    [store],
+    [store, t],
   );
 
   const handleDeleteConfirm = useCallback(
@@ -504,7 +524,25 @@ function useSheetDeleteActions(
   };
 }
 
+/**
+ * Re-parent via drag: runs the same composite nest operation the context menu
+ * uses, resolving the workflow from the snapshot keys.
+ */
+function useSheetNestTask() {
+  const store = useAppStoreApi();
+  const nestTask = useNestTask();
+  return useCallback(
+    (taskId: string, parentTaskId: string) => {
+      const workflowId = taskWorkflowIdFromSnapshots(store, taskId);
+      if (!workflowId) return;
+      void nestTask(taskId, workflowId, parentTaskId);
+    },
+    [store, nestTask],
+  );
+}
+
 export function useSheetActions(workspaceId: string | null, onOpenChange: (open: boolean) => void) {
+  const { t } = useTranslation();
   const setActiveTask = useAppStore((state) => state.setActiveTask);
   const setActiveSession = useAppStore((state) => state.setActiveSession);
   const store = useAppStoreApi();
@@ -512,12 +550,18 @@ export function useSheetActions(workspaceId: string | null, onOpenChange: (open:
   const { removeTaskFromBoard, loadTaskSessionsForTask } = useTaskRemoval({ store });
   const deleteActions = useSheetDeleteActions(store, removeTaskFromBoard);
   const detachActions = useTaskDetachDialog(store);
-  const nestTask = useNestTask();
+  const handleNestTask = useSheetNestTask();
 
   const handleSelectTask = useCallback(
     (taskId: string) => {
       const state = store.getState();
-      const task = findTaskInSnapshots(taskId, state.kanbanMulti.snapshots, state.kanban.tasks);
+      const task = findSheetTask(state, taskId);
+      if (task?.isArchived) {
+        setActiveTask(taskId);
+        replaceTaskUrl(taskId);
+        onOpenChange(false);
+        return;
+      }
       if (task?.primarySessionId) {
         const targetSessionId = resolvePreferredSessionId({
           taskId,
@@ -552,14 +596,14 @@ export function useSheetActions(workspaceId: string | null, onOpenChange: (open:
   const handleArchiveTask = useCallback(
     (taskId: string) => {
       const state = store.getState();
-      const task = findTaskInSnapshots(taskId, state.kanbanMulti.snapshots, state.kanban.tasks);
+      const task = findSheetTask(state, taskId);
       setArchivingTask({
         id: taskId,
-        title: task?.title ?? "this task",
+        title: task?.title ?? t("task:thisTask"),
         executorType: task?.primaryExecutorType,
       });
     },
-    [store],
+    [store, t],
   );
 
   const handleArchiveConfirm = useCallback(
@@ -586,17 +630,6 @@ export function useSheetActions(workspaceId: string | null, onOpenChange: (open:
     setActiveTask,
     onOpenChange,
   });
-
-  // Re-parent via drag: run the same composite nest operation the context
-  // menu uses, resolving the workflow from the snapshot keys.
-  const handleNestTask = useCallback(
-    (taskId: string, parentTaskId: string) => {
-      const workflowId = taskWorkflowIdFromSnapshots(store, taskId);
-      if (!workflowId) return;
-      void nestTask(taskId, workflowId, parentTaskId);
-    },
-    [store, nestTask],
-  );
 
   return {
     handleSelectTask,

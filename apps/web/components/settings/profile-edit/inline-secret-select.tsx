@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 
 const NONE_VALUE = "__none__";
 const CREATE_VALUE = "__create__";
+const SECRET_NAME_EXAMPLE = "my-api-token";
 
 type InlineSecretSelectProps = {
   secretId: string | null;
@@ -52,6 +53,9 @@ export function InlineSecretSelect({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={NONE_VALUE}>{t("executors:none")}</SelectItem>
+          {secretId && !secrets.some((secret) => secret.id === secretId) && (
+            <SelectItem value={secretId}>{t("executors:missingSecretReference")}</SelectItem>
+          )}
           {secrets.map((s) => (
             <SelectItem key={s.id} value={s.id}>
               {s.name}
@@ -113,7 +117,7 @@ function InlineCreateForm({
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={t("executors:eGMyApiToken")}
+          placeholder={t("executors:eGMyApiToken", { example: SECRET_NAME_EXAMPLE })}
           className="h-8 text-sm"
         />
       </div>

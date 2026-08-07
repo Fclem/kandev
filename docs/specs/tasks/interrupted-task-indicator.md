@@ -1,5 +1,5 @@
 ---
-status: building
+status: complete
 created: 2026-08-02
 owner: kandev
 ---

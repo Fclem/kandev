@@ -200,10 +200,6 @@ var (
 	ErrWIPLimitExceeded          = wfmodels.ErrWIPLimitExceeded
 	ErrInvalidRepositorySettings = errors.New("invalid repository settings")
 	ErrInvalidExecutorConfig     = errors.New("invalid executor config")
-	// ErrWorkspaceReadOnly rejects configuration mutations (workflows,
-	// repositories) in the dedicated Improve Kandev workspace, which is
-	// configuration-immutable.
-	ErrWorkspaceReadOnly = errors.New("workspace is managed by Improve Kandev and is read-only")
 	// Workspace-source sentinels are the service boundary consumed by the HTTP
 	// and MCP adapters. Keep categories stable rather than making callers parse
 	// a validation or runtime error string.

@@ -306,9 +306,11 @@ func (h *Handler) ensureImproveWorkspace(ctx context.Context, createWorkspace bo
 	}
 
 	created, err := h.taskSvc.CreateWorkspace(ctx, &taskservice.CreateWorkspaceRequest{
-		Name:                    improveWorkspaceName,
-		Description:             improveWorkspaceDesc,
-		BootstrapKanbanWorkflow: true,
+		Name:        improveWorkspaceName,
+		Description: improveWorkspaceDesc,
+		// No Kanban bootstrap: the dedicated workspace only ever contains the
+		// hidden Improve Kandev / Report Kandev Issue workflows, so its
+		// workflow configuration must not show a default "Kanban" workflow.
 	})
 	if err == nil {
 		// A concurrent bootstrap may have created another row with the same

@@ -23,6 +23,7 @@ import (
 	"github.com/kandev/kandev/internal/task/repository"
 	taskrepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 	"github.com/kandev/kandev/internal/task/service"
+	ws "github.com/kandev/kandev/pkg/websocket"
 	"github.com/stretchr/testify/require"
 )
 
@@ -585,4 +586,75 @@ func TestRepositoryMutationsRejectedInImproveKandevWorkspace(t *testing.T) {
 	res5 := httptest.NewRecorder()
 	router.ServeHTTP(res5, req5)
 	require.Equal(t, http.StatusConflict, res5.Code, res5.Body.String())
+}
+
+// TestWSRepositoryMutationsRejectedInImproveKandevWorkspace verifies the
+// WebSocket repository mutation handlers carry the same Improve Kandev
+// read-only guard as their HTTP counterparts: create by workspace id, and
+// update/delete (plus repository-script mutations) by repository workspace.
+func TestWSRepositoryMutationsRejectedInImproveKandevWorkspace(t *testing.T) {
+	_, repo, svc := newRepositoryHTTPTestRouterWithService(t)
+	ctx := context.Background()
+	require.NoError(t, repo.CreateWorkspace(ctx, &models.Workspace{ID: "ws-improve", Name: "Improve Kandev"}))
+	require.NoError(t, repo.CreateRepository(ctx, &models.Repository{
+		ID: "repo-improve", WorkspaceID: "ws-improve", Name: "kandev",
+	}))
+	log, err := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "json", OutputPath: "stdout"})
+	require.NoError(t, err)
+	h := NewRepositoryHandlers(svc, log)
+
+	assertConflict := func(t *testing.T, resp *ws.Message, err error) {
+		t.Helper()
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Equal(t, ws.MessageTypeError, resp.Type)
+		var payload ws.ErrorPayload
+		require.NoError(t, json.Unmarshal(resp.Payload, &payload))
+		require.Equal(t, ws.ErrorCodeConflict, payload.Code)
+		require.Contains(t, payload.Message, "managed by Improve Kandev")
+	}
+
+	t.Run("create_rejected", func(t *testing.T) {
+		msg := &ws.Message{ID: "1", Action: ws.ActionRepositoryCreate,
+			Payload: json.RawMessage(`{"workspace_id":"ws-improve","name":"new-repo","source_type":"local","local_path":"/tmp/x"}`)}
+		resp, err := h.wsCreateRepository(ctx, msg)
+		assertConflict(t, resp, err)
+	})
+
+	t.Run("update_rejected", func(t *testing.T) {
+		msg := &ws.Message{ID: "2", Action: ws.ActionRepositoryUpdate,
+			Payload: json.RawMessage(`{"id":"repo-improve","name":"renamed"}`)}
+		resp, err := h.wsUpdateRepository(ctx, msg)
+		assertConflict(t, resp, err)
+	})
+
+	t.Run("delete_rejected", func(t *testing.T) {
+		msg := &ws.Message{ID: "3", Action: ws.ActionRepositoryDelete,
+			Payload: json.RawMessage(`{"id":"repo-improve"}`)}
+		resp, err := h.wsDeleteRepository(ctx, msg)
+		assertConflict(t, resp, err)
+	})
+
+	t.Run("script_create_rejected", func(t *testing.T) {
+		msg := &ws.Message{ID: "4", Action: ws.ActionRepositoryScriptCreate,
+			Payload: json.RawMessage(`{"repository_id":"repo-improve","name":"dev","command":"npm run dev"}`)}
+		resp, err := h.wsCreateRepositoryScript(ctx, msg)
+		assertConflict(t, resp, err)
+	})
+
+	t.Run("script_update_rejected", func(t *testing.T) {
+		script := &models.RepositoryScript{ID: "script-1", RepositoryID: "repo-improve", Name: "dev", Command: "npm run dev"}
+		require.NoError(t, repo.CreateRepositoryScript(ctx, script))
+		msg := &ws.Message{ID: "5", Action: ws.ActionRepositoryScriptUpdate,
+			Payload: json.RawMessage(`{"id":"script-1","command":"npm test"}`)}
+		resp, err := h.wsUpdateRepositoryScript(ctx, msg)
+		assertConflict(t, resp, err)
+	})
+
+	t.Run("script_delete_rejected", func(t *testing.T) {
+		msg := &ws.Message{ID: "6", Action: ws.ActionRepositoryScriptDelete,
+			Payload: json.RawMessage(`{"id":"script-1"}`)}
+		resp, err := h.wsDeleteRepositoryScript(ctx, msg)
+		assertConflict(t, resp, err)
+	})
 }

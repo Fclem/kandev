@@ -356,6 +356,46 @@ func (h *RepositoryHandlers) rejectReadOnlyRepositoryHTTP(c *gin.Context, id str
 	return h.rejectReadOnlyWorkspaceHTTP(c, repository.WorkspaceID)
 }
 
+// wsRejectReadOnlyWorkspace returns a conflict WS error when the workspace is
+// the dedicated Improve Kandev workspace, whose repositories are read-only.
+// Returns (nil, false) when the mutation is allowed.
+func (h *RepositoryHandlers) wsRejectReadOnlyWorkspace(ctx context.Context, msg *ws.Message, workspaceID string) (*ws.Message, bool) {
+	if workspaceID == "" {
+		return nil, false
+	}
+	workspace, err := h.service.GetWorkspace(ctx, workspaceID)
+	if err != nil {
+		errMsg, _ := ws.NewError(msg.ID, msg.Action, ws.ErrorCodeNotFound, "Workspace not found", nil)
+		return errMsg, true
+	}
+	if workspace.IsImproveKandev() {
+		errMsg, _ := ws.NewError(msg.ID, msg.Action, ws.ErrorCodeConflict, workspaceReadOnlyMsg, nil)
+		return errMsg, true
+	}
+	return nil, false
+}
+
+// readOnlyRepositoryMessage returns the workspace read-only reason when the
+// repository lives in the dedicated Improve Kandev workspace. Lookup errors
+// surface as ("", false) so the caller's normal not-found path handles them.
+func (h *RepositoryHandlers) readOnlyRepositoryMessage(ctx context.Context, repositoryID string) (string, bool) {
+	repository, err := h.service.GetRepository(ctx, repositoryID)
+	if err != nil {
+		return "", false
+	}
+	if repository == nil || repository.WorkspaceID == "" {
+		return "", false
+	}
+	workspace, err := h.service.GetWorkspace(ctx, repository.WorkspaceID)
+	if err != nil {
+		return "", false
+	}
+	if workspace.IsImproveKandev() {
+		return workspaceReadOnlyMsg, true
+	}
+	return "", false
+}
+
 func (h *RepositoryHandlers) httpInitializeLocalRepository(c *gin.Context) {
 	var body httpInitializeLocalRepositoryRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -630,6 +670,9 @@ func (h *RepositoryHandlers) wsCreateRepository(ctx context.Context, msg *ws.Mes
 	if req.WorkspaceID == "" || req.Name == "" {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "workspace_id and name are required", nil)
 	}
+	if errMsg, blocked := h.wsRejectReadOnlyWorkspace(ctx, msg, req.WorkspaceID); blocked {
+		return errMsg, nil
+	}
 	repository, err := h.service.CreateRepository(ctx, &service.CreateRepositoryRequest{
 		WorkspaceID:            req.WorkspaceID,
 		Name:                   req.Name,
@@ -706,6 +749,9 @@ func (h *RepositoryHandlers) wsUpdateRepository(ctx context.Context, msg *ws.Mes
 	if req.ID == "" {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "id is required", nil)
 	}
+	if reason, readOnly := h.readOnlyRepositoryMessage(ctx, req.ID); readOnly {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeConflict, reason, nil)
+	}
 	repository, err := h.service.UpdateRepository(ctx, req.ID, &service.UpdateRepositoryRequest{
 		Name:                   req.Name,
 		SourceType:             req.SourceType,
@@ -745,6 +791,9 @@ func (h *RepositoryHandlers) wsDeleteRepository(ctx context.Context, msg *ws.Mes
 	}
 	if req.ID == "" {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "id is required", nil)
+	}
+	if reason, readOnly := h.readOnlyRepositoryMessage(ctx, req.ID); readOnly {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeConflict, reason, nil)
 	}
 	if err := h.service.DeleteRepository(ctx, req.ID); err != nil {
 		h.logger.Error("failed to delete repository", zap.Error(err))

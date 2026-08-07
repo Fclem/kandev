@@ -13,8 +13,11 @@ import (
 var ErrWorkflowReadOnly = errors.New("workflow is managed by GitHub sync and is read-only; edit its definition in the synced repository")
 
 // ErrWorkflowWorkspaceReadOnly rejects UI mutations of workflows that live in
-// the dedicated Improve Kandev workspace, whose workflows are read-only.
-var ErrWorkflowWorkspaceReadOnly = errors.New("workflow belongs to the Improve Kandev workspace and is read-only")
+// the dedicated Improve Kandev workspace, whose workflows are read-only. The
+// message is the canonical user-facing string shared with the handler layer
+// (task/handlers `workspaceReadOnlyMsg`), so both layers surface identical
+// wording for the same restriction.
+var ErrWorkflowWorkspaceReadOnly = errors.New("this workspace is managed by Improve Kandev and is read-only")
 
 // EnsureWorkflowMutable returns ErrWorkflowReadOnly when the workflow's
 // definition is owned by workflow sync (source == "github"), and

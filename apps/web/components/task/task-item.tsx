@@ -463,7 +463,6 @@ export const TaskItem = memo(function TaskItem({
 }: TaskItemProps) {
   const effectiveMenuOpen = menuOpen || isDeleting === true;
   const hasDiffStats = !!diffStats && (diffStats.additions > 0 || diffStats.deletions > 0);
-  const showSubtaskToggle = !!subtaskCount && subtaskCount > 0 && !!onToggleSubtasks;
   const taskColor = useTaskColor(taskId);
   const indent = computeRowIndent(resolveRowDepth(depth, isSubTask));
 
@@ -517,7 +516,7 @@ export const TaskItem = memo(function TaskItem({
       ) : (
         <TaskMenuButton visible={effectiveMenuOpen} expanded={menuOpen} rowFocus />
       )}
-      {showSubtaskToggle && (
+      {!!subtaskCount && subtaskCount > 0 && !!onToggleSubtasks && (
         <SubtaskToggle
           taskId={taskId}
           count={subtaskCount!}

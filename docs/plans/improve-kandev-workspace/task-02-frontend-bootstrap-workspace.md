@@ -77,4 +77,12 @@ status update in the same conversation.
 
 ## Results
 
-Pending.
+Shipped in `09733d2f2`, `cc7b66550` (PR #2347). The app boot payload's
+`workspace_id`/`workspaces` now drive the Improve Kandev dialog; the dialog's
+`WorkspaceChoicePanel` + `CreateWorkspaceCheckbox` opt into workspace creation
+(default checked) when the dedicated workspace does not exist, and
+`useBootstrapKandev` sends `create_workspace` accordingly. "New Task" in the
+dedicated workspace opens the Improve Kandev dialog via the shared
+`appSidebar.improveDialogOpen` store flag. Unit coverage:
+`components/improve-kandev-dialog.test.tsx` (bootstrap wiring + copy), all pass
+with `pnpm vitest run components/improve-kandev-dialog.test.tsx`.

@@ -45,4 +45,9 @@ Add tests (desktop chromium):
 
 ## Results
 
-Pending — record exact commands, outcomes, and any deviations here.
+Covered by `improve-kandev.spec` tests "workflows settings are read-only in the
+dedicated workspace" and "repositories settings are read-only in the dedicated
+workspace": they seed workflows/repos under a temp workspace name, rename it to
+"Improve Kandev" (rename is unguarded), then assert the settings pages render
+read-only and that mutating API calls (create workflow, create repository) 409.
+All pass in the 14/14 `improve-kandev.spec` run (see task-03).

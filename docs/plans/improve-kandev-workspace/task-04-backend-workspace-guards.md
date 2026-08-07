@@ -75,4 +75,13 @@ with HTTP 409 before any write. Listing/reading stays available.
 
 ## Results
 
-Pending — record exact commands, outcomes, and any deviations here.
+Shipped in `37597867d` + merge `68b8a57a4` (PR #2347). Guards at the HTTP/WS
+handler layer reject mutations in the "Improve Kandev" workspace with HTTP 409
+(`workspaceReadOnlyMsg`); workflow step mutations go through
+`workflow/service.EnsureWorkflowMutable` (`ErrWorkflowWorkspaceReadOnly` → 409)
+and task mutations via `task.Service.ErrWorkspaceReadOnly`. Identity is name-based
+(`(*Workspace).IsImproveKandev()`), so the bootstrap's internal service calls keep
+working. Verified by `TestImproveKandevBootstrap*` in
+`internal/integration/improve_kandev_test.go` (synthetic-identity router) and by
+the read-only settings e2e tests; full backend suite passes with
+`KANDEV_*` vars unset and `umask 022`.

@@ -80,4 +80,10 @@ blockers, risks, and task/plan status update in the same conversation.
 
 ## Results
 
-Pending.
+E2E `apps/web/e2e/tests/improve-kandev.spec.ts` (13 desktop + 1 mobile) all pass:
+`playwright test --config e2e/playwright.config.ts improve-kandev.spec` → 14 passed.
+The 4 submit-flow tests needed `agent_generated_task_titles: false` in the seed
+(after upstream main merged the auto-title setting, whose default hides the title
+field); the earlier 4 failures were caused by a stale `apps/backend/bin/kandev`
+e2e binary missing upstream's `agent_generated_task_titles` backend field —
+rebuilt via `go build -o bin/kandev ./cmd/kandev`.

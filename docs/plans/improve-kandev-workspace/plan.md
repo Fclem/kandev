@@ -113,9 +113,28 @@ evidence of isolation.
 
 ## Verification Results
 
-Pending. On completion, synchronize with each task's `## Results`:
-exact commands and outcomes/counts, generated artifact paths, cleanup/teardown
-evidence.
+Completed for all 7 tasks (see each task's `## Results`). Summary of the final
+verification run on the merged branch (`68b8a57a4`, PR #2347):
+
+- Backend: `go test -tags fts5 ./internal/improvekandev/... ./internal/integration/...`
+  pass; full backend suite passes with `KANDEV_*` vars unset and `umask 022`.
+- Frontend: `tsc --noEmit` and `eslint --max-warnings 0` clean on all touched
+  files; unit tests pass (improve-kandev dialog, repository-card).
+- E2E: `playwright test --config e2e/playwright.config.ts improve-kandev.spec` →
+  14 passed (13 desktop + 1 mobile). Required rebuilding the stale
+  `apps/backend/bin/kandev` e2e binary (missing upstream `agent_generated_task_titles`)
+  and seeding `agent_generated_task_titles: false` in the submit-flow tests.
+- CI on PR #2347: all checks green (`mergeStateStatus: CLEAN`); CodeRabbit
+  threads resolved.
+- Demo instance on ubu4.in.fiere.fr (backend :25208, vite :58449) rebuilt with
+  the merged code: bootstrap with `create_workspace:true` created workspace
+  `0dfe5db8-c82d-4c6e-803a-2eec41bcb3fc` and carried the Default workspace's
+  mock GitHub connection; 409s and read-only settings pages verified.
+
+Artifacts: `docs/specs/improve-kandev/spec.md` (spec amendment for Phase 2),
+this plan, and `docs/plans/improve-kandev-workspace/task-*.md`.
+Cleanup/teardown: no temporary artifacts shipped; e2e DIAG probes removed before
+committing.
 
 ---
 

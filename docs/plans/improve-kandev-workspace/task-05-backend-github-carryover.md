@@ -69,4 +69,13 @@ integration configs, no automations, no extra workflows/repos.
 
 ## Results
 
-Pending — record exact commands, outcomes, and any deviations here.
+Shipped in `37597867d` (PR #2347). `github.Service.CopyWorkspaceConnectionToWorkspace`
+copies the default workspace's GitHub connection row + PAT secret at workspace
+creation only; `gh_cli`/app rows without secrets are copied as rows.
+Wired via `improvekandev.GitHubWorkspaceCopier` / `DefaultWorkspaceResolver`
+(uses `workspacescope.ResolveMigrationTarget`); `dbPool` threaded through
+`buildHTTPServer` + `routeParams`. Best-effort — failures are logged and never
+fail bootstrap. Verified by integration tests and on the ubu4 demo instance
+(workspace `0dfe5db8-...` received the Default workspace's mock GitHub
+connection; re-seed needed after restart since mock connections are in-memory:
+`PUT /api/v1/github/mock/workspace-connections/<ws-id>`).

@@ -71,4 +71,14 @@ task/plan status update in the same conversation.
 
 ## Results
 
-Pending.
+Shipped in `26e16a3d2` (PR #2347, branch `feature/improve-kandev-works-af0`).
+`POST /api/v1/system/improve-kandev/bootstrap` find-or-creates a kanban-bootstrapped
+workspace named `"Improve Kandev"` (exact-name match via
+`task/models.WorkspaceNameImproveKandev`), scopes the hidden report workflow and
+repository to it, and returns `{ workspace_id, ... }`; the request's `workspace_id`
+is accepted for backward-compatible single-user flows. Concurrent bootstraps
+converge on one workspace via the deterministic re-read after create
+(`TestImproveKandevBootstrapConvergesOnSingleWorkspace`). No global unique-name
+constraint was added (workspace names are not unique in the product).
+Verification: `go test -tags fts5 ./internal/improvekandev/... ./internal/integration/...`
+pass; e2e `improve-kandev.spec` covers the find-or-create + isolation path.

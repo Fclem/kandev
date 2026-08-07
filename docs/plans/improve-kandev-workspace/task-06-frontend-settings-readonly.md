@@ -57,4 +57,13 @@ with no add/edit/delete controls. Other workspaces keep the current UI.
 
 ## Results
 
-Pending — record exact commands, outcomes, and any deviations here.
+Shipped in `cc7b66550` (PR #2347). `WorkspaceWorkflowsClient`/`WorkspaceRepositoriesClient`
+render read-only when `isImproveWorkspace` (`WorkflowCard readOnly`,
+`RepositoryCard readOnly`), with a shared `WorkspaceSettingsHeader` and a badge
+distinguishing "managed by Improve Kandev" from GitHub-sync managed; `include_hidden=true`
+lists hidden workflows in settings. The merged upstream i18n pass replaced literals
+with `t()` keys (`workflowsReadOnlyImprove`, `repositoriesReadOnlyImprove`, ...);
+repository-card max-lines was fixed by extracting `RepositoryPreview` into
+`components/settings/repository-card-preview.tsx`. Verified: `tsc --noEmit`,
+`eslint --max-warnings 0`, `vitest run components/settings/repository-card.test.tsx`
+(17 tests across the touched files).

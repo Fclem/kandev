@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   configOptionToModelOptions,
@@ -237,8 +238,15 @@ function useModelChangeHandlers(
   const updateLocalConfig = useCallback(
     (sid: string, configId: string, value: string) => {
       if (!sessionModelsData) return;
+      // A manual model change ends the fallback story — drop the note so the
+      // picker stops labelling the model as a fallback.
+      const fallbackModel =
+        configId === sessionModelsData.configOptions.find(isModelConfigOption)?.id
+          ? undefined
+          : sessionModelsData.fallbackModel;
       setSessionModels(sid, {
         ...sessionModelsData,
+        fallbackModel,
         currentModelId: nextCurrentModelId(sessionModelsData, configId, value),
         configOptions: updateConfigOptionValue(sessionModelsData.configOptions, configId, value),
       });
@@ -283,6 +291,12 @@ function useModelChangeHandlers(
         updateLocalConfig(sid, modelConfig.id, modelId);
         setSessionConfigOption(sid, modelConfig.id, modelId).catch(fail);
         return;
+      }
+      // Non-config path: the next models_updated event would preserve the
+      // fallback note (see session-models handler) — clear it locally now
+      // that the user picked a model explicitly.
+      if (sessionModelsData) {
+        setSessionModels(sid, { ...sessionModelsData, fallbackModel: undefined });
       }
       setSessionModel(sid, modelId).catch(fail);
     },
@@ -377,6 +391,7 @@ function useModelSelectorState(sessionId: string | null) {
     modelOptions,
     configOptions,
     configBaseline: sessionModelsData?.configBaseline,
+    fallbackModel: sessionModelsData?.fallbackModel ?? null,
     configHydrated: hasCompleteDynamicConfig(session, sessionModelsData, settingsAgents as Agent[]),
     requiredKeys: requiredConfigKeys(session, settingsAgents as Agent[]),
     rawConfigOptionIds: (sessionModelsData?.configOptions ?? []).map((o) => o.id),
@@ -395,6 +410,7 @@ export const ModelSelector = memo(function ModelSelector({
     modelOptions,
     configOptions,
     configBaseline,
+    fallbackModel,
     configHydrated,
     requiredKeys,
     rawConfigOptionIds,
@@ -402,6 +418,10 @@ export const ModelSelector = memo(function ModelSelector({
     handleConfigChange,
   } = useModelSelectorState(sessionId);
   const modelConfig = configOptions.find(isModelConfigOption);
+  const { t } = useTranslation();
+  // Explicit "using fallback" signal: annotate the trigger so the user sees
+  // the session is not on the configured start model.
+  const currentModelSuffix = fallbackModel ? ` ${t("settings:modelFallbackSuffix")}` : undefined;
 
   const onModelChange = useCallback(
     (value: string) => {
@@ -448,6 +468,7 @@ export const ModelSelector = memo(function ModelSelector({
       triggerClassName={triggerClassName}
       triggerSummary="changed"
       configBaseline={configBaseline}
+      currentModelSuffix={currentModelSuffix}
     />
   );
 });

@@ -66,6 +66,7 @@ func TestUpdateTaskParentIDFailsClosedWhenDetacherIsNotConfigured(t *testing.T) 
 func TestUpdateTaskParentIDKeepsNonEmptyReparentingInOffice(t *testing.T) {
 	deps := newTestDeps(t)
 	insertTestTask(t, deps.db, "child", "workspace", "Child", "todo", 1)
+	insertTestTask(t, deps.db, "new-parent", "workspace", "New parent", "todo", 1)
 	detacher := &recordingTaskDetacher{}
 	deps.svc.SetTaskDetacher(detacher)
 
@@ -92,6 +93,7 @@ func TestUpdateTaskParentIDKeepsNonEmptyReparentingInOffice(t *testing.T) {
 func TestUpdateTaskParentIDNormalizesInheritedWorkspaceMode(t *testing.T) {
 	deps := newTestDeps(t)
 	insertTestTask(t, deps.db, "child", "workspace", "Child", "todo", 1)
+	insertTestTask(t, deps.db, "new-parent", "workspace", "New parent", "todo", 1)
 	if _, err := deps.db.Exec(`UPDATE tasks SET parent_id = 'parent', metadata = '{"workspace":{"mode":"inherit_parent","group_id":"group-1"}}' WHERE id = 'child'`); err != nil {
 		t.Fatalf("set parent/metadata: %v", err)
 	}
@@ -134,6 +136,7 @@ func TestUpdateTaskParentIDNormalizesInheritedWorkspaceMode(t *testing.T) {
 func TestUpdateTaskParentIDSameParentDoesNotNormalizeMetadata(t *testing.T) {
 	deps := newTestDeps(t)
 	insertTestTask(t, deps.db, "child", "workspace", "Child", "todo", 1)
+	insertTestTask(t, deps.db, "parent", "workspace", "Parent", "todo", 1)
 	if _, err := deps.db.Exec(`UPDATE tasks SET parent_id = 'parent', metadata = '{"workspace":{"mode":"inherit_parent","group_id":"group-1"}}' WHERE id = 'child'`); err != nil {
 		t.Fatalf("set parent/metadata: %v", err)
 	}
@@ -156,5 +159,27 @@ func TestUpdateTaskParentIDSameParentDoesNotNormalizeMetadata(t *testing.T) {
 	}
 	if parsed.Workspace.Mode != "inherit_parent" {
 		t.Fatalf("workspace mode = %q, want inherit_parent (same-parent update must not normalize)", parsed.Workspace.Mode)
+	}
+}
+
+// A non-empty parent_id that does not exist must be rejected instead of
+// silently writing a dangling parent reference.
+func TestUpdateTaskParentIDRejectsNonExistentParent(t *testing.T) {
+	deps := newTestDeps(t)
+	insertTestTask(t, deps.db, "child", "workspace", "Child", "todo", 1)
+	if _, err := deps.db.Exec(`UPDATE tasks SET parent_id = 'parent' WHERE id = 'child'`); err != nil {
+		t.Fatalf("set parent: %v", err)
+	}
+
+	if err := deps.svc.UpdateTaskParentID(context.Background(), "child", "missing-parent"); err == nil {
+		t.Fatal("UpdateTaskParentID error = nil, want missing-parent error")
+	}
+
+	var parentID string
+	if err := deps.db.Get(&parentID, `SELECT parent_id FROM tasks WHERE id = 'child'`); err != nil {
+		t.Fatalf("select parent: %v", err)
+	}
+	if parentID != "parent" {
+		t.Fatalf("parent_id = %q, want unchanged 'parent'", parentID)
 	}
 }

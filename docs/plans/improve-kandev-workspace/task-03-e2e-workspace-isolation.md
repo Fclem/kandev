@@ -1,7 +1,7 @@
 ---
 id: "03-e2e-workspace-isolation"
 title: "E2E: workspace isolation coverage"
-status: pending
+status: completed
 wave: 3
 depends_on: ["02-frontend-bootstrap-workspace"]
 plan: "plan.md"

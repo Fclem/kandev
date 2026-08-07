@@ -1,7 +1,7 @@
 ---
 id: "01-backend-dedicated-workspace"
 title: "Backend: dedicated Improve Kandev workspace"
-status: pending
+status: completed
 wave: 1
 depends_on: []
 plan: "plan.md"

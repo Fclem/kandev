@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/improve-kandev/spec.md
 created: 2026-08-01
-status: draft
+status: implemented
 ---
 
 # Implementation Plan: Improve Kandev Workspace Isolation
@@ -159,16 +159,16 @@ else (no other integrations, no automations).
 ### Waves
 
 Wave 4 (backend guards — sequential):
-- [ ] [task-04-backend-workspace-guards](task-04-backend-workspace-guards.md)
+- [x] [task-04-backend-workspace-guards](task-04-backend-workspace-guards.md)
 
 Wave 5 (depends on 04):
-- [ ] [task-05-backend-github-carryover](task-05-backend-github-carryover.md)
+- [x] [task-05-backend-github-carryover](task-05-backend-github-carryover.md)
 
 Wave 6 (depends on 04, 05):
-- [ ] [task-06-frontend-settings-readonly](task-06-frontend-settings-readonly.md)
+- [x] [task-06-frontend-settings-readonly](task-06-frontend-settings-readonly.md)
 
 Wave 7 (depends on 06):
-- [ ] [task-07-e2e-settings-guards](task-07-e2e-settings-guards.md)
+- [x] [task-07-e2e-settings-guards](task-07-e2e-settings-guards.md)
 
 The default is sequential execution in the primary conversation. No subagents
 unless the user explicitly asks after selecting the implementation model.

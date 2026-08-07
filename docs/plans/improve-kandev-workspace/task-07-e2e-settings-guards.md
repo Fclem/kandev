@@ -51,3 +51,10 @@ workspace": they seed workflows/repos under a temp workspace name, rename it to
 "Improve Kandev" (rename is unguarded), then assert the settings pages render
 read-only and that mutating API calls (create workflow, create repository) 409.
 All pass in the 14/14 `improve-kandev.spec` run (see task-03).
+
+> TODO(guards): workspace rename is intentionally unguarded (task-04 excludes
+> it), so a user who can rename workspaces can bypass the immutability guard by
+> renaming the dedicated workspace away, or trigger it by renaming any other
+> workspace to "Improve Kandev". Track this gap when workspace-rename access is
+> revisited; the name-based identity (`WorkspaceNameImproveKandev`) is the
+> seam that would need to change (e.g. a dedicated flag column on the row).

@@ -1,7 +1,7 @@
 ---
 id: "02-frontend-bootstrap-workspace"
 title: "Frontend: use the bootstrap workspace"
-status: pending
+status: completed
 wave: 2
 depends_on: ["01-backend-dedicated-workspace"]
 plan: "plan.md"

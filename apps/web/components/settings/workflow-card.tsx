@@ -224,6 +224,8 @@ type WorkflowCardBodyProps = {
   savedWorkflowSteps: WorkflowStep[];
   diagnostics: WorkflowReplayCycleDiagnostic[];
   mutationPending: boolean;
+  /** Read-only reason label: Improve Kandev workspace vs GitHub sync. */
+  isImproveWorkspace?: boolean;
   stepActions: {
     handleUpdateWorkflowStep: (id: string, updates: Partial<WorkflowStep>) => Promise<void>;
     handleAddWorkflowStep: () => Promise<void>;
@@ -242,6 +244,7 @@ function WorkflowCardBody({
   savedWorkflowSteps,
   diagnostics,
   mutationPending,
+  isImproveWorkspace,
   stepActions,
   readOnly,
 }: WorkflowCardBodyProps) {
@@ -254,10 +257,14 @@ function WorkflowCardBody({
         <div className="flex-1 space-y-1.5">
           <Label className="flex items-center gap-2">
             <span>Workflow Name</span>
-            {readOnly && <WorkflowSyncedBadge sourcePath={workflow.source_path} />}
+            {readOnly && workflow.source === "github" && (
+              <WorkflowSyncedBadge sourcePath={workflow.source_path} />
+            )}
             {readOnly && (
               <span className="text-xs text-muted-foreground">
-                Read-only — managed by workflow sync
+                {isImproveWorkspace
+                  ? "Read-only — managed by Improve Kandev"
+                  : "Read-only — managed by workflow sync"}
               </span>
             )}
           </Label>
@@ -497,6 +504,7 @@ export function WorkflowCard(props: WorkflowCardProps) {
             savedWorkflowSteps={visibleSavedSteps}
             diagnostics={s.mutationGuard.diagnostics}
             mutationPending={s.mutationGuard.isMutationPending}
+            isImproveWorkspace={props.isImproveWorkspace}
             stepActions={s.stepActions}
             readOnly={s.readOnly}
           />

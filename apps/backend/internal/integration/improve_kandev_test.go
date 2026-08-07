@@ -211,3 +211,43 @@ func TestImproveKandevBootstrapRequiresWorkspaceIDWhenCreationDeclined(t *testin
 	router.ServeHTTP(res, req)
 	require.Equal(t, http.StatusInternalServerError, res.Code, res.Body.String())
 }
+
+func TestImproveKandevBootstrapConvergesOnSingleWorkspace(t *testing.T) {
+	ts := NewOrchestratorTestServer(t)
+	// Simulate the outcome of two concurrent first-time bootstraps: two rows
+	// with the same name (workspace names are not unique). Bootstrap must
+	// converge on a single, deterministic workspace id across calls.
+	for _, id := range []string{
+		"aaaaaaaa-0000-0000-0000-000000000001",
+		"aaaaaaaa-0000-0000-0000-000000000002",
+	} {
+		require.NoError(t, ts.TaskRepo.CreateWorkspace(context.Background(), &models.Workspace{
+			ID:   id,
+			Name: "Improve Kandev",
+		}))
+	}
+
+	repoPath := t.TempDir()
+	require.NoError(t, exec.Command("git", "init", repoPath).Run())
+	router := gin.New()
+	handler := improvekandev.NewHandler(ts.TaskSvc, improveKandevTestCloner{path: repoPath}, nil, nil, "test", ts.Logger)
+	improvekandev.RegisterRoutes(router, handler)
+
+	bootstrap := func() improvekandev.BootstrapResponse {
+		t.Helper()
+		body, err := json.Marshal(improvekandev.BootstrapRequest{CreateWorkspace: true})
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/system/improve-kandev/bootstrap", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+		var response improvekandev.BootstrapResponse
+		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &response))
+		return response
+	}
+
+	first := bootstrap()
+	second := bootstrap()
+	require.Equal(t, first.WorkspaceID, second.WorkspaceID, "both bootstraps must agree on one workspace")
+}

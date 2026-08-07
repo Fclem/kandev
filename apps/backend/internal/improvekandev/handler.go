@@ -312,6 +312,17 @@ func (h *Handler) ensureImproveWorkspace(ctx context.Context, createWorkspace bo
 		BootstrapKanbanWorkflow: true,
 	})
 	if err == nil {
+		// A concurrent bootstrap may have created another row with the same
+		// name in the same instant (workspace names are not unique). Re-read
+		// and converge on the deterministic first match so every caller agrees
+		// on one workspace id; the duplicate row is left to the next bootstrap
+		// to ignore.
+		if latest, listErr := h.taskSvc.ListWorkspaces(ctx); listErr == nil {
+			if winner := findByName(latest); winner != nil {
+				h.copyGitHubConnectionFromDefaultWorkspace(ctx, winner.ID)
+				return winner, nil
+			}
+		}
 		h.copyGitHubConnectionFromDefaultWorkspace(ctx, created.ID)
 		return created, nil
 	}

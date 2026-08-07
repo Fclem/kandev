@@ -28,12 +28,15 @@ bootstrap response returns, not in the user's active workspace.
 
 ```sh
 cd apps && pnpm --filter @kandev/web typecheck
+cd apps/web && pnpm vitest run components/improve-kandev-dialog.test.tsx
 ```
 
-(No new unit tests are required here — the behavior is covered by the E2E
-isolation test in task 03. Run the existing web unit tests if any are touched:
-`cd apps/web && pnpm vitest run components/improve-kandev-dialog` — currently
-none exist, so this is a typecheck-only gate.)
+Unit coverage (added with the change): `components/improve-kandev-dialog.test.tsx`
+asserts bootstrap is called with the workspace-choice flag, repositories are
+listed and stored for the bootstrap's `workspace_id` (not the active one), and
+the workspace-creation choice gates bootstrap when the dedicated workspace is
+missing. The task-landing-in-the-dedicated-workspace behavior itself is covered
+by the E2E isolation test in task 03.
 
 ## Files likely touched
 

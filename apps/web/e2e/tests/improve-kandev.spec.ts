@@ -181,23 +181,28 @@ test.describe("Improve Kandev dialog", () => {
     apiClient,
     seedData,
   }) => {
-    // Seed a real dedicated workspace so the mocked bootstrap's workspace_id
-    // exists in the backend: after bootstrap the dialog lists that workspace's
-    // repositories and creates the task there.
-    const dedicated = await apiClient.createWorkspace("Improve Kandev");
+    // The dedicated workspace is configuration-immutable: workflows and
+    // repositories cannot be created in it via the API. Seed them under a
+    // temporary name, then rename the workspace to "Improve Kandev" so the
+    // mocked bootstrap's workspace_id exists in the backend and the dialog
+    // lists its repositories and creates the task there.
+    const staging = await apiClient.createWorkspace("Improve Kandev Setup");
     const dedicatedWorkflow = await apiClient.createWorkflow(
-      dedicated.id,
+      staging.id,
       "Improve Kandev",
       "simple",
     );
     const dedicatedRepo = await apiClient.createRepository(
-      dedicated.id,
+      staging.id,
       seedData.repositoryPath,
       "main",
     );
+    await apiClient.updateWorkspace(staging.id, { name: "Improve Kandev" });
+    const dedicated = staging;
     await mockImproveKandevApis(testPage, seedData, {
       workspaceId: dedicated.id,
       workflowId: dedicatedWorkflow.id,
+      issueWorkflowId: dedicatedWorkflow.id,
       repositoryId: dedicatedRepo.id,
     });
 
@@ -548,8 +553,12 @@ test.describe("Improve Kandev dialog", () => {
     apiClient,
     seedData,
   }) => {
-    const dedicated = await apiClient.createWorkspace("Improve Kandev");
-    await apiClient.createRepository(dedicated.id, seedData.repositoryPath, "main");
+    // Repositories cannot be created in the immutable workspace, so seed under
+    // a temporary name and rename (the rename itself is not guarded).
+    const staging = await apiClient.createWorkspace("Improve Kandev Setup");
+    await apiClient.createRepository(staging.id, seedData.repositoryPath, "main");
+    await apiClient.updateWorkspace(staging.id, { name: "Improve Kandev" });
+    const dedicated = staging;
 
     await testPage.goto(`/settings/workspace/${dedicated.id}/repositories`);
 

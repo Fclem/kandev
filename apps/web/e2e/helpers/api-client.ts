@@ -750,6 +750,7 @@ export class ApiClient {
   async updateWorkspace(
     workspaceId: string,
     updates: {
+      name?: string;
       default_executor_id?: string;
       default_agent_profile_id?: string;
       default_config_agent_profile_id?: string;

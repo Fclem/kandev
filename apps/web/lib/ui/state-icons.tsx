@@ -186,7 +186,7 @@ export function InterruptedTaskIcon({ className }: { className?: string }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          aria-label={t("common:task.interruptedByRestart")}
+          aria-label={t("common:interruptedByRestart")}
           tabIndex={0}
           className="flex shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
         >
@@ -197,7 +197,7 @@ export function InterruptedTaskIcon({ className }: { className?: string }) {
           />
         </span>
       </TooltipTrigger>
-      <TooltipContent side="right">{t("common:task.interruptedByRestart")}</TooltipContent>
+      <TooltipContent side="right">{t("common:interruptedByRestart")}</TooltipContent>
     </Tooltip>
   );
 }

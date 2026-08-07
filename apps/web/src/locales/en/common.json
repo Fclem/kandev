@@ -141,6 +141,7 @@
   "includeRecentBackendAndBrowserLogs": "Include recent backend & browser logs as context for the agent",
   "installed": "Installed",
   "integrations": "Integrations",
+  "interruptedByRestart": "Interrupted by restart",
   "justNow": "just now",
   "kandevAllowsEveryAgentPermissionRequest": "Kandev allows every agent permission request without prompting you.",
   "kandevCouldNotLoad": "Kandev couldn’t load.",
@@ -316,9 +317,6 @@
   "workflowsControlTheStepsAutomationAnd": "Workflows control the steps, automation, and agent behavior for your tasks. You can add more workflows from Settings.",
   "workspace": "Workspace",
   "workspaces": "Workspaces",
-  "task": {
-    "interruptedByRestart": "Interrupted by restart"
-  },
   "youCanUseTheNavigationOr": "You can use the navigation or reload to try again.",
   "yourAgentImplementsItInThe": "Your agent implements it in the kandev repository, with tests",
   "youVerifyAndTestTheChange": "You verify and test the change in a second kandev instance"

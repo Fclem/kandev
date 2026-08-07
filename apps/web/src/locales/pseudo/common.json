@@ -141,6 +141,7 @@
   "includeRecentBackendAndBrowserLogs": "Ĩńćĺũďē ŕēćēńţ ƀàćķēńď & ƀŕōŵśēŕ ĺōĝś àś ćōńţēxţ ƒōŕ ţĥē àĝēńţ",
   "installed": "Ĩńśţàĺĺēď",
   "integrations": "Ĩńţēĝŕàţĩōńś",
+  "interruptedByRestart": "Ĩńţēŕŕũƥţēď ƀŷ ŕēśţàŕţ",
   "justNow": "ĵũśţ ńōŵ",
   "kandevAllowsEveryAgentPermissionRequest": "Ķàńďēv àĺĺōŵś ēvēŕŷ àĝēńţ ƥēŕḿĩśśĩōń ŕēqũēśţ ŵĩţĥōũţ ƥŕōḿƥţĩńĝ ŷōũ.",
   "kandevCouldNotLoad": "Ķàńďēv ćōũĺďń’ţ ĺōàď.",
@@ -316,9 +317,6 @@
   "workflowsControlTheStepsAutomationAnd": "Ŵōŕķƒĺōŵś ćōńţŕōĺ ţĥē śţēƥś, àũţōḿàţĩōń, àńď àĝēńţ ƀēĥàvĩōŕ ƒōŕ ŷōũŕ ţàśķś. Ŷōũ ćàń àďď ḿōŕē ŵōŕķƒĺōŵś ƒŕōḿ Śēţţĩńĝś.",
   "workspace": "Ŵōŕķśƥàćē",
   "workspaces": "Ŵōŕķśƥàćēś",
-  "task": {
-    "interruptedByRestart": "Ĩńţēŕŕũƥţēď ƀŷ ŕēśţàŕţ"
-  },
   "youCanUseTheNavigationOr": "Ŷōũ ćàń ũśē ţĥē ńàvĩĝàţĩōń ōŕ ŕēĺōàď ţō ţŕŷ àĝàĩń.",
   "yourAgentImplementsItInThe": "Ŷōũŕ àĝēńţ ĩḿƥĺēḿēńţś ĩţ ĩń ţĥē ķàńďēv ŕēƥōśĩţōŕŷ, ŵĩţĥ ţēśţś",
   "youVerifyAndTestTheChange": "Ŷōũ vēŕĩƒŷ àńď ţēśţ ţĥē ćĥàńĝē ĩń à śēćōńď ķàńďēv ĩńśţàńćē"

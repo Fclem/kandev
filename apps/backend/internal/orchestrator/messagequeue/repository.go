@@ -160,6 +160,7 @@ type Repository interface {
 	TakePendingMove(ctx context.Context, sessionID string) (*PendingMove, error)
 }
 
+// applyMetadataUpdates merges metadata key updates into current; a nil value removes the key.
 func applyMetadataUpdates(current, updates map[string]interface{}) map[string]interface{} {
 	merged := make(map[string]interface{}, len(current)+len(updates))
 	for key, value := range current {

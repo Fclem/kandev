@@ -10,6 +10,7 @@ import (
 	"github.com/kandev/kandev/internal/testutil"
 )
 
+// reorderRepos returns the repository constructors exercised by the reorder tests.
 func reorderRepos(t *testing.T) []struct {
 	name string
 	new  func(*testing.T) Repository
@@ -25,6 +26,7 @@ func reorderRepos(t *testing.T) []struct {
 	}
 }
 
+// assertOrderedIDs fails the test unless entries match want in exact order.
 func assertOrderedIDs(t *testing.T, entries []QueuedMessage, want ...string) {
 	t.Helper()
 	if len(entries) != len(want) {
@@ -37,6 +39,7 @@ func assertOrderedIDs(t *testing.T, entries []QueuedMessage, want ...string) {
 	}
 }
 
+// entryIDs extracts the ordered id list from entries.
 func entryIDs(entries []QueuedMessage) []string {
 	ids := make([]string, len(entries))
 	for i, e := range entries {
@@ -45,6 +48,7 @@ func entryIDs(entries []QueuedMessage) []string {
 	return ids
 }
 
+// snapshotEntries lists the session queue for assertions.
 func snapshotEntries(t *testing.T, repo Repository, sessionID string) []QueuedMessage {
 	t.Helper()
 	entries, err := repo.ListBySession(context.Background(), sessionID)

@@ -66,7 +66,7 @@ func TestHandlePostStartFailure_StrictModeEscalates(t *testing.T) {
 	run := seedRoutedRun(t, repo)
 
 	handled, err := ss.HandlePostStartFailure(
-		context.Background(), run, agentWithFallback(false, ""), postStartFailureMessage)
+		context.Background(), run, agentWithFallback(false, ""), postStartFailureMessage, nil)
 	if err != nil {
 		t.Fatalf("HandlePostStartFailure: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestHandlePostStartFailure_AutoFallbackRequeues(t *testing.T) {
 	run := seedRoutedRun(t, repo)
 
 	handled, err := ss.HandlePostStartFailure(
-		context.Background(), run, agentWithFallback(true, ""), postStartFailureMessage)
+		context.Background(), run, agentWithFallback(true, ""), postStartFailureMessage, nil)
 	if err != nil {
 		t.Fatalf("HandlePostStartFailure: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestHandlePostStartFailure_FallbackModelSetsOverride(t *testing.T) {
 	run := seedRoutedRun(t, repo)
 
 	handled, err := ss.HandlePostStartFailure(
-		context.Background(), run, agentWithFallback(false, "gpt-5"), postStartFailureMessage)
+		context.Background(), run, agentWithFallback(false, "gpt-5"), postStartFailureMessage, nil)
 	if err != nil {
 		t.Fatalf("HandlePostStartFailure: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestHandlePostStartFailure_NoSecondFallbackAttempt(t *testing.T) {
 		t.Fatalf("get run after dispatch: %v", err)
 	}
 	handled, err := ss.HandlePostStartFailure(
-		context.Background(), afterDispatch, agentWithFallback(false, "gpt-5"), postStartFailureMessage)
+		context.Background(), afterDispatch, agentWithFallback(false, "gpt-5"), postStartFailureMessage, nil)
 	if err != nil {
 		t.Fatalf("HandlePostStartFailure: %v", err)
 	}

@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 
 import {
   configOptionToModelOptions,
@@ -22,9 +23,6 @@ import type {
   ConfigOptionEntry,
   SessionModelEntry,
 } from "@/lib/state/slices/session-runtime/types";
-import { useTranslation } from "react-i18next";
-import { t } from "@/lib/i18n";
-
 type SessionModelsEntry = {
   currentModelId: string;
   models: SessionModelEntry[];
@@ -138,6 +136,22 @@ function sessionModelsToOptions(models: SessionModelEntry[]): ModelSelectorOptio
     description: m.description,
     usageMultiplier: m.usageMultiplier,
   }));
+}
+
+// annotateFallbackOptions marks the fallback model so the user sees the
+// session is not on the configured start model. Returns the same array when
+// no fallback note is active.
+function annotateFallbackOptions(
+  options: ModelSelectorOption[],
+  fallbackModel: string | undefined,
+): ModelSelectorOption[] {
+  if (!fallbackModel) return options;
+  for (const option of options) {
+    if (option.id === fallbackModel && !option.name.includes("(fallback)")) {
+      option.name = `${option.name} (fallback)`;
+    }
+  }
+  return options;
 }
 
 function buildModelOptions(
@@ -324,6 +338,43 @@ function useModelChangeHandlers(
   return { handleModelChange, handleConfigChange };
 }
 
+// resolveModelSelectorInputs derives the model list, config options and
+// current model from store state, independent of the hook lifecycle.
+function resolveModelSelectorInputs({
+  session,
+  sessionModelsData,
+  activeModel,
+  settingsAgents,
+  availableAgents,
+  profileModel,
+}: {
+  session: TaskSession | null;
+  sessionModelsData: SessionModelsEntry | undefined;
+  activeModel: string | null;
+  settingsAgents: Agent[];
+  availableAgents: AvailableAgent[];
+  profileModel: string | null;
+}) {
+  const usingAcpModels = !!sessionModelsData?.models?.length;
+  const configOptions = usableConfigOptions(sessionModelsData?.configOptions);
+  const modelConfig = configOptions.find(isModelConfigOption);
+  const availableModels = resolveAvailableModels({
+    modelConfig,
+    usingAcpModels,
+    sessionModels: sessionModelsData?.models ?? [],
+    settingsAgents,
+    profileId: session?.agent_profile_id,
+    availableAgents,
+  });
+  const currentModel = resolveCurrentModel(
+    activeModel,
+    sessionModelsData?.currentModelId || null,
+    resolveSnapshotModel(session?.agent_profile_snapshot),
+    profileModel,
+  );
+  return { configOptions, currentModel, availableModels };
+}
+
 /** Resolves available models, config options and current model from store state. */
 function useModelSelectorState(sessionId: string | null) {
   useSettingsData(true);
@@ -341,45 +392,27 @@ function useModelSelectorState(sessionId: string | null) {
     activeModels,
     selectedSessionModels,
   );
-  const snapshotModel = resolveSnapshotModel(session?.agent_profile_snapshot);
   const profileModel = useMemo(
     () => resolveProfileModel(session?.agent_profile_id, settingsAgents as Agent[]),
     [session?.agent_profile_id, settingsAgents],
   );
 
-  const usingAcpModels = !!sessionModelsData?.models?.length;
-  const configOptions = usableConfigOptions(sessionModelsData?.configOptions);
-  const modelConfig = configOptions.find(isModelConfigOption);
-  const availableModels = resolveAvailableModels({
-    modelConfig,
-    usingAcpModels,
-    sessionModels: sessionModelsData?.models ?? [],
-    settingsAgents: settingsAgents as Agent[],
-    profileId: session?.agent_profile_id,
-    availableAgents,
-  });
-
-  const acpCurrentModel = sessionModelsData?.currentModelId || null;
-  const currentModel = resolveCurrentModel(
+  const { configOptions, currentModel, availableModels } = resolveModelSelectorInputs({
+    session,
+    sessionModelsData,
     activeModel,
-    acpCurrentModel,
-    snapshotModel,
+    settingsAgents: settingsAgents as Agent[],
+    availableAgents,
     profileModel,
+  });
+  const modelOptions = useMemo(
+    () =>
+      annotateFallbackOptions(
+        buildModelOptions(availableModels, currentModel),
+        sessionModelsData?.fallbackModel,
+      ),
+    [availableModels, currentModel, sessionModelsData?.fallbackModel],
   );
-  const modelOptions = useMemo(() => {
-    const options = buildModelOptions(availableModels, currentModel);
-    const fallbackModel = sessionModelsData?.fallbackModel;
-    // Explicit "using fallback" signal: annotate the fallback model so the
-    // user sees the session is not on the configured start model.
-    if (fallbackModel) {
-      for (const option of options) {
-        if (option.id === fallbackModel && !option.name.includes("(fallback)")) {
-          option.name = `${option.name} (fallback)`;
-        }
-      }
-    }
-    return options;
-  }, [availableModels, currentModel, sessionModelsData?.fallbackModel]);
 
   const { handleModelChange, handleConfigChange } = useModelChangeHandlers(
     configOptions,
@@ -418,7 +451,6 @@ export const ModelSelector = memo(function ModelSelector({
     handleConfigChange,
   } = useModelSelectorState(sessionId);
   const modelConfig = configOptions.find(isModelConfigOption);
-  const { t } = useTranslation();
   // Explicit "using fallback" signal: annotate the trigger so the user sees
   // the session is not on the configured start model.
   const currentModelSuffix = fallbackModel ? ` ${t("settings:modelFallbackSuffix")}` : undefined;

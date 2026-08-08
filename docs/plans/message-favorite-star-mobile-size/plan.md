@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/ui/message-favorite-star-mobile-size.md
 created: 2026-08-08
-status: building
+status: done
 ---
 
 # Implementation Plan: Message favorite star mobile sizing

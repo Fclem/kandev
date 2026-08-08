@@ -1282,9 +1282,12 @@ func (r *sqliteRepository) MergeIntoAbove(ctx context.Context, sessionID, source
 // Any drift — a missing, extra, or duplicate id, or an id belonging to a
 // reserved in-flight row — returns ErrQueueChanged and leaves the queue
 // untouched. The per-session lock plus the in-transaction read make the
-// validation and the position rewrite one atomic snapshot; a row that
-// vanishes mid-transaction (a drain racing the lock) rolls back via the
-// affected-row check.
+// validation and the position rewrite one atomic snapshot in-process; across
+// backend instances sharing the same database (Postgres), each UPDATE carries
+// the row's read-time position as a compare-and-swap precondition, so a stale
+// reorder rolls back with ErrQueueChanged instead of clobbering a newer order.
+// A row that vanished mid-transaction (a drain racing the lock) fails the same
+// precondition and rolls back.
 func (r *sqliteRepository) ReorderEntries(ctx context.Context, sessionID string, orderedIDs []string) error {
 	unlock := r.withSessionLock(sessionID)
 	defer unlock()
@@ -1341,8 +1344,8 @@ func (r *sqliteRepository) ReorderEntries(ctx context.Context, sessionID string,
 		res, err := tx.ExecContext(ctx, r.db.Rebind(`
 			UPDATE queued_messages
 			SET position = ?
-			WHERE id = ? AND session_id = ?
-		`), int64(i+1), msg.ID, sessionID)
+			WHERE id = ? AND session_id = ? AND position = ?
+		`), int64(i+1), msg.ID, sessionID, msg.Position)
 		if err != nil {
 			return fmt.Errorf("reorder position %d: %w", i+1, err)
 		}
@@ -1351,8 +1354,12 @@ func (r *sqliteRepository) ReorderEntries(ctx context.Context, sessionID string,
 			return fmt.Errorf("reorder position %d rows affected: %w", i+1, err)
 		}
 		if affected == 0 {
-			// A row vanished mid-transaction; roll back so no partial reorder
-			// persists and the caller reconciles from the authoritative queue.
+			// The row vanished or its position drifted since the in-transaction
+			// read — a concurrent drain, or another backend instance committed a
+			// reorder for this session in between. The per-session lock only
+			// serializes in-process; the position precondition is the
+			// cross-instance compare-and-swap, so a stale reorder rolls back
+			// with ErrQueueChanged instead of clobbering the newer order.
 			return ErrQueueChanged
 		}
 	}

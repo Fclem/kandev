@@ -766,11 +766,11 @@ func (h *QueueHandlers) wsReorder(ctx context.Context, msg *ws.Message) (*ws.Mes
 	if req.SessionID == "" {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "session_id is required", nil)
 	}
-	if len(req.OrderedIDs) == 0 {
-		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "ordered_ids is required", nil)
-	}
 	if denied := h.authorizeSession(ctx, msg, req.SessionID); denied != nil {
 		return denied, nil
+	}
+	if len(req.OrderedIDs) == 0 {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "ordered_ids is required", nil)
 	}
 	if hasDuplicateIDs(req.OrderedIDs) {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "ordered_ids must not contain duplicates", nil)

@@ -644,7 +644,9 @@ func (r *memoryRepository) MergeIntoAbove(_ context.Context, sessionID, sourceID
 // ReorderEntries rewrites the session's visible pending order to match
 // orderedIDs, mirroring the sqlite repository's semantics: reserved in-flight
 // rows keep their place in the sequence, visible rows appear in the submitted
-// order, and positions are compacted to 1..N. Any drift returns
+// order, and positions are compacted to 1..N. The stored slice is reassigned
+// to the new sequence so TakeHead/ReserveHead (which consume list[0]) drain in
+// the reordered order, not the pre-reorder slice order. Any drift returns
 // ErrQueueChanged and leaves every entry untouched.
 func (r *memoryRepository) ReorderEntries(_ context.Context, sessionID string, orderedIDs []string) error {
 	r.mu.Lock()
@@ -676,8 +678,14 @@ func (r *memoryRepository) ReorderEntries(_ context.Context, sessionID string, o
 	for i, msg := range sequence {
 		msg.Position = int64(i + 1)
 	}
-	if n := len(sequence); n > 0 && int64(n) > r.nextPosition[sessionID] {
-		r.nextPosition[sessionID] = int64(n)
+	if len(sequence) > 0 {
+		// The entries slice is consumed by index (TakeHead/ReserveHead take
+		// list[0]); it must be stored in the new position order or drains
+		// would still return the pre-reorder head.
+		r.entries[sessionID] = sequence
+		if n := len(sequence); int64(n) > r.nextPosition[sessionID] {
+			r.nextPosition[sessionID] = int64(n)
+		}
 	}
 	return nil
 }

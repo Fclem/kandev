@@ -340,7 +340,10 @@ function DisplayView({
   );
   return (
     <div className="group flex items-start gap-2 py-1.5" data-testid="queue-entry">
-      <span className="flex items-center gap-1.5 mt-0.5 text-muted-foreground">
+      {/* Position label + sender icon are non-interactive; relative keeps them
+       * painted above the background grab handle on coarse pointers, and
+       * pointer-events-none lets touches reach the handle behind them. */}
+      <span className="relative flex items-center gap-1.5 mt-0.5 text-muted-foreground pointer-events-none">
         <span
           aria-label={t("task:position", { positionLabel })}
           className="font-mono text-[10px] tabular-nums"
@@ -397,7 +400,9 @@ type QueueGrabHandleProps = {
  * Dotted drag handle that floats over the row's left edge. It is absolutely
  * positioned so nothing in the row shifts to make room; on fine pointers it
  * appears on row hover or keyboard focus, on coarse pointers it is always
- * visible with a touch-sized hit area. Dragging starts only from this handle.
+ * visible, attached flush to the box's left edge and painted behind the row
+ * content (no chip surface — the dots read as part of the box edge).
+ * Dragging starts only from this handle.
  */
 function QueueGrabHandle({ canDrag, attributes, listeners }: QueueGrabHandleProps) {
   const { t } = useTranslation();
@@ -419,9 +424,17 @@ function QueueGrabHandle({ canDrag, attributes, listeners }: QueueGrabHandleProp
         "opacity-0 transition-opacity duration-150",
         "group-hover:opacity-100 group-focus-within:opacity-100",
         canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-30",
+        // Coarse pointers: always visible, flush with the left side of the
+        // message box, and behind the row content — the label/icon cluster
+        // paints above it (relative) while pointer-events-none lets touches
+        // reach the 44px target.
         "[@media(pointer:coarse)]:opacity-100",
-        "[@media(pointer:coarse)]:left-1 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
-        "[@media(pointer:coarse)]:bg-background/80",
+        "[@media(pointer:coarse)]:left-0 [@media(pointer:coarse)]:z-0",
+        "[@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
+        "[@media(pointer:coarse)]:border-transparent",
+        "[@media(pointer:coarse)]:bg-transparent",
+        "[@media(pointer:coarse)]:shadow-none",
+        "[@media(pointer:coarse)]:justify-start [@media(pointer:coarse)]:pl-1",
       )}
     >
       <span aria-hidden className="grid grid-cols-2 gap-[3px]">

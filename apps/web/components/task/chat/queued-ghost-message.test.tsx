@@ -119,6 +119,29 @@ describe("QueuedGhostMessage reorder handle", () => {
     expect(handle.className).toContain("[@media(pointer:coarse)]:opacity-100");
   });
 
+  it("attaches the coarse-pointer handle to the box edge in the background", () => {
+    renderRow();
+    const handle = screen.getByTestId(HANDLE_TESTID);
+    // Coarse pointers: flush at the left edge, behind the content (z-0, no
+    // chip surface) so the dots read as part of the box edge.
+    expect(handle.className).toContain("[@media(pointer:coarse)]:left-0");
+    expect(handle.className).toContain("[@media(pointer:coarse)]:z-0");
+    expect(handle.className).toContain("[@media(pointer:coarse)]:bg-transparent");
+    expect(handle.className).toContain("[@media(pointer:coarse)]:shadow-none");
+    expect(handle.className).toContain("[@media(pointer:coarse)]:h-11");
+    expect(handle.className).toContain("[@media(pointer:coarse)]:w-11");
+  });
+
+  it("keeps the position label painted above the handle and pointer-transparent", () => {
+    renderRow();
+    // The label/icon cluster sits above the background handle (relative) and
+    // passes touches through to it (pointer-events-none).
+    const label = screen.getByLabelText("Position #1");
+    const cluster = label.parentElement!;
+    expect(cluster.className).toContain("relative");
+    expect(cluster.className).toContain("pointer-events-none");
+  });
+
   it("disables the handle while reordering is unavailable", () => {
     renderRow({}, { canDrag: false });
     const handle = screen.getByTestId(HANDLE_TESTID) as HTMLButtonElement;

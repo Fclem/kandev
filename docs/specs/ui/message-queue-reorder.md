@@ -24,9 +24,11 @@ without losing content.
   `#N` position label; the label returns when the handle hides.
 - On a fine pointer the handle is hidden by default and appears when the
   pointer hovers the row or keyboard focus reaches it. On a coarse pointer
-  (touch) it is always visible and has an interactive hit area of at least
-  44 by 44 CSS pixels; its surface is translucent so the position label
-  stays faintly legible.
+  (touch) it is always visible, attached flush to the message box's left
+  edge, and painted **behind** the row content — no chip surface, so the
+  dotted grip reads as part of the box edge. The position label and sender
+  icon stay painted above it (and pass touches through), and the interactive
+  hit area is at least 44 by 44 CSS pixels.
 - Dragging starts **only** from the handle. Pointer interaction with the row
   body (text selection, expand toggle, edit/merge/remove/send-now actions)
   is unchanged. Dragging requires pointer movement (activation distance),
@@ -144,9 +146,13 @@ transaction uncommitted and the previous order intact.
   stays visible.
 - Desktop: the handle is a hover/focus-revealed floating overlay on the
   row's left edge; nothing shifts in layout.
-- Phone/coarse-pointer: the handle is always visible, at least 44 by 44 CSS
-  pixels, `touch-action: none` so a touch-drag reorders instead of scrolling.
-  Vertical scrolling of the queue list is unaffected elsewhere.
+- Phone/coarse-pointer: the handle is always visible, attached flush to the
+  box's left edge, and painted behind the row content (background, no chip
+  surface). The row's position label / sender icon render above it and are
+  `pointer-events: none`, so touches reach the handle's 44 by 44 CSS-pixel
+  target while the label stays readable. `touch-action: none` on the handle
+  keeps a touch-drag reordering instead of scrolling; vertical scrolling of
+  the queue list is unaffected elsewhere.
 - The queue hook, backend action, optimistic order, and reconciliation are
   shared across viewports; only the handle's visibility and size differ.
 - Mobile Playwright coverage proves the same reorder result with touch input.
@@ -185,7 +191,9 @@ transaction uncommitted and the previous order intact.
   the bulk prompt concatenates the bodies in the reordered FIFO order.
 - **GIVEN** a phone viewport with queued messages, **WHEN** the user opens
   the queue panel, **THEN** every row shows an always-visible touch-sized
-  handle and a touch drag reorders the queue with the same persisted result.
+  handle attached flush to the box's left edge and painted behind the row
+  content (position labels stay readable), and a touch drag reorders the
+  queue with the same persisted result.
 - **GIVEN** the user focuses a row's handle with the keyboard, **WHEN** they
   press Space, Arrow Up, then Space, **THEN** the row moves one position up
   and the order is persisted.

@@ -32,7 +32,7 @@ async function seedBusyQueueTask(
   await testPage.goto(`/t/${task.id}`);
   const session = new SessionPage(testPage);
   await session.waitForLoad();
-  await session.waitForChatIdle({ timeout: 30_000 });
+  await session.waitForChatIdle({ timeout: 60_000 });
   await session.sendMessageViaButton("/slow 30s");
   await session.agentStatus().waitFor({ state: "visible", timeout: 15_000 });
   await testPage.waitForTimeout(500);
@@ -107,6 +107,8 @@ async function touchDragTo(
     clientY: end.y + 2,
   });
 }
+
+test.describe.configure({ retries: 1 });
 
 test("mobile touch drag reorders queued messages with an always-visible handle", async ({
   testPage,

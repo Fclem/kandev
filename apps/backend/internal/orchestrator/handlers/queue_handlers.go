@@ -20,11 +20,15 @@ import (
 const (
 	// queueErrorCodeEntryNotFound is surfaced when an edit/remove targets an entry
 	// that has already been drained (atomic-take won the race).
-	queueErrorCodeEntryNotFound             = "entry_not_found"
-	queueErrorCodeSessionBusy               = "session_busy"
-	queueErrorCodeNotPromptable             = "session_not_promptable"
-	queueErrorCodeSendNowQueueEmpty         = "queue_empty"
-	queueErrorCodeSendNowQueueChanged       = "queue_changed"
+	queueErrorCodeEntryNotFound       = "entry_not_found"
+	queueErrorCodeSessionBusy         = "session_busy"
+	queueErrorCodeNotPromptable       = "session_not_promptable"
+	queueErrorCodeSendNowQueueEmpty   = "queue_empty"
+	queueErrorCodeSendNowQueueChanged = "queue_changed"
+	// queueErrorCodeQueueChanged is the shared "your snapshot is stale" signal
+	// for reorder drift; the wire value matches the send-now code so clients
+	// reconcile with one handler.
+	queueErrorCodeQueueChanged              = "queue_changed"
 	queueErrorCodeSendNowConflict           = "send_now_conflict"
 	queueErrorCodeSendNowTurnChanged        = "turn_changed"
 	queueErrorCodeSendNowAttachmentOverflow = "send_now_attachment_overflow"
@@ -55,6 +59,7 @@ type QueueService interface {
 	UpdateMessageWithMetadata(ctx context.Context, sessionID, entryID, content string, attachments []messagequeue.MessageAttachment, metadataUpdates map[string]interface{}, queuedBy string) error
 	RemoveEntry(ctx context.Context, sessionID, entryID string) error
 	MergeIntoAbove(ctx context.Context, sessionID, entryID, queuedBy string) (*messagequeue.QueuedMessage, error)
+	ReorderEntries(ctx context.Context, sessionID string, orderedIDs []string) error
 	CancelAll(ctx context.Context, sessionID string) (int, error)
 	GetStatus(ctx context.Context, sessionID string) *messagequeue.QueueStatus
 }
@@ -158,6 +163,7 @@ func (h *QueueHandlers) RegisterHandlers(d *ws.Dispatcher) {
 	d.RegisterFunc(ws.ActionMessageQueueSendNow, h.wsSendNow)
 	d.RegisterFunc(ws.ActionMessageQueueRemove, h.wsRemoveEntry)
 	d.RegisterFunc(ws.ActionMessageQueueMerge, h.wsMergeIntoAbove)
+	d.RegisterFunc(ws.ActionMessageQueueReorder, h.wsReorder)
 }
 
 type wsQueueMessageRequest struct {
@@ -740,6 +746,51 @@ func (h *QueueHandlers) wsMergeIntoAbove(ctx context.Context, msg *ws.Message) (
 	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{fieldEntryID: merged.ID})
 }
 
+// wsReorderRequest is the payload for ActionMessageQueueReorder: the session
+// whose queue is modified and the complete ordered list of visible pending
+// entry ids the caller wants as the new FIFO order.
+type wsReorderRequest struct {
+	SessionID  string   `json:"session_id"`
+	OrderedIDs []string `json:"ordered_ids"`
+}
+
+// wsReorder handles ActionMessageQueueReorder, rewriting the session's visible
+// pending order to match ordered_ids and broadcasting the updated queue. Any
+// drift from the persisted visible set (a drain/remove/merge raced the drag)
+// is rejected atomically with queue_changed so the client refetches.
+func (h *QueueHandlers) wsReorder(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
+	var req wsReorderRequest
+	if err := msg.ParsePayload(&req); err != nil {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeBadRequest, "Invalid payload: "+err.Error(), nil)
+	}
+	if req.SessionID == "" {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "session_id is required", nil)
+	}
+	if len(req.OrderedIDs) == 0 {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "ordered_ids is required", nil)
+	}
+	if denied := h.authorizeSession(ctx, msg, req.SessionID); denied != nil {
+		return denied, nil
+	}
+	if hasDuplicateIDs(req.OrderedIDs) {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "ordered_ids must not contain duplicates", nil)
+	}
+
+	if err := h.queueService.ReorderEntries(ctx, req.SessionID, req.OrderedIDs); err != nil {
+		if errors.Is(err, messagequeue.ErrQueueChanged) {
+			return ws.NewError(msg.ID, msg.Action, queueErrorCodeQueueChanged, "Queue changed before the reorder could be applied", nil)
+		}
+		h.logger.Error("failed to reorder queued messages", zap.Error(err))
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to reorder queued messages", nil)
+	}
+
+	h.publishStatus(ctx, req.SessionID)
+	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{
+		fieldSessionID: req.SessionID,
+		"reordered":    len(req.OrderedIDs),
+	})
+}
+
 type wsAppendToQueueRequest struct {
 	SessionID string `json:"session_id"`
 	TaskID    string `json:"task_id"`
@@ -794,6 +845,18 @@ func (h *QueueHandlers) wsAppendToQueue(ctx context.Context, msg *ws.Message) (*
 		fieldEntryID: queued.ID,
 		"was_append": appended,
 	})
+}
+
+// hasDuplicateIDs reports whether ids contains any id more than once.
+func hasDuplicateIDs(ids []string) bool {
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if _, duplicate := seen[id]; duplicate {
+			return true
+		}
+		seen[id] = struct{}{}
+	}
+	return false
 }
 
 func reservedIdentityError(queuedBy string) string {

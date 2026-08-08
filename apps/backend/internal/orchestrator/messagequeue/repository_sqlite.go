@@ -1275,6 +1275,93 @@ func (r *sqliteRepository) MergeIntoAbove(ctx context.Context, sessionID, source
 	return &merged, nil
 }
 
+// ReorderEntries atomically rewrites the FIFO positions of the session's
+// visible pending entries to match orderedIDs. Reserved in-flight lifecycle
+// rows keep their place in the sequence; visible rows are interleaved in the
+// submitted order and all positions are compacted to 1..N in one transaction.
+// Any drift — a missing, extra, or duplicate id, or an id belonging to a
+// reserved in-flight row — returns ErrQueueChanged and leaves the queue
+// untouched. The per-session lock plus the in-transaction read make the
+// validation and the position rewrite one atomic snapshot; a row that
+// vanishes mid-transaction (a drain racing the lock) rolls back via the
+// affected-row check.
+func (r *sqliteRepository) ReorderEntries(ctx context.Context, sessionID string, orderedIDs []string) error {
+	unlock := r.withSessionLock(sessionID)
+	defer unlock()
+
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin reorder tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryxContext(ctx, r.db.Rebind(`
+		SELECT id, session_id, task_id, position, content, model, plan_mode,
+		       attachments_json, metadata_json, queued_at, queued_by
+		FROM queued_messages
+		WHERE session_id = ?
+		ORDER BY position ASC
+	`), sessionID)
+	if err != nil {
+		return fmt.Errorf("read reorder rows: %w", err)
+	}
+	stored := make([]*QueuedMessage, 0, 4)
+	for rows.Next() {
+		msg, scanErr := scanQueuedRow(rows)
+		if scanErr != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan reorder row: %w", scanErr)
+		}
+		stored = append(stored, msg)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close reorder rows: %w", err)
+	}
+
+	visible, _ := splitVisibleAndReserved(stored)
+	ordered, err := validateReorderSet(visible, orderedIDs)
+	if err != nil {
+		return err
+	}
+
+	// Interleave reserved rows at their current places; visible rows emit in
+	// the submitted order. Positions are compacted to 1..N.
+	sequence := make([]*QueuedMessage, 0, len(stored))
+	visibleCursor := 0
+	for _, msg := range stored {
+		if msg.IsReservedInFlight() {
+			sequence = append(sequence, msg)
+		} else {
+			sequence = append(sequence, ordered[visibleCursor])
+			visibleCursor++
+		}
+	}
+
+	for i, msg := range sequence {
+		res, err := tx.ExecContext(ctx, r.db.Rebind(`
+			UPDATE queued_messages
+			SET position = ?
+			WHERE id = ? AND session_id = ?
+		`), int64(i+1), msg.ID, sessionID)
+		if err != nil {
+			return fmt.Errorf("reorder position %d: %w", i+1, err)
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("reorder position %d rows affected: %w", i+1, err)
+		}
+		if affected == 0 {
+			// A row vanished mid-transaction; roll back so no partial reorder
+			// persists and the caller reconciles from the authoritative queue.
+			return ErrQueueChanged
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit reorder: %w", err)
+	}
+	return nil
+}
+
 // readMergeSource loads the source entry by id, mapping a missing row to
 // ErrEntryNotFound so the caller can report it without wrapping.
 func readMergeSource(ctx context.Context, r *sqliteRepository, tx *sqlx.Tx, sessionID, sourceID string) (*QueuedMessage, error) {

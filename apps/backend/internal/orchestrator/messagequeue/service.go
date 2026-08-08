@@ -626,6 +626,24 @@ func (s *Service) MergeIntoAbove(ctx context.Context, sessionID, entryID, queued
 	return merged, nil
 }
 
+// ReorderEntries rewrites the pending FIFO order of a session's queue to
+// match orderedIDs. Returns ErrQueueChanged when the submitted order is empty,
+// contains duplicates, or does not match the current visible pending set (a
+// drain/remove/merge raced the request); callers refetch the authoritative
+// queue.
+func (s *Service) ReorderEntries(ctx context.Context, sessionID string, orderedIDs []string) error {
+	if err := validateReorderInput(orderedIDs); err != nil {
+		return err
+	}
+	if err := s.repo.ReorderEntries(ctx, sessionID, orderedIDs); err != nil {
+		return err
+	}
+	s.logger.Info("queued entries reordered",
+		zap.String("session_id", sessionID),
+		zap.Int("entry_count", len(orderedIDs)))
+	return nil
+}
+
 // CancelAll clears every queued entry for a session. Returns the number of
 // rows removed.
 func (s *Service) CancelAll(ctx context.Context, sessionID string) (int, error) {

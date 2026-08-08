@@ -641,6 +641,47 @@ func (r *memoryRepository) MergeIntoAbove(_ context.Context, sessionID, sourceID
 	return &merged, nil
 }
 
+// ReorderEntries rewrites the session's visible pending order to match
+// orderedIDs, mirroring the sqlite repository's semantics: reserved in-flight
+// rows keep their place in the sequence, visible rows appear in the submitted
+// order, and positions are compacted to 1..N. Any drift returns
+// ErrQueueChanged and leaves every entry untouched.
+func (r *memoryRepository) ReorderEntries(_ context.Context, sessionID string, orderedIDs []string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	stored := r.entries[sessionID]
+
+	// The stored slice is not guaranteed position-sorted after ReplaceSession;
+	// sort a copy so reserved rows interleave at their persisted places.
+	sorted := make([]*QueuedMessage, len(stored))
+	copy(sorted, stored)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Position < sorted[j].Position })
+
+	visible, _ := splitVisibleAndReserved(sorted)
+	ordered, err := validateReorderSet(visible, orderedIDs)
+	if err != nil {
+		return err
+	}
+
+	sequence := make([]*QueuedMessage, 0, len(sorted))
+	visibleCursor := 0
+	for _, msg := range sorted {
+		if msg.IsReservedInFlight() {
+			sequence = append(sequence, msg)
+		} else {
+			sequence = append(sequence, ordered[visibleCursor])
+			visibleCursor++
+		}
+	}
+	for i, msg := range sequence {
+		msg.Position = int64(i + 1)
+	}
+	if n := len(sequence); n > 0 && int64(n) > r.nextPosition[sessionID] {
+		r.nextPosition[sessionID] = int64(n)
+	}
+	return nil
+}
+
 func (r *memoryRepository) DeleteByID(_ context.Context, sessionID, entryID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

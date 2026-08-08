@@ -9,8 +9,12 @@ import {
   useRef,
   useState,
 } from "react";
+import type { ReactNode } from "react";
 import { IconCheck, IconFile, IconInfoCircle, IconRobot, IconUser } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { toast } from "@/lib/toast/sonner";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui";
@@ -383,6 +387,95 @@ function DisplayView({
   );
 }
 
+type QueueGrabHandleProps = {
+  canDrag: boolean;
+  attributes: DraggableAttributes;
+  listeners: DraggableSyntheticListeners;
+};
+
+/**
+ * Dotted drag handle that floats over the row's left edge. It is absolutely
+ * positioned so nothing in the row shifts to make room; on fine pointers it
+ * appears on row hover or keyboard focus, on coarse pointers it is always
+ * visible with a touch-sized hit area. Dragging starts only from this handle.
+ */
+function QueueGrabHandle({ canDrag, attributes, listeners }: QueueGrabHandleProps) {
+  const { t } = useTranslation();
+  const dragProps = canDrag ? { ...attributes, ...listeners } : {};
+  return (
+    <button
+      type="button"
+      disabled={!canDrag}
+      aria-label={t("chat:reorderQueuedMessage")}
+      data-testid="queue-grab-handle"
+      {...dragProps}
+      aria-roledescription={t("chat:sortable")}
+      className={cn(
+        "absolute top-1/2 z-10 -translate-y-1/2 touch-none rounded-md",
+        "flex items-center justify-center",
+        "left-[-5px] h-6 w-6",
+        "text-muted-foreground",
+        "border border-border/60 bg-background/90 shadow-sm",
+        "opacity-0 transition-opacity duration-150",
+        "group-hover:opacity-100 group-focus-within:opacity-100",
+        canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-30",
+        "[@media(pointer:coarse)]:opacity-100",
+        "[@media(pointer:coarse)]:left-1 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
+        "[@media(pointer:coarse)]:bg-background/80",
+      )}
+    >
+      <span aria-hidden className="grid grid-cols-2 gap-[3px]">
+        {[0, 1, 2, 3, 4, 5].map((dot) => (
+          <span key={dot} className="h-[3px] w-[3px] rounded-full bg-current" />
+        ))}
+      </span>
+    </button>
+  );
+}
+
+type SortableRowShellProps = {
+  id: string;
+  /** useSortable is disabled while the row is edited or reordering is off. */
+  disabled: boolean;
+  canDrag: boolean;
+  /** The grab handle is hidden while the row is being edited. */
+  showHandle: boolean;
+  isDragging: boolean;
+  children: ReactNode;
+};
+
+/** Sortable row wrapper: owns the dnd-kit node ref, transform, and the dotted
+ * grab handle overlay, keeping QueuedGhostMessage focused on content. */
+function SortableRowShell({
+  id,
+  disabled,
+  canDrag,
+  showHandle,
+  isDragging,
+  children,
+}: SortableRowShellProps) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+    id,
+    disabled,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "group relative rounded-md border border-border/60 bg-background/40 px-2 text-sm",
+        "hover:border-border transition-colors",
+        isDragging && "z-10 opacity-40",
+      )}
+    >
+      {showHandle && (
+        <QueueGrabHandle canDrag={canDrag} attributes={attributes} listeners={listeners} />
+      )}
+      {children}
+    </div>
+  );
+}
+
 type QueuedGhostMessageProps = {
   entry: QueuedMessage;
   /** Zero-based render position; combined with entry.position to label the row. */
@@ -399,6 +492,14 @@ type QueuedGhostMessageProps = {
    * share a sender kind. Optional so standalone renders (tests) can omit it.
    */
   canMerge?: boolean;
+  /**
+   * Reordering is enabled unless a queue mutation or backend cancellation is
+   * in flight; the row's own edit view also suppresses the handle. Optional so
+   * standalone renders (tests) default to the draggable state.
+   */
+  canDrag?: boolean;
+  /** Set while this row is the active drag target, for dimming/z-index. */
+  isDragging?: boolean;
   onSave: (content: string, entityReferences: EntityReference[]) => Promise<void>;
   onRemove: () => void | Promise<void>;
   /** Fold this entry into the one above it. */
@@ -479,6 +580,8 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
       canEdit,
       canRemove = true,
       canMerge = false,
+      canDrag = true,
+      isDragging = false,
       onSave,
       onRemove,
       onMerge,
@@ -530,11 +633,12 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
     const positionLabel = queuePositionLabel(index, entry.position);
 
     return (
-      <div
-        className={cn(
-          "rounded-md border border-border/60 bg-background/40 px-2 text-sm",
-          "hover:border-border transition-colors",
-        )}
+      <SortableRowShell
+        id={entry.id}
+        disabled={editing || !canDrag}
+        canDrag={canDrag}
+        showHandle={!editing}
+        isDragging={isDragging}
       >
         {editing ? (
           <EditView
@@ -561,7 +665,7 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
             sendNowDisabled={sendNowDisabled}
           />
         )}
-      </div>
+      </SortableRowShell>
     );
   },
 );

@@ -81,6 +81,58 @@ function renderWithProviders(node: React.ReactNode) {
   );
 }
 
+describe("QueuedGhostMessage reorder handle", () => {
+  const HANDLE_TESTID = "queue-grab-handle";
+
+  function renderRow(
+    overrides: Partial<QueuedMessage> = {},
+    props: Partial<React.ComponentProps<typeof QueuedGhostMessage>> = {},
+  ) {
+    return render(
+      <QueuedGhostMessage
+        entry={entry(overrides)}
+        canEdit={false}
+        onSave={vi.fn()}
+        onRemove={vi.fn()}
+        {...props}
+      />,
+    );
+  }
+
+  it("renders a dotted grab handle with localized labels", () => {
+    renderRow();
+    const handle = screen.getByTestId(HANDLE_TESTID);
+    expect(handle.getAttribute("aria-label")).toBe("Reorder queued message");
+    expect(handle.getAttribute("aria-roledescription")).toBe("sortable");
+    // 2x3 dot grid reads as a dotted grip.
+    expect(handle.querySelectorAll('[aria-hidden="true"] span').length).toBe(6);
+  });
+
+  it("hides the handle on a fine pointer until the row is hovered", () => {
+    renderRow();
+    const handle = screen.getByTestId(HANDLE_TESTID);
+    // Visibility is CSS-driven: hidden by default, revealed on hover/focus on
+    // fine pointers, always visible on coarse pointers.
+    expect(handle.className).toContain("opacity-0");
+    expect(handle.className).toContain("group-hover:opacity-100");
+    expect(handle.className).toContain("group-focus-within:opacity-100");
+    expect(handle.className).toContain("[@media(pointer:coarse)]:opacity-100");
+  });
+
+  it("disables the handle while reordering is unavailable", () => {
+    renderRow({}, { canDrag: false });
+    const handle = screen.getByTestId(HANDLE_TESTID) as HTMLButtonElement;
+    expect(handle.disabled).toBe(true);
+    expect(handle.className).toContain("cursor-not-allowed");
+  });
+
+  it("hides the handle while the row is being edited", () => {
+    renderRow({ queued_by: "user-1" }, { canEdit: true });
+    fireEvent.click(screen.getByTestId(EDIT_TESTID));
+    expect(screen.queryByTestId(HANDLE_TESTID)).toBeNull();
+  });
+});
+
 describe("QueuedGhostMessage workflow badge", () => {
   it("renders workflow metadata as a workflow step badge", () => {
     render(

@@ -9,8 +9,9 @@ async function expectTouchTarget(locator: Locator): Promise<void> {
   await expect(locator).toBeVisible();
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
-  expect(box!.width).toBeGreaterThanOrEqual(44);
-  expect(box!.height).toBeGreaterThanOrEqual(44);
+  // Chromium can report a 44px CSS target a fraction below 44 after layout.
+  expect(box!.width).toBeGreaterThanOrEqual(43.5);
+  expect(box!.height).toBeGreaterThanOrEqual(43.5);
 }
 
 async function seedBusyQueueTask(

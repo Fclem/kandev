@@ -339,11 +339,11 @@ function DisplayView({
     [entityReferences],
   );
   return (
-    <div className="group flex items-start gap-2 py-1.5" data-testid="queue-entry">
+    <div className="group flex items-center gap-2 py-1.5" data-testid="queue-entry">
       {/* Position label + sender icon are non-interactive; relative keeps them
-       * painted above the background grab handle on coarse pointers, and
-       * pointer-events-none lets touches reach the handle behind them. */}
-      <span className="relative flex items-center gap-1.5 mt-0.5 text-muted-foreground pointer-events-none">
+       * painted above the coarse-pointer touch target, and pointer-events-none
+       * lets touches reach the handle behind them. */}
+      <span className="relative flex items-center gap-1.5 text-muted-foreground pointer-events-none">
         <span
           aria-label={t("task:position", { positionLabel })}
           className="font-mono text-[10px] tabular-nums"
@@ -400,10 +400,10 @@ type QueueGrabHandleProps = {
 
 /**
  * Dotted drag handle that floats over the row's left edge. It is absolutely
- * positioned so nothing in the row shifts to make room; on fine pointers it
- * appears on row hover or keyboard focus, on coarse pointers it is always
- * visible, attached flush to the box's left edge and painted behind the row
- * content (no chip surface — the dots read as part of the box edge).
+ * positioned so nothing in the row shifts to make room. It is always visible
+ * when the queue has multiple entries, attached flush to the box's left edge
+ * and painted behind the row content on coarse pointers (no chip surface —
+ * the dots read as part of the box edge).
  * Dragging starts only from this handle.
  */
 function QueueGrabHandle({
@@ -426,28 +426,25 @@ function QueueGrabHandle({
       className={cn(
         "absolute top-1/2 z-10 -translate-y-1/2 touch-none rounded-md",
         "flex items-center justify-center",
-        "left-[-5px] h-6 w-6",
-        "text-muted-foreground",
-        "border border-border/60 bg-background/90 shadow-sm",
-        "opacity-0 transition-opacity duration-150",
-        "group-hover:opacity-100 group-focus-within:opacity-100",
+        "left-1 h-3 w-3",
+        "text-muted-foreground/70 hover:text-muted-foreground",
+        "border-0 bg-transparent shadow-none",
+        "opacity-100 transition-opacity duration-150",
         canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-30",
-        // Coarse pointers: always visible, flush with the left side of the
-        // message box, and behind the row content — the label/icon cluster
-        // paints above it (relative) while pointer-events-none lets touches
-        // reach the 44px target.
+        // Coarse pointers: keep a 44px touch target while the visible grip
+        // remains small and behind the row content.
         "[@media(pointer:coarse)]:opacity-100",
         "[@media(pointer:coarse)]:left-0 [@media(pointer:coarse)]:z-0",
         "[@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
-        "[@media(pointer:coarse)]:border-transparent",
+        "[@media(pointer:coarse)]:border-0",
         "[@media(pointer:coarse)]:bg-transparent",
         "[@media(pointer:coarse)]:shadow-none",
-        "[@media(pointer:coarse)]:justify-start [@media(pointer:coarse)]:pl-1",
+        "[@media(pointer:coarse)]:justify-start [@media(pointer:coarse)]:pl-2",
       )}
     >
-      <span aria-hidden className="grid grid-cols-2 gap-[3px]">
+      <span aria-hidden className="grid grid-cols-2 gap-0.5">
         {[0, 1, 2, 3, 4, 5].map((dot) => (
-          <span key={dot} className="h-[3px] w-[3px] rounded-full bg-current" />
+          <span key={dot} className="h-px w-px rounded-full bg-current" />
         ))}
       </span>
     </button>
@@ -485,8 +482,9 @@ function SortableRowShell({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "group relative rounded-md border border-border/60 bg-background/40 px-2 text-sm",
+        "group relative rounded-md border border-border/60 bg-background/40 pr-2 text-sm",
         "hover:border-border transition-colors",
+        showHandle ? "pl-5 [@media(pointer:coarse)]:pl-11" : "pl-2",
         isDragging && "z-10 opacity-40",
       )}
     >
@@ -521,10 +519,13 @@ type QueuedGhostMessageProps = {
   canMerge?: boolean;
   /**
    * Reordering is enabled unless a queue mutation or backend cancellation is
-   * in flight; the row's own edit view also suppresses the handle. Optional so
-   * standalone renders (tests) default to the draggable state.
+   * in flight; the row's own edit view also suppresses the handle. The queue
+   * panel hides it when there is only one entry. Optional so standalone renders
+   * default to showing the handle.
    */
   canDrag?: boolean;
+  /** Whether this row belongs to a queue with enough entries to reorder. */
+  showDragHandle?: boolean;
   /** Set while this row is the active drag target, for dimming/z-index. */
   isDragging?: boolean;
   onSave: (content: string, entityReferences: EntityReference[]) => Promise<void>;
@@ -608,6 +609,7 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
       canRemove = true,
       canMerge = false,
       canDrag = true,
+      showDragHandle = true,
       isDragging = false,
       onSave,
       onRemove,
@@ -664,7 +666,7 @@ export const QueuedGhostMessage = forwardRef<QueuedGhostMessageHandle, QueuedGho
         id={entry.id}
         disabled={editing || !canDrag}
         canDrag={canDrag}
-        showHandle={!editing}
+        showHandle={showDragHandle && !editing}
         isDragging={isDragging}
       >
         {editing ? (

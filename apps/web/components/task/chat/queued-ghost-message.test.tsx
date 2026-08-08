@@ -108,15 +108,27 @@ describe("QueuedGhostMessage reorder handle", () => {
     expect(handle.querySelectorAll('[aria-hidden="true"] span').length).toBe(6);
   });
 
-  it("hides the handle on a fine pointer until the row is hovered", () => {
+  it("shows the handle without hovering on a fine pointer", () => {
     renderRow();
     const handle = screen.getByTestId(HANDLE_TESTID);
-    // Visibility is CSS-driven: hidden by default, revealed on hover/focus on
-    // fine pointers, always visible on coarse pointers.
-    expect(handle.className).toContain("opacity-0");
-    expect(handle.className).toContain("group-hover:opacity-100");
-    expect(handle.className).toContain("group-focus-within:opacity-100");
-    expect(handle.className).toContain("[@media(pointer:coarse)]:opacity-100");
+    // A mounted handle is an always-visible drag affordance on every pointer.
+    expect(handle.className).toContain("opacity-100");
+    expect(handle.className).not.toContain("opacity-0");
+    expect(handle.className).not.toContain("group-hover:opacity-100");
+  });
+
+  it("keeps the fine-pointer grip small and unobtrusive", () => {
+    renderRow();
+    const handle = screen.getByTestId(HANDLE_TESTID);
+    expect(handle.className).toContain("left-1");
+    expect(handle.className).toContain("h-3 w-3");
+    expect(handle.className).toContain("border-0");
+    expect(handle.className).toContain("bg-transparent");
+    expect(handle.className).toContain("shadow-none");
+    const grip = handle.querySelector('[aria-hidden="true"]')!;
+    expect(grip.className).toContain("gap-0.5");
+    const dot = handle.querySelector('[aria-hidden="true"] span')!;
+    expect(dot.className).toContain("h-px w-px");
   });
 
   it("attaches the coarse-pointer handle to the box edge in the background", () => {
@@ -140,6 +152,15 @@ describe("QueuedGhostMessage reorder handle", () => {
     const cluster = label.parentElement!;
     expect(cluster.className).toContain("relative");
     expect(cluster.className).toContain("pointer-events-none");
+  });
+
+  it("centers the position, sender icon, and message content", () => {
+    renderRow();
+    const row = screen.getByTestId("queue-entry");
+    expect(row.className).toContain("items-center");
+    expect(row.className).not.toContain("items-start");
+    const label = screen.getByLabelText("Position #1");
+    expect(label.parentElement!.className).not.toContain("mt-0.5");
   });
 
   it("disables the handle while reordering is unavailable", () => {

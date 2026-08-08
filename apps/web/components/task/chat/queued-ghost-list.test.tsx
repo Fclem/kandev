@@ -532,7 +532,7 @@ describe("QueueAffordance merge wiring — dispatch", () => {
 describe("QueueAffordance reorder", () => {
   const GRAB_HANDLE_ID = "queue-grab-handle";
 
-  it("renders a localized grab handle on every row", () => {
+  it("renders a localized grab handle on every row when multiple entries are queued", () => {
     const state = queueState([
       entry({ id: "q-1", content: "first" }),
       entry({ id: "q-2", content: "second" }),
@@ -548,40 +548,56 @@ describe("QueueAffordance reorder", () => {
       expect(handle.getAttribute("aria-roledescription")).toBe("sortable");
       expect((handle as HTMLButtonElement).disabled).toBe(false);
     }
+    const rowShell = screen.getAllByTestId("queue-entry")[0].parentElement!;
+    expect(rowShell.className).toContain("pl-5");
+    expect(rowShell.className).toContain("[@media(pointer:coarse)]:pl-11");
   });
 
-  it("hides the handle by default on a fine pointer and reveals it on hover", () => {
+  it("does not render a handle when only one entry is queued", () => {
     useQueueMock.mockReturnValue(queueState([entry()]));
     renderQueue(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
     fireEvent.click(screen.getByTestId(CHIP_ID));
 
-    const handle = screen.getByTestId(GRAB_HANDLE_ID);
-    // Visibility is CSS-driven (hover reveal + coarse-pointer override); the
-    // classes encode the spec: hidden until hover on fine pointers, always
-    // visible on touch.
-    expect(handle.className).toContain("opacity-0");
-    expect(handle.className).toContain("group-hover:opacity-100");
-    expect(handle.className).toContain("[@media(pointer:coarse)]:opacity-100");
+    expect(screen.queryByTestId(GRAB_HANDLE_ID)).toBeNull();
+  });
+
+  it("keeps compact row padding when no drag handle is shown", () => {
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    renderQueue(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    fireEvent.click(screen.getByTestId(CHIP_ID));
+
+    const rowShell = screen.getAllByTestId("queue-entry")[0].parentElement!;
+    expect(rowShell.className).toContain("pl-2");
+    expect(rowShell.className).not.toContain("pl-5");
+    expect(rowShell.className).not.toContain("[@media(pointer:coarse)]:pl-11");
   });
 
   it("disables every handle while a queue mutation or cancellation is pending", () => {
-    const state = queueState([entry()], { isLoading: true, cancellationPending: true });
+    const state = queueState([entry({ id: "q-1" }), entry({ id: "q-2", content: "second" })], {
+      isLoading: true,
+      cancellationPending: true,
+    });
     useQueueMock.mockReturnValue(state);
     renderQueue(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
     fireEvent.click(screen.getByTestId(CHIP_ID));
 
-    const handle = screen.getByTestId(GRAB_HANDLE_ID) as HTMLButtonElement;
-    expect(handle.disabled).toBe(true);
+    const handles = screen.getAllByTestId(GRAB_HANDLE_ID) as HTMLButtonElement[];
+    expect(handles).toHaveLength(2);
+    for (const handle of handles) expect(handle.disabled).toBe(true);
   });
 
   it("removes the handle while the row is being edited", () => {
-    const state = queueState([entry({ queued_by: QUEUED_BY_USER })]);
+    const state = queueState([
+      entry({ id: "q-1", queued_by: QUEUED_BY_USER }),
+      entry({ id: "q-2", content: "second" }),
+    ]);
     useQueueMock.mockReturnValue(state);
     renderQueue(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
     fireEvent.click(screen.getByTestId(CHIP_ID));
 
-    fireEvent.click(screen.getByTestId(EDIT_BUTTON_ID));
-    expect(screen.queryByTestId(GRAB_HANDLE_ID)).toBeNull();
+    fireEvent.click(screen.getAllByTestId(EDIT_BUTTON_ID)[0]);
+    expect(screen.getByTestId("queue-edit-textarea")).toBeTruthy();
+    expect(screen.getAllByTestId(GRAB_HANDLE_ID)).toHaveLength(1);
   });
 
   it("drags the last row onto the first and calls reorderEntries with the new order", async () => {

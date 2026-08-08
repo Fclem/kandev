@@ -649,6 +649,7 @@ function QueuePanel({
                 canRemove
                 canMerge={mergeEnabled && canMergeWithAbove(entry, entries[index - 1])}
                 canDrag={canReorder}
+                showDragHandle={entries.length > 1}
                 isDragging={activeId === entry.id}
                 onSave={(content, entityReferences) => onSave(entry.id, content, entityReferences)}
                 onRemove={() => onRemove(entry.id)}

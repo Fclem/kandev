@@ -110,12 +110,19 @@ test.describe("Queue reorder", () => {
     const panel = await openQueuePanel(session);
     await expectRelativeOrder(panel, "reorder first", "reorder second", "reorder third");
 
-    // The dotted grab handle is hidden until the row is hovered on a fine
-    // pointer; hovering reveals it.
+    // Multiple queued rows expose their dotted grab handles immediately on a
+    // fine pointer, so the drag affordance is discoverable without hover.
     const firstHandle = rowHandle(panel, "reorder first");
-    await expect(firstHandle).toHaveCSS("opacity", "0");
-    await firstHandle.hover();
     await expect(firstHandle).toHaveCSS("opacity", "1", { timeout: 5_000 });
+    const firstContent = panel.getByTestId("queue-entry").filter({ hasText: "reorder first" });
+    const [handleBox, contentBox] = await Promise.all([
+      firstHandle.boundingBox(),
+      firstContent.boundingBox(),
+    ]);
+    expect(handleBox).not.toBeNull();
+    expect(contentBox).not.toBeNull();
+    expect(handleBox!.width).toBeLessThanOrEqual(12);
+    expect(contentBox!.x).toBeGreaterThanOrEqual(handleBox!.x + handleBox!.width + 4);
 
     // Drag the third row's handle onto the first row. Playwright's dragTo
     // fires a single mousemove, which only activates dnd-kit's PointerSensor
@@ -156,7 +163,11 @@ test.describe("Queue reorder", () => {
     await testPage.waitForTimeout(500);
 
     const editor = session.activeChat().locator(".tiptap.ProseMirror:visible").first();
-    await queueMessagesWhileBusy(testPage, editor, ["reorder first", "reorder second"]);
+    await queueMessagesWhileBusy(testPage, editor, [
+      "reorder first",
+      "reorder second",
+      "reorder third",
+    ]);
 
     const panel = await openQueuePanel(session);
     await expectRelativeOrder(panel, "reorder first", "reorder second");

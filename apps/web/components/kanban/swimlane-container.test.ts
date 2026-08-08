@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Task } from "@/components/kanban-card";
-import { filterTasks, selectWorkflowSwimlanes } from "./swimlane-container";
+import {
+  filterTasks,
+  selectMobileNavigatorWorkflows,
+  selectWorkflowSwimlanes,
+} from "./swimlane-container";
 import { mapSelectedRepositoryIds } from "@/lib/kanban/filters";
+
+const IMPROVE_WORKFLOW_NAME = "Improve Kandev";
 
 function makeTask(overrides: Partial<Task> & { id: string }): Task {
   return {
@@ -62,11 +68,11 @@ describe("filterTasks — plugin task filter predicate", () => {
 describe("selectWorkflowSwimlanes — hidden workflow filter resolution", () => {
   const workflows = [
     { id: "dev", name: "Development", hidden: false },
-    { id: "improve", name: "Improve Kandev", hidden: true },
+    { id: "improve", name: IMPROVE_WORKFLOW_NAME, hidden: true },
   ];
   const snapshots = {
     dev: { workflowName: "Development" },
-    improve: { workflowName: "Improve Kandev" },
+    improve: { workflowName: IMPROVE_WORKFLOW_NAME },
   };
 
   it("keeps hidden workflows off the All Workflows board", () => {
@@ -89,5 +95,41 @@ describe("selectWorkflowSwimlanes — hidden workflow filter resolution", () => 
 
   it("returns no workflows for a filter that does not exist in the store", () => {
     expect(selectWorkflowSwimlanes("missing", workflows, snapshots)).toEqual([]);
+  });
+});
+
+describe("selectMobileNavigatorWorkflows — mobile board navigator options", () => {
+  const workflows = [
+    { id: "dev", name: "Development", hidden: false },
+    { id: "improve", name: IMPROVE_WORKFLOW_NAME, hidden: true },
+    { id: "report", name: "Report Kandev Issue", hidden: true },
+  ];
+  const visibleOrdered = [{ id: "dev", name: "Development", hidden: false }];
+  const noTasks = () => [];
+  const tasks = (workflowId: string) => (workflowId === "improve" ? [{ id: "t1" }] : []);
+
+  it("lists visible workflows plus hidden workflows that have tasks", () => {
+    expect(
+      selectMobileNavigatorWorkflows(visibleOrdered, workflows, tasks).map((w) => w.id),
+    ).toEqual(["dev", "improve"]);
+  });
+
+  it("keeps empty hidden workflows out of the navigator", () => {
+    expect(
+      selectMobileNavigatorWorkflows(visibleOrdered, workflows, noTasks).map((w) => w.id),
+    ).toEqual(["dev"]);
+  });
+
+  it("does not duplicate a workflow already in the visible list", () => {
+    const both = [
+      { id: "dev", name: "Development", hidden: false },
+      { id: "improve", name: "Improve Kandev", hidden: true },
+    ];
+    const withTasks = () => [{ id: "t1" }];
+    expect(selectMobileNavigatorWorkflows(both, workflows, withTasks).map((w) => w.id)).toEqual([
+      "dev",
+      "improve",
+      "report",
+    ]);
   });
 });

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- WS protocol message map; the session.model_fallback entry keeps protocol shapes co-located. */
 import type { QueuedMessage } from "@/lib/state/slices/session/types";
 import type { TaskPlanEventPayload, TaskPlanRevisionEventPayload } from "./task-plan-events";
 import type { CaptureRequest } from "@/lib/logger/capture";
@@ -607,11 +608,18 @@ export type BackendMessageMap = OfficeBackendMessageMap &
     "session.models_updated": BackendMessage<"session.models_updated", SessionModelsPayload>;
     "session.model_fallback": BackendMessage<
       "session.model_fallback",
-      { task_id: string; session_id: string; agent_id: string; fallback_model: string; timestamp: string }
+      {
+        task_id: string;
+        session_id: string;
+        agent_id: string;
+        fallback_model: string;
+        timestamp: string;
+      }
     >;
     "session.mcp_status_updated": BackendMessage<
       "session.mcp_status_updated",
-      SessionMCPStatusPayload    >;
+      SessionMCPStatusPayload
+    >;
     "session.info_updated": BackendMessage<"session.info_updated", SessionInfoPayload>;
     "session.todos_updated": BackendMessage<"session.todos_updated", SessionTodosPayload>;
     "session.prompt_usage": BackendMessage<"session.prompt_usage", SessionPromptUsagePayload>;

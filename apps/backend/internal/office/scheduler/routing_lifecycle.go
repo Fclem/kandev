@@ -73,7 +73,13 @@ func (ss *SchedulerService) HandlePostStartFailure(
 	//   - fallback-model: re-dispatch ONCE with the explicit fallback model
 	//     on the same provider (runs.fallback_model override).
 	//   - auto-fallback toggle: legacy behavior (next candidate).
-	if !agent.AutoFallback && agent.FallbackModel == "" {
+	// The gate only applies to availability failures (auth/model/credentials/
+	// subscription/provider): transient conditions (rate limit, quota,
+	// provider capacity) keep their short/long-retry recovery regardless of
+	// the profile's model policy — retrying a busy provider is not an
+	// implicit model switch.
+	if !agent.AutoFallback && agent.FallbackModel == "" &&
+		routingerr.IsAvailabilityCode(classified.Code) {
 		ss.logger.Info("post-start failure not eligible for fallback (strict mode), escalating",
 			zap.String("run_id", run.ID),
 			zap.String("error_code", string(classified.Code)))
@@ -240,6 +246,14 @@ func (ss *SchedulerService) applyPostStartFallback(
 	if err := ss.finishAttempt(ctx, run.ID, run.CurrentRouteAttemptSeq,
 		RouteAttemptOutcomeFailedProviderUnavail, classified, now); err != nil {
 		return err
+	}
+	// Fallback-model mode: the requeue carries a one-shot fallback_model
+	// override so the next dispatch launches only that model on the same
+	// provider (no silent switch to an arbitrary candidate).
+	if !agent.AutoFallback && agent.FallbackModel != "" {
+		if err := ss.repo.SetRunFallbackModelOverride(ctx, run.ID, agent.FallbackModel); err != nil {
+			return err
+		}
 	}
 	return ss.RequeueForNextCandidate(ctx, run.ID)
 }

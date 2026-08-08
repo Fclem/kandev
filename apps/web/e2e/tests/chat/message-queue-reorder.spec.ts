@@ -60,9 +60,11 @@ function rowHandle(panel: Locator, text: string): Locator {
 }
 
 /**
- * Assert that `contents` appear in the queue in exactly this relative order,
- * ignoring any unrelated rows (e.g. a slow command still queued at the head):
- * positions are normalized to the first matched row.
+ * Assert that `contents` occupy exactly the consecutive positions starting at
+ * the head after removing the `/slow` keep-busy command, and that the `/slow`
+ * row — when present — sits at the head. This pins the global order instead of
+ * normalizing it away: a foreign row interleaved between the expected contents
+ * or a `/slow` row anywhere but the head fails.
  */
 async function expectRelativeOrder(panel: Locator, ...contents: string[]): Promise<void> {
   await expect
@@ -71,12 +73,16 @@ async function expectRelativeOrder(panel: Locator, ...contents: string[]): Promi
         const texts = (await panel.getByTestId("queue-entry-text").allTextContents()).map((t) =>
           t.replace(/\s+/g, " ").trim(),
         );
-        const positions = contents.map((content) => texts.findIndex((t) => t.includes(content)));
-        return positions.map((position) => position - positions[0]);
+        const slowIndex = texts.findIndex((t) => t.startsWith("/slow"));
+        const withoutSlow = texts.filter((_, index) => index !== slowIndex);
+        return {
+          positions: contents.map((content) => withoutSlow.findIndex((t) => t.includes(content))),
+          slowHead: slowIndex === -1 || slowIndex === 0,
+        };
       },
       { timeout: 10_000 },
     )
-    .toEqual(contents.map((_, index) => index));
+    .toEqual({ positions: contents.map((_, index) => index), slowHead: true });
 }
 
 test.describe("Queue reorder", () => {

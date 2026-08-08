@@ -82,8 +82,10 @@ Successful response:
 }
 ```
 
-`reordered` is the number of visible pending entries whose order was
-rewritten.
+`reordered` is the number of entries in the submitted order — equal to the
+visible pending count on success. A no-op reorder (submitting the current
+order) reports the same count, since positions are rewritten to the compacted
+`1..N` sequence.
 
 Errors:
 

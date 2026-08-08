@@ -394,6 +394,8 @@ type QueueGrabHandleProps = {
   canDrag: boolean;
   attributes: DraggableAttributes;
   listeners: DraggableSyntheticListeners;
+  /** dnd-kit activator node ref: after a keyboard drag, focus returns here. */
+  setActivatorNodeRef: (node: HTMLElement | null) => void;
 };
 
 /**
@@ -404,12 +406,18 @@ type QueueGrabHandleProps = {
  * content (no chip surface — the dots read as part of the box edge).
  * Dragging starts only from this handle.
  */
-function QueueGrabHandle({ canDrag, attributes, listeners }: QueueGrabHandleProps) {
+function QueueGrabHandle({
+  canDrag,
+  attributes,
+  listeners,
+  setActivatorNodeRef,
+}: QueueGrabHandleProps) {
   const { t } = useTranslation();
   const dragProps = canDrag ? { ...attributes, ...listeners } : {};
   return (
     <button
       type="button"
+      ref={setActivatorNodeRef}
       disabled={!canDrag}
       aria-label={t("chat:reorderQueuedMessage")}
       data-testid="queue-grab-handle"
@@ -467,10 +475,11 @@ function SortableRowShell({
   isDragging,
   children,
 }: SortableRowShellProps) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id,
-    disabled,
-  });
+  const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition } =
+    useSortable({
+      id,
+      disabled,
+    });
   return (
     <div
       ref={setNodeRef}
@@ -482,7 +491,12 @@ function SortableRowShell({
       )}
     >
       {showHandle && (
-        <QueueGrabHandle canDrag={canDrag} attributes={attributes} listeners={listeners} />
+        <QueueGrabHandle
+          canDrag={canDrag}
+          attributes={attributes}
+          listeners={listeners}
+          setActivatorNodeRef={setActivatorNodeRef}
+        />
       )}
       {children}
     </div>

@@ -18,6 +18,8 @@ type fakeModelApplier struct {
 	errs  []error
 }
 
+// SetModel records the applied model so tests can assert what the policy sent.
+
 func (f *fakeModelApplier) SetModel(_ context.Context, modelID string) error {
 	f.calls = append(f.calls, modelID)
 	if len(f.errs) == 0 {
@@ -30,10 +32,14 @@ func (f *fakeModelApplier) SetModel(_ context.Context, modelID string) error {
 	return err
 }
 
+// newPolicyTestLogger returns a discard logger for policy tests.
+
 func newPolicyTestLogger() *logger.Logger {
 	log, _ := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "json"})
 	return log
 }
+
+// modelState builds a cached model state advertising the given model ids.
 
 func modelState(models ...string) *CachedModelState {
 	infos := make([]streams.SessionModelInfo, 0, len(models))
@@ -43,9 +49,13 @@ func modelState(models ...string) *CachedModelState {
 	return &CachedModelState{Models: infos}
 }
 
+// methodNotFoundErr simulates the agent declaring no model-selection support.
+
 func methodNotFoundErr() error {
 	return &acp.RequestError{Code: -32601, Message: "method not found"}
 }
+
+// TestApplyStartModelPolicy_StrictGoneModelFails verifies a gone start model fails the session with the actionable message.
 
 func TestApplyStartModelPolicy_StrictGoneModelFails(t *testing.T) {
 	applier := &fakeModelApplier{}
@@ -67,6 +77,8 @@ func TestApplyStartModelPolicy_StrictGoneModelFails(t *testing.T) {
 	}
 }
 
+// TestApplyStartModelPolicy_StrictGoneModelNoSession verifies no model is applied when the strict policy rejects a gone start model.
+
 func TestApplyStartModelPolicy_StrictGoneModelNoSession(t *testing.T) {
 	// Empty advertised list = "unknown" — fall back to SetModel result.
 	applier := &fakeModelApplier{errs: []error{errors.New("model rejected")}}
@@ -78,6 +90,8 @@ func TestApplyStartModelPolicy_StrictGoneModelNoSession(t *testing.T) {
 		t.Fatal("expected error when SetModel fails and list is unknown")
 	}
 }
+
+// TestApplyStartModelPolicy_StrictGoneModelUnsupportedContinues verifies a method-not-found SetModel error continues silently.
 
 func TestApplyStartModelPolicy_StrictGoneModelUnsupportedContinues(t *testing.T) {
 	applier := &fakeModelApplier{errs: []error{methodNotFoundErr()}}
@@ -92,6 +106,8 @@ func TestApplyStartModelPolicy_StrictGoneModelUnsupportedContinues(t *testing.T)
 		t.Errorf("expected no applied model, got applied=%q fallback=%v", applied, usingFallback)
 	}
 }
+
+// TestApplyStartModelPolicy_StrictModelPresentApplies verifies an advertised start model is applied.
 
 func TestApplyStartModelPolicy_StrictModelPresentApplies(t *testing.T) {
 	applier := &fakeModelApplier{}
@@ -110,6 +126,8 @@ func TestApplyStartModelPolicy_StrictModelPresentApplies(t *testing.T) {
 	}
 }
 
+// TestApplyStartModelPolicy_FallbackModelUsedWhenGone verifies the configured fallback replaces a gone start model.
+
 func TestApplyStartModelPolicy_FallbackModelUsedWhenGone(t *testing.T) {
 	applier := &fakeModelApplier{}
 	applied, usingFallback, err := applyStartModelPolicy(
@@ -126,6 +144,8 @@ func TestApplyStartModelPolicy_FallbackModelUsedWhenGone(t *testing.T) {
 		t.Errorf("SetModel calls = %v, want [gpt-5]", applier.calls)
 	}
 }
+
+// TestApplyStartModelPolicy_FallbackWhenSetModelRejectsGoneModel verifies the fallback applies when SetModel rejects the start model even without an advertised list.
 
 func TestApplyStartModelPolicy_FallbackWhenSetModelRejectsGoneModel(t *testing.T) {
 	// Regression: at session start the advertised model list may not have
@@ -151,6 +171,8 @@ func TestApplyStartModelPolicy_FallbackWhenSetModelRejectsGoneModel(t *testing.T
 	}
 }
 
+// TestApplyStartModelPolicy_FallbackModelFailureFails verifies a failed fallback SetModel fails the session explicitly.
+
 func TestApplyStartModelPolicy_FallbackModelFailureFails(t *testing.T) {
 	applier := &fakeModelApplier{errs: []error{errors.New("rejected")}}
 	_, _, err := applyStartModelPolicy(
@@ -164,6 +186,8 @@ func TestApplyStartModelPolicy_FallbackModelFailureFails(t *testing.T) {
 		t.Errorf("error should name the fallback model, got %q", err.Error())
 	}
 }
+
+// TestApplyStartModelPolicy_AutoFallbackLegacyBestEffort verifies auto-fallback logs and continues on SetModel failure.
 
 func TestApplyStartModelPolicy_AutoFallbackLegacyBestEffort(t *testing.T) {
 	// Gone model + auto-fallback: legacy behavior — try, warn, continue.
@@ -183,6 +207,8 @@ func TestApplyStartModelPolicy_AutoFallbackLegacyBestEffort(t *testing.T) {
 	}
 }
 
+// TestApplyStartModelPolicy_AutoFallbackPresentApplies verifies auto-fallback still applies an available start model.
+
 func TestApplyStartModelPolicy_AutoFallbackPresentApplies(t *testing.T) {
 	applier := &fakeModelApplier{}
 	applied, usingFallback, err := applyStartModelPolicy(
@@ -196,6 +222,8 @@ func TestApplyStartModelPolicy_AutoFallbackPresentApplies(t *testing.T) {
 		t.Errorf("expected applied=claude-sonnet fallback=false, got applied=%q fallback=%v", applied, usingFallback)
 	}
 }
+
+// TestApplyStartModelPolicy_EmptyModelNoOp verifies an empty start model is a no-op.
 
 func TestApplyStartModelPolicy_EmptyModelNoOp(t *testing.T) {
 	applier := &fakeModelApplier{}

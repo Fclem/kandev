@@ -2979,6 +2979,8 @@ func TestHandleSessionModelsEventCapturesOriginalEffectiveConfigurationOnce(t *t
 	require.Equal(t, map[string]string{"reasoning_effort": "high"}, original.ConfigOptions)
 }
 
+// TestHandleSessionModelFallbackEventPublishesToWS verifies the fallback event publishes the WS notification.
+
 func TestHandleSessionModelFallbackEventPublishesToWS(t *testing.T) {
 	ctx := context.Background()
 	repo := setupTestRepo(t)

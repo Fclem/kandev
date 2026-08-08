@@ -310,6 +310,8 @@ func TestProfileReconciler_DoesNotReseedAfterUserDelete(t *testing.T) {
 	}
 }
 
+// TestProfileReconciler_KeepsGoneModel verifies the reconciler keeps a gone start model instead of healing it.
+
 func TestProfileReconciler_KeepsGoneModel(t *testing.T) {
 	st := newFakeStore()
 	// Seed an existing DB agent and profile whose model is no longer
@@ -355,6 +357,8 @@ func TestProfileReconciler_KeepsGoneModel(t *testing.T) {
 	}
 }
 
+// TestProfileReconciler_SeedsEmptyModel verifies the reconciler still seeds an empty model from the probe.
+
 func TestProfileReconciler_SeedsEmptyModel(t *testing.T) {
 	st := newFakeStore()
 	dbAgent := &models.Agent{Name: "claude-acp"}
@@ -388,6 +392,8 @@ func TestProfileReconciler_SeedsEmptyModel(t *testing.T) {
 		t.Errorf("seeded model = %q, want claude-sonnet", updated.Model)
 	}
 }
+
+// TestProfileReconciler_KeepsGoneFallbackModel verifies a gone fallback model is kept, not healed.
 
 func TestProfileReconciler_KeepsGoneFallbackModel(t *testing.T) {
 	st := newFakeStore()

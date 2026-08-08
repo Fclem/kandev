@@ -50,6 +50,8 @@ func seedRoutedRun(t *testing.T, repo *officesqlite.Repository) *officemodels.Ru
 	return run
 }
 
+// agentWithFallback builds a test agent profile with the given fallback settings.
+
 func agentWithFallback(autoFallback bool, fallbackModel string) *settingsmodels.AgentProfile {
 	agent := makeAgent()
 	agent.AutoFallback = autoFallback
@@ -58,6 +60,8 @@ func agentWithFallback(autoFallback bool, fallbackModel string) *settingsmodels.
 }
 
 const postStartFailureMessage = "missing API key: not authenticated"
+
+// TestHandlePostStartFailure_StrictModeEscalates verifies strict profiles escalate post-start failures.
 
 func TestHandlePostStartFailure_StrictModeEscalates(t *testing.T) {
 	repo := newTestRepoSched(t)
@@ -86,6 +90,8 @@ func TestHandlePostStartFailure_StrictModeEscalates(t *testing.T) {
 	}
 }
 
+// TestHandlePostStartFailure_AutoFallbackRequeues verifies auto-fallback profiles requeue to the next candidate.
+
 func TestHandlePostStartFailure_AutoFallbackRequeues(t *testing.T) {
 	repo := newTestRepoSched(t)
 	starter := newFakeTaskStarter()
@@ -112,6 +118,8 @@ func TestHandlePostStartFailure_AutoFallbackRequeues(t *testing.T) {
 	}
 }
 
+// TestHandlePostStartFailure_FallbackModelSetsOverride verifies fallback-model profiles set the one-shot fallback override.
+
 func TestHandlePostStartFailure_FallbackModelSetsOverride(t *testing.T) {
 	repo := newTestRepoSched(t)
 	starter := newFakeTaskStarter()
@@ -137,6 +145,8 @@ func TestHandlePostStartFailure_FallbackModelSetsOverride(t *testing.T) {
 		t.Errorf("fallback-model mode must set override gpt-5, got %v", got.FallbackModelOverride)
 	}
 }
+
+// TestDispatch_ForcedFallbackLaunchesOnlyFallbackModel verifies the forced dispatch launches only the fallback model on the resolved provider.
 
 func TestDispatch_ForcedFallbackLaunchesOnlyFallbackModel(t *testing.T) {
 	repo := newTestRepoSched(t)
@@ -178,6 +188,8 @@ func TestDispatch_ForcedFallbackLaunchesOnlyFallbackModel(t *testing.T) {
 		t.Errorf("resolved model must record the fallback, got %v", got.ResolvedModel)
 	}
 }
+
+// TestDispatch_ForcedFallbackFailureIsTerminal verifies a failed forced fallback is terminal, not re-queued.
 
 func TestDispatch_ForcedFallbackFailureIsTerminal(t *testing.T) {
 	repo := newTestRepoSched(t)

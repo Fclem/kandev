@@ -44,6 +44,8 @@ func advertisedModelIDs(state *CachedModelState) []string {
 	return ids
 }
 
+// containsModel reports whether ids contains id.
+
 func containsModel(ids []string, id string) bool {
 	for _, existing := range ids {
 		if existing == id {

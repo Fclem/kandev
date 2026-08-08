@@ -1,7 +1,7 @@
 ---
 id: "04-frontend-dnd-ui"
 title: "Frontend drag-and-drop queue UI"
-status: pending
+status: done
 wave: 4
 depends_on: ["03-frontend-api-hook-reorder"]
 plan: "plan.md"
@@ -65,4 +65,8 @@ Summary, files changed, exact test/lint commands and outcomes, blockers, risks; 
 
 ## Results
 
-Pending.
+- `cd apps && pnpm --filter @kandev/web test -- components/task/chat/queued-ghost-list.test.tsx components/task/chat/queued-ghost-message.test.tsx hooks/domains/session/use-queue.test.ts lib/api/domains/queue-api.test.ts` → 114 passed.
+- `cd apps/web && pnpm exec eslint --max-warnings 0 <changed files>` → 0 warnings.
+- `cd apps/web && pnpm i18n:pseudo && pnpm i18n:check && pnpm i18n:ratchet` → all pass.
+- `cd apps/web && pnpm run typecheck` → exit 0 (run with `NODE_OPTIONS=--max-old-space-size=12288`; default heap OOMs on this box, environmental).
+- Files: `components/task/chat/queued-ghost-list.tsx` (`useQueueReorder`, DndContext/SortableContext wiring), `components/task/chat/queued-ghost-message.tsx` (`SortableRowShell`, `QueueGrabHandle`), `src/locales/en/chat.json` + regenerated pseudo (`reorderQueuedMessage`, `sortable`, `failedToReorderQueuedMessages`), both component test files. Drag simulation in happy-dom requires `isPrimary` patching (happy-dom omits the primary-pointer computation) and a second pointermove to dispatch DragMove — documented in `simulateReorderDrag`.

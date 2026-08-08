@@ -1,7 +1,7 @@
 ---
 id: "05-e2e-reorder"
 title: "E2E reorder desktop and mobile"
-status: pending
+status: done
 wave: 5
 depends_on: ["04-frontend-dnd-ui"]
 plan: "plan.md"
@@ -66,4 +66,7 @@ risks; update task + plan statuses in the same conversation.
 
 ## Results
 
-Pending.
+- Built `make build-backend`, `make build-web`, `make build-e2e-plugin-package` (all required by `global-setup.ts`).
+- `cd apps/web && pnpm e2e tests/chat/message-queue-reorder.spec.ts --repeat-each=3` → 6 passed.
+- `cd apps/web && pnpm e2e --project=mobile-chrome tests/chat/mobile-message-queue-reorder.spec.ts --repeat-each=3` → 3 passed.
+- Specs use stepped mouse moves / delayed touch-pointer events because a single move or key press only activates dnd-kit's PointerSensor without dispatching DragMove (drop resolves no target); order assertions are normalized to the first matched row because the `/slow 30s` command can remain queued at the head on the mobile flow.

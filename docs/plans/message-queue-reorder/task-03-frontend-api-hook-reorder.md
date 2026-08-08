@@ -1,7 +1,7 @@
 ---
 id: "03-frontend-api-hook-reorder"
 title: "Frontend queue API and hook reorder"
-status: pending
+status: done
 wave: 3
 depends_on: ["02-backend-service-handler-reorder"]
 plan: "plan.md"
@@ -57,4 +57,6 @@ Summary, files changed, exact test commands and outcomes, blockers, risks; updat
 
 ## Results
 
-Pending.
+- `cd apps && pnpm --filter @kandev/web test -- lib/api/domains/queue-api.test.ts hooks/domains/session/use-queue.test.ts` → 43 passed.
+- `cd apps/web && pnpm run typecheck` → exit 0.
+- Files: `lib/api/domains/queue-api.ts` (`QueueReorderError`, `reorderQueuedEntries` + tests), `hooks/domains/session/use-queue.ts` (`useReorderEntriesAction`, `reorderEntries` exposed from `useQueue` + tests).

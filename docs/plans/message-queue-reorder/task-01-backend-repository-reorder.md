@@ -1,7 +1,7 @@
 ---
 id: "01-backend-repository-reorder"
 title: "Backend repository reorder"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -51,4 +51,6 @@ Summary, files changed, exact test commands and outcomes, blockers, risks; updat
 
 ## Results
 
-Pending.
+- `cd apps/backend && go test -count=1 -run 'TestReorder' -v ./internal/orchestrator/messagequeue/...` → PASS: `TestReorderEntriesRewritesVisibleOrder`, `TestReorderEntriesNoOpKeepsPositions`, `TestReorderEntriesRejectsDriftAtomically` (missing/unknown/duplicate/empty), `TestReorderEntriesKeepsReservedRowInPlace`, `TestReorderEntriesDrainRaceRejected` — each green on memory, sqlite, and postgres.
+- `cd apps/backend && go test ./internal/orchestrator/messagequeue/...` → `ok`.
+- Files: `repository.go` (interface), `types.go` (`ErrQueueChanged`), `reorder.go` (new shared helpers), `repository_sqlite.go`, `repository_memory.go`, `repository_reorder_test.go` (new).

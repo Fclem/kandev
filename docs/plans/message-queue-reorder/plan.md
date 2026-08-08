@@ -312,22 +312,22 @@ Pending. On completion, synchronize with each task's `## Results`.
 
 ```
 Wave 1 (sequential):
-- [ ] [task-01-backend-repository-reorder](task-01-backend-repository-reorder.md)
+- [x] [task-01-backend-repository-reorder](task-01-backend-repository-reorder.md)
 
 Wave 2 (sequential):
-- [ ] [task-02-backend-service-handler-reorder](task-02-backend-service-handler-reorder.md)
+- [x] [task-02-backend-service-handler-reorder](task-02-backend-service-handler-reorder.md)
 
 Wave 3 (sequential):
-- [ ] [task-03-frontend-api-hook-reorder](task-03-frontend-api-hook-reorder.md)
+- [x] [task-03-frontend-api-hook-reorder](task-03-frontend-api-hook-reorder.md)
 
 Wave 4 (sequential):
-- [ ] [task-04-frontend-dnd-ui](task-04-frontend-dnd-ui.md)
+- [x] [task-04-frontend-dnd-ui](task-04-frontend-dnd-ui.md)
 
 Wave 5 (sequential):
-- [ ] [task-05-e2e-reorder](task-05-e2e-reorder.md)
+- [x] [task-05-e2e-reorder](task-05-e2e-reorder.md)
 
 Wave 6 (sequential):
-- [ ] [task-06-docs-out-of-scope-updates](task-06-docs-out-of-scope-updates.md)
+- [x] [task-06-docs-out-of-scope-updates](task-06-docs-out-of-scope-updates.md)
 ```
 
 All tasks are `sequential` by default. `task-06` touches only docs and is

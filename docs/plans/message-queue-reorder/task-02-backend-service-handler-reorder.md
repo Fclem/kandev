@@ -1,7 +1,7 @@
 ---
 id: "02-backend-service-handler-reorder"
 title: "Backend service and WS handler reorder"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-backend-repository-reorder"]
 plan: "plan.md"
@@ -52,4 +52,6 @@ Summary, files changed, exact test commands and outcomes, blockers, risks; updat
 
 ## Results
 
-Pending.
+- `cd apps/backend && go test -count=1 ./internal/orchestrator/handlers/...` → `ok`.
+- `cd apps/backend && go build ./...` → exit 0 (whole backend compiles with the new `QueueService.ReorderEntries`).
+- Files: `pkg/websocket/actions.go` (`ActionMessageQueueReorder`), `messagequeue/service.go` (`ReorderEntries`), `handlers/queue_handlers.go` (interface method, `queueErrorCodeQueueChanged`, `wsReorder` + registration, `hasDuplicateIDs`), `handlers/queue_handlers_reorder_test.go` (new), `handlers/queue_handlers_test.go` (auth-table row).

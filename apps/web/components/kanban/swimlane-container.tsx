@@ -281,15 +281,18 @@ export function selectMobileNavigatorWorkflows(
   visibleOrdered: WorkflowLike[],
   workflows: WorkflowLike[],
   getFilteredTasks: (workflowId: string) => unknown[],
-): WorkflowLike[] {
+): Array<{ workflow: WorkflowLike; tasks: unknown[] }> {
   const visibleIds = new Set(visibleOrdered.map((workflow) => workflow.id));
-  return [
-    ...visibleOrdered,
-    ...workflows.filter(
-      (workflow) =>
-        workflow.hidden && !visibleIds.has(workflow.id) && getFilteredTasks(workflow.id).length > 0,
-    ),
-  ];
+  const entries: Array<{ workflow: WorkflowLike; tasks: unknown[] }> = [];
+  for (const workflow of visibleOrdered) {
+    entries.push({ workflow, tasks: getFilteredTasks(workflow.id) });
+  }
+  for (const workflow of workflows) {
+    if (!workflow.hidden || visibleIds.has(workflow.id)) continue;
+    const tasks = getFilteredTasks(workflow.id);
+    if (tasks.length > 0) entries.push({ workflow, tasks });
+  }
+  return entries;
 }
 
 function useSwimlaneData(
@@ -328,14 +331,13 @@ function useSwimlaneData(
 
   // The mobile board navigator is the only workflow switcher on the mobile
   // kanban page (the display menu hides its workflow select there), so hidden
-  // workflows with tasks are included alongside the visible ones.
+  // workflows with tasks are included alongside the visible ones. The selector
+  // returns the filtered tasks with each entry so `getFilteredTasks` runs once
+  // per workflow and the task count reuses that result.
   const workflowOptions = useMemo(
     () =>
       selectMobileNavigatorWorkflows(allOrderedWorkflows, workflows, getFilteredTasks).map(
-        (workflow) => ({
-          ...workflow,
-          taskCount: getFilteredTasks(workflow.id).length,
-        }),
+        ({ workflow, tasks }) => ({ ...workflow, taskCount: tasks.length }),
       ),
     [allOrderedWorkflows, workflows, getFilteredTasks],
   );

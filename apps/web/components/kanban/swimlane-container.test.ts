@@ -109,27 +109,35 @@ describe("selectMobileNavigatorWorkflows — mobile board navigator options", ()
   const tasks = (workflowId: string) => (workflowId === "improve" ? [{ id: "t1" }] : []);
 
   it("lists visible workflows plus hidden workflows that have tasks", () => {
-    expect(
-      selectMobileNavigatorWorkflows(visibleOrdered, workflows, tasks).map((w) => w.id),
-    ).toEqual(["dev", "improve"]);
+    const entries = selectMobileNavigatorWorkflows(visibleOrdered, workflows, tasks);
+    expect(entries.map((entry) => entry.workflow.id)).toEqual(["dev", "improve"]);
   });
 
   it("keeps empty hidden workflows out of the navigator", () => {
     expect(
-      selectMobileNavigatorWorkflows(visibleOrdered, workflows, noTasks).map((w) => w.id),
+      selectMobileNavigatorWorkflows(visibleOrdered, workflows, noTasks).map(
+        (entry) => entry.workflow.id,
+      ),
     ).toEqual(["dev"]);
   });
 
-  it("does not duplicate a workflow already in the visible list", () => {
+  it("returns the filtered tasks alongside each workflow so callers reuse the result", () => {
+    const entries = selectMobileNavigatorWorkflows(visibleOrdered, workflows, tasks);
+    expect(entries.find((entry) => entry.workflow.id === "improve")?.tasks).toEqual([{ id: "t1" }]);
+  });
+
+  // `both` marks the hidden improve workflow as already visible. `withTasks`
+  // gives every workflow tasks, so the hidden `report` workflow from the
+  // module-scope fixture is added too — the point is that improve is not
+  // duplicated just because it is both hidden and already in the visible list.
+  it("does not duplicate a hidden workflow already in the visible list but includes other hidden workflows with tasks", () => {
     const both = [
       { id: "dev", name: "Development", hidden: false },
-      { id: "improve", name: "Improve Kandev", hidden: true },
+      { id: "improve", name: IMPROVE_WORKFLOW_NAME, hidden: true },
     ];
     const withTasks = () => [{ id: "t1" }];
-    expect(selectMobileNavigatorWorkflows(both, workflows, withTasks).map((w) => w.id)).toEqual([
-      "dev",
-      "improve",
-      "report",
-    ]);
+    expect(
+      selectMobileNavigatorWorkflows(both, workflows, withTasks).map((entry) => entry.workflow.id),
+    ).toEqual(["dev", "improve", "report"]);
   });
 });

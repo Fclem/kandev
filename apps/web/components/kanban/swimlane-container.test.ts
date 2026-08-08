@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Task } from "@/components/kanban-card";
-import { filterTasks } from "./swimlane-container";
+import { filterTasks, selectWorkflowSwimlanes } from "./swimlane-container";
 import { mapSelectedRepositoryIds } from "@/lib/kanban/filters";
 
 function makeTask(overrides: Partial<Task> & { id: string }): Task {
@@ -56,5 +56,38 @@ describe("filterTasks — plugin task filter predicate", () => {
     const result = filterTasks(snapshots, "wf", repoFilter, "fix", matches);
 
     expect(result.map((t) => t.id)).toEqual(["1"]);
+  });
+});
+
+describe("selectWorkflowSwimlanes — hidden workflow filter resolution", () => {
+  const workflows = [
+    { id: "dev", name: "Development", hidden: false },
+    { id: "improve", name: "Improve Kandev", hidden: true },
+  ];
+  const snapshots = {
+    dev: { workflowName: "Development" },
+    improve: { workflowName: "Improve Kandev" },
+  };
+
+  it("keeps hidden workflows off the All Workflows board", () => {
+    expect(selectWorkflowSwimlanes(null, workflows, snapshots).map((w) => w.id)).toEqual(["dev"]);
+  });
+
+  it("renders a hidden workflow the user explicitly selects", () => {
+    expect(selectWorkflowSwimlanes("improve", workflows, snapshots).map((w) => w.id)).toEqual([
+      "improve",
+    ]);
+  });
+
+  it("does not render a hidden workflow before its snapshot has loaded", () => {
+    expect(selectWorkflowSwimlanes("improve", workflows, {})).toEqual([]);
+  });
+
+  it("still renders a visible workflow under an explicit filter", () => {
+    expect(selectWorkflowSwimlanes("dev", workflows, snapshots).map((w) => w.id)).toEqual(["dev"]);
+  });
+
+  it("returns no workflows for a filter that does not exist in the store", () => {
+    expect(selectWorkflowSwimlanes("missing", workflows, snapshots)).toEqual([]);
   });
 });

@@ -244,6 +244,31 @@ function useWorkflowReorder(
   return { sensors, canSort, handleDragEnd };
 }
 
+type WorkflowLike = { id: string; name: string; hidden?: boolean };
+
+/**
+ * Selects the workflow swimlanes the board renders.
+ *
+ * - No filter ("All Workflows"): every workflow with a loaded snapshot that is
+ *   not hidden (system/office workflows stay off the board by design).
+ * - Explicit filter: the selected workflow itself, hidden or not. The display
+ *   dropdown offers every workflow in the store — including hidden ones like
+ *   Improve Kandev — so an explicit selection must render that board;
+ *   resolving against the visible-only list would silently show "No tasks yet"
+ *   for a workflow that has tasks.
+ */
+export function selectWorkflowSwimlanes(
+  workflowFilter: string | null | undefined,
+  workflows: WorkflowLike[],
+  snapshots: Record<string, unknown>,
+): WorkflowLike[] {
+  if (workflowFilter) {
+    const workflow = workflows.find((item) => item.id === workflowFilter && snapshots[item.id]);
+    return workflow ? [workflow] : [];
+  }
+  return workflows.filter((workflow) => !workflow.hidden && snapshots[workflow.id]);
+}
+
 function useSwimlaneData(
   workflowFilter: string | null | undefined,
   selectedRepositoryIds: string[],
@@ -264,16 +289,13 @@ function useSwimlaneData(
     [repositories, selectedRepositoryIds],
   );
   const allOrderedWorkflows = useMemo(
-    () => workflows.filter((workflow) => !workflow.hidden && snapshots[workflow.id]),
+    () => selectWorkflowSwimlanes(null, workflows, snapshots),
     [workflows, snapshots],
   );
-  const orderedWorkflows = useMemo(() => {
-    if (workflowFilter) {
-      const workflow = allOrderedWorkflows.find((item) => item.id === workflowFilter);
-      return workflow ? [workflow] : [];
-    }
-    return allOrderedWorkflows;
-  }, [workflowFilter, allOrderedWorkflows]);
+  const orderedWorkflows = useMemo(
+    () => selectWorkflowSwimlanes(workflowFilter, workflows, snapshots),
+    [workflowFilter, workflows, snapshots],
+  );
 
   const getFilteredTasks = useCallback(
     (wfId: string) =>

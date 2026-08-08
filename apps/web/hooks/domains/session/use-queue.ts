@@ -212,7 +212,85 @@ function useQueueActions({
     [sessionId, refetch, setQueueLoading],
   );
 
-  const clearAll = useCallback(async () => {
+  const clearAll = useClearAllAction({
+    sessionId,
+    setQueueEntries,
+    setQueueLoading,
+    metaMax,
+    metaMergeEnabled,
+    refetch,
+    invalidateRefetch,
+  });
+
+  const drainNext = useDrainNextAction(sessionId, setQueueLoading, refetch);
+
+  const sendNow = useSendNowAction(sessionId, setQueueLoading, refetch);
+
+  const sendEntryNow = useCallback((entryId: string) => sendNow("entry", entryId), [sendNow]);
+  const sendAllNow = useCallback(() => sendNow("all"), [sendNow]);
+
+  const { editEntry, removeEntry, mergeEntry } = useEntryMutations({
+    sessionId,
+    removeQueueEntry,
+    refetch,
+  });
+
+  const reorderEntries = useReorderEntriesAction({
+    sessionId,
+    entries,
+    setQueueEntries,
+    setQueueLoading,
+    metaMax,
+    metaMergeEnabled,
+    refetch,
+  });
+
+  return {
+    refetch,
+    queue,
+    clearAll,
+    drainNext,
+    sendEntryNow,
+    sendAllNow,
+    editEntry,
+    removeEntry,
+    mergeEntry,
+    reorderEntries,
+  };
+}
+
+type ReorderEntriesArgs = {
+  sessionId: string | null;
+  entries: QueuedMessage[];
+  setQueueEntries: ReturnType<typeof useQueueState>["setQueueEntries"];
+  setQueueLoading: ReturnType<typeof useQueueState>["setQueueLoading"];
+  metaMax: number | undefined;
+  metaMergeEnabled: boolean | undefined;
+  refetch: (sid: string) => Promise<void>;
+};
+
+type ClearAllArgs = {
+  sessionId: string | null;
+  setQueueEntries: ReturnType<typeof useQueueState>["setQueueEntries"];
+  setQueueLoading: ReturnType<typeof useQueueState>["setQueueLoading"];
+  metaMax: number | undefined;
+  metaMergeEnabled: boolean | undefined;
+  refetch: (sid: string) => Promise<void>;
+  invalidateRefetch: (sid: string) => void;
+};
+
+/** Clears every pending entry: optimistic empty state, then the backend's
+ * authoritative result. Reconcile errors preserve the mutation error. */
+function useClearAllAction({
+  sessionId,
+  setQueueEntries,
+  setQueueLoading,
+  metaMax,
+  metaMergeEnabled,
+  refetch,
+  invalidateRefetch,
+}: ClearAllArgs) {
+  return useCallback(async () => {
     if (!sessionId) return;
     setQueueLoading(sessionId, true);
     let mutationFailed = false;
@@ -255,51 +333,7 @@ function useQueueActions({
     refetch,
     invalidateRefetch,
   ]);
-
-  const drainNext = useDrainNextAction(sessionId, setQueueLoading, refetch);
-
-  const sendNow = useSendNowAction(sessionId, setQueueLoading, refetch);
-
-  const sendEntryNow = useCallback((entryId: string) => sendNow("entry", entryId), [sendNow]);
-  const sendAllNow = useCallback(() => sendNow("all"), [sendNow]);
-
-  const { editEntry, removeEntry, mergeEntry } = useEntryMutations({
-    sessionId,
-    removeQueueEntry,
-    refetch,
-  });
-
-  const reorderEntries = useReorderEntriesAction({
-    sessionId,
-    entries,
-    setQueueEntries,
-    setQueueLoading,
-    metaMax,
-    refetch,
-  });
-
-  return {
-    refetch,
-    queue,
-    clearAll,
-    drainNext,
-    sendEntryNow,
-    sendAllNow,
-    editEntry,
-    removeEntry,
-    mergeEntry,
-    reorderEntries,
-  };
 }
-
-type ReorderEntriesArgs = {
-  sessionId: string | null;
-  entries: QueuedMessage[];
-  setQueueEntries: ReturnType<typeof useQueueState>["setQueueEntries"];
-  setQueueLoading: ReturnType<typeof useQueueState>["setQueueLoading"];
-  metaMax: number | undefined;
-  refetch: (sid: string) => Promise<void>;
-};
 
 /** Rewrites the visible pending order, optimistically at first, then
  * reconciles to the backend's authoritative order. A queue_changed drift
@@ -311,6 +345,7 @@ function useReorderEntriesAction({
   setQueueEntries,
   setQueueLoading,
   metaMax,
+  metaMergeEnabled,
   refetch,
 }: ReorderEntriesArgs) {
   return useCallback(
@@ -323,7 +358,11 @@ function useReorderEntriesAction({
         .map((id) => byId.get(id))
         .filter((entry): entry is QueuedMessage => entry !== undefined);
       if (reordered.length === entries.length) {
-        setQueueEntries(sessionId, reordered, { count: reordered.length, max: metaMax ?? 0 });
+        setQueueEntries(sessionId, reordered, {
+          count: reordered.length,
+          max: metaMax ?? 0,
+          mergeEnabled: metaMergeEnabled ?? true,
+        });
       }
       setQueueLoading(sessionId, true);
       let mutationFailed = false;

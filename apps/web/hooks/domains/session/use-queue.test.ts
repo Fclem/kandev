@@ -541,6 +541,7 @@ describe("useQueue reorderEntries", () => {
     expect(mockState.setQueueEntries).toHaveBeenCalledWith(SESSION_ID, [second, first], {
       count: 2,
       max: 10,
+      mergeEnabled: true,
     });
     expect(queueApiMock.getQueueStatus).toHaveBeenCalledWith(SESSION_ID);
   });

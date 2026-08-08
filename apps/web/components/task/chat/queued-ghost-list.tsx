@@ -574,7 +574,6 @@ function useQueueReorder({ entries, canReorder, onReorder }: QueueReorderArgs) {
   };
 }
 
->>>>>>> 45db198c7 (feat: drag and drop reorder queued messages)
 function QueuePanel({
   entries,
   count,

@@ -115,7 +115,7 @@ func TestWsReorder(t *testing.T) {
 		require.NoError(t, err)
 		access := &fakeQueueAccessAuthorizer{sessionErr: errors.New("secret denial")}
 		events := &mockEventBus{}
-		handlers := NewQueueHandlers(svc, events, log, nil, access)
+		handlers := NewQueueHandlers(svc, events, log, nil, access, nil)
 
 		response, err := handlers.wsReorder(context.Background(), createTestMessage(t, ws.ActionMessageQueueReorder, map[string]interface{}{
 			"session_id":  "s",

@@ -290,77 +290,95 @@ test.describe("Linear settings", () => {
     );
     const firstRepoId = seedData.repositoryId;
 
-    const settings = new LinearSettingsPage(testPage);
-    await settings.goto();
+    // The e2e reset does not wipe linear watches or repositories, so clean up
+    // after ourselves in finally to keep the shard's workspace at the fixture
+    // baseline for later tests.
+    let createdWatchId: string | undefined;
+    try {
+      const settings = new LinearSettingsPage(testPage);
+      await settings.goto();
 
-    await testPage.getByRole("button", { name: /new watcher/i }).click();
-    const dialog = testPage.getByRole("dialog");
-    await expect(dialog).toBeVisible();
+      await testPage.getByRole("button", { name: /new watcher/i }).click();
+      const dialog = testPage.getByRole("dialog");
+      await expect(dialog).toBeVisible();
 
-    // Scopes a Radix Select trigger by its field label (same shape as the
-    // dispatch-order flow helper).
-    const comboboxByLabel = (root: Locator, label: string) =>
-      root.getByText(label, { exact: true }).locator("xpath=..").getByRole("combobox");
-    const pick = async (label: string, option: string | RegExp) => {
-      await comboboxByLabel(dialog, label).click();
-      await testPage.getByRole("listbox").getByRole("option", { name: option }).click();
-    };
+      // Scopes a Radix Select trigger by its field label (same shape as the
+      // dispatch-order flow helper).
+      const comboboxByLabel = (root: Locator, label: string) =>
+        root.getByText(label, { exact: true }).locator("xpath=..").getByRole("combobox");
+      const pick = async (label: string, option: string | RegExp) => {
+        await comboboxByLabel(dialog, label).click();
+        await testPage.getByRole("listbox").getByRole("option", { name: option }).click();
+      };
 
-    // Minimum fields to enable Save: workspace, non-empty filter (team),
-    // workflow, and workflow step. Prompt is pre-filled.
-    await pick("Workspace", "E2E Workspace");
-    await pick("Team", /ENG/);
-    await pick("Workflow", "E2E Workflow");
-    await comboboxByLabel(dialog, "Workflow Step").click();
-    await testPage.getByRole("listbox").getByRole("option").first().click();
+      // Minimum fields to enable Save: workspace, non-empty filter (team),
+      // workflow, and workflow step. Prompt is pre-filled.
+      await pick("Workspace", "E2E Workspace");
+      await pick("Team", /ENG/);
+      await pick("Workflow", "E2E Workflow");
+      await comboboxByLabel(dialog, "Workflow Step").click();
+      await testPage.getByRole("listbox").getByRole("option").first().click();
 
-    // Add both repositories via the add control, and pin a branch on the first.
-    await dialog.getByTestId("add-repository-trigger").click();
-    await testPage
-      .getByRole("listbox")
-      .getByRole("option", { name: "E2E Repo", exact: true })
-      .click();
-    await dialog.getByTestId("add-repository-trigger").click();
-    await testPage
-      .getByRole("listbox")
-      .getByRole("option", { name: "E2E Repo B", exact: true })
-      .click();
-    await dialog.getByTestId(`branch-trigger-${firstRepoId}`).click();
-    await testPage.getByRole("listbox").getByRole("option", { name: "main" }).click();
+      // Add both repositories via the add control, and pin a branch on the first.
+      await dialog.getByTestId("add-repository-trigger").click();
+      await testPage
+        .getByRole("listbox")
+        .getByRole("option", { name: "E2E Repo", exact: true })
+        .click();
+      await dialog.getByTestId("add-repository-trigger").click();
+      await testPage
+        .getByRole("listbox")
+        .getByRole("option", { name: "E2E Repo B", exact: true })
+        .click();
+      await dialog.getByTestId(`branch-trigger-${firstRepoId}`).click();
+      await testPage.getByRole("listbox").getByRole("option", { name: "main" }).click();
 
-    const createButton = dialog.getByRole("button", { name: "Create" });
-    await expect(createButton).toBeEnabled();
-    await createButton.click();
-    await expect(dialog).toBeHidden();
+      const createButton = dialog.getByRole("button", { name: "Create" });
+      await expect(createButton).toBeEnabled();
+      await createButton.click();
+      await expect(dialog).toBeHidden();
 
-    // The stored watch carries both bindings in the added order; the second
-    // repo's empty branch was resolved to its default ("main") at save.
-    const res = await apiClient.rawRequest(
-      "GET",
-      `/api/v1/linear/watches/issue?workspace_id=${encodeURIComponent(seedData.workspaceId)}`,
-    );
-    const { watches } = (await res.json()) as {
-      watches: Array<{
-        id: string;
-        repositories?: Array<{ repositoryId: string; baseBranch: string }>;
-      }>;
-    };
-    const saved = watches[watches.length - 1];
-    expect(saved.repositories).toEqual([
-      { repositoryId: firstRepoId, baseBranch: "main" },
-      { repositoryId: secondRepo.id, baseBranch: "main" },
-    ]);
+      // The stored watch carries both bindings in the added order; the second
+      // repo's empty branch was resolved to its default ("main") at save.
+      const res = await apiClient.rawRequest(
+        "GET",
+        `/api/v1/linear/watches/issue?workspace_id=${encodeURIComponent(seedData.workspaceId)}`,
+      );
+      const { watches } = (await res.json()) as {
+        watches: Array<{
+          id: string;
+          repositories?: Array<{ repositoryId: string; baseBranch: string }>;
+        }>;
+      };
+      const saved = watches[watches.length - 1];
+      createdWatchId = saved.id;
+      expect(saved.repositories).toEqual([
+        { repositoryId: firstRepoId, baseBranch: "main" },
+        { repositoryId: secondRepo.id, baseBranch: "main" },
+      ]);
 
-    // Reopen the saved watcher: both rows render with the saved branches.
-    await testPage.getByText("team:ENG").first().click();
-    const editDialog = testPage.getByRole("dialog");
-    await expect(editDialog.getByText("Edit Linear Watcher")).toBeVisible();
-    await expect(editDialog.getByText("E2E Repo", { exact: true })).toBeVisible();
-    await expect(editDialog.getByText("E2E Repo B", { exact: true })).toBeVisible();
-    await expect(editDialog.getByTestId(`branch-trigger-${firstRepoId}`)).toContainText("main");
-    // The second repo's branch was resolved to its default at save; it must
-    // render even though its branch fetch returns nothing (no repo on disk).
-    await expect(editDialog.getByTestId(`branch-trigger-${secondRepo.id}`)).toContainText("main");
+      // Reopen the saved watcher: both rows render with the saved branches.
+      await testPage.getByText("team:ENG").first().click();
+      const editDialog = testPage.getByRole("dialog");
+      await expect(editDialog.getByText("Edit Linear Watcher")).toBeVisible();
+      await expect(editDialog.getByText("E2E Repo", { exact: true })).toBeVisible();
+      await expect(editDialog.getByText("E2E Repo B", { exact: true })).toBeVisible();
+      await expect(editDialog.getByTestId(`branch-trigger-${firstRepoId}`)).toContainText("main");
+      // The second repo's branch was resolved to its default at save.
+      await expect(editDialog.getByTestId(`branch-trigger-${secondRepo.id}`)).toContainText("main");
+    } finally {
+      if (createdWatchId) {
+        await apiClient
+          .rawRequest(
+            "DELETE",
+            `/api/v1/linear/watches/issue/${encodeURIComponent(createdWatchId)}?workspace_id=${encodeURIComponent(seedData.workspaceId)}`,
+          )
+          .catch(() => undefined);
+      }
+      await apiClient
+        .rawRequest("DELETE", `/api/v1/repositories/${encodeURIComponent(secondRepo.id)}`)
+        .catch(() => undefined);
+    }
   });
 
   test("watcher saved without touching the repository picker stays unbound", async ({
@@ -410,5 +428,14 @@ test.describe("Linear settings", () => {
     };
     const saved = watches[watches.length - 1];
     expect(saved.repositories).toBeUndefined();
+
+    // Leave the shard's workspace at the fixture baseline (the e2e reset does
+    // not wipe linear watches).
+    await apiClient
+      .rawRequest(
+        "DELETE",
+        `/api/v1/linear/watches/issue/${encodeURIComponent(saved.id)}?workspace_id=${encodeURIComponent(seedData.workspaceId)}`,
+      )
+      .catch(() => undefined);
   });
 });

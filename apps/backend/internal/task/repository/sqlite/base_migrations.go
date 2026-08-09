@@ -43,6 +43,9 @@ func (r *Repository) migrateSessionsAddCostColumns() {
 
 // runMigrations applies idempotent ALTER TABLE migrations for schema evolution.
 func (r *Repository) runMigrations() error {
+	if err := r.migrateTaskPriorityToTextPostgres(); err != nil {
+		return err
+	}
 	if err := r.ensureTaskWorkspaceFoldersSchema(); err != nil {
 		return err
 	}
@@ -164,6 +167,21 @@ func (r *Repository) runMigrations() error {
 	// Office task-handoffs phase 6 - tag tasks archived as part of a cascade so
 	// unarchive can restore exactly the descendants that cascade archived.
 	r.migrate.Apply("tasks.archived_by_cascade_id", `ALTER TABLE tasks ADD COLUMN archived_by_cascade_id TEXT DEFAULT ''`)
+
+	// Task create-idempotency (docs/specs/tasks/external-id-idempotency).
+	// external_id needs an explicit deterministic collation: SQLite TEXT
+	// columns already compare BINARY by default, but an unqualified Postgres
+	// column silently inherits the database's default collation, which may be
+	// case-insensitive or nondeterministic. The partial unique index syntax
+	// (CREATE UNIQUE INDEX ... WHERE ...) is supported identically by both
+	// dialects, so it needs no branch.
+	if dialect.IsPostgres(r.db.DriverName()) {
+		r.migrate.Apply("tasks.external_id", `ALTER TABLE tasks ADD COLUMN external_id TEXT COLLATE "C"`)
+	} else {
+		r.migrate.Apply("tasks.external_id", `ALTER TABLE tasks ADD COLUMN external_id TEXT COLLATE BINARY`)
+	}
+	r.migrate.Apply("tasks.external_id_settled_at", `ALTER TABLE tasks ADD COLUMN external_id_settled_at TIMESTAMP`)
+	r.migrate.Apply("uniq_tasks_external_id", `CREATE UNIQUE INDEX IF NOT EXISTS uniq_tasks_external_id ON tasks(workspace_id, external_id) WHERE external_id IS NOT NULL`)
 
 	// Office workspace extensions
 	r.migrate.Apply("workspaces.task_prefix", `ALTER TABLE workspaces ADD COLUMN task_prefix TEXT DEFAULT 'KAN'`)

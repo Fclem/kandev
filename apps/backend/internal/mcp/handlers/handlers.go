@@ -26,6 +26,7 @@ import (
 	"github.com/kandev/kandev/internal/sysprompt"
 	"github.com/kandev/kandev/internal/task/dto"
 	"github.com/kandev/kandev/internal/task/models"
+	"github.com/kandev/kandev/internal/task/planws"
 	taskrepository "github.com/kandev/kandev/internal/task/repository"
 	taskrepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 	"github.com/kandev/kandev/internal/task/service"
@@ -575,6 +576,7 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		BaseBranch             string               `json:"base_branch"`               // top-level fallback applied to every resolved repo only when no per-repo entries are supplied; explicit per-repo BaseBranch is authoritative when Repositories is set
 		BlockedBy              []string             `json:"blocked_by"`                // task IDs that must complete before this task
 		AssigneeAgentProfileID string               `json:"assignee_agent_profile_id"` // agent instance to assign the task to
+		ExternalID             string               `json:"external_id"`               // caller-supplied create-idempotency key
 	}
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeBadRequest, "Invalid payload: "+err.Error(), nil)
@@ -680,7 +682,7 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		}
 		return ws.NewError(msg.ID, msg.Action, code, err.Error(), nil)
 	}
-	metadata = mergeMCPMetadata(metadata, workspacePolicy.MetadataBlock())
+	metadata = workspacePolicy.MergeMetadataBlock(metadata)
 	var deferredLaunch map[string]interface{}
 	if startAgent {
 		deferredLaunch = map[string]interface{}{
@@ -690,7 +692,7 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		}
 	}
 
-	task, err := h.taskSvc.CreateTask(ctx, &service.CreateTaskRequest{
+	result, err := h.taskSvc.CreateTask(ctx, &service.CreateTaskRequest{
 		ParentID:               req.ParentID,
 		WorkspaceID:            req.WorkspaceID,
 		WorkflowID:             req.WorkflowID,
@@ -702,6 +704,7 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		AssigneeAgentProfileID: req.AssigneeAgentProfileID,
 		Metadata:               metadata,
 		DeferredLaunch:         deferredLaunch,
+		ExternalID:             req.ExternalID,
 	})
 	if err != nil {
 		h.logger.Error("failed to create task", zap.Error(err))
@@ -712,6 +715,24 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		}
 		return ws.NewError(msg.ID, msg.Action, code, message, nil)
 	}
+
+	// The MCP skip is a data-loss guard, not just an optimization: the steps
+	// below resolve remote contributions from the REQUEST (resolveMCPRemote
+	// Contributions above) but index them against the RETURNED task's
+	// repositories, and every rollback path on a mismatch calls DeleteTask.
+	// A retry landing on a Found outcome — the existing task, whose
+	// repository list need not match this retry's payload — would then
+	// misindex, roll back, and delete the task the caller was trying to
+	// recover. Both Found outcomes have no side effects, so skip everything
+	// below and return the existing task as-is.
+	if result.Outcome != service.CreateTaskOutcomeCreated {
+		return ws.NewResponse(msg.ID, msg.Action, mcpCreateTaskResult{
+			TaskDTO:          dto.FromTask(result.Task),
+			Deduplicated:     true,
+			CreationComplete: result.Outcome == service.CreateTaskOutcomeFoundSettled,
+		})
+	}
+	task := result.Task
 
 	for index, resolution := range contributions {
 		if resolution == nil {
@@ -747,12 +768,48 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		}
 	}
 
+	// Settlement (create-sequence step 7): after policy attach, before
+	// auto-start dispatch.
+	settled, survivor, settleErr := h.taskSvc.SettleExternalID(ctx, task.ID, task.ExternalID)
+	if settleErr != nil {
+		if errors.Is(settleErr, taskrepo.ErrTaskNotFound) {
+			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeNotFound, "task not found", nil)
+		}
+		h.logger.Error("failed to settle external_id", zap.String("task_id", task.ID), zap.Error(settleErr))
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "failed to create task", nil)
+	}
+	if !settled {
+		// CreatedIdentityLost: another actor released the identity while
+		// this create was running. The task survives holding no
+		// external_id; per the spec, no asynchronous work (auto-start) is
+		// dispatched for it.
+		return ws.NewResponse(msg.ID, msg.Action, mcpCreateTaskResult{
+			TaskDTO:          dto.FromTask(survivor),
+			Deduplicated:     false,
+			CreationComplete: true,
+		})
+	}
+
 	// Auto-start agent session asynchronously only if requested and admitted.
 	if startAgent && task.QueuedForStepID == "" && h.sessionLauncher != nil {
 		h.launchAutoStartTask(ctx, task, launchConfig)
 	}
 
-	return ws.NewResponse(msg.ID, msg.Action, dto.FromTask(task))
+	return ws.NewResponse(msg.ID, msg.Action, mcpCreateTaskResult{
+		TaskDTO:          dto.FromTask(task),
+		Deduplicated:     false,
+		CreationComplete: true,
+	})
+}
+
+// mcpCreateTaskResult is create_task_kandev's tool-result shape: the task
+// DTO plus deduplicated/creation_complete, per
+// docs/specs/tasks/external-id-idempotency/spec.md, "MCP" — required
+// booleans, not presence-only markers, mirroring the REST create response.
+type mcpCreateTaskResult struct {
+	dto.TaskDTO
+	Deduplicated     bool `json:"deduplicated"`
+	CreationComplete bool `json:"creation_complete"`
 }
 
 func classifyCreateTaskError(err error) string {
@@ -763,6 +820,7 @@ func classifyCreateTaskError(err error) string {
 		return ws.ErrorCodeValidation
 	case errors.Is(err, service.ErrSubtaskDepthExceeded),
 		errors.Is(err, service.ErrInvalidTaskWorkflow),
+		errors.Is(err, service.ErrExternalIDInvalid),
 		isMCPWorkflowNotFoundError(err):
 		return ws.ErrorCodeValidation
 	default:
@@ -933,19 +991,6 @@ func (h *Handlers) resolveMCPWorkspacePolicy(parentID, workspaceMode string) (se
 	}
 
 	return service.WorkspacePolicy{Mode: mode}, nil
-}
-
-func mergeMCPMetadata(base, extra map[string]interface{}) map[string]interface{} {
-	if len(extra) == 0 {
-		return base
-	}
-	if base == nil {
-		base = map[string]interface{}{}
-	}
-	for k, v := range extra {
-		base[k] = v
-	}
-	return base
 }
 
 func applyMCPTaskScopeDefaults(parentID, workspaceID, workflowID, workflowStepID string, explicitWorkspaceID, explicitWorkflowID bool, resolved taskRepoResult) (string, string, string) {
@@ -3471,10 +3516,7 @@ func (h *Handlers) handleCreateTaskPlan(ctx context.Context, msg *ws.Message) (*
 		CreatedBy: createdBy,
 	})
 	if err != nil {
-		if errors.Is(err, service.ErrTaskIDRequired) {
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "task_id is required", nil)
-		}
-		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to create task plan: "+err.Error(), nil)
+		return planws.CreateError(msg, err)
 	}
 
 	return ws.NewResponse(msg.ID, msg.Action, dto.TaskPlanFromModel(plan))
@@ -3482,19 +3524,14 @@ func (h *Handlers) handleCreateTaskPlan(ctx context.Context, msg *ws.Message) (*
 
 // handleGetTaskPlan retrieves a task plan.
 func (h *Handlers) handleGetTaskPlan(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
-	var req struct {
-		TaskID string `json:"task_id"`
-	}
+	var req planws.TaskIDRequest
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeBadRequest, "Invalid payload: "+err.Error(), nil)
 	}
 
 	plan, err := h.planService.GetPlan(ctx, req.TaskID)
 	if err != nil {
-		if errors.Is(err, service.ErrTaskIDRequired) {
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "task_id is required", nil)
-		}
-		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to get task plan", nil)
+		return planws.GetError(msg, err)
 	}
 	if plan == nil {
 		// Return empty object if no plan exists
@@ -3531,13 +3568,7 @@ func (h *Handlers) handleUpdateTaskPlan(ctx context.Context, msg *ws.Message) (*
 		CreatedBy: createdBy,
 	})
 	if err != nil {
-		if errors.Is(err, service.ErrTaskIDRequired) {
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "task_id is required", nil)
-		}
-		if errors.Is(err, service.ErrTaskPlanNotFound) {
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeNotFound, "Task plan not found", nil)
-		}
-		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to update task plan: "+err.Error(), nil)
+		return planws.UpdateError(msg, err)
 	}
 
 	return ws.NewResponse(msg.ID, msg.Action, dto.TaskPlanFromModel(plan))
@@ -3545,22 +3576,14 @@ func (h *Handlers) handleUpdateTaskPlan(ctx context.Context, msg *ws.Message) (*
 
 // handleDeleteTaskPlan deletes a task plan.
 func (h *Handlers) handleDeleteTaskPlan(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
-	var req struct {
-		TaskID string `json:"task_id"`
-	}
+	var req planws.TaskIDRequest
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeBadRequest, "Invalid payload: "+err.Error(), nil)
 	}
 
 	err := h.planService.DeletePlan(ctx, req.TaskID)
 	if err != nil {
-		if errors.Is(err, service.ErrTaskIDRequired) {
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "task_id is required", nil)
-		}
-		if errors.Is(err, service.ErrTaskPlanNotFound) {
-			return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeNotFound, "Task plan not found", nil)
-		}
-		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "Failed to delete task plan: "+err.Error(), nil)
+		return planws.DeleteError(msg, err)
 	}
 
 	return ws.NewResponse(msg.ID, msg.Action, map[string]interface{}{"success": true})

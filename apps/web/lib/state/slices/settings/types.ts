@@ -59,6 +59,7 @@ export type AgentProfileOption = {
   fallback_model?: string;
   /** Legacy automatic-fallback opt-in. */
   auto_fallback?: boolean;
+  workspace_id?: string;
   /**
    * False hides the profile from task/session creation pickers. Existing
    * sessions keep their labels and the profile stays editable in settings.
@@ -81,7 +82,7 @@ export function isSelectableAgentProfile(profile: Pick<AgentProfileOption, "enab
 /** Single source of truth for mapping an API Agent+Profile to a store AgentProfileOption. */
 export function toAgentProfileOption(
   agent: Pick<Agent, "id" | "name" | "capability_status" | "capability_error">,
-  profile: Pick<AgentProfile, "id" | "agentDisplayName" | "name"> & {
+  profile: Pick<AgentProfile, "id" | "agentDisplayName" | "name" | "workspaceId"> & {
     cliPassthrough?: boolean;
     model?: string;
     fallbackModel?: string;
@@ -98,6 +99,7 @@ export function toAgentProfileOption(
     model: profile.model ?? undefined,
     fallback_model: profile.fallbackModel ?? undefined,
     auto_fallback: profile.autoFallback ?? undefined,
+    workspace_id: profile.workspaceId,
     enabled: profile.enabled ?? true,
     capability_status: agent.capability_status,
     capability_error: agent.capability_error,

@@ -25,9 +25,13 @@ test.describe("No silent model fallback on mobile", () => {
     });
 
     try {
+      // Mobile kanban opens the create-task dialog from the floating action
+      // button, not the desktop sidebar button.
       const kanban = new KanbanPage(testPage);
       await kanban.goto();
-      await kanban.createTaskButton.first().click();
+      const fab = testPage.getByTestId("mobile-fab");
+      await expect(fab).toBeVisible({ timeout: 15_000 });
+      await fab.tap();
       const dialog = testPage.getByTestId("create-task-dialog");
       await expect(dialog).toBeVisible();
 
@@ -35,7 +39,7 @@ test.describe("No silent model fallback on mobile", () => {
       await testPage.getByTestId("task-description-input").fill("verify visible fallback note");
 
       const selector = dialog.getByTestId("agent-profile-selector");
-      await selector.click();
+      await selector.tap();
 
       const fallbackOption = testPage.getByRole("option", { name: /Gone Fallback Mobile/ });
       await expect(fallbackOption).toBeVisible({ timeout: 15_000 });

@@ -182,33 +182,41 @@ export function useAgentProfileOptions(agentProfiles: AgentProfileOption[]): Opt
         disabled: blocked || undefined,
         disabledReason,
         renderLabel: () => (
-          <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-            <span className="flex shrink-0 items-center gap-1.5">
-              <AgentLogo agentName={profile.agent_name} className="shrink-0" />
-              <span>{agentLabel}</span>
-              {warning && (
-                <warning.Icon className={`size-3.5 ${warning.color}`} title={warning.title} />
-              )}
-              {fallbackNote && (
-                <IconAlertTriangle
-                  className="size-3.5 shrink-0 text-amber-500"
-                  title={fallbackNote}
-                />
-              )}
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="flex shrink-0 items-center justify-between gap-2">
+              <span className="flex shrink-0 items-center gap-1.5">
+                <AgentLogo agentName={profile.agent_name} className="shrink-0" />
+                <span>{agentLabel}</span>
+                {warning && (
+                  <warning.Icon className={`size-3.5 ${warning.color}`} title={warning.title} />
+                )}
+                {fallbackNote && (
+                  <IconAlertTriangle
+                    className="size-3.5 shrink-0 text-amber-500"
+                    title={fallbackNote}
+                  />
+                )}
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5">
+                {isPassthrough && (
+                  <IconTerminal2
+                    className="size-3.5 text-muted-foreground"
+                    title={t("common:cliModeYourPromptWillBe")}
+                  />
+                )}
+                {profileLabel ? (
+                  <ScrollOnOverflow className="rounded-full border border-border px-2 py-0.5 text-xs">
+                    {profileLabel}
+                  </ScrollOnOverflow>
+                ) : null}
+              </span>
             </span>
-            <span className="flex shrink-0 items-center gap-1.5">
-              {isPassthrough && (
-                <IconTerminal2
-                  className="size-3.5 text-muted-foreground"
-                  title={t("common:cliModeYourPromptWillBe")}
-                />
-              )}
-              {profileLabel ? (
-                <ScrollOnOverflow className="rounded-full border border-border px-2 py-0.5 text-xs">
-                  {profileLabel}
-                </ScrollOnOverflow>
-              ) : null}
-            </span>
+            {fallbackNote && (
+              <span className="flex items-center gap-1.5 pl-1 text-xs text-amber-600">
+                <IconAlertTriangle className="size-3 shrink-0" aria-hidden />
+                {fallbackNote}
+              </span>
+            )}
           </span>
         ),
       };

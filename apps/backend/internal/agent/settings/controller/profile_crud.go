@@ -158,7 +158,8 @@ type UpdateProfileRequest struct {
 }
 
 func enabledOnlyUpdate(req UpdateProfileRequest) bool {
-	return req.Enabled != nil && req.Name == nil && req.Model == nil && req.Mode == nil &&
+	return req.Enabled != nil && req.Name == nil && req.Model == nil &&
+		req.FallbackModel == nil && req.AutoFallback == nil && req.Mode == nil &&
 		req.ConfigOptions == nil && req.AllowIndexing == nil && req.AutoApprove == nil &&
 		req.CLIPassthrough == nil && req.CLIFlags == nil && req.EnvVars == nil &&
 		req.CommandPrefix == nil

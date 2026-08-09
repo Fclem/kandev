@@ -313,6 +313,65 @@ func TestInitializeAndPromptWithLayers_StrictPolicyFailsGoneModel(t *testing.T) 
 	}
 }
 
+// TestInitializeAndPrompt_AppliesStartModelPolicyExactlyOnce verifies the
+// start-model policy's SetModel is not repeated by the profile layers: the
+// policy applies the model, then the layers must only record it as applied
+// (a second SetModel would be a redundant ACP round-trip whose failure would
+// be silently logged while the session still starts).
+func TestInitializeAndPrompt_AppliesStartModelPolicyExactlyOnce(t *testing.T) {
+	mock := newMockAgentServer(t)
+	defer mock.Close()
+
+	log := newSessionTestLogger()
+	stopCh := newTestStopCh(t)
+	sm := NewSessionManager(log, stopCh)
+	streamMgr := NewStreamManager(log, StreamCallbacks{
+		OnAgentEvent: func(execution *AgentExecution, event agentctl.AgentEvent) {},
+	}, nil, stopCh)
+	cleanupStreamManager(t, stopCh, streamMgr)
+	sm.SetDependencies(NewEventPublisher(&MockEventBusWithTracking{}, log), streamMgr, nil, nil)
+
+	client := createTestClient(t, mock.server.URL)
+	defer client.Close()
+	execution := &AgentExecution{
+		ID:            "exec-1",
+		TaskID:        "task-1",
+		SessionID:     "session-1",
+		WorkspacePath: "/workspace",
+		agentctl:      client,
+		promptDoneCh:  make(chan PromptCompletionSignal, 1),
+	}
+	execution.SetModelState(modelState("gpt-5"))
+	agentConfig := &testAgent{
+		id:      "test-agent",
+		enabled: true,
+		runtimeConfig: &agents.RuntimeConfig{
+			Cmd:            agents.NewCommand("test-agent"),
+			Protocol:       agent.ProtocolACP,
+			SessionConfig:  agents.SessionConfig{},
+			ResourceLimits: agents.ResourceLimits{MemoryMB: 512, CPUCores: 0.5, Timeout: time.Hour},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	err := sm.InitializeAndPrompt(ctx, execution, agentConfig, "", nil, nil,
+		func(executionID string) error { return nil },
+		StartModelPolicy{Model: "gpt-5"}, "plan", nil)
+	if err != nil {
+		t.Fatalf("InitializeAndPrompt failed: %v", err)
+	}
+	setModelCalls := 0
+	for _, action := range mock.getActionLog() {
+		if action == "agent.session.set_model" {
+			setModelCalls++
+		}
+	}
+	if setModelCalls != 1 {
+		t.Fatalf("set_model calls = %d, want exactly 1 (the policy applies the model once)", setModelCalls)
+	}
+}
+
 func TestInitializeAndPrompt_StreamBeforeInitialize(t *testing.T) {
 	// This test verifies the critical ordering: stream connects BEFORE initialize is called.
 	mock := newMockAgentServer(t)

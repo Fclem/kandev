@@ -98,11 +98,14 @@ test.describe("No silent model fallback", () => {
       await expect(strictOption).toBeVisible({ timeout: 15_000 });
       await expect(strictOption).toHaveAttribute("aria-disabled", "true");
 
-      // Fallback profile: selectable and carries the "fallback will be used" warning.
+      // Fallback profile: selectable and carries the "fallback will be used"
+      // warning as visible secondary text (touch-discoverable, not just a
+      // hover tooltip) plus the alert icon.
       const fallbackOption = testPage.getByRole("option", { name: /Gone Fallback/ });
       await expect(fallbackOption).toBeVisible({ timeout: 15_000 });
       await expect(fallbackOption).not.toHaveAttribute("aria-disabled", "true");
       await expect(fallbackOption.getByRole("img", { name: /mock-fast/ })).toBeVisible();
+      await expect(fallbackOption).toContainText(/no longer available/);
     } finally {
       await apiClient.deleteAgentProfile(strictProfile.id, true);
       await apiClient.deleteAgentProfile(fallbackProfile.id, true);

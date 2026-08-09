@@ -47,9 +47,12 @@ switches models for them, invisibly.**
   new-agent profile picker, unless the profile opts into an explicit
   fallback.
 - A new optional per-profile **agent fallback model** allows an explicit,
-  single-model automatic switch when the start model becomes unavailable
-  (session start and mid-session), replacing the current "walk the whole
-  candidate list" behavior.
+  single-model automatic switch when the start model becomes unavailable at
+  session start. Office post-start routing is unchanged and remains governed
+  by the workspace routing configuration (see ADR
+  `2026-08-08-provider-neutral-agent-error-recovery.md`): the profile's
+  model policy is the owner of the session-start decision, not of office
+  post-start provider fallback.
 - A new explicit per-profile toggle **"Fallback automatically to next
   model"** restores the legacy automatic-fallback behavior (session start
   best-effort + office routing re-dispatch). Enabling the toggle hides and
@@ -94,7 +97,7 @@ over `fallback_model`):
 |---|---|---|---|
 | Session start, start model gone | **Fail launch explicitly** with "start model X is no longer available — change the model in the profile or configure a fallback". Run/session enters failed state; no session starts. | Apply `fallback_model` instead; surface an explicit "using fallback model Y because X is unavailable" note (log + UI). | Legacy: `SetModel` best-effort (warn + continue on provider default). |
 | Session start, `SetModel` fails for another reason | Fail explicitly (strict + fallback-model modes). | Same | Legacy warn + continue. |
-| Mid-session model/auth failure (office run, post-start) | **No re-dispatch.** Run fails explicitly with an actionable message (map `model_unavailable`/`auth_required` codes to "change the model" copy). | One-shot retry: re-dispatch **once** with `fallback_model` on the same provider; if that attempt fails too ⇒ explicit failure (no further candidates). | Legacy: re-dispatch to next candidate in the provider order (`HandlePostStartFailure` requeue). |
+| Mid-session model/auth failure (office run, post-start) | Unchanged ADR behavior: office re-dispatches via the workspace routing chain (`routingerr.Decide(ContextOffice)`; availability codes → `DecisionFallback`). The profile's model policy does **not** gate office fallback — the workspace routing configuration is the office authorization owner. | Same as strict: `fallback_model` is a session-start policy, not an office routing input. | Legacy: re-dispatch to next candidate in the provider order (unchanged). |
 | Boot reconciliation | Never overwrite a gone start model (keep it; UI shows it red). Same for a gone `fallback_model`. | Same | Same (reconciler is mode-independent). |
 | New-task / new-agent profile picker | Profile **blocked** (greyed, unselectable, reason tooltip). | Profile **selectable with a warning** ("start model X is gone — fallback Y will be used"). If the fallback model is also gone ("both-gone"), the profile is **blocked** — a fallback the session cannot apply is not a valid opt-in. | Selectable normally. |
 | Model picker (profile editor, session toolbar) | Gone models greyed out, unselectable, visible. | Same. | Same. |
@@ -170,30 +173,27 @@ The same policy applies to the context-reset re-application path
 `manager_interaction.go`) via a shared helper, so a context reset cannot
 silently drop a gone model either.
 
-### 4. Office post-start failure gating
+### 4. Office post-start failure gating (unchanged, ADR-governed)
 
 `HandlePostStartFailure` in
-`internal/office/scheduler/routing_lifecycle.go` receives the profile
-(`agent *models.AgentInstance` — already a parameter). After classification:
+`internal/office/scheduler/routing_lifecycle.go` is **not** modified by this
+feature. Office post-start fallback authorization stays with the workspace
+routing configuration and provider chain
+(`routingerr.Decide(ContextOffice)`), per ADR
+`2026-08-08-provider-neutral-agent-error-recovery.md`. Rationale: the
+feature's model policy is owned by the session-start decision
+(`execution.AgentProfileID`); the office post-start path sees the stable
+office identity (`run.AgentProfileID`), and the two can disagree. Reading
+`agent.FallbackModel` / `agent.AutoFallback` there would create a second,
+conflicting policy owner. Office runs still get the session-start guarantee
+(launch fails explicitly on a gone start model), and mid-session office
+failures keep the workspace-configured routing behavior.
 
-- `!classified.FallbackAllowed` → unchanged (escalate).
-- `agent.AutoFallback` → unchanged (requeue to next candidate).
-- `agent.FallbackModel != ""` → one-shot retry with the fallback model:
-  record `runs.fallback_model = agent.FallbackModel` (new nullable column)
-  and requeue. The next dispatch builds **one** candidate from
-  `run.ResolvedExecutionProfileID` + `run.ResolvedProviderID` +
-  `run.FallbackModelOverride`, skipping the resolver, and clears the
-  override after the attempt so a subsequent failure escalates to the
-  terminal explicit-failure path. On success the run records
-  `ResolvedModel = fallback`.
-- otherwise (strict) → return `(false, nil)` so the caller escalates to the
-  terminal failure path (`HandleAgentFailure`) — the run fails explicitly.
-
-Surface the classified code in the failure message: map
+Terminal office failures (for example after max attempts) surface an
+actionable "provider/model unavailable — change the model" hint: map
 `model_unavailable` / `auth_required` / `missing_credentials` /
-`subscription_required` to an actionable "provider/model unavailable —
-change the model" hint on the run/session error (helper in the scheduler or
-routingerr, used when composing the failure message).
+`subscription_required` codes onto the failure message via
+`routingerr.ModelUnavailableMessage` when composing it.
 
 ### 5. Error message mapping
 
@@ -290,10 +290,9 @@ Backend (Go, `*_test.go` beside source):
   start model gone; fallback-model mode applies the fallback and notes it;
   auto-fallback keeps legacy warn-continue; `-32601` continues silently.
   (`session_test.go` or the manager test harness.)
-- Office post-start: strict → escalate (no requeue); auto-fallback →
-  requeue to next candidate (existing behavior preserved); fallback-model →
-  single forced retry with the fallback model, then escalate on second
-  failure; success records resolved model = fallback.
+- Office post-start: unchanged — availability failures requeue via the
+  workspace routing chain regardless of the profile's fallback settings
+  (regression test pins that the profile policy does not gate office).
 - Error mapping helper unit tests.
 
 Frontend (Vitest, `*.test.ts(x)`):
@@ -318,8 +317,6 @@ E2E (Playwright, `apps/web/e2e`):
 
 - `agent_profiles.fallback_model TEXT NOT NULL DEFAULT ''`
 - `agent_profiles.auto_fallback INTEGER NOT NULL DEFAULT 0`
-- `runs.fallback_model TEXT NULL` (office one-shot fallback override,
-  cleared after one attempt)
 
 Existing rows default to strict mode (`auto_fallback = 0`, no fallback).
 This IS a behavior change for existing profiles: a session whose start
@@ -333,10 +330,12 @@ explicitly enable the toggle — that opt-in is the point of the feature.
   a session whose start model is gone will fail at launch instead of
   starting on the provider default. That is the requested behavior; the
   failure message must be actionable (covered by the error-mapping helper).
-- **`runs.fallback_model` one-shot retry** interacts with the existing
-  `MaxAttemptsPerRun` cap and route-cycle baseline — the forced candidate
-  must not bypass the cap (it counts as one attempt row via the existing
-  `recordAttemptStart`).
+- **Office post-start fallback remains workspace-routing-governed**: a
+  strict profile's office run can still be re-dispatched to another
+  provider mid-session by the ADR office policy (availability codes →
+  `DecisionFallback`). This is intentional — office authorization is the
+  workspace routing configuration, not the execution profile — and is
+  documented in the behavior matrix above.
 - **Probe staleness**: the advertised list can be stale (probe cached).
   Membership checks use the freshest available signal (session
   `models_updated` at start; probe cache for pickers). A stale cache

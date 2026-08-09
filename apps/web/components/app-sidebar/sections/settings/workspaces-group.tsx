@@ -104,6 +104,10 @@ function WorkspaceIntegrationItems({
     sentry: sentryEnabled,
   };
 
+  // Configured status gates the badge only, never the row itself — the tree
+  // always lists all six integrations regardless of credentials, so the
+  // filter here hides only disabled integrations (intentionally looser than
+  // useNavAvailability's `configured && (!hideDisabled || enabled)`).
   return WORKSPACE_INTEGRATIONS.filter(([slug]) => !hideDisabled || toggleEnabled[slug]).map(
     ([slug, label]) => {
       const href = `${integrationsPath}/${slug}`;

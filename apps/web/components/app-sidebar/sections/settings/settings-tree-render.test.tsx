@@ -306,7 +306,18 @@ describe("SettingsTree hide disabled integrations", () => {
     hideDisabled.value = false;
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    // Restore the file-scoped mock state so later suites in this file never
+    // inherit the previous test's hideDisabled/enabled flags.
+    hideDisabled.value = false;
+    integrationEnabled["azure-devops"] = true;
+    integrationEnabled.github = true;
+    integrationEnabled.gitlab = true;
+    integrationEnabled.jira = true;
+    integrationEnabled.linear = true;
+    integrationEnabled.sentry = true;
+  });
 
   it("keeps every integration listed when the hide-disabled setting is off (default), even disabled ones", () => {
     integrationEnabled.github = false;
@@ -315,8 +326,9 @@ describe("SettingsTree hide disabled integrations", () => {
       <WorkspacesGroup pathname="/settings/workspace/ws-1/integrations/azure-devops" expanded />,
     );
 
-    expect(screen.getByRole("link", { name: "GitHub" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Azure DevOps/ })).toBeTruthy();
+    for (const name of [/(Azure DevOps)/, /GitHub/, /GitLab/, /Jira/, /Linear/, /Sentry/]) {
+      expect(screen.getByRole("link", { name })).toBeTruthy();
+    }
   });
 
   it("hides a disabled integration from the workspace integrations list when the setting is on", () => {
@@ -338,9 +350,9 @@ describe("SettingsTree hide disabled integrations", () => {
       <WorkspacesGroup pathname="/settings/workspace/ws-1/integrations/azure-devops" expanded />,
     );
 
-    expect(screen.getByRole("link", { name: "GitHub" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Jira" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Linear" })).toBeTruthy();
+    for (const name of [/(Azure DevOps)/, /GitHub/, /GitLab/, /Jira/, /Linear/, /Sentry/]) {
+      expect(screen.getByRole("link", { name })).toBeTruthy();
+    }
   });
 
   it("keeps an enabled-but-unconfigured integration listed when the setting is on", () => {

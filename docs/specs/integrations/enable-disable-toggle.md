@@ -148,11 +148,13 @@ toggle).
   false` (its documented default) under the same failure, so a storage
   failure never hides an integration a user can't otherwise see or control.
 - No integration ever hides from a *settings* page based on the new nav
-  setting — `hideDisabled` only ever affects `useNavAvailability`'s output,
-  never a settings route's reachability. A user can always reach a disabled
-  integration's own settings page directly (by URL, from the index page, or
-  from the sidebar's Settings section) and re-enable it even while the
-  left-panel nav entry is hidden.
+  setting — `hideDisabled` affects only left-panel navigation surfaces
+  (`useNavAvailability`'s output for the main sidebar and mobile menu, and
+  `WorkspaceIntegrationItems`' filter for the Settings left panel's
+  per-workspace Integrations tree), never a settings route's reachability.
+  A user can always reach a disabled integration's own settings page
+  directly (by URL, from the index page, or from the sidebar's Settings
+  section) and re-enable it even while the left-panel nav entry is hidden.
 
 ## Persistence guarantees
 
@@ -215,11 +217,15 @@ is not synced across devices/browsers.
   (a disabled integration is hidden from it when the setting is on), since
   users reach it through left-panel navigation; the badge convention itself
   is unchanged.
-- Sentry has no left-panel nav destination today (see
+- Sentry has no main-sidebar nav destination today (see
   `lib/navigation/core-destinations.ts` — only Azure DevOps, GitHub, GitLab,
-  Jira and Linear are nav-gated). The new "hide disabled" setting therefore
-  has no observable effect for Sentry; its existing slider (own page
-  + new index-page row) still works for the enable/disable state itself.
+  Jira and Linear are nav-gated), so the setting has no effect for Sentry in
+  the main sidebar or mobile menu. Sentry DOES appear in the Settings left
+  panel's per-workspace Integrations tree (all six integrations are always
+  listed there), so with the setting on and Sentry's toggle off it is hidden
+  from that tree like any other disabled integration; its existing slider
+  (own page + new index-page row) still works for the enable/disable state
+  itself.
 - No new command-palette entries or keyboard shortcuts for the new toggles.
 
 ## Open questions

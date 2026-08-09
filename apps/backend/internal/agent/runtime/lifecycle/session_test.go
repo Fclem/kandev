@@ -239,6 +239,80 @@ func createTestClient(t *testing.T, serverURL string) *agentctl.Client {
 
 // --- Tests ---
 
+// TestInitializeAndPromptWithLayers_StrictPolicyFailsGoneModel verifies the
+// start-model policy is applied to the EFFECTIVE model (profile start model or
+// persisted runtime override) and a strict profile fails the launch explicitly
+// when that model is unavailable. This is the regression guard for the
+// no-silent model-fallback gate: an unavailable model must never silently
+// continue on the provider default, and a failed launch must not look
+// initialized.
+func TestInitializeAndPromptWithLayers_StrictPolicyFailsGoneModel(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		profileModel string
+		runtimeModel string
+	}{
+		{name: "profile start model gone", profileModel: "claude-gone", runtimeModel: ""},
+		{name: "runtime override gone", profileModel: "", runtimeModel: "claude-gone"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := newMockAgentServer(t)
+			defer mock.Close()
+
+			log := newSessionTestLogger()
+			stopCh := newTestStopCh(t)
+			sm := NewSessionManager(log, stopCh)
+			streamMgr := NewStreamManager(log, StreamCallbacks{
+				OnAgentEvent: func(execution *AgentExecution, event agentctl.AgentEvent) {},
+			}, nil, stopCh)
+			cleanupStreamManager(t, stopCh, streamMgr)
+			sm.SetDependencies(NewEventPublisher(&MockEventBusWithTracking{}, log), streamMgr, nil, nil)
+
+			client := createTestClient(t, mock.server.URL)
+			defer client.Close()
+			execution := &AgentExecution{
+				ID:            "exec-1",
+				TaskID:        "task-1",
+				SessionID:     "session-1",
+				WorkspacePath: "/workspace",
+				agentctl:      client,
+				promptDoneCh:  make(chan PromptCompletionSignal, 1),
+			}
+			// Advertise only gpt-5; the policy model (claude-gone) is missing.
+			execution.SetModelState(modelState("gpt-5"))
+			agentConfig := &testAgent{
+				id:      "test-agent",
+				enabled: true,
+				runtimeConfig: &agents.RuntimeConfig{
+					Cmd:            agents.NewCommand("test-agent"),
+					Protocol:       agent.ProtocolACP,
+					SessionConfig:  agents.SessionConfig{},
+					ResourceLimits: agents.ResourceLimits{MemoryMB: 512, CPUCores: 0.5, Timeout: time.Hour},
+				},
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			err := sm.InitializeAndPromptWithLayers(
+				ctx, execution, agentConfig, "", nil, nil,
+				func(executionID string) error { return nil },
+				tc.profileModel, "plan", nil,
+				tc.runtimeModel, "", nil,
+				StartModelPolicy{},
+			)
+			if err == nil {
+				t.Fatal("expected InitializeAndPromptWithLayers to fail for an unavailable model")
+			}
+			if !strings.Contains(err.Error(), "claude-gone") {
+				t.Errorf("error should name the unavailable model, got %q", err.Error())
+			}
+			if execution.sessionInitialized {
+				t.Error("a failed launch must not be marked initialized")
+			}
+		})
+	}
+}
+
 func TestInitializeAndPrompt_StreamBeforeInitialize(t *testing.T) {
 	// This test verifies the critical ordering: stream connects BEFORE initialize is called.
 	mock := newMockAgentServer(t)

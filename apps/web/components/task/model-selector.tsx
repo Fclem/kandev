@@ -139,22 +139,24 @@ function sessionModelsToOptions(models: SessionModelEntry[]): ModelSelectorOptio
 }
 
 // annotateFallbackOptions marks the fallback model so the user sees the
-// session is not on the configured start model. Returns the same array when
-// no fallback note is active.
-function annotateFallbackOptions(
+// session is not on the configured start model. It returns NEW option objects
+// (never mutating the input or shared store state) and reuses the same
+// translated suffix as the trigger label so the option and trigger cannot
+// disagree. Returns the same array when no fallback note is active.
+export function annotateFallbackOptions(
   options: ModelSelectorOption[],
   fallbackModel: string | undefined,
 ): ModelSelectorOption[] {
   if (!fallbackModel) return options;
-  for (const option of options) {
-    if (option.id === fallbackModel && !option.name.includes("(fallback)")) {
-      option.name = `${option.name} (fallback)`;
-    }
-  }
-  return options;
+  const suffix = t("settings:modelFallbackSuffix");
+  return options.map((option) =>
+    option.id === fallbackModel && !option.name.endsWith(suffix)
+      ? { ...option, name: `${option.name} ${suffix}` }
+      : option,
+  );
 }
 
-function buildModelOptions(
+export function buildModelOptions(
   availableModels: ModelSelectorOption[],
   currentModel: string | null,
 ): ModelSelectorOption[] {
@@ -167,7 +169,7 @@ function buildModelOptions(
       id: currentModel,
       name: currentModel,
       disabled: true,
-      disabledReason: "Model no longer available — select a new model",
+      disabledReason: t("settings:startModelUnavailable"),
     });
   }
   return options;

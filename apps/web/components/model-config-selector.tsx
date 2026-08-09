@@ -216,12 +216,21 @@ function ModelRow({
     </CommandItem>
   );
   // cmdk's CommandItem swallows pointer events with no native tooltip slot;
-  // wrap disabled items in a Tooltip trigger so the gone-reason shows.
+  // wrap disabled items in a Tooltip trigger so the gone-reason shows. The
+  // CommandItem is disabled (unfocusable), so the wrapper itself must be
+  // focusable and carry an accessible name for keyboard users to reach the
+  // reason.
   if (model.disabled && model.disabledReason) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <div>{item}</div>
+          <div
+            tabIndex={0}
+            aria-label={`${model.name}: ${model.disabledReason}`}
+            className="rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          >
+            {item}
+          </div>
         </TooltipTrigger>
         <TooltipContent side="right">{model.disabledReason}</TooltipContent>
       </Tooltip>

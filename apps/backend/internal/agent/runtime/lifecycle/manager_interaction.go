@@ -573,6 +573,13 @@ func (m *Manager) ResetAgentContext(ctx context.Context, executionID string) err
 	// session fails the reset explicitly instead of silently dropping to the
 	// provider default.
 	if err := m.reapplySessionModelAfterReset(ctx, execution, newSessionID, effectiveModel); err != nil {
+		// The reset already committed the execution as Ready; a model
+		// re-application failure must not leave it there, or later prompts
+		// would run on the fresh session with provider-default model state.
+		_ = m.executionStore.WithLock(executionID, func(exec *AgentExecution) {
+			exec.Status = v1.AgentStatusFailed
+			exec.ErrorMessage = err.Error()
+		})
 		return err
 	}
 	m.reapplySessionModeAfterReset(ctx, execution, newSessionID, prevMode)

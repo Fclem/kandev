@@ -187,6 +187,10 @@ export function CliProfileEditor({
             patch({
               agentName: name,
               model: installed.find((a) => a.name === name)?.model_config.default_model ?? "",
+              // A fallback model belongs to the previous client's model
+              // vocabulary; carrying it over would save a false gone-model
+              // configuration for the new client.
+              fallbackModel: "",
               mode: installed.find((a) => a.name === name)?.model_config.current_mode_id ?? "",
               cliFlags: seedDefaultCLIFlags(
                 installed.find((a) => a.name === name)?.permission_settings ?? {},
@@ -378,7 +382,11 @@ function ModelModeFields({
               startModelGone
                 ? [
                     ...availableModels,
-                    { id: model, name: `${model} (${t("settings:startModelUnavailable")})` },
+                    {
+                      id: model,
+                      name: `${model} (${t("settings:startModelUnavailable")})`,
+                      disabled: true,
+                    },
                   ]
                 : availableModels
             }
@@ -558,7 +566,7 @@ async function saveExistingProfile(id: string, form: FormState): Promise<AgentPr
   return updateAgentProfileAction(id, {
     name: form.profileName.trim(),
     model: form.model,
-    fallback_model: form.fallbackModel || undefined,
+    fallback_model: form.fallbackModel ?? "",
     auto_fallback: form.autoFallback,
     mode: form.mode || undefined,
     allow_indexing: form.allowIndexing,
@@ -573,7 +581,7 @@ async function saveNewProfile(form: FormState, settingsAgents: Agent[]): Promise
   const profilePayload = {
     name: form.profileName.trim(),
     model: form.model,
-    fallback_model: form.fallbackModel || undefined,
+    fallback_model: form.fallbackModel ?? "",
     auto_fallback: form.autoFallback,
     mode: form.mode || undefined,
     allow_indexing: form.allowIndexing,

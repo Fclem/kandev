@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/kandev/kandev/internal/agent/runtime/routingerr"
@@ -131,8 +132,12 @@ func applyStartModelPolicy(
 		// advertised list may not have arrived yet at session start, or the
 		// agent rejected the model itself). The explicit fallback exists
 		// exactly for this: switch to it instead of failing — but never
-		// fall through to the provider default.
-		if policy.FallbackModel != "" {
+		// fall through to the provider default. A transport or cancellation
+		// failure is NOT evidence the model is unavailable — switching
+		// models would mask a broken connection, so those fail explicitly
+		// like any other non-availability error.
+		if policy.FallbackModel != "" &&
+			!isTransportDeadErr(err) && !errors.Is(err, context.Canceled) {
 			return applyFallbackModel(ctx, log, applier, policy, "failed")
 		}
 		return "", false, fmt.Errorf("failed to set start model %q: %w", policy.Model, err)

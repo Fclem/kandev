@@ -238,3 +238,39 @@ func TestApplyStartModelPolicy_EmptyModelNoOp(t *testing.T) {
 		t.Errorf("SetModel should not be called for empty model, got %v", applier.calls)
 	}
 }
+
+// TestApplyStartModelPolicy_TransportErrorDoesNotFallback verifies a
+// transport/protocol SetModel failure fails explicitly instead of switching
+// to the fallback: a broken connection is not evidence the model is
+// unavailable, so applying the fallback would mask the real fault.
+func TestApplyStartModelPolicy_TransportErrorDoesNotFallback(t *testing.T) {
+	applier := &fakeModelApplier{errs: []error{
+		errors.New(`websocket: connection closed: peer disconnected`),
+	}}
+	_, _, err := applyStartModelPolicy(
+		context.Background(), newPolicyTestLogger(), applier,
+		modelState("claude-gone"), StartModelPolicy{Model: "claude-gone", FallbackModel: "gpt-5"},
+	)
+	if err == nil {
+		t.Fatal("expected explicit failure for a transport error")
+	}
+	if len(applier.calls) != 1 || applier.calls[0] != "claude-gone" {
+		t.Errorf("SetModel calls = %v, want only [claude-gone] (no fallback)", applier.calls)
+	}
+}
+
+// TestApplyStartModelPolicy_CancelErrorDoesNotFallback verifies a cancelled
+// SetModel context does not switch models either.
+func TestApplyStartModelPolicy_CancelErrorDoesNotFallback(t *testing.T) {
+	applier := &fakeModelApplier{errs: []error{context.Canceled}}
+	_, _, err := applyStartModelPolicy(
+		context.Background(), newPolicyTestLogger(), applier,
+		modelState("claude-gone"), StartModelPolicy{Model: "claude-gone", FallbackModel: "gpt-5"},
+	)
+	if err == nil {
+		t.Fatal("expected explicit failure for a cancelled SetModel")
+	}
+	if len(applier.calls) != 1 || applier.calls[0] != "claude-gone" {
+		t.Errorf("SetModel calls = %v, want only [claude-gone] (no fallback)", applier.calls)
+	}
+}

@@ -366,7 +366,6 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 	}
 
 	execution.ACPSessionID = result.SessionID
-	execution.sessionInitialized = true
 	providerDefaultConfig := execution.GetModelState()
 
 	// No-silent-model-fallback: decide the effective model up front under the
@@ -375,32 +374,24 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 	// hand the decided model to the layers so it is applied exactly once.
 	// Previously SetModel failures were best-effort — the session continued
 	// on the provider default, which is the implicit switch this feature
-	// eliminates.
-	effectiveModel := profileModel
-	if runtimeModel != "" {
-		effectiveModel = runtimeModel
-	}
-	if startModelPolicy.Model != "" && execution.agentctl != nil {
-		startModelPolicy.Model = effectiveModel
-		appliedModel, usingFallback, policyErr := applyStartModelPolicy(
-			ctx, sm.logger, execution.agentctl,
-			execution.GetModelState(), startModelPolicy,
-		)
-		if policyErr != nil {
-			sm.logger.Error("start model unavailable, failing session start",
-				zap.String("execution_id", execution.ID),
-				zap.Error(policyErr))
-			return policyErr
-		}
-		if usingFallback {
-			sm.publishModelFallbackEvent(execution, result.SessionID, appliedModel)
-			effectiveModel = appliedModel
-		}
+	// eliminates. The gate is the effective model (which includes the
+	// persisted runtime override), not the profile's start model: a profile
+	// with no model and a session with a runtime model must still enforce
+	// strict failure / the configured fallback.
+	effectiveModel := sm.applyStartModelPolicyToEffectiveModel(
+		ctx, execution, result.SessionID, profileModel, runtimeModel, startModelPolicy,
+	)
+	if effectiveModel.err != nil {
+		return effectiveModel.err
 	}
 	// The layers apply the policy-decided model; the runtime override is
 	// neutralized because the decision already accounted for it.
-	profileModel = effectiveModel
+	profileModel = effectiveModel.model
 	runtimeModel = ""
+	// Only mark the launch initialized once the start-model policy has
+	// succeeded — a strict unavailable model fails here, and a failed launch
+	// must not look initialized.
+	execution.sessionInitialized = true
 
 	finalConfigID, profileModelApplied, profileModeApplied, profileConfigOptionsApplied := sm.applyProfileSessionLayers(
 		ctx, execution, result.SessionID, profileModel, profileMode, profileConfigOptions,
@@ -427,6 +418,50 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 	sm.dispatchInitialPrompt(ctx, execution, agentConfig, taskDescription, attachments, markReady)
 
 	return nil
+}
+
+// applyStartModelPolicyToEffectiveModel resolves the effective model (profile
+// start model, overridden by the persisted runtime model) and applies the
+// profile's no-silent-model-fallback policy to it: strict profiles fail a gone
+// model explicitly, fallback-model profiles switch to the configured fallback
+// (publishing the fallback event), and auto-fallback keeps legacy behavior.
+// Returns the decided model (fallback when one was applied) or the policy
+// error. The caller neutralizes the runtime override afterwards because the
+// decision already accounted for it.
+func (sm *SessionManager) applyStartModelPolicyToEffectiveModel(
+	ctx context.Context,
+	execution *AgentExecution,
+	acpSessionID string,
+	profileModel, runtimeModel string,
+	startModelPolicy StartModelPolicy,
+) (effective struct {
+	model string
+	err   error
+}) {
+	effective.model = profileModel
+	if runtimeModel != "" {
+		effective.model = runtimeModel
+	}
+	if effective.model == "" || execution.agentctl == nil {
+		return effective
+	}
+	startModelPolicy.Model = effective.model
+	appliedModel, usingFallback, policyErr := applyStartModelPolicy(
+		ctx, sm.logger, execution.agentctl,
+		execution.GetModelState(), startModelPolicy,
+	)
+	if policyErr != nil {
+		sm.logger.Error("start model unavailable, failing session start",
+			zap.String("execution_id", execution.ID),
+			zap.Error(policyErr))
+		effective.err = policyErr
+		return effective
+	}
+	if usingFallback {
+		sm.publishModelFallbackEvent(execution, acpSessionID, appliedModel)
+		effective.model = appliedModel
+	}
+	return effective
 }
 
 func (sm *SessionManager) initializeACPConnection(

@@ -269,3 +269,48 @@ func TestHandlePostStartFailure_NoSecondFallbackAttempt(t *testing.T) {
 		t.Errorf("must not set a new fallback override, got %q", *got.FallbackModelOverride)
 	}
 }
+
+// TestHandlePostStartFailure_TransientFailureOnFallbackModelRequeues verifies
+// the fallback self-failure gate is constrained to availability failures: a
+// transient failure (rate limit) on the in-flight fallback model still
+// requeues (handled=true) instead of escalating — retrying a busy provider is
+// not an implicit model switch.
+func TestHandlePostStartFailure_TransientFailureOnFallbackModelRequeues(t *testing.T) {
+	repo := newTestRepoSched(t)
+	starter := newFakeTaskStarter()
+	ss := buildScheduler(t, repo, starter)
+	run := seedRoutedRun(t, repo)
+	if err := repo.SetRunFallbackModelOverride(context.Background(), run.ID, "gpt-5"); err != nil {
+		t.Fatalf("set override: %v", err)
+	}
+	run.FallbackModelOverride = new("gpt-5")
+
+	launched, parked, err := ss.DispatchWithRouting(
+		context.Background(), run, agentWithFallback(false, "gpt-5"), scheduler.LaunchContext{})
+	if err != nil || !launched || parked {
+		t.Fatalf("forced fallback dispatch: launched=%v parked=%v err=%v", launched, parked, err)
+	}
+
+	// The fallback attempt (seq 2, model gpt-5) is now in flight. A rate-limit
+	// failure on it must requeue, not escalate.
+	afterDispatch, err := repo.GetRun(context.Background(), run.ID)
+	if err != nil {
+		t.Fatalf("get run after dispatch: %v", err)
+	}
+	handled, err := ss.HandlePostStartFailure(
+		context.Background(), afterDispatch, agentWithFallback(false, "gpt-5"),
+		"API rate limit exceeded", nil)
+	if err != nil {
+		t.Fatalf("HandlePostStartFailure: %v", err)
+	}
+	if !handled {
+		t.Fatal("transient failure on the fallback model must be handled (requeued)")
+	}
+	got, err := repo.GetRun(context.Background(), run.ID)
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	if got.Status != "queued" {
+		t.Errorf("transient failure must requeue the run, got status %q", got.Status)
+	}
+}

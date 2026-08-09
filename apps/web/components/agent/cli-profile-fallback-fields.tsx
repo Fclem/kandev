@@ -75,6 +75,7 @@ export function ModelFallbackFields({
                           {
                             id: fallbackModel,
                             name: `${fallbackModel} (${t("settings:startModelUnavailable")})`,
+                            disabled: true,
                           },
                         ]
                       : availableModels

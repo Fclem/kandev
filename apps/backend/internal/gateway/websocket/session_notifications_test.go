@@ -216,14 +216,23 @@ func TestSessionStreamBroadcaster_BroadcastsFallbackNotification(t *testing.T) {
 		},
 	))
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		for _, action := range receivedActions(client) {
-			if action == ws.ActionSessionModelFallback {
+	// Wait deterministically on the client's send channels (the hub writes
+	// the broadcast there synchronously) instead of polling on a clock.
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case raw := <-client.send:
+			var msg ws.Message
+			if err := json.Unmarshal(raw, &msg); err == nil && msg.Action == ws.ActionSessionModelFallback {
 				return
 			}
+		case raw := <-client.controlSend:
+			var msg ws.Message
+			if err := json.Unmarshal(raw, &msg); err == nil && msg.Action == ws.ActionSessionModelFallback {
+				return
+			}
+		case <-timeout:
+			t.Fatalf("client did not receive %s", ws.ActionSessionModelFallback)
 		}
-		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("client did not receive %s", ws.ActionSessionModelFallback)
 }

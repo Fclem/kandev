@@ -94,7 +94,7 @@ export function useProfileSave({
       const updated = await updateAgentProfileAction(draft.id, {
         name: draft.name,
         model: draft.model,
-        fallback_model: draft.fallbackModel || undefined,
+        fallback_model: draft.fallbackModel ?? "",
         auto_fallback: draft.autoFallback ?? false,
         mode: draft.mode,
         config_options: draft.configOptions ?? {},

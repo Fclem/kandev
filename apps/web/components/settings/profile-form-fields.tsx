@@ -390,7 +390,6 @@ function CapabilitiesRowContent({
       <ModelFallbackSection
         profile={profile}
         models={models}
-        currentModelId={currentModelId}
         configOptions={configOptions}
         baselineProfile={baselineProfile}
         labelCls={labelCls}

@@ -88,8 +88,14 @@ func (ss *SchedulerService) HandlePostStartFailure(
 	// The in-flight attempt is already on the profile's fallback model (the
 	// one-shot override was consumed by dispatchForcedFallback). A failure on
 	// the fallback itself must escalate to the terminal failure path — never
-	// re-dispatch the same fallback model a second time.
-	if !agent.AutoFallback && candidate.Model == agent.FallbackModel {
+	// re-dispatch the same fallback model a second time. The gate applies
+	// only to availability failures on a genuinely configured fallback:
+	// transient conditions keep their short/long-retry recovery, and an
+	// empty fallback config never matches (the strict gate above already
+	// handled strict profiles).
+	if !agent.AutoFallback && agent.FallbackModel != "" &&
+		candidate.Model == agent.FallbackModel &&
+		routingerr.IsAvailabilityCode(classified.Code) {
 		ss.logger.Info("post-start failure on the fallback model itself, escalating",
 			zap.String("run_id", run.ID),
 			zap.String("fallback_model", agent.FallbackModel))

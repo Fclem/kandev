@@ -398,7 +398,7 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 
 	finalConfigID, profileModelApplied, profileModeApplied, profileConfigOptionsApplied := sm.applyProfileSessionLayers(
 		ctx, execution, result.SessionID, profileModel, profileMode, profileConfigOptions,
-		effectiveModel.modelSet,
+		effectiveModel.handled, effectiveModel.appliedModel,
 	)
 
 	// Capture the effective profile state before runtime overrides or workflow
@@ -429,10 +429,10 @@ func (sm *SessionManager) InitializeAndPromptWithLayers(
 // profile's no-silent-model-fallback policy to it: strict profiles fail a gone
 // model explicitly, fallback-model profiles switch to the configured fallback
 // (publishing the fallback event), and auto-fallback keeps legacy behavior.
-// Returns the decided model (fallback when one was applied), whether the
-// policy itself applied the model via SetModel, or the policy error. The
-// caller neutralizes the runtime override afterwards because the decision
-// already accounted for it.
+// Returns the decided model (fallback when one was applied), the model
+// actually applied by the policy, whether the policy handled model selection,
+// or the policy error. The caller neutralizes the runtime override afterwards
+// because the decision already accounted for it.
 func (sm *SessionManager) applyStartModelPolicyToEffectiveModel(
 	ctx context.Context,
 	execution *AgentExecution,
@@ -440,9 +440,10 @@ func (sm *SessionManager) applyStartModelPolicyToEffectiveModel(
 	profileModel, runtimeModel string,
 	startModelPolicy StartModelPolicy,
 ) (effective struct {
-	model    string
-	modelSet bool
-	err      error
+	model        string
+	appliedModel string
+	handled      bool
+	err          error
 }) {
 	effective.model = profileModel
 	if runtimeModel != "" {
@@ -451,6 +452,10 @@ func (sm *SessionManager) applyStartModelPolicyToEffectiveModel(
 	if effective.model == "" || execution.agentctl == nil {
 		return effective
 	}
+	// The policy owns this model decision even when it deliberately continues
+	// without an applied model (auto-fallback or method-not-found). Later
+	// profile layers must not retry an outcome that was already handled.
+	effective.handled = true
 	startModelPolicy.Model = effective.model
 	appliedModel, usingFallback, policyErr := applyStartModelPolicy(
 		ctx, sm.logger, execution.agentctl,
@@ -463,9 +468,7 @@ func (sm *SessionManager) applyStartModelPolicyToEffectiveModel(
 		effective.err = policyErr
 		return effective
 	}
-	if appliedModel != "" {
-		effective.modelSet = true
-	}
+	effective.appliedModel = appliedModel
 	if usingFallback {
 		sm.publishModelFallbackEvent(execution, acpSessionID, appliedModel)
 		effective.model = appliedModel
@@ -533,7 +536,8 @@ func (sm *SessionManager) applyProfileSessionLayers(
 	profileModel string,
 	profileMode string,
 	profileConfigOptions map[string]string,
-	modelAlreadyApplied bool,
+	modelPolicyHandled bool,
+	policyAppliedModel string,
 ) (string, string, string, map[string]string) {
 	if execution.agentctl == nil {
 		return "", "", "", nil
@@ -543,15 +547,20 @@ func (sm *SessionManager) applyProfileSessionLayers(
 	profileModeApplied := ""
 	profileConfigOptionsApplied := make(map[string]string)
 	if profileModel != "" {
-		if modelAlreadyApplied {
-			// The start-model policy applied this model via SetModel before
-			// the layers ran — record it as applied without repeating the
-			// call, so a duplicate SetModel cannot fail silently behind the
-			// policy's back.
-			finalConfigID = modelConfigIDFromState(execution.GetModelState())
-			profileModelApplied = profileModel
-			sm.logger.Info("profile model applied by start-model policy",
-				zap.String("execution_id", execution.ID), zap.String("model", profileModel))
+		if modelPolicyHandled {
+			if policyAppliedModel == "" {
+				sm.logger.Debug("start-model policy handled model without applying one",
+					zap.String("execution_id", execution.ID), zap.String("model", profileModel))
+			} else {
+				// The start-model policy applied this model via SetModel before
+				// the layers ran — record it as applied without repeating the
+				// call, so a duplicate SetModel cannot fail silently behind the
+				// policy's back.
+				finalConfigID = modelConfigIDFromState(execution.GetModelState())
+				profileModelApplied = policyAppliedModel
+				sm.logger.Info("profile model applied by start-model policy",
+					zap.String("execution_id", execution.ID), zap.String("model", policyAppliedModel))
+			}
 		} else if err := execution.agentctl.SetModel(ctx, profileModel); err != nil {
 			sm.logger.Warn("failed to set profile model via ACP",
 				zap.String("execution_id", execution.ID), zap.String("model", profileModel), zap.Error(err))

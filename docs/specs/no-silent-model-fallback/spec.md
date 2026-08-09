@@ -1,6 +1,6 @@
 # No Silent Model Fallback
 
-**Status**: approved (design package)
+**Status**: approved (design package; amended 2026-08-09)
 **Date**: 2026-08-04
 **Slug**: `no-silent-model-fallback`
 
@@ -55,9 +55,14 @@ switches models for them, invisibly.**
   post-start provider fallback.
 - A new explicit per-profile toggle **"Fallback automatically to next
   model"** restores the legacy automatic-fallback behavior (session start
-  best-effort + office routing re-dispatch). Enabling the toggle hides and
-  disables the optional fallback-model field (the two are mutually
-  exclusive opt-ins).
+  best-effort + office routing re-dispatch). Enabling the toggle disables the
+  optional fallback-model controls without clearing their saved value (the two
+  are mutually exclusive opt-ins).
+- Agent-profile editors group both fallback choices in a collapsed **Fallback
+  settings** disclosure. Expanding it shows the two choices side by side on
+  desktop and as one vertical flow on phone-sized screens. Each choice keeps a
+  short visible explanation and adds contextual help that works by hover or
+  keyboard focus with a fine pointer and by tap on a coarse pointer.
 
 ## Non-Goals
 
@@ -168,6 +173,14 @@ profile's mode:
 The explicit failure must propagate as the session/run error message so the
 chat and run detail render "start model unavailable — change the model".
 
+The start-model policy owns every model application attempted during this
+decision. Its outcome distinguishes **handled** from **applied**: best-effort
+auto-fallback failure and method-not-supported are handled even though no model
+was applied. Later profile/configuration layers must not retry a handled model
+attempt. An explicit fallback may still make its intentional ordered attempts
+(`start`, then `fallback`) when the advertised model list is unknown, but no
+layer repeats either attempt.
+
 The same policy applies to the context-reset re-application path
 (`reapplySessionModelAfterReset` / `effectiveSessionModelForReset` in
 `manager_interaction.go`) via a shared helper, so a context reset cannot
@@ -236,17 +249,31 @@ Session toolbar picker (`apps/web/components/task/model-selector.tsx`):
   keep it as the current value but render it red
   (`text-destructive`) + disabled with a reason ("no longer available").
 - **Agent fallback row** (new, under Start model): optional select of the
-  same model list bound to `profile.fallback_model`. Hidden entirely when
-  `auto_fallback` is ON; otherwise shown, with the same gone-red/disabled
-  treatment if the fallback model itself is gone.
+  same model list bound to `profile.fallback_model`. It remains visible but is
+  disabled when `auto_fallback` is ON, preserving the configured value while
+  making the mutual exclusion understandable. It uses the same
+  gone-red/disabled treatment if the fallback model itself is gone.
 - **"Fallback automatically to next model" toggle** (new row): a switch
-  bound to `profile.auto_fallback`. When ON, the fallback-model row is
-  hidden/disabled. Helper text explains the semantics.
+  bound to `profile.auto_fallback`. When ON, the fallback-model controls are
+  disabled. Helper text explains the semantics.
+- **Fallback settings disclosure**: both choices sit inside a semantic
+  collapsible section that is closed on initial render. Its closed header
+  summarizes the effective mode (strict, automatic, or the configured explicit
+  fallback) so saved state and hidden dirty state remain discoverable. The
+  trigger is keyboard-operable, reports expanded state, and has a touch target
+  of at least 44px.
+- **Responsive layout and help**: the expanded choices use two equal columns at
+  the desktop breakpoint and one column below it. Each label has an info-icon
+  button. Fine pointers expose localized help through a tooltip on hover and
+  focus; coarse pointers open the same help in an inset bottom drawer. The
+  visible helper sentence remains in the option card, so the icon is
+  supplementary rather than the only explanation.
 - The lighter editor `apps/web/components/agent/cli-profile-editor.tsx`
-  (`ModelModeFields`) gets the same two rows for parity.
+  (`ModelModeFields`) gets the same disclosure, layout, help, and mutual
+  exclusion behavior for parity.
 
 All new copy is externalized via `t()` into the `settings` i18n namespace
-(`apps/web/src/locales/{en,pseudo}/settings.json`) — the i18n ratchet
+  (`apps/web/src/locales/{en,pseudo,pt-pt,zh-cn}/settings.json`) — the i18n ratchet
 judges added lines even in unmigrated files.
 
 ### 8. Profile picker gating (new-task / new-agent)
@@ -290,6 +317,11 @@ Backend (Go, `*_test.go` beside source):
   start model gone; fallback-model mode applies the fallback and notes it;
   auto-fallback keeps legacy warn-continue; `-32601` continues silently.
   (`session_test.go` or the manager test harness.)
+- Runtime session start: a successful start-model application, an auto-fallback
+  best-effort failure, and method-not-supported each produce one policy attempt
+  with no profile-layer retry. When an unknown advertised list requires trying
+  an explicit fallback after the start model fails, the ordered call list is
+  exactly `[start, fallback]`.
 - Office post-start: unchanged — availability failures requeue via the
   workspace routing chain regardless of the profile's fallback settings
   (regression test pins that the profile policy does not gate office).
@@ -301,8 +333,11 @@ Frontend (Vitest, `*.test.ts(x)`):
 - `session-models` WS handler: stale active model is kept (not cleared).
 - `useAgentProfileOptions`: strict profile disabled with reason; fallback
   profile selectable with warning; auto-fallback selectable.
-- Profile editor: gone start model renders red + disabled; toggle hides the
-  fallback row.
+- Profile editor: gone start model renders red + disabled; auto-fallback keeps
+  the explicit fallback choice visible but disables its controls.
+- Profile editors: fallback settings start collapsed; expanding exposes both
+  choices, auto-fallback disables rather than removes the explicit fallback,
+  and desktop tooltip help is available through pointer and keyboard focus.
 - `agent-profile-normalize`: new fields round-trip.
 
 E2E (Playwright, `apps/web/e2e`):
@@ -311,7 +346,13 @@ E2E (Playwright, `apps/web/e2e`):
   is not in the mock agent's advertised list; assert the profile editor
   shows it red/disabled, the task-create profile picker blocks it (greyed,
   unselectable) or shows the fallback warning when a fallback is set, and
-  the toggle hides the fallback row.
+  the fallback settings disclosure controls both fallback modes.
+- Desktop profile settings: the disclosure starts closed, expands to two
+  horizontally aligned option columns, summarizes the current fallback mode,
+  and exposes each info explanation on hover/focus.
+- Mobile profile settings: tapping the same disclosure reveals one stacked
+  flow; tapping either 44px info target opens the localized help drawer without
+  horizontal document overflow.
 
 ## Persistence & Migration
 
@@ -345,3 +386,9 @@ explicitly enable the toggle — that opt-in is the point of the feature.
 - **Office vs. kanban surfaces**: both share the same agent-profiles rows;
   the picker gating in §8 covers the kanban task-create dialog and the
   office setup flow. Office run-detail routing surfaces are unchanged.
+- **Collapsed controls remain legible**: the disclosure header summarizes the
+  effective mode, and dirty-state decoration is applied to the disclosure
+  container so a collapsed section cannot conceal that it has unsaved changes.
+- **Hover is supplementary**: every info icon is focusable, and coarse-pointer
+  devices receive the same content in a drawer. The visible option helper copy
+  remains the baseline explanation.

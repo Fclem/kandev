@@ -394,7 +394,6 @@ function CapabilitiesRowContent({
         baselineProfile={baselineProfile}
         labelCls={labelCls}
         gapCls={gapCls}
-        alignSelectorWithStart={hasModes}
         onChange={onChange}
       />
       {commands.length > 0 && <CommandsButton commands={commands} />}

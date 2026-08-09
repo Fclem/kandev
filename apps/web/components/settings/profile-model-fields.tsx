@@ -17,6 +17,10 @@ import {
   profileAutoFallbackIsDirty,
   profileFallbackModelIsDirty,
 } from "@/components/settings/profile-capability-helpers";
+import {
+  FallbackOptionHelp,
+  ModelFallbackSettingsShell,
+} from "@/components/settings/model-fallback-settings-shell";
 import type { ModelConfig, ModeEntry, ModelEntry } from "@/lib/types/http";
 import type { PermissionKey } from "@/lib/agent-permissions";
 import type { CLIFlag } from "@/lib/types/http";
@@ -44,6 +48,7 @@ export function ModelPicker({
   ariaLabel,
   placeholder,
   goneModelLabel,
+  disabled,
 }: {
   profile: ProfileFormData;
   models: ModelEntry[];
@@ -53,6 +58,7 @@ export function ModelPicker({
   ariaLabel: string;
   placeholder?: string;
   goneModelLabel: string;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   const modelConfig = configOptions.find(isModelConfigOption);
@@ -96,6 +102,7 @@ export function ModelPicker({
       }
       placeholder={placeholder ?? t("settings:selectAModel")}
       ariaLabel={ariaLabel}
+      disabled={disabled}
       triggerClassName={modelIsGone ? "text-destructive" : undefined}
     />
   );
@@ -135,13 +142,10 @@ export function modelConfigOptions(modelConfig: ModelConfig): SelectConfigOption
   );
 }
 
-// ModelFallbackSection renders the no-silent-model-fallback controls: the
-// "fallback automatically to next model" toggle on top, and below it the
-// optional explicit fallback model (hidden while auto-fallback is on). The
-// fallback model is itself optional, so its row carries an attached switch:
-// checking it enables the model selector and records fallback_model;
-// unchecking clears the value (strict mode). The explicit fallback is the
-// only automatic model switch allowed when auto-fallback is off.
+// ModelFallbackSection renders the no-silent-model-fallback controls inside a
+// collapsed disclosure. The explicit fallback remains visible while automatic
+// fallback is enabled, but its controls are disabled and its saved value is
+// preserved until automatic fallback is turned off again.
 // FallbackModelPicker owns the optional fallback row: its attached switch
 // tracks whether the user opted in. Checking with no value yet must keep the
 // selector visible (empty) until a model is picked, so a transient local flag
@@ -153,7 +157,7 @@ function FallbackModelPicker({
   baselineProfile,
   labelCls,
   gapCls,
-  alignSelectorWithStart,
+  disabled,
   onChange,
 }: {
   profile: ProfileFormData;
@@ -162,7 +166,7 @@ function FallbackModelPicker({
   baselineProfile?: ProfileFormData;
   labelCls?: string;
   gapCls: string;
-  alignSelectorWithStart?: boolean;
+  disabled?: boolean;
   onChange: (patch: Partial<ProfileFormData>) => void;
 }) {
   const { t } = useTranslation();
@@ -186,10 +190,14 @@ function FallbackModelPicker({
       data-settings-dirty={profileFallbackModelIsDirty(profile, baselineProfile)}
       data-settings-dirty-level="container"
     >
-      <div className="flex items-start justify-between gap-3">
-        <Label className={labelCls}>{t("settings:agentFallback")}</Label>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1">
+          <Label className={labelCls}>{t("settings:agentFallback")}</Label>
+          <FallbackOptionHelp kind="explicit" />
+        </div>
         <Switch
           checked={fallbackEnabled}
+          disabled={disabled}
           onCheckedChange={(checked) => {
             setOptedIn(checked);
             if (!checked) onChange({ fallback_model: "" });
@@ -198,38 +206,32 @@ function FallbackModelPicker({
         />
       </div>
       {fallbackEnabled && (
-        <div className={alignSelectorWithStart ? "flex items-end gap-2" : undefined}>
-          <div className={alignSelectorWithStart ? "flex-1 min-w-0" : undefined}>
-            <ModelPicker
-              profile={{ ...profile, model: profile.fallback_model ?? "" }}
-              models={models}
-              currentModelId={profile.fallback_model || undefined}
-              configOptions={fallbackConfigOptions}
-              onChange={(patch) => {
-                if (patch.model !== undefined) {
-                  onChange({ fallback_model: patch.model });
-                  return;
-                }
-                if (patch.config_options && fallbackModelOptionId) {
-                  const selected = patch.config_options[fallbackModelOptionId];
-                  if (selected !== undefined) onChange({ fallback_model: selected });
-                }
-              }}
-              ariaLabel={t("settings:agentFallbackAria")}
-              placeholder={t("settings:agentFallbackPlaceholder")}
-              goneModelLabel={t("settings:fallbackModelUnavailable")}
-            />
-          </div>
-          {alignSelectorWithStart && <div className="flex-1 min-w-0" aria-hidden />}
-          {/* Mirrors the refresh-capabilities column (w-7 icon button) so
-              the fallback selector matches the start-model cell width
-              exactly. */}
-          {alignSelectorWithStart && <div className="w-7 shrink-0" aria-hidden />}
+        <div className="min-w-0">
+          <ModelPicker
+            profile={{ ...profile, model: profile.fallback_model ?? "" }}
+            models={models}
+            currentModelId={profile.fallback_model || undefined}
+            configOptions={fallbackConfigOptions}
+            onChange={(patch) => {
+              if (patch.model !== undefined) {
+                onChange({ fallback_model: patch.model });
+                return;
+              }
+              if (patch.config_options && fallbackModelOptionId) {
+                const selected = patch.config_options[fallbackModelOptionId];
+                if (selected !== undefined) onChange({ fallback_model: selected });
+              }
+            }}
+            ariaLabel={t("settings:agentFallbackAria")}
+            placeholder={t("settings:agentFallbackPlaceholder")}
+            goneModelLabel={t("settings:fallbackModelUnavailable")}
+            disabled={disabled}
+          />
         </div>
       )}
-      {fallbackEnabled && (
-        <p className="text-xs text-muted-foreground">{t("settings:agentFallbackHelper")}</p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        {disabled ? t("settings:agentFallbackDisabledHelper") : t("settings:agentFallbackHelper")}
+      </p>
     </div>
   );
 }
@@ -247,7 +249,6 @@ export function ModelFallbackSection({
   baselineProfile,
   labelCls,
   gapCls,
-  alignSelectorWithStart,
   onChange,
 }: {
   profile: ProfileFormData;
@@ -256,31 +257,41 @@ export function ModelFallbackSection({
   baselineProfile?: ProfileFormData;
   labelCls?: string;
   gapCls: string;
-  /** Constrain the fallback selector to the same width as the start-model
-   *  cell (which sits next to the mode cell) instead of spanning the row. */
-  alignSelectorWithStart?: boolean;
   onChange: (patch: Partial<ProfileFormData>) => void;
 }) {
   const { t } = useTranslation();
+  const autoFallback = profile.auto_fallback ?? false;
+  const isDirty =
+    profileAutoFallbackIsDirty(profile, baselineProfile) ||
+    profileFallbackModelIsDirty(profile, baselineProfile);
+
   return (
-    <>
-      <div
-        data-testid="profile-auto-fallback-field"
-        className="flex items-start justify-between gap-3"
-        data-settings-dirty={profileAutoFallbackIsDirty(profile, baselineProfile)}
-        data-settings-dirty-level="container"
-      >
-        <div className={`min-w-0 ${gapCls}`}>
-          <Label className={labelCls}>{t("settings:autoFallback")}</Label>
+    <ModelFallbackSettingsShell
+      autoFallback={autoFallback}
+      fallbackModel={profile.fallback_model ?? ""}
+      isDirty={isDirty}
+      automaticOption={
+        <div
+          data-testid="profile-auto-fallback-field"
+          className={`min-w-0 ${gapCls}`}
+          data-settings-dirty={profileAutoFallbackIsDirty(profile, baselineProfile)}
+          data-settings-dirty-level="container"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-1">
+              <Label className={labelCls}>{t("settings:autoFallback")}</Label>
+              <FallbackOptionHelp kind="automatic" />
+            </div>
+            <Switch
+              checked={autoFallback}
+              onCheckedChange={(checked) => onChange({ auto_fallback: checked })}
+              aria-label={t("settings:autoFallback")}
+            />
+          </div>
           <p className="text-xs text-muted-foreground">{t("settings:autoFallbackHelper")}</p>
         </div>
-        <Switch
-          checked={profile.auto_fallback ?? false}
-          onCheckedChange={(checked) => onChange({ auto_fallback: checked })}
-          aria-label={t("settings:autoFallback")}
-        />
-      </div>
-      {!profile.auto_fallback && (
+      }
+      explicitOption={
         <FallbackModelPicker
           profile={profile}
           models={models}
@@ -288,10 +299,10 @@ export function ModelFallbackSection({
           baselineProfile={baselineProfile}
           labelCls={labelCls}
           gapCls={gapCls}
-          alignSelectorWithStart={alignSelectorWithStart}
+          disabled={autoFallback}
           onChange={onChange}
         />
-      )}
-    </>
+      }
+    />
   );
 }

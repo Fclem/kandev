@@ -372,6 +372,90 @@ func TestInitializeAndPrompt_AppliesStartModelPolicyExactlyOnce(t *testing.T) {
 	}
 }
 
+// TestInitializeAndPrompt_AutoFallbackFailureDoesNotRetryModel verifies that
+// the legacy best-effort policy owns its failed SetModel attempt. The profile
+// layers must not send the same request a second time after the policy has
+// deliberately continued on the provider default.
+func TestInitializeAndPrompt_AutoFallbackFailureDoesNotRetryModel(t *testing.T) {
+	mock := newMockAgentServer(t)
+	defer mock.Close()
+	mock.handler = func(msg ws.Message) *ws.Message {
+		if msg.Action == "agent.session.set_model" {
+			resp, _ := ws.NewError(msg.ID, msg.Action, ws.ErrorCodeInternalError, "model unavailable", nil)
+			return resp
+		}
+		return mock.defaultHandler(msg)
+	}
+
+	log := newSessionTestLogger()
+	stopCh := newTestStopCh(t)
+	sm := NewSessionManager(log, stopCh)
+	streamMgr := NewStreamManager(log, StreamCallbacks{
+		OnAgentEvent: func(execution *AgentExecution, event agentctl.AgentEvent) {},
+	}, nil, stopCh)
+	cleanupStreamManager(t, stopCh, streamMgr)
+	eventBus := &MockEventBusWithTracking{}
+	sm.SetDependencies(NewEventPublisher(eventBus, log), streamMgr, nil, nil)
+
+	client := createTestClient(t, mock.server.URL)
+	defer client.Close()
+	execution := &AgentExecution{
+		ID:            "exec-1",
+		TaskID:        "task-1",
+		SessionID:     "session-1",
+		WorkspacePath: "/workspace",
+		agentctl:      client,
+		promptDoneCh:  make(chan PromptCompletionSignal, 1),
+	}
+	execution.SetModelState(&CachedModelState{
+		CurrentModelID: "provider-default",
+		Models:         []streams.SessionModelInfo{{ModelID: "gpt-5"}},
+	})
+	agentConfig := &testAgent{
+		id:      "test-agent",
+		enabled: true,
+		runtimeConfig: &agents.RuntimeConfig{
+			Cmd:            agents.NewCommand("test-agent"),
+			Protocol:       agent.ProtocolACP,
+			SessionConfig:  agents.SessionConfig{},
+			ResourceLimits: agents.ResourceLimits{MemoryMB: 512, CPUCores: 0.5, Timeout: time.Hour},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	err := sm.InitializeAndPrompt(ctx, execution, agentConfig, "", nil, nil,
+		func(executionID string) error { return nil },
+		StartModelPolicy{Model: "gpt-5", AutoFallback: true}, "plan", nil)
+	if err != nil {
+		t.Fatalf("InitializeAndPrompt failed: %v", err)
+	}
+
+	setModelCalls := 0
+	for _, action := range mock.getActionLog() {
+		if action == "agent.session.set_model" {
+			setModelCalls++
+		}
+	}
+	if setModelCalls != 1 {
+		t.Fatalf("set_model calls = %d, want exactly 1 policy attempt", setModelCalls)
+	}
+
+	var original *AgentStreamEventPayload
+	for _, event := range eventBus.getStreamEvents() {
+		if event.Data != nil && originalConfigEventData(event.Data.Data) {
+			original = &event
+			break
+		}
+	}
+	if original == nil {
+		t.Fatal("expected original configuration snapshot")
+	}
+	if original.Data.CurrentModelID != "provider-default" {
+		t.Fatalf("original model = %q, want provider-default after failed policy attempt", original.Data.CurrentModelID)
+	}
+}
+
 func TestInitializeAndPrompt_StreamBeforeInitialize(t *testing.T) {
 	// This test verifies the critical ordering: stream connects BEFORE initialize is called.
 	mock := newMockAgentServer(t)

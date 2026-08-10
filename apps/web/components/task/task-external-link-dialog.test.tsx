@@ -123,6 +123,45 @@ describe("TaskExternalLinkDialog — Jira and Linear", () => {
   });
 });
 
+describe("TaskExternalLinkDialog — long task titles", () => {
+  it("caps the renamed title at the 60-character limit when linking a Linear issue", async () => {
+    const longTitle = "x".repeat(60);
+    vi.mocked(getLinearIssue).mockResolvedValue({ identifier: "ENG-20" } as never);
+    vi.mocked(updateTask).mockResolvedValue({
+      id: TASK_ID,
+      title: "ENG-20: " + "x".repeat(51) + "…",
+    } as never);
+
+    render(
+      <StateProvider>
+        <ToastProvider>
+          <TaskExternalLinkDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            provider="linear"
+            task={{ id: TASK_ID, title: longTitle }}
+            workspaceId={WORKSPACE_ID}
+          />
+        </ToastProvider>
+      </StateProvider>,
+    );
+
+    fireEvent.change(screen.getByTestId(INPUT_TEST_ID), {
+      target: { value: "ENG-20" },
+    });
+    fireEvent.click(screen.getByTestId(SUBMIT_TEST_ID));
+
+    await waitFor(() => {
+      expect(getLinearIssue).toHaveBeenCalledWith("ENG-20", { workspaceId: WORKSPACE_ID });
+    });
+    expect(updateTask).toHaveBeenCalledTimes(1);
+    const title = vi.mocked(updateTask).mock.calls[0][1].title as string;
+    expect(Array.from(title)).toHaveLength(60);
+    expect(title.startsWith("ENG-20: ")).toBe(true);
+    expect(title.endsWith("…")).toBe(true);
+  });
+});
+
 describe("TaskExternalLinkDialog — Sentry linking", () => {
   it("auto-selects the sole healthy Sentry instance and links against it", async () => {
     mockSentryInstances("single", [instance("inst-1", "Production")]);

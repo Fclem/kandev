@@ -66,6 +66,11 @@ export function ImproveKandevDialog(props: ImproveKandevDialogProps) {
   // without this the effect only re-ran when improveWorkspaceMissing changed —
   // a re-open with the workspace already known would sit forever at the idle
   // "Preparing kandev repository" banner with submit blocked.
+  //
+  // The re-probe on every open is intentional: bootstrap is idempotent
+  // (backend reuses the existing workspace/workflow/repo) and re-checks the
+  // user's fork/write access, which can change between opens. Do not
+  // short-circuit it on a previously-successful result.
   useEffect(() => {
     if (open && !improveWorkspaceMissing) {
       setWorkspaceChoiceConfirmed(true);

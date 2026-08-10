@@ -96,5 +96,8 @@ in the same conversation.
   appears on reopen — bootstrap never runs) and passes with it.
 - Red/green evidence: both new tests were run against the pre-fix tree
   (stashed fix) and failed for the expected reason, then passed with the fix.
+- PR fixup: comment-only remediation `5a034e86b` documenting the intentional
+  per-open bootstrap re-probe (Claude review suggestion, non-blocking).
+  Final head CI 27/27 green, threads resolved, mergeable clean.
 
 Security/trust: none. External side-effect boundaries: none.

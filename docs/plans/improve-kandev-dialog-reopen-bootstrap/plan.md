@@ -91,6 +91,17 @@ Completed for task 01 (see its `## Results`). Summary on the final tree:
 - Both new regression tests (component + e2e) were verified red before the
   fix and green after.
 
+### PR fixup (PR #2484)
+
+- Remediation commit `5a034e86b` (comment-only) documents that the per-open
+  bootstrap re-probe is intentional, addressing the non-blocking review
+  suggestion; the second suggestion (pre-existing double `readSkipIntro()`)
+  was deferred per the reviewer.
+- Final head `5a034e86b`: 27/27 checks green (incl. CodeRabbit, full E2E
+  matrix, frontend suite, Build), no failed or pending checks, no unresolved
+  review threads, `mergeable_state: clean`. Claude review at the substantive
+  head (`0d96473ad`) verdict: "Ready to merge", 0 blockers.
+
 ---
 
 ## Implementation Waves And Parallel Candidates

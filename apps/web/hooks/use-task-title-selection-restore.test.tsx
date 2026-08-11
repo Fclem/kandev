@@ -78,7 +78,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("useTaskTitleSelectionRestore", () => {
+describe("useTaskTitleSelectionRestore - commit-path caret restore", () => {
   it("clamps the value to 60 code points on change", () => {
     render(<Harness initial={LONG.slice(0, 59)} />);
     const input = screen.getByTestId("title") as HTMLInputElement;
@@ -140,7 +140,9 @@ describe("useTaskTitleSelectionRestore", () => {
     simulateInsert(input, `${LONG.slice(0, 6)}XY${LONG.slice(6, 58)}`, 8, setSelectionRange);
     expect(setSelectionRange).not.toHaveBeenCalled();
   });
+});
 
+describe("useTaskTitleSelectionRestore - bail-out caret restore", () => {
   it("restores the caret when a truncating keystroke leaves the clamped value unchanged", async () => {
     const setSelectionRange = vi.spyOn(HTMLInputElement.prototype, "setSelectionRange");
     render(<Harness initial={LONG} />);
@@ -176,6 +178,23 @@ describe("useTaskTitleSelectionRestore", () => {
     expect(setSelectionRange).not.toHaveBeenCalled();
   });
 
+  it("does not restore a stale caret when the value changes in the same turn as a bail-out", async () => {
+    const setSelectionRange = vi.spyOn(HTMLInputElement.prototype, "setSelectionRange");
+    const onChange = vi.fn();
+    const { rerender } = render(<ControlledHarness value={LONG} onChange={onChange} />);
+    const input = screen.getByTestId("title") as HTMLInputElement;
+    input.focus();
+    // Schedules the bail-out restore for the old value...
+    simulateInsert(input, `${LONG}T`, 6, setSelectionRange);
+    // ...but the controlled value changes synchronously before the microtask
+    // runs, so the restore must be superseded.
+    rerender(<ControlledHarness value={"U".repeat(60)} onChange={onChange} />);
+    await act(async () => {});
+    expect(setSelectionRange).not.toHaveBeenCalled();
+  });
+});
+
+describe("useTaskTitleSelectionRestore - textarea path", () => {
   it("pins the caret after a truncating change in a textarea", () => {
     const setSelectionRange = vi.spyOn(HTMLTextAreaElement.prototype, "setSelectionRange");
     render(<HarnessTextarea initial={LONG} />);
@@ -186,5 +205,16 @@ describe("useTaskTitleSelectionRestore", () => {
     expect(textarea.value).toHaveLength(60);
     expect(textarea.value.slice(6, 8)).toBe("XY");
     expect(setSelectionRange).toHaveBeenCalledWith(8, 8);
+  });
+
+  it("restores the caret on a same-result bail-out in a textarea", async () => {
+    const setSelectionRange = vi.spyOn(HTMLTextAreaElement.prototype, "setSelectionRange");
+    render(<HarnessTextarea initial={LONG} />);
+    const textarea = screen.getByTestId("title") as HTMLTextAreaElement;
+    textarea.focus();
+    simulateInsert(textarea, `${LONG}T`, 6, setSelectionRange);
+    await act(async () => {});
+    expect(textarea.value).toHaveLength(60);
+    expect(setSelectionRange).toHaveBeenCalledWith(6, 6);
   });
 });

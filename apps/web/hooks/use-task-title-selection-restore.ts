@@ -9,6 +9,34 @@ type TitleInputElement = HTMLInputElement | HTMLTextAreaElement;
 type PendingSelection = { start: number; end: number };
 
 /**
+ * Re-pin the caret after React restores a controlled value whose render
+ * bailed out. The epoch, ownership, and value checks keep a stale restore
+ * from touching a newer value or a replaced element; the connection and focus
+ * checks cover unmount and blur between scheduling and execution.
+ */
+function scheduleSameResultCaretRestore(options: {
+  el: TitleInputElement;
+  next: string;
+  start: number;
+  end: number;
+  epoch: number;
+  refs: {
+    restoreEpochRef: { current: number };
+    inputRef: { current: TitleInputElement | null };
+  };
+}) {
+  const { el, next, start, end, epoch, refs } = options;
+  queueMicrotask(() => {
+    if (epoch !== refs.restoreEpochRef.current) return;
+    if (refs.inputRef.current !== el) return;
+    if (el.value !== next) return;
+    if (!el.isConnected || document.activeElement !== el) return;
+    const max = next.length;
+    el.setSelectionRange(Math.min(start, max), Math.min(end, max));
+  });
+}
+
+/**
  * Keeps the caret in place while a task-title field clamps its value at the
  * 60-character cap.
  *
@@ -35,10 +63,14 @@ export function useTaskTitleSelectionRestore<T extends TitleInputElement = HTMLI
   const inputRef = useRef<T | null>(null);
   const pendingSelectionRef = useRef<PendingSelection | null>(null);
   const lastCommittedRef = useRef(value);
+  const restoreEpochRef = useRef(0);
 
   const clampChange = useCallback((e: ChangeEvent<TitleInputElement>) => {
     const el = e.target;
     const next = clampTaskTitleInput(el.value);
+    // Any new change supersedes bail-out restores scheduled by an earlier
+    // change in the same turn.
+    restoreEpochRef.current += 1;
     if (next !== el.value) {
       if (next !== lastCommittedRef.current) {
         // The commit will change the value: record the caret for the layout
@@ -52,13 +84,13 @@ export function useTaskTitleSelectionRestore<T extends TitleInputElement = HTMLI
         // but React still restores the controlled DOM value after the event
         // and the browser resets the caret to the end. Re-pin it after that
         // write via a microtask; there is no commit to hook into.
-        const start = el.selectionStart ?? el.value.length;
-        const end = el.selectionEnd ?? el.value.length;
-        const max = next.length;
-        queueMicrotask(() => {
-          if (el.isConnected && document.activeElement === el) {
-            el.setSelectionRange(Math.min(start, max), Math.min(end, max));
-          }
+        scheduleSameResultCaretRestore({
+          el,
+          next,
+          start: el.selectionStart ?? el.value.length,
+          end: el.selectionEnd ?? el.value.length,
+          epoch: restoreEpochRef.current,
+          refs: { restoreEpochRef, inputRef },
         });
       }
     } else {
@@ -69,6 +101,8 @@ export function useTaskTitleSelectionRestore<T extends TitleInputElement = HTMLI
 
   useLayoutEffect(() => {
     lastCommittedRef.current = value;
+    // A committed value change supersedes any pending bail-out restore.
+    restoreEpochRef.current += 1;
     const selection = pendingSelectionRef.current;
     pendingSelectionRef.current = null;
     if (!selection) return;

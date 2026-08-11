@@ -67,16 +67,23 @@ No backend/HTTP/WS changes. This is entirely a frontend feature.
 
 Frontend primitives (new):
 
+- `hooks/use-local-storage-boolean.ts` — the shared
+  `useLocalStorageBoolean(storageKey, syncEvent, defaultValue = false)`
+  primitive: install-wide, `localStorage`-backed boolean with the
+  `useSyncExternalStore` + `storage`-event + custom-event-broadcast shape
+  both nav-visibility toggles use. Absent keys (and read failures) resolve
+  to `defaultValue` on both the client snapshot and the server snapshot, so
+  SSR and first client paint agree; a failed write throws.
 - `hooks/domains/settings/use-hide-disabled-agent-profiles-in-nav.ts` —
   exports `useHideDisabledAgentProfilesInNav()` returning
   `{ hideDisabled: boolean; setHideDisabled: (next: boolean) => void }`,
   backed by `localStorage` key `kandev:agents:hideDisabledInNav:v1`
-  (default `false`), using the same `useSyncExternalStore` +
-  `storage`-event + custom-event-broadcast shape as
-  `useHideDisabledIntegrationsInNav` (custom event name
-  `kandev:agents:hide-disabled-in-nav-changed`), so the settings tree
+  (default `false`), delegating to the shared primitive with custom event
+  name `kandev:agents:hide-disabled-in-nav-changed`, so the settings tree
   re-renders immediately in the same tab and other tabs update via the
-  browser `storage` event.
+  browser `storage` event. The integrations sibling
+  (`useHideDisabledIntegrationsInNav`) delegates to the same primitive with
+  its own key/event, so the two features cannot drift in mechanism.
 - `app/settings/agents/hide-disabled-agent-profiles-setting.tsx` — the
   settings-page row (label + description + `<Switch
   id="hide-disabled-agent-profiles-in-nav">`), rendered inside the "Manage

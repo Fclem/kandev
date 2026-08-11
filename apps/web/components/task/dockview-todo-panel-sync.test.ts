@@ -304,4 +304,16 @@ describe("todoListNotEmptyForSession", () => {
     expect(todoListNotEmptyForSession([], [persistedTodoMessage])).toBe(true);
     expect(todoListNotEmptyForSession([], [])).toBe(false);
   });
+
+  it("treats malformed persisted todo metadata as empty instead of throwing", () => {
+    const malformed = [
+      { id: "m1", type: "todo", turn_id: "t", metadata: { todos: { text: "x" } } },
+      { id: "m2", type: "todo", turn_id: "t", metadata: { todos: [null, 42] } },
+    ] as unknown as Message[];
+
+    for (const message of malformed) {
+      expect(() => todoListNotEmptyForSession(undefined, [message])).not.toThrow();
+      expect(todoListNotEmptyForSession(undefined, [message])).toBe(false);
+    }
+  });
 });

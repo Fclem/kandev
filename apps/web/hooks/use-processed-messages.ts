@@ -563,16 +563,30 @@ export function insertLastAgentErrorItem(
 export function buildTodoItems(visibleMessages: Message[]) {
   const latestTodos = [...visibleMessages]
     .reverse()
-    .find((message) => message.type === "todo" || (message.metadata as { todos?: unknown })?.todos);
-  return (
-    (
-      latestTodos?.metadata as
-        | { todos?: Array<{ text: string; done?: boolean } | string> }
-        | undefined
-    )?.todos
-      ?.map((item) => (typeof item === "string" ? { text: item, done: false } : item))
-      .filter((item) => item.text) ?? []
-  );
+    .find(
+      (message) =>
+        message.type === "todo" ||
+        (message.metadata !== null &&
+          typeof message.metadata === "object" &&
+          "todos" in message.metadata),
+    );
+  const metadata = latestTodos?.metadata;
+  const todos =
+    metadata !== null && typeof metadata === "object" && "todos" in metadata
+      ? metadata.todos
+      : undefined;
+  // Total by construction: malformed persisted metadata (non-array `todos`,
+  // null/primitive entries) must yield an empty list, never throw, so the
+  // todos panel, chat processing, and the todo-panel sync hook can all trust
+  // this call. Matches the spec's "malformed todo message falls back to an
+  // empty state" behavior.
+  if (!Array.isArray(todos)) return [];
+  return todos
+    .map((item) => (typeof item === "string" ? { text: item, done: false } : item))
+    .filter(
+      (item): item is { text: string; done?: boolean } =>
+        typeof item === "object" && item !== null && typeof item.text === "string",
+    );
 }
 
 export function useProcessedMessages(

@@ -139,4 +139,28 @@ clean; `make fmt` + `make lint` clean; E2E
 `todo-list-panel.spec.ts` 8/8 passed (web rebuilt). Committed as follow-up
 `fix:` on the feature branch.
 
+### Round-4 reviewer feedback (OMP GPT Luna) and disposition
+
+- **Finding 1 (major, confirmed by reviewer): "branch contains unrelated
+  changes"** — review-base artifact, not a defect: the reviewer diffed
+  against the stale local `main` ref (c0f5750b); against `origin/main` the
+  branch is exactly the four feature commits / 31 files
+  (`git diff origin/main...HEAD --stat`). No action; round-5 brief instructs
+  the reviewer to use `origin/main` as the base.
+- **Finding 2 (major, confirmed): malformed persisted todo metadata crashes
+  `buildTodoItems`** — `metadata.todos` as a non-array (object/primitive)
+  throws `TypeError: ...?.todos?.map is not a function`, and `[null]`
+  elements throw on `item.text`. The round-1 fix made this a sync hot-path
+  call, so a malformed message would throw inside the RAF callback and the
+  sync (including panel removal with the master pref off) would silently
+  fail; the same throw also hits the panel content and chat processing, and
+  violates the spec's "malformed todo message falls back to an empty state".
+  Fixed by making `buildTodoItems` total: runtime `typeof`/`in` narrowing
+  instead of inline casts, `Array.isArray(todos)` guard, and a type-guard
+  filter dropping null/primitive entries. Added malformed-shape unit tests
+  (non-array object, primitive, `[null, 42, valid]`, primitive metadata,
+  missing metadata) at both the `buildTodoItems` and
+  `todoListNotEmptyForSession` levels (2 red → green). Committed as follow-up
+  `fix:`.
+
 Blockers/risks: none.

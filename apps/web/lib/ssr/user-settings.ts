@@ -41,6 +41,7 @@ export function createDefaultUserSettings(): UserSettingsState {
     chatSubmitKey: "cmd_enter",
     reviewAutoMarkOnScroll: true,
     confirmTaskArchive: true,
+    preventAutoStartAgentOnOpen: false,
     unreadDivider: false,
     agentGeneratedTaskTitles: true,
     mcpTaskAgentProfileDefault: "current_task",
@@ -249,6 +250,8 @@ function buildBehaviorFields(s: UserSettingsData, current: UserSettingsState) {
     chatSubmitKey: s.chat_submit_key ?? current.chatSubmitKey,
     reviewAutoMarkOnScroll: s.review_auto_mark_on_scroll ?? current.reviewAutoMarkOnScroll,
     confirmTaskArchive: s.confirm_task_archive ?? current.confirmTaskArchive,
+    preventAutoStartAgentOnOpen:
+      s.prevent_auto_start_agent_on_open ?? current.preventAutoStartAgentOnOpen,
     unreadDivider: s.unread_divider ?? current.unreadDivider,
     agentGeneratedTaskTitles: s.agent_generated_task_titles ?? current.agentGeneratedTaskTitles,
     mcpTaskAgentProfileDefault: mapDefined(

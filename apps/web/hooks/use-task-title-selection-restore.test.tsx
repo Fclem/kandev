@@ -178,6 +178,23 @@ describe("useTaskTitleSelectionRestore - bail-out caret restore", () => {
     expect(setSelectionRange).not.toHaveBeenCalled();
   });
 
+  it("does not apply a pending commit-path caret to an unrelated value commit", async () => {
+    const setSelectionRange = vi.spyOn(HTMLInputElement.prototype, "setSelectionRange");
+    const onChange = vi.fn();
+    const { rerender } = render(<ControlledHarness value={LONG} onChange={onChange} />);
+    const input = screen.getByTestId("title") as HTMLInputElement;
+    input.focus();
+    // A truncating change records the caret for the commit path...
+    const next = `${LONG.slice(0, 6)}XY${LONG.slice(6, 58)}`;
+    simulateInsert(input, `${LONG.slice(0, 6)}XY${LONG.slice(6)}`, 8, setSelectionRange);
+    expect(onChange).toHaveBeenCalledWith(next);
+    // ...but the parent rejects it (no state update), and an unrelated value
+    // commit arrives later: the stale caret must not be applied to it.
+    rerender(<ControlledHarness value={"U".repeat(60)} onChange={onChange} />);
+    await act(async () => {});
+    expect(setSelectionRange).not.toHaveBeenCalled();
+  });
+
   it("does not restore a stale caret when the value changes in the same turn as a bail-out", async () => {
     const setSelectionRange = vi.spyOn(HTMLInputElement.prototype, "setSelectionRange");
     const onChange = vi.fn();

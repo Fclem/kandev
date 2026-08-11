@@ -6,7 +6,7 @@ import { clampTaskTitleInput } from "@/lib/task-title";
 
 type TitleInputElement = HTMLInputElement | HTMLTextAreaElement;
 
-type PendingSelection = { start: number; end: number };
+type PendingSelection = { start: number; end: number; value: string };
 
 /**
  * Re-pin the caret after React restores a controlled value whose render
@@ -73,13 +73,18 @@ export function useTaskTitleSelectionRestore<T extends TitleInputElement = HTMLI
     restoreEpochRef.current += 1;
     if (next !== el.value) {
       if (next !== lastCommittedRef.current) {
-        // The commit will change the value: record the caret for the layout
-        // effect, which runs after React rewrites the DOM.
+        // The commit will change the value: record the caret (bound to the
+        // clamped value it belongs to) for the layout effect, which runs
+        // after React rewrites the DOM.
         pendingSelectionRef.current = {
           start: el.selectionStart ?? el.value.length,
           end: el.selectionEnd ?? el.value.length,
+          value: next,
         };
       } else {
+        // A same-result keystroke supersedes any earlier commit-path record
+        // that the parent never applied.
+        pendingSelectionRef.current = null;
         // The clamped value equals the committed value: the render bails out,
         // but React still restores the controlled DOM value after the event
         // and the browser resets the caret to the end. Re-pin it after that
@@ -106,6 +111,10 @@ export function useTaskTitleSelectionRestore<T extends TitleInputElement = HTMLI
     const selection = pendingSelectionRef.current;
     pendingSelectionRef.current = null;
     if (!selection) return;
+    // The committed value must be the one the caret was computed for; a
+    // parent that delayed, rejected, or superseded the clamped update must
+    // not receive a stale caret.
+    if (selection.value !== value) return;
     const el = inputRef.current;
     if (!el || document.activeElement !== el) return;
     const max = value.length;

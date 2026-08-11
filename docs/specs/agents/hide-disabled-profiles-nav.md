@@ -79,8 +79,9 @@ Frontend primitives (new):
   browser `storage` event.
 - `app/settings/agents/hide-disabled-agent-profiles-setting.tsx` — the
   settings-page row (label + description + `<Switch
-  id="hide-disabled-agent-profiles-in-nav">`), rendered on the agents
-  settings page below the "Manage existing profiles by agent" section.
+  id="hide-disabled-agent-profiles-in-nav">`), rendered inside the "Manage
+  existing profiles by agent" section on the agents settings page, directly
+  below the section header and above the first profile row.
   The switch saves immediately on toggle (the agents page has no
   settings-floating-save bar; its profile enabled toggles are
   immediate-save via `useProfileEnabledToggle`, and this setting follows

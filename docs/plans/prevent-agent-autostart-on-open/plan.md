@@ -136,19 +136,26 @@ gating hooks, then E2E.
     action — NOT a native `Set`, which would break the Immer-managed,
     SSR-hydrated slice). The flag is keyed by session id, so it cannot leak
     across sessions.
-  - Skip-flag lifecycle (all three clear points MUST be specified):
-    - `resumeSession()` (`use-session-resumption.ts:491-522`) clears the flag
-      only after a SUCCESSFUL launch (a failed resume keeps the Start button as
-      a retry affordance).
-    - The Start agent button click (`message-renderer.tsx:55-64`) clears it
-      only after a successful dispatch; failures keep it.
-    - The WS `session.state_changed` handler (`lib/ws/handlers/agent-session.ts:692-750`)
-      deletes it when the session transitions to STARTING/RUNNING.
-    - `setResumeSkipped(sessionId, true)` is CONDITIONAL: the slice action
-      refuses to set the flag when the session's current state is STARTING or
-      RUNNING. This closes the delayed-status race where a running WS event
-      lands before a stale `task.session.status` response would record the
-      skip after the WS clear.
+  - Skip-flag semantics are monotonic and derived from live state, not timing:
+    - RECORD only when `needs_resume && is_resumable && !is_agent_running`
+      AND the live store state is not STARTING/RUNNING. `checkAndResume` must
+      re-read the live session state immediately before recording
+      (`applyStatusToState` at `use-session-resumption.ts:244-251` merges the
+      status state into the store via `setTaskSession`
+      (`session-slice.ts:136-150` spreads incoming over existing) and a stale
+      response can downgrade a newer STARTING/RUNNING state before the guard
+      runs). Status hydration is monotonic: a `task.session.status` response
+      MUST NOT downgrade a live STARTING/RUNNING state.
+    - CLEAR only on confirmed running: the WS `session.state_changed` handler
+      (`lib/ws/handlers/agent-session.ts:692-750`) deletes the flag on the
+      RUNNING transition only (NOT on STARTING — a failed manual resume emits
+      STARTING before the launch fails); the manual paths (`resumeSession()`
+      at `:491-522`, the Start button click at `message-renderer.tsx:55-64`)
+      clear it only after a successful launch response; rejections and
+      `{ success: false }` keep the flag.
+    - `setResumeSkipped(sessionId, true)` stays conditional in the slice
+      action (refuses when the current state is STARTING/RUNNING) as a second
+      line of defense.
   - The manual `resumeSession()` action is NOT gated.
 - Start agent button for the recovered-idle case —
   `apps/web/components/task/chat/message-renderer.tsx`:
@@ -186,11 +193,10 @@ gating hooks, then E2E.
 | caller normalization (snake → camel input) | `apps/web/components/task/task-page-content` test or hook caller test | unit: task page passes `workflowStepId` from `workflow_step_id` |
 | cross-workflow preview resolves the right steps | `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` + preview test | unit: task from `kanbanMulti.snapshots[w]` uses snapshot steps, not the active workflow's |
 | resume gate skips auto-resume and records the skip | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: `checkAndResume` with `needs_resume && is_resumable` and preventAutoStart → no launch, state idle, skip recorded in store; manual `resumeSession` still launches AND clears the flag only on success |
-| failed launch keeps the retry button | `apps/web/hooks/domains/session/use-session-resumption.test.ts` + message-renderer test | unit: resume/start rejects or returns `{ success: false }` → skip flag retained, Start button still rendered |
-| delayed-status race: running WS event before stale status | `apps/web/lib/state/slices/kanban` slice test + `use-session-resumption.test.ts` | unit: WS `state_changed` → STARTING then a stale status response attempts `setResumeSkipped(true)` → flag NOT set (conditional action refuses when state is STARTING/RUNNING) |
+| failed launch keeps the retry button | `apps/web/hooks/domains/session/use-session-resumption.test.ts` + message-renderer test | unit: resume/start rejects or returns `{ success: false }` → skip flag retained, Start button still rendered (including after a WS STARTING event that precedes the failure) |
+| delayed-status race: running WS event before stale status | `apps/web/lib/state/slices/kanban` slice test + `use-session-resumption.test.ts` | unit: WS `state_changed` → STARTING then a stale status response attempts to apply + record a skip → live state is NOT downgraded (monotonic hydration) and the flag is NOT set |
+| WS clear only on RUNNING | `apps/web/lib/ws/handlers/agent-session.test.ts` (or slice test) | unit: `session.state_changed` to RUNNING deletes `resumeSkippedSessionIds[sessionId]`; STARTING does NOT delete it; hydration keeps the record shape intact |
 | Start button renders for resume-skipped sessions (non-FAILED) | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag (non-FAILED state) → button visible; FAILED + resume-skipped → no new button (recovery actions remain); button dispatches resume for the skipped case and clears the flag on success |
-| skip flag clears on WS running state | `apps/web/lib/ws/handlers/agent-session.test.ts` (or slice test) | unit: `session.state_changed` to STARTING/RUNNING deletes `resumeSkippedSessionIds[sessionId]`; hydration keeps the record shape intact |
-| Start button renders for resume-skipped sessions | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag → button visible; button dispatches resume for the skipped case |
 | settings card renders and saves | `apps/web/components/settings/prevent-auto-start-agent-settings.test.tsx` (mirror `archive-confirmation-settings.test.tsx`) | component: switch toggles, save calls `updateUserSettings({ prevent_auto_start_agent_on_open })` |
 | i18n ratchet + em-dash check | — | `cd apps/web && pnpm run i18n:check && pnpm run i18n:ratchet` |
 

@@ -139,17 +139,23 @@ export async function duplicateAgentProfileAction(profileId: string): Promise<Ag
   `profiles`; toast success/failure via `agents:duplicateProfileSuccess` /
   `agents:failedToDuplicateProfile`). The `agent.profile.created` WS handler
   already upserts the same profile; the direct merge keeps the UI consistent
-  even if WS is delayed.
+  even if WS is delayed. The merge (`applyProfileDuplicated` in
+  `use-profile-duplicate.ts`) dedupes by ID, preserves WS-delivered options
+  whose owning agent is absent, never lets a stale duplicate response clobber
+  a newer `agent.profile.updated` version (newer `updatedAt` wins), and
+  always rebuilds the copy option with the known agent metadata.
 
 ### Profile settings page: header Duplicate button
 
 - `apps/web/components/settings/agent-profile-page.tsx`: add a Duplicate
   button to `ProfileEditorHeader` (copy icon + `t("agents:duplicate")`,
-  `data-testid="duplicate-profile-header"`). On success: toast
-  `agents:duplicateProfileSuccess` and
-  `window.location.assign(`/settings/agents/${agentName}/profiles/${newId}`)`
-  so the user lands on the copy to edit it. Wire it through the same
-  action; the agent name is available from the page's agent lookup.
+  `data-testid="duplicate-profile-header"`). On success the handler first
+  saves any unsaved draft edits (a failed save aborts the duplicate), POSTs
+  the duplicate, merges the copy into the store, toasts
+  `agents:duplicateProfileSuccess`, and SPA-navigates via
+  `runWithNavigationBlockerBypassed(() => router.push(...))` to the copy's
+  page — never `window.location.assign`, so the success toast survives and
+  the dirty-settings blocker is already resolved by the save.
 
 ### i18n
 

@@ -3,7 +3,8 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
-import { useParams } from "@/lib/routing/client-router";
+import { useParams, useRouter } from "@/lib/routing/client-router";
+import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
 import { IconCopy, IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -51,7 +52,8 @@ import type {
   PassthroughConfig,
 } from "@/lib/types/http";
 import type { UtilityAgentReference } from "@/lib/types/agent-profile-errors";
-import { useAppStore } from "@/components/state-provider";
+import { useAppStore, useAppStoreApi } from "@/components/state-provider";
+import { applyProfileDuplicated } from "@/hooks/domains/settings/use-profile-duplicate";
 import { AgentLogo } from "@/components/agent-logo";
 import { ProfileMcpConfigCard } from "@/app/settings/agents/[agentId]/profile-mcp-config-card";
 import { CommandPreviewCard } from "@/app/settings/agents/[agentId]/profiles/[profileId]/command-preview-card";
@@ -416,16 +418,36 @@ function ProfileEditor({
   });
   const deleteState = useProfileDelete(agent, draft, settingsAgents, syncAgentsToStore, toast);
 
+  const storeApi = useAppStoreApi();
+  const router = useRouter();
   const handleDuplicateProfile = useCallback(async () => {
+    // Save any unsaved edits first so the copy starts from what the user sees
+    // and the page is clean before navigating. handleSave surfaces its own
+    // failure toast, so a save failure aborts the duplicate without a
+    // double toast here.
+    if (isDirty) {
+      try {
+        await handleSave();
+      } catch {
+        return;
+      }
+    }
     try {
       const created = await duplicateAgentProfileAction(draft.id);
+      // Merge the copy into the store so the destination page resolves it
+      // without waiting on the WS round-trip.
+      storeApi.setState((state) => applyProfileDuplicated(state, agent, created));
       toast({
         title: t("agents:duplicateProfileSuccess"),
         description: created.name,
         variant: "success",
       });
-      window.location.assign(
-        `/settings/agents/${encodeURIComponent(agent.name)}/profiles/${created.id}`,
+      // SPA navigation, not location.assign: the toast survives the route
+      // change and the dirty-settings blocker was already resolved by the
+      // save above (the bypass is the pattern the executor editors use
+      // after an awaited save).
+      runWithNavigationBlockerBypassed(() =>
+        router.push(`/settings/agents/${encodeURIComponent(agent.name)}/profiles/${created.id}`),
       );
     } catch (error) {
       toast({
@@ -434,7 +456,7 @@ function ProfileEditor({
         variant: "error",
       });
     }
-  }, [agent.name, draft.id, t, toast]);
+  }, [agent, draft.id, handleSave, isDirty, router, storeApi, t, toast]);
 
   return (
     <div className="space-y-8">

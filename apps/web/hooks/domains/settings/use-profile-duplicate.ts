@@ -22,6 +22,10 @@ type ProfileState = Pick<AppState, "settingsAgents" | "agentProfiles">;
  * are preserved, and the new copy always appears exactly once — via the
  * rebuild when its owning agent is present, otherwise via a stub so it is
  * never dropped.
+ *
+ * A stale duplicate HTTP response never clobbers a newer profile: when the
+ * copy already exists in the store (e.g. another tab edited it and
+ * `agent.profile.updated` arrived first), the newer `updatedAt` wins.
  */
 export function applyProfileDuplicated(
   state: ProfileState,
@@ -30,10 +34,14 @@ export function applyProfileDuplicated(
 ): ProfileState {
   const nextAgents = state.settingsAgents.items.map((item: Agent) =>
     item.id === agent.id
-      ? {
-          ...item,
-          profiles: [...item.profiles.filter((p) => p.id !== created.id), created],
-        }
+      ? (() => {
+          const existing = item.profiles.find((p) => p.id === created.id);
+          const latest = existing && existing.updatedAt > created.updatedAt ? existing : created;
+          return {
+            ...item,
+            profiles: [...item.profiles.filter((p) => p.id !== created.id), latest],
+          };
+        })()
       : item,
   );
 
@@ -41,12 +49,14 @@ export function applyProfileDuplicated(
     item.profiles.map((profile) => toAgentProfileOption(item, profile)),
   );
   const preserved = state.agentProfiles.items.filter(
-    (option) => !rebuiltOptions.some((rebuilt) => rebuilt.id === option.id),
+    (option) =>
+      // The copy option is always rebuilt from the known agent (never the
+      // WS stub with an empty agent_name); everything else the rebuild does
+      // not represent stays.
+      option.id !== created.id && !rebuiltOptions.some((rebuilt) => rebuilt.id === option.id),
   );
   const copyOption = toAgentProfileOption({ id: agent.id, name: agent.name }, created);
-  const copyAlreadyPresent =
-    rebuiltOptions.some((option) => option.id === created.id) ||
-    preserved.some((option) => option.id === created.id);
+  const copyAlreadyPresent = rebuiltOptions.some((option) => option.id === created.id);
 
   const agentProfilesItems = copyAlreadyPresent
     ? [...preserved, ...rebuiltOptions]

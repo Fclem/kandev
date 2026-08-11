@@ -9,7 +9,7 @@ vi.mock("@/components/toast-provider", () => ({ useToast: vi.fn() }));
 
 const COPY_NAME = "Default Copy";
 
-function profile(id: string, agentId: string, name = id): AgentProfile {
+function profile(id: string, agentId: string, name = id, updatedAt = ""): AgentProfile {
   return {
     id,
     agentId,
@@ -22,7 +22,7 @@ function profile(id: string, agentId: string, name = id): AgentProfile {
     cliPassthrough: false,
     enabled: true,
     createdAt: "",
-    updatedAt: "",
+    updatedAt,
   } as unknown as AgentProfile;
 }
 
@@ -80,14 +80,35 @@ describe("applyProfileDuplicated", () => {
     expect(next.agentProfiles.items.map((o) => o.id)).toEqual(["p2"]);
   });
 
-  it("does not erase a WS-delivered copy when the agent is missing", () => {
+  it("does not erase a WS-delivered copy and refreshes it with agent metadata", () => {
     const copy = profile("p2", "a1", COPY_NAME);
-    // WS delivered the option first while the owning agent is absent.
+    // WS delivered the option first (with a stub agent_name) while the
+    // owning agent is absent; the merge must replace it with the full-agent
+    // option rather than keep the empty-name stub.
     const initial = stateWith([], [option("p2")]);
 
     const next = applyProfileDuplicated(initial, agent("a1"), copy);
 
-    expect(next.agentProfiles.items.filter((o) => o.id === "p2")).toHaveLength(1);
+    const options = next.agentProfiles.items.filter((o) => o.id === "p2");
+    expect(options).toHaveLength(1);
+    expect(options[0].agent_name).toBe("a1");
+  });
+
+  it("keeps a newer WS-delivered version instead of the stale duplicate response", () => {
+    // Another tab edited the copy after creation: agent.profile.updated
+    // delivered the newer version before this delayed duplicate response.
+    const newer = profile("p2", "a1", "Default Copy (edited)", "2026-08-11T22:00:00Z");
+    const staleCreated = profile("p2", "a1", COPY_NAME, "2026-08-11T21:00:00Z");
+    const source = profile("p1", "a1");
+    const initial = stateWith([agent("a1", source, newer)], [option("p1"), option("p2")]);
+
+    const next = applyProfileDuplicated(initial, agent("a1"), staleCreated);
+
+    const stored = next.settingsAgents.items.find((a) => a.id === "a1")?.profiles ?? [];
+    expect(stored.find((p) => p.id === "p2")?.name).toBe("Default Copy (edited)");
+    expect(next.agentProfiles.items.find((o) => o.id === "p2")?.label).toContain(
+      "Default Copy (edited)",
+    );
   });
 
   it("preserves WS-delivered orphan options for agents absent from the store", () => {

@@ -214,6 +214,25 @@ primary session and follows the dependency order above.
   `internal/agentctl/server/{process,api,config}` reproduced identically on the
   clean tree (unrelated to this web-only change).
 
+## Adversarial Review Loop
+
+Round 1 (DeepSeek V4 Pro sub-task, read-only): no blockers, no majors. Two
+minors and one nit, all fixed in `30e6c647`:
+
+- **Minor** — stale `pendingSelectionRef` when a same-value clamp makes React
+  bail out of the render: the recorded caret could be replayed by an unrelated
+  later commit. Fixed by tracking `lastCommittedRef` and only recording when
+  the clamp result differs from it.
+- **Minor** — unit tests covered only `<input>`, not the `<textarea>` path
+  used by the Office new-task dialog. Added `HarnessTextarea` coverage.
+- **Nit** — plan referenced `tests/kanban/` instead of `tests/task/` for the
+  E2E file. Corrected.
+
+Round 2 (same reviewer): **NO FINDINGS** — the `lastCommittedRef` fix was
+verified complete (no desync path; the guard test genuinely exercises the
+bail-out), the new coverage is sound, and the earlier-passing areas remain
+intact.
+
 ## Open Questions
 
 None. The root cause is reproduced with deterministic E2E evidence and the fix

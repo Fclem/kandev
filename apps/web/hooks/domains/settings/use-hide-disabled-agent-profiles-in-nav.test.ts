@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useHideDisabledAgentProfilesInNav } from "./use-hide-disabled-agent-profiles-in-nav";
-import { makeLocalStorageMock } from "@/hooks/domains/integrations/local-storage-mock.test-helpers";
+import { makeLocalStorageMock } from "@/hooks/local-storage-mock.test-helpers";
 
 const STORAGE_KEY = "kandev:agents:hideDisabledInNav:v1";
 

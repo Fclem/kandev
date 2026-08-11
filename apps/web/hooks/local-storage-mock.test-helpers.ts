@@ -3,8 +3,9 @@
  * `localStorage`-backed preferences: the per-integration "enabled" hooks
  * (azure-devops, github, gitlab, jira, linear, sentry), the two nav-visibility
  * toggles (hide-disabled integrations / agent profiles), and the shared
- * `useLocalStorageBoolean` primitive. Each test file calls this factory to
- * build its own mock instance — the store is never shared across files, so
+ * `useLocalStorageBoolean` primitive. Lives at the top level of the hooks tree
+ * because it is not owned by any one domain. Each test file calls this factory
+ * to build its own mock instance — the store is never shared across files, so
  * suites stay isolated from one another even though they all use the same
  * shape.
  */

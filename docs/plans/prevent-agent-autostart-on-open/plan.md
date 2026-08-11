@@ -43,6 +43,12 @@ gating hooks, then E2E.
   `publishUserSettingsEvent` (`:773` map).
 - `apps/backend/internal/user/controller/controller.go` — map
   `req.PreventAutoStartAgentOnOpen` in `UpdateUserSettings` (`:61` block).
+- `apps/backend/internal/user/store/sqlite.go` — persist the field in the
+  settings JSON blob: add `"prevent_auto_start_agent_on_open"` to the
+  `marshalUserSettingsPayload` map (`:519-573`) and a
+  `PreventAutoStartAgentOnOpen *bool` field to the `scanUserSettings` payload
+  struct (`:707-760`) with the pointer-guarded assignment. Default is `false`
+  (the zero value in `defaultUserSettings` at `:651`).
 - `apps/backend/internal/backendapp/boot_state_routes.go` — add
   `"preventAutoStartAgentOnOpen": settings.PreventAutoStartAgentOnOpen` to the
   boot-payload map (`:459` block).
@@ -96,28 +102,44 @@ gating hooks, then E2E.
 ### 3. Open-time gates
 
 - `apps/web/hooks/domains/session/use-ensure-task-session.ts` —
-  - Extend `EnsureTaskInput` with `workflowStepId?: string | null`.
-  - Read `state.userSettings.preventAutoStartAgentOnOpen` and
-    `state.kanban.steps`.
-  - When the setting is on and the task's step is the final step of its
-    workflow (max `position` among `state.kanban.steps`), call
-    `ensureTaskSession(taskId, { autoStart: false })`; otherwise
-    `ensureTaskSession(taskId)` as today.
-  - New pure helper (exported for unit tests), e.g.
-    `isFinalWorkflowStep(workflowStepId, steps)` in the same file or
-    `lib/tasks/` — treat missing step/steps as "not final".
+  - Extend `EnsureTaskInput` with `workflowStepId?: string | null` and
+    `workflowId?: string | null`.
+  - Read `state.userSettings.preventAutoStartAgentOnOpen` and resolve the
+    task's workflow step list workflow-aware: `state.kanban.steps` when the
+    task's workflow is the active one (`state.kanban.workflowId`), otherwise
+    `state.kanbanMulti.snapshots[workflowId]?.steps`. Missing workflow id or
+    step list → treated as "not final" (no gate).
+  - When the setting is on and the task's step is the final step of that
+    workflow (max `position`), call `ensureTaskSession(taskId, { autoStart: false })`;
+    otherwise `ensureTaskSession(taskId)` as today.
+  - New pure helper (exported for unit tests),
+    `isFinalWorkflowStep(workflowStepId, steps)`.
 - `apps/web/hooks/domains/session/use-session-resumption.ts` —
   - Read `state.userSettings.preventAutoStartAgentOnOpen` in
     `useSessionResumption` and thread a `preventAutoStart` boolean into
     `useSessionResetAndCheck` → `checkAndResume`.
   - In `checkAndResume`, when `preventAutoStart` is true, skip the
     `status.needs_resume && status.is_resumable` branch (do not call
-    `resumeWithSilentFallback`); set `resumptionState` to `"idle"` instead.
+    `resumeWithSilentFallback`); set `resumptionState` to `"idle"` and record
+    the skip in the store (e.g. a `resumeSkippedSessionIds` set on the tasks
+    slice via a new `setResumeSkipped(sessionId, boolean)` action) so the chat
+    can render the Start agent button. Clear the flag when the user resumes
+    manually or the agent reports running.
   - The manual `resumeSession()` action is NOT gated.
-- Callers pass the richer task object already available:
-  `components/task/task-page-content.tsx` and
-  `components/kanban-with-preview.tsx` both pass kanban tasks that already
-  carry `workflowStepId` — no signature change beyond the hook's input type.
+- Start agent button for the recovered-idle case —
+  `apps/web/components/task/chat/message-renderer.tsx`:
+  `TaskDescriptionStartButton` currently renders only for
+  `sessionState === "CREATED"`. Extend the visibility condition so it also
+  renders when the store marks the session as resume-skipped (recovered-idle
+  shape), and dispatch the matching intent: `buildStartCreatedRequest` for
+  CREATED sessions, the resume request builder for the skipped-resume case.
+- Callers:
+  - `components/task/task-page-content.tsx` passes the normalized input
+    `{ id: task?.id, workflowStepId: task?.workflow_step_id, workflowId: task?.workflow_id }`
+    (the effective task is the HTTP `Task`, whose fields are snake_case).
+  - `components/kanban-with-preview.tsx` — `useSelectedTask` must include
+    `workflowId` in its returned subset (it currently drops it at `:171-180`),
+    so cross-workflow preview tasks resolve their own workflow's steps.
 
 ---
 
@@ -126,12 +148,16 @@ gating hooks, then E2E.
 | Behavior (spec scenario) | File | How |
 |---|---|---|
 | PATCH accepts and persists the setting; GET/boot payload returns it | `apps/backend/internal/user/dto/dto_test.go`, `internal/user/service/service_test.go` (or existing settings-update test) | unit: round-trip `UpdateUserSettingsRequest` → model → DTO; assert blob round-trip |
+| Settings blob survives reload (true/false/omitted-legacy) | `apps/backend/internal/user/store/sqlite_test.go` | repo test: `SaveUserSettings` then `GetUserSettings` preserves the value; legacy JSON without the key loads the default `false` |
 | `session.ensure` with `auto_start: false` prepares instead of starts | `apps/backend/internal/orchestrator/session_ensure_test.go` (or `session_ensure_office_test.go` pattern) | integration: seed task + step with `auto_start_agent`; call `EnsureSession` with `AutoStart: &false`; assert `Source == "created_prepare"`, `State == "CREATED"`; control case without override still `created_start` |
 | WS handler passes `auto_start` through | `apps/backend/internal/orchestrator/handlers/handlers_test.go` | unit: parse `{task_id, auto_start:false}` → handler calls service with the option |
 | SSR defaults and hydration | `apps/web/lib/ssr/user-settings.test.ts` | unit: default `false`; hydrate from `prevent_auto_start_agent_on_open` |
 | ensure payload carries `auto_start` | extend `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` (mocks `ensureTaskSession`) | unit: final-step + setting-on → called with `{ autoStart: false }`; non-final → without |
 | final-step helper | new test beside the helper | unit: max-position logic, missing step/steps → false |
-| resume gate skips auto-resume | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: `checkAndResume` with `needs_resume && is_resumable` and preventAutoStart → no launch, state idle; manual `resumeSession` still launches |
+| caller normalization (snake → camel input) | `apps/web/components/task/task-page-content` test or hook caller test | unit: task page passes `workflowStepId` from `workflow_step_id` |
+| cross-workflow preview resolves the right steps | `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` + preview test | unit: task from `kanbanMulti.snapshots[w]` uses snapshot steps, not the active workflow's |
+| resume gate skips auto-resume and records the skip | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: `checkAndResume` with `needs_resume && is_resumable` and preventAutoStart → no launch, state idle, skip recorded in store; manual `resumeSession` still launches |
+| Start button renders for resume-skipped sessions | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag → button visible; button dispatches resume for the skipped case |
 | settings card renders and saves | `apps/web/components/settings/prevent-auto-start-agent-settings.test.tsx` (mirror `archive-confirmation-settings.test.tsx`) | component: switch toggles, save calls `updateUserSettings({ prevent_auto_start_agent_on_open })` |
 | i18n ratchet + em-dash check | — | `cd apps/web && pnpm run i18n:check && pnpm run i18n:ratchet` |
 
@@ -142,14 +168,22 @@ gating hooks, then E2E.
   (`[data-testid="task-description-start-button"]`) is visible and the agent
   never starts on its own.
 - **File:** `apps/web/e2e/tests/settings/prevent-auto-start-on-open.spec.ts`
-- **What to verify:** set the setting via `apiClient.updateUserSettings` (or
-  the settings UI), create a task in a workflow whose final step has
-  `auto_start_agent` (a custom workflow created through the API with
-  `on_enter: [auto_start_agent]` on its last step), open `/t/:id`, assert the
-  Start agent button appears, and (optionally) that clicking it starts the
-  agent. A second case: seed a session in the recovered-idle shape (launch →
-  stop backend-simulated restart via the existing recovery helpers) and assert
-  no resume `session.launch` fires and the manual affordance is present.
+- **What to verify:**
+  - Set the setting via `apiClient.saveUserSettings({ prevent_auto_start_agent_on_open: true })`.
+  - Create a custom workflow whose final step has
+    `on_enter: [{ type: "auto_start_agent" }]` — extend
+    `e2e/helpers/api-client.ts` `createWorkflowStep` with an `events` opt
+    (the backend `POST /api/v1/workflow/steps` already accepts `events`,
+    `internal/workflow/controller/controller.go` `CreateStepRequest`).
+  - Final-step case: create a task in that final step, open `/t/:id`, assert
+    the Start agent button appears and the agent stays stopped until clicked.
+  - Recovered-idle case: seed a task+session, let the first turn finish, then
+    `backend.restart()` + `testPage.reload()` (the restart pattern from
+    `e2e/tests/session/session-resume.spec.ts`), assert no automatic resume
+    (the agent does not reach a running state on its own and the Start agent
+    button is visible), then click the button and assert the agent resumes.
+  - Control: with the setting off, the same final-step task auto-starts on
+    open (no start button; agent reaches a running/ready state).
 
 ## Verification Results
 

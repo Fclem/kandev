@@ -22,10 +22,9 @@ open and start it explicitly instead.
   surfaced in Settings → Task Actions as a switch.
 - When the setting is ON, opening a task whose session exists but whose agent
   is not running (the post-restart / recovered-idle shape) MUST NOT
-  automatically resume the agent. The task opens with the agent stopped and
-  the existing manual start affordances (the Start agent button for
-  never-started sessions, the session menu's resume, the chat composer) are
-  shown instead.
+  automatically resume the agent. The task opens with the agent stopped and a
+  Start agent button is shown in the chat; clicking it resumes the agent.
+  (The existing session-menu resume and chat composer remain available too.)
 - When the setting is ON, opening a task whose current workflow step is the
   final step of its workflow MUST NOT auto-start the agent when the task has
   no session. The session is created in the never-started (prepared) state
@@ -82,7 +81,7 @@ auto-start or auto-resume is *triggered by opening the task page*:
 | Trigger | Setting OFF (default) | Setting ON |
 |---|---|---|
 | Open task, no session, step allows auto-start | agent starts (`created_start`) | non-final step: unchanged; final step: `created_prepare`, Start agent button shown |
-| Open task, session exists, agent not running, session resumable | auto-resume (`session.launch` intent=resume) | no auto-resume; session stays stopped, manual affordances shown |
+| Open task, session exists, agent not running, session resumable | auto-resume (`session.launch` intent=resume) | no auto-resume; session stays stopped and a Start agent button (resume action) is shown in the chat |
 | Open task, agent already running | no-op | no-op (unchanged) |
 | Workflow step transition with `auto_start_agent` on-enter | agent starts | agent starts (unchanged) |
 | User clicks Start agent / Resume / sends a message | agent starts | agent starts (unchanged) |
@@ -101,17 +100,18 @@ auto-start or auto-resume is *triggered by opening the task page*:
 
 ## Persistence guarantees
 
-The setting is per-user, stored in `users.settings`, and survives kandev
-restarts. It is hydrated into the web boot payload on every page load. There is
-no per-workspace or per-task variant in this feature.
+The setting is per-user, stored in `users.settings` (JSON blob serialized by
+`internal/user/store/sqlite.go`), and survives kandev restarts. It is hydrated
+into the web boot payload on every page load. There is no per-workspace or
+per-task variant in this feature.
 
 ## Scenarios
 
 - **GIVEN** the setting is ON and a task's session is in an active state with a
   resume token but no running agent (post-restart shape), **WHEN** the user
   opens the task page, **THEN** no `session.launch` resume request is sent on
-  open, the session stays stopped, and the task page shows the manual start
-  affordance.
+  open, the session stays stopped, and the task page shows a Start agent
+  button that resumes the agent when clicked.
 - **GIVEN** the setting is ON and the task's current workflow step is the final
   step, **WHEN** the user opens the task and it has no session, **THEN**
   `session.ensure` is called with `auto_start: false`, the session is created

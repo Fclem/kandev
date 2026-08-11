@@ -18,11 +18,11 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
   actions) shows the Start agent button
   (`[data-testid="task-description-start-button"]`) and does not start an
   agent on its own. Clicking the button starts the agent.
-- **Setting-off control:** with the setting off, the same task auto-starts on
-  open (no start button; agent reaches a running/ready state).
-- **Resume case:** with the setting on, a task whose session needs resume
-  (recovered-idle shape) does not issue an automatic `session.launch`
-  resume; the manual affordance is present.
+- **Recovered-idle case:** with the setting on, after a backend restart a
+  task whose session needs resume does not auto-resume; the Start agent button
+  is visible and the agent stays stopped until clicked, then resumes.
+- **Setting-off control:** with the setting off, the same final-step task
+  auto-starts on open (no start button; agent reaches a running/ready state).
 
 ## Verification
 
@@ -37,27 +37,41 @@ cd apps && pnpm install --frozen-lockfile
 ## Files Likely Touched
 
 - `apps/web/e2e/tests/settings/prevent-auto-start-on-open.spec.ts` (new)
-- `apps/web/e2e/helpers/api-client.ts` (only if a workflow-with-autostart-on-final-step fixture helper is needed)
+- `apps/web/e2e/helpers/api-client.ts`:
+  - `saveUserSettings` (`:944`) gains `prevent_auto_start_agent_on_open?: boolean`
+    (there is no `updateUserSettings` helper — the settings PATCH helper is
+    named `saveUserSettings`).
+  - `createWorkflowStep` (`:701`) gains an `events` opt, e.g.
+    `events?: { on_enter?: Array<{ type: string; config?: Record<string, unknown> }> }`,
+    passed through as `events` — the backend `POST /api/v1/workflow/steps`
+    already accepts `events` (`internal/workflow/controller/controller.go`
+    `CreateStepRequest`).
 
 ## Dependencies
 
 Task 05 (the gating behavior under test), Task 03 (the setting is settable via
-`updateUserSettings`).
+`saveUserSettings`).
 
 ## Inputs
 
 - Spec scenarios 2, 4, 5.
-- Existing patterns: `apps/web/e2e/tests/settings/startup-page.spec.ts`
-  (settings via `apiClient.updateUserSettings` / UI), `api-client.ts`
-  `createTask` with `workflow_id` + `workflow_step_id`, and the session
-  recovery helpers in `e2e/tests/session/session-recovery.spec.ts`.
+- Existing patterns:
+  - `apps/web/e2e/tests/settings/startup-page.spec.ts` (settings UI flow).
+  - `apps/web/e2e/tests/session/session-resume.spec.ts` `:44-85` — the
+    backend-restart pattern: `backend.restart()` then `testPage.reload()`
+    (this is the correct restart fixture; `session-recovery.spec.ts` covers
+    agent-crash recovery buttons, not backend restarts).
+  - `api-client.ts` `createWorkflow` / `createWorkflowStep` / `createTask`
+    with `workflow_id` + `workflow_step_id`.
 - Note: built-in final steps (office-default, kanban) do NOT carry
-  `auto_start_agent`; the fixture must create a custom workflow through the API
-  whose last step has `on_enter: [{ type: "auto_start_agent" }]`, or reuse an
-  existing fixture workflow that already behaves that way.
+  `auto_start_agent`; the fixture must create a custom workflow through the
+  API whose last step has `on_enter: [{ type: "auto_start_agent" }]`.
 
 ## Output Contract
 
-The spec's two user-visible gates are pinned end to end with the mock agent.
-Cleanup: any fixture-only workflow/task created by the spec is removed in
-teardown (mirror the try/finally pattern used by sibling specs).
+The spec's two user-visible gates are pinned end to end with the mock agent:
+final-step no-auto-start and post-restart no-auto-resume, each with the Start
+agent button visible and a working click-through. Control case (setting off)
+asserts the current auto-start behavior. Cleanup: fixture-only workflows/tasks
+created by the spec are removed in teardown (try/finally pattern used by
+sibling specs).

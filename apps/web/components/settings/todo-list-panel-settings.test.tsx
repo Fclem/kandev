@@ -173,7 +173,7 @@ describe("TodoListPanelSettings save lifecycle", () => {
       showTodoListPanelOnlyWhenNotEmpty: true,
     });
 
-    resolveSave({ settings: {} });
+    resolveSave();
     await waitFor(() => expect(updateUserSettings).toHaveBeenCalledTimes(1));
 
     expect(storeApi.getState().userSettings.showTodoListPanel).toBe(false);

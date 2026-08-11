@@ -255,6 +255,17 @@ guards (epoch, ownership, value, connection, focus) verified correctly ordered,
 all seven call sites sound, input and textarea paths covered. One nit (stale
 verification count) fixed here.
 
+Round 6 (OMP GPT Luna, final round): one minor, fixed in `e071d1a5` — the
+commit-path record stored only the caret, so a parent that delayed, rejected,
+or superseded the clamped update could commit an unrelated value and apply the
+stale caret to it (reachable in the automation editor's async form load).
+The pending selection now stores the clamped value it belongs to, the
+same-result bail-out clears any lingering record, and the layout effect
+discards the record when the committed value does not match. Regression test
+added (controlled harness that rejects the clamped update, then commits an
+unrelated value). This was the 6-round cap; the final finding is addressed and
+the full gate is green (13 unit tests, 3 E2E per project).
+
 ## Open Questions
 
 None. The root cause is reproduced with deterministic E2E evidence and the fix

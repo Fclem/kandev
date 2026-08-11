@@ -6,6 +6,8 @@ import { useTaskTitleSelectionRestore } from "./use-task-title-selection-restore
 
 const LONG = "T".repeat(60);
 
+type TitleInput = HTMLInputElement | HTMLTextAreaElement;
+
 function Harness({ initial }: { initial: string }) {
   const [value, setValue] = useState(initial);
   const { inputRef, clampChange } = useTaskTitleSelectionRestore(value);
@@ -19,18 +21,52 @@ function Harness({ initial }: { initial: string }) {
   );
 }
 
+function HarnessTextarea({ initial }: { initial: string }) {
+  const [value, setValue] = useState(initial);
+  const { inputRef, clampChange } = useTaskTitleSelectionRestore<HTMLTextAreaElement>(value);
+  return (
+    <textarea
+      ref={inputRef}
+      data-testid="title"
+      value={value}
+      onChange={(e) => setValue(clampChange(e))}
+    />
+  );
+}
+
+function ControlledHarness({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const { inputRef, clampChange } = useTaskTitleSelectionRestore(value);
+  return (
+    <input
+      ref={inputRef}
+      data-testid="title"
+      value={value}
+      onChange={(e) => onChange(clampChange(e))}
+    />
+  );
+}
+
 /**
  * Simulate typing: write the DOM value through the prototype setter (React's
  * instance value tracker would otherwise swallow the change), place the caret,
  * then dispatch the change event React maps to onChange.
  */
 function simulateInsert(
-  input: HTMLInputElement,
+  input: TitleInput,
   value: string,
   caret: number,
   setSelectionRange: MockInstance,
 ) {
-  const setNativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  const setNativeValue = Object.getOwnPropertyDescriptor(
+    input.constructor.prototype,
+    "value",
+  )!.set!;
   setNativeValue.call(input, value);
   input.setSelectionRange(caret, caret);
   setSelectionRange.mockClear();
@@ -51,19 +87,28 @@ describe("useTaskTitleSelectionRestore", () => {
     expect(input.value).toHaveLength(60);
   });
 
-  it("pins the caret after the inserted text when the clamp truncates", () => {
+  it.each([
+    [0, 2],
+    [6, 8],
+    [58, 60],
+  ])("pins the caret after inserting mid-title at the cap (insert at %i)", (caret, expected) => {
     const setSelectionRange = vi.spyOn(HTMLInputElement.prototype, "setSelectionRange");
     render(<Harness initial={LONG} />);
     const input = screen.getByTestId("title") as HTMLInputElement;
     input.focus();
-    // Simulate the DOM right after typing "XY" at position 6: 62 code points,
-    // caret at 8.
-    simulateInsert(input, `${LONG.slice(0, 6)}XY${LONG.slice(6)}`, 8, setSelectionRange);
+    // Simulate the DOM right after typing "XY" at `caret`: 62 code points,
+    // caret after the insert.
+    simulateInsert(
+      input,
+      `${LONG.slice(0, caret)}XY${LONG.slice(caret)}`,
+      caret + 2,
+      setSelectionRange,
+    );
 
     expect(input.value).toHaveLength(60);
-    expect(input.value.slice(6, 8)).toBe("XY");
+    expect(input.value.slice(caret, caret + 2)).toBe("XY");
     // The caret must be re-pinned after React rewrites the truncated value.
-    expect(setSelectionRange).toHaveBeenCalledWith(8, 8);
+    expect(setSelectionRange).toHaveBeenCalledWith(expected, expected);
   });
 
   it("leaves the caret alone when the clamp does not truncate", () => {
@@ -94,5 +139,33 @@ describe("useTaskTitleSelectionRestore", () => {
     input.focus();
     simulateInsert(input, `${LONG.slice(0, 6)}XY${LONG.slice(6, 58)}`, 8, setSelectionRange);
     expect(setSelectionRange).not.toHaveBeenCalled();
+  });
+
+  it("does not replay a stale selection when the clamp result equals the committed value", () => {
+    const setSelectionRange = vi.spyOn(HTMLInputElement.prototype, "setSelectionRange");
+    const onChange = vi.fn();
+    const { rerender } = render(<ControlledHarness value={LONG} onChange={onChange} />);
+    const input = screen.getByTestId("title") as HTMLInputElement;
+    input.focus();
+    // Typing the same character into an all-same-char title at the cap: the
+    // clamped value equals the committed value, so React bails out of the
+    // render and no layout effect runs.
+    simulateInsert(input, `${LONG}T`, 6, setSelectionRange);
+    expect(onChange).toHaveBeenCalledWith(LONG);
+    // An unrelated value update must not replay the discarded caret.
+    rerender(<ControlledHarness value={"U".repeat(60)} onChange={onChange} />);
+    expect(setSelectionRange).not.toHaveBeenCalled();
+  });
+
+  it("pins the caret after a truncating change in a textarea", () => {
+    const setSelectionRange = vi.spyOn(HTMLTextAreaElement.prototype, "setSelectionRange");
+    render(<HarnessTextarea initial={LONG} />);
+    const textarea = screen.getByTestId("title") as HTMLTextAreaElement;
+    textarea.focus();
+    simulateInsert(textarea, `${LONG.slice(0, 6)}XY${LONG.slice(6)}`, 8, setSelectionRange);
+
+    expect(textarea.value).toHaveLength(60);
+    expect(textarea.value.slice(6, 8)).toBe("XY");
+    expect(setSelectionRange).toHaveBeenCalledWith(8, 8);
   });
 });

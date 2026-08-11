@@ -113,7 +113,7 @@ reported fix.
   pinned to the recorded position rather than the end.
 - **What:** the rename and edit dialogs keep the caret when typing mid-title at
   the 60-character cap.
-  **File:** `apps/web/e2e/tests/kanban/task-title-caret.spec.ts` (desktop
+  **File:** `apps/web/e2e/tests/task/task-title-caret.spec.ts` (desktop
   `chromium` project).
   **How:** seed a task with a 60-character title; open the edit dialog and the
   rename dialog; click the title input, set the selection to position 6, type
@@ -157,14 +157,14 @@ spec proves the same user value on the phone viewport.
 - `apps/web/app/office/components/new-task-dialog.tsx`
 - `apps/web/app/office/setup/step-task.tsx`
 - `apps/web/components/automations/automation-editor-sections.tsx`
-- `apps/web/e2e/tests/kanban/task-title-caret.spec.ts` (new)
+- `apps/web/e2e/tests/task/task-title-caret.spec.ts` (new)
 - `apps/web/e2e/tests/task/mobile-task-title-caret.spec.ts` (new)
 - `docs/specs/tasks/title-length-limit.md` (amended: caret scenario)
 
 ## Verification
 
 - Unit: `cd apps && pnpm --filter @kandev/web test -- --run apps/web/hooks/use-task-title-selection-restore.test.tsx`
-- E2E desktop: `cd apps/web && pnpm e2e:raw tests/kanban/task-title-caret.spec.ts`
+- E2E desktop: `cd apps/web && pnpm e2e:raw tests/task/task-title-caret.spec.ts`
 - E2E mobile: `cd apps/web && pnpm e2e:raw --project=mobile-chrome tests/task/mobile-task-title-caret.spec.ts`
 - Related suite: `cd apps && pnpm --filter @kandev/web test -- --run apps/web/lib/task-title.test.ts` and
   `cd apps/web && pnpm e2e:raw tests/github/pr-action-create-task-dialog.spec.ts` (asserts no `maxlength`)

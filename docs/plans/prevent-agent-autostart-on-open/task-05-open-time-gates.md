@@ -1,7 +1,7 @@
 ---
 id: "05-open-time-gates"
 title: "Open-time gates in ensure and resume hooks"
-status: pending
+status: done
 wave: 1
 parallelism: sequential
 depends_on: ["03-frontend-settings-plumbing"]

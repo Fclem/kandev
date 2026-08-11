@@ -1,7 +1,7 @@
 ---
 id: "06-e2e"
 title: "E2E: prevent auto-start on open"
-status: pending
+status: done
 wave: 2
 parallelism: sequential
 depends_on: ["05-open-time-gates"]

@@ -1,7 +1,7 @@
 ---
 id: "04-settings-ui-card"
 title: "Settings UI card"
-status: pending
+status: done
 wave: 1
 parallelism: sequential
 depends_on: ["03-frontend-settings-plumbing"]

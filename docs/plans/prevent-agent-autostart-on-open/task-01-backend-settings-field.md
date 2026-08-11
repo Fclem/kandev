@@ -1,7 +1,7 @@
 ---
 id: "01-backend-settings-field"
 title: "Backend user-settings field"
-status: pending
+status: done
 wave: 1
 parallelism: sequential
 depends_on: []

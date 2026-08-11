@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/prevent-agent-autostart-on-open/spec.md
 created: 2026-08-11
-status: draft
+status: complete
 ---
 
 # Implementation Plan: Prevent Agent Auto-Start On Open
@@ -248,22 +248,25 @@ gating hooks, then E2E.
 
 ## Verification Results
 
-Pending. On completion, synchronize this section with each task's `## Results`:
-record exact commands and outcomes/counts, generated artifact paths, and
-cleanup/teardown evidence.
+All six tasks implemented with TDD and verified:
+
+- Backend: `go test ./internal/user/... ./internal/orchestrator/... ./internal/backendapp/... -race` — clean. golangci-lint on the PR diff — clean (after splitting the store test file and rebasing onto the then-current origin/main).
+- Frontend: `pnpm run typecheck` — clean. Vitest suites (lib/ws/handlers, lib/state/slices/kanban, hooks/domains/session, lib/ssr, settings card, message-list-footer) — 753 tests passing. `pnpm run i18n:check` + `pnpm run i18n:ratchet` — clean.
+- E2E (mock agent): `KANDEV_E2E_MOCK=true pnpm e2e:raw --project=chromium settings/prevent-auto-start-on-open.spec.ts` — 3/3 passing; `--project=mobile-chrome settings/mobile-prevent-auto-start-on-open.spec.ts` — 1/1 passing.
+- Pre-commit hooks (harness, architecture, gofmt, golangci, prettier, web lint, i18n guard, commitlint) — passed on every commit; no bypasses.
 
 ## Implementation Waves And Parallel Candidates
 
 ```
 Wave 1 (sequential):
-- [ ] [task-01-backend-settings-field](task-01-backend-settings-field.md)
-- [ ] [task-02-backend-ensure-override](task-02-backend-ensure-override.md)
-- [ ] [task-03-frontend-settings-plumbing](task-03-frontend-settings-plumbing.md)
-- [ ] [task-04-settings-ui-card](task-04-settings-ui-card.md)
-- [ ] [task-05-open-time-gates](task-05-open-time-gates.md)
+- [x] [task-01-backend-settings-field](task-01-backend-settings-field.md)
+- [x] [task-02-backend-ensure-override](task-02-backend-ensure-override.md)
+- [x] [task-03-frontend-settings-plumbing](task-03-frontend-settings-plumbing.md)
+- [x] [task-04-settings-ui-card](task-04-settings-ui-card.md)
+- [x] [task-05-open-time-gates](task-05-open-time-gates.md)
 
 Wave 2:
-- [ ] [task-06-e2e](task-06-e2e.md)
+- [x] [task-06-e2e](task-06-e2e.md)
 ```
 
 All tasks are sequential: 01→02 share the backend settings surface, 03 depends

@@ -1,7 +1,7 @@
 ---
 id: "02-backend-ensure-override"
 title: "Backend session.ensure auto_start override"
-status: pending
+status: done
 wave: 1
 parallelism: sequential
 depends_on: []

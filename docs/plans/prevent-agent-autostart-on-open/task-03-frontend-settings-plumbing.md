@@ -1,7 +1,7 @@
 ---
 id: "03-frontend-settings-plumbing"
 title: "Frontend settings plumbing"
-status: pending
+status: done
 wave: 1
 parallelism: sequential
 depends_on: ["01-backend-settings-field"]

@@ -1,4 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 export class LinearSettingsPage {
   readonly secretInput: Locator;
@@ -29,7 +30,7 @@ export class LinearSettingsPage {
   }
 
   async gotoWorkspace(workspaceId: string) {
-    await this.page.goto(`/settings/workspaces/${workspaceId}/integrations/linear`);
+    await this.page.goto(workspaceSettingsHref(workspaceId, "integrations"));
     await this.secretInput.waitFor({ state: "visible" });
   }
 }

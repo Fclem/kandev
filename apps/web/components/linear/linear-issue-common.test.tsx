@@ -104,3 +104,27 @@ describe("priorityClass", () => {
     expect(priorityClass(undefined)).toContain("muted");
   });
 });
+
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach } from "vitest";
+import { LinearErrorMessage } from "./linear-issue-common";
+
+describe("LinearErrorMessage reconnect link", () => {
+  afterEach(() => cleanup());
+
+  it("links to the workspace-scoped Linear settings when a workspace is provided", () => {
+    render(<LinearErrorMessage error="status 401" workspaceId="ws 1/2" />);
+
+    expect(screen.getByRole("link", { name: /Reconnect/ }).getAttribute("href")).toBe(
+      "/settings/workspaces/ws%201%2F2/integrations",
+    );
+  });
+
+  it("links to the global Linear settings without a workspace", () => {
+    render(<LinearErrorMessage error="status 401" />);
+
+    expect(screen.getByRole("link", { name: /Reconnect/ }).getAttribute("href")).toBe(
+      "/settings/integrations/linear",
+    );
+  });
+});

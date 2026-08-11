@@ -73,7 +73,7 @@ export function SentryIssueDialog({ open, onOpenChange, workspaceId }: SentryIss
       <DialogContent className="!max-w-[min(1080px,95vw)] w-[95vw] max-h-[90vh] overflow-hidden flex flex-col gap-0 p-0 sm:rounded-lg">
         <DialogTitle className="sr-only">{t("sentry:browseSentryIssues")}</DialogTitle>
         <FiltersBar state={dialog} />
-        <ResultsBody state={dialog} />
+        <ResultsBody state={dialog} workspaceId={workspaceId} />
       </DialogContent>
     </Dialog>
   );
@@ -546,14 +546,14 @@ function SearchActionRow({ state }: { state: DialogState }) {
   );
 }
 
-function ResultsBody({ state }: { state: DialogState }) {
+function ResultsBody({ state, workspaceId }: { state: DialogState; workspaceId?: string }) {
   const { t } = useTranslation();
   const { issues, loading, error, isLast, nextCursor, search, instanceId } = state;
   const empty = useMemo(() => !loading && !error && issues.length === 0, [loading, error, issues]);
 
   return (
     <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-      {error && <SentryErrorMessage error={error} compact />}
+      {error && <SentryErrorMessage error={error} compact workspaceId={workspaceId} />}
       {empty && (
         <div className="text-sm text-muted-foreground py-12 text-center">
           {instanceId

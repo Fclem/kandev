@@ -1,4 +1,5 @@
 "use client";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 import Link from "@/components/routing/app-link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -78,7 +79,7 @@ function MobileFiltersButton({ show, onClick }: { show: boolean; onClick: () => 
   );
 }
 
-function NotAuthenticatedNotice({
+export function NotAuthenticatedNotice({
   workspaceId,
   personalRequired,
 }: {
@@ -87,7 +88,7 @@ function NotAuthenticatedNotice({
 }) {
   const { t } = useTranslation();
   const settingsHref = workspaceId
-    ? `/settings/workspaces/${workspaceId}/integrations/github`
+    ? workspaceSettingsHref(workspaceId, "integrations")
     : "/settings/integrations/github";
   return (
     <Alert>

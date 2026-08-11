@@ -1,12 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 export class GitHubAuthSettingsPage {
   constructor(private readonly page: Page) {}
 
   async goto(workspaceId: string, query = "") {
-    await this.page.goto(
-      `/settings/workspaces/${encodeURIComponent(workspaceId)}/integrations/github${query}`,
-    );
+    await this.page.goto(`${workspaceSettingsHref(workspaceId, "integrations")}/github${query}`);
   }
 
   automation() {

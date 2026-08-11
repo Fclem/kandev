@@ -1,4 +1,5 @@
 "use client";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 import { formatTimeDistance, useDateLocale } from "@/lib/i18n/date-locale";
 import { Badge } from "@kandev/ui/badge";
@@ -115,15 +116,21 @@ export function isSentryAuthError(error: string): boolean {
 type SentryErrorMessageProps = {
   error: string;
   compact?: boolean;
+  /** When present, the reconnect link targets the workspace's Sentry settings. */
+  workspaceId?: string | null;
 };
 
-export function SentryErrorMessage({ error, compact }: SentryErrorMessageProps) {
+export function SentryErrorMessage({ error, compact, workspaceId }: SentryErrorMessageProps) {
   const { t } = useTranslation();
   return (
     <IntegrationAuthErrorMessage
       error={error}
       name="Sentry"
-      reconnectHref="/settings/integrations/sentry"
+      reconnectHref={
+        workspaceId
+          ? workspaceSettingsHref(workspaceId, "integrations")
+          : "/settings/integrations/sentry"
+      }
       isAuthError={isSentryAuthError}
       authErrorBody={t("sentry:yourSentryAuthTokenIsInvalid")}
       compact={compact}

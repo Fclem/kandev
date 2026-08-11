@@ -1,4 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 export class AutomationsPage {
   readonly listPage: Locator;
@@ -43,12 +44,12 @@ export class AutomationsPage {
   }
 
   async goto() {
-    await this.page.goto(`/settings/workspaces/${this.workspaceId}/automations`);
+    await this.page.goto(workspaceSettingsHref(this.workspaceId, "automations"));
     await this.listPage.waitFor({ state: "visible", timeout: 15_000 });
   }
 
   async gotoNew() {
-    await this.page.goto(`/settings/workspaces/${this.workspaceId}/automations/new`);
+    await this.page.goto(`${workspaceSettingsHref(this.workspaceId, "automations")}/new`);
     await this.editor.waitFor({ state: "visible", timeout: 15_000 });
   }
 

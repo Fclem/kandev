@@ -1,4 +1,5 @@
 "use client";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 import { useCallback, useEffect, useState } from "react";
 import { formatTimeDistance } from "@/lib/i18n/date-locale";
@@ -158,15 +159,21 @@ type JiraErrorMessageProps = {
   error: string;
   /** Inline variant for cases where a ticket is already rendered above. */
   compact?: boolean;
+  /** When present, the reconnect link targets the workspace's Jira settings. */
+  workspaceId?: string | null;
 };
 
-export function JiraErrorMessage({ error, compact }: JiraErrorMessageProps) {
+export function JiraErrorMessage({ error, compact, workspaceId }: JiraErrorMessageProps) {
   const { t } = useTranslation();
   return (
     <IntegrationAuthErrorMessage
       error={error}
       name="Jira"
-      reconnectHref="/settings/integrations/jira"
+      reconnectHref={
+        workspaceId
+          ? workspaceSettingsHref(workspaceId, "integrations")
+          : "/settings/integrations/jira"
+      }
       isAuthError={isJiraAuthError}
       authErrorBody={t("jira:yourJiraSessionExpiredOrNeeds")}
       compact={compact}

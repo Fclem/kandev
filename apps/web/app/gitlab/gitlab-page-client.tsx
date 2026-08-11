@@ -1,4 +1,5 @@
 "use client";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 import Link from "@/components/routing/app-link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -47,7 +48,13 @@ type GitLabPageClientProps = {
   repositories?: Repository[];
 };
 
-function NotConnectedNotice({ reconnect }: { reconnect?: boolean }) {
+export function NotConnectedNotice({
+  reconnect,
+  workspaceId,
+}: {
+  reconnect?: boolean;
+  workspaceId?: string;
+}) {
   const { t } = useTranslation();
   return (
     <Alert>
@@ -57,7 +64,11 @@ function NotConnectedNotice({ reconnect }: { reconnect?: boolean }) {
           : t("gitlab:gitlabIsNotConnectedConfigureGitlab")}
         <Trans i18nKey="gitlab:openSettingsToSeeMrsAndIssues">
           <Link
-            href="/settings/integrations/gitlab"
+            href={
+              workspaceId
+                ? workspaceSettingsHref(workspaceId, "integrations")
+                : "/settings/integrations/gitlab"
+            }
             className="underline font-medium cursor-pointer"
           />
           to see your merge requests and issues.
@@ -396,7 +407,7 @@ function GitLabPageBody({
   if (!connected) {
     return (
       <div className="p-6 max-w-2xl">
-        <NotConnectedNotice reconnect={reconnect} />
+        <NotConnectedNotice reconnect={reconnect} workspaceId={workspaceId} />
       </div>
     );
   }

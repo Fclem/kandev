@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslation } from "react-i18next";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 import { useRouter } from "@/lib/routing/client-router";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -150,7 +151,7 @@ export function AutomationsTable({
                 data-settings-dirty-level="container"
                 className="cursor-pointer hover:bg-muted/50"
                 onClick={() =>
-                  router.push(`/settings/workspaces/${workspaceId}/automations/${a.id}`)
+                  router.push(`${workspaceSettingsHref(workspaceId, "automations")}/${a.id}`)
                 }
               >
                 <TableCell className="font-medium">{a.name}</TableCell>

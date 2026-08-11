@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "@/components/routing/app-link";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 import { IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
 import { Alert, AlertDescription, AlertTitle } from "@kandev/ui/alert";
 import { Button } from "@kandev/ui/button";
@@ -33,7 +34,7 @@ export function describeEnsureError(
       action: workspaceId
         ? {
             label: t("task:openWorkspaceSettings"),
-            href: `/settings/workspaces/${workspaceId}`,
+            href: workspaceSettingsHref(workspaceId, "overview"),
           }
         : null,
     };

@@ -1,4 +1,5 @@
 "use client";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 import Link from "@/components/routing/app-link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -40,7 +41,7 @@ type JiraPageClientProps = {
   steps: WorkflowStep[];
 };
 
-function NotConfiguredNotice() {
+export function NotConfiguredNotice({ workspaceId }: { workspaceId?: string }) {
   return (
     <div className="p-6 max-w-2xl">
       <Alert>
@@ -48,7 +49,11 @@ function NotConfiguredNotice() {
           <Trans i18nKey="jira:notConfiguredNotice">
             Jira is not configured.{" "}
             <Link
-              href="/settings/integrations/jira"
+              href={
+                workspaceId
+                  ? workspaceSettingsHref(workspaceId, "integrations")
+                  : "/settings/integrations/jira"
+              }
               className="underline font-medium cursor-pointer"
             />{" "}
             to see your tickets here.
@@ -130,6 +135,7 @@ function TicketResults({
   presets,
   onStartTask,
   onOpen,
+  workspaceId,
 }: {
   items: JiraTicket[];
   loading: boolean;
@@ -137,12 +143,13 @@ function TicketResults({
   presets: JiraTaskPreset[];
   onStartTask: (ticket: JiraTicket, preset: JiraTaskPreset) => void;
   onOpen: (ticket: JiraTicket) => void;
+  workspaceId?: string;
 }) {
   const { t } = useTranslation();
   if (error) {
     return (
       <div className="flex justify-center py-16">
-        <JiraErrorMessage error={error} />
+        <JiraErrorMessage error={error} workspaceId={workspaceId} />
       </div>
     );
   }
@@ -252,6 +259,7 @@ function AuthenticatedView({
           presets={presets}
           onStartTask={onStartTask}
           onOpen={onOpenTicket}
+          workspaceId={workspaceId}
         />
       </div>
       <ResultsPagination
@@ -349,7 +357,7 @@ export function JiraPageClient({ workspaceId, workflows, steps }: JiraPageClient
         {!loaded && (
           <div className="p-6 text-sm text-muted-foreground">{t("jira:checkingJiraStatus")}</div>
         )}
-        {loaded && !configured && <NotConfiguredNotice />}
+        {loaded && !configured && <NotConfiguredNotice workspaceId={workspaceId} />}
         {loaded && configured && (
           <AuthenticatedView
             workspaceId={workspaceId}

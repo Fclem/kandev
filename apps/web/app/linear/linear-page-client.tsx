@@ -1,4 +1,5 @@
 "use client";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 import Link from "@/components/routing/app-link";
 import { useEffect, useMemo, useState } from "react";
@@ -41,7 +42,7 @@ type LinearPageClientProps = {
   steps: WorkflowStep[];
 };
 
-function NotConfiguredNotice() {
+export function NotConfiguredNotice({ workspaceId }: { workspaceId?: string }) {
   return (
     <div className="p-6 max-w-2xl">
       <Alert>
@@ -49,7 +50,11 @@ function NotConfiguredNotice() {
           <Trans i18nKey="linear:notConfiguredNotice">
             Linear is not configured.{" "}
             <Link
-              href="/settings/integrations/linear"
+              href={
+                workspaceId
+                  ? workspaceSettingsHref(workspaceId, "integrations")
+                  : "/settings/integrations/linear"
+              }
               className="underline font-medium cursor-pointer"
             />{" "}
             to see your issues here.
@@ -305,7 +310,7 @@ function LinearFrame({ children }: { children: React.ReactNode }) {
   );
 }
 
-function DisabledNotice() {
+export function DisabledNotice({ workspaceId }: { workspaceId?: string }) {
   const { t } = useTranslation();
   return (
     <div className="p-6 max-w-2xl">
@@ -313,7 +318,11 @@ function DisabledNotice() {
         <AlertDescription>
           {t("linear:integrationDisabled")}{" "}
           <Link
-            href="/settings/integrations/linear"
+            href={
+              workspaceId
+                ? workspaceSettingsHref(workspaceId, "integrations")
+                : "/settings/integrations/linear"
+            }
             className="underline font-medium cursor-pointer"
           >
             {t("linear:reEnableItInSettings")}
@@ -330,18 +339,20 @@ function ResultsArea({
   empty,
   onOpen,
   onStartTask,
+  workspaceId,
 }: {
   search: LinearSearchState;
   empty: boolean;
   onOpen: (issue: LinearIssue) => void;
   onStartTask: (issue: LinearIssue) => void;
+  workspaceId?: string;
 }) {
   const { t } = useTranslation();
   return (
     <div className="flex-1 overflow-y-auto px-6 py-3">
       {search.error && !search.loading && (
         <div className="py-8 flex justify-center">
-          <LinearErrorMessage error={search.error} />
+          <LinearErrorMessage error={search.error} workspaceId={workspaceId} />
         </div>
       )}
       {!search.error && empty && (
@@ -419,6 +430,7 @@ export function LinearPageClient({ workspaceId, workflows, steps }: LinearPageCl
         empty={empty}
         onOpen={setOpenIssue}
         onStartTask={setLaunchIssue}
+        workspaceId={workspaceId}
       />
       <PaginationBar
         page={search.page}

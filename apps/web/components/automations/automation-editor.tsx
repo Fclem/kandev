@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 import { useTranslation } from "react-i18next";
 import { t } from "@/lib/i18n";
 import { useRouter } from "@/lib/routing/client-router";
@@ -175,7 +176,7 @@ function useSaveHandler(opts: SaveHandlerOpts): () => Promise<void> {
         } else {
           toast.success(t("automations:automationCreated"));
           runWithNavigationBlockerBypassed(() =>
-            router.push(`/settings/workspaces/${workspaceId}/automations`),
+            router.push(workspaceSettingsHref(workspaceId, "automations")),
           );
         }
       } else if (currentId) {
@@ -219,7 +220,7 @@ function useLoadAutomation(opts: LoadAutomationOpts) {
         onLoaded(loadedForm, loadedTriggers);
       })
       .catch(() => {
-        router.push(`/settings/workspaces/${workspaceId}/automations`);
+        router.push(workspaceSettingsHref(workspaceId, "automations"));
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automationId]);
@@ -306,7 +307,7 @@ function useRemoveAutomation(
     try {
       await remove(currentId);
       runWithNavigationBlockerBypassed(() =>
-        router.push(`/settings/workspaces/${workspaceId}/automations`),
+        router.push(workspaceSettingsHref(workspaceId, "automations")),
       );
     } catch (error) {
       onError(error);
@@ -458,7 +459,7 @@ export function AutomationEditor({ workspaceId, automationId }: AutomationEditor
         details={createdWebhook}
         onClose={() => {
           setCreatedWebhook(null);
-          router.push(`/settings/workspaces/${workspaceId}/automations`);
+          router.push(workspaceSettingsHref(workspaceId, "automations"));
         }}
       />
     </div>

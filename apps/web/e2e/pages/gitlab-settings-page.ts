@@ -1,4 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 export class GitLabSettingsPage {
   readonly hostInput: Locator;
@@ -15,7 +16,7 @@ export class GitLabSettingsPage {
 
   async goto(workspaceId?: string) {
     const path = workspaceId
-      ? `/settings/workspaces/${workspaceId}/integrations/gitlab`
+      ? workspaceSettingsHref(workspaceId, "integrations")
       : "/settings/integrations/gitlab";
     await this.page.goto(path);
     await this.hostInput.waitFor();

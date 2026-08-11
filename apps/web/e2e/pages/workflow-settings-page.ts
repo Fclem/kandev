@@ -1,4 +1,5 @@
 import { type Locator, type Page, expect } from "@playwright/test";
+import { workspaceSettingsHref } from "../../lib/settings/workspace-settings-tabs";
 
 export class WorkflowSettingsPage {
   readonly page: Page;
@@ -20,7 +21,7 @@ export class WorkflowSettingsPage {
   }
 
   async goto(workspaceId: string) {
-    await this.page.goto(`/settings/workspaces/${workspaceId}/workflows`);
+    await this.page.goto(workspaceSettingsHref(workspaceId, "workflows"));
     // Wait for a client-rendered element to confirm hydration is complete
     // (networkidle is unreliable with persistent WebSocket connections)
     await expect(this.addWorkflowButton).toBeVisible();

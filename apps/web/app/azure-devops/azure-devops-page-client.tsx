@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- Azure DevOps page composition keeps the browse, board, and task-launch flows together. */
 
 "use client";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 import Link from "@/components/routing/app-link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
@@ -82,9 +83,9 @@ type PageProps = {
   repositories: Repository[];
 };
 
-function NotConfigured({ workspaceId }: { workspaceId?: string }) {
+export function NotConfigured({ workspaceId }: { workspaceId?: string }) {
   const href = workspaceId
-    ? `/settings/workspaces/${encodeURIComponent(workspaceId)}/integrations/azure-devops`
+    ? workspaceSettingsHref(workspaceId, "integrations")
     : "/settings/integrations/azure-devops";
   return (
     <div className="max-w-2xl p-6">

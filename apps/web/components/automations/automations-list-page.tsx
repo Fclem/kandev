@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslation } from "react-i18next";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 import { useRouter } from "@/lib/routing/client-router";
 import { Button } from "@kandev/ui/button";
 import { Separator } from "@kandev/ui/separator";
@@ -57,7 +58,7 @@ export function AutomationsListPage({ workspaceId }: AutomationsListPageProps) {
             size="sm"
             data-testid="new-automation-button"
             className="cursor-pointer"
-            onClick={() => router.push(`/settings/workspaces/${workspaceId}/automations/new`)}
+            onClick={() => router.push(`${workspaceSettingsHref(workspaceId, "automations")}/new`)}
           >
             <IconPlus className="h-4 w-4 mr-2" />
             {t("automations:newAutomation")}

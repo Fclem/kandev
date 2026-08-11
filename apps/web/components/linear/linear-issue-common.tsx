@@ -1,4 +1,5 @@
 "use client";
+import { workspaceSettingsHref } from "@/lib/settings/workspace-settings-tabs";
 
 import { useCallback, useEffect, useState } from "react";
 import { formatTimeDistance } from "@/lib/i18n/date-locale";
@@ -161,15 +162,21 @@ export { cleanIntegrationErrorMessage as cleanLinearErrorMessage } from "@/compo
 type LinearErrorMessageProps = {
   error: string;
   compact?: boolean;
+  /** When present, the reconnect link targets the workspace's Linear settings. */
+  workspaceId?: string | null;
 };
 
-export function LinearErrorMessage({ error, compact }: LinearErrorMessageProps) {
+export function LinearErrorMessage({ error, compact, workspaceId }: LinearErrorMessageProps) {
   const { t } = useTranslation();
   return (
     <IntegrationAuthErrorMessage
       error={error}
       name="Linear"
-      reconnectHref="/settings/integrations/linear"
+      reconnectHref={
+        workspaceId
+          ? workspaceSettingsHref(workspaceId, "integrations")
+          : "/settings/integrations/linear"
+      }
       isAuthError={isLinearAuthError}
       authErrorBody={t("linear:yourLinearApiKeyIsInvalid")}
       compact={compact}

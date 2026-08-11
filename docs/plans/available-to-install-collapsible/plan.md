@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/ui/available-to-install-collapsible.md
 created: 2026-08-11
-status: draft
+status: complete
 ---
 
 # Implementation Plan: Available to Install section collapsible
@@ -80,15 +80,21 @@ Wrap the "Available to Install" section on the Agents settings page in the exist
 
 Wave 1:
 
-- [ ] [Task 01: Make the section collapsible](task-01-collapsible-section.md)
+- [x] [Task 01: Make the section collapsible](task-01-collapsible-section.md)
 
 Wave 2:
 
-- [ ] [Task 02: Prove desktop and mobile collapse flows](task-02-e2e-coverage.md)
+- [x] [Task 02: Prove desktop and mobile collapse flows](task-02-e2e-coverage.md)
 
 ## Verification Results
 
-Pending. On completion, synchronize this section with each task's `## Results`.
+- `cd apps && pnpm install --frozen-lockfile` → done (needed for the commit-msg hook's `commitlint`; 6s).
+- `cd apps/web && pnpm run typecheck` → clean (131s).
+- `cd apps/web && pnpm run i18n:ratchet` → `✓ i18n new-code ratchet — 0 added + 1 modified file(s) clean`.
+- `make fmt` → `✓ Code formatting complete!`; `make lint-web` → clean (eslint `--max-warnings 0`).
+- `cd apps/web && pnpm e2e:run --host tests/settings/available-to-install-collapsible.spec.ts` → `1 passed (6.6s)` (chromium project; red on the pre-implementation build, green after).
+- `cd apps/web && pnpm e2e:run --host --project mobile-chrome tests/settings/mobile-available-to-install-collapsible.spec.ts` → `1 passed (6.8s)` (mobile-chrome project).
+- `make test-web` → 10495 passed, 4 skipped; 3 remaining failures are `lib/http-git-server.test.ts` tests that require a Docker daemon bridge gateway unavailable in this sandbox — they fail in fixture setup on the base tree and are unrelated to this change. All other initially failing tests (file-browser, sentry, lazy-catalogs, error-boundary) pass in isolation (parallel-load timeouts).
 
 ## Risks
 

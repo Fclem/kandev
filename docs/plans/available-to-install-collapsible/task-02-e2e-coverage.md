@@ -1,7 +1,7 @@
 ---
 id: "02-e2e-coverage"
 title: "Prove desktop and mobile collapse flows"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-collapsible-section"]
 plan: "plan.md"
@@ -45,3 +45,11 @@ spec: "../../specs/ui/available-to-install-collapsible.md"
 ## Output contract
 
 Summary, files changed, exact command/result, screenshot or rendered evidence paths when available, uncertainties, and this task file updated to `done` with a `## Results` section; synchronize `plan.md`'s Wave 2 checkbox and Verification Results.
+
+## Results
+
+- Desktop spec `apps/web/e2e/tests/settings/available-to-install-collapsible.spec.ts` (chromium project): `pnpm e2e:run --host tests/settings/available-to-install-collapsible.spec.ts` → `1 passed (6.6s)`. Covers default-expanded, click-to-collapse (`aria-expanded` false, card hidden via `toBeHidden()`), click-to-re-expand.
+- Mobile spec `apps/web/e2e/tests/settings/mobile-available-to-install-collapsible.spec.ts` (mobile-chrome project, Pixel 5): `pnpm e2e:run --host --project mobile-chrome tests/settings/mobile-available-to-install-collapsible.spec.ts` → `1 passed (6.8s)`. Covers ≥44px touch target, tap collapse/expand, and no document horizontal overflow in both states.
+- Both specs intercept `/api/v1/agents/available` to seed one discoverable-but-not-installed agent (`codex`) so the section renders.
+- Web unit suite (`make test-web`): 10495 passed, 4 skipped; 7 failures were reproduced in isolation as environment-only — 3 in `lib/http-git-server.test.ts` fail in fixture setup (`Could not determine Docker bridge gateway: undefined`, requires a Docker daemon) and the rest were parallel-load timeouts that pass in isolation. None touch the changed code.
+- External side-effect boundaries: none (tests use the existing mock backend fixtures).

@@ -1,7 +1,7 @@
 ---
 id: "01-collapsible-section"
 title: "Make the section collapsible"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -46,3 +46,13 @@ spec: "../../specs/ui/available-to-install-collapsible.md"
 ## Output contract
 
 Summary, files changed, tests run with exact commands and outcomes, blockers, risks, and this task file updated to `done` with a `## Results` section; synchronize `plan.md`'s Wave 1 checkbox and Verification Results.
+
+## Results
+
+- Red first: `pnpm e2e:run --host tests/settings/available-to-install-collapsible.spec.ts` failed as expected on `getByTestId('available-to-install-trigger')` → element not found (before the implementation existed).
+- Implemented the collapsible in `SuggestInstallSection` (`apps/web/app/settings/agents/page.tsx`): `Collapsible`/`CollapsibleTrigger asChild`/`CollapsibleContent` from `@kandev/ui/collapsible`, header row as the trigger button with rotating `IconChevronDown`, `useState(true)` default-expanded, `pt-4` grid spacing restored inside `CollapsibleContent`.
+- Green: `pnpm e2e:run --host tests/settings/available-to-install-collapsible.spec.ts` → `1 passed (6.6s)`.
+- `cd apps/web && pnpm run typecheck` → clean.
+- `cd apps/web && pnpm run i18n:ratchet` → `0 added + 1 modified file(s) clean` (no new strings).
+- `make fmt` and `make lint-web` → clean.
+- Security/trust boundaries: none (presentational change).

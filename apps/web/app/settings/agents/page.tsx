@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   IconAlertTriangle,
   IconCheck,
+  IconChevronDown,
   IconClipboard,
   IconDownload,
   IconExternalLink,
@@ -15,6 +16,7 @@ import {
 } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { Card, CardContent } from "@kandev/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kandev/ui/collapsible";
 import { Separator } from "@kandev/ui/separator";
 import { useAppStore } from "@/components/state-provider";
 import {
@@ -320,32 +322,56 @@ function SuggestInstallSection({
   onInstall: (name: string) => void;
 }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(true);
   const notInstalledTools = tools.filter((tool) => !tool.available);
   if (notInstalledAgents.length === 0 && notInstalledTools.length === 0) return null;
 
   return (
     <div className="space-y-4">
       <Separator />
-      <div>
-        <h3 className="text-lg font-semibold">{t("agents:availableToInstall")}</h3>
-        <p className="text-sm text-muted-foreground">{t("agents:availableToInstallDescription")}</p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-        {notInstalledAgents.map((agent) => (
-          <InstallCard
-            key={agent.name}
-            agent={agent}
-            copiedValue={copiedValue}
-            onCopy={onCopy}
-            job={installJobs[agent.name]}
-            onInstall={onInstall}
-          />
-        ))}
-        {notInstalledTools.map((tool) => (
-          <ToolInstallCard key={tool.name} tool={tool} copiedValue={copiedValue} onCopy={onCopy} />
-        ))}
-      </div>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full cursor-pointer items-start justify-between gap-3"
+            data-testid="available-to-install-trigger"
+          >
+            <div className="text-left">
+              <h3 className="text-lg font-semibold">{t("agents:availableToInstall")}</h3>
+              <p className="text-sm text-muted-foreground">
+                {t("agents:availableToInstallDescription")}
+              </p>
+            </div>
+            <IconChevronDown
+              className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${
+                open ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="grid gap-4 pt-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            {notInstalledAgents.map((agent) => (
+              <InstallCard
+                key={agent.name}
+                agent={agent}
+                copiedValue={copiedValue}
+                onCopy={onCopy}
+                job={installJobs[agent.name]}
+                onInstall={onInstall}
+              />
+            ))}
+            {notInstalledTools.map((tool) => (
+              <ToolInstallCard
+                key={tool.name}
+                tool={tool}
+                copiedValue={copiedValue}
+                onCopy={onCopy}
+              />
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

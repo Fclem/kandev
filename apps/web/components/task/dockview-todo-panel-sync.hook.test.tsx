@@ -20,9 +20,10 @@ function Harness() {
   return null;
 }
 
-const rafQueue: FrameRequestCallback[] = [];
 const addPanel = vi.fn();
 const close = vi.fn();
+const pendingFrames = new Map<number, FrameRequestCallback>();
+let nextFrameId = 0;
 
 function setDockviewState(panel: { id: string; api: { close: typeof close } } | undefined): void {
   useDockviewStore.setState({
@@ -46,12 +47,23 @@ function renderHook(overrides: Partial<AppState> = {}): void {
   );
 }
 
-function flushRaf(): void {
+/** Runs exactly one animation frame: the outer rAF fires and schedules the
+ *  inner rAF, which stays pending until the next call, mirroring the
+ *  browser's two-frame scheduling. */
+function flushOneFrame(): void {
   act(() => {
-    while (rafQueue.length > 0) {
-      rafQueue.shift()!(0);
+    const due = [...pendingFrames.entries()];
+    for (const [id, callback] of due) {
+      pendingFrames.delete(id);
+      callback(0);
     }
   });
+}
+
+function flushAllFrames(): void {
+  while (pendingFrames.size > 0) {
+    flushOneFrame();
+  }
 }
 
 function sessionedStateOverrides(showTodoListPanel: boolean, loaded: boolean): Partial<AppState> {
@@ -68,14 +80,18 @@ function sessionedStateOverrides(showTodoListPanel: boolean, loaded: boolean): P
 }
 
 beforeEach(() => {
-  rafQueue.length = 0;
+  pendingFrames.clear();
+  nextFrameId = 0;
   addPanel.mockReset();
   close.mockReset();
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-    rafQueue.push(callback);
-    return rafQueue.length;
+    const id = ++nextFrameId;
+    pendingFrames.set(id, callback);
+    return id;
   });
-  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+    pendingFrames.delete(id);
+  });
 });
 
 afterEach(() => {
@@ -90,7 +106,7 @@ describe("useSyncTodoPanel", () => {
     renderHook(sessionedStateOverrides(true, true));
 
     // Empty todo list suppresses the add.
-    flushRaf();
+    flushAllFrames();
     expect(addPanel).not.toHaveBeenCalled();
 
     // A live sessionTodos update re-runs the sync and pins the panel.
@@ -101,7 +117,7 @@ describe("useSyncTodoPanel", () => {
         },
       });
     });
-    flushRaf();
+    flushAllFrames();
     expect(addPanel).toHaveBeenCalledWith(expect.objectContaining({ id: "todos" }));
   });
 
@@ -112,7 +128,7 @@ describe("useSyncTodoPanel", () => {
       tasks: { ...defaultState.tasks, activeTaskId: TASK_ID, activeSessionId: null },
     });
 
-    flushRaf();
+    flushAllFrames();
     expect(close).toHaveBeenCalledOnce();
   });
 
@@ -123,8 +139,27 @@ describe("useSyncTodoPanel", () => {
       tasks: { ...defaultState.tasks, activeTaskId: TASK_ID, activeSessionId: null },
     });
 
-    flushRaf();
+    flushAllFrames();
     expect(addPanel).not.toHaveBeenCalled();
+  });
+
+  it("cancels a pending sync when the preference changes between the frames", () => {
+    setDockviewState(undefined);
+    renderHook(sessionedStateOverrides(true, true));
+    flushOneFrame(); // outer fired, inner pending
+
+    // The preference flips before the inner frame: the effect cleanup must
+    // cancel the pending inner, and the new effect's sync must see the
+    // updated preference (off -> nothing to add or remove).
+    act(() => {
+      storeApi.setState({
+        userSettings: { ...storeApi.getState().userSettings, showTodoListPanel: false },
+      });
+    });
+    flushAllFrames();
+
+    expect(addPanel).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("does not apply a stale task's sync after a task switch mid-flight", () => {
@@ -146,7 +181,7 @@ describe("useSyncTodoPanel", () => {
       });
     });
 
-    flushRaf();
+    flushAllFrames();
     // Neither the cancelled task-1 frames (identity guard) nor the new
     // sessionless task may add a panel.
     expect(addPanel).not.toHaveBeenCalled();
@@ -165,7 +200,7 @@ describe("useSyncTodoPanel", () => {
       },
     });
 
-    flushRaf();
+    flushAllFrames();
     expect(addPanel).not.toHaveBeenCalled();
 
     act(() => {
@@ -173,7 +208,7 @@ describe("useSyncTodoPanel", () => {
         userSettings: { ...storeApi.getState().userSettings, loaded: true },
       });
     });
-    flushRaf();
+    flushAllFrames();
     expect(addPanel).toHaveBeenCalledWith(expect.objectContaining({ id: "todos" }));
   });
 
@@ -181,7 +216,7 @@ describe("useSyncTodoPanel", () => {
     setDockviewState({ id: "todos", api: { close } });
     renderHook(sessionedStateOverrides(true, true));
 
-    flushRaf();
+    flushAllFrames();
     expect(close).not.toHaveBeenCalled();
 
     act(() => {
@@ -189,7 +224,7 @@ describe("useSyncTodoPanel", () => {
         userSettings: { ...storeApi.getState().userSettings, showTodoListPanel: false },
       });
     });
-    flushRaf();
+    flushAllFrames();
     expect(close).toHaveBeenCalledOnce();
   });
 });

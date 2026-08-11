@@ -230,4 +230,32 @@ Verification: 853 tests across the touched areas pass; `pnpm run typecheck`,
 `make fmt`, `make lint` clean; E2E `todo-list-panel.spec.ts` 8/8 (web
 rebuilt). Committed as follow-up `fix:`.
 
+### Round-9 reviewer feedback (OMP GPT Luna) and disposition
+
+1. **J1 (major): full transcript scan on every message update while the
+   sub-option is on** — analyzed, NOT fixed by the suggested incremental
+   tracker: a prototype tracker that only inspected the newest message after
+   a todo-free scan was demonstrated UNSOUND — when the first sync runs
+   before the messages fetch completes (`[]`), then persisted history with a
+   mid-array `todo` message and a plain final message lands, the tracker
+   returns false forever and the auto-pin for reopened completed tasks (a
+   passing E2E scenario) breaks. A sound incremental version requires the
+   messages store to expose todo-relevant derived state, which it does not
+   (out of scope). The current behavior is already bounded: the predicate is
+   computed only when the opt-in sub-option is on, and the live
+   `sessionTodos` slice short-circuits the message scan while the session
+   has live entries. Documented in the hook comment; the E2E
+   persisted-history pin continues to pass.
+2. **J2 (minor): hook tests did not model rAF cancellation or frame
+   boundaries** — FIXED: the hook-test harness now uses stable frame IDs
+   backed by a pending-callback map, `cancelAnimationFrame` deletes the
+   pending callback, and frames flush one at a time (outer schedules inner
+   for the next flush). Added a between-frames test: a preference change
+   after the outer frame cancels the pending inner, and exactly zero sync
+   side effects fire for the stale state.
+
+Verification: 862 tests across the touched areas pass; `pnpm run typecheck`,
+`make fmt`, `make lint` clean; E2E `todo-list-panel.spec.ts` 8/8 (web
+rebuilt). Committed as follow-up `fix:`/`test:`.
+
 Blockers/risks: none.

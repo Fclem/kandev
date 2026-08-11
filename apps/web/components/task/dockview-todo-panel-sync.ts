@@ -162,8 +162,9 @@ const EMPTY_MESSAGES: Message[] = [];
 /** True when the session's todo list is non-empty, using the exact two-source
  *  fallback the Todos panel content uses: live `sessionTodos.bySessionId`
  *  entries first (an empty array falls through), then the latest persisted
- *  `todo`-type message via `buildTodoItems`. Computed once per sync from the
- *  dispatch-time snapshot (see `useSyncTodoPanel`) and exported as a testable
+ *  `todo`-type message via `buildTodoItems`. `useSyncTodoPanel` uses the
+ *  streaming-optimized `createTodoMessagePresenceTracker` for the messages
+ *  half on its hot path; this canonical form is kept as the testable
  *  contract so the fallback can't drift from the panel content. */
 export function todoListNotEmptyForSession(
   liveTodos: readonly TodoEntry[] | undefined,
@@ -238,8 +239,9 @@ export function useSyncTodoPanel() {
           onlyPinWhenNotEmpty: live.userSettings.showTodoListPanelOnlyWhenNotEmpty,
           // A sessionless task never auto-adds a Todos tab (there is nothing
           // to show); it only ever gets removal handling. The predicate is
-          // computed only when the sub-option is on, skipping the O(n)
-          // transcript scan otherwise.
+          // computed only when the sub-option is on, skipping the transcript
+          // scan otherwise, and the live slice short-circuits the message
+          // scan while the session has live todo entries.
           hasActiveSession: sessionId !== null,
           todoListNotEmpty:
             live.userSettings.showTodoListPanelOnlyWhenNotEmpty && sessionId

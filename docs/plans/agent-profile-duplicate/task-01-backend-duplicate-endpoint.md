@@ -22,6 +22,9 @@ spec: "../../specs/agents/profile-duplicate.md"
   timestamp, zero consecutive failures.
 - A disabled source produces a disabled copy; an enabled source produces an
   enabled copy.
+- The copy is committed atomically (row + MCP config in one repository
+  transaction, inserted with the source's enabled state): a failure leaves no
+  partial profile and a disabled source never becomes briefly selectable.
 - Unknown or soft-deleted source ID → `ErrAgentProfileNotFound` → HTTP 404,
   and nothing is created.
 - Success returns the new `AgentProfileDTO` and broadcasts the
@@ -41,7 +44,10 @@ spec: "../../specs/agents/profile-duplicate.md"
 
 - `apps/backend/internal/agent/settings/controller/profile_crud.go`
 - `apps/backend/internal/agent/settings/controller/profile_duplicate_test.go` (new)
-- `apps/backend/internal/agent/settings/controller/reconciler_test.go` (extend shared `fakeStore` with MCP config methods, additively)
+- `apps/backend/internal/agent/settings/controller/reconciler_test.go` (extend shared `fakeStore` with MCP config methods + `DuplicateAgentProfile`, additively)
+- `apps/backend/internal/agent/settings/store/store.go` (add `DuplicateAgentProfile` to the repository interface)
+- `apps/backend/internal/agent/settings/store/sqlite.go` (atomic `DuplicateAgentProfile` in one transaction; shared insert/upsert helpers)
+- `apps/backend/internal/agent/settings/store/sqlite_duplicate_test.go` (new)
 - `apps/backend/internal/agent/settings/handlers/handlers.go`
 - `apps/backend/internal/agent/settings/handlers/interim_settings_interlock_test.go`
 - Optional: `apps/backend/internal/agent/settings/handlers/profile_duplicate_handlers_test.go`

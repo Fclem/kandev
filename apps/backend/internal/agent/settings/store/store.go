@@ -20,6 +20,11 @@ type Repository interface {
 	UpsertAgentProfileMcpConfig(ctx context.Context, config *models.AgentProfileMcpConfig) error
 
 	CreateAgentProfile(ctx context.Context, profile *models.AgentProfile) error
+	// DuplicateAgentProfile creates an independent copy of a profile in one
+	// transaction: the row is inserted with the caller-provided Enabled state
+	// and the MCP config row is upserted when non-nil. A failure rolls back
+	// and leaves no partial copy.
+	DuplicateAgentProfile(ctx context.Context, profile *models.AgentProfile, mcpConfig *models.AgentProfileMcpConfig) error
 	UpdateAgentProfile(ctx context.Context, profile *models.AgentProfile) error
 	UpdateAgentProfileEnabled(ctx context.Context, id string, enabled bool) (time.Time, error)
 	DeleteAgentProfile(ctx context.Context, id string) error

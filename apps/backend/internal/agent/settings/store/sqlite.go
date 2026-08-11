@@ -450,6 +450,10 @@ func (r *sqliteRepository) UpsertAgentProfileMcpConfig(ctx context.Context, conf
 	if config.ProfileID == "" {
 		return fmt.Errorf("profile ID is required")
 	}
+	return r.upsertAgentProfileMcpConfig(ctx, r.db, config)
+}
+
+func (r *sqliteRepository) upsertAgentProfileMcpConfig(ctx context.Context, execer profileExecer, config *models.AgentProfileMcpConfig) error {
 	if config.Servers == nil {
 		config.Servers = map[string]interface{}{}
 	}
@@ -471,7 +475,7 @@ func (r *sqliteRepository) UpsertAgentProfileMcpConfig(ctx context.Context, conf
 		return fmt.Errorf("failed to serialize MCP meta: %w", err)
 	}
 
-	_, err = r.db.ExecContext(ctx, r.db.Rebind(`
+	_, err = execer.ExecContext(ctx, execer.Rebind(`
 		INSERT INTO agent_profile_mcp_configs (profile_id, enabled, servers_json, meta_json, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(profile_id) DO UPDATE SET
@@ -490,6 +494,51 @@ func (r *sqliteRepository) CreateAgentProfile(ctx context.Context, profile *mode
 	now := time.Now().UTC()
 	profile.CreatedAt = now
 	profile.UpdatedAt = now
+	// New profiles are created enabled — the DB column default is 1 and
+	// nothing creates a profile pre-disabled. Setting the field here keeps
+	// callers' in-memory copy consistent with the row.
+	profile.Enabled = true
+	return r.insertAgentProfile(ctx, r.db, profile)
+}
+
+// DuplicateAgentProfile creates an independent copy of a profile in a single
+// transaction: the row is inserted with the caller-provided Enabled state (a
+// duplicate of a disabled profile must not become briefly selectable) and the
+// MCP config row is upserted when non-nil. A failure rolls back and leaves no
+// partial copy, so retrying after an error cannot create a duplicate row.
+func (r *sqliteRepository) DuplicateAgentProfile(ctx context.Context, profile *models.AgentProfile, mcpConfig *models.AgentProfileMcpConfig) error {
+	if profile.ID == "" {
+		profile.ID = uuid.New().String()
+	}
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	now := time.Now().UTC()
+	profile.CreatedAt = now
+	profile.UpdatedAt = now
+	if err := r.insertAgentProfile(ctx, tx, profile); err != nil {
+		return err
+	}
+	if mcpConfig != nil {
+		mcpConfig.ProfileID = profile.ID
+		if err := r.upsertAgentProfileMcpConfig(ctx, tx, mcpConfig); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// profileExecer is the subset of *sqlx.DB / *sqlx.Tx the shared insert and
+// upsert helpers need, so one code path serves both single-statement and
+// transactional writes.
+type profileExecer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	Rebind(query string) string
+}
+
+func (r *sqliteRepository) insertAgentProfile(ctx context.Context, execer profileExecer, profile *models.AgentProfile) error {
 	cliFlagsJSON, err := cliFlagsToJSON(profile.CLIFlags)
 	if err != nil {
 		return err
@@ -502,11 +551,7 @@ func (r *sqliteRepository) CreateAgentProfile(ctx context.Context, profile *mode
 	if err != nil {
 		return err
 	}
-	// New profiles are created enabled — the DB column default is 1 and
-	// nothing creates a profile pre-disabled. Setting the field here keeps
-	// callers' in-memory copy consistent with the row.
-	profile.Enabled = true
-	_, err = r.db.ExecContext(ctx, r.db.Rebind(`
+	_, err = execer.ExecContext(ctx, execer.Rebind(`
 		INSERT INTO agent_profiles (
 			id, agent_id, name, agent_display_name, model, mode, migrated_from,
 			auto_approve, dangerously_skip_permissions, allow_indexing, cli_passthrough,

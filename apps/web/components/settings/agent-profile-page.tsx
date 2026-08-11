@@ -112,6 +112,7 @@ function ProfileEditorHeader({
           variant="outline"
           onClick={onDuplicate}
           data-testid="duplicate-profile-header"
+          className="min-h-11"
           title={t("agents:duplicateProfileNamed", { name: savedProfileName })}
         >
           <IconCopy className="h-4 w-4 mr-2" />

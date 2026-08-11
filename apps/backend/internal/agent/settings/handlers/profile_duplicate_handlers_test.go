@@ -53,6 +53,21 @@ func (r *duplicateRepo) CreateAgentProfile(_ context.Context, p *models.AgentPro
 	return nil
 }
 
+func (r *duplicateRepo) DuplicateAgentProfile(_ context.Context, p *models.AgentProfile, mcpConfig *models.AgentProfileMcpConfig) error {
+	if p.ID == "" {
+		p.ID = "duplicate-" + p.Name
+	}
+	now := time.Now().UTC()
+	p.CreatedAt = now
+	p.UpdatedAt = now
+	r.profiles[p.ID] = p
+	r.created = append(r.created, p)
+	if mcpConfig != nil {
+		mcpConfig.ProfileID = p.ID
+	}
+	return nil
+}
+
 func (r *duplicateRepo) UpdateAgentProfileEnabled(_ context.Context, id string, enabled bool) (time.Time, error) {
 	p, ok := r.profiles[id]
 	if !ok {

@@ -1,0 +1,148 @@
+package store
+
+import (
+	"context"
+	"testing"
+
+	"github.com/kandev/kandev/internal/agent/settings/models"
+)
+
+// TestDuplicateAgentProfile_RoundTrip verifies the atomic copy path: the copy
+// gets a fresh ID, keeps every configuration field, preserves the source's
+// disabled state (the store must NOT force a duplicate enabled like
+// CreateAgentProfile does), and copies the MCP config row in the same write.
+func TestDuplicateAgentProfile_RoundTrip(t *testing.T) {
+	repo := newFreshRepo(t)
+	ctx := context.Background()
+
+	if err := repo.CreateAgent(ctx, &models.Agent{Name: "test-agent", SupportsMCP: true}); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+	agent, err := repo.GetAgentByName(ctx, "test-agent")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+
+	source := &models.AgentProfile{
+		AgentID:          agent.ID,
+		Name:             "Default",
+		AgentDisplayName: "Test Agent",
+		Model:            "model-1",
+		Mode:             "plan",
+		AutoApprove:      true,
+		CLIPassthrough:   true,
+		CLIFlags:         []models.CLIFlag{{Description: "Tools", Flag: "--allow-all-tools", Enabled: true}},
+		EnvVars:          []models.ProfileEnvVar{{Key: "FOO", Value: "bar"}},
+		CommandPrefix:    "greywall --",
+		UserModified:     true,
+	}
+	if err := repo.CreateAgentProfile(ctx, source); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	// CreateAgentProfile forces enabled=true; simulate a user-disabled source.
+	if _, err := repo.UpdateAgentProfileEnabled(ctx, source.ID, false); err != nil {
+		t.Fatalf("disable source: %v", err)
+	}
+	sourceMcp := &models.AgentProfileMcpConfig{
+		ProfileID: source.ID,
+		Enabled:   true,
+		Servers:   map[string]interface{}{"github": map[string]interface{}{"url": "https://api.github.com"}},
+		Meta:      map[string]interface{}{"k": "v"},
+	}
+	if err := repo.UpsertAgentProfileMcpConfig(ctx, sourceMcp); err != nil {
+		t.Fatalf("seed source mcp: %v", err)
+	}
+
+	clone := &models.AgentProfile{
+		AgentID:          source.AgentID,
+		Name:             "Default Copy",
+		AgentDisplayName: source.AgentDisplayName,
+		Model:            source.Model,
+		Mode:             source.Mode,
+		AutoApprove:      source.AutoApprove,
+		CLIPassthrough:   source.CLIPassthrough,
+		CLIFlags:         source.CLIFlags,
+		EnvVars:          source.EnvVars,
+		CommandPrefix:    source.CommandPrefix,
+		Enabled:          false,
+		UserModified:     true,
+	}
+	copiedMcp := &models.AgentProfileMcpConfig{
+		Enabled: sourceMcp.Enabled,
+		Servers: sourceMcp.Servers,
+		Meta:    sourceMcp.Meta,
+	}
+	if err := repo.DuplicateAgentProfile(ctx, clone, copiedMcp); err != nil {
+		t.Fatalf("DuplicateAgentProfile: %v", err)
+	}
+
+	if clone.ID == source.ID || clone.ID == "" {
+		t.Fatalf("copy ID = %q, want a fresh ID", clone.ID)
+	}
+	got, err := repo.GetAgentProfile(ctx, clone.ID)
+	if err != nil {
+		t.Fatalf("get copy: %v", err)
+	}
+	// The duplicate must NOT be forced enabled like CreateAgentProfile: a
+	// disabled source produces a disabled copy in the same write.
+	if got.Enabled {
+		t.Error("duplicate enabled = true, want false (source disabled)")
+	}
+	if got.Name != "Default Copy" || got.Model != "model-1" || got.Mode != "plan" ||
+		!got.AutoApprove || !got.CLIPassthrough || got.CommandPrefix != "greywall --" ||
+		len(got.CLIFlags) != 1 || got.CLIFlags[0].Flag != "--allow-all-tools" ||
+		len(got.EnvVars) != 1 || got.EnvVars[0].Key != "FOO" {
+		t.Errorf("copy configuration not preserved: %+v", got)
+	}
+	if !got.CreatedAt.Equal(got.UpdatedAt) {
+		t.Errorf("copy timestamps differ: created=%v updated=%v", got.CreatedAt, got.UpdatedAt)
+	}
+
+	gotMcp, err := repo.GetAgentProfileMcpConfig(ctx, clone.ID)
+	if err != nil {
+		t.Fatalf("get copy mcp config: %v", err)
+	}
+	if gotMcp == nil || !gotMcp.Enabled {
+		t.Fatal("copy mcp config missing or disabled")
+	}
+	servers, ok := gotMcp.Servers["github"].(map[string]interface{})
+	if !ok || servers["url"] != "https://api.github.com" {
+		t.Errorf("copy mcp servers = %+v, want github entry preserved", gotMcp.Servers)
+	}
+	if gotMcp.Meta["k"] != "v" {
+		t.Errorf("copy mcp meta = %+v, want k=v", gotMcp.Meta)
+	}
+
+	// The source row must be untouched.
+	srcAgain, err := repo.GetAgentProfile(ctx, source.ID)
+	if err != nil || srcAgain == nil || srcAgain.Enabled {
+		t.Errorf("source row altered by duplicate: err=%v enabled=%v", err, srcAgain.Enabled)
+	}
+}
+
+// TestDuplicateAgentProfile_NoMcpConfig verifies the copy is created without
+// an MCP row when none is passed.
+func TestDuplicateAgentProfile_NoMcpConfig(t *testing.T) {
+	repo := newFreshRepo(t)
+	ctx := context.Background()
+
+	if err := repo.CreateAgent(ctx, &models.Agent{Name: "test-agent"}); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+	agent, err := repo.GetAgentByName(ctx, "test-agent")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	source := &models.AgentProfile{AgentID: agent.ID, Name: "Default"}
+	if err := repo.CreateAgentProfile(ctx, source); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+
+	clone := &models.AgentProfile{AgentID: agent.ID, Name: "Default Copy"}
+	if err := repo.DuplicateAgentProfile(ctx, clone, nil); err != nil {
+		t.Fatalf("DuplicateAgentProfile: %v", err)
+	}
+	if _, err := repo.GetAgentProfileMcpConfig(ctx, clone.ID); err == nil {
+		t.Fatal("expected no MCP row for a copy without config")
+	}
+}

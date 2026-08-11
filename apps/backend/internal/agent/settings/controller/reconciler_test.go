@@ -34,19 +34,20 @@ func (f *fakeCapReader) Get(agentType string) (hostutility.AgentCapabilities, bo
 
 // fakeStore implements just enough of store.Repository for the reconciler.
 type fakeStore struct {
-	agents        map[string]*models.Agent                 // keyed by DB ID
-	byName        map[string]*models.Agent                 // keyed by Name
-	profiles      map[string][]*models.AgentProfile        // keyed by DB agent ID (live)
-	deleted       map[string][]*models.AgentProfile        // keyed by DB agent ID (soft-deleted)
-	mcpConfigs    map[string]*models.AgentProfileMcpConfig // keyed by profile ID
-	created       []*models.AgentProfile
-	updated       []*models.AgentProfile
-	softDeleted   []string
-	nextAgentID   int
-	nextProfID    int
-	getByNameErr  error
-	listAgentsErr error
-	listProfErr   map[string]error
+	agents           map[string]*models.Agent                 // keyed by DB ID
+	byName           map[string]*models.Agent                 // keyed by Name
+	profiles         map[string][]*models.AgentProfile        // keyed by DB agent ID (live)
+	deleted          map[string][]*models.AgentProfile        // keyed by DB agent ID (soft-deleted)
+	mcpConfigs       map[string]*models.AgentProfileMcpConfig // keyed by profile ID
+	created          []*models.AgentProfile
+	updated          []*models.AgentProfile
+	softDeleted      []string
+	nextAgentID      int
+	nextProfID       int
+	getByNameErr     error
+	listAgentsErr    error
+	listProfErr      map[string]error
+	duplicateProfErr error
 }
 
 func newFakeStore() *fakeStore {
@@ -115,6 +116,24 @@ func (f *fakeStore) CreateAgentProfile(_ context.Context, p *models.AgentProfile
 	p.ID = "profile-" + strconv.Itoa(f.nextProfID)
 	f.profiles[p.AgentID] = append(f.profiles[p.AgentID], p)
 	f.created = append(f.created, p)
+	return nil
+}
+
+func (f *fakeStore) DuplicateAgentProfile(_ context.Context, p *models.AgentProfile, mcpConfig *models.AgentProfileMcpConfig) error {
+	if f.duplicateProfErr != nil {
+		return f.duplicateProfErr
+	}
+	f.nextProfID++
+	p.ID = "profile-" + strconv.Itoa(f.nextProfID)
+	now := time.Now().UTC()
+	p.CreatedAt = now
+	p.UpdatedAt = now
+	f.profiles[p.AgentID] = append(f.profiles[p.AgentID], p)
+	f.created = append(f.created, p)
+	if mcpConfig != nil {
+		mcpConfig.ProfileID = p.ID
+		f.mcpConfigs[p.ID] = mcpConfig
+	}
 	return nil
 }
 

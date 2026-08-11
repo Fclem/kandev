@@ -167,6 +167,35 @@ func TestDuplicateProfile_CopiesDisabledState(t *testing.T) {
 	if len(st.created) != 1 || st.created[0].Enabled {
 		t.Errorf("stored copy enabled = %v, want false", st.created[0].Enabled)
 	}
+	// The disabled state must be part of the single atomic duplicate write:
+	// no follow-up enabled flip is allowed (a flip would create a window where
+	// the copy is selectable and would need a second write).
+	if len(st.updated) != 0 {
+		t.Errorf("duplicate issued %d follow-up updates, want 0 (atomic write)", len(st.updated))
+	}
+	// The response timestamps must be the ones actually stored (no stale
+	// insert timestamp after a separate write).
+	stored := st.created[0]
+	if !result.CreatedAt.Equal(stored.CreatedAt) || !result.UpdatedAt.Equal(stored.UpdatedAt) {
+		t.Errorf("response timestamps (%v/%v) differ from stored (%v/%v)",
+			result.CreatedAt, result.UpdatedAt, stored.CreatedAt, stored.UpdatedAt)
+	}
+}
+
+func TestDuplicateProfile_StoreFailureLeavesNoCopy(t *testing.T) {
+	source := sourceProfile()
+	ctrl, st := duplicateSetup(source)
+	wantErr := errors.New("boom")
+	st.duplicateProfErr = wantErr
+
+	_, err := ctrl.DuplicateProfile(context.Background(), DuplicateProfileRequest{ID: source.ID})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("err = %v, want %v", err, wantErr)
+	}
+	if len(st.created) != 0 || len(st.mcpConfigs) != 0 {
+		t.Errorf("partial copy persisted despite store error: created=%d mcp=%d",
+			len(st.created), len(st.mcpConfigs))
+	}
 }
 
 func TestDuplicateProfile_CopiesMcpConfig(t *testing.T) {

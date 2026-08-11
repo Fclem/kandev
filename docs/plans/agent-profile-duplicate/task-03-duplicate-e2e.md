@@ -32,6 +32,7 @@ spec: "../../specs/agents/profile-duplicate.md"
 ## Files likely touched
 
 - `apps/web/e2e/tests/settings/agent-profile-duplicate.spec.ts` (new)
+- `apps/web/e2e/tests/settings/mobile-agent-profile-duplicate.spec.ts` (new — mobile parity: Pixel 5 tap on the 44px row control, copy row appears, no horizontal overflow)
 
 ## Dependencies
 

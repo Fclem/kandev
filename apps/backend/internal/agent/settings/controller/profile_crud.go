@@ -269,6 +269,10 @@ type DuplicateProfileRequest struct {
 // last-run timestamp, or consecutive-failure count. No in-use checks apply —
 // a brand-new row cannot be referenced by sessions, watchers, automations,
 // or routing tiers yet.
+//
+// The copy is committed in one repository transaction (row + MCP config), so
+// a failure leaves no partial profile and a disabled source never becomes
+// briefly selectable.
 func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileRequest) (*dto.AgentProfileDTO, error) {
 	source, err := c.repo.GetAgentProfile(ctx, req.ID)
 	if err != nil {
@@ -309,34 +313,24 @@ func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileR
 		Settings:              source.Settings,
 		Permissions:           source.Permissions,
 	}
-	if err := c.repo.CreateAgentProfile(ctx, clone); err != nil {
-		return nil, err
-	}
-	// The store creates every new profile enabled (existing invariant). A
-	// disabled source means a disabled copy, so flip the row after insert.
-	if !source.Enabled {
-		if _, err := c.repo.UpdateAgentProfileEnabled(ctx, clone.ID, false); err != nil {
-			return nil, err
-		}
-		clone.Enabled = false
-	}
-	// Copy the MCP config row when the source has one, deep-copied under the
-	// new profile ID. A source without a row leaves the copy without one: the
-	// default-config semantics and boot EnsureDefaultMcpConfig cover
-	// MCP-supporting agents.
-	mcpConfig, err := c.repo.GetAgentProfileMcpConfig(ctx, source.ID)
+	// Read the source's MCP config up front; the copy is committed together
+	// with it in one transaction. A source without a row leaves the copy
+	// without one: the default-config semantics and boot EnsureDefaultMcpConfig
+	// cover MCP-supporting agents.
+	var mcpConfig *models.AgentProfileMcpConfig
+	mcpConfig, err = c.repo.GetAgentProfileMcpConfig(ctx, source.ID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 	if mcpConfig != nil {
-		if err := c.repo.UpsertAgentProfileMcpConfig(ctx, &models.AgentProfileMcpConfig{
-			ProfileID: clone.ID,
-			Enabled:   mcpConfig.Enabled,
-			Servers:   cloneStringInterfaceMap(mcpConfig.Servers),
-			Meta:      cloneStringInterfaceMap(mcpConfig.Meta),
-		}); err != nil {
-			return nil, err
+		mcpConfig = &models.AgentProfileMcpConfig{
+			Enabled: mcpConfig.Enabled,
+			Servers: cloneStringInterfaceMap(mcpConfig.Servers),
+			Meta:    cloneStringInterfaceMap(mcpConfig.Meta),
 		}
+	}
+	if err := c.repo.DuplicateAgentProfile(ctx, clone, mcpConfig); err != nil {
+		return nil, err
 	}
 	result := toProfileDTO(clone)
 	return &result, nil

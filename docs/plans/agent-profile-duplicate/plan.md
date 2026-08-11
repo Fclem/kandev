@@ -45,19 +45,22 @@ Add to `apps/backend/internal/agent/settings/controller/profile_crud.go`:
   3. Name: `strings.TrimSpace(source.Name) + " Copy"`. The name is persisted
      data, not UI copy (same convention as seeded executor/repository names),
      so the suffix is a plain string in Go.
-  4. `repo.CreateAgentProfile(ctx, clone)` — the store sets a new UUID,
-     timestamps, and forces `Enabled=true` (existing store invariant).
-  5. If `!source.Enabled`, call `repo.UpdateAgentProfileEnabled(ctx,
-     clone.ID, false)` and set `clone.Enabled = false` so the copy inherits
-     the source's selection state.
-  6. Copy the MCP config row when the source has one:
-     `repo.GetAgentProfileMcpConfig(ctx, source.ID)`; tolerate
-     `sql.ErrNoRows`/nil; when non-nil, deep-copy `Servers` and `Meta` maps
-     into a new `models.AgentProfileMcpConfig{ProfileID: clone.ID, ...}` and
-     `repo.UpsertAgentProfileMcpConfig`. When the source has no row, leave
-     the copy without one — the existing default-config semantics and boot
-     `EnsureDefaultMcpConfig` cover MCP-supporting agents.
-  7. Return `toProfileDTO(clone)`.
+  4. Read the source's MCP config row when it has one (`repo
+     .GetAgentProfileMcpConfig(ctx, source.ID)`; tolerate `sql.ErrNoRows` /
+     nil); deep-copy `Servers` and `Meta` into a fresh
+     `models.AgentProfileMcpConfig` (ProfileID filled by the repo). A source
+     without a row leaves the copy without one — the default-config
+     semantics and boot `EnsureDefaultMcpConfig` cover MCP-supporting
+     agents.
+  5. `repo.DuplicateAgentProfile(ctx, clone, mcpConfig)` — NEW atomic
+     repository operation (adversarial review round 1): one transaction
+     inserts the row with the caller-provided `Enabled` state (NOT forced
+     true like `CreateAgentProfile`, so a disabled source never becomes
+     briefly selectable) and upserts the MCP config row. A failure rolls
+     back, leaving no partial copy — retrying cannot duplicate. The store
+     assigns the fresh UUID and a single `CreatedAt`/`UpdatedAt` pair, which
+     the returned DTO reflects (no stale timestamp after a second write).
+  6. Return `toProfileDTO(clone)`.
 
 Env-var secret refs are copied verbatim; they were validated when the source
 was created/updated, so no re-validation is needed.
@@ -82,15 +85,21 @@ In `apps/backend/internal/agent/settings/handlers/handlers.go`:
   - full-config copy: source with model/fallback/mode/config options/CLI
     flags/env vars/command prefix/auto-approve/cli-passthrough duplicates
     with equal fields, new ID, `Default Copy` name, `user_modified` true;
-  - disabled source → disabled copy;
+  - disabled source → disabled copy stored in the single atomic write (no
+    follow-up enabled flip, timestamps match the stored row);
   - MCP config row copied to the new profile ID with equal enabled/servers/meta
     (extend the shared `fakeStore` in `reconciler_test.go` with an
     `mcpConfigs` map + working `GetAgentProfileMcpConfig` /
-    `UpsertAgentProfileMcpConfig`, additively — other tests only observe
-    the existing nil behaviour);
+    `UpsertAgentProfileMcpConfig` + `DuplicateAgentProfile`, additively —
+    other tests only observe the existing nil behaviour);
+  - store failure propagates and leaves no partial copy;
   - unknown ID → `ErrAgentProfileNotFound`;
   - empty source name (`""` → `" Copy"` is acceptable; source names are
     non-empty by validation, but pin the suffix behaviour).
+- Store, new file `apps/backend/internal/agent/settings/store/sqlite_duplicate_test.go`:
+  sqlite `DuplicateAgentProfile` round-trip — fresh ID, full configuration
+  preserved, disabled copy stays disabled (not forced enabled), MCP row
+  copied, source untouched; no MCP row created when none passed.
 - Handler, `apps/backend/internal/agent/settings/handlers/interim_settings_interlock_test.go`:
   add `{method: POST, path: "/api/v1/agent-profiles/profile-1/duplicate"}`
   to the route list that must return 403 without the interlock token.

@@ -75,6 +75,10 @@ func (m *MockRepository) CreateAgentProfile(ctx context.Context, profile *models
 	return nil
 }
 
+func (m *MockRepository) DuplicateAgentProfile(ctx context.Context, profile *models.AgentProfile, mcpConfig *models.AgentProfileMcpConfig) error {
+	return nil
+}
+
 func (m *MockRepository) UpdateAgentProfile(ctx context.Context, profile *models.AgentProfile) error {
 	if m.updateAgentProfileFn != nil {
 		return m.updateAgentProfileFn(ctx, profile)

@@ -17,12 +17,13 @@ spec: "../../specs/agents/profile-duplicate.md"
   `AgentProfile`.
 - Each profile row on `/settings/agents` shows a Duplicate icon button
   (outside the row link, beside the enabled switch) with an accessible label
-  `Duplicate <name>` and `data-testid="duplicate-profile-<id>"`. Clicking it
-  creates the copy and adds the new row to the store immediately (toast on
-  success/failure). No navigation.
+  `Duplicate <name>`, `data-testid="duplicate-profile-<id>"`, and a touch
+  target of at least 44×44px. Clicking it creates the copy and adds the new
+  row to the store immediately (toast on success/failure). No navigation.
 - The profile settings page header (`/settings/agents/<agent>/profiles/<id>`)
-  shows a Duplicate button (`data-testid="duplicate-profile-header"`). On
-  success it toasts and navigates to the copy's settings page.
+  shows a Duplicate button (`data-testid="duplicate-profile-header"`,
+  `min-h-11` touch target). On success it toasts and navigates to the copy's
+  settings page.
 - All new user-facing copy goes through `t()`; the persisted copy name stays
   server-side (`<source> Copy`) and is not localized.
 - New en keys exist in `agents.json`; the pseudo locale is regenerated;

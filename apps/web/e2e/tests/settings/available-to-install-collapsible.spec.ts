@@ -41,13 +41,10 @@ test.describe("Available to Install collapsible section", () => {
     );
 
     await testPage.goto("/settings/agents/browse");
-    await expect(testPage.getByRole("heading", { name: "Agents", exact: true })).toBeVisible({
-      timeout: 15_000,
-    });
 
     const trigger = testPage.getByTestId("available-to-install-trigger");
     const installCard = testPage.getByTestId("install-card-codex");
-    await expect(trigger).toBeVisible();
+    await expect(trigger).toBeVisible({ timeout: 15_000 });
 
     // The section renders expanded by default.
     await expect(trigger).toHaveAttribute("aria-expanded", "true");

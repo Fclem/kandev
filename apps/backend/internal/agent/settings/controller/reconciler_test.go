@@ -34,10 +34,11 @@ func (f *fakeCapReader) Get(agentType string) (hostutility.AgentCapabilities, bo
 
 // fakeStore implements just enough of store.Repository for the reconciler.
 type fakeStore struct {
-	agents        map[string]*models.Agent          // keyed by DB ID
-	byName        map[string]*models.Agent          // keyed by Name
-	profiles      map[string][]*models.AgentProfile // keyed by DB agent ID (live)
-	deleted       map[string][]*models.AgentProfile // keyed by DB agent ID (soft-deleted)
+	agents        map[string]*models.Agent                 // keyed by DB ID
+	byName        map[string]*models.Agent                 // keyed by Name
+	profiles      map[string][]*models.AgentProfile        // keyed by DB agent ID (live)
+	deleted       map[string][]*models.AgentProfile        // keyed by DB agent ID (soft-deleted)
+	mcpConfigs    map[string]*models.AgentProfileMcpConfig // keyed by profile ID
 	created       []*models.AgentProfile
 	updated       []*models.AgentProfile
 	softDeleted   []string
@@ -50,10 +51,11 @@ type fakeStore struct {
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		agents:   map[string]*models.Agent{},
-		byName:   map[string]*models.Agent{},
-		profiles: map[string][]*models.AgentProfile{},
-		deleted:  map[string][]*models.AgentProfile{},
+		agents:     map[string]*models.Agent{},
+		byName:     map[string]*models.Agent{},
+		profiles:   map[string][]*models.AgentProfile{},
+		deleted:    map[string][]*models.AgentProfile{},
+		mcpConfigs: map[string]*models.AgentProfileMcpConfig{},
 	}
 }
 
@@ -97,10 +99,14 @@ func (f *fakeStore) ListTUIAgents(context.Context) ([]*models.Agent, error) {
 	return nil, nil
 }
 
-func (f *fakeStore) GetAgentProfileMcpConfig(context.Context, string) (*models.AgentProfileMcpConfig, error) {
+func (f *fakeStore) GetAgentProfileMcpConfig(_ context.Context, profileID string) (*models.AgentProfileMcpConfig, error) {
+	if cfg, ok := f.mcpConfigs[profileID]; ok {
+		return cfg, nil
+	}
 	return nil, nil
 }
-func (f *fakeStore) UpsertAgentProfileMcpConfig(context.Context, *models.AgentProfileMcpConfig) error {
+func (f *fakeStore) UpsertAgentProfileMcpConfig(_ context.Context, config *models.AgentProfileMcpConfig) error {
+	f.mcpConfigs[config.ProfileID] = config
 	return nil
 }
 

@@ -75,6 +75,7 @@ func (h *Handlers) registerHTTP(router *gin.Engine) {
 	api.GET("/agent-update/jobs/:id", h.httpGetAgentUpdateJob)
 	api.PATCH("/agent-profiles/:id", h.interlock, h.httpUpdateProfile)
 	api.DELETE("/agent-profiles/:id", h.interlock, h.httpDeleteProfile)
+	api.POST("/agent-profiles/:id/duplicate", h.interlock, h.httpDuplicateProfile)
 	api.GET("/agent-profiles/:id/mcp-config", h.httpGetProfileMcpConfig)
 	api.POST("/agent-profiles/:id/mcp-config", h.interlock, h.httpUpdateProfileMcpConfig)
 }
@@ -616,6 +617,37 @@ func (h *Handlers) httpUpdateProfile(c *gin.Context) {
 	}
 	if h.hub != nil {
 		notification, _ := ws.NewNotification(ws.ActionAgentProfileUpdated, gin.H{
+			"profile": resp,
+		})
+		h.hub.Broadcast(notification)
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// httpDuplicateProfile copies a profile's full configuration into a new row
+// named "<source> copy" and returns the new profile. No request body: the
+// copy name is derived server-side. The existing agent.profile.created
+// notification lets every open settings surface pick the copy up live.
+func (h *Handlers) httpDuplicateProfile(c *gin.Context) {
+	profileID := c.Param("id")
+	if profileID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "profile id is required"})
+		return
+	}
+	resp, err := h.controller.DuplicateProfile(c.Request.Context(), controller.DuplicateProfileRequest{
+		ID: profileID,
+	})
+	if err != nil {
+		if err == controller.ErrAgentProfileNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "agent profile not found"})
+			return
+		}
+		h.logger.Error("failed to duplicate profile", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to duplicate profile"})
+		return
+	}
+	if h.hub != nil {
+		notification, _ := ws.NewNotification(ws.ActionAgentProfileCreated, gin.H{
 			"profile": resp,
 		})
 		h.hub.Broadcast(notification)

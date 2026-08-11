@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -252,6 +254,142 @@ func (c *Controller) UpdateProfile(ctx context.Context, req UpdateProfileRequest
 	}
 	result := toProfileDTO(profile)
 	return &result, nil
+}
+
+type DuplicateProfileRequest struct {
+	ID string
+}
+
+// DuplicateProfile creates an independent copy of an existing profile. The
+// copy keeps every configuration field (model, mode, config options, CLI
+// flags, env vars, launcher prefix, auto-approve flags, enabled state, MCP
+// config) under a fresh row named "<source> Copy", so a user can start a
+// variant from a working profile without re-entering it. Runtime state is
+// intentionally not copied: the copy starts idle with no pause reason,
+// last-run timestamp, or consecutive-failure count. No in-use checks apply —
+// a brand-new row cannot be referenced by sessions, watchers, automations,
+// or routing tiers yet.
+func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileRequest) (*dto.AgentProfileDTO, error) {
+	source, err := c.repo.GetAgentProfile(ctx, req.ID)
+	if err != nil {
+		if isProfileNotFoundErr(err) {
+			return nil, ErrAgentProfileNotFound
+		}
+		return nil, err
+	}
+	clone := &models.AgentProfile{
+		AgentID:               source.AgentID,
+		Name:                  strings.TrimSpace(source.Name) + " Copy",
+		AgentDisplayName:      source.AgentDisplayName,
+		Model:                 source.Model,
+		FallbackModel:         strings.TrimSpace(source.FallbackModel),
+		AutoFallback:          source.AutoFallback,
+		Mode:                  source.Mode,
+		ConfigOptions:         profileconfig.SanitizeConfigOptions(cloneStringMap(source.ConfigOptions)),
+		AllowIndexing:         source.AllowIndexing,
+		AutoApprove:           source.AutoApprove,
+		CLIPassthrough:        source.CLIPassthrough,
+		CLIFlags:              cloneCLIFlags(source.CLIFlags),
+		EnvVars:               cloneEnvVars(source.EnvVars),
+		CommandPrefix:         source.CommandPrefix,
+		UserModified:          true,
+		Enabled:               source.Enabled,
+		WorkspaceID:           source.WorkspaceID,
+		Role:                  source.Role,
+		Icon:                  source.Icon,
+		ReportsTo:             source.ReportsTo,
+		SkillIDs:              source.SkillIDs,
+		DesiredSkills:         source.DesiredSkills,
+		MaxConcurrentSessions: source.MaxConcurrentSessions,
+		CooldownSec:           source.CooldownSec,
+		SkipIdleRuns:          source.SkipIdleRuns,
+		FailureThreshold:      cloneIntPtr(source.FailureThreshold),
+		ExecutorPreference:    source.ExecutorPreference,
+		BudgetMonthlyCents:    source.BudgetMonthlyCents,
+		Settings:              source.Settings,
+		Permissions:           source.Permissions,
+	}
+	if err := c.repo.CreateAgentProfile(ctx, clone); err != nil {
+		return nil, err
+	}
+	// The store creates every new profile enabled (existing invariant). A
+	// disabled source means a disabled copy, so flip the row after insert.
+	if !source.Enabled {
+		if _, err := c.repo.UpdateAgentProfileEnabled(ctx, clone.ID, false); err != nil {
+			return nil, err
+		}
+		clone.Enabled = false
+	}
+	// Copy the MCP config row when the source has one, deep-copied under the
+	// new profile ID. A source without a row leaves the copy without one: the
+	// default-config semantics and boot EnsureDefaultMcpConfig cover
+	// MCP-supporting agents.
+	mcpConfig, err := c.repo.GetAgentProfileMcpConfig(ctx, source.ID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	if mcpConfig != nil {
+		if err := c.repo.UpsertAgentProfileMcpConfig(ctx, &models.AgentProfileMcpConfig{
+			ProfileID: clone.ID,
+			Enabled:   mcpConfig.Enabled,
+			Servers:   cloneStringInterfaceMap(mcpConfig.Servers),
+			Meta:      cloneStringInterfaceMap(mcpConfig.Meta),
+		}); err != nil {
+			return nil, err
+		}
+	}
+	result := toProfileDTO(clone)
+	return &result, nil
+}
+
+// isProfileNotFoundErr reports whether err means "no live profile row with
+// that ID". The sqlite store surfaces it as sql.ErrNoRows from GetAgentProfile
+// and as an "agent profile not found" message from the update/delete paths;
+// fakes and future stores may use either shape.
+func isProfileNotFoundErr(err error) bool {
+	return errors.Is(err, sql.ErrNoRows) || strings.Contains(err.Error(), "agent profile not found")
+}
+
+func cloneCLIFlags(in []models.CLIFlag) []models.CLIFlag {
+	out := make([]models.CLIFlag, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneEnvVars(in []models.ProfileEnvVar) []models.ProfileEnvVar {
+	out := make([]models.ProfileEnvVar, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneStringInterfaceMap(in map[string]interface{}) map[string]interface{} {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]interface{}, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneIntPtr(in *int) *int {
+	if in == nil {
+		return nil
+	}
+	v := *in
+	return &v
 }
 
 func (c *Controller) validateGlobalSecretRefs(ctx context.Context, envVars []dto.ProfileEnvVarDTO) error {

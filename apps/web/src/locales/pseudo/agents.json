@@ -214,5 +214,9 @@
   "watcherKindGithubIssue": "ĜĩţĤũƀ Ĩśśũēś",
   "watcherKindGithubReview": "ĜĩţĤũƀ ƤŔ Ŕēvĩēŵś",
   "watcherKindJira": "Ĵĩŕà",
-  "watcherKindLinear": "Ĺĩńēàŕ"
+  "watcherKindLinear": "Ĺĩńēàŕ",
+  "duplicate": "Ďũƥĺĩćàţē",
+  "duplicateProfileNamed": "Ďũƥĺĩćàţē {{name}}",
+  "duplicateProfileSuccess": "Ƥŕōƒĩĺē ďũƥĺĩćàţēď",
+  "failedToDuplicateProfile": "Ƒàĩĺēď ţō ďũƥĺĩćàţē ƥŕōƒĩĺē"
 }

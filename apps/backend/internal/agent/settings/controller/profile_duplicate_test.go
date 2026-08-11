@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kandev/kandev/internal/agent/settings/models"
+	"github.com/kandev/kandev/internal/agent/settings/store"
 )
 
 // sourceProfile returns a fully-populated kanban-flavour profile so every
@@ -269,4 +270,42 @@ func TestDuplicateProfile_NameSuffixFromEmptySourceName(t *testing.T) {
 		t.Errorf("copy name = %q, want %q", result.Name, " Copy")
 	}
 	_ = st
+}
+
+// TestDuplicateProfile_RetriesOnConcurrentChange verifies the controller
+// re-reads the source and retries when the repository aborts the first
+// attempt with ErrProfileChanged (a concurrent writer), ending with exactly
+// one copy.
+func TestDuplicateProfile_RetriesOnConcurrentChange(t *testing.T) {
+	source := sourceProfile()
+	ctrl, st := duplicateSetup(source)
+	st.duplicateChangedOnce = true
+
+	result, err := ctrl.DuplicateProfile(context.Background(), DuplicateProfileRequest{ID: source.ID})
+	if err != nil {
+		t.Fatalf("DuplicateProfile after retry: %v", err)
+	}
+	if result.ID == source.ID || result.ID == "" {
+		t.Fatalf("copy ID = %q, want a fresh ID", result.ID)
+	}
+	if len(st.created) != 1 {
+		t.Fatalf("stored copies = %d, want exactly 1 after retry", len(st.created))
+	}
+}
+
+// TestDuplicateProfile_ExhaustsRetriesOnPersistentChange verifies the
+// controller gives up (and creates nothing) when every attempt aborts with
+// ErrProfileChanged.
+func TestDuplicateProfile_ExhaustsRetriesOnPersistentChange(t *testing.T) {
+	source := sourceProfile()
+	ctrl, st := duplicateSetup(source)
+	st.duplicateProfErr = store.ErrProfileChanged
+
+	_, err := ctrl.DuplicateProfile(context.Background(), DuplicateProfileRequest{ID: source.ID})
+	if !errors.Is(err, store.ErrProfileChanged) {
+		t.Fatalf("err = %v, want ErrProfileChanged", err)
+	}
+	if len(st.created) != 0 {
+		t.Errorf("copy created despite persistent source changes: %d rows", len(st.created))
+	}
 }

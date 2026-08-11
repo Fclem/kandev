@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { duplicateAgentProfileAction } from "@/app/actions/agents";
 import { useAppStoreApi } from "@/components/state-provider";
 import { useToast } from "@/components/toast-provider";
@@ -76,9 +76,14 @@ export function applyProfileDuplicated(
 export function useProfileDuplicate() {
   const { toast } = useToast();
   const storeApi = useAppStoreApi();
+  // Per-profile in-flight guard: the row button stays clickable while the
+  // request runs, so a double-click must not issue two copies.
+  const pendingRef = useRef(new Set<string>());
 
   return useCallback(
     async (agent: Agent, profile: AgentProfile) => {
+      if (pendingRef.current.has(profile.id)) return;
+      pendingRef.current.add(profile.id);
       try {
         const created = await duplicateAgentProfileAction(profile.id);
         storeApi.setState((state) => applyProfileDuplicated(state, agent, created));
@@ -93,6 +98,8 @@ export function useProfileDuplicate() {
           description: error instanceof Error ? error.message : translate("agents:requestFailed"),
           variant: "error",
         });
+      } finally {
+        pendingRef.current.delete(profile.id);
       }
     },
     [storeApi, toast],

@@ -506,28 +506,77 @@ func (r *sqliteRepository) CreateAgentProfile(ctx context.Context, profile *mode
 // duplicate of a disabled profile must not become briefly selectable) and the
 // MCP config row is upserted when non-nil. A failure rolls back and leaves no
 // partial copy, so retrying after an error cannot create a duplicate row.
-func (r *sqliteRepository) DuplicateAgentProfile(ctx context.Context, profile *models.AgentProfile, mcpConfig *models.AgentProfileMcpConfig) error {
-	if profile.ID == "" {
-		profile.ID = uuid.New().String()
+//
+// The source rows are re-read inside the transaction and must still carry the
+// revisions the copy was built from; otherwise ErrProfileChanged is returned
+// and nothing is created. Combined with WAL snapshot isolation (a concurrent
+// commit after this transaction's first read aborts its write with a busy
+// error), the copy always reflects one consistent snapshot of the source.
+func (r *sqliteRepository) DuplicateAgentProfile(ctx context.Context, input DuplicateAgentProfileInput) error {
+	if input.Profile.ID == "" {
+		input.Profile.ID = uuid.New().String()
 	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	now := time.Now().UTC()
-	profile.CreatedAt = now
-	profile.UpdatedAt = now
-	if err := r.insertAgentProfile(ctx, tx, profile); err != nil {
+
+	if err := r.verifySourceSnapshot(ctx, tx, input); err != nil {
 		return err
 	}
-	if mcpConfig != nil {
-		mcpConfig.ProfileID = profile.ID
-		if err := r.upsertAgentProfileMcpConfig(ctx, tx, mcpConfig); err != nil {
+
+	now := time.Now().UTC()
+	input.Profile.CreatedAt = now
+	input.Profile.UpdatedAt = now
+	if err := r.insertAgentProfile(ctx, tx, input.Profile); err != nil {
+		return err
+	}
+	if input.McpConfig != nil {
+		input.McpConfig.ProfileID = input.Profile.ID
+		if err := r.upsertAgentProfileMcpConfig(ctx, tx, input.McpConfig); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+// verifySourceSnapshot checks, inside the duplicate transaction, that the
+// source rows still match the revisions the caller built the copy from. A
+// mismatch means a concurrent writer changed the source between the caller's
+// read and this transaction — duplicating anyway would produce a copy mixing
+// two points in time.
+func (r *sqliteRepository) verifySourceSnapshot(ctx context.Context, tx *sqlx.Tx, input DuplicateAgentProfileInput) error {
+	var sourceUpdated time.Time
+	err := tx.QueryRowContext(ctx, tx.Rebind(
+		`SELECT updated_at FROM agent_profiles WHERE id = ? AND deleted_at IS NULL`),
+		input.Source.ID).Scan(&sourceUpdated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrSourceProfileNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !sourceUpdated.Equal(input.Source.UpdatedAt) {
+		return ErrProfileChanged
+	}
+	if input.SourceMcp == nil {
+		return nil
+	}
+	var mcpUpdated time.Time
+	err = tx.QueryRowContext(ctx, tx.Rebind(
+		`SELECT updated_at FROM agent_profile_mcp_configs WHERE profile_id = ?`),
+		input.Source.ID).Scan(&mcpUpdated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrProfileChanged
+	}
+	if err != nil {
+		return err
+	}
+	if !mcpUpdated.Equal(input.SourceMcp.UpdatedAt) {
+		return ErrProfileChanged
+	}
+	return nil
 }
 
 // profileExecer is the subset of *sqlx.DB / *sqlx.Tx the shared insert and

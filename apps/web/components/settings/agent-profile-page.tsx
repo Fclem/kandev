@@ -12,7 +12,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Separator } from "@kandev/ui/separator";
 import { Switch } from "@kandev/ui/switch";
 import { useToast } from "@/components/toast-provider";
-import { useSettingsSaveContributor } from "@/components/settings/settings-save-provider";
+import {
+  useSettingsSaveContributor,
+  useSettingsSaveCoordinator,
+} from "@/components/settings/settings-save-provider";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { ProfileFormFields, type ProfileFormData } from "@/components/settings/profile-form-fields";
 import { profilePermissionValues } from "@/lib/agent-permissions";
@@ -77,6 +80,7 @@ type ProfileEditorHeaderProps = {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
   onDuplicate: () => void;
+  duplicating: boolean;
 };
 
 function profileSaveInvalidReason(
@@ -96,6 +100,7 @@ function ProfileEditorHeader({
   enabled,
   onEnabledChange,
   onDuplicate,
+  duplicating,
 }: ProfileEditorHeaderProps) {
   const { t } = useTranslation();
   return (
@@ -115,6 +120,8 @@ function ProfileEditorHeader({
           onClick={onDuplicate}
           data-testid="duplicate-profile-header"
           className="min-h-11"
+          disabled={duplicating}
+          aria-busy={duplicating}
           title={t("agents:duplicateProfileNamed", { name: savedProfileName })}
         >
           <IconCopy className="h-4 w-4 mr-2" />
@@ -420,19 +427,28 @@ function ProfileEditor({
 
   const storeApi = useAppStoreApi();
   const router = useRouter();
+  const { saveAll } = useSettingsSaveCoordinator();
+  const [duplicating, setDuplicating] = useState(false);
   const handleDuplicateProfile = useCallback(async () => {
-    // Save any unsaved edits first so the copy starts from what the user sees
-    // and the page is clean before navigating. handleSave surfaces its own
-    // failure toast, so a save failure aborts the duplicate without a
-    // double toast here.
-    if (isDirty) {
-      try {
-        await handleSave();
-      } catch {
+    if (duplicating) return;
+    setDuplicating(true);
+    try {
+      // Save EVERY dirty contributor (the profile editor AND the MCP card)
+      // so the copy starts from what the user sees. saveAll respects each
+      // contributor's canSave; when anything is invalid or fails to persist,
+      // it reports canLeave=false and we abort before posting.
+      const saved = await saveAll();
+      if (!saved.canLeave) {
+        const reason = profileSaveInvalidReason(draft.name, modelConfigResolutionPending, t);
+        if (reason) {
+          toast({
+            title: t("agents:failedToDuplicateProfile"),
+            description: reason,
+            variant: "error",
+          });
+        }
         return;
       }
-    }
-    try {
       const created = await duplicateAgentProfileAction(draft.id);
       // Merge the copy into the store so the destination page resolves it
       // without waiting on the WS round-trip.
@@ -455,8 +471,20 @@ function ProfileEditor({
         description: errorMessage(error),
         variant: "error",
       });
+    } finally {
+      setDuplicating(false);
     }
-  }, [agent, draft.id, handleSave, isDirty, router, storeApi, t, toast]);
+  }, [
+    agent,
+    draft.id,
+    duplicating,
+    modelConfigResolutionPending,
+    router,
+    saveAll,
+    storeApi,
+    t,
+    toast,
+  ]);
 
   return (
     <div className="space-y-8">
@@ -467,6 +495,7 @@ function ProfileEditor({
         enabled={draft.enabled ?? true}
         onEnabledChange={(next) => updateDraft({ enabled: next })}
         onDuplicate={() => void handleDuplicateProfile()}
+        duplicating={duplicating}
       />
 
       <Separator />

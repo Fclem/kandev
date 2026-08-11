@@ -52,15 +52,25 @@ Add to `apps/backend/internal/agent/settings/controller/profile_crud.go`:
      without a row leaves the copy without one — the default-config
      semantics and boot `EnsureDefaultMcpConfig` cover MCP-supporting
      agents.
-  5. `repo.DuplicateAgentProfile(ctx, clone, mcpConfig)` — NEW atomic
-     repository operation (adversarial review round 1): one transaction
-     inserts the row with the caller-provided `Enabled` state (NOT forced
-     true like `CreateAgentProfile`, so a disabled source never becomes
-     briefly selectable) and upserts the MCP config row. A failure rolls
-     back, leaving no partial copy — retrying cannot duplicate. The store
-     assigns the fresh UUID and a single `CreatedAt`/`UpdatedAt` pair, which
-     the returned DTO reflects (no stale timestamp after a second write).
-  6. Return `toProfileDTO(clone)`.
+  5. `repo.DuplicateAgentProfile(ctx, store.DuplicateAgentProfileInput{...})`
+     — NEW atomic repository operation (adversarial review round 1): one
+     transaction inserts the row with the caller-provided `Enabled` state
+     (NOT forced true like `CreateAgentProfile`, so a disabled source never
+     becomes briefly selectable) and upserts the MCP config row. A failure
+     rolls back, leaving no partial copy — retrying cannot duplicate. The
+     store assigns the fresh UUID and a single `CreatedAt`/`UpdatedAt` pair,
+     which the returned DTO reflects (no stale timestamp after a second
+     write).
+  6. **Consistent snapshot (adversarial review round 5):** inside the
+     transaction the repository re-reads the source profile and MCP rows and
+     verifies their `updated_at` still match the revisions the copy was
+     built from (`ErrProfileChanged` / `ErrSourceProfileNotFound` otherwise);
+     WAL snapshot isolation aborts the write with a busy error if a
+     concurrent writer commits between the verification and the insert. The
+     controller retries (bounded, `maxDuplicateRetries = 2`) on
+     `ErrProfileChanged` / `ErrSourceProfileNotFound` / busy errors with a
+     fresh source read, so the copy always reflects one consistent snapshot.
+  7. Return `toProfileDTO(clone)`.
 
 Env-var secret refs are copied verbatim; they were validated when the source
 was created/updated, so no re-validation is needed.
@@ -149,13 +159,20 @@ export async function duplicateAgentProfileAction(profileId: string): Promise<Ag
 
 - `apps/web/components/settings/agent-profile-page.tsx`: add a Duplicate
   button to `ProfileEditorHeader` (copy icon + `t("agents:duplicate")`,
-  `data-testid="duplicate-profile-header"`). On success the handler first
-  saves any unsaved draft edits (a failed save aborts the duplicate), POSTs
-  the duplicate, merges the copy into the store, toasts
-  `agents:duplicateProfileSuccess`, and SPA-navigates via
-  `runWithNavigationBlockerBypassed(() => router.push(...))` to the copy's
-  page — never `window.location.assign`, so the success toast survives and
-  the dirty-settings blocker is already resolved by the save.
+  `data-testid="duplicate-profile-header"`, disabled + `aria-busy` while a
+  duplicate is in flight). On success the handler first saves EVERY dirty
+  contributor via the shared settings save coordinator
+  (`useSettingsSaveCoordinator().saveAll` — the profile editor AND its MCP
+  card; `saveAll` respects each contributor's `canSave`, so an invalid draft
+  aborts with a toast before the POST), POSTs the duplicate, merges the copy
+  into the store, toasts `agents:duplicateProfileSuccess`, and SPA-navigates
+  via `runWithNavigationBlockerBypassed(() => router.push(...))` to the
+  copy's page — never `window.location.assign`, so the success toast
+  survives and the dirty-settings blocker is already resolved by the save.
+  The row-level duplicate hook guards against double-clicks (per-profile
+  in-flight set). The profile save path (`syncAgentsToStore`) reconciles the
+  options slice by ID (`reconcileAgentProfileOptions`), preserving
+  WS-delivered orphan options exactly like the duplicate merge.
 
 ### i18n
 

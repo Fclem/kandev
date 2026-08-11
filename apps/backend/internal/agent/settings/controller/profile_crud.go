@@ -16,6 +16,7 @@ import (
 	"github.com/kandev/kandev/internal/agent/settings/dto"
 	"github.com/kandev/kandev/internal/agent/settings/models"
 	"github.com/kandev/kandev/internal/agent/settings/profileconfig"
+	"github.com/kandev/kandev/internal/agent/settings/store"
 	"github.com/kandev/kandev/internal/secrets"
 )
 
@@ -273,6 +274,11 @@ type DuplicateProfileRequest struct {
 // The copy is committed in one repository transaction (row + MCP config), so
 // a failure leaves no partial profile and a disabled source never becomes
 // briefly selectable.
+//
+// The source profile and MCP row are read up front, then the repository
+// re-verifies those revisions inside the transaction; a concurrent writer
+// between the reads and the insert aborts with a retryable error, so the
+// copy always reflects one consistent snapshot of the source.
 func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileRequest) (*dto.AgentProfileDTO, error) {
 	source, err := c.repo.GetAgentProfile(ctx, req.ID)
 	if err != nil {
@@ -281,7 +287,70 @@ func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileR
 		}
 		return nil, err
 	}
-	clone := &models.AgentProfile{
+	for attempt := 0; ; attempt++ {
+		// A source without an MCP row leaves the copy without one: the
+		// default-config semantics and boot EnsureDefaultMcpConfig cover
+		// MCP-supporting agents.
+		var sourceMcp *models.AgentProfileMcpConfig
+		sourceMcp, err = c.repo.GetAgentProfileMcpConfig(ctx, source.ID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			sourceMcp = nil
+		}
+		clone := duplicateClone(source)
+		var mcpCopy *models.AgentProfileMcpConfig
+		if sourceMcp != nil {
+			mcpCopy = &models.AgentProfileMcpConfig{
+				Enabled: sourceMcp.Enabled,
+				Servers: cloneStringInterfaceMap(sourceMcp.Servers),
+				Meta:    cloneStringInterfaceMap(sourceMcp.Meta),
+			}
+		}
+		err = c.repo.DuplicateAgentProfile(ctx, store.DuplicateAgentProfileInput{
+			Source:    source,
+			SourceMcp: sourceMcp,
+			Profile:   clone,
+			McpConfig: mcpCopy,
+		})
+		if err == nil {
+			result := toProfileDTO(clone)
+			return &result, nil
+		}
+		if !isRetryableDuplicateErr(err) || attempt >= maxDuplicateRetries {
+			return nil, err
+		}
+		source, err = c.repo.GetAgentProfile(ctx, req.ID)
+		if err != nil {
+			if isProfileNotFoundErr(err) {
+				return nil, ErrAgentProfileNotFound
+			}
+			return nil, err
+		}
+	}
+}
+
+// maxDuplicateRetries bounds the number of re-attempts after a concurrent
+// source change. One retry covers the common single-writer race; the cap
+// prevents a hot loop under sustained concurrent edits.
+const maxDuplicateRetries = 2
+
+// isRetryableDuplicateErr reports whether a duplicate attempt failed because
+// the source changed concurrently (revision mismatch, source deleted, or a
+// WAL snapshot-isolation busy error on the write) rather than deterministically.
+func isRetryableDuplicateErr(err error) bool {
+	return errors.Is(err, store.ErrProfileChanged) ||
+		errors.Is(err, store.ErrSourceProfileNotFound) ||
+		strings.Contains(err.Error(), "database is locked") ||
+		strings.Contains(err.Error(), "database table is locked")
+}
+
+// duplicateClone builds the copy row from the source profile. Runtime state
+// is intentionally not copied: the copy starts idle with no pause reason,
+// last-run timestamp, or consecutive-failure count.
+func duplicateClone(source *models.AgentProfile) *models.AgentProfile {
+	return &models.AgentProfile{
 		AgentID:               source.AgentID,
 		Name:                  strings.TrimSpace(source.Name) + " Copy",
 		AgentDisplayName:      source.AgentDisplayName,
@@ -313,27 +382,6 @@ func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileR
 		Settings:              source.Settings,
 		Permissions:           source.Permissions,
 	}
-	// Read the source's MCP config up front; the copy is committed together
-	// with it in one transaction. A source without a row leaves the copy
-	// without one: the default-config semantics and boot EnsureDefaultMcpConfig
-	// cover MCP-supporting agents.
-	var mcpConfig *models.AgentProfileMcpConfig
-	mcpConfig, err = c.repo.GetAgentProfileMcpConfig(ctx, source.ID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-	if mcpConfig != nil {
-		mcpConfig = &models.AgentProfileMcpConfig{
-			Enabled: mcpConfig.Enabled,
-			Servers: cloneStringInterfaceMap(mcpConfig.Servers),
-			Meta:    cloneStringInterfaceMap(mcpConfig.Meta),
-		}
-	}
-	if err := c.repo.DuplicateAgentProfile(ctx, clone, mcpConfig); err != nil {
-		return nil, err
-	}
-	result := toProfileDTO(clone)
-	return &result, nil
 }
 
 // isProfileNotFoundErr reports whether err means "no live profile row with

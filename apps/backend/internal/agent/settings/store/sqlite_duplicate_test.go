@@ -42,9 +42,12 @@ func TestDuplicateAgentProfile_RoundTrip(t *testing.T) {
 		t.Fatalf("create source: %v", err)
 	}
 	// CreateAgentProfile forces enabled=true; simulate a user-disabled source.
-	if _, err := repo.UpdateAgentProfileEnabled(ctx, source.ID, false); err != nil {
+	// The returned timestamp is the DB revision the duplicate input must carry.
+	disabledAt, err := repo.UpdateAgentProfileEnabled(ctx, source.ID, false)
+	if err != nil {
 		t.Fatalf("disable source: %v", err)
 	}
+	source.UpdatedAt = disabledAt
 	sourceMcp := &models.AgentProfileMcpConfig{
 		ProfileID: source.ID,
 		Enabled:   true,
@@ -74,7 +77,12 @@ func TestDuplicateAgentProfile_RoundTrip(t *testing.T) {
 		Servers: sourceMcp.Servers,
 		Meta:    sourceMcp.Meta,
 	}
-	if err := repo.DuplicateAgentProfile(ctx, clone, copiedMcp); err != nil {
+	if err := repo.DuplicateAgentProfile(ctx, DuplicateAgentProfileInput{
+		Source:    source,
+		SourceMcp: sourceMcp,
+		Profile:   clone,
+		McpConfig: copiedMcp,
+	}); err != nil {
 		t.Fatalf("DuplicateAgentProfile: %v", err)
 	}
 
@@ -141,11 +149,50 @@ func TestDuplicateAgentProfile_NoMcpConfig(t *testing.T) {
 	}
 
 	clone := &models.AgentProfile{AgentID: agent.ID, Name: "Default Copy"}
-	if err := repo.DuplicateAgentProfile(ctx, clone, nil); err != nil {
+	if err := repo.DuplicateAgentProfile(ctx, DuplicateAgentProfileInput{
+		Source:  source,
+		Profile: clone,
+	}); err != nil {
 		t.Fatalf("DuplicateAgentProfile: %v", err)
 	}
 	if _, err := repo.GetAgentProfileMcpConfig(ctx, clone.ID); err == nil {
 		t.Fatal("expected no MCP row for a copy without config")
+	}
+}
+
+// TestDuplicateAgentProfile_DetectsConcurrentChange verifies the transaction
+// aborts with ErrProfileChanged when the source row moved on since the caller
+// built the copy (here: a stale revision), and creates nothing.
+func TestDuplicateAgentProfile_DetectsConcurrentChange(t *testing.T) {
+	repo := newFreshRepo(t)
+	ctx := context.Background()
+
+	if err := repo.CreateAgent(ctx, &models.Agent{Name: "test-agent"}); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+	agent, err := repo.GetAgentByName(ctx, "test-agent")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	source := &models.AgentProfile{AgentID: agent.ID, Name: "Default"}
+	if err := repo.CreateAgentProfile(ctx, source); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	// A concurrent writer bumps the source after the caller's snapshot.
+	if _, err := repo.UpdateAgentProfileEnabled(ctx, source.ID, false); err != nil {
+		t.Fatalf("bump source: %v", err)
+	}
+
+	clone := &models.AgentProfile{AgentID: agent.ID, Name: "Default Copy"}
+	err = repo.DuplicateAgentProfile(ctx, DuplicateAgentProfileInput{
+		Source:  source, // stale: UpdatedAt predates the bump above
+		Profile: clone,
+	})
+	if !errors.Is(err, ErrProfileChanged) {
+		t.Fatalf("err = %v, want ErrProfileChanged", err)
+	}
+	if _, err := repo.GetAgentProfile(ctx, clone.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("copy row created despite stale source: err=%v", err)
 	}
 }
 
@@ -168,6 +215,16 @@ func TestDuplicateAgentProfile_RollsBackMcpFailure(t *testing.T) {
 	if err := repo.CreateAgentProfile(ctx, source); err != nil {
 		t.Fatalf("create source: %v", err)
 	}
+	// The source has a valid MCP row so the snapshot verification passes and
+	// the failure below happens during the insert-time serialization.
+	sourceMcp := &models.AgentProfileMcpConfig{
+		ProfileID: source.ID,
+		Enabled:   true,
+		Servers:   map[string]interface{}{"ok": "v"},
+	}
+	if err := repo.UpsertAgentProfileMcpConfig(ctx, sourceMcp); err != nil {
+		t.Fatalf("seed source mcp: %v", err)
+	}
 
 	clone := &models.AgentProfile{AgentID: agent.ID, Name: "Default Copy"}
 	// A channel is not JSON-serializable: the MCP upsert fails during
@@ -177,7 +234,13 @@ func TestDuplicateAgentProfile_RollsBackMcpFailure(t *testing.T) {
 		Enabled: true,
 		Servers: map[string]interface{}{"bad": make(chan int)},
 	}
-	if err := repo.DuplicateAgentProfile(ctx, clone, badMcp); err == nil {
+	err = repo.DuplicateAgentProfile(ctx, DuplicateAgentProfileInput{
+		Source:    source,
+		SourceMcp: sourceMcp,
+		Profile:   clone,
+		McpConfig: badMcp,
+	})
+	if err == nil {
 		t.Fatal("expected MCP serialization error, got nil")
 	}
 	if _, err := repo.GetAgentProfile(ctx, clone.ID); !errors.Is(err, sql.ErrNoRows) {

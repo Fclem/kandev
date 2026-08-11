@@ -53,7 +53,12 @@ func (r *duplicateRepo) CreateAgentProfile(_ context.Context, p *models.AgentPro
 	return nil
 }
 
-func (r *duplicateRepo) DuplicateAgentProfile(_ context.Context, p *models.AgentProfile, mcpConfig *models.AgentProfileMcpConfig) error {
+func (r *duplicateRepo) DuplicateAgentProfile(_ context.Context, input store.DuplicateAgentProfileInput) error {
+	// Version check: the stored source must match the caller's snapshot.
+	if src, ok := r.profiles[input.Source.ID]; ok && !src.UpdatedAt.Equal(input.Source.UpdatedAt) {
+		return store.ErrProfileChanged
+	}
+	p := input.Profile
 	if p.ID == "" {
 		p.ID = "duplicate-" + p.Name
 	}
@@ -62,8 +67,8 @@ func (r *duplicateRepo) DuplicateAgentProfile(_ context.Context, p *models.Agent
 	p.UpdatedAt = now
 	r.profiles[p.ID] = p
 	r.created = append(r.created, p)
-	if mcpConfig != nil {
-		mcpConfig.ProfileID = p.ID
+	if input.McpConfig != nil {
+		input.McpConfig.ProfileID = p.ID
 	}
 	return nil
 }

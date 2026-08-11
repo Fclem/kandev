@@ -17,6 +17,7 @@ import (
 	"github.com/kandev/kandev/internal/agent/hostutility"
 	"github.com/kandev/kandev/internal/agent/registry"
 	"github.com/kandev/kandev/internal/agent/settings/models"
+	"github.com/kandev/kandev/internal/agent/settings/store"
 	"github.com/kandev/kandev/internal/agent/usage"
 	"github.com/kandev/kandev/internal/agentctl/acpcompat"
 	"github.com/kandev/kandev/internal/common/logger"
@@ -34,20 +35,21 @@ func (f *fakeCapReader) Get(agentType string) (hostutility.AgentCapabilities, bo
 
 // fakeStore implements just enough of store.Repository for the reconciler.
 type fakeStore struct {
-	agents           map[string]*models.Agent                 // keyed by DB ID
-	byName           map[string]*models.Agent                 // keyed by Name
-	profiles         map[string][]*models.AgentProfile        // keyed by DB agent ID (live)
-	deleted          map[string][]*models.AgentProfile        // keyed by DB agent ID (soft-deleted)
-	mcpConfigs       map[string]*models.AgentProfileMcpConfig // keyed by profile ID
-	created          []*models.AgentProfile
-	updated          []*models.AgentProfile
-	softDeleted      []string
-	nextAgentID      int
-	nextProfID       int
-	getByNameErr     error
-	listAgentsErr    error
-	listProfErr      map[string]error
-	duplicateProfErr error
+	agents               map[string]*models.Agent                 // keyed by DB ID
+	byName               map[string]*models.Agent                 // keyed by Name
+	profiles             map[string][]*models.AgentProfile        // keyed by DB agent ID (live)
+	deleted              map[string][]*models.AgentProfile        // keyed by DB agent ID (soft-deleted)
+	mcpConfigs           map[string]*models.AgentProfileMcpConfig // keyed by profile ID
+	created              []*models.AgentProfile
+	updated              []*models.AgentProfile
+	softDeleted          []string
+	nextAgentID          int
+	nextProfID           int
+	getByNameErr         error
+	listAgentsErr        error
+	listProfErr          map[string]error
+	duplicateProfErr     error
+	duplicateChangedOnce bool
 }
 
 func newFakeStore() *fakeStore {
@@ -119,10 +121,30 @@ func (f *fakeStore) CreateAgentProfile(_ context.Context, p *models.AgentProfile
 	return nil
 }
 
-func (f *fakeStore) DuplicateAgentProfile(_ context.Context, p *models.AgentProfile, mcpConfig *models.AgentProfileMcpConfig) error {
+func (f *fakeStore) DuplicateAgentProfile(_ context.Context, input store.DuplicateAgentProfileInput) error {
 	if f.duplicateProfErr != nil {
 		return f.duplicateProfErr
 	}
+	if f.duplicateChangedOnce {
+		f.duplicateChangedOnce = false
+		return store.ErrProfileChanged
+	}
+	// Version check mirrors the sqlite store: the stored source rows must
+	// still match the revisions the copy was built from.
+	if f.profiles[input.Source.AgentID] != nil {
+		for _, p := range f.profiles[input.Source.AgentID] {
+			if p.ID == input.Source.ID && !p.UpdatedAt.Equal(input.Source.UpdatedAt) {
+				return store.ErrProfileChanged
+			}
+		}
+	}
+	if input.SourceMcp != nil {
+		mcp, ok := f.mcpConfigs[input.Source.ID]
+		if !ok || !mcp.UpdatedAt.Equal(input.SourceMcp.UpdatedAt) {
+			return store.ErrProfileChanged
+		}
+	}
+	p := input.Profile
 	f.nextProfID++
 	p.ID = "profile-" + strconv.Itoa(f.nextProfID)
 	now := time.Now().UTC()
@@ -130,9 +152,9 @@ func (f *fakeStore) DuplicateAgentProfile(_ context.Context, p *models.AgentProf
 	p.UpdatedAt = now
 	f.profiles[p.AgentID] = append(f.profiles[p.AgentID], p)
 	f.created = append(f.created, p)
-	if mcpConfig != nil {
-		mcpConfig.ProfileID = p.ID
-		f.mcpConfigs[p.ID] = mcpConfig
+	if input.McpConfig != nil {
+		input.McpConfig.ProfileID = p.ID
+		f.mcpConfigs[p.ID] = input.McpConfig
 	}
 	return nil
 }

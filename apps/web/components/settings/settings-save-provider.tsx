@@ -63,6 +63,18 @@ type SaveResult = {
 const SettingsSaveRegistryContext = createContext<Registry | null>(null);
 const SettingsDirtyScopeContext = createContext<DirtyScopeRegistry | null>(null);
 
+export type SettingsSaveCoordinator = {
+  /** Save every dirty contributor. Respects each contributor's canSave;
+   * returns canLeave=false when any contributor is invalid or fails. */
+  saveAll: () => Promise<SaveResult>;
+  status: SettingsSaveStatus;
+  errorKind: SettingsSaveErrorKind | null;
+  hasDirty: boolean;
+  clearSavedStatus: () => void;
+};
+
+const SettingsSaveCoordinatorContext = createContext<SettingsSaveCoordinator | null>(null);
+
 export function SettingsSaveProvider({
   children,
   placement = "viewport",
@@ -148,25 +160,94 @@ export function SettingsSaveProvider({
   useSettingsBeforeUnloadGuard(hasDirty);
 
   return (
-    <SettingsSaveRegistryContext.Provider value={registry}>
+    <SettingsSaveProviderBody
+      registry={registry}
+      coordinator={{ saveAll, status, errorKind, hasDirty, clearSavedStatus }}
+      placement={placement}
+      displayStatus={displayStatus}
+      errorKind={errorKind}
+      dirtyContributorIds={dirtyContributors.map(({ contributor }) => contributor.id).join(",")}
+      invalidReason={invalidReason}
+      pendingNavigation={pendingNavigation}
+      isDiscarding={isDiscarding}
+      onSave={handleSave}
+      onReset={discardDirtyContributors}
+      onDiscardAndLeave={discardAndLeave}
+      onContinueEditing={continueEditing}
+    >
       {children}
-      {(hasDirty || status === "saved") && (
-        <SettingsFloatingSave
-          status={displayStatus}
-          placement={placement}
-          errorKind={errorKind}
-          dirtyContributorIds={dirtyContributors.map(({ contributor }) => contributor.id).join(",")}
-          invalidReason={invalidReason}
-          navigationIntent={pendingNavigation}
-          isDiscarding={isDiscarding}
-          onSave={handleSave}
-          onReset={discardDirtyContributors}
-          onDiscardAndLeave={discardAndLeave}
-          onContinueEditing={continueEditing}
-        />
-      )}
+    </SettingsSaveProviderBody>
+  );
+}
+
+type SettingsSaveProviderBodyProps = {
+  registry: Registry;
+  coordinator: SettingsSaveCoordinator;
+  placement: SettingsSavePlacement;
+  displayStatus: SettingsSaveStatus;
+  errorKind: SettingsSaveErrorKind | null;
+  dirtyContributorIds: string;
+  invalidReason: string | undefined;
+  pendingNavigation: NavigationIntent | null;
+  isDiscarding: boolean;
+  onSave: () => Promise<boolean>;
+  onReset: () => Promise<boolean>;
+  onDiscardAndLeave: () => Promise<void>;
+  onContinueEditing: () => void;
+  children: ReactNode;
+};
+
+function SettingsSaveProviderBody({
+  registry,
+  coordinator,
+  placement,
+  displayStatus,
+  errorKind,
+  dirtyContributorIds,
+  invalidReason,
+  pendingNavigation,
+  isDiscarding,
+  onSave,
+  onReset,
+  onDiscardAndLeave,
+  onContinueEditing,
+  children,
+}: SettingsSaveProviderBodyProps) {
+  const hasDirty = coordinator.hasDirty;
+  return (
+    <SettingsSaveRegistryContext.Provider value={registry}>
+      <SettingsSaveCoordinatorContext.Provider value={coordinator}>
+        {children}
+        {(hasDirty || displayStatus === "saved") && (
+          <SettingsFloatingSave
+            status={displayStatus}
+            placement={placement}
+            errorKind={errorKind}
+            dirtyContributorIds={dirtyContributorIds}
+            invalidReason={invalidReason}
+            navigationIntent={pendingNavigation}
+            isDiscarding={isDiscarding}
+            onSave={onSave}
+            onReset={onReset}
+            onDiscardAndLeave={onDiscardAndLeave}
+            onContinueEditing={onContinueEditing}
+          />
+        )}
+      </SettingsSaveCoordinatorContext.Provider>
     </SettingsSaveRegistryContext.Provider>
   );
+}
+
+/**
+ * Imperative handle on the shared settings save coordinator: save every dirty
+ * contributor (across pages that register multiple contributors, e.g. the
+ * profile editor and its MCP card) and learn whether the page can be left.
+ * Requires SettingsSaveProvider.
+ */
+export function useSettingsSaveCoordinator(): SettingsSaveCoordinator {
+  const coordinator = useContext(SettingsSaveCoordinatorContext);
+  if (!coordinator) throw new Error("useSettingsSaveCoordinator requires SettingsSaveProvider");
+  return coordinator;
 }
 
 function useSettingsBeforeUnloadGuard(enabled: boolean) {

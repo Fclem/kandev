@@ -19,7 +19,11 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 - The switch follows the `ArchiveConfirmationSettings` pattern: draft state,
   `data-settings-dirty`, `useSettingsSaveContributor`, save via
   `updateUserSettings({ prevent_auto_start_agent_on_open })`, store updated
-  through `setUserSettings`.
+  through `setUserSettings`. The contributor id MUST be unique (e.g.
+  `general-prevent-auto-start-on-open`): the save registry is a `Map` keyed by
+  contributor id (`settings-save-provider.tsx:224-248`), and the archive card
+  already owns `general-task-actions` (`archive-confirmation-settings.tsx:33`),
+  so a literal clone would silently replace the archive contributor.
 - The card registers a settings-discovery target and definition.
 - i18n check and ratchet pass.
 

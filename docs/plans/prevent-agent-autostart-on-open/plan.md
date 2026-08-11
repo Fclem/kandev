@@ -121,18 +121,30 @@ gating hooks, then E2E.
   - In `checkAndResume`, when `preventAutoStart` is true, skip the
     `status.needs_resume && status.is_resumable` branch (do not call
     `resumeWithSilentFallback`); set `resumptionState` to `"idle"` and record
-    the skip in the store (e.g. a `resumeSkippedSessionIds` set on the tasks
-    slice via a new `setResumeSkipped(sessionId, boolean)` action) so the chat
-    can render the Start agent button. Clear the flag when the user resumes
-    manually or the agent reports running.
+    the skip in the store (a `resumeSkippedSessionIds` set on the kanban tasks
+    slice via a new `setResumeSkipped(sessionId, boolean)` action). The flag is
+    keyed by session id, so it cannot leak across sessions.
+  - Skip-flag lifecycle (all three clear points MUST be specified):
+    - `resumeSession()` (`use-session-resumption.ts:491-522`) clears the flag
+      for the session before launching.
+    - The Start agent button click (`message-renderer.tsx:55-64`) clears it
+      before dispatching.
+    - The WS `session.state_changed` handler (`lib/ws/handlers/agent-session.ts:692-750`)
+      clears it when the session transitions to a state where the agent is
+      running (STARTING/RUNNING), so a late state event cannot leave a stale
+      button behind.
   - The manual `resumeSession()` action is NOT gated.
 - Start agent button for the recovered-idle case —
   `apps/web/components/task/chat/message-renderer.tsx`:
   `TaskDescriptionStartButton` currently renders only for
   `sessionState === "CREATED"`. Extend the visibility condition so it also
-  renders when the store marks the session as resume-skipped (recovered-idle
-  shape), and dispatch the matching intent: `buildStartCreatedRequest` for
-  CREATED sessions, the resume request builder for the skipped-resume case.
+  renders when the store marks the session as resume-skipped, BUT only for
+  non-FAILED sessions: `TaskDescriptionMessage` returns early for FAILED
+  sessions at `:119-134` (agent-styled message, no button slot), and FAILED
+  sessions keep their existing recovery actions (`recovery-resume-button` /
+  `recovery-fresh-button` in `action-message.tsx`). Dispatch the matching
+  intent: `buildStartCreatedRequest` for CREATED sessions, the resume request
+  builder for the skipped-resume case.
 - Callers:
   - `components/task/task-page-content.tsx` passes the normalized input
     `{ id: task?.id, workflowStepId: task?.workflow_step_id, workflowId: task?.workflow_id }`
@@ -156,7 +168,9 @@ gating hooks, then E2E.
 | final-step helper | new test beside the helper | unit: max-position logic, missing step/steps → false |
 | caller normalization (snake → camel input) | `apps/web/components/task/task-page-content` test or hook caller test | unit: task page passes `workflowStepId` from `workflow_step_id` |
 | cross-workflow preview resolves the right steps | `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` + preview test | unit: task from `kanbanMulti.snapshots[w]` uses snapshot steps, not the active workflow's |
-| resume gate skips auto-resume and records the skip | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: `checkAndResume` with `needs_resume && is_resumable` and preventAutoStart → no launch, state idle, skip recorded in store; manual `resumeSession` still launches |
+| resume gate skips auto-resume and records the skip | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: `checkAndResume` with `needs_resume && is_resumable` and preventAutoStart → no launch, state idle, skip recorded in store; manual `resumeSession` still launches AND clears the flag |
+| Start button renders for resume-skipped sessions (non-FAILED) | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag (non-FAILED state) → button visible; FAILED + resume-skipped → no new button (recovery actions remain); button dispatches resume for the skipped case and clears the flag |
+| skip flag clears on WS running state | `apps/web/lib/ws/handlers/agent-session.test.ts` (or slice test) | unit: `session.state_changed` to STARTING/RUNNING clears `resumeSkippedSessionIds[sessionId]` |
 | Start button renders for resume-skipped sessions | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag → button visible; button dispatches resume for the skipped case |
 | settings card renders and saves | `apps/web/components/settings/prevent-auto-start-agent-settings.test.tsx` (mirror `archive-confirmation-settings.test.tsx`) | component: switch toggles, save calls `updateUserSettings({ prevent_auto_start_agent_on_open })` |
 | i18n ratchet + em-dash check | — | `cd apps/web && pnpm run i18n:check && pnpm run i18n:ratchet` |
@@ -177,6 +191,10 @@ gating hooks, then E2E.
     `internal/workflow/controller/controller.go` `CreateStepRequest`).
   - Final-step case: create a task in that final step, open `/t/:id`, assert
     the Start agent button appears and the agent stays stopped until clicked.
+  - Setting-off control: create a SEPARATE fresh task in the same final step
+    (never opened before, no session) — `useEnsureTaskSession` no-ops when a
+    session already exists, so reusing the setting-on task cannot exercise the
+    control.
   - Recovered-idle case: seed a task+session, let the first turn finish, then
     `backend.restart()` + `testPage.reload()` (the restart pattern from
     `e2e/tests/session/session-resume.spec.ts`), assert no automatic resume
@@ -184,6 +202,15 @@ gating hooks, then E2E.
     button is visible), then click the button and assert the agent resumes.
   - Control: with the setting off, the same final-step task auto-starts on
     open (no start button; agent reaches a running/ready state).
+  - Isolation: `e2e/fixtures/test-base.ts` per-test settings reset (`:190-225`)
+    gains `prevent_auto_start_agent_on_open: false` so a test enabling the
+    setting cannot leak into later tests in the same worker.
+  - Mobile: add `e2e/tests/settings/mobile-prevent-auto-start-on-open.spec.ts`
+    (same fixtures, phone viewport via `testPage.setViewportSize`, following
+    `mobile-general-settings.spec.ts`) asserting the Start agent button on the
+    final-step case. The gating hooks run on mobile through the shared
+    responsive `TaskPageContent` (`useResponsiveBreakpoint` at
+    `task-page-content.tsx:325`).
 
 ## Verification Results
 

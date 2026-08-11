@@ -25,6 +25,9 @@ open and start it explicitly instead.
   automatically resume the agent. The task opens with the agent stopped and a
   Start agent button is shown in the chat; clicking it resumes the agent.
   (The existing session-menu resume and chat composer remain available too.)
+  For FAILED-but-resumable sessions the existing recovery actions (Resume
+  session / Start fresh session buttons) remain the manual affordance; the
+  new Start agent button is not rendered for FAILED sessions.
 - When the setting is ON, opening a task whose current workflow step is the
   final step of its workflow MUST NOT auto-start the agent when the task has
   no session. The session is created in the never-started (prepared) state
@@ -112,6 +115,11 @@ per-task variant in this feature.
   opens the task page, **THEN** no `session.launch` resume request is sent on
   open, the session stays stopped, and the task page shows a Start agent
   button that resumes the agent when clicked.
+- **GIVEN** the setting is ON and a task's session is FAILED but resumable,
+  **WHEN** the user opens the task page, **THEN** no auto-resume is sent on
+  open and the session keeps the existing recovery actions (Resume session and
+  Start fresh session buttons). The new Start agent button is not rendered for
+  FAILED sessions.
 - **GIVEN** the setting is ON and the task's current workflow step is the final
   step, **WHEN** the user opens the task and it has no session, **THEN**
   `session.ensure` is called with `auto_start: false`, the session is created

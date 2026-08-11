@@ -30,14 +30,22 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 - `useSessionResumption`'s automatic check no longer auto-resumes when the
   setting is on: with `status.needs_resume && status.is_resumable` it skips
   `resumeWithSilentFallback`, settles on `"idle"`, and records the skip in the
-  store (a `resumeSkippedSessionIds` set on the tasks slice via a new
+  store (a `resumeSkippedSessionIds` set on the kanban tasks slice via a new
   `setResumeSkipped(sessionId, boolean)` action). The manual `resumeSession()`
   action and the `is_agent_running` / `needs_workspace_restore` branches are
-  unchanged; the skip flag clears on manual resume or when the agent runs.
+  unchanged.
+- Skip-flag lifecycle is pinned to three clear points, all keyed by session id:
+  (1) `resumeSession()` clears the flag before launching; (2) the Start agent
+  button click clears it before dispatching; (3) the WS `session.state_changed`
+  handler (`lib/ws/handlers/agent-session.ts:692-750`) clears it when the
+  session transitions to STARTING/RUNNING.
 - The Start agent button (`TaskDescriptionStartButton` in
   `message-renderer.tsx`) renders for `sessionState === "CREATED"` AND for
-  resume-skipped (recovered-idle) sessions; for the recovered-idle case it
-  dispatches the resume request builder instead of `buildStartCreatedRequest`.
+  resume-skipped (recovered-idle) sessions whose state is NOT FAILED; for the
+  recovered-idle case it dispatches the resume request builder instead of
+  `buildStartCreatedRequest`. FAILED sessions are excluded: the renderer
+  returns early at `:119-134` for FAILED, and they keep their existing
+  recovery actions (`recovery-resume-button` / `recovery-fresh-button`).
 
 ## Verification
 
@@ -54,7 +62,9 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 - `apps/web/hooks/domains/session/use-ensure-task-session.ts` (+ its test; add a `isFinalWorkflowStep(workflowStepId, steps)` helper, exported for tests)
 - `apps/web/hooks/domains/session/use-session-resumption.ts` (+ its test; thread `preventAutoStart` into `checkAndResume` via `useSessionResetAndCheck`)
 - `apps/web/lib/state/slices/kanban/types.ts` + `kanban-slice.ts` (the slice owning `tasks.activeSessionId`): add `resumeSkippedSessionIds` state + a `setResumeSkipped` action
-- `apps/web/components/task/chat/message-renderer.tsx` (+ test): Start button visibility for resume-skipped sessions and resume intent dispatch
+- `apps/web/components/task/chat/message-renderer.tsx` (+ test): Start button visibility for resume-skipped non-FAILED sessions, resume intent dispatch, and flag clearing on click
+- `apps/web/lib/ws/handlers/agent-session.ts` (+ test): clear the skip flag on `session.state_changed` to STARTING/RUNNING
+- `apps/web/hooks/domains/session/use-session-resumption.ts`: `resumeSession()` clears the flag (covered by its test)
 - `apps/web/components/task/task-page-content.tsx`: pass `{ id, workflowStepId: task?.workflow_step_id, workflowId: task?.workflow_id }`
 - `apps/web/components/kanban-with-preview.tsx` (+ test): `useSelectedTask` returns `workflowId`
 
@@ -78,7 +88,10 @@ button copy covers both cases).
 
 Opening a task honors the setting on both kanban surfaces:
 final-step + no-session → prepare-only ensure (CREATED session, Start agent
-button rendered); post-restart idle session → no auto-resume, skip recorded,
-Start agent button rendered with a resume action. Unit tests pin each branch,
-including the non-gated controls, the snake→camel caller normalization, and
-the cross-workflow preview resolution.
+button rendered); post-restart idle session (non-FAILED) → no auto-resume,
+skip recorded, Start agent button rendered with a resume action; resumable
+FAILED sessions → no auto-resume, existing recovery actions retained. The skip
+flag never goes stale: manual resume, button click, and WS running-state
+transitions all clear it. Unit tests pin each branch, including the non-gated
+controls, the snake→camel caller normalization, the cross-workflow preview
+resolution, and the flag lifecycle.

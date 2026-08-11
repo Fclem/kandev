@@ -21,8 +21,20 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 - **Recovered-idle case:** with the setting on, after a backend restart a
   task whose session needs resume does not auto-resume; the Start agent button
   is visible and the agent stays stopped until clicked, then resumes.
-- **Setting-off control:** with the setting off, the same final-step task
-  auto-starts on open (no start button; agent reaches a running/ready state).
+- **Setting-off control:** with the setting off, a SEPARATE fresh task in the
+  same final step (never opened before, no session) auto-starts on open (no
+  start button; agent reaches a running/ready state). The control must not
+  reuse the setting-on task: `useEnsureTaskSession` no-ops once a session
+  exists, so a reused task cannot exercise fresh auto-start.
+- **Isolation:** `e2e/fixtures/test-base.ts` per-test settings reset
+  (`:190-225`) gains `prevent_auto_start_agent_on_open: false` — PATCH omits
+  the field as "unchanged", so without the reset a test enabling the setting
+  leaks into later tests in the same worker.
+- **Mobile:** `e2e/tests/settings/mobile-prevent-auto-start-on-open.spec.ts`
+  (same fixtures, phone viewport, `mobile-general-settings.spec.ts` pattern)
+  asserts the Start agent button for the final-step case. The gating hooks run
+  on mobile through the shared responsive `TaskPageContent`
+  (`useResponsiveBreakpoint` at `task-page-content.tsx:325`).
 
 ## Verification
 
@@ -31,12 +43,14 @@ cd apps && pnpm install --frozen-lockfile
 ```
 
 ```bash
-(cd apps/web && KANDEV_E2E_MOCK=true pnpm e2e:raw -- --project=chromium settings/prevent-auto-start-on-open.spec.ts)
+(cd apps/web && KANDEV_E2E_MOCK=true pnpm e2e:raw -- --project=chromium settings/prevent-auto-start-on-open.spec.ts settings/mobile-prevent-auto-start-on-open.spec.ts)
 ```
 
 ## Files Likely Touched
 
 - `apps/web/e2e/tests/settings/prevent-auto-start-on-open.spec.ts` (new)
+- `apps/web/e2e/tests/settings/mobile-prevent-auto-start-on-open.spec.ts` (new, phone viewport)
+- `apps/web/e2e/fixtures/test-base.ts` (per-test settings reset at `:190-225`)
 - `apps/web/e2e/helpers/api-client.ts`:
   - `saveUserSettings` (`:944`) gains `prevent_auto_start_agent_on_open?: boolean`
     (there is no `updateUserSettings` helper — the settings PATCH helper is

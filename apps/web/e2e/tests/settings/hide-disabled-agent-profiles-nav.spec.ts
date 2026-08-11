@@ -31,11 +31,17 @@ test.describe("hide disabled agent profiles from left panel navigation", () => {
       // profile leaves. Seeded before every navigation (the page boots the
       // mode from localStorage on the first render).
       await testPage.addInitScript(() => {
-        window.localStorage.setItem("kandev.settings.menuMode", "accordion");
+        // getLocalStorage JSON-parses the value, so the mode must be stored
+        // the way setLocalStorage would write it.
+        window.localStorage.setItem("kandev.settings.menuMode", JSON.stringify("accordion"));
       });
 
       await testPage.goto("/settings/agents");
       const settingsTree = testPage.getByTestId("app-sidebar-settings-mode");
+      // Accordion opens the route-owned Agents row; the agent node under it
+      // (Mock) has no page of its own, so expand it to expose the profile
+      // leaves.
+      await settingsTree.getByRole("button", { name: "Expand Mock" }).click();
       const disabledLink = settingsTree.getByRole("link", { name: profileLink });
       await expect(disabledLink).toBeVisible({ timeout: 15_000 });
 
@@ -48,7 +54,7 @@ test.describe("hide disabled agent profiles from left panel navigation", () => {
       await hideDisabledSwitch.click();
       await expect(hideDisabledSwitch).toHaveAttribute("aria-checked", "true");
       await expect(disabledLink).not.toBeVisible();
-      await expect(settingsTree.getByRole("link", { name: "Agents", exact: true })).toBeVisible();
+      await expect(settingsTree.getByRole("link", { name: /^Agents/ })).toBeVisible();
 
       // Re-enable from the profile editor (the settings list no longer holds
       // the toggle after the PageShell restructure) and confirm the tree
@@ -63,6 +69,9 @@ test.describe("hide disabled agent profiles from left panel navigation", () => {
       await expect(testPage.getByText(/unsaved changes/i)).toBeHidden({ timeout: 15_000 });
 
       await testPage.goto("/settings/agents");
+      // Fresh page load collapses the agent node again; re-expand it before
+      // asserting the revealed profile.
+      await settingsTree.getByRole("button", { name: "Expand Mock" }).click();
       await expect(disabledLink).toBeVisible({ timeout: 15_000 });
     } finally {
       // Always restore so worker-scoped seedData stays valid for later tests.

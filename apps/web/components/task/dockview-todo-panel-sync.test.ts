@@ -4,16 +4,18 @@ import {
   resolveConditionalTodoPanelAction,
   resolveConfiguredTodoPanelPlacement,
   syncConditionalTodoPanel,
-  type ConditionalTodoPanelOptions,
+  type SyncConditionalTodoPanelOptions,
 } from "./dockview-todo-panel-sync";
 
 const CENTER_GROUP_ID = "group-center";
 const RIGHT_TOP_GROUP_ID = "group-right-top";
 
-const DEFAULT_OPTIONS: ConditionalTodoPanelOptions = {
+const DEFAULT_OPTIONS = {
   centerGroupId: CENTER_GROUP_ID,
   isRestoringLayout: false,
   isMaximized: false,
+  onlyPinWhenNotEmpty: false,
+  todoListNotEmpty: false,
 };
 
 function makeApi(
@@ -35,6 +37,15 @@ function makeApi(
     close,
     addPanel,
   };
+}
+
+type SyncOverrides = Pick<SyncConditionalTodoPanelOptions, "showTodoListPanel" | "settingsLoaded"> &
+  Partial<Omit<SyncConditionalTodoPanelOptions, "showTodoListPanel" | "settingsLoaded">>;
+
+/** Runs the sync with DEFAULT_OPTIONS merged over `overrides` — every
+ *  syncConditionalTodoPanel test shares this exact options base. */
+function runSync(api: DockviewApi, overrides: SyncOverrides): boolean {
+  return syncConditionalTodoPanel(api, { ...DEFAULT_OPTIONS, ...overrides });
 }
 
 describe("resolveConditionalTodoPanelAction", () => {
@@ -71,12 +82,64 @@ describe("resolveConditionalTodoPanelAction", () => {
       { showTodoListPanel: false, panelExists: true, settingsLoaded: false },
       "none",
     ],
+    [
+      "does not pin when the sub-option is on and the todo list is empty",
+      {
+        showTodoListPanel: true,
+        onlyPinWhenNotEmpty: true,
+        todoListNotEmpty: false,
+        panelExists: false,
+      },
+      "none",
+    ],
+    [
+      "pins when the sub-option is on and the todo list is not empty",
+      {
+        showTodoListPanel: true,
+        onlyPinWhenNotEmpty: true,
+        todoListNotEmpty: true,
+        panelExists: false,
+      },
+      "add",
+    ],
+    [
+      "leaves an existing panel alone when the sub-option is on and the list is empty",
+      {
+        showTodoListPanel: true,
+        onlyPinWhenNotEmpty: true,
+        todoListNotEmpty: false,
+        panelExists: true,
+      },
+      "none",
+    ],
+    [
+      "pins regardless of the list when the sub-option is off",
+      {
+        showTodoListPanel: true,
+        onlyPinWhenNotEmpty: false,
+        todoListNotEmpty: false,
+        panelExists: false,
+      },
+      "add",
+    ],
+    [
+      "still removes when the master preference is off, even with the sub-option on",
+      {
+        showTodoListPanel: false,
+        onlyPinWhenNotEmpty: true,
+        todoListNotEmpty: false,
+        panelExists: true,
+      },
+      "remove",
+    ],
   ])("%s", (_name, input, expected) => {
     expect(
       resolveConditionalTodoPanelAction({
         settingsLoaded: true,
         isRestoringLayout: false,
         isMaximized: false,
+        onlyPinWhenNotEmpty: false,
+        todoListNotEmpty: false,
         ...input,
       }),
     ).toBe(expected);
@@ -114,13 +177,7 @@ describe("syncConditionalTodoPanel", () => {
   it("adds an inactive panel beside Files/Changes when enabled and absent", () => {
     const { api, addPanel } = makeApi();
 
-    expect(
-      syncConditionalTodoPanel(api, {
-        ...DEFAULT_OPTIONS,
-        showTodoListPanel: true,
-        settingsLoaded: true,
-      }),
-    ).toBe(true);
+    expect(runSync(api, { showTodoListPanel: true, settingsLoaded: true })).toBe(true);
     expect(addPanel).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "todos",
@@ -135,8 +192,7 @@ describe("syncConditionalTodoPanel", () => {
     const { api, addPanel } = makeApi(undefined, ["custom-group"]);
 
     expect(
-      syncConditionalTodoPanel(api, {
-        ...DEFAULT_OPTIONS,
+      runSync(api, {
         showTodoListPanel: true,
         settingsLoaded: true,
         configuredPlacement: { groupId: "custom-group", index: 2 },
@@ -150,13 +206,7 @@ describe("syncConditionalTodoPanel", () => {
   it("falls back to the center group when no right column exists (e.g. compact layout)", () => {
     const { api, addPanel } = makeApi(undefined, []);
 
-    expect(
-      syncConditionalTodoPanel(api, {
-        ...DEFAULT_OPTIONS,
-        showTodoListPanel: true,
-        settingsLoaded: true,
-      }),
-    ).toBe(true);
+    expect(runSync(api, { showTodoListPanel: true, settingsLoaded: true })).toBe(true);
     expect(addPanel).toHaveBeenCalledWith(
       expect.objectContaining({ position: { referenceGroup: CENTER_GROUP_ID } }),
     );
@@ -166,12 +216,7 @@ describe("syncConditionalTodoPanel", () => {
     const { api, close } = makeApi({});
 
     expect(
-      syncConditionalTodoPanel(api, {
-        ...DEFAULT_OPTIONS,
-        showTodoListPanel: false,
-        settingsLoaded: true,
-        isRestoringLayout: true,
-      }),
+      runSync(api, { showTodoListPanel: false, settingsLoaded: true, isRestoringLayout: true }),
     ).toBe(true);
     expect(close).toHaveBeenCalledOnce();
   });
@@ -182,14 +227,9 @@ describe("syncConditionalTodoPanel", () => {
       { isRestoringLayout: false, isMaximized: true },
     ]) {
       const { api, addPanel } = makeApi();
-      expect(
-        syncConditionalTodoPanel(api, {
-          ...DEFAULT_OPTIONS,
-          showTodoListPanel: true,
-          settingsLoaded: true,
-          ...options,
-        }),
-      ).toBe(false);
+      expect(runSync(api, { showTodoListPanel: true, settingsLoaded: true, ...options })).toBe(
+        false,
+      );
       expect(addPanel).not.toHaveBeenCalled();
     }
   });
@@ -197,13 +237,41 @@ describe("syncConditionalTodoPanel", () => {
   it("does nothing before settings have hydrated", () => {
     const { api, addPanel, close } = makeApi({});
     expect(
-      syncConditionalTodoPanel(api, {
-        ...DEFAULT_OPTIONS,
+      runSync(api, {
         showTodoListPanel: false,
         settingsLoaded: false,
       }),
     ).toBe(false);
     expect(addPanel).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
+  });
+
+  it("does not add an absent panel when the sub-option is on and the list is empty", () => {
+    const { api, addPanel, close } = makeApi();
+
+    expect(
+      runSync(api, {
+        showTodoListPanel: true,
+        onlyPinWhenNotEmpty: true,
+        todoListNotEmpty: false,
+        settingsLoaded: true,
+      }),
+    ).toBe(false);
+    expect(addPanel).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("adds an absent panel when the sub-option is on and the list is not empty", () => {
+    const { api, addPanel } = makeApi();
+
+    expect(
+      runSync(api, {
+        showTodoListPanel: true,
+        onlyPinWhenNotEmpty: true,
+        todoListNotEmpty: true,
+        settingsLoaded: true,
+      }),
+    ).toBe(true);
+    expect(addPanel).toHaveBeenCalledWith(expect.objectContaining({ id: "todos", inactive: true }));
   });
 });

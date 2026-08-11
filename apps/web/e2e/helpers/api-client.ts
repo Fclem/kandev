@@ -916,6 +916,7 @@ export class ApiClient {
       tasks_list_show_details?: boolean;
       show_transcript_auto_scroll_control?: boolean;
       show_todo_list_panel?: boolean;
+      show_todo_list_panel_only_when_not_empty?: boolean;
       agent_generated_task_titles?: boolean;
       [key: string]: unknown;
     };

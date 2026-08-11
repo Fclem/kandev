@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { AddPanelOptions, DockviewApi } from "dockview-react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
+import { buildTodoItems } from "@/hooks/use-processed-messages";
 import { t } from "@/lib/i18n";
+import type { Message } from "@/lib/types/http";
 import { focusOrAddPanel } from "@/lib/state/dockview-layout-builders";
 import { useDockviewStore } from "@/lib/state/dockview-store";
 import {
@@ -21,13 +23,20 @@ export type ConditionalTodoPanelAction = "add" | "remove" | "none";
  * and no closed-for-session suppression: the `showTodoListPanel` preference
  * is the single authoritative on/off switch (see
  * docs/specs/ui/agent-todo-list-panel.md — "true, unconditional visibility
- * gate"). `settingsLoaded` mirrors PR Details' `reviewsLoaded` guard: don't
- * touch the panel until the real preference value has hydrated, so a
- * cold-loading task with the preference persisted `true` doesn't flash-remove
- * a panel materialized from its saved layout before settings arrive.
+ * gate"). The "only pin when not empty" sub-option (`onlyPinWhenNotEmpty`)
+ * gates only the automatic add: while it is on, an absent panel is not added
+ * until the active session's todo list is non-empty (`todoListNotEmpty`).
+ * It never removes an existing panel, and removal stays gated solely on the
+ * master preference. `settingsLoaded` mirrors PR Details' `reviewsLoaded`
+ * guard: don't touch the panel until the real preference value has hydrated,
+ * so a cold-loading task with the preference persisted `true` doesn't
+ * flash-remove a panel materialized from its saved layout before settings
+ * arrive.
  */
 export function resolveConditionalTodoPanelAction(params: {
   showTodoListPanel: boolean;
+  onlyPinWhenNotEmpty: boolean;
+  todoListNotEmpty: boolean;
   panelExists: boolean;
   settingsLoaded: boolean;
   isRestoringLayout: boolean;
@@ -39,6 +48,7 @@ export function resolveConditionalTodoPanelAction(params: {
   }
   if (params.panelExists) return "none";
   if (params.isRestoringLayout || params.isMaximized) return "none";
+  if (params.onlyPinWhenNotEmpty && !params.todoListNotEmpty) return "none";
   return "add";
 }
 
@@ -68,6 +78,15 @@ export type ConditionalTodoPanelOptions = {
   isMaximized: boolean;
 };
 
+/** Full runtime inputs to {@link syncConditionalTodoPanel}: the placement
+ *  options plus the visibility preferences and the hydrated settings flag. */
+export type SyncConditionalTodoPanelOptions = ConditionalTodoPanelOptions & {
+  showTodoListPanel: boolean;
+  onlyPinWhenNotEmpty: boolean;
+  todoListNotEmpty: boolean;
+  settingsLoaded: boolean;
+};
+
 /** Beside Files/Changes in the pinned right column's top group by default —
  *  the user asked for "the right panel" specifically. Falls back to the
  *  center group for layouts with no right column (e.g. compact). */
@@ -91,17 +110,20 @@ function resolveTodoPanelTargetPosition(
 
 /**
  * Synchronize the Todos panel's runtime presence with the `showTodoListPanel`
- * preference. The preference is the sole visibility gate; a saved layout's
- * `todos` entry only supplies placement (see
- * `resolveConfiguredTodoPanelPlacement`) and is never rewritten here.
+ * preference (and the "only pin when not empty" sub-option). The preference
+ * is the sole visibility gate; a saved layout's `todos` entry only supplies
+ * placement (see `resolveConfiguredTodoPanelPlacement`) and is never
+ * rewritten here.
  */
 export function syncConditionalTodoPanel(
   api: DockviewApi,
-  options: ConditionalTodoPanelOptions & { showTodoListPanel: boolean; settingsLoaded: boolean },
+  options: SyncConditionalTodoPanelOptions,
 ): boolean {
   const panel = api.getPanel("todos");
   const action = resolveConditionalTodoPanelAction({
     showTodoListPanel: options.showTodoListPanel,
+    onlyPinWhenNotEmpty: options.onlyPinWhenNotEmpty,
+    todoListNotEmpty: options.todoListNotEmpty,
     panelExists: !!panel,
     settingsLoaded: options.settingsLoaded,
     isRestoringLayout: options.isRestoringLayout,
@@ -130,10 +152,15 @@ export function syncConditionalTodoPanel(
   return false;
 }
 
+const EMPTY_MESSAGES: Message[] = [];
+
 /** Keep the Todos panel in sync with the active task's live Dockview tree. */
 export function useSyncTodoPanel() {
   const appStore = useAppStoreApi();
   const showTodoListPanel = useAppStore((state) => state.userSettings.showTodoListPanel);
+  const onlyPinWhenNotEmpty = useAppStore(
+    (state) => state.userSettings.showTodoListPanelOnlyWhenNotEmpty,
+  );
   const settingsLoaded = useAppStore((state) => state.userSettings.loaded);
   const taskId = useAppStore((state) => state.tasks.activeTaskId);
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
@@ -143,6 +170,23 @@ export function useSyncTodoPanel() {
   const isMaximized = useDockviewStore((state) => state.preMaximizeLayout !== null);
   const centerGroupId = useDockviewStore((state) => state.centerGroupId);
   const userDefaultLayout = useDockviewStore((state) => state.userDefaultLayout);
+  // The "not empty" predicate mirrors the Todos panel's two-source fallback:
+  // live `sessionTodos.bySessionId` entries first, then the latest persisted
+  // `todo`-type message. Messages are fetched by the always-mounted chat
+  // panel, so subscribing to the store slices here adds no fetch side effects.
+  // Selectors must return stable references (the stored array or `undefined`),
+  // never a fresh `[]`, or zustand re-renders on every store read and React
+  // throws "maximum update depth exceeded".
+  const liveTodos = useAppStore((state) =>
+    sessionId ? state.sessionTodos.bySessionId[sessionId] : undefined,
+  );
+  const messages = useAppStore((state) =>
+    sessionId ? (state.messages.bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES,
+  );
+  const todoListNotEmpty = useMemo(
+    () => (liveTodos?.length ?? 0) > 0 || buildTodoItems(messages).length > 0,
+    [liveTodos, messages],
+  );
 
   useEffect(() => {
     if (!taskId || !sessionId || !workspaceId || !hasApi) return;
@@ -163,6 +207,8 @@ export function useSyncTodoPanel() {
         const dockview = useDockviewStore.getState();
         syncConditionalTodoPanel(api, {
           showTodoListPanel: live.userSettings.showTodoListPanel,
+          onlyPinWhenNotEmpty: live.userSettings.showTodoListPanelOnlyWhenNotEmpty,
+          todoListNotEmpty,
           settingsLoaded: live.userSettings.loaded,
           centerGroupId: dockview.centerGroupId,
           configuredPlacement: resolveConfiguredTodoPanelPlacement(dockview.userDefaultLayout),
@@ -182,10 +228,12 @@ export function useSyncTodoPanel() {
     hasApi,
     isMaximized,
     isRestoringLayout,
+    onlyPinWhenNotEmpty,
     settingsLoaded,
     sessionId,
     showTodoListPanel,
     taskId,
+    todoListNotEmpty,
     userDefaultLayout,
     workspaceId,
   ]);

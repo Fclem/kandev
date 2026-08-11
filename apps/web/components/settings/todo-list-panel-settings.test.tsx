@@ -6,6 +6,9 @@ import { SettingsSaveProvider } from "./settings-save-provider";
 
 const updateUserSettings = vi.fn();
 const TODO_LIST_PANEL_LABEL = "Show agent todo list panel";
+const ONLY_PIN_WHEN_NOT_EMPTY_LABEL = "Only pin when todo list is not empty";
+const DATA_STATE_ATTR = "data-state";
+const DATA_SETTINGS_DIRTY_ATTR = "data-settings-dirty";
 
 vi.mock("@/lib/api", () => ({
   updateUserSettings: (...args: unknown[]) => updateUserSettings(...args),
@@ -34,20 +37,90 @@ describe("TodoListPanelSettings", () => {
     );
     const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
 
-    expect(toggle.getAttribute("data-state")).toBe("unchecked");
+    expect(toggle.getAttribute(DATA_STATE_ATTR)).toBe("unchecked");
     fireEvent.click(toggle);
 
     expect(updateUserSettings).not.toHaveBeenCalled();
-    expect(toggle.getAttribute("data-state")).toBe("checked");
+    expect(toggle.getAttribute(DATA_STATE_ATTR)).toBe("checked");
     expect(
-      screen.getByTestId("todo-list-panel-settings-card").getAttribute("data-settings-dirty"),
+      screen.getByTestId("todo-list-panel-settings-card").getAttribute(DATA_SETTINGS_DIRTY_ATTR),
     ).toBe("true");
 
     fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
-      expect(updateUserSettings).toHaveBeenCalledWith({ show_todo_list_panel: true }),
+      expect(updateUserSettings).toHaveBeenCalledWith({
+        show_todo_list_panel: true,
+        show_todo_list_panel_only_when_not_empty: false,
+      }),
     );
-    await waitFor(() => expect(toggle.getAttribute("data-settings-dirty")).toBe("false"));
+    await waitFor(() => expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false"));
+  });
+
+  it("inhibits the sub-option while the main toggle is off and saves both fields", async () => {
+    render(
+      <StateProvider
+        initialState={{
+          userSettings: {
+            ...defaultState.userSettings,
+            showTodoListPanel: false,
+            showTodoListPanelOnlyWhenNotEmpty: true,
+          },
+        }}
+      >
+        <SettingsSaveProvider>
+          <TodoListPanelSettings />
+        </SettingsSaveProvider>
+      </StateProvider>,
+    );
+
+    // Inhibited (hidden entirely), not disabled, while the main preference is off.
+    expect(screen.queryByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL })).toBeNull();
+
+    const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
+    fireEvent.click(toggle);
+
+    // Appears once the main preference is on, in its preserved (on) state.
+    const subToggle = screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL });
+    expect(subToggle.getAttribute(DATA_STATE_ATTR)).toBe("checked");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(updateUserSettings).toHaveBeenCalledWith({
+        show_todo_list_panel: true,
+        show_todo_list_panel_only_when_not_empty: true,
+      }),
+    );
+    await waitFor(() => expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false"));
+  });
+
+  it("preserves the sub-option state across a main-toggle off/on cycle without saving", () => {
+    render(
+      <StateProvider
+        initialState={{
+          userSettings: {
+            ...defaultState.userSettings,
+            showTodoListPanel: true,
+            showTodoListPanelOnlyWhenNotEmpty: true,
+          },
+        }}
+      >
+        <SettingsSaveProvider>
+          <TodoListPanelSettings />
+        </SettingsSaveProvider>
+      </StateProvider>,
+    );
+
+    const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
+    expect(screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL })).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(screen.queryByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL })).toBeNull();
+
+    fireEvent.click(toggle);
+    const subToggle = screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL });
+    expect(subToggle.getAttribute(DATA_STATE_ATTR)).toBe("checked");
+    expect(updateUserSettings).not.toHaveBeenCalled();
   });
 });

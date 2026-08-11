@@ -585,7 +585,10 @@ export function buildTodoItems(visibleMessages: Message[]) {
     .map((item) => (typeof item === "string" ? { text: item, done: false } : item))
     .filter(
       (item): item is { text: string; done?: boolean } =>
-        typeof item === "object" && item !== null && typeof item.text === "string",
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.text === "string" &&
+        item.text.length > 0,
     );
 }
 

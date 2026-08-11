@@ -163,4 +163,42 @@ clean; `make fmt` + `make lint` clean; E2E
   `todoListNotEmptyForSession` levels (2 red → green). Committed as follow-up
   `fix:`.
 
+### Round-5 reviewer feedback (OMP GPT Luna) and disposition — all five fixed
+
+1. **F1 (major): sessionless tasks bypass visibility sync** — `useSyncTodoPanel`
+   early-returned on `!sessionId`, so a `todos` tab materialized from a saved
+   layout on a task without a session could never be removed by the master
+   preference. Fixed: the guard now requires only `taskId`/`workspaceId`/`hasApi`;
+   a null session is treated as an empty todo list (never enables an add) while
+   still allowing the removal path.
+2. **F2 (major): malformed todo metadata still crashed chat rendering** —
+   `TodoMessage`'s own `normalizeTodos` (non-array `todos`, `[null]` entries,
+   `previous_todo_snapshots` non-array) threw, bypassing the round-4
+   `buildTodoItems` hardening. Fixed: `normalizeTodos` is now total (unknown
+   input, `Array.isArray`, type-guard filter dropping null/primitive/empty-text
+   entries), `parseTodos`/`parseSnapshots` narrow via `typeof`/`in` instead of
+   inline casts, and a new `todo-message.test.tsx` pins all malformed shapes
+   (5 tests, red → green).
+3. **F3 (major): delayed PATCH could clobber a newer WS settings update** — the
+   save callback unconditionally echoed the submission into the store; a WS
+   push landing mid-flight would be reverted. Fixed: snapshot the store before
+   the PATCH and only echo when it has not drifted; otherwise the server's own
+   settings broadcast owns convergence. New component test with a deferred
+   save + mid-flight store update (red → green).
+4. **F4 (minor): empty-text entries counted as non-empty** — the round-4
+   type-guard filter (`typeof item.text === "string"`) kept `{ text: "" }`,
+   which the pre-fix code dropped; a blank entry could trigger pinning. Fixed:
+   require `item.text.length > 0` in `buildTodoItems` (and the mirrored
+   `TodoMessage` filter); regression tests at both levels.
+5. **F5 (minor): unbounded transcript scan when the sub-option is off** — the
+   sync computed `buildTodoItems` (O(n) copy+scan) on every message-array
+   update even when `onlyPinWhenNotEmpty` is false. Fixed: the predicate is
+   only computed when the sub-option is on (and a session exists); otherwise
+   `false` is passed (the decision ignores it).
+
+Verification: 846 tests across the touched areas (chat, settings, sync,
+processed-messages, SSR/WS) pass; `pnpm run typecheck`, `make fmt`, `make
+lint` clean; E2E `todo-list-panel.spec.ts` 8/8 (web rebuilt). Committed as
+follow-up `fix:`.
+
 Blockers/risks: none.

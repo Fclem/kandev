@@ -201,7 +201,12 @@ export function useSyncTodoPanel() {
   );
 
   useEffect(() => {
-    if (!taskId || !sessionId || !workspaceId || !hasApi) return;
+    // Run even for sessionless tasks (no `!sessionId` guard): a saved layout
+    // can materialize a `todos` tab for a task without a session, and the
+    // master preference must still be able to remove it (spec: "the
+    // preference is a true, unconditional visibility gate"). A null session
+    // only means the todo list is empty, which never enables an add.
+    if (!taskId || !workspaceId || !hasApi) return;
 
     let innerFrame: number | null = null;
     const outerFrame = requestAnimationFrame(() => {
@@ -218,16 +223,21 @@ export function useSyncTodoPanel() {
         if (!api) return;
         const dockview = useDockviewStore.getState();
         // Recompute the predicate from the dispatch-time snapshot rather than
-        // the render-time memo: a WS todo event landing between the render
-        // and this rAF tick would otherwise make the decision one frame stale
-        // (the tab would be missed until the next effect run).
+        // a render-time value: a WS todo event landing between the render and
+        // this rAF tick would otherwise make the decision one frame stale
+        // (the tab would be missed until the next effect run). The predicate
+        // only matters when the sub-option is on, so skip the O(n) transcript
+        // scan entirely otherwise; a null session is treated as an empty list.
         syncConditionalTodoPanel(api, {
           showTodoListPanel: live.userSettings.showTodoListPanel,
           onlyPinWhenNotEmpty: live.userSettings.showTodoListPanelOnlyWhenNotEmpty,
-          todoListNotEmpty: todoListNotEmptyForSession(
-            sessionId ? live.sessionTodos.bySessionId[sessionId] : undefined,
-            sessionId ? (live.messages.bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES,
-          ),
+          todoListNotEmpty:
+            live.userSettings.showTodoListPanelOnlyWhenNotEmpty && sessionId
+              ? todoListNotEmptyForSession(
+                  live.sessionTodos.bySessionId[sessionId],
+                  live.messages.bySession[sessionId] ?? EMPTY_MESSAGES,
+                )
+              : false,
           settingsLoaded: live.userSettings.loaded,
           centerGroupId: dockview.centerGroupId,
           configuredPlacement: resolveConfiguredTodoPanelPlacement(dockview.userDefaultLayout),

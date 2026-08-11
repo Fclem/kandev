@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { StateProvider } from "@/components/state-provider";
+import type { StoreApi } from "zustand";
+import { StateProvider, useAppStoreApi } from "@/components/state-provider";
 import { defaultState } from "@/lib/state/default-state";
+import type { AppState } from "@/lib/state/store";
 import type { UserSettingsState } from "@/lib/state/slices/settings/types";
 import { SettingsSaveProvider } from "./settings-save-provider";
 
@@ -23,18 +25,27 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-function renderTodoListPanelSettings(userSettingsOverrides: Partial<UserSettingsState> = {}): void {
+function renderTodoListPanelSettings(
+  userSettingsOverrides: Partial<UserSettingsState> = {},
+): StoreApi<AppState> {
+  let storeApi: StoreApi<AppState> | null = null;
+  function StoreProbe() {
+    storeApi = useAppStoreApi();
+    return null;
+  }
   render(
     <StateProvider
       initialState={{
         userSettings: { ...defaultState.userSettings, ...userSettingsOverrides },
       }}
     >
+      <StoreProbe />
       <SettingsSaveProvider>
         <TodoListPanelSettings />
       </SettingsSaveProvider>
     </StateProvider>,
   );
+  return storeApi!;
 }
 
 describe("TodoListPanelSettings", () => {
@@ -105,6 +116,35 @@ describe("TodoListPanelSettings", () => {
     const subToggle = screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL });
     expect(subToggle.getAttribute(DATA_STATE_ATTR)).toBe("checked");
     expect(updateUserSettings).not.toHaveBeenCalled();
+  });
+
+  it("does not clobber a newer store value with a stale delayed save", async () => {
+    let resolveSave: (value: { settings: object }) => void = () => undefined;
+    updateUserSettings.mockImplementationOnce(
+      () => new Promise<{ settings: object }>((resolve) => (resolveSave = resolve)),
+    );
+
+    const storeApi = renderTodoListPanelSettings({ showTodoListPanel: false });
+
+    const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
+    fireEvent.click(toggle); // draft: main on
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+
+    // While the PATCH is in flight, a newer value arrives (e.g. via the
+    // user.settings.updated WebSocket push from another tab).
+    const { setUserSettings } = storeApi.getState();
+    setUserSettings({
+      ...storeApi.getState().userSettings,
+      showTodoListPanel: false,
+      showTodoListPanelOnlyWhenNotEmpty: true,
+    });
+
+    resolveSave({ settings: {} });
+    await waitFor(() => expect(updateUserSettings).toHaveBeenCalledTimes(1));
+
+    // The store must keep the newer WS value, not the stale submission.
+    expect(storeApi.getState().userSettings.showTodoListPanel).toBe(false);
+    expect(storeApi.getState().userSettings.showTodoListPanelOnlyWhenNotEmpty).toBe(true);
   });
 
   it("marks each toggle dirty only for its own unsaved change", () => {

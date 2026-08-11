@@ -507,6 +507,20 @@ describe("buildTodoItems", () => {
     expect(buildTodoItems([])).toEqual([]);
   });
 
+  it("drops empty-text entries so they do not count as a non-empty list", () => {
+    const messages = [
+      {
+        ...makeMessage("m1", "todo", { todos: [{ text: "" }, "Valid", { text: "Whitespace " }] }),
+        turn_id: "t",
+      },
+    ];
+
+    expect(buildTodoItems(messages)).toEqual([
+      { text: "Valid", done: false },
+      { text: "Whitespace ", done: undefined },
+    ]);
+  });
+
   it("is total for malformed todo metadata instead of throwing", () => {
     const malformed = [
       // todos is a non-array object

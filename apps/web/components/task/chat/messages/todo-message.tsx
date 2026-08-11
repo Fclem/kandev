@@ -4,7 +4,7 @@ import { useState } from "react";
 import { IconChevronDown, IconChevronRight, IconListCheck } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/lib/types/http";
-import type { RichMetadata, TodoMetadata, TodoSnapshot } from "@/components/task/chat/types";
+import type { TodoSnapshot } from "@/components/task/chat/types";
 import { ExpandableRow } from "./expandable-row";
 import { StatusIcon, resolveStatus } from "../todo-indicator";
 import { useTranslation } from "react-i18next";
@@ -15,20 +15,38 @@ type TodoItem = {
   status?: "pending" | "in_progress" | "completed" | "failed";
 };
 
-function normalizeTodos(raw: TodoMetadata[]): TodoItem[] {
+function normalizeTodos(raw: unknown): TodoItem[] {
+  // Total by construction: malformed persisted metadata (non-array `todos`,
+  // null/primitive entries, empty text) must yield an empty list, never
+  // throw, matching buildTodoItems' hardening in use-processed-messages.ts.
+  if (!Array.isArray(raw)) return [];
   return raw
     .map((item) => (typeof item === "string" ? { text: item, done: false } : item))
-    .filter((item) => item.text);
+    .filter(
+      (item): item is TodoItem =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.text === "string" &&
+        item.text.length > 0,
+    );
 }
 
 function parseTodos(comment: Message): TodoItem[] {
-  const metadata = comment.metadata as RichMetadata | undefined;
-  return normalizeTodos(metadata?.todos ?? []);
+  const metadata = comment.metadata;
+  const todos =
+    metadata !== null && typeof metadata === "object" && "todos" in metadata
+      ? metadata.todos
+      : undefined;
+  return normalizeTodos(todos ?? []);
 }
 
 function parseSnapshots(comment: Message): TodoSnapshot[] {
-  const metadata = comment.metadata as RichMetadata | undefined;
-  return metadata?.previous_todo_snapshots ?? [];
+  const metadata = comment.metadata;
+  const snapshots =
+    metadata !== null && typeof metadata === "object" && "previous_todo_snapshots" in metadata
+      ? metadata.previous_todo_snapshots
+      : undefined;
+  return Array.isArray(snapshots) ? snapshots : [];
 }
 
 function countCompleted(items: TodoItem[]): number {

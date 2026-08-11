@@ -59,16 +59,28 @@ export function TodoListPanelSettings() {
     isDirty,
     save: async (revision) => {
       const submitted = JSON.parse(String(revision)) as TodoListPanelDraft;
+      const before = storeApi.getState().userSettings;
       await updateUserSettings({
         show_todo_list_panel: submitted.show,
         show_todo_list_panel_only_when_not_empty: submitted.onlyWhenNotEmpty,
       });
       setSaved(submitted);
-      setUserSettings({
-        ...storeApi.getState().userSettings,
-        showTodoListPanel: submitted.show,
-        showTodoListPanelOnlyWhenNotEmpty: submitted.onlyWhenNotEmpty,
-      });
+      // Only echo our submission into the store when nothing newer landed
+      // mid-flight (e.g. a WS settings push from another tab): overwriting
+      // unconditionally could revert a value the server has already
+      // superseded. The server's own settings broadcast converges the store
+      // otherwise.
+      const current = storeApi.getState().userSettings;
+      if (
+        current.showTodoListPanel === before.showTodoListPanel &&
+        current.showTodoListPanelOnlyWhenNotEmpty === before.showTodoListPanelOnlyWhenNotEmpty
+      ) {
+        setUserSettings({
+          ...current,
+          showTodoListPanel: submitted.show,
+          showTodoListPanelOnlyWhenNotEmpty: submitted.onlyWhenNotEmpty,
+        });
+      }
     },
     discard: () => setDraft(saved),
   });

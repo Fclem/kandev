@@ -527,6 +527,7 @@ func marshalUserSettingsPayload(settings *models.UserSettings) ([]byte, error) {
 		"chat_submit_key":                          settings.ChatSubmitKey,
 		"review_auto_mark_on_scroll":               settings.ReviewAutoMarkOnScroll,
 		"confirm_task_archive":                     settings.ConfirmTaskArchive,
+		"prevent_auto_start_agent_on_open":         settings.PreventAutoStartAgentOnOpen,
 		"unread_divider":                           settings.UnreadDivider,
 		"agent_generated_task_titles":              settings.AgentGeneratedTaskTitles,
 		"mcp_task_agent_profile_default":           models.NormalizeMCPTaskAgentProfileDefault(settings.MCPTaskAgentProfileDefault),
@@ -712,6 +713,7 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 		ChatSubmitKey                     string                              `json:"chat_submit_key"`
 		ReviewAutoMarkOnScroll            *bool                               `json:"review_auto_mark_on_scroll"`
 		ConfirmTaskArchive                *bool                               `json:"confirm_task_archive"`
+		PreventAutoStartAgentOnOpen       *bool                               `json:"prevent_auto_start_agent_on_open"`
 		UnreadDivider                     *bool                               `json:"unread_divider"`
 		AgentGeneratedTaskTitles          *bool                               `json:"agent_generated_task_titles"`
 		MCPTaskAgentProfileDefault        string                              `json:"mcp_task_agent_profile_default"`
@@ -779,6 +781,9 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 	}
 	if payload.ConfirmTaskArchive != nil {
 		settings.ConfirmTaskArchive = *payload.ConfirmTaskArchive
+	}
+	if payload.PreventAutoStartAgentOnOpen != nil {
+		settings.PreventAutoStartAgentOnOpen = *payload.PreventAutoStartAgentOnOpen
 	}
 	if payload.UnreadDivider != nil {
 		settings.UnreadDivider = *payload.UnreadDivider

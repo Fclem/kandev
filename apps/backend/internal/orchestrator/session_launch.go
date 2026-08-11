@@ -49,6 +49,14 @@ type LaunchSessionRequest struct {
 	LaunchWorkspace   bool          `json:"launch_workspace,omitempty"`
 	SkipMessageRecord bool          `json:"skip_message_record,omitempty"`
 	AutoStart         bool          `json:"auto_start,omitempty"`
+	// NoAgentLaunch marks a prepare request that must NEVER be upgraded into an
+	// agent launch, even for passthrough profiles (whose prepare would normally
+	// be eagerly upgraded so the PTY exists). It backs the session.ensure
+	// auto_start=false override used by the prevent-auto-start-on-open
+	// preference: the session is created workspace-only (CREATED) and the
+	// Start agent button launches it later. It is an internal server-side flag
+	// set from EnsureSessionOptions, kept off the wire protocol (`json:"-"`).
+	NoAgentLaunch bool `json:"-"`
 	// DeferredStart marks a prepare whose caller will follow up with an explicit
 	// IntentStartCreated that carries the prompt (the two-phase create flow:
 	// cheap sync prepare + async start). It suppresses the passthrough
@@ -206,6 +214,9 @@ func (s *Service) launchPrepare(ctx context.Context, req *LaunchSessionRequest) 
 // imminent prompt-bearing start) get the eager launch. See launchPrepare for
 // why AutoStart and DeferredStart each suppress it.
 func (s *Service) shouldUpgradePassthroughPrepare(ctx context.Context, req *LaunchSessionRequest) bool {
+	if req.NoAgentLaunch {
+		return false
+	}
 	return !req.AutoStart && !req.DeferredStart && s.isPassthroughProfile(ctx, req.AgentProfileID)
 }
 

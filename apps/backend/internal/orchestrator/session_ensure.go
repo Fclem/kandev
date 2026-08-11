@@ -28,6 +28,13 @@ type EnsureSessionOptions struct {
 	// but the agent process (agentctl) is not running. Used by office advanced
 	// mode to bring up file/terminal/changes panels.
 	EnsureExecution bool
+	// AutoStart overrides the workflow-step auto-start decision. When
+	// explicitly false, the session is created workspace-only (prepare,
+	// CREATED) even when the step's on-enter has auto_start_agent, and the
+	// launch is marked NoAgentLaunch so passthrough profiles are never
+	// upgraded into an agent start. Absent (nil) keeps the step-derived
+	// decision.
+	AutoStart *bool
 }
 
 // ensureLocks serializes EnsureSession calls per task id so concurrent callers
@@ -85,6 +92,9 @@ func (s *Service) EnsureSession(ctx context.Context, taskID string, opts ...Ensu
 
 	agentProfileID, step := s.resolveTaskAgentProfile(ctx, task)
 	autoStart := stepAllowsAutoStart(step)
+	if o.AutoStart != nil {
+		autoStart = *o.AutoStart
+	}
 
 	intent := IntentPrepare
 	source := "created_prepare"
@@ -100,6 +110,7 @@ func (s *Service) EnsureSession(ctx context.Context, taskID string, opts ...Ensu
 		WorkflowStepID:  task.WorkflowStepID,
 		LaunchWorkspace: true,
 		AutoStart:       intent == IntentStart,
+		NoAgentLaunch:   o.AutoStart != nil && !*o.AutoStart,
 	})
 	if err != nil {
 		return nil, err

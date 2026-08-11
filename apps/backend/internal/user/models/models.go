@@ -80,6 +80,7 @@ type UserSettings struct {
 	ChatSubmitKey                     string                            `json:"chat_submit_key"` // "enter" | "cmd_enter"
 	ReviewAutoMarkOnScroll            bool                              `json:"review_auto_mark_on_scroll"`
 	ConfirmTaskArchive                bool                              `json:"confirm_task_archive"`
+	PreventAutoStartAgentOnOpen       bool                              `json:"prevent_auto_start_agent_on_open"`
 	UnreadDivider                     bool                              `json:"unread_divider"`
 	AgentGeneratedTaskTitles          bool                              `json:"agent_generated_task_titles"`
 	MCPTaskAgentProfileDefault        string                            `json:"mcp_task_agent_profile_default"`

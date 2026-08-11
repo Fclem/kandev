@@ -51,6 +51,7 @@ type UpdateUserSettingsRequest struct {
 	ChatSubmitKey                     *string
 	ReviewAutoMarkOnScroll            *bool
 	ConfirmTaskArchive                *bool
+	PreventAutoStartAgentOnOpen       *bool
 	UnreadDivider                     *bool
 	AgentGeneratedTaskTitles          *bool
 	MCPTaskAgentProfileDefault        *string
@@ -359,6 +360,9 @@ func applyTaskActionPreferences(settings *models.UserSettings, req *UpdateUserSe
 	}
 	if req.ConfirmTaskArchive != nil {
 		settings.ConfirmTaskArchive = *req.ConfirmTaskArchive
+	}
+	if req.PreventAutoStartAgentOnOpen != nil {
+		settings.PreventAutoStartAgentOnOpen = *req.PreventAutoStartAgentOnOpen
 	}
 	if req.UnreadDivider != nil {
 		settings.UnreadDivider = *req.UnreadDivider
@@ -788,6 +792,7 @@ func (s *Service) publishUserSettingsEvent(ctx context.Context, settings *models
 		"chat_submit_key":                          settings.ChatSubmitKey,
 		"review_auto_mark_on_scroll":               settings.ReviewAutoMarkOnScroll,
 		"confirm_task_archive":                     settings.ConfirmTaskArchive,
+		"prevent_auto_start_agent_on_open":         settings.PreventAutoStartAgentOnOpen,
 		"unread_divider":                           settings.UnreadDivider,
 		"agent_generated_task_titles":              settings.AgentGeneratedTaskTitles,
 		"mcp_task_agent_profile_default":           models.NormalizeMCPTaskAgentProfileDefault(settings.MCPTaskAgentProfileDefault),

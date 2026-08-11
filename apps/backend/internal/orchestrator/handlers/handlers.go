@@ -109,7 +109,8 @@ func (h *Handlers) wsLaunchSession(ctx context.Context, msg *ws.Message) (*ws.Me
 }
 
 type wsEnsureSessionRequest struct {
-	TaskID string `json:"task_id"`
+	TaskID    string `json:"task_id"`
+	AutoStart *bool  `json:"auto_start,omitempty"`
 }
 
 func (h *Handlers) wsEnsureSession(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
@@ -121,7 +122,7 @@ func (h *Handlers) wsEnsureSession(ctx context.Context, msg *ws.Message) (*ws.Me
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "task_id is required", nil)
 	}
 
-	resp, err := h.service.EnsureSession(ctx, req.TaskID)
+	resp, err := h.service.EnsureSession(ctx, req.TaskID, orchestrator.EnsureSessionOptions{AutoStart: req.AutoStart})
 	if err != nil {
 		h.logger.Error("failed to ensure session",
 			zap.String("task_id", req.TaskID),

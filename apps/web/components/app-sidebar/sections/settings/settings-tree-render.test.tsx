@@ -18,6 +18,10 @@ const AGENT_LABEL = "Claude Code";
 // Anchored: the caret beside the row is labelled "Expand/Collapse Claude Code",
 // and a badge can extend the row's own name past an exact match.
 const AGENT_ROW = /^Claude Code/;
+// The hide-disabled setting's storage key, used to flip the real hook in the
+// tree tests. Hoisted to a constant so the sonar duplicate-literal rule stays
+// quiet.
+const HIDE_DISABLED_AGENT_KEY = "kandev:agents:hideDisabledInNav:v1";
 // Which integrations the probe reports as connected, per test.
 const integrationsEnabled = new Set<string>();
 
@@ -406,12 +410,12 @@ describe("SettingsTree badges", () => {
     state.agentDiscovery.items = [];
     state.agentDiscovery.loaded = false;
     integrationsEnabled.clear();
-    window.localStorage.removeItem("kandev:agents:hideDisabledInNav:v1");
+    window.localStorage.removeItem(HIDE_DISABLED_AGENT_KEY);
   });
 
   afterEach(() => {
     setMenuMode("flat");
-    window.localStorage.removeItem("kandev:agents:hideDisabledInNav:v1");
+    window.localStorage.removeItem(HIDE_DISABLED_AGENT_KEY);
     cleanup();
   });
 
@@ -427,7 +431,7 @@ describe("SettingsTree badges", () => {
   });
 
   it("hides a disabled profile from the tree when the hide setting is on", () => {
-    window.localStorage.setItem("kandev:agents:hideDisabledInNav:v1", "true");
+    window.localStorage.setItem(HIDE_DISABLED_AGENT_KEY, "true");
     setMenuMode("persistent", [AGENTS_ROW_KEY, AGENT_KEY]);
     render(<SettingsTree pathname="/settings/preferences/appearance" />);
 
@@ -436,12 +440,12 @@ describe("SettingsTree badges", () => {
   });
 
   it("reveals a disabled profile again once the hide setting is turned back off", () => {
-    window.localStorage.setItem("kandev:agents:hideDisabledInNav:v1", "true");
+    window.localStorage.setItem(HIDE_DISABLED_AGENT_KEY, "true");
     setMenuMode("persistent", [AGENTS_ROW_KEY, AGENT_KEY]);
     const { rerender } = render(<SettingsTree pathname="/settings/preferences/appearance" />);
     expect(screen.queryByRole("link", { name: /Retired/ })).toBeNull();
 
-    window.localStorage.removeItem("kandev:agents:hideDisabledInNav:v1");
+    window.localStorage.removeItem(HIDE_DISABLED_AGENT_KEY);
     window.dispatchEvent(new Event("kandev:agents:hide-disabled-in-nav-changed"));
     rerender(<SettingsTree pathname="/settings/preferences/appearance" />);
 

@@ -38,9 +38,10 @@ setting for agent profiles.
   "no compatible agent" empty states, pre-selection defaults). Those keep
   gating on `enabled !== false` exactly as they do today.
 - The setting SHALL NOT hide anything from a settings *page* itself: the
-  `/settings/agents` page keeps listing every profile with its toggle, and a
-  profile editor page stays directly reachable by URL even while its
-  left-panel nav entry is hidden.
+  `/settings/agents` page keeps listing every profile, and the profile
+  editor page (which owns the enable/disable toggle after the PageShell
+  restructure) stays directly reachable by URL even while its left-panel nav
+  entry is hidden.
 - Toggling the setting SHALL take effect immediately (no reload, no save
   bar) and SHALL sync across browser tabs.
 
@@ -86,25 +87,29 @@ Frontend primitives (new):
   its own key/event, so the two features cannot drift in mechanism.
 - `app/settings/agents/hide-disabled-agent-profiles-setting.tsx` — the
   settings-page row (label + description + `<Switch
-  id="hide-disabled-agent-profiles-in-nav">`), rendered inside the "Manage
-  existing profiles by agent" section on the agents settings page, directly
-  below the section header and above the first profile row.
+  id="hide-disabled-agent-profiles-in-nav">`), rendered on the agents
+  settings page directly below the header separator and above the
+  "Installed Agents" list (the restructured page's profile list lives inside
+  the installed-agent cards), so the setting appears before the first agent
+  profile on the page.
   The switch saves immediately on toggle (the agents page has no
   settings-floating-save bar; its profile enabled toggles are
-  immediate-save via `useProfileEnabledToggle`, and this setting follows
-  that page convention). The row renders only when the profiles section
-  renders: with zero profiles the section (header included) is absent, so
-  the row is absent too — there is nothing to hide yet, and it appears
-  automatically once the first profile exists.
+  immediate-save, and this setting follows that page convention).
 
 Modified:
 
-- `components/app-sidebar/sections/settings/agents-group.tsx` — the Settings
-  left panel's Agents tree filters its profile leaves: when
-  `hideDisabled` is on, a profile with `enabled === false` is omitted.
-  Profiles with `enabled` absent/`true` are always listed. The existing
-  `DisabledBadge` convention is unchanged (it still renders on any disabled
-  profile that is listed, i.e. when the setting is off).
+- `components/app-sidebar/sections/settings/settings-menu-branches.ts` —
+  the Settings left panel's Agents branch (`buildAgentsBranch`) filters its
+  profile children: when `hideDisabled` is on, a profile with
+  `enabled === false` is omitted. Profiles with `enabled` absent/`true` are
+  always listed. The existing "disabled" badge convention is unchanged (it
+  still renders on any disabled profile that is listed, i.e. when the
+  setting is off).
+- `components/app-sidebar/sections/settings/use-settings-menu-branches.ts` —
+  the live branch builder reads `useHideDisabledAgentProfilesInNav()` and
+  threads the flag into `buildAgentsBranch`, mirroring how
+  `useVisibleIntegrationSlugs` gates the integrations branch (both skip
+  filtering entirely on the default path).
 
 ## Permissions
 
@@ -142,13 +147,13 @@ nav-setting convention. It survives a browser restart but not a
   Settings left panel's Agents tree immediately (no reload required), while
   enabled profiles and legacy profiles without the flag stay listed.
 - **GIVEN** the "hide disabled" setting is on and a profile is hidden,
-  **WHEN** the user re-enables the profile via its `/settings/agents`
-  row toggle (or the profile editor header toggle), **THEN** the profile's
+  **WHEN** the user re-enables the profile via the profile editor header
+  toggle (`/settings/agents/<agent>/profiles/<id>`), **THEN** the profile's
   nav entry reappears immediately.
 - **GIVEN** the "hide disabled" setting is on, **WHEN** the user opens
   `/settings/agents` (the page itself), **THEN** every profile — disabled or
-  not — is still listed with its toggle, and the profile editor remains
-  reachable by URL.
+  not — is still listed, and the profile editor (which owns the
+  enable/disable toggle) remains reachable by URL.
 - **GIVEN** the "hide disabled" setting is on and a profile is disabled,
   **WHEN** the user opens the new task / new session / handoff / quick-chat
   selectors, **THEN** the disabled profile stays excluded exactly as it is

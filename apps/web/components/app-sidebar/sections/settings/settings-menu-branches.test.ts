@@ -15,6 +15,9 @@ import {
 const WORKSPACE_ID = "ws-1";
 const WORKSPACES_HREF = "/settings/workspaces";
 const WORKSPACES = [{ id: WORKSPACE_ID, name: "Main Workspace" }];
+// Hoisted so the filter tests can build fixtures without re-spelling the
+// display name (sonar duplicate-literal rule).
+const AGENT_DISPLAY_NAME = "Claude Code";
 const AGENTS = [
   {
     name: "claude-code",
@@ -197,9 +200,9 @@ describe("buildAgentsBranch", () => {
     const mixedAgent = {
       name: "claude-code",
       profiles: [
-        { id: "profile-1", name: "Default", agentDisplayName: "Claude Code" },
-        { id: "profile-2", name: "Retired", agentDisplayName: "Claude Code", enabled: false },
-        { id: "profile-3", name: "Legacy", agentDisplayName: "Claude Code" },
+        { id: "profile-1", name: "Default", agentDisplayName: AGENT_DISPLAY_NAME },
+        { id: "profile-2", name: "Retired", agentDisplayName: AGENT_DISPLAY_NAME, enabled: false },
+        { id: "profile-3", name: "Legacy", agentDisplayName: AGENT_DISPLAY_NAME },
       ],
     };
 
@@ -217,8 +220,8 @@ describe("buildAgentsBranch", () => {
     const mixedAgent = {
       name: "claude-code",
       profiles: [
-        { id: "profile-1", name: "Default", agentDisplayName: "Claude Code" },
-        { id: "profile-2", name: "Retired", agentDisplayName: "Claude Code", enabled: false },
+        { id: "profile-1", name: "Default", agentDisplayName: AGENT_DISPLAY_NAME },
+        { id: "profile-2", name: "Retired", agentDisplayName: AGENT_DISPLAY_NAME, enabled: false },
       ],
     };
 

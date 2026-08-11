@@ -4,8 +4,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockRequest = vi.fn();
 const mockSetTaskSession = vi.fn();
 const mockSetSessionAgentctlStatus = vi.fn();
+const mockSetResumeSkipped = vi.fn();
 let mockConnectionStatus = "connected";
-let mockSessionItems: Record<string, { started_at?: string; updated_at?: string }> = {};
+let mockPreventAutoStart = false;
+let mockSessionItems: Record<string, { started_at?: string; updated_at?: string; state?: string }> =
+  {};
 
 vi.mock("@/lib/ws/connection", () => ({
   getWebSocketClient: () => ({ request: mockRequest }),
@@ -18,8 +21,20 @@ vi.mock("@/components/state-provider", () => ({
       taskSessions: { items: mockSessionItems },
       setTaskSession: mockSetTaskSession,
       setSessionAgentctlStatus: mockSetSessionAgentctlStatus,
+      setResumeSkipped: mockSetResumeSkipped,
+      userSettings: { preventAutoStartAgentOnOpen: mockPreventAutoStart },
+      tasks: { resumeSkippedSessionIds: {} },
     }),
+  useAppStoreApi: () => ({
+    getState: () => ({ taskSessions: { items: mockSessionItems } }),
+  }),
 }));
+
+const SESSION_ID = "s1";
+const TASK_ID = "t1";
+const FAILED_STATE = "FAILED";
+const LAUNCH_ACTION = "session.launch";
+const STARTED_AT = "2026-01-01T00:00:00.000Z";
 
 import {
   resumeWithSilentFallback,
@@ -69,6 +84,7 @@ describe("resumeWithSilentFallback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockConnectionStatus = "connected";
+    mockPreventAutoStart = false;
     mockSessionItems = {};
     // tryLaunch logs caught errors via console.error; silence in tests so the
     // expected error paths don't pollute the test output.
@@ -78,20 +94,20 @@ describe("resumeWithSilentFallback", () => {
   it("uses resume on first try when it succeeds, never calling restore_workspace", async () => {
     mockRequest.mockResolvedValueOnce({
       success: true,
-      task_id: "t1",
-      session_id: "s1",
+      task_id: TASK_ID,
+      session_id: SESSION_ID,
       state: "STARTING",
       worktree_path: "/wt/foo",
       worktree_branch: "feature/foo",
     });
     const { setters, calls } = createSetters();
 
-    await resumeWithSilentFallback("t1", "s1", null, setters);
+    await resumeWithSilentFallback(TASK_ID, SESSION_ID, null, setters);
 
     expect(mockRequest).toHaveBeenCalledTimes(1);
     expect(mockRequest).toHaveBeenCalledWith(
-      "session.launch",
-      expect.objectContaining({ intent: "resume", session_id: "s1" }),
+      LAUNCH_ACTION,
+      expect.objectContaining({ intent: "resume", session_id: SESSION_ID }),
       expect.any(Number),
     );
     expect(calls.resumptionStates).toContain("resumed");
@@ -102,28 +118,28 @@ describe("resumeWithSilentFallback", () => {
   it("falls back to restore_workspace silently when resume returns success=false", async () => {
     // 1st call: resume fails. 2nd call: restore_workspace succeeds.
     mockRequest
-      .mockResolvedValueOnce({ success: false, task_id: "t1", state: "FAILED" })
+      .mockResolvedValueOnce({ success: false, task_id: TASK_ID, state: FAILED_STATE })
       .mockResolvedValueOnce({
         success: true,
-        task_id: "t1",
-        session_id: "s1",
-        state: "FAILED",
+        task_id: TASK_ID,
+        session_id: SESSION_ID,
+        state: FAILED_STATE,
         worktree_path: "/wt/foo",
       });
     const { setters, calls } = createSetters();
 
-    await resumeWithSilentFallback("t1", "s1", null, setters);
+    await resumeWithSilentFallback(TASK_ID, SESSION_ID, null, setters);
 
     expect(mockRequest).toHaveBeenCalledTimes(2);
     expect(mockRequest).toHaveBeenNthCalledWith(
       1,
-      "session.launch",
+      LAUNCH_ACTION,
       expect.objectContaining({ intent: "resume" }),
       expect.any(Number),
     );
     expect(mockRequest).toHaveBeenNthCalledWith(
       2,
-      "session.launch",
+      LAUNCH_ACTION,
       expect.objectContaining({ intent: "restore_workspace" }),
       expect.any(Number),
     );
@@ -133,12 +149,15 @@ describe("resumeWithSilentFallback", () => {
   });
 
   it("falls back to restore_workspace silently when resume throws", async () => {
-    mockRequest
-      .mockRejectedValueOnce(new Error("ws timeout"))
-      .mockResolvedValueOnce({ success: true, task_id: "t1", session_id: "s1", state: "FAILED" });
+    mockRequest.mockRejectedValueOnce(new Error("ws timeout")).mockResolvedValueOnce({
+      success: true,
+      task_id: TASK_ID,
+      session_id: SESSION_ID,
+      state: FAILED_STATE,
+    });
     const { setters, calls } = createSetters();
 
-    await resumeWithSilentFallback("t1", "s1", null, setters);
+    await resumeWithSilentFallback(TASK_ID, SESSION_ID, null, setters);
 
     expect(mockRequest).toHaveBeenCalledTimes(2);
     expect(calls.resumptionStates.at(-1)).toBe("resumed");
@@ -147,11 +166,11 @@ describe("resumeWithSilentFallback", () => {
 
   it("surfaces an error only when BOTH resume and restore_workspace fail", async () => {
     mockRequest
-      .mockResolvedValueOnce({ success: false, task_id: "t1", state: "FAILED" })
-      .mockResolvedValueOnce({ success: false, task_id: "t1", state: "FAILED" });
+      .mockResolvedValueOnce({ success: false, task_id: TASK_ID, state: FAILED_STATE })
+      .mockResolvedValueOnce({ success: false, task_id: TASK_ID, state: FAILED_STATE });
     const { setters, calls } = createSetters();
 
-    await resumeWithSilentFallback("t1", "s1", null, setters);
+    await resumeWithSilentFallback(TASK_ID, SESSION_ID, null, setters);
 
     expect(mockRequest).toHaveBeenCalledTimes(2);
     expect(calls.resumptionStates.at(-1)).toBe("error");
@@ -166,7 +185,7 @@ describe("resumeWithSilentFallback", () => {
       .mockRejectedValueOnce(new Error("still closed"));
     const { setters, calls } = createSetters();
 
-    await resumeWithSilentFallback("t1", "s1", null, setters);
+    await resumeWithSilentFallback(TASK_ID, SESSION_ID, null, setters);
 
     expect(mockRequest).toHaveBeenCalledTimes(2);
     expect(calls.resumptionStates.at(-1)).toBe("error");
@@ -177,35 +196,35 @@ describe("resumeWithSilentFallback", () => {
 
   it("seeds agentctl ready when restore_workspace fallback succeeds", async () => {
     mockRequest
-      .mockResolvedValueOnce({ success: false, task_id: "t1", state: "FAILED" })
+      .mockResolvedValueOnce({ success: false, task_id: TASK_ID, state: FAILED_STATE })
       .mockResolvedValueOnce({
         success: true,
-        task_id: "t1",
-        session_id: "s1",
-        state: "FAILED",
+        task_id: TASK_ID,
+        session_id: SESSION_ID,
+        state: FAILED_STATE,
       });
     const { setters } = createSetters();
     const setAgentctlReady = vi.fn();
     setters.setAgentctlReady = setAgentctlReady;
 
-    await resumeWithSilentFallback("t1", "s1", null, setters);
+    await resumeWithSilentFallback(TASK_ID, SESSION_ID, null, setters);
 
     expect(setAgentctlReady).toHaveBeenCalledTimes(1);
-    expect(setAgentctlReady).toHaveBeenCalledWith("s1");
+    expect(setAgentctlReady).toHaveBeenCalledWith(SESSION_ID);
   });
 
   it("does not seed agentctl ready when resume succeeds (new execution will emit its own events)", async () => {
     mockRequest.mockResolvedValueOnce({
       success: true,
-      task_id: "t1",
-      session_id: "s1",
+      task_id: TASK_ID,
+      session_id: SESSION_ID,
       state: "STARTING",
     });
     const { setters } = createSetters();
     const setAgentctlReady = vi.fn();
     setters.setAgentctlReady = setAgentctlReady;
 
-    await resumeWithSilentFallback("t1", "s1", null, setters);
+    await resumeWithSilentFallback(TASK_ID, SESSION_ID, null, setters);
 
     expect(setAgentctlReady).not.toHaveBeenCalled();
   });
@@ -215,24 +234,25 @@ describe("useSessionResumption", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockConnectionStatus = "connected";
+    mockPreventAutoStart = false;
     mockSessionItems = {
       s1: {
-        started_at: "2026-01-01T00:00:00.000Z",
+        started_at: STARTED_AT,
       },
     };
   });
 
   it("does not mint client timestamps when status has no updated_at", async () => {
     mockRequest.mockResolvedValueOnce({
-      session_id: "s1",
-      task_id: "t1",
+      session_id: SESSION_ID,
+      task_id: TASK_ID,
       state: "WAITING_FOR_INPUT",
       is_agent_running: false,
       is_resumable: false,
       needs_resume: false,
     });
 
-    renderHook(() => useSessionResumption("t1", "s1"));
+    renderHook(() => useSessionResumption(TASK_ID, SESSION_ID));
 
     await waitFor(() => expect(mockSetTaskSession).toHaveBeenCalled());
     expect(mockSetTaskSession).toHaveBeenCalledWith(expect.objectContaining({ updated_at: "" }));
@@ -241,8 +261,8 @@ describe("useSessionResumption", () => {
   it("refreshes the status and embedded editor capability after a successful resume", async () => {
     mockRequest
       .mockResolvedValueOnce({
-        session_id: "s1",
-        task_id: "t1",
+        session_id: SESSION_ID,
+        task_id: TASK_ID,
         state: "WAITING_FOR_INPUT",
         is_agent_running: false,
         is_resumable: true,
@@ -251,13 +271,13 @@ describe("useSessionResumption", () => {
       })
       .mockResolvedValueOnce({
         success: true,
-        task_id: "t1",
-        session_id: "s1",
+        task_id: TASK_ID,
+        session_id: SESSION_ID,
         state: "STARTING",
       })
       .mockResolvedValueOnce({
-        session_id: "s1",
-        task_id: "t1",
+        session_id: SESSION_ID,
+        task_id: TASK_ID,
         state: "STARTING",
         is_agent_running: true,
         is_resumable: false,
@@ -265,14 +285,82 @@ describe("useSessionResumption", () => {
         capabilities: { embedded_vscode: true },
       });
 
-    const { result } = renderHook(() => useSessionResumption("t1", "s1"));
+    const { result } = renderHook(() => useSessionResumption(TASK_ID, SESSION_ID));
 
     await waitFor(() => {
       expect(result.current.sessionStatus?.capabilities?.embedded_vscode).toBe(true);
     });
     expect(mockRequest).toHaveBeenLastCalledWith("task.session.status", {
-      task_id: "t1",
-      session_id: "s1",
+      task_id: TASK_ID,
+      session_id: SESSION_ID,
     });
+  });
+});
+
+describe("useSessionResumption prevent-auto-start gate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConnectionStatus = "connected";
+    mockPreventAutoStart = true;
+    mockSessionItems = {
+      s1: {
+        started_at: STARTED_AT,
+        updated_at: STARTED_AT,
+        state: "WAITING_FOR_INPUT",
+      },
+    };
+  });
+
+  it("skips the auto-resume, records the skip, and stays idle when the preference is on", async () => {
+    mockRequest.mockResolvedValueOnce({
+      session_id: SESSION_ID,
+      task_id: TASK_ID,
+      state: "WAITING_FOR_INPUT",
+      is_agent_running: false,
+      is_resumable: true,
+      needs_resume: true,
+      updated_at: STARTED_AT,
+    });
+
+    const { result } = renderHook(() => useSessionResumption(TASK_ID, SESSION_ID));
+
+    await waitFor(() => {
+      expect(mockSetResumeSkipped).toHaveBeenCalledWith(SESSION_ID, true);
+    });
+    // No resume/restore launch attempt happened.
+    const launchCalls = mockRequest.mock.calls.filter(([action]) => action === LAUNCH_ACTION);
+    expect(launchCalls).toHaveLength(0);
+    expect(result.current.resumptionState).toBe("idle");
+  });
+
+  it("auto-resumes when the preference is off (unchanged behavior)", async () => {
+    mockPreventAutoStart = false;
+    mockRequest
+      .mockResolvedValueOnce({
+        session_id: SESSION_ID,
+        task_id: TASK_ID,
+        state: "WAITING_FOR_INPUT",
+        is_agent_running: false,
+        is_resumable: true,
+        needs_resume: true,
+        updated_at: STARTED_AT,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        task_id: TASK_ID,
+        session_id: SESSION_ID,
+        state: "STARTING",
+      });
+
+    renderHook(() => useSessionResumption(TASK_ID, SESSION_ID));
+
+    await waitFor(() => {
+      expect(mockRequest).toHaveBeenCalledWith(
+        LAUNCH_ACTION,
+        expect.objectContaining({ session_id: SESSION_ID, intent: "resume" }),
+        expect.any(Number),
+      );
+    });
+    expect(mockSetResumeSkipped).not.toHaveBeenCalled();
   });
 });

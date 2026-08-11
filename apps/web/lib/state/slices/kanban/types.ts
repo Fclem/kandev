@@ -165,6 +165,12 @@ export type TaskState = {
   // map survives task switches so navigating back to a task can restore the
   // user's last-selected session instead of always jumping to primary.
   lastSessionByTaskId: Record<string, string>;
+  // resumeSkippedSessionIds records sessions whose open-time auto-resume was
+  // skipped because the prevent-auto-start-on-open preference is enabled. A
+  // Record (not a Set): the slice is Immer-managed and SSR-hydrated, so a
+  // native Set would break mutation and serialization. The Start agent button
+  // renders for these sessions until the agent confirms RUNNING.
+  resumeSkippedSessionIds: Record<string, true>;
 };
 
 export type KanbanSliceState = {
@@ -188,6 +194,11 @@ export type KanbanSliceActions = {
   // it explicitly after checking no non-terminal manual pin should be preserved.
   setActiveSessionAuto: (taskId: string, sessionId: string) => void;
   clearActiveSession: () => void;
+  // setResumeSkipped records/clears the resume-skipped marker for a session.
+  // Recording is conditional: it refuses when the session's current state is
+  // STARTING or RUNNING, so a stale status response can never leave a Start
+  // button while the agent is actually running.
+  setResumeSkipped: (sessionId: string, skipped: boolean) => void;
   setWorkflowSnapshot: (workflowId: string, data: WorkflowSnapshotData) => void;
   setKanbanMultiLoading: (loading: boolean) => void;
   clearKanbanMulti: () => void;

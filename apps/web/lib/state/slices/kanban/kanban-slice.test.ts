@@ -108,6 +108,7 @@ describe("kanban slice workspace transition", () => {
         activeSessionId: PINNED_SESSION_ID,
         pinnedSessionId: PINNED_SESSION_ID,
         lastSessionByTaskId: { [TASK_ID]: PINNED_SESSION_ID },
+        resumeSkippedSessionIds: {},
       },
     });
 
@@ -198,5 +199,46 @@ describe("kanban slice archived sidebar projection", () => {
     expect(store.getState().sidebarArchivedTasks.itemsByWorkspaceId[ARCHIVED_WORKSPACE_ID]).toEqual(
       [],
     );
+  });
+});
+
+describe("kanban slice resume-skipped marker", () => {
+  it("records the skip for a stopped session and clears it on request", () => {
+    const store = makeStore();
+    store.getState().setResumeSkipped("session-idle", true);
+    expect(store.getState().tasks.resumeSkippedSessionIds["session-idle"]).toBe(true);
+
+    store.getState().setResumeSkipped("session-idle", false);
+    expect(store.getState().tasks.resumeSkippedSessionIds["session-idle"]).toBeUndefined();
+  });
+
+  it("refuses to record the skip while the session is STARTING or RUNNING", () => {
+    // Minimal composed store: the kanban slice + a taskSessions bag. Kept out
+    // of createAppStore (too heavy for the shared suite run — it timed out).
+    type Composed = KanbanSlice & {
+      taskSessions: { items: Record<string, { state?: string }> };
+    };
+    const store = create<Composed>()(
+      immer((set, get, api) => ({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- slice composition matches lib/state/store.ts
+        ...createKanbanSlice(set as any, get as any, api as any),
+        taskSessions: { items: {} },
+      })),
+    );
+    store.setState({
+      taskSessions: {
+        items: { "session-running": { state: "RUNNING" } },
+      },
+    });
+    store.getState().setResumeSkipped("session-running", true);
+    expect(store.getState().tasks.resumeSkippedSessionIds["session-running"]).toBeUndefined();
+
+    store.setState({
+      taskSessions: {
+        items: { "session-starting": { state: "STARTING" } },
+      },
+    });
+    store.getState().setResumeSkipped("session-starting", true);
+    expect(store.getState().tasks.resumeSkippedSessionIds["session-starting"]).toBeUndefined();
   });
 });

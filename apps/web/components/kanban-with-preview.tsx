@@ -172,6 +172,7 @@ function useSelectedTask(
       id: task.id,
       title: task.title,
       workflowStepId: task.workflowStepId,
+      workflowId: task.workflowId,
       state: task.state,
       description: task.description,
       position: task.position,

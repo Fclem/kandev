@@ -6,7 +6,10 @@ import { Button } from "@kandev/ui/button";
 import type { Message, TaskSessionState } from "@/lib/types/http";
 import type { ToolCallMetadata } from "@/components/task/chat/types";
 import { launchSession } from "@/lib/services/session-launch-service";
-import { buildStartCreatedRequest } from "@/lib/services/session-launch-helpers";
+import {
+  buildResumeRequest,
+  buildStartCreatedRequest,
+} from "@/lib/services/session-launch-helpers";
 import { useAppStore } from "@/components/state-provider";
 import { useTask } from "@/hooks/use-task";
 import { ChatMessage } from "@/components/task/chat/messages/chat-message";
@@ -51,18 +54,33 @@ function TaskDescriptionStartButton({ taskId, sessionId }: { taskId: string; ses
   const prepareStatus = useAppStore(
     (state) => state.prepareProgress.bySessionId[sessionId]?.status ?? null,
   );
+  const resumeSkipped = useAppStore(
+    (state) => state.tasks.resumeSkippedSessionIds[sessionId] === true,
+  );
+  const setResumeSkipped = useAppStore((state) => state.setResumeSkipped);
 
   const handleStart = useCallback(async () => {
     setIsStarting(true);
     try {
-      const { request } = buildStartCreatedRequest(taskId, sessionId);
-      await launchSession(request);
+      // Never-started (CREATED) sessions use the start_created intent; a
+      // resume-skipped (recovered-idle) session resumes its existing agent.
+      const { request } = resumeSkipped
+        ? buildResumeRequest(taskId, sessionId)
+        : buildStartCreatedRequest(taskId, sessionId);
+      const response = await launchSession(request);
+      // Only confirmed RUNNING clears the resume-skipped marker: a resume
+      // response commonly reports STARTING (launch accepted, agent starting),
+      // and the WS RUNNING transition clears it later. Failed launches keep
+      // the button as a retry affordance.
+      if (response.state === "RUNNING") {
+        setResumeSkipped(sessionId, false);
+      }
     } catch (error) {
       console.error("Failed to start agent:", error);
     } finally {
       setIsStarting(false);
     }
-  }, [taskId, sessionId]);
+  }, [taskId, sessionId, resumeSkipped, setResumeSkipped]);
 
   // Hide while environment is being prepared
   if (prepareStatus === "preparing") return null;
@@ -132,8 +150,14 @@ function TaskDescriptionMessage({
       />
     );
   }
+  const resumeSkipped = useAppStore(
+    (state) => state.tasks.resumeSkippedSessionIds[sessionId ?? ""] === true,
+  );
   const showStartButton =
-    sessionState === "CREATED" && task?.state !== "SCHEDULING" && !!taskId && !!sessionId;
+    (sessionState === "CREATED" || resumeSkipped) &&
+    task?.state !== "SCHEDULING" &&
+    !!taskId &&
+    !!sessionId;
   return (
     <>
       <ChatMessage

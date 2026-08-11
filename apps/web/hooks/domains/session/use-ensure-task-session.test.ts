@@ -13,15 +13,30 @@ let mockSessionsResult: {
   loadSessions: mockLoadSessions,
 };
 
+let mockStoreState: {
+  userSettings: { preventAutoStartAgentOnOpen: boolean };
+  kanban: { workflowId: string | null; steps: Array<{ id: string; position: number }> };
+  kanbanMulti: { snapshots: Record<string, { steps: Array<{ id: string; position: number }> }> };
+} = {
+  userSettings: { preventAutoStartAgentOnOpen: false },
+  kanban: { workflowId: "wf-active", steps: [] },
+  kanbanMulti: { snapshots: {} },
+};
+
 vi.mock("@/lib/services/session-launch-service", () => ({
-  ensureTaskSession: (taskId: string) => mockEnsureTaskSession(taskId),
+  ensureTaskSession: (taskId: string, opts?: { autoStart?: boolean }) =>
+    mockEnsureTaskSession(taskId, opts),
 }));
 
 vi.mock("@/hooks/use-task-sessions", () => ({
   useTaskSessions: () => mockSessionsResult,
 }));
 
-import { useEnsureTaskSession } from "./use-ensure-task-session";
+vi.mock("@/components/state-provider", () => ({
+  useAppStore: (selector: (state: typeof mockStoreState) => unknown) => selector(mockStoreState),
+}));
+
+import { useEnsureTaskSession, isFinalWorkflowStep } from "./use-ensure-task-session";
 
 const TASK = { id: "task-1" };
 
@@ -33,6 +48,11 @@ function resetEnsureTaskSessionMocks() {
   vi.clearAllMocks();
   mockLoadSessions.mockResolvedValue(undefined);
   mockSessionsResult = { sessions: [], isLoaded: true, loadSessions: mockLoadSessions };
+  mockStoreState = {
+    userSettings: { preventAutoStartAgentOnOpen: false },
+    kanban: { workflowId: "wf-active", steps: [] },
+    kanbanMulti: { snapshots: {} },
+  };
   mockEnsureTaskSession.mockResolvedValue({
     success: true,
     task_id: "task-1",
@@ -50,7 +70,7 @@ describe("useEnsureTaskSession", () => {
     const { result } = renderHook(() => useEnsureTaskSession(TASK));
 
     expect(mockEnsureTaskSession).toHaveBeenCalledTimes(1);
-    expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1");
+    expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1", undefined);
     expect(result.current.status).toBe("preparing");
     await flushMicrotasks();
     expect(result.current.status).toBe("idle");
@@ -155,6 +175,123 @@ describe("useEnsureTaskSession — task changes", () => {
     expect(mockEnsureTaskSession).toHaveBeenCalledTimes(1);
     rerender({ task: { id: "task-2" } });
     expect(mockEnsureTaskSession).toHaveBeenCalledTimes(2);
-    expect(mockEnsureTaskSession).toHaveBeenLastCalledWith("task-2");
+    expect(mockEnsureTaskSession).toHaveBeenLastCalledWith("task-2", undefined);
+  });
+});
+
+describe("isFinalWorkflowStep", () => {
+  const steps = [
+    { id: "a", position: 0 },
+    { id: "b", position: 1 },
+    { id: "c", position: 2 },
+  ];
+
+  it("returns true for the max-position step", () => {
+    expect(isFinalWorkflowStep("c", steps)).toBe(true);
+  });
+
+  it("returns false for non-terminal steps", () => {
+    expect(isFinalWorkflowStep("a", steps)).toBe(false);
+    expect(isFinalWorkflowStep("b", steps)).toBe(false);
+  });
+
+  it("breaks position ties deterministically by max id", () => {
+    const tied = [
+      { id: "early", position: 2 },
+      { id: "late", position: 2 },
+    ];
+    expect(isFinalWorkflowStep("late", tied)).toBe(true);
+    expect(isFinalWorkflowStep("early", tied)).toBe(false);
+  });
+
+  it("treats missing step id or empty steps as not final", () => {
+    expect(isFinalWorkflowStep(undefined, steps)).toBe(false);
+    expect(isFinalWorkflowStep("c", [])).toBe(false);
+    expect(isFinalWorkflowStep("missing", steps)).toBe(false);
+  });
+});
+
+describe("useEnsureTaskSession prevent-auto-start gate", () => {
+  it("requests autoStart:false for a final-step task when the preference is on", async () => {
+    mockStoreState = {
+      userSettings: { preventAutoStartAgentOnOpen: true },
+      kanban: {
+        workflowId: "wf-active",
+        steps: [
+          { id: "step-1", position: 0 },
+          { id: "step-done", position: 1 },
+        ],
+      },
+      kanbanMulti: { snapshots: {} },
+    };
+    const { result } = renderHook(() =>
+      useEnsureTaskSession({ id: "task-1", workflowStepId: "step-done", workflowId: "wf-active" }),
+    );
+    await flushMicrotasks();
+    expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1", { autoStart: false });
+    expect(result.current.status).toBe("idle");
+  });
+
+  it("keeps the default ensure call for a non-final step even when the preference is on", async () => {
+    mockStoreState = {
+      userSettings: { preventAutoStartAgentOnOpen: true },
+      kanban: {
+        workflowId: "wf-active",
+        steps: [
+          { id: "step-1", position: 0 },
+          { id: "step-done", position: 1 },
+        ],
+      },
+      kanbanMulti: { snapshots: {} },
+    };
+    renderHook(() =>
+      useEnsureTaskSession({ id: "task-1", workflowStepId: "step-1", workflowId: "wf-active" }),
+    );
+    await flushMicrotasks();
+    expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1", undefined);
+  });
+
+  it("resolves the step list from the multi-workflow snapshot for a cross-workflow task", async () => {
+    mockStoreState = {
+      userSettings: { preventAutoStartAgentOnOpen: true },
+      kanban: {
+        workflowId: "wf-active",
+        steps: [{ id: "active-step", position: 0 }],
+      },
+      kanbanMulti: {
+        snapshots: {
+          "wf-other": {
+            steps: [
+              { id: "other-step", position: 0 },
+              { id: "other-done", position: 1 },
+            ],
+          },
+        },
+      },
+    };
+    renderHook(() =>
+      useEnsureTaskSession({ id: "task-2", workflowStepId: "other-done", workflowId: "wf-other" }),
+    );
+    await flushMicrotasks();
+    expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-2", { autoStart: false });
+  });
+
+  it("does not gate when the preference is off", async () => {
+    mockStoreState = {
+      userSettings: { preventAutoStartAgentOnOpen: false },
+      kanban: {
+        workflowId: "wf-active",
+        steps: [
+          { id: "step-1", position: 0 },
+          { id: "step-done", position: 1 },
+        ],
+      },
+      kanbanMulti: { snapshots: {} },
+    };
+    renderHook(() =>
+      useEnsureTaskSession({ id: "task-1", workflowStepId: "step-done", workflowId: "wf-active" }),
+    );
+    await flushMicrotasks();
+    expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1", undefined);
   });
 });

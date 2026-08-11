@@ -12,6 +12,7 @@ const TODO_LIST_PANEL_LABEL = "Show agent todo list panel";
 const ONLY_PIN_WHEN_NOT_EMPTY_LABEL = "Only pin when todo list is not empty";
 const DATA_STATE_ATTR = "data-state";
 const DATA_SETTINGS_DIRTY_ATTR = "data-settings-dirty";
+const SAVE_CHANGES_BUTTON = "Save changes";
 
 vi.mock("@/lib/api", () => ({
   updateUserSettings: (...args: unknown[]) => updateUserSettings(...args),
@@ -24,6 +25,16 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+/** Asserts the last save submitted both fields with the given values. */
+async function expectSavedAs(show: boolean, onlyWhenNotEmpty: boolean): Promise<void> {
+  await waitFor(() =>
+    expect(updateUserSettings).toHaveBeenCalledWith({
+      show_todo_list_panel: show,
+      show_todo_list_panel_only_when_not_empty: onlyWhenNotEmpty,
+    }),
+  );
+}
 
 function renderTodoListPanelSettings(
   userSettingsOverrides: Partial<UserSettingsState> = {},
@@ -62,14 +73,9 @@ describe("TodoListPanelSettings", () => {
       screen.getByTestId("todo-list-panel-settings-card").getAttribute(DATA_SETTINGS_DIRTY_ATTR),
     ).toBe("true");
 
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_BUTTON }));
 
-    await waitFor(() =>
-      expect(updateUserSettings).toHaveBeenCalledWith({
-        show_todo_list_panel: true,
-        show_todo_list_panel_only_when_not_empty: false,
-      }),
-    );
+    await expectSavedAs(true, false);
     await waitFor(() => expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false"));
   });
 
@@ -89,14 +95,9 @@ describe("TodoListPanelSettings", () => {
     const subToggle = screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL });
     expect(subToggle.getAttribute(DATA_STATE_ATTR)).toBe("checked");
 
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_BUTTON }));
 
-    await waitFor(() =>
-      expect(updateUserSettings).toHaveBeenCalledWith({
-        show_todo_list_panel: true,
-        show_todo_list_panel_only_when_not_empty: true,
-      }),
-    );
+    await expectSavedAs(true, true);
     await waitFor(() => expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false"));
   });
 
@@ -128,7 +129,7 @@ describe("TodoListPanelSettings", () => {
 
     const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
     fireEvent.click(toggle); // draft: main on
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_BUTTON }));
 
     // While the PATCH is in flight, a newer value arrives (e.g. via the
     // user.settings.updated WebSocket push from another tab).
@@ -148,6 +149,24 @@ describe("TodoListPanelSettings", () => {
     // And the UI must not be falsely clean: the draft still differs from the
     // newer saved baseline, so the dirty flag stays on and the user can
     // reconcile.
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
+  });
+
+  it("keeps the draft dirty and the store unchanged when saving fails", async () => {
+    updateUserSettings.mockRejectedValueOnce(new Error("save failed"));
+    const storeApi = renderTodoListPanelSettings({ showTodoListPanel: false });
+    const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
+    fireEvent.click(toggle); // draft: main on
+    expect(toggle.getAttribute(DATA_STATE_ATTR)).toBe("checked");
+
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_BUTTON }));
+    await waitFor(() => expect(updateUserSettings).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("Couldn't save")).toBeTruthy());
+
+    // The failed PATCH must not touch the store, the draft, or the dirty flag.
+    expect(storeApi.getState().userSettings.showTodoListPanel).toBe(false);
+    expect(storeApi.getState().userSettings.showTodoListPanelOnlyWhenNotEmpty).toBe(false);
+    expect(toggle.getAttribute(DATA_STATE_ATTR)).toBe("checked");
     expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
   });
 

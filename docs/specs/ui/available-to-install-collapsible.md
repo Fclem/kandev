@@ -12,7 +12,7 @@ The Agents settings page lists every discovered-but-not-installed agent and tool
 
 ## What
 
-- The "Available to Install" heading row on `/settings/agents` is a control that toggles the section's card grid between expanded and collapsed.
+- The "Browse available agents" heading row on `/settings/agents/browse` (the page that lists every discovered-but-not-installed agent and tool, formerly the "Available to Install" section on `/settings/agents`) is a control that toggles the section's card grid between expanded and collapsed.
 - The section renders expanded by default on first visit.
 - When collapsed, the install cards and tool cards are removed from view; the heading row (title, description, and a chevron that rotates when expanded) remains visible.
 - Install jobs started before collapsing keep streaming and completing server-side; a successful install still moves the agent under "Installed Agents" via the existing rescan, whether or not the section is expanded at that moment.
@@ -21,8 +21,8 @@ The Agents settings page lists every discovered-but-not-installed agent and tool
 
 ## Scenarios
 
-- **GIVEN** the Agents settings page with at least one installable agent or tool, **WHEN** the page loads, **THEN** the section's card grid is visible and the chevron points down (expanded state).
-- **GIVEN** the section expanded, **WHEN** the user clicks or taps the "Available to Install" heading row, **THEN** the card grid is hidden and the chevron indicates the collapsed state.
+- **GIVEN** the agents browse page with at least one installable agent or tool, **WHEN** the page loads, **THEN** the section's card grid is visible and the chevron points down (expanded state).
+- **GIVEN** the section expanded, **WHEN** the user clicks or taps the "Browse available agents" heading row, **THEN** the card grid is hidden and the chevron indicates the collapsed state.
 - **GIVEN** the section collapsed, **WHEN** the user clicks or taps the heading row again, **THEN** the card grid reappears.
 - **GIVEN** an install job streaming output, **WHEN** the user collapses the section, **THEN** the install continues and the agent appears under "Installed Agents" after the job succeeds.
 - **GIVEN** a phone-sized viewport, **WHEN** the user taps the heading row, **THEN** the section collapses and expands without introducing document-level horizontal overflow.

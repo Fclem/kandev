@@ -40,7 +40,7 @@ test.describe("Available to Install collapsible section", () => {
       }),
     );
 
-    await testPage.goto("/settings/agents");
+    await testPage.goto("/settings/agents/browse");
     await expect(testPage.getByRole("heading", { name: "Agents", exact: true })).toBeVisible({
       timeout: 15_000,
     });

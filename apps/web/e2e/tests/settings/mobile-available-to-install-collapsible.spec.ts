@@ -38,7 +38,7 @@ test.describe("Available to Install collapsible section on mobile", () => {
       }),
     );
 
-    await testPage.goto("/settings/agents");
+    await testPage.goto("/settings/agents/browse");
     const trigger = testPage.getByTestId("available-to-install-trigger");
     const installCard = testPage.getByTestId("install-card-codex");
     await expect(trigger).toBeVisible({ timeout: 15_000 });

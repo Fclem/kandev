@@ -16,7 +16,7 @@ export class GitLabSettingsPage {
 
   async goto(workspaceId?: string) {
     const path = workspaceId
-      ? workspaceSettingsHref(workspaceId, "integrations")
+      ? `${workspaceSettingsHref(workspaceId, "integrations")}/gitlab`
       : "/settings/integrations/gitlab";
     await this.page.goto(path);
     await this.hostInput.waitFor();

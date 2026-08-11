@@ -3,8 +3,7 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
-import { useParams, useRouter } from "@/lib/routing/client-router";
-import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
+import { useParams } from "@/lib/routing/client-router";
 import { IconCopy, IconTrash } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { Button } from "@kandev/ui/button";
@@ -12,10 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@kandev/ui/card";
 import { Separator } from "@kandev/ui/separator";
 import { Switch } from "@kandev/ui/switch";
 import { useToast } from "@/components/toast-provider";
-import {
-  useSettingsSaveContributor,
-  useSettingsSaveCoordinator,
-} from "@/components/settings/settings-save-provider";
+import { useSettingsSaveContributor } from "@/components/settings/settings-save-provider";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { ProfileFormFields, type ProfileFormData } from "@/components/settings/profile-form-fields";
 import { profilePermissionValues } from "@/lib/agent-permissions";
@@ -37,7 +33,10 @@ import {
   useProfileSave,
   useSyncAgentsToStore,
 } from "@/components/settings/agent-profile-page-state";
-import { duplicateAgentProfileAction } from "@/app/actions/agents";
+import {
+  profileSaveInvalidReason,
+  useProfileDuplicateAction,
+} from "@/components/settings/agent-profile-duplicate-action";
 import { CustomCLIFlagsCard } from "@/components/settings/cli-flags-field";
 import { ProfileEnabledHelp } from "@/components/settings/profile-enabled-help";
 
@@ -55,8 +54,7 @@ import type {
   PassthroughConfig,
 } from "@/lib/types/http";
 import type { UtilityAgentReference } from "@/lib/types/agent-profile-errors";
-import { useAppStore, useAppStoreApi } from "@/components/state-provider";
-import { applyProfileDuplicated } from "@/hooks/domains/settings/use-profile-duplicate";
+import { useAppStore } from "@/components/state-provider";
 import { AgentLogo } from "@/components/agent-logo";
 import { ProfileMcpConfigCard } from "@/app/settings/agents/[agentId]/profile-mcp-config-card";
 import { CommandPreviewCard } from "@/app/settings/agents/[agentId]/profiles/[profileId]/command-preview-card";
@@ -82,16 +80,6 @@ type ProfileEditorHeaderProps = {
   onDuplicate: () => void;
   duplicating: boolean;
 };
-
-function profileSaveInvalidReason(
-  profileName: string,
-  modelConfigResolutionPending: boolean,
-  translate: (key: string) => string,
-): string | undefined {
-  if (!profileName.trim()) return translate("agents:profileNameRequired");
-  if (modelConfigResolutionPending) return translate("agents:resolvingModelOptions");
-  return undefined;
-}
 
 function ProfileEditorHeader({
   agentName,
@@ -425,66 +413,12 @@ function ProfileEditor({
   });
   const deleteState = useProfileDelete(agent, draft, settingsAgents, syncAgentsToStore, toast);
 
-  const storeApi = useAppStoreApi();
-  const router = useRouter();
-  const { saveAll } = useSettingsSaveCoordinator();
-  const [duplicating, setDuplicating] = useState(false);
-  const handleDuplicateProfile = useCallback(async () => {
-    if (duplicating) return;
-    setDuplicating(true);
-    try {
-      // Save EVERY dirty contributor (the profile editor AND the MCP card)
-      // so the copy starts from what the user sees. saveAll respects each
-      // contributor's canSave; when anything is invalid or fails to persist,
-      // it reports canLeave=false and we abort before posting.
-      const saved = await saveAll();
-      if (!saved.canLeave) {
-        const reason = profileSaveInvalidReason(draft.name, modelConfigResolutionPending, t);
-        if (reason) {
-          toast({
-            title: t("agents:failedToDuplicateProfile"),
-            description: reason,
-            variant: "error",
-          });
-        }
-        return;
-      }
-      const created = await duplicateAgentProfileAction(draft.id);
-      // Merge the copy into the store so the destination page resolves it
-      // without waiting on the WS round-trip.
-      storeApi.setState((state) => applyProfileDuplicated(state, agent, created));
-      toast({
-        title: t("agents:duplicateProfileSuccess"),
-        description: created.name,
-        variant: "success",
-      });
-      // SPA navigation, not location.assign: the toast survives the route
-      // change and the dirty-settings blocker was already resolved by the
-      // save above (the bypass is the pattern the executor editors use
-      // after an awaited save).
-      runWithNavigationBlockerBypassed(() =>
-        router.push(`/settings/agents/${encodeURIComponent(agent.name)}/profiles/${created.id}`),
-      );
-    } catch (error) {
-      toast({
-        title: t("agents:failedToDuplicateProfile"),
-        description: errorMessage(error),
-        variant: "error",
-      });
-    } finally {
-      setDuplicating(false);
-    }
-  }, [
+  const { handleDuplicate: handleDuplicateProfile, duplicating } = useProfileDuplicateAction({
     agent,
-    draft.id,
-    duplicating,
+    draft,
     modelConfigResolutionPending,
-    router,
-    saveAll,
-    storeApi,
-    t,
-    toast,
-  ]);
+    translate: t,
+  });
 
   return (
     <div className="space-y-8">

@@ -160,19 +160,27 @@ export async function duplicateAgentProfileAction(profileId: string): Promise<Ag
 - `apps/web/components/settings/agent-profile-page.tsx`: add a Duplicate
   button to `ProfileEditorHeader` (copy icon + `t("agents:duplicate")`,
   `data-testid="duplicate-profile-header"`, disabled + `aria-busy` while a
-  duplicate is in flight). On success the handler first saves EVERY dirty
-  contributor via the shared settings save coordinator
-  (`useSettingsSaveCoordinator().saveAll` — the profile editor AND its MCP
-  card; `saveAll` respects each contributor's `canSave`, so an invalid draft
-  aborts with a toast before the POST), POSTs the duplicate, merges the copy
-  into the store, toasts `agents:duplicateProfileSuccess`, and SPA-navigates
-  via `runWithNavigationBlockerBypassed(() => router.push(...))` to the
-  copy's page — never `window.location.assign`, so the success toast
-  survives and the dirty-settings blocker is already resolved by the save.
-  The row-level duplicate hook guards against double-clicks (per-profile
-  in-flight set). The profile save path (`syncAgentsToStore`) reconciles the
-  options slice by ID (`reconcileAgentProfileOptions`), preserving
-  WS-delivered orphan options exactly like the duplicate merge.
+  duplicate is in flight). The flow lives in the extracted
+  `useProfileDuplicateAction` hook
+  (`components/settings/agent-profile-duplicate-action.ts`, unit-tested):
+  a ref-based in-flight guard (two rapid clicks can never issue two
+  copies), then save EVERY dirty contributor via the shared settings save
+  coordinator (`useSettingsSaveCoordinator().saveAll` — the profile editor
+  AND its MCP card; `saveAll` respects each contributor's `canSave`, and the
+  abort toasts the blocking contributor's `invalidReason` — MCP error or
+  profile-name validation), POST the duplicate, merge the copy into the
+  store, toast `agents:duplicateProfileSuccess`, cancel any pending
+  navigation intent the dirty guard had blocked, and SPA-navigate via
+  `runWithNavigationBlockerBypassed(() => router.push(...))` — never
+  `window.location.assign`, so the success toast survives and the
+  dirty-settings blocker is already resolved by the save. The row-level
+  duplicate hook guards against double-clicks (per-profile in-flight set).
+  The profile save path (`syncAgentsToStore`) reconciles the options slice
+  by ID (`reconcileAgentProfileOptions`), preserving WS-delivered orphan
+  options exactly like the duplicate merge. The merge keeps a newer
+  WS-delivered orphan option (revision carried on the option as `updatedAt`)
+  over a stale duplicate HTTP response, matching the newer-wins rule used
+  when the owning agent is present.
 
 ### i18n
 

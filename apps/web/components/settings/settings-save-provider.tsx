@@ -70,6 +70,11 @@ export type SettingsSaveCoordinator = {
   status: SettingsSaveStatus;
   errorKind: SettingsSaveErrorKind | null;
   hasDirty: boolean;
+  /** Reason why the first invalid dirty contributor cannot be saved, if any. */
+  invalidReason: string | undefined;
+  /** Cancel a navigation intent blocked by the dirty guard (the caller is
+   * superseding it with its own navigation). */
+  cancelPendingNavigation: () => void;
   clearSavedStatus: () => void;
 };
 
@@ -87,10 +92,6 @@ export function SettingsSaveProvider({
     contributors,
     refreshRegistry,
   );
-  const pendingNavigationRef = useRef<NavigationIntent | null>(null);
-  const discardingRef = useRef(false);
-  const [pendingNavigation, setPendingNavigation] = useState<NavigationIntent | null>(null);
-  const [isDiscarding, setIsDiscarding] = useState(false);
   const hasDirty = dirtyContributors.length > 0;
   const invalidReason = dirtyContributors.find(({ contributor }) => contributor.canSave === false)
     ?.contributor.invalidReason;
@@ -102,67 +103,29 @@ export function SettingsSaveProvider({
     return () => window.clearTimeout(timeout);
   }, [clearSavedStatus, status]);
 
-  const handleSave = useCallback(async (): Promise<boolean> => {
-    const result = await saveAll();
-    if (!result.canLeave) return false;
-    settlePendingNavigation(pendingNavigationRef, setPendingNavigation);
-    return true;
-  }, [saveAll]);
-
-  const discardDirtyContributors = useCallback(async (): Promise<boolean> => {
-    if (discardingRef.current) return false;
-    discardingRef.current = true;
-    setIsDiscarding(true);
-    const submitted = snapshotDirtyContributors(contributors);
-    let hasNewerChanges = false;
-    try {
-      for (const { contributor } of submitted) {
-        if (!isCurrentRevision(contributors, contributor)) {
-          hasNewerChanges = true;
-          continue;
-        }
-        await contributor.discard(contributor.revision);
-        hasNewerChanges ||= hasNewerRevision(contributors, contributor);
-      }
-      refreshRegistry();
-      if (hasNewerChanges) return false;
-      settlePendingNavigation(pendingNavigationRef, setPendingNavigation);
-      return true;
-    } catch {
-      markError("reset");
-      return false;
-    } finally {
-      discardingRef.current = false;
-      setIsDiscarding(false);
-    }
-  }, [contributors, markError, refreshRegistry]);
-
-  const discardAndLeave = useCallback(async () => {
-    await discardDirtyContributors();
-  }, [discardDirtyContributors]);
-
-  const continueEditing = useCallback(() => {
-    const intent = pendingNavigationRef.current;
-    pendingNavigationRef.current = null;
-    setPendingNavigation(null);
-    intent?.cancel();
-  }, []);
-
-  useEffect(() => {
-    if (!hasDirty) return;
-    return setNavigationBlocker((intent) => {
-      pendingNavigationRef.current?.cancel();
-      pendingNavigationRef.current = intent;
-      setPendingNavigation(intent);
-    });
-  }, [hasDirty]);
+  const {
+    pendingNavigation,
+    isDiscarding,
+    handleSave,
+    discardDirtyContributors,
+    discardAndLeave,
+    continueEditing,
+  } = useSaveNavigationFlow({ saveAll, contributors, markError, refreshRegistry, hasDirty });
 
   useSettingsBeforeUnloadGuard(hasDirty);
 
   return (
     <SettingsSaveProviderBody
       registry={registry}
-      coordinator={{ saveAll, status, errorKind, hasDirty, clearSavedStatus }}
+      coordinator={{
+        saveAll,
+        status,
+        errorKind,
+        hasDirty,
+        invalidReason,
+        cancelPendingNavigation: continueEditing,
+        clearSavedStatus,
+      }}
       placement={placement}
       displayStatus={displayStatus}
       errorKind={errorKind}
@@ -248,6 +211,89 @@ export function useSettingsSaveCoordinator(): SettingsSaveCoordinator {
   const coordinator = useContext(SettingsSaveCoordinatorContext);
   if (!coordinator) throw new Error("useSettingsSaveCoordinator requires SettingsSaveProvider");
   return coordinator;
+}
+
+function useSaveNavigationFlow({
+  saveAll,
+  contributors,
+  markError,
+  refreshRegistry,
+  hasDirty,
+}: {
+  saveAll: () => Promise<SaveResult>;
+  contributors: Map<string, RegisteredContributor>;
+  markError: (kind: SettingsSaveErrorKind) => void;
+  refreshRegistry: () => void;
+  hasDirty: boolean;
+}) {
+  const pendingNavigationRef = useRef<NavigationIntent | null>(null);
+  const discardingRef = useRef(false);
+  const [pendingNavigation, setPendingNavigation] = useState<NavigationIntent | null>(null);
+  const [isDiscarding, setIsDiscarding] = useState(false);
+
+  useEffect(() => {
+    if (!hasDirty) return;
+    return setNavigationBlocker((intent) => {
+      pendingNavigationRef.current?.cancel();
+      pendingNavigationRef.current = intent;
+      setPendingNavigation(intent);
+    });
+  }, [hasDirty]);
+
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    const result = await saveAll();
+    if (!result.canLeave) return false;
+    settlePendingNavigation(pendingNavigationRef, setPendingNavigation);
+    return true;
+  }, [saveAll]);
+
+  const discardDirtyContributors = useCallback(async (): Promise<boolean> => {
+    if (discardingRef.current) return false;
+    discardingRef.current = true;
+    setIsDiscarding(true);
+    const submitted = snapshotDirtyContributors(contributors);
+    let hasNewerChanges = false;
+    try {
+      for (const { contributor } of submitted) {
+        if (!isCurrentRevision(contributors, contributor)) {
+          hasNewerChanges = true;
+          continue;
+        }
+        await contributor.discard(contributor.revision);
+        hasNewerChanges ||= hasNewerRevision(contributors, contributor);
+      }
+      refreshRegistry();
+      if (hasNewerChanges) return false;
+      settlePendingNavigation(pendingNavigationRef, setPendingNavigation);
+      return true;
+    } catch {
+      markError("reset");
+      return false;
+    } finally {
+      discardingRef.current = false;
+      setIsDiscarding(false);
+    }
+  }, [contributors, markError, refreshRegistry]);
+
+  const discardAndLeave = useCallback(async () => {
+    await discardDirtyContributors();
+  }, [discardDirtyContributors]);
+
+  const continueEditing = useCallback(() => {
+    const intent = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    setPendingNavigation(null);
+    intent?.cancel();
+  }, []);
+
+  return {
+    pendingNavigation,
+    isDiscarding,
+    handleSave,
+    discardDirtyContributors,
+    discardAndLeave,
+    continueEditing,
+  };
 }
 
 function useSettingsBeforeUnloadGuard(enabled: boolean) {

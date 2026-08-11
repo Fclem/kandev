@@ -127,6 +127,11 @@ func (f *fakeStore) DuplicateAgentProfile(_ context.Context, input store.Duplica
 	}
 	if f.duplicateChangedOnce {
 		f.duplicateChangedOnce = false
+		// Simulate a concurrent writer: the stored source row changes between
+		// the controller's first read and its duplicate attempt, so a retry
+		// must re-read the source and copy the NEW state.
+		input.Source.Name = "Changed Name"
+		input.Source.UpdatedAt = input.Source.UpdatedAt.Add(time.Second)
 		return store.ErrProfileChanged
 	}
 	// Version check mirrors the sqlite store: the stored source rows must

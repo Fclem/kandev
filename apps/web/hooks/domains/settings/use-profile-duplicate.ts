@@ -48,15 +48,21 @@ export function applyProfileDuplicated(
   const rebuiltOptions = nextAgents.flatMap((item) =>
     item.profiles.map((profile) => toAgentProfileOption(item, profile)),
   );
-  const preserved = state.agentProfiles.items.filter(
-    (option) =>
-      // The copy option is always rebuilt from the known agent (never the
-      // WS stub with an empty agent_name); everything else the rebuild does
-      // not represent stays.
-      option.id !== created.id && !rebuiltOptions.some((rebuilt) => rebuilt.id === option.id),
-  );
+  const rebuiltCopy = rebuiltOptions.some((option) => option.id === created.id);
+  const preserved = state.agentProfiles.items.filter((option) => {
+    if (option.id === created.id) {
+      // Owner present: the rebuilt option wins (the store profile was already
+      // resolved by the newer-updatedAt logic above). Owner absent: keep an
+      // existing WS-delivered option only when it is NEWER than this —
+      // possibly stale — HTTP response; otherwise let the copy option below
+      // replace it with the known agent metadata.
+      if (rebuiltCopy) return false;
+      return (option.updatedAt ?? "") > (created.updatedAt ?? "");
+    }
+    return !rebuiltOptions.some((rebuilt) => rebuilt.id === option.id);
+  });
   const copyOption = toAgentProfileOption({ id: agent.id, name: agent.name }, created);
-  const copyAlreadyPresent = rebuiltOptions.some((option) => option.id === created.id);
+  const copyAlreadyPresent = rebuiltCopy || preserved.some((option) => option.id === created.id);
 
   const agentProfilesItems = copyAlreadyPresent
     ? [...preserved, ...rebuiltOptions]

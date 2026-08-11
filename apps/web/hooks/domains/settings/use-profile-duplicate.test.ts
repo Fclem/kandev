@@ -30,8 +30,15 @@ function agent(id: string, ...profiles: AgentProfile[]): Agent {
   return { id, name: id, profiles } as unknown as Agent;
 }
 
-function option(id: string): AgentProfileOption {
-  return { id, label: id, agent_id: "a1", agent_name: "a1", cli_passthrough: false };
+function option(id: string, updatedAt = ""): AgentProfileOption {
+  return {
+    id,
+    label: id,
+    agent_id: "a1",
+    agent_name: "a1",
+    cli_passthrough: false,
+    updatedAt,
+  };
 }
 
 function stateWith(agents: Agent[], options: AgentProfileOption[]) {
@@ -92,6 +99,22 @@ describe("applyProfileDuplicated", () => {
     const options = next.agentProfiles.items.filter((o) => o.id === "p2");
     expect(options).toHaveLength(1);
     expect(options[0].agent_name).toBe("a1");
+  });
+
+  it("keeps a newer WS-delivered orphan option over a stale duplicate response", () => {
+    // Owner absent; WS delivered a NEWER version of the copy than this
+    // delayed HTTP response. The merge must not regress it to the stale one.
+    const staleCreated = profile("p2", "a1", COPY_NAME, "2026-08-11T21:00:00Z");
+    const newerOrphan = option("p2", "2026-08-11T22:00:00Z");
+    const initial = stateWith([], [newerOrphan]);
+
+    const next = applyProfileDuplicated(initial, agent("a1"), staleCreated);
+
+    const options = next.agentProfiles.items.filter((o) => o.id === "p2");
+    expect(options).toHaveLength(1);
+    // The preserved option keeps the newer revision (label from the option).
+    expect(options[0].label).toBe("p2");
+    expect(options[0].updatedAt).toBe("2026-08-11T22:00:00Z");
   });
 
   it("keeps a newer WS-delivered version instead of the stale duplicate response", () => {

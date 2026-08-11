@@ -275,7 +275,8 @@ func TestDuplicateProfile_NameSuffixFromEmptySourceName(t *testing.T) {
 // TestDuplicateProfile_RetriesOnConcurrentChange verifies the controller
 // re-reads the source and retries when the repository aborts the first
 // attempt with ErrProfileChanged (a concurrent writer), ending with exactly
-// one copy.
+// one copy — and that the retried copy reflects the NEW source state (proving
+// the fresh GetAgentProfile happened).
 func TestDuplicateProfile_RetriesOnConcurrentChange(t *testing.T) {
 	source := sourceProfile()
 	ctrl, st := duplicateSetup(source)
@@ -287,6 +288,9 @@ func TestDuplicateProfile_RetriesOnConcurrentChange(t *testing.T) {
 	}
 	if result.ID == source.ID || result.ID == "" {
 		t.Fatalf("copy ID = %q, want a fresh ID", result.ID)
+	}
+	if result.Name != "Changed Name Copy" {
+		t.Errorf("copy name = %q, want %q (copy must be built from the re-read source)", result.Name, "Changed Name Copy")
 	}
 	if len(st.created) != 1 {
 		t.Fatalf("stored copies = %d, want exactly 1 after retry", len(st.created))

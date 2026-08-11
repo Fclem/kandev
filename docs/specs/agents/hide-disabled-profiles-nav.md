@@ -85,7 +85,10 @@ Frontend primitives (new):
   The switch saves immediately on toggle (the agents page has no
   settings-floating-save bar; its profile enabled toggles are
   immediate-save via `useProfileEnabledToggle`, and this setting follows
-  that page convention).
+  that page convention). The row renders only when the profiles section
+  renders: with zero profiles the section (header included) is absent, so
+  the row is absent too — there is nothing to hide yet, and it appears
+  automatically once the first profile exists.
 
 Modified:
 

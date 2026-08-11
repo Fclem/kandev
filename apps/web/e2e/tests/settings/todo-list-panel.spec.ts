@@ -248,6 +248,8 @@ test.describe("Todo list panel preference", () => {
     seedData,
   }) => {
     test.setTimeout(120_000);
+    // Deterministic viewport so the geometry assertions below are stable.
+    await testPage.setViewportSize({ width: 1440, height: 900 });
     const task = await createTaskWithTodos(apiClient, seedData, "Todos fills panel height");
     await setTodoListPanelPreference(apiClient, true);
     await openTask(testPage, task.id);
@@ -265,13 +267,15 @@ test.describe("Todo list panel preference", () => {
     expect(slotBox).not.toBeNull();
     expect(Math.abs((panelBox?.height ?? 0) - (slotBox?.height ?? 0))).toBeLessThanOrEqual(4);
 
-    // The checklist scroll container is no longer a fixed-size popover list
-    // (~40px for two rows, capped at 192px): it flexes to consume the
-    // panel's remaining height below the header/progress chrome.
+    // The checklist scroll container is no longer a fixed-size popover list:
+    // it must consume the panel height below the header/progress chrome
+    // (~66px). A relative bound against the measured slot keeps this
+    // assertion layout-independent (no absolute pixel floor, valid in short
+    // split groups), while still failing the pre-fix 192px cap in any
+    // hosting panel taller than ~280px.
     const listBox = await panel.locator(".overflow-y-auto").boundingBox();
     expect(listBox).not.toBeNull();
-    expect(listBox!.height).toBeGreaterThan(120);
-    expect(listBox!.height).toBeGreaterThan((slotBox?.height ?? 0) - 100);
+    expect(listBox!.height).toBeGreaterThan((slotBox?.height ?? 0) - 90);
   });
 
   test("is manually addable from the task workbench's own + menu, independent of the preference", async ({

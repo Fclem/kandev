@@ -93,6 +93,9 @@ describe("dockview-panel-content todos panel (desktop task workbench)", () => {
     render(<>{renderPanel(TODOS_PANEL_ID, "todos", {})}</>);
 
     expect(screen.getByTestId("todos-panel-empty-state").textContent).toBe("No todos yet.");
+    // The empty state must occupy the full hosting panel like the populated
+    // state (review finding, round 3), not collapse to its intrinsic height.
+    expect(screen.getByTestId("todos-panel-empty-state").classList.contains("h-full")).toBe(true);
   });
 
   it("falls back to the latest persisted todo message when the live store has no entry for the session (a completed/reopened session)", () => {

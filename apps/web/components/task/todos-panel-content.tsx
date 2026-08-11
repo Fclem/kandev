@@ -31,7 +31,10 @@ export function TodosContent() {
 
   if (todos.length === 0) {
     return (
-      <div data-testid="todos-panel-empty-state" className="p-4 text-sm text-muted-foreground">
+      <div
+        data-testid="todos-panel-empty-state"
+        className="flex h-full min-h-0 flex-col p-4 text-sm text-muted-foreground"
+      >
         {t("chat:noTodosYet")}
       </div>
     );

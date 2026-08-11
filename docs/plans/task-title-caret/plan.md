@@ -200,9 +200,10 @@ primary session and follows the dependency order above.
 - `cd apps && pnpm --filter @kandev/web test -- --run hooks/use-task-title-selection-restore.test.tsx`
   — passed (10 tests).
 - `cd apps/web && pnpm e2e:raw tests/task/task-title-caret.spec.ts` — passed
-  (2 tests) before the fix (RED: caret at 60) and after (GREEN: caret at 8).
+  (3 tests) before the fix (RED: caret at 60) and after (GREEN: caret at 8;
+  the third case covers the same-char bail-out).
 - `cd apps/web && pnpm e2e:raw --project=mobile-chrome tests/task/mobile-task-title-caret.spec.ts`
-  — passed (2 tests) RED then GREEN.
+  — passed (3 tests) RED then GREEN.
 - `cd apps/web && pnpm e2e:raw tests/github/pr-action-create-task-dialog.spec.ts`
   — passed (guards the `maxlength`-absence contract).
 - `make fmt` — passed.
@@ -232,6 +233,22 @@ Round 2 (same reviewer): **NO FINDINGS** — the `lastCommittedRef` fix was
 verified complete (no desync path; the guard test genuinely exercises the
 bail-out), the new coverage is sound, and the earlier-passing areas remain
 intact.
+
+Rounds 3-4 (OMP GPT Luna, fresh reviewer): one major + two minors + two nits,
+all fixed in `f8574cf6` and `6740e3e9`:
+
+- **Major (round 3)** — same-result truncations (e.g. typing the identical
+  character into an all-same-char 60-char title) still reset the caret: the
+  render bails out, but React's controlled-state restoration writes the value
+  back after the event with no commit to hook into. Fixed with an immediate
+  microtask restore in the bail-out path, guarded by element connection and
+  focus. Unit + desktop/mobile E2E coverage added.
+- **Minor (round 4)** — the bail-out microtask could restore a stale caret
+  after a same-turn value or identity change. Fixed with an epoch token
+  invalidated by newer changes and commits, plus ownership (`inputRef.current
+  === el`) and value (`el.value === next`) guards. Regression test added.
+- **Minor (round 4)** — bail-out path untested for textarea. Added.
+- **Nits** — verification counts corrected (unit 12, E2E 3 per project).
 
 ## Open Questions
 

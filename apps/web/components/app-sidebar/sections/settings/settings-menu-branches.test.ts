@@ -192,6 +192,42 @@ describe("buildAgentsBranch", () => {
   it("drops an agent with no profiles rather than rendering a dead row", () => {
     expect(buildAgentsBranch([{ name: "empty", profiles: [] }])).toEqual([]);
   });
+
+  it("omits disabled profiles from the branch only when the hide setting is on", () => {
+    const mixedAgent = {
+      name: "claude-code",
+      profiles: [
+        { id: "profile-1", name: "Default", agentDisplayName: "Claude Code" },
+        { id: "profile-2", name: "Retired", agentDisplayName: "Claude Code", enabled: false },
+        { id: "profile-3", name: "Legacy", agentDisplayName: "Claude Code" },
+      ],
+    };
+
+    const [agent] = buildAgentsBranch([mixedAgent], undefined, true);
+
+    // Enabled and legacy (no `enabled` field) profiles stay; only `enabled ===
+    // false` is omitted.
+    expect(hrefsOf(agent.children ?? [])).toEqual([
+      "/settings/agents/claude-code/profiles/profile-1",
+      "/settings/agents/claude-code/profiles/profile-3",
+    ]);
+  });
+
+  it("keeps disabled profiles listed when the hide setting is off or absent", () => {
+    const mixedAgent = {
+      name: "claude-code",
+      profiles: [
+        { id: "profile-1", name: "Default", agentDisplayName: "Claude Code" },
+        { id: "profile-2", name: "Retired", agentDisplayName: "Claude Code", enabled: false },
+      ],
+    };
+
+    const [agent] = buildAgentsBranch([mixedAgent]);
+    const [agentWithOff] = buildAgentsBranch([mixedAgent], undefined, false);
+
+    expect(hrefsOf(agent.children ?? [])).toHaveLength(2);
+    expect(hrefsOf(agentWithOff.children ?? [])).toHaveLength(2);
+  });
 });
 
 describe("buildExecutorsBranch", () => {

@@ -406,10 +406,12 @@ describe("SettingsTree badges", () => {
     state.agentDiscovery.items = [];
     state.agentDiscovery.loaded = false;
     integrationsEnabled.clear();
+    window.localStorage.removeItem("kandev:agents:hideDisabledInNav:v1");
   });
 
   afterEach(() => {
     setMenuMode("flat");
+    window.localStorage.removeItem("kandev:agents:hideDisabledInNav:v1");
     cleanup();
   });
 
@@ -422,6 +424,28 @@ describe("SettingsTree badges", () => {
     // but stays here, so the menu has to say why it looks inert.
     expect(screen.getByRole("link", { name: /Retired/ }).textContent).toContain("Disabled");
     expect(screen.getByRole("link", { name: "Default" }).textContent).not.toContain("Disabled");
+  });
+
+  it("hides a disabled profile from the tree when the hide setting is on", () => {
+    window.localStorage.setItem("kandev:agents:hideDisabledInNav:v1", "true");
+    setMenuMode("persistent", [AGENTS_ROW_KEY, AGENT_KEY]);
+    render(<SettingsTree pathname="/settings/preferences/appearance" />);
+
+    expect(screen.queryByRole("link", { name: /Retired/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "Default" })).toBeTruthy();
+  });
+
+  it("reveals a disabled profile again once the hide setting is turned back off", () => {
+    window.localStorage.setItem("kandev:agents:hideDisabledInNav:v1", "true");
+    setMenuMode("persistent", [AGENTS_ROW_KEY, AGENT_KEY]);
+    const { rerender } = render(<SettingsTree pathname="/settings/preferences/appearance" />);
+    expect(screen.queryByRole("link", { name: /Retired/ })).toBeNull();
+
+    window.localStorage.removeItem("kandev:agents:hideDisabledInNav:v1");
+    window.dispatchEvent(new Event("kandev:agents:hide-disabled-in-nav-changed"));
+    rerender(<SettingsTree pathname="/settings/preferences/appearance" />);
+
+    expect(screen.getByRole("link", { name: /Retired/ }).textContent).toContain("Disabled");
   });
 
   it("badges the active workspace, the way its own list does", () => {

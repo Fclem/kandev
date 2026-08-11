@@ -12,6 +12,18 @@ vi.mock("@/components/task/chat/message-renderer", () => ({
   ),
 }));
 
+let mockResumeSkippedSessionIds: Record<string, true> = {};
+
+vi.mock("@/components/state-provider", () => ({
+  useAppStore: (
+    selector: (state: { tasks: { resumeSkippedSessionIds: Record<string, true> } }) => unknown,
+  ) => selector({ tasks: { resumeSkippedSessionIds: mockResumeSkippedSessionIds } }),
+}));
+
+vi.mock("@/components/task/chat/session-resume-start-button", () => ({
+  SessionResumeStartButton: () => <div data-testid="resume-start-button">Start agent</div>,
+}));
+
 import { MessageListFooter } from "./message-list-footer";
 
 afterEach(cleanup);
@@ -109,5 +121,37 @@ describe("MessageListFooter", () => {
 
     expect(screen.getByTestId(AGENT_STATUS_TEST_ID)).toBeTruthy();
     expect(screen.queryByTestId("action-message")).toBeNull();
+  });
+});
+
+describe("MessageListFooter resume-skipped start button", () => {
+  const withMessages = [actionableFailure];
+
+  it("renders the Start agent button for a resume-skipped session with messages", () => {
+    mockResumeSkippedSessionIds = { "session-1": true };
+    render(
+      <MessageListFooter
+        sessionState="WAITING_FOR_INPUT"
+        sessionId="session-1"
+        messages={withMessages}
+      />,
+    );
+    expect(screen.getByTestId("resume-start-button")).toBeTruthy();
+  });
+
+  it("hides the Start agent button for a resume-skipped FAILED session (recovery owns the affordance)", () => {
+    mockResumeSkippedSessionIds = { "session-1": true };
+    render(
+      <MessageListFooter sessionState="FAILED" sessionId="session-1" messages={withMessages} />,
+    );
+    expect(screen.queryByTestId("resume-start-button")).toBeNull();
+  });
+
+  it("hides the Start agent button for an empty resume-skipped session", () => {
+    mockResumeSkippedSessionIds = { "session-1": true };
+    render(
+      <MessageListFooter sessionState="WAITING_FOR_INPUT" sessionId="session-1" messages={[]} />,
+    );
+    expect(screen.queryByTestId("resume-start-button")).toBeNull();
   });
 });

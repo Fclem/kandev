@@ -3,6 +3,8 @@
 import type { Message, TaskSessionState } from "@/lib/types/http";
 import { AgentStatus } from "@/components/task/chat/messages/agent-status";
 import { MessageRenderer } from "@/components/task/chat/message-renderer";
+import { SessionResumeStartButton } from "@/components/task/chat/session-resume-start-button";
+import { useAppStore } from "@/components/state-provider";
 
 type MessageListFooterProps = {
   sessionState?: TaskSessionState;
@@ -49,6 +51,16 @@ export function MessageListFooter({
   const visibleFooterActionMessages = footerActionMessages.filter(
     (message) => !isMissingBranchFailure(message) || message.id === currentActionableFailure?.id,
   );
+  // The task-description start button only renders for EMPTY sessions. A
+  // resume-skipped session (prevent-auto-start-on-open preference, agent
+  // stopped with history) gets its Start agent button here instead — but only
+  // for non-FAILED states, where the existing recovery actions already provide
+  // the manual affordance.
+  const resumeSkipped = useAppStore((state) =>
+    sessionId ? state.tasks.resumeSkippedSessionIds[sessionId] === true : false,
+  );
+  const showResumeStartButton =
+    resumeSkipped && sessionState !== "FAILED" && sessionId !== null && messages.length > 0;
   return (
     <>
       {!recoveryOwnsFailure && (
@@ -58,6 +70,9 @@ export function MessageListFooter({
           messages={messages}
           isWorking={isWorking}
         />
+      )}
+      {showResumeStartButton && sessionId !== null && (
+        <SessionResumeStartButton sessionId={sessionId} />
       )}
       {visibleFooterActionMessages.map((message) => (
         <MessageRenderer key={message.id} comment={message} isTaskDescription={false} />

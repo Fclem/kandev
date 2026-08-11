@@ -136,23 +136,30 @@ gating hooks, then E2E.
     action — NOT a native `Set`, which would break the Immer-managed,
     SSR-hydrated slice). The flag is keyed by session id, so it cannot leak
     across sessions.
-  - Skip-flag semantics are monotonic and derived from live state, not timing:
+  - Skip-flag semantics are confirmed-running-only and derived from live state,
+    not timing:
     - RECORD only when `needs_resume && is_resumable && !is_agent_running`
       AND the live store state is not STARTING/RUNNING. `checkAndResume` must
       re-read the live session state immediately before recording
       (`applyStatusToState` at `use-session-resumption.ts:244-251` merges the
       status state into the store via `setTaskSession`
-      (`session-slice.ts:136-150` spreads incoming over existing) and a stale
-      response can downgrade a newer STARTING/RUNNING state before the guard
-      runs). Status hydration is monotonic: a `task.session.status` response
-      MUST NOT downgrade a live STARTING/RUNNING state.
-    - CLEAR only on confirmed running: the WS `session.state_changed` handler
+      (`session-slice.ts:136-150` spreads incoming over existing)).
+    - Status hydration uses TIMESTAMP PRECEDENCE: preserve a live
+      STARTING/RUNNING state when the incoming status timestamp is absent or
+      not newer than the live session's `updated_at`; accept an incoming
+      terminal status (FAILED/CANCELLED/COMPLETED) only when its timestamp is
+      newer. Blanket protection would reject legitimate newer terminal
+      responses and leave the UI stuck with no recovery actions.
+    - CLEAR only on confirmed RUNNING: the WS `session.state_changed` handler
       (`lib/ws/handlers/agent-session.ts:692-750`) deletes the flag on the
       RUNNING transition only (NOT on STARTING — a failed manual resume emits
-      STARTING before the launch fails); the manual paths (`resumeSession()`
-      at `:491-522`, the Start button click at `message-renderer.tsx:55-64`)
-      clear it only after a successful launch response; rejections and
-      `{ success: false }` keep the flag.
+      STARTING before the launch fails); the manual paths (`resumeSession()` at
+      `:491-522`, the Start button click at `message-renderer.tsx:55-64`)
+      clear it only when the launch response reports `state === "RUNNING"`
+      (successful resumes commonly return `state: "STARTING"` — launch
+      accepted, not agent running; `executor_resume.go:585`,
+      `session_launch.go:358-365`); rejections and `{ success: false }` keep
+      the flag.
     - `setResumeSkipped(sessionId, true)` stays conditional in the slice
       action (refuses when the current state is STARTING/RUNNING) as a second
       line of defense.
@@ -194,7 +201,9 @@ gating hooks, then E2E.
 | cross-workflow preview resolves the right steps | `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` + preview test | unit: task from `kanbanMulti.snapshots[w]` uses snapshot steps, not the active workflow's |
 | resume gate skips auto-resume and records the skip | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: `checkAndResume` with `needs_resume && is_resumable` and preventAutoStart → no launch, state idle, skip recorded in store; manual `resumeSession` still launches AND clears the flag only on success |
 | failed launch keeps the retry button | `apps/web/hooks/domains/session/use-session-resumption.test.ts` + message-renderer test | unit: resume/start rejects or returns `{ success: false }` → skip flag retained, Start button still rendered (including after a WS STARTING event that precedes the failure) |
-| delayed-status race: running WS event before stale status | `apps/web/lib/state/slices/kanban` slice test + `use-session-resumption.test.ts` | unit: WS `state_changed` → STARTING then a stale status response attempts to apply + record a skip → live state is NOT downgraded (monotonic hydration) and the flag is NOT set |
+| delayed-status race: running WS event before stale status | `apps/web/lib/state/slices/kanban` slice test + `use-session-resumption.test.ts` | unit: WS `state_changed` → STARTING then a stale status response attempts to apply + record a skip → live state is NOT downgraded (timestamp precedence) and the flag is NOT set |
+| stale vs newer terminal status precedence | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: an incoming FAILED/CANCELLED/COMPLETED status with a timestamp older than the live session is rejected; the same terminal status with a newer timestamp is accepted (recovery actions appear) |
+| launch response clears only when RUNNING | `apps/web/hooks/domains/session/use-session-resumption.test.ts` + message-renderer test | unit: resume returns `{ success: true, state: "STARTING" }` → flag kept (WS RUNNING clears later); `{ success: true, state: "RUNNING" }` → flag cleared; rejections / `{ success: false }` → flag kept |
 | WS clear only on RUNNING | `apps/web/lib/ws/handlers/agent-session.test.ts` (or slice test) | unit: `session.state_changed` to RUNNING deletes `resumeSkippedSessionIds[sessionId]`; STARTING does NOT delete it; hydration keeps the record shape intact |
 | Start button renders for resume-skipped sessions (non-FAILED) | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag (non-FAILED state) → button visible; FAILED + resume-skipped → no new button (recovery actions remain); button dispatches resume for the skipped case and clears the flag on success |
 | settings card renders and saves | `apps/web/components/settings/prevent-auto-start-agent-settings.test.tsx` (mirror `archive-confirmation-settings.test.tsx`) | component: switch toggles, save calls `updateUserSettings({ prevent_auto_start_agent_on_open })` |

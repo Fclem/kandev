@@ -52,19 +52,31 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
     `applyStatusToState` merges the status state into the store and can
     downgrade a newer STARTING/RUNNING state to the stale status state before
     the guard runs.
-  - Status hydration is monotonic: a `task.session.status` response MUST NOT
-    downgrade a live STARTING/RUNNING session state
+  - Status hydration uses timestamp precedence, not blanket protection:
+    preserve a live STARTING/RUNNING session state when the incoming
+    `task.session.status` timestamp is absent or NOT newer than the live
+    session's `updated_at`; ACCEPT an incoming terminal status (FAILED,
+    CANCELLED, COMPLETED) when its timestamp IS newer. Blanket protection
+    would reject a legitimate newer terminal response and leave the UI stuck
+    in STARTING/RUNNING with no recovery actions
     (`applyStatusToState` at `use-session-resumption.ts:244-251` merges via
     `setTaskSession`; `session-slice.ts:136-150` spreads incoming over
-    existing). Guard the apply or re-read live state first.
-  - CLEAR the flag only on CONFIRMED running: the WS `session.state_changed`
+    existing). Add tests for both a stale terminal response (rejected) and a
+    newer terminal response (accepted).
+  - CLEAR the flag only on CONFIRMED RUNNING: the WS `session.state_changed`
     handler (`lib/ws/handlers/agent-session.ts:692-750`) deletes it on the
-    RUNNING transition (NOT on STARTING — a failed manual resume emits
+    RUNNING transition only (NOT on STARTING — a failed manual resume emits
     STARTING before the launch fails, and clearing there would drop the retry
-    affordance), and the manual paths (`resumeSession()` at
+    affordance). The manual paths (`resumeSession()` at
     `use-session-resumption.ts:491-522`, the Start button click at
-    `message-renderer.tsx:55-64`) clear it only after a SUCCESSFUL launch
-    response. Rejections and `{ success: false }` keep the flag.
+    `message-renderer.tsx:55-64`) clear it only when the launch response
+    reports `state === "RUNNING"` — a successful resume commonly returns
+    `state: "STARTING"` (launch accepted, not agent running:
+    `executor_resume.go:585` builds the execution as `SessionStateStarting`,
+    `executionToLaunchResponse` at `session_launch.go:358-365` copies it), so
+    success alone is NOT confirmation; the WS RUNNING transition (or a later
+    status response reporting RUNNING) does the clearing. Rejections and
+    `{ success: false }` keep the flag.
   - `setResumeSkipped(sessionId, true)` remains conditional in the slice
     action (refuses when the current state is STARTING/RUNNING) as a second
     line of defense.
@@ -92,7 +104,7 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 - `apps/web/hooks/domains/session/use-session-resumption.ts` (+ its test; thread `preventAutoStart` into `checkAndResume` via `useSessionResetAndCheck`)
 - `apps/web/lib/state/slices/kanban/types.ts` + `kanban-slice.ts` (the slice owning `tasks.activeSessionId`): add `resumeSkippedSessionIds: Record<string, true>` state + a `setResumeSkipped` action (property assignment / `delete`)
 - `apps/web/components/task/chat/message-renderer.tsx` (+ test): Start button visibility for resume-skipped non-FAILED sessions, resume intent dispatch, and flag clearing on click
-- `apps/web/lib/ws/handlers/agent-session.ts` (+ test): clear the skip flag on `session.state_changed` to STARTING/RUNNING
+- `apps/web/lib/ws/handlers/agent-session.ts` (+ test): clear the skip flag ONLY on a `session.state_changed` transition to RUNNING; never clear it on STARTING
 - `apps/web/hooks/domains/session/use-session-resumption.ts`: monotonic status application + re-read-before-record + clear-on-success (covered by its test)
 - `apps/web/components/task/task-page-content.tsx`: pass `{ id, workflowStepId: task?.workflow_step_id, workflowId: task?.workflow_id }`
 - `apps/web/components/kanban-with-preview.tsx` (+ test): `useSelectedTask` returns `workflowId`
@@ -120,11 +132,13 @@ final-step + no-session → prepare-only ensure (CREATED session, Start agent
 button rendered); post-restart idle session (non-FAILED) → no auto-resume,
 skip recorded, Start agent button rendered with a resume action; resumable
 FAILED sessions → no auto-resume, existing recovery actions retained. The skip
-flag is monotonic: it is recorded only when the agent is verifiably stopped
-(live state re-checked, status hydration cannot downgrade STARTING/RUNNING)
-and cleared only on confirmed running (WS RUNNING or a successful launch
-response); failed launches keep the retry button. Unit tests pin each branch,
-including the non-gated controls, the snake→camel caller normalization, the
-cross-workflow preview resolution, the equal-position tie-break, the
-delayed-status race (WS STARTING then stale status), and the failed-launch
+flag is confirmed-running-only: it is recorded only when the agent is
+verifiably stopped (live state re-checked; status hydration preserves live
+STARTING/RUNNING unless a NEWER terminal status arrives) and cleared only on
+confirmed RUNNING (WS RUNNING transition or a launch response with
+`state === "RUNNING"`); failed launches and `STARTING` responses keep the
+retry button. Unit tests pin each branch, including the non-gated controls,
+the snake→camel caller normalization, the cross-workflow preview resolution,
+the equal-position tie-break, the delayed-status race (WS STARTING then stale
+status), the stale-vs-newer terminal status precedence, and the failed-launch
 retention.

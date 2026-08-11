@@ -17,12 +17,22 @@ describe("buildLinkedIssueTitle", () => {
     );
   });
 
-  it("replaces the prefix and keeps the limit when re-linking a truncated title", () => {
+  it("replaces the prefix on a previously-truncated title without exceeding the limit", () => {
     // Simulate a title already truncated by a previous link (60 chars, "…" tail).
+    // Equal-length keys keep the composed title at exactly the limit, so this
+    // locks prefix replacement, not truncation (see the longer-key case below).
     const prev = `DO-916: ${"x".repeat(51)}…`;
     const got = buildLinkedIssueTitle(prev, "ENG-20");
     expect(Array.from(got)).toHaveLength(60);
     expect(got).toBe(`ENG-20: ${"x".repeat(51)}…`);
+  });
+
+  it("truncates when re-linking to a longer key", () => {
+    // "DO-9: " (6 chars) → "PROJ-12345: " (12 chars) makes the re-composed
+    // title exceed the limit, so the truncation path fires after the prefix swap.
+    const got = buildLinkedIssueTitle(`DO-9: ${"x".repeat(54)}`, "PROJ-12345");
+    expect(Array.from(got)).toHaveLength(60);
+    expect(got).toBe(`PROJ-12345: ${"x".repeat(47)}…`);
   });
 
   it("truncates a composed title that exceeds the 60-character limit", () => {

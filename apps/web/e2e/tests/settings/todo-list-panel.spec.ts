@@ -242,6 +242,38 @@ test.describe("Todo list panel preference", () => {
     await expect(panel.getByText("1/2 completed")).toBeVisible();
   });
 
+  test("checklist fills the height of its hosting panel instead of the popover cap", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    test.setTimeout(120_000);
+    const task = await createTaskWithTodos(apiClient, seedData, "Todos fills panel height");
+    await setTodoListPanelPreference(apiClient, true);
+    await openTask(testPage, task.id);
+
+    await expect(todosTabWrapper(testPage)).toBeVisible({ timeout: 15_000 });
+    await todosTabWrapper(testPage).click();
+    const panel = testPage.getByTestId("todos-panel");
+    await expect(panel).toBeVisible({ timeout: 15_000 });
+
+    // The panel root must stretch to its layout parent, the portal slot
+    // (`h-full w-full overflow-hidden`). `xpath=../..` skips the
+    // `display: contents` portal element, which carries no box of its own.
+    const slot = panel.locator("xpath=../..");
+    const [panelBox, slotBox] = await Promise.all([panel.boundingBox(), slot.boundingBox()]);
+    expect(slotBox).not.toBeNull();
+    expect(Math.abs((panelBox?.height ?? 0) - (slotBox?.height ?? 0))).toBeLessThanOrEqual(4);
+
+    // The checklist scroll container is no longer a fixed-size popover list
+    // (~40px for two rows, capped at 192px): it flexes to consume the
+    // panel's remaining height below the header/progress chrome.
+    const listBox = await panel.locator(".overflow-y-auto").boundingBox();
+    expect(listBox).not.toBeNull();
+    expect(listBox!.height).toBeGreaterThan(120);
+    expect(listBox!.height).toBeGreaterThan((slotBox?.height ?? 0) - 100);
+  });
+
   test("is manually addable from the task workbench's own + menu, independent of the preference", async ({
     testPage,
     apiClient,

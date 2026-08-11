@@ -201,4 +201,33 @@ processed-messages, SSR/WS) pass; `pnpm run typecheck`, `make fmt`, `make
 lint` clean; E2E `todo-list-panel.spec.ts` 8/8 (web rebuilt). Committed as
 follow-up `fix:`.
 
+### Round-6 reviewer feedback (OMP GPT Luna) and disposition — all three fixed
+
+1. **G1 (major): malformed snapshot entries still crashed TodoMessage** —
+   `parseSnapshots` validated array-ness but not entries, so
+   `previous_todo_snapshots: [null]` threw in `SnapshotHistory` on expand.
+   Fixed: entries are filtered to non-null objects; malformed `snapshot.todos`
+   was already neutralized by the unknown-safe `normalizeTodos`. New tests
+   click the "Earlier updates" toggle with `[null, 42, valid]` and malformed
+   snapshot `todos` (red → green).
+2. **G2 (major): sessionless tasks could still receive an automatic Todos tab**
+   — the round-5 fix enabled removal for null sessions but the add path still
+   fired when the sub-option was off (the resolver ignored the empty-list
+   predicate). Fixed: `resolveConditionalTodoPanelAction` gained a required
+   `hasActiveSession` param gating the add path; the hook passes
+   `sessionId !== null`. Removal for sessionless tasks is preserved. New
+   decision-table rows (never-add, sessionless-remove, sessionless-keeps) and
+   two `syncConditionalTodoPanel` tests (red → green).
+3. **G3 (major): delayed save could leave the UI falsely clean and stale** —
+   the round-5 drift guard skipped the store echo but still ran
+   `setSaved(submitted)`, overwriting the newer WS hydration baseline so
+   `isDirty` flipped false against a stale submission. Fixed: on drift the
+   save returns without touching `saved`, keeping the draft dirty against the
+   newer baseline so the user can reconcile; the F3 test now asserts the
+   dirty flag stays on (red → green).
+
+Verification: 853 tests across the touched areas pass; `pnpm run typecheck`,
+`make fmt`, `make lint` clean; E2E `todo-list-panel.spec.ts` 8/8 (web
+rebuilt). Committed as follow-up `fix:`.
+
 Blockers/risks: none.

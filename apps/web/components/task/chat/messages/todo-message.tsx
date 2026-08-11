@@ -46,7 +46,13 @@ function parseSnapshots(comment: Message): TodoSnapshot[] {
     metadata !== null && typeof metadata === "object" && "previous_todo_snapshots" in metadata
       ? metadata.previous_todo_snapshots
       : undefined;
-  return Array.isArray(snapshots) ? snapshots : [];
+  if (!Array.isArray(snapshots)) return [];
+  // Total by construction: drop null/primitive snapshot entries (SnapshotHistory
+  // would dereference their `todos`); malformed `snapshot.todos` is already
+  // neutralized by the unknown-safe normalizeTodos.
+  return snapshots.filter(
+    (snapshot): snapshot is TodoSnapshot => typeof snapshot === "object" && snapshot !== null,
+  );
 }
 
 function countCompleted(items: TodoItem[]): number {

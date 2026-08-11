@@ -64,23 +64,23 @@ export function TodoListPanelSettings() {
         show_todo_list_panel: submitted.show,
         show_todo_list_panel_only_when_not_empty: submitted.onlyWhenNotEmpty,
       });
-      setSaved(submitted);
-      // Only echo our submission into the store when nothing newer landed
-      // mid-flight (e.g. a WS settings push from another tab): overwriting
-      // unconditionally could revert a value the server has already
-      // superseded. The server's own settings broadcast converges the store
-      // otherwise.
+      // Only adopt our submission as the saved baseline when nothing newer
+      // landed mid-flight (e.g. a WS settings push from another tab): the
+      // hydration effect has already moved `saved` to the newer values, so
+      // overwriting them here would leave the UI falsely clean against a
+      // stale submission. On drift, keep the newer baseline so the draft
+      // stays dirty and the user can reconcile.
       const current = storeApi.getState().userSettings;
-      if (
-        current.showTodoListPanel === before.showTodoListPanel &&
-        current.showTodoListPanelOnlyWhenNotEmpty === before.showTodoListPanelOnlyWhenNotEmpty
-      ) {
-        setUserSettings({
-          ...current,
-          showTodoListPanel: submitted.show,
-          showTodoListPanelOnlyWhenNotEmpty: submitted.onlyWhenNotEmpty,
-        });
-      }
+      const drifted =
+        current.showTodoListPanel !== before.showTodoListPanel ||
+        current.showTodoListPanelOnlyWhenNotEmpty !== before.showTodoListPanelOnlyWhenNotEmpty;
+      if (drifted) return;
+      setSaved(submitted);
+      setUserSettings({
+        ...current,
+        showTodoListPanel: submitted.show,
+        showTodoListPanelOnlyWhenNotEmpty: submitted.onlyWhenNotEmpty,
+      });
     },
     discard: () => setDraft(saved),
   });

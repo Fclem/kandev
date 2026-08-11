@@ -145,6 +145,10 @@ describe("TodoListPanelSettings", () => {
     // The store must keep the newer WS value, not the stale submission.
     expect(storeApi.getState().userSettings.showTodoListPanel).toBe(false);
     expect(storeApi.getState().userSettings.showTodoListPanelOnlyWhenNotEmpty).toBe(true);
+    // And the UI must not be falsely clean: the draft still differs from the
+    // newer saved baseline, so the dirty flag stays on and the user can
+    // reconcile.
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
   });
 
   it("marks each toggle dirty only for its own unsaved change", () => {

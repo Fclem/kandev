@@ -18,6 +18,7 @@ const DEFAULT_OPTIONS = {
   isMaximized: false,
   onlyPinWhenNotEmpty: false,
   todoListNotEmpty: false,
+  hasActiveSession: true,
 };
 
 function makeApi(
@@ -50,91 +51,132 @@ function runSync(api: DockviewApi, overrides: SyncOverrides): boolean {
   return syncConditionalTodoPanel(api, { ...DEFAULT_OPTIONS, ...overrides });
 }
 
+/** Asserts the sync resolves to "none": neither addPanel nor close called. */
+function expectNoAction(overrides: SyncOverrides, panel?: { groupId?: string }): void {
+  const { api, addPanel, close } = makeApi(panel);
+  expect(runSync(api, overrides)).toBe(false);
+  expect(addPanel).not.toHaveBeenCalled();
+  expect(close).not.toHaveBeenCalled();
+}
+
+const CONDITIONAL_TODO_PANEL_CASES: Array<
+  [string, Record<string, unknown>, "add" | "remove" | "none"]
+> = [
+  ["adds when enabled and absent", { showTodoListPanel: true, panelExists: false }, "add"],
+  ["does nothing when already present", { showTodoListPanel: true, panelExists: true }, "none"],
+  [
+    "waits while restoring",
+    { showTodoListPanel: true, panelExists: false, isRestoringLayout: true },
+    "none",
+  ],
+  [
+    "waits while maximized",
+    { showTodoListPanel: true, panelExists: false, isMaximized: true },
+    "none",
+  ],
+  ["removes when disabled and present", { showTodoListPanel: false, panelExists: true }, "remove"],
+  [
+    "does nothing when disabled and absent",
+    { showTodoListPanel: false, panelExists: false },
+    "none",
+  ],
+  [
+    "waits for settings hydration before adding",
+    { showTodoListPanel: true, panelExists: false, settingsLoaded: false },
+    "none",
+  ],
+  [
+    "waits for settings hydration before removing",
+    { showTodoListPanel: false, panelExists: true, settingsLoaded: false },
+    "none",
+  ],
+  [
+    "does not pin when the sub-option is on and the todo list is empty",
+    {
+      showTodoListPanel: true,
+      onlyPinWhenNotEmpty: true,
+      todoListNotEmpty: false,
+      panelExists: false,
+    },
+    "none",
+  ],
+  [
+    "pins when the sub-option is on and the todo list is not empty",
+    {
+      showTodoListPanel: true,
+      onlyPinWhenNotEmpty: true,
+      todoListNotEmpty: true,
+      panelExists: false,
+    },
+    "add",
+  ],
+  [
+    "leaves an existing panel alone when the sub-option is on and the list is empty",
+    {
+      showTodoListPanel: true,
+      onlyPinWhenNotEmpty: true,
+      todoListNotEmpty: false,
+      panelExists: true,
+    },
+    "none",
+  ],
+  [
+    "pins regardless of the list when the sub-option is off",
+    {
+      showTodoListPanel: true,
+      onlyPinWhenNotEmpty: false,
+      todoListNotEmpty: false,
+      panelExists: false,
+    },
+    "add",
+  ],
+  [
+    "still removes when the master preference is off, even with the sub-option on",
+    {
+      showTodoListPanel: false,
+      onlyPinWhenNotEmpty: true,
+      todoListNotEmpty: false,
+      panelExists: true,
+    },
+    "remove",
+  ],
+  [
+    "never adds without an active session, even with the master preference on",
+    {
+      showTodoListPanel: true,
+      onlyPinWhenNotEmpty: false,
+      todoListNotEmpty: false,
+      hasActiveSession: false,
+      panelExists: false,
+    },
+    "none",
+  ],
+  [
+    "still removes when the master preference is off without an active session",
+    {
+      showTodoListPanel: false,
+      onlyPinWhenNotEmpty: false,
+      todoListNotEmpty: false,
+      hasActiveSession: false,
+      panelExists: true,
+    },
+    "remove",
+  ],
+  [
+    "leaves an existing panel alone for a sessionless task with the preference on",
+    {
+      showTodoListPanel: true,
+      onlyPinWhenNotEmpty: false,
+      todoListNotEmpty: false,
+      hasActiveSession: false,
+      panelExists: true,
+    },
+    "none",
+  ],
+];
+
 describe("resolveConditionalTodoPanelAction", () => {
-  it.each([
-    ["adds when enabled and absent", { showTodoListPanel: true, panelExists: false }, "add"],
-    ["does nothing when already present", { showTodoListPanel: true, panelExists: true }, "none"],
-    [
-      "waits while restoring",
-      { showTodoListPanel: true, panelExists: false, isRestoringLayout: true },
-      "none",
-    ],
-    [
-      "waits while maximized",
-      { showTodoListPanel: true, panelExists: false, isMaximized: true },
-      "none",
-    ],
-    [
-      "removes when disabled and present",
-      { showTodoListPanel: false, panelExists: true },
-      "remove",
-    ],
-    [
-      "does nothing when disabled and absent",
-      { showTodoListPanel: false, panelExists: false },
-      "none",
-    ],
-    [
-      "waits for settings hydration before adding",
-      { showTodoListPanel: true, panelExists: false, settingsLoaded: false },
-      "none",
-    ],
-    [
-      "waits for settings hydration before removing",
-      { showTodoListPanel: false, panelExists: true, settingsLoaded: false },
-      "none",
-    ],
-    [
-      "does not pin when the sub-option is on and the todo list is empty",
-      {
-        showTodoListPanel: true,
-        onlyPinWhenNotEmpty: true,
-        todoListNotEmpty: false,
-        panelExists: false,
-      },
-      "none",
-    ],
-    [
-      "pins when the sub-option is on and the todo list is not empty",
-      {
-        showTodoListPanel: true,
-        onlyPinWhenNotEmpty: true,
-        todoListNotEmpty: true,
-        panelExists: false,
-      },
-      "add",
-    ],
-    [
-      "leaves an existing panel alone when the sub-option is on and the list is empty",
-      {
-        showTodoListPanel: true,
-        onlyPinWhenNotEmpty: true,
-        todoListNotEmpty: false,
-        panelExists: true,
-      },
-      "none",
-    ],
-    [
-      "pins regardless of the list when the sub-option is off",
-      {
-        showTodoListPanel: true,
-        onlyPinWhenNotEmpty: false,
-        todoListNotEmpty: false,
-        panelExists: false,
-      },
-      "add",
-    ],
-    [
-      "still removes when the master preference is off, even with the sub-option on",
-      {
-        showTodoListPanel: false,
-        onlyPinWhenNotEmpty: true,
-        todoListNotEmpty: false,
-        panelExists: true,
-      },
-      "remove",
-    ],
-  ])("%s", (_name, input, expected) => {
+  it.each(CONDITIONAL_TODO_PANEL_CASES)("%s", (_name, input, expected) => {
     expect(
       resolveConditionalTodoPanelAction({
         settingsLoaded: true,
@@ -142,6 +184,7 @@ describe("resolveConditionalTodoPanelAction", () => {
         isMaximized: false,
         onlyPinWhenNotEmpty: false,
         todoListNotEmpty: false,
+        hasActiveSession: true,
         ...input,
       }),
     ).toBe(expected);
@@ -224,43 +267,21 @@ describe("syncConditionalTodoPanel", () => {
   });
 
   it("does not add while restoring or maximized", () => {
-    for (const options of [
-      { isRestoringLayout: true, isMaximized: false },
-      { isRestoringLayout: false, isMaximized: true },
-    ]) {
-      const { api, addPanel } = makeApi();
-      expect(runSync(api, { showTodoListPanel: true, settingsLoaded: true, ...options })).toBe(
-        false,
-      );
-      expect(addPanel).not.toHaveBeenCalled();
-    }
+    expectNoAction({ showTodoListPanel: true, settingsLoaded: true, isRestoringLayout: true });
+    expectNoAction({ showTodoListPanel: true, settingsLoaded: true, isMaximized: true });
   });
 
   it("does nothing before settings have hydrated", () => {
-    const { api, addPanel, close } = makeApi({});
-    expect(
-      runSync(api, {
-        showTodoListPanel: false,
-        settingsLoaded: false,
-      }),
-    ).toBe(false);
-    expect(addPanel).not.toHaveBeenCalled();
-    expect(close).not.toHaveBeenCalled();
+    expectNoAction({ showTodoListPanel: false, settingsLoaded: false }, {});
   });
 
   it("does not add an absent panel when the sub-option is on and the list is empty", () => {
-    const { api, addPanel, close } = makeApi();
-
-    expect(
-      runSync(api, {
-        showTodoListPanel: true,
-        onlyPinWhenNotEmpty: true,
-        todoListNotEmpty: false,
-        settingsLoaded: true,
-      }),
-    ).toBe(false);
-    expect(addPanel).not.toHaveBeenCalled();
-    expect(close).not.toHaveBeenCalled();
+    expectNoAction({
+      showTodoListPanel: true,
+      onlyPinWhenNotEmpty: true,
+      todoListNotEmpty: false,
+      settingsLoaded: true,
+    });
   });
 
   it("adds an absent panel when the sub-option is on and the list is not empty", () => {
@@ -275,6 +296,31 @@ describe("syncConditionalTodoPanel", () => {
       }),
     ).toBe(true);
     expect(addPanel).toHaveBeenCalledWith(expect.objectContaining({ id: "todos", inactive: true }));
+  });
+
+  it("does not add for a sessionless task even when the preference is on", () => {
+    expectNoAction({
+      showTodoListPanel: true,
+      onlyPinWhenNotEmpty: false,
+      todoListNotEmpty: false,
+      hasActiveSession: false,
+      settingsLoaded: true,
+    });
+  });
+
+  it("still removes a materialized panel for a sessionless task when the preference is off", () => {
+    const { api, close } = makeApi({});
+
+    expect(
+      runSync(api, {
+        showTodoListPanel: false,
+        onlyPinWhenNotEmpty: false,
+        todoListNotEmpty: false,
+        hasActiveSession: false,
+        settingsLoaded: true,
+      }),
+    ).toBe(true);
+    expect(close).toHaveBeenCalledOnce();
   });
 });
 

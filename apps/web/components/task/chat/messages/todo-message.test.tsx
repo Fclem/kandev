@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Message } from "@/lib/types/http";
 import { TodoMessage } from "./todo-message";
+
+afterEach(cleanup);
 
 function makeTodoMessage(metadata: unknown): Message {
   return {
@@ -56,5 +58,36 @@ describe("TodoMessage malformed metadata", () => {
       ),
     ).not.toThrow();
     expect(screen.getByText("A")).toBeTruthy();
+  });
+
+  it("drops null and primitive snapshot entries instead of crashing on expand", () => {
+    render(
+      <TodoMessage
+        comment={makeTodoMessage({
+          todos: [{ text: "A" }],
+          previous_todo_snapshots: [null, 42, { todos: [{ text: "Old" }] }],
+        })}
+        defaultExpanded
+      />,
+    );
+    // The crash surface is the snapshot-history expansion.
+    fireEvent.click(screen.getByRole("button", { name: /earlier update/i }));
+    expect(screen.getByText(/- Old/)).toBeTruthy();
+  });
+
+  it("renders nothing instead of throwing when a snapshot's todos are malformed", () => {
+    expect(() =>
+      render(
+        <TodoMessage
+          comment={makeTodoMessage({
+            todos: [{ text: "A" }],
+            previous_todo_snapshots: [{ todos: "not-an-array" }, { todos: [null] }],
+          })}
+          defaultExpanded
+        />,
+      ),
+    ).not.toThrow();
+    fireEvent.click(screen.getByRole("button", { name: /earlier update/i }));
+    expect(screen.getAllByText("A").length).toBeGreaterThanOrEqual(1);
   });
 });

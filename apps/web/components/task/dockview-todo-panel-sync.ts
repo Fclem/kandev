@@ -38,6 +38,7 @@ export function resolveConditionalTodoPanelAction(params: {
   showTodoListPanel: boolean;
   onlyPinWhenNotEmpty: boolean;
   todoListNotEmpty: boolean;
+  hasActiveSession: boolean;
   panelExists: boolean;
   settingsLoaded: boolean;
   isRestoringLayout: boolean;
@@ -48,6 +49,7 @@ export function resolveConditionalTodoPanelAction(params: {
     return params.panelExists ? "remove" : "none";
   }
   if (params.panelExists) return "none";
+  if (!params.hasActiveSession) return "none";
   if (params.isRestoringLayout || params.isMaximized) return "none";
   if (params.onlyPinWhenNotEmpty && !params.todoListNotEmpty) return "none";
   return "add";
@@ -85,6 +87,7 @@ export type SyncConditionalTodoPanelOptions = ConditionalTodoPanelOptions & {
   showTodoListPanel: boolean;
   onlyPinWhenNotEmpty: boolean;
   todoListNotEmpty: boolean;
+  hasActiveSession: boolean;
   settingsLoaded: boolean;
 };
 
@@ -125,6 +128,7 @@ export function syncConditionalTodoPanel(
     showTodoListPanel: options.showTodoListPanel,
     onlyPinWhenNotEmpty: options.onlyPinWhenNotEmpty,
     todoListNotEmpty: options.todoListNotEmpty,
+    hasActiveSession: options.hasActiveSession,
     panelExists: !!panel,
     settingsLoaded: options.settingsLoaded,
     isRestoringLayout: options.isRestoringLayout,
@@ -205,7 +209,8 @@ export function useSyncTodoPanel() {
     // can materialize a `todos` tab for a task without a session, and the
     // master preference must still be able to remove it (spec: "the
     // preference is a true, unconditional visibility gate"). A null session
-    // only means the todo list is empty, which never enables an add.
+    // never enables an add (`hasActiveSession` gates the add path in the
+    // resolver).
     if (!taskId || !workspaceId || !hasApi) return;
 
     let innerFrame: number | null = null;
@@ -231,6 +236,11 @@ export function useSyncTodoPanel() {
         syncConditionalTodoPanel(api, {
           showTodoListPanel: live.userSettings.showTodoListPanel,
           onlyPinWhenNotEmpty: live.userSettings.showTodoListPanelOnlyWhenNotEmpty,
+          // A sessionless task never auto-adds a Todos tab (there is nothing
+          // to show); it only ever gets removal handling. The predicate is
+          // computed only when the sub-option is on, skipping the O(n)
+          // transcript scan otherwise.
+          hasActiveSession: sessionId !== null,
           todoListNotEmpty:
             live.userSettings.showTodoListPanelOnlyWhenNotEmpty && sessionId
               ? todoListNotEmptyForSession(

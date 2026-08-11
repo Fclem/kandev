@@ -38,7 +38,7 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 - `apps/web/components/settings/prevent-auto-start-agent-settings.tsx` (new; clone `archive-confirmation-settings.tsx`)
 - `apps/web/components/settings/prevent-auto-start-agent-settings.test.tsx` (new; mirror `archive-confirmation-settings.test.tsx`)
 - `apps/web/components/settings/general-settings.tsx` (`TaskActionsSettings`)
-- `apps/web/lib/settings-discovery/catalog/general.ts` (target + control definition; mirror `archiveConfirmation` at `:32`/`:319`)
+- `apps/web/lib/settings-discovery/catalog/preferences.ts` (target + control definition; mirror `archiveConfirmation` at `:35`/`:311`; `GENERAL_SETTINGS_TARGETS` lives here after the PageShell restructure #2322)
 - `apps/web/src/locales/en/settings.json`, `apps/web/src/locales/pseudo/settings.json`, `apps/web/src/locales/pt-pt/settings.json`, `apps/web/src/locales/zh-cn/settings.json`
 
 ## Dependencies

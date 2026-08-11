@@ -84,9 +84,11 @@ gating hooks, then E2E.
   `useSettingsSaveContributor`), persisting `prevent_auto_start_agent_on_open`.
 - `apps/web/components/settings/general-settings.tsx` — render the new card in
   `TaskActionsSettings` (first slot of the task-actions section).
-- `apps/web/lib/settings-discovery/catalog/general.ts` — new target
-  `preventAutoStartOnOpen: "setting-prevent-auto-start-on-open"` plus a control
-  definition under the task-actions page.
+- `apps/web/lib/settings-discovery/catalog/preferences.ts` — new target
+  `preventAutoStartOnOpen: "setting-prevent-auto-start-on-open"` on
+  `GENERAL_SETTINGS_TARGETS` plus a control definition under the task-actions
+  page. (The PageShell restructure #2322 moved the catalog here from
+  `catalog/general.ts`.)
 - i18n — add `preventAutoStartAgentOnOpen` and `preventAutoStartAgentOnOpenHelp`
   to `apps/web/src/locales/{en,pseudo,pt-pt,zh-cn}/settings.json` (help text
   must use plain punctuation, no em dash).

@@ -105,4 +105,30 @@ Commands:
 - `cd apps/web && pnpm run typecheck` (with
   `NODE_OPTIONS=--max-old-space-size=4096`) → clean.
 
+### Reviewer-feedback refinement (adversarial review, APPROVE qualified)
+
+The DeepSeek V4 Pro adversarial review (sub-task
+`4c855132-fc54-4e8c-924e-3a45bcda460b`) found 3 items; two were acted on:
+
+- **N1 (minor, suspected)** — the inner RAF callback captured the
+  render-time `todoListNotEmpty` memo; a WS todo event landing between render
+  and rAF dispatch (~16ms) could make the pin decision one frame stale.
+  Fixed by extracting `todoListNotEmptyForSession(liveTodos, messages)` (the
+  panel's exact two-source fallback, exported so the contract is testable)
+  and recomputing it inside the callback from the dispatch-time
+  `appStore.getState()` snapshot. The render-time memo stays as the effect's
+  change signal in the dep array. Added 4 unit tests pinning the helper
+  (empty, live-wins, persisted-fallback, empty-live-array-falls-through).
+- **N3 (nit, confirmed)** — dropped the now-unnecessary
+  `as unknown as Partial<BackendMessageMap[...]>` cast in
+  `lib/ws/handlers/users.test.ts` (the field is statically typed).
+- **N2 (nit, confirmed)** — card-level `data-settings-dirty` on both toggles;
+  reviewer assessed as cosmetic and consistent with the app's card-level save
+  pattern; no action taken per the reviewer's recommendation.
+
+Post-fix verification: sync+WS unit tests 49 passed; `pnpm run typecheck`
+clean; `make fmt` + `make lint` clean; E2E
+`todo-list-panel.spec.ts` 8/8 passed (web rebuilt). Committed as follow-up
+`fix:` on the feature branch.
+
 Blockers/risks: none.

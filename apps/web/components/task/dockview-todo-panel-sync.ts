@@ -6,6 +6,7 @@ import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { buildTodoItems } from "@/hooks/use-processed-messages";
 import { t } from "@/lib/i18n";
 import type { Message } from "@/lib/types/http";
+import type { TodoEntry } from "@/lib/state/slices/session-runtime/types";
 import { focusOrAddPanel } from "@/lib/state/dockview-layout-builders";
 import { useDockviewStore } from "@/lib/state/dockview-store";
 import {
@@ -154,6 +155,19 @@ export function syncConditionalTodoPanel(
 
 const EMPTY_MESSAGES: Message[] = [];
 
+/** True when the session's todo list is non-empty, using the exact two-source
+ *  fallback the Todos panel content uses: live `sessionTodos.bySessionId`
+ *  entries first (an empty array falls through), then the latest persisted
+ *  `todo`-type message via `buildTodoItems`. Shared by the render-time memo
+ *  (the effect's change signal) and the RAF-dispatch-time recompute (so the
+ *  decision never uses a stale render snapshot). */
+export function todoListNotEmptyForSession(
+  liveTodos: readonly TodoEntry[] | undefined,
+  messages: Message[],
+): boolean {
+  return (liveTodos?.length ?? 0) > 0 || buildTodoItems(messages).length > 0;
+}
+
 /** Keep the Todos panel in sync with the active task's live Dockview tree. */
 export function useSyncTodoPanel() {
   const appStore = useAppStoreApi();
@@ -184,7 +198,7 @@ export function useSyncTodoPanel() {
     sessionId ? (state.messages.bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES,
   );
   const todoListNotEmpty = useMemo(
-    () => (liveTodos?.length ?? 0) > 0 || buildTodoItems(messages).length > 0,
+    () => todoListNotEmptyForSession(liveTodos, messages),
     [liveTodos, messages],
   );
 
@@ -205,10 +219,17 @@ export function useSyncTodoPanel() {
         const api = useDockviewStore.getState().api;
         if (!api) return;
         const dockview = useDockviewStore.getState();
+        // Recompute the predicate from the dispatch-time snapshot rather than
+        // the render-time memo: a WS todo event landing between the render
+        // and this rAF tick would otherwise make the decision one frame stale
+        // (the tab would be missed until the next effect run).
         syncConditionalTodoPanel(api, {
           showTodoListPanel: live.userSettings.showTodoListPanel,
           onlyPinWhenNotEmpty: live.userSettings.showTodoListPanelOnlyWhenNotEmpty,
-          todoListNotEmpty,
+          todoListNotEmpty: todoListNotEmptyForSession(
+            sessionId ? live.sessionTodos.bySessionId[sessionId] : undefined,
+            sessionId ? (live.messages.bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES,
+          ),
           settingsLoaded: live.userSettings.loaded,
           centerGroupId: dockview.centerGroupId,
           configuredPlacement: resolveConfiguredTodoPanelPlacement(dockview.userDefaultLayout),

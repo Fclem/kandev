@@ -201,9 +201,7 @@ describe("todo list panel websocket sync", () => {
     const store = makeStore();
 
     registerUsersHandlers(store)["user.settings.updated"]?.(
-      userSettingsMessage({
-        show_todo_list_panel_only_when_not_empty: true,
-      } as unknown as Partial<BackendMessageMap["user.settings.updated"]["payload"]>),
+      userSettingsMessage({ show_todo_list_panel_only_when_not_empty: true }),
     );
     expect(store.getState().userSettings.showTodoListPanelOnlyWhenNotEmpty).toBe(true);
 

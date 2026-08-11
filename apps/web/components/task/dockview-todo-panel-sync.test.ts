@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DockviewApi } from "dockview-react";
+import type { Message } from "@/lib/types/http";
 import {
   resolveConditionalTodoPanelAction,
   resolveConfiguredTodoPanelPlacement,
   syncConditionalTodoPanel,
+  todoListNotEmptyForSession,
   type SyncConditionalTodoPanelOptions,
 } from "./dockview-todo-panel-sync";
 
@@ -273,5 +275,33 @@ describe("syncConditionalTodoPanel", () => {
       }),
     ).toBe(true);
     expect(addPanel).toHaveBeenCalledWith(expect.objectContaining({ id: "todos", inactive: true }));
+  });
+});
+
+describe("todoListNotEmptyForSession", () => {
+  const persistedTodoMessage = {
+    id: "m1",
+    type: "todo",
+    turn_id: "turn-1",
+    metadata: { todos: [{ text: "Write tests", done: true }] },
+  } as unknown as Message;
+
+  it("is false when the session has neither live entries nor a persisted todo message", () => {
+    expect(todoListNotEmptyForSession(undefined, [])).toBe(false);
+  });
+
+  it("is true when the live slice has entries, even with no persisted messages", () => {
+    expect(
+      todoListNotEmptyForSession([{ description: "Implement", status: "in_progress" }], []),
+    ).toBe(true);
+  });
+
+  it("falls back to the latest persisted todo message when the live slice is absent", () => {
+    expect(todoListNotEmptyForSession(undefined, [persistedTodoMessage])).toBe(true);
+  });
+
+  it("treats an empty live array like an absent live slice (persisted fallback wins)", () => {
+    expect(todoListNotEmptyForSession([], [persistedTodoMessage])).toBe(true);
+    expect(todoListNotEmptyForSession([], [])).toBe(false);
   });
 });

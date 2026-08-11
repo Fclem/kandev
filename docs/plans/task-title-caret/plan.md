@@ -198,7 +198,7 @@ primary session and follows the dependency order above.
 ## Verification Results
 
 - `cd apps && pnpm --filter @kandev/web test -- --run hooks/use-task-title-selection-restore.test.tsx`
-  — passed (5 tests).
+  — passed (10 tests).
 - `cd apps/web && pnpm e2e:raw tests/task/task-title-caret.spec.ts` — passed
   (2 tests) before the fix (RED: caret at 60) and after (GREEN: caret at 8).
 - `cd apps/web && pnpm e2e:raw --project=mobile-chrome tests/task/mobile-task-title-caret.spec.ts`

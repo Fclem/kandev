@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useTaskTitleSelectionRestore } from "./use-task-title-selection-restore";
 
 const LONG = "T".repeat(60);
@@ -141,18 +141,37 @@ describe("useTaskTitleSelectionRestore", () => {
     expect(setSelectionRange).not.toHaveBeenCalled();
   });
 
-  it("does not replay a stale selection when the clamp result equals the committed value", () => {
+  it("restores the caret when a truncating keystroke leaves the clamped value unchanged", async () => {
+    const setSelectionRange = vi.spyOn(HTMLInputElement.prototype, "setSelectionRange");
+    render(<Harness initial={LONG} />);
+    const input = screen.getByTestId("title") as HTMLInputElement;
+    input.focus();
+    // Typing the same character into an all-same-char title at the cap: the
+    // clamped value equals the committed value, so React bails out of the
+    // render (no layout effect) but still restores the controlled DOM value
+    // after the event, resetting the caret to the end. The hook must re-pin
+    // it after that write.
+    simulateInsert(input, `${LONG}T`, 6, setSelectionRange);
+    await act(async () => {});
+    expect(input.value).toHaveLength(60);
+    expect(setSelectionRange).toHaveBeenCalledWith(6, 6);
+  });
+
+  it("does not replay the caret on a later commit after a same-result bail-out", async () => {
     const setSelectionRange = vi.spyOn(HTMLInputElement.prototype, "setSelectionRange");
     const onChange = vi.fn();
     const { rerender } = render(<ControlledHarness value={LONG} onChange={onChange} />);
     const input = screen.getByTestId("title") as HTMLInputElement;
     input.focus();
-    // Typing the same character into an all-same-char title at the cap: the
-    // clamped value equals the committed value, so React bails out of the
-    // render and no layout effect runs.
+    // Typing the same character at the cap: the clamped value equals the
+    // committed value, so the render bails out.
     simulateInsert(input, `${LONG}T`, 6, setSelectionRange);
     expect(onChange).toHaveBeenCalledWith(LONG);
-    // An unrelated value update must not replay the discarded caret.
+    await act(async () => {});
+    // The same-key restore happens exactly once, via the immediate path.
+    expect(setSelectionRange).toHaveBeenCalledTimes(1);
+    setSelectionRange.mockClear();
+    // An unrelated value update must not replay the caret.
     rerender(<ControlledHarness value={"U".repeat(60)} onChange={onChange} />);
     expect(setSelectionRange).not.toHaveBeenCalled();
   });

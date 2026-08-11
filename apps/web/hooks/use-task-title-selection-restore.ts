@@ -18,11 +18,16 @@ type PendingSelection = { start: number; end: number };
  * to the end of the field; the layout effect re-pins the caret to the recorded
  * position (bounded by the clamped length) after that commit.
  *
- * The record is cleared on every non-truncating change and whenever the
- * clamped result equals the last committed value, so a stale caret from a
- * keystroke that never committed (typing at the very end while at the cap, or
- * typing a character that leaves the clamped value unchanged) cannot be
- * replayed by a later commit.
+ * The record is cleared on every non-truncating change so a stale caret from
+ * a keystroke that never committed (typing at the very end while at the cap)
+ * cannot be replayed by a later commit.
+ *
+ * When a truncating keystroke leaves the clamped value equal to the last
+ * committed value (e.g. typing the same character into an all-same-char title
+ * at the cap), `setValue` bails out of the render, so no layout effect runs —
+ * but React still restores the controlled DOM value after the event, which
+ * resets the caret to the end. That case is handled with an immediate
+ * microtask restore instead of the commit-driven path.
  */
 export function useTaskTitleSelectionRestore<T extends TitleInputElement = HTMLInputElement>(
   value: string,
@@ -34,14 +39,31 @@ export function useTaskTitleSelectionRestore<T extends TitleInputElement = HTMLI
   const clampChange = useCallback((e: ChangeEvent<TitleInputElement>) => {
     const el = e.target;
     const next = clampTaskTitleInput(el.value);
-    // Only record when the commit will actually change the value. If `next`
-    // equals the last committed value, `setValue` bails out of the render, no
-    // layout effect runs, and a recorded selection would linger until an
-    // unrelated later commit.
-    pendingSelectionRef.current =
-      next !== el.value && next !== lastCommittedRef.current
-        ? { start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length }
-        : null;
+    if (next !== el.value) {
+      if (next !== lastCommittedRef.current) {
+        // The commit will change the value: record the caret for the layout
+        // effect, which runs after React rewrites the DOM.
+        pendingSelectionRef.current = {
+          start: el.selectionStart ?? el.value.length,
+          end: el.selectionEnd ?? el.value.length,
+        };
+      } else {
+        // The clamped value equals the committed value: the render bails out,
+        // but React still restores the controlled DOM value after the event
+        // and the browser resets the caret to the end. Re-pin it after that
+        // write via a microtask; there is no commit to hook into.
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? el.value.length;
+        const max = next.length;
+        queueMicrotask(() => {
+          if (el.isConnected && document.activeElement === el) {
+            el.setSelectionRange(Math.min(start, max), Math.min(end, max));
+          }
+        });
+      }
+    } else {
+      pendingSelectionRef.current = null;
+    }
     return next;
   }, []);
 

@@ -16,10 +16,12 @@ type ProfileState = Pick<AppState, "settingsAgents" | "agentProfiles">;
  * a concurrent `agent.profile.created` WS delivery cannot double-insert the
  * copy into either slice.
  *
- * When the owning agent is missing from `settingsAgents` (e.g. removed while
- * the request was in flight), the copy is still surfaced in `agentProfiles`
- * via a stub instead of being dropped — and the rebuild never erases a copy
- * the WS handler already delivered.
+ * The options slice is rebuilt from `settingsAgents` by ID on top of the
+ * existing options: options the rebuild does not represent (e.g. profiles the
+ * WS handler delivered for agents temporarily absent from `settingsAgents`)
+ * are preserved, and the new copy always appears exactly once — via the
+ * rebuild when its owning agent is present, otherwise via a stub so it is
+ * never dropped.
  */
 export function applyProfileDuplicated(
   state: ProfileState,
@@ -38,9 +40,17 @@ export function applyProfileDuplicated(
   const rebuiltOptions = nextAgents.flatMap((item) =>
     item.profiles.map((profile) => toAgentProfileOption(item, profile)),
   );
-  const agentProfilesItems = rebuiltOptions.some((option) => option.id === created.id)
-    ? rebuiltOptions
-    : [...rebuiltOptions, toAgentProfileOption({ id: agent.id, name: agent.name }, created)];
+  const preserved = state.agentProfiles.items.filter(
+    (option) => !rebuiltOptions.some((rebuilt) => rebuilt.id === option.id),
+  );
+  const copyOption = toAgentProfileOption({ id: agent.id, name: agent.name }, created);
+  const copyAlreadyPresent =
+    rebuiltOptions.some((option) => option.id === created.id) ||
+    preserved.some((option) => option.id === created.id);
+
+  const agentProfilesItems = copyAlreadyPresent
+    ? [...preserved, ...rebuiltOptions]
+    : [...preserved, copyOption, ...rebuiltOptions];
 
   return {
     settingsAgents: { ...state.settingsAgents, items: nextAgents },

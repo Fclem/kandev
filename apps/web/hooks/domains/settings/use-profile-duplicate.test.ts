@@ -89,4 +89,19 @@ describe("applyProfileDuplicated", () => {
 
     expect(next.agentProfiles.items.filter((o) => o.id === "p2")).toHaveLength(1);
   });
+
+  it("preserves WS-delivered orphan options for agents absent from the store", () => {
+    // p-orphan was delivered by WS for an agent not present in settingsAgents;
+    // duplicating a profile of a DIFFERENT agent must not wipe it.
+    const source = profile("p1", "a2");
+    const copy = profile("p2", "a2", COPY_NAME);
+    const initial = stateWith([agent("a2", source)], [option("p-orphan")]);
+
+    const next = applyProfileDuplicated(initial, agent("a2"), copy);
+
+    const ids = next.agentProfiles.items.map((o) => o.id);
+    expect(ids).toContain("p-orphan");
+    expect(ids).toContain("p2");
+    expect(ids.filter((id) => id === "p2")).toHaveLength(1);
+  });
 });

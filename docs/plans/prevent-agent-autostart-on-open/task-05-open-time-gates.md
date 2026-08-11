@@ -15,9 +15,17 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 
 - `useEnsureTaskSession` accepts `{ id, workflowStepId, workflowId }` and reads
   `state.userSettings.preventAutoStartAgentOnOpen`. When the setting is on and
-  the task's step is the final step (max `position`) of the task's OWN
-  workflow, it calls `ensureTaskSession(taskId, { autoStart: false })`; all
-  other cases call `ensureTaskSession(taskId)` exactly as today.
+  the task's step is the terminal step of the task's OWN workflow, it calls
+  `ensureTaskSession(taskId, { autoStart: false })`; all other cases call
+  `ensureTaskSession(taskId)` exactly as today.
+- The terminal-step predicate is deterministic even with equal positions:
+  `isFinalWorkflowStep(workflowStepId, steps)` returns true only when the
+  step's `(position, id)` is the maximum of all steps under that ordering
+  (max `position`, ties broken by max `id`). Workflow-step positions are
+  caller-supplied and not uniqueness-validated
+  (`internal/workflow/controller/controller.go` `CreateStepRequest`,
+  `internal/workflow/service/service.go:335-344`), so a tie is representable
+  and MUST NOT make both steps terminal. Add an equal-position unit test.
 - The step list is resolved workflow-aware: the active workflow's steps
   (`state.kanban.steps` when `task.workflowId` matches
   `state.kanban.workflowId`) or the multi-workflow snapshot's steps
@@ -30,11 +38,14 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 - `useSessionResumption`'s automatic check no longer auto-resumes when the
   setting is on: with `status.needs_resume && status.is_resumable` it skips
   `resumeWithSilentFallback`, settles on `"idle"`, and records the skip in the
-  store (a `resumeSkippedSessionIds` set on the kanban tasks slice via a new
-  `setResumeSkipped(sessionId, boolean)` action). The manual `resumeSession()`
-  action and the `is_agent_running` / `needs_workspace_restore` branches are
-  unchanged.
-- Skip-flag lifecycle is pinned to three clear points, all keyed by session id:
+  store as `resumeSkippedSessionIds: Record<string, true>` on the kanban tasks
+  slice via a new `setResumeSkipped(sessionId, boolean)` action. Do NOT use a
+  native `Set`: the kanban slice is Immer-managed (`zustand/immer`, no
+  `enableMapSet` configured) and SSR-hydrated, so a `Set` breaks mutation and
+  serialization. The manual `resumeSession()` action and the
+  `is_agent_running` / `needs_workspace_restore` branches are unchanged.
+- Skip-flag lifecycle is pinned to three clear points, all keyed by session id
+  and operating on the `Record<string, true>` (delete on clear):
   (1) `resumeSession()` clears the flag before launching; (2) the Start agent
   button click clears it before dispatching; (3) the WS `session.state_changed`
   handler (`lib/ws/handlers/agent-session.ts:692-750`) clears it when the
@@ -61,7 +72,7 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 
 - `apps/web/hooks/domains/session/use-ensure-task-session.ts` (+ its test; add a `isFinalWorkflowStep(workflowStepId, steps)` helper, exported for tests)
 - `apps/web/hooks/domains/session/use-session-resumption.ts` (+ its test; thread `preventAutoStart` into `checkAndResume` via `useSessionResetAndCheck`)
-- `apps/web/lib/state/slices/kanban/types.ts` + `kanban-slice.ts` (the slice owning `tasks.activeSessionId`): add `resumeSkippedSessionIds` state + a `setResumeSkipped` action
+- `apps/web/lib/state/slices/kanban/types.ts` + `kanban-slice.ts` (the slice owning `tasks.activeSessionId`): add `resumeSkippedSessionIds: Record<string, true>` state + a `setResumeSkipped` action (property assignment / `delete`)
 - `apps/web/components/task/chat/message-renderer.tsx` (+ test): Start button visibility for resume-skipped non-FAILED sessions, resume intent dispatch, and flag clearing on click
 - `apps/web/lib/ws/handlers/agent-session.ts` (+ test): clear the skip flag on `session.state_changed` to STARTING/RUNNING
 - `apps/web/hooks/domains/session/use-session-resumption.ts`: `resumeSession()` clears the flag (covered by its test)
@@ -94,4 +105,4 @@ FAILED sessions → no auto-resume, existing recovery actions retained. The skip
 flag never goes stale: manual resume, button click, and WS running-state
 transitions all clear it. Unit tests pin each branch, including the non-gated
 controls, the snake→camel caller normalization, the cross-workflow preview
-resolution, and the flag lifecycle.
+resolution, the equal-position tie-break, and the flag lifecycle.

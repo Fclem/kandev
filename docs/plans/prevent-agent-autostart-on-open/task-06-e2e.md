@@ -52,7 +52,7 @@ cd apps && pnpm install --frozen-lockfile
 - `apps/web/e2e/tests/settings/mobile-prevent-auto-start-on-open.spec.ts` (new, phone viewport)
 - `apps/web/e2e/fixtures/test-base.ts` (per-test settings reset at `:190-225`)
 - `apps/web/e2e/helpers/api-client.ts`:
-  - `saveUserSettings` (`:944`) gains `prevent_auto_start_agent_on_open?: boolean`
+  - `saveUserSettings` (`:926`) gains `prevent_auto_start_agent_on_open?: boolean`
     (there is no `updateUserSettings` helper — the settings PATCH helper is
     named `saveUserSettings`).
   - `createWorkflowStep` (`:701`) gains an `events` opt, e.g.

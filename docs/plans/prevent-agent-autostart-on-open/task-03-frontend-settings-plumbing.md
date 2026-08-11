@@ -35,9 +35,9 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
 ## Files Likely Touched
 
 - `apps/web/lib/types/http-user-settings.ts` (`UserSettings`, `UserSettingsUpdatePayload`)
-- `apps/web/lib/ssr/user-settings.ts` (`createDefaultUserSettings` at `:11`, `buildBehaviorFields` at `:222`)
+- `apps/web/lib/ssr/user-settings.ts` (`createDefaultUserSettings` at `:26`, `buildBehaviorFields` at `:243`)
 - `apps/web/lib/ssr/user-settings.test.ts`
-- `apps/web/lib/state/slices/settings/types.ts` (`UserSettingsState` at `:222`)
+- `apps/web/lib/state/slices/settings/types.ts` (`UserSettingsState` at `:207`)
 - `apps/web/lib/services/session-launch-service.ts` (`ensureTaskSession` at `:76`)
 - `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` (mock signature keeps matching)
 

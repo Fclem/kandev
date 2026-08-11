@@ -109,11 +109,14 @@ gating hooks, then E2E.
     task's workflow is the active one (`state.kanban.workflowId`), otherwise
     `state.kanbanMulti.snapshots[workflowId]?.steps`. Missing workflow id or
     step list → treated as "not final" (no gate).
-  - When the setting is on and the task's step is the final step of that
-    workflow (max `position`), call `ensureTaskSession(taskId, { autoStart: false })`;
+  - When the setting is on and the task's step is the terminal step of that
+    workflow, call `ensureTaskSession(taskId, { autoStart: false })`;
     otherwise `ensureTaskSession(taskId)` as today.
   - New pure helper (exported for unit tests),
-    `isFinalWorkflowStep(workflowStepId, steps)`.
+    `isFinalWorkflowStep(workflowStepId, steps)`. Terminal = max
+    `(position, id)` (ties broken by max id): step positions are
+    caller-supplied and not uniqueness-validated, so equal positions are
+    representable and must not make both steps terminal.
 - `apps/web/hooks/domains/session/use-session-resumption.ts` —
   - Read `state.userSettings.preventAutoStartAgentOnOpen` in
     `useSessionResumption` and thread a `preventAutoStart` boolean into
@@ -121,9 +124,11 @@ gating hooks, then E2E.
   - In `checkAndResume`, when `preventAutoStart` is true, skip the
     `status.needs_resume && status.is_resumable` branch (do not call
     `resumeWithSilentFallback`); set `resumptionState` to `"idle"` and record
-    the skip in the store (a `resumeSkippedSessionIds` set on the kanban tasks
-    slice via a new `setResumeSkipped(sessionId, boolean)` action). The flag is
-    keyed by session id, so it cannot leak across sessions.
+    the skip in the store (a `resumeSkippedSessionIds: Record<string, true>`
+    map on the kanban tasks slice via a new `setResumeSkipped(sessionId, boolean)`
+    action — NOT a native `Set`, which would break the Immer-managed,
+    SSR-hydrated slice). The flag is keyed by session id, so it cannot leak
+    across sessions.
   - Skip-flag lifecycle (all three clear points MUST be specified):
     - `resumeSession()` (`use-session-resumption.ts:491-522`) clears the flag
       for the session before launching.
@@ -165,12 +170,12 @@ gating hooks, then E2E.
 | WS handler passes `auto_start` through | `apps/backend/internal/orchestrator/handlers/handlers_test.go` | unit: parse `{task_id, auto_start:false}` → handler calls service with the option |
 | SSR defaults and hydration | `apps/web/lib/ssr/user-settings.test.ts` | unit: default `false`; hydrate from `prevent_auto_start_agent_on_open` |
 | ensure payload carries `auto_start` | extend `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` (mocks `ensureTaskSession`) | unit: final-step + setting-on → called with `{ autoStart: false }`; non-final → without |
-| final-step helper | new test beside the helper | unit: max-position logic, missing step/steps → false |
+| final-step helper | new test beside the helper | unit: max `(position, id)` tie-break, equal positions resolve to one terminal step, missing step/steps → false |
 | caller normalization (snake → camel input) | `apps/web/components/task/task-page-content` test or hook caller test | unit: task page passes `workflowStepId` from `workflow_step_id` |
 | cross-workflow preview resolves the right steps | `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` + preview test | unit: task from `kanbanMulti.snapshots[w]` uses snapshot steps, not the active workflow's |
 | resume gate skips auto-resume and records the skip | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: `checkAndResume` with `needs_resume && is_resumable` and preventAutoStart → no launch, state idle, skip recorded in store; manual `resumeSession` still launches AND clears the flag |
 | Start button renders for resume-skipped sessions (non-FAILED) | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag (non-FAILED state) → button visible; FAILED + resume-skipped → no new button (recovery actions remain); button dispatches resume for the skipped case and clears the flag |
-| skip flag clears on WS running state | `apps/web/lib/ws/handlers/agent-session.test.ts` (or slice test) | unit: `session.state_changed` to STARTING/RUNNING clears `resumeSkippedSessionIds[sessionId]` |
+| skip flag clears on WS running state | `apps/web/lib/ws/handlers/agent-session.test.ts` (or slice test) | unit: `session.state_changed` to STARTING/RUNNING deletes `resumeSkippedSessionIds[sessionId]`; hydration keeps the record shape intact |
 | Start button renders for resume-skipped sessions | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag → button visible; button dispatches resume for the skipped case |
 | settings card renders and saves | `apps/web/components/settings/prevent-auto-start-agent-settings.test.tsx` (mirror `archive-confirmation-settings.test.tsx`) | component: switch toggles, save calls `updateUserSettings({ prevent_auto_start_agent_on_open })` |
 | i18n ratchet + em-dash check | — | `cd apps/web && pnpm run i18n:check && pnpm run i18n:ratchet` |

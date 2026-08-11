@@ -46,10 +46,21 @@ spec: "../../specs/prevent-agent-autostart-on-open/spec.md"
   `is_agent_running` / `needs_workspace_restore` branches are unchanged.
 - Skip-flag lifecycle is pinned to three clear points, all keyed by session id
   and operating on the `Record<string, true>` (delete on clear):
-  (1) `resumeSession()` clears the flag before launching; (2) the Start agent
-  button click clears it before dispatching; (3) the WS `session.state_changed`
-  handler (`lib/ws/handlers/agent-session.ts:692-750`) clears it when the
-  session transitions to STARTING/RUNNING.
+  (1) `resumeSession()` clears the flag after a SUCCESSFUL launch; (2) the
+  Start agent button click clears it after a successful dispatch; (3) the WS
+  `session.state_changed` handler (`lib/ws/handlers/agent-session.ts:692-750`)
+  deletes it when the session transitions to STARTING/RUNNING. A failed launch
+  (exception or `{ success: false }`) MUST keep the flag so the Start button
+  remains as a retry affordance (`message-renderer.tsx:55-64` and
+  `use-session-resumption.ts:492-521` currently swallow failures).
+- The skip is recorded defensively against the delayed-status race:
+  `setResumeSkipped(sessionId, true)` is conditional in the slice action and
+  refuses to set the flag when the session's current state is STARTING or
+  RUNNING. Rationale: `checkAndResume` awaits `task.session.status`, and a
+  STARTING/RUNNING `session.state_changed` WS event can arrive before the
+  (stale) status response lands; without the guard the flag would be recorded
+  after the WS clear and leave a Start button while the agent runs. Add a unit
+  test for that interleaving.
 - The Start agent button (`TaskDescriptionStartButton` in
   `message-renderer.tsx`) renders for `sessionState === "CREATED"` AND for
   resume-skipped (recovered-idle) sessions whose state is NOT FAILED; for the
@@ -102,7 +113,10 @@ final-step + no-session → prepare-only ensure (CREATED session, Start agent
 button rendered); post-restart idle session (non-FAILED) → no auto-resume,
 skip recorded, Start agent button rendered with a resume action; resumable
 FAILED sessions → no auto-resume, existing recovery actions retained. The skip
-flag never goes stale: manual resume, button click, and WS running-state
-transitions all clear it. Unit tests pin each branch, including the non-gated
-controls, the snake→camel caller normalization, the cross-workflow preview
-resolution, the equal-position tie-break, and the flag lifecycle.
+flag never goes stale: successful manual resume / button click and WS
+running-state transitions clear it; failed launches keep it for retry; the
+conditional slice action refuses to record it once the agent is STARTING or
+RUNNING (delayed-status race). Unit tests pin each branch, including the
+non-gated controls, the snake→camel caller normalization, the cross-workflow
+preview resolution, the equal-position tie-break, the flag lifecycle, and the
+delayed-status race.

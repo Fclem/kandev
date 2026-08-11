@@ -59,11 +59,18 @@ gating hooks, then E2E.
   `AutoStart *bool` to `EnsureSessionOptions`; in `EnsureSession`, when
   `o.AutoStart != nil`, override the step-derived decision:
   `autoStart := stepAllowsAutoStart(step); if o.AutoStart != nil { autoStart = *o.AutoStart }`.
+- `apps/backend/internal/orchestrator/session_launch.go` — add a prepare-only
+  marker (e.g. `NoAgentLaunch bool`) to `LaunchSessionRequest`; `EnsureSession`
+  sets it when `AutoStart == &false`, and `shouldUpgradePassthroughPrepare`
+  (`:172-174`) returns false when it is set. Passthrough profiles are otherwise
+  eagerly upgraded into `launchStart`, which would start the agent despite the
+  override.
 - `apps/backend/internal/orchestrator/handlers/handlers.go` — add
   `AutoStart *bool \`json:"auto_start,omitempty"\`` to `wsEnsureSessionRequest`
   and pass it through as `EnsureSessionOptions{AutoStart: req.AutoStart}`.
 - Behavior: `auto_start: false` → `IntentPrepare` / `created_prepare` even when
-  the step has `auto_start_agent`; absent/`true` → unchanged.
+  the step has `auto_start_agent`, and never upgrades to a launch (including
+  passthrough profiles); absent/`true` → unchanged.
 
 ---
 
@@ -131,13 +138,17 @@ gating hooks, then E2E.
     across sessions.
   - Skip-flag lifecycle (all three clear points MUST be specified):
     - `resumeSession()` (`use-session-resumption.ts:491-522`) clears the flag
-      for the session before launching.
+      only after a SUCCESSFUL launch (a failed resume keeps the Start button as
+      a retry affordance).
     - The Start agent button click (`message-renderer.tsx:55-64`) clears it
-      before dispatching.
+      only after a successful dispatch; failures keep it.
     - The WS `session.state_changed` handler (`lib/ws/handlers/agent-session.ts:692-750`)
-      clears it when the session transitions to a state where the agent is
-      running (STARTING/RUNNING), so a late state event cannot leave a stale
-      button behind.
+      deletes it when the session transitions to STARTING/RUNNING.
+    - `setResumeSkipped(sessionId, true)` is CONDITIONAL: the slice action
+      refuses to set the flag when the session's current state is STARTING or
+      RUNNING. This closes the delayed-status race where a running WS event
+      lands before a stale `task.session.status` response would record the
+      skip after the WS clear.
   - The manual `resumeSession()` action is NOT gated.
 - Start agent button for the recovered-idle case —
   `apps/web/components/task/chat/message-renderer.tsx`:
@@ -167,14 +178,17 @@ gating hooks, then E2E.
 | PATCH accepts and persists the setting; GET/boot payload returns it | `apps/backend/internal/user/dto/dto_test.go`, `internal/user/service/service_test.go` (or existing settings-update test) | unit: round-trip `UpdateUserSettingsRequest` → model → DTO; assert blob round-trip |
 | Settings blob survives reload (true/false/omitted-legacy) | `apps/backend/internal/user/store/sqlite_test.go` | repo test: `SaveUserSettings` then `GetUserSettings` preserves the value; legacy JSON without the key loads the default `false` |
 | `session.ensure` with `auto_start: false` prepares instead of starts | `apps/backend/internal/orchestrator/session_ensure_test.go` (or `session_ensure_office_test.go` pattern) | integration: seed task + step with `auto_start_agent`; call `EnsureSession` with `AutoStart: &false`; assert `Source == "created_prepare"`, `State == "CREATED"`; control case without override still `created_start` |
+| passthrough profile never starts on `auto_start: false` | `apps/backend/internal/orchestrator/session_launch_test.go` | integration: mock agent manager reports `CLIPassthrough`; `EnsureSession` with `AutoStart: &false` stays prepared (`CREATED`, no `startTask`); without the override the passthrough upgrade still launches |
 | WS handler passes `auto_start` through | `apps/backend/internal/orchestrator/handlers/handlers_test.go` | unit: parse `{task_id, auto_start:false}` → handler calls service with the option |
 | SSR defaults and hydration | `apps/web/lib/ssr/user-settings.test.ts` | unit: default `false`; hydrate from `prevent_auto_start_agent_on_open` |
 | ensure payload carries `auto_start` | extend `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` (mocks `ensureTaskSession`) | unit: final-step + setting-on → called with `{ autoStart: false }`; non-final → without |
 | final-step helper | new test beside the helper | unit: max `(position, id)` tie-break, equal positions resolve to one terminal step, missing step/steps → false |
 | caller normalization (snake → camel input) | `apps/web/components/task/task-page-content` test or hook caller test | unit: task page passes `workflowStepId` from `workflow_step_id` |
 | cross-workflow preview resolves the right steps | `apps/web/hooks/domains/session/use-ensure-task-session.test.ts` + preview test | unit: task from `kanbanMulti.snapshots[w]` uses snapshot steps, not the active workflow's |
-| resume gate skips auto-resume and records the skip | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: `checkAndResume` with `needs_resume && is_resumable` and preventAutoStart → no launch, state idle, skip recorded in store; manual `resumeSession` still launches AND clears the flag |
-| Start button renders for resume-skipped sessions (non-FAILED) | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag (non-FAILED state) → button visible; FAILED + resume-skipped → no new button (recovery actions remain); button dispatches resume for the skipped case and clears the flag |
+| resume gate skips auto-resume and records the skip | `apps/web/hooks/domains/session/use-session-resumption.test.ts` | unit: `checkAndResume` with `needs_resume && is_resumable` and preventAutoStart → no launch, state idle, skip recorded in store; manual `resumeSession` still launches AND clears the flag only on success |
+| failed launch keeps the retry button | `apps/web/hooks/domains/session/use-session-resumption.test.ts` + message-renderer test | unit: resume/start rejects or returns `{ success: false }` → skip flag retained, Start button still rendered |
+| delayed-status race: running WS event before stale status | `apps/web/lib/state/slices/kanban` slice test + `use-session-resumption.test.ts` | unit: WS `state_changed` → STARTING then a stale status response attempts `setResumeSkipped(true)` → flag NOT set (conditional action refuses when state is STARTING/RUNNING) |
+| Start button renders for resume-skipped sessions (non-FAILED) | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag (non-FAILED state) → button visible; FAILED + resume-skipped → no new button (recovery actions remain); button dispatches resume for the skipped case and clears the flag on success |
 | skip flag clears on WS running state | `apps/web/lib/ws/handlers/agent-session.test.ts` (or slice test) | unit: `session.state_changed` to STARTING/RUNNING deletes `resumeSkippedSessionIds[sessionId]`; hydration keeps the record shape intact |
 | Start button renders for resume-skipped sessions | `apps/web/components/task/chat/message-renderer` test (or component test) | unit: `sessionState === "CREATED"` OR store resume-skipped flag → button visible; button dispatches resume for the skipped case |
 | settings card renders and saves | `apps/web/components/settings/prevent-auto-start-agent-settings.test.tsx` (mirror `archive-confirmation-settings.test.tsx`) | component: switch toggles, save calls `updateUserSettings({ prevent_auto_start_agent_on_open })` |

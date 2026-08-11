@@ -198,7 +198,7 @@ primary session and follows the dependency order above.
 ## Verification Results
 
 - `cd apps && pnpm --filter @kandev/web test -- --run hooks/use-task-title-selection-restore.test.tsx`
-  — passed (10 tests).
+  — passed (12 tests).
 - `cd apps/web && pnpm e2e:raw tests/task/task-title-caret.spec.ts` — passed
   (3 tests) before the fix (RED: caret at 60) and after (GREEN: caret at 8;
   the third case covers the same-char bail-out).
@@ -249,6 +249,11 @@ all fixed in `f8574cf6` and `6740e3e9`:
   === el`) and value (`el.value === next`) guards. Regression test added.
 - **Minor (round 4)** — bail-out path untested for textarea. Added.
 - **Nits** — verification counts corrected (unit 12, E2E 3 per project).
+
+Round 5 (OMP GPT Luna): **no correctness findings** — the bail-out microtask
+guards (epoch, ownership, value, connection, focus) verified correctly ordered,
+all seven call sites sound, input and textarea paths covered. One nit (stale
+verification count) fixed here.
 
 ## Open Questions
 

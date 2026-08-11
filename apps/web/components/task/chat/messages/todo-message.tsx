@@ -15,6 +15,8 @@ type TodoItem = {
   status?: "pending" | "in_progress" | "completed" | "failed";
 };
 
+/** Normalizes persisted todo entries, dropping malformed or empty-text
+ *  entries. Total by construction: never throws. */
 function normalizeTodos(raw: unknown): TodoItem[] {
   // Total by construction: malformed persisted metadata (non-array `todos`,
   // null/primitive entries, empty text) must yield an empty list, never
@@ -31,6 +33,7 @@ function normalizeTodos(raw: unknown): TodoItem[] {
     );
 }
 
+/** Extracts the message's current todo items via normalizeTodos. */
 function parseTodos(comment: Message): TodoItem[] {
   const metadata = comment.metadata;
   const todos =
@@ -40,6 +43,8 @@ function parseTodos(comment: Message): TodoItem[] {
   return normalizeTodos(todos ?? []);
 }
 
+/** Extracts the message's earlier-updates snapshot history, dropping
+ *  malformed entries. */
 function parseSnapshots(comment: Message): TodoSnapshot[] {
   const metadata = comment.metadata;
   const snapshots =
@@ -55,10 +60,12 @@ function parseSnapshots(comment: Message): TodoSnapshot[] {
   );
 }
 
+/** Number of todo items in the completed state. */
 function countCompleted(items: TodoItem[]): number {
   return items.filter((t) => resolveStatus(t) === "completed").length;
 }
 
+/** Collapsible history of earlier todo snapshots for one message. */
 function SnapshotHistory({ snapshots }: { snapshots: TodoSnapshot[] }) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -103,6 +110,8 @@ function SnapshotHistory({ snapshots }: { snapshots: TodoSnapshot[] }) {
   );
 }
 
+/** Renders a `todo`-type chat message: its current checklist plus an
+ *  expandable earlier-updates history. */
 export function TodoMessage({
   comment,
   defaultExpanded = false,

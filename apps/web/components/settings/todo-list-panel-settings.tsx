@@ -113,6 +113,9 @@ export function TodoListPanelSettings() {
                 <Label htmlFor="todo-list-panel-only-when-not-empty">
                   {t("settings:onlyPinWhenTodoListIsNotEmpty")}
                 </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings:onlyPinWhenTodoListIsNotEmptyDescription")}
+                </p>
               </div>
               <Switch
                 id="todo-list-panel-only-when-not-empty"

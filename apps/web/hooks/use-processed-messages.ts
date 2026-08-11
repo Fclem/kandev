@@ -560,6 +560,9 @@ export function insertLastAgentErrorItem(
   return [...items.slice(0, insertAt), notice, ...items.slice(insertAt)];
 }
 
+/** Builds the todo checklist from the latest persisted `todo`-type message,
+ *  accepting string and `{ text, done }` entries. Total by construction:
+ *  malformed metadata yields an empty list, never throws. */
 export function buildTodoItems(visibleMessages: Message[]) {
   // Scan backward from the latest message without allocating a reversed
   // copy: this runs on the todo-panel sync hot path for every message-array

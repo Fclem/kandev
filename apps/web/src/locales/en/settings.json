@@ -479,6 +479,7 @@
   "pickTheDefaultShellForTask": "Pick the default shell for task sessions",
   "pinTheAgentsLiveTodoChecklistAs": "Automatically pin the agent's live todo checklist as a Todos tab in the right panel. Even when this is off, you can always add the Todos tab manually.",
   "onlyPinWhenTodoListIsNotEmpty": "Only pin when todo list is not empty",
+  "onlyPinWhenTodoListIsNotEmptyDescription": "Limits automatic pinning to sessions that have todo entries. Manually added Todos tabs are never affected.",
   "pluginShortcuts": "Plugin Shortcuts",
   "preferredShell": "Preferred Shell",
   "preferences": "Preferences",

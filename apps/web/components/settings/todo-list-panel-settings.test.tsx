@@ -100,9 +100,11 @@ describe("TodoListPanelSettings", () => {
     const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
     fireEvent.click(toggle);
 
-    // Appears once the main preference is on, in its preserved (on) state.
+    // Appears once the main preference is on, in its preserved (on) state,
+    // with visible help explaining that only automatic pinning is affected.
     const subToggle = screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL });
     expect(subToggle.getAttribute(DATA_STATE_ATTR)).toBe("checked");
+    expect(screen.getByText(/Manually added Todos tabs are never affected/)).toBeTruthy();
 
     fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_BUTTON }));
 

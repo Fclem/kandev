@@ -36,6 +36,15 @@ async function expectSavedAs(show: boolean, onlyWhenNotEmpty: boolean): Promise<
   );
 }
 
+/** Makes the next save hang until the returned resolver is called. */
+function deferNextSave(): () => void {
+  let resolveSave: (value: { settings: object }) => void = () => undefined;
+  updateUserSettings.mockImplementationOnce(
+    () => new Promise<{ settings: object }>((resolve) => (resolveSave = resolve)),
+  );
+  return () => resolveSave({ settings: {} });
+}
+
 function renderTodoListPanelSettings(
   userSettingsOverrides: Partial<UserSettingsState> = {},
 ): StoreApi<AppState> {
@@ -119,12 +128,36 @@ describe("TodoListPanelSettings", () => {
     expect(updateUserSettings).not.toHaveBeenCalled();
   });
 
-  it("does not clobber a newer store value with a stale delayed save", async () => {
-    let resolveSave: (value: { settings: object }) => void = () => undefined;
-    updateUserSettings.mockImplementationOnce(
-      () => new Promise<{ settings: object }>((resolve) => (resolveSave = resolve)),
-    );
+  it("marks each toggle dirty only for its own unsaved change", () => {
+    renderTodoListPanelSettings({
+      showTodoListPanel: true,
+      showTodoListPanelOnlyWhenNotEmpty: false,
+    });
 
+    const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
+    const subToggle = screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL });
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+    expect(subToggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+
+    fireEvent.click(subToggle); // only the sub-option becomes dirty
+    expect(subToggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+
+    fireEvent.click(subToggle); // reverting clears it
+    expect(subToggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+
+    // Changing only the main toggle marks only the main toggle dirty (the
+    // sub-option unmounts with the main toggle off).
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
+    expect(updateUserSettings).not.toHaveBeenCalled();
+  });
+});
+
+describe("TodoListPanelSettings save lifecycle", () => {
+  it("does not clobber a newer store value with a stale delayed save", async () => {
+    const resolveSave = deferNextSave();
     const storeApi = renderTodoListPanelSettings({ showTodoListPanel: false });
 
     const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
@@ -143,12 +176,9 @@ describe("TodoListPanelSettings", () => {
     resolveSave({ settings: {} });
     await waitFor(() => expect(updateUserSettings).toHaveBeenCalledTimes(1));
 
-    // The store must keep the newer WS value, not the stale submission.
     expect(storeApi.getState().userSettings.showTodoListPanel).toBe(false);
     expect(storeApi.getState().userSettings.showTodoListPanelOnlyWhenNotEmpty).toBe(true);
-    // And the UI must not be falsely clean: the draft still differs from the
-    // newer saved baseline, so the dirty flag stays on and the user can
-    // reconcile.
+    // The draft still differs from the newer WS baseline: not falsely clean.
     expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
   });
 
@@ -170,31 +200,22 @@ describe("TodoListPanelSettings", () => {
     expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
   });
 
-  it("marks each toggle dirty only for its own unsaved change", () => {
-    renderTodoListPanelSettings({
-      showTodoListPanel: true,
-      showTodoListPanelOnlyWhenNotEmpty: false,
-    });
-
+  it("keeps a draft edited during an in-flight save dirty against the completed save", async () => {
+    const resolveSave = deferNextSave();
+    const storeApi = renderTodoListPanelSettings({ showTodoListPanel: false });
     const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
-    const subToggle = screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL });
-    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
-    expect(subToggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+    fireEvent.click(toggle); // draft: main on
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_CHANGES_BUTTON }));
 
-    // Changing only the sub-option marks only the sub-option dirty.
-    fireEvent.click(subToggle);
-    expect(subToggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
-    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+    fireEvent.click(toggle); // draft: main back off while the PATCH is pending
 
-    // Reverting it clears the sub-option's dirty flag.
-    fireEvent.click(subToggle);
-    expect(subToggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
-    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+    resolveSave();
+    await waitFor(() => expect(updateUserSettings).toHaveBeenCalledTimes(1));
 
-    // Changing only the main toggle marks only the main toggle dirty (the
-    // sub-option unmounts with the main toggle off).
-    fireEvent.click(toggle);
+    // The completed save owns the store and the baseline; the newer draft
+    // stays unsaved and dirty.
+    expect(storeApi.getState().userSettings.showTodoListPanel).toBe(true);
+    expect(toggle.getAttribute(DATA_STATE_ATTR)).toBe("unchecked");
     expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
-    expect(updateUserSettings).not.toHaveBeenCalled();
   });
 });

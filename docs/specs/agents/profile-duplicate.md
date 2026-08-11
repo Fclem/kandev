@@ -32,9 +32,11 @@ touching the source.
 - The copy is an independent row: it gets a new ID, `user_modified` is set,
   and editing or deleting it never affects the source. No session, task,
   watcher, automation, or routing reference points at the copy.
-- The copy is created enabled (the store invariant for every new profile) and
-  then disabled when the source was disabled, so a duplicated profile inherits
-  the source's selection state.
+- The copy is committed atomically: the row is inserted with the source's
+  enabled state and the MCP config row is upserted in one repository
+  transaction, so a duplicated profile inherits the source's selection state
+  and a disabled source never becomes briefly selectable. A failure rolls
+  back and leaves no partial copy.
 - Runtime state is never copied: the copy starts idle with no pause reason,
   no last-run timestamp, and a zero consecutive-failure count. Office
   enrichment configuration (workspace, role, budget, permissions, skills,

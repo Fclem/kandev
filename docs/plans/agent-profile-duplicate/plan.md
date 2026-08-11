@@ -207,9 +207,11 @@ Wave 3:
 
 ## Risks
 
-- The store's `CreateAgentProfile` forces `Enabled=true`; the disabled-source
-  case needs the follow-up `UpdateAgentProfileEnabled` call — pinned by a
-  test so a future change to that invariant cannot silently drop the state.
+- `DuplicateAgentProfile` inserts the copy with the caller-provided enabled
+  state inside one transaction, unlike `CreateAgentProfile` which forces
+  `Enabled=true` for other callers — a store regression that forces the
+  duplicate enabled is pinned by `sqlite_duplicate_test.go` (disabled copy
+  stays disabled) and by the controller test asserting no follow-up write.
 - `GetAgentProfileMcpConfig` returns different "absent" shapes across the
   sqlite store (`sql.ErrNoRows`) and the shared fake store (`nil, nil`);
   the controller must tolerate both.

@@ -15,6 +15,11 @@ type ProfileState = Pick<AppState, "settingsAgents" | "agentProfiles">;
  * Merge one duplicated profile into the latest store state. Dedupes by ID so
  * a concurrent `agent.profile.created` WS delivery cannot double-insert the
  * copy into either slice.
+ *
+ * When the owning agent is missing from `settingsAgents` (e.g. removed while
+ * the request was in flight), the copy is still surfaced in `agentProfiles`
+ * via a stub instead of being dropped — and the rebuild never erases a copy
+ * the WS handler already delivered.
  */
 export function applyProfileDuplicated(
   state: ProfileState,
@@ -30,14 +35,16 @@ export function applyProfileDuplicated(
       : item,
   );
 
+  const rebuiltOptions = nextAgents.flatMap((item) =>
+    item.profiles.map((profile) => toAgentProfileOption(item, profile)),
+  );
+  const agentProfilesItems = rebuiltOptions.some((option) => option.id === created.id)
+    ? rebuiltOptions
+    : [...rebuiltOptions, toAgentProfileOption({ id: agent.id, name: agent.name }, created)];
+
   return {
     settingsAgents: { ...state.settingsAgents, items: nextAgents },
-    agentProfiles: {
-      ...state.agentProfiles,
-      items: nextAgents.flatMap((item) =>
-        item.profiles.map((profile) => toAgentProfileOption(item, profile)),
-      ),
-    },
+    agentProfiles: { ...state.agentProfiles, items: agentProfilesItems },
   };
 }
 

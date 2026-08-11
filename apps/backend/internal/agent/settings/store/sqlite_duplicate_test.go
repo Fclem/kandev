@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/kandev/kandev/internal/agent/settings/models"
@@ -144,5 +146,41 @@ func TestDuplicateAgentProfile_NoMcpConfig(t *testing.T) {
 	}
 	if _, err := repo.GetAgentProfileMcpConfig(ctx, clone.ID); err == nil {
 		t.Fatal("expected no MCP row for a copy without config")
+	}
+}
+
+// TestDuplicateAgentProfile_RollsBackMcpFailure verifies the transaction
+// rolls back the inserted profile row when the MCP upsert fails AFTER the
+// insert. A regression that commits the profile before the MCP write would
+// leave a partial, selectable copy on every failed duplicate.
+func TestDuplicateAgentProfile_RollsBackMcpFailure(t *testing.T) {
+	repo := newFreshRepo(t)
+	ctx := context.Background()
+
+	if err := repo.CreateAgent(ctx, &models.Agent{Name: "test-agent"}); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+	agent, err := repo.GetAgentByName(ctx, "test-agent")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	source := &models.AgentProfile{AgentID: agent.ID, Name: "Default"}
+	if err := repo.CreateAgentProfile(ctx, source); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+
+	clone := &models.AgentProfile{AgentID: agent.ID, Name: "Default Copy"}
+	// A channel is not JSON-serializable: the MCP upsert fails during
+	// serialization, which happens AFTER the profile row was inserted inside
+	// the transaction.
+	badMcp := &models.AgentProfileMcpConfig{
+		Enabled: true,
+		Servers: map[string]interface{}{"bad": make(chan int)},
+	}
+	if err := repo.DuplicateAgentProfile(ctx, clone, badMcp); err == nil {
+		t.Fatal("expected MCP serialization error, got nil")
+	}
+	if _, err := repo.GetAgentProfile(ctx, clone.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("copy row survived a failed duplicate (rollback missing): err=%v", err)
 	}
 }

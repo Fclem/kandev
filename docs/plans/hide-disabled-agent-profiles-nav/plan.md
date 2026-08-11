@@ -44,9 +44,11 @@ scope (office rows have no enabled concept).
   checked from the hook and toggling `setHideDisabled` directly (immediate
   save — the agents page has no floating save bar; its profile toggles are
   immediate-save too). Always rendered, even when no profiles exist.
-- Render it on `apps/web/app/settings/agents/page.tsx` below
-  `<AgentProfilesSection />` (page already at its lint line budget; the new
-  component is a separate file imported by the page).
+- Render it on `apps/web/app/settings/agents/page.tsx` at the top of the
+  page, directly below the header `<Separator />` and above the "Installed
+  Agents" list, so the setting appears before the first agent on the page
+  (page already at its lint line budget; the component is a separate file
+  imported by the page).
 - Locale keys (all four catalogs, `src/locales/{en,pseudo,pt-pt,zh-cn}/settings.json`):
   - `hideDisabledAgentProfilesFromNav` — "Hide disabled agent profiles from
     left panel navigation"

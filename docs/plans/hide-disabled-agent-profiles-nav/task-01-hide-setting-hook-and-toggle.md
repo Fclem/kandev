@@ -33,7 +33,8 @@ cd apps/web && pnpm run i18n:ratchet && pnpm run i18n:check
 - `apps/web/hooks/domains/integrations/local-storage-mock.test-helpers.ts` (reuse as-is)
 - `apps/web/app/settings/agents/hide-disabled-agent-profiles-setting.tsx` (new)
 - `apps/web/app/settings/agents/hide-disabled-agent-profiles-setting.test.tsx` (new)
-- `apps/web/app/settings/agents/page.tsx` (render the new row below `AgentProfilesSection`)
+- `apps/web/app/settings/agents/page.tsx` (render the new row at the top,
+  below the header `<Separator />` and above the "Installed Agents" list)
 - `apps/web/src/locales/{en,pseudo,pt-pt,zh-cn}/settings.json` (two keys each)
 
 ## Dependencies
@@ -79,8 +80,9 @@ blockers/risks, then mark this task `done` and update its checkbox in
   shape; storage key `kandev:agents:hideDisabledInNav:v1`, sync event
   `kandev:agents:hide-disabled-in-nav-changed`; degrades to `false` on read
   errors, throws on failed writes.
-- Toggle: `HideDisabledAgentProfilesSetting` rendered on `/settings/agents`
-  below `AgentProfilesSection`; immediate-save switch
+- Toggle: `HideDisabledAgentProfilesSetting` rendered at the top of
+  `/settings/agents` (below the header separator, above the "Installed
+  Agents" list); immediate-save switch
   `#hide-disabled-agent-profiles-in-nav`.
 - Locales: two keys added to `en`, `pt-pt`, `zh-cn`; `pseudo` regenerated.
 - Focused tests: hook 10/10, toggle 3/3; `i18n:ratchet` + `i18n:check`

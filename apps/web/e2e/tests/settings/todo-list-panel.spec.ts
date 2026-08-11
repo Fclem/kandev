@@ -272,12 +272,13 @@ test.describe("Todo list panel preference", () => {
     // p-3 padding remains below). A capped 192px (max-h-48) list can never
     // reach the bottom of a taller hosting panel, so this measured invariant
     // is layout-independent — it holds in short split groups and any
-    // viewport, with no arbitrary pixel allowance.
+    // viewport, with no arbitrary pixel allowance. Two-sided (Math.abs) so
+    // content spilling below the panel also fails the guard (round 5).
     const listBox = await panel.locator(".overflow-y-auto").boundingBox();
     expect(listBox).not.toBeNull();
     const panelBottom = (panelBox?.y ?? 0) + (panelBox?.height ?? 0);
     const listBottom = (listBox?.y ?? 0) + listBox!.height;
-    expect(panelBottom - listBottom).toBeLessThanOrEqual(24);
+    expect(Math.abs(panelBottom - listBottom)).toBeLessThanOrEqual(24);
   });
 
   test("is manually addable from the task workbench's own + menu, independent of the preference", async ({

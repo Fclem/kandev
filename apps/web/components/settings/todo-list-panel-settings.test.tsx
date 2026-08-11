@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StateProvider } from "@/components/state-provider";
 import { defaultState } from "@/lib/state/default-state";
+import type { UserSettingsState } from "@/lib/state/slices/settings/types";
 import { SettingsSaveProvider } from "./settings-save-provider";
 
 const updateUserSettings = vi.fn();
@@ -22,19 +23,23 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+function renderTodoListPanelSettings(userSettingsOverrides: Partial<UserSettingsState> = {}): void {
+  render(
+    <StateProvider
+      initialState={{
+        userSettings: { ...defaultState.userSettings, ...userSettingsOverrides },
+      }}
+    >
+      <SettingsSaveProvider>
+        <TodoListPanelSettings />
+      </SettingsSaveProvider>
+    </StateProvider>,
+  );
+}
+
 describe("TodoListPanelSettings", () => {
   it("keeps an enabled preference local until Save changes persists it", async () => {
-    render(
-      <StateProvider
-        initialState={{
-          userSettings: { ...defaultState.userSettings, showTodoListPanel: false },
-        }}
-      >
-        <SettingsSaveProvider>
-          <TodoListPanelSettings />
-        </SettingsSaveProvider>
-      </StateProvider>,
-    );
+    renderTodoListPanelSettings({ showTodoListPanel: false });
     const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
 
     expect(toggle.getAttribute(DATA_STATE_ATTR)).toBe("unchecked");
@@ -58,21 +63,10 @@ describe("TodoListPanelSettings", () => {
   });
 
   it("inhibits the sub-option while the main toggle is off and saves both fields", async () => {
-    render(
-      <StateProvider
-        initialState={{
-          userSettings: {
-            ...defaultState.userSettings,
-            showTodoListPanel: false,
-            showTodoListPanelOnlyWhenNotEmpty: true,
-          },
-        }}
-      >
-        <SettingsSaveProvider>
-          <TodoListPanelSettings />
-        </SettingsSaveProvider>
-      </StateProvider>,
-    );
+    renderTodoListPanelSettings({
+      showTodoListPanel: false,
+      showTodoListPanelOnlyWhenNotEmpty: true,
+    });
 
     // Inhibited (hidden entirely), not disabled, while the main preference is off.
     expect(screen.queryByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL })).toBeNull();
@@ -96,21 +90,10 @@ describe("TodoListPanelSettings", () => {
   });
 
   it("preserves the sub-option state across a main-toggle off/on cycle without saving", () => {
-    render(
-      <StateProvider
-        initialState={{
-          userSettings: {
-            ...defaultState.userSettings,
-            showTodoListPanel: true,
-            showTodoListPanelOnlyWhenNotEmpty: true,
-          },
-        }}
-      >
-        <SettingsSaveProvider>
-          <TodoListPanelSettings />
-        </SettingsSaveProvider>
-      </StateProvider>,
-    );
+    renderTodoListPanelSettings({
+      showTodoListPanel: true,
+      showTodoListPanelOnlyWhenNotEmpty: true,
+    });
 
     const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
     expect(screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL })).toBeTruthy();
@@ -121,6 +104,34 @@ describe("TodoListPanelSettings", () => {
     fireEvent.click(toggle);
     const subToggle = screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL });
     expect(subToggle.getAttribute(DATA_STATE_ATTR)).toBe("checked");
+    expect(updateUserSettings).not.toHaveBeenCalled();
+  });
+
+  it("marks each toggle dirty only for its own unsaved change", () => {
+    renderTodoListPanelSettings({
+      showTodoListPanel: true,
+      showTodoListPanelOnlyWhenNotEmpty: false,
+    });
+
+    const toggle = screen.getByRole("switch", { name: TODO_LIST_PANEL_LABEL });
+    const subToggle = screen.getByRole("switch", { name: ONLY_PIN_WHEN_NOT_EMPTY_LABEL });
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+    expect(subToggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+
+    // Changing only the sub-option marks only the sub-option dirty.
+    fireEvent.click(subToggle);
+    expect(subToggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+
+    // Reverting it clears the sub-option's dirty flag.
+    fireEvent.click(subToggle);
+    expect(subToggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("false");
+
+    // Changing only the main toggle marks only the main toggle dirty (the
+    // sub-option unmounts with the main toggle off).
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute(DATA_SETTINGS_DIRTY_ATTR)).toBe("true");
     expect(updateUserSettings).not.toHaveBeenCalled();
   });
 });

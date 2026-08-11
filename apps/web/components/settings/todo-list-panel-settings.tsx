@@ -90,7 +90,7 @@ export function TodoListPanelSettings() {
             <Switch
               id="show-todo-list-panel"
               checked={draft.show}
-              data-settings-dirty={isDirty}
+              data-settings-dirty={draft.show !== saved.show}
               onCheckedChange={(show) => setDraft((current) => ({ ...current, show }))}
               className="shrink-0 cursor-pointer"
             />
@@ -105,7 +105,7 @@ export function TodoListPanelSettings() {
               <Switch
                 id="todo-list-panel-only-when-not-empty"
                 checked={draft.onlyWhenNotEmpty}
-                data-settings-dirty={isDirty}
+                data-settings-dirty={draft.onlyWhenNotEmpty !== saved.onlyWhenNotEmpty}
                 onCheckedChange={(onlyWhenNotEmpty) =>
                   setDraft((current) => ({ ...current, onlyWhenNotEmpty }))
                 }

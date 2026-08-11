@@ -123,8 +123,16 @@ The DeepSeek V4 Pro adversarial review (sub-task
   `as unknown as Partial<BackendMessageMap[...]>` cast in
   `lib/ws/handlers/users.test.ts` (the field is statically typed).
 - **N2 (nit, confirmed)** — card-level `data-settings-dirty` on both toggles;
-  reviewer assessed as cosmetic and consistent with the app's card-level save
-  pattern; no action taken per the reviewer's recommendation.
+  fixed in the round-2 pass as F1 (per-field dirty flags, see Task 07
+  results).
+- **F2 (minor, suspected, round 2)** — the render-time `todoListNotEmpty`
+  memo and the RAF-dispatch recompute each called `buildTodoItems` (two O(n)
+  scans per effect cycle). Fixed by removing the memo entirely: the effect's
+  change signal is now the raw `liveTodos`/`messages` slice identities in the
+  dependency array (they only change when the underlying todo/message data
+  actually changes), so the predicate is computed exactly once per sync — in
+  the dispatch callback, from the dispatch-time snapshot. `useMemo` import
+  dropped.
 
 Post-fix verification: sync+WS unit tests 49 passed; `pnpm run typecheck`
 clean; `make fmt` + `make lint` clean; E2E

@@ -121,3 +121,12 @@ Commands:
   advisory pt-pt, zh-cn issue(s)" — advisory real-locale gaps only).
 
 Blockers/risks: none.
+
+Reviewer-feedback follow-up (round 2, finding F1 = round-1 N2): both
+switches now carry per-field `data-settings-dirty`
+(`draft.show !== saved.show` / `draft.onlyWhenNotEmpty !==
+saved.onlyWhenNotEmpty`) instead of the shared card-level flag, matching the
+established per-control pattern (e.g. `lsp-language-cards.tsx`). Added a
+component test "marks each toggle dirty only for its own unsaved change"
+(four render blocks deduplicated into `renderTodoListPanelSettings` to stay
+under the 100-line lint cap).

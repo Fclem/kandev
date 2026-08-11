@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import type { AddPanelOptions, DockviewApi } from "dockview-react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { buildTodoItems } from "@/hooks/use-processed-messages";
@@ -158,9 +158,9 @@ const EMPTY_MESSAGES: Message[] = [];
 /** True when the session's todo list is non-empty, using the exact two-source
  *  fallback the Todos panel content uses: live `sessionTodos.bySessionId`
  *  entries first (an empty array falls through), then the latest persisted
- *  `todo`-type message via `buildTodoItems`. Shared by the render-time memo
- *  (the effect's change signal) and the RAF-dispatch-time recompute (so the
- *  decision never uses a stale render snapshot). */
+ *  `todo`-type message via `buildTodoItems`. Computed once per sync from the
+ *  dispatch-time snapshot (see `useSyncTodoPanel`) and exported as a testable
+ *  contract so the fallback can't drift from the panel content. */
 export function todoListNotEmptyForSession(
   liveTodos: readonly TodoEntry[] | undefined,
   messages: Message[],
@@ -190,16 +190,14 @@ export function useSyncTodoPanel() {
   // panel, so subscribing to the store slices here adds no fetch side effects.
   // Selectors must return stable references (the stored array or `undefined`),
   // never a fresh `[]`, or zustand re-renders on every store read and React
-  // throws "maximum update depth exceeded".
+  // throws "maximum update depth exceeded". The slices double as the effect's
+  // change signal, so the predicate is computed exactly once per sync — in
+  // the dispatch callback, from the dispatch-time snapshot.
   const liveTodos = useAppStore((state) =>
     sessionId ? state.sessionTodos.bySessionId[sessionId] : undefined,
   );
   const messages = useAppStore((state) =>
     sessionId ? (state.messages.bySession[sessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES,
-  );
-  const todoListNotEmpty = useMemo(
-    () => todoListNotEmptyForSession(liveTodos, messages),
-    [liveTodos, messages],
   );
 
   useEffect(() => {
@@ -249,12 +247,13 @@ export function useSyncTodoPanel() {
     hasApi,
     isMaximized,
     isRestoringLayout,
+    liveTodos,
+    messages,
     onlyPinWhenNotEmpty,
     settingsLoaded,
     sessionId,
     showTodoListPanel,
     taskId,
-    todoListNotEmpty,
     userDefaultLayout,
     workspaceId,
   ]);

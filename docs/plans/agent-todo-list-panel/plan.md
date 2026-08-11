@@ -425,6 +425,12 @@ Results section.
 
 ### Iteration 2 (done)
 
+Adversarial review loop (DeepSeek V4 Pro, sub-tasks): round 1 APPROVE
+(qualified) → N1/N3 fixed (`b2ae04fd`), N2 deferred; round 2 APPROVE → F1
+(per-field dirty) / F2 (single predicate computation) fixed (`11cfe336`);
+round 3 APPROVE with **no new findings** (round-2 fixes re-verified). Loop
+converged; details in task-07/task-08 Results.
+
 All 4 tasks done. Backend
 (`cd apps/backend && go test ./internal/user/... ./internal/backendapp/...`):
 all `internal/user/*` packages `ok`; `internal/backendapp` `ok` (the two

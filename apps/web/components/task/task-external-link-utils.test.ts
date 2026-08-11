@@ -17,6 +17,14 @@ describe("buildLinkedIssueTitle", () => {
     );
   });
 
+  it("replaces the prefix and keeps the limit when re-linking a truncated title", () => {
+    // Simulate a title already truncated by a previous link (60 chars, "…" tail).
+    const prev = `DO-916: ${"x".repeat(51)}…`;
+    const got = buildLinkedIssueTitle(prev, "ENG-20");
+    expect(Array.from(got)).toHaveLength(60);
+    expect(got).toBe(`ENG-20: ${"x".repeat(51)}…`);
+  });
+
   it("truncates a composed title that exceeds the 60-character limit", () => {
     const got = buildLinkedIssueTitle("x".repeat(60), "DO-916");
     expect(Array.from(got)).toHaveLength(60);

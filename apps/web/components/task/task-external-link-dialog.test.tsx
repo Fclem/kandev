@@ -160,6 +160,44 @@ describe("TaskExternalLinkDialog — long task titles", () => {
     expect(title.startsWith("ENG-20: ")).toBe(true);
     expect(title.endsWith("…")).toBe(true);
   });
+
+  it("caps the renamed title when a Sentry shortId rewrites the key", async () => {
+    mockSentryInstances("single", [instance("inst-1", "Production")]);
+    vi.mocked(getSentryIssue).mockResolvedValue({ shortId: "API-42" } as never);
+    vi.mocked(updateTask).mockResolvedValue({
+      id: TASK_ID,
+      title: "API-42: " + "x".repeat(51) + "…",
+    } as never);
+
+    const longTitle = "x".repeat(60);
+    render(
+      <StateProvider>
+        <ToastProvider>
+          <TaskExternalLinkDialog
+            open={true}
+            onOpenChange={vi.fn()}
+            provider="sentry"
+            task={{ id: TASK_ID, title: longTitle }}
+            workspaceId={WORKSPACE_ID}
+          />
+        </ToastProvider>
+      </StateProvider>,
+    );
+
+    fireEvent.change(screen.getByTestId(INPUT_TEST_ID), {
+      target: { value: "https://sentry.io/organizations/acme/issues/123456/" },
+    });
+    fireEvent.click(screen.getByTestId(SUBMIT_TEST_ID));
+
+    await waitFor(() => {
+      expect(getSentryIssue).toHaveBeenCalledWith(WORKSPACE_ID, "inst-1", "123456");
+    });
+    expect(updateTask).toHaveBeenCalledTimes(1);
+    const title = vi.mocked(updateTask).mock.calls[0][1].title as string;
+    expect(Array.from(title)).toHaveLength(60);
+    expect(title.startsWith("API-42: ")).toBe(true);
+    expect(title.endsWith("…")).toBe(true);
+  });
 });
 
 describe("TaskExternalLinkDialog — Sentry linking", () => {

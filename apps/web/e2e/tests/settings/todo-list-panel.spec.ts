@@ -268,14 +268,16 @@ test.describe("Todo list panel preference", () => {
     expect(Math.abs((panelBox?.height ?? 0) - (slotBox?.height ?? 0))).toBeLessThanOrEqual(4);
 
     // The checklist scroll container is no longer a fixed-size popover list:
-    // it must consume the panel height below the header/progress chrome
-    // (~66px). A relative bound against the measured slot keeps this
-    // assertion layout-independent (no absolute pixel floor, valid in short
-    // split groups), while still failing the pre-fix 192px cap in any
-    // hosting panel taller than ~280px.
+    // its bottom edge must track the panel's bottom content edge (only the
+    // p-3 padding remains below). A capped 192px (max-h-48) list can never
+    // reach the bottom of a taller hosting panel, so this measured invariant
+    // is layout-independent — it holds in short split groups and any
+    // viewport, with no arbitrary pixel allowance.
     const listBox = await panel.locator(".overflow-y-auto").boundingBox();
     expect(listBox).not.toBeNull();
-    expect(listBox!.height).toBeGreaterThan((slotBox?.height ?? 0) - 90);
+    const panelBottom = (panelBox?.y ?? 0) + (panelBox?.height ?? 0);
+    const listBottom = (listBox?.y ?? 0) + listBox!.height;
+    expect(panelBottom - listBottom).toBeLessThanOrEqual(24);
   });
 
   test("is manually addable from the task workbench's own + menu, independent of the preference", async ({

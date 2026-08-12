@@ -14,22 +14,24 @@ import { useState } from "react";
  * unpinning never closes an already-open panel. A pinned queue that was
  * empty reopens when entries arrive (initial async load, session switch, or
  * a new message after a full drain); ordinary count changes on a nonempty
- * queue never reopen an X-collapsed panel. State is adjusted during render
- * (React docs: "Adjusting some state when a prop changes") to avoid the
- * cascading-render anti-pattern of doing it inside useEffect.
+ * queue never reopen an X-collapsed panel. An empty queue starts collapsed
+ * even when pinned, so unpinning before delayed entries arrive leaves it
+ * collapsed. State is adjusted during render (React docs: "Adjusting some
+ * state when a prop changes") to avoid the cascading-render anti-pattern of
+ * doing it inside useEffect.
  */
 export function useQueuePanelOpenState(
   sessionId: string | null,
   entryCount: number,
   pinned: boolean,
 ) {
-  const [isOpen, setIsOpen] = useState(pinned);
+  const [isOpen, setIsOpen] = useState(pinned && entryCount > 0);
   const [lastSession, setLastSession] = useState(sessionId);
   const [lastEntryCount, setLastEntryCount] = useState(entryCount);
   const [lastPinned, setLastPinned] = useState(pinned);
   if (sessionId !== lastSession) {
     setLastSession(sessionId);
-    setIsOpen(pinned);
+    setIsOpen(pinned && entryCount > 0);
   }
   if (entryCount !== lastEntryCount) {
     const wasEmpty = lastEntryCount === 0;

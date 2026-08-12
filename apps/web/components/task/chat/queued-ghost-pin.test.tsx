@@ -207,6 +207,25 @@ describe("QueueAffordance pin sync", () => {
     expect(screen.queryByTestId(CHIP_ID)).toBeNull();
   });
 
+  it("stays collapsed when a pinned empty queue is unpinned before entries arrive", () => {
+    useQueueMock.mockReturnValue(queueState([]));
+    useQueuePinnedMock.mockReturnValue({ value: true, setValue: vi.fn(), toggle: vi.fn() });
+    const { rerender } = render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+
+    // Another tab unpins the session before its queue has loaded.
+    useQueuePinnedMock.mockReturnValue({ value: false, setValue: vi.fn(), toggle: vi.fn() });
+    rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+
+    // Entries arrive: the unpinned queue must stay collapsed with the chip,
+    // not leak an open panel from the earlier pinned-empty state.
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+    expect(screen.getByTestId(CHIP_ID)).toBeTruthy();
+  });
+
   it("opens when entries arrive after a storage-synced pin on an empty queue", () => {
     useQueueMock.mockReturnValue(queueState([]));
     useQueuePinnedMock.mockReturnValue({ value: false, setValue: vi.fn(), toggle: vi.fn() });
@@ -224,7 +243,9 @@ describe("QueueAffordance pin sync", () => {
     expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
     expect(screen.queryByTestId(CHIP_ID)).toBeNull();
   });
+});
 
+describe("QueueAffordance pin transitions", () => {
   it("opens when the session switches to a pinned queue whose entries load later", () => {
     useQueuePinnedMock.mockImplementation((sessionId: string | null) => ({
       value: sessionId === "sess-2",

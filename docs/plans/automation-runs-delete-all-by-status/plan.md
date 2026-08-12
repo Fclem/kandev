@@ -171,9 +171,11 @@ Wave 1 (sequential):
 - [x] [task-03-e2e-status-scoped-delete](task-03-e2e-status-scoped-delete.md) — done
 
 The hook and the component are a vertical slice (the component consumes the
-hook's new signature in the same change cycle); E2E follows both. Three
-adversarial review rounds (Luna) ran after implementation; each round's
-findings were fixed, re-verified, and committed before the next round.
+hook's new signature in the same change cycle); E2E follows both. Eight
+adversarial review rounds (Luna, one fresh sub-task per round) ran after
+implementation; each round's findings were fixed, re-verified, and committed
+before the next. Round 8 reported `NO NEW FINDINGS` with a ready-to-merge
+verdict, ending the loop.
 
 ## Open Questions
 

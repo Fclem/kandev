@@ -3,6 +3,7 @@
 import { memo, useState, useCallback, type ReactElement } from "react";
 import { IconPlayerPlay } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
+import { sessionId as toSessionId, taskId as toTaskId } from "@/lib/types/http";
 import type { Message, TaskSessionState } from "@/lib/types/http";
 import type { ToolCallMetadata } from "@/components/task/chat/types";
 import { launchSession } from "@/lib/services/session-launch-service";
@@ -80,6 +81,8 @@ function TaskDescriptionStartButton({ taskId, sessionId }: { taskId: string; ses
     (state) => state.tasks.resumeSkippedSessionIds[sessionId] === true,
   );
   const setResumeSkipped = useAppStore((state) => state.setResumeSkipped);
+  const session = useAppStore((state) => state.taskSessions.items[sessionId] ?? null);
+  const setTaskSession = useAppStore((state) => state.setTaskSession);
 
   const handleStart = useCallback(async () => {
     setIsStarting(true);
@@ -90,6 +93,18 @@ function TaskDescriptionStartButton({ taskId, sessionId }: { taskId: string; ses
         ? buildResumeRequest(taskId, sessionId)
         : buildStartCreatedRequest(taskId, sessionId);
       const response = await launchSession(request);
+      if (response.success && response.state) {
+        // Hydrate the launch state (commonly STARTING) so the button hides
+        // immediately and repeated start_created/resume requests cannot fire
+        // against an already-starting session before the WS transition lands.
+        setTaskSession({
+          id: toSessionId(sessionId),
+          task_id: toTaskId(taskId),
+          state: response.state as TaskSessionState,
+          started_at: session?.started_at ?? "",
+          updated_at: session?.updated_at ?? "",
+        });
+      }
       // Only confirmed RUNNING clears the resume-skipped marker: a resume
       // response commonly reports STARTING (launch accepted, agent starting),
       // and the WS RUNNING transition clears it later. Failed launches keep
@@ -102,7 +117,7 @@ function TaskDescriptionStartButton({ taskId, sessionId }: { taskId: string; ses
     } finally {
       setIsStarting(false);
     }
-  }, [taskId, sessionId, resumeSkipped, setResumeSkipped]);
+  }, [taskId, sessionId, resumeSkipped, setResumeSkipped, session, setTaskSession]);
 
   // Hide while environment is being prepared
   if (prepareStatus === "preparing") return null;

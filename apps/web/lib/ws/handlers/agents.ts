@@ -56,7 +56,11 @@ function isStaleProfileEvent(
   eventTimestamp: string | undefined,
 ): boolean {
   const tombstone = deletionTombstones.get(normalized.id);
-  if (tombstone !== undefined && eventTimestamp && compareTimestamps(tombstone, eventTimestamp) >= 0) {
+  if (
+    tombstone !== undefined &&
+    eventTimestamp &&
+    compareTimestamps(tombstone, eventTimestamp) >= 0
+  ) {
     return true;
   }
   const existingProfile = findExistingProfile(state, normalized.id);

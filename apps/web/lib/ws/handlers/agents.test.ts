@@ -173,13 +173,23 @@ describe("agent profile events", () => {
   it("ignores a stale delete event when a newer revision already exists", () => {
     const store = makeStore();
     const handlers = handlersFor(store);
-    const current = profilePayload({ id: "p-stale", model: "new-model", updated_at: "2026-07-26T11:00:00Z" });
-    handlers[PROFILE_CREATED](message(PROFILE_CREATED, { profile: current }, "2026-07-26T11:05:00Z"));
+    const current = profilePayload({
+      id: "p-stale",
+      model: "new-model",
+      updated_at: "2026-07-26T11:00:00Z",
+    });
+    handlers[PROFILE_CREATED](
+      message(PROFILE_CREATED, { profile: current }, "2026-07-26T11:05:00Z"),
+    );
     expect(store.getState().agentProfiles.items).toHaveLength(1);
 
     // A delayed delete carrying an OLDER snapshot than the stored revision
     // must not remove the current profile.
-    const staleDelete = profilePayload({ id: "p-stale", model: "new-model", updated_at: TIMESTAMP });
+    const staleDelete = profilePayload({
+      id: "p-stale",
+      model: "new-model",
+      updated_at: TIMESTAMP,
+    });
     handlers[PROFILE_DELETED](
       message(PROFILE_DELETED, { profile: staleDelete }, "2026-07-26T11:02:00Z"),
     );
@@ -199,10 +209,20 @@ describe("agent profile events", () => {
     const handlers = handlersFor(store);
     // Lexically "…10:00:00Z" sorts AFTER "…10:00:00.100Z", so a naive string
     // compare would treat the whole-second revision as newer and regress it.
-    const fractional = profilePayload({ id: "p-frac", model: "fractional-model", updated_at: "2026-07-26T10:00:00.100Z" });
-    handlers[PROFILE_CREATED](message(PROFILE_CREATED, { profile: fractional }, "2026-07-26T10:00:00.100Z"));
+    const fractional = profilePayload({
+      id: "p-frac",
+      model: "fractional-model",
+      updated_at: "2026-07-26T10:00:00.100Z",
+    });
+    handlers[PROFILE_CREATED](
+      message(PROFILE_CREATED, { profile: fractional }, "2026-07-26T10:00:00.100Z"),
+    );
 
-    const wholeSecond = profilePayload({ id: "p-frac", model: "whole-second-model", updated_at: TIMESTAMP });
+    const wholeSecond = profilePayload({
+      id: "p-frac",
+      model: "whole-second-model",
+      updated_at: TIMESTAMP,
+    });
     handlers[PROFILE_UPDATED](message(PROFILE_UPDATED, { profile: wholeSecond }));
 
     expect(store.getState().agentProfiles.items[0]?.model).toBe("fractional-model");
@@ -217,12 +237,20 @@ describe("agent profile events", () => {
     // Delete at a fractional second; the tombstone must beat a whole-second
     // create produced before it.
     handlers[PROFILE_DELETED](
-      message(PROFILE_DELETED, { profile: profilePayload({ id: "p-tomb" }) }, "2026-07-26T10:00:00.100Z"),
+      message(
+        PROFILE_DELETED,
+        { profile: profilePayload({ id: "p-tomb" }) },
+        "2026-07-26T10:00:00.100Z",
+      ),
     );
     expect(store.getState().agentProfiles.items).toHaveLength(0);
 
     handlers[PROFILE_CREATED](
-      message(PROFILE_CREATED, { profile: profilePayload({ id: "p-tomb" }) }, "2026-07-26T10:00:00.050Z"),
+      message(
+        PROFILE_CREATED,
+        { profile: profilePayload({ id: "p-tomb" }) },
+        "2026-07-26T10:00:00.050Z",
+      ),
     );
     expect(store.getState().agentProfiles.items).toHaveLength(0);
   });

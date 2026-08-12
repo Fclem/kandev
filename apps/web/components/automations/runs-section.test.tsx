@@ -186,6 +186,8 @@ describe("RunsSection delete-all scope", () => {
     expect(cells[cells.length - 1].querySelector(`[data-testid="${DELETE_ALL_BTN}"]`)).toBeTruthy();
     // It no longer lives in the section header beside Refresh.
     expect(screen.getByTestId(DELETE_ALL_BTN).closest("thead")).toBeTruthy();
+    // Unfiltered: the accessible name matches the full scope.
+    expect(screen.getByTestId(DELETE_ALL_BTN).getAttribute("title")).toBe("Delete all runs");
   });
 
   it("deletes only the runs in the active status view", () => {
@@ -251,6 +253,11 @@ describe("RunsSection delete-all scope", () => {
     fireEvent.click(screen.getByTestId(FILTER_SKIPPED));
     fireEvent.click(screen.getByTestId(DELETE_ALL_BTN));
 
+    // The button's accessible name names the active status, matching the
+    // dialog copy.
+    expect(screen.getByTestId(DELETE_ALL_BTN).getAttribute("title")).toBe(
+      "Delete all Skipped runs",
+    );
     expect(
       screen.getByText(
         "This will permanently remove the Skipped runs shown in this view and their associated tasks. This cannot be undone.",

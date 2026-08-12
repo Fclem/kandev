@@ -144,6 +144,12 @@ function DeleteAllButton({ disabled, statusFilter, onConfirm }: DeleteAllButtonP
   const statusLabel = scoped
     ? t(STATUS_FILTERS.find((filter) => filter.value === statusFilter)?.labelKey ?? "")
     : "";
+  // The accessible name must match the action's actual scope, not just the
+  // dialog: in a filtered view "Delete all runs" would promise more than the
+  // button deletes.
+  const label = scoped
+    ? t("automations:deleteAllRunsScoped", { status: statusLabel })
+    : t("automations:deleteAllRuns");
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -152,7 +158,8 @@ function DeleteAllButton({ disabled, statusFilter, onConfirm }: DeleteAllButtonP
           size="icon-sm"
           className="cursor-pointer text-destructive hover:text-destructive"
           disabled={disabled}
-          title={t("automations:deleteAllRuns")}
+          title={label}
+          aria-label={label}
           data-testid="delete-all-runs"
         >
           <IconTrash className="h-3.5 w-3.5" />

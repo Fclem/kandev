@@ -70,6 +70,7 @@ import {
 import { useAutomationRuns } from "./use-automation-runs";
 
 const AUTOMATION_ID = "auto-1";
+const BATCH_DELETE_ERROR = "batch delete failed";
 const WORKSPACE_ID = "ws-1";
 
 function mkRun(id: string): AutomationRun {
@@ -323,7 +324,7 @@ describe("useAutomationRuns - status-scoped delete-all", () => {
     setRuns(AUTOMATION_ID, [runX, runY]);
 
     vi.mocked(listAutomationRuns).mockResolvedValue([runX, runY]);
-    vi.mocked(deleteAutomationRun).mockRejectedValue(new Error("batch delete failed"));
+    vi.mocked(deleteAutomationRun).mockRejectedValue(new Error(BATCH_DELETE_ERROR));
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
     await act(async () => {});
@@ -339,7 +340,7 @@ describe("useAutomationRuns - status-scoped delete-all", () => {
 
     // One toast for the whole batch, not one per failed delete.
     expect(toast.error).toHaveBeenCalledTimes(1);
-    expect(toast.error).toHaveBeenCalledWith("batch delete failed");
+    expect(toast.error).toHaveBeenCalledWith(BATCH_DELETE_ERROR);
     expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-x", "run-y"]);
   });
 
@@ -351,7 +352,7 @@ describe("useAutomationRuns - status-scoped delete-all", () => {
     vi.mocked(listAutomationRuns)
       .mockResolvedValueOnce([runX, runY])
       .mockRejectedValueOnce(new Error("network down"));
-    vi.mocked(deleteAutomationRun).mockRejectedValue(new Error("batch delete failed"));
+    vi.mocked(deleteAutomationRun).mockRejectedValue(new Error(BATCH_DELETE_ERROR));
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
     await act(async () => {});
@@ -381,6 +382,89 @@ describe("useAutomationRuns - status-scoped delete-all", () => {
     expect(result.current.runs).toHaveLength(1);
     expect(deleteAutomationRun).not.toHaveBeenCalled();
     expect(deleteAllAutomationRuns).not.toHaveBeenCalled();
+  });
+});
+
+describe("useAutomationRuns - status-scoped delete-all races", () => {
+  it("discards a refresh that started before a scoped delete-all and resolves after it succeeds", async () => {
+    const runX = mkRun("run-x");
+    const runY = mkRun("run-y");
+    setRuns(AUTOMATION_ID, [runX, runY]);
+
+    const stale = deferred<AutomationRun[]>();
+    vi.mocked(listAutomationRuns)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
+      .mockReturnValueOnce(stale.promise); // refresh started before the delete
+    vi.mocked(deleteAutomationRun).mockResolvedValue({ deleted: true });
+
+    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+
+    act(() => {
+      result.current.refresh(); // in flight when the delete starts
+      result.current.deleteAllRuns(["run-x"]); // succeeds immediately
+    });
+    // Let the delete's success re-removal land before the stale list resolves.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+    expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
+
+    // The stale pre-delete list resolves after the delete confirmed — the
+    // mutation guard must discard it instead of resurrecting run-x.
+    await act(async () => {
+      stale.resolve([runX, runY]);
+      await stale.promise;
+    });
+    rerender();
+    expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
+  });
+
+  it("does not recover from a partial failure until every delete in the batch settles", async () => {
+    const runX = mkRun("run-x");
+    const runY = mkRun("run-y");
+    setRuns(AUTOMATION_ID, [runX, runY]);
+
+    const slowDelete = deferred<{ deleted: boolean }>();
+    vi.mocked(deleteAutomationRun)
+      .mockRejectedValueOnce(new Error(BATCH_DELETE_ERROR))
+      .mockReturnValueOnce(slowDelete.promise);
+    vi.mocked(listAutomationRuns)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
+      .mockResolvedValue([runX, runY]); // recovery refresh
+
+    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+
+    act(() => {
+      result.current.deleteAllRuns(["run-x", "run-y"]);
+    });
+    // run-x rejects first while run-y is still pending — the recovery must
+    // not run yet, or it would race the in-flight delete.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+    expect(listAutomationRuns).toHaveBeenCalledTimes(1); // mount fetch only
+    expect(toast.error).not.toHaveBeenCalled();
+
+    // run-y settles successfully; only now does the batch settle and recover.
+    await act(async () => {
+      slowDelete.resolve({ deleted: true });
+      await slowDelete.promise;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+    expect(listAutomationRuns).toHaveBeenCalledTimes(2); // mount + recovery
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    // The server list (both runs still present) wins over the optimistic
+    // removal once every delete has settled.
+    expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-x", "run-y"]);
   });
 });
 

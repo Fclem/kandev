@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/automation-runs-delete-all-by-status/spec.md
 created: 2026-08-12
-status: building
+status: completed
 ---
 
 # Implementation Plan: Status-scoped delete-all for automation runs

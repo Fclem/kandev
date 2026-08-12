@@ -13,6 +13,8 @@ import type { AutomationRun } from "@/lib/types/automation";
 
 const EMPTY_RUNS: AutomationRun[] = [];
 
+const COULD_NOT_REFRESH_RUNS = "automations:couldNotRefreshRuns";
+
 /**
  * Latest in-flight list request per (store instance, automation). `fetchRuns`
  * applies results and settles the shared `loading` flag only when the
@@ -103,7 +105,7 @@ function revertAfterFailedDelete(
     setRuns: store.setRuns,
     onError: () => {
       store.setRuns(automationId, fallbackRuns);
-      toast.error(t("automations:couldNotRefreshRuns"));
+      toast.error(t(COULD_NOT_REFRESH_RUNS));
     },
     onSettled: store.endDelete,
   });
@@ -154,6 +156,9 @@ function executeDeleteAll(
           getEpoch: store.getEpoch,
           setRunsLoading: store.setRunsLoading,
           setRuns: store.setRuns,
+          // Surface a failed reconciliation instead of silently keeping the
+          // optimistic state; the delete itself already succeeded.
+          onError: () => toast.error(t(COULD_NOT_REFRESH_RUNS)),
           onSettled: store.endDelete,
         });
       })
@@ -181,6 +186,9 @@ function executeDeleteAll(
         getEpoch: store.getEpoch,
         setRunsLoading: store.setRunsLoading,
         setRuns: store.setRuns,
+        // Surface a failed reconciliation instead of silently keeping the
+        // optimistic state; the deletes themselves already succeeded.
+        onError: () => toast.error(t(COULD_NOT_REFRESH_RUNS)),
         onSettled: store.endDelete,
       });
       return;
@@ -194,7 +202,15 @@ function executeDeleteAll(
         ? first.reason.message
         : t("automations:failedToDeleteRuns");
     toast.error(msg);
-    revertAfterFailedDelete(automationId, previousRuns, store);
+    // The double-failure fallback must not resurrect runs the server actually
+    // deleted in this batch: drop the succeeded ids from the pre-delete
+    // snapshot, keeping the failed rows and every untargeted row.
+    const succeededIds = new Set(ids.filter((_, i) => results[i].status === "fulfilled"));
+    revertAfterFailedDelete(
+      automationId,
+      previousRuns.filter((run) => !succeededIds.has(run.id)),
+      store,
+    );
   });
 }
 
@@ -243,7 +259,7 @@ function executeDeleteRun(
           // succeeded server-side. Fall back to re-inserting just the run we
           // know we removed.
           if (deletedRun) store.restoreRun(automationId, deletedRun);
-          toast.error(t("automations:couldNotRefreshRuns"));
+          toast.error(t(COULD_NOT_REFRESH_RUNS));
         },
         onSettled: store.endDelete,
       });

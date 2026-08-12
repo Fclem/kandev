@@ -36,6 +36,7 @@ import {
 import { useAutomationRuns } from "./use-automation-runs";
 
 const BATCH_DELETE_ERROR = "batch delete failed";
+const NETWORK_DOWN = "network down";
 
 beforeEach(() => {
   runsStore.reset();
@@ -136,7 +137,7 @@ describe("useAutomationRuns - status-scoped delete-all failure recovery", () => 
 
     vi.mocked(listAutomationRuns)
       .mockResolvedValueOnce([runX, runY])
-      .mockRejectedValueOnce(new Error("network down"));
+      .mockRejectedValueOnce(new Error(NETWORK_DOWN));
     vi.mocked(deleteAutomationRun).mockRejectedValue(new Error(BATCH_DELETE_ERROR));
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
@@ -399,7 +400,7 @@ describe("useAutomationRuns - batch recovery timing", () => {
     // The recovery fails → the snapshot is restored, the slot is released,
     // and the failed delete's rows stay visible.
     await act(async () => {
-      recovery.reject(new Error("network down"));
+      recovery.reject(new Error(NETWORK_DOWN));
       await recovery.promise.catch(() => {});
       await Promise.resolve();
       await Promise.resolve();
@@ -453,6 +454,69 @@ describe("useAutomationRuns - batch recovery timing", () => {
     // The server list (both runs still present) wins over the optimistic
     // removal once every delete has settled.
     expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-x", "run-y"]);
+  });
+});
+describe("useAutomationRuns - batch recovery fallback", () => {
+  it("restores only the failed-delete rows when recovery fails after a partial batch", async () => {
+    const runX = mkRun("run-x");
+    const runY = mkRun("run-y");
+    const runZ = mkRun("run-z");
+    setRuns(AUTOMATION_ID, [runX, runY, runZ]);
+
+    vi.mocked(listAutomationRuns)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
+      .mockRejectedValueOnce(new Error(NETWORK_DOWN)); // recovery fetch fails
+    vi.mocked(deleteAutomationRun)
+      .mockResolvedValueOnce({ deleted: true }) // run-x succeeds server-side
+      .mockRejectedValueOnce(new Error(BATCH_DELETE_ERROR)); // run-y fails
+
+    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+    await act(async () => {});
+    rerender();
+
+    await act(async () => {
+      result.current.deleteAllRuns(["run-x", "run-y"]);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+
+    // run-x was deleted server-side and must NOT be resurrected by the
+    // snapshot fallback; run-y failed and is restored; run-z was never
+    // targeted and stays.
+    expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-y", "run-z"]);
+    expect(toast.error).toHaveBeenCalledTimes(2); // delete failure + could-not-refresh
+    expect(result.current.deleting).toBe(false);
+  });
+
+  it("toasts when the post-delete reconciliation fetch fails", async () => {
+    const runX = mkRun("run-x");
+    setRuns(AUTOMATION_ID, [runX]);
+
+    vi.mocked(listAutomationRuns)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
+      .mockRejectedValueOnce(new Error(NETWORK_DOWN)); // reconciliation fails
+    vi.mocked(deleteAutomationRun).mockResolvedValue({ deleted: true });
+
+    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+
+    act(() => {
+      result.current.deleteAllRuns(["run-x"]);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+
+    // The optimistic removal stays (the delete succeeded), but the failed
+    // reconciliation is surfaced and the serialization slot releases.
+    expect(result.current.runs.map((r) => r.id)).toEqual([]);
+    expect(toast.error).toHaveBeenCalledTimes(1); // could-not-refresh copy
+    expect(result.current.deleting).toBe(false);
   });
 });
 describe("useAutomationRuns - serialized deletes", () => {

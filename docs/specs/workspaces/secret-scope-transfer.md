@@ -144,17 +144,20 @@ func (s *Service) Copy(ctx context.Context, sourceID, sourceWorkspaceID string, 
 func (s *Service) Move(ctx context.Context, sourceID, sourceWorkspaceID string, req *CopySecretRequest) (*SecretListItem, error)
 ```
 
-The store and schema are unchanged; `scope` and `workspace_id` stay immutable.
-The service authorizes and validates, then delegates to atomic store
-operations:
+The database schema is unchanged and `scope`/`workspace_id` stay immutable;
+the `ScopedSecretStore` interface gains the two transfer methods below. The
+service authorizes and validates, then delegates to atomic store operations:
 
 ```go
-// ScopedSecretStore additions. verifyDestination runs inside the transfer
-// transaction while the destination lock is held, before the conflict check
-// and insert; returning an error rolls back and surfaces that error (the
-// service maps it to ErrWorkspaceAccessDenied / 404).
-CopyScoped(ctx context.Context, sourceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error)
-MoveScoped(ctx context.Context, sourceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error)
+// ScopedSecretStore additions. sourceWorkspaceID is the RESOLVED source's
+// workspace ("" for a Global source); a Move locks it alongside the
+// destination so concurrent same-source moves serialize without deadlock.
+// verifyDestination runs inside the transfer transaction while the
+// destination lock is held, before the conflict check and insert; returning
+// an error rolls back and surfaces that error (the service maps it to
+// ErrWorkspaceAccessDenied / 404).
+CopyScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error)
+MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error)
 ```
 
 `CopyScoped` checks the target name and inserts the copy in one transaction;

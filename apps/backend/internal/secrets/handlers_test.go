@@ -504,4 +504,24 @@ func TestWSHandler_ReusedEnvelopeResetsAllFields(t *testing.T) {
 		badTarget.nameSet || badTarget.nameNull {
 		t.Fatalf("malformed decode left stale state: %+v", bad)
 	}
+
+	// A SEMANTIC decode failure (invalid `name` type after valid top-level
+	// fields) must also leave the receiver fully reset, never partially
+	// populated with the already-parsed scope/workspace fields.
+	var semantic wsTransferPayload
+	if err := json.Unmarshal([]byte(firstBody), &semantic); err != nil {
+		t.Fatalf("seed semantic payload: %v", err)
+	}
+	if err := json.Unmarshal(
+		[]byte(`{"id":"`+global2+`","target_scope":"workspace","target_workspace_id":"workspace-a","name":123}`),
+		&semantic,
+	); err == nil {
+		t.Fatal("semantic decode with a numeric name succeeded")
+	}
+	semanticTarget := &semantic.CopySecretRequest
+	if semantic.ID != "" || semantic.WorkspaceID != "" || semanticTarget.Scope != "" ||
+		semanticTarget.WorkspaceID != "" || semanticTarget.Name != nil ||
+		semanticTarget.nameSet || semanticTarget.nameNull {
+		t.Fatalf("semantic decode left partially populated state: %+v", semantic)
+	}
 }

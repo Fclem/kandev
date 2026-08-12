@@ -347,7 +347,9 @@ type wsTransferPayload struct {
 // between messages.
 func (p *wsTransferPayload) UnmarshalJSON(data []byte) error {
 	// Reset every field before parsing so a failed decode can never leave
-	// stale state from an earlier message on a reused envelope.
+	// stale state from an earlier message on a reused envelope, and assign
+	// only after every sub-decode succeeds so a semantic failure cannot leave
+	// a partially populated receiver.
 	p.ID = ""
 	p.WorkspaceID = ""
 	p.CopySecretRequest = CopySecretRequest{}
@@ -358,9 +360,14 @@ func (p *wsTransferPayload) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+	var req CopySecretRequest
+	if err := json.Unmarshal(data, &req); err != nil {
+		return err
+	}
 	p.ID = aux.ID
 	p.WorkspaceID = aux.WorkspaceID
-	return json.Unmarshal(data, &p.CopySecretRequest)
+	p.CopySecretRequest = req
+	return nil
 }
 
 func (h *Handler) wsTransfer(ctx context.Context, msg *ws.Message, move bool) (*ws.Message, error) {

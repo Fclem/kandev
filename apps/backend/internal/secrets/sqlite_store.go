@@ -26,6 +26,11 @@ type sqliteStore struct {
 	// transfer inserts the target row and before the Move source delete runs,
 	// proving Move is transactional (the inserted copy must roll back).
 	failAfterInsert func() error
+
+	// afterSourceLock is a test-only hook invoked right after the source row
+	// is selected with FOR UPDATE (Move on PostgreSQL), giving tests a
+	// deterministic point where the source row lock is known to be held.
+	afterSourceLock func() error
 }
 
 var _ ScopedSecretStore = (*sqliteStore)(nil)
@@ -543,48 +548,13 @@ func (s *sqliteStore) transferBody(ctx context.Context, exec transferExec, rebin
 		}
 	}
 
-	var src struct {
-		ID          string
-		Name        string
-		Scope       SecretScope
-		WorkspaceID string
-		Ciphertext  []byte
-		Nonce       []byte
-	}
-	sourceQuery := `
-		SELECT id, name, scope, workspace_id, encrypted_value, nonce
-		FROM secrets WHERE id = ? AND (user_id = '' OR ? = '' OR user_id = ?)`
-	if lockSource {
-		// Row lock held to commit so a concurrent Update cannot interleave
-		// between the read and the Move delete (PostgreSQL only; SQLite's
-		// single writer already serializes).
-		sourceQuery += " FOR UPDATE"
-	}
-	err := exec.QueryRowContext(ctx, rebind(sourceQuery),
-		sourceID, owner, owner).Scan(&src.ID, &src.Name, &src.Scope, &src.WorkspaceID, &src.Ciphertext, &src.Nonce)
+	src, err := s.transferSource(ctx, exec, rebind, sourceID, owner, lockSource)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("%w: %s", ErrNotFound, sourceID)
-		}
-		return nil, fmt.Errorf("transfer source lookup: %w", err)
+		return nil, err
 	}
 
-	// Conflict check on the normalized scope: a legacy empty stored scope is
-	// Global, so a Global target can never bypass an existing legacy row.
-	var conflictQuery string
-	var conflictArgs []any
-	if normalizeStoredScope(targetScope) != ScopeWorkspace {
-		conflictQuery = `SELECT 1 FROM secrets WHERE name = ? AND (scope = ? OR scope = '') AND (user_id = '' OR ? = '' OR user_id = ?) LIMIT 1`
-		conflictArgs = []any{targetName, ScopeGlobal, owner, owner}
-	} else {
-		conflictQuery = `SELECT 1 FROM secrets WHERE name = ? AND scope = ? AND workspace_id = ? AND (user_id = '' OR ? = '' OR user_id = ?) LIMIT 1`
-		conflictArgs = []any{targetName, ScopeWorkspace, targetWorkspaceID, owner, owner}
-	}
-	var found int
-	if err := exec.QueryRowContext(ctx, rebind(conflictQuery), conflictArgs...).Scan(&found); err == nil {
-		return nil, ErrSecretNameConflict
-	} else if err != sql.ErrNoRows {
-		return nil, fmt.Errorf("transfer conflict check: %w", err)
+	if err := s.transferConflictCheck(ctx, exec, rebind, targetScope, targetWorkspaceID, targetName, owner); err != nil {
+		return nil, err
 	}
 
 	now := time.Now().UTC()
@@ -630,6 +600,66 @@ func (s *sqliteStore) deleteTransferredSource(ctx context.Context, exec transfer
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("%w: %s", ErrNotFound, sourceID)
+	}
+	return nil
+}
+
+// transferSourceRow is the decrypted-source scan target for transferBody.
+type transferSourceRow struct {
+	ID          string
+	Name        string
+	Scope       SecretScope
+	WorkspaceID string
+	Ciphertext  []byte
+	Nonce       []byte
+}
+
+// transferSource selects the source row with the per-user visibility
+// predicate. On PostgreSQL Moves (lockSource) it appends FOR UPDATE so a
+// concurrent Update cannot interleave between the read and the delete; the
+// afterSourceLock test hook fires once the row lock is known to be held.
+func (s *sqliteStore) transferSource(ctx context.Context, exec transferExec, rebind func(string) string, sourceID, owner string, lockSource bool) (*transferSourceRow, error) {
+	query := `
+		SELECT id, name, scope, workspace_id, encrypted_value, nonce
+		FROM secrets WHERE id = ? AND (user_id = '' OR ? = '' OR user_id = ?)`
+	if lockSource {
+		query += " FOR UPDATE"
+	}
+	var src transferSourceRow
+	err := exec.QueryRowContext(ctx, rebind(query), sourceID, owner, owner).
+		Scan(&src.ID, &src.Name, &src.Scope, &src.WorkspaceID, &src.Ciphertext, &src.Nonce)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("%w: %s", ErrNotFound, sourceID)
+		}
+		return nil, fmt.Errorf("transfer source lookup: %w", err)
+	}
+	if lockSource && s.afterSourceLock != nil {
+		if err := s.afterSourceLock(); err != nil {
+			return nil, err
+		}
+	}
+	return &src, nil
+}
+
+// transferConflictCheck rejects a target name that already exists in the
+// destination scope, comparing the NORMALIZED scope so a legacy empty stored
+// scope (which reads as Global) can never be bypassed.
+func (s *sqliteStore) transferConflictCheck(ctx context.Context, exec transferExec, rebind func(string) string, targetScope SecretScope, targetWorkspaceID, targetName, owner string) error {
+	var query string
+	var args []any
+	if normalizeStoredScope(targetScope) != ScopeWorkspace {
+		query = `SELECT 1 FROM secrets WHERE name = ? AND (scope = ? OR scope = '') AND (user_id = '' OR ? = '' OR user_id = ?) LIMIT 1`
+		args = []any{targetName, ScopeGlobal, owner, owner}
+	} else {
+		query = `SELECT 1 FROM secrets WHERE name = ? AND scope = ? AND workspace_id = ? AND (user_id = '' OR ? = '' OR user_id = ?) LIMIT 1`
+		args = []any{targetName, ScopeWorkspace, targetWorkspaceID, owner, owner}
+	}
+	var found int
+	if err := exec.QueryRowContext(ctx, rebind(query), args...).Scan(&found); err == nil {
+		return ErrSecretNameConflict
+	} else if err != sql.ErrNoRows {
+		return fmt.Errorf("transfer conflict check: %w", err)
 	}
 	return nil
 }

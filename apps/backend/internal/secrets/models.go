@@ -90,7 +90,9 @@ type CopySecretRequest struct {
 // leak state between messages.
 func (r *CopySecretRequest) UnmarshalJSON(data []byte) error {
 	// Reset every field (including the presence markers) BEFORE parsing so a
-	// failed decode can never leave stale state from an earlier message.
+	// failed decode can never leave stale state from an earlier message, and
+	// assign the receiver only after EVERY sub-decode succeeds so a semantic
+	// failure (e.g. `name: 123`) cannot leave a partially populated receiver.
 	r.Scope = ""
 	r.WorkspaceID = ""
 	r.Name = nil
@@ -104,20 +106,24 @@ func (r *CopySecretRequest) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+	var name *string
+	nameSet := len(aux.Name) > 0
+	nameNull := false
+	if nameSet {
+		if string(aux.Name) == "null" {
+			nameNull = true
+		} else {
+			var value string
+			if err := json.Unmarshal(aux.Name, &value); err != nil {
+				return err
+			}
+			name = &value
+		}
+	}
 	r.Scope = aux.Scope
 	r.WorkspaceID = aux.WorkspaceID
-	r.nameSet = len(aux.Name) > 0
-	if !r.nameSet {
-		return nil
-	}
-	if string(aux.Name) == "null" {
-		r.nameNull = true
-		return nil
-	}
-	var name string
-	if err := json.Unmarshal(aux.Name, &name); err != nil {
-		return err
-	}
-	r.Name = &name
+	r.Name = name
+	r.nameSet = nameSet
+	r.nameNull = nameNull
 	return nil
 }

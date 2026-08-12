@@ -271,3 +271,75 @@ func TestPostgresTransfer_DeleteVsTransferRace(t *testing.T) {
 		}
 	})
 }
+
+// TestPostgresTransfer_MoveSerializesConcurrentUpdate proves the Move source
+// row is locked with FOR UPDATE: a concurrent Update cannot interleave between
+// Move's read and delete, so no newer value is lost.
+func TestPostgresTransfer_MoveSerializesConcurrentUpdate(t *testing.T) {
+	db := openPGWithConns(t, 3)
+	store := newPGStore(t, db)
+	ctx := context.Background()
+	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "src", Name: "orig"}, Value: "A"})
+
+	locked := make(chan struct{})
+	release := make(chan struct{})
+	moveDone := make(chan error, 1)
+	store.afterSourceLock = func() error {
+		close(locked)
+		<-release
+		return nil
+	}
+	go func() {
+		_, err := store.MoveScoped(ctx, "src", "", ScopeWorkspace, "workspace-a", "copied", nil)
+		moveDone <- err
+	}()
+
+	// Move holds the FOR UPDATE source row lock.
+	<-locked
+
+	updateDone := make(chan error, 1)
+	go func() {
+		updateDone <- store.Update(ctx, "src", &UpdateSecretRequest{Value: stringPtr("B")})
+	}()
+
+	select {
+	case err := <-updateDone:
+		t.Fatalf("Update completed while Move held the source row lock: %v", err)
+	case <-time.After(300 * time.Millisecond):
+		// Blocked on the row lock, as intended.
+	}
+
+	close(release)
+	if err := <-moveDone; err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	// The Update completes after Move commits; the row is gone, so it touches
+	// nothing and the newer value B is not lost anywhere.
+	if err := <-updateDone; err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	if _, err := store.Get(ctx, "src"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("source still present after move: %v", err)
+	}
+	items, err := store.ListScoped(ctx, SecretListOptions{Scope: ScopeWorkspace, WorkspaceID: "workspace-a"})
+	if err != nil {
+		t.Fatalf("list workspace: %v", err)
+	}
+	var moved *SecretListItem
+	for _, item := range items {
+		if item.Name == "copied" {
+			moved = item
+		}
+	}
+	if moved == nil {
+		t.Fatalf("moved copy not found in workspace-a: %+v", items)
+	}
+	value, err := store.RevealForWorkspace(ctx, moved.ID, "workspace-a")
+	if err != nil {
+		t.Fatalf("reveal moved: %v", err)
+	}
+	if value != "A" {
+		t.Fatalf("moved value = %q, want A (concurrent update must not be lost)", value)
+	}
+}

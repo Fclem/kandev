@@ -87,6 +87,10 @@ afterEach(async () => {
   mockMoveSecret.mockReset();
   mockUseDestinationNames.mockReset();
   mockUseDestinationNames.mockReturnValue({ names: [], loaded: true, conflict: () => false });
+  storeState.workspaces.items = [
+    { id: "ws-1", name: "Alpha" },
+    { id: "ws-2", name: "Beta" },
+  ];
 });
 
 describe("CopyMoveSecretDialog", () => {
@@ -197,6 +201,27 @@ describe("CopyMoveSecretDialog submit", () => {
     expect(onCompleted).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("disables submit synchronously when the selected workspace vanishes from the list", () => {
+    const { view, onClose, onCompleted } = renderDialog();
+    expect((screen.getByRole("button", { name: "Copy" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+
+    storeState.workspaces.items = [];
+    view.rerender(
+      <CopyMoveSecretDialog
+        secret={globalSecret}
+        originToken="general"
+        onClose={onClose}
+        onCompleted={onCompleted}
+      />,
+    );
+
+    // The validity check is synchronous: the stale workspace destination must
+    // not be submittable even before the cleanup effect runs.
+    expect((screen.getByRole("button", { name: "Copy" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("ignores duplicate clicks while a transfer is in flight", async () => {

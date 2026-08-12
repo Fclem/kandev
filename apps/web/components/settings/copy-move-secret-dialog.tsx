@@ -76,11 +76,18 @@ export function CopyMoveSecretDialog({
     error: destinationsError,
     retry: retryDestinations,
   } = useWorkspaceDestinations();
+  const workspaces = useAppStore((state) => state.workspaces.items);
   const [mode, setMode] = useState<CopyMoveMode>("copy");
   const [destination, setDestination] = useState<SecretDestination | null>(null);
   const [name, setName] = useState(() => buildDefaultTargetName(secret.name, originToken));
   const [nameError, setNameError] = useState<string | null>(null);
 
+  const { destinations, workspaceNameById, destinationValid } = useDestinationOptions(
+    secret,
+    workspaces,
+    destination,
+    setDestination,
+  );
   const destinationNames = useSecretDestinationNames(
     destination?.scope ?? "global",
     destination?.scope === "workspace" ? destination.workspaceId : undefined,
@@ -91,6 +98,7 @@ export function CopyMoveSecretDialog({
     secret,
     mode,
     destination,
+    destinationValid,
     name,
     nameError,
     conflict,
@@ -114,7 +122,8 @@ export function CopyMoveSecretDialog({
         <TransferModeField mode={mode} onModeChange={setMode} originToken={originToken} />
 
         <DestinationField
-          secret={secret}
+          destinations={destinations}
+          workspaceNameById={workspaceNameById}
           destination={destination}
           onDestinationChange={setDestination}
           destinationsLoading={destinationsLoading}
@@ -200,6 +209,7 @@ function TransferDialogFooter({
 type TransferCanSubmitArgs = {
   isBusy: boolean;
   destination: SecretDestination | null;
+  destinationValid: boolean;
   name: string;
   nameError: string | null;
   conflict: boolean;
@@ -210,6 +220,7 @@ type TransferCanSubmitArgs = {
 function transferCanSubmit({
   isBusy,
   destination,
+  destinationValid,
   name,
   nameError,
   conflict,
@@ -219,6 +230,7 @@ function transferCanSubmit({
   return (
     !isBusy &&
     destination !== null &&
+    destinationValid &&
     name.trim().length > 0 &&
     nameError === null &&
     !conflict &&
@@ -231,6 +243,7 @@ type TransferSubmitArgs = {
   secret: SecretListItem;
   mode: CopyMoveMode;
   destination: SecretDestination | null;
+  destinationValid: boolean;
   name: string;
   nameError: string | null;
   conflict: boolean;
@@ -244,6 +257,7 @@ function useTransferSubmit({
   secret,
   mode,
   destination,
+  destinationValid,
   name,
   nameError,
   conflict,
@@ -259,6 +273,7 @@ function useTransferSubmit({
   const canSubmit = transferCanSubmit({
     isBusy,
     destination,
+    destinationValid,
     name,
     nameError,
     conflict,
@@ -383,29 +398,37 @@ function useDestinationOptions(
     return list;
   }, [secret, workspaces]);
 
+  // Synchronous validity: the selected destination must be present in the
+  // CURRENT list. canSubmit consumes this on the same render, so a workspace
+  // that vanished (deleted or failed list) can never be submitted even
+  // between renders; the effect below only performs state cleanup.
+  const destinationValid =
+    destination !== null &&
+    destinations.some((option) => {
+      if (option.scope !== destination.scope) {
+        return false;
+      }
+      if (destination.scope === "workspace") {
+        return option.scope === "workspace" && option.workspaceId === destination.workspaceId;
+      }
+      return true;
+    });
+
   useEffect(() => {
     if (destination === null && destinations.length > 0) {
       onDestinationChange(destinations[0]);
       return;
     }
-    const selected = destination;
-    const destinationValid =
-      selected !== null &&
-      destinations.some((option) => {
-        if (option.scope !== selected.scope) {
-          return false;
-        }
-        if (selected.scope === "workspace") {
-          return option.scope === "workspace" && option.workspaceId === selected.workspaceId;
-        }
-        return true;
-      });
-    if (selected !== null && !destinationValid) {
+    if (destination !== null && !destinationValid) {
+      // The selected destination disappeared from the list: clear it so the
+      // UI cannot show a stale selection. null keeps canSubmit false when
+      // nothing valid remains (a Global source must never fall back to a
+      // same-scope target).
       onDestinationChange(destinations[0] ?? null);
     }
-  }, [destination, destinations, onDestinationChange]);
+  }, [destination, destinations, destinationValid, onDestinationChange]);
 
-  return { destinations, workspaceNameById };
+  return { destinations, workspaceNameById, destinationValid };
 }
 
 function TransferModeField({
@@ -452,7 +475,8 @@ function TransferModeField({
 }
 
 function DestinationField({
-  secret,
+  destinations,
+  workspaceNameById,
   destination,
   onDestinationChange,
   destinationsLoading,
@@ -460,7 +484,8 @@ function DestinationField({
   onRetryDestinations,
   disabled,
 }: {
-  secret: SecretListItem;
+  destinations: SecretDestination[];
+  workspaceNameById: Record<string, string>;
   destination: SecretDestination | null;
   onDestinationChange: (destination: SecretDestination) => void;
   destinationsLoading: boolean;
@@ -469,14 +494,6 @@ function DestinationField({
   disabled: boolean;
 }) {
   const { t } = useTranslation();
-  const workspaces = useAppStore((state) => state.workspaces.items);
-  const { destinations, workspaceNameById } = useDestinationOptions(
-    secret,
-    workspaces,
-    destination,
-    onDestinationChange,
-  );
-
   const noDestinations =
     destinations.length === 0 && !destinationsLoading && destinationsError === null;
 

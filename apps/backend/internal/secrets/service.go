@@ -45,7 +45,7 @@ func (s *Service) validateCreate(req *CreateSecretRequest) error {
 	req.Name = strings.TrimSpace(req.Name)
 
 	if req.Name == "" || len(req.Name) > 100 {
-		return fmt.Errorf("name must be 1-100 characters")
+		return fmt.Errorf("name must be 1-100 bytes")
 	}
 	if req.Value == "" || len(req.Value) > 10000 {
 		return fmt.Errorf("value must be 1-10000 characters")
@@ -66,7 +66,7 @@ func (s *Service) validateUpdate(req *UpdateSecretRequest) error {
 		name := strings.TrimSpace(*req.Name)
 		req.Name = &name
 		if name == "" || len(name) > 100 {
-			return fmt.Errorf("name must be 1-100 characters")
+			return fmt.Errorf("name must be 1-100 bytes")
 		}
 	}
 	if req.Value != nil && (len(*req.Value) == 0 || len(*req.Value) > 10000) {

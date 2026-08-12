@@ -3,6 +3,7 @@ package secrets
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -488,7 +489,10 @@ func (s *sqliteStore) transferSQLite(ctx context.Context, sourceID string, targe
 	committed := false
 	defer func() {
 		if !committed {
-			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+			// The rollback must reach SQLite even when the caller canceled ctx:
+			// a canceled ROLLBACK would leave the BEGIN IMMEDIATE transaction
+			// and its write lock open on the pooled connection.
+			_, _ = conn.ExecContext(context.WithoutCancel(ctx), "ROLLBACK")
 		}
 	}()
 
@@ -651,7 +655,7 @@ func (s *sqliteStore) transferSource(ctx context.Context, exec transferExec, reb
 	err := exec.QueryRowContext(ctx, rebind(query), sourceID, owner, owner).
 		Scan(&src.ID, &src.Name, &src.Scope, &src.WorkspaceID, &src.Ciphertext, &src.Nonce)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("%w: %s", ErrNotFound, sourceID)
 		}
 		return nil, fmt.Errorf("transfer source lookup: %w", err)
@@ -680,7 +684,7 @@ func (s *sqliteStore) transferConflictCheck(ctx context.Context, exec transferEx
 	var found int
 	if err := exec.QueryRowContext(ctx, rebind(query), args...).Scan(&found); err == nil {
 		return ErrSecretNameConflict
-	} else if err != sql.ErrNoRows {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("transfer conflict check: %w", err)
 	}
 	return nil

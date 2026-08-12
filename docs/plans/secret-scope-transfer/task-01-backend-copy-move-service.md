@@ -148,16 +148,16 @@ None.
    transaction lock and not merely at the single-connection Go pool (the
    existing `newTestSQLiteStore` helper pins `SetMaxOpenConns(1)` and cannot
    distinguish the two).
-2. Implement the store methods, dialect serialization, and `UserVisibleStore`
+  2. Implement the store methods, dialect serialization, and `UserVisibleStore`
    delegation; add the two methods to `inMemorySecretStore`.
-3. Write failing service tests (`copy_move_test.go` with
+  3. Write failing service tests (`copy_move_test.go` with
    `NewUserVisibleStore(newTestSQLiteStore(t))` and the workspace-authorizer
    pattern from `service_test.go`), including nil-checker and internal-error
    pass-through cases.
-4. Implement `CopySecretRequest`, `ErrSecretNameConflict`,
+  4. Implement `CopySecretRequest`, `ErrSecretNameConflict`,
    `ErrWorkspaceAccessDenied`, `Service.Copy`/`Service.Move`, the existence
    checker, and the main.go adapters.
-5. Re-run until green; keep existing secrets and lifecycle tests green.
+  5. Re-run until green; keep existing secrets and lifecycle tests green.
 
 ## Verification
 

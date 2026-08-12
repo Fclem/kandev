@@ -63,10 +63,10 @@ as one operation, without ever showing the value.
 
 ### HTTP
 
-```
+```text
 POST /api/v1/secrets/:id/copy?workspace_id=<source-workspace-id>
 POST /api/v1/secrets/:id/move?workspace_id=<source-workspace-id>
-```
+```text
 
 The `workspace_id` query parameter identifies the source secret's workspace and
 is required when the source is Workspace-scoped (matching the existing scoped
@@ -100,10 +100,10 @@ CRUD routes). The request body:
 
 ### WebSocket
 
-```
+```text
 secrets.copy
 secrets.move
-```
+```text
 
 Payload: `{ "id": "<source>", "workspace_id": "<source-workspace>",
 "target_scope": "global" | "workspace", "target_workspace_id": "<id>", "name":

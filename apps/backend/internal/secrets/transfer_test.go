@@ -258,6 +258,38 @@ func TestTransferStore_MoveFailpointAfterInsertRollsBack(t *testing.T) {
 	}
 }
 
+// TestTransferStore_RollbackSurvivesCanceledContext verifies the deferred
+// ROLLBACK reaches SQLite even when the caller cancels the context mid-transfer:
+// a canceled rollback would leave the BEGIN IMMEDIATE transaction and its write
+// lock open on the pooled connection, breaking every later transfer.
+func TestTransferStore_RollbackSurvivesCanceledContext(t *testing.T) {
+	store := newTestSQLiteStore(t)
+	// Pin the writer pool to one connection so the follow-up transfer MUST
+	// reuse the connection that ran the failed transfer: a leaked BEGIN
+	// IMMEDIATE transaction on it would break the next transfer.
+	store.db.SetMaxOpenConns(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v"})
+
+	// Cancel after the destination insert: the source delete then fails with
+	// context.Canceled, and the deferred rollback must still reach SQLite.
+	store.failAfterInsert = func() error {
+		cancel()
+		return nil
+	}
+	_, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "copied", nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("MoveScoped error = %v, want context.Canceled", err)
+	}
+	// The write lock must be released: a second transfer on the same pooled
+	// connection can BEGIN IMMEDIATE again. If the rollback leaked, this
+	// fails with "cannot start a transaction within a transaction".
+	store.failAfterInsert = nil
+	if _, err := store.MoveScoped(context.Background(), "g1", "", ScopeWorkspace, "workspace-a", "copied-again", nil); err != nil {
+		t.Fatalf("second transfer failed: %v (leaked transaction/write lock?)", err)
+	}
+}
+
 // TestTransferStore_PerUserScoping verifies secrets are per-user: another user cannot copy or read them, while the owner can move and read the copy.
 func TestTransferStore_PerUserScoping(t *testing.T) {
 	store := newTestSQLiteStore(t)

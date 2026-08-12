@@ -154,7 +154,7 @@ test.describe("Todo list panel preference", () => {
     // Toggle the preference from a second tab; `testPage` never navigates
     // away from the task — proves the change is live, not reload-dependent.
     const settingsPage = await testPage.context().newPage();
-    await settingsPage.goto("/settings/general/task-actions");
+    await settingsPage.goto("/settings/preferences/task-behavior");
     const toggle = settingsPage.getByRole("switch", { name: "Show agent todo list panel" });
     await expect(toggle).toHaveAttribute("aria-checked", "false");
     await toggle.click();

@@ -216,8 +216,8 @@ function TransferModeField({
         onValueChange={(value) => onModeChange(value as CopyMoveMode)}
         className="flex flex-col gap-2"
       >
-        <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3 cursor-pointer">
-          <RadioGroupItem value="copy" className="mt-0.5 min-h-11 min-w-11" />
+        <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3 min-h-11 cursor-pointer">
+          <RadioGroupItem value="copy" className="mt-0.5" />
           <span className="space-y-1">
             <span className="block text-sm font-medium">{t("settings:copySecretAction")}</span>
             <span className="block text-xs text-muted-foreground">
@@ -225,15 +225,13 @@ function TransferModeField({
             </span>
           </span>
         </label>
-        <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3 cursor-pointer">
-          <RadioGroupItem value="move" className="mt-0.5 min-h-11 min-w-11" />
+        <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3 min-h-11 cursor-pointer">
+          <RadioGroupItem value="move" className="mt-0.5" />
           <span className="space-y-1">
             <span className="block text-sm font-medium">{t("settings:moveSecretAction")}</span>
-            {mode === "move" && (
-              <span className="block text-xs text-muted-foreground">
-                {t("settings:moveModeWarning", { origin: originToken })}
-              </span>
-            )}
+            <span className="block text-xs text-muted-foreground">
+              {t("settings:moveModeWarning", { origin: originToken })}
+            </span>
           </span>
         </label>
       </RadioGroup>
@@ -308,7 +306,7 @@ function DestinationField({
             {destinations.map((option) =>
               option.scope === "global" ? (
                 <SelectItem key="global" value="global">
-                  {t("settings:destinationGeneral")}
+                  {t("settings:destinationGlobal")}
                 </SelectItem>
               ) : (
                 <SelectItem key={option.workspaceId} value={`workspace:${option.workspaceId}`}>

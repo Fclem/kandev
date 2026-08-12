@@ -54,9 +54,12 @@ test.describe("mobile-secrets-copy-move", () => {
     await dialog.getByRole("radio", { name: /Move/ }).click();
     await dialog.getByLabel("Name").fill(movedName);
 
+    // The mode option CARDS are the touch targets (the radio indicator itself
+    // is the standard 16px control).
     for (const control of [
       dialog.getByLabel("Name"),
-      dialog.getByRole("radio", { name: /Move/ }),
+      dialog.locator("label").filter({ hasText: "Copy" }),
+      dialog.locator("label").filter({ hasText: "Move" }),
       dialog.getByRole("button", { name: "Move", exact: true }),
       dialog.getByRole("button", { name: "Close", exact: true }),
     ]) {

@@ -747,7 +747,6 @@
   "copyModeDescription": "在目标位置创建副本。原密钥保持不变。",
   "moveModeWarning": "原密钥将从{{origin}}中移除。",
   "destination": "目标",
-  "destinationGeneral": "常规",
   "secretTargetName": "名称",
   "secretNameConflictInDestination": "目标位置已存在名为{{name}}的密钥。",
   "destinationsLoading": "正在加载目标",
@@ -755,5 +754,6 @@
   "retryDestinations": "重试",
   "noValidDestinations": "没有可用的有效目标。",
   "transferFailed": "无法复制或移动密钥。",
-  "globalSecrets": "全局密钥"
+  "globalSecrets": "全局密钥",
+  "destinationGlobal": "全局"
 }

@@ -763,12 +763,12 @@
   "copyModeDescription": "Ćŕēàţēś à ćōƥŷ ĩń ţĥē ďēśţĩńàţĩōń. Ţĥē ōŕĩĝĩńàĺ śēćŕēţ śţàŷś.",
   "moveModeWarning": "Ţĥē ōŕĩĝĩńàĺ śēćŕēţ ŵĩĺĺ ƀē ŕēḿōvēď ƒŕōḿ {{origin}}.",
   "destination": "Ďēśţĩńàţĩōń",
-  "destinationGeneral": "Ĝēńēŕàĺ",
   "secretTargetName": "Ńàḿē",
   "secretNameConflictInDestination": "À śēćŕēţ ńàḿēď {{name}} àĺŕēàďŷ ēxĩśţś ĩń ţĥĩś ďēśţĩńàţĩōń.",
   "destinationsLoading": "Ĺōàďĩńĝ ďēśţĩńàţĩōńś",
   "destinationsLoadFailed": "Ćōũĺď ńōţ ĺōàď ďēśţĩńàţĩōńś.",
   "retryDestinations": "Ŕēţŕŷ",
   "noValidDestinations": "Ńō vàĺĩď ďēśţĩńàţĩōńś àvàĩĺàƀĺē.",
-  "transferFailed": "Ćōũĺď ńōţ ćōƥŷ ōŕ ḿōvē ţĥē śēćŕēţ."
+  "transferFailed": "Ćōũĺď ńōţ ćōƥŷ ōŕ ḿōvē ţĥē śēćŕēţ.",
+  "destinationGlobal": "Ĝĺōƀàĺ"
 }

@@ -52,7 +52,7 @@ test.describe("secrets-copy-move", () => {
     seedData,
   }) => {
     const sourceName = `E2E Copy Move Global Copy ${runToken()}`;
-    const copiedName = `${sourceName} (from general)`;
+    const copiedName = `${sourceName} (from Global)`;
     await createSecretFromSettings(testPage, "/settings/general/secrets", sourceName, GLOBAL_VALUE);
     const global = (await apiClient.listSecrets()).find((secret) => secret.name === sourceName);
     expect(global?.id).toBeTruthy();
@@ -112,7 +112,7 @@ test.describe("secrets-copy-move", () => {
     seedData,
   }) => {
     const sourceName = `E2E Copy Move Global Move ${runToken()}`;
-    const movedName = `${sourceName} (from general)`;
+    const movedName = `${sourceName} (from Global)`;
     await createSecretFromSettings(testPage, "/settings/general/secrets", sourceName, GLOBAL_VALUE);
 
     await submitCopyMove(testPage, sourceName, "Move");
@@ -135,7 +135,7 @@ test.describe("secrets-copy-move", () => {
     seedData,
   }) => {
     const sourceName = `E2E Copy Move Conflict Source ${runToken()}`;
-    const conflictingName = `${sourceName} (from general)`;
+    const conflictingName = `${sourceName} (from Global)`;
     await createSecretFromSettings(testPage, "/settings/general/secrets", sourceName, GLOBAL_VALUE);
     await createSecretFromSettings(
       testPage,

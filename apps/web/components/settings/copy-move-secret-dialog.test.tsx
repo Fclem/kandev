@@ -47,7 +47,7 @@ vi.mock("@/lib/api/domains/secrets-api", () => ({
   moveSecret: (...args: unknown[]) => mockMoveSecret(...args),
 }));
 
-const DEFAULT_GLOBAL_NAME = "API Key (from general)";
+const DEFAULT_GLOBAL_NAME = "API Key (from Global)";
 
 const globalSecret: SecretListItem = {
   id: "secret-1",
@@ -72,7 +72,7 @@ function renderDialog(overrides: Partial<Parameters<typeof CopyMoveSecretDialog>
   const view = render(
     <CopyMoveSecretDialog
       secret={globalSecret}
-      originToken="general"
+      originToken="Global"
       open
       onClose={onClose}
       onCompleted={onCompleted}
@@ -106,7 +106,7 @@ describe("CopyMoveSecretDialog", () => {
   it("shows General as the default destination for a workspace source", () => {
     renderDialog({ secret: workspaceSecret, originToken: "Alpha" });
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("WS Key (from Alpha)");
-    expect(screen.getByText("General")).toBeTruthy();
+    expect(screen.getByText("Global")).toBeTruthy();
   });
 
   it("resets the form when a different secret is targeted while mounted", async () => {
@@ -122,7 +122,7 @@ describe("CopyMoveSecretDialog", () => {
     view.rerender(
       <CopyMoveSecretDialog
         secret={globalSecret}
-        originToken="general"
+        originToken="Global"
         open
         onClose={vi.fn()}
         onCompleted={vi.fn()}
@@ -145,7 +145,7 @@ describe("CopyMoveSecretDialog", () => {
     view.rerender(
       <CopyMoveSecretDialog
         secret={globalSecret}
-        originToken="general"
+        originToken="Global"
         open={false}
         onClose={vi.fn()}
         onCompleted={vi.fn()}
@@ -154,7 +154,7 @@ describe("CopyMoveSecretDialog", () => {
     view.rerender(
       <CopyMoveSecretDialog
         secret={globalSecret}
-        originToken="general"
+        originToken="Global"
         open
         onClose={vi.fn()}
         onCompleted={vi.fn()}
@@ -169,7 +169,7 @@ describe("CopyMoveSecretDialog", () => {
     renderDialog();
     fireEvent.click(screen.getByRole("radio", { name: /^Move/ }));
     expect(screen.getByRole("button", { name: "Move" })).toBeTruthy();
-    expect(screen.getByText("The original secret will be removed from general.")).toBeTruthy();
+    expect(screen.getByText("The original secret will be removed from Global.")).toBeTruthy();
   });
 
   it("blocks submit on a conflicting target name with an invalid field", () => {
@@ -233,7 +233,7 @@ describe("CopyMoveSecretDialog submit", () => {
     await waitFor(() =>
       expect(
         screen.getByText(
-          "A secret named API Key (from general) already exists in this destination.",
+          "A secret named API Key (from Global) already exists in this destination.",
         ),
       ).toBeTruthy(),
     );
@@ -302,7 +302,7 @@ describe("CopyMoveSecretDialog conflict handling", () => {
     view.rerender(
       <CopyMoveSecretDialog
         secret={globalSecret}
-        originToken="general"
+        originToken="Global"
         open
         onClose={onClose}
         onCompleted={onCompleted}
@@ -348,7 +348,7 @@ describe("CopyMoveSecretDialog in-flight transfers", () => {
     view.rerender(
       <CopyMoveSecretDialog
         secret={globalSecret}
-        originToken="general"
+        originToken="Global"
         open
         onClose={vi.fn()}
         onCompleted={onCompleted}
@@ -419,7 +419,7 @@ describe("truncateUtf8Bytes", () => {
 
 describe("buildDefaultTargetName", () => {
   it("builds the locale-independent origin suffix within the byte limit", () => {
-    const name = buildDefaultTargetName("API Key", "general");
+    const name = buildDefaultTargetName("API Key", "Global");
     expect(name).toBe(DEFAULT_GLOBAL_NAME);
     expect(new TextEncoder().encode(name).length).toBeLessThanOrEqual(100);
   });

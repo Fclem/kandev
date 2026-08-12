@@ -747,7 +747,6 @@
   "copyModeDescription": "Cria uma cópia no destino. O segredo original permanece.",
   "moveModeWarning": "O segredo original será removido de {{origin}}.",
   "destination": "Destino",
-  "destinationGeneral": "Geral",
   "secretTargetName": "Nome",
   "secretNameConflictInDestination": "Já existe um segredo com o nome {{name}} neste destino.",
   "destinationsLoading": "A carregar destinos",
@@ -755,5 +754,6 @@
   "retryDestinations": "Repetir",
   "noValidDestinations": "Não há destinos válidos disponíveis.",
   "transferFailed": "Não foi possível copiar ou mover o segredo.",
-  "globalSecrets": "Segredos globais"
+  "globalSecrets": "Segredos globais",
+  "destinationGlobal": "Global"
 }

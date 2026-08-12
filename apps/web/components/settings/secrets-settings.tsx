@@ -496,7 +496,7 @@ export function SecretsSettings({
       ? (workspaceNames.find((workspace) => workspace.id === secret.workspace_id)?.name ??
         secret.workspace_id ??
         "workspace")
-      : "general";
+      : "Global";
 
   // Route the transfer result by the RETURNED item's scope, never the page
   // scope: Global targets always land in the Global store (from any page),

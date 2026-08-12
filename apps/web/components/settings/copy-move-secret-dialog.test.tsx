@@ -313,7 +313,9 @@ describe("CopyMoveSecretDialog conflict handling", () => {
     // not be submittable even before the cleanup effect runs.
     expect((screen.getByRole("button", { name: "Copy" }) as HTMLButtonElement).disabled).toBe(true);
   });
+});
 
+describe("CopyMoveSecretDialog in-flight transfers", () => {
   it("ignores duplicate clicks while a transfer is in flight", async () => {
     const { promise, resolve } = Promise.withResolvers<unknown>();
     mockCopySecret.mockReturnValue(promise);
@@ -347,6 +349,40 @@ describe("CopyMoveSecretDialog conflict handling", () => {
       <CopyMoveSecretDialog
         secret={globalSecret}
         originToken="general"
+        open
+        onClose={vi.fn()}
+        onCompleted={onCompleted}
+      />,
+    );
+    await act(async () => {
+      resolve({ id: "new-1", name: DEFAULT_GLOBAL_NAME });
+    });
+
+    expect(onCompleted).not.toHaveBeenCalled();
+  });
+
+  it("discards a stale completion when the same secret is reopened", async () => {
+    // Submit for a secret, close the dialog (the X is disabled while busy but
+    // Escape/overlay could still dismiss), then reopen the SAME secret: the
+    // first session's completion must not fire against the reopened dialog.
+    const { promise, resolve } = Promise.withResolvers<unknown>();
+    mockCopySecret.mockReturnValue(promise);
+    const { view, onCompleted } = renderDialog({ secret: workspaceSecret, originToken: "Alpha" });
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    view.rerender(
+      <CopyMoveSecretDialog
+        secret={workspaceSecret}
+        originToken="Alpha"
+        open={false}
+        onClose={vi.fn()}
+        onCompleted={onCompleted}
+      />,
+    );
+    view.rerender(
+      <CopyMoveSecretDialog
+        secret={workspaceSecret}
+        originToken="Alpha"
         open
         onClose={vi.fn()}
         onCompleted={onCompleted}

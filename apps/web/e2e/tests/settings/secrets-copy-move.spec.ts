@@ -1,6 +1,9 @@
 import { test, expect } from "../../fixtures/test-base";
 
 const GLOBAL_VALUE = "e2e-copy-move-global-value";
+
+/** Unique per run so retries never collide with leftovers from a failed attempt. */
+const runToken = () => `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 const WORKSPACE_VALUE = "e2e-copy-move-workspace-value";
 
 async function createSecretFromSettings(
@@ -48,7 +51,7 @@ test.describe("secrets-copy-move", () => {
     apiClient,
     seedData,
   }) => {
-    const sourceName = "E2E Copy Move Global Copy";
+    const sourceName = `E2E Copy Move Global Copy ${runToken()}`;
     const copiedName = `${sourceName} (from general)`;
     await createSecretFromSettings(testPage, "/settings/general/secrets", sourceName, GLOBAL_VALUE);
     const global = (await apiClient.listSecrets()).find((secret) => secret.name === sourceName);
@@ -74,7 +77,7 @@ test.describe("secrets-copy-move", () => {
     apiClient,
     seedData,
   }) => {
-    const sourceName = "E2E Copy Move Workspace Move";
+    const sourceName = `E2E Copy Move Workspace Move ${runToken()}`;
     await createSecretFromSettings(
       testPage,
       `/settings/workspace/${seedData.workspaceId}/secrets`,
@@ -108,7 +111,7 @@ test.describe("secrets-copy-move", () => {
     apiClient,
     seedData,
   }) => {
-    const sourceName = "E2E Copy Move Global Move";
+    const sourceName = `E2E Copy Move Global Move ${runToken()}`;
     const movedName = `${sourceName} (from general)`;
     await createSecretFromSettings(testPage, "/settings/general/secrets", sourceName, GLOBAL_VALUE);
 
@@ -131,7 +134,7 @@ test.describe("secrets-copy-move", () => {
     testPage,
     seedData,
   }) => {
-    const sourceName = "E2E Copy Move Conflict Source";
+    const sourceName = `E2E Copy Move Conflict Source ${runToken()}`;
     const conflictingName = `${sourceName} (from general)`;
     await createSecretFromSettings(testPage, "/settings/general/secrets", sourceName, GLOBAL_VALUE);
     await createSecretFromSettings(

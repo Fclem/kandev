@@ -98,6 +98,7 @@ export function CopyMoveSecretDialog({
     destinationsError: destinationsError !== null,
     setNameError,
     onCompleted,
+    open,
   });
   useTransferFormReset(secret, originToken, open, {
     setMode,
@@ -108,10 +109,20 @@ export function CopyMoveSecretDialog({
     resetDestinationNames: () => setDestinationNamesKey((key) => key + 1),
   });
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // While a transfer is in flight, no dismiss path (X, Escape, overlay)
+        // may close the dialog: a stale completion must not land in a
+        // reopened session for the same secret.
+        if (!next && !busy) {
+          onClose();
+        }
+      }}
+    >
       <DialogContent
         showCloseButton={false}
-        className="bottom-0 top-auto left-0 right-0 translate-x-0 translate-y-0 rounded-b-none pb-[env(safe-area-inset-bottom)] sm:top-1/2 sm:left-1/2 sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-b-lg"
+        className="bottom-0 top-auto left-0 right-0 translate-x-0 translate-y-0 grid-cols-[minmax(0,1fr)] rounded-b-none pb-[env(safe-area-inset-bottom)] sm:top-1/2 sm:left-1/2 sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-b-lg"
       >
         <CopyMoveDialogBody
           secretName={secret.name}
@@ -231,6 +242,8 @@ type TransferSubmitArgs = {
   destinationsError: boolean;
   setNameError: (error: string | null) => void;
   onCompleted: (item: SecretListItem, mode: CopyMoveMode) => void;
+  /** Controlled visibility; drives the session counter for stale-result guards. */
+  open: boolean;
 };
 
 function useTransferSubmit({
@@ -245,16 +258,25 @@ function useTransferSubmit({
   destinationsError,
   setNameError,
   onCompleted,
+  open,
 }: TransferSubmitArgs) {
   const { t } = useTranslation();
   const [isBusy, setIsBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   // The dialog stays mounted across opens; a completion or error for a
   // previously targeted secret must not mutate the dialog now showing another.
+  // The session counter also covers closing and reopening the SAME secret:
+  // a result from the previous session must not land in the reopened dialog.
   const secretIdRef = useRef(secret.id);
+  const sessionRef = useRef(0);
   useEffect(() => {
     secretIdRef.current = secret.id;
   }, [secret.id]);
+  useEffect(() => {
+    if (open) {
+      sessionRef.current += 1;
+    }
+  }, [open]);
 
   const canSubmit = transferCanSubmit({
     isBusy,
@@ -272,6 +294,7 @@ function useTransferSubmit({
       return;
     }
     const startedSecretId = secret.id;
+    const startedSession = sessionRef.current;
     setIsBusy(true);
     setFormError(null);
     const trimmedName = name.trim();
@@ -292,13 +315,13 @@ function useTransferSubmit({
         mode === "copy"
           ? await copySecret(secret.id, payload, sourceOptions)
           : await moveSecret(secret.id, payload, sourceOptions);
-      if (secretIdRef.current === startedSecretId) {
+      if (secretIdRef.current === startedSecretId && sessionRef.current === startedSession) {
         onCompleted(item, mode);
       }
     } catch (err) {
-      // A stale failure (user switched to another secret mid-flight) must not
-      // paint an error onto the dialog now showing a different secret.
-      if (secretIdRef.current !== startedSecretId) {
+      // A stale failure (user switched to another secret mid-flight, or closed
+      // and reopened the same one) must not paint onto the current dialog.
+      if (secretIdRef.current !== startedSecretId || sessionRef.current !== startedSession) {
         return;
       }
       if (err instanceof ApiError && err.status === 409) {

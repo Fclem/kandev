@@ -5,6 +5,10 @@ import {
 } from "../../helpers/layout-assertions";
 
 const WORKSPACE_VALUE = "e2e-mobile-copy-move-value";
+const GLOBAL_VALUE = "e2e-mobile-copy-move-global";
+
+/** Unique per run so retries never collide with leftovers from a failed attempt. */
+const runToken = () => `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
 test.describe("mobile-secrets-copy-move", () => {
   test("moves a workspace secret to General and copies one back at phone width", async ({
@@ -14,9 +18,22 @@ test.describe("mobile-secrets-copy-move", () => {
     prCapture,
   }) => {
     await testPage.setViewportSize({ width: 390, height: 844 });
-    const sourceName = "E2E Mobile Copy Move";
-    const movedName = "E2E Mobile Moved";
-    const copiedName = "E2E Mobile Copied";
+    const sourceName = `E2E Mobile Copy Move ${runToken()}`;
+    const movedName = `E2E Mobile Moved ${runToken()}`;
+    const copiedName = `E2E Mobile Copied ${runToken()}`;
+
+    // Seed a General secret whose name collides with the max-length target
+    // name, so the conflict message (not just the input) is exercised below.
+    const longName = "x".repeat(100);
+    await testPage.goto("/settings/general/secrets");
+    await testPage.getByRole("button", { name: "Add secret", exact: true }).click();
+    await testPage.getByPlaceholder("Name (e.g. OpenAI Production Key)").fill(longName);
+    await testPage.getByPlaceholder("Secret value").fill(GLOBAL_VALUE);
+    await testPage
+      .getByTestId("settings-floating-save")
+      .getByRole("button", { name: "Save changes" })
+      .click();
+    await expect(testPage.getByText(longName, { exact: true })).toBeVisible();
 
     // Create a workspace secret through the mobile flow.
     await testPage.goto(`/settings/workspace/${seedData.workspaceId}/secrets`);
@@ -63,9 +80,11 @@ test.describe("mobile-secrets-copy-move", () => {
     expect(moveButtonBox!.y + moveButtonBox!.height).toBeLessThanOrEqual(844);
 
     // Max-length unbroken text must not push any dialog descendant past the
-    // sheet's right edge (title, input, and the conflict message wrap).
-    const longName = "x".repeat(100);
+    // sheet's right edge: fill the target name with a value that CONFLICTS
+    // with the seeded General secret, so the conflict message is rendered
+    // while its wrapping (break-words) is exercised.
     await dialog.getByLabel("Name").fill(longName);
+    await expect(dialog.getByText(/already exists in this destination/)).toBeVisible();
     await assertNoDescendantOverflowsRight(dialog, "mobile copy/move dialog with 100-char name");
     await dialog.getByLabel("Name").fill(movedName);
 

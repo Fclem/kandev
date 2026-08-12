@@ -87,7 +87,7 @@ test.describe("Automations settings on mobile", () => {
     await testPage.getByTestId("run-filter-skipped").click();
     await expect(tbody.locator("tr")).toHaveCount(2, { timeout: 5_000 });
 
-    const deleteAll = testPage.getByTestId("delete-all-runs");
+    const deleteAll = testPage.locator("table thead").getByTestId("delete-all-runs");
     await expect(deleteAll).toBeVisible();
     await deleteAll.click();
     await expect(

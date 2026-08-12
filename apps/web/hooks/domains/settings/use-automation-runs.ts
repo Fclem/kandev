@@ -13,6 +13,15 @@ import type { AutomationRun } from "@/lib/types/automation";
 
 const EMPTY_RUNS: AutomationRun[] = [];
 
+/**
+ * Latest in-flight list request per automation. `fetchRuns` settles the
+ * shared `loading` flag only when the finishing request is still the latest,
+ * so an older request completing after a newer one started cannot clear the
+ * newer request's loading state. Entries are removed when their request is
+ * the latest to settle, so the registry stays bounded.
+ */
+const latestListRequest: Record<string, number> = {};
+
 function fetchRuns(
   automationId: string,
   getEpoch: () => number,
@@ -21,6 +30,8 @@ function fetchRuns(
   onError?: () => void,
 ): void {
   const captured = getEpoch();
+  const token = (latestListRequest[automationId] ?? 0) + 1;
+  latestListRequest[automationId] = token;
   setRunsLoading(automationId, true);
   listAutomationRuns(automationId)
     .then((result) => {
@@ -32,7 +43,10 @@ function fetchRuns(
       if (getEpoch() === captured) onError?.();
     })
     .finally(() => {
-      setRunsLoading(automationId, false);
+      if (latestListRequest[automationId] === token) {
+        delete latestListRequest[automationId];
+        setRunsLoading(automationId, false);
+      }
     });
 }
 

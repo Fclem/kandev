@@ -23,6 +23,7 @@ const COULDNT_SAVE_LABEL = "Couldn't save";
 const COULDNT_RESET_LABEL = "Couldn't reset";
 const APPEARANCE_ID = "appearance";
 const FLOATING_SAVE_TEST_ID = "settings-floating-save";
+const SAVE_AND_LEAVE_LABEL = "Save and leave";
 const APPEARANCE_PATH = "/settings/general/appearance";
 const TERMINAL_PATH = "/settings/general/terminal";
 
@@ -75,6 +76,34 @@ function DraftContributor({
       }
       setRevision(savedRevision);
     },
+  });
+
+  return (
+    <button type="button" onClick={() => setRevision((current) => current + 1)}>
+      Edit {id}
+    </button>
+  );
+}
+
+function CleanStartDraftContributor({
+  id,
+  onSave,
+}: {
+  id: string;
+  onSave: () => Promise<void> | void;
+}) {
+  const [revision, setRevision] = useState(1);
+  const [savedRevision, setSavedRevision] = useState(1); // starts clean
+
+  useSettingsSaveContributor({
+    id,
+    revision,
+    isDirty: revision !== savedRevision,
+    save: async () => {
+      await onSave();
+      setSavedRevision(revision);
+    },
+    discard: () => setRevision(savedRevision),
   });
 
   return (
@@ -456,13 +485,13 @@ describe("SettingsSaveProvider navigation", () => {
     );
 
     fireEvent.click(screen.getByRole("link", { name: "Terminal" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save and leave" }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_AND_LEAVE_LABEL }));
 
     expect(await screen.findByText("Couldn't save")).toBeTruthy();
     expect(window.location.pathname).toBe(APPEARANCE_PATH);
 
     shouldFail = false;
-    fireEvent.click(screen.getByRole("button", { name: "Save and leave" }));
+    fireEvent.click(screen.getByRole("button", { name: SAVE_AND_LEAVE_LABEL }));
     await waitFor(() => expect(window.location.pathname).toBe(TERMINAL_PATH));
   });
 
@@ -477,7 +506,7 @@ describe("SettingsSaveProvider navigation", () => {
     );
 
     fireEvent.click(screen.getByRole("link", { name: "Terminal" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save and leave" }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_AND_LEAVE_LABEL }));
 
     await waitFor(() => expect(window.location.pathname).toBe(TERMINAL_PATH));
   });
@@ -504,6 +533,36 @@ describe("SettingsSaveProvider navigation", () => {
     expect(await screen.findByTestId(FLOATING_SAVE_TEST_ID)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove draft" }));
     await waitFor(() => expect(screen.queryByTestId(FLOATING_SAVE_TEST_ID)).toBeNull());
+  });
+});
+
+describe("SettingsSaveProvider mid-save edits", () => {
+  it("stays put when a contributor becomes dirty while the save is in flight", async () => {
+    window.history.replaceState({}, "", APPEARANCE_PATH);
+    const pending = deferred();
+
+    render(
+      <SettingsSaveProvider>
+        <DraftContributor id="appearance" onSave={() => pending.promise} />
+        <CleanStartDraftContributor id="mcp" onSave={vi.fn()} />
+        <Link href={TERMINAL_PATH}>Terminal</Link>
+      </SettingsSaveProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit appearance" }));
+    fireEvent.click(screen.getByRole("link", { name: "Terminal" }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_AND_LEAVE_LABEL }));
+    // The MCP contributor (clean at the save snapshot) becomes dirty while
+    // the appearance save is pending. Radix aria-hides the page behind the
+    // modal, so query with hidden:true.
+    fireEvent.click(screen.getByRole("button", { name: "Edit mcp", hidden: true }));
+
+    await act(async () => pending.resolve());
+
+    // The newly dirty contributor blocks leaving: the navigation must not
+    // proceed (saveAll reports canLeave=false).
+    await waitFor(() => expect(window.location.pathname).toBe(APPEARANCE_PATH));
+    expect(screen.getByRole("button", { name: SAVE_AND_LEAVE_LABEL })).toBeTruthy();
   });
 });
 

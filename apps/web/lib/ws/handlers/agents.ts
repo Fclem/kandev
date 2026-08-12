@@ -23,9 +23,51 @@ function isOfficeScoped(normalized: { workspaceId?: string }): boolean {
   return Boolean(normalized.workspaceId);
 }
 
-function handleProfileCreated(state: AppState, profile: unknown): Partial<AppState> {
+// Deletion tombstones keyed by profile id -> deletion event timestamp, so a
+// delayed create/update event cannot resurrect a profile that was deleted
+// after the event was produced. Cleared when a genuinely newer create arrives.
+const deletionTombstones = new Map<string, string>();
+
+function findExistingProfile(state: AppState, profileId: string): AgentProfile | undefined {
+  for (const item of state.settingsAgents.items) {
+    const found = item.profiles.find((p) => p.id === profileId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**
+ * A profile event is stale when the store already holds a newer revision of
+ * the profile or its option (e.g. a delayed duplicate response or a newer
+ * WebSocket update arrived first), or when the profile was deleted after the
+ * event was produced (tombstone). Events must never regress newer state.
+ * Missing event timestamps (never produced by the backend) are treated as
+ * not-stale so they cannot trip the guards.
+ */
+function isStaleProfileEvent(
+  state: AppState,
+  normalized: { id: string; updatedAt?: string },
+  eventTimestamp: string | undefined,
+): boolean {
+  const tombstone = deletionTombstones.get(normalized.id);
+  if (tombstone !== undefined && eventTimestamp && tombstone >= eventTimestamp) return true;
+  const existingProfile = findExistingProfile(state, normalized.id);
+  if (existingProfile && (existingProfile.updatedAt ?? "") > (normalized.updatedAt ?? "")) {
+    return true;
+  }
+  const existingOption = state.agentProfiles.items.find((o) => o.id === normalized.id);
+  return Boolean(existingOption && (existingOption.updatedAt ?? "") > (normalized.updatedAt ?? ""));
+}
+
+function handleProfileCreated(
+  state: AppState,
+  profile: unknown,
+  eventTimestamp: string | undefined,
+): Partial<AppState> {
   const normalized = normalizeAgentProfile(profile);
   if (isOfficeScoped(normalized)) return {};
+  if (isStaleProfileEvent(state, normalized, eventTimestamp)) return {};
+  deletionTombstones.delete(normalized.id); // a genuinely newer create wins
   const agentId = getAgentId(profile);
   const agent = state.settingsAgents.items.find((a) => a.id === agentId);
   const agentStub = { id: agentId, name: agent?.name ?? "" };
@@ -50,9 +92,14 @@ function handleProfileCreated(state: AppState, profile: unknown): Partial<AppSta
   };
 }
 
-function handleProfileUpdated(state: AppState, profile: unknown): Partial<AppState> {
+function handleProfileUpdated(
+  state: AppState,
+  profile: unknown,
+  eventTimestamp: string | undefined,
+): Partial<AppState> {
   const normalized = normalizeAgentProfile(profile);
   if (isOfficeScoped(normalized)) return {};
+  if (isStaleProfileEvent(state, normalized, eventTimestamp)) return {};
   const agentId = getAgentId(profile);
   const agent = state.settingsAgents.items.find((a) => a.id === agentId);
   const agentStub = { id: agentId, name: agent?.name ?? "" };
@@ -69,6 +116,32 @@ function handleProfileUpdated(state: AppState, profile: unknown): Partial<AppSta
   );
   return {
     agentProfiles: { ...state.agentProfiles, items: nextProfiles },
+    settingsAgents: { items: nextAgents },
+  };
+}
+
+function handleProfileDeleted(
+  state: AppState,
+  profile: unknown,
+  eventTimestamp: string | undefined,
+): Partial<AppState> {
+  const normalized = normalizeAgentProfile(profile);
+  if (isOfficeScoped(normalized)) return {};
+  if (eventTimestamp) deletionTombstones.set(normalized.id, eventTimestamp);
+  const agentId = getAgentId(profile);
+  const nextAgents = state.settingsAgents.items.map((item) =>
+    item.id === agentId
+      ? {
+          ...item,
+          profiles: item.profiles.filter((p) => p.id !== normalized.id),
+        }
+      : item,
+  );
+  return {
+    agentProfiles: {
+      ...state.agentProfiles,
+      items: state.agentProfiles.items.filter((p) => p.id !== normalized.id),
+    },
     settingsAgents: { items: nextAgents },
   };
 }
@@ -128,35 +201,19 @@ export function registerAgentsHandlers(store: StoreApi<AppState>): WsHandlers {
     "agent.profile.created": (message) => {
       store.setState((state) => ({
         ...state,
-        ...handleProfileCreated(state, message.payload.profile),
+        ...handleProfileCreated(state, message.payload.profile, message.timestamp),
       }));
     },
     "agent.profile.updated": (message) => {
       store.setState((state) => ({
         ...state,
-        ...handleProfileUpdated(state, message.payload.profile),
+        ...handleProfileUpdated(state, message.payload.profile, message.timestamp),
       }));
     },
     "agent.profile.deleted": (message) => {
-      const profile = message.payload.profile as Record<string, unknown>;
-      const profileId = profile.id as string;
-      const agentId = getAgentId(profile);
       store.setState((state) => ({
         ...state,
-        agentProfiles: {
-          ...state.agentProfiles,
-          items: state.agentProfiles.items.filter((p) => p.id !== profileId),
-        },
-        settingsAgents: {
-          items: state.settingsAgents.items.map((item) =>
-            item.id === agentId
-              ? {
-                  ...item,
-                  profiles: item.profiles.filter((p) => p.id !== profileId),
-                }
-              : item,
-          ),
-        },
+        ...handleProfileDeleted(state, message.payload.profile, message.timestamp),
       }));
     },
   };

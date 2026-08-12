@@ -426,11 +426,21 @@ function useSaveCoordinator(
     }
 
     savingRef.current = false;
+    // Revalidate the whole registry before reporting canLeave: a contributor
+    // that became dirty while the saves were in flight (e.g. the MCP card
+    // edited during the profile save) is absent from the submitted snapshot
+    // and would otherwise be skipped while the caller proceeds on stale data.
+    const newlyDirty = getDirtyContributors(contributors).filter(
+      ({ contributor }) => !submitted.some((sub) => sub.contributor === contributor),
+    );
     const completionStatus = saveCompletionStatus(failedIds, hasNewerChanges);
     setErrorKind(completionStatus === "error" ? "save" : null);
     setStatus(completionStatus);
     refreshRegistry();
-    return { canLeave: failedIds.size === 0 && !hasNewerChanges, failedIds };
+    return {
+      canLeave: failedIds.size === 0 && !hasNewerChanges && newlyDirty.length === 0,
+      failedIds,
+    };
   }, [contributors, refreshRegistry]);
 
   return { status, errorKind, saveAll, clearSavedStatus, markError };

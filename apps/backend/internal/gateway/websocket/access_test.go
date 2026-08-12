@@ -328,6 +328,52 @@ func TestBroadcastToWorkspaceRoutesByOwner(t *testing.T) {
 	waitForMessage(t, clientA)
 }
 
+func TestBroadcastToWorkspaceOrDropFailsClosed(t *testing.T) {
+	hub := newAccessTestHub(t)
+	hub.setAuthPolicy(AuthPolicy{
+		Enforced: func() bool { return true },
+		WorkspaceOwner: func(_ context.Context, workspaceID string) (string, error) {
+			if workspaceID == "ws-a" {
+				return "user-a", nil
+			}
+			return "", errors.New("unknown workspace")
+		},
+	})
+	clientA := registerAccessClient(t, hub, "a", authn.Identity{UserID: "user-a", Role: authn.RoleMember})
+	clientB := registerAccessClient(t, hub, "b", authn.Identity{UserID: "user-b", Role: authn.RoleMember})
+
+	notify := func(action string) *ws.Message {
+		msg, err := ws.NewNotification(action, map[string]interface{}{"workspace_id": "ws-a"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return msg
+	}
+
+	// Resolvable workspace: only the owner receives it, the foreign user
+	// never does.
+	hub.BroadcastToWorkspaceOrDrop("ws-a", notify("agent.profile.updated"))
+	if got := receivedActions(clientA); len(got) != 1 {
+		t.Fatalf("owner received %v, want 1 message", got)
+	}
+	if got := receivedActions(clientB); len(got) != 0 {
+		t.Fatalf("foreign user received %v, want none — WS LEAK", got)
+	}
+
+	// Unresolvable workspace: DROPPED under enforced auth — never the
+	// global fallback that BroadcastToWorkspace applies.
+	hub.BroadcastToWorkspaceOrDrop("ws-mystery", notify("agent.profile.updated"))
+	if got := receivedActions(clientB); len(got) != 0 {
+		t.Fatalf("unresolvable workspace leaked globally: %v", got)
+	}
+
+	// Empty workspace ID under enforced auth: DROPPED.
+	hub.BroadcastToWorkspaceOrDrop("", notify("agent.profile.updated"))
+	if got := receivedActions(clientB); len(got) != 0 {
+		t.Fatalf("empty workspace leaked globally: %v", got)
+	}
+}
+
 func waitForMessage(t *testing.T, client *Client) {
 	t.Helper()
 	select {

@@ -289,6 +289,15 @@ func (b *TaskEventBroadcaster) routeBroadcast(
 		// GitHub PR or GitLab MR update must never cross workspace boundaries.
 		b.hub.BroadcastToWorkspaceOrDrop(workspaceID, msg)
 		return nil
+	case ws.ActionAgentProfileCreated, ws.ActionAgentProfileUpdated, ws.ActionAgentProfileDeleted:
+		// Profile payloads wrap the profile DTO under "profile"; office-scoped
+		// profiles (nested workspace_id) must never cross workspace
+		// boundaries — route them fail-closed. Kanban profiles (empty
+		// workspace) are instance-wide and fall through to the global path.
+		if workspaceID != "" {
+			b.hub.BroadcastToWorkspaceOrDrop(workspaceID, msg)
+			return nil
+		}
 	}
 	// Workspace-carrying events (task/workflow/repository/…) route to the
 	// owner's clients; events without workspace context (executors,
@@ -298,11 +307,17 @@ func (b *TaskEventBroadcaster) routeBroadcast(
 }
 
 // extractWorkspaceID pulls a workspace ID from event payloads (map- or
-// struct-shaped). Empty means "no workspace context" — the event is treated
-// as instance-wide and broadcast to everyone.
+// struct-shaped). Profile events wrap the profile DTO under "profile", so the
+// nested workspace_id is inspected too. Empty means "no workspace context" —
+// the event is treated as instance-wide and broadcast to everyone.
 func extractWorkspaceID(data interface{}) string {
 	if id := extractStringField(data, "workspace_id"); id != "" {
 		return id
+	}
+	if profile, ok := data.(map[string]interface{}); ok {
+		if id := extractStringField(profile["profile"], "workspace_id"); id != "" {
+			return id
+		}
 	}
 	if provider, ok := data.(interface{ GetWorkspaceID() string }); ok {
 		return provider.GetWorkspaceID()

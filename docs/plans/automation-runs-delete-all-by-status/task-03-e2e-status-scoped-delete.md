@@ -1,7 +1,7 @@
 ---
 id: "03-e2e-status-scoped-delete"
 title: "E2E status-scoped delete"
-status: pending
+status: done
 wave: 3
 depends_on:
   - "02-runs-table-header-delete-all"
@@ -69,4 +69,8 @@ conversation. No backend changes.
 
 ## Results
 
-Pending.
+- E2E: `pnpm --filter @kandev/web e2e:raw -g "delete" --workers=4
+  automations-settings.spec.ts` — "delete all only removes the runs in the
+  active status view" and "delete individual and all runs from Recent Runs"
+  passed; an earlier full chromium-project run (67 tests) passed with exit 0.
+- `git diff --check` and Prettier — passed. No backend changes.

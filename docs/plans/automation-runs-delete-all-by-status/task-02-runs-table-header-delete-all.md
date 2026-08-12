@@ -1,7 +1,7 @@
 ---
 id: "02-runs-table-header-delete-all"
 title: "Runs table header delete-all"
-status: pending
+status: done
 wave: 2
 depends_on:
   - "01-hook-status-scoped-delete"
@@ -88,4 +88,16 @@ conversation. No backend changes.
 
 ## Results
 
-Pending.
+- RED: new scope/placement tests failed before the component change (button
+  still beside the heading, no scoped ids, no scoped copy).
+- GREEN: `pnpm --filter @kandev/web test -- --run
+  components/automations/runs-section.test.tsx
+  hooks/domains/settings/use-automation-runs.test.ts` — 34 tests passed
+  (final state).
+- Added during review rounds: status-scoped `title`/`aria-label`
+  (`deleteAllRunsScoped` key), and `deleting`-gated disablement of both the
+  delete-all button and the per-row delete buttons.
+- `pnpm run typecheck` (from `apps/web`) — passed; `i18n:check` +
+  `i18n:ratchet` — passed (keys in all four catalogs, pseudo regenerated);
+  changed-file eslint `--max-warnings 0` — passed; `git diff --check` —
+  passed.

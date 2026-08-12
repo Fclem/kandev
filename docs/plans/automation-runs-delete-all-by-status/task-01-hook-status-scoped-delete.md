@@ -1,7 +1,7 @@
 ---
 id: "01-hook-status-scoped-delete"
 title: "Hook status-scoped delete-all"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -72,4 +72,16 @@ conversation. No backend, store-slice, or API-layer changes.
 
 ## Results
 
-Pending.
+- RED: new race-condition tests failed before the guards existed (stale
+  refresh resurrecting deleted rows; early recovery on first rejection).
+- GREEN: `pnpm --filter @kandev/web test -- --run
+  hooks/domains/settings/use-automation-runs.test.ts` — 18 tests passed.
+- Hardening added during review rounds: `fetchRuns`/`revertAfterFailedDelete`
+  are epoch-guarded; `executeDeleteAll` uses `Promise.allSettled` and
+  recovers only after every delete settles; destructive mutations are
+  serialized via generation-tagged store state
+  (`beginAutomationRunDelete`/`endAutomationRunDelete`,
+  `automationRuns.mutationEpoch`/`deleting`) so overlapping or cross-instance
+  deletes cannot race; `executeDeleteRun` joins the same mechanism; success
+  paths reconcile with an authoritative post-delete refresh.
+- `git diff --check` and Prettier — passed. No backend or API-layer changes.

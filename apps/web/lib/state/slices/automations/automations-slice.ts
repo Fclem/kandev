@@ -3,7 +3,7 @@ import type { AutomationsSlice, AutomationsSliceState } from "./types";
 
 export const defaultAutomationsState: AutomationsSliceState = {
   automations: { items: [], loaded: false, loading: false },
-  automationRuns: { byAutomationId: {}, loading: {} },
+  automationRuns: { byAutomationId: {}, loading: {}, mutationEpoch: {}, deleting: {} },
 };
 
 type ImmerSet = Parameters<
@@ -50,6 +50,7 @@ function createAutomationsActions(
 
 function createRunsActions(
   set: ImmerSet,
+  get: () => AutomationsSlice,
 ): Pick<
   AutomationsSlice,
   | "setAutomationRuns"
@@ -57,6 +58,8 @@ function createRunsActions(
   | "removeAutomationRun"
   | "clearAutomationRuns"
   | "restoreAutomationRun"
+  | "beginAutomationRunDelete"
+  | "endAutomationRunDelete"
 > {
   return {
     setAutomationRuns: (automationId, runs) =>
@@ -96,6 +99,22 @@ function createRunsActions(
         }
         draft.automationRuns.byAutomationId[automationId] = next;
       }),
+    beginAutomationRunDelete: (automationId) => {
+      // `?? false` treats the never-started automation (absent key) as idle.
+      if ((get().automationRuns.deleting[automationId] ?? false) !== false) return null;
+      const next = (get().automationRuns.mutationEpoch[automationId] ?? 0) + 1;
+      set((draft) => {
+        draft.automationRuns.mutationEpoch[automationId] = next;
+        draft.automationRuns.deleting[automationId] = next;
+      });
+      return next;
+    },
+    endAutomationRunDelete: (automationId, generation) =>
+      set((draft) => {
+        if (draft.automationRuns.deleting[automationId] === generation) {
+          draft.automationRuns.deleting[automationId] = false;
+        }
+      }),
   };
 }
 
@@ -104,8 +123,8 @@ export const createAutomationsSlice: StateCreator<
   [["zustand/immer", never]],
   [],
   AutomationsSlice
-> = (set, _get, _api) => ({
+> = (set, get, _api) => ({
   ...defaultAutomationsState,
   ...createAutomationsActions(set),
-  ...createRunsActions(set),
+  ...createRunsActions(set, get),
 });

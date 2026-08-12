@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/ui/remove-hide-disabled-nav-options.md
 created: 2026-08-12
-status: building
+status: complete
 ---
 
 # Implementation Plan: Remove Hide-Disabled Left-Panel-Nav Options

@@ -193,7 +193,7 @@ Subscription quota tracking and per-agent cheap-model profile routing.
 | [app-status-bar](ui/app-status-bar.md) | shipped |
 | [quick-terminal](quick-terminal/spec.md) | shipped |
 | [mobile-task-navigation](ui/mobile-task-navigation.md) | shipped |
-| [remove-hide-disabled-nav-options](ui/remove-hide-disabled-nav-options.md) | draft |
+| [remove-hide-disabled-nav-options](ui/remove-hide-disabled-nav-options.md) | shipped |
 | [adaptive-kanban](ui/adaptive-kanban.md) | shipped |
 | [task-layout-profiles](ui/task-layout-profiles.md) | draft |
 | [port-forwarding-discovery](ui/port-forwarding-discovery.md) | building |

@@ -128,6 +128,14 @@ the e2e fixture backend is available per `e2e/README.md`).
 - E2E (managed runner, production build): `tests/chat/message-queue-pin.spec.ts` 2/2; `--project mobile-chrome tests/chat/mobile-message-queue-management.spec.ts` 3/3 (incl. new mobile pin test).
 - `make test` full-suite: backend failures are pre-existing/environmental (zero Go changes; launcher tests assert a Homebrew install path absent on this machine — reproduced on clean HEAD). Web suite: all queue/pin suites pass; `http-git-server.test.ts` failures reproduce on clean HEAD; the remaining sentry/file-browser/i18n failures pass in isolation (load flakiness), none import the changed files.
 
+### Adversarial review loop (10-luna-review-fix)
+
+Rounds 1–3 produced findings (storage-sync pin flip, empty→nonempty reopen,
+pinned-empty unpin leak), each fixed, tested, and committed (`dabb6c80e`,
+`8fb2a3de3`, `fdaf84ee9`); round 4 returned `NO_FINDINGS` and the loop
+stopped. Final unit count 63/63; desktop pin E2E 2/2 and mobile pin E2E 1/1
+re-run green against the final code.
+
 ---
 
 ## Implementation Waves And Parallel Candidates

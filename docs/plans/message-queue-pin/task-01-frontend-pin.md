@@ -69,3 +69,23 @@ spec: "../../specs/ui/message-queue-pin.md"
   entries arrive asynchronously after mount (initial open state is `pinned`,
   not gated on entry count; the render path gates on `hasEntries`).
 - Security/trust boundaries: `None`. External side effects: `None`.
+
+### Adversarial review loop (10-luna-review-fix)
+
+Three review rounds produced findings; all fixed and committed; round 4 found
+none and the loop stopped:
+
+1. `dabb6c80e` — open the panel when a storage-synced pin flips true
+   (multi-tab) with entries present; corrected the pseudo-locale `U` glyph
+   (`Ū` → `Ũ`) in `unpinQueuedMessages`.
+2. `8fb2a3de3` — reopen a pinned queue on the empty→nonempty entryCount
+   transition (async load after session switch, storage pin on an empty
+   queue, later queue after a full drain); X-collapsed nonempty pinned queues
+   are not reopened by ordinary count changes.
+3. `fdaf84ee9` — initialize `isOpen` as `pinned && entryCount > 0` so an
+   empty pinned queue starts collapsed; unpinning it before delayed entries
+   arrive leaves it collapsed instead of leaking an open panel.
+
+Unit tests grew from 56 to 63 (pin spec split across three describes to stay
+under the 100-line per-function cap). Desktop + mobile E2E re-run green after
+the fixes.

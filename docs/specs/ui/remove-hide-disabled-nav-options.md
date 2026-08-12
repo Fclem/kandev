@@ -9,12 +9,17 @@ owner: platform
 ## Why
 
 The "Hide disabled integrations from left panel navigation" and "Hide
-disabled agent profiles from left panel navigation" settings filter
-tree/list entries out of the left panel navigation. The left-panel
-navigation no longer renders those tree/list surfaces, so the settings
-no longer control anything a user can see. Keeping them means two
-obsolete rows on the integrations and agents settings pages plus a
-`localStorage`-backed filter chain that nothing observable consumes.
+disabled agent profiles from left panel navigation" settings filtered
+tree/list entries out of the left panel navigation. The surfaces
+themselves — the sidebar Integrations section, the mobile-menu
+integrations group, and the Settings left panel's Workspaces/Agents/
+Executors trees — still render, but nothing filters their content
+anymore: integration nav visibility is configuration-only, and the
+Settings trees list every integration and every profile unconditionally.
+The two settings therefore no longer control anything a user can see.
+Keeping them means two obsolete rows on the integrations and agents
+settings pages plus a `localStorage`-backed filter chain that nothing
+observable consumes.
 
 ## What
 

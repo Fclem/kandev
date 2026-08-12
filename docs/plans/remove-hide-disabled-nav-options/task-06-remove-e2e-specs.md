@@ -36,9 +36,12 @@ Delete the two Playwright specs that exercised the removed settings.
 
 ## Change
 
-Delete both spec files. Do not add replacement E2E — the removal's
-observable contract is covered by the updated unit tests (task 03) and
-the existing sidebar/settings navigation specs.
+Delete both spec files (their setting-toggle scenarios are obsolete).
+The post-removal contract is covered by three replacement specs added
+during review round 1 (commit `c96721e43`):
+`e2e/tests/integrations/disabled-integration-stays-in-nav.spec.ts`,
+`e2e/tests/integrations/mobile-disabled-integration-stays-in-nav.spec.ts`,
+and `e2e/tests/settings/disabled-profile-stays-in-nav.spec.ts`.
 
 ## Inputs
 
@@ -54,3 +57,4 @@ task/plan status update in the same conversation.
 
 - Deleted both specs via `git rm`.
 - `grep -rn "hide-disabled-integrations-nav\|hide-disabled-agent-profiles-nav" apps/web` → no matches (historical `docs/plans/**` transcripts untouched).
+- Replacement specs added in review round 1 (commit `c96721e43`): desktop + mobile integration-stays-visible and disabled-profile-stays-listed; all pass (chromium 2/2, mobile-chrome 1/1).

@@ -131,11 +131,20 @@ filtering.
 
 ## E2E Tests
 
-No new E2E tests. The two specs that exercised the removed feature are
-deleted (task 06). The surviving contract ("configured integrations
-always show in nav; disabled profiles always show in the Settings tree")
-is asserted by the updated unit tests in task 03 and by the existing
-sidebar/settings navigation E2E specs, which are unchanged.
+The two specs that exercised the removed setting-toggle scenarios
+(`hide-disabled-integrations-nav.spec.ts`,
+`hide-disabled-agent-profiles-nav.spec.ts`) are deleted (task 06). The
+post-removal contract — a disabled-but-configured integration stays
+visible in the sidebar, mobile menu, and per-workspace Settings tree, and
+a disabled profile stays listed in the Settings Agents tree — is covered
+by three replacement specs added during review round 1
+(commit `c96721e43`):
+
+- `apps/web/e2e/tests/integrations/disabled-integration-stays-in-nav.spec.ts` (desktop sidebar + Settings tree)
+- `apps/web/e2e/tests/integrations/mobile-disabled-integration-stays-in-nav.spec.ts` (mobile menu)
+- `apps/web/e2e/tests/settings/disabled-profile-stays-in-nav.spec.ts` (Settings Agents tree)
+
+All three pass in this environment (chromium 2/2, mobile-chrome 1/1).
 
 ---
 

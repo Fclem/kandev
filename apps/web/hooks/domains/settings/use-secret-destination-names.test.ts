@@ -21,6 +21,7 @@ vi.mock("@/components/state-provider", () => ({
 
 import { secretNameConflict, useSecretDestinationNames } from "./use-secret-destination-names";
 
+/** Deferred promise helper for controlling async test resolution. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((nextResolve) => {

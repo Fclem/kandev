@@ -31,6 +31,7 @@ func testCopyMoveService(t *testing.T, allowed map[string]bool) *Service {
 	return svc
 }
 
+// decodeCopyRequest unmarshals a JSON copy/move request body for testing.
 func decodeCopyRequest(t *testing.T, body string) *CopySecretRequest {
 	t.Helper()
 	var req CopySecretRequest
@@ -40,6 +41,7 @@ func decodeCopyRequest(t *testing.T, body string) *CopySecretRequest {
 	return &req
 }
 
+// TestServiceCopy_GlobalToWorkspaceUsesSourceNameWhenOmitted verifies a global-to-workspace copy with no explicit name keeps the source name and value and retains the source.
 func TestServiceCopy_GlobalToWorkspaceUsesSourceNameWhenOmitted(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	ctx := context.Background()
@@ -71,6 +73,7 @@ func TestServiceCopy_GlobalToWorkspaceUsesSourceNameWhenOmitted(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_WorkspaceToGlobalWithExplicitName verifies a workspace-to-global copy with an explicit name keeps the source intact.
 func TestServiceCopy_WorkspaceToGlobalWithExplicitName(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	ctx := context.Background()
@@ -88,6 +91,7 @@ func TestServiceCopy_WorkspaceToGlobalWithExplicitName(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_WorkspaceToWorkspace verifies a workspace-to-workspace copy lands in the target workspace.
 func TestServiceCopy_WorkspaceToWorkspace(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true, "workspace-b": true})
 	ctx := context.Background()
@@ -102,6 +106,7 @@ func TestServiceCopy_WorkspaceToWorkspace(t *testing.T) {
 	}
 }
 
+// TestServiceMove_WorkspaceToGlobalRemovesSource verifies moving a workspace secret to global removes the source.
 func TestServiceMove_WorkspaceToGlobalRemovesSource(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	ctx := context.Background()
@@ -119,6 +124,7 @@ func TestServiceMove_WorkspaceToGlobalRemovesSource(t *testing.T) {
 	}
 }
 
+// TestServiceMove_GlobalToWorkspaceRemovesSource verifies moving a global secret into a workspace removes the source.
 func TestServiceMove_GlobalToWorkspaceRemovesSource(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	ctx := context.Background()
@@ -136,6 +142,7 @@ func TestServiceMove_GlobalToWorkspaceRemovesSource(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_NamePresenceSemantics verifies null, empty, whitespace, and over-long target names are rejected as ErrSecretValidation.
 func TestServiceCopy_NamePresenceSemantics(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	ctx := context.Background()
@@ -172,6 +179,7 @@ func TestServiceCopy_NamePresenceSemantics(t *testing.T) {
 	})
 }
 
+// TestServiceCopy_SameScopeRejected verifies copying within the same scope returns ErrSecretValidation.
 func TestServiceCopy_SameScopeRejected(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	ctx := context.Background()
@@ -186,6 +194,7 @@ func TestServiceCopy_SameScopeRejected(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_NameConflict verifies a target-name collision in the destination scope returns ErrSecretNameConflict.
 func TestServiceCopy_NameConflict(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	ctx := context.Background()
@@ -199,6 +208,7 @@ func TestServiceCopy_NameConflict(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_MissingSourceIsNotFound verifies an unknown source ID returns ErrNotFound.
 func TestServiceCopy_MissingSourceIsNotFound(t *testing.T) {
 	svc := testCopyMoveService(t, nil)
 	_, err := svc.Copy(context.Background(), "missing", "", decodeCopyRequest(t, `{"target_scope":"global"}`))
@@ -207,6 +217,7 @@ func TestServiceCopy_MissingSourceIsNotFound(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_UnauthorizedSourceIsDenied verifies revoking source-workspace access makes Copy fail with ErrWorkspaceAccessDenied.
 func TestServiceCopy_UnauthorizedSourceIsDenied(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	ctx := context.Background()
@@ -222,6 +233,7 @@ func TestServiceCopy_UnauthorizedSourceIsDenied(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_UnauthorizedDestinationIsDenied verifies an unallowed destination workspace returns ErrWorkspaceAccessDenied.
 func TestServiceCopy_UnauthorizedDestinationIsDenied(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true}) // workspace-b not allowed
 	ctx := context.Background()
@@ -233,6 +245,7 @@ func TestServiceCopy_UnauthorizedDestinationIsDenied(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_NilExistenceCheckerFailsClosed verifies a nil existence checker denies workspace targets (fails closed).
 func TestServiceCopy_NilExistenceCheckerFailsClosed(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	svc := NewService(NewUserVisibleStore(store), nil)
@@ -246,6 +259,7 @@ func TestServiceCopy_NilExistenceCheckerFailsClosed(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_RawAuthorizerErrorPassesThroughUnclassified verifies a raw authorizer error is returned as-is rather than mapped to a sentinel.
 func TestServiceCopy_RawAuthorizerErrorPassesThroughUnclassified(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	svc := NewService(NewUserVisibleStore(store), nil)
@@ -264,6 +278,7 @@ func TestServiceCopy_RawAuthorizerErrorPassesThroughUnclassified(t *testing.T) {
 	}
 }
 
+// TestServiceCopy_InternalSourceIDIsNotFound verifies internal (backend-owned) source IDs are rejected as ErrNotFound.
 func TestServiceCopy_InternalSourceIDIsNotFound(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	_, err := svc.Copy(context.Background(), "github:user:workspace:user:access", "", decodeCopyRequest(t, `{"target_scope":"workspace","target_workspace_id":"workspace-a"}`))
@@ -272,6 +287,7 @@ func TestServiceCopy_InternalSourceIDIsNotFound(t *testing.T) {
 	}
 }
 
+// TestServiceMove_CrossUserOwnershipEnforced verifies a user cannot move another user's workspace secret (ErrNotFound) while the owner can.
 func TestServiceMove_CrossUserOwnershipEnforced(t *testing.T) {
 	svc := testCopyMoveService(t, map[string]bool{"workspace-a": true})
 	alice := authn.WithIdentity(context.Background(), authn.Identity{UserID: "user-a"})

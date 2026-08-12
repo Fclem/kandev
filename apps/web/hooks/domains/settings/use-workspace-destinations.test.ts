@@ -16,6 +16,7 @@ vi.mock("@/components/state-provider", () => ({
 
 import { useWorkspaceDestinations } from "./use-workspace-destinations";
 
+/** Deferred promise helper for controlling async test resolution. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;

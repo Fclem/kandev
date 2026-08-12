@@ -49,6 +49,7 @@ func openPGWithConns(t *testing.T, conns int) *sqlx.DB {
 	return db
 }
 
+// newPGStore builds a secrets store over the given Postgres pool with a fresh master key.
 func newPGStore(t *testing.T, db *sqlx.DB) *sqliteStore {
 	t.Helper()
 	crypto, err := NewMasterKeyProvider(t.TempDir())
@@ -63,6 +64,7 @@ func newPGStore(t *testing.T, db *sqlx.DB) *sqliteStore {
 	return store
 }
 
+// TestPostgresTransfer_CopyMoveConflictAndOwnership verifies Postgres copy/move metadata, name conflicts (including legacy empty-scope globals), and source removal on move.
 func TestPostgresTransfer_CopyMoveConflictAndOwnership(t *testing.T) {
 	db := openPGWithConns(t, 2)
 	store := newPGStore(t, db)
@@ -120,6 +122,7 @@ func TestPostgresTransfer_CopyMoveConflictAndOwnership(t *testing.T) {
 	}
 }
 
+// TestPostgresTransfer_MoveRollbackAfterInsert verifies a failed source delete after insert rolls back the copy, leaving the source intact and no destination row.
 func TestPostgresTransfer_MoveRollbackAfterInsert(t *testing.T) {
 	db := openPGWithConns(t, 2)
 	store := newPGStore(t, db)

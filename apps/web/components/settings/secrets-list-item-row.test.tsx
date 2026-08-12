@@ -12,6 +12,7 @@ const secret: SecretListItem = {
   updated_at: "2026-01-01T00:00:00Z",
 };
 
+/** Renders the row with test fakes and returns the spies. */
 function renderRow(overrides: Partial<Parameters<typeof SecretListItemRow>[0]> = {}) {
   const onEdit = vi.fn();
   const onDelete = vi.fn();
@@ -35,6 +36,7 @@ afterEach(() => cleanup());
 
 const COPY_MOVE_BUTTON = "Copy or move API Key";
 
+/** Returns whether the copy/move button is currently disabled. */
 function copyMoveDisabled(): boolean {
   return (screen.getByRole("button", { name: COPY_MOVE_BUTTON }) as HTMLButtonElement).disabled;
 }

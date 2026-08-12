@@ -6,6 +6,7 @@ const GLOBAL_VALUE = "e2e-copy-move-global-value";
 const runToken = () => `${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 const WORKSPACE_VALUE = "e2e-copy-move-workspace-value";
 
+/** Creates a secret from the settings page via the Add secret dialog. */
 async function createSecretFromSettings(
   page: import("@playwright/test").Page,
   route: string,

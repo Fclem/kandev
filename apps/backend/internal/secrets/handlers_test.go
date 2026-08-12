@@ -15,6 +15,7 @@ import (
 	ws "github.com/kandev/kandev/pkg/websocket"
 )
 
+// testLogger returns an error-level JSON logger for tests.
 func testLogger(t *testing.T) *logger.Logger {
 	t.Helper()
 	log, err := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "json"})
@@ -52,6 +53,7 @@ func newSecretsHandlerService(t *testing.T, allowed map[string]bool, authorizerE
 	return svc
 }
 
+// newSecretsHTTPRouter builds a gin engine with the secrets handler's HTTP routes registered.
 func newSecretsHTTPRouter(t *testing.T, svc *Service) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -60,6 +62,7 @@ func newSecretsHTTPRouter(t *testing.T, svc *Service) *gin.Engine {
 	return router
 }
 
+// doTransferHTTP performs an HTTP request against the router and returns the response recorder.
 func doTransferHTTP(t *testing.T, router *gin.Engine, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -69,6 +72,7 @@ func doTransferHTTP(t *testing.T, router *gin.Engine, method, path, body string)
 	return rec
 }
 
+// decodeItem unmarshals a SecretListItem from the response body.
 func decodeItem(t *testing.T, rec *httptest.ResponseRecorder) *SecretListItem {
 	t.Helper()
 	var item SecretListItem
@@ -78,12 +82,14 @@ func decodeItem(t *testing.T, rec *httptest.ResponseRecorder) *SecretListItem {
 	return &item
 }
 
+// seedGlobalViaService creates a global secret via the service and returns its ID.
 func seedGlobalViaService(t *testing.T, svc *Service, name, value string) string {
 	t.Helper()
 	item := mustCreateViaService(t, svc, name, value, ScopeGlobal, "")
 	return item.ID
 }
 
+// TestHandlerCopy_GlobalToWorkspaceCreated verifies the copy endpoint returns 201 with the copied item and keeps the source.
 func TestHandlerCopy_GlobalToWorkspaceCreated(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -103,6 +109,7 @@ func TestHandlerCopy_GlobalToWorkspaceCreated(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_WorkspaceSourceRequiresWorkspaceID verifies a workspace source without workspace_id is rejected with 404.
 func TestHandlerCopy_WorkspaceSourceRequiresWorkspaceID(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -115,6 +122,7 @@ func TestHandlerCopy_WorkspaceSourceRequiresWorkspaceID(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_OmittedNameUsesSourceName verifies an omitted copy name falls back to the source name.
 func TestHandlerCopy_OmittedNameUsesSourceName(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -130,6 +138,7 @@ func TestHandlerCopy_OmittedNameUsesSourceName(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_NullNameBadRequest verifies a null copy name is rejected with 400.
 func TestHandlerCopy_NullNameBadRequest(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -142,6 +151,7 @@ func TestHandlerCopy_NullNameBadRequest(t *testing.T) {
 	}
 }
 
+// TestHandlerMove_WorkspaceToGlobal verifies the move endpoint moves a workspace secret to global and removes the source.
 func TestHandlerMove_WorkspaceToGlobal(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -161,6 +171,7 @@ func TestHandlerMove_WorkspaceToGlobal(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_SameScopeBadRequest verifies a same-scope copy is rejected with 400.
 func TestHandlerCopy_SameScopeBadRequest(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -173,6 +184,7 @@ func TestHandlerCopy_SameScopeBadRequest(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_NameConflict verifies a target name collision returns 409.
 func TestHandlerCopy_NameConflict(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -186,6 +198,7 @@ func TestHandlerCopy_NameConflict(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_MissingSourceNotFound verifies an unknown copy source returns 404.
 func TestHandlerCopy_MissingSourceNotFound(t *testing.T) {
 	svc := newSecretsHandlerService(t, nil, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -196,6 +209,7 @@ func TestHandlerCopy_MissingSourceNotFound(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_UnauthorizedSourceNotFound verifies an unauthorized source workspace is reported as 404.
 func TestHandlerCopy_UnauthorizedSourceNotFound(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -210,6 +224,7 @@ func TestHandlerCopy_UnauthorizedSourceNotFound(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_UnauthorizedDestinationNotFound verifies an unauthorized destination workspace is reported as 404.
 func TestHandlerCopy_UnauthorizedDestinationNotFound(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -222,6 +237,7 @@ func TestHandlerCopy_UnauthorizedDestinationNotFound(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_NilExistenceCheckerNotFound verifies a nil existence checker fails closed with 404.
 func TestHandlerCopy_NilExistenceCheckerNotFound(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	svc := NewService(NewUserVisibleStore(store), nil)
@@ -236,6 +252,7 @@ func TestHandlerCopy_NilExistenceCheckerNotFound(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_InternalErrorSanitized verifies internal errors return 500 without leaking the error message.
 func TestHandlerCopy_InternalErrorSanitized(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, errors.New("database unreachable"), nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -251,6 +268,7 @@ func TestHandlerCopy_InternalErrorSanitized(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_ValidationLikeInternalErrorStays500 verifies sentinel-based classification keeps a validation-sounding internal error at 500.
 func TestHandlerCopy_ValidationLikeInternalErrorStays500(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, errors.New("name must be 1-100 characters"), nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -263,6 +281,7 @@ func TestHandlerCopy_ValidationLikeInternalErrorStays500(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_WhitespaceNameBadRequest verifies a whitespace-only name is rejected with 400.
 func TestHandlerCopy_WhitespaceNameBadRequest(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	router := newSecretsHTTPRouter(t, svc)
@@ -277,11 +296,13 @@ func TestHandlerCopy_WhitespaceNameBadRequest(t *testing.T) {
 
 // --- WebSocket handlers ---
 
+// newWSHandler builds a secrets Handler for WebSocket tests.
 func newWSHandler(t *testing.T, svc *Service) *Handler {
 	t.Helper()
 	return NewHandler(svc, testLogger(t))
 }
 
+// wsTransfer dispatches a WebSocket copy/move message and returns the response message.
 func wsTransfer(t *testing.T, h *Handler, action, payload string) (*ws.Message, error) {
 	t.Helper()
 	msg := &ws.Message{ID: "1", Action: action, Payload: json.RawMessage(payload)}
@@ -300,6 +321,7 @@ type wsErrorPayload struct {
 	Message string `json:"message"`
 }
 
+// decodeWSError unmarshals a wsErrorPayload from a WebSocket response.
 func decodeWSError(t *testing.T, resp *ws.Message) wsErrorPayload {
 	t.Helper()
 	var errPayload wsErrorPayload
@@ -309,6 +331,7 @@ func decodeWSError(t *testing.T, resp *ws.Message) wsErrorPayload {
 	return errPayload
 }
 
+// decodeWSItem unmarshals a SecretListItem from a WebSocket response.
 func decodeWSItem(t *testing.T, resp *ws.Message) *SecretListItem {
 	t.Helper()
 	var item SecretListItem
@@ -318,6 +341,7 @@ func decodeWSItem(t *testing.T, resp *ws.Message) *SecretListItem {
 	return &item
 }
 
+// TestWSHandler_CopySuccessAndShape verifies a WebSocket copy returns the copied item with the expected shape.
 func TestWSHandler_CopySuccessAndShape(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	h := newWSHandler(t, svc)
@@ -334,6 +358,7 @@ func TestWSHandler_CopySuccessAndShape(t *testing.T) {
 	}
 }
 
+// TestWSHandler_CopyNullNameBadRequest verifies a WebSocket copy with a null name returns a BAD_REQUEST error.
 func TestWSHandler_CopyNullNameBadRequest(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	h := newWSHandler(t, svc)
@@ -349,6 +374,7 @@ func TestWSHandler_CopyNullNameBadRequest(t *testing.T) {
 	}
 }
 
+// TestWSHandler_CopyConflict verifies a WebSocket copy name collision returns a CONFLICT error.
 func TestWSHandler_CopyConflict(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	h := newWSHandler(t, svc)
@@ -365,6 +391,7 @@ func TestWSHandler_CopyConflict(t *testing.T) {
 	}
 }
 
+// TestWSHandler_CopyMissingSourceNotFound verifies a WebSocket copy of an unknown source returns NOT_FOUND.
 func TestWSHandler_CopyMissingSourceNotFound(t *testing.T) {
 	svc := newSecretsHandlerService(t, nil, nil, nil)
 	h := newWSHandler(t, svc)
@@ -378,6 +405,7 @@ func TestWSHandler_CopyMissingSourceNotFound(t *testing.T) {
 	}
 }
 
+// TestWSHandler_CopyUnauthorizedDestinationNotFound verifies an unauthorized WebSocket copy destination returns NOT_FOUND.
 func TestWSHandler_CopyUnauthorizedDestinationNotFound(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	h := newWSHandler(t, svc)
@@ -393,6 +421,7 @@ func TestWSHandler_CopyUnauthorizedDestinationNotFound(t *testing.T) {
 	}
 }
 
+// TestWSHandler_CopyInternalErrorSanitized verifies WebSocket copy internal errors return INTERNAL_ERROR without leaking details.
 func TestWSHandler_CopyInternalErrorSanitized(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, errors.New("database unreachable"), nil)
 	h := newWSHandler(t, svc)
@@ -412,6 +441,7 @@ func TestWSHandler_CopyInternalErrorSanitized(t *testing.T) {
 	}
 }
 
+// TestWSHandler_WorkspaceSourceWithoutWorkspaceIDNotFound verifies a WebSocket copy of a workspace source without workspace_id returns NOT_FOUND.
 func TestWSHandler_WorkspaceSourceWithoutWorkspaceIDNotFound(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)
 	h := newWSHandler(t, svc)
@@ -427,6 +457,7 @@ func TestWSHandler_WorkspaceSourceWithoutWorkspaceIDNotFound(t *testing.T) {
 	}
 }
 
+// TestWSHandler_ReusedEnvelopeResetsAllFields verifies reusing a wsTransferPayload across decodes fully resets all fields, including after malformed and semantic decode failures.
 func TestWSHandler_ReusedEnvelopeResetsAllFields(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true, "workspace-b": true}, nil, nil)
 	h := newWSHandler(t, svc)

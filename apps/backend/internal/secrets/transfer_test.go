@@ -13,6 +13,7 @@ import (
 	"github.com/kandev/kandev/internal/db"
 )
 
+// testTransferContext returns a context carrying the given user identity, or a bare background context when userID is empty.
 func testTransferContext(userID string) context.Context {
 	if userID == "" {
 		return context.Background()
@@ -20,6 +21,7 @@ func testTransferContext(userID string) context.Context {
 	return authn.WithIdentity(context.Background(), authn.Identity{UserID: userID})
 }
 
+// mustCreate seeds a secret via the store, failing the test on error.
 func mustCreate(t *testing.T, store SecretStore, secret *SecretWithValue) {
 	t.Helper()
 	if err := store.Create(context.Background(), secret); err != nil {
@@ -27,6 +29,7 @@ func mustCreate(t *testing.T, store SecretStore, secret *SecretWithValue) {
 	}
 }
 
+// TestTransferStore_CopyGlobalToWorkspace verifies a global-to-workspace copy keeps the source, sets timestamps, and carries the value server-side.
 func TestTransferStore_CopyGlobalToWorkspace(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -56,6 +59,7 @@ func TestTransferStore_CopyGlobalToWorkspace(t *testing.T) {
 	}
 }
 
+// TestTransferStore_CopyWorkspaceToGlobal verifies a workspace-to-global copy lands in the global scope with the value intact and the source kept.
 func TestTransferStore_CopyWorkspaceToGlobal(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -80,6 +84,7 @@ func TestTransferStore_CopyWorkspaceToGlobal(t *testing.T) {
 	}
 }
 
+// TestTransferStore_CopyWorkspaceToWorkspace verifies a workspace-to-workspace copy lands in the target workspace with the value intact.
 func TestTransferStore_CopyWorkspaceToWorkspace(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -101,6 +106,7 @@ func TestTransferStore_CopyWorkspaceToWorkspace(t *testing.T) {
 	}
 }
 
+// TestTransferStore_MoveWorkspaceToGlobalRemovesSource verifies moving a workspace secret to global removes the source and preserves the value.
 func TestTransferStore_MoveWorkspaceToGlobalRemovesSource(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -125,6 +131,7 @@ func TestTransferStore_MoveWorkspaceToGlobalRemovesSource(t *testing.T) {
 	}
 }
 
+// TestTransferStore_MoveGlobalToWorkspaceRemovesSource verifies moving a global secret into a workspace removes the source.
 func TestTransferStore_MoveGlobalToWorkspaceRemovesSource(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -142,6 +149,7 @@ func TestTransferStore_MoveGlobalToWorkspaceRemovesSource(t *testing.T) {
 	}
 }
 
+// TestTransferStore_ConflictGlobal verifies a Global target name collision returns ErrSecretNameConflict.
 func TestTransferStore_ConflictGlobal(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -154,6 +162,7 @@ func TestTransferStore_ConflictGlobal(t *testing.T) {
 	}
 }
 
+// TestTransferStore_ConflictWorkspace verifies a workspace target name collision returns ErrSecretNameConflict.
 func TestTransferStore_ConflictWorkspace(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -166,6 +175,7 @@ func TestTransferStore_ConflictWorkspace(t *testing.T) {
 	}
 }
 
+// TestTransferStore_ConflictLegacyEmptyScopeGlobal verifies a legacy empty-scope row conflicts with a Global target name.
 func TestTransferStore_ConflictLegacyEmptyScopeGlobal(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -190,6 +200,7 @@ func TestTransferStore_ConflictLegacyEmptyScopeGlobal(t *testing.T) {
 	}
 }
 
+// TestTransferStore_SourceMissing verifies copying an unknown source returns ErrNotFound.
 func TestTransferStore_SourceMissing(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	_, err := store.CopyScoped(context.Background(), "nope", "", ScopeWorkspace, "workspace-a", "x", nil)
@@ -198,6 +209,7 @@ func TestTransferStore_SourceMissing(t *testing.T) {
 	}
 }
 
+// TestTransferStore_VerifyDestinationErrorRollsBack verifies a failing verifyDestination callback rolls back the copy, leaving no destination row and the source intact.
 func TestTransferStore_VerifyDestinationErrorRollsBack(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -222,6 +234,7 @@ func TestTransferStore_VerifyDestinationErrorRollsBack(t *testing.T) {
 	}
 }
 
+// TestTransferStore_MoveFailpointAfterInsertRollsBack verifies Move is transactional: an injected delete failure rolls back the inserted copy.
 func TestTransferStore_MoveFailpointAfterInsertRollsBack(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
@@ -245,6 +258,7 @@ func TestTransferStore_MoveFailpointAfterInsertRollsBack(t *testing.T) {
 	}
 }
 
+// TestTransferStore_PerUserScoping verifies secrets are per-user: another user cannot copy or read them, while the owner can move and read the copy.
 func TestTransferStore_PerUserScoping(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	alice := testTransferContext("user-a")
@@ -279,6 +293,7 @@ func TestTransferStore_PerUserScoping(t *testing.T) {
 	}
 }
 
+// TestTransferStore_UserVisibleStoreRejectsInternalSource verifies the user-visible wrapper rejects copying internal backend-owned secrets as ErrNotFound.
 func TestTransferStore_UserVisibleStoreRejectsInternalSource(t *testing.T) {
 	raw := newTestSQLiteStore(t)
 	// Seed an internal backend-owned row through the RAW store (the wrapper
@@ -295,6 +310,7 @@ func TestTransferStore_UserVisibleStoreRejectsInternalSource(t *testing.T) {
 	}
 }
 
+// TestTransferStore_ConcurrentSameTargetSQLite verifies concurrent same-name copies to a Global target serialize on the SQLite write lock with exactly one winner.
 func TestTransferStore_ConcurrentSameTargetSQLite(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "secrets.db")

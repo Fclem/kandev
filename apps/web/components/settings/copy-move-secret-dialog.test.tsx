@@ -66,6 +66,7 @@ const workspaceSecret: SecretListItem = {
   workspace_id: "ws-1",
 };
 
+/** Renders the dialog with test fakes and returns the spies. */
 function renderDialog(overrides: Partial<Parameters<typeof CopyMoveSecretDialog>[0]> = {}) {
   const onCompleted = vi.fn();
   const onClose = vi.fn();

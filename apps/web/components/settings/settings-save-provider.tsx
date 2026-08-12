@@ -160,6 +160,11 @@ type SettingsSaveProviderBodyProps = {
   children: ReactNode;
 };
 
+/**
+ * Renders the provider's context stack (registry + coordinator) around the
+ * page content and the floating save bar/dialog. Extracted to keep
+ * SettingsSaveProvider under the line limit.
+ */
 function SettingsSaveProviderBody({
   registry,
   coordinator,
@@ -213,6 +218,11 @@ export function useSettingsSaveCoordinator(): SettingsSaveCoordinator {
   return coordinator;
 }
 
+/**
+ * Owns the save/discard/continue actions and the dirty-navigation blocker:
+ * registers the blocker while anything is dirty, saves and settles a pending
+ * navigation intent, or discards the dirty contributors and leaves.
+ */
 function useSaveNavigationFlow({
   saveAll,
   contributors,

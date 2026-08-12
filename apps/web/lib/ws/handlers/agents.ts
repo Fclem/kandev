@@ -15,19 +15,17 @@ function getAgentId(raw: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-// Office-scoped profiles are owned by the office channels, never the kanban
-// settings surface (the HTTP agent list hides them via filterGlobalProfiles).
-// Defense in depth: ignore their events here so a stray broadcast cannot leak
-// them into the global settings store and selectors.
+/**
+ * Office-scoped profiles are owned by the office channels, never the kanban
+ * settings surface (the HTTP agent list hides them via filterGlobalProfiles).
+ * Defense in depth: ignore their events here so a stray broadcast cannot leak
+ * them into the global settings store and selectors.
+ */
 function isOfficeScoped(normalized: { workspaceId?: string }): boolean {
   return Boolean(normalized.workspaceId);
 }
 
-// Deletion tombstones keyed by profile id -> deletion event timestamp, so a
-// delayed create/update event cannot resurrect a profile that was deleted
-// after the event was produced. Cleared when a genuinely newer create arrives.
-const deletionTombstones = new Map<string, string>();
-
+/** Finds a profile in the settings agents list by id, across all agents. */
 function findExistingProfile(state: AppState, profileId: string): AgentProfile | undefined {
   for (const item of state.settingsAgents.items) {
     const found = item.profiles.find((p) => p.id === profileId);
@@ -35,6 +33,11 @@ function findExistingProfile(state: AppState, profileId: string): AgentProfile |
   }
   return undefined;
 }
+
+// Deletion tombstones keyed by profile id -> deletion event timestamp, so a
+// delayed create/update event cannot resurrect a profile that was deleted
+// after the event was produced. Cleared when a genuinely newer create arrives.
+const deletionTombstones = new Map<string, string>();
 
 /**
  * A profile event is stale when the store already holds a newer revision of
@@ -59,6 +62,11 @@ function isStaleProfileEvent(
   return Boolean(existingOption && (existingOption.updatedAt ?? "") > (normalized.updatedAt ?? ""));
 }
 
+/**
+ * Applies an agent.profile.created event, skipping office-scoped or stale
+ * events (see isStaleProfileEvent) and clearing the deletion tombstone when a
+ * genuinely newer create arrives.
+ */
 function handleProfileCreated(
   state: AppState,
   profile: unknown,
@@ -92,6 +100,10 @@ function handleProfileCreated(
   };
 }
 
+/**
+ * Applies an agent.profile.updated event, skipping office-scoped or stale
+ * events so a delayed update never regresses newer stored state.
+ */
 function handleProfileUpdated(
   state: AppState,
   profile: unknown,
@@ -120,6 +132,12 @@ function handleProfileUpdated(
   };
 }
 
+/**
+ * Applies an agent.profile.deleted event: removes the profile from both
+ * slices and records a deletion tombstone (keyed by the event timestamp) so a
+ * delayed create/update cannot resurrect it. Office-scoped deletes are
+ * ignored.
+ */
 function handleProfileDeleted(
   state: AppState,
   profile: unknown,

@@ -17,6 +17,10 @@ import { useRouter } from "@/lib/routing/client-router";
 import { runWithNavigationBlockerBypassed } from "@/lib/routing/navigation-guard";
 import type { Agent, AgentProfile } from "@/lib/types/http";
 
+/**
+ * Returns the localized reason a profile draft cannot be saved yet (missing
+ * name or model resolution still pending), or undefined when it is savable.
+ */
 export function profileSaveInvalidReason(
   profileName: string,
   modelConfigResolutionPending: boolean,

@@ -453,6 +453,10 @@ func (r *sqliteRepository) UpsertAgentProfileMcpConfig(ctx context.Context, conf
 	return r.upsertAgentProfileMcpConfig(ctx, r.db, config)
 }
 
+// upsertAgentProfileMcpConfig inserts or replaces the MCP config row for a
+// profile, running against the caller-supplied execer so the duplicate can
+// commit it in the same transaction as the profile row. Defaults nil maps and
+// fills timestamps on the passed config in place.
 func (r *sqliteRepository) upsertAgentProfileMcpConfig(ctx context.Context, execer profileExecer, config *models.AgentProfileMcpConfig) error {
 	if config.Servers == nil {
 		config.Servers = map[string]interface{}{}
@@ -600,6 +604,9 @@ type profileExecer interface {
 	Rebind(query string) string
 }
 
+// insertAgentProfile writes the profile row through the caller-supplied
+// execer, sharing one SQL statement between CreateAgentProfile and the
+// transactional duplicate path. The profile's Enabled value is written as-is.
 func (r *sqliteRepository) insertAgentProfile(ctx context.Context, execer profileExecer, profile *models.AgentProfile) error {
 	cliFlagsJSON, err := cliFlagsToJSON(profile.CLIFlags)
 	if err != nil {

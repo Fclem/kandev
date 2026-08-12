@@ -397,18 +397,25 @@ func isProfileNotFoundErr(err error) bool {
 	return errors.Is(err, sql.ErrNoRows) || strings.Contains(err.Error(), "agent profile not found")
 }
 
+// cloneCLIFlags returns a copy of the profile's CLI flag list so the
+// duplicated profile never shares slice memory with the source.
 func cloneCLIFlags(in []models.CLIFlag) []models.CLIFlag {
 	out := make([]models.CLIFlag, len(in))
 	copy(out, in)
 	return out
 }
 
+// cloneEnvVars returns a copy of the profile's env-var list (secret
+// references included) so the duplicated profile never shares slice memory
+// with the source.
 func cloneEnvVars(in []models.ProfileEnvVar) []models.ProfileEnvVar {
 	out := make([]models.ProfileEnvVar, len(in))
 	copy(out, in)
 	return out
 }
 
+// cloneStringMap returns a shallow copy of a string map, preserving nil so a
+// source with no config options stays nil on the copy.
 func cloneStringMap(in map[string]string) map[string]string {
 	if in == nil {
 		return nil
@@ -420,6 +427,8 @@ func cloneStringMap(in map[string]string) map[string]string {
 	return out
 }
 
+// cloneStringInterfaceMap returns a shallow copy of a string-keyed interface
+// map (used for MCP servers/meta), preserving nil.
 func cloneStringInterfaceMap(in map[string]interface{}) map[string]interface{} {
 	if in == nil {
 		return nil
@@ -431,6 +440,8 @@ func cloneStringInterfaceMap(in map[string]interface{}) map[string]interface{} {
 	return out
 }
 
+// cloneIntPtr returns a copy of an int pointer so the duplicated profile never
+// aliases the source's field, preserving nil.
 func cloneIntPtr(in *int) *int {
 	if in == nil {
 		return nil

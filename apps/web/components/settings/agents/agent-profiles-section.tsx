@@ -80,6 +80,8 @@ export function AgentProfilesSubList({
 /**
  * The per-profile actions dropdown (duplicate, delete). The trigger exposes a
  * touch-sized hitbox (>= 44px) so the row actions are reachable on mobile.
+ * Duplication uses the shared useProfileDuplicate hook (per-profile in-flight
+ * guard, revision-aware store merge).
  */
 function ProfileRowActions({
   agent,

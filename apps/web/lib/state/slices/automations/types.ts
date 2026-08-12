@@ -50,6 +50,12 @@ export type AutomationsSliceActions = {
    * given generation — a stale callback from an unmounted hook instance
    * cannot clear a newer mutation's slot. */
   endAutomationRunDelete: (automationId: string, generation: number) => void;
+  /**
+   * Advances the mutation epoch without claiming the serialization slot. A
+   * delete calls this when it settles so list responses that were captured
+   * while it was in flight go stale — they may hold pre-delete rows.
+   */
+  advanceAutomationRunEpoch: (automationId: string) => void;
 };
 
 export type AutomationsSlice = AutomationsSliceState & AutomationsSliceActions;

@@ -47,25 +47,27 @@ function fetchRuns(
 function revertAfterFailedDelete(
   automationId: string,
   fallbackRuns: AutomationRun[],
-  getEpoch: () => number,
-  setRuns: (automationId: string, runs: AutomationRun[]) => void,
-  endDelete: () => void,
+  store: DeleteStore,
 ): void {
-  const captured = getEpoch();
+  // The delete has settled: mark every list response captured while it was
+  // in flight stale — those may hold rows the delete removed server-side.
+  store.bumpEpoch();
+  const captured = store.getEpoch();
   listAutomationRuns(automationId)
     .then((result) => {
-      if (getEpoch() === captured) setRuns(automationId, result ?? []);
-      endDelete();
+      if (store.getEpoch() === captured) store.setRuns(automationId, result ?? []);
+      store.endDelete();
     })
     .catch(() => {
-      if (getEpoch() === captured) setRuns(automationId, fallbackRuns);
+      if (store.getEpoch() === captured) store.setRuns(automationId, fallbackRuns);
       toast.error(t("automations:couldNotRefreshRuns"));
-      endDelete();
+      store.endDelete();
     });
 }
 
 type DeleteStore = {
   getEpoch: () => number;
+  bumpEpoch: () => void;
   clearRuns: (automationId: string) => void;
   removeRun: (automationId: string, runId: string) => void;
   restoreRun: (automationId: string, run: AutomationRun) => void;
@@ -98,19 +100,17 @@ function executeDeleteAll(
     store.clearRuns(automationId); // optimistic
     deleteAllAutomationRuns(automationId, workspaceId)
       .then(() => {
+        // Settled: invalidate list responses captured while the delete was
+        // in flight (they may hold rows the delete removed), then reconcile
+        // with the authoritative post-delete list.
+        store.bumpEpoch();
         fetchRuns(automationId, store.getEpoch, store.setRunsLoading, store.setRuns);
         store.endDelete();
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : t("automations:failedToDeleteRuns");
         toast.error(msg);
-        revertAfterFailedDelete(
-          automationId,
-          previousRuns,
-          store.getEpoch,
-          store.setRuns,
-          store.endDelete,
-        );
+        revertAfterFailedDelete(automationId, previousRuns, store);
       });
     return;
   }
@@ -121,9 +121,11 @@ function executeDeleteAll(
   ids.forEach((id) => store.removeRun(automationId, id)); // optimistic
   Promise.allSettled(ids.map((id) => deleteAutomationRun(id, workspaceId))).then((results) => {
     if (results.every((result) => result.status === "fulfilled")) {
-      // Reconcile with the authoritative post-delete list: an in-flight
-      // refresh may have returned pre-delete rows, and a run created after
-      // the deletes completed must not be wiped by a blanket clear.
+      // Settled: invalidate list responses captured while the deletes were
+      // in flight, then reconcile with the authoritative post-delete list:
+      // an in-flight refresh may have returned pre-delete rows, and a run
+      // created after the deletes completed must not be wiped.
+      store.bumpEpoch();
       fetchRuns(automationId, store.getEpoch, store.setRunsLoading, store.setRuns);
       store.endDelete();
       return;
@@ -137,13 +139,7 @@ function executeDeleteAll(
         ? first.reason.message
         : t("automations:failedToDeleteRuns");
     toast.error(msg);
-    revertAfterFailedDelete(
-      automationId,
-      previousRuns,
-      store.getEpoch,
-      store.setRuns,
-      store.endDelete,
-    );
+    revertAfterFailedDelete(automationId, previousRuns, store);
   });
 }
 
@@ -170,8 +166,10 @@ function executeDeleteRun(
       // resolve between the optimistic removeRun above and this success
       // callback and overwrite the store with the pre-delete list,
       // resurrecting the row. Removing it again here is a no-op unless
-      // that happened.
+      // that happened; the epoch bump then invalidates any list response
+      // captured while the delete was in flight.
       store.removeRun(automationId, runId);
+      store.bumpEpoch();
       store.endDelete();
     })
     .catch((err: unknown) => {
@@ -179,6 +177,7 @@ function executeDeleteRun(
       // fallback for a non-Error rejection is copy.
       const msg = err instanceof Error ? err.message : t("automations:failedToDeleteRun");
       toast.error(msg);
+      store.bumpEpoch();
       const captured = store.getEpoch();
       listAutomationRuns(automationId)
         .then((result) => {
@@ -258,6 +257,7 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
   const makeStore = useCallback(
     (end: () => void): DeleteStore => ({
       getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId ?? ""] ?? 0,
+      bumpEpoch: () => storeApi.getState().advanceAutomationRunEpoch(automationId ?? ""),
       clearRuns,
       removeRun,
       restoreRun,

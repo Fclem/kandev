@@ -60,6 +60,7 @@ function createRunsActions(
   | "restoreAutomationRun"
   | "beginAutomationRunDelete"
   | "endAutomationRunDelete"
+  | "advanceAutomationRunEpoch"
 > {
   return {
     setAutomationRuns: (automationId, runs) =>
@@ -114,6 +115,11 @@ function createRunsActions(
         if (draft.automationRuns.deleting[automationId] === generation) {
           draft.automationRuns.deleting[automationId] = false;
         }
+      }),
+    advanceAutomationRunEpoch: (automationId) =>
+      set((draft) => {
+        draft.automationRuns.mutationEpoch[automationId] =
+          (draft.automationRuns.mutationEpoch[automationId] ?? 0) + 1;
       }),
   };
 }

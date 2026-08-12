@@ -69,6 +69,17 @@ const storeActions = {
       };
     }
   },
+  advanceAutomationRunEpoch: (automationId: string) => {
+    mockState = {
+      automationRuns: {
+        ...mockState.automationRuns,
+        mutationEpoch: {
+          ...mockState.automationRuns.mutationEpoch,
+          [automationId]: (mockState.automationRuns.mutationEpoch[automationId] ?? 0) + 1,
+        },
+      },
+    };
+  },
 };
 
 vi.mock("@/components/state-provider", () => ({
@@ -474,6 +485,43 @@ describe("useAutomationRuns - status-scoped delete-all races", () => {
     await act(async () => {
       stale.resolve([runX, runY]);
       await stale.promise;
+    });
+    rerender();
+    expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
+  });
+
+  it("discards a fetch that started during a scoped delete-all and resolves after it succeeds", async () => {
+    const runX = mkRun("run-x");
+    const runY = mkRun("run-y");
+    setRuns(AUTOMATION_ID, [runX, runY]);
+
+    const during = deferred<AutomationRun[]>();
+    vi.mocked(listAutomationRuns)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
+      .mockReturnValueOnce(during.promise) // fetch started during the delete
+      .mockResolvedValue([runY]); // authoritative post-delete refresh
+    vi.mocked(deleteAutomationRun).mockResolvedValue({ deleted: true });
+
+    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+
+    act(() => {
+      result.current.deleteAllRuns(["run-x"]); // claims the epoch
+      result.current.refresh(); // starts while the delete is in flight
+    });
+    // The delete settles and reconciles with the post-delete list.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+    expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
+
+    // The pre-delete fetch resolves after the delete settled — the settle
+    // epoch bump must discard it instead of resurrecting run-x.
+    await act(async () => {
+      during.resolve([runX, runY]);
+      await during.promise;
     });
     rerender();
     expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);

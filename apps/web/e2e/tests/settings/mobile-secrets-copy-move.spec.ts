@@ -1,5 +1,8 @@
 import { test, expect } from "../../fixtures/test-base";
-import { assertNoDocumentHorizontalOverflow } from "../../helpers/layout-assertions";
+import {
+  assertNoDescendantOverflowsRight,
+  assertNoDocumentHorizontalOverflow,
+} from "../../helpers/layout-assertions";
 
 const WORKSPACE_VALUE = "e2e-mobile-copy-move-value";
 
@@ -58,6 +61,13 @@ test.describe("mobile-secrets-copy-move", () => {
       .boundingBox();
     expect(moveButtonBox).not.toBeNull();
     expect(moveButtonBox!.y + moveButtonBox!.height).toBeLessThanOrEqual(844);
+
+    // Max-length unbroken text must not push any dialog descendant past the
+    // sheet's right edge (title, input, and the conflict message wrap).
+    const longName = "x".repeat(100);
+    await dialog.getByLabel("Name").fill(longName);
+    await assertNoDescendantOverflowsRight(dialog, "mobile copy/move dialog with 100-char name");
+    await dialog.getByLabel("Name").fill(movedName);
 
     await dialog.getByRole("button", { name: "Move", exact: true }).click();
     await expect(dialog).toBeHidden();

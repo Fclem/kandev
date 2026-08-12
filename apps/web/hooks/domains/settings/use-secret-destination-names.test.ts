@@ -82,4 +82,24 @@ describe("useSecretDestinationNames", () => {
     view.rerender({ workspaceId: "workspace-b" });
     expect(mockListSecrets).toHaveBeenCalledTimes(2);
   });
+
+  it("refetches the same workspace when the refresh key changes", async () => {
+    mockListSecrets.mockResolvedValue([]);
+    const view = renderHook(
+      ({ refreshKey }: { refreshKey: number }) =>
+        useSecretDestinationNames("workspace", "workspace-a", refreshKey),
+      { initialProps: { refreshKey: 0 } },
+    );
+    await waitFor(() => expect(view.result.current.loaded).toBe(true));
+    expect(mockListSecrets).toHaveBeenCalledTimes(1);
+
+    // Same key: cached.
+    view.rerender({ refreshKey: 0 });
+    expect(mockListSecrets).toHaveBeenCalledTimes(1);
+
+    // New transfer session: the per-workspace cache must be invalidated so a
+    // secret copied in the previous session shows up as a conflict now.
+    view.rerender({ refreshKey: 1 });
+    await waitFor(() => expect(mockListSecrets).toHaveBeenCalledTimes(2));
+  });
 });

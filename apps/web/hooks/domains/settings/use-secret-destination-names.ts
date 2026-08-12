@@ -20,15 +20,26 @@ export function secretNameConflict(names: string[], name: string): boolean {
  * conflict pre-check. Global names come from the store; workspace names are
  * fetched on demand and cached per workspace.
  */
-export function useSecretDestinationNames(scope: SecretScope, workspaceId?: string) {
+export function useSecretDestinationNames(
+  scope: SecretScope,
+  workspaceId?: string,
+  refreshKey = 0,
+) {
   const globalItems = useAppStore((state) => state.secrets.items);
   const [workspaceNames, setWorkspaceNames] = useState<string[]>([]);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(scope !== "workspace");
   // Ref-based cache key: a state key would re-run the effect (and its
   // cleanup, which cancels the in-flight request) on every fetch.
   const cacheKeyRef = useRef("");
+  const lastRefreshKey = useRef(refreshKey);
 
   useEffect(() => {
+    // A new transfer session (different secret or reopened dialog) must see
+    // fresh destination names, e.g. a secret copied in the previous session.
+    if (refreshKey !== lastRefreshKey.current) {
+      lastRefreshKey.current = refreshKey;
+      cacheKeyRef.current = "";
+    }
     if (scope !== "workspace") {
       return;
     }
@@ -63,7 +74,7 @@ export function useSecretDestinationNames(scope: SecretScope, workspaceId?: stri
     return () => {
       cancelled = true;
     };
-  }, [scope, workspaceId]);
+  }, [scope, workspaceId, refreshKey]);
 
   const names =
     scope === "global"

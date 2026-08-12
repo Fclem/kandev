@@ -327,6 +327,37 @@ describe("CopyMoveSecretDialog conflict handling", () => {
       resolve({ id: "new-1", name: DEFAULT_GLOBAL_NAME });
     });
   });
+
+  it("discards a stale transfer completion after switching to another secret", async () => {
+    // The dialog stays mounted between opens. Submit for secret A, then (while
+    // the request is in flight) reopen the dialog for secret B: A's completion
+    // must not fire onCompleted against B's dialog.
+    const { promise, resolve } = Promise.withResolvers<unknown>();
+    mockCopySecret.mockReturnValue(promise);
+    const { view, onCompleted } = renderDialog({ secret: workspaceSecret, originToken: "Alpha" });
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(mockCopySecret).toHaveBeenCalledTimes(1);
+
+    // The close affordance is disabled while a transfer is in flight.
+    expect((screen.getByRole("button", { name: "Close" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+
+    view.rerender(
+      <CopyMoveSecretDialog
+        secret={globalSecret}
+        originToken="general"
+        open
+        onClose={vi.fn()}
+        onCompleted={onCompleted}
+      />,
+    );
+    await act(async () => {
+      resolve({ id: "new-1", name: DEFAULT_GLOBAL_NAME });
+    });
+
+    expect(onCompleted).not.toHaveBeenCalled();
+  });
 });
 
 describe("truncateUtf8Bytes", () => {

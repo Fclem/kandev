@@ -71,6 +71,7 @@ export function CopyMoveSecretDialog({
   const [destination, setDestination] = useState<SecretDestination | null>(null);
   const [name, setName] = useState(() => buildDefaultTargetName(secret.name, originToken));
   const [nameError, setNameError] = useState<string | null>(null);
+  const [destinationNamesKey, setDestinationNamesKey] = useState(0);
 
   const { destinations, workspaceNameById, destinationValid } = useDestinationOptions(
     secret,
@@ -81,6 +82,7 @@ export function CopyMoveSecretDialog({
   const destinationNames = useSecretDestinationNames(
     destination?.scope ?? "global",
     destination?.scope === "workspace" ? destination.workspaceId : undefined,
+    destinationNamesKey,
   );
   const conflict = nameError === null && destination !== null && destinationNames.conflict(name);
 
@@ -103,6 +105,7 @@ export function CopyMoveSecretDialog({
     setName,
     setNameError,
     clearError,
+    resetDestinationNames: () => setDestinationNamesKey((key) => key + 1),
   });
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -162,6 +165,7 @@ function useTransferFormReset(
     setName: (name: string) => void;
     setNameError: (error: string | null) => void;
     clearError: () => void;
+    resetDestinationNames: () => void;
   },
 ) {
   const lastSecretId = useRef(secret.id);
@@ -178,6 +182,7 @@ function useTransferFormReset(
     setters.setName(buildDefaultTargetName(secret.name, originToken));
     setters.setNameError(null);
     setters.clearError();
+    setters.resetDestinationNames();
   }, [secret.id, originToken, open, setters]);
 }
 
@@ -244,6 +249,12 @@ function useTransferSubmit({
   const { t } = useTranslation();
   const [isBusy, setIsBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // The dialog stays mounted across opens; a completion or error for a
+  // previously targeted secret must not mutate the dialog now showing another.
+  const secretIdRef = useRef(secret.id);
+  useEffect(() => {
+    secretIdRef.current = secret.id;
+  }, [secret.id]);
 
   const canSubmit = transferCanSubmit({
     isBusy,
@@ -260,6 +271,7 @@ function useTransferSubmit({
     if (!canSubmit || destination === null) {
       return;
     }
+    const startedSecretId = secret.id;
     setIsBusy(true);
     setFormError(null);
     const trimmedName = name.trim();
@@ -280,8 +292,15 @@ function useTransferSubmit({
         mode === "copy"
           ? await copySecret(secret.id, payload, sourceOptions)
           : await moveSecret(secret.id, payload, sourceOptions);
-      onCompleted(item, mode);
+      if (secretIdRef.current === startedSecretId) {
+        onCompleted(item, mode);
+      }
     } catch (err) {
+      // A stale failure (user switched to another secret mid-flight) must not
+      // paint an error onto the dialog now showing a different secret.
+      if (secretIdRef.current !== startedSecretId) {
+        return;
+      }
       if (err instanceof ApiError && err.status === 409) {
         setNameError(t("settings:secretNameConflictInDestination", { name: trimmedName }));
       } else {

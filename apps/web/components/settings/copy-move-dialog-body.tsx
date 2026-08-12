@@ -145,6 +145,7 @@ function TransferDialogFooter({
           variant="ghost"
           size="icon"
           aria-label={t("common:close")}
+          disabled={busy}
           className="absolute top-2 right-2 min-h-11 min-w-11 cursor-pointer"
         >
           <IconX className="h-4 w-4" />
@@ -189,7 +190,7 @@ function TargetNameField({
         className="min-h-11"
       />
       {invalid && (
-        <p id="copy-move-name-error" className="text-xs text-destructive">
+        <p id="copy-move-name-error" className="text-xs text-destructive break-words">
           {nameError ?? t("settings:secretNameConflictInDestination", { name: name.trim() })}
         </p>
       )}

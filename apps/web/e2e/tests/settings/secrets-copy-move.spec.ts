@@ -161,7 +161,9 @@ test.describe("secrets-copy-move", () => {
   });
 
   test("restores focus to the trigger after closing the dialog", async ({ testPage }) => {
-    const sourceName = "E2E Copy Move Focus";
+    // Unique per run: retries must not collide with a secret a previous
+    // attempt left behind (the fixture reset does not remove secrets).
+    const sourceName = `E2E Copy Move Focus ${Date.now()} ${Math.random().toString(36).slice(2, 6)}`;
     await createSecretFromSettings(testPage, "/settings/general/secrets", sourceName, GLOBAL_VALUE);
 
     await testPage.getByRole("button", { name: `Copy or move ${sourceName}` }).click();

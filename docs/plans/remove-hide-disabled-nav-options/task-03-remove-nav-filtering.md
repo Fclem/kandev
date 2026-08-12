@@ -71,8 +71,9 @@ branches list every integration and every profile unconditionally.
    param from `buildWorkspacesBranch`, and the `hideDisabled` param from
    `buildAgentsBranch` (and its `.filter((profile) => !hideDisabled ||
    (profile.enabled ?? true))`). Update the doc comments. Keep the
-   exported `IntegrationSlug` type (it types the node `integrationSlug`
-   field consumed by `integration-enabled.tsx`).
+   `IntegrationSlug` type (it still types the node `integrationSlug`
+   field, consumed by `integration-enabled.tsx` via the node), but stop
+   exporting it — no external consumer remains.
 5. Test updates:
    - `settings-menu-branches.test.ts`: in the "buildWorkspacesBranch
      integration visibility" describe, drop the cases that pass a visible

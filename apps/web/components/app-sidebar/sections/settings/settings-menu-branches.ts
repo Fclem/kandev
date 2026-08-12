@@ -31,7 +31,7 @@ import {
  * `{ text }` for a record name or brand) so `t()` runs at render.
  */
 
-export type IntegrationSlug = (typeof WORKSPACE_INTEGRATIONS)[number][0];
+type IntegrationSlug = (typeof WORKSPACE_INTEGRATIONS)[number][0];
 
 export type SettingsMenuNodeLabel =
   /** A catalog key, translated at render. */

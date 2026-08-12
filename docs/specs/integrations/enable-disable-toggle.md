@@ -168,8 +168,12 @@ is not synced across devices/browsers.
   (`components/app-sidebar/sections/settings/workspaces-group.tsx`): its
   per-workspace Integrations list keeps the configured-status badge
   ("Enabled" = credentials/health present), which is unrelated to the
-  enable/disable toggle. The list itself is unfiltered — every integration
-  is listed there, disabled ones included.
+  enable/disable toggle for every integration except Sentry — Sentry's
+  badge probe (`useSentryAvailable`) also requires its per-workspace
+  toggle to be on, a pre-existing asymmetry carried over from the
+  pre-menu tree (`hooks/domains/integrations/use-enabled-integrations.ts`).
+  The list itself is unfiltered — every integration is listed there,
+  disabled ones included, with or without the badge.
 - Sentry has no main-sidebar nav destination today (see
   `lib/navigation/core-destinations.ts` — only Azure DevOps, GitHub, GitLab,
   Jira and Linear are nav-gated). Sentry DOES appear in the Settings left

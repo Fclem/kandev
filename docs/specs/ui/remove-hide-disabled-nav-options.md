@@ -30,10 +30,14 @@ observable consumes.
 - The agents settings page (`/settings/agents`) SHALL no longer render
   the "Hide disabled agent profiles from left panel navigation" row.
 - Nav visibility of integrations SHALL be gated by configuration only: a
-  configured integration always appears in the sidebar Integrations
-  section, the mobile-menu integrations group, and the Settings left
-  panel's per-workspace Integrations branch, regardless of its
-  enable/disable toggle state.
+  configured integration with a navigation destination always appears in
+  the sidebar Integrations section, the mobile-menu integrations group,
+  and the Settings left panel's per-workspace Integrations branch,
+  regardless of its enable/disable toggle state. Sentry is the exception
+  on the sidebar and mobile menu: it has no first-party navigation
+  destination (`lib/navigation/core-destinations.ts` gates only Azure
+  DevOps, GitHub, GitLab, Jira and Linear), so it appears only in the
+  Settings left panel's per-workspace Integrations tree.
 - A disabled agent profile SHALL always appear in the Settings left
   panel's Agents tree (with its "Disabled" badge), regardless of the
   profile's `enabled` state.

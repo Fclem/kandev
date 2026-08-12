@@ -35,6 +35,7 @@ const TASK_ID = "t1";
 const FAILED_STATE = "FAILED";
 const LAUNCH_ACTION = "session.launch";
 const STARTED_AT = "2026-01-01T00:00:00.000Z";
+const LATER_AT = "2026-01-02T00:00:00.000Z";
 
 import {
   resumeWithSilentFallback,
@@ -362,5 +363,105 @@ describe("useSessionResumption prevent-auto-start gate", () => {
       );
     });
     expect(mockSetResumeSkipped).not.toHaveBeenCalled();
+  });
+});
+
+describe("useSessionResumption monotonic terminal hydration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConnectionStatus = "connected";
+    mockPreventAutoStart = false;
+  });
+
+  it("rejects an older terminal status over a live terminal state", async () => {
+    mockSessionItems = {
+      s1: {
+        started_at: STARTED_AT,
+        updated_at: LATER_AT,
+        state: "FAILED",
+      },
+    };
+    mockRequest.mockResolvedValueOnce({
+      session_id: "s1",
+      task_id: "t1",
+      state: "COMPLETED",
+      is_agent_running: false,
+      is_resumable: false,
+      needs_resume: false,
+      updated_at: STARTED_AT, // older than the live FAILED
+    });
+
+    renderHook(() => useSessionResumption("t1", "s1"));
+
+    await waitFor(() => {
+      expect(mockRequest).toHaveBeenCalledWith("task.session.status", {
+        task_id: "t1",
+        session_id: "s1",
+      });
+    });
+    // The stale COMPLETED must not overwrite the newer live FAILED.
+    expect(mockSetTaskSession).not.toHaveBeenCalledWith(
+      expect.objectContaining({ state: "COMPLETED" }),
+    );
+  });
+
+  it("accepts a newer terminal status over a live terminal state", async () => {
+    mockSessionItems = {
+      s1: {
+        started_at: STARTED_AT,
+        updated_at: STARTED_AT,
+        state: "FAILED",
+      },
+    };
+    mockRequest.mockResolvedValueOnce({
+      session_id: "s1",
+      task_id: "t1",
+      state: "COMPLETED",
+      is_agent_running: false,
+      is_resumable: false,
+      needs_resume: false,
+      updated_at: LATER_AT, // newer
+    });
+
+    renderHook(() => useSessionResumption("t1", "s1"));
+
+    await waitFor(() => {
+      expect(mockSetTaskSession).toHaveBeenCalledWith(
+        expect.objectContaining({ state: "COMPLETED" }),
+      );
+    });
+  });
+});
+
+describe("useSessionResumption resume-skipped clearing on running status", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConnectionStatus = "connected";
+    mockPreventAutoStart = true;
+    mockSessionItems = {
+      s1: {
+        started_at: STARTED_AT,
+        updated_at: STARTED_AT,
+        state: "WAITING_FOR_INPUT",
+      },
+    };
+  });
+
+  it("clears the resume-skipped marker when the status confirms the agent is running", async () => {
+    mockRequest.mockResolvedValueOnce({
+      session_id: "s1",
+      task_id: "t1",
+      state: "RUNNING",
+      is_agent_running: true,
+      is_resumable: false,
+      needs_resume: false,
+      updated_at: LATER_AT,
+    });
+
+    renderHook(() => useSessionResumption("t1", "s1"));
+
+    await waitFor(() => {
+      expect(mockSetResumeSkipped).toHaveBeenCalledWith("s1", false);
+    });
   });
 });

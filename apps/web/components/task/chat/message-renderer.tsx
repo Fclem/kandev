@@ -72,6 +72,8 @@ export function shouldShowDescriptionStartButton({
   return (
     (sessionState === "CREATED" || resumeSkipped) &&
     sessionState !== "FAILED" &&
+    sessionState !== "RUNNING" &&
+    sessionState !== "STARTING" &&
     taskState !== "SCHEDULING" &&
     !!taskId &&
     !!sessionId

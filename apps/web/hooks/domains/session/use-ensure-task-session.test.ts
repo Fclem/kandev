@@ -20,7 +20,12 @@ let mockStoreState: {
     steps: Array<{ id: string; position: number }>;
     isLoading: boolean;
   };
-  kanbanMulti: { snapshots: Record<string, { steps: Array<{ id: string; position: number }> }> };
+  kanbanMulti: {
+    snapshots: Record<
+      string,
+      { steps: Array<{ id: string; position: number }>; isPlaceholder?: boolean }
+    >;
+  };
 } = {
   userSettings: { preventAutoStartAgentOnOpen: false },
   kanban: { workflowId: "wf-active", steps: [], isLoading: false },
@@ -43,6 +48,9 @@ vi.mock("@/components/state-provider", () => ({
 import { useEnsureTaskSession, isFinalWorkflowStep } from "./use-ensure-task-session";
 
 const TASK = { id: "task-1" };
+const OTHER_DONE_STEP = "other-done";
+const OTHER_STEP = "other-step";
+const OTHER_WORKFLOW = "wf-other";
 
 function flushMicrotasks() {
   return act(() => Promise.resolve());
@@ -267,17 +275,21 @@ describe("useEnsureTaskSession prevent-auto-start gate", () => {
       },
       kanbanMulti: {
         snapshots: {
-          "wf-other": {
+          [OTHER_WORKFLOW]: {
             steps: [
-              { id: "other-step", position: 0 },
-              { id: "other-done", position: 1 },
+              { id: OTHER_STEP, position: 0 },
+              { id: OTHER_DONE_STEP, position: 1 },
             ],
           },
         },
       },
     };
     renderHook(() =>
-      useEnsureTaskSession({ id: "task-2", workflowStepId: "other-done", workflowId: "wf-other" }),
+      useEnsureTaskSession({
+        id: "task-2",
+        workflowStepId: OTHER_DONE_STEP,
+        workflowId: OTHER_WORKFLOW,
+      }),
     );
     await flushMicrotasks();
     expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-2", { autoStart: false });
@@ -344,5 +356,52 @@ describe("useEnsureTaskSession late step hydration", () => {
     // Exactly one ensure, gated: never an ungated call.
     expect(mockEnsureTaskSession).toHaveBeenCalledTimes(1);
     expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1", { autoStart: false });
+  });
+});
+
+describe("useEnsureTaskSession placeholder snapshot", () => {
+  beforeEach(resetEnsureTaskSessionMocks);
+
+  it("waits for the real snapshot when only a placeholder exists", async () => {
+    mockStoreState = {
+      userSettings: { preventAutoStartAgentOnOpen: true },
+      kanban: { workflowId: "wf-active", steps: [], isLoading: false },
+      kanbanMulti: {
+        snapshots: {
+          [OTHER_WORKFLOW]: { steps: [], isPlaceholder: true },
+        },
+      },
+    };
+    const { rerender } = renderHook(() =>
+      useEnsureTaskSession({
+        id: "task-2",
+        workflowStepId: OTHER_DONE_STEP,
+        workflowId: OTHER_WORKFLOW,
+      }),
+    );
+    await flushMicrotasks();
+    // A placeholder snapshot must not satisfy stepsKnown — no ensure yet.
+    expect(mockEnsureTaskSession).not.toHaveBeenCalled();
+
+    // The real workflow snapshot arrives with the terminal step.
+    mockStoreState = {
+      userSettings: { preventAutoStartAgentOnOpen: true },
+      kanban: { workflowId: "wf-active", steps: [], isLoading: false },
+      kanbanMulti: {
+        snapshots: {
+          [OTHER_WORKFLOW]: {
+            steps: [
+              { id: OTHER_STEP, position: 0 },
+              { id: OTHER_DONE_STEP, position: 1 },
+            ],
+          },
+        },
+      },
+    };
+    rerender();
+    await flushMicrotasks();
+
+    expect(mockEnsureTaskSession).toHaveBeenCalledTimes(1);
+    expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-2", { autoStart: false });
   });
 });

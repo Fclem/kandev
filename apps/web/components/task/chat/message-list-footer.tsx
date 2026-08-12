@@ -60,7 +60,12 @@ export function MessageListFooter({
     sessionId ? state.tasks.resumeSkippedSessionIds[sessionId] === true : false,
   );
   const showResumeStartButton =
-    resumeSkipped && sessionState !== "FAILED" && sessionId !== null && messages.length > 0;
+    resumeSkipped &&
+    sessionState !== "FAILED" &&
+    sessionState !== "RUNNING" &&
+    sessionState !== "STARTING" &&
+    sessionId !== null &&
+    messages.length > 0;
   return (
     <>
       {!recoveryOwnsFailure && (

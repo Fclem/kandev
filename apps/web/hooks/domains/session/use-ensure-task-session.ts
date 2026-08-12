@@ -70,31 +70,55 @@ export type UseEnsureTaskSessionResult = {
  * ensuring, or a final-step task would auto-start. Non-active workflows
  * without a snapshot never resolve here (documented safe default: no gate).
  */
+function resolveWorkflowSteps(
+  snapshot: { steps: KanbanStepLike[]; isPlaceholder?: boolean } | undefined,
+  taskWorkflowId: string | null,
+  kanbanWorkflowId: string | null,
+  kanbanSteps: KanbanStepLike[],
+): KanbanStepLike[] {
+  if (snapshot !== undefined) return snapshot.steps;
+  if (taskWorkflowId === null || taskWorkflowId === kanbanWorkflowId) return kanbanSteps;
+  return [];
+}
+
+function resolveStepsKnown(
+  snapshot: { steps: KanbanStepLike[]; isPlaceholder?: boolean } | undefined,
+  taskWorkflowId: string | null,
+  kanbanWorkflowId: string | null,
+  kanbanSteps: KanbanStepLike[],
+  kanbanLoading: boolean,
+): boolean {
+  if (snapshot !== undefined) {
+    // A placeholder snapshot (created by a task event before the real
+    // workflow snapshot arrives) carries empty steps — it must NOT satisfy
+    // stepsKnown, or the ungated ensure would latch before the real steps
+    // hydrate.
+    return snapshot.isPlaceholder !== true;
+  }
+  if (taskWorkflowId !== null && taskWorkflowId !== kanbanWorkflowId) return true;
+  return kanbanSteps.length > 0 || !kanbanLoading;
+}
+
 export function resolveFinalStepInfo(
   task: EnsureTaskInput,
   kanbanWorkflowId: string | null,
   kanbanSteps: KanbanStepLike[],
   kanbanLoading: boolean,
-  snapshots: Record<string, { steps: KanbanStepLike[] }>,
+  snapshots: Record<string, { steps: KanbanStepLike[]; isPlaceholder?: boolean }>,
 ): { isFinalStep: boolean; stepsKnown: boolean } {
   const workflowStepId = task?.workflowStepId ?? null;
   const taskWorkflowId = task?.workflowId ?? null;
   if (!workflowStepId) return { isFinalStep: false, stepsKnown: true };
   const snapshot = taskWorkflowId ? snapshots[taskWorkflowId] : undefined;
-  let steps: KanbanStepLike[] | undefined;
-  if (snapshot !== undefined) {
-    steps = snapshot.steps;
-  } else if (taskWorkflowId === null || taskWorkflowId === kanbanWorkflowId) {
-    steps = kanbanSteps;
-  } else {
-    steps = [];
-  }
+  const steps = resolveWorkflowSteps(snapshot, taskWorkflowId, kanbanWorkflowId, kanbanSteps);
   const isFinalStep = isFinalWorkflowStep(workflowStepId, steps);
-  const stepsKnown =
-    snapshot !== undefined ||
-    (taskWorkflowId !== null && taskWorkflowId !== kanbanWorkflowId) ||
-    kanbanSteps.length > 0 ||
-    !kanbanLoading;
+  const stepsKnown = resolveStepsKnown(
+    snapshot,
+    taskWorkflowId,
+    kanbanWorkflowId,
+    kanbanSteps,
+    kanbanLoading,
+  );
   return { isFinalStep, stepsKnown };
 }
 

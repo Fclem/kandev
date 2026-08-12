@@ -66,7 +66,7 @@ test.describe("mobile-secrets-copy-move", () => {
       (workspace) => workspace.id === seedData.workspaceId,
     )?.name;
     expect(workspaceName).toBeTruthy();
-    await copyDialog.getByLabel("Destination").click();
+    await copyDialog.getByRole("combobox", { name: "Destination" }).click();
     await testPage.getByRole("option", { name: workspaceName!, exact: true }).click();
     await copyDialog.getByRole("button", { name: "Copy", exact: true }).click();
     await expect(copyDialog).toBeHidden();

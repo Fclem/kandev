@@ -22,7 +22,12 @@ const { mockCopySecret, mockMoveSecret, mockUseDestinationNames, storeState } = 
   return {
     mockCopySecret: vi.fn(),
     mockMoveSecret: vi.fn(),
-    mockUseDestinationNames: vi.fn(() => ({ names: [], loaded: true, conflict: () => false })),
+    mockUseDestinationNames: vi.fn<
+      (
+        scope: string,
+        workspaceId?: string,
+      ) => { names: string[]; loaded: boolean; conflict: (name: string) => boolean }
+    >(() => ({ names: [], loaded: true, conflict: () => false })),
     storeState,
   };
 });

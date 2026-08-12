@@ -238,9 +238,6 @@ type SecretsSettingsProps = {
   initialItems?: SecretListItem[];
 };
 
-type SecretsSettingsState = ReturnType<typeof useSecretsState>;
-type SecretsSettingsActions = ReturnType<typeof useSecretsActions>;
-
 function secretScopeTitle(t: TFunction, scope: SecretScope) {
   return scope === "workspace" ? t("settings:secrets") : t("settings:globalSecrets");
 }

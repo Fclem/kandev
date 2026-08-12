@@ -369,7 +369,7 @@ function TransferModeField({
         className="flex flex-col gap-2"
       >
         <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3 cursor-pointer">
-          <RadioGroupItem value="copy" className="mt-0.5" />
+          <RadioGroupItem value="copy" className="mt-0.5 min-h-11 min-w-11" />
           <span className="space-y-1">
             <span className="block text-sm font-medium">{t("settings:copySecretAction")}</span>
             <span className="block text-xs text-muted-foreground">
@@ -378,7 +378,7 @@ function TransferModeField({
           </span>
         </label>
         <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3 cursor-pointer">
-          <RadioGroupItem value="move" className="mt-0.5" />
+          <RadioGroupItem value="move" className="mt-0.5 min-h-11 min-w-11" />
           <span className="space-y-1">
             <span className="block text-sm font-medium">{t("settings:moveSecretAction")}</span>
             {mode === "move" && (

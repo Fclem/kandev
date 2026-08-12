@@ -57,7 +57,7 @@ export function SecretListItemRow({
 
   return (
     <div className="rounded-lg border border-border/70 bg-background p-4 space-y-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <IconKey className="h-4 w-4 text-muted-foreground shrink-0" />
           <div className="text-sm font-medium text-foreground truncate">{secret.name}</div>

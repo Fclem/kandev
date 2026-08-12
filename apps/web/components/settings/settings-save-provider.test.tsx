@@ -85,6 +85,7 @@ function DraftContributor({
   );
 }
 
+/** A contributor that starts clean (revision equals savedRevision) and dirties on Edit. */
 function CleanStartDraftContributor({
   id,
   onSave,

@@ -307,15 +307,18 @@ func (b *TaskEventBroadcaster) routeBroadcast(
 }
 
 // extractWorkspaceID pulls a workspace ID from event payloads (map- or
-// struct-shaped). Profile events wrap the profile DTO under "profile", so the
-// nested workspace_id is inspected too. Empty means "no workspace context" —
-// the event is treated as instance-wide and broadcast to everyone.
+// struct-shaped, nested included). Profile events wrap the profile DTO under
+// "profile": the wrapper may be a map (JSON round-tripped bus) or a struct
+// (in-process bus, e.g. *dto.AgentProfileDTO from the MCP publisher), so the
+// nested value is inspected recursively and structs expose their ID via the
+// GetWorkspaceID interface. Empty means "no workspace context" — the event is
+// treated as instance-wide and broadcast to everyone.
 func extractWorkspaceID(data interface{}) string {
 	if id := extractStringField(data, "workspace_id"); id != "" {
 		return id
 	}
 	if profile, ok := data.(map[string]interface{}); ok {
-		if id := extractStringField(profile["profile"], "workspace_id"); id != "" {
+		if id := extractWorkspaceID(profile["profile"]); id != "" {
 			return id
 		}
 	}

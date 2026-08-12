@@ -11,6 +11,7 @@ const COPY_NAME = "Default Copy";
 const OLD_REVISION = "2026-08-11T21:00:00Z";
 const NEW_REVISION = "2026-08-11T22:00:00Z";
 
+/** Builds an AgentProfile fixture with an optional updatedAt. */
 function profile(id: string, agentId: string, name = id, updatedAt = ""): AgentProfile {
   return {
     id,
@@ -28,10 +29,12 @@ function profile(id: string, agentId: string, name = id, updatedAt = ""): AgentP
   } as unknown as AgentProfile;
 }
 
+/** Builds an Agent fixture carrying the given profiles. */
 function agent(id: string, ...profiles: AgentProfile[]): Agent {
   return { id, name: id, profiles } as unknown as Agent;
 }
 
+/** Builds an AgentProfileOption fixture with an optional updatedAt. */
 function option(id: string, updatedAt = ""): AgentProfileOption {
   return {
     id,
@@ -43,6 +46,7 @@ function option(id: string, updatedAt = ""): AgentProfileOption {
   };
 }
 
+/** Builds the settings slice state the duplicate merge operates on. */
 function stateWith(agents: Agent[], options: AgentProfileOption[]) {
   return {
     settingsAgents: { items: agents, version: 0 },
@@ -134,6 +138,21 @@ describe("applyProfileDuplicated", () => {
     expect(options).toHaveLength(1);
     expect(options[0].enabled).toBe(false);
     expect(options[0].updatedAt).toBe(NEW_REVISION);
+  });
+
+  it("orders revisions by instant, not lexically, for offset timestamps", () => {
+    // "2026-08-11T23:30:00+02:00" is 21:30 UTC — OLDER than 22:00Z, but
+    // lexically larger. A string compare would keep the stale duplicate
+    // response over the newer WS-delivered option.
+    const staleCreated = profile("p2", "a1", COPY_NAME, "2026-08-11T23:30:00+02:00");
+    const newerOrphan = option("p2", "2026-08-11T22:00:00Z");
+    const initial = stateWith([], [newerOrphan]);
+
+    const next = applyProfileDuplicated(initial, agent("a1"), staleCreated);
+
+    const options = next.agentProfiles.items.filter((o) => o.id === "p2");
+    expect(options).toHaveLength(1);
+    expect(options[0].updatedAt).toBe("2026-08-11T22:00:00Z");
   });
 
   it("keeps a newer WS-delivered version instead of the stale duplicate response", () => {

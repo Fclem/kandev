@@ -40,6 +40,7 @@ vi.mock("@/components/settings/agent-profile-page-state", () => ({
   errorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }));
 
+/** Builds an Agent fixture for the duplicate-action harness. */
 function agent(): Agent {
   return { id: "a1", name: "mock-agent", profiles: [] } as unknown as Agent;
 }
@@ -50,6 +51,7 @@ type DraftOverrides = Partial<Omit<AgentProfile, "id" | "agentId" | "name">> & {
   name?: string;
 };
 
+/** Builds a profile draft (SettingsSaveContributor) for the duplicate-action harness. */
 function draft(overrides: DraftOverrides = {}): AgentProfile {
   return {
     id: "p1",
@@ -68,6 +70,7 @@ function draft(overrides: DraftOverrides = {}): AgentProfile {
   } as unknown as AgentProfile;
 }
 
+/** Renders the duplicate action with the settings save provider and navigation guard. */
 function Harness({ profileDraft = draft() }: { profileDraft?: AgentProfile }) {
   const { handleDuplicate, duplicating } = useProfileDuplicateAction({
     agent: agent(),
@@ -82,6 +85,7 @@ function Harness({ profileDraft = draft() }: { profileDraft?: AgentProfile }) {
   );
 }
 
+/** Reads the most recently pushed toast from the harness. */
 function lastToast(): ToastArgs {
   const call = toast.mock.calls.at(-1);
   return call ? call[0] : {};

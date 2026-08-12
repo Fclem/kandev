@@ -10,6 +10,7 @@ vi.mock("@/app/actions/agents", () => ({
 vi.mock("@/components/state-provider", () => ({ useAppStore: vi.fn(), useAppStoreApi: vi.fn() }));
 vi.mock("@/lib/i18n", () => ({ t: (key: string) => key }));
 
+/** Builds an Agent fixture with the given profile names. */
 function agent(id: string, ...profileNames: string[]): Agent {
   return {
     id,
@@ -31,6 +32,7 @@ function agent(id: string, ...profileNames: string[]): Agent {
   } as unknown as Agent;
 }
 
+/** Builds an AgentProfileOption fixture with an optional updatedAt. */
 function option(id: string, updatedAt = ""): AgentProfileOption {
   return {
     id,

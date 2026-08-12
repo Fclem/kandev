@@ -102,12 +102,15 @@ func (f *fakeStore) ListTUIAgents(context.Context) ([]*models.Agent, error) {
 	return nil, nil
 }
 
+// GetAgentProfileMcpConfig implements the settings store interface for the reconciler test fakes.
 func (f *fakeStore) GetAgentProfileMcpConfig(_ context.Context, profileID string) (*models.AgentProfileMcpConfig, error) {
 	if cfg, ok := f.mcpConfigs[profileID]; ok {
 		return cfg, nil
 	}
 	return nil, nil
 }
+
+// UpsertAgentProfileMcpConfig implements the settings store interface for the reconciler test fakes.
 func (f *fakeStore) UpsertAgentProfileMcpConfig(_ context.Context, config *models.AgentProfileMcpConfig) error {
 	f.mcpConfigs[config.ProfileID] = config
 	return nil
@@ -121,6 +124,7 @@ func (f *fakeStore) CreateAgentProfile(_ context.Context, p *models.AgentProfile
 	return nil
 }
 
+// DuplicateAgentProfile implements the settings store interface for the reconciler test fakes.
 func (f *fakeStore) DuplicateAgentProfile(_ context.Context, input store.DuplicateAgentProfileInput) error {
 	if f.duplicateProfErr != nil {
 		return f.duplicateProfErr

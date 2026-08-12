@@ -115,8 +115,11 @@ In `apps/backend/internal/agent/settings/handlers/handlers.go`:
 - Handler, `apps/backend/internal/agent/settings/handlers/interim_settings_interlock_test.go`:
   add `{method: POST, path: "/api/v1/agent-profiles/profile-1/duplicate"}`
   to the route list that must return 403 without the interlock token.
-- Optional (only if a clean stub is easy): a handler test asserting 404
-  mapping and the `agent.profile.created` broadcast, following
+- Handler test (mandatory, adversarial review round 9): an office-scoped
+  source (`WorkspaceID != ""`) returns 404 with zero broadcasts on any
+  channel — global or workspace-scoped — and the office profile is rejected
+  before MCP config is read or written. Also assert 404 mapping and the
+  `agent.profile.created` broadcast for kanban profiles, following
   `agent_update_handlers_test.go`'s controller-stub pattern.
 
 ## Frontend

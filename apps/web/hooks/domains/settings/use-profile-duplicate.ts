@@ -6,6 +6,7 @@ import { useAppStoreApi } from "@/components/state-provider";
 import { useToast } from "@/components/toast-provider";
 import { t as translate } from "@/lib/i18n";
 import {
+  compareTimestamps,
   mergeOptionsByNewest,
   toAgentProfileOption,
   type AgentProfileOption,
@@ -40,7 +41,10 @@ export function applyProfileDuplicated(
     item.id === agent.id
       ? (() => {
           const existing = item.profiles.find((p) => p.id === created.id);
-          const latest = existing && existing.updatedAt > created.updatedAt ? existing : created;
+          const latest =
+            existing && compareTimestamps(existing.updatedAt, created.updatedAt) > 0
+              ? existing
+              : created;
           return {
             ...item,
             profiles: [...item.profiles.filter((p) => p.id !== created.id), latest],
@@ -61,7 +65,7 @@ export function applyProfileDuplicated(
   let agentProfilesItems: AgentProfileOption[];
   if (!existingCopy) {
     agentProfilesItems = [...merged, copyOption];
-  } else if ((existingCopy.updatedAt ?? "") > (created.updatedAt ?? "")) {
+  } else if (compareTimestamps(existingCopy.updatedAt, created.updatedAt) > 0) {
     agentProfilesItems = merged; // keep the newer WS-delivered option
   } else {
     agentProfilesItems = merged.map((option) => (option.id === created.id ? copyOption : option));

@@ -9,6 +9,7 @@ function setLocation(path: string) {
   window.history.replaceState({}, "", path);
 }
 
+/** Simulates a history popstate at the given location for router tests. */
 function popStateAt(position: number) {
   window.dispatchEvent(new PopStateEvent("popstate", { state: { [NAV_POSITION_KEY]: position } }));
 }

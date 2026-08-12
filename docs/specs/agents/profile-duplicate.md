@@ -93,8 +93,12 @@ yet.
 
 - Duplicating office workspace agents through the office UI (`/office/agents`):
   office has its own agent creation flows and permission model. This feature
-  targets the `/settings/agents` profile flavor; the endpoint still copies
-  office configuration fields faithfully for API callers.
+  targets the `/settings/agents` profile flavor. The settings duplicate
+  endpoint is fail-closed against office-scoped sources: a profile with a
+  non-empty `workspace_id` returns `404` (existence hidden) before any MCP
+  read or write, so the instance-level settings surface can never read or
+  clone another workspace's configuration. Office duplication, when added,
+  belongs on the workspace-scoped office API surface.
 - Renaming after duplicate: the copy is a normal profile the user renames via
   the existing profile editor.
 - Bulk/queue duplication, templates, or copy-paste between agents.

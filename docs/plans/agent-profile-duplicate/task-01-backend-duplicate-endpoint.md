@@ -27,6 +27,10 @@ spec: "../../specs/agents/profile-duplicate.md"
   partial profile and a disabled source never becomes briefly selectable.
 - Unknown or soft-deleted source ID → `ErrAgentProfileNotFound` → HTTP 404,
   and nothing is created.
+- An office-scoped source (non-empty `workspace_id`) → `ErrAgentProfileNotFound`
+  → HTTP 404 (existence hidden), rejected before MCP config is read or any
+  row is written, with zero broadcasts on any channel (global or
+  workspace-scoped).
 - Success returns the new `AgentProfileDTO` and broadcasts the
   `agent.profile.created` WS notification with `{"profile": <dto>}`.
 - The route is added to the interlock 403 route list.

@@ -29,10 +29,12 @@ type duplicateRepo struct {
 	created  []*models.AgentProfile
 }
 
+// newDuplicateRepo returns a fake repository preloaded with one kanban profile (p-1) under agent-1.
 func newDuplicateRepo() *duplicateRepo {
 	return &duplicateRepo{profiles: map[string]*models.AgentProfile{}}
 }
 
+// GetAgentProfile implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) GetAgentProfile(_ context.Context, id string) (*models.AgentProfile, error) {
 	if p, ok := r.profiles[id]; ok {
 		return p, nil
@@ -40,10 +42,12 @@ func (r *duplicateRepo) GetAgentProfile(_ context.Context, id string) (*models.A
 	return nil, fmt.Errorf("agent profile not found: %s", id)
 }
 
+// GetAgentProfileIncludingDeleted implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) GetAgentProfileIncludingDeleted(ctx context.Context, id string) (*models.AgentProfile, error) {
 	return r.GetAgentProfile(ctx, id)
 }
 
+// CreateAgentProfile implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) CreateAgentProfile(_ context.Context, p *models.AgentProfile) error {
 	if p.ID == "" {
 		p.ID = "duplicate-" + p.Name
@@ -53,6 +57,7 @@ func (r *duplicateRepo) CreateAgentProfile(_ context.Context, p *models.AgentPro
 	return nil
 }
 
+// DuplicateAgentProfile implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) DuplicateAgentProfile(_ context.Context, input store.DuplicateAgentProfileInput) error {
 	// Version check: the stored source must match the caller's snapshot.
 	if src, ok := r.profiles[input.Source.ID]; ok && !src.UpdatedAt.Equal(input.Source.UpdatedAt) {
@@ -73,6 +78,7 @@ func (r *duplicateRepo) DuplicateAgentProfile(_ context.Context, input store.Dup
 	return nil
 }
 
+// UpdateAgentProfileEnabled implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) UpdateAgentProfileEnabled(_ context.Context, id string, enabled bool) (time.Time, error) {
 	p, ok := r.profiles[id]
 	if !ok {
@@ -83,39 +89,64 @@ func (r *duplicateRepo) UpdateAgentProfileEnabled(_ context.Context, id string, 
 	return p.UpdatedAt, nil
 }
 
+// GetAgentProfileMcpConfig implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) GetAgentProfileMcpConfig(context.Context, string) (*models.AgentProfileMcpConfig, error) {
 	return nil, nil
 }
 
+// UpsertAgentProfileMcpConfig implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) UpsertAgentProfileMcpConfig(context.Context, *models.AgentProfileMcpConfig) error {
 	return nil
 }
 
+// CreateAgent implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) CreateAgent(context.Context, *models.Agent) error { return nil }
+
+// GetAgent implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) GetAgent(context.Context, string) (*models.Agent, error) {
 	return nil, nil
 }
+
+// GetAgentByName implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) GetAgentByName(context.Context, string) (*models.Agent, error) {
 	return nil, nil
 }
+
+// UpdateAgent implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) UpdateAgent(context.Context, *models.Agent) error { return nil }
-func (r *duplicateRepo) DeleteAgent(context.Context, string) error        { return nil }
+
+// DeleteAgent implements the settings store interface for the duplicate handler tests.
+func (r *duplicateRepo) DeleteAgent(context.Context, string) error { return nil }
+
+// ListAgents implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) ListAgents(context.Context) ([]*models.Agent, error) {
 	return nil, nil
 }
+
+// ListTUIAgents implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) ListTUIAgents(context.Context) ([]*models.Agent, error) {
 	return nil, nil
 }
+
+// UpdateAgentProfile implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) UpdateAgentProfile(context.Context, *models.AgentProfile) error {
 	return nil
 }
+
+// DeleteAgentProfile implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) DeleteAgentProfile(context.Context, string) error { return nil }
+
+// ListAgentProfiles implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) ListAgentProfiles(context.Context, string) ([]*models.AgentProfile, error) {
 	return nil, nil
 }
+
+// HasDeletedAgentProfiles implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) HasDeletedAgentProfiles(context.Context, string) (bool, error) {
 	return false, nil
 }
+
+// Close implements the settings store interface for the duplicate handler tests.
 func (r *duplicateRepo) Close() error { return nil }
 
 var _ store.Repository = (*duplicateRepo)(nil)
@@ -126,12 +157,14 @@ type duplicateHub struct {
 	msgs []*ws.Message
 }
 
+// Broadcast records a global notification so tests can assert (non-)delivery.
 func (h *duplicateHub) Broadcast(msg *ws.Message) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.msgs = append(h.msgs, msg)
 }
 
+// actions returns the global notifications recorded by Broadcast.
 func (h *duplicateHub) actions() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -150,18 +183,21 @@ type workspaceDuplicateHub struct {
 	workspaceMsgs map[string][]*ws.Message
 }
 
+// Broadcast records a global notification so tests can assert (non-)delivery.
 func (h *workspaceDuplicateHub) Broadcast(msg *ws.Message) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.global = append(h.global, msg)
 }
 
+// BroadcastToWorkspaceOrDrop records a workspace-scoped notification so tests can assert (non-)delivery.
 func (h *workspaceDuplicateHub) BroadcastToWorkspaceOrDrop(workspaceID string, msg *ws.Message) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.workspaceMsgs[workspaceID] = append(h.workspaceMsgs[workspaceID], msg)
 }
 
+// newDuplicateRouter builds a gin router with the settings handlers wired to the given repo and hub.
 func newDuplicateRouter(t *testing.T, repo store.Repository, hub Broadcaster) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -175,6 +211,7 @@ func newDuplicateRouter(t *testing.T, repo store.Repository, hub Broadcaster) *g
 	return router
 }
 
+// TestDuplicateProfileEndpoint_CopiesAndBroadcasts verifies the HTTP endpoint copies a kanban profile and broadcasts agent.profile.created.
 func TestDuplicateProfileEndpoint_CopiesAndBroadcasts(t *testing.T) {
 	repo := newDuplicateRepo()
 	repo.profiles["source-1"] = &models.AgentProfile{
@@ -228,6 +265,7 @@ func TestDuplicateProfileEndpoint_CopiesAndBroadcasts(t *testing.T) {
 	}
 }
 
+// TestDuplicateProfileEndpoint_NotFound verifies an unknown source ID surfaces as HTTP 404.
 func TestDuplicateProfileEndpoint_NotFound(t *testing.T) {
 	router := newDuplicateRouter(t, newDuplicateRepo(), nil)
 
@@ -277,6 +315,7 @@ func TestDuplicateProfileEndpoint_RejectsOfficeScopedSource(t *testing.T) {
 	}
 }
 
+// TestDuplicateProfileEndpoint_RequiresInterlock verifies the duplicate route is rejected without the interlock token.
 func TestDuplicateProfileEndpoint_RequiresInterlock(t *testing.T) {
 	router := newDuplicateRouter(t, newDuplicateRepo(), nil)
 

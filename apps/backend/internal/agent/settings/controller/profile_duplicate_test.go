@@ -69,6 +69,7 @@ func sourceProfile() *models.AgentProfile {
 	}
 }
 
+// duplicateSetup wires a controller to a fake store pre-seeded with the source profile.
 func duplicateSetup(source *models.AgentProfile) (*Controller, *fakeStore) {
 	ctrl := newTestController(nil)
 	st := newFakeStore()
@@ -78,6 +79,7 @@ func duplicateSetup(source *models.AgentProfile) (*Controller, *fakeStore) {
 	return ctrl, st
 }
 
+// TestDuplicateProfile_CopiesFullConfiguration verifies every configuration field (office enrichment and deprecated legacy columns included) survives duplication while runtime state is reset.
 func TestDuplicateProfile_CopiesFullConfiguration(t *testing.T) {
 	source := sourceProfile()
 	ctrl, st := duplicateSetup(source)
@@ -163,6 +165,7 @@ func TestDuplicateProfile_CopiesFullConfiguration(t *testing.T) {
 	}
 }
 
+// TestDuplicateProfile_CopiesDisabledState verifies a disabled source produces a disabled copy.
 func TestDuplicateProfile_CopiesDisabledState(t *testing.T) {
 	source := sourceProfile()
 	source.Enabled = false
@@ -193,6 +196,7 @@ func TestDuplicateProfile_CopiesDisabledState(t *testing.T) {
 	}
 }
 
+// TestDuplicateProfile_StoreFailureLeavesNoCopy verifies a failed transaction leaves no copy behind.
 func TestDuplicateProfile_StoreFailureLeavesNoCopy(t *testing.T) {
 	source := sourceProfile()
 	ctrl, st := duplicateSetup(source)
@@ -209,6 +213,7 @@ func TestDuplicateProfile_StoreFailureLeavesNoCopy(t *testing.T) {
 	}
 }
 
+// TestDuplicateProfile_CopiesMcpConfig verifies the MCP config (enabled, servers, meta) is copied under the new profile ID.
 func TestDuplicateProfile_CopiesMcpConfig(t *testing.T) {
 	source := sourceProfile()
 	ctrl, st := duplicateSetup(source)
@@ -246,6 +251,7 @@ func TestDuplicateProfile_CopiesMcpConfig(t *testing.T) {
 	}
 }
 
+// TestDuplicateProfile_NoMcpConfigLeavesCopyWithoutRow verifies a source without an MCP row leaves the copy without one.
 func TestDuplicateProfile_NoMcpConfigLeavesCopyWithoutRow(t *testing.T) {
 	source := sourceProfile()
 	ctrl, st := duplicateSetup(source)
@@ -258,6 +264,7 @@ func TestDuplicateProfile_NoMcpConfigLeavesCopyWithoutRow(t *testing.T) {
 	}
 }
 
+// TestDuplicateProfile_NotFound verifies an unknown source ID maps to ErrAgentProfileNotFound.
 func TestDuplicateProfile_NotFound(t *testing.T) {
 	ctrl, _ := duplicateSetup(sourceProfile())
 
@@ -286,6 +293,7 @@ func TestDuplicateProfile_RejectsOfficeScopedSource(t *testing.T) {
 	}
 }
 
+// TestDuplicateProfile_NameSuffixFromEmptySourceName pins the copy name when the source name is empty.
 func TestDuplicateProfile_NameSuffixFromEmptySourceName(t *testing.T) {
 	source := sourceProfile()
 	source.Name = ""

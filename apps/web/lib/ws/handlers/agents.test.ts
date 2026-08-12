@@ -19,6 +19,7 @@ const PROFILE_CREATED = "agent.profile.created";
 const PROFILE_UPDATED = "agent.profile.updated";
 const PROFILE_DELETED = "agent.profile.deleted";
 
+/** Builds a WS notification message fixture with the given action, payload, and timestamp. */
 function message(action: string, payload: unknown, timestamp = TIMESTAMP) {
   return {
     id: `message-${action}`,
@@ -29,6 +30,7 @@ function message(action: string, payload: unknown, timestamp = TIMESTAMP) {
   };
 }
 
+/** Builds a kanban profile payload fixture, overridable per test. */
 function profilePayload(overrides: Record<string, unknown> = {}) {
   return {
     id: "p1",
@@ -42,6 +44,7 @@ function profilePayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Builds an office-scoped profile payload fixture (workspace_id set). */
 function officeProfilePayload() {
   return {
     id: "profile-office",
@@ -54,6 +57,7 @@ function officeProfilePayload() {
   };
 }
 
+/** Registers the agents WS handlers and returns them keyed by action. */
 function handlersFor(store: ReturnType<typeof makeStore>) {
   return registerAgentsHandlers(store) as unknown as Record<
     string,

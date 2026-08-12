@@ -18,7 +18,7 @@ async function seedBusyQueueTask(
   testPage: Page,
   apiClient: ApiClient,
   seedData: SeedData,
-): Promise<SessionPage> {
+): Promise<{ session: SessionPage; taskId: string }> {
   const task = await apiClient.createTaskWithAgent(
     seedData.workspaceId,
     "Mobile queue Send Now",
@@ -37,7 +37,7 @@ async function seedBusyQueueTask(
   await session.sendMessageViaButton("/slow 30s");
   await session.agentStatus().waitFor({ state: "visible", timeout: 15_000 });
   await testPage.waitForTimeout(500);
-  return session;
+  return { session, taskId: task.id };
 }
 
 test("mobile full queue stays usable while removing and clearing messages", async ({
@@ -87,7 +87,7 @@ test("mobile Send Now replaces a busy turn without hover or horizontal overflow"
 }) => {
   test.setTimeout(120_000);
 
-  const session = await seedBusyQueueTask(testPage, apiClient, seedData);
+  const { session } = await seedBusyQueueTask(testPage, apiClient, seedData);
   const chat = session.activeChat();
   const editor = chat.locator(".tiptap.ProseMirror:visible").first();
   const submit = testPage.getByTestId("submit-message-button");
@@ -120,4 +120,37 @@ test("mobile Send Now replaces a busy turn without hover or horizontal overflow"
   await expect(panel.getByTestId("queue-entry-text").nth(0)).toContainText("mobile first");
   await expect(panel.getByTestId("queue-entry-text").nth(1)).toContainText("mobile third");
   await expect(session.chat).not.toContainText("Turn cancelled by user");
+});
+
+test("mobile pin keeps the queue panel open across navigation", async ({
+  testPage,
+  apiClient,
+  seedData,
+}) => {
+  test.setTimeout(120_000);
+
+  const { session, taskId } = await seedBusyQueueTask(testPage, apiClient, seedData);
+  const chat = session.activeChat();
+  const editor = chat.locator(".tiptap.ProseMirror:visible").first();
+  const submit = testPage.getByTestId("submit-message-button");
+  await typeWhileBusy(testPage, editor, "mobile pinned message");
+  await expect(submit).toBeEnabled();
+  await submit.tap();
+
+  await chat.getByTestId("queue-chip").tap();
+  const panel = chat.getByTestId("queued-ghost-list");
+  await expect(panel).toBeVisible({ timeout: 10_000 });
+  const pin = panel.getByTestId("queue-pin");
+  await expectTouchTarget(pin);
+  await pin.tap();
+  await expect(pin).toHaveAttribute("aria-pressed", "true");
+
+  // Navigate away and back: the pinned panel must come back expanded without
+  // a chip tap.
+  await testPage.goto("/");
+  await testPage.waitForLoadState("networkidle");
+  await testPage.goto(`/t/${taskId}`);
+
+  await expect(chat.getByTestId("queued-ghost-list")).toBeVisible({ timeout: 15_000 });
+  await expect(chat.getByTestId("queue-chip")).not.toBeVisible();
 });

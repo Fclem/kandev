@@ -161,8 +161,10 @@ describe("QueueAffordance pin", () => {
     expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
     expect(screen.queryByTestId(CHIP_ID)).toBeNull();
   });
+});
 
-  it("follows the target session's pin state on session switch", () => {
+describe("QueueAffordance pin sync", () => {
+  it("opens the panel when a storage-synced pin turns on for the current session", () => {
     useQueueMock.mockReturnValue(queueState([entry()]));
     useQueuePinnedMock.mockImplementation((sessionId: string | null) => ({
       value: sessionId === "sess-1",
@@ -176,6 +178,33 @@ describe("QueueAffordance pin", () => {
     rerender(<QueueAffordance sessionId="sess-2">{CHILD}</QueueAffordance>);
     expect(screen.queryByTestId(PANEL_ID)).toBeNull();
     expect(screen.getByTestId(CHIP_ID)).toBeTruthy();
+  });
+
+  it("opens the panel when a storage-synced pin turns on for the current session", () => {
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    useQueuePinnedMock.mockReturnValue({ value: false, setValue: vi.fn(), toggle: vi.fn() });
+    const { rerender } = render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+    expect(screen.getByTestId(CHIP_ID)).toBeTruthy();
+
+    // Another tab pins the same session; the storage event flips `pinned`.
+    useQueuePinnedMock.mockReturnValue({ value: true, setValue: vi.fn(), toggle: vi.fn() });
+    rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
+    expect(screen.queryByTestId(CHIP_ID)).toBeNull();
+  });
+
+  it("does not close an open panel when the pin turns off", () => {
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    useQueuePinnedMock.mockReturnValue({ value: true, setValue: vi.fn(), toggle: vi.fn() });
+    const { rerender } = render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
+
+    // Unpinning (here or in another tab) never collapses the current view.
+    useQueuePinnedMock.mockReturnValue({ value: false, setValue: vi.fn(), toggle: vi.fn() });
+    rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
+    expect(screen.queryByTestId(CHIP_ID)).toBeNull();
   });
 
   it("keeps the collapse button touch-sized alongside the pin", () => {

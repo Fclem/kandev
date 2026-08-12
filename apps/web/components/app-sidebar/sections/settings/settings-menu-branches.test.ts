@@ -15,8 +15,8 @@ import {
 const WORKSPACE_ID = "ws-1";
 const WORKSPACES_HREF = "/settings/workspaces";
 const WORKSPACES = [{ id: WORKSPACE_ID, name: "Main Workspace" }];
-// Hoisted so the filter tests can build fixtures without re-spelling the
-// display name (sonar duplicate-literal rule).
+// Hoisted so the shared fixtures can re-use the display name without
+// re-spelling it (sonar duplicate-literal rule).
 const AGENT_DISPLAY_NAME = "Claude Code";
 const AGENTS = [
   {

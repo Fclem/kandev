@@ -32,11 +32,13 @@ an external plugin after this spec was written and is out of scope.)
   (same underlying per-integration enabled state, install-wide — not
   per-workspace — consistent with the existing Jira/Linear/Sentry
   toggle).
-- The enabled state for Azure DevOps, GitHub and GitLab is purely a
-  presentation/navigation-visibility switch: it MUST NOT change whether their
-  existing PR/work-item/board/MR features function. This mirrors that those
-  three integrations have no existing UI surface gated on an "available"
-  concept beyond navigation and their own settings page banner.
+- The enabled state for Azure DevOps, GitHub and GitLab currently affects
+  only their settings controls — the own-page slider and the index-page row
+  slider — and MUST NOT change whether their existing PR/work-item/board/MR
+  features function. It does not gate left-panel navigation: nav visibility
+  is configuration-only (see the next bullet), so these three integrations
+  have no UI surface gated on an "available" concept beyond their settings
+  pages and their settings-page banner.
 - Left-panel nav visibility is configuration-only: a configured integration
   always appears in the sidebar Integrations section, the mobile-menu
   integrations group, and the Settings left panel's per-workspace

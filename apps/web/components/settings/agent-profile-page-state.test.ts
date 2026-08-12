@@ -31,8 +31,15 @@ function agent(id: string, ...profileNames: string[]): Agent {
   } as unknown as Agent;
 }
 
-function option(id: string, label = id): AgentProfileOption {
-  return { id, label, agent_id: "a1", agent_name: "a1", cli_passthrough: false };
+function option(id: string, updatedAt = ""): AgentProfileOption {
+  return {
+    id,
+    label: id,
+    agent_id: "a1",
+    agent_name: "a1",
+    cli_passthrough: false,
+    updatedAt,
+  };
 }
 
 describe("reconcileAgentProfileOptions", () => {
@@ -50,8 +57,41 @@ describe("reconcileAgentProfileOptions", () => {
   });
 
   it("replaces stale options with the rebuilt versions by id", () => {
-    const next = reconcileAgentProfileOptions([option("p1", "stale label")], [agent("a1", "p1")]);
+    const next = reconcileAgentProfileOptions([option("p1")], [agent("a1", "p1")]);
     expect(next.filter((o) => o.id === "p1")).toHaveLength(1);
     expect(next.find((o) => o.id === "p1")?.label).toContain("p1");
+  });
+
+  it("keeps a newer existing option over a stale rebuilt one", () => {
+    // WS updated the option (enabled=false, newer revision) while the next
+    // agent list carries a stale profile. The rebuild must not regress it.
+    const staleProfile = {
+      id: "a1",
+      name: "a1",
+      profiles: [
+        {
+          id: "p1",
+          agentId: "a1",
+          name: "p1",
+          agentDisplayName: "Test Agent",
+          model: "",
+          allowIndexing: false,
+          autoApprove: false,
+          cliFlags: [],
+          cliPassthrough: false,
+          enabled: true,
+          createdAt: "",
+          updatedAt: "2026-08-11T21:00:00Z",
+        },
+      ],
+    } as unknown as Agent;
+    const newerOption = { ...option("p1", "2026-08-11T22:00:00Z"), enabled: false };
+
+    const next = reconcileAgentProfileOptions([newerOption], [staleProfile]);
+
+    const options = next.filter((o) => o.id === "p1");
+    expect(options).toHaveLength(1);
+    expect(options[0].enabled).toBe(false);
+    expect(options[0].updatedAt).toBe("2026-08-11T22:00:00Z");
   });
 });

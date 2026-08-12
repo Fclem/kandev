@@ -8,6 +8,8 @@ vi.mock("@/components/state-provider", () => ({ useAppStoreApi: vi.fn() }));
 vi.mock("@/components/toast-provider", () => ({ useToast: vi.fn() }));
 
 const COPY_NAME = "Default Copy";
+const OLD_REVISION = "2026-08-11T21:00:00Z";
+const NEW_REVISION = "2026-08-11T22:00:00Z";
 
 function profile(id: string, agentId: string, name = id, updatedAt = ""): AgentProfile {
   return {
@@ -104,8 +106,8 @@ describe("applyProfileDuplicated", () => {
   it("keeps a newer WS-delivered orphan option over a stale duplicate response", () => {
     // Owner absent; WS delivered a NEWER version of the copy than this
     // delayed HTTP response. The merge must not regress it to the stale one.
-    const staleCreated = profile("p2", "a1", COPY_NAME, "2026-08-11T21:00:00Z");
-    const newerOrphan = option("p2", "2026-08-11T22:00:00Z");
+    const staleCreated = profile("p2", "a1", COPY_NAME, OLD_REVISION);
+    const newerOrphan = option("p2", NEW_REVISION);
     const initial = stateWith([], [newerOrphan]);
 
     const next = applyProfileDuplicated(initial, agent("a1"), staleCreated);
@@ -114,14 +116,31 @@ describe("applyProfileDuplicated", () => {
     expect(options).toHaveLength(1);
     // The preserved option keeps the newer revision (label from the option).
     expect(options[0].label).toBe("p2");
-    expect(options[0].updatedAt).toBe("2026-08-11T22:00:00Z");
+    expect(options[0].updatedAt).toBe(NEW_REVISION);
+  });
+
+  it("keeps a newer WS-delivered option over a stale rebuilt one when the owner is present", () => {
+    // The option was updated by WS (enabled=false, newer revision) while the
+    // settingsAgents profile is stale. The merge must not regress it to the
+    // rebuilt (older) version — a disabled profile must stay hidden.
+    const staleProfile = profile("p1", "a1", "Default", OLD_REVISION);
+    const copy = profile("p2", "a1", COPY_NAME, OLD_REVISION);
+    const newerCopyOption = { ...option("p2", NEW_REVISION), enabled: false };
+    const initial = stateWith([agent("a1", staleProfile)], [newerCopyOption]);
+
+    const next = applyProfileDuplicated(initial, agent("a1"), copy);
+
+    const options = next.agentProfiles.items.filter((o) => o.id === "p2");
+    expect(options).toHaveLength(1);
+    expect(options[0].enabled).toBe(false);
+    expect(options[0].updatedAt).toBe(NEW_REVISION);
   });
 
   it("keeps a newer WS-delivered version instead of the stale duplicate response", () => {
     // Another tab edited the copy after creation: agent.profile.updated
     // delivered the newer version before this delayed duplicate response.
-    const newer = profile("p2", "a1", "Default Copy (edited)", "2026-08-11T22:00:00Z");
-    const staleCreated = profile("p2", "a1", COPY_NAME, "2026-08-11T21:00:00Z");
+    const newer = profile("p2", "a1", "Default Copy (edited)", NEW_REVISION);
+    const staleCreated = profile("p2", "a1", COPY_NAME, OLD_REVISION);
     const source = profile("p1", "a1");
     const initial = stateWith([agent("a1", source, newer)], [option("p1"), option("p2")]);
 

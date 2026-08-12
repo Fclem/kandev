@@ -131,6 +131,20 @@ describe("useProfileDuplicateAction", () => {
     expect(lastToast().description).toBe("agents:profileNameRequired");
   });
 
+  it("falls back to a generic toast when the save is blocked without a specific reason", async () => {
+    // canLeave=false with no invalidReason and a valid draft: another save is
+    // in flight or newer changes appeared. The abort must still be visible.
+    saveAll.mockResolvedValue({ canLeave: false, failedIds: new Set() });
+    render(<Harness />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "duplicate" }));
+    });
+
+    expect(duplicateAction).not.toHaveBeenCalled();
+    expect(lastToast().description).toBe("agents:duplicateSaveBlocked");
+  });
+
   it("POSTs, merges, toasts, and SPA-navigates when the save succeeds", async () => {
     saveAll.mockResolvedValue({ canLeave: true, failedIds: new Set() });
     duplicateAction.mockResolvedValue(draft({ id: "p2", name: "Default Copy" }));

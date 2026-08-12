@@ -561,6 +561,19 @@ func (r *sqliteRepository) verifySourceSnapshot(ctx context.Context, tx *sqlx.Tx
 		return ErrProfileChanged
 	}
 	if input.SourceMcp == nil {
+		// The caller's snapshot had no MCP row: verify one was not created in
+		// the meantime, otherwise the copy would silently drop it. Missing is
+		// the unchanged case; an existing row means the snapshot is stale.
+		var exists int
+		err = tx.QueryRowContext(ctx, tx.Rebind(
+			`SELECT 1 FROM agent_profile_mcp_configs WHERE profile_id = ?`),
+			input.Source.ID).Scan(&exists)
+		if err == nil {
+			return ErrProfileChanged
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 		return nil
 	}
 	var mcpUpdated time.Time

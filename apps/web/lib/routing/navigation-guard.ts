@@ -186,6 +186,7 @@ function blockPop(event: PopStateEvent, delta: number, restorePosition: number):
   };
   blockedPop = pending;
   restoringPop = true;
+  canceledRestorationPosition = null; // a new block supersedes any stale one
   window.history.go(-delta);
 
   blocker({
@@ -203,11 +204,16 @@ function trackNativeHistoryMutations(): void {
     const position = readPosition(state) ?? (currentPosition ?? 0) + 1;
     pushState(withPosition(state, position), title, url);
     currentPosition = position;
+    // A new navigation supersedes any blocked-pop traversal still in flight;
+    // without this the cancelled restoration position could eat a later
+    // legitimate popstate to the same position.
+    canceledRestorationPosition = null;
   };
   window.history.replaceState = (state, title, url) => {
     const position = readPosition(state) ?? currentPosition ?? 0;
     replaceState(withPosition(state, position), title, url);
     currentPosition = position;
+    canceledRestorationPosition = null;
   };
 }
 

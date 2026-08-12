@@ -5,7 +5,11 @@ import { duplicateAgentProfileAction } from "@/app/actions/agents";
 import { useAppStoreApi } from "@/components/state-provider";
 import { useToast } from "@/components/toast-provider";
 import { t as translate } from "@/lib/i18n";
-import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
+import {
+  mergeOptionsByNewest,
+  toAgentProfileOption,
+  type AgentProfileOption,
+} from "@/lib/state/slices/settings/types";
 import type { AppState } from "@/lib/state/store";
 import type { Agent, AgentProfile } from "@/lib/types/http";
 
@@ -48,25 +52,20 @@ export function applyProfileDuplicated(
   const rebuiltOptions = nextAgents.flatMap((item) =>
     item.profiles.map((profile) => toAgentProfileOption(item, profile)),
   );
-  const rebuiltCopy = rebuiltOptions.some((option) => option.id === created.id);
-  const preserved = state.agentProfiles.items.filter((option) => {
-    if (option.id === created.id) {
-      // Owner present: the rebuilt option wins (the store profile was already
-      // resolved by the newer-updatedAt logic above). Owner absent: keep an
-      // existing WS-delivered option only when it is NEWER than this —
-      // possibly stale — HTTP response; otherwise let the copy option below
-      // replace it with the known agent metadata.
-      if (rebuiltCopy) return false;
-      return (option.updatedAt ?? "") > (created.updatedAt ?? "");
-    }
-    return !rebuiltOptions.some((rebuilt) => rebuilt.id === option.id);
-  });
+  const merged = mergeOptionsByNewest(state.agentProfiles.items, rebuiltOptions);
+  // The copy must appear exactly once with the known agent metadata: append
+  // it when absent, replace an OLDER existing option (e.g. a WS stub) with
+  // it, and keep a NEWER WS-delivered option untouched.
   const copyOption = toAgentProfileOption({ id: agent.id, name: agent.name }, created);
-  const copyAlreadyPresent = rebuiltCopy || preserved.some((option) => option.id === created.id);
-
-  const agentProfilesItems = copyAlreadyPresent
-    ? [...preserved, ...rebuiltOptions]
-    : [...preserved, copyOption, ...rebuiltOptions];
+  const existingCopy = merged.find((option) => option.id === created.id);
+  let agentProfilesItems: AgentProfileOption[];
+  if (!existingCopy) {
+    agentProfilesItems = [...merged, copyOption];
+  } else if ((existingCopy.updatedAt ?? "") > (created.updatedAt ?? "")) {
+    agentProfilesItems = merged; // keep the newer WS-delivered option
+  } else {
+    agentProfilesItems = merged.map((option) => (option.id === created.id ? copyOption : option));
+  }
 
   return {
     settingsAgents: { ...state.settingsAgents, items: nextAgents },

@@ -196,6 +196,48 @@ func TestDuplicateAgentProfile_DetectsConcurrentChange(t *testing.T) {
 	}
 }
 
+// TestDuplicateAgentProfile_DetectsMcpRowCreatedMidFlight verifies the
+// transaction aborts when the caller's snapshot had NO MCP row but one was
+// created before the duplicate ran — otherwise the copy would silently drop
+// the newly configured servers.
+func TestDuplicateAgentProfile_DetectsMcpRowCreatedMidFlight(t *testing.T) {
+	repo := newFreshRepo(t)
+	ctx := context.Background()
+
+	if err := repo.CreateAgent(ctx, &models.Agent{Name: "test-agent"}); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+	agent, err := repo.GetAgentByName(ctx, "test-agent")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	source := &models.AgentProfile{AgentID: agent.ID, Name: "Default"}
+	if err := repo.CreateAgentProfile(ctx, source); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	// The caller read "no MCP row", then a concurrent writer created one.
+	mcp := &models.AgentProfileMcpConfig{
+		ProfileID: source.ID,
+		Enabled:   true,
+		Servers:   map[string]interface{}{"github": "x"},
+	}
+	if err := repo.UpsertAgentProfileMcpConfig(ctx, mcp); err != nil {
+		t.Fatalf("create source mcp: %v", err)
+	}
+
+	clone := &models.AgentProfile{AgentID: agent.ID, Name: "Default Copy"}
+	err = repo.DuplicateAgentProfile(ctx, DuplicateAgentProfileInput{
+		Source:  source, // SourceMcp nil: snapshot predates the MCP row
+		Profile: clone,
+	})
+	if !errors.Is(err, ErrProfileChanged) {
+		t.Fatalf("err = %v, want ErrProfileChanged (MCP row created mid-flight)", err)
+	}
+	if _, err := repo.GetAgentProfile(ctx, clone.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("copy row created despite new MCP row: err=%v", err)
+	}
+}
+
 // TestDuplicateAgentProfile_RollsBackMcpFailure verifies the transaction
 // rolls back the inserted profile row when the MCP upsert fails AFTER the
 // insert. A regression that commits the profile before the MCP write would

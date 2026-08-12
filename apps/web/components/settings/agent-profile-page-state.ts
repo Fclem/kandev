@@ -17,7 +17,11 @@ import { isProfileDirty } from "@/components/settings/agent-profile-dirty";
 import type { useToast } from "@/components/toast-provider";
 import type { AgentProfileDeleteConflict } from "@/components/settings/agent-profile-delete-dialog";
 import { t as translate } from "@/lib/i18n";
-import { toAgentProfileOption, type AgentProfileOption } from "@/lib/state/slices/settings/types";
+import {
+  mergeOptionsByNewest,
+  toAgentProfileOption,
+  type AgentProfileOption,
+} from "@/lib/state/slices/settings/types";
 import { ApiError } from "@/lib/api/client";
 import type { Agent, AgentProfile, PermissionSetting } from "@/lib/types/http";
 
@@ -38,10 +42,7 @@ export function reconcileAgentProfileOptions(
   const rebuiltOptions = nextAgents.flatMap((agentItem) =>
     agentItem.profiles.map((agentProfile) => toAgentProfileOption(agentItem, agentProfile)),
   );
-  const preserved = previousOptions.filter(
-    (option) => !rebuiltOptions.some((rebuilt) => rebuilt.id === option.id),
-  );
-  return [...preserved, ...rebuiltOptions];
+  return mergeOptionsByNewest(previousOptions, rebuiltOptions);
 }
 
 export function useSyncAgentsToStore() {

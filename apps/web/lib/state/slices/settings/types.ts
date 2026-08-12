@@ -82,6 +82,30 @@ export function isSelectableAgentProfile(profile: Pick<AgentProfileOption, "enab
   return profile.enabled !== false;
 }
 
+/**
+ * Merge two option lists by ID, keeping the NEWER revision per id (missing or
+ * equal updatedAt defers to the rebuilt option). A newer WebSocket-delivered
+ * option must never be regressed by a stale list rebuild — e.g. a disabled
+ * profile whose option was updated by `agent.profile.updated` while its owning
+ * agent was absent must not reappear as selectable.
+ */
+export function mergeOptionsByNewest(
+  previous: AgentProfileOption[],
+  rebuilt: AgentProfileOption[],
+): AgentProfileOption[] {
+  const byId = new Map<string, AgentProfileOption>();
+  for (const option of previous) {
+    byId.set(option.id, option);
+  }
+  for (const option of rebuilt) {
+    const existing = byId.get(option.id);
+    if (!existing || (option.updatedAt ?? "") >= (existing.updatedAt ?? "")) {
+      byId.set(option.id, option);
+    }
+  }
+  return [...byId.values()];
+}
+
 /** Single source of truth for mapping an API Agent+Profile to a store AgentProfileOption. */
 export function toAgentProfileOption(
   agent: Pick<Agent, "id" | "name" | "capability_status" | "capability_error">,

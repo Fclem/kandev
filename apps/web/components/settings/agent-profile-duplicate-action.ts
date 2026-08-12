@@ -68,17 +68,18 @@ export function useProfileDuplicateAction({
       const saved = await saveAll();
       if (!saved.canLeave) {
         // Surface whichever contributor is blocking the save (MCP error or
-        // an invalid profile draft) so the abort is never silent.
-        const reason =
-          invalidReason ??
-          profileSaveInvalidReason(draft.name, modelConfigResolutionPending, translate);
-        if (reason) {
-          toast({
-            title: translate("agents:failedToDuplicateProfile"),
-            description: reason,
-            variant: "error",
-          });
-        }
+        // an invalid profile draft); when the coordinator gives no reason
+        // (another save in flight, or newer changes appeared during the
+        // awaited save), fall back to a generic message so the abort is
+        // never silent.
+        toast({
+          title: translate("agents:failedToDuplicateProfile"),
+          description:
+            invalidReason ??
+            profileSaveInvalidReason(draft.name, modelConfigResolutionPending, translate) ??
+            translate("agents:duplicateSaveBlocked"),
+          variant: "error",
+        });
         return;
       }
       const created = await duplicateAgentProfileAction(draft.id);

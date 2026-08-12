@@ -80,10 +80,10 @@ filtering.
 ### E2E
 
 - Delete `apps/web/e2e/tests/integrations/hide-disabled-integrations-nav.spec.ts`
-  and `apps/web/e2e/tests/settings/hide-disabled-agent-profiles-nav.spec.ts`.
-  No replacement E2E: the removal's contract (configured ⇒ visible) is
-  covered by the updated unit tests and the existing sidebar/settings
-  navigation specs.
+  and `apps/web/e2e/tests/settings/hide-disabled-agent-profiles-nav.spec.ts`
+  (their setting-toggle scenarios are obsolete). The post-removal contract is
+  covered by three replacement specs (added during review round 1) — see the
+  E2E Tests section below.
 
 ---
 

@@ -44,42 +44,37 @@ beforeEach(() => {
 });
 
 describe("useAutomationRuns", () => {
-  it("re-applies the optimistic removal if an in-flight refresh resurrects the row before delete confirms", async () => {
+  it("does not let a refresh started before a single-run delete resurrect the row", async () => {
     const runX = mkRun("run-x");
     const runY = mkRun("run-y");
     setRuns(AUTOMATION_ID, [runX, runY]);
 
-    // The delete request stays pending until we manually resolve it below,
-    // so we can interleave a "stale refresh" in between.
+    // The delete request stays pending until we manually resolve it below.
     const del = deferred<{ deleted: boolean }>();
     vi.mocked(deleteAutomationRun).mockReturnValue(del.promise);
-    // A concurrent refresh() resolves with the pre-delete list — as if the
-    // list request was already in flight when the delete was fired. The
-    // hook's own mount-effect fetch (first call) is left pending so it
-    // doesn't confound the explicit refresh() below.
+    // The refresh starts before the delete claims the mutation epoch and
+    // resolves with the pre-delete list — the epoch guard must discard it.
     vi.mocked(listAutomationRuns)
-      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
       .mockResolvedValue([runX, runY]);
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
 
     act(() => {
-      result.current.deleteRun("run-x");
+      result.current.refresh(); // captures the pre-delete epoch
+      result.current.deleteRun("run-x"); // claims the epoch
+    });
+    // The pre-delete refresh resolves with the full list — it must be
+    // discarded (its captured epoch went stale when the delete claimed).
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
     rerender();
     expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
 
-    // The in-flight refresh resolves and overwrites the store with the
-    // stale full list, resurrecting run-x — this is the race being guarded
-    // against, reproduced here explicitly.
-    await act(async () => {
-      await result.current.refresh();
-    });
-    rerender();
-    expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-x", "run-y"]);
-
-    // The delete now confirms server-side. Without re-applying the removal
-    // on success, run-x would stay resurrected until the next full refresh.
+    // The delete confirms server-side.
     await act(async () => {
       del.resolve({ deleted: true });
       await del.promise;
@@ -89,16 +84,13 @@ describe("useAutomationRuns", () => {
   });
 
   it("keeps a run created after delete-all completed when reconciling the full list", async () => {
-    const runX = mkRun("run-x");
-    const runY = mkRun("run-y");
     const runNew = mkRun("run-new");
-    setRuns(AUTOMATION_ID, [runX, runY]);
+    setRuns(AUTOMATION_ID, [mkRun("run-x"), mkRun("run-y")]);
 
     const del = deferred<{ deleted: boolean }>();
     vi.mocked(deleteAllAutomationRuns).mockReturnValue(del.promise);
     vi.mocked(listAutomationRuns)
       .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
-      .mockResolvedValueOnce([runX, runY]) // in-flight refresh, pre-delete list
       .mockResolvedValue([runNew]); // authoritative post-delete refresh
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
@@ -108,12 +100,6 @@ describe("useAutomationRuns", () => {
     });
     rerender();
     expect(result.current.runs).toEqual([]);
-
-    await act(async () => {
-      await result.current.refresh();
-    });
-    rerender();
-    expect(result.current.runs).toHaveLength(2);
 
     // The success path must end with exactly the authoritative post-delete
     // list: a blanket clear would drop run-new, which was created after the

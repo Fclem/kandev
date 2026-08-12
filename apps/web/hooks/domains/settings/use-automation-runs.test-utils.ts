@@ -120,11 +120,11 @@ export const actions = {
   },
 };
 
-/** A promise plus its resolve function, for controlling when a mocked async
- * call settles relative to other events in a test. */
+/** A promise plus its resolve/reject functions, for controlling when a mocked
+ * async call settles relative to other events in a test. */
 export function deferred<T>() {
-  const { promise, resolve } = Promise.withResolvers<T>();
-  return { promise, resolve };
+  const { promise, resolve, reject } = Promise.withResolvers<T>();
+  return { promise, resolve, reject };
 }
 
 export function mkRun(id: string): AutomationRun {

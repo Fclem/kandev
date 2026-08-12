@@ -286,6 +286,10 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
 
   useEffect(() => {
     if (!automationId || loading) return;
+    // A delete owns the store while it is in flight: its reconciliation or
+    // recovery is the only list request, so it can never be superseded by a
+    // mount fetch whose failure would skip the recovery's snapshot restore.
+    if ((storeApi.getState().automationRuns.deleting[automationId] ?? false) !== false) return;
     fetchRuns(storeApi, automationId, {
       getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
       setRunsLoading,
@@ -297,6 +301,9 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
 
   const refresh = useCallback(() => {
     if (!automationId) return;
+    // See the mount effect: while a delete is in flight its reconciliation /
+    // recovery owns the list state and must not be superseded.
+    if ((storeApi.getState().automationRuns.deleting[automationId] ?? false) !== false) return;
     fetchRuns(storeApi, automationId, {
       getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
       setRunsLoading,

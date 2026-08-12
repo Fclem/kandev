@@ -78,7 +78,6 @@ describe("useAutomationRuns - status-scoped delete-all", () => {
     vi.mocked(deleteAutomationRun).mockReturnValue(del.promise);
     vi.mocked(listAutomationRuns)
       .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
-      .mockResolvedValueOnce([runX, runY]) // in-flight refresh, pre-delete list
       .mockResolvedValue([runY, runNew]); // authoritative post-delete refresh
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
@@ -88,12 +87,6 @@ describe("useAutomationRuns - status-scoped delete-all", () => {
     });
     rerender();
     expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
-
-    await act(async () => {
-      await result.current.refresh();
-    });
-    rerender();
-    expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-x", "run-y"]);
 
     // The success path must end with exactly the authoritative post-delete
     // list: a blanket re-clear would drop run-new, which was created after
@@ -217,61 +210,50 @@ describe("useAutomationRuns - scoped delete-all stale list responses", () => {
     expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
   });
 
-  it("discards a fetch that started during a scoped delete-all and resolves after it succeeds", async () => {
+  it("ignores a refresh while a scoped delete-all is in flight", async () => {
     const runX = mkRun("run-x");
     const runY = mkRun("run-y");
     setRuns(AUTOMATION_ID, [runX, runY]);
 
-    const during = deferred<AutomationRun[]>();
     vi.mocked(listAutomationRuns)
       .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
-      .mockReturnValueOnce(during.promise) // fetch started during the delete
       .mockResolvedValue([runY]); // authoritative post-delete refresh
     vi.mocked(deleteAutomationRun).mockResolvedValue({ deleted: true });
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
 
     act(() => {
-      result.current.deleteAllRuns(["run-x"]); // claims the epoch
-      result.current.refresh(); // starts while the delete is in flight
+      result.current.deleteAllRuns(["run-x"]);
+      result.current.refresh(); // no-op while the delete owns the store
     });
-    // The delete settles and reconciles with the post-delete list.
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
     rerender();
-    expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
-
-    // The pre-delete fetch resolves after the delete settled — the settle
-    // epoch bump must discard it instead of resurrecting run-x.
-    await act(async () => {
-      during.resolve([runX, runY]);
-      await during.promise;
-    });
-    rerender();
+    // Only the mount fetch and the post-delete reconciliation ran; the
+    // in-flight refresh was ignored at the hook level.
+    expect(listAutomationRuns).toHaveBeenCalledTimes(2);
     expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
   });
 });
 describe("useAutomationRuns - unscoped delete-all stale list responses", () => {
-  it("discards a fetch that started during an unscoped delete-all and resolves after it succeeds", async () => {
+  it("ignores a refresh while an unscoped delete-all is in flight", async () => {
     const runX = mkRun("run-x");
     const runY = mkRun("run-y");
     setRuns(AUTOMATION_ID, [runX, runY]);
 
-    const during = deferred<AutomationRun[]>();
     vi.mocked(listAutomationRuns)
       .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
-      .mockReturnValueOnce(during.promise) // fetch started during the delete
       .mockResolvedValue([]); // authoritative post-delete refresh
     vi.mocked(deleteAllAutomationRuns).mockResolvedValue({ deleted: true });
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
 
     act(() => {
-      result.current.deleteAllRuns(); // claims the epoch
-      result.current.refresh(); // starts while the delete is in flight
+      result.current.deleteAllRuns();
+      result.current.refresh(); // no-op while the delete owns the store
     });
     await act(async () => {
       await Promise.resolve();
@@ -279,36 +261,27 @@ describe("useAutomationRuns - unscoped delete-all stale list responses", () => {
       await Promise.resolve();
     });
     rerender();
-    expect(result.current.runs).toEqual([]);
-
-    // The pre-delete fetch resolves after the delete settled — the settle
-    // epoch bump must discard it instead of resurrecting the deleted runs.
-    await act(async () => {
-      during.resolve([runX, runY]);
-      await during.promise;
-    });
-    rerender();
+    expect(listAutomationRuns).toHaveBeenCalledTimes(2); // mount + reconciliation
     expect(result.current.runs).toEqual([]);
   });
 });
 describe("useAutomationRuns - single-run delete invalidation", () => {
-  it("discards a fetch that started during a single-run delete and resolves after it succeeds", async () => {
+  it("ignores a refresh while a single-run delete is in flight", async () => {
     const runX = mkRun("run-x");
     const runY = mkRun("run-y");
     setRuns(AUTOMATION_ID, [runX, runY]);
 
-    const during = deferred<AutomationRun[]>();
-    vi.mocked(listAutomationRuns)
-      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
-      .mockReturnValueOnce(during.promise); // fetch started during the delete
     const del = deferred<{ deleted: boolean }>();
     vi.mocked(deleteAutomationRun).mockReturnValue(del.promise);
+    vi.mocked(listAutomationRuns).mockReturnValueOnce(
+      Promise.withResolvers<AutomationRun[]>().promise,
+    ); // mount
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
 
     act(() => {
-      result.current.deleteRun("run-x"); // claims the epoch
-      result.current.refresh(); // starts while the delete is in flight
+      result.current.deleteRun("run-x");
+      result.current.refresh(); // no-op while the delete owns the store
     });
     rerender();
     expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
@@ -318,54 +291,8 @@ describe("useAutomationRuns - single-run delete invalidation", () => {
       await del.promise;
     });
     rerender();
+    expect(listAutomationRuns).toHaveBeenCalledTimes(1); // mount only
     expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
-
-    // The pre-delete fetch resolves after the delete settled — the settle
-    // bump must discard it instead of resurrecting run-x.
-    await act(async () => {
-      during.resolve([runX, runY]);
-      await during.promise;
-    });
-    rerender();
-    expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
-  });
-
-  it("discards a fetch that started during a failed single-run delete and resolves after the recovery", async () => {
-    const runX = mkRun("run-x");
-    const runY = mkRun("run-y");
-    setRuns(AUTOMATION_ID, [runX, runY]);
-
-    const during = deferred<AutomationRun[]>();
-    vi.mocked(listAutomationRuns)
-      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
-      .mockReturnValueOnce(during.promise) // fetch started during the delete
-      .mockResolvedValue([runX, runY]); // recovery refresh
-    vi.mocked(deleteAutomationRun).mockRejectedValue(new Error("single delete failed"));
-
-    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
-    await act(async () => {});
-    rerender();
-
-    await act(async () => {
-      result.current.deleteRun("run-x"); // claims the epoch
-      result.current.refresh(); // starts while the delete is in flight
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    rerender();
-    // The recovery applied the server list (run-x still present).
-    expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-x", "run-y"]);
-
-    // The during-delete fetch resolves after the recovery — the settle bump
-    // must discard it; either way the server list remains authoritative.
-    await act(async () => {
-      during.resolve([runX, runY]);
-      await during.promise;
-    });
-    rerender();
-    expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-x", "run-y"]);
   });
 });
 describe("useAutomationRuns - loading flag", () => {
@@ -442,6 +369,47 @@ describe("useAutomationRuns - loading flag", () => {
   });
 });
 describe("useAutomationRuns - batch recovery timing", () => {
+  it("does not let a refresh supersede an in-flight recovery", async () => {
+    const runX = mkRun("run-x");
+    const runY = mkRun("run-y");
+    setRuns(AUTOMATION_ID, [runX, runY]);
+
+    const recovery = deferred<AutomationRun[]>();
+    vi.mocked(listAutomationRuns)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
+      .mockReturnValueOnce(recovery.promise); // recovery refresh
+    vi.mocked(deleteAutomationRun).mockRejectedValue(new Error(BATCH_DELETE_ERROR));
+
+    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+
+    act(() => {
+      result.current.deleteAllRuns(["run-x"]); // delete fails → recovery starts
+      result.current.refresh(); // must be a no-op while the recovery is in flight
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+    // refresh() was ignored at the hook level: only the mount fetch and the
+    // recovery ran, so the recovery's fallback cannot be superseded.
+    expect(listAutomationRuns).toHaveBeenCalledTimes(2);
+
+    // The recovery fails → the snapshot is restored, the slot is released,
+    // and the failed delete's rows stay visible.
+    await act(async () => {
+      recovery.reject(new Error("network down"));
+      await recovery.promise.catch(() => {});
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+    expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-x", "run-y"]);
+    expect(toast.error).toHaveBeenCalledTimes(2); // delete failure + could-not-refresh
+    expect(result.current.deleting).toBe(false);
+  });
+
   it("does not recover from a partial failure until every delete in the batch settles", async () => {
     const runX = mkRun("run-x");
     const runY = mkRun("run-y");
@@ -542,9 +510,11 @@ describe("useAutomationRuns - serialized deletes", () => {
     first.unmount();
 
     // A remounted instance for the same automation must see the shared
-    // in-flight slot and be gated, not start its own overlapping delete.
+    // in-flight slot and be gated, not start its own overlapping delete —
+    // and its mount fetch must not supersede A's recovery either.
     const second = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
     expect(second.result.current.deleting).toBe(true);
+    expect(listAutomationRuns).toHaveBeenCalledTimes(1); // A's mount fetch only
     act(() => {
       second.result.current.deleteAllRuns(["run-y"]);
       second.result.current.deleteRun("run-y");

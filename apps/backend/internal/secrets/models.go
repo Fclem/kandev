@@ -89,6 +89,13 @@ type CopySecretRequest struct {
 // presence markers, is reset on each decode so a reused request struct cannot
 // leak state between messages.
 func (r *CopySecretRequest) UnmarshalJSON(data []byte) error {
+	// Reset every field (including the presence markers) BEFORE parsing so a
+	// failed decode can never leave stale state from an earlier message.
+	r.Scope = ""
+	r.WorkspaceID = ""
+	r.Name = nil
+	r.nameSet = false
+	r.nameNull = false
 	var aux struct {
 		Scope       SecretScope     `json:"target_scope"`
 		WorkspaceID string          `json:"target_workspace_id"`
@@ -99,9 +106,7 @@ func (r *CopySecretRequest) UnmarshalJSON(data []byte) error {
 	}
 	r.Scope = aux.Scope
 	r.WorkspaceID = aux.WorkspaceID
-	r.Name = nil
 	r.nameSet = len(aux.Name) > 0
-	r.nameNull = false
 	if !r.nameSet {
 		return nil
 	}

@@ -449,13 +449,6 @@ export function SecretsSettings({
     actions.closeTransfer();
   };
 
-  const handleStaleSource = () => {
-    if (state.transferTarget) {
-      state.removeSecret(state.transferTarget.id);
-    }
-    actions.closeTransfer();
-  };
-
   return (
     <>
       <SecretsSettingsContent
@@ -470,7 +463,6 @@ export function SecretsSettings({
           originToken={originTokenFor(state.transferTarget)}
           onClose={actions.closeTransfer}
           onCompleted={handleTransferCompleted}
-          onStaleSource={handleStaleSource}
         />
       )}
     </>

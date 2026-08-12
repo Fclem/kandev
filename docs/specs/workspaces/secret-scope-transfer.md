@@ -250,10 +250,12 @@ Store invariants for the transfer operations:
   localized "no valid destinations" state (rather than an empty picker) and
   keeps submit disabled; a Global source has no valid target and must not be
   able to submit.
-- **Source deleted while the dialog is open:** the backend returns `404`; the
-  dialog shows localized stale-secret feedback and closes without adding any
-  destination item, and the stale source row is removed or refreshed in the
-  page list.
+- **Source deleted or destination unavailable while the dialog is open:** the
+  backend returns `404` (deliberately ambiguous between a missing source and a
+  missing/unauthorized destination, so it never discloses which). The dialog
+  shows a localized generic failure message and stays open; rows are never
+  removed automatically on a `404`, and no destination item is added. The
+  source list refreshes on the next navigation or reload.
 
 ## Scenarios
 

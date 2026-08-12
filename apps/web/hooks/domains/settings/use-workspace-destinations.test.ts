@@ -91,12 +91,15 @@ describe("useWorkspaceDestinations", () => {
     mockListWorkspaces.mockReturnValue(pending.promise);
 
     const view = renderHook(() => useWorkspaceDestinations());
+    expect(view.result.current.loading).toBe(true);
     storeState.workspaces.items = [{ id: "ws-1", name: "One" }];
     view.rerender();
     await act(async () => pending.reject(new Error("late failure")));
     // The store was populated meanwhile, so the stale failure must not
-    // surface as an error or trigger another fetch.
+    // surface as an error, must not trigger another fetch, and must not leave
+    // loading stuck true (which would disable submission forever).
     await waitFor(() => expect(view.result.current.error).toBeNull());
+    expect(view.result.current.loading).toBe(false);
     expect(mockListWorkspaces).toHaveBeenCalledTimes(1);
   });
 });

@@ -23,7 +23,10 @@ export function useWorkspaceDestinations() {
 
   useEffect(() => {
     if (workspaceItems.length > 0) {
+      // Hydration (or a retry result) superseded the fallback request: clear
+      // any in-flight loading state so submission is not disabled forever.
       setError(null);
+      setLoading(false);
       return;
     }
     let cancelled = false;

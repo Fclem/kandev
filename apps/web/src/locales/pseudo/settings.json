@@ -767,7 +767,6 @@
   "secretTargetName": "Ńàḿē",
   "secretNameFromOrigin": "{{name}} (ƒŕōḿ {{origin}})",
   "secretNameConflictInDestination": "À śēćŕēţ ńàḿēď {{name}} àĺŕēàďŷ ēxĩśţś ĩń ţĥĩś ďēśţĩńàţĩōń.",
-  "staleSecretSource": "Ţĥē śōũŕćē śēćŕēţ ńō ĺōńĝēŕ ēxĩśţś.",
   "destinationsLoading": "Ĺōàďĩńĝ ďēśţĩńàţĩōńś",
   "destinationsLoadFailed": "Ćōũĺď ńōţ ĺōàď ďēśţĩńàţĩōńś.",
   "retryDestinations": "Ŕēţŕŷ",

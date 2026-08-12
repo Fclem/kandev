@@ -767,7 +767,6 @@
   "secretTargetName": "Name",
   "secretNameFromOrigin": "{{name}} (from {{origin}})",
   "secretNameConflictInDestination": "A secret named {{name}} already exists in this destination.",
-  "staleSecretSource": "The source secret no longer exists.",
   "destinationsLoading": "Loading destinations",
   "destinationsLoadFailed": "Could not load destinations.",
   "retryDestinations": "Retry",

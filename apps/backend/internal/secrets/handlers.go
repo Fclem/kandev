@@ -346,6 +346,11 @@ type wsTransferPayload struct {
 // including its presence markers, so a reused envelope cannot leak state
 // between messages.
 func (p *wsTransferPayload) UnmarshalJSON(data []byte) error {
+	// Reset every field before parsing so a failed decode can never leave
+	// stale state from an earlier message on a reused envelope.
+	p.ID = ""
+	p.WorkspaceID = ""
+	p.CopySecretRequest = CopySecretRequest{}
 	var aux struct {
 		ID          string `json:"id"`
 		WorkspaceID string `json:"workspace_id"`

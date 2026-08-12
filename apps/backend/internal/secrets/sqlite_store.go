@@ -465,7 +465,9 @@ func (s *sqliteStore) transferSQLite(ctx context.Context, sourceID string, targe
 		}
 	}()
 
-	secret, err := s.transferBody(ctx, conn, func(q string) string { return q }, sourceID, targetScope, targetWorkspaceID, targetName, verifyDestination, deleteSource)
+	// SQLite's single writer serializes all writers (BEGIN IMMEDIATE), so the
+	// source row cannot change under us; no row lock is needed.
+	secret, err := s.transferBody(ctx, conn, func(q string) string { return q }, sourceID, targetScope, targetWorkspaceID, targetName, verifyDestination, deleteSource, false)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +507,10 @@ func (s *sqliteStore) transferPostgres(ctx context.Context, sourceID, sourceWork
 		first = false
 	}
 
-	secret, err := s.transferBody(ctx, tx, s.db.Rebind, sourceID, targetScope, targetWorkspaceID, targetName, verifyDestination, deleteSource)
+	// A Move destroys the source, so the source row is locked with FOR UPDATE
+	// (deleteSource == true): a concurrent Update cannot commit a newer value
+	// between our read and delete, which would otherwise lose that value.
+	secret, err := s.transferBody(ctx, tx, s.db.Rebind, sourceID, targetScope, targetWorkspaceID, targetName, verifyDestination, deleteSource, deleteSource)
 	if err != nil {
 		return nil, err
 	}
@@ -529,7 +534,7 @@ func transferTargetLockKey(targetScope SecretScope, targetWorkspaceID string) in
 // normalized-scope conflict check, insert of the copy (reusing the source's
 // encrypted value), optional source delete, and the returned-row read. Every
 // statement uses the same executor and the per-user visibility predicate.
-func (s *sqliteStore) transferBody(ctx context.Context, exec transferExec, rebind func(string) string, sourceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error, deleteSource bool) (*Secret, error) {
+func (s *sqliteStore) transferBody(ctx context.Context, exec transferExec, rebind func(string) string, sourceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error, deleteSource, lockSource bool) (*Secret, error) {
 	owner := scopeOwner(ctx)
 
 	if verifyDestination != nil {
@@ -546,9 +551,16 @@ func (s *sqliteStore) transferBody(ctx context.Context, exec transferExec, rebin
 		Ciphertext  []byte
 		Nonce       []byte
 	}
-	err := exec.QueryRowContext(ctx, rebind(`
+	sourceQuery := `
 		SELECT id, name, scope, workspace_id, encrypted_value, nonce
-		FROM secrets WHERE id = ? AND (user_id = '' OR ? = '' OR user_id = ?)`),
+		FROM secrets WHERE id = ? AND (user_id = '' OR ? = '' OR user_id = ?)`
+	if lockSource {
+		// Row lock held to commit so a concurrent Update cannot interleave
+		// between the read and the Move delete (PostgreSQL only; SQLite's
+		// single writer already serializes).
+		sourceQuery += " FOR UPDATE"
+	}
+	err := exec.QueryRowContext(ctx, rebind(sourceQuery),
 		sourceID, owner, owner).Scan(&src.ID, &src.Name, &src.Scope, &src.WorkspaceID, &src.Ciphertext, &src.Nonce)
 	if err != nil {
 		if err == sql.ErrNoRows {

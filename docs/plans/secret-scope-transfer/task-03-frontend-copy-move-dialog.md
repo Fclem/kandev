@@ -64,10 +64,10 @@ spec: "../../specs/workspaces/secret-scope-transfer.md"
   `isBusy` flag and the primary button is `disabled={isBusy || ...}` while a
   transfer is in flight; a deferred-response test asserts the button stays
   disabled and a second click does not issue another copy/move request.
-- A `404` from the backend (source deleted while the dialog was open) is
-  handled explicitly: the dialog shows localized stale-secret feedback, closes
-  without adding any destination item, and the stale source row is removed or
-  refreshed in the page list.
+- A `404` from the backend is deliberately ambiguous (missing source OR
+  missing/unauthorized destination) and never discloses which: the dialog shows
+  a localized generic failure message and stays open; no rows are removed
+  automatically on a `404`, and no destination item is added.
 - On success `onCompleted` routes **by the returned item's scope**: a
   Global-target result is added to the Global store from any page; a
   Workspace-target result joins the page's list only when the page is that
@@ -126,9 +126,10 @@ Tasks 01 and 02.
    44px targets, no overflow), keyboard operation of the Copy/Move radios,
    the primary submit label switching between Copy and Move modes (toggling
    the radio changes the button label), an in-flight duplicate-click test
-   (deferred response: button disabled, no second request), a `404`-stale-
-   source test (dialog feedback, no destination item added, stale row
-   removed), and `onCompleted` routing in both directions (workspace page →
+   (deferred response: button disabled, no second request), an ambiguous
+   `404` test (generic dialog feedback, dialog stays open, no row removal, no
+   destination item added), and `onCompleted` routing in both directions
+   (workspace page →
    Global target lands in the store; Global page → workspace Move removes the
    source from the Global list and routes the returned workspace item only
    when the page is that workspace).

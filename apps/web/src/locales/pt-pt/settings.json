@@ -751,7 +751,6 @@
   "secretTargetName": "Nome",
   "secretNameFromOrigin": "{{name}} (de {{origin}})",
   "secretNameConflictInDestination": "Já existe um segredo com o nome {{name}} neste destino.",
-  "staleSecretSource": "O segredo de origem já não existe.",
   "destinationsLoading": "A carregar destinos",
   "destinationsLoadFailed": "Não foi possível carregar os destinos.",
   "retryDestinations": "Repetir",

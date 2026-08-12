@@ -62,7 +62,6 @@ type CopyMoveSecretDialogProps = {
   originToken: string;
   onClose: () => void;
   onCompleted: (item: SecretListItem, mode: CopyMoveMode) => void;
-  onStaleSource: () => void;
 };
 
 export function CopyMoveSecretDialog({
@@ -70,7 +69,6 @@ export function CopyMoveSecretDialog({
   originToken,
   onClose,
   onCompleted,
-  onStaleSource,
 }: CopyMoveSecretDialogProps) {
   const { t } = useTranslation();
   const {
@@ -97,9 +95,9 @@ export function CopyMoveSecretDialog({
     nameError,
     conflict,
     destinationsLoading,
+    destinationsError: destinationsError !== null,
     setNameError,
     onCompleted,
-    onStaleSource,
   });
 
   return (
@@ -206,6 +204,7 @@ type TransferCanSubmitArgs = {
   nameError: string | null;
   conflict: boolean;
   destinationsLoading: boolean;
+  destinationsError: boolean;
 };
 
 function transferCanSubmit({
@@ -215,6 +214,7 @@ function transferCanSubmit({
   nameError,
   conflict,
   destinationsLoading,
+  destinationsError,
 }: TransferCanSubmitArgs): boolean {
   return (
     !isBusy &&
@@ -222,7 +222,8 @@ function transferCanSubmit({
     name.trim().length > 0 &&
     nameError === null &&
     !conflict &&
-    !destinationsLoading
+    !destinationsLoading &&
+    !destinationsError
   );
 }
 
@@ -234,9 +235,9 @@ type TransferSubmitArgs = {
   nameError: string | null;
   conflict: boolean;
   destinationsLoading: boolean;
+  destinationsError: boolean;
   setNameError: (error: string | null) => void;
   onCompleted: (item: SecretListItem, mode: CopyMoveMode) => void;
-  onStaleSource: () => void;
 };
 
 function useTransferSubmit({
@@ -247,9 +248,9 @@ function useTransferSubmit({
   nameError,
   conflict,
   destinationsLoading,
+  destinationsError,
   setNameError,
   onCompleted,
-  onStaleSource,
 }: TransferSubmitArgs) {
   const { t } = useTranslation();
   const [isBusy, setIsBusy] = useState(false);
@@ -262,6 +263,7 @@ function useTransferSubmit({
     nameError,
     conflict,
     destinationsLoading,
+    destinationsError,
   });
 
   const run = async () => {
@@ -290,15 +292,13 @@ function useTransferSubmit({
           : await moveSecret(secret.id, payload, sourceOptions);
       onCompleted(item, mode);
     } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 409) {
-          setNameError(t("settings:secretNameConflictInDestination", { name: trimmedName }));
-        } else if (err.status === 404) {
-          onStaleSource();
-          return;
-        }
+      if (err instanceof ApiError && err.status === 409) {
+        setNameError(t("settings:secretNameConflictInDestination", { name: trimmedName }));
+      } else {
+        // 404 is deliberately ambiguous (missing source OR missing/unauthorized
+        // destination) to avoid disclosure; never remove the source row on it.
+        setFormError(t("settings:transferFailed"));
       }
-      setFormError(t("settings:transferFailed"));
     } finally {
       setIsBusy(false);
     }
@@ -348,6 +348,64 @@ function TargetNameField({
       )}
     </div>
   );
+}
+
+type WorkspaceOption = { id: string; name: string };
+
+/**
+ * Computes the valid destinations for a secret (General plus every other
+ * workspace) and keeps the selection in sync: auto-selects the first option
+ * when nothing is chosen, and clears a selection that vanished from the list
+ * (deleted workspace or failed list) so submission can never target a stale
+ * destination. `null` keeps canSubmit false when nothing valid remains (a
+ * Global source must never fall back to a same-scope target).
+ */
+function useDestinationOptions(
+  secret: SecretListItem,
+  workspaces: WorkspaceOption[],
+  destination: SecretDestination | null,
+  onDestinationChange: (destination: SecretDestination) => void,
+) {
+  const workspaceNameById = Object.fromEntries(
+    workspaces.map((workspace) => [workspace.id, workspace.name]),
+  );
+  const destinations = useMemo(() => {
+    const list: SecretDestination[] = [];
+    if (secret.scope !== "global") {
+      list.push({ scope: "global" });
+    }
+    for (const workspace of workspaces) {
+      if (secret.scope === "workspace" && workspace.id === secret.workspace_id) {
+        continue;
+      }
+      list.push({ scope: "workspace", workspaceId: workspace.id });
+    }
+    return list;
+  }, [secret, workspaces]);
+
+  useEffect(() => {
+    if (destination === null && destinations.length > 0) {
+      onDestinationChange(destinations[0]);
+      return;
+    }
+    const selected = destination;
+    const destinationValid =
+      selected !== null &&
+      destinations.some((option) => {
+        if (option.scope !== selected.scope) {
+          return false;
+        }
+        if (selected.scope === "workspace") {
+          return option.scope === "workspace" && option.workspaceId === selected.workspaceId;
+        }
+        return true;
+      });
+    if (selected !== null && !destinationValid) {
+      onDestinationChange(destinations[0] ?? null);
+    }
+  }, [destination, destinations, onDestinationChange]);
+
+  return { destinations, workspaceNameById };
 }
 
 function TransferModeField({
@@ -412,29 +470,12 @@ function DestinationField({
 }) {
   const { t } = useTranslation();
   const workspaces = useAppStore((state) => state.workspaces.items);
-
-  const workspaceNameById = Object.fromEntries(
-    workspaces.map((workspace) => [workspace.id, workspace.name]),
+  const { destinations, workspaceNameById } = useDestinationOptions(
+    secret,
+    workspaces,
+    destination,
+    onDestinationChange,
   );
-  const destinations = useMemo(() => {
-    const list: SecretDestination[] = [];
-    if (secret.scope !== "global") {
-      list.push({ scope: "global" });
-    }
-    for (const workspace of workspaces) {
-      if (secret.scope === "workspace" && workspace.id === secret.workspace_id) {
-        continue;
-      }
-      list.push({ scope: "workspace", workspaceId: workspace.id });
-    }
-    return list;
-  }, [secret, workspaces]);
-
-  useEffect(() => {
-    if (destination === null && destinations.length > 0) {
-      onDestinationChange(destinations[0]);
-    }
-  }, [destination, destinations, onDestinationChange]);
 
   const noDestinations =
     destinations.length === 0 && !destinationsLoading && destinationsError === null;
@@ -452,7 +493,7 @@ function DestinationField({
             variant="outline"
             size="sm"
             onClick={onRetryDestinations}
-            className="cursor-pointer"
+            className="min-h-11 cursor-pointer"
           >
             {t("settings:retryDestinations")}
           </Button>

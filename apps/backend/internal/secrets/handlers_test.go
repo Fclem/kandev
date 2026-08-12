@@ -443,12 +443,10 @@ func TestWSHandler_ReusedEnvelopeResetsAllFields(t *testing.T) {
 		t.Fatalf("first code = %q, want BAD_REQUEST", got.Code)
 	}
 
-	// Second message reuses the same envelope: a different source (Global),
-	// workspace target A, omitted name, NO source workspace_id. A decoder that
-	// only reset the name marker would retain the stale source workspace_id
-	// and mis-dispatch the Global source as a workspace source (404), or leak
-	// the null name (400). A clean reset succeeds with the default source name
-	// and the freshly targeted workspace.
+	// Second message: a different source (Global), workspace target A, omitted
+	// name, NO source workspace_id. If the decoder leaked the stale source
+	// workspace_id, the Global source would be mis-dispatched as a workspace
+	// source (404); a clean reset succeeds with the default source name.
 	second, err := wsTransfer(t, h, ws.ActionSecretCopy,
 		`{"id":"`+global2+`","target_scope":"workspace","target_workspace_id":"workspace-a"}`)
 	if err != nil {
@@ -457,5 +455,53 @@ func TestWSHandler_ReusedEnvelopeResetsAllFields(t *testing.T) {
 	item := decodeWSItem(t, second)
 	if item.Scope != ScopeWorkspace || item.WorkspaceID != "workspace-a" || item.Name != "g2" {
 		t.Fatalf("second item = %+v (stale fields leaked between decodes)", item)
+	}
+
+	// Decoder-level reuse: one wsTransferPayload instance decodes BOTH
+	// messages. The second decode must fully reset id, workspace_id, scope,
+	// and the name presence markers.
+	var payload wsTransferPayload
+	firstBody := `{"id":"` + wsSecretA.ID + `","workspace_id":"workspace-a","target_scope":"workspace","target_workspace_id":"workspace-b","name":null}`
+	if err := json.Unmarshal([]byte(firstBody), &payload); err != nil {
+		t.Fatalf("decode first into shared payload: %v", err)
+	}
+	// Local alias for the embedded request: promoted selectors for
+	// WorkspaceID would be ambiguous (the envelope's source workspace id
+	// shadows the embedded target workspace id).
+	target := &payload.CopySecretRequest
+	if !target.nameNull || payload.ID != wsSecretA.ID {
+		t.Fatalf("first shared decode = %+v", payload)
+	}
+	secondBody := `{"id":"` + global2 + `","target_scope":"workspace","target_workspace_id":"workspace-a"}`
+	if err := json.Unmarshal([]byte(secondBody), &payload); err != nil {
+		t.Fatalf("decode second into shared payload: %v", err)
+	}
+	if payload.ID != global2 || payload.WorkspaceID != "" ||
+		target.Scope != ScopeWorkspace || target.WorkspaceID != "workspace-a" ||
+		target.Name != nil || target.nameSet || target.nameNull {
+		t.Fatalf("shared payload after second decode = %+v (stale fields leaked)", payload)
+	}
+
+	// A malformed second decode must leave the receiver fully reset, never
+	// carrying state from the first decode.
+	staleName := "stale"
+	bad := wsTransferPayload{
+		ID:          "stale-id",
+		WorkspaceID: "stale-ws",
+		CopySecretRequest: CopySecretRequest{
+			Scope:       ScopeWorkspace,
+			WorkspaceID: "stale-ws",
+			Name:        &staleName,
+			nameSet:     true,
+		},
+	}
+	if err := bad.UnmarshalJSON([]byte(`{"id":`)); err == nil {
+		t.Fatal("malformed decode succeeded")
+	}
+	badTarget := &bad.CopySecretRequest
+	if bad.ID != "" || bad.WorkspaceID != "" || badTarget.Scope != "" ||
+		badTarget.WorkspaceID != "" || badTarget.Name != nil ||
+		badTarget.nameSet || badTarget.nameNull {
+		t.Fatalf("malformed decode left stale state: %+v", bad)
 	}
 }

@@ -69,18 +69,16 @@ const workspaceSecret: SecretListItem = {
 function renderDialog(overrides: Partial<Parameters<typeof CopyMoveSecretDialog>[0]> = {}) {
   const onCompleted = vi.fn();
   const onClose = vi.fn();
-  const onStaleSource = vi.fn();
   const view = render(
     <CopyMoveSecretDialog
       secret={globalSecret}
       originToken="general"
       onClose={onClose}
       onCompleted={onCompleted}
-      onStaleSource={onStaleSource}
       {...overrides}
     />,
   );
-  return { onCompleted, onClose, onStaleSource, view };
+  return { onCompleted, onClose, view };
 }
 
 afterEach(async () => {
@@ -181,17 +179,24 @@ describe("CopyMoveSecretDialog submit", () => {
     expect(onCompleted).not.toHaveBeenCalled();
   });
 
-  it("reports a stale source on 404 without adding a destination item", async () => {
+  it("shows a generic failure on 404 and never removes the source row", async () => {
     mockMoveSecret.mockRejectedValue(new ApiError("not found", 404, {}));
-    const { onCompleted, onStaleSource } = renderDialog({
+    const { onCompleted, onClose } = renderDialog({
       secret: workspaceSecret,
       originToken: "Alpha",
     });
     fireEvent.click(screen.getByRole("radio", { name: /^Move/ }));
     fireEvent.click(screen.getByRole("button", { name: "Move" }));
 
-    await waitFor(() => expect(onStaleSource).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByText("Could not copy or move the secret.")).toBeTruthy(),
+    );
+    // A 404 is deliberately ambiguous (missing source OR missing/unauthorized
+    // destination): the dialog stays open, nothing is completed, and no row
+    // removal callback fires.
     expect(onCompleted).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
   it("ignores duplicate clicks while a transfer is in flight", async () => {

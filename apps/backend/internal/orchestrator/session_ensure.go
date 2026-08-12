@@ -45,6 +45,8 @@ type EnsureSessionOptions struct {
 // Growth is bounded by the number of distinct task IDs (~160 B per entry).
 var ensureLocks sync.Map // map[taskID]*sync.Mutex
 
+// acquireEnsureLock serializes concurrent EnsureSession calls per task,
+// returning an unlock function.
 func acquireEnsureLock(taskID string) func() {
 	v, _ := ensureLocks.LoadOrStore(taskID, &sync.Mutex{})
 	mu := v.(*sync.Mutex)
@@ -202,6 +204,8 @@ func WithViewerAgent(ctx context.Context, agentInstanceID string) context.Contex
 	return context.WithValue(ctx, viewerAgentContextKey, agentInstanceID)
 }
 
+// existingResponse builds an ensure response for a pre-existing session,
+// attaching the task's workspace path when the session row lacks one.
 func (s *Service) existingResponse(ctx context.Context, taskID string, sess *models.TaskSession, source string) *EnsureSessionResponse {
 	resp := &EnsureSessionResponse{
 		Success:        true,
@@ -262,6 +266,8 @@ func (s *Service) resolveTaskAgentProfile(ctx context.Context, task *models.Task
 	return "", step
 }
 
+// lookupWorkflowStep loads a workflow step by id, returning nil when the id
+// is empty, the getter is unavailable, or the lookup fails.
 func (s *Service) lookupWorkflowStep(ctx context.Context, stepID string) *wfmodels.WorkflowStep {
 	if stepID == "" || s.workflowStepGetter == nil {
 		return nil

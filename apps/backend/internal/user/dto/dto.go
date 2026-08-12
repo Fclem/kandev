@@ -163,10 +163,13 @@ type NullableSidebarDraft struct {
 	Value *models.SidebarViewDraft
 }
 
+// NewNullableSidebarDraft wraps a draft value as explicitly-set.
 func NewNullableSidebarDraft(value *models.SidebarViewDraft) NullableSidebarDraft {
 	return NullableSidebarDraft{Set: true, Value: value}
 }
 
+// UnmarshalJSON decodes an explicit null as "set with nil value" so the
+// PATCH distinction survives JSON decoding.
 func (n *NullableSidebarDraft) UnmarshalJSON(data []byte) error {
 	n.Set = true
 	if string(data) == "null" {
@@ -181,6 +184,9 @@ func (n *NullableSidebarDraft) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ServiceValue returns a **SidebarViewDraft suitable for the service layer:
+// nil when the field was omitted, otherwise a pointer to the value (possibly
+// nil when explicitly cleared).
 func (n NullableSidebarDraft) ServiceValue() **models.SidebarViewDraft {
 	if !n.Set {
 		return nil
@@ -195,6 +201,8 @@ type NullableRawMessage struct {
 	Value *json.RawMessage
 }
 
+// UnmarshalJSON decodes an explicit null as "set with nil value" so the
+// PATCH distinction survives JSON decoding.
 func (n *NullableRawMessage) UnmarshalJSON(data []byte) error {
 	n.Set = true
 	if string(data) == "null" {
@@ -209,6 +217,9 @@ func (n *NullableRawMessage) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ServiceValue returns a **json.RawMessage suitable for the service layer:
+// nil when the field was omitted, otherwise a pointer to the value (possibly
+// nil when explicitly cleared).
 func (n NullableRawMessage) ServiceValue() **json.RawMessage {
 	if !n.Set {
 		return nil
@@ -216,6 +227,7 @@ func (n NullableRawMessage) ServiceValue() **json.RawMessage {
 	return &n.Value
 }
 
+// FromUser maps a user model to its API DTO.
 func FromUser(user *models.User) UserDTO {
 	return UserDTO{
 		ID:        user.ID,
@@ -225,6 +237,8 @@ func FromUser(user *models.User) UserDTO {
 	}
 }
 
+// FromUserSettings maps a settings model to its API DTO, normalizing enum
+// fields (startup page, MCP default, LSP location) to canonical values.
 func FromUserSettings(settings *models.UserSettings) UserSettingsDTO {
 	return UserSettingsDTO{
 		UserID:                            settings.UserID,

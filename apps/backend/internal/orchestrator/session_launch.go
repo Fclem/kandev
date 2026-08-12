@@ -220,6 +220,8 @@ func (s *Service) shouldUpgradePassthroughPrepare(ctx context.Context, req *Laun
 	return !req.AutoStart && !req.DeferredStart && s.isPassthroughProfile(ctx, req.AgentProfileID)
 }
 
+// isPassthroughProfile reports whether the agent profile is a CLI
+// passthrough provider.
 func (s *Service) isPassthroughProfile(ctx context.Context, profileID string) bool {
 	if profileID == "" || s.agentManager == nil {
 		return false
@@ -386,6 +388,8 @@ func (s *Service) RecoverSession(ctx context.Context, taskID, sessionID, action 
 	return resp, nil
 }
 
+// normalizeRecoverSessionError maps a missing-profile resume failure to a
+// user-actionable message.
 func normalizeRecoverSessionError(err error) error {
 	if err == nil {
 		return nil
@@ -396,6 +400,8 @@ func normalizeRecoverSessionError(err error) error {
 	return err
 }
 
+// isMissingProfileResumeError reports whether the error indicates the
+// session's agent profile no longer exists.
 func isMissingProfileResumeError(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "failed to resolve agent profile") ||

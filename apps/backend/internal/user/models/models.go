@@ -12,6 +12,9 @@ const (
 	LspStatusLocationStatusBar                 = "status_bar"
 )
 
+// NormalizeMCPTaskAgentProfileDefault returns the canonical MCP task agent
+// profile default: workspace_default is accepted as-is, anything else is
+// coerced to current_task.
 func NormalizeMCPTaskAgentProfileDefault(value string) string {
 	if value == MCPTaskAgentProfileDefaultWorkspaceDefault {
 		return value
@@ -19,6 +22,8 @@ func NormalizeMCPTaskAgentProfileDefault(value string) string {
 	return MCPTaskAgentProfileDefaultCurrentTask
 }
 
+// NormalizeLspStatusLocation returns the canonical LSP status location:
+// status_bar is accepted as-is, anything else is coerced to toolbar.
 func NormalizeLspStatusLocation(value string) string {
 	if value == LspStatusLocationStatusBar {
 		return value
@@ -31,6 +36,8 @@ const (
 	StartupPageLastTask     = "last_task"
 )
 
+// NormalizeStartupPage returns the canonical startup page: last_task is
+// accepted as-is, anything else is coerced to task_overview.
 func NormalizeStartupPage(value string) string {
 	if value == StartupPageLastTask {
 		return value

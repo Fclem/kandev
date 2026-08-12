@@ -272,7 +272,7 @@ export function RunsSection({ automationId, workspaceId }: RunsSectionProps) {
               size="icon-sm"
               className="cursor-pointer"
               onClick={refresh}
-              disabled={loading}
+              disabled={loading || deleting}
               title={t("automations:refresh")}
             >
               <IconRefresh className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />

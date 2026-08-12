@@ -35,7 +35,7 @@ From `apps/` (fresh worktrees must first run `pnpm install --frozen-lockfile`
 from `apps/` when `apps/node_modules/` is absent):
 
 ```bash
-pnpm --filter @kandev/web test -- --run hooks/domains/settings/use-automation-runs.test.ts
+pnpm --filter @kandev/web test -- --run hooks/domains/settings/use-automation-runs.test.ts hooks/domains/settings/use-automation-runs-delete.test.ts
 ```
 
 Also run `git diff --check` and Prettier on the changed files before commit.
@@ -75,7 +75,11 @@ conversation. No backend, store-slice, or API-layer changes.
 - RED: new race-condition tests failed before the guards existed (stale
   refresh resurrecting deleted rows; early recovery on first rejection).
 - GREEN: `pnpm --filter @kandev/web test -- --run
-  hooks/domains/settings/use-automation-runs.test.ts` — 18 tests passed.
+  hooks/domains/settings/use-automation-runs.test.ts
+  hooks/domains/settings/use-automation-runs-delete.test.ts
+  components/automations/runs-section.test.tsx lib/state/store.test.ts` —
+  48 tests passed (final state; the suite was split across the two hook
+  test files as it grew).
 - Hardening added during review rounds: `fetchRuns`/`revertAfterFailedDelete`
   are epoch-guarded; `executeDeleteAll` uses `Promise.allSettled` and
   recovers only after every delete settles; destructive mutations are

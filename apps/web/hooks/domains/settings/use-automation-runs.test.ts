@@ -12,10 +12,10 @@ import {
 } from "./use-automation-runs.test-utils";
 
 vi.mock("@/components/state-provider", async () => {
-  const { runsStore } = await import("./use-automation-runs.test-utils");
+  const { runsStore, mockStoreApi } = await import("./use-automation-runs.test-utils");
   return {
     useAppStore: (selector: (s: unknown) => unknown) => selector(runsStore.get()),
-    useAppStoreApi: () => ({ getState: () => runsStore.get() }),
+    useAppStoreApi: () => mockStoreApi,
   };
 });
 

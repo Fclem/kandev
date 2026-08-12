@@ -20,6 +20,8 @@ function freshState(): MockRunsState {
  * Shared mutable mock of the app store's automation-runs surface, mirroring
  * `createAutomationsSlice`. Test files reset it in `beforeEach`; the
  * `vi.mock("@/components/state-provider")` factories read `runsStore.get()`.
+ * `mockStoreApi` is a single stable object (like the production context
+ * store) so the hook's per-store request registry keys stay consistent.
  */
 export const runsStore = {
   state: freshState(),
@@ -29,6 +31,10 @@ export const runsStore = {
   get() {
     return { ...this.state, ...actions };
   },
+};
+
+export const mockStoreApi = {
+  getState: () => runsStore.get(),
 };
 
 function setRunsInternal(automationId: string, runs: AutomationRun[]) {
@@ -66,7 +72,15 @@ export const actions = {
   restoreAutomationRun: (automationId: string, run: AutomationRun) => {
     const runs = runsStore.state.automationRuns.byAutomationId[automationId] ?? [];
     if (runs.some((r) => r.id === run.id)) return;
-    setRunsInternal(automationId, [...runs, run]);
+    // Mirrors the production slice: insert keeping newest-first order.
+    const insertAt = runs.findIndex((r) => r.created_at < run.created_at);
+    const next = runs.slice();
+    if (insertAt === -1) {
+      next.push(run);
+    } else {
+      next.splice(insertAt, 0, run);
+    }
+    setRunsInternal(automationId, next);
   },
   beginAutomationRunDelete: (automationId: string) => {
     if ((runsStore.state.automationRuns.deleting[automationId] ?? false) !== false) return null;

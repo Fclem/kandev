@@ -12,10 +12,10 @@ import {
 } from "./use-automation-runs.test-utils";
 
 vi.mock("@/components/state-provider", async () => {
-  const { runsStore } = await import("./use-automation-runs.test-utils");
+  const { runsStore, mockStoreApi } = await import("./use-automation-runs.test-utils");
   return {
     useAppStore: (selector: (s: unknown) => unknown) => selector(runsStore.get()),
-    useAppStoreApi: () => ({ getState: () => runsStore.get() }),
+    useAppStoreApi: () => mockStoreApi,
   };
 });
 
@@ -405,6 +405,41 @@ describe("useAutomationRuns - loading flag", () => {
     rerender();
     expect(result.current.loading).toBe(false);
   });
+
+  it("does not let an older list response overwrite a newer one", async () => {
+    setRuns(AUTOMATION_ID, []);
+    const older = deferred<AutomationRun[]>();
+    const newer = deferred<AutomationRun[]>();
+    vi.mocked(listAutomationRuns)
+      .mockResolvedValueOnce([]) // mount
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+
+    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+    await act(async () => {});
+    rerender();
+
+    act(() => {
+      result.current.refresh(); // older request
+      result.current.refresh(); // newer request
+    });
+    // The newer request resolves first with the freshest data.
+    await act(async () => {
+      newer.resolve([mkRun("run-new")]);
+      await newer.promise;
+    });
+    rerender();
+    expect(result.current.runs.map((r) => r.id)).toEqual(["run-new"]);
+
+    // The older request resolves later with staler data — the latest-request
+    // token must discard it instead of overwriting the newer result.
+    await act(async () => {
+      older.resolve([mkRun("run-old")]);
+      await older.promise;
+    });
+    rerender();
+    expect(result.current.runs.map((r) => r.id)).toEqual(["run-new"]);
+  });
 });
 describe("useAutomationRuns - batch recovery timing", () => {
   it("does not recover from a partial failure until every delete in the batch settles", async () => {
@@ -474,7 +509,11 @@ describe("useAutomationRuns - serialized deletes", () => {
     setRuns(AUTOMATION_ID, [mkRun("run-x"), mkRun("run-y")]);
     const slow = deferred<{ deleted: boolean }>();
     vi.mocked(deleteAutomationRun).mockReturnValue(slow.promise);
-    vi.mocked(listAutomationRuns).mockReturnValue(Promise.withResolvers<AutomationRun[]>().promise);
+    // Mount fetch stays pending; the post-delete reconciliation settles so
+    // A's endDelete (via the reconciliation settle) releases the slot.
+    vi.mocked(listAutomationRuns)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise)
+      .mockResolvedValue([]);
 
     const { result } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
 
@@ -489,7 +528,11 @@ describe("useAutomationRuns - serialized deletes", () => {
     setRuns(AUTOMATION_ID, [mkRun("run-x"), mkRun("run-y")]);
     const slow = deferred<{ deleted: boolean }>();
     vi.mocked(deleteAutomationRun).mockReturnValue(slow.promise);
-    vi.mocked(listAutomationRuns).mockReturnValue(Promise.withResolvers<AutomationRun[]>().promise);
+    // Mount fetch stays pending; the post-delete reconciliation settles so
+    // A's endDelete (via the reconciliation settle) releases the slot.
+    vi.mocked(listAutomationRuns)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise)
+      .mockResolvedValue([]);
 
     // Instance A starts a delete and "unmounts" (the editor navigated away).
     const first = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
@@ -524,7 +567,11 @@ describe("useAutomationRuns - serialized deletes", () => {
     setRuns(AUTOMATION_ID, [mkRun("run-x")]);
     const slow = deferred<{ deleted: boolean }>();
     vi.mocked(deleteAutomationRun).mockReturnValue(slow.promise);
-    vi.mocked(listAutomationRuns).mockReturnValue(Promise.withResolvers<AutomationRun[]>().promise);
+    // Mount fetch stays pending; the post-delete reconciliation settles so
+    // the serialization slot (held until it does) can release.
+    vi.mocked(listAutomationRuns)
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise)
+      .mockResolvedValue([]);
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
 

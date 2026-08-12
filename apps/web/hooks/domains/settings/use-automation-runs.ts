@@ -14,39 +14,69 @@ import type { AutomationRun } from "@/lib/types/automation";
 const EMPTY_RUNS: AutomationRun[] = [];
 
 /**
- * Latest in-flight list request per automation. `fetchRuns` settles the
- * shared `loading` flag only when the finishing request is still the latest,
- * so an older request completing after a newer one started cannot clear the
- * newer request's loading state. Entries are removed when their request is
- * the latest to settle, so the registry stays bounded.
+ * Latest in-flight list request per (store instance, automation). `fetchRuns`
+ * applies results and settles the shared `loading` flag only when the
+ * finishing request is still the latest, so an older request completing after
+ * a newer one started cannot overwrite the newer result or clear its loading
+ * state. Tokens are opaque symbols — never reused, even after cleanup — and
+ * the registry is scoped per store instance, so independent stores cannot
+ * conflate each other's requests.
  */
-const latestListRequest: Record<string, number> = {};
+const latestListRequest = new WeakMap<object, Map<string, symbol>>();
 
-function fetchRuns(
-  automationId: string,
-  getEpoch: () => number,
-  setRunsLoading: (automationId: string, loading: boolean) => void,
-  setRuns: (automationId: string, runs: AutomationRun[]) => void,
-  onError?: () => void,
-): void {
+function registerListRequest(storeApi: object, automationId: string): symbol {
+  let byAutomation = latestListRequest.get(storeApi);
+  if (!byAutomation) {
+    byAutomation = new Map();
+    latestListRequest.set(storeApi, byAutomation);
+  }
+  const token = Symbol();
+  byAutomation.set(automationId, token);
+  return token;
+}
+
+function isLatestListRequest(storeApi: object, automationId: string, token: symbol): boolean {
+  return latestListRequest.get(storeApi)?.get(automationId) === token;
+}
+
+function clearLatestListRequest(storeApi: object, automationId: string, token: symbol): void {
+  const byAutomation = latestListRequest.get(storeApi);
+  if (byAutomation?.get(automationId) === token) {
+    byAutomation.delete(automationId);
+  }
+}
+
+type FetchRunsOptions = {
+  getEpoch: () => number;
+  setRunsLoading: (automationId: string, loading: boolean) => void;
+  setRuns: (automationId: string, runs: AutomationRun[]) => void;
+  onError?: () => void;
+  onSettled?: () => void;
+};
+
+function fetchRuns(storeApi: object, automationId: string, options: FetchRunsOptions): void {
+  const { getEpoch, setRunsLoading, setRuns, onError, onSettled } = options;
   const captured = getEpoch();
-  const token = (latestListRequest[automationId] ?? 0) + 1;
-  latestListRequest[automationId] = token;
+  const token = registerListRequest(storeApi, automationId);
   setRunsLoading(automationId, true);
   listAutomationRuns(automationId)
     .then((result) => {
+      // A newer request superseded this one: its result owns the store.
+      if (!isLatestListRequest(storeApi, automationId, token)) return;
       // Discard responses that went stale while in flight: a delete that
       // started after this fetch captured the epoch owns the store now.
       if (getEpoch() === captured) setRuns(automationId, result ?? []);
     })
     .catch(() => {
+      if (!isLatestListRequest(storeApi, automationId, token)) return;
       if (getEpoch() === captured) onError?.();
     })
     .finally(() => {
-      if (latestListRequest[automationId] === token) {
-        delete latestListRequest[automationId];
+      if (isLatestListRequest(storeApi, automationId, token)) {
+        clearLatestListRequest(storeApi, automationId, token);
         setRunsLoading(automationId, false);
       }
+      onSettled?.();
     });
 }
 
@@ -54,9 +84,10 @@ function fetchRuns(
  * Shared revert for the delete paths: on failure, refresh from the server
  * (authoritative — it drops whatever actually succeeded); if that also fails,
  * fall back to the pre-delete snapshot so the store is never left
- * permanently missing rows the delete never removed. Both writes are
- * epoch-guarded, and the mutation stays serialized until the recovery
- * settles, so no newer mutation can be clobbered by this recovery.
+ * permanently missing rows the delete never removed. Routed through
+ * `fetchRuns`, so the recovery participates in loading state, request
+ * ordering, and the epoch guard, and the serialization slot is held until
+ * the recovery settles.
  */
 function revertAfterFailedDelete(
   automationId: string,
@@ -66,20 +97,20 @@ function revertAfterFailedDelete(
   // The delete has settled: mark every list response captured while it was
   // in flight stale — those may hold rows the delete removed server-side.
   store.bumpEpoch();
-  const captured = store.getEpoch();
-  listAutomationRuns(automationId)
-    .then((result) => {
-      if (store.getEpoch() === captured) store.setRuns(automationId, result ?? []);
-      store.endDelete();
-    })
-    .catch(() => {
-      if (store.getEpoch() === captured) store.setRuns(automationId, fallbackRuns);
+  fetchRuns(store.storeApi, automationId, {
+    getEpoch: store.getEpoch,
+    setRunsLoading: store.setRunsLoading,
+    setRuns: store.setRuns,
+    onError: () => {
+      store.setRuns(automationId, fallbackRuns);
       toast.error(t("automations:couldNotRefreshRuns"));
-      store.endDelete();
-    });
+    },
+    onSettled: store.endDelete,
+  });
 }
 
 type DeleteStore = {
+  storeApi: object;
   getEpoch: () => number;
   bumpEpoch: () => void;
   clearRuns: (automationId: string) => void;
@@ -116,10 +147,15 @@ function executeDeleteAll(
       .then(() => {
         // Settled: invalidate list responses captured while the delete was
         // in flight (they may hold rows the delete removed), then reconcile
-        // with the authoritative post-delete list.
+        // with the authoritative post-delete list. The serialization slot
+        // stays held until the reconciliation settles.
         store.bumpEpoch();
-        fetchRuns(automationId, store.getEpoch, store.setRunsLoading, store.setRuns);
-        store.endDelete();
+        fetchRuns(store.storeApi, automationId, {
+          getEpoch: store.getEpoch,
+          setRunsLoading: store.setRunsLoading,
+          setRuns: store.setRuns,
+          onSettled: store.endDelete,
+        });
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : t("automations:failedToDeleteRuns");
@@ -138,10 +174,15 @@ function executeDeleteAll(
       // Settled: invalidate list responses captured while the deletes were
       // in flight, then reconcile with the authoritative post-delete list:
       // an in-flight refresh may have returned pre-delete rows, and a run
-      // created after the deletes completed must not be wiped.
+      // created after the deletes completed must not be wiped. The
+      // serialization slot stays held until the reconciliation settles.
       store.bumpEpoch();
-      fetchRuns(automationId, store.getEpoch, store.setRunsLoading, store.setRuns);
-      store.endDelete();
+      fetchRuns(store.storeApi, automationId, {
+        getEpoch: store.getEpoch,
+        setRunsLoading: store.setRunsLoading,
+        setRuns: store.setRuns,
+        onSettled: store.endDelete,
+      });
       return;
     }
     // One toast and one recovery refresh for the whole batch, and only after
@@ -192,23 +233,20 @@ function executeDeleteRun(
       const msg = err instanceof Error ? err.message : t("automations:failedToDeleteRun");
       toast.error(msg);
       store.bumpEpoch();
-      const captured = store.getEpoch();
-      listAutomationRuns(automationId)
-        .then((result) => {
-          if (store.getEpoch() === captured) store.setRuns(automationId, result ?? []);
-          store.endDelete();
-        })
-        .catch(() => {
+      fetchRuns(store.storeApi, automationId, {
+        getEpoch: store.getEpoch,
+        setRunsLoading: store.setRunsLoading,
+        setRuns: store.setRuns,
+        onError: () => {
           // The recovery refresh also failed — the store would otherwise
           // stay permanently missing this row even though the delete never
           // succeeded server-side. Fall back to re-inserting just the run we
           // know we removed.
-          if (store.getEpoch() === captured && deletedRun) {
-            store.restoreRun(automationId, deletedRun);
-          }
+          if (deletedRun) store.restoreRun(automationId, deletedRun);
           toast.error(t("automations:couldNotRefreshRuns"));
-          store.endDelete();
-        });
+        },
+        onSettled: store.endDelete,
+      });
     });
 }
 
@@ -248,28 +286,27 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
 
   useEffect(() => {
     if (!automationId || loading) return;
-    fetchRuns(
-      automationId,
-      () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
+    fetchRuns(storeApi, automationId, {
+      getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
       setRunsLoading,
       setRuns,
-      () => setRuns(automationId, []),
-    );
+      onError: () => setRuns(automationId, []),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [automationId]);
 
   const refresh = useCallback(() => {
     if (!automationId) return;
-    fetchRuns(
-      automationId,
-      () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
+    fetchRuns(storeApi, automationId, {
+      getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId] ?? 0,
       setRunsLoading,
       setRuns,
-    );
+    });
   }, [automationId, setRuns, setRunsLoading, storeApi]);
 
   const makeStore = useCallback(
     (end: () => void): DeleteStore => ({
+      storeApi,
       getEpoch: () => storeApi.getState().automationRuns.mutationEpoch[automationId ?? ""] ?? 0,
       bumpEpoch: () => storeApi.getState().advanceAutomationRunEpoch(automationId ?? ""),
       clearRuns,

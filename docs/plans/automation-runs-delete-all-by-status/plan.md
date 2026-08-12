@@ -100,7 +100,7 @@ Add, in all four catalogs (plain punctuation, no em dash):
 
 - **What:** scoped delete-all removes exactly the given run ids and calls the
   per-run API per id.
-  **File:** `apps/web/hooks/domains/settings/use-automation-runs.test.ts`
+  **File:** `apps/web/hooks/domains/settings/use-automation-runs-delete.test.ts`
   **How:** mock `deleteAutomationRun`; assert per-id calls with
   `WORKSPACE_ID`, optimistic removal of exactly those ids, success
   reconciliation with the authoritative post-delete list (a run created
@@ -115,18 +115,19 @@ Add, in all four catalogs (plain punctuation, no em dash):
   view renders no button; filtered dialog shows the scoped title/description;
   both delete controls are disabled while `deleting` is true.
 - **What:** the "All" view still uses the single bulk delete.
-  **File:** `apps/web/hooks/domains/settings/use-automation-runs.test.ts`
+  **File:** `apps/web/hooks/domains/settings/use-automation-runs-delete.test.ts`
   **How:** existing no-arg tests already assert `deleteAllAutomationRuns` is
   called with `(AUTOMATION_ID, WORKSPACE_ID)`; they must keep passing
   unchanged.
 - **What:** delete race conditions stay closed.
-  **File:** `apps/web/hooks/domains/settings/use-automation-runs.test.ts`
+  **File:** `apps/web/hooks/domains/settings/use-automation-runs-delete.test.ts`
   **How:** stale refresh started before a delete and resolving after it is
   discarded; partial batch failure does not recover until every delete
   settles; a second delete-all or per-run delete fired while one is in flight
   is a no-op; the serialization slot is shared across hook instances (an
   unmounted instance's endDelete releases it); every recovery terminal path
-  resets `deleting` to `false`.
+  resets `deleting` to `false`; older list responses cannot overwrite newer
+  ones.
 
 ## E2E Tests
 
@@ -145,10 +146,11 @@ Add, in all four catalogs (plain punctuation, no em dash):
 
 ## Verification Results
 
-- Hook + component unit suites: `pnpm --filter @kandev/web test -- --run
-  hooks/domains/settings/use-automation-runs.test.ts
-  components/automations/runs-section.test.tsx` — 34 tests passed (final
-  state after review rounds).
+- Hook + component + store unit suites: `pnpm --filter @kandev/web test --
+  --run hooks/domains/settings/use-automation-runs.test.ts
+  hooks/domains/settings/use-automation-runs-delete.test.ts
+  components/automations/runs-section.test.tsx lib/state/store.test.ts` —
+  48 tests passed (final state after review rounds).
 - `pnpm --filter @kandev/web typecheck` (from `apps/web`) — passed.
 - `pnpm --filter @kandev/web lint -- <changed files>` (eslint
   `--max-warnings 0`) — passed.

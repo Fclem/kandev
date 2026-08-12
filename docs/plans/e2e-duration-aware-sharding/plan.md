@@ -182,7 +182,7 @@ daemon and the container profile:
 
 ```sh
 cd apps/web
-pnpm exec playwright test --config e2e/playwright.config.ts --project=chromium e2e/tests/integrations/hide-disabled-integrations-nav.spec.ts e2e/tests/review/review-multi-pr.spec.ts e2e/tests/task/task-create-prompt-autocomplete.spec.ts
+pnpm exec playwright test --config e2e/playwright.config.ts --project=chromium e2e/tests/integrations/disabled-integration-stays-in-nav.spec.ts e2e/tests/review/review-multi-pr.spec.ts e2e/tests/task/task-create-prompt-autocomplete.spec.ts
 pnpm exec playwright test --config e2e/playwright.config.ts --project=chromium e2e/tests/settings/config-management.spec.ts
 pnpm exec playwright test --config e2e/playwright.config.ts --project=mobile-chrome e2e/tests/review/mobile-review-multi-pr.spec.ts e2e/tests/task/mobile-autopilot-mode.spec.ts
 KANDEV_E2E_CONTAINERS=1 pnpm exec playwright test --config e2e/playwright.config.ts --project=containers e2e/tests/docker/storage-maintenance.spec.ts

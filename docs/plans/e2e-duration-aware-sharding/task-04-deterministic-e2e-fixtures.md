@@ -25,7 +25,7 @@ spec: "../../specs/e2e-duration-aware-sharding/spec.md"
 
 ```sh
 cd apps/web
-pnpm exec playwright test --config e2e/playwright.config.ts --project=chromium e2e/tests/integrations/hide-disabled-integrations-nav.spec.ts e2e/tests/review/review-multi-pr.spec.ts e2e/tests/task/task-create-prompt-autocomplete.spec.ts
+pnpm exec playwright test --config e2e/playwright.config.ts --project=chromium e2e/tests/integrations/disabled-integration-stays-in-nav.spec.ts e2e/tests/review/review-multi-pr.spec.ts e2e/tests/task/task-create-prompt-autocomplete.spec.ts
 pnpm exec playwright test --config e2e/playwright.config.ts --project=mobile-chrome e2e/tests/review/mobile-review-multi-pr.spec.ts
 ```
 
@@ -35,7 +35,7 @@ timeouts.
 
 ## Files likely touched
 
-- `apps/web/e2e/tests/integrations/hide-disabled-integrations-nav.spec.ts`
+- `apps/web/e2e/tests/integrations/disabled-integration-stays-in-nav.spec.ts`
 - `apps/web/e2e/helpers/multi-pr-review.ts`
 - `apps/web/e2e/tests/review/review-multi-pr.spec.ts`
 - `apps/web/e2e/tests/review/mobile-review-multi-pr.spec.ts`

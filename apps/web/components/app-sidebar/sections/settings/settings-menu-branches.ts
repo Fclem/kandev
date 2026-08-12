@@ -152,7 +152,9 @@ export function buildBranchRoot(
 function integrationNodes(workspaceId: string, integrationsHref: string): SettingsMenuNode[] {
   // Configured status gates the badge only, never the row itself — the branch
   // always lists every integration regardless of credentials or its
-  // enable/disable toggle.
+  // enable/disable toggle. One pre-existing exception: Sentry's badge probe
+  // (`useSentryAvailable`) also requires its per-workspace toggle to be on,
+  // so a connected Sentry whose toggle is off lists without the badge.
   return WORKSPACE_INTEGRATIONS.map(([slug, label]) => ({
     key: `workspace:${workspaceId}:integrations:${slug}`,
     href: `${integrationsHref}/${slug}`,

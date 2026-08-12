@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/workspaces/secret-scope-transfer.md
 created: 2026-08-11
-status: planned
+status: completed
 ---
 
 # Implementation Plan: Copy and Move Secrets Between Scopes
@@ -331,21 +331,21 @@ and the destination payload is cleared when switching to General.
 
 Wave 1:
 
-- [ ] [Task 01: Backend copy/move service and store](task-01-backend-copy-move-service.md)
+- [x] [Task 01: Backend copy/move service and store](task-01-backend-copy-move-service.md)
 
 Wave 2:
 
-- [ ] [Task 02: Backend copy/move handlers](task-02-backend-copy-move-handlers.md)
+- [x] [Task 02: Backend copy/move handlers](task-02-backend-copy-move-handlers.md)
   (depends on Task 01)
 
 Wave 3:
 
-- [ ] [Task 03: Frontend copy/move dialog and API](task-03-frontend-copy-move-dialog.md)
+- [x] [Task 03: Frontend copy/move dialog and API](task-03-frontend-copy-move-dialog.md)
   (depends on Tasks 01 and 02)
 
 Wave 4:
 
-- [ ] [Task 04: E2E and documentation](task-04-e2e-and-docs.md)
+- [x] [Task 04: E2E and documentation](task-04-e2e-and-docs.md)
   (depends on Task 03)
 
 The primary conversation executes these tasks sequentially unless the user

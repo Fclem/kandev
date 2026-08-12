@@ -1,7 +1,7 @@
 ---
 id: "03-frontend-copy-move-dialog"
 title: "Frontend copy/move dialog and API"
-status: pending
+status: done
 wave: 3
 depends_on: ["01-backend-copy-move-service", "02-backend-copy-move-handlers"]
 plan: "plan.md"

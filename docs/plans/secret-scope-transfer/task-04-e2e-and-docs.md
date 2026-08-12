@@ -1,7 +1,7 @@
 ---
 id: "04-e2e-and-docs"
 title: "E2E coverage and documentation"
-status: pending
+status: done
 wave: 4
 depends_on: ["03-frontend-copy-move-dialog"]
 plan: "plan.md"

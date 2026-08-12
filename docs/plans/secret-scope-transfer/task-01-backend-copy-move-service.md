@@ -1,7 +1,7 @@
 ---
 id: "01-backend-copy-move-service"
 title: "Backend copy/move service and store"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"

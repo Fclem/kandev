@@ -58,6 +58,7 @@ function makeMessage(payload: TaskSessionStateChangedPayload) {
 function makeKanbanTask(primarySessionId: string) {
   return {
     id: "t-1",
+    workflowId: "wf-1",
     workflowStepId: "step-1",
     title: TASK_TITLE,
     position: 0,
@@ -185,6 +186,7 @@ describe("session.state_changed -> non-primary kanban card state", () => {
         tasks: [
           {
             id: "t-1",
+            workflowId: "wf-1",
             workflowStepId: "step-1",
             title: TASK_TITLE,
             position: 0,
@@ -203,6 +205,7 @@ describe("session.state_changed -> non-primary kanban card state", () => {
             tasks: [
               {
                 id: "t-1",
+                workflowId: "wf-1",
                 workflowStepId: "step-1",
                 title: TASK_TITLE,
                 position: 0,
@@ -262,6 +265,7 @@ describe("session.state_changed -> kanban sync guards", () => {
     const kanbanTasks = [
       {
         id: "t-1",
+        workflowId: "wf-1",
         workflowStepId: "step-1",
         title: TASK_TITLE,
         position: 0,

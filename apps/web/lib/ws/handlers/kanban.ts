@@ -69,6 +69,7 @@ export function registerKanbanHandlers(store: StoreApi<AppState>): WsHandlers {
             });
             return {
               id: task.id,
+              workflowId,
               workflowStepId: task.workflowStepId,
               title: task.title,
               description: task.description,

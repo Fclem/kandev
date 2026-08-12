@@ -81,6 +81,7 @@ describe("kanban slice workspace transition", () => {
         tasks: [
           {
             id: TASK_ID,
+            workflowId: WORKFLOW_ID,
             workflowStepId: "step-a",
             title: "Workspace A task",
             position: 0,
@@ -132,7 +133,13 @@ describe("kanban slice workspace transition", () => {
 describe("kanban slice archived sidebar projection", () => {
   it("stores archived tasks separately from active kanban state and deduplicates IDs", () => {
     const store = makeStore();
-    const task = { id: TASK_ID, workflowStepId: "step-a", title: "Archived", position: 0 };
+    const task = {
+      id: TASK_ID,
+      workflowId: WORKFLOW_ID,
+      workflowStepId: "step-a",
+      title: "Archived",
+      position: 0,
+    };
 
     store.getState().setSidebarArchivedTasks(ARCHIVED_WORKSPACE_ID, [task]);
     store
@@ -150,7 +157,13 @@ describe("kanban slice archived sidebar projection", () => {
 
   it("creates a workspace bucket when upserting its first archived task", () => {
     const store = makeStore();
-    const task = { id: TASK_ID, workflowStepId: "step-a", title: "Archived", position: 0 };
+    const task = {
+      id: TASK_ID,
+      workflowId: WORKFLOW_ID,
+      workflowStepId: "step-a",
+      title: "Archived",
+      position: 0,
+    };
 
     store.getState().upsertSidebarArchivedTask("workspace-new", task);
 
@@ -173,7 +186,13 @@ describe("kanban slice archived sidebar projection", () => {
       tasks: KanbanSlice["sidebarArchivedTasks"]["itemsByWorkspaceId"][string],
       expectedRevision?: number,
     ) => boolean;
-    const task = { id: TASK_ID, workflowStepId: "step-a", title: "Loaded", position: 0 };
+    const task = {
+      id: TASK_ID,
+      workflowId: WORKFLOW_ID,
+      workflowStepId: "step-a",
+      title: "Loaded",
+      position: 0,
+    };
 
     setArchivedTasks(ARCHIVED_WORKSPACE_ID, [task]);
     const beforeArchive = revision();

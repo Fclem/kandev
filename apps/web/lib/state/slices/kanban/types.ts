@@ -46,7 +46,11 @@ export type KanbanState = {
   tasks: Array<{
     id: string;
     workspaceId?: string;
-    workflowId?: string;
+    // Required for workflow-backed kanban tasks: every producer (kanban.update
+    // WS handler, snapshotToState, toKanbanTask) must populate it, or the
+    // prevent-auto-start gate would resolve a task's step list against the
+    // wrong workflow. Ephemeral tasks are filtered out before this point.
+    workflowId: string;
     workflowStepId: string;
     title: string;
     description?: string;

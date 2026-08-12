@@ -440,8 +440,12 @@ function useSaveCoordinator(
     // that became dirty while the saves were in flight (e.g. the MCP card
     // edited during the profile save) is absent from the submitted snapshot
     // and would otherwise be skipped while the caller proceeds on stale data.
+    // Compare by id: the registry replaces the contributor object on every
+    // upsert, so an identity check would report submitted contributors as
+    // newly dirty after any re-render and block save-and-leave.
+    const submittedIds = new Set(submitted.map(({ contributor }) => contributor.id));
     const newlyDirty = getDirtyContributors(contributors).filter(
-      ({ contributor }) => !submitted.some((sub) => sub.contributor === contributor),
+      ({ contributor }) => !submittedIds.has(contributor.id),
     );
     const completionStatus = saveCompletionStatus(failedIds, hasNewerChanges);
     setErrorKind(completionStatus === "error" ? "save" : null);

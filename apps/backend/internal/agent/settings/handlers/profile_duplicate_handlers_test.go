@@ -244,7 +244,12 @@ func TestDuplicateProfileEndpoint_NotFound(t *testing.T) {
 	}
 }
 
-func TestDuplicateProfileEndpoint_RoutesOfficeCopyToWorkspace(t *testing.T) {
+// TestDuplicateProfileEndpoint_RejectsOfficeScopedSource verifies the
+// settings duplicate endpoint refuses office-scoped profiles fail-closed:
+// the source is owned by the workspace-scoped office surface, so the request
+// surfaces as 404 (existence hidden) and no event is broadcast on any channel
+// (workspace-aware or global).
+func TestDuplicateProfileEndpoint_RejectsOfficeScopedSource(t *testing.T) {
 	repo := newDuplicateRepo()
 	repo.profiles["source-office"] = &models.AgentProfile{
 		ID:          "source-office",
@@ -261,44 +266,14 @@ func TestDuplicateProfileEndpoint_RoutesOfficeCopyToWorkspace(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body: %s", rec.Code, rec.Body.String())
 	}
 	if len(hub.global) != 0 {
 		t.Errorf("office duplicate leaked to the global settings broadcast: %d messages", len(hub.global))
 	}
-	if len(hub.workspaceMsgs["ws-1"]) != 1 {
-		t.Errorf("workspace-scoped messages for ws-1 = %d, want 1", len(hub.workspaceMsgs["ws-1"]))
-	}
-	if action := hub.workspaceMsgs["ws-1"][0].Action; action != ws.ActionAgentProfileCreated {
-		t.Errorf("workspace message action = %q, want %q", action, ws.ActionAgentProfileCreated)
-	}
-}
-
-func TestDuplicateProfileEndpoint_DropsOfficeCopyWithoutWorkspaceHub(t *testing.T) {
-	repo := newDuplicateRepo()
-	repo.profiles["source-office"] = &models.AgentProfile{
-		ID:          "source-office",
-		AgentID:     "agent-1",
-		Name:        "Office Agent",
-		WorkspaceID: "ws-1",
-		Enabled:     true,
-	}
-	// A plain Broadcaster cannot route by workspace: the office event must be
-	// dropped fail-closed, not leaked globally.
-	hub := &duplicateHub{}
-	router := newDuplicateRouter(t, repo, hub)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-profiles/source-office/duplicate", nil)
-	req.Header.Set(httpmw.InterimSettingsInterlockHeader, "test-interlock")
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
-	}
-	if actions := hub.actions(); len(actions) != 0 {
-		t.Errorf("office duplicate broadcast globally via a plain hub: %v", actions)
+	if len(hub.workspaceMsgs) != 0 {
+		t.Errorf("office duplicate broadcast workspace-scoped messages: %v", hub.workspaceMsgs)
 	}
 }
 

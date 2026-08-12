@@ -83,6 +83,24 @@ export function isSelectableAgentProfile(profile: Pick<AgentProfileOption, "enab
 }
 
 /**
+ * Compares two RFC3339 timestamps as instants (millisecond precision).
+ * Lexical comparison misorders values with fractional seconds or differing
+ * offsets (e.g. `10:00:00.100Z` is newer than `10:00:00Z` but sorts before
+ * it), so revision precedence must parse the instants. Missing timestamps
+ * sort oldest so a present timestamp always wins.
+ */
+export function compareTimestamps(a: string | undefined, b: string | undefined): number {
+  if (a === b) return 0;
+  if (a === undefined || a === "") return -1;
+  if (b === undefined || b === "") return 1;
+  const aMs = Date.parse(a);
+  const bMs = Date.parse(b);
+  if (Number.isNaN(aMs)) return -1;
+  if (Number.isNaN(bMs)) return 1;
+  return aMs - bMs;
+}
+
+/**
  * Merge two option lists by ID, keeping the NEWER revision per id (missing or
  * equal updatedAt defers to the rebuilt option). A newer WebSocket-delivered
  * option must never be regressed by a stale list rebuild — e.g. a disabled
@@ -99,7 +117,7 @@ export function mergeOptionsByNewest(
   }
   for (const option of rebuilt) {
     const existing = byId.get(option.id);
-    if (!existing || (option.updatedAt ?? "") >= (existing.updatedAt ?? "")) {
+    if (!existing || compareTimestamps(option.updatedAt, existing.updatedAt) >= 0) {
       byId.set(option.id, option);
     }
   }

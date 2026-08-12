@@ -39,8 +39,11 @@ func sourceProfile() *models.AgentProfile {
 		CommandPrefix: "greywall --",
 		UserModified:  true,
 		Enabled:       true,
-		// Office enrichment configuration — must be copied.
-		WorkspaceID:           "ws-1",
+		// Office enrichment configuration — must be copied. WorkspaceID stays
+		// empty (kanban): the settings duplicate endpoint rejects office-scoped
+		// sources, so the copy assertions cover the enrichment fields on a
+		// kanban-scoped profile.
+		WorkspaceID:           "",
 		Role:                  "worker",
 		Icon:                  "🤖",
 		ReportsTo:             "profile-other",
@@ -54,6 +57,10 @@ func sourceProfile() *models.AgentProfile {
 		BudgetMonthlyCents:    12500,
 		Settings:              `{"office_theme":"dark"}`,
 		Permissions:           `{"spawn_subagents":true}`,
+		// Deprecated legacy columns — still copied for fidelity so an old row's
+		// values survive duplication.
+		DangerouslySkipPermissions: true,
+		CustomPrompt:               "legacy prompt",
 		// Runtime state — must NOT be copied.
 		Status:              "working",
 		PauseReason:         "auto-paused",
@@ -134,7 +141,7 @@ func TestDuplicateProfile_CopiesFullConfiguration(t *testing.T) {
 		t.Errorf("stored copy ID = %q, response ID = %q", stored.ID, result.ID)
 	}
 	// Office enrichment configuration copied; runtime state reset.
-	if stored.WorkspaceID != "ws-1" || stored.Role != "worker" || stored.Icon != "🤖" ||
+	if stored.WorkspaceID != "" || stored.Role != "worker" || stored.Icon != "🤖" ||
 		stored.ReportsTo != "profile-other" || stored.SkillIDs != `["s1","s2"]` ||
 		stored.DesiredSkills != `["ds1"]` || stored.MaxConcurrentSessions != 2 ||
 		stored.CooldownSec != 60 || !stored.SkipIdleRuns ||
@@ -143,13 +150,16 @@ func TestDuplicateProfile_CopiesFullConfiguration(t *testing.T) {
 		stored.Settings != `{"office_theme":"dark"}` || stored.Permissions != `{"spawn_subagents":true}` {
 		t.Errorf("stored office enrichment not copied: %+v", stored)
 	}
+	if !stored.DangerouslySkipPermissions || stored.CustomPrompt != "legacy prompt" {
+		t.Errorf("deprecated legacy columns not copied: dangerously_skip_permissions=%v custom_prompt=%q",
+			stored.DangerouslySkipPermissions, stored.CustomPrompt)
+	}
 	if stored.Status != "" || stored.PauseReason != "" || stored.LastRunFinishedAt != nil || stored.ConsecutiveFailures != 0 {
 		t.Errorf("runtime state must not be copied: status=%q pause=%q last_run=%v failures=%d",
 			stored.Status, stored.PauseReason, stored.LastRunFinishedAt, stored.ConsecutiveFailures)
 	}
-	if stored.MigratedFrom != "" || stored.CustomPrompt != "" {
-		t.Errorf("legacy fields must not be copied: migrated_from=%q custom_prompt=%q",
-			stored.MigratedFrom, stored.CustomPrompt)
+	if stored.MigratedFrom != "" {
+		t.Errorf("legacy field must not be copied: migrated_from=%q", stored.MigratedFrom)
 	}
 }
 
@@ -254,6 +264,25 @@ func TestDuplicateProfile_NotFound(t *testing.T) {
 	_, err := ctrl.DuplicateProfile(context.Background(), DuplicateProfileRequest{ID: "missing"})
 	if !errors.Is(err, ErrAgentProfileNotFound) {
 		t.Fatalf("err = %v, want ErrAgentProfileNotFound", err)
+	}
+}
+
+// TestDuplicateProfile_RejectsOfficeScopedSource verifies the settings
+// duplicate endpoint refuses office-scoped profiles: they are owned by the
+// workspace-scoped office surface and hidden from this instance-level API, so
+// duplication must fail closed (as 404, not 403, to keep their existence
+// hidden) without creating a copy.
+func TestDuplicateProfile_RejectsOfficeScopedSource(t *testing.T) {
+	source := sourceProfile()
+	source.WorkspaceID = "ws-1"
+	ctrl, st := duplicateSetup(source)
+
+	_, err := ctrl.DuplicateProfile(context.Background(), DuplicateProfileRequest{ID: source.ID})
+	if !errors.Is(err, ErrAgentProfileNotFound) {
+		t.Fatalf("err = %v, want ErrAgentProfileNotFound for an office-scoped source", err)
+	}
+	if len(st.created) != 0 {
+		t.Errorf("office-scoped source created %d copies, want 0", len(st.created))
 	}
 }
 

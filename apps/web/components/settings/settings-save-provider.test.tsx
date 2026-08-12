@@ -564,6 +564,43 @@ describe("SettingsSaveProvider mid-save edits", () => {
     await waitFor(() => expect(window.location.pathname).toBe(APPEARANCE_PATH));
     expect(screen.getByRole("button", { name: SAVE_AND_LEAVE_LABEL })).toBeTruthy();
   });
+
+  it("does not treat a re-rendered same-id contributor as newly dirty mid-save", async () => {
+    window.history.replaceState({}, "", APPEARANCE_PATH);
+    const pending = deferred();
+    const onSave = vi.fn(() => pending.promise);
+
+    function PokingContributor() {
+      const [, setPoke] = useState(0);
+      return (
+        <>
+          <DraftContributor id="appearance" onSave={onSave} />
+          <button type="button" onClick={() => setPoke((n) => n + 1)}>
+            Poke appearance
+          </button>
+        </>
+      );
+    }
+
+    render(
+      <SettingsSaveProvider>
+        <PokingContributor />
+        <Link href={TERMINAL_PATH}>Terminal</Link>
+      </SettingsSaveProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit appearance" }));
+    fireEvent.click(screen.getByRole("link", { name: "Terminal" }));
+    fireEvent.click(await screen.findByRole("button", { name: SAVE_AND_LEAVE_LABEL }));
+    // Re-render the contributor while its save is pending: the registry
+    // replaces the contributor object on every upsert, so an identity-based
+    // "newly dirty" check would wrongly block leaving. Same id must not count.
+    fireEvent.click(screen.getByRole("button", { name: "Poke appearance", hidden: true }));
+
+    await act(async () => pending.resolve());
+
+    await waitFor(() => expect(window.location.pathname).toBe(TERMINAL_PATH));
+  });
 });
 
 describe("SettingsSaveProvider reset coordination", () => {

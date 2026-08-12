@@ -61,9 +61,12 @@ protected, like every other profile mutation):
 - Broadcasts the existing `agent.profile.created` WebSocket notification so
   every open settings surface picks the copy up live.
 
-The endpoint is idempotent per click in the sense that every call creates one
-new row; it performs no reference checks because a brand-new row cannot be
-referenced by anything yet.
+The endpoint is not idempotent in the HTTP sense: each call creates one new
+row (there is no idempotency key), so a retried POST after a network timeout
+may create a second copy. Callers must treat duplicates as one-shot
+operations; the UI guards against double-clicks. The copy performs no
+reference checks because a brand-new row cannot be referenced by anything
+yet.
 
 ## Scenarios
 

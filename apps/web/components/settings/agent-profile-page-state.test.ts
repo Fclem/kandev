@@ -94,4 +94,37 @@ describe("reconcileAgentProfileOptions", () => {
     expect(options[0].enabled).toBe(false);
     expect(options[0].updatedAt).toBe("2026-08-11T22:00:00Z");
   });
+
+  it("keeps a fractional-second newer option over a whole-second rebuilt one", () => {
+    // Lexically "…22:00:00Z" sorts after "…22:00:00.100Z" despite being
+    // older, so revision precedence must compare instants, not strings.
+    const staleProfile = {
+      id: "a1",
+      name: "a1",
+      profiles: [
+        {
+          id: "p1",
+          agentId: "a1",
+          name: "p1",
+          agentDisplayName: "Test Agent",
+          model: "",
+          allowIndexing: false,
+          autoApprove: false,
+          cliFlags: [],
+          cliPassthrough: false,
+          enabled: true,
+          createdAt: "",
+          updatedAt: "2026-08-11T22:00:00Z",
+        },
+      ],
+    } as unknown as Agent;
+    const fractionalOption = { ...option("p1", "2026-08-11T22:00:00.100Z"), enabled: false };
+
+    const next = reconcileAgentProfileOptions([fractionalOption], [staleProfile]);
+
+    const options = next.filter((o) => o.id === "p1");
+    expect(options).toHaveLength(1);
+    expect(options[0].enabled).toBe(false);
+    expect(options[0].updatedAt).toBe("2026-08-11T22:00:00.100Z");
+  });
 });

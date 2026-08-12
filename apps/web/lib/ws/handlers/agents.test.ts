@@ -14,6 +14,7 @@ function makeStore() {
 }
 
 const TIMESTAMP = "2026-07-26T10:00:00Z";
+const NOTIFICATION_TYPE = "notification";
 const PROFILE_CREATED = "agent.profile.created";
 const PROFILE_UPDATED = "agent.profile.updated";
 const PROFILE_DELETED = "agent.profile.deleted";
@@ -21,7 +22,7 @@ const PROFILE_DELETED = "agent.profile.deleted";
 function message(action: string, payload: unknown, timestamp = TIMESTAMP) {
   return {
     id: `message-${action}`,
-    type: "notification",
+    type: NOTIFICATION_TYPE,
     action,
     timestamp,
     payload,
@@ -167,5 +168,62 @@ describe("agent profile events", () => {
 
     expect(store.getState().agentProfiles.items).toHaveLength(0);
     expect(store.getState().settingsAgents.items).toHaveLength(0);
+  });
+
+  it("ignores a stale delete event when a newer revision already exists", () => {
+    const store = makeStore();
+    const handlers = handlersFor(store);
+    const current = profilePayload({ id: "p-stale", model: "new-model", updated_at: "2026-07-26T11:00:00Z" });
+    handlers[PROFILE_CREATED](message(PROFILE_CREATED, { profile: current }, "2026-07-26T11:05:00Z"));
+    expect(store.getState().agentProfiles.items).toHaveLength(1);
+
+    // A delayed delete carrying an OLDER snapshot than the stored revision
+    // must not remove the current profile.
+    const staleDelete = profilePayload({ id: "p-stale", model: "new-model", updated_at: TIMESTAMP });
+    handlers[PROFILE_DELETED](
+      message(PROFILE_DELETED, { profile: staleDelete }, "2026-07-26T11:02:00Z"),
+    );
+
+    const state = store.getState();
+    expect(state.agentProfiles.items).toHaveLength(1);
+    expect(state.agentProfiles.items[0]?.model).toBe("new-model");
+    // A genuinely newer delete (after the stored revision) still applies.
+    handlers[PROFILE_DELETED](
+      message(PROFILE_DELETED, { profile: current }, "2026-07-26T12:00:00Z"),
+    );
+    expect(store.getState().agentProfiles.items).toHaveLength(0);
+  });
+
+  it("orders revisions by instant, not lexically, for fractional-second timestamps", () => {
+    const store = makeStore();
+    const handlers = handlersFor(store);
+    // Lexically "…10:00:00Z" sorts AFTER "…10:00:00.100Z", so a naive string
+    // compare would treat the whole-second revision as newer and regress it.
+    const fractional = profilePayload({ id: "p-frac", model: "fractional-model", updated_at: "2026-07-26T10:00:00.100Z" });
+    handlers[PROFILE_CREATED](message(PROFILE_CREATED, { profile: fractional }, "2026-07-26T10:00:00.100Z"));
+
+    const wholeSecond = profilePayload({ id: "p-frac", model: "whole-second-model", updated_at: TIMESTAMP });
+    handlers[PROFILE_UPDATED](message(PROFILE_UPDATED, { profile: wholeSecond }));
+
+    expect(store.getState().agentProfiles.items[0]?.model).toBe("fractional-model");
+  });
+
+  it("keeps the tombstone ordered by instant for fractional-second deletes", () => {
+    const store = makeStore();
+    const handlers = handlersFor(store);
+    handlers[PROFILE_CREATED](
+      message(PROFILE_CREATED, { profile: profilePayload({ id: "p-tomb" }) }),
+    );
+    // Delete at a fractional second; the tombstone must beat a whole-second
+    // create produced before it.
+    handlers[PROFILE_DELETED](
+      message(PROFILE_DELETED, { profile: profilePayload({ id: "p-tomb" }) }, "2026-07-26T10:00:00.100Z"),
+    );
+    expect(store.getState().agentProfiles.items).toHaveLength(0);
+
+    handlers[PROFILE_CREATED](
+      message(PROFILE_CREATED, { profile: profilePayload({ id: "p-tomb" }) }, "2026-07-26T10:00:00.050Z"),
+    );
+    expect(store.getState().agentProfiles.items).toHaveLength(0);
   });
 });

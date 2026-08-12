@@ -57,8 +57,10 @@ Add to `apps/backend/internal/agent/settings/controller/profile_crud.go`:
      transaction inserts the row with the caller-provided `Enabled` state
      (NOT forced true like `CreateAgentProfile`, so a disabled source never
      becomes briefly selectable) and upserts the MCP config row. A failure
-     rolls back, leaving no partial copy — retrying cannot duplicate. The
-     store assigns the fresh UUID and a single `CreatedAt`/`UpdatedAt` pair,
+     rolls back, leaving no partial copy. Rollback makes each attempt
+     atomic, but the endpoint is not HTTP-idempotent: a retried request
+     creates another row (the UI guards against double-clicks). The store
+     assigns the fresh UUID and a single `CreatedAt`/`UpdatedAt` pair,
      which the returned DTO reflects (no stale timestamp after a second
      write).
   6. **Consistent snapshot (adversarial review round 5):** inside the

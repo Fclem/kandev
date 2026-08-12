@@ -1,7 +1,7 @@
 import type { StoreApi } from "zustand";
 import type { AppState } from "@/lib/state/store";
 import type { WsHandlers } from "@/lib/ws/handlers/types";
-import { toAgentProfileOption } from "@/lib/state/slices/settings/types";
+import { compareTimestamps, toAgentProfileOption } from "@/lib/state/slices/settings/types";
 import { normalizeAgentProfile } from "@/lib/api/domains/agent-profile-normalize";
 import type { AgentProfile } from "@/lib/types/agent-profile";
 
@@ -37,6 +37,9 @@ function findExistingProfile(state: AppState, profileId: string): AgentProfile |
 // Deletion tombstones keyed by profile id -> deletion event timestamp, so a
 // delayed create/update event cannot resurrect a profile that was deleted
 // after the event was produced. Cleared when a genuinely newer create arrives.
+// Tombstones are keyed by UUID and profiles are never recreated under the same
+// ID, so the map is bounded by the number of profiles deleted in this session
+// (typically single digits to low dozens — no eviction needed).
 const deletionTombstones = new Map<string, string>();
 
 /**
@@ -53,13 +56,17 @@ function isStaleProfileEvent(
   eventTimestamp: string | undefined,
 ): boolean {
   const tombstone = deletionTombstones.get(normalized.id);
-  if (tombstone !== undefined && eventTimestamp && tombstone >= eventTimestamp) return true;
+  if (tombstone !== undefined && eventTimestamp && compareTimestamps(tombstone, eventTimestamp) >= 0) {
+    return true;
+  }
   const existingProfile = findExistingProfile(state, normalized.id);
-  if (existingProfile && (existingProfile.updatedAt ?? "") > (normalized.updatedAt ?? "")) {
+  if (existingProfile && compareTimestamps(existingProfile.updatedAt, normalized.updatedAt) > 0) {
     return true;
   }
   const existingOption = state.agentProfiles.items.find((o) => o.id === normalized.id);
-  return Boolean(existingOption && (existingOption.updatedAt ?? "") > (normalized.updatedAt ?? ""));
+  return Boolean(
+    existingOption && compareTimestamps(existingOption.updatedAt, normalized.updatedAt) > 0,
+  );
 }
 
 /**
@@ -135,8 +142,10 @@ function handleProfileUpdated(
 /**
  * Applies an agent.profile.deleted event: removes the profile from both
  * slices and records a deletion tombstone (keyed by the event timestamp) so a
- * delayed create/update cannot resurrect it. Office-scoped deletes are
- * ignored.
+ * delayed create/update cannot resurrect it. Office-scoped and stale deletes
+ * (a delete whose snapshot is older than the stored revision — e.g. a delayed
+ * event after a newer update already applied) are ignored so the handler
+ * never regresses newer state.
  */
 function handleProfileDeleted(
   state: AppState,
@@ -145,6 +154,7 @@ function handleProfileDeleted(
 ): Partial<AppState> {
   const normalized = normalizeAgentProfile(profile);
   if (isOfficeScoped(normalized)) return {};
+  if (isStaleProfileEvent(state, normalized, eventTimestamp)) return {};
   if (eventTimestamp) deletionTombstones.set(normalized.id, eventTimestamp);
   const agentId = getAgentId(profile);
   const nextAgents = state.settingsAgents.items.map((item) =>

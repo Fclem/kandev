@@ -287,6 +287,14 @@ func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileR
 		}
 		return nil, err
 	}
+	// Office-scoped profiles are owned by the workspace-scoped office API
+	// surface and hidden from this instance-level settings surface (the UI
+	// filters them via filterGlobalProfiles). Refuse to duplicate them here so
+	// the endpoint cannot read or clone another workspace's configuration;
+	// 404 keeps the existence of office profiles hidden.
+	if source.WorkspaceID != "" {
+		return nil, ErrAgentProfileNotFound
+	}
 	for attempt := 0; ; attempt++ {
 		// A source without an MCP row leaves the copy without one: the
 		// default-config semantics and boot EnsureDefaultMcpConfig cover
@@ -318,12 +326,14 @@ func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileR
 			result := toProfileDTO(clone)
 			return &result, nil
 		}
+		// A source deleted between the snapshot read and the transaction is a
+		// deterministic 404, not a retryable race: the copy has nothing to
+		// reflect, so surface it immediately instead of re-reading the source
+		// up to maxDuplicateRetries times.
+		if errors.Is(err, store.ErrSourceProfileNotFound) {
+			return nil, ErrAgentProfileNotFound
+		}
 		if !isRetryableDuplicateErr(err) || attempt >= maxDuplicateRetries {
-			// A source deleted mid-flight must surface as 404, not 500, even
-			// when the retry cap is reached before the re-read noticed it.
-			if errors.Is(err, store.ErrSourceProfileNotFound) {
-				return nil, ErrAgentProfileNotFound
-			}
 			return nil, err
 		}
 		source, err = c.repo.GetAgentProfile(ctx, req.ID)
@@ -342,11 +352,12 @@ func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileR
 const maxDuplicateRetries = 2
 
 // isRetryableDuplicateErr reports whether a duplicate attempt failed because
-// the source changed concurrently (revision mismatch, source deleted, or a
-// WAL snapshot-isolation busy error on the write) rather than deterministically.
+// the source changed concurrently (revision mismatch or a WAL snapshot-isolation
+// busy error on the write) rather than deterministically. A deleted source is
+// intentionally absent: DuplicateProfile maps ErrSourceProfileNotFound to 404
+// before consulting this set.
 func isRetryableDuplicateErr(err error) bool {
 	return errors.Is(err, store.ErrProfileChanged) ||
-		errors.Is(err, store.ErrSourceProfileNotFound) ||
 		strings.Contains(err.Error(), "database is locked") ||
 		strings.Contains(err.Error(), "database table is locked")
 }
@@ -356,36 +367,38 @@ func isRetryableDuplicateErr(err error) bool {
 // last-run timestamp, or consecutive-failure count.
 func duplicateClone(source *models.AgentProfile) *models.AgentProfile {
 	return &models.AgentProfile{
-		AgentID:               source.AgentID,
-		Name:                  strings.TrimSpace(source.Name) + " Copy",
-		AgentDisplayName:      source.AgentDisplayName,
-		Model:                 source.Model,
-		FallbackModel:         strings.TrimSpace(source.FallbackModel),
-		AutoFallback:          source.AutoFallback,
-		Mode:                  source.Mode,
-		ConfigOptions:         profileconfig.SanitizeConfigOptions(cloneStringMap(source.ConfigOptions)),
-		AllowIndexing:         source.AllowIndexing,
-		AutoApprove:           source.AutoApprove,
-		CLIPassthrough:        source.CLIPassthrough,
-		CLIFlags:              cloneCLIFlags(source.CLIFlags),
-		EnvVars:               cloneEnvVars(source.EnvVars),
-		CommandPrefix:         source.CommandPrefix,
-		UserModified:          true,
-		Enabled:               source.Enabled,
-		WorkspaceID:           source.WorkspaceID,
-		Role:                  source.Role,
-		Icon:                  source.Icon,
-		ReportsTo:             source.ReportsTo,
-		SkillIDs:              source.SkillIDs,
-		DesiredSkills:         source.DesiredSkills,
-		MaxConcurrentSessions: source.MaxConcurrentSessions,
-		CooldownSec:           source.CooldownSec,
-		SkipIdleRuns:          source.SkipIdleRuns,
-		FailureThreshold:      cloneIntPtr(source.FailureThreshold),
-		ExecutorPreference:    source.ExecutorPreference,
-		BudgetMonthlyCents:    source.BudgetMonthlyCents,
-		Settings:              source.Settings,
-		Permissions:           source.Permissions,
+		AgentID:                    source.AgentID,
+		Name:                       strings.TrimSpace(source.Name) + " Copy",
+		AgentDisplayName:           source.AgentDisplayName,
+		Model:                      source.Model,
+		FallbackModel:              strings.TrimSpace(source.FallbackModel),
+		AutoFallback:               source.AutoFallback,
+		Mode:                       source.Mode,
+		ConfigOptions:              profileconfig.SanitizeConfigOptions(cloneStringMap(source.ConfigOptions)),
+		AllowIndexing:              source.AllowIndexing,
+		AutoApprove:                source.AutoApprove,
+		CLIPassthrough:             source.CLIPassthrough,
+		CLIFlags:                   cloneCLIFlags(source.CLIFlags),
+		EnvVars:                    cloneEnvVars(source.EnvVars),
+		CommandPrefix:              source.CommandPrefix,
+		UserModified:               true,
+		Enabled:                    source.Enabled,
+		WorkspaceID:                source.WorkspaceID,
+		Role:                       source.Role,
+		Icon:                       source.Icon,
+		ReportsTo:                  source.ReportsTo,
+		SkillIDs:                   source.SkillIDs,
+		DesiredSkills:              source.DesiredSkills,
+		MaxConcurrentSessions:      source.MaxConcurrentSessions,
+		CooldownSec:                source.CooldownSec,
+		SkipIdleRuns:               source.SkipIdleRuns,
+		FailureThreshold:           cloneIntPtr(source.FailureThreshold),
+		ExecutorPreference:         source.ExecutorPreference,
+		BudgetMonthlyCents:         source.BudgetMonthlyCents,
+		Settings:                   source.Settings,
+		Permissions:                source.Permissions,
+		DangerouslySkipPermissions: source.DangerouslySkipPermissions,
+		CustomPrompt:               source.CustomPrompt,
 	}
 }
 

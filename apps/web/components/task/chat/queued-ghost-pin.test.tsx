@@ -15,6 +15,12 @@ vi.mock("@/hooks/use-queue-pinned", () => ({
   useQueuePinned: (sessionId: string | null) => useQueuePinnedMock(sessionId),
 }));
 
+const breakpointMocks: { isMobile: boolean } = { isMobile: false };
+
+vi.mock("@/hooks/use-responsive-breakpoint", () => ({
+  useResponsiveBreakpoint: () => breakpointMocks,
+}));
+
 vi.mock("@kandev/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -78,6 +84,7 @@ beforeEach(() => {
   useQueueMock.mockReset();
   useQueuePinnedMock.mockReset();
   useQueuePinnedMock.mockReturnValue({ value: false, setValue: vi.fn(), toggle: vi.fn() });
+  breakpointMocks.isMobile = false;
 });
 
 afterEach(() => {
@@ -160,6 +167,31 @@ describe("QueueAffordance pin", () => {
     rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
     expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
     expect(screen.queryByTestId(CHIP_ID)).toBeNull();
+  });
+});
+
+describe("QueueAffordance pin desktop-only", () => {
+  it("hides the pin toggle on mobile viewports", () => {
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    useQueuePinnedMock.mockReturnValue({ value: false, setValue: vi.fn(), toggle: vi.fn() });
+    breakpointMocks.isMobile = true;
+    render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    fireEvent.click(screen.getByTestId(CHIP_ID));
+
+    expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
+    expect(screen.queryByTestId("queue-pin")).toBeNull();
+    // The rest of the header controls remain available on mobile.
+    expect(screen.getByTestId("queue-clear-all")).toBeTruthy();
+    expect(screen.getByTestId("queue-close")).toBeTruthy();
+  });
+
+  it("renders the pin toggle on desktop viewports", () => {
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    useQueuePinnedMock.mockReturnValue({ value: false, setValue: vi.fn(), toggle: vi.fn() });
+    breakpointMocks.isMobile = false;
+    render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    fireEvent.click(screen.getByTestId(CHIP_ID));
+    expect(screen.getByTestId("queue-pin")).toBeTruthy();
   });
 });
 

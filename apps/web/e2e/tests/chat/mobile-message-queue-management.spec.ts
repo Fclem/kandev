@@ -122,35 +122,28 @@ test("mobile Send Now replaces a busy turn without hover or horizontal overflow"
   await expect(session.chat).not.toContainText("Turn cancelled by user");
 });
 
-test("mobile pin keeps the queue panel open across navigation", async ({
+test("mobile queue panel hides the desktop-only pin and keeps its controls", async ({
   testPage,
   apiClient,
   seedData,
 }) => {
   test.setTimeout(120_000);
 
-  const { session, taskId } = await seedBusyQueueTask(testPage, apiClient, seedData);
+  const { session } = await seedBusyQueueTask(testPage, apiClient, seedData);
   const chat = session.activeChat();
   const editor = chat.locator(".tiptap.ProseMirror:visible").first();
   const submit = testPage.getByTestId("submit-message-button");
-  await typeWhileBusy(testPage, editor, "mobile pinned message");
+  await typeWhileBusy(testPage, editor, "mobile queued message");
   await expect(submit).toBeEnabled();
   await submit.tap();
 
   await chat.getByTestId("queue-chip").tap();
   const panel = chat.getByTestId("queued-ghost-list");
   await expect(panel).toBeVisible({ timeout: 10_000 });
-  const pin = panel.getByTestId("queue-pin");
-  await expectTouchTarget(pin);
-  await pin.tap();
-  await expect(pin).toHaveAttribute("aria-pressed", "true");
 
-  // Navigate away and back: the pinned panel must come back expanded without
-  // a chip tap.
-  await testPage.goto("/");
-  await testPage.waitForLoadState("networkidle");
-  await testPage.goto(`/t/${taskId}`);
-
-  await expect(chat.getByTestId("queued-ghost-list")).toBeVisible({ timeout: 15_000 });
-  await expect(chat.getByTestId("queue-chip")).not.toBeVisible();
+  // The pin is a desktop-only control: it must not render on the mobile
+  // queue panel, while the other header controls stay touch-sized.
+  await expect(panel.getByTestId("queue-pin")).toHaveCount(0);
+  await expectTouchTarget(panel.getByTestId("queue-clear-all"));
+  await expectTouchTarget(panel.getByTestId("queue-close"));
 });

@@ -89,3 +89,15 @@ none and the loop stopped:
 Unit tests grew from 56 to 63 (pin spec split across three describes to stay
 under the 100-line per-function cap). Desktop + mobile E2E re-run green after
 the fixes.
+
+### Desktop-only pin (post-review product decision)
+
+The pin is now a desktop-only control per explicit user request: the header
+gates the button on `useResponsiveBreakpoint().isMobile` (width < 768px), so
+phone viewports render the queue panel without the pin while Clear all /
+Send now / Run next / collapse remain. Unit tests: two new cases (pin hidden
+on mobile, rendered on desktop) via the `use-responsive-breakpoint` mock —
+65 total. Mobile E2E: the pin-present navigation test was replaced with a
+desktop-only guard asserting `queue-pin` has count 0 and the remaining header
+controls stay touch-sized; desktop pin E2E unchanged (2/2). Spec updated
+(`What`, Scenarios, Out of scope) with the mobile exclusion.

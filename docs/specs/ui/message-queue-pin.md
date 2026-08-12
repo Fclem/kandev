@@ -32,6 +32,11 @@ navigation, even when they deliberately left the queue open.
   name and tooltip.
 - On coarse-pointer viewports the pin button keeps the existing queue header
   touch sizing (at least 44 by 44 CSS pixels), matching Clear all and X.
+- The pin is **desktop-only**: on phone viewports (the app's `mobile`
+  breakpoint, width below 768px) the queue panel renders without the pin;
+  Clear all, Send now, Run next, and the collapse button remain available.
+  On phone the queue panel keeps the existing mount behavior (starts
+  collapsed).
 
 ## Data model
 
@@ -84,10 +89,14 @@ Absent or unreadable entries default to `false` (unpinned).
 - **GIVEN** the user pins the queue in one task session, **WHEN** they open
   another task's queue, **THEN** that queue starts collapsed unless it has its
   own pin.
+- **GIVEN** a phone viewport with the queue panel expanded, **WHEN** the user
+  inspects the header, **THEN** no pin control is rendered and Clear all and
+  the collapse button remain touch-sized.
 
 ## Out of scope
 
 - Backend persistence or synchronization of the pin across devices/installs.
+- Rendering the pin on phone viewports (desktop-only control).
 - Pinning the queue chip or collapsing behavior beyond the expanded panel.
 - Changing the Clear all, Send now, Run next, or merge/reorder controls.
 - Any change to queued-message admission, delivery, or capacity rules.

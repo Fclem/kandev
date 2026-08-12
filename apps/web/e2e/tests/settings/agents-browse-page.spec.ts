@@ -42,13 +42,25 @@ test.describe("Agents browse page", () => {
 
     await testPage.goto("/settings/agents/browse");
 
-    await expect(testPage.getByRole("heading", { name: "Browse available agents" })).toBeVisible({
-      timeout: 15_000,
-    });
+    const heading = testPage.getByRole("heading", { name: "Browse available agents" });
+    await expect(heading).toBeVisible({ timeout: 15_000 });
     await expect(testPage.getByTestId("install-card-codex")).toBeVisible();
 
     // PR #2544 wrapped the section in a collapsible whose heading row was a
-    // toggle; reverted, the heading must not be a button.
+    // toggle button. Reverted, the heading must be a plain heading: no button
+    // with the heading's accessible name and no button ancestor. Assert the
+    // semantic shape rather than the old implementation's test ID, so any
+    // future collapsible reintroduction fails even with different test IDs.
+    await expect(testPage.getByRole("button", { name: "Browse available agents" })).toHaveCount(0);
+    const headingHasButtonAncestor = await testPage.evaluate(() => {
+      const h = [...document.querySelectorAll("h1, h2, h3, h4, h5, h6")].find(
+        (el) => el.textContent?.trim() === "Browse available agents",
+      );
+      return h ? h.closest("button") !== null : null;
+    });
+    expect(headingHasButtonAncestor).toBe(false);
+
+    // Compatibility guard: the exact test ID PR #2544 introduced is gone too.
     await expect(testPage.getByTestId("available-to-install-trigger")).toHaveCount(0);
   });
 });

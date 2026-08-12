@@ -149,24 +149,17 @@ export function buildBranchRoot(
   };
 }
 
-function integrationNodes(
-  workspaceId: string,
-  integrationsHref: string,
-  visibleSlugs?: ReadonlySet<IntegrationSlug>,
-): SettingsMenuNode[] {
+function integrationNodes(workspaceId: string, integrationsHref: string): SettingsMenuNode[] {
   // Configured status gates the badge only, never the row itself — the branch
-  // always lists every integration regardless of credentials, so the filter
-  // here hides only disabled ones (intentionally looser than
-  // useNavAvailability's `configured && (!hideDisabled || enabled)`).
-  return WORKSPACE_INTEGRATIONS.filter(([slug]) => !visibleSlugs || visibleSlugs.has(slug)).map(
-    ([slug, label]) => ({
-      key: `workspace:${workspaceId}:integrations:${slug}`,
-      href: `${integrationsHref}/${slug}`,
-      label: { text: label },
-      icon: INTEGRATION_ICONS[slug],
-      integrationSlug: slug,
-    }),
-  );
+  // always lists every integration regardless of credentials or its
+  // enable/disable toggle.
+  return WORKSPACE_INTEGRATIONS.map(([slug, label]) => ({
+    key: `workspace:${workspaceId}:integrations:${slug}`,
+    href: `${integrationsHref}/${slug}`,
+    label: { text: label },
+    icon: INTEGRATION_ICONS[slug],
+    integrationSlug: slug,
+  }));
 }
 
 /**
@@ -181,12 +174,6 @@ function integrationNodes(
 export function buildWorkspacesBranch(
   workspaces: ReadonlyArray<BranchWorkspace>,
   activeWorkspaceId?: string | null,
-  /**
-   * Which integrations the Integrations branch may list. Omitted — the default
-   * — lists all of them; a set is passed only while "Hide disabled integrations
-   * from left panel navigation" is on.
-   */
-  visibleIntegrationSlugs?: ReadonlySet<IntegrationSlug>,
 ): SettingsMenuNode[] {
   return workspaces.map((workspace) => {
     const integrationsHref = workspaceSettingsHref(workspace.id, "integrations");
@@ -209,7 +196,7 @@ export function buildWorkspacesBranch(
           icon,
           ...(tab === "integrations"
             ? {
-                children: integrationNodes(workspace.id, integrationsHref, visibleIntegrationSlugs),
+                children: integrationNodes(workspace.id, integrationsHref),
                 integrationsWorkspaceId: workspace.id,
               }
             : {}),
@@ -238,13 +225,6 @@ export function buildAgentsBranch(
    * moment before discovery lands would be worse than saying nothing.
    */
   detectedNames?: ReadonlySet<string>,
-  /**
-   * When on ("Hide disabled agent profiles from left panel navigation"),
-   * profiles with `enabled === false` are omitted from the branch. `undefined`
-   * (the setting off) skips filtering entirely; profiles whose `enabled` is
-   * absent are legacy and always stay listed.
-   */
-  hideDisabled?: boolean,
 ): SettingsMenuNode[] {
   return agents
     .filter((agent) => agent.profiles.length > 0)
@@ -261,15 +241,13 @@ export function buildAgentsBranch(
           ? { badge: "not-installed" as const }
           : {}),
         // The agent is kandev's; only the profiles under it are the user's.
-        children: agent.profiles
-          .filter((profile) => !hideDisabled || (profile.enabled ?? true))
-          .map((profile) => ({
-            key: `agent:${agent.name}:profile:${profile.id}`,
-            href: `${agentHref}/profiles/${profile.id}`,
-            label: { text: profile.name },
-            isUserRecord: true,
-            ...(profile.enabled === false ? { badge: "disabled" as const } : {}),
-          })),
+        children: agent.profiles.map((profile) => ({
+          key: `agent:${agent.name}:profile:${profile.id}`,
+          href: `${agentHref}/profiles/${profile.id}`,
+          label: { text: profile.name },
+          isUserRecord: true,
+          ...(profile.enabled === false ? { badge: "disabled" as const } : {}),
+        })),
       };
     });
 }

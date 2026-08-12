@@ -1,7 +1,7 @@
 ---
 id: "01-remove-integrations-setting"
 title: "Remove integrations hide-disabled setting"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -59,4 +59,5 @@ task/plan status update in the same conversation.
 
 ## Results
 
-Pending.
+- `cd apps && pnpm --filter @kandev/web test -- app/settings/integrations/page.test.tsx` — Red: 1 failed (7 switches rendered, expected 6). Green after removing the setting from `integrations-index-page.tsx`: 4 passed.
+- Typecheck/lint covered by final `make typecheck` / `make lint` (both exit 0).

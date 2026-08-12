@@ -1,7 +1,7 @@
 ---
 id: "02-remove-agent-profiles-setting"
 title: "Remove agent-profiles hide-disabled setting"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -54,4 +54,5 @@ task/plan status update in the same conversation.
 
 ## Results
 
-Pending.
+- Deleted `hide-disabled-agent-profiles-setting.tsx` + `.test.tsx` (`git rm`); removed the import and `<HideDisabledAgentProfilesSetting />` render from `apps/web/app/settings/agents/page.tsx` (header `<Separator />` kept).
+- Typecheck/lint covered by final `make typecheck` / `make lint` (both exit 0).

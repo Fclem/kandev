@@ -1,7 +1,7 @@
 ---
 id: "05-remove-i18n-keys"
 title: "Remove hide-disabled i18n keys"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -50,4 +50,5 @@ task/plan status update in the same conversation.
 
 ## Results
 
-Pending.
+- Removed the 4 `hideDisabled*FromNav*` keys from `en`, `pseudo`, `pt-pt`, `zh-cn` `settings.json`.
+- `cd apps/web && pnpm run i18n:check` → all checks pass; `pnpm run i18n:ratchet` → 0 added, clean.

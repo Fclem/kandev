@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/ui/remove-hide-disabled-nav-options.md
 created: 2026-08-12
-status: draft
+status: building
 ---
 
 # Implementation Plan: Remove Hide-Disabled Left-Panel-Nav Options
@@ -141,24 +141,29 @@ sidebar/settings navigation E2E specs, which are unchanged.
 
 ## Verification Results
 
-Pending. On completion, synchronize this section with each task's
-`## Results`: record exact commands and outcomes/counts.
+- Task 01: `pnpm --filter @kandev/web test -- app/settings/integrations/page.test.tsx` — red 1 failed (7 switches), green 4 passed.
+- Task 03: 5-file targeted suite — 78 passed (after rewriting the stale `buildAgentsBranch` hide-filter test). Final touched-suite run (6 files incl. page.test.tsx): 82 passed.
+- Task 04: `grep` for hook/primitive names in `apps/web` → no matches.
+- Task 05: `pnpm run i18n:check` ✓, `pnpm run i18n:ratchet` ✓ (0 added).
+- Task 06: `grep` for spec names in `apps/web` → no matches.
+- Task 07: `git diff --check` clean.
+- Gate: `make fmt` ✓ · `make typecheck` ✓ (exit 0) · `make lint` ✓ (exit 0) · `make test`: backend/web have pre-existing environmental failures (process-capture tests, Docker-gateway `http-git-server.test.ts` — reproduces identically at pristine HEAD `723c14001`; zero backend diff) · `make test-cli` ✓ (0 failures) · `test-scripts` blocked by missing `unzip` binary (no package-manager access).
 
 ---
 
 ## Implementation Waves And Parallel Candidates
 
 Wave 1 (parallel candidates — disjoint files; user authorization required):
-- [ ] [task-01-remove-integrations-setting](task-01-remove-integrations-setting.md)
-- [ ] [task-02-remove-agent-profiles-setting](task-02-remove-agent-profiles-setting.md)
-- [ ] [task-03-remove-nav-filtering](task-03-remove-nav-filtering.md)
-- [ ] [task-05-remove-i18n-keys](task-05-remove-i18n-keys.md)
-- [ ] [task-06-remove-e2e-specs](task-06-remove-e2e-specs.md)
-- [ ] [task-07-update-docs](task-07-update-docs.md)
+- [x] [task-01-remove-integrations-setting](task-01-remove-integrations-setting.md)
+- [x] [task-02-remove-agent-profiles-setting](task-02-remove-agent-profiles-setting.md)
+- [x] [task-03-remove-nav-filtering](task-03-remove-nav-filtering.md)
+- [x] [task-05-remove-i18n-keys](task-05-remove-i18n-keys.md)
+- [x] [task-06-remove-e2e-specs](task-06-remove-e2e-specs.md)
+- [x] [task-07-update-docs](task-07-update-docs.md)
 
 Wave 2 (must land after 01–03 — deletes the hooks the earlier tasks
 stop importing):
-- [ ] [task-04-delete-orphaned-hooks](task-04-delete-orphaned-hooks.md)
+- [x] [task-04-delete-orphaned-hooks](task-04-delete-orphaned-hooks.md)
 
 ## Open Questions
 

@@ -36,34 +36,6 @@ vi.mock("@/hooks/domains/linear/use-linear-availability", () => ({
   useLinearAuthed: useLinearAuthedMock,
 }));
 
-// useNavAvailability now also folds in each integration's install-wide
-// enabled toggle plus the "hide disabled" nav setting. This suite never
-// exercises that decoupling (see hooks/use-nav-availability.test.ts for
-// that) — every enabled hook here defaults to `true` and the hide-disabled
-// setting to `false`, reproducing the pre-existing "enabled && authed"
-// visibility these tests already assert on.
-function enabledStub() {
-  return { enabled: true, setEnabled: () => {}, loaded: true };
-}
-vi.mock("@/hooks/domains/azure-devops/use-azure-devops-enabled", () => ({
-  useAzureDevOpsEnabled: enabledStub,
-}));
-vi.mock("@/hooks/domains/github/use-github-enabled", () => ({
-  useGitHubEnabled: enabledStub,
-}));
-vi.mock("@/hooks/domains/gitlab/use-gitlab-enabled", () => ({
-  useGitLabEnabled: enabledStub,
-}));
-vi.mock("@/hooks/domains/jira/use-jira-enabled", () => ({
-  useJiraEnabled: enabledStub,
-}));
-vi.mock("@/hooks/domains/linear/use-linear-enabled", () => ({
-  useLinearEnabled: enabledStub,
-}));
-vi.mock("@/hooks/domains/integrations/use-hide-disabled-integrations-in-nav", () => ({
-  useHideDisabledIntegrationsInNav: () => ({ hideDisabled: false, setHideDisabled: () => {} }),
-}));
-
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (
     selector: (state: {

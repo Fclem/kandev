@@ -1,10 +1,15 @@
 ---
-status: shipped
+status: archived
 created: 2026-08-11
 owner: platform
 ---
 
 # Hide Disabled Agent Profiles from Left Panel Navigation
+
+> Archived: this setting was removed — the left-panel navigation no longer
+> renders the tree/list surfaces it filtered. See
+> `docs/specs/ui/remove-hide-disabled-nav-options.md` for the removal and the
+> post-change behavior. Kept for history.
 
 ## Why
 

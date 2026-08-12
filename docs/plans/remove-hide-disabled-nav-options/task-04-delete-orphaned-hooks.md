@@ -1,7 +1,7 @@
 ---
 id: "04-delete-orphaned-hooks"
 title: "Delete orphaned hooks and shared primitive"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-remove-integrations-setting", "02-remove-agent-profiles-setting", "03-remove-nav-filtering"]
 plan: "plan.md"
@@ -56,4 +56,6 @@ task/plan status update in the same conversation.
 
 ## Results
 
-Pending.
+- Deleted the two domain hooks + shared primitive + their tests via `git rm` (6 files).
+- `grep -rn "useHideDisabledIntegrationsInNav\|useHideDisabledAgentProfilesInNav\|useLocalStorageBoolean\|hideDisabledInNav" apps/web` → no matches.
+- Updated `local-storage-mock.test-helpers.ts` doc comment (helper kept — per-integration enabled-hook tests still use it).

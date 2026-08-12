@@ -1,7 +1,7 @@
 ---
 id: "07-update-docs"
 title: "Update superseded specs and index"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -62,4 +62,7 @@ task/plan status update in the same conversation.
 
 ## Results
 
-Pending.
+- `docs/specs/integrations/enable-disable-toggle.md` — nav-visibility setting content removed (What/Data model/API/Failure modes/Scenarios/Out of scope), title narrowed to "Integration Enable/Disable Toggle", removal note links the new spec. Status stays `shipped`.
+- `docs/specs/agents/hide-disabled-profiles-nav.md` — `status: archived` + removal note.
+- `docs/specs/INDEX.md` — added `remove-hide-disabled-nav-options` under `ui/`.
+- `git diff --check` — clean.

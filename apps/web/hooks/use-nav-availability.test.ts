@@ -19,7 +19,6 @@ const mocks = vi.hoisted(() => {
     gitlabAvailable: vi.fn(() => false),
     jiraAuthed: vi.fn(() => false),
     linearAuthed: vi.fn(() => false),
-    hideDisabled: vi.fn(() => false),
   };
 });
 
@@ -40,39 +39,6 @@ vi.mock("@/hooks/domains/jira/use-jira-availability", () => ({
 }));
 vi.mock("@/hooks/domains/linear/use-linear-availability", () => ({
   useLinearAuthed: mocks.linearAuthed,
-}));
-vi.mock("@/hooks/domains/integrations/use-hide-disabled-integrations-in-nav", () => ({
-  useHideDisabledIntegrationsInNav: () => ({
-    hideDisabled: mocks.hideDisabled(),
-    setHideDisabled: vi.fn(),
-  }),
-}));
-
-// Enabled-hook mocks default to `true` everywhere: most scenarios exercise
-// the `configured` axis, and defaulting `enabled` off would make every one of
-// them need to opt back in just to stay green.
-const enabledHookMocks = vi.hoisted(() => ({
-  azureDevOps: vi.fn(() => ({ enabled: true, setEnabled: vi.fn(), loaded: true })),
-  github: vi.fn(() => ({ enabled: true, setEnabled: vi.fn(), loaded: true })),
-  gitlab: vi.fn(() => ({ enabled: true, setEnabled: vi.fn(), loaded: true })),
-  jira: vi.fn(() => ({ enabled: true, setEnabled: vi.fn(), loaded: true })),
-  linear: vi.fn(() => ({ enabled: true, setEnabled: vi.fn(), loaded: true })),
-}));
-
-vi.mock("@/hooks/domains/azure-devops/use-azure-devops-enabled", () => ({
-  useAzureDevOpsEnabled: enabledHookMocks.azureDevOps,
-}));
-vi.mock("@/hooks/domains/github/use-github-enabled", () => ({
-  useGitHubEnabled: enabledHookMocks.github,
-}));
-vi.mock("@/hooks/domains/gitlab/use-gitlab-enabled", () => ({
-  useGitLabEnabled: enabledHookMocks.gitlab,
-}));
-vi.mock("@/hooks/domains/jira/use-jira-enabled", () => ({
-  useJiraEnabled: enabledHookMocks.jira,
-}));
-vi.mock("@/hooks/domains/linear/use-linear-enabled", () => ({
-  useLinearEnabled: enabledHookMocks.linear,
 }));
 
 import { useNavAvailability } from "./use-nav-availability";
@@ -117,14 +83,6 @@ describe("getGitHubIntegrationStatus", () => {
 
 const NAV_GATED_KEYS: AvailabilityKey[] = ["azure-devops", "github", "gitlab", "jira", "linear"];
 
-const ENABLED_MOCK_BY_KEY = {
-  "azure-devops": enabledHookMocks.azureDevOps,
-  github: enabledHookMocks.github,
-  gitlab: enabledHookMocks.gitlab,
-  jira: enabledHookMocks.jira,
-  linear: enabledHookMocks.linear,
-};
-
 function setConfigured(key: AvailabilityKey, configured: boolean) {
   switch (key) {
     case "azure-devops":
@@ -148,18 +106,12 @@ function setConfigured(key: AvailabilityKey, configured: boolean) {
   }
 }
 
-function setEnabled(key: AvailabilityKey, enabled: boolean) {
-  ENABLED_MOCK_BY_KEY[key].mockReturnValue({ enabled, setEnabled: vi.fn(), loaded: true });
-}
-
 describe("useNavAvailability", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.state.workspaces.activeId = mocks.workspaceId;
     mocks.state.workspaces.items = [{ id: mocks.workspaceId }];
     mocks.githubStatus.mockReturnValue({ status: null, loading: false });
-    mocks.hideDisabled.mockReturnValue(false);
-    for (const key of NAV_GATED_KEYS) setEnabled(key, true);
   });
 
   it("scopes workspace integrations to the active workspace", () => {
@@ -180,47 +132,21 @@ describe("useNavAvailability", () => {
     expect(mocks.azureDevOpsAvailable).toHaveBeenCalledWith(null);
   });
 
-  describe.each(NAV_GATED_KEYS)("decoupling enabled from nav visibility for %s", (key) => {
-    it("hides an unconfigured integration regardless of enabled/hideDisabled", () => {
-      setConfigured(key, false);
-      setEnabled(key, true);
-      mocks.hideDisabled.mockReturnValue(false);
-      const { result: hideDisabledOff } = renderHook(() => useNavAvailability());
-      expect(hideDisabledOff.current[key]).toBe(false);
-
-      mocks.hideDisabled.mockReturnValue(true);
-      const { result: hideDisabledOn } = renderHook(() => useNavAvailability());
-      expect(hideDisabledOn.current[key]).toBe(false);
-    });
-
-    it('with "hide disabled" off (default), a configured-but-disabled integration stays visible', () => {
+  describe.each(NAV_GATED_KEYS)("gates %s nav visibility on configuration only", (key) => {
+    it("lists a configured integration regardless of its enabled toggle", () => {
       setConfigured(key, true);
-      setEnabled(key, false);
-      mocks.hideDisabled.mockReturnValue(false);
 
       const { result } = renderHook(() => useNavAvailability());
 
       expect(result.current[key]).toBe(true);
     });
 
-    it('with "hide disabled" on, a configured-but-disabled integration is hidden', () => {
-      setConfigured(key, true);
-      setEnabled(key, false);
-      mocks.hideDisabled.mockReturnValue(true);
+    it("hides an unconfigured integration even when it is enabled", () => {
+      setConfigured(key, false);
 
       const { result } = renderHook(() => useNavAvailability());
 
       expect(result.current[key]).toBe(false);
-    });
-
-    it('with "hide disabled" on, a configured and enabled integration stays visible', () => {
-      setConfigured(key, true);
-      setEnabled(key, true);
-      mocks.hideDisabled.mockReturnValue(true);
-
-      const { result } = renderHook(() => useNavAvailability());
-
-      expect(result.current[key]).toBe(true);
     });
   });
 });

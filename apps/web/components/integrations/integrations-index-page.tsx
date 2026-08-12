@@ -11,13 +11,9 @@ import {
   IconTicket,
 } from "@tabler/icons-react";
 import { Card, CardContent } from "@kandev/ui/card";
-import { Label } from "@kandev/ui/label";
 import { Separator } from "@kandev/ui/separator";
-import { Switch } from "@kandev/ui/switch";
 import { WorkspaceSectionHeader } from "@/components/settings/workspaces/workspace-section-header";
 import { useTranslation } from "react-i18next";
-import { useDraftedIntegrationEnabled } from "@/components/integrations/use-drafted-integration-enabled";
-import { useHideDisabledIntegrationsInNav } from "@/hooks/domains/integrations/use-hide-disabled-integrations-in-nav";
 import { AzureDevOpsEnabledControl } from "@/components/azure-devops/azure-devops-enabled-control";
 import { GitHubEnabledControl } from "@/components/github/github-enabled-control";
 import { GitLabEnabledControl } from "@/components/gitlab/gitlab-enabled-control";
@@ -87,36 +83,6 @@ type IntegrationsIndexPageProps = {
   workspaceId?: string;
 };
 
-/** Row for the "Hide disabled integrations from left panel navigation" setting, drafted/saved like the per-integration toggles. */
-function HideDisabledIntegrationsSetting() {
-  const { t } = useTranslation();
-  const { hideDisabled, setHideDisabled } = useHideDisabledIntegrationsInNav();
-  const draft = useDraftedIntegrationEnabled({
-    id: "integrations-hide-disabled-in-nav",
-    enabled: hideDisabled,
-    persist: setHideDisabled,
-  });
-  return (
-    <div className="flex min-h-11 items-center justify-between gap-4 rounded-lg border p-4">
-      <div className="min-w-0 space-y-0.5">
-        <Label htmlFor="hide-disabled-integrations-in-nav">
-          {t("settings:hideDisabledIntegrationsFromNav")}
-        </Label>
-        <p className="text-xs text-muted-foreground">
-          {t("settings:hideDisabledIntegrationsFromNavDescription")}
-        </p>
-      </div>
-      <Switch
-        id="hide-disabled-integrations-in-nav"
-        checked={draft.enabled}
-        data-settings-dirty={draft.isDirty}
-        onCheckedChange={draft.setEnabled}
-        className="shrink-0 cursor-pointer"
-      />
-    </div>
-  );
-}
-
 /** `/settings/integrations` and its workspace-scoped equivalent. */
 export function IntegrationsIndexPage({ workspaceId }: IntegrationsIndexPageProps = {}) {
   const { t } = useTranslation();
@@ -162,7 +128,6 @@ export function IntegrationsIndexPage({ workspaceId }: IntegrationsIndexPageProp
           );
         })}
       </div>
-      <HideDisabledIntegrationsSetting />
     </div>
   );
 }

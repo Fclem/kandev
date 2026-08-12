@@ -37,7 +37,6 @@ vi.mock("@/hooks/domains/sentry/use-sentry-enabled", () => ({
 
 beforeEach(() => {
   pushNavigationStateSpy.mockClear();
-  window.localStorage.removeItem("kandev:integrations:hideDisabledInNav:v1");
 });
 
 afterEach(cleanup);
@@ -62,25 +61,10 @@ describe("IntegrationsIndexPage", () => {
     renderPage();
 
     const switches = screen.getAllByRole("switch");
-    expect(switches).toHaveLength(7);
+    expect(switches).toHaveLength(6);
 
     expect(ariaChecked(document.getElementById("azure-devops-enabled"))).toBe(ARIA_CHECKED_TRUE);
     expect(ariaChecked(document.getElementById("github-enabled"))).toBe(ARIA_CHECKED_FALSE);
-  });
-
-  it("renders the hide-disabled-in-nav setting off by default and drafts a toggle without persisting until save", () => {
-    renderPage();
-
-    const hideDisabledSwitch = document.getElementById("hide-disabled-integrations-in-nav");
-    expect(hideDisabledSwitch).not.toBeNull();
-    expect(ariaChecked(hideDisabledSwitch)).toBe(ARIA_CHECKED_FALSE);
-
-    fireEvent.click(hideDisabledSwitch as HTMLElement);
-
-    // Drafted: the switch visually flips immediately...
-    expect(ariaChecked(hideDisabledSwitch)).toBe(ARIA_CHECKED_TRUE);
-    // ...but nothing is persisted to localStorage before the shared save action fires.
-    expect(window.localStorage.getItem("kandev:integrations:hideDisabledInNav:v1")).toBeNull();
   });
 
   it("navigates when the integration label is clicked", () => {

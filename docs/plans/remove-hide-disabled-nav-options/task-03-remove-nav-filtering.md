@@ -1,7 +1,7 @@
 ---
 id: "03-remove-nav-filtering"
 title: "Remove nav filtering by enabled state"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -103,4 +103,6 @@ task/plan status update in the same conversation.
 
 ## Results
 
-Pending.
+- `cd apps && pnpm --filter @kandev/web test -- hooks/use-nav-availability.test.ts components/app-sidebar/sections/settings/settings-menu-branches.test.ts components/app-sidebar/sections/settings/use-settings-menu-branches.test.ts components/app-sidebar/sections/settings/settings-tree-render.test.tsx components/integrations/integrations-menu.test.ts` — first run 78 passed / 1 failed: a stale `buildAgentsBranch` hide-filter test in `settings-menu-branches.test.ts`; rewritten to the no-filter contract. Final: 5 files, 78 passed.
+- Final touched-suite run (incl. `app/settings/integrations/page.test.tsx`): 6 files, 82 passed.
+- Typecheck/lint covered by final `make typecheck` / `make lint` (both exit 0).

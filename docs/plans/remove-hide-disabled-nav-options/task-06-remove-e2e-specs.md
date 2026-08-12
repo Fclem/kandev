@@ -1,7 +1,7 @@
 ---
 id: "06-remove-e2e-specs"
 title: "Remove hide-disabled E2E specs"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -52,4 +52,5 @@ task/plan status update in the same conversation.
 
 ## Results
 
-Pending.
+- Deleted both specs via `git rm`.
+- `grep -rn "hide-disabled-integrations-nav\|hide-disabled-agent-profiles-nav" apps/web` → no matches (historical `docs/plans/**` transcripts untouched).

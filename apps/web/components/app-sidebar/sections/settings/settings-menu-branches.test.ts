@@ -88,12 +88,12 @@ describe("buildWorkspacesBranch", () => {
   });
 });
 
-describe("buildWorkspacesBranch integration visibility", () => {
+describe("buildWorkspacesBranch integration listing", () => {
   function integrationSlugsOf(nodes: readonly SettingsMenuNode[]): Array<string | undefined> {
     return (integrationsTabOf(nodes)?.children ?? []).map((node) => node.integrationSlug);
   }
 
-  it("lists every integration when no visible set is given — the default", () => {
+  it("lists every integration, enabled or disabled — the branch has no filter", () => {
     const [workspace] = buildWorkspacesBranch(WORKSPACES);
 
     expect(integrationSlugsOf(workspace.children ?? [])).toEqual([
@@ -104,34 +104,6 @@ describe("buildWorkspacesBranch integration visibility", () => {
       "linear",
       "sentry",
     ]);
-  });
-
-  it("drops the integrations missing from the visible set, keeping catalog order", () => {
-    const [workspace] = buildWorkspacesBranch(
-      WORKSPACES,
-      null,
-      new Set(["azure-devops", "linear"] as const),
-    );
-
-    expect(integrationSlugsOf(workspace.children ?? [])).toEqual(["azure-devops", "linear"]);
-  });
-
-  it("never consults whether an integration is configured — the badge owns that", () => {
-    // Nothing about credentials reaches this builder: an integration the user
-    // has never connected is listed exactly like a connected one, so the
-    // visible set is the only thing that can remove a row.
-    const [workspace] = buildWorkspacesBranch(WORKSPACES, null, new Set(["github"] as const));
-
-    expect(integrationSlugsOf(workspace.children ?? [])).toEqual(["github"]);
-  });
-
-  it("leaves the Integrations row navigable when the set hides all of them", () => {
-    // An empty branch would otherwise render a chevron opening onto nothing.
-    const [workspace] = buildWorkspacesBranch(WORKSPACES, null, new Set());
-    const integrations = integrationsTabOf(workspace.children ?? []);
-
-    expect(integrations?.children).toEqual([]);
-    expect(integrations?.href).toBe(`/settings/workspaces/${WORKSPACE_ID}/integrations`);
   });
 });
 
@@ -196,7 +168,7 @@ describe("buildAgentsBranch", () => {
     expect(buildAgentsBranch([{ name: "empty", profiles: [] }])).toEqual([]);
   });
 
-  it("omits disabled profiles from the branch only when the hide setting is on", () => {
+  it("keeps disabled profiles listed — the branch has no hide filter", () => {
     const mixedAgent = {
       name: "claude-code",
       profiles: [
@@ -206,30 +178,15 @@ describe("buildAgentsBranch", () => {
       ],
     };
 
-    const [agent] = buildAgentsBranch([mixedAgent], undefined, true);
+    const [agent] = buildAgentsBranch([mixedAgent]);
 
-    // Enabled and legacy (no `enabled` field) profiles stay; only `enabled ===
-    // false` is omitted.
+    // Enabled, disabled and legacy (no `enabled` field) profiles all stay —
+    // the disabled badge, not a filter, marks the disabled one.
     expect(hrefsOf(agent.children ?? [])).toEqual([
       "/settings/agents/claude-code/profiles/profile-1",
+      "/settings/agents/claude-code/profiles/profile-2",
       "/settings/agents/claude-code/profiles/profile-3",
     ]);
-  });
-
-  it("keeps disabled profiles listed when the hide setting is off or absent", () => {
-    const mixedAgent = {
-      name: "claude-code",
-      profiles: [
-        { id: "profile-1", name: "Default", agentDisplayName: AGENT_DISPLAY_NAME },
-        { id: "profile-2", name: "Retired", agentDisplayName: AGENT_DISPLAY_NAME, enabled: false },
-      ],
-    };
-
-    const [agent] = buildAgentsBranch([mixedAgent]);
-    const [agentWithOff] = buildAgentsBranch([mixedAgent], undefined, false);
-
-    expect(hrefsOf(agent.children ?? [])).toHaveLength(2);
-    expect(hrefsOf(agentWithOff.children ?? [])).toHaveLength(2);
   });
 });
 

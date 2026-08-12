@@ -10,32 +10,29 @@ describe("shouldShowDescriptionStartButton", () => {
     expect(
       shouldShowDescriptionStartButton({
         sessionState: CREATED_STATE,
-        resumeSkipped: false,
-        taskState: CREATED_STATE,
+        taskState: "CREATED",
         taskId: TASK_ID,
         sessionId: SESSION_ID,
       }),
     ).toBe(true);
   });
 
-  it("shows for a resume-skipped stopped session", () => {
+  it("does NOT show for a resume-skipped session (the footer owns that surface)", () => {
     expect(
       shouldShowDescriptionStartButton({
         sessionState: "WAITING_FOR_INPUT",
-        resumeSkipped: true,
-        taskState: CREATED_STATE,
+        taskState: "CREATED",
         taskId: TASK_ID,
         sessionId: SESSION_ID,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it("NEVER shows for a FAILED session even when resume-skipped (recovery owns the affordance)", () => {
+  it("does NOT show for a FAILED session (recovery owns the affordance)", () => {
     expect(
       shouldShowDescriptionStartButton({
         sessionState: "FAILED",
-        resumeSkipped: true,
-        taskState: CREATED_STATE,
+        taskState: "CREATED",
         taskId: TASK_ID,
         sessionId: SESSION_ID,
       }),
@@ -46,7 +43,6 @@ describe("shouldShowDescriptionStartButton", () => {
     expect(
       shouldShowDescriptionStartButton({
         sessionState: CREATED_STATE,
-        resumeSkipped: false,
         taskState: "SCHEDULING",
         taskId: TASK_ID,
         sessionId: SESSION_ID,
@@ -54,26 +50,11 @@ describe("shouldShowDescriptionStartButton", () => {
     ).toBe(false);
   });
 
-  it("hides for RUNNING/STARTING sessions even when resume-skipped (stale-marker defense)", () => {
-    for (const runningState of ["RUNNING", "STARTING"] as const) {
-      expect(
-        shouldShowDescriptionStartButton({
-          sessionState: runningState,
-          resumeSkipped: true,
-          taskState: CREATED_STATE,
-          taskId: "t1",
-          sessionId: "s1",
-        }),
-      ).toBe(false);
-    }
-  });
-
   it("hides when no task/session context is bound", () => {
     expect(
       shouldShowDescriptionStartButton({
         sessionState: CREATED_STATE,
-        resumeSkipped: false,
-        taskState: CREATED_STATE,
+        taskState: "CREATED",
         taskId: undefined,
         sessionId: undefined,
       }),

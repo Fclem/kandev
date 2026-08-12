@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { IconPlayerPlay } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
 import { useTranslation } from "react-i18next";
+import type { TaskSessionState } from "@/lib/types/http";
 import { useAppStore } from "@/components/state-provider";
 import { launchSession } from "@/lib/services/session-launch-service";
 import { buildResumeRequest } from "@/lib/services/session-launch-helpers";
@@ -14,22 +15,35 @@ import { buildResumeRequest } from "@/lib/services/session-launch-helpers";
  * running) and the open-time auto-resume was skipped, so the session stayed
  * stopped. Clicking resumes the agent.
  *
- * Rendered in the message-list footer when the session has messages (the
- * task-description start button only renders for empty sessions). The resume
+ * Rendered in the message-list footer for resume-skipped sessions (the
+ * task-description start button only handles never-started CREATED sessions). The resume
  * is NOT gated by the preference — it is the explicit manual action.
  */
 export function SessionResumeStartButton({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation();
   const [isStarting, setIsStarting] = useState(false);
-  const taskId = useAppStore((state) => state.taskSessions.items[sessionId]?.task_id ?? null);
+  const session = useAppStore((state) => state.taskSessions.items[sessionId] ?? null);
+  const setTaskSession = useAppStore((state) => state.setTaskSession);
   const setResumeSkipped = useAppStore((state) => state.setResumeSkipped);
 
   const handleStart = useCallback(async () => {
-    if (!taskId) return;
+    if (!session) return;
     setIsStarting(true);
     try {
-      const { request } = buildResumeRequest(taskId, sessionId);
+      const { request } = buildResumeRequest(session.task_id, sessionId);
       const response = await launchSession(request);
+      if (response.success && response.state) {
+        // Hydrate the launch state (commonly STARTING) so the button hides
+        // immediately and the UI reflects the in-flight resume instead of
+        // staying stopped and clickable for repeated resumes.
+        setTaskSession({
+          id: session.id,
+          task_id: session.task_id,
+          state: response.state as TaskSessionState,
+          started_at: session.started_at ?? "",
+          updated_at: session.updated_at ?? "",
+        });
+      }
       // Only confirmed RUNNING clears the resume-skipped marker: a resume
       // response commonly reports STARTING (launch accepted, agent starting),
       // and the WS RUNNING transition clears it later. Failed launches keep
@@ -42,7 +56,7 @@ export function SessionResumeStartButton({ sessionId }: { sessionId: string }) {
     } finally {
       setIsStarting(false);
     }
-  }, [taskId, sessionId, setResumeSkipped]);
+  }, [session, sessionId, setTaskSession, setResumeSkipped]);
 
   return (
     <div className="flex justify-end mt-1.5">

@@ -131,7 +131,10 @@ export function registerKanbanHandlers(store: StoreApi<AppState>): WsHandlers {
               ...next.kanbanMulti,
               snapshots: {
                 ...next.kanbanMulti.snapshots,
-                [workflowId]: { ...snapshot, steps, tasks: multiTasks },
+                // A full kanban.update carries the authoritative step list;
+                // clear any placeholder marker so final-step gating can
+                // resolve against the real steps.
+                [workflowId]: { ...snapshot, steps, tasks: multiTasks, isPlaceholder: false },
               },
             },
           };

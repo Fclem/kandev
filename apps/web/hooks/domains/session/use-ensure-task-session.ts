@@ -76,8 +76,12 @@ function resolveWorkflowSteps(
   kanbanWorkflowId: string | null,
   kanbanSteps: KanbanStepLike[],
 ): KanbanStepLike[] {
-  if (snapshot !== undefined) return snapshot.steps;
+  // The ACTIVE workflow's steps always come from state.kanban.steps: WS
+  // step events (workflow.step.created/updated) only mutate that list, so a
+  // multi-workflow snapshot for the active workflow can be stale and miss a
+  // freshly-added terminal step, which would bypass the final-step gate.
   if (taskWorkflowId === null || taskWorkflowId === kanbanWorkflowId) return kanbanSteps;
+  if (snapshot !== undefined) return snapshot.steps;
   return [];
 }
 
@@ -88,6 +92,9 @@ function resolveStepsKnown(
   kanbanSteps: KanbanStepLike[],
   kanbanLoading: boolean,
 ): boolean {
+  if (taskWorkflowId === null || taskWorkflowId === kanbanWorkflowId) {
+    return kanbanSteps.length > 0 || !kanbanLoading;
+  }
   if (snapshot !== undefined) {
     // A placeholder snapshot (created by a task event before the real
     // workflow snapshot arrives) carries empty steps — it must NOT satisfy
@@ -95,8 +102,8 @@ function resolveStepsKnown(
     // hydrate.
     return snapshot.isPlaceholder !== true;
   }
-  if (taskWorkflowId !== null && taskWorkflowId !== kanbanWorkflowId) return true;
-  return kanbanSteps.length > 0 || !kanbanLoading;
+  // Non-active workflow with no snapshot: safe default (no gate), never wait.
+  return true;
 }
 
 export function resolveFinalStepInfo(

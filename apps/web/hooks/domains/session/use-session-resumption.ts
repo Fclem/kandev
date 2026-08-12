@@ -245,19 +245,18 @@ type LiveSessionLike = (SessionLike & { state?: string }) | null;
  * Monotonic status-hydration guard: a `task.session.status` response must not
  * downgrade a live STARTING/RUNNING session state (a stale response can race a
  * newer `session.state_changed` WS event and leave the UI showing a stopped
- * session while the agent runs), and an older TERMINAL response must not
- * overwrite a newer terminal state (FAILED/CANCELLED/COMPLETED — which
- * determines which recovery affordances the UI shows). An incoming TERMINAL
- * status is accepted when its timestamp is newer than the live session's.
+ * session while the agent runs), and must not overwrite a live TERMINAL state
+ * (FAILED/CANCELLED/COMPLETED — which determines the recovery affordances the
+ * UI shows) with an older or timestamp-less response. In both cases the
+ * incoming status is accepted only when its timestamp is newer than the live
+ * session's.
  */
 function shouldApplyStatusState(status: SessionStatus, live: LiveSessionLike): boolean {
   if (!status.state) return false;
   const liveState = live?.state;
-  const incomingState = status.state as TaskSessionState;
   const liveIsRunning = liveState === "STARTING" || liveState === "RUNNING";
-  const bothTerminal =
-    TERMINAL_STATES.has(liveState as TaskSessionState) && TERMINAL_STATES.has(incomingState);
-  if (!liveIsRunning && !bothTerminal) return true;
+  const liveIsTerminal = TERMINAL_STATES.has(liveState as TaskSessionState);
+  if (!liveIsRunning && !liveIsTerminal) return true;
   const liveUpdated = live?.updated_at ? Date.parse(live.updated_at) : Number.NaN;
   const incomingUpdated = status.updated_at ? Date.parse(status.updated_at) : Number.NaN;
   return (

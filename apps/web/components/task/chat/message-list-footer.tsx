@@ -59,13 +59,16 @@ export function MessageListFooter({
   const resumeSkipped = useAppStore((state) =>
     sessionId ? state.tasks.resumeSkippedSessionIds[sessionId] === true : false,
   );
+  // The footer is the single Start-agent surface for resume-skipped sessions
+  // (prevent-auto-start-on-open): it must render even when the session has
+  // no messages or the task has no description, so every gated recovered-idle
+  // session keeps the manual affordance.
   const showResumeStartButton =
     resumeSkipped &&
     sessionState !== "FAILED" &&
     sessionState !== "RUNNING" &&
     sessionState !== "STARTING" &&
-    sessionId !== null &&
-    messages.length > 0;
+    sessionId !== null;
   return (
     <>
       {!recoveryOwnsFailure && (

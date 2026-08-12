@@ -405,6 +405,38 @@ describe("useSessionResumption monotonic terminal hydration", () => {
     );
   });
 
+  it("rejects an older non-terminal status over a live terminal state", async () => {
+    mockSessionItems = {
+      s1: {
+        started_at: "2026-01-01T00:00:00.000Z",
+        updated_at: LATER_AT,
+        state: "FAILED",
+      },
+    };
+    mockRequest.mockResolvedValueOnce({
+      session_id: "s1",
+      task_id: "t1",
+      state: "STARTING",
+      is_agent_running: false,
+      is_resumable: false,
+      needs_resume: false,
+      updated_at: STARTED_AT, // older than the live FAILED
+    });
+
+    renderHook(() => useSessionResumption("t1", "s1"));
+
+    await waitFor(() => {
+      expect(mockRequest).toHaveBeenCalledWith("task.session.status", {
+        task_id: "t1",
+        session_id: "s1",
+      });
+    });
+    // The stale STARTING must not overwrite the newer live FAILED.
+    expect(mockSetTaskSession).not.toHaveBeenCalledWith(
+      expect.objectContaining({ state: "STARTING" }),
+    );
+  });
+
   it("accepts a newer terminal status over a live terminal state", async () => {
     mockSessionItems = {
       s1: {

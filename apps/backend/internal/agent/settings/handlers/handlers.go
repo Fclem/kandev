@@ -646,13 +646,33 @@ func (h *Handlers) httpDuplicateProfile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to duplicate profile"})
 		return
 	}
-	if h.hub != nil {
-		notification, _ := ws.NewNotification(ws.ActionAgentProfileCreated, gin.H{
-			"profile": resp,
-		})
-		h.hub.Broadcast(notification)
-	}
+	h.broadcastProfileCreated(resp)
 	c.JSON(http.StatusOK, resp)
+}
+
+// broadcastProfileCreated fans a profile-created event out. Kanban profiles
+// (empty WorkspaceID) go to every settings client. Office-scoped profiles are
+// routed through the workspace-scoped broadcaster so their configuration
+// (env vars, servers, ...) never leaks across workspace/user boundaries — the
+// HTTP agent list hides them via filterGlobalProfiles, and the WS path must
+// not contradict that. When the hub does not support workspace routing (test
+// fakes), the office event is dropped fail-closed.
+func (h *Handlers) broadcastProfileCreated(profile *dto.AgentProfileDTO) {
+	if h.hub == nil {
+		return
+	}
+	notification, _ := ws.NewNotification(ws.ActionAgentProfileCreated, gin.H{
+		"profile": profile,
+	})
+	if profile.WorkspaceID != "" {
+		if workspaceHub, ok := h.hub.(interface {
+			BroadcastToWorkspaceOrDrop(string, *ws.Message)
+		}); ok {
+			workspaceHub.BroadcastToWorkspaceOrDrop(profile.WorkspaceID, notification)
+		}
+		return
+	}
+	h.hub.Broadcast(notification)
 }
 
 func (h *Handlers) httpDeleteProfile(c *gin.Context) {

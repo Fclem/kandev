@@ -13,12 +13,14 @@ function makeStore() {
   ) as unknown as StoreApi<AppState>;
 }
 
+const TIMESTAMP = "2026-07-26T10:00:00Z";
+
 function message(action: string, payload: unknown) {
   return {
     id: `message-${action}`,
     type: "notification",
     action,
-    timestamp: "2026-07-26T10:00:00Z",
+    timestamp: TIMESTAMP,
     payload,
   };
 }
@@ -62,5 +64,32 @@ describe("agent runtime update websocket handlers", () => {
         }
       ).updateJobs.byAgent["claude-acp"],
     ).toMatchObject({ status: "succeeded", output: "downloaded\n" });
+  });
+
+  it("ignores office-scoped profile events so they never leak into global settings", () => {
+    const store = makeStore();
+    const handlers = registerAgentsHandlers(store) as unknown as Record<
+      string,
+      (event: ReturnType<typeof message>) => void
+    >;
+    const officeProfile = {
+      id: "profile-office",
+      agent_id: "agent-1",
+      name: "Office Agent",
+      model: "claude-sonnet",
+      workspace_id: "ws-1",
+      enabled: true,
+      created_at: TIMESTAMP,
+      updated_at: TIMESTAMP,
+    };
+    // The backend wraps the profile under { profile: ... } in the event.
+    const payload = { profile: officeProfile };
+
+    handlers["agent.profile.created"](message("agent.profile.created", payload));
+    handlers["agent.profile.updated"](message("agent.profile.updated", payload));
+
+    const state = store.getState();
+    expect(state.agentProfiles.items).toHaveLength(0);
+    expect(state.settingsAgents.items).toHaveLength(0);
   });
 });

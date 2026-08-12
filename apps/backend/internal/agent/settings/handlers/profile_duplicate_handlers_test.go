@@ -142,6 +142,26 @@ func (h *duplicateHub) actions() []string {
 	return out
 }
 
+// workspaceDuplicateHub models the gateway hub: global Broadcast plus the
+// workspace-scoped, fail-closed BroadcastToWorkspaceOrDrop.
+type workspaceDuplicateHub struct {
+	mu            sync.Mutex
+	global        []*ws.Message
+	workspaceMsgs map[string][]*ws.Message
+}
+
+func (h *workspaceDuplicateHub) Broadcast(msg *ws.Message) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.global = append(h.global, msg)
+}
+
+func (h *workspaceDuplicateHub) BroadcastToWorkspaceOrDrop(workspaceID string, msg *ws.Message) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.workspaceMsgs[workspaceID] = append(h.workspaceMsgs[workspaceID], msg)
+}
+
 func newDuplicateRouter(t *testing.T, repo store.Repository, hub Broadcaster) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -221,6 +241,64 @@ func TestDuplicateProfileEndpoint_NotFound(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "agent profile not found") {
 		t.Errorf("body = %q, want agent profile not found message", rec.Body.String())
+	}
+}
+
+func TestDuplicateProfileEndpoint_RoutesOfficeCopyToWorkspace(t *testing.T) {
+	repo := newDuplicateRepo()
+	repo.profiles["source-office"] = &models.AgentProfile{
+		ID:          "source-office",
+		AgentID:     "agent-1",
+		Name:        "Office Agent",
+		WorkspaceID: "ws-1",
+		Enabled:     true,
+	}
+	hub := &workspaceDuplicateHub{workspaceMsgs: map[string][]*ws.Message{}}
+	router := newDuplicateRouter(t, repo, hub)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-profiles/source-office/duplicate", nil)
+	req.Header.Set(httpmw.InterimSettingsInterlockHeader, "test-interlock")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if len(hub.global) != 0 {
+		t.Errorf("office duplicate leaked to the global settings broadcast: %d messages", len(hub.global))
+	}
+	if len(hub.workspaceMsgs["ws-1"]) != 1 {
+		t.Errorf("workspace-scoped messages for ws-1 = %d, want 1", len(hub.workspaceMsgs["ws-1"]))
+	}
+	if action := hub.workspaceMsgs["ws-1"][0].Action; action != ws.ActionAgentProfileCreated {
+		t.Errorf("workspace message action = %q, want %q", action, ws.ActionAgentProfileCreated)
+	}
+}
+
+func TestDuplicateProfileEndpoint_DropsOfficeCopyWithoutWorkspaceHub(t *testing.T) {
+	repo := newDuplicateRepo()
+	repo.profiles["source-office"] = &models.AgentProfile{
+		ID:          "source-office",
+		AgentID:     "agent-1",
+		Name:        "Office Agent",
+		WorkspaceID: "ws-1",
+		Enabled:     true,
+	}
+	// A plain Broadcaster cannot route by workspace: the office event must be
+	// dropped fail-closed, not leaked globally.
+	hub := &duplicateHub{}
+	router := newDuplicateRouter(t, repo, hub)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent-profiles/source-office/duplicate", nil)
+	req.Header.Set(httpmw.InterimSettingsInterlockHeader, "test-interlock")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	if actions := hub.actions(); len(actions) != 0 {
+		t.Errorf("office duplicate broadcast globally via a plain hub: %v", actions)
 	}
 }
 

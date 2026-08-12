@@ -15,8 +15,17 @@ function getAgentId(raw: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+// Office-scoped profiles are owned by the office channels, never the kanban
+// settings surface (the HTTP agent list hides them via filterGlobalProfiles).
+// Defense in depth: ignore their events here so a stray broadcast cannot leak
+// them into the global settings store and selectors.
+function isOfficeScoped(normalized: { workspaceId?: string }): boolean {
+  return Boolean(normalized.workspaceId);
+}
+
 function handleProfileCreated(state: AppState, profile: unknown): Partial<AppState> {
   const normalized = normalizeAgentProfile(profile);
+  if (isOfficeScoped(normalized)) return {};
   const agentId = getAgentId(profile);
   const agent = state.settingsAgents.items.find((a) => a.id === agentId);
   const agentStub = { id: agentId, name: agent?.name ?? "" };
@@ -43,6 +52,7 @@ function handleProfileCreated(state: AppState, profile: unknown): Partial<AppSta
 
 function handleProfileUpdated(state: AppState, profile: unknown): Partial<AppState> {
   const normalized = normalizeAgentProfile(profile);
+  if (isOfficeScoped(normalized)) return {};
   const agentId = getAgentId(profile);
   const agent = state.settingsAgents.items.find((a) => a.id === agentId);
   const agentStub = { id: agentId, name: agent?.name ?? "" };

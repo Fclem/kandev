@@ -182,6 +182,32 @@ describe("CopyMoveSecretDialog submit", () => {
     );
     expect(onCompleted).not.toHaveBeenCalled();
   });
+});
+
+describe("CopyMoveSecretDialog conflict handling", () => {
+  it("clears a 409 name conflict when the destination changes", async () => {
+    mockMoveSecret.mockRejectedValue(new ApiError("conflict", 409, {}));
+    renderDialog({ secret: workspaceSecret, originToken: "Alpha" });
+    fireEvent.click(screen.getByRole("radio", { name: /^Move/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Move" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/already exists in this destination/)).toBeTruthy(),
+    );
+    expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(true);
+
+    // The 409 is destination-specific: switching to a workspace where the name
+    // is free must clear the error and re-enable submission.
+    fireEvent.click(screen.getByRole("combobox", { name: "Destination" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Beta" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/already exists in this destination/)).toBeNull(),
+    );
+    expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
 
   it("shows a generic failure on 404 and never removes the source row", async () => {
     mockMoveSecret.mockRejectedValue(new ApiError("not found", 404, {}));

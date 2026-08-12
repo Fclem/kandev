@@ -112,7 +112,7 @@ export function CopyMoveSecretDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="bottom-0 top-auto left-0 right-0 translate-x-0 translate-y-0 rounded-b-none max-h-[85dvh] overflow-y-auto pb-[env(safe-area-inset-bottom)] sm:top-1/2 sm:left-1/2 sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-b-lg sm:max-h-none sm:overflow-visible"
+        className="bottom-0 top-auto left-0 right-0 translate-x-0 translate-y-0 rounded-b-none pb-[env(safe-area-inset-bottom)] sm:top-1/2 sm:left-1/2 sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-b-lg"
       >
         <DialogHeader>
           <DialogTitle>{t("settings:copyMoveSecretNamed", { name: secret.name })}</DialogTitle>
@@ -125,7 +125,15 @@ export function CopyMoveSecretDialog({
           destinations={destinations}
           workspaceNameById={workspaceNameById}
           destination={destination}
-          onDestinationChange={setDestination}
+          onDestinationChange={(next) => {
+            // A 409 conflict is destination-specific: switching targets must
+            // clear it so the name field is not stuck invalid on a destination
+            // where the name is free.
+            if (nameError !== null) {
+              setNameError(null);
+            }
+            setDestination(next);
+          }}
           destinationsLoading={destinationsLoading}
           destinationsError={destinationsError}
           onRetryDestinations={retryDestinations}

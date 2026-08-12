@@ -61,6 +61,43 @@ export type UseEnsureTaskSessionResult = {
  * - No-op when `enabled === false` or `task.id` is missing.
  * - Idempotent per task id within a mount; switching tasks resets the latch.
  */
+/**
+ * Resolves the task's workflow step list and final-step decision for the
+ * prevent-auto-start gate. Workflow-aware: the active workflow's steps
+ * (state.kanban.steps) when the task is in it, otherwise the multi-workflow
+ * snapshot's steps. `stepsKnown` is false only while the ACTIVE workflow's
+ * steps are still hydrating (loading, empty) — callers must wait before
+ * ensuring, or a final-step task would auto-start. Non-active workflows
+ * without a snapshot never resolve here (documented safe default: no gate).
+ */
+export function resolveFinalStepInfo(
+  task: EnsureTaskInput,
+  kanbanWorkflowId: string | null,
+  kanbanSteps: KanbanStepLike[],
+  kanbanLoading: boolean,
+  snapshots: Record<string, { steps: KanbanStepLike[] }>,
+): { isFinalStep: boolean; stepsKnown: boolean } {
+  const workflowStepId = task?.workflowStepId ?? null;
+  const taskWorkflowId = task?.workflowId ?? null;
+  if (!workflowStepId) return { isFinalStep: false, stepsKnown: true };
+  const snapshot = taskWorkflowId ? snapshots[taskWorkflowId] : undefined;
+  let steps: KanbanStepLike[] | undefined;
+  if (snapshot !== undefined) {
+    steps = snapshot.steps;
+  } else if (taskWorkflowId === null || taskWorkflowId === kanbanWorkflowId) {
+    steps = kanbanSteps;
+  } else {
+    steps = [];
+  }
+  const isFinalStep = isFinalWorkflowStep(workflowStepId, steps);
+  const stepsKnown =
+    snapshot !== undefined ||
+    (taskWorkflowId !== null && taskWorkflowId !== kanbanWorkflowId) ||
+    kanbanSteps.length > 0 ||
+    !kanbanLoading;
+  return { isFinalStep, stepsKnown };
+}
+
 export function useEnsureTaskSession(
   task: EnsureTaskInput,
   opts?: { enabled?: boolean },
@@ -80,29 +117,16 @@ export function useEnsureTaskSession(
   const preventAutoStart = useAppStore((state) => state.userSettings.preventAutoStartAgentOnOpen);
   const kanbanWorkflowId = useAppStore((state) => state.kanban.workflowId);
   const kanbanSteps = useAppStore((state) => state.kanban.steps);
+  const kanbanLoading = useAppStore((state) => state.kanban.isLoading === true);
   const snapshots = useAppStore((state) => state.kanbanMulti.snapshots);
-  const taskWorkflowId = task?.workflowId ?? null;
 
-  const isFinalStep = useMemo(() => {
-    if (!preventAutoStart || !task?.workflowStepId) return false;
-    const snapshot = taskWorkflowId ? snapshots[taskWorkflowId] : undefined;
-    let steps: KanbanStepLike[] | undefined;
-    if (snapshot !== undefined) {
-      steps = snapshot.steps;
-    } else if (taskWorkflowId === null || taskWorkflowId === kanbanWorkflowId) {
-      steps = kanbanSteps;
-    } else {
-      steps = [];
-    }
-    return isFinalWorkflowStep(task.workflowStepId, steps);
-  }, [
-    preventAutoStart,
-    task?.workflowStepId,
-    taskWorkflowId,
-    kanbanWorkflowId,
-    kanbanSteps,
-    snapshots,
-  ]);
+  const { isFinalStep, stepsKnown } = useMemo(
+    () =>
+      preventAutoStart
+        ? resolveFinalStepInfo(task, kanbanWorkflowId, kanbanSteps, kanbanLoading, snapshots)
+        : { isFinalStep: false, stepsKnown: true },
+    [preventAutoStart, task, kanbanWorkflowId, kanbanSteps, kanbanLoading, snapshots],
+  );
 
   // Latch keyed by `${taskId}:${retryToken}` so a re-mount on the same task
   // doesn't refire, but switching tasks or calling retry() does.
@@ -123,7 +147,11 @@ export function useEnsureTaskSession(
   useEffect(() => {
     if (!enabled || !taskId || !isLoaded) return;
     if (sessions.length > 0) return;
-    const key = `${taskId}:${retryToken}`;
+    // Wait for the workflow steps to resolve before deciding the gate. This
+    // branch does NOT latch, so a later steps hydration re-runs the effect
+    // with the correct isFinalStep value (fixes late-hydration auto-start).
+    if (preventAutoStart && !stepsKnown) return;
+    const key = `${taskId}:${retryToken}:${isFinalStep ? "gated" : "plain"}`;
     if (launchedKeyRef.current === key) return;
     launchedKeyRef.current = key;
 
@@ -152,7 +180,17 @@ export function useEnsureTaskSession(
     return () => {
       cancelled = true;
     };
-  }, [enabled, taskId, isLoaded, loadSessions, sessions.length, retryToken]);
+  }, [
+    enabled,
+    taskId,
+    isLoaded,
+    loadSessions,
+    sessions.length,
+    retryToken,
+    preventAutoStart,
+    stepsKnown,
+    isFinalStep,
+  ]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const retry = useCallback(() => {

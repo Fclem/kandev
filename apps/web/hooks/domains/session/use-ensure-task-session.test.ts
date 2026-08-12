@@ -15,11 +15,15 @@ let mockSessionsResult: {
 
 let mockStoreState: {
   userSettings: { preventAutoStartAgentOnOpen: boolean };
-  kanban: { workflowId: string | null; steps: Array<{ id: string; position: number }> };
+  kanban: {
+    workflowId: string | null;
+    steps: Array<{ id: string; position: number }>;
+    isLoading: boolean;
+  };
   kanbanMulti: { snapshots: Record<string, { steps: Array<{ id: string; position: number }> }> };
 } = {
   userSettings: { preventAutoStartAgentOnOpen: false },
-  kanban: { workflowId: "wf-active", steps: [] },
+  kanban: { workflowId: "wf-active", steps: [], isLoading: false },
   kanbanMulti: { snapshots: {} },
 };
 
@@ -50,7 +54,7 @@ function resetEnsureTaskSessionMocks() {
   mockSessionsResult = { sessions: [], isLoaded: true, loadSessions: mockLoadSessions };
   mockStoreState = {
     userSettings: { preventAutoStartAgentOnOpen: false },
-    kanban: { workflowId: "wf-active", steps: [] },
+    kanban: { workflowId: "wf-active", steps: [], isLoading: false },
     kanbanMulti: { snapshots: {} },
   };
   mockEnsureTaskSession.mockResolvedValue({
@@ -221,6 +225,7 @@ describe("useEnsureTaskSession prevent-auto-start gate", () => {
           { id: "step-1", position: 0 },
           { id: "step-done", position: 1 },
         ],
+        isLoading: false,
       },
       kanbanMulti: { snapshots: {} },
     };
@@ -241,6 +246,7 @@ describe("useEnsureTaskSession prevent-auto-start gate", () => {
           { id: "step-1", position: 0 },
           { id: "step-done", position: 1 },
         ],
+        isLoading: false,
       },
       kanbanMulti: { snapshots: {} },
     };
@@ -257,6 +263,7 @@ describe("useEnsureTaskSession prevent-auto-start gate", () => {
       kanban: {
         workflowId: "wf-active",
         steps: [{ id: "active-step", position: 0 }],
+        isLoading: false,
       },
       kanbanMulti: {
         snapshots: {
@@ -285,6 +292,7 @@ describe("useEnsureTaskSession prevent-auto-start gate", () => {
           { id: "step-1", position: 0 },
           { id: "step-done", position: 1 },
         ],
+        isLoading: false,
       },
       kanbanMulti: { snapshots: {} },
     };
@@ -293,5 +301,48 @@ describe("useEnsureTaskSession prevent-auto-start gate", () => {
     );
     await flushMicrotasks();
     expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1", undefined);
+  });
+});
+
+describe("useEnsureTaskSession late step hydration", () => {
+  beforeEach(resetEnsureTaskSessionMocks);
+
+  it("waits for the workflow steps before ensuring, then applies the gate", async () => {
+    mockStoreState = {
+      userSettings: { preventAutoStartAgentOnOpen: true },
+      kanban: {
+        workflowId: "wf-active",
+        // Steps not yet hydrated — isLoading still true.
+        steps: [],
+        isLoading: true,
+      },
+      kanbanMulti: { snapshots: {} },
+    };
+    const { rerender } = renderHook(() =>
+      useEnsureTaskSession({ id: "task-1", workflowStepId: "step-done", workflowId: "wf-active" }),
+    );
+    await flushMicrotasks();
+    // No ensure while the step list is unresolved.
+    expect(mockEnsureTaskSession).not.toHaveBeenCalled();
+
+    // Steps hydrate: the final step appears and loading completes.
+    mockStoreState = {
+      userSettings: { preventAutoStartAgentOnOpen: true },
+      kanban: {
+        workflowId: "wf-active",
+        steps: [
+          { id: "step-1", position: 0 },
+          { id: "step-done", position: 1 },
+        ],
+        isLoading: false,
+      },
+      kanbanMulti: { snapshots: {} },
+    };
+    rerender();
+    await flushMicrotasks();
+
+    // Exactly one ensure, gated: never an ungated call.
+    expect(mockEnsureTaskSession).toHaveBeenCalledTimes(1);
+    expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1", { autoStart: false });
   });
 });

@@ -48,6 +48,36 @@ type AdapterContext = {
   isContainingTurnActive?: boolean;
 };
 
+/**
+ * Decides whether the task-description message renders the Start agent
+ * button. Shown for never-started (CREATED) sessions and resume-skipped
+ * (prevent-auto-start-on-open) sessions, but NEVER for FAILED sessions —
+ * those keep their existing recovery actions (Resume session / Start fresh
+ * session). Also hidden while the task is SCHEDULING (the launch is in
+ * flight) and when no task/session context is bound.
+ */
+export function shouldShowDescriptionStartButton({
+  sessionState,
+  resumeSkipped,
+  taskState,
+  taskId,
+  sessionId,
+}: {
+  sessionState: TaskSessionState | undefined;
+  resumeSkipped: boolean;
+  taskState?: string;
+  taskId?: string;
+  sessionId?: string;
+}): boolean {
+  return (
+    (sessionState === "CREATED" || resumeSkipped) &&
+    sessionState !== "FAILED" &&
+    taskState !== "SCHEDULING" &&
+    !!taskId &&
+    !!sessionId
+  );
+}
+
 function TaskDescriptionStartButton({ taskId, sessionId }: { taskId: string; sessionId: string }) {
   const { t } = useTranslation();
   const [isStarting, setIsStarting] = useState(false);
@@ -153,11 +183,13 @@ function TaskDescriptionMessage({
   const resumeSkipped = useAppStore(
     (state) => state.tasks.resumeSkippedSessionIds[sessionId ?? ""] === true,
   );
-  const showStartButton =
-    (sessionState === "CREATED" || resumeSkipped) &&
-    task?.state !== "SCHEDULING" &&
-    !!taskId &&
-    !!sessionId;
+  const showStartButton = shouldShowDescriptionStartButton({
+    sessionState,
+    resumeSkipped,
+    taskState: task?.state,
+    taskId,
+    sessionId,
+  });
   return (
     <>
       <ChatMessage

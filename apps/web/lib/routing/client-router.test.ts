@@ -90,4 +90,50 @@ describe("client router adapter", () => {
     expect(attempts).toHaveLength(0);
     expect(go).toHaveBeenCalledTimes(2);
   });
+
+  it("cancelling a blocked pop does not let a delayed restoration clobber a newer position", () => {
+    setLocation("/settings/general/appearance");
+    const intents: Array<{ proceed: () => void; cancel: () => void }> = [];
+    setNavigationBlocker((intent) => intents.push(intent));
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => undefined);
+    vi.spyOn(window.history, "back").mockImplementation(() => {
+      window.dispatchEvent(
+        new PopStateEvent("popstate", {
+          state: { __kandevNavigationPosition: 0 },
+        }),
+      );
+    });
+    const { result } = renderHook(() => useRouter());
+
+    act(() => result.current.push("/tasks"));
+    act(() => intents.pop()?.proceed()); // allow the push -> currentPosition 1
+    act(() => result.current.back()); // blocked pop to position 0; restoration to 1 pending
+    expect(intents).toHaveLength(1);
+
+    // Duplicate-like flow: cancel the blocked intent, then push a new route
+    // before the restoration popstate arrives.
+    act(() => {
+      intents[0].cancel();
+      result.current.push("/settings/agents/mock-agent/profiles/copy-1");
+      intents.pop()?.proceed(); // allow the duplicate push -> currentPosition 2
+    });
+
+    // The delayed restoration popstate for the blocked entry must be consumed
+    // without overwriting position 2.
+    act(() => {
+      window.dispatchEvent(
+        new PopStateEvent("popstate", { state: { __kandevNavigationPosition: 1 } }),
+      );
+    });
+
+    // A later real back to position 1 is a fresh guarded pop (delta -1 from
+    // position 2), not a silent delta-0 acceptance.
+    act(() => {
+      window.dispatchEvent(
+        new PopStateEvent("popstate", { state: { __kandevNavigationPosition: 1 } }),
+      );
+    });
+    expect(intents).toHaveLength(2);
+    expect(go).toHaveBeenCalled();
+  });
 });

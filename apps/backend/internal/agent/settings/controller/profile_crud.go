@@ -319,6 +319,11 @@ func (c *Controller) DuplicateProfile(ctx context.Context, req DuplicateProfileR
 			return &result, nil
 		}
 		if !isRetryableDuplicateErr(err) || attempt >= maxDuplicateRetries {
+			// A source deleted mid-flight must surface as 404, not 500, even
+			// when the retry cap is reached before the re-read noticed it.
+			if errors.Is(err, store.ErrSourceProfileNotFound) {
+				return nil, ErrAgentProfileNotFound
+			}
 			return nil, err
 		}
 		source, err = c.repo.GetAgentProfile(ctx, req.ID)

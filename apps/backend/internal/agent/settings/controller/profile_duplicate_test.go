@@ -313,3 +313,20 @@ func TestDuplicateProfile_ExhaustsRetriesOnPersistentChange(t *testing.T) {
 		t.Errorf("copy created despite persistent source changes: %d rows", len(st.created))
 	}
 }
+
+// TestDuplicateProfile_SourceDeletedMidFlightMapsToNotFound verifies a source
+// deleted during the duplicate retries surfaces as ErrAgentProfileNotFound
+// (HTTP 404) instead of the raw store error (HTTP 500).
+func TestDuplicateProfile_SourceDeletedMidFlightMapsToNotFound(t *testing.T) {
+	source := sourceProfile()
+	ctrl, st := duplicateSetup(source)
+	st.duplicateProfErr = store.ErrSourceProfileNotFound
+
+	_, err := ctrl.DuplicateProfile(context.Background(), DuplicateProfileRequest{ID: source.ID})
+	if !errors.Is(err, ErrAgentProfileNotFound) {
+		t.Fatalf("err = %v, want ErrAgentProfileNotFound", err)
+	}
+	if len(st.created) != 0 {
+		t.Errorf("copy created despite deleted source: %d rows", len(st.created))
+	}
+}

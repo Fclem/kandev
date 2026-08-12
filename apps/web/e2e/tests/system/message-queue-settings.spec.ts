@@ -59,6 +59,7 @@ test.describe.serial("Message Queue general settings", () => {
     const queueCard = testPage.getByTestId("message-queue-settings");
     const siblingCard = testPage.getByTestId("voice-enable-card");
     await expect(queueCard).toBeVisible();
+    await expect(siblingCard).toBeVisible();
     expect((await queueCard.boundingBox())?.width ?? 0).toBeCloseTo(
       (await siblingCard.boundingBox())?.width ?? 0,
       0,

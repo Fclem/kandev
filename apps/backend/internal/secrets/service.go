@@ -13,6 +13,7 @@ type Service struct {
 	store               SecretStore
 	logger              *logger.Logger
 	workspaceAuthorizer func(context.Context, string) error
+	workspaceExistence  func(context.Context, string) error
 }
 
 // NewService creates a new secrets service.
@@ -28,6 +29,14 @@ func NewService(store SecretStore, log *logger.Logger) *Service {
 // secrets package does not depend on the task service package.
 func (s *Service) SetWorkspaceAuthorizer(authorizer func(context.Context, string) error) {
 	s.workspaceAuthorizer = authorizer
+}
+
+// SetWorkspaceExistenceChecker wires a workspace-existence check that runs
+// unconditionally for copy/move destinations, including auth-disabled
+// contexts where the authorizer is a no-op. A nil checker fails closed:
+// workspace destinations resolve as ErrWorkspaceAccessDenied.
+func (s *Service) SetWorkspaceExistenceChecker(checker func(context.Context, string) error) {
+	s.workspaceExistence = checker
 }
 
 func (s *Service) validateCreate(req *CreateSecretRequest) error {
@@ -291,5 +300,107 @@ func secretListItem(secret *Secret) *SecretListItem {
 		HasValue:    true,
 		CreatedAt:   secret.CreatedAt,
 		UpdatedAt:   secret.UpdatedAt,
+	}
+}
+
+// Copy copies a secret into another scope/workspace without removing the
+// source. Errors are classified with the package sentinels: validation
+// failures wrap ErrSecretValidation, missing/unauthorized sources and
+// destinations surface ErrNotFound or ErrWorkspaceAccessDenied, and raw
+// lookup/storage failures pass through unclassified (sanitized 500 upstream).
+func (s *Service) Copy(ctx context.Context, sourceID, sourceWorkspaceID string, req *CopySecretRequest) (*SecretListItem, error) {
+	return s.copyOrMove(ctx, sourceID, sourceWorkspaceID, req, false)
+}
+
+// Move copies a secret into another scope/workspace and removes the source in
+// one atomic store operation.
+func (s *Service) Move(ctx context.Context, sourceID, sourceWorkspaceID string, req *CopySecretRequest) (*SecretListItem, error) {
+	return s.copyOrMove(ctx, sourceID, sourceWorkspaceID, req, true)
+}
+
+func (s *Service) copyOrMove(ctx context.Context, sourceID, sourceWorkspaceID string, req *CopySecretRequest, move bool) (*SecretListItem, error) {
+	if req == nil {
+		return nil, fmt.Errorf("%w: request is required", ErrSecretValidation)
+	}
+	if err := validateSecretScope(req.Scope, req.WorkspaceID); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSecretValidation, err)
+	}
+
+	var source *Secret
+	var err error
+	if strings.TrimSpace(sourceWorkspaceID) == "" {
+		source, err = s.Get(ctx, sourceID)
+	} else {
+		source, err = s.GetWorkspaceSecret(ctx, sourceID, sourceWorkspaceID)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	targetName, err := resolveTransferName(req, source.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	if normalizeStoredScope(req.Scope) == normalizeStoredScope(source.Scope) && req.WorkspaceID == source.WorkspaceID {
+		return nil, fmt.Errorf("%w: source and destination scope are the same", ErrSecretValidation)
+	}
+
+	scoped, ok := s.store.(ScopedSecretStore)
+	if !ok {
+		return nil, fmt.Errorf("workspace-scoped secret storage is unavailable")
+	}
+
+	verifyDestination := s.destinationVerifier(ctx, req)
+
+	var secret *Secret
+	if move {
+		secret, err = scoped.MoveScoped(ctx, sourceID, source.WorkspaceID, req.Scope, req.WorkspaceID, targetName, verifyDestination)
+	} else {
+		secret, err = scoped.CopyScoped(ctx, sourceID, source.WorkspaceID, req.Scope, req.WorkspaceID, targetName, verifyDestination)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return secretListItem(secret), nil
+}
+
+// resolveTransferName applies the name presence contract: an omitted name
+// (and the absence of an explicit null) uses the source name; an explicit
+// null, empty, whitespace-only, or over-length name is a validation error.
+// The limit is 100 UTF-8 bytes, matching create/update validation.
+func resolveTransferName(req *CopySecretRequest, sourceName string) (string, error) {
+	if req.nameNull {
+		return "", fmt.Errorf("%w: name must not be null", ErrSecretValidation)
+	}
+	if req.Name == nil {
+		return sourceName, nil
+	}
+	name := strings.TrimSpace(*req.Name)
+	if name == "" {
+		return "", fmt.Errorf("%w: name must not be empty", ErrSecretValidation)
+	}
+	if len(name) > 100 {
+		return "", fmt.Errorf("%w: name must be 1-100 bytes", ErrSecretValidation)
+	}
+	return name, nil
+}
+
+// destinationVerifier returns the in-transaction callback the store invokes
+// while holding the destination lock: workspace existence (unconditional,
+// fail-closed when unconfigured) then workspace authorization. Global targets
+// need no verification.
+func (s *Service) destinationVerifier(ctx context.Context, req *CopySecretRequest) func(context.Context) error {
+	if normalizeStoredScope(req.Scope) != ScopeWorkspace {
+		return nil
+	}
+	return func(context.Context) error {
+		if s.workspaceExistence == nil {
+			return ErrWorkspaceAccessDenied
+		}
+		if err := s.workspaceExistence(ctx, req.WorkspaceID); err != nil {
+			return err
+		}
+		return s.authorizeScope(ctx, ScopeWorkspace, req.WorkspaceID)
 	}
 }

@@ -5,6 +5,7 @@ package backendapp
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -107,6 +108,7 @@ import (
 	workflowengine "github.com/kandev/kandev/internal/workflow/engine"
 
 	taskhandlers "github.com/kandev/kandev/internal/task/handlers"
+	repoerrors "github.com/kandev/kandev/internal/task/repository/repoerrors"
 	tasksqlite "github.com/kandev/kandev/internal/task/repository/sqlite"
 	taskservice "github.com/kandev/kandev/internal/task/service"
 	workflowservice "github.com/kandev/kandev/internal/workflow/service"
@@ -1901,7 +1903,24 @@ func buildHTTPServer(
 	router.Use(integrationWorkspaceScopeMiddleware(services.Auth, services.Task))
 
 	secretsSvc := secrets.NewService(userSecretStore, log)
-	secretsSvc.SetWorkspaceAuthorizer(services.Task.AuthorizeWorkspaceAccess)
+	// Workspace classification happens here, at the wiring boundary, where both
+	// packages are importable: the task service's not-found sentinel becomes
+	// the secrets sentinel (404), while raw lookup/storage errors pass through
+	// unclassified (sanitized 500).
+	secretsSvc.SetWorkspaceAuthorizer(func(ctx context.Context, workspaceID string) error {
+		err := services.Task.AuthorizeWorkspaceAccess(ctx, workspaceID)
+		if errors.Is(err, repoerrors.ErrWorkspaceNotFound) {
+			return secrets.ErrWorkspaceAccessDenied
+		}
+		return err
+	})
+	secretsSvc.SetWorkspaceExistenceChecker(func(ctx context.Context, workspaceID string) error {
+		_, err := services.Task.GetWorkspace(ctx, workspaceID)
+		if errors.Is(err, repoerrors.ErrWorkspaceNotFound) {
+			return secrets.ErrWorkspaceAccessDenied
+		}
+		return err
+	})
 	registerRoutes(routeParams{
 		router:                        router,
 		gateway:                       gateway,

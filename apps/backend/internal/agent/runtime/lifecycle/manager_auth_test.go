@@ -115,6 +115,56 @@ func (s *inMemorySecretStore) DeleteWorkspaceSecrets(_ context.Context, workspac
 	return nil
 }
 
+func (s *inMemorySecretStore) CopyScoped(_ context.Context, sourceID, _ string, targetScope secrets.SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*secrets.Secret, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if verifyDestination != nil {
+		if err := verifyDestination(context.Background()); err != nil {
+			return nil, err
+		}
+	}
+	sw, ok := s.store[sourceID]
+	if !ok {
+		return nil, secrets.ErrNotFound
+	}
+	if targetName == "" {
+		targetName = sw.Name
+	}
+	for _, stored := range s.store {
+		if stored.Name == targetName && normalizeScopeForTest(stored.Scope) == normalizeScopeForTest(targetScope) && stored.WorkspaceID == targetWorkspaceID {
+			return nil, secrets.ErrSecretNameConflict
+		}
+	}
+	copy := &secrets.SecretWithValue{
+		Secret: secrets.Secret{
+			ID:          "copy-" + sw.ID,
+			Name:        targetName,
+			Scope:       normalizeScopeForTest(targetScope),
+			WorkspaceID: targetWorkspaceID,
+		},
+		Value: sw.Value,
+	}
+	s.store[copy.ID] = copy
+	return &copy.Secret, nil
+}
+
+func (s *inMemorySecretStore) MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope secrets.SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*secrets.Secret, error) {
+	secret, err := s.CopyScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination)
+	if err != nil {
+		return nil, err
+	}
+	delete(s.store, sourceID)
+	return secret, nil
+}
+
+func normalizeScopeForTest(scope secrets.SecretScope) secrets.SecretScope {
+	if scope == "" {
+		return secrets.ScopeGlobal
+	}
+	return scope
+}
+
 func TestPersistAuthToken(t *testing.T) {
 	log, _ := logger.NewLogger(logger.LoggingConfig{Level: "error", Format: "json"})
 

@@ -140,6 +140,7 @@ Per-workspace credentials and triage triggers for external services.
 | [deletion](workspaces/deletion.md) | shipped |
 | [local-repositories](workspaces/local-repositories.md) | shipped |
 | [repository-secrets](workspaces/repository-secrets.md) | shipped |
+| [secret-scope-transfer](workspaces/secret-scope-transfer.md) | draft |
 
 ## costs/ — cost tracking & budgets
 

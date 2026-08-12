@@ -153,6 +153,8 @@ Kandev has two secret scopes:
 
 The General page manages Global secrets. Manage Workspace secrets from **Settings > Workspaces > _workspace_ > Secrets**. Agent and executor profile selectors intentionally show Global secrets only; a Workspace reference saved through an older or direct API path is rejected when the profile is saved or launched.
 
+Copy or move a secret between scopes from the **Copy/Move** action on any secret row. The dialog picks Copy or Move, chooses a destination (General or another workspace), and lets you edit the target name; it is pre-filled as `<name> (from general)` or `<name> (from <workspace name>)` so copied secrets keep their origin visible. Moving removes the original after the copy is safely in place, and the value is transferred server-side between encrypted rows — it is never shown or copied through the browser. A target name that already exists in the destination blocks the action until you rename it.
+
 Kandev encrypts secret values at rest with AES-256-GCM. The encryption key is `<KANDEV_HOME_DIR>/data/master.key` (by default `~/.kandev/data/master.key`) and is created with owner-only file permissions. `KANDEV_DATABASE_PATH` does not relocate this key. Protect and back it up with the Kandev database; losing it makes stored values unreadable. Anyone with access to the Secrets settings can reveal the plaintext.
 
 Profile environment rules are:

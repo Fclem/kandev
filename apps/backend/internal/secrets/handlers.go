@@ -2,6 +2,8 @@ package secrets
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +39,8 @@ func (h *Handler) registerHTTP(router *gin.Engine) {
 	api.PUT("/secrets/:id", h.httpUpdateSecret)
 	api.DELETE("/secrets/:id", h.httpDeleteSecret)
 	api.POST("/secrets/:id/reveal", h.httpRevealSecret)
+	api.POST("/secrets/:id/copy", h.httpCopySecret)
+	api.POST("/secrets/:id/move", h.httpMoveSecret)
 }
 
 func (h *Handler) registerWS(dispatcher *ws.Dispatcher) {
@@ -45,6 +49,8 @@ func (h *Handler) registerWS(dispatcher *ws.Dispatcher) {
 	dispatcher.RegisterFunc(ws.ActionSecretUpdate, h.wsUpdate)
 	dispatcher.RegisterFunc(ws.ActionSecretDelete, h.wsDelete)
 	dispatcher.RegisterFunc(ws.ActionSecretReveal, h.wsReveal)
+	dispatcher.RegisterFunc(ws.ActionSecretCopy, h.wsCopy)
+	dispatcher.RegisterFunc(ws.ActionSecretMove, h.wsMove)
 }
 
 // HTTP handlers
@@ -260,4 +266,122 @@ func (h *Handler) revealSecretForWorkspace(ctx context.Context, id, workspaceID 
 		return h.service.RevealWorkspaceSecret(ctx, id, workspaceID)
 	}
 	return h.service.Reveal(ctx, id)
+}
+
+// HTTP copy/move handlers
+
+func (h *Handler) httpCopySecret(c *gin.Context) {
+	h.httpTransferSecret(c, false)
+}
+
+func (h *Handler) httpMoveSecret(c *gin.Context) {
+	h.httpTransferSecret(c, true)
+}
+
+func (h *Handler) httpTransferSecret(c *gin.Context, move bool) {
+	id := c.Param("id")
+	var req CopySecretRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	item, err := h.transferSecret(c.Request.Context(), id, c.Query("workspace_id"), &req, move)
+	if err != nil {
+		status, message := h.transferError(err)
+		c.JSON(status, gin.H{"error": message})
+		return
+	}
+	c.JSON(http.StatusCreated, item)
+}
+
+// transferSecret dispatches copy/move using the existing source-scoping
+// convention: a non-empty workspace_id selects the workspace-scoped source.
+func (h *Handler) transferSecret(ctx context.Context, id, sourceWorkspaceID string, req *CopySecretRequest, move bool) (*SecretListItem, error) {
+	if move {
+		return h.service.Move(ctx, id, sourceWorkspaceID, req)
+	}
+	return h.service.Copy(ctx, id, sourceWorkspaceID, req)
+}
+
+// transferError classifies a transfer error into an HTTP status and a safe
+// message. Only the known sentinels map to 400/404/409; unexpected failures
+// become a sanitized 500 with the details logged server-side.
+func (h *Handler) transferError(err error) (int, string) {
+	switch {
+	case errors.Is(err, ErrSecretValidation):
+		return http.StatusBadRequest, err.Error()
+	case errors.Is(err, ErrNotFound), errors.Is(err, ErrWorkspaceAccessDenied):
+		return http.StatusNotFound, err.Error()
+	case errors.Is(err, ErrSecretNameConflict):
+		return http.StatusConflict, err.Error()
+	default:
+		h.logger.Error("secret transfer failed", zap.Error(err))
+		return http.StatusInternalServerError, "internal error"
+	}
+}
+
+// WS copy/move handlers
+
+func (h *Handler) wsCopy(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
+	return h.wsTransfer(ctx, msg, false)
+}
+
+func (h *Handler) wsMove(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
+	return h.wsTransfer(ctx, msg, true)
+}
+
+// wsTransferPayload is the WS envelope for secrets.copy / secrets.move. It
+// decodes id/workspace_id separately, then delegates the transfer fields to
+// the presence-aware CopySecretRequest decoder (a flat struct would silently
+// collapse an explicit null name into "omitted").
+type wsTransferPayload struct {
+	ID          string
+	WorkspaceID string
+	CopySecretRequest
+}
+
+// UnmarshalJSON implements the presence-aware envelope decode. The
+// CopySecretRequest decoder runs on the whole payload and resets every field,
+// including its presence markers, so a reused envelope cannot leak state
+// between messages.
+func (p *wsTransferPayload) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		ID          string `json:"id"`
+		WorkspaceID string `json:"workspace_id"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	p.ID = aux.ID
+	p.WorkspaceID = aux.WorkspaceID
+	return json.Unmarshal(data, &p.CopySecretRequest)
+}
+
+func (h *Handler) wsTransfer(ctx context.Context, msg *ws.Message, move bool) (*ws.Message, error) {
+	var payload wsTransferPayload
+	if err := msg.ParsePayload(&payload); err != nil {
+		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeBadRequest, "invalid payload: "+err.Error(), nil)
+	}
+
+	item, err := h.transferSecret(ctx, payload.ID, payload.WorkspaceID, &payload.CopySecretRequest, move)
+	if err != nil {
+		code, message := h.transferWSError(err)
+		return ws.NewError(msg.ID, msg.Action, code, message, nil)
+	}
+	return ws.NewResponse(msg.ID, msg.Action, item)
+}
+
+func (h *Handler) transferWSError(err error) (string, string) {
+	switch {
+	case errors.Is(err, ErrSecretValidation):
+		return ws.ErrorCodeBadRequest, err.Error()
+	case errors.Is(err, ErrNotFound), errors.Is(err, ErrWorkspaceAccessDenied):
+		return ws.ErrorCodeNotFound, err.Error()
+	case errors.Is(err, ErrSecretNameConflict):
+		return ws.ErrorCodeConflict, err.Error()
+	default:
+		h.logger.Error("secret transfer failed", zap.Error(err))
+		return ws.ErrorCodeInternalError, "internal error"
+	}
 }

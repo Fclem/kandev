@@ -1,6 +1,9 @@
 package secrets
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // SecretScope identifies the ownership boundary for a secret.
 type SecretScope string
@@ -64,4 +67,52 @@ type UpdateSecretRequest struct {
 // RevealSecretResponse is returned by the reveal endpoint.
 type RevealSecretResponse struct {
 	Value string `json:"value"`
+}
+
+// CopySecretRequest is the request body for copy/move operations. Name uses
+// presence semantics: a JSON-omitted name means "use the source secret's
+// name"; an explicit null, empty, or whitespace-only name is a validation
+// error.
+type CopySecretRequest struct {
+	Scope       SecretScope `json:"target_scope"`
+	WorkspaceID string      `json:"target_workspace_id"`
+	Name        *string     `json:"name,omitempty"`
+
+	nameSet  bool
+	nameNull bool
+}
+
+// UnmarshalJSON implements presence-aware decoding so handlers can distinguish
+// an omitted name (default to the source name) from an explicit null (a
+// validation error). Go's standard decoding collapses both to a nil pointer,
+// so this is the only way to honor the contract. Every field, including the
+// presence markers, is reset on each decode so a reused request struct cannot
+// leak state between messages.
+func (r *CopySecretRequest) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Scope       SecretScope     `json:"target_scope"`
+		WorkspaceID string          `json:"target_workspace_id"`
+		Name        json.RawMessage `json:"name"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	r.Scope = aux.Scope
+	r.WorkspaceID = aux.WorkspaceID
+	r.Name = nil
+	r.nameSet = len(aux.Name) > 0
+	r.nameNull = false
+	if !r.nameSet {
+		return nil
+	}
+	if string(aux.Name) == "null" {
+		r.nameNull = true
+		return nil
+	}
+	var name string
+	if err := json.Unmarshal(aux.Name, &name); err != nil {
+		return err
+	}
+	r.Name = &name
+	return nil
 }

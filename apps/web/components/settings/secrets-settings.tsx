@@ -1,277 +1,20 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { IconEdit, IconTrash, IconEye, IconEyeOff, IconKey } from "@tabler/icons-react";
 import { Button } from "@kandev/ui/button";
-import { Badge } from "@kandev/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@kandev/ui/dialog";
-import { Input } from "@kandev/ui/input";
-import { Textarea } from "@kandev/ui/textarea";
 import { SettingsPageTemplate } from "@/components/settings/settings-page-template";
+import { WorkspaceSectionHeader } from "@/components/settings/workspaces/workspace-section-header";
+import { useAppStore } from "@/components/state-provider";
 import { useSecrets } from "@/hooks/domains/settings/use-secrets";
-import {
-  createSecret,
-  updateSecret,
-  deleteSecret,
-  revealSecret,
-} from "@/lib/api/domains/secrets-api";
+import { createSecret, updateSecret, deleteSecret } from "@/lib/api/domains/secrets-api";
 import { useRequest } from "@/lib/http/use-request";
 import type { SecretListItem, SecretScope, UpdateSecretRequest } from "@/lib/types/http-secrets";
-import { WorkspaceSectionHeader } from "@/components/settings/workspaces/workspace-section-header";
-
-export type SecretFormState = {
-  name: string;
-  value: string;
-};
-
-const defaultFormState: SecretFormState = {
-  name: "",
-  value: "",
-};
-
-/* ------------------------------------------------------------------ */
-/*  Create / Edit form                                                 */
-/* ------------------------------------------------------------------ */
-
-type SecretFormProps = {
-  title: string;
-  formState: SecretFormState;
-  onFormChange: (patch: Partial<SecretFormState>) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
-  isValid: boolean;
-  isBusy: boolean;
-  submitLabel: string;
-  showSubmit?: boolean;
-  baselineState?: SecretFormState;
-};
-
-function SecretForm({
-  title,
-  formState,
-  onFormChange,
-  onSubmit,
-  onCancel,
-  isValid,
-  isBusy,
-  submitLabel,
-  showSubmit = true,
-  baselineState,
-}: SecretFormProps) {
-  const { t } = useTranslation();
-  const nameIsDirty = Boolean(baselineState) && formState.name.trim() !== baselineState?.name;
-  const valueIsDirty = Boolean(baselineState) && formState.value !== baselineState?.value;
-  return (
-    <div
-      className="rounded-lg border border-border/70 bg-background p-4 space-y-3"
-      data-settings-dirty={nameIsDirty || valueIsDirty}
-    >
-      <div className="text-sm font-medium text-foreground">{title}</div>
-      <div className="space-y-2">
-        <Input
-          value={formState.name}
-          onChange={(e) => onFormChange({ name: e.target.value })}
-          placeholder={t("settings:nameEGOpenaiProductionKey")}
-          disabled={isBusy}
-          data-settings-dirty={nameIsDirty}
-        />
-        <Textarea
-          value={formState.value}
-          onChange={(e) => onFormChange({ value: e.target.value })}
-          placeholder={t("settings:secretValue")}
-          rows={2}
-          className="resize-y font-mono text-sm"
-          disabled={isBusy}
-          data-settings-dirty={valueIsDirty}
-        />
-      </div>
-      <div className="flex items-center gap-2">
-        {showSubmit && (
-          <Button onClick={onSubmit} disabled={!isValid || isBusy} className="cursor-pointer">
-            {submitLabel}
-          </Button>
-        )}
-        <Button variant="ghost" onClick={onCancel} disabled={isBusy} className="cursor-pointer">
-          {t("settings:cancel")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  List item                                                          */
-/* ------------------------------------------------------------------ */
-
-type SecretListItemRowProps = {
-  secret: SecretListItem;
-  workspaceId?: string;
-  onEdit: (secret: SecretListItem) => void;
-  onDelete: (secret: SecretListItem) => void;
-  isBusy: boolean;
-  showCreate: boolean;
-  isEditing: boolean;
-};
-
-function SecretListItemRow({
-  secret,
-  workspaceId,
-  onEdit,
-  onDelete,
-  isBusy,
-  showCreate,
-  isEditing,
-}: SecretListItemRowProps) {
-  const { t } = useTranslation();
-  const [revealed, setRevealed] = useState(false);
-  const [revealedValue, setRevealedValue] = useState<string | null>(null);
-  const [revealing, setRevealing] = useState(false);
-
-  const handleReveal = async () => {
-    if (revealed) {
-      setRevealed(false);
-      setRevealedValue(null);
-      return;
-    }
-    setRevealing(true);
-    try {
-      const resp = await revealSecret(secret.id, {
-        cache: "no-store",
-        ...(workspaceId ? { workspaceId } : {}),
-      });
-      setRevealedValue(resp.value);
-      setRevealed(true);
-    } catch {
-      // ignore
-    } finally {
-      setRevealing(false);
-    }
-  };
-
-  return (
-    <div className="rounded-lg border border-border/70 bg-background p-4 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <IconKey className="h-4 w-4 text-muted-foreground shrink-0" />
-          <div className="text-sm font-medium text-foreground truncate">{secret.name}</div>
-          <Badge variant="outline" className="shrink-0 text-[10px]">
-            {secret.scope === "workspace"
-              ? t("settings:workspaceScope")
-              : t("settings:globalScope")}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleReveal}
-            disabled={revealing || isBusy}
-            className="min-h-11 min-w-11 cursor-pointer"
-            aria-label={
-              revealed
-                ? t("settings:hideSecretNamed", { name: secret.name })
-                : t("settings:revealSecretNamed", { name: secret.name })
-            }
-          >
-            {revealed ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onEdit(secret)}
-            disabled={isBusy || showCreate || isEditing}
-            className="min-h-11 min-w-11 cursor-pointer"
-            aria-label={t("settings:editSecretNamed", { name: secret.name })}
-          >
-            <IconEdit className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onDelete(secret)}
-            disabled={isBusy}
-            className="min-h-11 min-w-11 cursor-pointer"
-            aria-label={t("settings:deleteSecretNamed", { name: secret.name })}
-          >
-            <IconTrash className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-      {revealed && revealedValue !== null && (
-        <div className="text-xs font-mono bg-muted/50 rounded px-2 py-1 break-all">
-          {revealedValue}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Delete dialog                                                      */
-/* ------------------------------------------------------------------ */
-
-type DeleteSecretDialogProps = {
-  target: SecretListItem | null;
-  onClose: () => void;
-  onConfirm: () => void;
-  isBusy: boolean;
-};
-
-export function DeleteSecretDialog({
-  target,
-  onClose,
-  onConfirm,
-  isBusy,
-}: DeleteSecretDialogProps) {
-  const { t } = useTranslation();
-  // The secret's own name is user data: it is interpolated as a value and never
-  // routed through a catalog key.
-  const name = target?.name ?? t("settings:thisSecret");
-  return (
-    <Dialog
-      open={Boolean(target)}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("settings:deleteSecret")}</DialogTitle>
-          <DialogDescription>
-            <Trans i18nKey="settings:thisWillPermanentlyRemoveSecret" values={{ name }}>
-              This will permanently remove{" "}
-              <span className="font-medium text-foreground">{name}</span>. This action cannot be
-              undone.
-            </Trans>
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose} className="cursor-pointer">
-            {t("settings:cancel")}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={onConfirm}
-            disabled={isBusy}
-            className="cursor-pointer"
-          >
-            {t("settings:deleteSecret")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+import { SecretForm, defaultFormState, type SecretFormState } from "./secret-form";
+import { SecretListItemRow } from "./secrets-list-item-row";
+import { DeleteSecretDialog } from "./secrets-delete-dialog";
+import { CopyMoveSecretDialog, type CopyMoveMode } from "./copy-move-secret-dialog";
 
 /* ------------------------------------------------------------------ */
 /*  State + actions hooks                                              */
@@ -292,6 +35,7 @@ function useSecretsState(
   const [showCreate, setShowCreate] = useState(false);
   const [formState, setFormState] = useState<SecretFormState>(defaultFormState);
   const [deleteTarget, setDeleteTarget] = useState<SecretListItem | null>(null);
+  const [transferTarget, setTransferTarget] = useState<SecretListItem | null>(null);
 
   return {
     loaded,
@@ -309,6 +53,8 @@ function useSecretsState(
     setFormState,
     deleteTarget,
     setDeleteTarget,
+    transferTarget,
+    setTransferTarget,
   };
 }
 
@@ -326,6 +72,7 @@ function useSecretsActions(state: ReturnType<typeof useSecretsState>) {
     formState,
     scope,
     workspaceId,
+    setTransferTarget,
   } = state;
 
   const requestOptions = {
@@ -410,6 +157,8 @@ function useSecretsActions(state: ReturnType<typeof useSecretsState>) {
       deleteRequest.run(deleteTarget.id).catch(() => undefined);
       setDeleteTarget(null);
     },
+    openTransfer: (secret: SecretListItem) => setTransferTarget(secret),
+    closeTransfer: () => setTransferTarget(null),
     items: state.items,
   };
 }
@@ -446,6 +195,42 @@ export function getSecretDraftMeta(
     revision: `${showCreate ? "new" : (editingId ?? "none")}:${edit.revision}`,
   };
 }
+
+export type SecretsSettingsState = {
+  loaded: boolean;
+  items: SecretListItem[];
+  addSecret: (item: SecretListItem) => void;
+  updateSecretInStore: (item: SecretListItem) => void;
+  removeSecret: (id: string) => void;
+  scope: SecretScope;
+  workspaceId?: string;
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
+  showCreate: boolean;
+  setShowCreate: (show: boolean) => void;
+  formState: SecretFormState;
+  setFormState: (state: SecretFormState | ((prev: SecretFormState) => SecretFormState)) => void;
+  deleteTarget: SecretListItem | null;
+  setDeleteTarget: (target: SecretListItem | null) => void;
+  transferTarget: SecretListItem | null;
+  setTransferTarget: (target: SecretListItem | null) => void;
+};
+
+export type SecretsSettingsActions = {
+  resetForm: () => void;
+  isValid: boolean;
+  isBusy: boolean;
+  handleCreate: () => Promise<void>;
+  handleUpdate: () => Promise<void>;
+  startEditing: (secret: SecretListItem) => void;
+  startCreate: () => void;
+  openDelete: (secret: SecretListItem) => void;
+  closeDelete: () => void;
+  confirmDelete: () => void;
+  openTransfer: (secret: SecretListItem) => void;
+  closeTransfer: () => void;
+  items: SecretListItem[];
+};
 
 type SecretsSettingsProps = {
   scope?: SecretScope;
@@ -563,6 +348,7 @@ function SecretsSettingsBody({
               workspaceId={workspaceId}
               onEdit={actions.startEditing}
               onDelete={actions.openDelete}
+              onCopyMove={actions.openTransfer}
               isBusy={isBusy}
               showCreate={showCreate}
               isEditing={editingId === secret.id}
@@ -640,12 +426,56 @@ export function SecretsSettings({
 }: SecretsSettingsProps) {
   const state = useSecretsState(scope, workspaceId, initialItems);
   const actions = useSecretsActions(state);
+  const globalAdd = useAppStore((s) => s.addSecret);
+  const workspaceNames = useAppStore((s) => s.workspaces.items);
+
+  const originTokenFor = (secret: SecretListItem) =>
+    secret.scope === "workspace"
+      ? (workspaceNames.find((workspace) => workspace.id === secret.workspace_id)?.name ??
+        secret.workspace_id ??
+        "workspace")
+      : "general";
+
+  // Route the transfer result by the RETURNED item's scope, never the page
+  // scope: Global targets always land in the Global store (from any page),
+  // workspace targets join the page's list only when the page is that
+  // workspace, and a Move removes the source from the page's own list.
+  const handleTransferCompleted = (item: SecretListItem, mode: CopyMoveMode) => {
+    if (!item.scope || item.scope === "global") {
+      globalAdd(item);
+    } else if (scope === "workspace" && workspaceId === item.workspace_id) {
+      state.addSecret(item);
+    }
+    if (mode === "move" && state.transferTarget) {
+      state.removeSecret(state.transferTarget.id);
+    }
+    actions.closeTransfer();
+  };
+
+  const handleStaleSource = () => {
+    if (state.transferTarget) {
+      state.removeSecret(state.transferTarget.id);
+    }
+    actions.closeTransfer();
+  };
+
   return (
-    <SecretsSettingsContent
-      scope={scope}
-      workspaceId={workspaceId}
-      state={state}
-      actions={actions}
-    />
+    <>
+      <SecretsSettingsContent
+        scope={scope}
+        workspaceId={workspaceId}
+        state={state}
+        actions={actions}
+      />
+      {state.transferTarget && (
+        <CopyMoveSecretDialog
+          secret={state.transferTarget}
+          originToken={originTokenFor(state.transferTarget)}
+          onClose={actions.closeTransfer}
+          onCompleted={handleTransferCompleted}
+          onStaleSource={handleStaleSource}
+        />
+      )}
+    </>
   );
 }

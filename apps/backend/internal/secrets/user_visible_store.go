@@ -157,6 +157,26 @@ func (s *UserVisibleStore) DeleteWorkspaceSecrets(ctx context.Context, workspace
 	return s.scoped.DeleteWorkspaceSecrets(ctx, workspaceID)
 }
 
+func (s *UserVisibleStore) CopyScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error) {
+	if IsInternalID(sourceID) {
+		return nil, internalSecretNotFound(sourceID)
+	}
+	if s.scoped == nil {
+		return nil, fmt.Errorf("workspace-scoped secret storage is unavailable")
+	}
+	return s.scoped.CopyScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination)
+}
+
+func (s *UserVisibleStore) MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error) {
+	if IsInternalID(sourceID) {
+		return nil, internalSecretNotFound(sourceID)
+	}
+	if s.scoped == nil {
+		return nil, fmt.Errorf("workspace-scoped secret storage is unavailable")
+	}
+	return s.scoped.MoveScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination)
+}
+
 func (s *UserVisibleStore) DeleteWorkspaceSecretsTx(ctx context.Context, tx *sqlx.Tx, workspaceID string) error {
 	if s.scoped == nil {
 		return fmt.Errorf("workspace-scoped secret storage is unavailable")

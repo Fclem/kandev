@@ -3,6 +3,7 @@ import type {
   SecretListItem,
   CreateSecretRequest,
   UpdateSecretRequest,
+  CopyMoveSecretRequest,
   RevealSecretResponse,
   SecretScope,
 } from "@/lib/types/http-secrets";
@@ -72,5 +73,33 @@ export async function revealSecret(
   return fetchJson<RevealSecretResponse>(withSecretQuery(`/api/v1/secrets/${id}/reveal`, options), {
     ...options,
     init: { method: "POST", ...(options?.init ?? {}) },
+  });
+}
+
+/**
+ * Copies a secret into another scope/workspace. The `workspaceId` option is
+ * the SOURCE workspace for a workspace-scoped source. Errors surface as
+ * `ApiError` with the HTTP status (409 = target name conflict).
+ */
+export async function copySecret(
+  id: string,
+  payload: CopyMoveSecretRequest,
+  options?: SecretScopedOptions,
+): Promise<SecretListItem> {
+  return fetchJson<SecretListItem>(withSecretQuery(`/api/v1/secrets/${id}/copy`, options), {
+    ...options,
+    init: { method: "POST", body: JSON.stringify(payload), ...(options?.init ?? {}) },
+  });
+}
+
+/** Moves a secret into another scope/workspace, removing the source. */
+export async function moveSecret(
+  id: string,
+  payload: CopyMoveSecretRequest,
+  options?: SecretScopedOptions,
+): Promise<SecretListItem> {
+  return fetchJson<SecretListItem>(withSecretQuery(`/api/v1/secrets/${id}/move`, options), {
+    ...options,
+    init: { method: "POST", body: JSON.stringify(payload), ...(options?.init ?? {}) },
   });
 }

@@ -101,14 +101,15 @@ export function CopyMoveSecretDialog({
     onCompleted,
     open,
   });
-  useTransferFormReset(secret, originToken, open, {
-    setMode,
-    setDestination,
-    setName,
-    setNameError,
-    clearError,
-    resetDestinationNames: () => setDestinationNamesKey((key) => key + 1),
-  });
+  const resetDestinationNames = useCallback(() => setDestinationNamesKey((key) => key + 1), []);
+  // Stable identity: the reset effect depends on this object, so it must not
+  // change every render (the guard inside useTransferFormReset would still
+  // keep behavior correct, but the effect would fire needlessly).
+  const transferSetters = useMemo(
+    () => ({ setMode, setDestination, setName, setNameError, clearError, resetDestinationNames }),
+    [setMode, setDestination, setName, setNameError, clearError, resetDestinationNames],
+  );
+  useTransferFormReset(secret, originToken, open, transferSetters);
   return (
     <Dialog
       open={open}
@@ -359,7 +360,7 @@ function useDestinationOptions(
   secret: SecretListItem,
   workspaces: WorkspaceOption[],
   destination: SecretDestination | null,
-  onDestinationChange: (destination: SecretDestination) => void,
+  onDestinationChange: (destination: SecretDestination | null) => void,
 ) {
   const workspaceNameById = Object.fromEntries(
     workspaces.map((workspace) => [workspace.id, workspace.name]),

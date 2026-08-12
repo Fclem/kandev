@@ -25,7 +25,7 @@ as one operation, without ever showing the value.
     secret is Workspace-scoped its own workspace is excluded, and when the
     source is Global, General is excluded (a same-scope destination is a no-op);
   - an editable **target name** field, pre-filled with
-    `<name> (from general)` for a Global source or `<name> (from <workspace
+    `<name> (from Global)` for a Global source or `<name> (from <workspace
     name>)` for a Workspace source.
 - **Copy** creates a new secret in the destination scope with the chosen name
   and the source's value. The source stays.
@@ -34,9 +34,9 @@ as one operation, without ever showing the value.
   from its current scope.
 - Workspace-to-workspace copy/move is supported through the destination picker.
 - The persisted default target name is locale-independent: the origin token is
-  the literal string `general` for a Global source and the raw workspace name
+  the literal string `Global` for a Global source and the raw workspace name
   for a Workspace source. Only the surrounding pattern
-  (`<name> (from <origin>)`) is translated. The dialog default is truncated so
+  (`<name> (from <origin>)`). The dialog default is truncated so
   its UTF-8 encoding is at most 100 bytes, matching the backend's byte-based
   name limit.
 - If the chosen target name already exists in the destination scope, the
@@ -264,8 +264,8 @@ Store invariants for the transfer operations:
 
 - **GIVEN** a Global secret named `API Key`, **WHEN** the user opens Copy/Move
   on it, chooses Copy, destination `My Workspace`, and keeps the default name
-  `API Key (from general)`, **THEN** a Workspace secret named
-  `API Key (from general)` with the same value appears in `My Workspace` and
+  `API Key (from Global)`, **THEN** a Workspace secret named
+  `API Key (from Global)` with the same value appears in `My Workspace` and
   the Global secret remains.
 - **GIVEN** a Workspace secret in `My Workspace`, **WHEN** the user chooses
   Move to General, **THEN** a Global secret with the chosen name exists with

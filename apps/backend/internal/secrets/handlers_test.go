@@ -109,6 +109,28 @@ func TestHandlerCopy_GlobalToWorkspaceCreated(t *testing.T) {
 	}
 }
 
+// TestHandlerCopy_WorkspaceToWorkspace verifies the copy endpoint handles a
+// workspace source (via ?workspace_id=) with a workspace target: 201 with the
+// item scoped to the destination workspace, source intact.
+func TestHandlerCopy_WorkspaceToWorkspace(t *testing.T) {
+	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true, "workspace-b": true}, nil, nil)
+	router := newSecretsHTTPRouter(t, svc)
+	w := mustCreateViaService(t, svc, "ws-key", "v", ScopeWorkspace, "workspace-a")
+
+	rec := doTransferHTTP(t, router, http.MethodPost, "/api/v1/secrets/"+w.ID+"/copy?workspace_id=workspace-a",
+		`{"target_scope":"workspace","target_workspace_id":"workspace-b","name":"copied"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	item := decodeItem(t, rec)
+	if item.Scope != ScopeWorkspace || item.WorkspaceID != "workspace-b" || item.Name != "copied" {
+		t.Fatalf("item = %+v", item)
+	}
+	if _, err := svc.GetForWorkspace(context.Background(), w.ID, "workspace-a"); err != nil {
+		t.Fatalf("source lost after copy: %v", err)
+	}
+}
+
 // TestHandlerCopy_WorkspaceSourceRequiresWorkspaceID verifies a workspace source without workspace_id is rejected with 404.
 func TestHandlerCopy_WorkspaceSourceRequiresWorkspaceID(t *testing.T) {
 	svc := newSecretsHandlerService(t, map[string]bool{"workspace-a": true}, nil, nil)

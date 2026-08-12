@@ -34,6 +34,7 @@ export function CopyMoveDialogBody({
   nameError,
   setNameError,
   conflict,
+  nameTooLong,
   formError,
   canSubmit,
   busy,
@@ -56,6 +57,7 @@ export function CopyMoveDialogBody({
   nameError: string | null;
   setNameError: (error: string | null) => void;
   conflict: boolean;
+  nameTooLong: boolean;
   formError: string | null;
   canSubmit: boolean;
   busy: boolean;
@@ -72,31 +74,36 @@ export function CopyMoveDialogBody({
         <DialogDescription>{t("settings:copyMoveDialogHint")}</DialogDescription>
       </DialogHeader>
 
-      <TransferModeField mode={mode} onModeChange={onModeChange} originToken={originToken} />
+      {/* The middle section scrolls on short viewports; the header and the
+          footer stay pinned so actions are never pushed off-screen. */}
+      <div className="min-h-0 space-y-4 overflow-y-auto">
+        <TransferModeField mode={mode} onModeChange={onModeChange} originToken={originToken} />
 
-      <DestinationField
-        destinations={destinations}
-        workspaceNameById={workspaceNameById}
-        destination={destination}
-        onDestinationChange={onDestinationChange}
-        destinationsLoading={destinationsLoading}
-        destinationsError={destinationsError}
-        onRetryDestinations={onRetryDestinations}
-        disabled={busy}
-      />
-      <TargetNameField
-        name={name}
-        onNameChange={onNameChange}
-        nameError={nameError}
-        setNameError={setNameError}
-        conflict={conflict}
-        disabled={busy}
-      />
-      {formError !== null && (
-        <p className="text-xs text-destructive" role="alert">
-          {formError}
-        </p>
-      )}
+        <DestinationField
+          destinations={destinations}
+          workspaceNameById={workspaceNameById}
+          destination={destination}
+          onDestinationChange={onDestinationChange}
+          destinationsLoading={destinationsLoading}
+          destinationsError={destinationsError}
+          onRetryDestinations={onRetryDestinations}
+          disabled={busy}
+        />
+        <TargetNameField
+          name={name}
+          onNameChange={onNameChange}
+          nameError={nameError}
+          setNameError={setNameError}
+          conflict={conflict}
+          nameTooLong={nameTooLong}
+          disabled={busy}
+        />
+        {formError !== null && (
+          <p className="text-xs text-destructive" role="alert">
+            {formError}
+          </p>
+        )}
+      </div>
       <TransferDialogFooter
         mode={mode}
         canSubmit={canSubmit}
@@ -164,6 +171,7 @@ function TargetNameField({
   nameError,
   setNameError,
   conflict,
+  nameTooLong,
   disabled,
 }: {
   name: string;
@@ -171,10 +179,11 @@ function TargetNameField({
   nameError: string | null;
   setNameError: (error: string | null) => void;
   conflict: boolean;
+  nameTooLong: boolean;
   disabled: boolean;
 }) {
   const { t } = useTranslation();
-  const invalid = conflict || nameError !== null;
+  const invalid = conflict || nameError !== null || nameTooLong;
   return (
     <div className="space-y-2">
       <Label htmlFor="copy-move-name">{t("settings:secretTargetName")}</Label>
@@ -194,7 +203,10 @@ function TargetNameField({
       />
       {invalid && (
         <p id="copy-move-name-error" className="text-xs text-destructive break-words">
-          {nameError ?? t("settings:secretNameConflictInDestination", { name: name.trim() })}
+          {nameError ??
+            (nameTooLong
+              ? t("settings:secretNameTooLong")
+              : t("settings:secretNameConflictInDestination", { name: name.trim() }))}
         </p>
       )}
     </div>

@@ -772,5 +772,6 @@
   "retryDestinations": "Ŕēţŕŷ",
   "noValidDestinations": "Ńō vàĺĩď ďēśţĩńàţĩōńś àvàĩĺàƀĺē.",
   "transferFailed": "Ćōũĺď ńōţ ćōƥŷ ōŕ ḿōvē ţĥē śēćŕēţ.",
-  "destinationGlobal": "Ĝĺōƀàĺ"
+  "destinationGlobal": "Ĝĺōƀàĺ",
+  "secretNameTooLong": "Ńàḿē ḿŭśţ ƀē àţ ḿōśţ 100 ƀŷţēś."
 }

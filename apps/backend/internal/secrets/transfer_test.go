@@ -29,13 +29,16 @@ func mustCreate(t *testing.T, store SecretStore, secret *SecretWithValue) {
 	}
 }
 
+// strPtr returns a pointer to s for presence-aware transfer arguments.
+func strPtr(s string) *string { return &s }
+
 // TestTransferStore_CopyGlobalToWorkspace verifies a global-to-workspace copy keeps the source, sets timestamps, and carries the value server-side.
 func TestTransferStore_CopyGlobalToWorkspace(t *testing.T) {
 	store := newTestSQLiteStore(t)
 	ctx := context.Background()
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v1"})
 
-	got, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "copied", nil)
+	got, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied"), nil)
 	if err != nil {
 		t.Fatalf("CopyScoped: %v", err)
 	}
@@ -65,7 +68,7 @@ func TestTransferStore_CopyWorkspaceToGlobal(t *testing.T) {
 	ctx := context.Background()
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "w1", Name: "ws", Scope: ScopeWorkspace, WorkspaceID: "workspace-a"}, Value: "v2"})
 
-	got, err := store.CopyScoped(ctx, "w1", "workspace-a", ScopeGlobal, "", "global-copy", nil)
+	got, err := store.CopyScoped(ctx, "w1", "workspace-a", ScopeGlobal, "", strPtr("global-copy"), nil)
 	if err != nil {
 		t.Fatalf("CopyScoped: %v", err)
 	}
@@ -90,7 +93,7 @@ func TestTransferStore_CopyWorkspaceToWorkspace(t *testing.T) {
 	ctx := context.Background()
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "w1", Name: "ws", Scope: ScopeWorkspace, WorkspaceID: "workspace-a"}, Value: "v3"})
 
-	got, err := store.CopyScoped(ctx, "w1", "workspace-a", ScopeWorkspace, "workspace-b", "moved", nil)
+	got, err := store.CopyScoped(ctx, "w1", "workspace-a", ScopeWorkspace, "workspace-b", strPtr("moved"), nil)
 	if err != nil {
 		t.Fatalf("CopyScoped: %v", err)
 	}
@@ -112,7 +115,7 @@ func TestTransferStore_MoveWorkspaceToGlobalRemovesSource(t *testing.T) {
 	ctx := context.Background()
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "w1", Name: "ws", Scope: ScopeWorkspace, WorkspaceID: "workspace-a"}, Value: "v4"})
 
-	got, err := store.MoveScoped(ctx, "w1", "workspace-a", ScopeGlobal, "", "global-copy", nil)
+	got, err := store.MoveScoped(ctx, "w1", "workspace-a", ScopeGlobal, "", strPtr("global-copy"), nil)
 	if err != nil {
 		t.Fatalf("MoveScoped: %v", err)
 	}
@@ -137,7 +140,7 @@ func TestTransferStore_MoveGlobalToWorkspaceRemovesSource(t *testing.T) {
 	ctx := context.Background()
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v5"})
 
-	got, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "copied", nil)
+	got, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied"), nil)
 	if err != nil {
 		t.Fatalf("MoveScoped: %v", err)
 	}
@@ -156,7 +159,7 @@ func TestTransferStore_ConflictGlobal(t *testing.T) {
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v"})
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g2", Name: "taken"}, Value: "other"})
 
-	_, err := store.CopyScoped(ctx, "g1", "", ScopeGlobal, "", "taken", nil)
+	_, err := store.CopyScoped(ctx, "g1", "", ScopeGlobal, "", strPtr("taken"), nil)
 	if !errors.Is(err, ErrSecretNameConflict) {
 		t.Fatalf("error = %v, want ErrSecretNameConflict", err)
 	}
@@ -169,7 +172,7 @@ func TestTransferStore_ConflictWorkspace(t *testing.T) {
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v"})
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "w1", Name: "taken", Scope: ScopeWorkspace, WorkspaceID: "workspace-a"}, Value: "other"})
 
-	_, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "taken", nil)
+	_, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("taken"), nil)
 	if !errors.Is(err, ErrSecretNameConflict) {
 		t.Fatalf("error = %v, want ErrSecretNameConflict", err)
 	}
@@ -194,7 +197,7 @@ func TestTransferStore_ConflictLegacyEmptyScopeGlobal(t *testing.T) {
 		t.Fatalf("seed legacy row: %v", err)
 	}
 
-	_, err = store.CopyScoped(ctx, "g1", "", ScopeGlobal, "", "taken", nil)
+	_, err = store.CopyScoped(ctx, "g1", "", ScopeGlobal, "", strPtr("taken"), nil)
 	if !errors.Is(err, ErrSecretNameConflict) {
 		t.Fatalf("error = %v, want ErrSecretNameConflict (legacy empty scope is Global)", err)
 	}
@@ -203,7 +206,7 @@ func TestTransferStore_ConflictLegacyEmptyScopeGlobal(t *testing.T) {
 // TestTransferStore_SourceMissing verifies copying an unknown source returns ErrNotFound.
 func TestTransferStore_SourceMissing(t *testing.T) {
 	store := newTestSQLiteStore(t)
-	_, err := store.CopyScoped(context.Background(), "nope", "", ScopeWorkspace, "workspace-a", "x", nil)
+	_, err := store.CopyScoped(context.Background(), "nope", "", ScopeWorkspace, "workspace-a", strPtr("x"), nil)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("error = %v, want ErrNotFound", err)
 	}
@@ -216,7 +219,7 @@ func TestTransferStore_VerifyDestinationErrorRollsBack(t *testing.T) {
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v"})
 
 	denied := errors.New("destination denied")
-	_, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "copied", func(context.Context) error {
+	_, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied"), func(context.Context) error {
 		return denied
 	})
 	if !errors.Is(err, denied) {
@@ -241,7 +244,7 @@ func TestTransferStore_MoveFailpointAfterInsertRollsBack(t *testing.T) {
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v"})
 
 	store.failAfterInsert = func() error { return errors.New("injected delete failure") }
-	_, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "copied", nil)
+	_, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied"), nil)
 	if err == nil {
 		t.Fatal("MoveScoped succeeded despite injected failpoint")
 	}
@@ -277,7 +280,7 @@ func TestTransferStore_RollbackSurvivesCanceledContext(t *testing.T) {
 		cancel()
 		return nil
 	}
-	_, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "copied", nil)
+	_, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied"), nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("MoveScoped error = %v, want context.Canceled", err)
 	}
@@ -285,8 +288,40 @@ func TestTransferStore_RollbackSurvivesCanceledContext(t *testing.T) {
 	// connection can BEGIN IMMEDIATE again. If the rollback leaked, this
 	// fails with "cannot start a transaction within a transaction".
 	store.failAfterInsert = nil
-	if _, err := store.MoveScoped(context.Background(), "g1", "", ScopeWorkspace, "workspace-a", "copied-again", nil); err != nil {
+	if _, err := store.MoveScoped(context.Background(), "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied-again"), nil); err != nil {
 		t.Fatalf("second transfer failed: %v (leaked transaction/write lock?)", err)
+	}
+}
+
+// TestTransferStore_OmittedNameUsesCurrentSourceName verifies an omitted name
+// resolves from the source row read inside the transaction: a rename that
+// lands before the transfer is reflected in the copy (and Move removes the
+// renamed row), never a stale pre-transaction read.
+func TestTransferStore_OmittedNameUsesCurrentSourceName(t *testing.T) {
+	store := newTestSQLiteStore(t)
+	ctx := context.Background()
+	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v"})
+	// Simulate a rename committing between a stale pre-read and the transfer.
+	if err := store.Update(ctx, "g1", &UpdateSecretRequest{Name: strPtr("renamed")}); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	got, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", nil, nil)
+	if err != nil {
+		t.Fatalf("CopyScoped: %v", err)
+	}
+	if got.Name != "renamed" {
+		t.Fatalf("copy name = %q, want the current source name %q", got.Name, "renamed")
+	}
+	// Move with an omitted name deletes the renamed source and carries its name.
+	got2, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-b", nil, nil)
+	if err != nil {
+		t.Fatalf("MoveScoped: %v", err)
+	}
+	if got2.Name != "renamed" {
+		t.Fatalf("moved name = %q, want %q", got2.Name, "renamed")
+	}
+	if _, err := store.Get(ctx, "g1"); err == nil {
+		t.Fatal("source still present after move")
 	}
 }
 
@@ -307,12 +342,12 @@ func TestTransferStore_PerUserScoping(t *testing.T) {
 		t.Fatalf("seed as alice: %v", err)
 	}
 
-	if _, err := store.CopyScoped(bob, "w1", "workspace-a", ScopeGlobal, "", "x", nil); !errors.Is(err, ErrNotFound) {
+	if _, err := store.CopyScoped(bob, "w1", "workspace-a", ScopeGlobal, "", strPtr("x"), nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("bob copying alice's secret: err = %v, want ErrNotFound", err)
 	}
 
 	// Alice can move her own secret to Global.
-	got, err := store.MoveScoped(alice, "w1", "workspace-a", ScopeGlobal, "", "alice-global", nil)
+	got, err := store.MoveScoped(alice, "w1", "workspace-a", ScopeGlobal, "", strPtr("alice-global"), nil)
 	if err != nil {
 		t.Fatalf("alice move: %v", err)
 	}
@@ -332,11 +367,11 @@ func TestTransferStore_UserVisibleStoreRejectsInternalSource(t *testing.T) {
 	// refuses to create it).
 	mustCreate(t, raw, &SecretWithValue{Secret: Secret{ID: "github:user:workspace:user:access", Name: "internal"}, Value: "token"})
 
-	wrapper, ok := NewUserVisibleStore(raw).(ScopedSecretStore)
+	wrapper, ok := NewUserVisibleStore(raw).(SecretTransferStore)
 	if !ok {
-		t.Fatal("wrapper is not a ScopedSecretStore")
+		t.Fatal("wrapper is not a SecretTransferStore")
 	}
-	_, err := wrapper.CopyScoped(context.Background(), "github:user:workspace:user:access", "", ScopeGlobal, "", "x", nil)
+	_, err := wrapper.CopyScoped(context.Background(), "github:user:workspace:user:access", "", ScopeGlobal, "", strPtr("x"), nil)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("error = %v, want ErrNotFound for internal source", err)
 	}
@@ -380,7 +415,7 @@ func TestTransferStore_ConcurrentSameTargetSQLite(t *testing.T) {
 	release := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		_, err := store1.CopyScoped(ctx, "src", "", ScopeGlobal, "", "dup", func(context.Context) error {
+		_, err := store1.CopyScoped(ctx, "src", "", ScopeGlobal, "", strPtr("dup"), func(context.Context) error {
 			close(locked)
 			<-release
 			return nil
@@ -393,7 +428,7 @@ func TestTransferStore_ConcurrentSameTargetSQLite(t *testing.T) {
 
 	bErr := make(chan error, 1)
 	go func() {
-		_, err := store2.CopyScoped(ctx, "src", "", ScopeGlobal, "", "dup", nil)
+		_, err := store2.CopyScoped(ctx, "src", "", ScopeGlobal, "", strPtr("dup"), nil)
 		bErr <- err
 	}()
 

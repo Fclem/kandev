@@ -354,27 +354,31 @@ func (s *Service) copyOrMove(ctx context.Context, sourceID, sourceWorkspaceID st
 		return nil, err
 	}
 
-	targetName, err := resolveTransferName(req, source.Name)
-	if err != nil {
-		return nil, err
+	// An explicit name (or an explicit null) is validated here; an omitted
+	// name is resolved from the source row inside the store's transaction so
+	// a concurrent rename can never split the copied name from its value.
+	if req.nameNull || req.Name != nil {
+		if _, err := resolveTransferName(req, ""); err != nil {
+			return nil, err
+		}
 	}
 
 	if normalizeStoredScope(req.Scope) == normalizeStoredScope(source.Scope) && req.WorkspaceID == source.WorkspaceID {
 		return nil, fmt.Errorf("%w: source and destination scope are the same", ErrSecretValidation)
 	}
 
-	scoped, ok := s.store.(ScopedSecretStore)
+	transferStore, ok := s.store.(SecretTransferStore)
 	if !ok {
-		return nil, fmt.Errorf("workspace-scoped secret storage is unavailable")
+		return nil, fmt.Errorf("secret transfer storage is unavailable")
 	}
 
 	verifyDestination := s.destinationVerifier(ctx, req)
 
 	var secret *Secret
 	if move {
-		secret, err = scoped.MoveScoped(ctx, sourceID, source.WorkspaceID, req.Scope, req.WorkspaceID, targetName, verifyDestination)
+		secret, err = transferStore.MoveScoped(ctx, sourceID, source.WorkspaceID, req.Scope, req.WorkspaceID, req.Name, verifyDestination)
 	} else {
-		secret, err = scoped.CopyScoped(ctx, sourceID, source.WorkspaceID, req.Scope, req.WorkspaceID, targetName, verifyDestination)
+		secret, err = transferStore.CopyScoped(ctx, sourceID, source.WorkspaceID, req.Scope, req.WorkspaceID, req.Name, verifyDestination)
 	}
 	if err != nil {
 		return nil, err

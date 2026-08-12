@@ -95,12 +95,27 @@ afterEach(async () => {
   ];
 });
 
+const TAKEN_NAME = "Taken";
+const TAKEN_CONFLICT_MESSAGE = "A secret named Taken already exists in this destination.";
+
+/** Whether the Copy/Move radio with the given name reports aria-checked. */
+function radioChecked(name: RegExp): boolean {
+  return screen.getByRole("radio", { name }).getAttribute("aria-checked") === "true";
+}
+
+/** Whether the target-name input reports aria-invalid. */
+function inputInvalid(): boolean {
+  return (
+    (screen.getByLabelText("Name") as HTMLInputElement).getAttribute("aria-invalid") === "true"
+  );
+}
+
 describe("CopyMoveSecretDialog", () => {
   it("pre-fills the name with the origin suffix and defaults to Copy", () => {
     renderDialog();
     expect(screen.getByRole("heading", { name: `Copy or move ${globalSecret.name}` })).toBeTruthy();
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(DEFAULT_GLOBAL_NAME);
-    expect(screen.getByRole("radio", { name: /^Copy/ }).getAttribute("aria-checked")).toBe("true");
+    expect(radioChecked(/^Copy/)).toBe(true);
     expect(screen.getByRole("button", { name: "Copy" })).toBeTruthy();
   });
 
@@ -130,7 +145,7 @@ describe("CopyMoveSecretDialog", () => {
       />,
     );
 
-    expect(screen.getByRole("radio", { name: /^Copy/ }).getAttribute("aria-checked")).toBe("true");
+    expect(radioChecked(/^Copy/)).toBe(true);
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(DEFAULT_GLOBAL_NAME);
     // Destination re-defaults for the new source (Global source: first workspace).
     expect(screen.getByRole("combobox", { name: "Destination" }).textContent).toContain("Alpha");
@@ -162,7 +177,7 @@ describe("CopyMoveSecretDialog", () => {
       />,
     );
 
-    expect(screen.getByRole("radio", { name: /^Copy/ }).getAttribute("aria-checked")).toBe("true");
+    expect(radioChecked(/^Copy/)).toBe(true);
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(DEFAULT_GLOBAL_NAME);
   });
 
@@ -175,17 +190,14 @@ describe("CopyMoveSecretDialog", () => {
 
   it("blocks submit on a conflicting target name with an invalid field", () => {
     mockUseDestinationNames.mockReturnValue({
-      names: ["Taken"],
+      names: [TAKEN_NAME],
       loaded: true,
-      conflict: (name: string) => name.trim() === "Taken",
+      conflict: (name: string) => name.trim() === TAKEN_NAME,
     });
     renderDialog();
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Taken" } });
-    const input = screen.getByLabelText("Name") as HTMLInputElement;
-    expect(input.getAttribute("aria-invalid")).toBe("true");
-    expect(
-      screen.getByText("A secret named Taken already exists in this destination."),
-    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: TAKEN_NAME } });
+    expect(inputInvalid()).toBe(true);
+    expect(screen.getByText(TAKEN_CONFLICT_MESSAGE)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Copy" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
@@ -243,15 +255,32 @@ describe("CopyMoveSecretDialog submit", () => {
 });
 
 describe("CopyMoveSecretDialog conflict handling", () => {
+  it("blocks an overlong target name with a localized byte-limit error", () => {
+    renderDialog();
+    const input = screen.getByLabelText("Name") as HTMLInputElement;
+    // 101 bytes: exceeds the 100-byte UTF-8 backend limit without submitting.
+    fireEvent.change(input, { target: { value: "x".repeat(101) } });
+    expect(screen.getByText("Name must be at most 100 bytes.")).toBeTruthy();
+    expect(inputInvalid()).toBe(true);
+    expect((screen.getByRole("button", { name: "Copy" }) as HTMLButtonElement).disabled).toBe(true);
+
+    // A multibyte name is counted in bytes, not characters.
+    fireEvent.change(input, { target: { value: "é".repeat(51) } }); // 102 bytes
+    expect(inputInvalid()).toBe(true);
+    fireEvent.change(input, { target: { value: "é".repeat(50) } }); // 100 bytes: valid
+    expect(inputInvalid()).toBe(false);
+    expect((screen.getByRole("button", { name: "Copy" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
   it("clears a 409 name conflict when the destination changes", async () => {
     mockMoveSecret.mockRejectedValue(new ApiError("conflict", 409, {}));
     renderDialog({ secret: workspaceSecret, originToken: "Alpha" });
     fireEvent.click(screen.getByRole("radio", { name: /^Move/ }));
     fireEvent.click(screen.getByRole("button", { name: "Move" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/already exists in this destination/)).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/already exists/)).toBeTruthy());
     expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(true);
 
     // The 409 is destination-specific: switching to a workspace where the name
@@ -265,9 +294,7 @@ describe("CopyMoveSecretDialog conflict handling", () => {
     await waitFor(() =>
       expect(screen.getByRole("combobox", { name: "Destination" }).textContent).toContain("Beta"),
     );
-    await waitFor(() =>
-      expect(screen.queryByText(/already exists in this destination/)).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByText(/already exists/)).toBeNull());
     expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(
       false,
     );

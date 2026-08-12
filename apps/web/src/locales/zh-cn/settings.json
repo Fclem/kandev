@@ -778,5 +778,6 @@
   "showStatusBarDescription": "在 Kandev 底部显示状态详情。在手机上，它们会出现在“状态”抽屉中。关闭此选项时，连接警告仍会显示。",
   "statusBar": "状态栏",
   "taskBehavior": "任务行为",
-  "terminalAndEditors": "终端与编辑器"
+  "terminalAndEditors": "终端与编辑器",
+  "secretNameTooLong": "名称不能超过 100 字节。"
 }

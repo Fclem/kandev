@@ -450,33 +450,33 @@ type transferExec interface {
 }
 
 // CopyScoped copies a secret into the target scope under a new name and returns the copy.
-func (s *sqliteStore) CopyScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error) {
-	return s.transferScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination, false)
+func (s *sqliteStore) CopyScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error) (*Secret, error) {
+	return s.transferScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, requestedName, verifyDestination, false)
 }
 
 // MoveScoped moves a secret into the target scope under a new name, deleting the source.
-func (s *sqliteStore) MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error) {
-	return s.transferScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination, true)
+func (s *sqliteStore) MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error) (*Secret, error) {
+	return s.transferScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, requestedName, verifyDestination, true)
 }
 
 // transferScoped runs the atomic copy/move transfer: conflict check, insert, and optional source delete inside one transaction.
-func (s *sqliteStore) transferScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error, deleteSource bool) (*Secret, error) {
+func (s *sqliteStore) transferScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error, deleteSource bool) (*Secret, error) {
 	if err := validateSecretScope(targetScope, targetWorkspaceID); err != nil {
 		return nil, fmt.Errorf("scope validation: %w", err)
 	}
-	if strings.TrimSpace(targetName) == "" {
+	if requestedName != nil && strings.TrimSpace(*requestedName) == "" {
 		return nil, fmt.Errorf("target name is required")
 	}
 	if dialect.IsPostgres(s.db.DriverName()) {
-		return s.transferPostgres(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination, deleteSource)
+		return s.transferPostgres(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, requestedName, verifyDestination, deleteSource)
 	}
-	return s.transferSQLite(ctx, sourceID, targetScope, targetWorkspaceID, targetName, verifyDestination, deleteSource)
+	return s.transferSQLite(ctx, sourceID, targetScope, targetWorkspaceID, requestedName, verifyDestination, deleteSource)
 }
 
 // transferSQLite runs the transfer on the single writer connection with
 // BEGIN IMMEDIATE, taking the SQLite write lock up front so competing
 // transfers serialize before any read.
-func (s *sqliteStore) transferSQLite(ctx context.Context, sourceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error, deleteSource bool) (*Secret, error) {
+func (s *sqliteStore) transferSQLite(ctx context.Context, sourceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error, deleteSource bool) (*Secret, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("acquire writer connection: %w", err)
@@ -498,7 +498,7 @@ func (s *sqliteStore) transferSQLite(ctx context.Context, sourceID string, targe
 
 	// SQLite's single writer serializes all writers (BEGIN IMMEDIATE), so the
 	// source row cannot change under us; no row lock is needed.
-	secret, err := s.transferBody(ctx, conn, func(q string) string { return q }, sourceID, targetScope, targetWorkspaceID, targetName, verifyDestination, deleteSource, false)
+	secret, err := s.transferBody(ctx, conn, func(q string) string { return q }, sourceID, targetScope, targetWorkspaceID, requestedName, verifyDestination, deleteSource, false)
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +513,7 @@ func (s *sqliteStore) transferSQLite(ctx context.Context, sourceID string, targe
 // destination's advisory lock (plus the source workspace's lock for Move) in
 // sorted order before any read, serializing competing transfers and
 // coordinating with workspace deletion under READ COMMITTED.
-func (s *sqliteStore) transferPostgres(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error, deleteSource bool) (*Secret, error) {
+func (s *sqliteStore) transferPostgres(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error, deleteSource bool) (*Secret, error) {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin transfer: %w", err)
@@ -541,7 +541,7 @@ func (s *sqliteStore) transferPostgres(ctx context.Context, sourceID, sourceWork
 	// A Move destroys the source, so the source row is locked with FOR UPDATE
 	// (deleteSource == true): a concurrent Update cannot commit a newer value
 	// between our read and delete, which would otherwise lose that value.
-	secret, err := s.transferBody(ctx, tx, s.db.Rebind, sourceID, targetScope, targetWorkspaceID, targetName, verifyDestination, deleteSource, deleteSource)
+	secret, err := s.transferBody(ctx, tx, s.db.Rebind, sourceID, targetScope, targetWorkspaceID, requestedName, verifyDestination, deleteSource, deleteSource)
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +565,7 @@ func transferTargetLockKey(targetScope SecretScope, targetWorkspaceID string) in
 // normalized-scope conflict check, insert of the copy (reusing the source's
 // encrypted value), optional source delete, and the returned-row read. Every
 // statement uses the same executor and the per-user visibility predicate.
-func (s *sqliteStore) transferBody(ctx context.Context, exec transferExec, rebind func(string) string, sourceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error, deleteSource, lockSource bool) (*Secret, error) {
+func (s *sqliteStore) transferBody(ctx context.Context, exec transferExec, rebind func(string) string, sourceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error, deleteSource, lockSource bool) (*Secret, error) {
 	owner := scopeOwner(ctx)
 
 	if verifyDestination != nil {
@@ -577,6 +577,15 @@ func (s *sqliteStore) transferBody(ctx context.Context, exec transferExec, rebin
 	src, err := s.transferSource(ctx, exec, rebind, sourceID, owner, lockSource)
 	if err != nil {
 		return nil, err
+	}
+	// An omitted name resolves from the transactional source row: a concurrent
+	// rename can never split the copied name from its value (or, for Move,
+	// delete the renamed row and recreate it under a stale name).
+	targetName := ""
+	if requestedName == nil {
+		targetName = src.Name
+	} else {
+		targetName = *requestedName
 	}
 
 	if err := s.transferConflictCheck(ctx, exec, rebind, targetScope, targetWorkspaceID, targetName, owner); err != nil {

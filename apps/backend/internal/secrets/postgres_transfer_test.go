@@ -73,7 +73,7 @@ func TestPostgresTransfer_CopyMoveConflictAndOwnership(t *testing.T) {
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v"})
 
 	// Copy global -> workspace with target identity.
-	got, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "copied", nil)
+	got, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied"), nil)
 	if err != nil {
 		t.Fatalf("CopyScoped: %v", err)
 	}
@@ -88,12 +88,12 @@ func TestPostgresTransfer_CopyMoveConflictAndOwnership(t *testing.T) {
 	}
 
 	// Conflict on a second copy of the same target name.
-	if _, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "copied", nil); !errors.Is(err, ErrSecretNameConflict) {
+	if _, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied"), nil); !errors.Is(err, ErrSecretNameConflict) {
 		t.Fatalf("conflict err = %v", err)
 	}
 
 	// Move workspace -> global removes the source.
-	moved, err := store.MoveScoped(ctx, "g1", "", ScopeGlobal, "", "global-copy", nil)
+	moved, err := store.MoveScoped(ctx, "g1", "", ScopeGlobal, "", strPtr("global-copy"), nil)
 	if err != nil {
 		t.Fatalf("MoveScoped: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestPostgresTransfer_CopyMoveConflictAndOwnership(t *testing.T) {
 		t.Fatalf("seed legacy row: %v", err)
 	}
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g2", Name: "src2"}, Value: "v2"})
-	if _, err := store.CopyScoped(ctx, "g2", "", ScopeGlobal, "", "legacy-name", nil); !errors.Is(err, ErrSecretNameConflict) {
+	if _, err := store.CopyScoped(ctx, "g2", "", ScopeGlobal, "", strPtr("legacy-name"), nil); !errors.Is(err, ErrSecretNameConflict) {
 		t.Fatalf("legacy conflict err = %v", err)
 	}
 }
@@ -130,7 +130,7 @@ func TestPostgresTransfer_MoveRollbackAfterInsert(t *testing.T) {
 	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v"})
 
 	store.failAfterInsert = func() error { return errors.New("injected delete failure") }
-	if _, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", "copied", nil); err == nil {
+	if _, err := store.MoveScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied"), nil); err == nil {
 		t.Fatal("MoveScoped succeeded despite failpoint")
 	}
 	if _, err := store.Get(ctx, "g1"); err != nil {
@@ -156,7 +156,7 @@ func TestPostgresTransfer_ConcurrentSameTarget(t *testing.T) {
 	release := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		_, err := storeA.CopyScoped(ctx, "src", "", ScopeGlobal, "", "dup", func(context.Context) error {
+		_, err := storeA.CopyScoped(ctx, "src", "", ScopeGlobal, "", strPtr("dup"), func(context.Context) error {
 			close(locked)
 			<-release
 			return nil
@@ -167,7 +167,7 @@ func TestPostgresTransfer_ConcurrentSameTarget(t *testing.T) {
 
 	bErr := make(chan error, 1)
 	go func() {
-		_, err := storeB.CopyScoped(ctx, "src", "", ScopeGlobal, "", "dup", nil)
+		_, err := storeB.CopyScoped(ctx, "src", "", ScopeGlobal, "", strPtr("dup"), nil)
 		bErr <- err
 	}()
 	select {
@@ -199,7 +199,7 @@ func TestPostgresTransfer_DeleteVsTransferRace(t *testing.T) {
 		release := make(chan struct{})
 		transferDone := make(chan error, 1)
 		go func() {
-			_, err := store.CopyScoped(ctx, "src", "", ScopeWorkspace, "workspace-a", "copied", func(context.Context) error {
+			_, err := store.CopyScoped(ctx, "src", "", ScopeWorkspace, "workspace-a", strPtr("copied"), func(context.Context) error {
 				close(locked)
 				<-release
 				return nil
@@ -262,7 +262,7 @@ func TestPostgresTransfer_DeleteVsTransferRace(t *testing.T) {
 		// The transfer's existence check (the callback, run under the lock)
 		// denies a workspace that no longer exists; nothing is inserted.
 		denied := errors.New("workspace gone")
-		_, err = store.CopyScoped(ctx, "src", "", ScopeWorkspace, "workspace-b", "copied", func(context.Context) error {
+		_, err = store.CopyScoped(ctx, "src", "", ScopeWorkspace, "workspace-b", strPtr("copied"), func(context.Context) error {
 			return denied
 		})
 		if !errors.Is(err, denied) {
@@ -293,7 +293,7 @@ func TestPostgresTransfer_MoveSerializesConcurrentUpdate(t *testing.T) {
 		return nil
 	}
 	go func() {
-		_, err := store.MoveScoped(ctx, "src", "", ScopeWorkspace, "workspace-a", "copied", nil)
+		_, err := store.MoveScoped(ctx, "src", "", ScopeWorkspace, "workspace-a", strPtr("copied"), nil)
 		moveDone <- err
 	}()
 

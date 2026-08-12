@@ -101,15 +101,28 @@ type ScopedSecretStore interface {
 	RevealGlobal(ctx context.Context, id string) (string, error)
 	RevealForWorkspace(ctx context.Context, id, workspaceID string) (string, error)
 	DeleteWorkspaceSecrets(ctx context.Context, workspaceID string) error
-	// CopyScoped atomically copies a secret into another scope/workspace under
-	// the given name and returns the new row's metadata. verifyDestination
-	// runs inside the transaction while the destination lock is held, before
-	// the conflict check and insert; an error rolls back and surfaces.
-	// sourceWorkspaceID is the resolved source's workspace ("" for Global) and
-	// is locked alongside the destination for Move so concurrent same-source
-	// moves serialize without deadlock.
-	CopyScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error)
-	MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error)
+}
+
+// SecretTransferStore is implemented by stores that can atomically copy or
+// move a secret into another scope/workspace. It is a narrow optional
+// interface, separate from ScopedSecretStore, so scope-aware read and
+// lifecycle stores (and their test doubles) are not forced to implement
+// transfer behavior.
+type SecretTransferStore interface {
+	// CopyScoped atomically copies a secret into another scope/workspace and
+	// returns the new row's metadata. requestedName nil keeps the source
+	// name, resolved from the source row read inside the transaction (so a
+	// concurrent rename can never split the copied name from its value).
+	// verifyDestination runs inside the transaction while the destination
+	// lock is held, before the conflict check and insert; an error rolls back
+	// and surfaces. sourceWorkspaceID is the resolved source's workspace
+	// ("" for Global) and is locked alongside the destination for Move so
+	// concurrent same-source moves serialize without deadlock.
+	CopyScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error) (*Secret, error)
+	// MoveScoped atomically copies a secret into another scope/workspace and
+	// deletes the source in the same transaction; the name contract matches
+	// CopyScoped.
+	MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error) (*Secret, error)
 }
 
 // WorkspaceSecretTransactionalDeleter is implemented by stores that can

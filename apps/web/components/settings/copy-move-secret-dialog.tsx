@@ -86,6 +86,9 @@ export function CopyMoveSecretDialog({
     destinationNamesKey,
   );
   const conflict = nameError === null && destination !== null && destinationNames.conflict(name);
+  // The backend limit is 100 UTF-8 bytes; a user-edited name that exceeds it
+  // would otherwise fail server-side with a generic transfer error.
+  const nameTooLong = new TextEncoder().encode(name.trim()).length > MAX_SECRET_NAME_BYTES;
 
   const { busy, canSubmit, formError, clearError, run } = useTransferSubmit({
     secret,
@@ -95,6 +98,7 @@ export function CopyMoveSecretDialog({
     name,
     nameError,
     conflict,
+    nameTooLong,
     destinationsLoading,
     destinationsError: destinationsError !== null,
     setNameError,
@@ -124,7 +128,7 @@ export function CopyMoveSecretDialog({
     >
       <DialogContent
         showCloseButton={false}
-        className="bottom-0 top-auto left-0 right-0 translate-x-0 translate-y-0 grid-cols-[minmax(0,1fr)] rounded-b-none pb-[env(safe-area-inset-bottom)] sm:top-1/2 sm:left-1/2 sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-b-lg"
+        className="bottom-0 top-auto left-0 right-0 translate-x-0 translate-y-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] max-h-[100dvh] overflow-hidden rounded-b-none pb-[env(safe-area-inset-bottom)] sm:top-1/2 sm:left-1/2 sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-b-lg"
       >
         <CopyMoveDialogBody
           secretName={secret.name}
@@ -149,6 +153,7 @@ export function CopyMoveSecretDialog({
           name={name}
           onNameChange={setName}
           nameError={nameError}
+          nameTooLong={nameTooLong}
           setNameError={setNameError}
           conflict={conflict}
           formError={formError}
@@ -206,6 +211,7 @@ type TransferCanSubmitArgs = {
   name: string;
   nameError: string | null;
   conflict: boolean;
+  nameTooLong: boolean;
   destinationsLoading: boolean;
   destinationsError: boolean;
 };
@@ -218,6 +224,7 @@ function transferCanSubmit({
   name,
   nameError,
   conflict,
+  nameTooLong,
   destinationsLoading,
   destinationsError,
 }: TransferCanSubmitArgs): boolean {
@@ -228,6 +235,7 @@ function transferCanSubmit({
     name.trim().length > 0 &&
     nameError === null &&
     !conflict &&
+    !nameTooLong &&
     !destinationsLoading &&
     !destinationsError
   );
@@ -241,6 +249,7 @@ type TransferSubmitArgs = {
   name: string;
   nameError: string | null;
   conflict: boolean;
+  nameTooLong: boolean;
   destinationsLoading: boolean;
   destinationsError: boolean;
   setNameError: (error: string | null) => void;
@@ -258,6 +267,7 @@ function useTransferSubmit({
   name,
   nameError,
   conflict,
+  nameTooLong,
   destinationsLoading,
   destinationsError,
   setNameError,
@@ -289,6 +299,7 @@ function useTransferSubmit({
     name,
     nameError,
     conflict,
+    nameTooLong,
     destinationsLoading,
     destinationsError,
   });

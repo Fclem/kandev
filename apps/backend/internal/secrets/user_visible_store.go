@@ -20,8 +20,17 @@ func IsInternalID(id string) bool {
 // underlying store remains available to integration services for their
 // deterministic internal keys.
 type UserVisibleStore struct {
-	store  SecretStore
-	scoped ScopedSecretStore
+	store SecretStore
+	// scoped carries both the scope-aware read/lifecycle surface and the
+	// transfer surface the wrapper exposes to the service.
+	scoped userVisibleScopedStore
+}
+
+// userVisibleScopedStore is the store surface UserVisibleStore forwards:
+// scope-aware reads/lifecycle plus atomic scope transfers.
+type userVisibleScopedStore interface {
+	ScopedSecretStore
+	SecretTransferStore
 }
 
 // NewUserVisibleStore wraps a SecretStore, returning a store that exposes
@@ -30,7 +39,7 @@ func NewUserVisibleStore(store SecretStore) SecretStore {
 	if store == nil {
 		return nil
 	}
-	scoped, _ := store.(ScopedSecretStore)
+	scoped, _ := store.(userVisibleScopedStore)
 	return &UserVisibleStore{store: store, scoped: scoped}
 }
 
@@ -172,25 +181,25 @@ func (s *UserVisibleStore) DeleteWorkspaceSecrets(ctx context.Context, workspace
 }
 
 // CopyScoped copies the user-visible secret to the target scope after the destination verifier approves.
-func (s *UserVisibleStore) CopyScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error) {
+func (s *UserVisibleStore) CopyScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error) (*Secret, error) {
 	if IsInternalID(sourceID) {
 		return nil, internalSecretNotFound(sourceID)
 	}
 	if s.scoped == nil {
 		return nil, fmt.Errorf("workspace-scoped secret storage is unavailable")
 	}
-	return s.scoped.CopyScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination)
+	return s.scoped.CopyScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, requestedName, verifyDestination)
 }
 
 // MoveScoped moves the user-visible secret to the target scope after the destination verifier approves.
-func (s *UserVisibleStore) MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error) {
+func (s *UserVisibleStore) MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID string, requestedName *string, verifyDestination func(context.Context) error) (*Secret, error) {
 	if IsInternalID(sourceID) {
 		return nil, internalSecretNotFound(sourceID)
 	}
 	if s.scoped == nil {
 		return nil, fmt.Errorf("workspace-scoped secret storage is unavailable")
 	}
-	return s.scoped.MoveScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination)
+	return s.scoped.MoveScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, requestedName, verifyDestination)
 }
 
 // DeleteWorkspaceSecretsTx deletes workspace-scoped user-visible secrets inside the given transaction.

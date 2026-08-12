@@ -130,4 +130,38 @@ test.describe("mobile-secrets-copy-move", () => {
       caption: "Mobile secrets copy/move flow",
     });
   });
+
+  test("keeps the dialog usable on a short viewport when an error is shown", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    await testPage.setViewportSize({ width: 390, height: 480 });
+    const sourceName = `E2E Short Viewport ${Date.now()}`;
+    await apiClient.createSecret(sourceName, "short-viewport-value", {
+      scope: "workspace",
+      workspaceId: seedData.workspaceId,
+    });
+    await testPage.goto(`/settings/workspace/${seedData.workspaceId}/secrets`);
+    await testPage.getByRole("button", { name: `Copy or move ${sourceName}` }).click();
+    const dialog = testPage.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+
+    // Trigger an in-dialog error: an overlong target name (101 bytes).
+    await dialog.getByLabel("Name").fill("x".repeat(101));
+    await expect(dialog.getByText(/at most 100 bytes/)).toBeVisible();
+
+    // The footer stays within the viewport and the sheet never exceeds it;
+    // the middle section scrolls internally instead.
+    const submitBox = await dialog.getByRole("button", { name: "Copy", exact: true }).boundingBox();
+    expect(submitBox).not.toBeNull();
+    expect(submitBox!.y + submitBox!.height).toBeLessThanOrEqual(480);
+    const dialogBox = await dialog.boundingBox();
+    expect(dialogBox).not.toBeNull();
+    expect(dialogBox!.y + dialogBox!.height).toBeLessThanOrEqual(480);
+    const documentOverflow = await testPage.evaluate(
+      () => document.documentElement.scrollHeight > window.innerHeight,
+    );
+    expect(documentOverflow).toBe(false);
+  });
 });

@@ -148,7 +148,7 @@ describe("useAutomationRuns", () => {
     expect(result.current.runs.map((r) => r.id)).toEqual(["run-y"]);
   });
 
-  it("re-applies the optimistic clear if an in-flight refresh resurrects rows before delete-all confirms", async () => {
+  it("overwrites rows an in-flight refresh resurrected with the authoritative post-delete list", async () => {
     const runX = mkRun("run-x");
     const runY = mkRun("run-y");
     setRuns(AUTOMATION_ID, [runX, runY]);
@@ -156,8 +156,9 @@ describe("useAutomationRuns", () => {
     const del = deferred<{ deleted: boolean }>();
     vi.mocked(deleteAllAutomationRuns).mockReturnValue(del.promise);
     vi.mocked(listAutomationRuns)
-      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise)
-      .mockResolvedValue([runX, runY]);
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
+      .mockResolvedValueOnce([runX, runY]) // in-flight refresh, pre-delete list
+      .mockResolvedValue([]); // authoritative post-delete refresh
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
 
@@ -181,18 +182,28 @@ describe("useAutomationRuns", () => {
     expect(result.current.runs).toEqual([]);
   });
 
-  it("passes workspaceId through to the delete-run and delete-all-runs API calls", () => {
+  it("passes workspaceId through to the delete-run and delete-all-runs API calls", async () => {
     setRuns(AUTOMATION_ID, [mkRun("run-x")]);
     vi.mocked(listAutomationRuns).mockReturnValue(Promise.withResolvers<AutomationRun[]>().promise);
     vi.mocked(deleteAutomationRun).mockResolvedValue({ deleted: true });
     vi.mocked(deleteAllAutomationRuns).mockResolvedValue({ deleted: true });
 
-    const { result } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
 
     act(() => {
       result.current.deleteRun("run-x");
     });
     expect(deleteAutomationRun).toHaveBeenCalledWith("run-x", WORKSPACE_ID);
+
+    // Let the per-run delete settle so the serialization gate reopens before
+    // the next mutation.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+    expect(result.current.deleting).toBe(false);
 
     act(() => {
       result.current.deleteAllRuns();
@@ -293,8 +304,9 @@ describe("useAutomationRuns - status-scoped delete-all", () => {
     const del = deferred<{ deleted: boolean }>();
     vi.mocked(deleteAutomationRun).mockReturnValue(del.promise);
     vi.mocked(listAutomationRuns)
-      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise)
-      .mockResolvedValue([runX, runY]);
+      .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
+      .mockResolvedValueOnce([runX, runY]) // in-flight refresh, pre-delete list
+      .mockResolvedValue([runY]); // authoritative post-delete refresh
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
 
@@ -394,7 +406,8 @@ describe("useAutomationRuns - status-scoped delete-all races", () => {
     const stale = deferred<AutomationRun[]>();
     vi.mocked(listAutomationRuns)
       .mockReturnValueOnce(Promise.withResolvers<AutomationRun[]>().promise) // mount
-      .mockReturnValueOnce(stale.promise); // refresh started before the delete
+      .mockReturnValueOnce(stale.promise) // refresh started before the delete
+      .mockResolvedValue([runY]); // authoritative post-delete refresh
     vi.mocked(deleteAutomationRun).mockResolvedValue({ deleted: true });
 
     const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
@@ -465,6 +478,65 @@ describe("useAutomationRuns - status-scoped delete-all races", () => {
     // The server list (both runs still present) wins over the optimistic
     // removal once every delete has settled.
     expect(result.current.runs.map((r) => r.id).sort()).toEqual(["run-x", "run-y"]);
+  });
+});
+
+describe("useAutomationRuns - serialized deletes", () => {
+  it("ignores a second delete-all fired while one is still in flight", () => {
+    setRuns(AUTOMATION_ID, [mkRun("run-x"), mkRun("run-y"), mkRun("run-z")]);
+    const slow = deferred<{ deleted: boolean }>();
+    vi.mocked(deleteAutomationRun).mockReturnValue(slow.promise);
+    vi.mocked(listAutomationRuns).mockReturnValue(Promise.withResolvers<AutomationRun[]>().promise);
+
+    const { result } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+
+    act(() => {
+      result.current.deleteAllRuns(["run-x", "run-y"]);
+      // The second, overlapping mutation must be a no-op: the two delete
+      // batches are serialized so their recoveries cannot race each other.
+      result.current.deleteAllRuns(["run-z"]);
+    });
+    expect(deleteAutomationRun).toHaveBeenCalledTimes(2); // only the first batch
+  });
+
+  it("ignores a per-run delete fired while a delete-all is in flight", () => {
+    setRuns(AUTOMATION_ID, [mkRun("run-x"), mkRun("run-y")]);
+    const slow = deferred<{ deleted: boolean }>();
+    vi.mocked(deleteAutomationRun).mockReturnValue(slow.promise);
+    vi.mocked(listAutomationRuns).mockReturnValue(Promise.withResolvers<AutomationRun[]>().promise);
+
+    const { result } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+
+    act(() => {
+      result.current.deleteAllRuns(["run-x"]);
+      result.current.deleteRun("run-y");
+    });
+    expect(deleteAutomationRun).toHaveBeenCalledTimes(1); // only the delete-all
+  });
+
+  it("exposes deleting while a delete runs and clears it once the batch settles", async () => {
+    setRuns(AUTOMATION_ID, [mkRun("run-x")]);
+    const slow = deferred<{ deleted: boolean }>();
+    vi.mocked(deleteAutomationRun).mockReturnValue(slow.promise);
+    vi.mocked(listAutomationRuns).mockReturnValue(Promise.withResolvers<AutomationRun[]>().promise);
+
+    const { result, rerender } = renderHook(() => useAutomationRuns(AUTOMATION_ID, WORKSPACE_ID));
+
+    act(() => {
+      result.current.deleteAllRuns(["run-x"]);
+    });
+    rerender();
+    expect(result.current.deleting).toBe(true);
+
+    await act(async () => {
+      slow.resolve({ deleted: true });
+      await slow.promise;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    rerender();
+    expect(result.current.deleting).toBe(false);
   });
 });
 

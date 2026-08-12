@@ -39,6 +39,7 @@ function mkRun(overrides: Partial<AutomationRun> = {}): AutomationRun {
 type RunsSectionHook = {
   runs: AutomationRun[];
   loading: boolean;
+  deleting: boolean;
   refresh: () => void;
   deleteRun: (id: string) => void;
   deleteAllRuns: (runIds?: string[]) => void;
@@ -51,6 +52,7 @@ function setup(
   mockUseAutomationRuns.mockReturnValue({
     runs,
     loading: false,
+    deleting: false,
     refresh: vi.fn(),
     deleteRun: vi.fn(),
     deleteAllRuns: vi.fn(),
@@ -242,6 +244,16 @@ describe("RunsSection delete-all scope", () => {
     rerender(<RunsSection automationId="auto-1" workspaceId="ws-1" />);
 
     expect(screen.queryByTestId(DELETE_ALL_BTN)).toBeNull();
+  });
+
+  it("disables the delete controls while a delete is in flight", () => {
+    setup(
+      [mkRun({ id: "run-a", status: "succeeded" }), mkRun({ id: "run-b", status: "skipped" })],
+      { deleting: true },
+    );
+
+    expect((screen.getByTestId(DELETE_ALL_BTN) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getAllByTestId("delete-run")[0] as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("names the active status in the confirmation dialog", () => {

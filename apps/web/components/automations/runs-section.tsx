@@ -50,11 +50,12 @@ const STATUS_BADGE: Record<
 
 type RunRowProps = {
   run: AutomationRun;
+  deleting: boolean;
   onDelete: (id: string) => void;
   onNavigate: (taskId: string) => void;
 };
 
-function RunRow({ run, onDelete, onNavigate }: RunRowProps) {
+function RunRow({ run, deleting, onDelete, onNavigate }: RunRowProps) {
   const { t } = useTranslation();
   const badge = STATUS_BADGE[run.status] ?? STATUS_BADGE.triggered;
   // Any run that produced a task links to it, run-mode included. Run mode
@@ -101,6 +102,7 @@ function RunRow({ run, onDelete, onNavigate }: RunRowProps) {
             e.preventDefault();
             onDelete(run.id);
           }}
+          disabled={deleting}
           title={t("automations:deleteRun")}
           data-testid="delete-run"
         >
@@ -235,7 +237,7 @@ export function RunsSection({ automationId, workspaceId }: RunsSectionProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [statusFilter, setStatusFilter] = useState<RunStatus | "all">("all");
-  const { runs, loading, refresh, deleteRun, deleteAllRuns } = useAutomationRuns(
+  const { runs, loading, refresh, deleteRun, deleteAllRuns, deleting } = useAutomationRuns(
     automationId,
     workspaceId,
   );
@@ -293,7 +295,7 @@ export function RunsSection({ automationId, workspaceId }: RunsSectionProps) {
                 <TableHead className="w-8">
                   {visibleRuns.length > 0 && (
                     <DeleteAllButton
-                      disabled={loading}
+                      disabled={loading || deleting}
                       statusFilter={statusFilter}
                       onConfirm={() => {
                         if (statusFilter === "all") {
@@ -319,6 +321,7 @@ export function RunsSection({ automationId, workspaceId }: RunsSectionProps) {
                   <RunRow
                     key={run.id}
                     run={run}
+                    deleting={deleting}
                     onDelete={deleteRun}
                     onNavigate={(id) => router.push(`/tasks/${id}`)}
                   />

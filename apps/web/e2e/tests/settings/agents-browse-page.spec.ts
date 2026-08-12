@@ -1,10 +1,11 @@
 import { test, expect } from "../../fixtures/test-base";
 import type { ListAvailableAgentsResponse } from "../../../lib/types/http";
 
-// The default mock-agent is discovered as installed with no install_script, so
+// The default mock-agent is discovered as already available (it has an
+// InstallScript, but the catalog filters on !available && install_script), so
 // the catalog would show its "everything installed" state with no install
-// cards. Intercept /api/v1/agents/available and return one
-// discoverable-but-not-installed agent so an install card renders.
+// cards. Intercept /api/v1/agents/available and return one unavailable agent
+// with an install script so an install card renders.
 const AVAILABLE_AGENTS = {
   agents: [
     {
@@ -68,6 +69,22 @@ test.describe("Agents browse page", () => {
     // a button; clicking the heading must not hide the install cards.
     await heading.click();
     await expect(testPage.getByTestId("install-card-codex")).toBeVisible();
+
+    // A separately-triggered collapsible (e.g. a toggle button elsewhere in
+    // the content) would not be caught by the heading assertions. The page
+    // content must carry no expand/collapse semantics at all. Scoped to the
+    // settings content region so the sidebar and topbar chrome (which use
+    // Radix data-state/aria-expanded legitimately) do not false-positive.
+    const collapseSemantics = await testPage.evaluate(() => {
+      const content = document.querySelector('[data-testid="settings-scroll-container"]');
+      return content
+        ? [...content.querySelectorAll("[aria-expanded], [aria-controls], [data-state]")].map(
+            (el) =>
+              `${el.tagName.toLowerCase()}[data-testid="${el.getAttribute("data-testid") ?? ""}"]`,
+          )
+        : ["<missing settings-scroll-container>"];
+    });
+    expect(collapseSemantics).toEqual([]);
 
     // Compatibility guard: the exact test ID PR #2544 introduced is gone too.
     await expect(testPage.getByTestId("available-to-install-trigger")).toHaveCount(0);

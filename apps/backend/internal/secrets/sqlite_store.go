@@ -44,6 +44,7 @@ func Provide(writer, reader *sqlx.DB, crypto *MasterKeyProvider) (*sqliteStore, 
 	return store, store.Close, nil
 }
 
+// initSchema creates the secrets table if needed and applies idempotent column migrations.
 func (s *sqliteStore) initSchema() error {
 	binaryType := dialect.BlobType(s.db.DriverName())
 	schema := fmt.Sprintf(`
@@ -92,6 +93,7 @@ func (s *sqliteStore) ClaimUnowned(ctx context.Context, ownerID string) error {
 	return err
 }
 
+// Close closes the underlying writer connection when the store owns it.
 func (s *sqliteStore) Close() error {
 	if !s.ownsDB {
 		return nil
@@ -99,6 +101,7 @@ func (s *sqliteStore) Close() error {
 	return s.db.Close()
 }
 
+// Create validates the scope, encrypts the value, and inserts a new secret.
 func (s *sqliteStore) Create(ctx context.Context, secret *SecretWithValue) error {
 	if secret == nil {
 		return fmt.Errorf("secret is required")
@@ -132,6 +135,7 @@ func (s *sqliteStore) Create(ctx context.Context, secret *SecretWithValue) error
 	return nil
 }
 
+// Get returns a secret's metadata by id, scoped to the caller; ErrNotFound if absent.
 func (s *sqliteStore) Get(ctx context.Context, id string) (*Secret, error) {
 	var row secretRow
 	err := s.ro.GetContext(ctx, &row, s.ro.Rebind(`
@@ -147,6 +151,7 @@ func (s *sqliteStore) Get(ctx context.Context, id string) (*Secret, error) {
 	return row.toSecret(), nil
 }
 
+// Reveal returns the decrypted plaintext value of the secret with the given id.
 func (s *sqliteStore) Reveal(ctx context.Context, id string) (string, error) {
 	var ciphertext, nonce []byte
 	err := s.ro.QueryRowContext(ctx, s.ro.Rebind(`
@@ -168,6 +173,7 @@ func (s *sqliteStore) Reveal(ctx context.Context, id string) (string, error) {
 	return string(plaintext), nil
 }
 
+// Update applies the requested name and/or value changes to the secret with the given id.
 func (s *sqliteStore) Update(ctx context.Context, id string, req *UpdateSecretRequest) error {
 	existing, err := s.Get(ctx, id)
 	if err != nil {
@@ -206,6 +212,7 @@ func (s *sqliteStore) Update(ctx context.Context, id string, req *UpdateSecretRe
 	return nil
 }
 
+// Delete removes the secret with the given id, scoped to the caller; ErrNotFound if absent.
 func (s *sqliteStore) Delete(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, s.db.Rebind(`
 		DELETE FROM secrets WHERE id = ? AND (user_id = '' OR ? = '' OR user_id = ?)`),
@@ -220,10 +227,12 @@ func (s *sqliteStore) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// List returns all global secrets visible to the caller.
 func (s *sqliteStore) List(ctx context.Context) ([]*SecretListItem, error) {
 	return s.ListScoped(ctx, SecretListOptions{Scope: ScopeGlobal})
 }
 
+// ListScoped returns secrets matching the given scope options, newest first.
 func (s *sqliteStore) ListScoped(ctx context.Context, opts SecretListOptions) ([]*SecretListItem, error) {
 	if err := validateListOptions(opts); err != nil {
 		return nil, err
@@ -254,6 +263,7 @@ func (s *sqliteStore) ListScoped(ctx context.Context, opts SecretListOptions) ([
 	return toSecretListItems(rows), nil
 }
 
+// GetForWorkspace returns the secret with id if it is global or belongs to the given workspace.
 func (s *sqliteStore) GetForWorkspace(ctx context.Context, id, workspaceID string) (*Secret, error) {
 	if strings.TrimSpace(workspaceID) == "" {
 		return nil, fmt.Errorf("workspace id is required")
@@ -268,6 +278,7 @@ func (s *sqliteStore) GetForWorkspace(ctx context.Context, id, workspaceID strin
 	return secret, nil
 }
 
+// RevealGlobal returns the decrypted value of the global secret with the given id.
 func (s *sqliteStore) RevealGlobal(ctx context.Context, id string) (string, error) {
 	secret, err := s.Get(ctx, id)
 	if err != nil {
@@ -279,6 +290,7 @@ func (s *sqliteStore) RevealGlobal(ctx context.Context, id string) (string, erro
 	return s.Reveal(ctx, id)
 }
 
+// RevealForWorkspace returns the decrypted value of a secret visible in the given workspace.
 func (s *sqliteStore) RevealForWorkspace(ctx context.Context, id, workspaceID string) (string, error) {
 	if _, err := s.GetForWorkspace(ctx, id, workspaceID); err != nil {
 		return "", err
@@ -286,6 +298,7 @@ func (s *sqliteStore) RevealForWorkspace(ctx context.Context, id, workspaceID st
 	return s.Reveal(ctx, id)
 }
 
+// DeleteWorkspaceSecrets removes all workspace-owned secrets for the given workspace in a transaction.
 func (s *sqliteStore) DeleteWorkspaceSecrets(ctx context.Context, workspaceID string) error {
 	if strings.TrimSpace(workspaceID) == "" {
 		return fmt.Errorf("workspace id is required")
@@ -321,6 +334,7 @@ func (s *sqliteStore) DeleteWorkspaceSecretsTx(ctx context.Context, tx *sqlx.Tx,
 	return s.deleteWorkspaceSecrets(ctx, tx, workspaceID)
 }
 
+// deleteWorkspaceSecrets runs the workspace-owned secret deletion on the supplied executor.
 func (s *sqliteStore) deleteWorkspaceSecrets(ctx context.Context, exec sqlx.ExtContext, workspaceID string) error {
 	if strings.TrimSpace(workspaceID) == "" {
 		return fmt.Errorf("workspace id is required")
@@ -333,6 +347,7 @@ func (s *sqliteStore) deleteWorkspaceSecrets(ctx context.Context, exec sqlx.ExtC
 	return nil
 }
 
+// validateSecretScope rejects scope/workspace combinations that are not allowed.
 func validateSecretScope(scope SecretScope, workspaceID string) error {
 	switch scope {
 	case ScopeGlobal:
@@ -349,6 +364,7 @@ func validateSecretScope(scope SecretScope, workspaceID string) error {
 	return nil
 }
 
+// validateListOptions rejects list options with an invalid scope or mismatched workspace.
 func validateListOptions(opts SecretListOptions) error {
 	switch opts.Scope {
 	case ScopeGlobal:
@@ -375,6 +391,7 @@ type secretRow struct {
 	UpdatedAt   time.Time   `db:"updated_at"`
 }
 
+// toSecret converts the scanned row into a Secret with its stored scope normalized.
 func (r *secretRow) toSecret() *Secret {
 	return &Secret{
 		ID:          r.ID,
@@ -397,6 +414,7 @@ type secretListRow struct {
 	UpdatedAt   time.Time   `db:"updated_at"`
 }
 
+// toSecretListItems converts scanned list rows into SecretListItems with normalized scopes.
 func toSecretListItems(rows []secretListRow) []*SecretListItem {
 	items := make([]*SecretListItem, len(rows))
 	for i, r := range rows {
@@ -413,6 +431,7 @@ func toSecretListItems(rows []secretListRow) []*SecretListItem {
 	return items
 }
 
+// normalizeStoredScope maps a legacy empty stored scope to Global.
 func normalizeStoredScope(scope SecretScope) SecretScope {
 	if scope == "" {
 		return ScopeGlobal
@@ -429,14 +448,17 @@ type transferExec interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+// CopyScoped copies a secret into the target scope under a new name and returns the copy.
 func (s *sqliteStore) CopyScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error) {
 	return s.transferScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination, false)
 }
 
+// MoveScoped moves a secret into the target scope under a new name, deleting the source.
 func (s *sqliteStore) MoveScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error) (*Secret, error) {
 	return s.transferScoped(ctx, sourceID, sourceWorkspaceID, targetScope, targetWorkspaceID, targetName, verifyDestination, true)
 }
 
+// transferScoped runs the atomic copy/move transfer: conflict check, insert, and optional source delete inside one transaction.
 func (s *sqliteStore) transferScoped(ctx context.Context, sourceID, sourceWorkspaceID string, targetScope SecretScope, targetWorkspaceID, targetName string, verifyDestination func(context.Context) error, deleteSource bool) (*Secret, error) {
 	if err := validateSecretScope(targetScope, targetWorkspaceID); err != nil {
 		return nil, fmt.Errorf("scope validation: %w", err)

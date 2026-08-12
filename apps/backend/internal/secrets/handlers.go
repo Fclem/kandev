@@ -31,6 +31,7 @@ func RegisterRoutes(router *gin.Engine, dispatcher *ws.Dispatcher, svc *Service,
 	h.registerWS(dispatcher)
 }
 
+// registerHTTP registers the secrets HTTP routes under /api/v1.
 func (h *Handler) registerHTTP(router *gin.Engine) {
 	api := router.Group("/api/v1")
 	api.POST("/secrets", h.httpCreateSecret)
@@ -43,6 +44,7 @@ func (h *Handler) registerHTTP(router *gin.Engine) {
 	api.POST("/secrets/:id/move", h.httpMoveSecret)
 }
 
+// registerWS registers the secrets WebSocket actions on the dispatcher.
 func (h *Handler) registerWS(dispatcher *ws.Dispatcher) {
 	dispatcher.RegisterFunc(ws.ActionSecretList, h.wsList)
 	dispatcher.RegisterFunc(ws.ActionSecretCreate, h.wsCreate)
@@ -55,6 +57,7 @@ func (h *Handler) registerWS(dispatcher *ws.Dispatcher) {
 
 // HTTP handlers
 
+// httpCreateSecret handles POST /api/v1/secrets.
 func (h *Handler) httpCreateSecret(c *gin.Context) {
 	var req CreateSecretRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -71,6 +74,7 @@ func (h *Handler) httpCreateSecret(c *gin.Context) {
 	c.JSON(http.StatusCreated, item)
 }
 
+// httpListSecrets handles GET /api/v1/secrets.
 func (h *Handler) httpListSecrets(c *gin.Context) {
 	opts := SecretListOptions{
 		Scope:         SecretScope(c.Query("scope")),
@@ -89,6 +93,7 @@ func (h *Handler) httpListSecrets(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+// httpGetSecret handles GET /api/v1/secrets/:id.
 func (h *Handler) httpGetSecret(c *gin.Context) {
 	id := c.Param("id")
 	secret, err := h.getSecret(c, id)
@@ -99,6 +104,7 @@ func (h *Handler) httpGetSecret(c *gin.Context) {
 	c.JSON(http.StatusOK, secret)
 }
 
+// httpUpdateSecret handles PUT /api/v1/secrets/:id.
 func (h *Handler) httpUpdateSecret(c *gin.Context) {
 	id := c.Param("id")
 	var req UpdateSecretRequest
@@ -116,6 +122,7 @@ func (h *Handler) httpUpdateSecret(c *gin.Context) {
 	c.JSON(http.StatusOK, item)
 }
 
+// httpDeleteSecret handles DELETE /api/v1/secrets/:id.
 func (h *Handler) httpDeleteSecret(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.deleteSecret(c, id); err != nil {
@@ -125,6 +132,7 @@ func (h *Handler) httpDeleteSecret(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// httpRevealSecret handles POST /api/v1/secrets/:id/reveal.
 func (h *Handler) httpRevealSecret(c *gin.Context) {
 	id := c.Param("id")
 	value, err := h.revealSecret(c, id)
@@ -137,6 +145,7 @@ func (h *Handler) httpRevealSecret(c *gin.Context) {
 
 // WS handlers
 
+// wsList handles the secrets.list WebSocket action.
 func (h *Handler) wsList(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	var req struct {
 		Scope         SecretScope `json:"scope"`
@@ -158,6 +167,7 @@ func (h *Handler) wsList(ctx context.Context, msg *ws.Message) (*ws.Message, err
 	return ws.NewResponse(msg.ID, msg.Action, items)
 }
 
+// wsCreate handles the secrets.create WebSocket action.
 func (h *Handler) wsCreate(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	var req CreateSecretRequest
 	if err := msg.ParsePayload(&req); err != nil {
@@ -171,6 +181,7 @@ func (h *Handler) wsCreate(ctx context.Context, msg *ws.Message) (*ws.Message, e
 	return ws.NewResponse(msg.ID, msg.Action, item)
 }
 
+// wsUpdate handles the secrets.update WebSocket action.
 func (h *Handler) wsUpdate(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	var payload struct {
 		ID          string `json:"id"`
@@ -188,6 +199,7 @@ func (h *Handler) wsUpdate(ctx context.Context, msg *ws.Message) (*ws.Message, e
 	return ws.NewResponse(msg.ID, msg.Action, item)
 }
 
+// wsDelete handles the secrets.delete WebSocket action.
 func (h *Handler) wsDelete(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	var payload struct {
 		ID          string `json:"id"`
@@ -203,6 +215,7 @@ func (h *Handler) wsDelete(ctx context.Context, msg *ws.Message) (*ws.Message, e
 	return ws.NewResponse(msg.ID, msg.Action, map[string]bool{"success": true})
 }
 
+// wsReveal handles the secrets.reveal WebSocket action.
 func (h *Handler) wsReveal(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	var payload struct {
 		ID          string `json:"id"`
@@ -219,6 +232,8 @@ func (h *Handler) wsReveal(ctx context.Context, msg *ws.Message) (*ws.Message, e
 	return ws.NewResponse(msg.ID, msg.Action, RevealSecretResponse{Value: value})
 }
 
+// getSecret fetches a secret by ID, resolving workspace-scoped access from
+// the request's workspace_id query parameter.
 func (h *Handler) getSecret(c *gin.Context, id string) (*Secret, error) {
 	if workspaceID := c.Query("workspace_id"); workspaceID != "" {
 		return h.service.GetWorkspaceSecret(c.Request.Context(), id, workspaceID)
@@ -226,6 +241,8 @@ func (h *Handler) getSecret(c *gin.Context, id string) (*Secret, error) {
 	return h.service.Get(c.Request.Context(), id)
 }
 
+// updateSecret updates a secret, resolving workspace-scoped access from the
+// request's workspace_id query parameter.
 func (h *Handler) updateSecret(c *gin.Context, id string, req *UpdateSecretRequest) (*SecretListItem, error) {
 	if workspaceID := c.Query("workspace_id"); workspaceID != "" {
 		return h.service.UpdateWorkspaceSecret(c.Request.Context(), id, workspaceID, req)
@@ -233,6 +250,8 @@ func (h *Handler) updateSecret(c *gin.Context, id string, req *UpdateSecretReque
 	return h.service.Update(c.Request.Context(), id, req)
 }
 
+// updateSecretForWorkspace updates a secret, targeting the workspace when
+// workspaceID is non-empty and falling back to the global scope otherwise.
 func (h *Handler) updateSecretForWorkspace(ctx context.Context, id, workspaceID string, req *UpdateSecretRequest) (*SecretListItem, error) {
 	if workspaceID != "" {
 		return h.service.UpdateWorkspaceSecret(ctx, id, workspaceID, req)
@@ -240,6 +259,8 @@ func (h *Handler) updateSecretForWorkspace(ctx context.Context, id, workspaceID 
 	return h.service.Update(ctx, id, req)
 }
 
+// deleteSecret deletes a secret, resolving workspace-scoped access from the
+// request's workspace_id query parameter.
 func (h *Handler) deleteSecret(c *gin.Context, id string) error {
 	if workspaceID := c.Query("workspace_id"); workspaceID != "" {
 		return h.service.DeleteWorkspaceSecret(c.Request.Context(), id, workspaceID)
@@ -247,6 +268,8 @@ func (h *Handler) deleteSecret(c *gin.Context, id string) error {
 	return h.service.Delete(c.Request.Context(), id)
 }
 
+// deleteSecretForWorkspace deletes a secret, targeting the workspace when
+// workspaceID is non-empty and falling back to the global scope otherwise.
 func (h *Handler) deleteSecretForWorkspace(ctx context.Context, id, workspaceID string) error {
 	if workspaceID != "" {
 		return h.service.DeleteWorkspaceSecret(ctx, id, workspaceID)
@@ -254,6 +277,8 @@ func (h *Handler) deleteSecretForWorkspace(ctx context.Context, id, workspaceID 
 	return h.service.Delete(ctx, id)
 }
 
+// revealSecret returns a secret's value, resolving workspace-scoped access
+// from the request's workspace_id query parameter.
 func (h *Handler) revealSecret(c *gin.Context, id string) (string, error) {
 	if workspaceID := c.Query("workspace_id"); workspaceID != "" {
 		return h.service.RevealWorkspaceSecret(c.Request.Context(), id, workspaceID)
@@ -261,6 +286,8 @@ func (h *Handler) revealSecret(c *gin.Context, id string) (string, error) {
 	return h.service.Reveal(c.Request.Context(), id)
 }
 
+// revealSecretForWorkspace returns a secret's value, targeting the workspace
+// when workspaceID is non-empty and falling back to the global scope otherwise.
 func (h *Handler) revealSecretForWorkspace(ctx context.Context, id, workspaceID string) (string, error) {
 	if workspaceID != "" {
 		return h.service.RevealWorkspaceSecret(ctx, id, workspaceID)
@@ -270,14 +297,18 @@ func (h *Handler) revealSecretForWorkspace(ctx context.Context, id, workspaceID 
 
 // HTTP copy/move handlers
 
+// httpCopySecret handles POST /api/v1/secrets/:id/copy.
 func (h *Handler) httpCopySecret(c *gin.Context) {
 	h.httpTransferSecret(c, false)
 }
 
+// httpMoveSecret handles POST /api/v1/secrets/:id/move.
 func (h *Handler) httpMoveSecret(c *gin.Context) {
 	h.httpTransferSecret(c, true)
 }
 
+// httpTransferSecret implements the shared HTTP copy/move flow for a secret;
+// move selects move semantics, false selects copy.
 func (h *Handler) httpTransferSecret(c *gin.Context, move bool) {
 	id := c.Param("id")
 	var req CopySecretRequest
@@ -323,10 +354,12 @@ func (h *Handler) transferError(err error) (int, string) {
 
 // WS copy/move handlers
 
+// wsCopy handles the secrets.copy WebSocket action.
 func (h *Handler) wsCopy(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	return h.wsTransfer(ctx, msg, false)
 }
 
+// wsMove handles the secrets.move WebSocket action.
 func (h *Handler) wsMove(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	return h.wsTransfer(ctx, msg, true)
 }
@@ -370,6 +403,8 @@ func (p *wsTransferPayload) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// wsTransfer implements the shared WebSocket copy/move flow for a secret;
+// move selects move semantics, false selects copy.
 func (h *Handler) wsTransfer(ctx context.Context, msg *ws.Message, move bool) (*ws.Message, error) {
 	var payload wsTransferPayload
 	if err := msg.ParsePayload(&payload); err != nil {
@@ -384,6 +419,7 @@ func (h *Handler) wsTransfer(ctx context.Context, msg *ws.Message, move bool) (*
 	return ws.NewResponse(msg.ID, msg.Action, item)
 }
 
+// transferWSError maps a transfer error to its WebSocket payload and status.
 func (h *Handler) transferWSError(err error) (string, string) {
 	switch {
 	case errors.Is(err, ErrSecretValidation):

@@ -8,16 +8,19 @@ import type {
   SecretScope,
 } from "@/lib/types/http-secrets";
 
+/** Options for listing secrets: optional scope, workspace, and include-global filter. */
 export type SecretListOptions = ApiRequestOptions & {
   scope?: SecretScope;
   workspaceId?: string;
   includeGlobal?: boolean;
 };
 
+/** Common options that scope a secrets request to a workspace. */
 export type SecretScopedOptions = ApiRequestOptions & {
   workspaceId?: string;
 };
 
+/** Appends scope/workspace/includeGlobal query parameters to a secrets API path. */
 function withSecretQuery(
   path: string,
   options?: { scope?: SecretScope; workspaceId?: string; includeGlobal?: boolean },
@@ -30,6 +33,7 @@ function withSecretQuery(
   return suffix ? `${path}?${suffix}` : path;
 }
 
+/** Lists secrets, optionally filtered by scope, workspace, and global inclusion. */
 export async function listSecrets(options?: SecretListOptions): Promise<SecretListItem[]> {
   const { scope, workspaceId, includeGlobal, ...requestOptions } = options ?? {};
   return fetchJson<SecretListItem[]>(
@@ -38,6 +42,7 @@ export async function listSecrets(options?: SecretListOptions): Promise<SecretLi
   );
 }
 
+/** Creates a secret from the given payload and returns the new item. */
 export async function createSecret(
   payload: CreateSecretRequest,
   options?: ApiRequestOptions,
@@ -48,6 +53,7 @@ export async function createSecret(
   });
 }
 
+/** Updates the secret with the given id and returns the updated item. */
 export async function updateSecret(
   id: string,
   payload: UpdateSecretRequest,
@@ -59,6 +65,7 @@ export async function updateSecret(
   });
 }
 
+/** Deletes the secret with the given id. */
 export async function deleteSecret(id: string, options?: SecretScopedOptions): Promise<void> {
   return fetchJson<void>(withSecretQuery(`/api/v1/secrets/${id}`, options), {
     ...options,
@@ -66,6 +73,7 @@ export async function deleteSecret(id: string, options?: SecretScopedOptions): P
   });
 }
 
+/** Reveals the value of the secret with the given id. */
 export async function revealSecret(
   id: string,
   options?: SecretScopedOptions,

@@ -16,6 +16,7 @@ import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import type { CopyMoveMode, SecretDestination } from "./copy-move-secret-dialog";
 
+/** Renders the Copy/Move dialog body: mode selector, destination picker, target name, and footer actions. */
 export function CopyMoveDialogBody({
   secretName,
   originToken,
@@ -107,6 +108,7 @@ export function CopyMoveDialogBody({
   );
 }
 
+/** Renders the dialog footer with cancel, submit, and close actions for a copy/move transfer. */
 function TransferDialogFooter({
   mode,
   canSubmit,
@@ -155,6 +157,7 @@ function TransferDialogFooter({
   );
 }
 
+/** Renders the target-name input with conflict and validation error display. */
 function TargetNameField({
   name,
   onNameChange,
@@ -198,6 +201,7 @@ function TargetNameField({
   );
 }
 
+/** Renders the copy/move mode radio group, including the move warning. */
 function TransferModeField({
   mode,
   onModeChange,
@@ -239,6 +243,7 @@ function TransferModeField({
   );
 }
 
+/** Renders the destination picker with loading, error/retry, and empty states. */
 function DestinationField({
   destinations,
   workspaceNameById,

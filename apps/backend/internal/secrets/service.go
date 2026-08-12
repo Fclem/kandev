@@ -39,6 +39,8 @@ func (s *Service) SetWorkspaceExistenceChecker(checker func(context.Context, str
 	s.workspaceExistence = checker
 }
 
+// validateCreate validates a create request, trimming the name and checking
+// length, scope, and workspace constraints.
 func (s *Service) validateCreate(req *CreateSecretRequest) error {
 	req.Name = strings.TrimSpace(req.Name)
 
@@ -57,6 +59,8 @@ func (s *Service) validateCreate(req *CreateSecretRequest) error {
 	return nil
 }
 
+// validateUpdate validates an update request, trimming the name and checking
+// length constraints on the fields that are present.
 func (s *Service) validateUpdate(req *UpdateSecretRequest) error {
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
@@ -163,6 +167,8 @@ func (s *Service) RevealForWorkspace(ctx context.Context, id, workspaceID string
 	return s.store.Reveal(ctx, id)
 }
 
+// RevealWorkspaceSecret returns the decrypted value of a Workspace secret
+// after checking the caller's workspace access.
 func (s *Service) RevealWorkspaceSecret(ctx context.Context, id, workspaceID string) (string, error) {
 	if _, err := s.GetWorkspaceSecret(ctx, id, workspaceID); err != nil {
 		return "", err
@@ -213,6 +219,8 @@ func (s *Service) UpdateForWorkspace(ctx context.Context, id, workspaceID string
 	return secretListItem(secret), nil
 }
 
+// UpdateWorkspaceSecret validates and updates a Workspace secret after
+// checking the caller's workspace access.
 func (s *Service) UpdateWorkspaceSecret(ctx context.Context, id, workspaceID string, req *UpdateSecretRequest) (*SecretListItem, error) {
 	if err := s.validateUpdate(req); err != nil {
 		return nil, fmt.Errorf("validation: %w", err)
@@ -246,6 +254,8 @@ func (s *Service) DeleteForWorkspace(ctx context.Context, id, workspaceID string
 	return s.store.Delete(ctx, id)
 }
 
+// DeleteWorkspaceSecret deletes a Workspace secret after checking the
+// caller's workspace access.
 func (s *Service) DeleteWorkspaceSecret(ctx context.Context, id, workspaceID string) error {
 	if _, err := s.GetWorkspaceSecret(ctx, id, workspaceID); err != nil {
 		return err
@@ -281,6 +291,8 @@ func (s *Service) ListScoped(ctx context.Context, opts SecretListOptions) ([]*Se
 	return nil, fmt.Errorf("workspace-scoped secret storage is unavailable")
 }
 
+// authorizeScope enforces workspace authorization for workspace-scoped
+// requests; global scope requires no check.
 func (s *Service) authorizeScope(ctx context.Context, scope SecretScope, workspaceID string) error {
 	if scope != ScopeWorkspace {
 		return nil
@@ -291,6 +303,8 @@ func (s *Service) authorizeScope(ctx context.Context, scope SecretScope, workspa
 	return s.workspaceAuthorizer(ctx, workspaceID)
 }
 
+// secretListItem converts a stored secret into a list item with a
+// normalized scope.
 func secretListItem(secret *Secret) *SecretListItem {
 	return &SecretListItem{
 		ID:          secret.ID,
@@ -318,6 +332,9 @@ func (s *Service) Move(ctx context.Context, sourceID, sourceWorkspaceID string, 
 	return s.copyOrMove(ctx, sourceID, sourceWorkspaceID, req, true)
 }
 
+// copyOrMove is the shared implementation behind Copy and Move: it validates
+// the request, resolves the source secret and target name, and performs the
+// copy or move in one store operation.
 func (s *Service) copyOrMove(ctx context.Context, sourceID, sourceWorkspaceID string, req *CopySecretRequest, move bool) (*SecretListItem, error) {
 	if req == nil {
 		return nil, fmt.Errorf("%w: request is required", ErrSecretValidation)

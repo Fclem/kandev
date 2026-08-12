@@ -19,6 +19,7 @@ type DeleteSecretDialogProps = {
   isBusy: boolean;
 };
 
+/** Renders the confirm-delete dialog for a secret, with cancel and destructive confirm actions. */
 export function DeleteSecretDialog({
   target,
   onClose,

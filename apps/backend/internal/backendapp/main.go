@@ -152,6 +152,9 @@ type backendFlags struct {
 	Version  bool
 }
 
+// parseBackendFlags parses the `kandev __backend` command-line flags into a
+// backendFlags struct, returning the parsed flags, a usage printer, and any
+// parse error.
 func parseBackendFlags(args []string) (backendFlags, func(), error) {
 	flags := flag.NewFlagSet("kandev __backend", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
@@ -271,6 +274,9 @@ func Run(args []string, build BuildInfo) int {
 	return 0
 }
 
+// acquireRuntimeStateOwnership acquires the advisory ownership lock over the
+// backend's runtime state (home dir and database), preventing a second backend
+// instance from acting on the same state.
 func acquireRuntimeStateOwnership(cfg *config.Config) (*ownershiplock.Owner, error) {
 	targets, err := ownershiplock.Targets(cfg.ResolvedHomeDir(), cfg.Database.Driver, cfg.Database.Path)
 	if err != nil {
@@ -279,6 +285,8 @@ func acquireRuntimeStateOwnership(cfg *config.Config) (*ownershiplock.Owner, err
 	return ownershiplock.Acquire(targets)
 }
 
+// setBuildInfo stamps the package-level build variables with the provided
+// build metadata, skipping fields that were not populated.
 func setBuildInfo(build BuildInfo) {
 	if build.Version != "" {
 		Version = build.Version
@@ -311,6 +319,9 @@ func run(cfg *config.Config, log *logger.Logger, cleanups *[]func() error, runCl
 	return startServices(ctx, cfg, log, addCleanup, eventBus, runCleanups)
 }
 
+// applyStartupRuntimeFlags resolves persisted runtime-flag overrides and
+// applies them to the config, returning false if resolution fails. It is a
+// no-op when no runtime-flag repository is configured.
 func applyStartupRuntimeFlags(ctx context.Context, cfg *config.Config, repos *Repositories, log *logger.Logger) bool {
 	if repos.RuntimeFlags == nil {
 		return true
@@ -992,6 +1003,8 @@ func startGatewayAndServe(
 	return true
 }
 
+// serverListenAddr formats the host and port into a listen address, binding
+// all interfaces when host is empty.
 func serverListenAddr(host string, port int) string {
 	host = strings.TrimSpace(host)
 	if host == "" {
@@ -1000,6 +1013,8 @@ func serverListenAddr(host string, port int) string {
 	return net.JoinHostPort(host, fmt.Sprint(port))
 }
 
+// serverProbeAddr rewrites a listen address into a loopback address suitable
+// for local probing, mapping wildcard hosts to 127.0.0.1 / ::1.
 func serverProbeAddr(listenAddr string) string {
 	host, port, err := net.SplitHostPort(listenAddr)
 	if err != nil {
@@ -1142,6 +1157,8 @@ func initOfficeServices(
 	return runProcessorSvc, true
 }
 
+// newRunProcessorService constructs the office run-processor service, wiring
+// its workspace, task, PR, and task-starter adapters to the backend services.
 func newRunProcessorService(
 	cfg *config.Config,
 	repos *Repositories,
@@ -1263,12 +1280,14 @@ type officeRoutingRepoAdapter struct {
 	repo *officesqlite.Repository
 }
 
+// GetWorkspaceRouting returns the routing configuration for a workspace.
 func (a *officeRoutingRepoAdapter) GetWorkspaceRouting(
 	ctx context.Context, workspaceID string,
 ) (*routing.WorkspaceConfig, error) {
 	return a.repo.GetWorkspaceRouting(ctx, workspaceID)
 }
 
+// ListProviderHealth returns the provider health statuses for a workspace.
 func (a *officeRoutingRepoAdapter) ListProviderHealth(
 	ctx context.Context, workspaceID string,
 ) ([]officemodels.ProviderHealth, error) {
@@ -1281,6 +1300,7 @@ type schedulerTaskStarterAdapter struct {
 	orch *orchestrator.Service
 }
 
+// StartTask starts a task on the orchestrator with the given launch parameters.
 func (a *schedulerTaskStarterAdapter) StartTask(
 	ctx context.Context,
 	taskID, agentProfileID, executorID, executorProfileID string,
@@ -1293,6 +1313,8 @@ func (a *schedulerTaskStarterAdapter) StartTask(
 	return err
 }
 
+// StartTaskWithRoute starts a task on the orchestrator with an explicit launch
+// context and route override.
 func (a *schedulerTaskStarterAdapter) StartTaskWithRoute(
 	ctx context.Context,
 	taskID, agentProfileID string,
@@ -1451,6 +1473,8 @@ type runsServiceEngineAdapter struct {
 	svc *runsservice.Service
 }
 
+// QueueRun enqueues a run, translating the engine's QueueRunRequest into the
+// runs-service request shape.
 func (a *runsServiceEngineAdapter) QueueRun(ctx context.Context, req workflowengine.QueueRunRequest) error {
 	return a.svc.QueueRun(ctx, runsservice.QueueRunRequest{
 		AgentProfileID: req.AgentProfileID,
@@ -1557,10 +1581,14 @@ type officeFailureInboxAdapter struct {
 	svc *officeservice.Service
 }
 
+// newOfficeFailureInboxAdapter wraps an office service in the dashboard
+// failure-inbox adapter so its rows can be served through the dashboard API.
 func newOfficeFailureInboxAdapter(svc *officeservice.Service) *officeFailureInboxAdapter {
 	return &officeFailureInboxAdapter{svc: svc}
 }
 
+// ListFailedRunInboxRows returns the failed-run inbox rows for a workspace and
+// user, mapped into the dashboard failure-inbox row type.
 func (a *officeFailureInboxAdapter) ListFailedRunInboxRows(
 	ctx context.Context, workspaceID, userID string,
 ) ([]officedashboard.FailureInboxRow, error) {
@@ -1583,6 +1611,8 @@ func (a *officeFailureInboxAdapter) ListFailedRunInboxRows(
 	return out, nil
 }
 
+// ListPausedAgentInboxRows returns the paused-agent inbox rows for a workspace
+// and user, mapped into the dashboard failure-inbox row type.
 func (a *officeFailureInboxAdapter) ListPausedAgentInboxRows(
 	ctx context.Context, workspaceID, userID string,
 ) ([]officedashboard.FailureInboxRow, error) {
@@ -1834,6 +1864,8 @@ func buildOfficeDashboardService(
 // buildHTTPServer creates the HTTP server with all routes registered.
 var newInterimSettingsInterlockToken = httpmw.NewInterimSettingsInterlockToken
 
+// resolvedHTTPPort returns the configured HTTP server port, falling back to
+// the default backend port when unset.
 func resolvedHTTPPort(cfg *config.Config) int {
 	if cfg.Server.Port != 0 {
 		return cfg.Server.Port
@@ -1841,6 +1873,8 @@ func resolvedHTTPPort(cfg *config.Config) int {
 	return ports.Backend
 }
 
+// buildHTTPServer creates the HTTP server with all middleware and routes
+// registered against the gateway and service layer.
 func buildHTTPServer(
 	cfg *config.Config,
 	log *logger.Logger,

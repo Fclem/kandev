@@ -54,6 +54,7 @@ type CopyMoveSecretDialogProps = {
   onCompleted: (item: SecretListItem, mode: CopyMoveMode) => void;
 };
 
+/** Renders the copy/move secret dialog, wiring form state, destinations, and submission. */
 export function CopyMoveSecretDialog({
   secret,
   originToken,
@@ -208,6 +209,7 @@ type TransferCanSubmitArgs = {
   destinationsError: boolean;
 };
 
+/** Returns whether the transfer can be submitted given the current form, destination, and request state. */
 function transferCanSubmit({
   isBusy,
   destination,
@@ -246,6 +248,7 @@ type TransferSubmitArgs = {
   open: boolean;
 };
 
+/** Runs the copy/move request, guarding against stale results across dialog sessions, and exposes busy/canSubmit/formError state. */
 function useTransferSubmit({
   secret,
   mode,
@@ -289,6 +292,7 @@ function useTransferSubmit({
     destinationsError,
   });
 
+  /** Runs the transfer request, guarding stale completions against dialog reopenings. */
   const run = async () => {
     if (!canSubmit || destination === null) {
       return;

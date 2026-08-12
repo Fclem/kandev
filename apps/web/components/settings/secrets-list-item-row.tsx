@@ -19,6 +19,7 @@ type SecretListItemRowProps = {
   isEditing: boolean;
 };
 
+/** Renders a single secret row: name, scope badge, and copy/move, reveal, edit, and delete actions. */
 export function SecretListItemRow({
   secret,
   workspaceId,
@@ -34,6 +35,7 @@ export function SecretListItemRow({
   const [revealedValue, setRevealedValue] = useState<string | null>(null);
   const [revealing, setRevealing] = useState(false);
 
+  /** Fetches and shows the secret value, or hides it when already revealed. */
   const handleReveal = async () => {
     if (revealed) {
       setRevealed(false);

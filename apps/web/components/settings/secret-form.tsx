@@ -28,6 +28,7 @@ type SecretFormProps = {
   baselineState?: SecretFormState;
 };
 
+/** Renders the secret name/value form with submit and cancel actions. */
 export function SecretForm({
   title,
   formState,

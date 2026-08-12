@@ -21,6 +21,7 @@ import { CopyMoveSecretDialog, type CopyMoveMode } from "./copy-move-secret-dial
 /*  State + actions hooks                                              */
 /* ------------------------------------------------------------------ */
 
+/** Holds the secrets list plus all settings-panel UI state (editing, create form, delete/transfer targets). */
 function useSecretsState(
   scope: SecretScope,
   workspaceId?: string,
@@ -88,6 +89,7 @@ function useTransferFocusRestore() {
   return { rememberTransferTrigger, restoreTransferTrigger };
 }
 
+/** Builds the create/update/delete request runners that mutate the store and reset the form on success. */
 function useSecretRequests(
   scope: SecretScope,
   workspaceId: string | undefined,
@@ -132,6 +134,7 @@ function useSecretRequests(
   return { createRequest, updateRequest, deleteRequest };
 }
 
+/** Composes request runners and UI actions (create, edit, delete, transfer) from the secrets state. */
 function useSecretsActions(state: ReturnType<typeof useSecretsState>) {
   const { rememberTransferTrigger, restoreTransferTrigger } = useTransferFocusRestore();
   const {
@@ -230,6 +233,7 @@ function useSecretsActions(state: ReturnType<typeof useSecretsState>) {
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
+/** Computes the edit draft's revision, dirty flag, and baseline from the current form state. */
 function getSecretEditState(
   items: SecretListItem[],
   editingId: string | null,
@@ -245,6 +249,7 @@ function getSecretEditState(
   };
 }
 
+/** Computes the combined draft metadata (dirty flag, revision) covering both create and edit states. */
 export function getSecretDraftMeta(
   items: SecretListItem[],
   editingId: string | null,
@@ -303,16 +308,19 @@ type SecretsSettingsProps = {
   initialItems?: SecretListItem[];
 };
 
+/** Returns the settings title for the given secret scope. */
 function secretScopeTitle(t: TFunction, scope: SecretScope) {
   return scope === "workspace" ? t("settings:secrets") : t("settings:globalSecrets");
 }
 
+/** Returns the settings description for the given secret scope. */
 function secretScopeDescription(t: TFunction, scope: SecretScope) {
   return scope === "workspace"
     ? t("settings:workspaceSecretsDescription")
     : t("settings:manageApiKeysAndCredentialsSecrets");
 }
 
+/** Returns the reason a dirty draft cannot be saved, or undefined when it can. */
 function secretDraftInvalidReason(
   t: TFunction,
   showCreate: boolean,
@@ -334,6 +342,7 @@ type SecretsSettingsBodyProps = {
   onFormChange: (patch: Partial<SecretFormState>) => void;
 };
 
+/** Renders the secrets list, create/edit forms, and delete dialog for the current scope. */
 function SecretsSettingsBody({
   scope,
   workspaceId,
@@ -429,6 +438,7 @@ function SecretsSettingsBody({
   );
 }
 
+/** Renders the page-template wrapper with dirty-state handling for the secrets panel. */
 function SecretsSettingsContent({
   scope,
   workspaceId,
@@ -446,6 +456,7 @@ function SecretsSettingsContent({
   const { edit, isDirty, revision } = getSecretDraftMeta(items, editingId, showCreate, formState);
   const invalidReason = secretDraftInvalidReason(t, showCreate, isDirty, isValid);
 
+  /** Applies a partial form patch to the draft state. */
   const onFormChange = (patch: Partial<SecretFormState>) =>
     setFormState((prev) => ({ ...prev, ...patch }));
 
@@ -481,6 +492,7 @@ function SecretsSettingsContent({
   );
 }
 
+/** Renders the full secrets settings panel: state, actions, and the copy/move dialog. */
 export function SecretsSettings({
   scope = "global",
   workspaceId,
@@ -491,6 +503,7 @@ export function SecretsSettings({
   const globalAdd = useAppStore((s) => s.addSecret);
   const workspaceNames = useAppStore((s) => s.workspaces.items);
 
+  /** Resolves the display origin token for a secret's source scope. */
   const originTokenFor = (secret: SecretListItem) =>
     secret.scope === "workspace"
       ? (workspaceNames.find((workspace) => workspace.id === secret.workspace_id)?.name ??
@@ -502,6 +515,7 @@ export function SecretsSettings({
   // scope: Global targets always land in the Global store (from any page),
   // workspace targets join the page's list only when the page is that
   // workspace, and a Move removes the source from the page's own list.
+  /** Routes a completed transfer: adds the returned item to the right store and removes the source on move. */
   const handleTransferCompleted = (item: SecretListItem, mode: CopyMoveMode) => {
     if (!item.scope || item.scope === "global") {
       globalAdd(item);

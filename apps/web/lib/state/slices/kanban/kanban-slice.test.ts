@@ -203,7 +203,7 @@ describe("kanban slice archived sidebar projection", () => {
 });
 
 describe("kanban slice resume-skipped marker", () => {
-  it("records the skip for a stopped session and clears it on request", () => {
+  it("records the skip for any session and clears it on request", () => {
     const store = makeStore();
     store.getState().setResumeSkipped("session-idle", true);
     expect(store.getState().tasks.resumeSkippedSessionIds["session-idle"]).toBe(true);
@@ -212,33 +212,16 @@ describe("kanban slice resume-skipped marker", () => {
     expect(store.getState().tasks.resumeSkippedSessionIds["session-idle"]).toBeUndefined();
   });
 
-  it("refuses to record the skip while the session is STARTING or RUNNING", () => {
-    // Minimal composed store: the kanban slice + a taskSessions bag. Kept out
-    // of createAppStore (too heavy for the shared suite run — it timed out).
-    type Composed = KanbanSlice & {
-      taskSessions: { items: Record<string, { state?: string }> };
-    };
-    const store = create<Composed>()(
-      immer((set, get, api) => ({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- slice composition matches lib/state/store.ts
-        ...createKanbanSlice(set as any, get as any, api as any),
-        taskSessions: { items: {} },
-      })),
-    );
-    store.setState({
-      taskSessions: {
-        items: { "session-running": { state: "RUNNING" } },
-      },
-    });
+  it("records the skip as a plain keyed write (the STARTING/RUNNING guard lives at the hook call site)", () => {
+    // The slice is deliberately a dumb write: the guard that refuses to mark
+    // a starting/running session resume-skipped reads the live session row
+    // with typed store access in use-session-resumption's skip branch. A
+    // direct slice call records unconditionally.
+    const store = makeStore();
     store.getState().setResumeSkipped("session-running", true);
-    expect(store.getState().tasks.resumeSkippedSessionIds["session-running"]).toBeUndefined();
+    expect(store.getState().tasks.resumeSkippedSessionIds["session-running"]).toBe(true);
 
-    store.setState({
-      taskSessions: {
-        items: { "session-starting": { state: "STARTING" } },
-      },
-    });
-    store.getState().setResumeSkipped("session-starting", true);
-    expect(store.getState().tasks.resumeSkippedSessionIds["session-starting"]).toBeUndefined();
+    store.getState().setResumeSkipped("session-running", false);
+    expect(store.getState().tasks.resumeSkippedSessionIds["session-running"]).toBeUndefined();
   });
 });

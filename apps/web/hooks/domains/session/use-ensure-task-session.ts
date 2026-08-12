@@ -115,7 +115,11 @@ export function resolveFinalStepInfo(
 ): { isFinalStep: boolean; stepsKnown: boolean } {
   const workflowStepId = task?.workflowStepId ?? null;
   const taskWorkflowId = task?.workflowId ?? null;
-  if (!workflowStepId) return { isFinalStep: false, stepsKnown: true };
+  // A task whose own workflow is unknown must never resolve against another
+  // workflow's steps: if workflowStepId merely matches a terminal step of the
+  // ACTIVE workflow, gating would suppress auto-start for a task whose own
+  // workflow we cannot see. No workflow id → no gate.
+  if (!workflowStepId || !taskWorkflowId) return { isFinalStep: false, stepsKnown: true };
   const snapshot = taskWorkflowId ? snapshots[taskWorkflowId] : undefined;
   const steps = resolveWorkflowSteps(snapshot, taskWorkflowId, kanbanWorkflowId, kanbanSteps);
   const isFinalStep = isFinalWorkflowStep(workflowStepId, steps);

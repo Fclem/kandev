@@ -74,7 +74,7 @@ export type ResumeStateSetter = {
   getLiveSession?: (sessionId: string) => SessionLike | null;
 };
 
-type SessionLike = { started_at?: string; updated_at?: string } | null;
+type SessionLike = { started_at?: string; updated_at?: string; state?: string } | null;
 
 /** Apply a successful resume response to local state. */
 function applyResumeResponse(
@@ -243,20 +243,25 @@ type LiveSessionLike = (SessionLike & { state?: string }) | null;
 
 /**
  * Monotonic status-hydration guard: a `task.session.status` response must not
- * downgrade a live STARTING/RUNNING session state (a stale response can race a
- * newer `session.state_changed` WS event and leave the UI showing a stopped
- * session while the agent runs), and must not overwrite a live TERMINAL state
- * (FAILED/CANCELLED/COMPLETED — which determines the recovery affordances the
- * UI shows) with an older or timestamp-less response. In both cases the
- * incoming status is accepted only when its timestamp is newer than the live
- * session's.
+ * downgrade a live STARTING/RUNNING/WAITING_FOR_INPUT session state (a stale
+ * response can race a newer `session.state_changed` WS event and leave the UI
+ * showing a stopped session while the agent runs — WAITING_FOR_INPUT means the
+ * agent is alive and awaiting the next prompt, so an older response claiming
+ * otherwise must not overwrite it), and must not overwrite a live TERMINAL
+ * state (FAILED/CANCELLED/COMPLETED — which determines the recovery
+ * affordances the UI shows) with an older or timestamp-less response. In both
+ * cases the incoming status is accepted only when its timestamp is newer than
+ * the live session's.
  */
 function shouldApplyStatusState(status: SessionStatus, live: LiveSessionLike): boolean {
   if (!status.state) return false;
   const liveState = live?.state;
-  const liveIsRunning = liveState === "STARTING" || liveState === "RUNNING";
-  const liveIsTerminal = TERMINAL_STATES.has(liveState as TaskSessionState);
-  if (!liveIsRunning && !liveIsTerminal) return true;
+  const liveIsProtected =
+    liveState === "STARTING" ||
+    liveState === "RUNNING" ||
+    liveState === "WAITING_FOR_INPUT" ||
+    TERMINAL_STATES.has(liveState as TaskSessionState);
+  if (!liveIsProtected) return true;
   const liveUpdated = live?.updated_at ? Date.parse(live.updated_at) : Number.NaN;
   const incomingUpdated = status.updated_at ? Date.parse(status.updated_at) : Number.NaN;
   return (
@@ -341,6 +346,18 @@ function decideResumeAction(status: SessionStatus, preventAutoStart: boolean): R
   return "idle";
 }
 
+/**
+ * Record the resume-skipped marker only while the live session row is not
+ * STARTING/RUNNING (checked here with typed live-store access so a stale
+ * status can never leave a Start button beside a running agent).
+ */
+function recordResumeSkipIfStopped(setters: ResumeStateSetter, sessionId: string): void {
+  const liveState = setters.getLiveSession?.(sessionId)?.state;
+  if (liveState !== "STARTING" && liveState !== "RUNNING") {
+    setters.setResumeSkipped?.(sessionId, true);
+  }
+}
+
 async function checkAndResume({
   taskId,
   sessionId,
@@ -381,11 +398,11 @@ async function checkAndResume({
         break;
       case "skip":
         // The preference gates the open-time auto-resume: leave the session
-        // stopped and record the skip so the Start agent button renders. The
-        // slice action is conditional (refuses while STARTING/RUNNING), so a
-        // stale status cannot leave a button while the agent runs.
+        // stopped and record the skip so the Start agent button renders.
+        // The record is guarded against a live STARTING/RUNNING row (a stale
+        // status can race a running WS transition).
+        recordResumeSkipIfStopped(setters, sessionId);
         setters.setResumptionState("idle");
-        setters.setResumeSkipped?.(sessionId, true);
         break;
       case "resume":
         resumed = await resumeWithSilentFallback(taskId, sessionId, session, setters);
@@ -537,6 +554,19 @@ function buildGuardedSetters(
     },
     setWorktreeBranch: (b) => {
       if (guard()) setters.setWorktreeBranch(b);
+    },
+    // The remaining setters write store state keyed by session id, but a
+    // stale async callback completing after navigation can still touch the
+    // previous session's row (e.g. re-mark it resume-skipped or overwrite its
+    // status). Guard them all so a switched-away session is never mutated.
+    setTaskSession: (s) => {
+      if (guard()) setters.setTaskSession(s);
+    },
+    setAgentctlReady: (sid) => {
+      if (guard()) setters.setAgentctlReady?.(sid);
+    },
+    setResumeSkipped: (sid, skipped) => {
+      if (guard()) setters.setResumeSkipped?.(sid, skipped);
     },
   };
 }

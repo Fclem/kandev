@@ -7,6 +7,7 @@ import { sessionId as toSessionId, taskId as toTaskId } from "@/lib/types/http";
 import type { Message, TaskSessionState } from "@/lib/types/http";
 import type { ToolCallMetadata } from "@/components/task/chat/types";
 import { launchSession } from "@/lib/services/session-launch-service";
+import { isLaunchStateRegression } from "@/lib/session-state";
 import {
   buildResumeRequest,
   buildStartCreatedRequest,
@@ -97,13 +98,19 @@ function TaskDescriptionStartButton({ taskId, sessionId }: { taskId: string; ses
         // Hydrate the launch state (commonly STARTING) so the button hides
         // immediately and repeated start_created/resume requests cannot fire
         // against an already-starting session before the WS transition lands.
-        setTaskSession({
-          id: toSessionId(sessionId),
-          task_id: toTaskId(taskId),
-          state: response.state as TaskSessionState,
-          started_at: session?.started_at ?? "",
-          updated_at: session?.updated_at ?? "",
-        });
+        // Never apply it over a newer live state: a WS RUNNING/FAILED
+        // transition can land before the launch response resolves, and the
+        // delayed STARTING must not hide a running agent or a failure's
+        // recovery affordances.
+        if (!isLaunchStateRegression(session?.state, response.state)) {
+          setTaskSession({
+            id: toSessionId(sessionId),
+            task_id: toTaskId(taskId),
+            state: response.state as TaskSessionState,
+            started_at: session?.started_at ?? "",
+            updated_at: session?.updated_at ?? "",
+          });
+        }
       }
       // Only confirmed RUNNING clears the resume-skipped marker: a resume
       // response commonly reports STARTING (launch accepted, agent starting),

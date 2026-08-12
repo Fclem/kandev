@@ -195,9 +195,9 @@ export type KanbanSliceActions = {
   setActiveSessionAuto: (taskId: string, sessionId: string) => void;
   clearActiveSession: () => void;
   // setResumeSkipped records/clears the resume-skipped marker for a session.
-  // Recording is conditional: it refuses when the session's current state is
-  // STARTING or RUNNING, so a stale status response can never leave a Start
-  // button while the agent is actually running.
+  // Recording is guarded at the call site (the session-resumption hook reads
+  // the live session row with typed store access), so a stale status response
+  // can never leave a Start button while the agent is actually running.
   setResumeSkipped: (sessionId: string, skipped: boolean) => void;
   setWorkflowSnapshot: (workflowId: string, data: WorkflowSnapshotData) => void;
   setKanbanMultiLoading: (loading: boolean) => void;

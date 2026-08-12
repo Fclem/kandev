@@ -223,6 +223,7 @@ describe("isFinalWorkflowStep", () => {
   });
 });
 
+// eslint-disable-next-line max-lines-per-function -- test describe block, splitting hurts readability
 describe("useEnsureTaskSession prevent-auto-start gate", () => {
   it("requests autoStart:false for a final-step task when the preference is on", async () => {
     mockStoreState = {
@@ -261,6 +262,27 @@ describe("useEnsureTaskSession prevent-auto-start gate", () => {
     renderHook(() =>
       useEnsureTaskSession({ id: "task-1", workflowStepId: "step-1", workflowId: "wf-active" }),
     );
+    await flushMicrotasks();
+    expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1", undefined);
+  });
+
+  it("does NOT gate a task whose workflow id is missing even when its step id matches the active workflow's terminal step", async () => {
+    mockStoreState = {
+      userSettings: { preventAutoStartAgentOnOpen: true },
+      kanban: {
+        workflowId: "wf-active",
+        steps: [
+          { id: "step-1", position: 0 },
+          { id: "step-done", position: 1 },
+        ],
+        isLoading: false,
+      },
+      kanbanMulti: { snapshots: {} },
+    };
+    // No workflowId on the task: resolving against the active workflow's
+    // steps would gate a task whose own workflow is unknown, suppressing the
+    // auto-start the user expects. Missing workflow id → no gate.
+    renderHook(() => useEnsureTaskSession({ id: "task-1", workflowStepId: "step-done" }));
     await flushMicrotasks();
     expect(mockEnsureTaskSession).toHaveBeenCalledWith("task-1", undefined);
   });

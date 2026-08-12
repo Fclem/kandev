@@ -157,7 +157,7 @@ test.describe("Prevent auto-start on open", () => {
       await testPage.reload();
       await session.waitForLoad();
 
-      const startButton = testPage.getByTestId("task-description-start-button");
+      const startButton = testPage.getByTestId("session-resume-start-button");
       await expect(startButton).toBeVisible({ timeout: 60_000 });
       await expect(testPage.getByText("Resumed agent", { exact: false })).toHaveCount(0);
 

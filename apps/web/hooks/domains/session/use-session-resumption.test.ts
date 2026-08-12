@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockRequest = vi.fn();
@@ -34,6 +34,7 @@ const SESSION_ID = "s1";
 const TASK_ID = "t1";
 const FAILED_STATE = "FAILED";
 const LAUNCH_ACTION = "session.launch";
+const STATUS_ACTION = "task.session.status";
 const STARTED_AT = "2026-01-01T00:00:00.000Z";
 const LATER_AT = "2026-01-02T00:00:00.000Z";
 
@@ -291,7 +292,7 @@ describe("useSessionResumption", () => {
     await waitFor(() => {
       expect(result.current.sessionStatus?.capabilities?.embedded_vscode).toBe(true);
     });
-    expect(mockRequest).toHaveBeenLastCalledWith("task.session.status", {
+    expect(mockRequest).toHaveBeenLastCalledWith(STATUS_ACTION, {
       task_id: TASK_ID,
       session_id: SESSION_ID,
     });
@@ -364,8 +365,43 @@ describe("useSessionResumption prevent-auto-start gate", () => {
     });
     expect(mockSetResumeSkipped).not.toHaveBeenCalled();
   });
+
+  it("does not record the skip when the live session is already RUNNING (stale status race)", async () => {
+    // A status response taken before the agent started can arrive while the
+    // live row is RUNNING. The skip must not be recorded, or a Start button
+    // would appear beside a running agent.
+    mockSessionItems = {
+      s1: {
+        started_at: STARTED_AT,
+        updated_at: LATER_AT,
+        state: "RUNNING",
+      },
+    };
+    mockRequest.mockResolvedValueOnce({
+      session_id: SESSION_ID,
+      task_id: TASK_ID,
+      state: "IDLE",
+      is_agent_running: false,
+      is_resumable: true,
+      needs_resume: true,
+      updated_at: STARTED_AT, // older than the live RUNNING row
+    });
+
+    renderHook(() => useSessionResumption(TASK_ID, SESSION_ID));
+
+    await waitFor(() => {
+      expect(mockRequest).toHaveBeenCalledWith(STATUS_ACTION, {
+        task_id: TASK_ID,
+        session_id: SESSION_ID,
+      });
+    });
+    // The skip branch must consult the live row (RUNNING) and refuse.
+    expect(mockSetResumeSkipped).not.toHaveBeenCalled();
+    expect(mockSetTaskSession).not.toHaveBeenCalled();
+  });
 });
 
+// eslint-disable-next-line max-lines-per-function -- test describe block, splitting hurts readability
 describe("useSessionResumption monotonic terminal hydration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -394,7 +430,7 @@ describe("useSessionResumption monotonic terminal hydration", () => {
     renderHook(() => useSessionResumption("t1", "s1"));
 
     await waitFor(() => {
-      expect(mockRequest).toHaveBeenCalledWith("task.session.status", {
+      expect(mockRequest).toHaveBeenCalledWith(STATUS_ACTION, {
         task_id: "t1",
         session_id: "s1",
       });
@@ -426,7 +462,7 @@ describe("useSessionResumption monotonic terminal hydration", () => {
     renderHook(() => useSessionResumption("t1", "s1"));
 
     await waitFor(() => {
-      expect(mockRequest).toHaveBeenCalledWith("task.session.status", {
+      expect(mockRequest).toHaveBeenCalledWith(STATUS_ACTION, {
         task_id: "t1",
         session_id: "s1",
       });
@@ -463,6 +499,37 @@ describe("useSessionResumption monotonic terminal hydration", () => {
       );
     });
   });
+
+  it("rejects an older status over a live WAITING_FOR_INPUT state", async () => {
+    mockSessionItems = {
+      s1: {
+        started_at: STARTED_AT,
+        updated_at: LATER_AT,
+        state: "WAITING_FOR_INPUT",
+      },
+    };
+    mockRequest.mockResolvedValueOnce({
+      session_id: "s1",
+      task_id: "t1",
+      state: "IDLE",
+      is_agent_running: false,
+      is_resumable: true,
+      needs_resume: true,
+      updated_at: STARTED_AT, // older than the live WAITING_FOR_INPUT row
+    });
+
+    renderHook(() => useSessionResumption("t1", "s1"));
+
+    await waitFor(() => {
+      expect(mockRequest).toHaveBeenCalledWith(STATUS_ACTION, {
+        task_id: "t1",
+        session_id: "s1",
+      });
+    });
+    // WAITING_FOR_INPUT means the agent is alive; a stale older response must
+    // not downgrade it to a stopped-looking state.
+    expect(mockSetTaskSession).not.toHaveBeenCalledWith(expect.objectContaining({ state: "IDLE" }));
+  });
 });
 
 describe("useSessionResumption resume-skipped clearing on running status", () => {
@@ -495,5 +562,50 @@ describe("useSessionResumption resume-skipped clearing on running status", () =>
     await waitFor(() => {
       expect(mockSetResumeSkipped).toHaveBeenCalledWith("s1", false);
     });
+  });
+});
+
+describe("useSessionResumption stale-callback guard after navigation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConnectionStatus = "connected";
+    mockPreventAutoStart = true;
+    mockSessionItems = {
+      s1: {
+        started_at: STARTED_AT,
+        updated_at: STARTED_AT,
+        state: "WAITING_FOR_INPUT",
+      },
+    };
+  });
+
+  it("does not record a skip or write state for the previous session when a status response lands after navigation", async () => {
+    const { promise, resolve: resolveStatus } = Promise.withResolvers<unknown>();
+    mockRequest.mockReturnValueOnce(promise);
+
+    const { rerender } = renderHook(
+      ({ sid }: { sid: string }) => useSessionResumption(TASK_ID, sid),
+      { initialProps: { sid: SESSION_ID } },
+    );
+
+    // Navigate to another session before the first status response resolves.
+    rerender({ sid: "s2" });
+
+    await act(async () => {
+      resolveStatus({
+        session_id: SESSION_ID,
+        task_id: TASK_ID,
+        state: "IDLE",
+        is_agent_running: false,
+        is_resumable: true,
+        needs_resume: true,
+        updated_at: STARTED_AT,
+      });
+    });
+
+    // The stale response for the switched-away session must neither record a
+    // resume-skipped marker nor write its session row.
+    expect(mockSetResumeSkipped).not.toHaveBeenCalled();
+    expect(mockSetTaskSession).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import type { TaskSessionState } from "@/lib/types/http";
 import { useAppStore } from "@/components/state-provider";
 import { launchSession } from "@/lib/services/session-launch-service";
 import { buildResumeRequest } from "@/lib/services/session-launch-helpers";
+import { isLaunchStateRegression } from "@/lib/session-state";
 
 /**
  * "Start agent" affordance for a resume-skipped session (prevent-auto-start-on-
@@ -35,14 +36,19 @@ export function SessionResumeStartButton({ sessionId }: { sessionId: string }) {
       if (response.success && response.state) {
         // Hydrate the launch state (commonly STARTING) so the button hides
         // immediately and the UI reflects the in-flight resume instead of
-        // staying stopped and clickable for repeated resumes.
-        setTaskSession({
-          id: session.id,
-          task_id: session.task_id,
-          state: response.state as TaskSessionState,
-          started_at: session.started_at ?? "",
-          updated_at: session.updated_at ?? "",
-        });
+        // staying stopped and clickable for repeated resumes. Never apply it
+        // over a newer live state: a WS RUNNING/FAILED transition can land
+        // before the launch response resolves, and the delayed STARTING must
+        // not hide a running agent or a failure's recovery affordances.
+        if (!isLaunchStateRegression(session.state, response.state)) {
+          setTaskSession({
+            id: session.id,
+            task_id: session.task_id,
+            state: response.state as TaskSessionState,
+            started_at: session.started_at ?? "",
+            updated_at: session.updated_at ?? "",
+          });
+        }
       }
       // Only confirmed RUNNING clears the resume-skipped marker: a resume
       // response commonly reports STARTING (launch accepted, agent starting),
@@ -66,7 +72,7 @@ export function SessionResumeStartButton({ sessionId }: { sessionId: string }) {
         className="cursor-pointer gap-1.5"
         onClick={handleStart}
         disabled={isStarting}
-        data-testid="task-description-start-button"
+        data-testid="session-resume-start-button"
       >
         <IconPlayerPlay className="h-3.5 w-3.5" />
         {isStarting ? t("task:startingEllipsis") : t("task:startAgent")}

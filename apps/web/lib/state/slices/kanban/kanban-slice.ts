@@ -135,18 +135,10 @@ function createTaskActions(set: KanbanSliceSet): TaskActions {
     setResumeSkipped: (sessionId, skipped) =>
       set((draft) => {
         if (skipped) {
-          // Conditional record: never mark a session resume-skipped while the
-          // agent is already starting or running (closes the delayed-status
-          // race where a stale status response arrives after a running WS
-          // event). The immer draft is the composed AppState at runtime (the
-          // store composes every slice); the slice type only exposes the
-          // kanban part, hence the narrowed cast.
-          const state = (
-            draft as unknown as {
-              taskSessions?: { items?: Record<string, { state?: string }> };
-            }
-          ).taskSessions?.items?.[sessionId]?.state;
-          if (state === "STARTING" || state === "RUNNING") return;
+          // Recording is guarded at the call site (use-session-resumption's
+          // skip branch reads the live session row with typed store access),
+          // so a stale status can never mark a starting/running session as
+          // resume-skipped. The slice stays a plain keyed write.
           draft.tasks.resumeSkippedSessionIds[sessionId] = true;
         } else {
           delete draft.tasks.resumeSkippedSessionIds[sessionId];

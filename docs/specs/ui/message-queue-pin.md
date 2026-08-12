@@ -72,8 +72,12 @@ Absent or unreadable entries default to `false` (unpinned).
   reopens on later mounts.
 - **GIVEN** the panel is pinned and the queue drains to zero entries, **WHEN**
   the queue refetches, **THEN** the panel closes and the chip is hidden;
-  pinning a later queue for the same session still reopens the panel on the
-  next mount (navigation away and back, or reload).
+  pinning a later queue for the same session still reopens the panel when a
+  new entry arrives, and on the next mount (navigation away and back, or
+  reload).
+- **GIVEN** the panel is pinned but the session's queue is empty, **WHEN**
+  entries arrive asynchronously (initial load after a session switch), **THEN**
+  the expanded panel appears without a chip click.
 - **GIVEN** the panel is pinned and the queue entries load asynchronously
   after the affordance mounts (e.g. returning to the task route), **WHEN** the
   entries arrive, **THEN** the expanded panel appears without a chip click.

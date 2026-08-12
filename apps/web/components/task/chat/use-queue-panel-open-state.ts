@@ -11,9 +11,12 @@ import { useState } from "react";
  * Collapsing via the header X closes it for the current view; a later mount
  * reopens it while the pin is retained. A pin turning on mid-view (another
  * tab's storage event) opens the queue when there is something to show;
- * unpinning never closes an already-open panel. State is adjusted during
- * render (React docs: "Adjusting some state when a prop changes") to avoid
- * the cascading-render anti-pattern of doing it inside useEffect.
+ * unpinning never closes an already-open panel. A pinned queue that was
+ * empty reopens when entries arrive (initial async load, session switch, or
+ * a new message after a full drain); ordinary count changes on a nonempty
+ * queue never reopen an X-collapsed panel. State is adjusted during render
+ * (React docs: "Adjusting some state when a prop changes") to avoid the
+ * cascading-render anti-pattern of doing it inside useEffect.
  */
 export function useQueuePanelOpenState(
   sessionId: string | null,
@@ -29,8 +32,13 @@ export function useQueuePanelOpenState(
     setIsOpen(pinned);
   }
   if (entryCount !== lastEntryCount) {
+    const wasEmpty = lastEntryCount === 0;
     setLastEntryCount(entryCount);
-    if (entryCount === 0) setIsOpen(false);
+    if (entryCount === 0) {
+      setIsOpen(false);
+    } else if (pinned && wasEmpty) {
+      setIsOpen(true);
+    }
   }
   if (pinned !== lastPinned) {
     setLastPinned(pinned);

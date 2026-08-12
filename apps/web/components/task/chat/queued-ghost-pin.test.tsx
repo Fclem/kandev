@@ -207,6 +207,80 @@ describe("QueueAffordance pin sync", () => {
     expect(screen.queryByTestId(CHIP_ID)).toBeNull();
   });
 
+  it("opens when entries arrive after a storage-synced pin on an empty queue", () => {
+    useQueueMock.mockReturnValue(queueState([]));
+    useQueuePinnedMock.mockReturnValue({ value: false, setValue: vi.fn(), toggle: vi.fn() });
+    const { rerender } = render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+
+    // Another tab pins the session while the queue is still empty.
+    useQueuePinnedMock.mockReturnValue({ value: true, setValue: vi.fn(), toggle: vi.fn() });
+    rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+
+    // Entries arrive: the pinned panel must open without a chip click.
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
+    expect(screen.queryByTestId(CHIP_ID)).toBeNull();
+  });
+
+  it("opens when the session switches to a pinned queue whose entries load later", () => {
+    useQueuePinnedMock.mockImplementation((sessionId: string | null) => ({
+      value: sessionId === "sess-2",
+      setValue: vi.fn(),
+      toggle: vi.fn(),
+    }));
+    useQueueMock.mockReturnValue(queueState([]));
+    const { rerender } = render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+
+    // Switch to the pinned session before its queue has loaded.
+    rerender(<QueueAffordance sessionId="sess-2">{CHILD}</QueueAffordance>);
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    rerender(<QueueAffordance sessionId="sess-2">{CHILD}</QueueAffordance>);
+    expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
+    expect(screen.queryByTestId(CHIP_ID)).toBeNull();
+  });
+
+  it("reopens a pinned queue after a full drain when a new entry arrives", () => {
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    useQueuePinnedMock.mockReturnValue({ value: true, setValue: vi.fn(), toggle: vi.fn() });
+    const { rerender } = render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
+
+    // Full drain: panel closes, nothing rendered.
+    useQueueMock.mockReturnValue(queueState([]));
+    rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+
+    // A later queue for the same session reopens the pinned panel.
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
+    expect(screen.queryByTestId(CHIP_ID)).toBeNull();
+  });
+
+  it("does not reopen an X-collapsed pinned queue on ordinary count changes", () => {
+    useQueueMock.mockReturnValue(
+      queueState([entry(), { ...entry(), id: "q-2", content: "second" }]),
+    );
+    useQueuePinnedMock.mockReturnValue({ value: true, setValue: vi.fn(), toggle: vi.fn() });
+    const { rerender } = render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.getByTestId(PANEL_ID)).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("queue-close"));
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+    expect(screen.getByTestId(CHIP_ID)).toBeTruthy();
+
+    // One entry removed while the queue stays nonempty: stays collapsed.
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    rerender(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+    expect(screen.getByTestId(CHIP_ID)).toBeTruthy();
+  });
+
   it("keeps the collapse button touch-sized alongside the pin", () => {
     useQueueMock.mockReturnValue(queueState([entry()]));
     useQueuePinnedMock.mockReturnValue({ value: true, setValue: vi.fn(), toggle: vi.fn() });

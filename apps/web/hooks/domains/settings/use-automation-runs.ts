@@ -13,6 +13,25 @@ import type { AutomationRun } from "@/lib/types/automation";
 
 const EMPTY_RUNS: AutomationRun[] = [];
 
+/**
+ * Shared revert for both delete-all paths: on failure, refresh from the
+ * server (authoritative — it drops whatever actually succeeded); if that also
+ * fails, fall back to the pre-delete snapshot so the store is never left
+ * permanently missing rows the delete never removed.
+ */
+function revertAfterFailedDelete(
+  automationId: string,
+  fallbackRuns: AutomationRun[],
+  setRuns: (automationId: string, runs: AutomationRun[]) => void,
+): void {
+  listAutomationRuns(automationId)
+    .then((result) => setRuns(automationId, result ?? []))
+    .catch(() => {
+      setRuns(automationId, fallbackRuns);
+      toast.error(t("automations:couldNotRefreshRuns"));
+    });
+}
+
 export function useAutomationRuns(automationId: string | null, workspaceId: string) {
   const runs = useAppStore((state) =>
     automationId ? (state.automationRuns.byAutomationId[automationId] ?? EMPTY_RUNS) : EMPTY_RUNS,
@@ -98,33 +117,56 @@ export function useAutomationRuns(automationId: string | null, workspaceId: stri
     [automationId, removeRun, restoreRun, setRuns, storeApi, workspaceId],
   );
 
-  const deleteAllRuns = useCallback(() => {
-    if (!automationId) return;
-    // Snapshot the full list so we can restore it if both the delete-all
-    // and the recovery refresh below fail.
-    const previousRuns = storeApi.getState().automationRuns.byAutomationId[automationId] ?? [];
-    clearRuns(automationId); // optimistic
-    deleteAllAutomationRuns(automationId, workspaceId)
-      .then(() => {
-        // See deleteRun: guard against an in-flight refresh() resurrecting
-        // rows between the optimistic clear and this success callback.
-        clearRuns(automationId);
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : t("automations:failedToDeleteRuns");
-        toast.error(msg);
-        // revert on failure
-        listAutomationRuns(automationId)
-          .then((result) => setRuns(automationId, result ?? []))
-          .catch(() => {
-            // The recovery refresh also failed — without this the store
-            // would stay permanently empty even though delete-all never
-            // succeeded server-side. Fall back to the pre-clear snapshot.
-            setRuns(automationId, previousRuns);
-            toast.error(t("automations:couldNotRefreshRuns"));
+  const deleteAllRuns = useCallback(
+    (runIds?: string[]) => {
+      if (!automationId) return;
+      // An empty scope is a no-op: the UI never offers delete-all for an
+      // empty view, and falling back to the all-runs delete here would be
+      // a dangerous surprise for a caller that computed zero ids.
+      if (runIds && runIds.length === 0) return;
+      if (!runIds) {
+        // Unscoped delete-all: remove every run for the automation. Snapshot
+        // the full list so we can restore it if both the delete-all and the
+        // recovery refresh below fail.
+        const previousRuns = storeApi.getState().automationRuns.byAutomationId[automationId] ?? [];
+        clearRuns(automationId); // optimistic
+        deleteAllAutomationRuns(automationId, workspaceId)
+          .then(() => {
+            // See deleteRun: guard against an in-flight refresh() resurrecting
+            // rows between the optimistic clear and this success callback.
+            clearRuns(automationId);
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : t("automations:failedToDeleteRuns");
+            toast.error(msg);
+            // revert on failure
+            revertAfterFailedDelete(automationId, previousRuns, setRuns);
           });
-      });
-  }, [automationId, clearRuns, setRuns, storeApi, workspaceId]);
+        return;
+      }
+      // Status-scoped delete-all: remove exactly the given runs through the
+      // per-run API. Archived/Cancelled are read-time-derived statuses that
+      // only exist in the loaded payload, so the visible set is the only
+      // exact scope. Snapshot the full list for the double-failure restore.
+      const ids = [...new Set(runIds)];
+      const previousRuns = storeApi.getState().automationRuns.byAutomationId[automationId] ?? [];
+      ids.forEach((id) => removeRun(automationId, id)); // optimistic
+      Promise.all(ids.map((id) => deleteAutomationRun(id, workspaceId)))
+        .then(() => {
+          // In-flight refresh guard, same as deleteRun and the unscoped path.
+          ids.forEach((id) => removeRun(automationId, id));
+        })
+        .catch((err: unknown) => {
+          // One toast and one recovery refresh for the whole batch, not one
+          // per failed delete; the refresh returns the server's authoritative
+          // list, which drops whatever actually succeeded.
+          const msg = err instanceof Error ? err.message : t("automations:failedToDeleteRuns");
+          toast.error(msg);
+          revertAfterFailedDelete(automationId, previousRuns, setRuns);
+        });
+    },
+    [automationId, clearRuns, removeRun, setRuns, storeApi, workspaceId],
+  );
 
   return { runs, loading, refresh, deleteRun, deleteAllRuns };
 }

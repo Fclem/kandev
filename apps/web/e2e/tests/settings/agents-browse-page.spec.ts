@@ -52,13 +52,12 @@ test.describe("Agents browse page", () => {
     // semantic shape rather than the old implementation's test ID, so any
     // future collapsible reintroduction fails even with different test IDs.
     await expect(testPage.getByRole("button", { name: "Browse available agents" })).toHaveCount(0);
-    const headingHasButtonAncestor = await testPage.evaluate(() => {
-      const h = [...document.querySelectorAll("h1, h2, h3, h4, h5, h6")].find(
-        (el) => el.textContent?.trim() === "Browse available agents",
-      );
-      return h ? h.closest("button") !== null : null;
-    });
-    expect(headingHasButtonAncestor).toBe(false);
+    expect(await heading.evaluate((el) => el.closest("button") === null)).toBe(true);
+
+    // A role-less clickable wrapper (e.g. <div onClick>) would not surface as
+    // a button; clicking the heading must not hide the install cards.
+    await heading.click();
+    await expect(testPage.getByTestId("install-card-codex")).toBeVisible();
 
     // Compatibility guard: the exact test ID PR #2544 introduced is gone too.
     await expect(testPage.getByTestId("available-to-install-trigger")).toHaveCount(0);

@@ -1,32 +1,42 @@
 import { test, expect } from "../../fixtures/test-base";
+import type { ListAvailableAgentsResponse } from "../../../lib/types/http";
 
 // The default mock-agent is discovered as installed with no install_script, so
-// the "Available to Install" section would not render. Intercept
-// /api/v1/agents/available and return one discoverable-but-not-installed agent
-// so the section has an install card to assert on.
+// the catalog would show its "everything installed" state with no install
+// cards. Intercept /api/v1/agents/available and return one
+// discoverable-but-not-installed agent so an install card renders.
 const AVAILABLE_AGENTS = {
   agents: [
     {
       name: "codex",
       display_name: "OpenAI Codex CLI",
-      available: false,
       install_script: "npm install -g @openai/codex",
-      info_url: "",
+      supports_mcp: false,
+      mcp_config_path: null,
+      installation_paths: [],
+      available: false,
+      matched_path: null,
+      capabilities: {
+        supports_session_resume: false,
+        supports_shell: false,
+        supports_workspace_only: false,
+      },
       model_config: {
         default_model: "",
         available_models: [],
-        modes: [],
+        available_modes: [],
         current_mode_id: "",
+        supports_dynamic_models: false,
         status: "not_installed",
         error: "",
       },
       permission_settings: {},
-      passthrough_config: null,
+      updated_at: "2026-08-12T00:00:00Z",
     },
   ],
   tools: [],
   total: 1,
-};
+} satisfies ListAvailableAgentsResponse;
 
 test.describe("Agents browse page", () => {
   test("renders the heading and install cards statically, without a collapsible toggle", async ({

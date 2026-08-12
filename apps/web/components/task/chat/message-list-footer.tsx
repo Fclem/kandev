@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { Message, TaskSessionState } from "@/lib/types/http";
 import { AgentStatus } from "@/components/task/chat/messages/agent-status";
 import { MessageRenderer } from "@/components/task/chat/message-renderer";
@@ -54,10 +55,24 @@ export function MessageListFooter({
   // The task-description start button only renders for EMPTY sessions. A
   // resume-skipped session (prevent-auto-start-on-open preference, agent
   // stopped with history) gets its Start agent button here instead — but only
-  // for non-FAILED states, where the existing recovery actions already provide
-  // the manual affordance.
+  // when no recovery actions are already visible: if the conversation shows
+  // "Resume session" / "Start fresh session" (an agent-kill recovery action
+  // message), that is the manual affordance and a second Start agent button
+  // would be duplicate noise.
   const resumeSkipped = useAppStore((state) =>
     sessionId ? state.tasks.resumeSkippedSessionIds[sessionId] === true : false,
+  );
+  const hasRecoveryActions = useMemo(
+    () =>
+      messages.some(
+        (message) =>
+          (message.metadata as Record<string, unknown> | undefined)?.recovery_actions === true,
+      ) ||
+      footerActionMessages.some(
+        (message) =>
+          (message.metadata as Record<string, unknown> | undefined)?.recovery_actions === true,
+      ),
+    [messages, footerActionMessages],
   );
   // The footer is the single Start-agent surface for resume-skipped sessions
   // (prevent-auto-start-on-open): it must render even when the session has
@@ -65,6 +80,7 @@ export function MessageListFooter({
   // session keeps the manual affordance.
   const showResumeStartButton =
     resumeSkipped &&
+    !hasRecoveryActions &&
     sessionState !== "FAILED" &&
     sessionState !== "RUNNING" &&
     sessionState !== "STARTING" &&

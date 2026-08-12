@@ -1,28 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { IconX } from "@tabler/icons-react";
-import { Button } from "@kandev/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@kandev/ui/dialog";
-import { Input } from "@kandev/ui/input";
-import { Label } from "@kandev/ui/label";
-import { RadioGroup, RadioGroupItem } from "@kandev/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
+import { Dialog, DialogContent } from "@kandev/ui/dialog";
 import { useAppStore } from "@/components/state-provider";
 import { ApiError } from "@/lib/api/client";
 import { copySecret, moveSecret } from "@/lib/api/domains/secrets-api";
 import { useSecretDestinationNames } from "@/hooks/domains/settings/use-secret-destination-names";
 import { useWorkspaceDestinations } from "@/hooks/domains/settings/use-workspace-destinations";
 import type { SecretListItem } from "@/lib/types/http-secrets";
+import { CopyMoveDialogBody } from "./copy-move-dialog-body";
 
 export const MAX_SECRET_NAME_BYTES = 100;
 
@@ -60,6 +47,9 @@ type CopyMoveSecretDialogProps = {
   secret: SecretListItem;
   /** `general` for a Global source, the workspace name otherwise (literal, locale-independent). */
   originToken: string;
+  /** Controlled visibility. The dialog stays mounted while closed so Radix can
+   *  restore focus to the trigger on close; callers must keep `secret` set. */
+  open: boolean;
   onClose: () => void;
   onCompleted: (item: SecretListItem, mode: CopyMoveMode) => void;
 };
@@ -67,10 +57,10 @@ type CopyMoveSecretDialogProps = {
 export function CopyMoveSecretDialog({
   secret,
   originToken,
+  open,
   onClose,
   onCompleted,
 }: CopyMoveSecretDialogProps) {
-  const { t } = useTranslation();
   const {
     loading: destinationsLoading,
     error: destinationsError,
@@ -94,7 +84,7 @@ export function CopyMoveSecretDialog({
   );
   const conflict = nameError === null && destination !== null && destinationNames.conflict(name);
 
-  const { busy, canSubmit, formError, run } = useTransferSubmit({
+  const { busy, canSubmit, formError, clearError, run } = useTransferSubmit({
     secret,
     mode,
     destination,
@@ -107,56 +97,45 @@ export function CopyMoveSecretDialog({
     setNameError,
     onCompleted,
   });
-
+  useTransferFormReset(secret, originToken, open, {
+    setMode,
+    setDestination,
+    setName,
+    setNameError,
+    clearError,
+  });
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent
         showCloseButton={false}
         className="bottom-0 top-auto left-0 right-0 translate-x-0 translate-y-0 rounded-b-none pb-[env(safe-area-inset-bottom)] sm:top-1/2 sm:left-1/2 sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-b-lg"
       >
-        <DialogHeader>
-          <DialogTitle>{t("settings:copyMoveSecretNamed", { name: secret.name })}</DialogTitle>
-          <DialogDescription>{t("settings:copyMoveDialogHint")}</DialogDescription>
-        </DialogHeader>
-
-        <TransferModeField mode={mode} onModeChange={setMode} originToken={originToken} />
-
-        <DestinationField
+        <CopyMoveDialogBody
+          secretName={secret.name}
+          originToken={originToken}
+          mode={mode}
+          onModeChange={setMode}
+          destination={destination}
           destinations={destinations}
           workspaceNameById={workspaceNameById}
-          destination={destination}
           onDestinationChange={(next) => {
-            // A 409 conflict is destination-specific: switching targets must
-            // clear it so the name field is not stuck invalid on a destination
-            // where the name is free.
+            // A 409 pins the name field and a non-409 failure pins the alert;
+            // both are destination-specific, so clear them on target change.
             if (nameError !== null) {
               setNameError(null);
             }
+            clearError();
             setDestination(next);
           }}
           destinationsLoading={destinationsLoading}
           destinationsError={destinationsError}
           onRetryDestinations={retryDestinations}
-          disabled={busy}
-        />
-
-        <TargetNameField
           name={name}
           onNameChange={setName}
           nameError={nameError}
           setNameError={setNameError}
           conflict={conflict}
-          disabled={busy}
-        />
-
-        {formError !== null && (
-          <p className="text-xs text-destructive" role="alert">
-            {formError}
-          </p>
-        )}
-
-        <TransferDialogFooter
-          mode={mode}
+          formError={formError}
           canSubmit={canSubmit}
           busy={busy}
           onSubmit={run}
@@ -167,51 +146,39 @@ export function CopyMoveSecretDialog({
   );
 }
 
-function TransferDialogFooter({
-  mode,
-  canSubmit,
-  busy,
-  onSubmit,
-  onClose,
-}: {
-  mode: CopyMoveMode;
-  canSubmit: boolean;
-  busy: boolean;
-  onSubmit: () => void;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <DialogFooter>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={onClose}
-        disabled={busy}
-        className="min-h-11 cursor-pointer"
-      >
-        {t("settings:cancel")}
-      </Button>
-      <Button
-        type="button"
-        onClick={onSubmit}
-        disabled={!canSubmit}
-        className="min-h-11 cursor-pointer"
-      >
-        {mode === "copy" ? t("settings:copySecretAction") : t("settings:moveSecretAction")}
-      </Button>
-      <DialogClose asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t("common:close")}
-          className="absolute top-2 right-2 min-h-11 min-w-11 cursor-pointer"
-        >
-          <IconX className="h-4 w-4" />
-        </Button>
-      </DialogClose>
-    </DialogFooter>
-  );
+/**
+ * The dialog stays mounted between opens so Radix can restore focus to the
+ * trigger on close. This resets every piece of form state when a new secret is
+ * targeted or when the dialog is reopened, while skipping the mount render so
+ * the initial useState values (and the destination auto-selection) survive.
+ */
+function useTransferFormReset(
+  secret: SecretListItem,
+  originToken: string,
+  open: boolean,
+  setters: {
+    setMode: (mode: CopyMoveMode) => void;
+    setDestination: (destination: SecretDestination | null) => void;
+    setName: (name: string) => void;
+    setNameError: (error: string | null) => void;
+    clearError: () => void;
+  },
+) {
+  const lastSecretId = useRef(secret.id);
+  const prevOpen = useRef(open);
+  useEffect(() => {
+    const reopened = open && !prevOpen.current;
+    prevOpen.current = open;
+    if (!reopened && lastSecretId.current === secret.id) {
+      return;
+    }
+    lastSecretId.current = secret.id;
+    setters.setMode("copy");
+    setters.setDestination(null);
+    setters.setName(buildDefaultTargetName(secret.name, originToken));
+    setters.setNameError(null);
+    setters.clearError();
+  }, [secret.id, originToken, open, setters]);
 }
 
 type TransferCanSubmitArgs = {
@@ -327,50 +294,9 @@ function useTransferSubmit({
     }
   };
 
-  return { busy: isBusy, canSubmit, formError, run };
-}
+  const clearError = useCallback(() => setFormError(null), []);
 
-function TargetNameField({
-  name,
-  onNameChange,
-  nameError,
-  setNameError,
-  conflict,
-  disabled,
-}: {
-  name: string;
-  onNameChange: (name: string) => void;
-  nameError: string | null;
-  setNameError: (error: string | null) => void;
-  conflict: boolean;
-  disabled: boolean;
-}) {
-  const { t } = useTranslation();
-  const invalid = conflict || nameError !== null;
-  return (
-    <div className="space-y-2">
-      <Label htmlFor="copy-move-name">{t("settings:secretTargetName")}</Label>
-      <Input
-        id="copy-move-name"
-        value={name}
-        onChange={(e) => {
-          onNameChange(e.target.value);
-          if (nameError !== null) {
-            setNameError(null);
-          }
-        }}
-        disabled={disabled}
-        aria-invalid={invalid}
-        aria-describedby={invalid ? "copy-move-name-error" : undefined}
-        className="min-h-11"
-      />
-      {invalid && (
-        <p id="copy-move-name-error" className="text-xs text-destructive">
-          {nameError ?? t("settings:secretNameConflictInDestination", { name: name.trim() })}
-        </p>
-      )}
-    </div>
-  );
+  return { busy: isBusy, canSubmit, formError, clearError, run };
 }
 
 type WorkspaceOption = { id: string; name: string };
@@ -437,129 +363,4 @@ function useDestinationOptions(
   }, [destination, destinations, destinationValid, onDestinationChange]);
 
   return { destinations, workspaceNameById, destinationValid };
-}
-
-function TransferModeField({
-  mode,
-  onModeChange,
-  originToken,
-}: {
-  mode: CopyMoveMode;
-  onModeChange: (mode: CopyMoveMode) => void;
-  originToken: string;
-}) {
-  const { t } = useTranslation();
-  return (
-    <fieldset className="space-y-2">
-      <legend className="sr-only">{t("settings:copyMoveMode")}</legend>
-      <RadioGroup
-        value={mode}
-        onValueChange={(value) => onModeChange(value as CopyMoveMode)}
-        className="flex flex-col gap-2"
-      >
-        <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3 cursor-pointer">
-          <RadioGroupItem value="copy" className="mt-0.5 min-h-11 min-w-11" />
-          <span className="space-y-1">
-            <span className="block text-sm font-medium">{t("settings:copySecretAction")}</span>
-            <span className="block text-xs text-muted-foreground">
-              {t("settings:copyModeDescription")}
-            </span>
-          </span>
-        </label>
-        <label className="flex items-start gap-2 rounded-lg border border-border/70 p-3 cursor-pointer">
-          <RadioGroupItem value="move" className="mt-0.5 min-h-11 min-w-11" />
-          <span className="space-y-1">
-            <span className="block text-sm font-medium">{t("settings:moveSecretAction")}</span>
-            {mode === "move" && (
-              <span className="block text-xs text-muted-foreground">
-                {t("settings:moveModeWarning", { origin: originToken })}
-              </span>
-            )}
-          </span>
-        </label>
-      </RadioGroup>
-    </fieldset>
-  );
-}
-
-function DestinationField({
-  destinations,
-  workspaceNameById,
-  destination,
-  onDestinationChange,
-  destinationsLoading,
-  destinationsError,
-  onRetryDestinations,
-  disabled,
-}: {
-  destinations: SecretDestination[];
-  workspaceNameById: Record<string, string>;
-  destination: SecretDestination | null;
-  onDestinationChange: (destination: SecretDestination) => void;
-  destinationsLoading: boolean;
-  destinationsError: string | null;
-  onRetryDestinations: () => void;
-  disabled: boolean;
-}) {
-  const { t } = useTranslation();
-  const noDestinations =
-    destinations.length === 0 && !destinationsLoading && destinationsError === null;
-
-  return (
-    <div className="space-y-2">
-      <Label htmlFor="copy-move-destination">{t("settings:destination")}</Label>
-      {destinationsLoading && (
-        <p className="text-xs text-muted-foreground">{t("settings:destinationsLoading")}</p>
-      )}
-      {destinationsError !== null && (
-        <div className="flex items-center gap-2">
-          <p className="text-xs text-destructive">{t("settings:destinationsLoadFailed")}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onRetryDestinations}
-            className="min-h-11 cursor-pointer"
-          >
-            {t("settings:retryDestinations")}
-          </Button>
-        </div>
-      )}
-      {noDestinations && (
-        <p className="text-xs text-destructive">{t("settings:noValidDestinations")}</p>
-      )}
-      {destination !== null && (
-        <Select
-          value={destination.scope === "global" ? "global" : `workspace:${destination.workspaceId}`}
-          onValueChange={(value) =>
-            onDestinationChange(
-              value === "global"
-                ? { scope: "global" }
-                : { scope: "workspace", workspaceId: value.slice("workspace:".length) },
-            )
-          }
-        >
-          <SelectTrigger
-            id="copy-move-destination"
-            disabled={disabled}
-            className="min-h-11 w-full cursor-pointer"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {destinations.map((option) =>
-              option.scope === "global" ? (
-                <SelectItem key="global" value="global">
-                  {t("settings:destinationGeneral")}
-                </SelectItem>
-              ) : (
-                <SelectItem key={option.workspaceId} value={`workspace:${option.workspaceId}`}>
-                  {workspaceNameById[option.workspaceId] ?? option.workspaceId}
-                </SelectItem>
-              ),
-            )}
-          </SelectContent>
-        </Select>
-      )}
-    </div>
-  );
 }

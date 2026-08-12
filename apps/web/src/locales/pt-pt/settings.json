@@ -749,7 +749,6 @@
   "destination": "Destino",
   "destinationGeneral": "Geral",
   "secretTargetName": "Nome",
-  "secretNameFromOrigin": "{{name}} (de {{origin}})",
   "secretNameConflictInDestination": "Já existe um segredo com o nome {{name}} neste destino.",
   "destinationsLoading": "A carregar destinos",
   "destinationsLoadFailed": "Não foi possível carregar os destinos.",

@@ -765,7 +765,6 @@
   "destination": "Destination",
   "destinationGeneral": "General",
   "secretTargetName": "Name",
-  "secretNameFromOrigin": "{{name}} (from {{origin}})",
   "secretNameConflictInDestination": "A secret named {{name}} already exists in this destination.",
   "destinationsLoading": "Loading destinations",
   "destinationsLoadFailed": "Could not load destinations.",

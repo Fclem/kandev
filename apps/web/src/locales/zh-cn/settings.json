@@ -749,7 +749,6 @@
   "destination": "目标",
   "destinationGeneral": "常规",
   "secretTargetName": "名称",
-  "secretNameFromOrigin": "{{name}}（来自{{origin}}）",
   "secretNameConflictInDestination": "目标位置已存在名为{{name}}的密钥。",
   "destinationsLoading": "正在加载目标",
   "destinationsLoadFailed": "无法加载目标。",

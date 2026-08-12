@@ -159,4 +159,21 @@ test.describe("secrets-copy-move", () => {
     await expect(nameInput).not.toHaveAttribute("aria-invalid", "true");
     await expect(dialog.getByRole("button", { name: "Copy", exact: true })).toBeEnabled();
   });
+
+  test("restores focus to the trigger after closing the dialog", async ({ testPage }) => {
+    const sourceName = "E2E Copy Move Focus";
+    await createSecretFromSettings(testPage, "/settings/general/secrets", sourceName, GLOBAL_VALUE);
+
+    await testPage.getByRole("button", { name: `Copy or move ${sourceName}` }).click();
+    const dialog = testPage.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    // Desktop mouse clicks focus the trigger; closing the dialog restores it.
+    await expect
+      .poll(async () =>
+        testPage.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? ""),
+      )
+      .toContain(`Copy or move ${sourceName}`);
+  });
 });

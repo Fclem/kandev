@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Button } from "@kandev/ui/button";
@@ -8,6 +8,7 @@ import { SettingsPageTemplate } from "@/components/settings/settings-page-templa
 import { WorkspaceSectionHeader } from "@/components/settings/workspaces/workspace-section-header";
 import { useAppStore } from "@/components/state-provider";
 import { useSecrets } from "@/hooks/domains/settings/use-secrets";
+import type { ApiRequestOptions } from "@/lib/api/client";
 import { createSecret, updateSecret, deleteSecret } from "@/lib/api/domains/secrets-api";
 import { useRequest } from "@/lib/http/use-request";
 import type { SecretListItem, SecretScope, UpdateSecretRequest } from "@/lib/types/http-secrets";
@@ -36,6 +37,7 @@ function useSecretsState(
   const [formState, setFormState] = useState<SecretFormState>(defaultFormState);
   const [deleteTarget, setDeleteTarget] = useState<SecretListItem | null>(null);
   const [transferTarget, setTransferTarget] = useState<SecretListItem | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   return {
     loaded,
@@ -55,43 +57,50 @@ function useSecretsState(
     setDeleteTarget,
     transferTarget,
     setTransferTarget,
+    transferOpen,
+    setTransferOpen,
   };
 }
 
-function useSecretsActions(state: ReturnType<typeof useSecretsState>) {
-  const {
-    addSecret: addToStore,
-    updateSecretInStore,
-    removeSecret: removeFromStore,
-    editingId,
-    setEditingId,
-    setShowCreate,
-    setFormState,
-    setDeleteTarget,
-    deleteTarget,
-    formState,
-    scope,
-    workspaceId,
-    setTransferTarget,
-  } = state;
+/**
+ * Remembers the focused element when a transfer dialog opens and returns
+ * focus to it on close. Radix restores to a stale node when the settings list
+ * re-renders mid-close, leaving focus on <body>; this makes the keyboard
+ * contract deterministic.
+ */
+function useTransferFocusRestore() {
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const rememberTransferTrigger = useCallback(() => {
+    triggerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, []);
+  const restoreTransferTrigger = useCallback(() => {
+    const trigger = triggerRef.current;
+    triggerRef.current = null;
+    if (trigger) {
+      window.setTimeout(() => {
+        if (document.contains(trigger)) {
+          trigger.focus();
+        }
+      }, 0);
+    }
+  }, []);
+  return { rememberTransferTrigger, restoreTransferTrigger };
+}
 
-  const requestOptions = {
-    cache: "no-store" as const,
-    ...(scope === "workspace" && workspaceId ? { workspaceId } : {}),
-  };
-
-  const resetForm = useCallback(() => {
-    setEditingId(null);
-    setShowCreate(false);
-    setFormState(defaultFormState);
-  }, [setEditingId, setShowCreate, setFormState]);
-
-  const isValid = useMemo(() => {
-    const nameOk = formState.name.trim().length > 0;
-    const valueOk = editingId ? true : formState.value.trim().length > 0;
-    return nameOk && valueOk;
-  }, [formState, editingId]);
-
+function useSecretRequests(
+  scope: SecretScope,
+  workspaceId: string | undefined,
+  requestOptions: ApiRequestOptions,
+  deps: {
+    addToStore: (item: SecretListItem) => void;
+    updateSecretInStore: (item: SecretListItem) => void;
+    removeFromStore: (id: string) => void;
+    resetForm: () => void;
+    editingId: string | null;
+  },
+) {
+  const { addToStore, updateSecretInStore, removeFromStore, resetForm, editingId } = deps;
   const createRequest = useRequest(async (s: SecretFormState) => {
     const item = await createSecret(
       {
@@ -106,7 +115,6 @@ function useSecretsActions(state: ReturnType<typeof useSecretsState>) {
     addToStore(item);
     resetForm();
   });
-
   const updateRequest = useRequest(async (id: string, s: SecretFormState) => {
     const payload: UpdateSecretRequest = {
       name: s.name.trim(),
@@ -116,13 +124,59 @@ function useSecretsActions(state: ReturnType<typeof useSecretsState>) {
     updateSecretInStore(item);
     resetForm();
   });
-
   const deleteRequest = useRequest(async (id: string) => {
     await deleteSecret(id, requestOptions);
     removeFromStore(id);
     if (editingId === id) resetForm();
   });
+  return { createRequest, updateRequest, deleteRequest };
+}
 
+function useSecretsActions(state: ReturnType<typeof useSecretsState>) {
+  const { rememberTransferTrigger, restoreTransferTrigger } = useTransferFocusRestore();
+  const {
+    addSecret: addToStore,
+    updateSecretInStore,
+    removeSecret: removeFromStore,
+    editingId,
+    setEditingId,
+    setShowCreate,
+    setFormState,
+    setDeleteTarget,
+    deleteTarget,
+    formState,
+    scope,
+    workspaceId,
+    setTransferTarget,
+    setTransferOpen,
+  } = state;
+  const requestOptions = {
+    cache: "no-store" as const,
+    ...(scope === "workspace" && workspaceId ? { workspaceId } : {}),
+  };
+  const resetForm = useCallback(() => {
+    setEditingId(null);
+    setShowCreate(false);
+    setFormState(defaultFormState);
+  }, [setEditingId, setShowCreate, setFormState]);
+
+  const isValid = useMemo(
+    () =>
+      formState.name.trim().length > 0 && (editingId ? true : formState.value.trim().length > 0),
+    [formState, editingId],
+  );
+  const { createRequest, updateRequest, deleteRequest } = useSecretRequests(
+    scope,
+    workspaceId,
+    requestOptions,
+    {
+      addToStore,
+      updateSecretInStore,
+      removeFromStore,
+      resetForm,
+      editingId,
+    },
+  );
   const isBusy = createRequest.isLoading || updateRequest.isLoading || deleteRequest.isLoading;
 
   return {
@@ -157,8 +211,17 @@ function useSecretsActions(state: ReturnType<typeof useSecretsState>) {
       deleteRequest.run(deleteTarget.id).catch(() => undefined);
       setDeleteTarget(null);
     },
-    openTransfer: (secret: SecretListItem) => setTransferTarget(secret),
-    closeTransfer: () => setTransferTarget(null),
+    openTransfer: (secret: SecretListItem) => {
+      // Remember the focused Copy/Move button; close restores it because
+      // Radix targets a stale node when the list re-renders mid-close.
+      rememberTransferTrigger();
+      setTransferTarget(secret);
+      setTransferOpen(true);
+    },
+    closeTransfer: () => {
+      setTransferOpen(false);
+      restoreTransferTrigger();
+    },
     items: state.items,
   };
 }
@@ -214,6 +277,8 @@ export type SecretsSettingsState = {
   setDeleteTarget: (target: SecretListItem | null) => void;
   transferTarget: SecretListItem | null;
   setTransferTarget: (target: SecretListItem | null) => void;
+  transferOpen: boolean;
+  setTransferOpen: (open: boolean) => void;
 };
 
 export type SecretsSettingsActions = {
@@ -461,6 +526,7 @@ export function SecretsSettings({
         <CopyMoveSecretDialog
           secret={state.transferTarget}
           originToken={originTokenFor(state.transferTarget)}
+          open={state.transferOpen}
           onClose={actions.closeTransfer}
           onCompleted={handleTransferCompleted}
         />

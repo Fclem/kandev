@@ -73,6 +73,7 @@ function renderDialog(overrides: Partial<Parameters<typeof CopyMoveSecretDialog>
     <CopyMoveSecretDialog
       secret={globalSecret}
       originToken="general"
+      open
       onClose={onClose}
       onCompleted={onCompleted}
       {...overrides}
@@ -106,6 +107,62 @@ describe("CopyMoveSecretDialog", () => {
     renderDialog({ secret: workspaceSecret, originToken: "Alpha" });
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("WS Key (from Alpha)");
     expect(screen.getByText("General")).toBeTruthy();
+  });
+
+  it("resets the form when a different secret is targeted while mounted", async () => {
+    // The dialog stays mounted between opens so Radix can restore focus to the
+    // trigger on close; targeting a new secret must not leak the previous
+    // mode/name/destination.
+    const { view } = renderDialog({ secret: workspaceSecret, originToken: "Alpha" });
+    fireEvent.click(screen.getByRole("radio", { name: /^Move/ }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Custom name" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Destination" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Beta" }));
+
+    view.rerender(
+      <CopyMoveSecretDialog
+        secret={globalSecret}
+        originToken="general"
+        open
+        onClose={vi.fn()}
+        onCompleted={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("radio", { name: /^Copy/ }).getAttribute("aria-checked")).toBe("true");
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(DEFAULT_GLOBAL_NAME);
+    // Destination re-defaults for the new source (Global source: first workspace).
+    expect(screen.getByRole("combobox", { name: "Destination" }).textContent).toContain("Alpha");
+  });
+
+  it("clears the form again when the same secret is reopened", () => {
+    // Close then reopen the dialog for the same secret: the stale name/mode
+    // from the previous session must not leak into the reopened dialog.
+    const { view } = renderDialog();
+    fireEvent.click(screen.getByRole("radio", { name: /^Move/ }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Custom name" } });
+
+    view.rerender(
+      <CopyMoveSecretDialog
+        secret={globalSecret}
+        originToken="general"
+        open={false}
+        onClose={vi.fn()}
+        onCompleted={vi.fn()}
+      />,
+    );
+    view.rerender(
+      <CopyMoveSecretDialog
+        secret={globalSecret}
+        originToken="general"
+        open
+        onClose={vi.fn()}
+        onCompleted={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("radio", { name: /^Copy/ }).getAttribute("aria-checked")).toBe("true");
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(DEFAULT_GLOBAL_NAME);
   });
 
   it("switches the submit label to Move and shows the warning", () => {
@@ -201,6 +258,12 @@ describe("CopyMoveSecretDialog conflict handling", () => {
     fireEvent.click(screen.getByRole("combobox", { name: "Destination" }));
     fireEvent.click(await screen.findByRole("option", { name: "Beta" }));
 
+    // Prove the destination actually changed: the trigger must now display
+    // Beta (not the initial General), otherwise the assertions below could
+    // pass while the selection stayed on the original destination.
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Destination" }).textContent).toContain("Beta"),
+    );
     await waitFor(() =>
       expect(screen.queryByText(/already exists in this destination/)).toBeNull(),
     );
@@ -240,6 +303,7 @@ describe("CopyMoveSecretDialog conflict handling", () => {
       <CopyMoveSecretDialog
         secret={globalSecret}
         originToken="general"
+        open
         onClose={onClose}
         onCompleted={onCompleted}
       />,

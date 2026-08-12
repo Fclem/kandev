@@ -46,6 +46,19 @@ test.describe("mobile-secrets-copy-move", () => {
     }
     await assertNoDocumentHorizontalOverflow(testPage, "mobile copy/move dialog");
 
+    // Scroll contract: the settings content area is the single scroll owner.
+    // The bottom-sheet dialog must not create document scroll or push its
+    // actions below the viewport.
+    const documentVerticalOverflow = await testPage.evaluate(
+      () => document.documentElement.scrollHeight > window.innerHeight,
+    );
+    expect(documentVerticalOverflow).toBe(false);
+    const moveButtonBox = await dialog
+      .getByRole("button", { name: "Move", exact: true })
+      .boundingBox();
+    expect(moveButtonBox).not.toBeNull();
+    expect(moveButtonBox!.y + moveButtonBox!.height).toBeLessThanOrEqual(844);
+
     await dialog.getByRole("button", { name: "Move", exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(testPage.getByText(sourceName, { exact: true })).toHaveCount(0);
@@ -75,6 +88,9 @@ test.describe("mobile-secrets-copy-move", () => {
     await expect(testPage.getByText(copiedName, { exact: true })).toBeVisible();
     await expect(testPage.locator("body")).not.toContainText(WORKSPACE_VALUE);
     await assertNoDocumentHorizontalOverflow(testPage, "mobile secrets after copy/move");
+
+    // Touch emulation does not move focus on tap, so focus restoration is
+    // covered in the desktop spec (keyboard/mouse focus contract) instead.
     await prCapture.screenshot("mobile-secrets-copy-move", {
       caption: "Mobile secrets copy/move flow",
     });

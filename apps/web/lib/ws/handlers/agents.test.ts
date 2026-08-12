@@ -169,7 +169,9 @@ describe("agent profile events", () => {
     expect(store.getState().agentProfiles.items).toHaveLength(0);
     expect(store.getState().settingsAgents.items).toHaveLength(0);
   });
+});
 
+describe("agent profile event ordering", () => {
   it("ignores a stale delete event when a newer revision already exists", () => {
     const store = makeStore();
     const handlers = handlersFor(store);

@@ -1990,8 +1990,22 @@ func TestQueueAndInterruptForPeerMessage_StoppedSessionResumesAgent(t *testing.T
 	svc.messageCreator = msgCreator
 	// Mirrors real agentctl bootstrap timing: LaunchAgent fires
 	// handleAgentBootReady ~50ms later so the resume path completes in unit
-	// tests without a real subprocess.
+	// tests without a real subprocess. Wrap the simulator to capture the
+	// LaunchAgent request so we can assert the RESUME semantics (the seeded
+	// ACP token must be passed through), not merely that some launch fired.
 	wireBootReadySimulator(svc, agentMgr, "exec-resumed")
+	var launchMu sync.Mutex
+	var launchReqs []*executor.LaunchAgentRequest
+	baseLaunch := agentMgr.launchAgentFunc
+	agentMgr.launchAgentFunc = func(
+		launchCtx context.Context,
+		req *executor.LaunchAgentRequest,
+	) (*executor.LaunchAgentResponse, error) {
+		launchMu.Lock()
+		launchReqs = append(launchReqs, req)
+		launchMu.Unlock()
+		return baseLaunch(launchCtx, req)
+	}
 
 	// The post-restart recovered-idle shape: session stopped with history,
 	// resumable via its executors_running resume token, no agent process.
@@ -2045,13 +2059,24 @@ func TestQueueAndInterruptForPeerMessage_StoppedSessionResumesAgent(t *testing.T
 
 	// The agent must have been RESUMED by the dispatch: the launch the
 	// boot-ready simulator wires into LaunchAgent must have registered the
-	// new execution on the session's executors_running row.
+	// new execution on the session's executors_running row, and it must have
+	// carried the seeded ACP resume token (a fresh-start regression would
+	// lose the prior ACP conversation but still satisfy the execution-ID
+	// check).
 	er, err := repo.GetExecutorRunningBySessionID(ctx, "session1")
 	if err != nil || er == nil {
 		t.Fatalf("ExecutorRunning lookup after dispatch failed: err=%v nil=%v", err, er == nil)
 	}
 	if er.AgentExecutionID != "exec-resumed" {
 		t.Fatalf("expected the peer-message dispatch to resume the agent (execution exec-resumed), got %q", er.AgentExecutionID)
+	}
+	launchMu.Lock()
+	defer launchMu.Unlock()
+	if len(launchReqs) != 1 {
+		t.Fatalf("expected exactly 1 resume launch, got %d", len(launchReqs))
+	}
+	if got := launchReqs[0].ACPSessionID; got != "acp-session-xyz" {
+		t.Fatalf("expected the resume launch to carry the seeded ACP token, got %q", got)
 	}
 }
 

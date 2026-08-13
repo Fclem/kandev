@@ -58,8 +58,12 @@ describe("shouldShowComposerAgentStartHint", () => {
     );
   });
 
-  it("shows when the session state is unknown/absent (defensive, matches footer behavior)", () => {
-    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: undefined })).toBe(true);
+  it("shows for a resume-skipped IDLE session (office idle shape)", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "IDLE" })).toBe(true);
+  });
+
+  it("hides when the session state is unknown/absent (a send might be rejected)", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: undefined })).toBe(false);
   });
 
   it("hides when the session is not resume-skipped", () => {
@@ -70,12 +74,21 @@ describe("shouldShowComposerAgentStartHint", () => {
     expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "FAILED" })).toBe(false);
   });
 
+  it("hides for terminal CANCELLED/COMPLETED sessions (the composer rejects sends)", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "CANCELLED" })).toBe(false);
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "COMPLETED" })).toBe(false);
+  });
+
   it("hides while the session is STARTING", () => {
     expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "STARTING" })).toBe(false);
   });
 
   it("hides while the session is RUNNING", () => {
     expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "RUNNING" })).toBe(false);
+  });
+
+  it("hides for a never-started CREATED session (the description button owns that surface)", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "CREATED" })).toBe(false);
   });
 
   it("hides when recovery actions are already visible", () => {

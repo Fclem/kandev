@@ -82,9 +82,9 @@ describe("useComposerAgentStartHint", () => {
     expect(result.current).toBe(false);
   });
 
-  it("hides for FAILED, STARTING and RUNNING sessions", () => {
+  it("hides for FAILED, STARTING, RUNNING and terminal sessions", () => {
     mockResumeSkippedSessionIds = { [SESSION_ID]: true };
-    for (const state of ["FAILED", "STARTING", "RUNNING"] as const) {
+    for (const state of ["FAILED", "STARTING", "RUNNING", "CANCELLED", "COMPLETED"] as const) {
       const { result } = renderHook(() => useComposerAgentStartHint(SESSION_ID, state, [], []));
       expect(result.current).toBe(false);
     }

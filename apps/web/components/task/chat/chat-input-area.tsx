@@ -333,8 +333,17 @@ type ChatInputAreaProps = {
    * start of the transcript. */
   showScrollToStart?: boolean;
   onScrollToStart?: () => void;
-1: @both
-2: @both
+  /**
+   * Task this composer belongs to, for the status row only. Hosts that mount a
+   * task's chat before any session exists pass it so the dependency / autopilot
+   * chips still render; without it the row is hidden on exactly the tasks a
+   * dependency chip is about.
+   */
+  statusTaskId?: string | null;
+  /** Recovered-idle (resume-skipped) sessions render the "a message will
+   * auto-start the agent" hint above the composer while the agent is
+   * stopped. */
+  showAgentStartHint?: boolean;
 };
 
 /** Resolves whether this session's executor environment is unavailable, and why. */
@@ -421,8 +430,8 @@ export function ChatInputArea({
   lastPromptScrollDirection,
   showScrollToStart,
   onScrollToStart,
-1: @both
-2: @both
+  statusTaskId = null,
+  showAgentStartHint = false,
 }: ChatInputAreaProps) {
   const { resolvedSessionId, taskId, isAgentBusy } = panelState;
   const statusRowTaskId = resolveStatusRowTaskId(taskId, statusTaskId);
@@ -458,7 +467,11 @@ export function ChatInputArea({
       data-testid="chat-input-area"
       className={cn("bg-card flex-shrink-0 px-2 pb-2 pt-1", surfaceClassName)}
     >
-      <ComposerAgentStartHint show={showAgentStartHint} />
+      <ComposerAgentStartHint
+        show={showAgentStartHint}
+        needsRecovery={panelState.needsRecovery}
+        executorUnavailable={executor.unavailable}
+      />
       <QueueAffordance
         sessionId={resolvedSessionId}
         canDrain={canDrainQueue}

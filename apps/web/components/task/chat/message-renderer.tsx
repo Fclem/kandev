@@ -50,10 +50,10 @@ type AdapterContext = {
 /**
  * Decides whether the task-description message renders the Start agent
  * button. Shown only for never-started (CREATED) sessions; resume-skipped
- * (prevent-auto-start-on-open) sessions get their Start agent button from
- * the message-list footer instead (which also covers empty sessions and
- * empty descriptions). Hidden while the task is SCHEDULING (the launch is
- * in flight) and when no task/session context is bound.
+ * (prevent-auto-start-on-open) sessions get the composer hint affordance
+ * instead (which also covers empty sessions and empty descriptions). Hidden
+ * while the task is SCHEDULING (the launch is in flight) and when no
+ * task/session context is bound.
  */
 export function shouldShowDescriptionStartButton({
   sessionState,

@@ -53,12 +53,14 @@ test.describe("Mobile agent-start hint", () => {
 
       // Sending a message is the explicit start: the agent resumes and
       // keeps working. Touch layouts don't submit on Ctrl/Cmd+Enter, so use
-      // the Send-button path like the other mobile specs.
+      // the Send-button path like the other mobile specs. Index 1: the first
+      // "simple mock response" from the pre-restart turn is still in the
+      // transcript, so the post-send reply must be the SECOND match.
       await session.sendMessageViaButton("/e2e:simple-message");
       await expect(testPage.getByText("Resumed agent", { exact: false })).toBeVisible({
         timeout: 30_000,
       });
-      await session.expectChatResponseVisible("simple mock response", 0, { timeout: 30_000 });
+      await session.expectChatResponseVisible("simple mock response", 1, { timeout: 30_000 });
     } finally {
       await apiClient.saveUserSettings({ prevent_auto_start_agent_on_open: false });
     }

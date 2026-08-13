@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isLaunchStateRegression } from "./session-state";
+import { isLaunchStateRegression, shouldShowComposerAgentStartHint } from "./session-state";
 
 describe("isLaunchStateRegression", () => {
   it("applies the launch response over a never-started (CREATED) session", () => {
@@ -42,5 +42,47 @@ describe("isLaunchStateRegression", () => {
   it("treats unknown states as non-regressing", () => {
     expect(isLaunchStateRegression("SOMETHING_NEW", "STARTING")).toBe(false);
     expect(isLaunchStateRegression("CREATED", "SOMETHING_NEW")).toBe(false);
+  });
+});
+
+describe("shouldShowComposerAgentStartHint", () => {
+  const base = {
+    resumeSkipped: true,
+    hasRecoveryActions: false,
+    sessionId: "s1",
+  } as const;
+
+  it("shows for a resume-skipped WAITING_FOR_INPUT session without recovery actions", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "WAITING_FOR_INPUT" })).toBe(
+      true,
+    );
+  });
+
+  it("shows when the session state is unknown/absent (defensive, matches footer behavior)", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: undefined })).toBe(true);
+  });
+
+  it("hides when the session is not resume-skipped", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, resumeSkipped: false })).toBe(false);
+  });
+
+  it("hides for a FAILED session (recovery owns the surface)", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "FAILED" })).toBe(false);
+  });
+
+  it("hides while the session is STARTING", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "STARTING" })).toBe(false);
+  });
+
+  it("hides while the session is RUNNING", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionState: "RUNNING" })).toBe(false);
+  });
+
+  it("hides when recovery actions are already visible", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, hasRecoveryActions: true })).toBe(false);
+  });
+
+  it("hides when no session is bound", () => {
+    expect(shouldShowComposerAgentStartHint({ ...base, sessionId: null })).toBe(false);
   });
 });

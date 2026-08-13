@@ -23,6 +23,7 @@ import { useIsTaskArchived } from "./task-archived-context";
 import { useChatPanelState } from "./chat/use-chat-panel-state";
 import { ChatInputArea, useSubmitHandler, useChatPanelHandlers } from "./chat/chat-input-area";
 import { ClarificationInputOverlay } from "./chat/clarification-input-overlay";
+import { useComposerAgentStartHint } from "./chat/use-composer-agent-start-hint";
 import { ResizeHandle } from "./chat/resize-handle";
 import { useResizableClarificationOverlay } from "@/hooks/use-resizable-clarification-overlay";
 import { PanelSearchBar } from "@/components/search/panel-search-bar";
@@ -241,6 +242,12 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     groupedItems,
     isInitialMessagesLoading,
   );
+  const showAgentStartHint = useComposerAgentStartHint(
+    resolvedSessionId,
+    session?.state,
+    allMessages,
+    footerActionMessages,
+  );
   const { handleCancelTurn } = useChatPanelHandlers(resolvedSessionId, chatInputRef);
   const { clarificationKey, handleClarificationResolved } = useClarificationKey(agentMessageCount);
   const {
@@ -423,6 +430,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
         showScrollToStart={showScrollToStartButton}
         onScrollToStart={scrollToStart}
         statusTaskId={statusTaskId ?? taskIdHint}
+        showAgentStartHint={showAgentStartHint}
       />
     </PanelRoot>
   );
@@ -489,6 +497,8 @@ type ChatFooterProps = {
   showScrollToStart: boolean;
   onScrollToStart: () => void;
   statusTaskId: string | null;
+  /** Recovered-idle sessions render the composer hint (see ChatInputArea). */
+  showAgentStartHint: boolean;
 };
 
 function ChatFooter({
@@ -509,6 +519,7 @@ function ChatFooter({
   showScrollToStart,
   onScrollToStart,
   statusTaskId,
+  showAgentStartHint,
 }: ChatFooterProps) {
   const { t } = useTranslation();
   if (isArchived) {
@@ -536,6 +547,7 @@ function ChatFooter({
       showScrollToStart={showScrollToStart}
       onScrollToStart={onScrollToStart}
       statusTaskId={statusTaskId}
+      showAgentStartHint={showAgentStartHint}
     />
   );
 }

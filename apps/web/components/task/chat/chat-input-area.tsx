@@ -13,6 +13,7 @@ import {
   type ChatInputContainerHandle,
 } from "@/components/task/chat/chat-input-container";
 import { QueueAffordance } from "@/components/task/chat/queued-ghost-list";
+import { ComposerAgentStartHint } from "./composer-agent-start-hint";
 import {
   formatReviewCommentsAsMarkdown,
   formatPRFeedbackAsMarkdown,
@@ -332,13 +333,8 @@ type ChatInputAreaProps = {
    * start of the transcript. */
   showScrollToStart?: boolean;
   onScrollToStart?: () => void;
-  /**
-   * Task this composer belongs to, for the status row only. Hosts that mount a
-   * task's chat before any session exists pass it so the dependency / autopilot
-   * chips still render; without it the row is hidden on exactly the tasks a
-   * dependency chip is about.
-   */
-  statusTaskId?: string | null;
+1: @both
+2: @both
 };
 
 /** Resolves whether this session's executor environment is unavailable, and why. */
@@ -425,7 +421,8 @@ export function ChatInputArea({
   lastPromptScrollDirection,
   showScrollToStart,
   onScrollToStart,
-  statusTaskId = null,
+1: @both
+2: @both
 }: ChatInputAreaProps) {
   const { resolvedSessionId, taskId, isAgentBusy } = panelState;
   const statusRowTaskId = resolveStatusRowTaskId(taskId, statusTaskId);
@@ -461,6 +458,7 @@ export function ChatInputArea({
       data-testid="chat-input-area"
       className={cn("bg-card flex-shrink-0 px-2 pb-2 pt-1", surfaceClassName)}
     >
+      <ComposerAgentStartHint show={showAgentStartHint} />
       <QueueAffordance
         sessionId={resolvedSessionId}
         canDrain={canDrainQueue}

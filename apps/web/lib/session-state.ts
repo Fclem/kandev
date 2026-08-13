@@ -36,3 +36,33 @@ export function isLaunchStateRegression(
   if (live === undefined || incoming === undefined) return false;
   return incoming < live;
 }
+
+/**
+ * Visibility rule for the composer's "a message will auto-start the agent"
+ * hint (the recovered-idle / resume-skipped affordance that replaced the
+ * footer Start agent button). Mirrors the exact condition set the footer
+ * button used: the session is resume-skipped (prevent-auto-start-on-open
+ * preference), stopped, not FAILED (recovery actions own that surface), not
+ * STARTING/RUNNING, and no recovery actions are already visible in the
+ * transcript.
+ */
+export function shouldShowComposerAgentStartHint({
+  resumeSkipped,
+  sessionState,
+  hasRecoveryActions,
+  sessionId,
+}: {
+  resumeSkipped: boolean;
+  sessionState?: TaskSessionState;
+  hasRecoveryActions: boolean;
+  sessionId: string | null;
+}): boolean {
+  return (
+    resumeSkipped &&
+    !hasRecoveryActions &&
+    sessionState !== "FAILED" &&
+    sessionState !== "RUNNING" &&
+    sessionState !== "STARTING" &&
+    sessionId !== null
+  );
+}

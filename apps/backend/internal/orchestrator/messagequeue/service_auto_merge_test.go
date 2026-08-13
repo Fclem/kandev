@@ -69,19 +69,95 @@ func TestService_AutoMergeChainsThreeAdmissions(t *testing.T) {
 	}
 }
 
-func TestService_AutoMergeDoesNotBypassCapacity(t *testing.T) {
+func TestService_AutoMergeFoldsSameTaskSiblingSessions(t *testing.T) {
+	svc := newAutoMergeTestService(t, 10)
+	first, err := svc.QueueMessageWithMetadata(context.Background(), "session", "task", "first", "", QueuedByAgent, false, nil, map[string]interface{}{
+		MetadataSenderTaskID:    "sender-task",
+		MetadataSenderSessionID: "session-one",
+		"sender_session_name":   "reviewer-one",
+		"sender_task_title":     "Sender task",
+	})
+	if err != nil {
+		t.Fatalf("queue first: %v", err)
+	}
+	second, err := svc.QueueMessageWithMetadata(context.Background(), "session", "task", "second", "", QueuedByAgent, false, nil, map[string]interface{}{
+		MetadataSenderTaskID:    "sender-task",
+		MetadataSenderSessionID: "session-two",
+		"sender_session_name":   "reviewer-two",
+		"sender_task_title":     "Sender task",
+	})
+	if err != nil {
+		t.Fatalf("queue second: %v", err)
+	}
+	if second.ID != first.ID || second.Content != "first\n\nsecond" {
+		t.Fatalf("second admission = %+v, want folded survivor %s", second, first.ID)
+	}
+	status := svc.GetStatus(context.Background(), "session")
+	if status.Count != 1 || status.Entries[0].ID != first.ID {
+		t.Fatalf("status = %+v, want one merged entry", status)
+	}
+}
+
+func TestService_AutoMergeFoldsCompatibleAdmissionAtCapacity(t *testing.T) {
 	svc := newAutoMergeTestService(t, 1)
 	first, err := svc.QueueMessage(context.Background(), "session", "task", "first", "", QueuedByUser, false, nil)
 	if err != nil {
 		t.Fatalf("queue first: %v", err)
 	}
+	// A compatible message must fold into the tail instead of being rejected:
+	// the fold is the admission, so the queue never reports full for a message
+	// that would merge anyway.
 	second, err := svc.QueueMessage(context.Background(), "session", "task", "second", "", QueuedByUser, false, nil)
-	if !errors.Is(err, ErrQueueFull) || second != nil {
-		t.Fatalf("second admission = %+v, err=%v, want queue full", second, err)
+	if err != nil {
+		t.Fatalf("compatible admission at capacity = %v, want fold", err)
+	}
+	if second.ID != first.ID || second.Content != "first\n\nsecond" {
+		t.Fatalf("second admission = %+v, want folded survivor %s", second, first.ID)
 	}
 	status := svc.GetStatus(context.Background(), "session")
-	if status.Count != 1 || status.Entries[0].ID != first.ID || status.Entries[0].Content != "first" {
-		t.Fatalf("queue changed after full admission: %+v", status)
+	if status.Count != 1 || status.Entries[0].ID != first.ID || status.Entries[0].Content != "first\n\nsecond" {
+		t.Fatalf("queue after full-queue fold: %+v", status)
+	}
+}
+
+func TestService_AutoMergeAtFullQueueRejectsIncompatibleAdmission(t *testing.T) {
+	svc := newAutoMergeTestService(t, 1)
+	if _, err := svc.QueueMessage(context.Background(), "session", "task", "first", "model-a", QueuedByUser, false, nil); err != nil {
+		t.Fatalf("queue first: %v", err)
+	}
+	second, err := svc.QueueMessage(context.Background(), "session", "task", "second", "model-b", QueuedByUser, false, nil)
+	if !errors.Is(err, ErrQueueFull) || second != nil {
+		t.Fatalf("incompatible full admission = %+v, err=%v, want queue full", second, err)
+	}
+}
+
+func TestService_AutoMergeDisabledAtFullQueueRejects(t *testing.T) {
+	svc := newAutoMergeTestService(t, 1)
+	svc.SetAutoMergeEnabled(false)
+	if _, err := svc.QueueMessage(context.Background(), "session", "task", "first", "", QueuedByUser, false, nil); err != nil {
+		t.Fatalf("queue first: %v", err)
+	}
+	second, err := svc.QueueMessage(context.Background(), "session", "task", "second", "", QueuedByUser, false, nil)
+	if !errors.Is(err, ErrQueueFull) || second != nil {
+		t.Fatalf("disabled full admission = %+v, err=%v, want queue full", second, err)
+	}
+}
+
+func TestService_AutoMergeAtFullQueueSkipsAfterInsertHook(t *testing.T) {
+	svc := newAutoMergeTestService(t, 1)
+	if _, err := svc.QueueMessage(context.Background(), "session", "task", "first", "", QueuedByUser, false, nil); err != nil {
+		t.Fatalf("queue first: %v", err)
+	}
+	ran := false
+	second, err := svc.QueueMessageWithMetadataAfterInsert(
+		context.Background(), "session", "task", "second", "", QueuedByUser, false, nil, nil,
+		func(context.Context, *QueuedMessage) error { ran = true; return nil },
+	)
+	if !errors.Is(err, ErrQueueFull) || second != nil {
+		t.Fatalf("after-insert full admission = %+v, err=%v, want queue full", second, err)
+	}
+	if ran {
+		t.Fatal("after-insert hook ran for a rejected full-queue admission")
 	}
 }
 

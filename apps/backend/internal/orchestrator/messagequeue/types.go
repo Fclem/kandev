@@ -72,6 +72,17 @@ const MetadataLifecycleReserved = "lifecycle_reserved_in_flight"
 // never mixes prompts issued by different agents.
 const MetadataSenderTaskID = "sender_task_id"
 
+// MetadataSenderSessionID identifies the specific session of the sender task
+// that produced an agent message. It is per-session provenance, not merge
+// context: two messages from different sessions of the same sender task are
+// both prompts from that task's agents and fold like manual merge allows.
+const MetadataSenderSessionID = "sender_session_id"
+
+// MetadataSenderSessionName is the sender session's user-supplied name,
+// snapshotted for the receiving chat's sender badge. Like the session id it
+// is provenance and never blocks merging between same-task entries.
+const MetadataSenderSessionName = "sender_session_name"
+
 // QueueFullErrorCode is the well-known WS / MCP error code surfaced when an
 // insert would exceed the per-session cap. Shared between the user-side WS
 // handlers and the inter-task MCP handler so the wire contract stays in sync.

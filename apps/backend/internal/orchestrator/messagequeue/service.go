@@ -179,6 +179,37 @@ func (s *Service) queueMessageWithMetadataAdmission(ctx context.Context, session
 			admittedCtx, sessionID, taskID, content, model, userID, planMode, attachments, metadata, maxPerSession,
 		)
 		if err != nil {
+			if errors.Is(err, ErrQueueFull) && autoMergeEnabled && afterInsert == nil {
+				// A full queue must still accept a message that would fold into
+				// the tail: admission-time auto-merge runs after a successful
+				// insert, so at capacity it could never fire. Fold the
+				// candidate directly — the fold is the admission. The
+				// afterInsert hook is excluded because it claims staged
+				// attachments against a persisted source row, which this path
+				// never creates.
+				candidate := &QueuedMessage{
+					SessionID:   sessionID,
+					TaskID:      taskID,
+					Content:     content,
+					Model:       model,
+					PlanMode:    planMode,
+					Attachments: attachments,
+					Metadata:    copyMessageMetadata(metadata, 0),
+					QueuedBy:    userID,
+				}
+				merged, didMerge, mergeErr := s.repo.AutoMergeCandidateIntoAbove(admittedCtx, candidate)
+				if mergeErr != nil {
+					s.logger.Error("automatic merge into full queue failed; preserving queue full rejection",
+						zap.String("session_id", sessionID),
+						zap.Error(mergeErr))
+				} else if didMerge && merged != nil {
+					s.logger.Info("automatically merged queued entry into full tail",
+						zap.String("session_id", sessionID),
+						zap.String("surviving_entry_id", merged.ID))
+					queued = merged
+					return nil
+				}
+			}
 			return err
 		}
 		if afterInsert != nil {

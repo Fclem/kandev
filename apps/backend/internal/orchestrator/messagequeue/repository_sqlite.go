@@ -1365,6 +1365,66 @@ func (r *sqliteRepository) AutoMergeIntoAbove(ctx context.Context, sessionID, so
 	return target, true, nil
 }
 
+// AutoMergeCandidateIntoAbove folds a not-yet-admitted candidate into the
+// session's tail entry when compatible. Unlike AutoMergeIntoAbove there is no
+// source row to delete: admission at full capacity could not insert one, so
+// the fold is the admission. Missing or incompatible tails are successful
+// skips and leave storage unchanged.
+func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, candidate *QueuedMessage) (*QueuedMessage, bool, error) {
+	unlock := r.withSessionLock(candidate.SessionID)
+	defer unlock()
+
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, false, fmt.Errorf("begin automatic candidate merge tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	target, err := r.scanTail(ctx, tx, candidate.SessionID)
+	if err != nil {
+		return nil, false, err
+	}
+	if target == nil {
+		return nil, false, nil
+	}
+	values, compatible := buildAutoMergedEntry(target, candidate)
+	if !compatible {
+		return nil, false, nil
+	}
+	attachmentsJSON, err := marshalAttachments(values.attachments)
+	if err != nil {
+		return nil, false, err
+	}
+	metadataJSON, err := marshalMetadata(values.metadata)
+	if err != nil {
+		return nil, false, err
+	}
+	res, err := tx.ExecContext(ctx, r.db.Rebind(`
+		UPDATE queued_messages
+		SET content = ?, attachments_json = ?, metadata_json = ?
+		WHERE id = ? AND session_id = ?
+	`), values.content, attachmentsJSON, metadataJSON, target.ID, candidate.SessionID)
+	if err != nil {
+		return nil, false, fmt.Errorf("update automatic candidate merge target: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return nil, false, fmt.Errorf("update automatic candidate merge rows affected: %w", err)
+	}
+	if affected == 0 {
+		// The tail was drained concurrently; roll back rather than folding
+		// into a row that no longer exists.
+		return nil, false, nil
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, false, err
+	}
+	target.Content = values.content
+	target.Attachments = values.attachments
+	target.Metadata = values.metadata
+	return target, true, nil
+}
+
 // ReorderEntries atomically rewrites the FIFO positions of the session's
 // visible pending entries to match orderedIDs. Reserved in-flight lifecycle
 // rows keep their place in the sequence; visible rows are interleaved in the

@@ -2000,7 +2000,6 @@ func buildHTTPServer(
 		devMode:                       cfg.Debug.DevMode || cfg.Debug.PprofEnabled,
 		httpPort:                      resolvedHTTPPort(cfg),
 		features:                      cfg.Features,
-		voice:                         cfg.Voice,
 		homeDir:                       cfg.ResolvedHomeDir(),
 		interimSettingsInterlockToken: interimSettingsInterlockToken,
 		log:                           log,

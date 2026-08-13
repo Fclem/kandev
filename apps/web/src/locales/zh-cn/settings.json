@@ -716,5 +716,21 @@
   "noValidDestinations": "没有可用的有效目标。",
   "transferFailed": "无法复制或移动密钥。",
   "destinationGlobal": "全局",
-  "secretNameTooLong": "名称不能超过 100 字节。"
+  "secretNameTooLong": "名称不能超过 100 字节。",
+  "shortcutBottomTerminal": "切换底部终端",
+  "shortcutCommandPanel": "命令面板",
+  "shortcutCommandPanelAlt": "命令面板（备用）",
+  "shortcutFileSearch": "文件搜索",
+  "shortcutFocusChatInput": "聚焦聊天输入框",
+  "shortcutFocusCliChatInput": "聚焦 CLI 聊天输入框",
+  "shortcutNewTask": "新建任务",
+  "shortcutOpenTaskPullRequest": "打开任务拉取请求",
+  "shortcutOpenWorkspacePicker": "打开工作区选择器",
+  "shortcutQuickChat": "快速聊天",
+  "shortcutRecentTaskSwitcher": "最近任务切换器",
+  "shortcutRecentTaskSwitcherBackward": "最近任务切换器（向后）",
+  "shortcutReverseChatSearch": "反向聊天搜索",
+  "shortcutTaskContentSearch": "搜索任务内容",
+  "shortcutTogglePlanMode": "切换计划模式",
+  "shortcutToggleSidebar": "切换侧边栏"
 }

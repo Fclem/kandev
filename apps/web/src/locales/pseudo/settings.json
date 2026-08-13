@@ -710,5 +710,21 @@
   "noValidDestinations": "Ńō vàĺĩď ďēśţĩńàţĩōńś àvàĩĺàƀĺē.",
   "transferFailed": "Ćōũĺď ńōţ ćōƥŷ ōŕ ḿōvē ţĥē śēćŕēţ.",
   "destinationGlobal": "Ĝĺōƀàĺ",
-  "secretNameTooLong": "Ńàḿē ḿŭśţ ƀē àţ ḿōśţ 100 ƀŷţēś."
+  "secretNameTooLong": "Ńàḿē ḿŭśţ ƀē àţ ḿōśţ 100 ƀŷţēś.",
+  "shortcutBottomTerminal": "Ţōĝĝĺē Ɓōţţōḿ Ţēŕḿĩńàĺ",
+  "shortcutCommandPanel": "Ćōḿḿàńď Ƥàńēĺ",
+  "shortcutCommandPanelAlt": "Ćōḿḿàńď Ƥàńēĺ (Àĺţ)",
+  "shortcutFileSearch": "Ƒĩĺē Śēàŕćĥ",
+  "shortcutFocusChatInput": "Ƒōćũś Ćĥàţ Ĩńƥũţ",
+  "shortcutFocusCliChatInput": "Ƒōćũś ĆĹĨ Ćĥàţ Ĩńƥũţ",
+  "shortcutNewTask": "Ńēŵ Ţàśķ",
+  "shortcutOpenTaskPullRequest": "Ōƥēń Ţàśķ Ƥũĺĺ Ŕēqũēśţ",
+  "shortcutOpenWorkspacePicker": "Ōƥēń Ŵōŕķśƥàćē Ƥĩćķēŕ",
+  "shortcutQuickChat": "Qũĩćķ Ćĥàţ",
+  "shortcutRecentTaskSwitcher": "Ŕēćēńţ Ţàśķ Śŵĩţćĥēŕ",
+  "shortcutRecentTaskSwitcherBackward": "Ŕēćēńţ Ţàśķ Śŵĩţćĥēŕ (Ɓàćķŵàŕď)",
+  "shortcutReverseChatSearch": "Ŕēvēŕśē Ćĥàţ Śēàŕćĥ",
+  "shortcutTaskContentSearch": "Śēàŕćĥ Ţàśķ Ćōńţēńţś",
+  "shortcutTogglePlanMode": "Ţōĝĝĺē Ƥĺàń Ḿōďē",
+  "shortcutToggleSidebar": "Ţōĝĝĺē Śĩďēƀàŕ"
 }

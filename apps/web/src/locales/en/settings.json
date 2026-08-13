@@ -710,5 +710,21 @@
   "noValidDestinations": "No valid destinations available.",
   "transferFailed": "Could not copy or move the secret.",
   "destinationGlobal": "Global",
-  "secretNameTooLong": "Name must be at most 100 bytes."
+  "secretNameTooLong": "Name must be at most 100 bytes.",
+  "shortcutBottomTerminal": "Toggle Bottom Terminal",
+  "shortcutCommandPanel": "Command Panel",
+  "shortcutCommandPanelAlt": "Command Panel (Alt)",
+  "shortcutFileSearch": "File Search",
+  "shortcutFocusChatInput": "Focus Chat Input",
+  "shortcutFocusCliChatInput": "Focus CLI Chat Input",
+  "shortcutNewTask": "New Task",
+  "shortcutOpenTaskPullRequest": "Open Task Pull Request",
+  "shortcutOpenWorkspacePicker": "Open Workspace Picker",
+  "shortcutQuickChat": "Quick Chat",
+  "shortcutRecentTaskSwitcher": "Recent Task Switcher",
+  "shortcutRecentTaskSwitcherBackward": "Recent Task Switcher (Backward)",
+  "shortcutReverseChatSearch": "Reverse Chat Search",
+  "shortcutTaskContentSearch": "Search Task Contents",
+  "shortcutTogglePlanMode": "Toggle Plan Mode",
+  "shortcutToggleSidebar": "Toggle Sidebar"
 }

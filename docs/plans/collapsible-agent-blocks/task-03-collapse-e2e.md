@@ -46,7 +46,16 @@ agent has zero profiles, create one via `apiClient.createAgentProfile`.
 
 ## Results
 
-- Desktop: `cd apps/web && pnpm e2e:run -- tests/settings/agent-block-collapse.spec.ts` → 1 passed (re-run `--repeat-each=2` → 2 passed).
-- Mobile: `cd apps/web && pnpm e2e:run --project mobile-chrome -- tests/settings/mobile-agent-block-collapse.spec.ts` → 3 passed (`--repeat-each=3`), after hardening the spec against a re-render race (explicit `toBeVisible` wait before `scrollIntoViewIfNeeded`; first run flagged flaky with "Element is not attached to the DOM").
+- Desktop: `cd apps/web && pnpm e2e:run -- tests/settings/agent-block-collapse.spec.ts` → 2/2 passed (`--repeat-each=2`).
+- Mobile: `cd apps/web && pnpm e2e:run --project mobile-chrome -- tests/settings/mobile-agent-block-collapse.spec.ts` → 2/2 passed (`--repeat-each=2`).
 - Files: `apps/web/e2e/tests/settings/agent-block-collapse.spec.ts` (new), `apps/web/e2e/tests/settings/mobile-agent-block-collapse.spec.ts` (new).
+- Both specs route-inject a deterministic zero-profile agent via `**/api/v1/agents/discovery` (the fixture only registers mock-agent, which has profiles). The injected card's presence gates interaction until discovery settles — this fixes a real flake: cards render from the boot payload as orphans (key = agent id) and remount when discovery resolves (key = agent name), detaching the toggle mid-scroll.
+- The mobile spec asserts no horizontal overflow (`scrollWidth <= clientWidth`) after collapsing, including for the long "No profiles yet" label on the zero-profile card.
 - Host-mode E2E (no Docker available in this environment); `pnpm e2e:run` rebuilt backend + web + fixture plugin.
+
+## Review loop
+
+Adversarial review rounds (sub-agent `reviewer`):
+- Round 1: 2 major findings (zero-profile label mobile overflow; uncaught localStorage write error) → fixed in `f98c54fc6` (wrap cluster + min-w-0 span; try/catch `handleToggleCollapsed` + component test).
+- Round 2: 1 minor finding (zero-profile E2E branch unreachable under the fixture) → fixed in `a092fc4e0` (deterministic route injection in both specs + discovery-settled gating).
+- Round 3: NO FINDINGS → loop ended.

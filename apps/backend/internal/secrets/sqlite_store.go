@@ -32,6 +32,12 @@ type sqliteStore struct {
 	// is selected with FOR UPDATE (Move on PostgreSQL), giving tests a
 	// deterministic point where the source row lock is known to be held.
 	afterSourceLock func() error
+
+	// beforeTransferInsert is a test-only hook invoked after the conflict
+	// check and before the conditional insert, letting tests commit a
+	// competing row at the exact point where the atomic NOT EXISTS guard must
+	// observe it (PostgreSQL: ordinary creates do not take the transfer lock).
+	beforeTransferInsert func() error
 }
 
 var _ ScopedSecretStore = (*sqliteStore)(nil)
@@ -595,11 +601,28 @@ func (s *sqliteStore) transferBody(ctx context.Context, exec transferExec, rebin
 	now := time.Now().UTC()
 	storedScope := normalizeStoredScope(targetScope)
 	copyID := uuid.New().String()
-	if _, err := exec.ExecContext(ctx, rebind(`
+	if s.beforeTransferInsert != nil {
+		if err := s.beforeTransferInsert(); err != nil {
+			return nil, err
+		}
+	}
+	// The insert is guarded by the same conflict predicate atomically: on
+	// PostgreSQL, an ordinary create or rename does not take the transfer's
+	// advisory lock, so the eager check alone could race a late commit of the
+	// same name. NOT EXISTS turns that race into a clean conflict instead of a
+	// duplicate row.
+	predicate, predicateArgs := transferConflictPredicate(targetScope, targetWorkspaceID, targetName, owner)
+	result, err := exec.ExecContext(ctx, rebind(`
 		INSERT INTO secrets (id, name, user_id, scope, workspace_id, encrypted_value, nonce, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-		copyID, targetName, owner, storedScope, targetWorkspaceID, src.Ciphertext, src.Nonce, now, now); err != nil {
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+		WHERE NOT EXISTS (SELECT 1 FROM secrets WHERE `+predicate+`)`),
+		append([]any{copyID, targetName, owner, storedScope, targetWorkspaceID, src.Ciphertext, src.Nonce, now, now}, predicateArgs...)...)
+	if err != nil {
 		return nil, fmt.Errorf("insert transferred secret: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return nil, ErrSecretNameConflict
 	}
 
 	if deleteSource {
@@ -677,19 +700,28 @@ func (s *sqliteStore) transferSource(ctx context.Context, exec transferExec, reb
 	return &src, nil
 }
 
-// transferConflictCheck rejects a target name that already exists in the
-// destination scope, comparing the NORMALIZED scope so a legacy empty stored
-// scope (which reads as Global) can never be bypassed.
-func (s *sqliteStore) transferConflictCheck(ctx context.Context, exec transferExec, rebind func(string) string, targetScope SecretScope, targetWorkspaceID, targetName, owner string) error {
-	var query string
-	var args []any
+// transferConflictPredicate returns the WHERE predicate and arguments that
+// identify an existing secret with the given name in the destination scope,
+// comparing the NORMALIZED scope so a legacy empty stored scope (which reads
+// as Global) can never be bypassed. Shared by the eager conflict check and the
+// atomic NOT EXISTS guard on the transfer insert.
+func transferConflictPredicate(targetScope SecretScope, targetWorkspaceID, targetName, owner string) (string, []any) {
 	if normalizeStoredScope(targetScope) != ScopeWorkspace {
-		query = `SELECT 1 FROM secrets WHERE name = ? AND (scope = ? OR scope = '') AND (user_id = '' OR ? = '' OR user_id = ?) LIMIT 1`
-		args = []any{targetName, ScopeGlobal, owner, owner}
-	} else {
-		query = `SELECT 1 FROM secrets WHERE name = ? AND scope = ? AND workspace_id = ? AND (user_id = '' OR ? = '' OR user_id = ?) LIMIT 1`
-		args = []any{targetName, ScopeWorkspace, targetWorkspaceID, owner, owner}
+		return `name = ? AND (scope = ? OR scope = '') AND (user_id = '' OR ? = '' OR user_id = ?)`,
+			[]any{targetName, ScopeGlobal, owner, owner}
 	}
+	return `name = ? AND scope = ? AND workspace_id = ? AND (user_id = '' OR ? = '' OR user_id = ?)`,
+		[]any{targetName, ScopeWorkspace, targetWorkspaceID, owner, owner}
+}
+
+// transferConflictCheck rejects a target name that already exists in the
+// destination scope. It is the eager, pre-insert check; the insert itself is
+// guarded by the same predicate atomically (see transferBody), so a competing
+// create or rename that commits after this check can still never produce a
+// duplicate name from the transfer.
+func (s *sqliteStore) transferConflictCheck(ctx context.Context, exec transferExec, rebind func(string) string, targetScope SecretScope, targetWorkspaceID, targetName, owner string) error {
+	predicate, args := transferConflictPredicate(targetScope, targetWorkspaceID, targetName, owner)
+	query := `SELECT 1 FROM secrets WHERE ` + predicate + ` LIMIT 1`
 	var found int
 	if err := exec.QueryRowContext(ctx, rebind(query), args...).Scan(&found); err == nil {
 		return ErrSecretNameConflict

@@ -346,3 +346,45 @@ func TestPostgresTransfer_MoveSerializesConcurrentUpdate(t *testing.T) {
 		t.Fatalf("moved value = %q, want A (concurrent update must not be lost)", value)
 	}
 }
+
+// TestPostgresTransfer_ConditionalInsertRejectsLateConflict verifies the
+// transfer insert is guarded by an atomic NOT EXISTS: an ordinary create or
+// rename (which does not take the transfer's advisory lock) committing the
+// target name between the eager conflict check and the insert must produce a
+// clean ErrSecretNameConflict, never a duplicate row.
+func TestPostgresTransfer_ConditionalInsertRejectsLateConflict(t *testing.T) {
+	db := openPGWithConns(t, 2)
+	store := newPGStore(t, db)
+	ctx := context.Background()
+
+	mustCreate(t, store, &SecretWithValue{Secret: Secret{ID: "g1", Name: "orig"}, Value: "v"})
+
+	// Commit the target name from a second connection at the exact point
+	// between the transfer's conflict check and its conditional insert.
+	store.beforeTransferInsert = func() error {
+		_, err := db.Exec(`
+			INSERT INTO secrets (id, name, user_id, scope, workspace_id, encrypted_value, nonce, created_at, updated_at)
+			VALUES ('late', 'copied', '', 'workspace', 'workspace-a', '\x01'::bytea, '\x01'::bytea, now(), now())`)
+		return err
+	}
+	_, err := store.CopyScoped(ctx, "g1", "", ScopeWorkspace, "workspace-a", strPtr("copied"), nil)
+	if !errors.Is(err, ErrSecretNameConflict) {
+		t.Fatalf("error = %v, want ErrSecretNameConflict (atomic NOT EXISTS must observe the late row)", err)
+	}
+
+	// Exactly one 'copied' row in workspace-a: the late create won, the
+	// transfer did not insert a duplicate.
+	items, err := store.ListScoped(ctx, SecretListOptions{Scope: ScopeWorkspace, WorkspaceID: "workspace-a"})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	count := 0
+	for _, item := range items {
+		if item.Name == "copied" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("'copied' rows in workspace-a = %d, want 1 (no duplicate from the transfer)", count)
+	}
+}

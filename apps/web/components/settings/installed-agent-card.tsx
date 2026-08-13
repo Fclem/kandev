@@ -4,12 +4,14 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Link from "@/components/routing/app-link";
-import { IconLoader2, IconLock, IconSettings } from "@tabler/icons-react";
+import { IconChevronDown, IconLoader2, IconLock, IconSettings } from "@tabler/icons-react";
 import { Badge } from "@kandev/ui/badge";
 import { NotInstalledBadge } from "@/components/settings/record-badges";
 import { Button } from "@kandev/ui/button";
 import { Card } from "@kandev/ui/card";
+import { Collapsible, CollapsibleContent } from "@kandev/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
+import { useCollapsedAgentBlocks } from "@/hooks/domains/settings/use-collapsed-agent-blocks";
 import { AgentLogo } from "@/components/agent-logo";
 import { AgentLoginDialog } from "@/components/settings/agent-login-dialog";
 import { AgentRuntimeUpdateControl } from "@/components/settings/agent-runtime-update-control";
@@ -114,6 +116,63 @@ function InstalledAgentIdentity({
 }
 
 /**
+ * The header's collapse toggle plus, while collapsed, the profile count that
+ * the profile list's first line normally shows — so a collapsed block never
+ * hides how many profiles the agent has (or that it has none yet). The
+ * profiles body is a `CollapsibleContent` driven by this button (no Radix
+ * trigger — the trigger would live outside the root, so the button owns the
+ * state transition).
+ */
+function AgentCollapseControl({
+  agentName,
+  displayName,
+  isCollapsed,
+  profileCount,
+  onToggle,
+}: {
+  agentName: string;
+  displayName: string;
+  isCollapsed: boolean;
+  profileCount: number;
+  onToggle: () => void;
+}) {
+  const { t } = useTranslation();
+  const countLabel =
+    profileCount === 0
+      ? t("agents:noProfilesYet")
+      : t("agents:profileCount", { count: profileCount });
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="cursor-pointer min-h-11 min-w-11"
+        onClick={onToggle}
+        data-testid={`collapse-agent-${agentName}`}
+        aria-expanded={!isCollapsed}
+        aria-label={
+          isCollapsed
+            ? t("agents:expandAgentProfiles", { name: displayName })
+            : t("agents:collapseAgentProfiles", { name: displayName })
+        }
+      >
+        <IconChevronDown
+          className={`h-4 w-4 transition-transform ${isCollapsed ? "" : "rotate-180"}`}
+        />
+      </Button>
+      {isCollapsed && (
+        <span
+          className="whitespace-nowrap text-sm text-muted-foreground"
+          data-testid={`collapsed-count-${agentName}`}
+        >
+          {countLabel}
+        </span>
+      )}
+    </>
+  );
+}
+
+/**
  * Card rendered under "Installed Agents" - links to the agent's page (its
  * profile list) once configured, or straight into profile creation otherwise.
  * Surfaces a yellow lock icon when the capability probe reports
@@ -134,6 +193,8 @@ export function InstalledAgentCard({
   children,
 }: Props) {
   const { t } = useTranslation();
+  const { collapsed, setCollapsed } = useCollapsedAgentBlocks();
+  const isCollapsed = collapsed(agent.name);
   const configured = Boolean(savedAgent && savedAgent.profiles.length > 0);
   const hasAgentRecord = Boolean(savedAgent);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -141,6 +202,7 @@ export function InstalledAgentCard({
   const authRequired = capabilityStatus === "auth_required";
   const probing = capabilityStatus === "probing";
   const loginAvailable = Boolean(agent.login_command);
+  const profileCount = savedAgent?.profiles.length ?? 0;
 
   // Either we have a registered login command (open the dedicated login PTY)
   // or we don't (open a plain host shell so the user can explore via
@@ -166,6 +228,13 @@ export function InstalledAgentCard({
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <AgentCollapseControl
+            agentName={agent.name}
+            displayName={displayName}
+            isCollapsed={isCollapsed}
+            profileCount={profileCount}
+            onToggle={() => setCollapsed(agent.name, !isCollapsed)}
+          />
           {runtimeUpdate?.supported && onPreview && onUpdate && (
             <AgentRuntimeUpdateControl
               agentName={agent.name}
@@ -191,8 +260,11 @@ export function InstalledAgentCard({
           )}
         </div>
       </div>
-      {/* Profiles area: full-bleed below the header, split off by a 1px border. */}
-      {children}
+      {/* Profiles area: full-bleed below the header, split off by a 1px border.
+          Hidden while the card is collapsed. */}
+      <Collapsible open={!isCollapsed}>
+        <CollapsibleContent>{children}</CollapsibleContent>
+      </Collapsible>
       <AuthDialogs
         agent={agent}
         loginOpen={loginOpen}

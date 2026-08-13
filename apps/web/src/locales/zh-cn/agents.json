@@ -212,5 +212,7 @@
   "watcherKindGithubIssue": "GitHub 议题",
   "watcherKindGithubReview": "GitHub PR Reviews",
   "watcherKindJira": "Jira",
-  "watcherKindLinear": "Linear"
+  "watcherKindLinear": "Linear",
+  "collapseAgentProfiles": "折叠 {{name}} 配置",
+  "expandAgentProfiles": "展开 {{name}} 配置"
 }

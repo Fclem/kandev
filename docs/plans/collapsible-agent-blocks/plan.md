@@ -112,15 +112,25 @@ Every spec scenario maps to a check:
 
 ## Verification Results
 
-Pending. On completion, synchronize with each task's `## Results`.
+All three tasks completed. Exact commands and outcomes:
+
+- Hook tests: `cd apps && pnpm --filter @kandev/web test -- hooks/domains/settings/use-collapsed-agent-blocks.test.ts` → 13/13 passed.
+- Component tests: `cd apps && pnpm --filter @kandev/web test -- components/settings/installed-agent-card.test.tsx` → 6/6 passed.
+- Typecheck: `cd apps/web && pnpm run typecheck` → clean; `make typecheck` → clean.
+- Lint: `make lint` → clean (including `eslint --max-warnings 0` on all four new/changed files).
+- i18n: `cd apps/web && pnpm run i18n:pseudo && pnpm run i18n:check && pnpm run i18n:ratchet` → all green.
+- Format: `make fmt` → complete.
+- E2E desktop: `cd apps/web && pnpm e2e:run -- tests/settings/agent-block-collapse.spec.ts` → 1 passed (2/2 with `--repeat-each=2`).
+- E2E mobile: `cd apps/web && pnpm e2e:run --project mobile-chrome -- tests/settings/mobile-agent-block-collapse.spec.ts` → 3/3 with `--repeat-each=3`.
+- `make test` (full): web suite 11303 passed; the only failures are environmental and pre-existing — `lib/http-git-server.test.ts` requires a Docker daemon, and six other web files fail only under full parallel load but pass in isolation. Backend: two packages fail for environment reasons unrelated to this frontend-only change (`internal/agent/settings/handlers` agent-update tests need a live npm registry; `internal/agentctl/server/api` needs the embedded VSCode remote-cli helper). This diff contains no Go files.
 
 ## Implementation Waves And Parallel Candidates
 
 ```
 Wave 1 (sequential):
-- [ ] [task-01-collapse-persistence-hook](task-01-collapse-persistence-hook.md)
-- [ ] [task-02-collapsible-agent-card-ui](task-02-collapsible-agent-card-ui.md)
-- [ ] [task-03-collapse-e2e](task-03-collapse-e2e.md)
+- [x] [task-01-collapse-persistence-hook](task-01-collapse-persistence-hook.md)
+- [x] [task-02-collapsible-agent-card-ui](task-02-collapsible-agent-card-ui.md)
+- [x] [task-03-collapse-e2e](task-03-collapse-e2e.md)
 ```
 
 No parallel candidates: task 02 consumes task 01's hook, task 03 covers both.

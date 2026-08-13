@@ -204,5 +204,7 @@
   "watcherKindGithubIssue": "Issues do GitHub",
   "watcherKindGithubReview": "Revisões de PR do GitHub",
   "watcherKindJira": "Jira",
-  "watcherKindLinear": "Linear"
+  "watcherKindLinear": "Linear",
+  "collapseAgentProfiles": "Recolher perfis de {{name}}",
+  "expandAgentProfiles": "Expandir perfis de {{name}}"
 }

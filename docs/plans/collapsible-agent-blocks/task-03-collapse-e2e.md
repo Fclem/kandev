@@ -1,7 +1,7 @@
 ---
 id: "03-collapse-e2e"
 title: "Collapse behavior E2E"
-status: pending
+status: done
 wave: 1
 depends_on: ["01-collapse-persistence-hook", "02-collapsible-agent-card-ui"]
 plan: "plan.md"
@@ -46,4 +46,7 @@ agent has zero profiles, create one via `apiClient.createAgentProfile`.
 
 ## Results
 
-Pending.
+- Desktop: `cd apps/web && pnpm e2e:run -- tests/settings/agent-block-collapse.spec.ts` → 1 passed (re-run `--repeat-each=2` → 2 passed).
+- Mobile: `cd apps/web && pnpm e2e:run --project mobile-chrome -- tests/settings/mobile-agent-block-collapse.spec.ts` → 3 passed (`--repeat-each=3`), after hardening the spec against a re-render race (explicit `toBeVisible` wait before `scrollIntoViewIfNeeded`; first run flagged flaky with "Element is not attached to the DOM").
+- Files: `apps/web/e2e/tests/settings/agent-block-collapse.spec.ts` (new), `apps/web/e2e/tests/settings/mobile-agent-block-collapse.spec.ts` (new).
+- Host-mode E2E (no Docker available in this environment); `pnpm e2e:run` rebuilt backend + web + fixture plugin.

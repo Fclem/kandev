@@ -1,7 +1,7 @@
 ---
 id: "01-collapse-persistence-hook"
 title: "Collapse persistence hook"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -45,4 +45,7 @@ and `apps/web/hooks/domains/settings/use-hide-disabled-agent-profiles-in-nav.ts`
 
 ## Results
 
-Pending.
+- `pnpm --filter @kandev/web test -- hooks/domains/settings/use-collapsed-agent-blocks.test.ts` → 13/13 passed (TDD: red on missing module, then green).
+- `cd apps/web && pnpm run typecheck` → clean.
+- `pnpm exec eslint --max-warnings 0 hooks/domains/settings/use-collapsed-agent-blocks.ts hooks/domains/settings/use-collapsed-agent-blocks.test.ts` → clean.
+- Files: `apps/web/hooks/domains/settings/use-collapsed-agent-blocks.ts` (new), `apps/web/hooks/domains/settings/use-collapsed-agent-blocks.test.ts` (new). Test suite split into four describes to stay under the 100-line function limit.

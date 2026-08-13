@@ -1,7 +1,7 @@
 ---
 id: "02-collapsible-agent-card-ui"
 title: "Collapsible agent card UI"
-status: pending
+status: done
 wave: 1
 depends_on: ["01-collapse-persistence-hook"]
 plan: "plan.md"
@@ -59,4 +59,9 @@ task 01.
 
 ## Results
 
-Pending.
+- `pnpm --filter @kandev/web test -- components/settings/installed-agent-card.test.tsx` → 6/6 passed (TDD: red on missing feature, then green).
+- `cd apps/web && pnpm run typecheck` → clean.
+- `pnpm exec eslint --max-warnings 0 components/settings/installed-agent-card.tsx components/settings/installed-agent-card.test.tsx hooks/domains/settings/use-collapsed-agent-blocks.ts hooks/domains/settings/use-collapsed-agent-blocks.test.ts` → clean (extracted `AgentCollapseControl` sub-component to stay under the 100-line function limit; helper functions in the test to avoid the duplicate-string lint).
+- `pnpm run i18n:pseudo && pnpm run i18n:check && pnpm run i18n:ratchet` → all green (en + regenerated pseudo + pt-pt + zh-cn).
+- Files: `apps/web/components/settings/installed-agent-card.tsx` (Collapsible body + header toggle/count), `apps/web/components/settings/installed-agent-card.test.tsx` (new), `apps/web/src/locales/{en,pseudo,pt-pt,zh-cn}/agents.json` (2 new keys each).
+- Note: this repo's unit tests use happy-dom without jest-dom; assertions use plain DOM properties (`hidden`, `getAttribute`), and Radix Presence unmounts closed `CollapsibleContent` (asserted hidden-or-detached).

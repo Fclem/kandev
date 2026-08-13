@@ -113,9 +113,15 @@ var importInCSSPattern = regexp.MustCompile(`@import\s+(['"])(/[^/'"][^'"]*)['"]
 // `proxyPrefix` is the public URL path that fronts this proxy on the gateway,
 // e.g. "/port-proxy/<sessionId>/<port>" (no trailing slash). It is prepended to
 // matched URLs that start with a single "/" — see `rewriteAbsolutePath`.
-func rewriteProxyResponse(resp *http.Response, proxyPrefix string) error {
+//
+// `capability`, when non-empty, is appended to every rewritten URL as
+// `kandev_cap=<capability>`. It is the short-lived subtree credential minted
+// after the preview document authenticated; embedding it in the asset URLs
+// keeps the browser's subresource fetches authorized even when they cannot
+// carry cookies (the <link rel="manifest"> fetch, sandboxed iframes).
+func rewriteProxyResponse(resp *http.Response, proxyPrefix, capability string) error {
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
-	var rewrite func([]byte, string) []byte
+	var rewrite func([]byte, string, string) []byte
 	switch {
 	case strings.Contains(ct, "text/html"):
 		rewrite = rewriteHTMLURLs
@@ -134,7 +140,7 @@ func rewriteProxyResponse(resp *http.Response, proxyPrefix string) error {
 		return closeErr
 	}
 
-	modified := rewrite(body, proxyPrefix)
+	modified := rewrite(body, proxyPrefix, capability)
 	resp.Body = io.NopCloser(bytes.NewReader(modified))
 	resp.Header.Del("Content-Encoding")
 	resp.Header.Set("Content-Length", strconv.Itoa(len(modified)))
@@ -142,18 +148,38 @@ func rewriteProxyResponse(resp *http.Response, proxyPrefix string) error {
 	return nil
 }
 
+// withCapability appends the capability query parameter to a rewritten URL,
+// using "&" when the URL already carries a query string. A URL fragment, when
+// present, stays last — the capability must precede it or the browser would
+// treat it as part of the fragment and never send it.
+func withCapability(rewritten, capability string) string {
+	if capability == "" {
+		return rewritten
+	}
+	path, fragment, hasFragment := strings.Cut(rewritten, "#")
+	sep := "?"
+	if strings.ContainsRune(path, '?') {
+		sep = "&"
+	}
+	path += sep + proxyCapabilityQueryParam + "=" + capability
+	if hasFragment {
+		path += "#" + fragment
+	}
+	return path
+}
+
 // rewriteAbsolutePath turns a path-absolute URL ("/foo") into a proxied path
 // ("<prefix>/foo"). Returns the input unchanged for non-rewritable cases:
 // empty strings, network-relative URLs (`//host`), schemes (`http:`, `data:`,
 // `mailto:`, etc.), or relative paths (`foo`, `./foo`, `../foo`).
-func rewriteAbsolutePath(rawURL, prefix string) string {
+func rewriteAbsolutePath(rawURL, prefix, capability string) string {
 	if len(rawURL) < 1 || rawURL[0] != '/' {
 		return rawURL
 	}
 	if len(rawURL) >= 2 && rawURL[1] == '/' {
 		return rawURL // network-relative
 	}
-	return prefix + rawURL
+	return withCapability(prefix+rawURL, capability)
 }
 
 // htmlRewriteState tracks per-document position during a single
@@ -163,6 +189,7 @@ func rewriteAbsolutePath(rawURL, prefix string) string {
 type htmlRewriteState struct {
 	out          *bytes.Buffer
 	prefix       string
+	capability   string
 	shim         string
 	inStyle      bool
 	inScript     bool
@@ -172,7 +199,7 @@ type htmlRewriteState struct {
 // onStartTag emits the (URL-rewritten) start tag and updates raw-text
 // element tracking. Also injects the runtime shim immediately after `<head>`.
 func (s *htmlRewriteState) onStartTag(token html.Token) {
-	rewriteTokenURLs(&token, s.prefix)
+	rewriteTokenURLs(&token, s.prefix, s.capability)
 	s.out.WriteString(token.String())
 	if !s.shimInjected && token.Data == headTagName {
 		s.out.WriteString(s.shim)
@@ -204,7 +231,7 @@ func (s *htmlRewriteState) onEndTag(token html.Token) {
 func (s *htmlRewriteState) onTextToken(token html.Token) {
 	switch {
 	case s.inStyle:
-		s.out.WriteString(rewriteCSSFragment(token.Data, s.prefix))
+		s.out.WriteString(rewriteCSSFragment(token.Data, s.prefix, s.capability))
 	case s.inScript:
 		s.out.WriteString(token.Data)
 	default:
@@ -220,11 +247,11 @@ func (s *htmlRewriteState) onTextToken(token html.Token) {
 //
 // Falls back to returning the input unchanged if tokenization fails midway, so
 // a malformed page never blocks the response.
-func rewriteHTMLURLs(body []byte, prefix string) []byte {
+func rewriteHTMLURLs(body []byte, prefix, capability string) []byte {
 	tok := html.NewTokenizer(bytes.NewReader(body))
 	var out bytes.Buffer
 	out.Grow(len(body) + 256 + len(runtimeShimTemplate))
-	s := &htmlRewriteState{out: &out, prefix: prefix, shim: runtimeShim(prefix)}
+	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShim(prefix)}
 	for {
 		tt := tok.Next()
 		if tt == html.ErrorToken {
@@ -238,7 +265,7 @@ func rewriteHTMLURLs(body []byte, prefix string) []byte {
 		case html.StartTagToken:
 			s.onStartTag(token)
 		case html.SelfClosingTagToken:
-			rewriteTokenURLs(&token, prefix)
+			rewriteTokenURLs(&token, prefix, capability)
 			out.WriteString(token.String())
 		case html.EndTagToken:
 			s.onEndTag(token)
@@ -252,7 +279,7 @@ func rewriteHTMLURLs(body []byte, prefix string) []byte {
 
 // rewriteTokenURLs walks a single token's attributes and rewrites any URL-
 // shaped attribute value in place.
-func rewriteTokenURLs(token *html.Token, prefix string) {
+func rewriteTokenURLs(token *html.Token, prefix, capability string) {
 	if token.Type != html.StartTagToken && token.Type != html.SelfClosingTagToken {
 		return
 	}
@@ -260,18 +287,18 @@ func rewriteTokenURLs(token *html.Token, prefix string) {
 		key := strings.ToLower(attr.Key)
 		switch {
 		case rewritableURLAttrs[key]:
-			token.Attr[i].Val = rewriteAbsolutePath(attr.Val, prefix)
+			token.Attr[i].Val = rewriteAbsolutePath(attr.Val, prefix, capability)
 		case key == "srcset":
-			token.Attr[i].Val = rewriteSrcSet(attr.Val, prefix)
+			token.Attr[i].Val = rewriteSrcSet(attr.Val, prefix, capability)
 		case key == "style":
-			token.Attr[i].Val = rewriteCSSFragment(attr.Val, prefix)
+			token.Attr[i].Val = rewriteCSSFragment(attr.Val, prefix, capability)
 		}
 	}
 }
 
 // rewriteSrcSet rewrites each candidate URL in a `srcset` attribute. The
 // value format is `url [descriptor], url [descriptor], …` per the HTML spec.
-func rewriteSrcSet(value, prefix string) string {
+func rewriteSrcSet(value, prefix, capability string) string {
 	parts := strings.Split(value, ",")
 	for i, part := range parts {
 		trimmed := strings.TrimSpace(part)
@@ -283,7 +310,7 @@ func rewriteSrcSet(value, prefix string) string {
 		if len(fields) == 0 {
 			continue
 		}
-		fields[0] = rewriteAbsolutePath(fields[0], prefix)
+		fields[0] = rewriteAbsolutePath(fields[0], prefix, capability)
 		parts[i] = strings.Join(fields, " ")
 	}
 	return strings.Join(parts, ", ")
@@ -291,27 +318,27 @@ func rewriteSrcSet(value, prefix string) string {
 
 // rewriteCSSURLs rewrites url(/...) and @import "/..." occurrences inside a
 // standalone CSS document.
-func rewriteCSSURLs(body []byte, prefix string) []byte {
-	return []byte(rewriteCSSFragment(string(body), prefix))
+func rewriteCSSURLs(body []byte, prefix, capability string) []byte {
+	return []byte(rewriteCSSFragment(string(body), prefix, capability))
 }
 
 // rewriteCSSFragment rewrites CSS URL references inside an arbitrary string
 // (either a full CSS file or the contents of an inline style attribute).
-func rewriteCSSFragment(css, prefix string) string {
+func rewriteCSSFragment(css, prefix, capability string) string {
 	css = urlInCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
 		sub := urlInCSSPattern.FindStringSubmatch(match)
 		// sub: full match, quote, url
 		if len(sub) != 3 {
 			return match
 		}
-		return "url(" + sub[1] + rewriteAbsolutePath(sub[2], prefix)
+		return "url(" + sub[1] + rewriteAbsolutePath(sub[2], prefix, capability)
 	})
 	css = importInCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
 		sub := importInCSSPattern.FindStringSubmatch(match)
 		if len(sub) != 3 {
 			return match
 		}
-		return "@import " + sub[1] + rewriteAbsolutePath(sub[2], prefix) + sub[1]
+		return "@import " + sub[1] + rewriteAbsolutePath(sub[2], prefix, capability) + sub[1]
 	})
 	return css
 }

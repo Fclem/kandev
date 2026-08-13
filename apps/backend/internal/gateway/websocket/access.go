@@ -55,7 +55,12 @@ func (g *Gateway) SetAuthPolicy(policy AuthPolicy) {
 // requireConnectionAuth guards WS upgrades and proxy routes. The global HTTP
 // auth middleware has already resolved cookie/bearer credentials into the gin
 // context; this closes the gap for unauthenticated attempts (JSON 401 before
-// any upgrade) and accepts ?token=<PAT> for headerless clients.
+// any upgrade) and accepts ?token=<PAT> for headerless clients. Port-proxy
+// requests additionally accept the short-lived subtree capability minted after
+// the preview document authenticated (see PortProxyHandler): carried as a
+// path-scoped cookie for ordinary subresource fetches, or as a query parameter
+// appended to rewritten asset URLs for fetches that never send cookies (the
+// browser's <link rel="manifest"> fetch, sandboxed iframes).
 func (g *Gateway) requireConnectionAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		policy := g.authPolicy
@@ -64,6 +69,10 @@ func (g *Gateway) requireConnectionAuth() gin.HandlerFunc {
 			return
 		}
 		if _, ok := authn.FromGin(c); ok {
+			c.Next()
+			return
+		}
+		if g.resolvePortProxyCapability(c) {
 			c.Next()
 			return
 		}
@@ -76,6 +85,34 @@ func (g *Gateway) requireConnectionAuth() gin.HandlerFunc {
 		}
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 	}
+}
+
+// resolvePortProxyCapability authenticates a /port-proxy/ request via the
+// short-lived subtree capability minted after the preview document
+// authenticated. It accepts the query-parameter form (appended to rewritten
+// asset URLs for fetches that never send cookies, like the browser's manifest
+// fetch) and the path-scoped cookie form (ordinary subresource fetches). The
+// credential only validates against the exact session:port subtree it was
+// minted for; on success the issuing identity is restored so downstream
+// session-ownership checks still run as the real user.
+func (g *Gateway) resolvePortProxyCapability(c *gin.Context) bool {
+	sessionID, port, ok := portProxyTarget(c)
+	if !ok || g.PortProxyHandler == nil {
+		return false
+	}
+	if raw := c.Query(proxyCapabilityQueryParam); raw != "" {
+		if identity, valid := g.PortProxyHandler.validateCapability(raw, sessionID, port); valid {
+			authn.SetOnGin(c, identity)
+			return true
+		}
+	}
+	if cookie, err := c.Cookie(proxyCapabilityCookieName); err == nil && cookie != "" {
+		if identity, valid := g.PortProxyHandler.validateCapability(cookie, sessionID, port); valid {
+			authn.SetOnGin(c, identity)
+			return true
+		}
+	}
+	return false
 }
 
 // clientMayReceive reports whether a client may receive workspace-scoped

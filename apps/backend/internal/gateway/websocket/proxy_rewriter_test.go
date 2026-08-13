@@ -27,7 +27,7 @@ func TestRewriteAbsolutePath(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := rewriteAbsolutePath(c.in, proxyPrefix)
+			got := rewriteAbsolutePath(c.in, proxyPrefix, "")
 			if got != c.want {
 				t.Fatalf("rewriteAbsolutePath(%q) = %q, want %q", c.in, got, c.want)
 			}
@@ -53,7 +53,7 @@ func TestRewriteHTMLURLs(t *testing.T) {
 </body>
 </html>`
 
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, ""))
 
 	mustContain(t, got, `href="/port-proxy/abc/3001/styles/main.css"`)
 	mustContain(t, got, `href="//cdn.example.com/lib.css"`)
@@ -80,7 +80,7 @@ func TestRewriteCSSURLs(t *testing.T) {
 .abs { background: url(http://example.com/x.png); }
 .rel { background: url(foo.png); }`
 
-	got := string(rewriteCSSURLs([]byte(in), proxyPrefix))
+	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, ""))
 
 	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css"`)
 	mustContain(t, got, `url("/port-proxy/abc/3001/print.css")`)
@@ -96,7 +96,7 @@ func TestRewriteProxyResponse_HTML(t *testing.T) {
 		Header: http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
 		Body:   io.NopCloser(strings.NewReader(body)),
 	}
-	if err := rewriteProxyResponse(resp, proxyPrefix); err != nil {
+	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got, _ := io.ReadAll(resp.Body)
@@ -114,7 +114,7 @@ func TestRewriteProxyResponse_CSS(t *testing.T) {
 		Header: http.Header{"Content-Type": []string{"text/css"}},
 		Body:   io.NopCloser(strings.NewReader(body)),
 	}
-	if err := rewriteProxyResponse(resp, proxyPrefix); err != nil {
+	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got, _ := io.ReadAll(resp.Body)
@@ -129,7 +129,7 @@ func TestRewriteProxyResponse_OtherContentTypeUnchanged(t *testing.T) {
 		Header: http.Header{"Content-Type": []string{"application/json"}},
 		Body:   io.NopCloser(strings.NewReader(body)),
 	}
-	if err := rewriteProxyResponse(resp, proxyPrefix); err != nil {
+	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got, _ := io.ReadAll(resp.Body)
@@ -140,7 +140,7 @@ func TestRewriteProxyResponse_OtherContentTypeUnchanged(t *testing.T) {
 
 func TestRewriteHTMLURLs_InjectsRuntimeShim(t *testing.T) {
 	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, ""))
 
 	// The shim must appear exactly once, immediately after the `<head>` open tag
 	// (so it executes before any other script that may follow).
@@ -167,7 +167,7 @@ func TestRewriteHTMLURLs_NoHeadStillRewritesURLs(t *testing.T) {
 	// injecting the shim in that case (no good anchor point), but URL
 	// rewriting must still work.
 	in := `<a href="/foo">x</a>`
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, ""))
 	if !strings.Contains(got, `href="/port-proxy/abc/3001/foo"`) {
 		t.Fatalf("URL not rewritten: %q", got)
 	}
@@ -185,7 +185,7 @@ func TestRewriteHTMLURLs_PreservesScriptContentVerbatim(t *testing.T) {
 		`<script src="/static/app.js"></script>` +
 		`</body></html>`
 
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, ""))
 
 	// Inline script body must come through unescaped.
 	for _, needle := range []string{
@@ -271,11 +271,42 @@ func TestRuntimeShim_PatchesNavigationAPIs(t *testing.T) {
 
 func TestRewriteSrcSet(t *testing.T) {
 	in := "/a.png 1x, /b.png 2x, //cdn.example.com/c.png 3x"
-	got := rewriteSrcSet(in, proxyPrefix)
+	got := rewriteSrcSet(in, proxyPrefix, "")
 	want := "/port-proxy/abc/3001/a.png 1x, /port-proxy/abc/3001/b.png 2x, //cdn.example.com/c.png 3x"
 	if got != want {
 		t.Fatalf("rewriteSrcSet = %q, want %q", got, want)
 	}
+}
+
+// The subtree capability must ride on every rewritten URL: plain URLs get it
+// as the first query parameter, URLs that already carry a query get it
+// appended. Network-relative and absolute URLs stay untouched.
+func TestRewriteHTMLURLs_AppendsCapabilityToRewrittenURLs(t *testing.T) {
+	in := `<a href="/foo">x</a>` +
+		`<script type="module" src="/src/main.tsx?t=123"></script>` +
+		`<img srcset="/a.png 1x, //cdn.example.com/b.png 2x">` +
+		`<link rel="manifest" href="/manifest.webmanifest">` +
+		`<a href="/docs#installation">docs</a>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-123"))
+
+	mustContain(t, got, `href="/port-proxy/abc/3001/foo?kandev_cap=cap-123"`)
+	// The tokenizer HTML-escapes the separator inside the attribute value.
+	mustContain(t, got, `src="/port-proxy/abc/3001/src/main.tsx?t=123&amp;kandev_cap=cap-123"`)
+	mustContain(t, got, `href="/port-proxy/abc/3001/manifest.webmanifest?kandev_cap=cap-123"`)
+	mustContain(t, got, `srcset="/port-proxy/abc/3001/a.png?kandev_cap=cap-123 1x, //cdn.example.com/b.png 2x"`)
+	// A fragment must stay after the capability query.
+	mustContain(t, got, `href="/port-proxy/abc/3001/docs?kandev_cap=cap-123#installation"`)
+}
+
+// The capability is appended to rewritten CSS url() and @import references too,
+// so cookie-less CSS loads stay authorized in the same contexts as the
+// manifest fetch.
+func TestRewriteCSSURLs_AppendsCapability(t *testing.T) {
+	in := `@import "/theme.css"; .x { background: url("/img/bg.png"); }`
+	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, "cap-456"))
+
+	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css?kandev_cap=cap-456"`)
+	mustContain(t, got, `url("/port-proxy/abc/3001/img/bg.png?kandev_cap=cap-456")`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

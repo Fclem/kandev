@@ -1,0 +1,318 @@
+package websocket
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
+	"regexp"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
+	"go.uber.org/zap"
+
+	"github.com/kandev/kandev/internal/auth"
+	"github.com/kandev/kandev/internal/auth/authn"
+	authhttpmw "github.com/kandev/kandev/internal/auth/httpmw"
+	"github.com/kandev/kandev/internal/auth/store"
+	"github.com/kandev/kandev/internal/common/config"
+	"github.com/kandev/kandev/internal/common/logger"
+	userstore "github.com/kandev/kandev/internal/user/store"
+)
+
+// newProxyAuthService builds an auth service with authentication enabled and an
+// admin user whose session-cookie token is returned. Mirrors the httpmw test
+// harness so the full production chain (httpmw.Middleware → requireConnectionAuth
+// → HandlePortProxy) is exercised against a real credential store.
+func newProxyAuthService(t *testing.T) (*auth.Service, string) {
+	t.Helper()
+	conn, err := sqlx.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	users, cleanup, err := userstore.Provide(conn, conn)
+	if err != nil {
+		t.Fatalf("user store: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup() })
+	authStore, err := store.New(conn, conn)
+	if err != nil {
+		t.Fatalf("auth store: %v", err)
+	}
+	cfg := &config.Config{}
+	cfg.Features.Auth = true
+	cfg.Auth.SessionTTLHours = 720
+	svc, err := auth.NewService(context.Background(), auth.Deps{
+		Cfg: cfg, Store: authStore, Users: users,
+	})
+	if err != nil {
+		t.Fatalf("auth service: %v", err)
+	}
+	_, token, err := svc.Setup(context.Background(), "admin@x.dev", "adminpass123", "Admin", "", "")
+	if err != nil {
+		t.Fatalf("setup admin: %v", err)
+	}
+	return svc, token
+}
+
+// newAuthEnforcingFakeAgentctl stands in for the agentctl inside an executor: it
+// rejects requests without the injected Bearer token (like the real agentctl's
+// bearerTokenAuth) and forwards /api/v1/port-proxy/<port>/* to the fake app.
+func newAuthEnforcingFakeAgentctl(t *testing.T, appURL, expectedToken string) *httptest.Server {
+	t.Helper()
+	target, err := url.Parse(appURL)
+	if err != nil {
+		t.Fatalf("parse app URL: %v", err)
+	}
+	proxy := &httputil.ReverseProxy{}
+	proxy.Rewrite = func(r *httputil.ProxyRequest) {
+		r.SetURL(target)
+		// /api/v1/port-proxy/<port>/<path> → /<path>
+		rest, ok := strings.CutPrefix(r.Out.URL.Path, "/api/v1/port-proxy/")
+		if ok {
+			if _, path, found := strings.Cut(rest, "/"); found {
+				r.Out.URL.Path = "/" + path
+			} else {
+				r.Out.URL.Path = "/"
+			}
+		}
+		r.Out.URL.RawPath = ""
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if expectedToken != "" && r.Header.Get("Authorization") != "Bearer "+expectedToken {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"error":"missing or invalid Authorization header"}`)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	srv.Config.SetKeepAlivesEnabled(false)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// newFakeProxyApp serves a Vite-style single page: an HTML document referencing
+// a manifest and a module script, plus the manifest itself. The HTML mirrors
+// the index.html shape that triggers the bug: the manifest <link> is fetched by
+// the browser with credentials omitted, so it never carries the session cookie.
+func newFakeProxyApp(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/manifest.webmanifest", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/manifest+json")
+		_, _ = io.WriteString(w, `{"name":"proxied-app"}`)
+	})
+	mux.HandleFunc("/src/main.tsx", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript")
+		_, _ = io.WriteString(w, `console.log("main");`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, `<!doctype html><html><head>`+
+			`<link rel="manifest" href="/manifest.webmanifest">`+
+			`<script type="module" src="/src/main.tsx"></script>`+
+			`</head><body>proxied app</body></html>`)
+	})
+	srv := httptest.NewServer(mux)
+	srv.Config.SetKeepAlivesEnabled(false)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// proxyAuthGatewayResponse is one response from the gateway under test.
+type proxyAuthGatewayResponse struct {
+	status  int
+	body    string
+	headers http.Header
+}
+
+// proxyAuthGateway issues requests against the full production chain: CORS,
+// auth middleware, gateway routes (requireConnectionAuth + port proxy), a
+// token-enforcing fake agentctl, and the fake app.
+func proxyAuthGateway(t *testing.T, handler http.Handler) func(method, path string, headers map[string]string) proxyAuthGatewayResponse {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(handler)
+	srv.Config.SetKeepAlivesEnabled(false)
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	transport := &http.Transport{DisableKeepAlives: true}
+	t.Cleanup(transport.CloseIdleConnections)
+	client := &http.Client{
+		Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	return func(method, path string, headers map[string]string) proxyAuthGatewayResponse {
+		t.Helper()
+		req, err := http.NewRequest(method, srv.URL+path, nil)
+		if err != nil {
+			t.Fatalf("build request %s: %v", path, err)
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("request %s: %v", path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body for %s: %v", path, err)
+		}
+		return proxyAuthGatewayResponse{status: resp.StatusCode, body: string(body), headers: resp.Header}
+	}
+}
+
+var manifestLinkPattern = regexp.MustCompile(`href="([^"]*manifest\.webmanifest[^"]*)"`)
+
+// TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth pins the
+// regression from the field report: with auth enforced, the preview document
+// loads (it carries the session cookie) but the browser's manifest fetch —
+// which never sends cookies — 401s on every subresource request. Once the
+// document authenticates, the proxy must mint a short-lived, path-scoped
+// capability and propagate it (cookie + rewritten asset URLs) so the whole
+// proxy subtree stays authorized without requiring per-request credentials.
+func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T) {
+	log, err := logger.NewFromZap(zap.NewNop())
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	svc, sessionToken := newProxyAuthService(t)
+	app := newFakeProxyApp(t)
+	agentctl := newAuthEnforcingFakeAgentctl(t, app.URL, "agentctl-token")
+
+	manager := newProxyTestManager(t, log)
+	addExecutionForURL(t, manager, "sess-auth", agentctl.URL, "agentctl-token", log)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(authhttpmw.Middleware(svc))
+	gateway := NewGateway(log)
+	gateway.SetAuthPolicy(AuthPolicy{
+		Enforced:     func() bool { return svc.Mode() != auth.ModeDisabled },
+		ResolveToken: svc.ResolveBearer,
+	})
+	gateway.SetPortProxy(manager)
+	gateway.SetupRoutes(router)
+
+	request := proxyAuthGateway(t, router)
+	cookieHeader := map[string]string{"Cookie": svc.CookieName() + "=" + sessionToken}
+
+	// 1. The document request authenticates with the session cookie.
+	doc := request(http.MethodGet, "/port-proxy/sess-auth/5173/", cookieHeader)
+	if doc.status != http.StatusOK {
+		t.Fatalf("document status = %d, want %d (body=%s)", doc.status, http.StatusOK, doc.body)
+	}
+	if !strings.Contains(doc.body, `/port-proxy/sess-auth/5173/manifest.webmanifest`) {
+		t.Fatalf("document HTML does not reference the proxied manifest:\n%s", doc.body)
+	}
+	capSetCookie := doc.headers.Values("Set-Cookie")
+	var capabilityCookie string
+	for _, sc := range capSetCookie {
+		if strings.HasPrefix(sc, proxyCapabilityCookieName+"=") {
+			capabilityCookie = sc
+		}
+	}
+	if capabilityCookie == "" {
+		t.Fatal("document response does not set the path-scoped capability cookie")
+	}
+	if !strings.Contains(capabilityCookie, "Path=/port-proxy/sess-auth/5173") {
+		t.Fatalf("capability cookie %q not scoped to the proxy subtree", capabilityCookie)
+	}
+
+	// 2. The rewritten manifest link carries the capability query parameter, so
+	// the browser's credential-less manifest fetch authenticates without cookies.
+	match := manifestLinkPattern.FindStringSubmatch(doc.body)
+	if len(match) != 2 {
+		t.Fatalf("no manifest link in rewritten HTML:\n%s", doc.body)
+	}
+	manifestURL := match[1]
+	if !strings.Contains(manifestURL, proxyCapabilityQueryParam+"=") {
+		t.Fatalf("manifest link %q missing the capability query parameter", manifestURL)
+	}
+	manifestReq := request(http.MethodGet, manifestURL, nil) // no cookie, like Chrome's manifest fetch
+	if manifestReq.status != http.StatusOK {
+		t.Fatalf("manifest (capability query, no cookie) status = %d, want %d (body=%s)",
+			manifestReq.status, http.StatusOK, manifestReq.body)
+	}
+
+	// 3. The same manifest without any credential still 401s — the capability is
+	// not a blanket bypass.
+	denied := request(http.MethodGet, "/port-proxy/sess-auth/5173/manifest.webmanifest", nil)
+	if denied.status != http.StatusUnauthorized {
+		t.Fatalf("manifest (no credential) status = %d, want %d", denied.status, http.StatusUnauthorized)
+	}
+
+	// 4. A module script carrying only the capability cookie (Path-scoped, no
+	// session cookie) also passes — covers cookie-sending subresource fetches
+	// in contexts that lack the session cookie.
+	capValue := capabilityCookie
+	if idx := strings.Index(capValue, ";"); idx >= 0 {
+		capValue = capValue[:idx]
+	}
+	_, capToken, _ := strings.Cut(capValue, "=")
+	script := request(http.MethodGet, "/port-proxy/sess-auth/5173/src/main.tsx",
+		map[string]string{"Cookie": proxyCapabilityCookieName + "=" + capToken})
+	if script.status != http.StatusOK {
+		t.Fatalf("module script (capability cookie, no session) status = %d, want %d (body=%s)",
+			script.status, http.StatusOK, script.body)
+	}
+}
+
+// TestPortProxyCapabilityRoundTrip covers the signed capability itself:
+// valid capabilities validate, and tampering, expiry, or a mismatched
+// session:port target are all rejected.
+func TestPortProxyCapabilityRoundTrip(t *testing.T) {
+	log, err := logger.NewFromZap(zap.NewNop())
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	handler := NewPortProxyHandler(newProxyTestManager(t, log), log)
+
+	identity := authn.Identity{UserID: "user-1", Role: authn.RoleAdmin}
+	cap := handler.issueCapability("sess-1", 5173, identity)
+
+	if got, ok := handler.validateCapability(cap, "sess-1", 5173); !ok {
+		t.Fatal("fresh capability did not validate")
+	} else if got.UserID != "user-1" {
+		t.Fatalf("validated identity UserID = %q, want %q", got.UserID, "user-1")
+	}
+
+	// Wrong session or port: rejected (the credential is subtree-scoped).
+	if _, ok := handler.validateCapability(cap, "sess-2", 5173); ok {
+		t.Fatal("capability validated for the wrong session")
+	}
+	if _, ok := handler.validateCapability(cap, "sess-1", 5174); ok {
+		t.Fatal("capability validated for the wrong port")
+	}
+
+	// Tampered payload: rejected.
+	tampered := cap[:len(cap)-2] + "00"
+	if _, ok := handler.validateCapability(tampered, "sess-1", 5173); ok {
+		t.Fatal("tampered capability validated")
+	}
+
+	// Expired: rejected.
+	old := handler.issueCapabilityWithTTL("sess-1", 5173, identity, -time.Minute)
+	if _, ok := handler.validateCapability(old, "sess-1", 5173); ok {
+		t.Fatal("expired capability validated")
+	}
+
+	// Garbage: rejected without panicking.
+	if _, ok := handler.validateCapability("not-a-capability", "sess-1", 5173); ok {
+		t.Fatal("garbage capability validated")
+	}
+}

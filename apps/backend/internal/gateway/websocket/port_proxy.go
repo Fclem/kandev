@@ -1,6 +1,13 @@
 package websocket
 
 import (
+	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
@@ -8,13 +15,48 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/agent/runtime/lifecycle"
+	"github.com/kandev/kandev/internal/auth/authn"
 	"github.com/kandev/kandev/internal/common/logger"
 )
+
+// Port-proxy capability credential.
+//
+// With authentication enforced, every request to /port-proxy/:sessionId/:port/*
+// requires a credential (session cookie, PAT, or ?token=). The preview document
+// carries one, but the browser's subresource fetches do not always: <link
+// rel="manifest"> fetches are made with credentials omitted, so they never send
+// the session cookie, and headerless contexts (sandboxed iframes, ?token= URLs)
+// drop it from other requests too. A document that authenticated would 200
+// while every asset 401s — the preview appears broken.
+//
+// The handler therefore mints a short-lived, path-scoped capability after the
+// document authenticates and propagates it two ways: as a cookie scoped to the
+// proxy subtree (covers cookie-sending subresource fetches) and appended to the
+// rewritten asset URLs in proxied HTML/CSS (covers the credential-less manifest
+// fetch and cookie-less contexts). requireConnectionAuth accepts either form
+// for the matching /port-proxy/ subtree and reconstructs the identity, so
+// CheckSessionAccess still gates on the real owner.
+const (
+	// proxyCapabilityCookieName is the cookie carrying the subtree capability.
+	proxyCapabilityCookieName = "kandev_port_proxy"
+	// proxyCapabilityQueryParam is the query parameter appended to rewritten
+	// asset URLs by rewriteProxyResponse.
+	proxyCapabilityQueryParam = "kandev_cap"
+	// proxyCapabilityTTL is how long a minted capability stays valid. Sliding:
+	// every proxied response mints a fresh one.
+	proxyCapabilityTTL = 15 * time.Minute
+)
+
+// proxyCapabilityContextKey carries the capability for the current request from
+// the handler into the cached proxy's ModifyResponse, which appends it to
+// rewritten asset URLs.
+type proxyCapabilityContextKey struct{}
 
 // portProxyEntry caches a reverse proxy and its target for a session:port pair.
 type portProxyEntry struct {
@@ -28,16 +70,29 @@ type PortProxyHandler struct {
 	lifecycleMgr *lifecycle.Manager
 	logger       *logger.Logger
 
+	// capabilitySecret signs the subtree capability cookie/query credentials.
+	// Per-process random: capabilities are short-lived, so a backend restart
+	// simply invalidates them.
+	capabilitySecret [32]byte
+
 	mu      sync.Mutex
 	proxies map[string]*portProxyEntry // key: "sessionId:port"
 }
 
 // NewPortProxyHandler creates a new port proxy handler.
 func NewPortProxyHandler(lifecycleMgr *lifecycle.Manager, log *logger.Logger) *PortProxyHandler {
+	secret := [32]byte{}
+	if _, err := rand.Read(secret[:]); err != nil {
+		// crypto/rand never fails on supported platforms; a deterministic
+		// fallback would make capabilities forgeable, so fail loudly instead
+		// of serving an auth bypass.
+		panic(fmt.Sprintf("port proxy: generate capability secret: %v", err))
+	}
 	return &PortProxyHandler{
-		lifecycleMgr: lifecycleMgr,
-		logger:       log.WithFields(zap.String("component", "port-proxy")),
-		proxies:      make(map[string]*portProxyEntry),
+		lifecycleMgr:     lifecycleMgr,
+		logger:           log.WithFields(zap.String("component", "port-proxy")),
+		capabilitySecret: secret,
+		proxies:          make(map[string]*portProxyEntry),
 	}
 }
 
@@ -61,6 +116,21 @@ func (h *PortProxyHandler) HandlePortProxy(c *gin.Context) {
 	if err != nil || port < 1024 || port > 65535 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid port: must be 1024-65535"})
 		return
+	}
+
+	// After the request authenticated (session cookie, PAT, ?token=, or a
+	// previously issued subtree capability), mint a fresh short-lived
+	// capability for this session:port subtree. It authorizes the browser's
+	// subresource fetches — which cannot always carry the session credential —
+	// for the next proxyCapabilityTTL, sliding with every proxied response.
+	// Synthetic identities (auth disabled) skip it: with no auth anywhere the
+	// subtree needs no credential, and the proxied bodies stay byte-identical
+	// to the pre-auth behavior.
+	if identity, ok := authn.FromGin(c); ok && !identity.Synthetic {
+		capability := h.issueCapability(sessionID, port, identity)
+		h.setCapabilityCookie(c, sessionID, port, capability)
+		ctx := context.WithValue(c.Request.Context(), proxyCapabilityContextKey{}, capability)
+		c.Request = c.Request.WithContext(ctx)
 	}
 
 	proxy, err := h.resolveProxy(c, sessionID, port)
@@ -165,7 +235,8 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 			resp.Header.Set("Connection", "Upgrade")
 			return nil
 		}
-		return rewriteProxyResponse(resp, proxyPrefix)
+		capability, _ := resp.Request.Context().Value(proxyCapabilityContextKey{}).(string)
+		return rewriteProxyResponse(resp, proxyPrefix, capability)
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
@@ -199,4 +270,114 @@ func (h *PortProxyHandler) InvalidateSession(sessionID string) {
 			delete(h.proxies, key)
 		}
 	}
+}
+
+// capabilityPayload is the signed, tamper-evident body of a subtree capability.
+// The identity travels inside the payload so requireConnectionAuth can restore
+// it and CheckSessionAccess still runs as the real owner.
+type capabilityPayload struct {
+	UserID    string `json:"u"`
+	Role      string `json:"r"`
+	SessionID string `json:"s"`
+	Port      int    `json:"p"`
+	ExpiresAt int64  `json:"e"` // unix seconds
+}
+
+// issueCapability mints a signed capability for the session:port subtree with
+// the default TTL.
+func (h *PortProxyHandler) issueCapability(sessionID string, port int, identity authn.Identity) string {
+	return h.issueCapabilityWithTTL(sessionID, port, identity, proxyCapabilityTTL)
+}
+
+// issueCapabilityWithTTL mints a signed capability with an explicit TTL (test
+// seam for expiry coverage).
+func (h *PortProxyHandler) issueCapabilityWithTTL(sessionID string, port int, identity authn.Identity, ttl time.Duration) string {
+	payload := capabilityPayload{
+		UserID:    identity.UserID,
+		Role:      string(identity.Role),
+		SessionID: sessionID,
+		Port:      port,
+		ExpiresAt: time.Now().Add(ttl).Unix(),
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		// The payload is a fixed shape; marshal cannot fail.
+		return ""
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(raw)
+	mac := h.signCapability(raw)
+	return encoded + "." + mac
+}
+
+// validateCapability verifies the signature, expiry, and session:port target of
+// a capability and returns the identity it was issued to.
+func (h *PortProxyHandler) validateCapability(raw, sessionID string, port int) (authn.Identity, bool) {
+	dot := strings.IndexByte(raw, '.')
+	if dot <= 0 || dot == len(raw)-1 {
+		return authn.Identity{}, false
+	}
+	encoded, mac := raw[:dot], raw[dot+1:]
+	payload, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return authn.Identity{}, false
+	}
+	if !hmac.Equal([]byte(h.signCapability(payload)), []byte(mac)) {
+		return authn.Identity{}, false
+	}
+	var parsed capabilityPayload
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		return authn.Identity{}, false
+	}
+	if parsed.SessionID != sessionID || parsed.Port != port {
+		return authn.Identity{}, false
+	}
+	if time.Now().Unix() > parsed.ExpiresAt {
+		return authn.Identity{}, false
+	}
+	return authn.Identity{UserID: parsed.UserID, Role: authn.Role(parsed.Role)}, true
+}
+
+// signCapability computes the HMAC-SHA256 of the capability payload.
+func (h *PortProxyHandler) signCapability(payload []byte) string {
+	mac := hmac.New(sha256.New, h.capabilitySecret[:])
+	_, _ = mac.Write(payload)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// setCapabilityCookie sets the subtree-scoped capability cookie on the response
+// so the browser's cookie-sending subresource fetches stay authorized. The
+// cookie's Path is exactly the proxy subtree, so it is never presented to (or
+// accepted for) any other path.
+func (h *PortProxyHandler) setCapabilityCookie(c *gin.Context, sessionID string, port int, capability string) {
+	if capability == "" {
+		return
+	}
+	path := "/port-proxy/" + sessionID + "/" + strconv.Itoa(port)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(proxyCapabilityCookieName, capability, int(proxyCapabilityTTL.Seconds()), path, "", requestIsTLS(c), true)
+}
+
+// requestIsTLS reports whether the request arrived over TLS, directly or via a
+// reverse proxy setting X-Forwarded-Proto. Mirrors the auth cookie helper so
+// the Secure flag tracks the session cookie.
+func requestIsTLS(c *gin.Context) bool {
+	if c.Request.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+}
+
+// portProxyTarget extracts the session:port subtree from a request handled by
+// the /port-proxy/:sessionId/:port(/...) routes.
+func portProxyTarget(c *gin.Context) (sessionID string, port int, ok bool) {
+	sessionID = c.Param("sessionId")
+	portStr := c.Param("port")
+	if sessionID == "" || portStr == "" {
+		return "", 0, false
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1024 || port > 65535 {
+		return "", 0, false
+	}
+	return sessionID, port, true
 }

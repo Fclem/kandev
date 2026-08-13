@@ -360,6 +360,8 @@ const (
 	ActionSecretUpdate = "secrets.update"
 	ActionSecretDelete = "secrets.delete"
 	ActionSecretReveal = "secrets.reveal"
+	ActionSecretCopy   = "secrets.copy"
+	ActionSecretMove   = "secrets.move"
 
 	// Sprites actions
 	ActionSpritesStatus              = "sprites.status"
@@ -381,6 +383,8 @@ const (
 	ActionMCPUpdateTaskPRAutomation     = "mcp.update_task_pr_automation"
 	ActionMCPGetTaskMRAutomation        = "mcp.get_task_mr_automation"
 	ActionMCPUpdateTaskMRAutomation     = "mcp.update_task_mr_automation"
+	ActionMCPAddTaskDependency          = "mcp.add_task_dependency"
+	ActionMCPRemoveTaskDependency       = "mcp.remove_task_dependency"
 	ActionMCPAddBranchToTask            = "mcp.add_branch_to_task"
 	ActionMCPAddWorkspaceSources        = "mcp.add_workspace_sources"
 	ActionMCPUpdateRepositoryBaseBranch = "mcp.update_repository_base_branch"

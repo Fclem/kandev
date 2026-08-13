@@ -78,6 +78,18 @@ function renderCard(profileCount: number) {
   );
 }
 
+function renderSetupCard(savedAgent?: Agent) {
+  return render(
+    <InstalledAgentCard
+      agent={makeDiscovery("mock-agent")}
+      savedAgent={savedAgent}
+      displayName="Mock Agent"
+    >
+      <div data-testid="profiles-body">profiles</div>
+    </InstalledAgentCard>,
+  );
+}
+
 const toggle = () => screen.getByTestId("collapse-agent-claude");
 const toggleAriaLabel = () => toggle().getAttribute("aria-label");
 const toggleAriaExpanded = () => toggle().getAttribute("aria-expanded");
@@ -177,9 +189,31 @@ describe("InstalledAgentCard collapse", () => {
     try {
       expect(() => fireEvent.click(toggle())).not.toThrow();
       expect(body()?.hidden).toBe(false);
-      expect(toggle().getAttribute("aria-expanded")).toBe("true");
+      expect(toggleAriaExpanded()).toBe("true");
     } finally {
       localStorageMock.setItem = original;
     }
+  });
+});
+
+describe("InstalledAgentCard setup links", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("uses the base setup route when no agent record exists", () => {
+    renderSetupCard();
+
+    expect(screen.getByTestId("setup-profile-mock-agent").getAttribute("href")).toBe(
+      "/settings/agents/mock-agent",
+    );
+  });
+
+  it("uses create mode when a saved agent has no profiles", () => {
+    renderSetupCard(makeSavedAgent("mock-agent", 0));
+
+    expect(screen.getByTestId("setup-profile-mock-agent").getAttribute("href")).toBe(
+      "/settings/agents/mock-agent?mode=create",
+    );
   });
 });

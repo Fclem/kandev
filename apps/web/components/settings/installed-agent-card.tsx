@@ -116,9 +116,9 @@ function InstalledAgentIdentity({
 }
 
 /**
- * The header's collapse toggle plus, while collapsed, the profile count that
- * the profile list's first line normally shows — so a collapsed block never
- * hides how many profiles the agent has (or that it has none yet). The
+ * The header's collapse toggle. Sized and styled exactly like the runtime
+ * update trigger it sits beside (`ghost` + `icon`, grey only on hover, 44px on
+ * touch, 28px from `sm` up) so the action cluster reads as one row. The
  * profiles body is a `CollapsibleContent` driven by this button (no Radix
  * trigger — the trigger would live outside the root, so the button owns the
  * state transition).
@@ -127,48 +127,55 @@ function AgentCollapseControl({
   agentName,
   displayName,
   isCollapsed,
-  profileCount,
   onToggle,
 }: {
   agentName: string;
   displayName: string;
   isCollapsed: boolean;
-  profileCount: number;
   onToggle: () => void;
 }) {
   const { t } = useTranslation();
-  const countLabel =
-    profileCount === 0
-      ? t("agents:noProfilesYet")
-      : t("agents:profileCount", { count: profileCount });
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="cursor-pointer min-h-11 min-w-11"
-        onClick={onToggle}
-        data-testid={`collapse-agent-${agentName}`}
-        aria-expanded={!isCollapsed}
-        aria-label={
-          isCollapsed
-            ? t("agents:expandAgentProfiles", { name: displayName })
-            : t("agents:collapseAgentProfiles", { name: displayName })
-        }
-      >
-        <IconChevronDown
-          className={`h-4 w-4 transition-transform ${isCollapsed ? "" : "rotate-180"}`}
-        />
-      </Button>
-      {isCollapsed && (
-        <span
-          className="min-w-0 text-sm text-muted-foreground"
-          data-testid={`collapsed-count-${agentName}`}
-        >
-          {countLabel}
-        </span>
-      )}
-    </>
+    <Button
+      variant="ghost"
+      size="icon"
+      // The ghost variant paints `aria-expanded:bg-muted`, which would give a
+      // permanent grey while expanded — this button uses aria-expanded as a
+      // disclosure state, not a select/trigger visual. Keep it transparent at
+      // rest and grey only on hover, matching the update trigger beside it.
+      className="h-11 w-11 cursor-pointer active:scale-95 sm:h-7 sm:w-7 aria-expanded:bg-transparent hover:bg-muted!"
+      onClick={onToggle}
+      data-testid={`collapse-agent-${agentName}`}
+      aria-expanded={!isCollapsed}
+      aria-label={
+        isCollapsed
+          ? t("agents:expandAgentProfiles", { name: displayName })
+          : t("agents:collapseAgentProfiles", { name: displayName })
+      }
+    >
+      <IconChevronDown
+        className={`size-4 transition-transform ${isCollapsed ? "" : "rotate-180"}`}
+      />
+    </Button>
+  );
+}
+
+/**
+ * The profile count shown in the header while the block is collapsed — the
+ * same copy the profile list's first line normally shows, so a collapsed block
+ * never hides how many profiles the agent has (or that it has none yet). Renders
+ * left of the update and collapse buttons.
+ */
+function CollapsedCountLabel({ agentName, count }: { agentName: string; count: number }) {
+  const { t } = useTranslation();
+  const label = count === 0 ? t("agents:noProfilesYet") : t("agents:profileCount", { count });
+  return (
+    <span
+      className="min-w-0 text-sm text-muted-foreground"
+      data-testid={`collapsed-count-${agentName}`}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -240,13 +247,7 @@ export function InstalledAgentCard({
           />
         </div>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          <AgentCollapseControl
-            agentName={agent.name}
-            displayName={displayName}
-            isCollapsed={isCollapsed}
-            profileCount={profileCount}
-            onToggle={handleToggleCollapsed}
-          />
+          {isCollapsed && <CollapsedCountLabel agentName={agent.name} count={profileCount} />}
           {runtimeUpdate?.supported && onPreview && onUpdate && (
             <AgentRuntimeUpdateControl
               agentName={agent.name}
@@ -258,6 +259,12 @@ export function InstalledAgentCard({
               onUpdate={onUpdate}
             />
           )}
+          <AgentCollapseControl
+            agentName={agent.name}
+            displayName={displayName}
+            isCollapsed={isCollapsed}
+            onToggle={handleToggleCollapsed}
+          />
           {!hasAgentRecord && (
             // Sized to match the runtime-update trigger it sits beside — a
             // coarse-pointer target on a phone, 28px from `sm` up. The default

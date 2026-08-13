@@ -156,6 +156,18 @@ describe("InstalledAgentCard collapse", () => {
     expect(headerCount()?.textContent).toContain("No profiles yet");
   });
 
+  it("places the count left of the collapse button while collapsed", async () => {
+    renderCard(3);
+    fireEvent.click(toggle());
+
+    await waitFor(() => expectBodyNotVisible());
+    const count = headerCount();
+    expect(count).not.toBeNull();
+    expect(
+      count!.compareDocumentPosition(toggle()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("stays expanded and never throws when persisting the collapse fails", () => {
     renderCard(3);
     const original = localStorageMock.setItem;

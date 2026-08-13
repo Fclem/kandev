@@ -415,7 +415,10 @@ func (s *Service) destinationVerifier(ctx context.Context, req *CopySecretReques
 	if normalizeStoredScope(req.Scope) != ScopeWorkspace {
 		return nil
 	}
-	return func(context.Context) error {
+	// The callback ignores the store-supplied context and uses the outer
+	// request ctx: the auth callbacks run inside the store's transaction,
+	// whose context is not the one the request handlers set up.
+	return func(_ context.Context) error {
 		if s.workspaceExistence == nil {
 			return ErrWorkspaceAccessDenied
 		}

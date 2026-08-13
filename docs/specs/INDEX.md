@@ -116,6 +116,7 @@ Roles, governance gates, and granular permissions that apply across human users 
 | [profile-disable](agents/profile-disable.md) | draft |
 | [dynamic-provider-options](agents/dynamic-provider-options.md) | shipped |
 | [utility-agent-profiles](agents/utility-agent-profiles.md) | approved |
+| [collapsible-agent-blocks](agents/collapsible-agent-blocks.md) | draft |
 | [roles](agents/roles.md) | shipped |
 | [governance](agents/governance.md) | shipped |
 | [granular-permissions](agents/granular-permissions.md) | draft |

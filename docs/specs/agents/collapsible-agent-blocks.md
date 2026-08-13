@@ -22,9 +22,10 @@ visible.
 - All agent cards SHALL be expanded by default on first visit (or when no
   stored preference exists).
 - Activating the collapse control SHALL hide that card's profile-list body and
-  SHALL show the profile count in the card header instead, using the same copy
-  the body's first line shows ("N profiles" via the existing `agents:profileCount`
-  key, or `agents:noProfilesYet` when the agent has zero profiles). The count
+  SHALL show the profile count in the card header instead ("N profiles" via the
+  existing `agents:profileCount` key, or the short `agents:noProfilesYetShort`
+  label "No profiles yet" when the agent has zero profiles — the full-sentence
+  empty-state copy belongs to the expanded body, not a header chip). The count
   stays visible while the block is collapsed.
 - Activating the control again SHALL re-expand the block and restore the
   profile list.
@@ -51,8 +52,11 @@ boolean:
   (default).
 - Invalid JSON, or a read error (quota / private mode) → treated as the default
   (all expanded); the page keeps working and never crashes.
-- A failed write throws, matching the shared `useLocalStorageBoolean` contract;
-  the toggle does not silently report success.
+- A failed write still applies the toggle for the current session (an in-memory
+  override keeps the card in the state the user chose, so a collapsed card can
+  always be expanded again and vice versa), but the preference is not persisted
+  and the write error is contained at the UI boundary — never surfaced to the
+  user. The next successful write makes storage authoritative again.
 
 ## Scenarios
 
@@ -72,8 +76,9 @@ boolean:
 - **GIVEN** an agent with zero profiles, **WHEN** its card is collapsed, **THEN**
   the header shows "No profiles yet".
 - **GIVEN** localStorage is unavailable (quota / private mode), **WHEN** the
-  user toggles a card, **THEN** the page keeps working with the default
-  expanded state and no error is surfaced.
+  user toggles a card, **THEN** the toggle still works for the session
+  (collapse and expand both apply in memory), no error is surfaced, and the
+  choice simply is not persisted.
 
 ## Out of scope
 

@@ -216,5 +216,6 @@
   "watcherKindJira": "Jira",
   "watcherKindLinear": "Linear",
   "collapseAgentProfiles": "Recolher perfis de {{name}}",
-  "expandAgentProfiles": "Expandir perfis de {{name}}"
+  "expandAgentProfiles": "Expandir perfis de {{name}}",
+  "noProfilesYetShort": "Sem perfis ainda"
 }

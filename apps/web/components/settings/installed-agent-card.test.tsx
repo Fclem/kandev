@@ -180,7 +180,7 @@ describe("InstalledAgentCard collapse", () => {
     ).toBeTruthy();
   });
 
-  it("stays expanded and never throws when persisting the collapse fails", () => {
+  it("applies the toggle in memory and never throws when persisting the collapse fails", () => {
     renderCard(3);
     const original = localStorageMock.setItem;
     localStorageMock.setItem = () => {
@@ -188,7 +188,28 @@ describe("InstalledAgentCard collapse", () => {
     };
     try {
       expect(() => fireEvent.click(toggle())).not.toThrow();
-      expect(body()?.hidden).toBe(false);
+      // The write failed, but the collapse still applies for the session.
+      expectBodyNotVisible();
+      expect(toggleAriaExpanded()).toBe("false");
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    } finally {
+      localStorageMock.setItem = original;
+    }
+  });
+
+  it("lets a collapsed card expand when persisting the change fails", async () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ claude: true }));
+    renderCard(3);
+
+    await waitFor(() => expectBodyNotVisible());
+    const original = localStorageMock.setItem;
+    localStorageMock.setItem = () => {
+      throw new Error("quota exceeded");
+    };
+    try {
+      expect(() => fireEvent.click(toggle())).not.toThrow();
+      await waitFor(() => expect(body()?.hidden).toBe(false));
+      expect(headerCount()).toBeNull();
       expect(toggleAriaExpanded()).toBe("true");
     } finally {
       localStorageMock.setItem = original;

@@ -174,7 +174,7 @@ function AgentCollapseControl({
  */
 function CollapsedCountLabel({ agentName, count }: { agentName: string; count: number }) {
   const { t } = useTranslation();
-  const label = count === 0 ? t("agents:noProfilesYet") : t("agents:profileCount", { count });
+  const label = count === 0 ? t("agents:noProfilesYetShort") : t("agents:profileCount", { count });
   return (
     <span
       className="min-w-0 text-sm text-muted-foreground"

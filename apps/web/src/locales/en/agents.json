@@ -150,6 +150,7 @@
   "noModelFound": "No model found.",
   "noModelsFound": "No models found.",
   "noProfilesYet": "No profiles yet. Create one from an installed agent.",
+  "noProfilesYetShort": "No profiles yet",
   "notInstalled": "Not installed",
   "openTerminal": "Open terminal",
   "pageDescription": "Discover installed agents, install new ones, and manage their profiles.",

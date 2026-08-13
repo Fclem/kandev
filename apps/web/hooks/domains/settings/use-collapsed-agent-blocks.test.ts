@@ -129,17 +129,6 @@ describe("useCollapsedAgentBlocks sync", () => {
 
     await waitFor(() => expect(result.current.collapsed("claude")).toBe(true));
   });
-
-  it("does not re-render for storage events on other keys", () => {
-    const { result } = renderHook(() => useCollapsedAgentBlocks());
-
-    act(() => {
-      window.localStorage.setItem("kandev:other:flag:v1", JSON.stringify({ claude: true }));
-      window.dispatchEvent(new Event("storage"));
-    });
-
-    expect(result.current.collapsed("claude")).toBe(false);
-  });
 });
 
 describe("useCollapsedAgentBlocks failure modes", () => {
@@ -163,7 +152,7 @@ describe("useCollapsedAgentBlocks failure modes", () => {
     }
   });
 
-  it("throws instead of reporting a successful save when localStorage.setItem fails", () => {
+  it("throws but still applies the toggle in memory when localStorage.setItem fails", async () => {
     const original = localStorageMock.setItem;
     localStorageMock.setItem = () => {
       throw new Error("quota exceeded");
@@ -171,9 +160,55 @@ describe("useCollapsedAgentBlocks failure modes", () => {
     try {
       const { result } = renderHook(() => useCollapsedAgentBlocks());
       expect(() => result.current.setCollapsed("claude", true)).toThrow();
-      expect(result.current.collapsed("claude")).toBe(false);
+      // The write failed, but the session override keeps the toggle working.
+      await waitFor(() => expect(result.current.collapsed("claude")).toBe(true));
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
     } finally {
       localStorageMock.setItem = original;
     }
+  });
+
+  it("lets a collapsed agent expand when the write fails, and drops the override after a successful write", async () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ claude: true }));
+    const { result } = renderHook(() => useCollapsedAgentBlocks());
+    expect(result.current.collapsed("claude")).toBe(true);
+
+    // Expand while writes fail: the override applies for the session.
+    const original = localStorageMock.setItem;
+    localStorageMock.setItem = () => {
+      throw new Error("quota exceeded");
+    };
+    try {
+      expect(() => result.current.setCollapsed("claude", false)).toThrow();
+      await waitFor(() => expect(result.current.collapsed("claude")).toBe(false));
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify({ claude: true }));
+    } finally {
+      localStorageMock.setItem = original;
+    }
+
+    // A later successful write makes storage authoritative again.
+    act(() => result.current.setCollapsed("claude", false));
+    await waitFor(() => expect(result.current.collapsed("claude")).toBe(false));
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify({ claude: false }));
+  });
+});
+
+describe("useCollapsedAgentBlocks storage event filtering", () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+  });
+  afterEach(() => {
+    localStorageMock.clear();
+  });
+
+  it("ignores storage events for other keys", () => {
+    const { result } = renderHook(() => useCollapsedAgentBlocks());
+
+    act(() => {
+      window.localStorage.setItem("kandev:other:flag:v1", JSON.stringify({ claude: true }));
+      window.dispatchEvent(new Event("storage"));
+    });
+
+    expect(result.current.collapsed("claude")).toBe(false);
   });
 });

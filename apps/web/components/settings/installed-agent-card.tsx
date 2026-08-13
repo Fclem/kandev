@@ -162,7 +162,7 @@ function AgentCollapseControl({
       </Button>
       {isCollapsed && (
         <span
-          className="whitespace-nowrap text-sm text-muted-foreground"
+          className="min-w-0 text-sm text-muted-foreground"
           data-testid={`collapsed-count-${agentName}`}
         >
           {countLabel}
@@ -212,6 +212,18 @@ export function InstalledAgentCard({
     else setShellOpen(true);
   };
 
+  // The hook's `setCollapsed` throws when the write fails (quota / private
+  // mode), matching the shared localStorage-preference contract. At this UI
+  // boundary the failure must stay invisible: the current expanded/collapsed
+  // snapshot remains authoritative and nothing escapes the click handler.
+  const handleToggleCollapsed = () => {
+    try {
+      setCollapsed(agent.name, !isCollapsed);
+    } catch {
+      // No fallback worth surfacing: the preference just does not persist.
+    }
+  };
+
   return (
     <Card className="min-w-0 gap-0 py-0" data-testid={`agent-group-${agent.name}`}>
       {/* Header section: identity + agent-level actions. */}
@@ -227,13 +239,13 @@ export function InstalledAgentCard({
             onAuthClick={handleAuthClick}
           />
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <AgentCollapseControl
             agentName={agent.name}
             displayName={displayName}
             isCollapsed={isCollapsed}
             profileCount={profileCount}
-            onToggle={() => setCollapsed(agent.name, !isCollapsed)}
+            onToggle={handleToggleCollapsed}
           />
           {runtimeUpdate?.supported && onPreview && onUpdate && (
             <AgentRuntimeUpdateControl

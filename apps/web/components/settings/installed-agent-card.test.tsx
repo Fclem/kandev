@@ -155,4 +155,19 @@ describe("InstalledAgentCard collapse", () => {
     await waitFor(() => expectBodyNotVisible());
     expect(headerCount()?.textContent).toContain("No profiles yet");
   });
+
+  it("stays expanded and never throws when persisting the collapse fails", () => {
+    renderCard(3);
+    const original = localStorageMock.setItem;
+    localStorageMock.setItem = () => {
+      throw new Error("quota exceeded");
+    };
+    try {
+      expect(() => fireEvent.click(toggle())).not.toThrow();
+      expect(body()?.hidden).toBe(false);
+      expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    } finally {
+      localStorageMock.setItem = original;
+    }
+  });
 });

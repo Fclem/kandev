@@ -90,6 +90,23 @@ Unit tests grew from 56 to 63 (pin spec split across three describes to stay
 under the 100-line per-function cap). Desktop + mobile E2E re-run green after
 the fixes.
 
+### Desktop-only + PR review round (post-PR)
+
+- `41f376948` — pin is desktop-only: the header hides the toggle on phone
+  viewports (`useResponsiveBreakpoint`), mobile E2E now asserts the pin is
+  absent while Clear all/close stay touch-sized, spec updated.
+- Review fixes (uncommitted at time of writing, landed with this round):
+  - `useQueuePanelOpenState` treats the pin as off on mobile so a pin stored
+    at desktop width never auto-opens the panel on phone viewports (Codex
+    P2; regression test added).
+  - `useQueuePinned.toggle` now keeps the current-view pin flipped via an
+    in-memory fallback when `localStorage.setItem` fails (CodeRabbit
+    functional-correctness finding), cleared by the next successful write.
+  - Renamed the mis-described session-switch test in the pin spec (Claude
+    blocker).
+- Final unit count 66/66; mobile E2E 3/3 (incl. pin-hidden-on-mobile),
+  desktop pin E2E 2/2, typecheck + lint + i18n clean.
+
 ### Desktop-only pin (post-review product decision)
 
 The pin is now a desktop-only control per explicit user request: the header

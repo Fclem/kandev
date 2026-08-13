@@ -92,6 +92,11 @@ Absent or unreadable entries default to `false` (unpinned).
 - **GIVEN** a phone viewport with the queue panel expanded, **WHEN** the user
   inspects the header, **THEN** no pin control is rendered and Clear all and
   the collapse button remain touch-sized.
+- **GIVEN** the session was pinned at desktop width, **WHEN** the same
+  session's queue is viewed on a phone viewport, **THEN** the stored pin does
+  not auto-open the panel (it starts collapsed with the chip, and there is no
+  pin control to unpin); returning to a desktop viewport re-applies the
+  stored pin.
 
 ## Out of scope
 

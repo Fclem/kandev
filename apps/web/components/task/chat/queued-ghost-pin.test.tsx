@@ -193,10 +193,23 @@ describe("QueueAffordance pin desktop-only", () => {
     fireEvent.click(screen.getByTestId(CHIP_ID));
     expect(screen.getByTestId("queue-pin")).toBeTruthy();
   });
+
+  it("does not auto-open from a stored desktop pin on mobile", () => {
+    useQueueMock.mockReturnValue(queueState([entry()]));
+    useQueuePinnedMock.mockReturnValue({ value: true, setValue: vi.fn(), toggle: vi.fn() });
+    breakpointMocks.isMobile = true;
+    render(<QueueAffordance sessionId={SESSION_ID}>{CHILD}</QueueAffordance>);
+
+    // The stored pin stays off on phone viewports: the panel starts
+    // collapsed with the chip, and there is no pin control to unpin.
+    expect(screen.queryByTestId(PANEL_ID)).toBeNull();
+    expect(screen.getByTestId(CHIP_ID)).toBeTruthy();
+    expect(screen.queryByTestId("queue-pin")).toBeNull();
+  });
 });
 
 describe("QueueAffordance pin sync", () => {
-  it("opens the panel when a storage-synced pin turns on for the current session", () => {
+  it("collapses the panel when navigating to an unpinned session", () => {
     useQueueMock.mockReturnValue(queueState([entry()]));
     useQueuePinnedMock.mockImplementation((sessionId: string | null) => ({
       value: sessionId === "sess-1",

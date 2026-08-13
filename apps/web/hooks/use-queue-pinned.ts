@@ -13,8 +13,18 @@ export function queuePinStorageKey(sessionId: string): string {
   return `kandev:queue:pinned:${sessionId}:v1`;
 }
 
+/**
+ * In-memory fallback for when localStorage writes fail (private mode /
+ * quota). The toggle must still flip the current view's pin even though
+ * nothing is persisted; the value lives for this tab only and is cleared by
+ * the next successful write.
+ */
+const volatilePins = new Map<string, boolean>();
+
 /** Reads the pin flag, treating only the literal string "true" as on. */
 function readStoredPin(sessionId: string): boolean {
+  const volatilePin = volatilePins.get(sessionId);
+  if (volatilePin !== undefined) return volatilePin;
   if (typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem(queuePinStorageKey(sessionId)) === "true";
@@ -62,6 +72,8 @@ export function useQueuePinned(sessionId: string | null) {
       if (sessionId === null) return;
       try {
         window.localStorage.setItem(queuePinStorageKey(sessionId), String(next));
+        // A successful write supersedes any volatile fallback.
+        volatilePins.delete(sessionId);
       } catch (error) {
         throw new Error(`Failed to persist queue pin for ${sessionId}`, { cause: error });
       }
@@ -74,9 +86,14 @@ export function useQueuePinned(sessionId: string | null) {
     try {
       setValue(!value);
     } catch {
-      // Ignored: the pin preference is best-effort persistence.
+      // Persistence failed (private mode / quota): keep the current view's
+      // pin flipped via the in-memory fallback so the toggle visibly works.
+      if (sessionId !== null) {
+        volatilePins.set(sessionId, !value);
+        window.dispatchEvent(new Event(QUEUE_PIN_SYNC_EVENT));
+      }
     }
-  }, [value, setValue]);
+  }, [sessionId, value, setValue]);
 
   return { value, setValue, toggle };
 }

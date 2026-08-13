@@ -126,6 +126,10 @@ describe("useQueuePinned", () => {
 });
 
 describe("useQueuePinned toggle", () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+  });
+
   it("flips the persisted value", async () => {
     const { result } = renderHook(() => useQueuePinned(SESSION_A));
     expect(result.current.value).toBe(false);
@@ -146,17 +150,25 @@ describe("useQueuePinned toggle", () => {
     expect(setItem).not.toHaveBeenCalled();
   });
 
-  it("swallows persistence failures instead of throwing", () => {
+  it("keeps the current-view pin active when persistence fails", async () => {
     const original = localStorageMock.setItem;
+    const { result } = renderHook(() => useQueuePinned(SESSION_A));
     localStorageMock.setItem = () => {
       throw new Error("quota exceeded");
     };
     try {
-      const { result } = renderHook(() => useQueuePinned(SESSION_A));
       expect(() => act(() => result.current.toggle())).not.toThrow();
-      expect(result.current.value).toBe(false);
+      // The in-memory fallback flips the current view even though nothing
+      // was persisted.
+      expect(result.current.value).toBe(true);
+      expect(window.localStorage.getItem(queuePinStorageKey(SESSION_A))).toBeNull();
     } finally {
       localStorageMock.setItem = original;
     }
+
+    // A later successful write clears the volatile fallback and persists.
+    act(() => result.current.toggle());
+    await waitFor(() => expect(result.current.value).toBe(false));
+    expect(window.localStorage.getItem(queuePinStorageKey(SESSION_A))).toBe("false");
   });
 });

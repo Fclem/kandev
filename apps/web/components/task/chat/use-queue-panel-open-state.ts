@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 
 /**
  * Disclosure state for the queue panel. A pinned session starts open (the
@@ -16,35 +17,39 @@ import { useState } from "react";
  * a new message after a full drain); ordinary count changes on a nonempty
  * queue never reopen an X-collapsed panel. An empty queue starts collapsed
  * even when pinned, so unpinning before delayed entries arrive leaves it
- * collapsed. State is adjusted during render (React docs: "Adjusting some
- * state when a prop changes") to avoid the cascading-render anti-pattern of
- * doing it inside useEffect.
+ * collapsed. The pin is desktop-only: on phone viewports it is treated as
+ * off (the header hides the toggle there, so a pin stored at desktop width
+ * must not auto-open the panel with no way to unpin). State is adjusted
+ * during render (React docs: "Adjusting some state when a prop changes") to
+ * avoid the cascading-render anti-pattern of doing it inside useEffect.
  */
 export function useQueuePanelOpenState(
   sessionId: string | null,
   entryCount: number,
   pinned: boolean,
 ) {
-  const [isOpen, setIsOpen] = useState(pinned && entryCount > 0);
+  const { isMobile } = useResponsiveBreakpoint();
+  const effectivePinned = isMobile ? false : pinned;
+  const [isOpen, setIsOpen] = useState(effectivePinned && entryCount > 0);
   const [lastSession, setLastSession] = useState(sessionId);
   const [lastEntryCount, setLastEntryCount] = useState(entryCount);
-  const [lastPinned, setLastPinned] = useState(pinned);
+  const [lastPinned, setLastPinned] = useState(effectivePinned);
   if (sessionId !== lastSession) {
     setLastSession(sessionId);
-    setIsOpen(pinned && entryCount > 0);
+    setIsOpen(effectivePinned && entryCount > 0);
   }
   if (entryCount !== lastEntryCount) {
     const wasEmpty = lastEntryCount === 0;
     setLastEntryCount(entryCount);
     if (entryCount === 0) {
       setIsOpen(false);
-    } else if (pinned && wasEmpty) {
+    } else if (effectivePinned && wasEmpty) {
       setIsOpen(true);
     }
   }
-  if (pinned !== lastPinned) {
-    setLastPinned(pinned);
-    if (pinned && entryCount > 0) setIsOpen(true);
+  if (effectivePinned !== lastPinned) {
+    setLastPinned(effectivePinned);
+    if (effectivePinned && entryCount > 0) setIsOpen(true);
   }
   return [isOpen, setIsOpen] as const;
 }

@@ -151,7 +151,7 @@ const runtimeShimTemplate = `(function(){` +
 	`function cssDecTok(t){var o='';var i=0;while(i<t.length){var c=t.charAt(i);if(c==='\\'){var e=cssEsc(t,i);if(!e)break;o+=e.ch;i+=e.adv}else{o+=c;i++}}return o}` +
 	`function cssEscTok(t){var o='';var i=0;while(i<t.length){var c=t.charAt(i);if(c==='\\'||c==='\''||c==='"'||c==='('||c===')'||c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'||c.charCodeAt(0)<0x20||c.charCodeAt(0)===0x7F){var h=c.charCodeAt(0).toString(16);if(h.length===1)h='0'+h;o+='\\'+h+' '}else{o+=c}i++}return o}` +
 	`function rwaStyle(v){var o='';var i=0;var n=v.length;var j2;while(i<n){var c=v.charAt(i);if((c==='u'||c==='U'||c==='\\')&&!(i>0&&(v.charCodeAt(i-1)>=128||/[a-zA-Z0-9_-]/.test(v.charAt(i-1))))&&(j2=cssFn(v,i,'url'))>=0){var jw=j2;while(jw<n&&' \t\n\r\f'.indexOf(v.charAt(jw))>=0)jw++;var sp=v.slice(j2,jw);if(jw<n&&(v.charAt(jw)==='\''||v.charAt(jw)==='"')){var q=v.charAt(jw);var ce=jw+1;while(ce<n){if(v.charAt(ce)==='\\'&&ce+1<n){ce+=2;continue}if(v.charAt(ce)===q)break;ce++}if(ce>=n){o+=v.slice(i);break}var tok=v.slice(jw+1,ce);var d1=cssDecTok(tok);var rw1=r(d1);var em1=d1===rw1?tok:cssEscTok(rw1);var k=ce+1;while(k<n&&' \t\n\r\f'.indexOf(v.charAt(k))>=0)k++;if(k<n&&v.charAt(k)===')'){o+='url('+sp+q+em1+q+v.slice(ce+1,k)+')';i=k+1;continue}o+=v.slice(i,ce+1);i=ce+1;continue}var k2=jw;while(k2<n&&v.charAt(k2)!==')'){if(v.charAt(k2)==='\\'){var ee=cssEsc(v,k2);if(!ee)break;k2+=ee.adv;continue}if(' \t\n\r\f'.indexOf(v.charAt(k2))>=0)break;k2++}var tok2=v.slice(jw,k2);var d2=cssDecTok(tok2);var l2=k2;while(l2<n&&' \t\n\r\f'.indexOf(v.charAt(l2))>=0)l2++;if(l2<n&&v.charAt(l2)===')'){if(d2.toLowerCase().indexOf('var(')!==0){var rw2=r(d2);var em2=d2===rw2?tok2:cssEscTok(rw2);o+='url('+sp+em2+v.slice(k2,l2)+')';i=l2+1;continue}o+=v.slice(i,l2+1);i=l2+1;continue}o+=v.slice(i,k2);i=k2;continue}if(c==='\\'&&i+1<n){o+=v.slice(i,i+2);i+=2;continue}if(c==='\''||c==='"'){var j=i+1;while(j<n){if(v.charAt(j)==='\\'&&j+1<n){j+=2;continue}if(v.charAt(j)===c)break;j++}if(j>=n){o+=v.slice(i);break}o+=v.slice(i,j+1);i=j+1;continue}o+=c;i++}return o}` +
-	`function srcsetParts(v){var parts=[];var cur='';var inData=false;var curEmpty=true;for(var i=0;i<v.length;i++){var c=v.charAt(i);if(c===','){if(inData){cur+=c;continue}parts.push(cur);cur='';curEmpty=true;inData=false;continue}if(!inData&&curEmpty&&c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f'&&/^data:/i.test(v.slice(i)))inData=true;if(inData&&(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'))inData=false;if(c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f')curEmpty=false;cur+=c}if(!curEmpty)parts.push(cur);return parts}` +
+	`function srcsetParts(v){var parts=[];var cur='';var inData=false;var curEmpty=true;for(var i=0;i<v.length;i++){var c=v.charAt(i);if(c===','){if(inData){cur+=c;continue}parts.push(cur);cur='';curEmpty=true;inData=false;continue}if(!inData&&curEmpty&&c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f'&&v.slice(i,i+5).toLowerCase()==='data:')inData=true;if(inData&&(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'))inData=false;if(c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f')curEmpty=false;cur+=c}if(!curEmpty)parts.push(cur);return parts}` +
 	`function mref(v){var n=v.length;var mi=-1;var from=0;while(from<=n){var semi=v.indexOf(';',from);var end=semi<0?n:semi;var field=v.slice(from,end);var k=0;while(k<field.length&&' \t\n\r\f'.indexOf(field.charAt(k))>=0)k++;if(field.slice(k,k+4).toLowerCase()==='url='){mi=from+k;break}if(semi<0)break;from=semi+1}if(mi<0)return v;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)==='\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
 	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'))||a==='cite';var rr=nav?rn:r;var nv=v;if(a==='srcset'){nv=srcsetParts(v).map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=rwaStyle(v)}else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
 	`function rwe(el){if(!el||el.nodeType!==1)return;for(var i=0;i<ATTRS.length;i++)rwa(el,ATTRS[i])}` +
@@ -777,6 +777,16 @@ func rewriteMetaRefresh(content, prefix string) string {
 	return content[:idx+4] + rest[:offset] + quote + rewriteURLReference(target, prefix, "") + tail
 }
 
+// asciiFoldHasPrefixAt reports whether value[i:] starts with prefix under
+// ASCII case folding, comparing at most len(prefix) bytes (bounded: it never
+// scans or allocates the rest of the string).
+func asciiFoldHasPrefixAt(value string, i int, prefix string) bool {
+	if i+len(prefix) > len(value) {
+		return false
+	}
+	return asciiFoldHasPrefix(value[i:i+len(prefix)], prefix)
+}
+
 // asciiFoldHasPrefix reports whether s starts with prefix under ASCII
 // case folding (A-Z only). Length-preserving: unlike strings.ToLower it never
 // changes byte lengths, so offsets into s remain valid.
@@ -807,7 +817,9 @@ func parseRefreshTarget(trimmed string) (target, tail, quote string) {
 		return "", "", ""
 	}
 	if trimmed[0] != '\'' && trimmed[0] != '"' {
-		if end := strings.IndexAny(trimmed, "; \t"); end >= 0 {
+		// All five ASCII whitespace bytes terminate an unquoted target,
+		// matching the runtime mref() and CSS whitespace semantics.
+		if end := strings.IndexAny(trimmed, "; \t\n\r\f"); end >= 0 {
 			return trimmed[:end], trimmed[end:], ""
 		}
 		return trimmed, "", ""
@@ -838,11 +850,17 @@ func rewriteURLReference(rawURL, prefix, capability string) string {
 		// metadata, or an app URL carrying a stale cap) so the bearer cannot
 		// land in the address bar, history, or a cross-origin Referer. The
 		// gateway also strips reserved pairs on forward; this keeps them out
-		// of the DOM in the first place. Scheme-bearing references (data:,
-		// mailto:, …) and network-relative references are never gateway HTTP
-		// queries: '?' and '#' there are payload, not query/fragment, so
-		// they are preserved verbatim.
-		if normalized != "" && normalized[0] != '#' && !hasURLScheme(normalized) && !strings.HasPrefix(normalized, "//") {
+		// of the DOM in the first place. Scheme-bearing references are
+		// preserved verbatim EXCEPT http:/https: absolute references, which
+		// ARE gateway HTTP queries and must have a stale capability removed
+		// (the runtime rn() does the same for same-origin absolutes);
+		// data:, mailto:, and other scheme payloads keep their '?'/'#' as
+		// payload, and network-relative references are left untouched.
+		strip := normalized != "" && normalized[0] != '#' && !strings.HasPrefix(normalized, "//")
+		if strip && hasURLScheme(normalized) {
+			strip = httpScheme(normalized)
+		}
+		if strip {
 			rawURL = stripCapability(rawURL)
 			normalized = normalizeURLForClassification(rawURL)
 		}
@@ -945,6 +963,25 @@ func hasURLScheme(raw string) bool {
 	return false
 }
 
+// httpScheme reports whether a scheme-bearing reference uses the http: or
+// https: scheme (the only schemes whose '?' is a gateway HTTP query).
+func httpScheme(raw string) bool {
+	for i := 0; i < len(raw); i++ {
+		if raw[i] == ':' {
+			return strings.EqualFold(raw[:i], "http") || strings.EqualFold(raw[:i], "https")
+		}
+		if !isSchemeChar(raw[i]) {
+			return false
+		}
+	}
+	return false
+}
+
+// isSchemeChar reports whether c is valid inside a URL scheme (per RFC 3986).
+func isSchemeChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.'
+}
+
 // rewriteSrcSet rewrites each candidate URL in a `srcset` attribute. The
 // value format is `url [descriptor], url [descriptor], …` per the HTML spec.
 func rewriteSrcSet(value, prefix, capability string) string {
@@ -992,10 +1029,10 @@ func splitSrcSetParts(value string) []string {
 			continue
 		}
 		// The data: prefix is tested only at the FIRST non-whitespace byte of
-		// a candidate (curEmpty is true then): testing every byte while the
-		// candidate is still whitespace-only would rescan the entire
-		// remaining suffix per byte (quadratic on leading whitespace).
-		if !inData && curEmpty && !isCSSSpace(c) && strings.HasPrefix(strings.ToLower(value[i:]), "data:") {
+		// a candidate (curEmpty is true then), with a bounded five-byte
+		// ASCII-fold compare — never a whole-suffix scan or allocation, so
+		// N candidates cost O(N), not O(N^2).
+		if !inData && curEmpty && !isCSSSpace(c) && asciiFoldHasPrefixAt(value, i, "data:") {
 			inData = true
 		}
 		if inData && isCSSSpace(c) {

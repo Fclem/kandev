@@ -930,7 +930,7 @@ func TestRuntimeShim_StyleTokenizerAndSrcSetDataURLs(t *testing.T) {
 	mustContain(t, shim, `function rwaStyle(v){var o='';var i=0;var n=v.length;`)
 	mustContain(t, shim, `if(d2.toLowerCase().indexOf('var(')!==0){var rw2=r(d2);var em2=d2===rw2?tok2:cssEscTok(rw2);o+='url('+sp+em2`)
 	mustContain(t, shim, `function srcsetParts(v){var parts=[];var cur='';var inData=false;`)
-	mustContain(t, shim, `if(!inData&&curEmpty&&c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f'&&/^data:/i.test(v.slice(i)))inData=true`)
+	mustContain(t, shim, `if(!inData&&curEmpty&&c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f'&&v.slice(i,i+5).toLowerCase()==='data:')inData=true`)
 	// content rewriting is guarded to META http-equiv=refresh; non-refresh
 	// meta content and non-META content attributes are left unchanged.
 	mustContain(t, shim, `else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}`)
@@ -1426,6 +1426,59 @@ func TestRewriteSrcSet_LongWhitespacePrefix(t *testing.T) {
 	got := rewriteSrcSet(in, proxyPrefix, "cap-ss")
 
 	mustContain(t, got, `data:image/svg+xml,%3Csvg%3E 1x, /port-proxy/abc/3001/img.png?kandev_cap=cap-ss 2x`)
+}
+
+// Static navigation rewrites must strip a stale capability from http(s)
+// ABSOLUTE references (the browser resolves them as gateway HTTP queries),
+// while data:/mailto: payloads and network-relative references are preserved
+// verbatim. The same path covers redirect Location headers.
+func TestRewriteHTMLURLs_NavStripsCapFromHTTPAbsolute(t *testing.T) {
+	in := `<a href="http://127.0.0.1:44444/page?kandev_cap=stale">x</a>` +
+		`<a href="https://app.example/feed?kandev_cap=stale">y</a>` +
+		`<a href="mailto:x@y.z?kandev_cap=stale">m</a>` +
+		`<a href="data:text/plain,#p?kandev_cap=x">d</a>` +
+		`<a href="//cdn.example/a?kandev_cap=stale">n</a>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-nav", ""))
+
+	mustContain(t, got, `<a href="http://127.0.0.1:44444/page?">x</a>`)
+	mustContain(t, got, `<a href="https://app.example/feed?">y</a>`)
+	mustContain(t, got, `<a href="mailto:x@y.z?kandev_cap=stale">m</a>`)
+	mustContain(t, got, `<a href="data:text/plain,#p?kandev_cap=x">d</a>`)
+	mustContain(t, got, `<a href="//cdn.example/a?kandev_cap=stale">n</a>`)
+
+	// Redirect Location headers go through the same navigation rewrite.
+	loc := rewriteURLReference("http://127.0.0.1:44444/next?kandev_cap=stale", proxyPrefix, "")
+	if loc != "http://127.0.0.1:44444/next?" {
+		t.Fatalf("Location strip = %q, want stripped absolute", loc)
+	}
+}
+
+// Unquoted meta-refresh targets terminate at ALL five ASCII whitespace bytes,
+// matching the runtime mref() and CSS whitespace semantics: an LF after the
+// target must not be joined into it.
+func TestRewriteHTMLURLs_MetaRefreshNewlineDelimiter(t *testing.T) {
+	in := "<meta http-equiv=\"refresh\" content=\"0; url=/next\nfoo\">"
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-nl", ""))
+
+	mustContain(t, got, "content=\"0; url=/port-proxy/abc/3001/next\nfoo\"")
+}
+
+// The srcset data: prefix test is bounded to five bytes: many candidates
+// must not rescan the remaining suffix (correctness on a large input).
+func TestRewriteSrcSet_ManyCandidatesBounded(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 20000; i++ {
+		fmt.Fprintf(&b, "  %d.png 1x, ", i)
+	}
+	b.WriteString("/last.png 2x")
+	got := rewriteSrcSet(b.String(), proxyPrefix, "cap-ss")
+
+	if !strings.HasPrefix(got, "0.png?kandev_cap=cap-ss 1x, ") {
+		t.Fatalf("first candidate not rewritten: %.60s", got)
+	}
+	if !strings.HasSuffix(got, "/port-proxy/abc/3001/last.png?kandev_cap=cap-ss 2x") {
+		t.Fatalf("last candidate not rewritten: %.60s", got[len(got)-60:])
+	}
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

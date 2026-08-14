@@ -216,11 +216,17 @@ func (r *Repository) deleteWorkspaceCascade(
 	// purging the queues: lifecycle admission takes the task row first and
 	// then the session lock, so taking session locks first here would invert
 	// the order and deadlock the two on Postgres. Guard every affected task
-	// row in stable sorted order.
-	sort.Slice(tasks, func(i, j int) bool { return tasks[i].ID < tasks[j].ID })
-	for _, task := range tasks {
-		if _, err := tx.ExecContext(ctx, r.db.Rebind(`UPDATE tasks SET updated_at = updated_at WHERE id = ?`), task.ID); err != nil {
-			return nil, nil, fmt.Errorf("guard cascade task row %s: %w", task.ID, err)
+	// row in stable sorted id order, WITHOUT reordering the inventory returned
+	// to the caller (listWorkspaceCascadeDeleteTasks orders created_at ASC,
+	// id ASC and the service consumes that order).
+	lockIDs := make([]string, len(tasks))
+	for i, task := range tasks {
+		lockIDs[i] = task.ID
+	}
+	sort.Strings(lockIDs)
+	for _, taskID := range lockIDs {
+		if err := r.lockTaskRowInTx(ctx, tx, taskID); err != nil {
+			return nil, nil, fmt.Errorf("guard cascade task row %s: %w", taskID, err)
 		}
 	}
 	if err := r.purgeWorkspaceTaskQueuesInTx(ctx, tx, tasks); err != nil {

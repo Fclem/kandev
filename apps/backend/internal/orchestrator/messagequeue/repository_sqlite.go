@@ -1145,6 +1145,11 @@ func (r *sqliteRepository) beginSendNowClaimTx(
 		return nil, "", nil, fmt.Errorf("begin send-now %s tx: %w", action, err)
 	}
 	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		// Roll back the started transaction: callers register
+		// `defer tx.Rollback()` only after this function succeeds, so an
+		// abandoned tx would keep the pooled connection inside an open
+		// transaction.
+		_ = tx.Rollback()
 		unlock()
 		return nil, "", nil, err
 	}

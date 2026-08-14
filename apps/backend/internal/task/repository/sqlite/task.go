@@ -588,6 +588,12 @@ func (r *Repository) updateTaskWithWorkflowStepAdmission(
 	// model cannot bypass the ordering.
 	var workspaceID string
 	if err := tx.QueryRowContext(ctx, r.db.Rebind(`SELECT workspace_id FROM tasks WHERE id = ?`), task.ID).Scan(&workspaceID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Preserve the ErrTaskNotFound sentinel callers relied on before
+			// the workspace read was introduced (a task deleted concurrently
+			// with a move is reachable).
+			return false, fmt.Errorf("%w: %s", ErrTaskNotFound, task.ID)
+		}
 		return false, fmt.Errorf("read task workspace for admission: %w", err)
 	}
 	if err := r.lockWorkspaceRowStdTx(ctx, tx, workspaceID); err != nil {

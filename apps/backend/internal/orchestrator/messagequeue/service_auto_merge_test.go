@@ -160,6 +160,8 @@ func TestService_AutoMergeAtFullQueueSkipsAfterInsertHook(t *testing.T) {
 	}
 }
 
+// autoMergeCandidateErrorRepository wraps a repository and fails every
+// full-queue candidate fold with the configured error.
 type autoMergeCandidateErrorRepository struct {
 	Repository
 	err error

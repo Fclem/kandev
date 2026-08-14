@@ -60,9 +60,12 @@ func waitForWaitingLocks(t *testing.T, poller interface {
 
 // newTaskPostgresRepoPair opens one isolated Postgres schema and constructs
 // two task repositories over it (plus the queue tables the purge touches,
-// which production creates on the same database). Two instances simulate two
-// backend processes sharing a queue database.
-func newTaskPostgresRepoPair(t *testing.T) (*Repository, *Repository) {
+// which production creates on the same database), plus an extra
+// single-connection DB handle on the same schema. Two instances simulate two
+// backend processes sharing a queue database; the extra handle lets a test
+// hold a queue_session_locks row on a separate connection while one of the
+// worker pools is busy in its lock transaction.
+func newTaskPostgresRepoPair(t *testing.T) (*Repository, *Repository, *sqlx.DB) {
 	t.Helper()
 	dsn := testutil.PostgresDSNFromEnv(t)
 	schema := "kandev_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -101,9 +104,25 @@ func newTaskPostgresRepoPair(t *testing.T) (*Repository, *Repository) {
 		return repo
 	}
 	repoA, repoB := open(), open()
-	return repoA, repoB
+	dbC := mustOpenTaskTestDB(t, dsn, schema)
+	return repoA, repoB, dbC
 }
 
+func mustOpenTaskTestDB(t *testing.T, dsn, schema string) *sqlx.DB {
+	t.Helper()
+	db, err := sqlx.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec("SET search_path TO " + schema); err != nil {
+		t.Fatalf("set postgres search_path %s: %v", schema, err)
+	}
+	return db
+}
+
+// seedTaskWithSession creates a workspace, a task in it, and one session.
 func seedTaskWithSession(t *testing.T, repo *Repository, taskID, workspaceID, sessionID string) {
 	t.Helper()
 	ctx := context.Background()
@@ -128,7 +147,7 @@ func seedTaskWithSession(t *testing.T, repo *Repository, taskID, workspaceID, se
 // purge. The competing backend holds the session lock; DeleteTask blocks on
 // it, proving the empty session was still locked.
 func TestPostgresRepository_DeleteTask_LocksEmptySessionDuringPurge(t *testing.T) {
-	repoA, repoB := newTaskPostgresRepoPair(t)
+	repoA, repoB, _ := newTaskPostgresRepoPair(t)
 	ctx := context.Background()
 	const (
 		taskID = "task-del-race"
@@ -183,7 +202,7 @@ func TestPostgresRepository_DeleteTask_LocksEmptySessionDuringPurge(t *testing.T
 // otherwise lifecycle admission (task row first, then session lock) and the
 // cascade deadlock on Postgres.
 func TestPostgresRepository_WorkspaceCascade_GuardsTaskRowsBeforeSessionLocks(t *testing.T) {
-	repoA, repoB := newTaskPostgresRepoPair(t)
+	repoA, repoB, _ := newTaskPostgresRepoPair(t)
 	ctx := context.Background()
 	const taskID = "task-cascade-race"
 	seedTaskWithSession(t, repoA, taskID, "ws-cascade-race", "sess-cascade-race")
@@ -229,7 +248,7 @@ func TestPostgresRepository_WorkspaceCascade_GuardsTaskRowsBeforeSessionLocks(t 
 // stale admission targeting the deleted task's session is rejected with
 // ErrTaskInactive and no queue row survives.
 func TestPostgresRepository_QueueAdmissionRejectedAfterTaskDelete(t *testing.T) {
-	repoA, _ := newTaskPostgresRepoPair(t)
+	repoA, _, _ := newTaskPostgresRepoPair(t)
 	ctx := context.Background()
 	seedTaskWithSession(t, repoA, "task-post-del", "ws-post-del", "sess-post-del")
 	queueRepo, err := messagequeue.NewSQLiteRepository(repoA.db, repoA.db)
@@ -264,7 +283,7 @@ func TestPostgresRepository_QueueAdmissionRejectedAfterTaskDelete(t *testing.T) 
 // the archive mid-flight), the fold blocks on the guard, the archive commits,
 // and the fold is rejected.
 func TestPostgresRepository_AutoMergeCandidateIntoAbove_RejectedAfterArchive(t *testing.T) {
-	repoA, repoB := newTaskPostgresRepoPair(t)
+	repoA, repoB, _ := newTaskPostgresRepoPair(t)
 	ctx := context.Background()
 	const (
 		taskID = "task-fold-arch-race"
@@ -329,6 +348,18 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RejectedAfterArchive(t *
 	}
 }
 
+// TestPostgresRepository_DeleteTask_MissingTaskReturnsErrTaskNotFound proves
+// the task-row lock preserves the ErrTaskNotFound classification: on
+// PostgreSQL a missing task surfaces as sql.ErrNoRows from the FOR UPDATE
+// before any RowsAffected check.
+func TestPostgresRepository_DeleteTask_MissingTaskReturnsErrTaskNotFound(t *testing.T) {
+	repoA, _, _ := newTaskPostgresRepoPair(t)
+	ctx := context.Background()
+	if err := repoA.DeleteTask(ctx, "no-such-task"); !errors.Is(err, ErrTaskNotFound) {
+		t.Fatalf("DeleteTask missing task err = %v, want ErrTaskNotFound", err)
+	}
+}
+
 // TestPostgresRepository_DeleteTask_SerializesWithSessionCreation proves
 // DeleteTask takes the task-row creation barrier BEFORE capturing the session
 // set: a session created mid-flight (while the task row is locked) must be
@@ -337,7 +368,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RejectedAfterArchive(t *
 // session is committed, and the subsequent purge must block on that new
 // session's lock (proving it was captured).
 func TestPostgresRepository_DeleteTask_SerializesWithSessionCreation(t *testing.T) {
-	repoA, repoB := newTaskPostgresRepoPair(t)
+	repoA, repoB, dbC := newTaskPostgresRepoPair(t)
 	ctx := context.Background()
 	const (
 		taskID = "task-del-sess-race"
@@ -365,22 +396,10 @@ func TestPostgresRepository_DeleteTask_SerializesWithSessionCreation(t *testing.
 	}()
 	waitForWaitingLocks(t, lockTx, delPID, 1, "DeleteTask on the task row barrier")
 
-	// A new session commits while DeleteTask waits on the task row.
-	if _, err := lockTx.ExecContext(ctx, `
-		INSERT INTO task_sessions (id, task_id, started_at, updated_at)
-		VALUES ('sess-new', 'task-del-sess-race', now(), now())
-	`); err != nil {
-		t.Fatalf("insert session mid-delete: %v", err)
-	}
-	if err := lockTx.Commit(); err != nil {
-		t.Fatalf("commit session creation: %v", err)
-	}
-
-	// Hold the NEW session's queue lock: with the fix the purge captured it
-	// (capture happens after the barrier) and blocks here; without the fix the
-	// stale capture misses it and DeleteTask completes, so the barrier times
-	// out.
-	lockTx2, err := dbA.BeginTxx(ctx, nil)
+	// Hold the NEW session's queue lock on a SEPARATE connection BEFORE
+	// releasing the task row: DeleteTask must not be able to pass the session
+	// lock in the gap between the two acquisitions.
+	lockTx2, err := dbC.BeginTxx(ctx, nil)
 	if err != nil {
 		t.Fatalf("begin second lock tx: %v", err)
 	}
@@ -397,6 +416,20 @@ func TestPostgresRepository_DeleteTask_SerializesWithSessionCreation(t *testing.
 		t.Fatalf("lock new session: %v", err)
 	}
 
+	// A new session commits while DeleteTask waits on the task row.
+	if _, err := lockTx.ExecContext(ctx, `
+		INSERT INTO task_sessions (id, task_id, started_at, updated_at)
+		VALUES ('sess-new', 'task-del-sess-race', now(), now())
+	`); err != nil {
+		t.Fatalf("insert session mid-delete: %v", err)
+	}
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit session creation: %v", err)
+	}
+
+	// With the fix the purge captured the new session (capture happens after
+	// the barrier) and blocks on the held lock; without the fix the stale
+	// capture misses it and DeleteTask completes, so the barrier times out.
 	waitForWaitingLocks(t, lockTx2, delPID, 1, "DeleteTask purge on the mid-flight session")
 
 	if err := lockTx2.Commit(); err != nil {
@@ -421,7 +454,7 @@ func TestPostgresRepository_DeleteTask_SerializesWithSessionCreation(t *testing.
 // row, the cascade blocks on it, a new task+session commits, and the purge
 // must then block on that new session's lock (proving the inventory saw it).
 func TestPostgresRepository_WorkspaceCascade_SerializesWithTaskCreation(t *testing.T) {
-	repoA, repoB := newTaskPostgresRepoPair(t)
+	repoA, repoB, dbC := newTaskPostgresRepoPair(t)
 	ctx := context.Background()
 	const (
 		wsID   = "ws-cascade-sess-race"
@@ -449,6 +482,26 @@ func TestPostgresRepository_WorkspaceCascade_SerializesWithTaskCreation(t *testi
 	}()
 	waitForWaitingLocks(t, lockTx, cascadePID, 1, "cascade on the workspace row")
 
+	// Hold the new task's session queue lock on a SEPARATE connection BEFORE
+	// releasing the workspace row: the cascade must not be able to pass the
+	// session lock in the gap between the two acquisitions.
+	lockTx2, err := dbC.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin second lock tx: %v", err)
+	}
+	defer func() { _ = lockTx2.Rollback() }()
+	if _, err := lockTx2.ExecContext(ctx, `
+		INSERT INTO queue_session_locks (session_id) VALUES ('sess-cascade-new')
+		ON CONFLICT(session_id) DO NOTHING
+	`); err != nil {
+		t.Fatalf("ensure session lock row: %v", err)
+	}
+	if _, err := lockTx2.ExecContext(ctx, `
+		SELECT 1 FROM queue_session_locks WHERE session_id = 'sess-cascade-new' FOR UPDATE
+	`); err != nil {
+		t.Fatalf("lock new session: %v", err)
+	}
+
 	// A new task with a session commits while the cascade waits on the
 	// workspace row.
 	if _, err := lockTx.ExecContext(ctx, `
@@ -467,27 +520,10 @@ func TestPostgresRepository_WorkspaceCascade_SerializesWithTaskCreation(t *testi
 		t.Fatalf("commit task creation: %v", err)
 	}
 
-	// Hold the new task's session queue lock: with the fix the cascade's
-	// inventory (taken after the workspace lock) includes the new task and its
-	// purge blocks here; without the fix the stale inventory misses it and the
-	// cascade completes, so the barrier times out.
-	lockTx2, err := dbA.BeginTxx(ctx, nil)
-	if err != nil {
-		t.Fatalf("begin second lock tx: %v", err)
-	}
-	defer func() { _ = lockTx2.Rollback() }()
-	if _, err := lockTx2.ExecContext(ctx, `
-		INSERT INTO queue_session_locks (session_id) VALUES ('sess-cascade-new')
-		ON CONFLICT(session_id) DO NOTHING
-	`); err != nil {
-		t.Fatalf("ensure session lock row: %v", err)
-	}
-	if _, err := lockTx2.ExecContext(ctx, `
-		SELECT 1 FROM queue_session_locks WHERE session_id = 'sess-cascade-new' FOR UPDATE
-	`); err != nil {
-		t.Fatalf("lock new session: %v", err)
-	}
-
+	// With the fix the cascade's inventory (taken after the workspace lock)
+	// includes the new task and its purge blocks on the held lock; without the
+	// fix the stale inventory misses it and the cascade completes, so the
+	// barrier times out.
 	waitForWaitingLocks(t, lockTx2, cascadePID, 1, "cascade purge on the mid-cascade task session")
 
 	if err := lockTx2.Commit(); err != nil {

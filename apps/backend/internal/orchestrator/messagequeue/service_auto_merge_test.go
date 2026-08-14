@@ -3,6 +3,7 @@ package messagequeue
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -166,6 +167,55 @@ type autoMergeCandidateErrorRepository struct {
 
 func (r *autoMergeCandidateErrorRepository) AutoMergeCandidateIntoAbove(context.Context, *QueuedMessage) (*QueuedMessage, bool, error) {
 	return nil, false, r.err
+}
+
+// failNextInsertRepository fails the next N Insert calls with ErrQueueFull,
+// simulating a cross-process admission that observed a stale full count while
+// the underlying queue already drained.
+type failNextInsertRepository struct {
+	Repository
+	mu       sync.Mutex
+	failNext int
+}
+
+func (r *failNextInsertRepository) Insert(ctx context.Context, msg *QueuedMessage, maxPerSession int) error {
+	r.mu.Lock()
+	if r.failNext > 0 {
+		r.failNext--
+		r.mu.Unlock()
+		return ErrQueueFull
+	}
+	r.mu.Unlock()
+	return r.Repository.Insert(ctx, msg, maxPerSession)
+}
+
+func TestService_AutoMergeFullQueueRetriesInsertAfterFoldSkip(t *testing.T) {
+	repo := &failNextInsertRepository{Repository: NewMemoryRepository()}
+	svc := newAutoMergeTestServiceWithRepository(t, repo, 1)
+	if _, err := svc.QueueMessage(context.Background(), "session", "task", "first", "", QueuedByUser, false, nil); err != nil {
+		t.Fatalf("queue first: %v", err)
+	}
+	// A concurrent drain frees capacity between the failed insert and the
+	// fold scan: the fold sees an empty queue and skips, and admission must
+	// retry the ordinary insert instead of returning the stale ErrQueueFull.
+	if _, ok := svc.TakeQueued(context.Background(), "session"); !ok {
+		t.Fatal("drain first entry")
+	}
+	repo.mu.Lock()
+	repo.failNext = 1
+	repo.mu.Unlock()
+
+	second, err := svc.QueueMessage(context.Background(), "session", "task", "second", "", QueuedByUser, false, nil)
+	if err != nil {
+		t.Fatalf("admission after fold skip = %v, want insert retry to succeed", err)
+	}
+	if second == nil || second.Content != "second" {
+		t.Fatalf("queued entry = %+v, want the retried message", second)
+	}
+	status := svc.GetStatus(context.Background(), "session")
+	if status.Count != 1 || status.Entries[0].Content != "second" {
+		t.Fatalf("status = %+v, want the retried message queued", status)
+	}
 }
 
 func TestService_AutoMergeFullQueueCandidateMergeErrorDegradesToQueueFull(t *testing.T) {

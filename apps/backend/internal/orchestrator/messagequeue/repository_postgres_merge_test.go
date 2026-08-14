@@ -178,6 +178,97 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCanno
 	}
 }
 
+// TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithReorderSkips
+// proves the position component of the CAS guard: a concurrent reorder that
+// only changes positions must invalidate an in-flight fold, otherwise the fold
+// lands on a row that is no longer the tail (e.g. it became the head) and
+// drains in the wrong order. The interleaving is forced deterministically with
+// a row lock, mirroring the concurrent-admission test.
+func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithReorderSkips(t *testing.T) {
+	repoA, repoB := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+
+	first := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("race-reorder", "first"))
+	second := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("race-reorder", "second"))
+	dbA := repoA.(*sqliteRepository).db
+
+	// Instance A holds a row lock on the tail (the "second" entry), simulating
+	// a concurrent reorder that is about to commit.
+	lockTx, err := dbA.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `SELECT id FROM queued_messages WHERE id = $1 FOR UPDATE`, second.ID); err != nil {
+		t.Fatalf("lock tail row: %v", err)
+	}
+
+	// Instance B starts a fold while A holds the lock: B scans the tail
+	// ("second", position 2), then its CAS UPDATE blocks on A's row lock.
+	foldDone := make(chan error, 1)
+	candidate := defaultAutoMergeEntry("race-reorder", "third")
+	go func() {
+		merged, didMerge, err := repoB.(automaticMergeCandidateRepository).AutoMergeCandidateIntoAbove(ctx, &candidate)
+		if err != nil {
+			foldDone <- err
+			return
+		}
+		if didMerge || merged != nil {
+			foldDone <- fmt.Errorf("fold survived a concurrent reorder (didMerge=%v merged=%+v), want stale-tail skip", didMerge, merged)
+			return
+		}
+		foldDone <- nil
+	}()
+
+	// Wait until B's UPDATE is queued on the row lock, guaranteeing B's scan
+	// predates the reorder below.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := lockTx.QueryRowContext(ctx, `
+			SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'row'
+		`).Scan(&waiting); err != nil {
+			t.Fatalf("query pg_locks: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("instance B fold never blocked on the tail row lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// The concurrent reorder swaps only positions: "second" becomes the head.
+	if _, err := lockTx.ExecContext(ctx, `UPDATE queued_messages SET position = 1 WHERE id = $1`, second.ID); err != nil {
+		t.Fatalf("reorder second: %v", err)
+	}
+	if _, err := lockTx.ExecContext(ctx, `UPDATE queued_messages SET position = 2 WHERE id = $1`, first.ID); err != nil {
+		t.Fatalf("reorder first: %v", err)
+	}
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit reorder: %v", err)
+	}
+
+	if err := <-foldDone; err != nil {
+		t.Fatalf("instance B fold: %v", err)
+	}
+
+	// The reordered queue is intact and the fold content is absent: the tail
+	// is no longer the tail, so the fold must not have landed on it.
+	entries, err := repoA.ListBySession(ctx, "race-reorder")
+	if err != nil {
+		t.Fatalf("list queue: %v", err)
+	}
+	if len(entries) != 2 || entries[0].ID != second.ID || entries[1].ID != first.ID {
+		t.Fatalf("entries after reorder = %+v, want second first", entries)
+	}
+	if entries[0].Content != "second" {
+		t.Fatalf("head content = %q, want %q (fold must not land on a non-tail row)", entries[0].Content, "second")
+	}
+}
+
 func TestPostgresRepository_MergeDrainOrdering_DrainWins(t *testing.T) {
 	repo := newTestPostgresRepo(t)
 	ctx := context.Background()

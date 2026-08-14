@@ -1412,16 +1412,20 @@ func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, cand
 	// transaction. Across backend processes the session mutex is process-local,
 	// so two instances can read the same tail and both attempt a fold; the
 	// CAS makes the loser's UPDATE affect zero rows and roll back instead of
-	// silently overwriting the winner's accepted message.
+	// silently overwriting the winner's accepted message. Position is part of
+	// the CAS because a concurrent reorder only changes positions: without it
+	// a fold could land on a row that is no longer the tail (e.g. it became
+	// the head), violating FIFO drain order.
 	res, err := tx.ExecContext(ctx, r.db.Rebind(`
 		UPDATE queued_messages
 		SET content = ?, attachments_json = ?, metadata_json = ?
 		WHERE id = ? AND session_id = ?
+		  AND position = ?
 		  AND content = ?
 		  AND attachments_json = ?
 		  AND metadata_json = ?
 	`), values.content, attachmentsJSON, metadataJSON,
-		target.ID, candidate.SessionID,
+		target.ID, candidate.SessionID, target.Position,
 		storedContent, storedAttachmentsJSON, storedMetadataJSON)
 	if err != nil {
 		return nil, false, fmt.Errorf("update automatic candidate merge target: %w", err)

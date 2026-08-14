@@ -285,8 +285,8 @@ func TestRuntimeShim_PatchesNavigationAPIs(t *testing.T) {
 	// (the subtree cookie covers same-origin navigations; a bearer in the
 	// address bar/history would leak).
 	for _, needle := range []string{
-		`history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}`, // history APIs (any DOMString-able arg)
-		`location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}`,    // location APIs
+		`history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}`, // history APIs (any DOMString-able arg)
+		`location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}`,    // location APIs
 	} {
 		mustContain(t, shim, needle)
 	}
@@ -497,8 +497,8 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `typeof i==='string'||(i&&typeof i==='object'&&typeof i.href==='string'&&!i.url)`)
 	mustContain(t, shim, `arguments[1]=norm(u)`)
 	// Navigation APIs use the prefix-only rewriter, never the capability.
-	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
-	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
 	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// Anchor navigation needs no click interception: the MutationObserver
 	// prefixes hrefs, so the browser's own default navigation stays inside
@@ -525,8 +525,8 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	// and never appends a new one.
 	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// history and location rewrite through rn(), never r().
-	mustContain(t, shim, `history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}`)
-	mustContain(t, shim, `location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}`)
+	mustContain(t, shim, `history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}`)
+	mustContain(t, shim, `location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}`)
 	if strings.Contains(shim, `history[op]=function(s,t,u){if(typeof u==='string')u=r(u)`) {
 		t.Fatal("history APIs must not use the capability-bearing rewriter")
 	}
@@ -1309,7 +1309,7 @@ func TestRuntimeShim_Round4Contracts(t *testing.T) {
 	// rwa defaults nv to v so guarded branches leave the attribute alone.
 	mustContain(t, shim, `var rr=nav?rn:r;var nv=v;if(a==='srcset')`)
 	// URL-object navigation arguments are stringified through rn().
-	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}`)
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}`)
 	// Token escape decode/encode helpers exist.
 	mustContain(t, shim, `function cssDecTok(t){`)
 	mustContain(t, shim, `function cssEscTok(t){`)
@@ -1336,8 +1336,27 @@ func TestRewriteCSSFragment_EscapedQuotedImport(t *testing.T) {
 // form.
 func TestRuntimeShim_DOMStringNavigationArguments(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
-	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
-	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
+}
+
+// Meta refresh honors leading whitespace before url= at the value start:
+// content="  url=/next" is a browser-accepted field boundary and must be
+// rewritten (matching the runtime mref()).
+func TestRewriteHTMLURLs_MetaRefreshLeadingWhitespace(t *testing.T) {
+	in := `<meta http-equiv="refresh" content="  url=/next">` +
+		"<meta http-equiv=\"refresh\" content=\"\turl=/tabbed\">"
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-mw", ""))
+
+	mustContain(t, got, `content="  url=/port-proxy/abc/3001/next"`)
+	mustContain(t, got, "content=\"\turl=/port-proxy/abc/3001/tabbed\"")
+}
+
+// The runtime navigation wrappers throw TypeError on Symbol arguments, like
+// native DOMString conversion (String(Symbol) would silently stringify).
+func TestRuntimeShim_SymbolNavigationThrows(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string')`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

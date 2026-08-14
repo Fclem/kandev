@@ -116,7 +116,7 @@ const runtimeShimTemplate = `(function(){` +
 	// WebSocket — path-absolute ws/wss URLs need an explicit ws:// scheme + host since the constructor doesn't accept bare paths. String and URL-object inputs go through norm(); same-origin results are converted to the matching ws/wss scheme, fragments are dropped (WebSocket URLs cannot carry one), and network-relative and cross-origin inputs pass through untouched.
 	`var OW=window.WebSocket;if(OW){function W(u,p){var n=norm(u);var l=window.location;var w=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host;var s=n;if(typeof s==='string'){if(s.charAt(0)==='/'&&s.charAt(1)!=='/'){s=w+s}else if(s!==u&&/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.test(s)){s=s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)}var h=s.indexOf('#');if(h!==-1)s=s.slice(0,h)}return p?new OW(s,p):new OW(s)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
 	// history.pushState / replaceState — SPA routers (Next.js, React Router, etc.) call these to change the URL on client-side navigation. Without rewriting, the URL bar drops the proxy prefix and a reload 404s. Uses rn() (no capability — see above).
-	`['pushState','replaceState'].forEach(function(op){var orig=history[op];if(!orig)return;history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}});` +
+	`['pushState','replaceState'].forEach(function(op){var orig=history[op];if(!orig)return;history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}});` +
 	// location.assign / location.replace — direct navigation APIs, patched
 	// best-effort with the prefix-only rewriter (string and URL-object
 	// arguments are both normalized, since the native API stringifies URL
@@ -130,7 +130,7 @@ const runtimeShimTemplate = `(function(){` +
 	// (anchor.click()) in the same task can navigate before the
 	// MutationObserver microtask rewrites its href; ordinary user clicks are
 	// unaffected because the observer delivers before the next task.
-	`['assign','replace'].forEach(function(op){var orig=location[op];if(!orig)return;try{location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}}catch(e){}});` +
+	`['assign','replace'].forEach(function(op){var orig=location[op];if(!orig)return;try{location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}}catch(e){}});` +
 	// MutationObserver: rewrite URL attributes on every element that is
 	// inserted or has its URL attribute mutated. Navigation attributes
 	// (anchor/area/base href, form action, button/input formaction, metadata
@@ -744,8 +744,11 @@ func isMetaRefresh(token *html.Token) bool {
 func rewriteMetaRefresh(content, prefix string) string {
 	lower := strings.ToLower(content)
 	idx := -1
-	if strings.HasPrefix(lower, "url=") {
-		idx = 0
+	// The "url" token is recognized at a field boundary — the start of the
+	// value or right after a ";" separator — ignoring surrounding whitespace.
+	trimmedStart := strings.TrimLeft(lower, " \t\n\r\f")
+	if strings.HasPrefix(trimmedStart, "url=") {
+		idx = len(lower) - len(trimmedStart)
 	} else {
 		for from := 0; from < len(lower); {
 			semi := strings.IndexByte(lower[from:], ';')

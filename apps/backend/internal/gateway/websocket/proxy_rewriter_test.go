@@ -515,7 +515,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))`)
 	mustContain(t, shim, `function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);`)
 	mustContain(t, shim, `var rr=nav?rn:r;`)
-	mustContain(t, shim, `'[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset]'`)
+	mustContain(t, shim, `'[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[style],[content]'`)
 }
 
 // The navigation rewriter must not carry the capability even when one is
@@ -780,9 +780,10 @@ func TestRewriteMetaRefresh_OnlyAtFieldBoundary(t *testing.T) {
 	mustContain(t, got, `content="0; noturl=/evil"`)
 }
 
-// CSP nonces must contain at least one non-padding character.
+// CSP nonces must contain at least one non-padding character, and padding
+// must be trailing only.
 func TestValidCSPNonce(t *testing.T) {
-	for _, bad := range []string{"", "=", "==", "a b", "a\"b"} {
+	for _, bad := range []string{"", "=", "==", "a b", "a\"b", "ab=c", "a=b", "=ab", "a==b"} {
 		if validCSPNonce(bad) {
 			t.Errorf("validCSPNonce(%q) = true, want false", bad)
 		}
@@ -794,6 +795,19 @@ func TestValidCSPNonce(t *testing.T) {
 	}
 }
 
+// The capability append is idempotent for the EXACT issued capability: a URL
+// already carrying kandev_cap=K is untouched (stopping the MutationObserver
+// from looping on its own rewrites), while an app's different kandev_cap
+// value still gets the issued capability appended.
+func TestRuntimeShim_AppendIsIdempotentForIssuedCapability(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `if(u.indexOf("kandev_cap="+K)===-1)u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+	// r() leaves network-relative values unchanged.
+	mustContain(t, shim, `u.indexOf('//')===0`)
+	// sc() decodes query keys before stripping.
+	mustContain(t, shim, `try{d=decodeURIComponent(k)}catch(e){d=k}`)
+}
+
 // The runtime shim appends the capability to safe same-origin relative
 // subresources too (e.g. a dynamically inserted relative manifest link), not
 // just root-absolute ones.
@@ -803,7 +817,7 @@ func TestRuntimeShim_CapsRelativeSubresources(t *testing.T) {
 	// splice for safe same-origin relative references.
 	mustContain(t, shim, `if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}`)
 	// The splice appends to u (prefixed or relative) with fragment handling.
-	mustContain(t, shim, `var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+	mustContain(t, shim, `if(u.indexOf("kandev_cap="+K)===-1)u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
 }
 
 // Link rel values are whitespace-separated token lists: ANY fetching token

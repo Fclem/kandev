@@ -65,13 +65,13 @@ const runtimeShimTemplate = `(function(){` +
 	// Path rewriter: prefix path-absolute URLs that aren't already prefixed.
 	// %s is the optional capability-append logic (empty when no capability is
 	// minted, keeping the auth-disabled output byte-identical).
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}%sreturn u;}` +
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}%sreturn u;}` +
 	// Navigation rewriter: same prefixing WITHOUT the capability. Navigation
 	// APIs (history.pushState, location.assign) put the URL in the address bar
 	// and browser history; embedding a bearer there would leak it through
 	// copied URLs, history, and cross-origin Referers. The subtree cookie
 	// covers same-origin navigations instead.
-	`function sc(u){var qi=u.indexOf('?');if(qi===-1)return u;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){return p.split('=')[0]!=='kandev_cap'});return b+(q.length?'?'+q.join('&'):'')}` +
+	`function sc(u){var qi=u.indexOf('?');if(qi===-1)return u;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){var k=p.split('=')[0];var d;try{d=decodeURIComponent(k)}catch(e){d=k}return d!=='kandev_cap'});return b+(q.length?'?'+q.join('&'):'')}` +
 	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return sc(u);return sc(P+u);}` +
 	// norm(u): normalizes any URL-like input through the network rewriter
 	// using the URL API, which applies the WHATWG parsing rules (leading
@@ -116,12 +116,13 @@ const runtimeShimTemplate = `(function(){` +
 	// accepted edge. Covers the cases the network-API patches miss, notably
 	// `ReactDOM.preload()` and any framework that builds DOM nodes with
 	// absolute paths after the initial HTML has been parsed.
-	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset'];` +
+	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','style','content'];` +
 	`function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);for(var i=0;i<toks.length;i++){if(toks[i]==='stylesheet'||toks[i]==='icon'||toks[i]==='manifest'||toks[i]==='preload'||toks[i]==='modulepreload'||toks[i]==='prefetch'||toks[i]==='dns-prefetch'||toks[i]==='preconnect'||toks[i]==='shortcut'||toks[i]==='apple-touch-icon')return true}return false}` +
-	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'));var rr=nav?rn:r;var nv;if(a==='srcset'){nv=v.split(',').map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=v.replace(/url\(\s*(['"]?)(\/[^'")]+)/g,function(m,q,u){return 'url('+q+r(u)+')'})}else if(a==='content'&&el.tagName==='META'){var ml=v.toLowerCase();var mi=ml.indexOf('url=');if(mi>=0&&(mi===0||ml[mi-1]===';')){var mt=v.slice(mi+4).replace(/^[ \t\n\r\f]+/,'');nv=v.slice(0,mi+4)+rn(mt)}else{nv=v}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
+	`function mref(v){var ml=v.toLowerCase();var m=/(^|;)\s*url=/.exec(ml);if(!m)return v;var mi=m.index+m[0].length-4;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)===\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
+	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'));var rr=nav?rn:r;var nv;if(a==='srcset'){nv=v.split(',').map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=v.replace(/url\(\s*(['"]?)([^'")]+)/g,function(m,q,u){return 'url('+q+r(u)+')'})}else if(a==='content'&&el.tagName==='META'){nv=mref(v)}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
 	`function rwe(el){if(!el||el.nodeType!==1)return;for(var i=0;i<ATTRS.length;i++)rwa(el,ATTRS[i])}` +
 	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','rel','style','content','http-equiv'];` +
-	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})}catch(e){}}` +
+	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[style],[content]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})}catch(e){}}` +
 	// Console forwarding: pipe iframe console output back to the parent frame via postMessage so it surfaces in the kandev UI alongside other preview events. The message targets the gateway origin only (the preview is served by the gateway, same-origin with the Kandev UI), never a wildcard, so a cross-origin embedding parent cannot receive proxied app console arguments. Errors and stacks are coerced to strings; objects are JSON-cloned where possible. We continue calling the original method so the iframe's own DevTools still shows everything.
 	`var LV=['log','warn','error','info','debug'];LV.forEach(function(lv){var orig=console[lv];if(!orig)return;console[lv]=function(){try{var out=[];for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){out.push('Error: '+a.message+(a.stack?'\n'+a.stack:''))}else if(typeof a==='object'&&a!==null){try{out.push(JSON.parse(JSON.stringify(a)))}catch(e){out.push(String(a))}}else{out.push(a)}}window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},window.location.origin)}catch(e){}return orig.apply(console,arguments)}});` +
 	`})();`
@@ -177,16 +178,20 @@ func validCSPNonce(nonce string) bool {
 		return false
 	}
 	seenContent := false
+	padding := 0
 	for i := 0; i < len(nonce); i++ {
 		if !cspNonceChar(nonce[i]) {
 			return false
 		}
 		if nonce[i] == '=' {
-			// Padding only at the end, at most two chars.
-			if i < len(nonce)-2 {
+			padding++
+			if padding > 2 {
 				return false
 			}
 		} else {
+			if padding > 0 {
+				return false // padding only at the very end (ab=c invalid)
+			}
 			seenContent = true
 		}
 	}
@@ -280,8 +285,13 @@ func shimCapabilityJS(capability string) string {
 		return ""
 	}
 	param := proxyCapabilityQueryParam + "="
-	return fmt.Sprintf(`var K=%q;var fr='';var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}u+=(u.indexOf('?')===-1?'?':'&')+%q+K;return u+fr;`,
-		capability, param)
+	// The append is idempotent for the EXACT issued capability: a value that
+	// already carries kandev_cap=K is not touched (this stops the
+	// MutationObserver from looping on its own rewrites), while an app's own
+	// different kandev_cap value still gets the issued capability appended —
+	// the gateway accepts any valid value among duplicates.
+	return fmt.Sprintf(`var K=%q;var fr='';var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}if(u.indexOf(%q+K)===-1)u+=(u.indexOf('?')===-1?'?':'&')+%q+K;return u+fr;`,
+		capability, param, param)
 }
 
 // urlInCSSPattern matches `url(...)` invocations in CSS where the argument is

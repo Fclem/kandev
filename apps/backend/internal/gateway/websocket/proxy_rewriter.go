@@ -65,7 +65,7 @@ const runtimeShimTemplate = `(function(){` +
 	// Path rewriter: prefix path-absolute URLs that aren't already prefixed.
 	// %s is the optional capability-append logic (empty when no capability is
 	// minted, keeping the auth-disabled output byte-identical).
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;%sreturn P+u;}` +
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||/^[a-z][a-z0-9+.-]*:/i.test(u)||u.indexOf('//')===0)return u;if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}%sreturn u;}` +
 	// Navigation rewriter: same prefixing WITHOUT the capability. Navigation
 	// APIs (history.pushState, location.assign) put the URL in the address bar
 	// and browser history; embedding a bearer there would leak it through
@@ -173,16 +173,22 @@ func validCSPNonce(nonce string) bool {
 	if nonce == "" || len(nonce) > 256 {
 		return false
 	}
+	seenContent := false
 	for i := 0; i < len(nonce); i++ {
 		if !cspNonceChar(nonce[i]) {
 			return false
 		}
-		// Padding only at the end, at most two chars.
-		if nonce[i] == '=' && i < len(nonce)-2 {
-			return false
+		if nonce[i] == '=' {
+			// Padding only at the end, at most two chars.
+			if i < len(nonce)-2 {
+				return false
+			}
+		} else {
+			seenContent = true
 		}
 	}
-	return true
+	// An all-padding token ("=", "==") is not a valid nonce value.
+	return seenContent
 }
 
 // cspNonceChar reports whether a byte is valid in a CSP nonce (base64 /
@@ -211,46 +217,50 @@ func scriptNonceFromCSP(policy string) string {
 	return ""
 }
 
-// cspMetaTagPattern matches a whole CSP meta tag so attributes can be read in
-// any order.
-var cspMetaTagPattern = regexp.MustCompile(`(?is)<meta[^>]*>`)
-
-// cspMetaHTTPEquivPattern extracts the http-equiv value of a meta tag.
-var cspMetaHTTPEquivPattern = regexp.MustCompile(`(?is)http-equiv\s*=\s*["']?([^"'\s>]+)`)
-
-// cspMetaContentPattern extracts the content value of a meta tag (double- or
-// single-quoted; single quotes inside a double-quoted policy are preserved).
-var cspMetaContentPattern = regexp.MustCompile(`(?is)content\s*=\s*(?:"([^"]*)"|'([^']*)')`)
-
 // responseScriptNonce returns the script nonce an app Content-Security-Policy
 // requires, from either the response header or a CSP meta tag in the body.
-// Every CSP meta tag is scanned — attribute order does not matter and a
-// nonce-free policy earlier in the document cannot hide a later nonce-bearing
-// one.
+// Meta tags are scanned with the HTML tokenizer: attributes are decoded
+// (entity-encoded policies work), keys match exactly (data-content decoys do
+// not), any attribute order is accepted, and every meta is examined so a
+// nonce-free policy cannot hide a later nonce-bearing one.
 func responseScriptNonce(resp *http.Response, body []byte) string {
 	for _, policy := range resp.Header.Values("Content-Security-Policy") {
 		if nonce := scriptNonceFromCSP(policy); nonce != "" {
 			return nonce
 		}
 	}
-	for _, tag := range cspMetaTagPattern.FindAll(body, -1) {
-		equiv := cspMetaHTTPEquivPattern.FindSubmatch(tag)
-		if len(equiv) != 2 || !strings.EqualFold(string(equiv[1]), "content-security-policy") {
-			continue
-		}
-		content := cspMetaContentPattern.FindSubmatch(tag)
-		if len(content) != 3 {
-			continue
-		}
-		policy := content[1]
-		if len(policy) == 0 {
-			policy = content[2]
-		}
-		if nonce := scriptNonceFromCSP(string(policy)); nonce != "" {
-			return nonce
+	tok := html.NewTokenizer(bytes.NewReader(body))
+	for {
+		tt := tok.Next()
+		switch tt {
+		case html.ErrorToken:
+			return ""
+		case html.StartTagToken, html.SelfClosingTagToken:
+			name, hasAttr := tok.TagName()
+			if !bytes.Equal(name, []byte("meta")) || !hasAttr {
+				continue
+			}
+			var equiv, content string
+			for {
+				key, val, more := tok.TagAttr()
+				switch {
+				case bytes.EqualFold(key, []byte("http-equiv")):
+					equiv = string(val)
+				case bytes.EqualFold(key, []byte("content")):
+					content = string(val)
+				}
+				if !more {
+					break
+				}
+			}
+			if !strings.EqualFold(strings.TrimSpace(equiv), "content-security-policy") {
+				continue
+			}
+			if nonce := scriptNonceFromCSP(content); nonce != "" {
+				return nonce
+			}
 		}
 	}
-	return ""
 }
 
 // shimCapabilityJS returns the JavaScript spliced into the shim's path
@@ -266,7 +276,7 @@ func shimCapabilityJS(capability string) string {
 		return ""
 	}
 	param := proxyCapabilityQueryParam + "="
-	return fmt.Sprintf(`var K=%q;var x=P+u;var fr='';var fh=x.indexOf('#');if(fh!==-1){fr=x.slice(fh);x=x.slice(0,fh)}x+=(x.indexOf('?')===-1?'?':'&')+%q+K;return x+fr;`,
+	return fmt.Sprintf(`var K=%q;var fr='';var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}u+=(u.indexOf('?')===-1?'?':'&')+%q+K;return u+fr;`,
 		capability, param)
 }
 
@@ -387,6 +397,7 @@ type htmlRewriteState struct {
 	capability   string
 	shim         string
 	nonce        string
+	depth        int
 	inStyle      bool
 	inScript     bool
 	shimInjected bool
@@ -395,7 +406,7 @@ type htmlRewriteState struct {
 // onStartTag emits the (URL-rewritten) start tag and updates raw-text
 // element tracking. Also injects the runtime shim immediately after `<head>`.
 func (s *htmlRewriteState) onStartTag(token html.Token) {
-	rewriteTokenURLs(&token, s.prefix, s.capability, s.nonce, 0)
+	rewriteTokenURLs(&token, s.prefix, s.capability, s.nonce, s.depth)
 	s.out.WriteString(token.String())
 	if !s.shimInjected && token.Data == headTagName {
 		s.out.WriteString(s.shim)
@@ -455,7 +466,7 @@ func rewriteHTMLURLsAtDepth(body []byte, prefix, capability, nonce string, depth
 	tok := html.NewTokenizer(bytes.NewReader(body))
 	var out bytes.Buffer
 	out.Grow(len(body) + 256 + len(runtimeShimTemplate))
-	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShimTag(prefix, capability, nonce), nonce: nonce}
+	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShimTag(prefix, capability, nonce), nonce: nonce, depth: depth}
 	for {
 		tt := tok.Next()
 		if tt == html.ErrorToken {
@@ -572,14 +583,25 @@ func isMetaRefresh(token *html.Token) bool {
 	return false
 }
 
-// rewriteMetaRefresh prefixes the first root-absolute navigation target inside
-// a meta refresh content value (no capability — it is a navigation). The
-// target is parsed exactly once, respecting an optional quote; any text after
-// it — including nested url= tokens — is preserved untouched, so a quoted
-// target containing `url=` cannot be rewritten a second time.
+// rewriteMetaRefresh prefixes the root-absolute navigation target inside a
+// meta refresh content value (no capability — it is a navigation). The "url"
+// token is recognized only at a field boundary (start of the value or right
+// after a ";" separator, case-insensitive, ignoring surrounding whitespace),
+// so unrelated text like `noturl=/evil` is never rewritten. The target is
+// parsed exactly once, respecting an optional quote; any text after it —
+// including nested url= tokens — is preserved untouched.
 func rewriteMetaRefresh(content, prefix string) string {
 	lower := strings.ToLower(content)
-	idx := strings.Index(lower, "url=")
+	idx := -1
+	if strings.HasPrefix(lower, "url=") {
+		idx = 0
+	} else if semi := strings.IndexByte(lower, ';'); semi >= 0 {
+		rest := lower[semi+1:]
+		trimmed := strings.TrimLeft(rest, " \t")
+		if strings.HasPrefix(trimmed, "url=") {
+			idx = semi + 1 + (len(rest) - len(trimmed))
+		}
+	}
 	if idx < 0 {
 		return content
 	}

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 const proxyPrefix = "/port-proxy/abc/3001"
@@ -472,11 +474,11 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	mustContain(t, shim, `var K="cap-shim";`)
 	// Fragment split: the query lands before any #fragment.
-	mustContain(t, shim, `var fh=x.indexOf('#');if(fh!==-1){fr=x.slice(fh);x=x.slice(0,fh)}`)
+	mustContain(t, shim, `var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}`)
 	// The append is unconditional: an app's own kandev_cap parameter must not
 	// suppress the issued capability (the gateway accepts any valid value
 	// among duplicates).
-	mustContain(t, shim, `x+=(x.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+	mustContain(t, shim, `u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
 	if strings.Contains(shim, `if(!/([?&])kandev_cap=/.test(x))`) {
 		t.Fatal("the shim must not let an app kandev_cap key suppress the issued capability")
 	}
@@ -724,6 +726,79 @@ func TestRewriteMetaRefresh_QuoteAndSemicolonAware(t *testing.T) {
 
 	mustContain(t, got, `content="0; url=&#39;/port-proxy/abc/3001/next;v=1&#39;"`)
 	mustContain(t, got, `content="3; url=/port-proxy/abc/3001/plain"`)
+}
+
+// srcdoc recursion is depth-bounded even through ordinary start tags: at the
+// bound the nested value is preserved unchanged.
+func TestRewriteHTMLURLs_SrcdocDepthBoundAppliesToStartTags(t *testing.T) {
+	in := `<iframe srcdoc="<img src=&quot;/logo.png&quot;>"></iframe>`
+	// At the bound, rewriteHTMLURLsAtDepth must leave the srcdoc untouched.
+	atBound := string(rewriteHTMLURLsAtDepth([]byte(in), proxyPrefix, "cap-d", "", maxSRCDocDepth))
+	mustContain(t, atBound, `srcdoc="&lt;img src=&#34;/logo.png&#34;&gt;"`)
+	// A chain of ordinary start-tag iframes nested past the bound completes
+	// without unbounded recursion: every level is rewritten while depth is
+	// below the bound, and the innermost content is preserved at it.
+	inner := `<img src="/deep.png">`
+	for i := 0; i < maxSRCDocDepth+2; i++ {
+		inner = `<iframe srcdoc="` + html.EscapeString(inner) + `">`
+	}
+	got := string(rewriteHTMLURLs([]byte(inner), proxyPrefix, "cap-d", ""))
+	if !strings.Contains(got, "/deep.png") {
+		t.Fatalf("deep srcdoc chain lost the innermost content:\n%s", got)
+	}
+	if strings.Count(got, "kandev_cap=") > maxSRCDocDepth {
+		t.Fatalf("deep srcdoc chain exceeded the depth bound:\n%s", got)
+	}
+}
+
+// Entity-encoded CSP meta policies are decoded by the tokenizer before nonce
+// extraction; decoy attribute keys (data-content) do not match.
+func TestRewriteHTMLURLs_CSPMetaEntityEncodedNonce(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><meta data-content="x" http-equiv="Content-Security-Policy" content="script-src &#39;self&#39; &#39;nonce-ent123&#39;"><title>x</title></head><body></body></html>`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"text/html"}},
+		Body:       io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	mustContain(t, string(got), `nonce="ent123"`)
+}
+
+// Meta refresh targets are recognized only at a field boundary: unrelated
+// text containing "url=" must not be rewritten.
+func TestRewriteMetaRefresh_OnlyAtFieldBoundary(t *testing.T) {
+	in := `<meta http-equiv="refresh" content="0; noturl=/evil">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-nb", ""))
+	mustContain(t, got, `content="0; noturl=/evil"`)
+}
+
+// CSP nonces must contain at least one non-padding character.
+func TestValidCSPNonce(t *testing.T) {
+	for _, bad := range []string{"", "=", "==", "a b", "a\"b"} {
+		if validCSPNonce(bad) {
+			t.Errorf("validCSPNonce(%q) = true, want false", bad)
+		}
+	}
+	for _, good := range []string{"abc123", "a_b-c", "ab+/", "abc=", "x=="} {
+		if !validCSPNonce(good) {
+			t.Errorf("validCSPNonce(%q) = false, want true", good)
+		}
+	}
+}
+
+// The runtime shim appends the capability to safe same-origin relative
+// subresources too (e.g. a dynamically inserted relative manifest link), not
+// just root-absolute ones.
+func TestRuntimeShim_CapsRelativeSubresources(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-rel")
+	// r() prefixes root-absolute URLs and falls through to the capability
+	// splice for safe same-origin relative references.
+	mustContain(t, shim, `if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}`)
+	// The splice appends to u (prefixed or relative) with fragment handling.
+	mustContain(t, shim, `var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

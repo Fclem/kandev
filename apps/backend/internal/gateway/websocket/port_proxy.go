@@ -221,23 +221,26 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 		r.SetURL(target)
 		r.Out.URL.Path = r.In.URL.Path
 		r.Out.URL.RawPath = ""
-		// The subtree capability is consumed by requireConnectionAuth at the
-		// gateway; strip it (in any encoding) before forwarding so it never
-		// lands in agentctl or application logs, redirects, or analytics. Only
-		// the capability pair is removed — every other parameter keeps its
-		// original bytes and order.
-		r.Out.URL.RawQuery = stripCapabilityParam(r.Out.URL.RawQuery)
+		// The subtree capability and the ?token= PAT credential are consumed by
+		// requireConnectionAuth at the gateway; strip them (in any encoding)
+		// before forwarding so they never land in agentctl or application logs,
+		// redirects, or analytics. Only the reserved pairs are removed — every
+		// other parameter keeps its original bytes and order.
+		r.Out.URL.RawQuery = stripReservedProxyParams(r.Out.URL.RawQuery)
 		// The browser may send a rewritten asset URL (which embeds the
 		// capability, possibly percent-encoded) as the Referer of a later
 		// request; sanitize every Referer. Capability-free Referers are left
-		// byte-identical.
+		// byte-identical; malformed ones are dropped rather than forwarded
+		// with their query intact.
 		if ref := r.Out.Header.Get("Referer"); ref != "" {
 			if parsed, err := url.Parse(ref); err == nil {
-				cleaned := stripCapabilityParam(parsed.RawQuery)
+				cleaned := stripReservedProxyParams(parsed.RawQuery)
 				if cleaned != parsed.RawQuery {
 					parsed.RawQuery = cleaned
 					r.Out.Header.Set("Referer", parsed.String())
 				}
+			} else {
+				r.Out.Header.Del("Referer")
 			}
 		}
 		// Inject agentctl auth token
@@ -255,6 +258,17 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 			return nil
 		}
 		capability, _ := resp.Request.Context().Value(proxyCapabilityContextKey{}).(string)
+		if capability != "" {
+			// Every response in an authenticated proxy subtree carries the
+			// per-user capability cookie, and rewritten bodies embed the
+			// capability: a shared intermediary must not retain or replay them
+			// for another user, and the browser must not leak the embedded
+			// capability to external origins through the Referer header. This
+			// applies to every response class (JS/JSON/redirects included),
+			// not just the HTML/CSS bodies the rewriter touches.
+			resp.Header.Set("Cache-Control", "private, no-store")
+			resp.Header.Set("Referrer-Policy", "no-referrer")
+		}
 		return rewriteProxyResponse(resp, proxyPrefix, capability)
 	}
 
@@ -386,18 +400,20 @@ func requestIsTLS(c *gin.Context) bool {
 	return strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
 }
 
+// proxyTokenQueryParam is the ?token=<PAT> query credential requireConnectionAuth
+// accepts on proxy routes. Like the capability, it is consumed at the gateway
+// and must never be forwarded to the proxied app.
+const proxyTokenQueryParam = "token"
+
 // stripCapabilityParam removes the capability query parameter from a raw query
-// string, matching the decoded key so percent-encoded spellings
-// (%6bandev_cap=) are caught too. Every other parameter keeps its original
-// bytes and order — nothing is re-encoded. Returns the input unchanged when
-// the parameter is absent.
-//
-// The grammar is "&"-separated pairs, which is the only form the gateway ever
-// issues (the rewriter and runtime shim append with "?"/"&") and the only form
-// the gateway's own query parser accepts as a credential; semicolon- or
-// space-separated spellings cannot carry a gateway-issued capability, so they
-// are out of scope here.
+// string. See stripReservedProxyParams.
 func stripCapabilityParam(rawQuery string) string {
+	return stripQueryParam(rawQuery, proxyCapabilityQueryParam)
+}
+
+// stripQueryParam removes the named query parameter from a raw query string,
+// matching the decoded key so percent-encoded spellings are caught too.
+func stripQueryParam(rawQuery, name string) string {
 	if rawQuery == "" {
 		return rawQuery
 	}
@@ -408,7 +424,36 @@ func stripCapabilityParam(rawQuery string) string {
 		if decoded, err := url.QueryUnescape(key); err == nil {
 			key = decoded
 		}
-		if key != proxyCapabilityQueryParam {
+		if key != name {
+			out = append(out, part)
+		}
+	}
+	return strings.Join(out, "&")
+}
+
+// stripReservedProxyParams removes every reserved gateway credential pair
+// (kandev_cap, token) from a raw query string, matching the decoded key so
+// percent-encoded spellings (%6bandev_cap=) are caught too. Every other
+// parameter keeps its original bytes and order — nothing is re-encoded.
+// Returns the input unchanged when no reserved pair is present.
+//
+// The grammar is "&"-separated pairs, which is the only form the gateway ever
+// issues (the rewriter and runtime shim append with "?"/"&") and the only form
+// the gateway's own query parser accepts as a credential; semicolon- or
+// space-separated spellings cannot carry a gateway-issued capability, so they
+// are out of scope here.
+func stripReservedProxyParams(rawQuery string) string {
+	if rawQuery == "" {
+		return rawQuery
+	}
+	parts := strings.Split(rawQuery, "&")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		key, _, _ := strings.Cut(part, "=")
+		if decoded, err := url.QueryUnescape(key); err == nil {
+			key = decoded
+		}
+		if key != proxyCapabilityQueryParam && key != proxyTokenQueryParam {
 			out = append(out, part)
 		}
 	}

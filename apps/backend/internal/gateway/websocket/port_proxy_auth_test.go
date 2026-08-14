@@ -287,6 +287,13 @@ func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T
 	if !strings.Contains(capabilityCookie, "Path=/port-proxy/sess-auth/5173") {
 		t.Fatalf("capability cookie %q not scoped to the proxy subtree", capabilityCookie)
 	}
+	// Capability-bearing responses are uncacheable and referrer-safe.
+	if got := doc.headers.Get("Cache-Control"); got != "private, no-store" {
+		t.Fatalf("document Cache-Control = %q, want %q", got, "private, no-store")
+	}
+	if got := doc.headers.Get("Referrer-Policy"); got != "no-referrer" {
+		t.Fatalf("document Referrer-Policy = %q, want %q", got, "no-referrer")
+	}
 
 	// 2. The rewritten manifest link carries the capability query parameter, so
 	// the browser's credential-less manifest fetch authenticates without cookies.

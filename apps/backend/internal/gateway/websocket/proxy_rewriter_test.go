@@ -94,8 +94,9 @@ func TestRewriteCSSURLs(t *testing.T) {
 func TestRewriteProxyResponse_HTML(t *testing.T) {
 	body := `<a href="/x">x</a>`
 	resp := &http.Response{
-		Header: http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
-		Body:   io.NopCloser(strings.NewReader(body)),
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -112,8 +113,9 @@ func TestRewriteProxyResponse_HTML(t *testing.T) {
 func TestRewriteProxyResponse_CSS(t *testing.T) {
 	body := `body { background: url(/bg.png); }`
 	resp := &http.Response{
-		Header: http.Header{"Content-Type": []string{"text/css"}},
-		Body:   io.NopCloser(strings.NewReader(body)),
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/css"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -127,8 +129,9 @@ func TestRewriteProxyResponse_CSS(t *testing.T) {
 func TestRewriteProxyResponse_OtherContentTypeUnchanged(t *testing.T) {
 	body := `{"href":"/foo"}`
 	resp := &http.Response{
-		Header: http.Header{"Content-Type": []string{"application/json"}},
-		Body:   io.NopCloser(strings.NewReader(body)),
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -281,9 +284,10 @@ func TestRewriteSrcSet(t *testing.T) {
 	}
 }
 
-// The subtree capability must ride on every rewritten URL: plain URLs get it
-// as the first query parameter, URLs that already carry a query get it
-// appended. Network-relative and absolute URLs stay untouched.
+// The subtree capability must ride on every rewritten SUBRESOURCE URL: plain
+// URLs get it as the first query parameter, URLs that already carry a query
+// get it appended. Network-relative and absolute URLs stay untouched, and
+// navigation references (anchor href) get the prefix without the capability.
 func TestRewriteHTMLURLs_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	in := `<a href="/foo">x</a>` +
 		`<script type="module" src="/src/main.tsx?t=123"></script>` +
@@ -292,13 +296,14 @@ func TestRewriteHTMLURLs_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 		`<a href="/docs#installation">docs</a>`
 	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-123"))
 
-	mustContain(t, got, `href="/port-proxy/abc/3001/foo?kandev_cap=cap-123"`)
+	// Navigation hrefs are prefixed but capability-free.
+	mustContain(t, got, `href="/port-proxy/abc/3001/foo"`)
 	// The tokenizer HTML-escapes the separator inside the attribute value.
 	mustContain(t, got, `src="/port-proxy/abc/3001/src/main.tsx?t=123&amp;kandev_cap=cap-123"`)
 	mustContain(t, got, `href="/port-proxy/abc/3001/manifest.webmanifest?kandev_cap=cap-123"`)
 	mustContain(t, got, `srcset="/port-proxy/abc/3001/a.png?kandev_cap=cap-123 1x, //cdn.example.com/b.png 2x"`)
-	// A fragment must stay after the capability query.
-	mustContain(t, got, `href="/port-proxy/abc/3001/docs?kandev_cap=cap-123#installation"`)
+	// A fragment must stay after the capability query on subresources.
+	mustContain(t, got, `href="/port-proxy/abc/3001/docs#installation"`)
 }
 
 // The capability is appended to rewritten CSS url() and @import references too,
@@ -376,6 +381,28 @@ func TestStripCapabilityParam(t *testing.T) {
 	}
 }
 
+// stripReservedProxyParams additionally removes the ?token= PAT credential the
+// gateway consumes, in any encoding, while preserving everything else.
+func TestStripReservedProxyParams(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"absent", "a=1&b=2", "a=1&b=2"},
+		{"cap", "a=1&kandev_cap=x", "a=1"},
+		{"token", "a=1&token=pat-secret&b=2", "a=1&b=2"},
+		{"encoded token", "a=1&%74oken=pat&b=2", "a=1&b=2"},
+		{"both", "token=pat&a=1&kandev_cap=x", "a=1"},
+		{"value contains names", "a=kandev_cap=x&b=token=y", "a=kandev_cap=x&b=token=y"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := stripReservedProxyParams(tc.in); got != tc.want {
+				t.Fatalf("stripReservedProxyParams(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 // Same-origin relative references (a relative <link rel="manifest">, relative
 // srcset entries) resolve inside the proxy subtree but carry no cookie on
 // fetch; they must still get the capability appended. Scheme-bearing,
@@ -391,11 +418,16 @@ func TestRewriteHTMLURLs_AppendsCapabilityToRelativeReferences(t *testing.T) {
 		`<img src="data:image/png;base64,AAA">` +
 		`<a href=" https://evil.example/x">spaced-scheme</a>` +
 		`<a href="&#10;//evil.example/y">newline-netrel</a>` +
-		`<a href=" /rooted">spaced-root</a>`
+		`<a href=" /rooted">spaced-root</a>` +
+		`<form action="/submit"><button formaction="/alt"></button></form>` +
+		`<a href="ht&#10;tps://evil2.example/z">embedded-tab-scheme</a>`
 	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-789"))
 
 	mustContain(t, got, `href="manifest.webmanifest?kandev_cap=cap-789"`)
-	mustContain(t, got, `href="page?kandev_cap=cap-789"`)
+	// Navigation references: prefixed, capability-free.
+	mustContain(t, got, `<a href="page">x</a>`)
+	mustContain(t, got, `action="/port-proxy/abc/3001/submit"`)
+	mustContain(t, got, `formaction="/port-proxy/abc/3001/alt"`)
 	mustContain(t, got, `srcset="a.png?kandev_cap=cap-789 1x, ./b.png?kandev_cap=cap-789 2x"`)
 	mustContain(t, got, `href="javascript:alert(1)"`)
 	mustContain(t, got, `href="mailto:x@y.dev"`)
@@ -409,8 +441,12 @@ func TestRewriteHTMLURLs_AppendsCapabilityToRelativeReferences(t *testing.T) {
 	// The tokenizer decodes &#10; to a literal newline; the network-relative
 	// URL behind it must still be left untouched.
 	mustContain(t, got, "href=\"\n//evil.example/y\"")
-	// A spaced root-absolute reference is rewritten from its trimmed form.
-	mustContain(t, got, `href="/port-proxy/abc/3001/rooted?kandev_cap=cap-789"`)
+	// A spaced root-absolute anchor reference is rewritten from its trimmed
+	// form, capability-free (navigation).
+	mustContain(t, got, `href="/port-proxy/abc/3001/rooted"`)
+	// Embedded tab/newline inside the scheme: WHATWG normalization reveals an
+	// external https URL, so the capability must not be appended.
+	mustContain(t, got, "href=\"ht\ntps://evil2.example/z\"")
 }
 
 // The runtime shim appends the capability to every URL its network path
@@ -428,15 +464,28 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	// the append, not substrings like /kandev_cap=note or ?name=kandev_cap=.
 	mustContain(t, shim, `if(!/([?&])kandev_cap=/.test(x))`)
 	mustContain(t, shim, `x+=(x.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
-	// WebSocket wrapper rewrites string AND same-origin URL-object inputs
-	// through r(), which carries the capability.
-	mustContain(t, shim, `'//'+l.host+r(u)`)
-	mustContain(t, shim, `u.origin===window.location.origin`)
-	mustContain(t, shim, `r(u.pathname+(u.search||'')+(u.hash||''))`)
+	// WebSocket wrapper rewrites string AND URL-object inputs through norm(),
+	// which carries the capability; same-origin ws/wss origins are compared
+	// as http/https and the scheme is swapped for the matching ws/wss form.
+	mustContain(t, shim, `'//'+l.host`)
+	mustContain(t, shim, `s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)`)
+	mustContain(t, shim, `(m[1]==='ws:'?'http:':m[1]==='wss:'?'https:':m[1])+'//'+m[2]`)
+	// fetch/XHR/WS all route URL-like inputs through norm() (URL objects,
+	// same-origin absolute strings).
+	mustContain(t, shim, `typeof i==='string'||(i&&typeof i==='object'&&typeof i.href==='string'&&!i.url)`)
+	mustContain(t, shim, `arguments[1]=norm(u)`)
 	// Navigation APIs use the prefix-only rewriter, never the capability.
 	mustContain(t, shim, `u=rn(u);return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `u=rn(u);return orig.call(location,u)`)
 	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}`)
+	// Click interception captures plain same-origin root-absolute anchor
+	// navigation through rn().
+	mustContain(t, shim, `document.addEventListener('click'`)
+	mustContain(t, shim, `location.href=rn(h)`)
+	// MutationObserver distinguishes navigation attributes (rn) from
+	// subresource attributes (r).
+	mustContain(t, shim, `el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'`)
+	mustContain(t, shim, `var rr=nav?rn:r;`)
 }
 
 // The navigation rewriter must not carry the capability even when one is
@@ -466,10 +515,33 @@ func TestRuntimeShim_WithoutCapabilityStaysByteIdentical(t *testing.T) {
 	}
 }
 
+// Bodyless responses (1xx/204/304) must pass through untouched: no body
+// rewrite, no synthesized Content-Length, no capability query rewriting.
+func TestRewriteProxyResponse_LeavesBodylessResponsesUntouched(t *testing.T) {
+	for _, status := range []int{http.StatusNoContent, http.StatusNotModified, http.StatusContinue} {
+		resp := &http.Response{
+			StatusCode: status,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("")),
+		}
+		resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+		resp.Header.Set("Content-Length", "100") // 304: describes the selected representation
+		if err := rewriteProxyResponse(resp, proxyPrefix, "cap-304"); err != nil {
+			t.Fatalf("status %d: unexpected error: %v", status, err)
+		}
+		if got := resp.Header.Get("Content-Length"); got != "100" {
+			t.Fatalf("status %d: Content-Length = %q, want original %q", status, got, "100")
+		}
+	}
+}
+
 // Capability-bearing rewritten responses must be uncacheable (per-user body +
 // Set-Cookie) and must not leak the embedded capability through the Referer
-// header to external origins.
-func TestRewriteProxyResponse_SetsCacheAndReferrerPolicies(t *testing.T) {
+// header to external origins. The headers are applied by the gateway's
+// ModifyResponse for every response class (JS/JSON/redirects included), which
+// is covered by the end-to-end proxy test; the rewriter itself performs the
+// body rewrite only.
+func TestRewriteProxyResponse_DoesNotSetCacheHeadersItself(t *testing.T) {
 	body := `<!doctype html><html><head><link rel="manifest" href="/manifest.webmanifest"></head><body></body></html>`
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
@@ -477,29 +549,11 @@ func TestRewriteProxyResponse_SetsCacheAndReferrerPolicies(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
-
 	if err := rewriteProxyResponse(resp, proxyPrefix, "cap-cache"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := resp.Header.Get("Cache-Control"); got != "private, no-store" {
-		t.Fatalf("Cache-Control = %q, want %q", got, "private, no-store")
-	}
-	if got := resp.Header.Get("Referrer-Policy"); got != "no-referrer" {
-		t.Fatalf("Referrer-Policy = %q, want %q", got, "no-referrer")
-	}
-
-	// Without a capability the headers stay untouched (auth-disabled parity).
-	plain := &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(strings.NewReader(body)),
-	}
-	plain.Header.Set("Content-Type", "text/html; charset=utf-8")
-	if err := rewriteProxyResponse(plain, proxyPrefix, ""); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if plain.Header.Get("Cache-Control") != "" || plain.Header.Get("Referrer-Policy") != "" {
-		t.Fatalf("capability-free rewrite must not add cache/referrer headers: %v", plain.Header)
+	if resp.Header.Get("Cache-Control") != "" || resp.Header.Get("Referrer-Policy") != "" {
+		t.Fatalf("cache/referrer headers must be applied by ModifyResponse, not the rewriter: %v", resp.Header)
 	}
 }
 

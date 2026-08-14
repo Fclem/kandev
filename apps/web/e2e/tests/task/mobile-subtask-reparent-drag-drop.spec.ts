@@ -2,7 +2,6 @@ import { test, expect } from "../../fixtures/test-base";
 import { dwell } from "../../helpers/causal-waits";
 import { SessionPage } from "../../pages/session-page";
 import { settledBoundingBox } from "../../helpers/settled-box";
-import { dwell } from "../../helpers/causal-waits";
 
 /**
  * Touch-drags a task row's handle onto a nest drop zone via CDP touch events.

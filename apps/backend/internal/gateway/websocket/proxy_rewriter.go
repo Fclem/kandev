@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
 	"strconv"
 	"strings"
 
@@ -493,10 +492,15 @@ func rewriteProxyResponse(resp *http.Response, proxyPrefix, capability string) e
 		rewrite = rewriteHTMLURLs
 	case strings.Contains(ct, "text/css"):
 		// Standalone CSS resolves relative references against the stylesheet
-		// FILE's directory, so the effective base is the directory of the
-		// public response path (e.g. P/css/main.css -> P/css/), not the
+		// FILE's public directory (stashed at the handler before the request
+		// path was rewritten to the agentctl form), falling back to the
 		// document root. ../ refs from a nested stylesheet stay in-subtree.
-		cssBase := cssDirectoryBase(resp.Request)
+		cssBase := proxyPrefix + "/"
+		if resp.Request != nil {
+			if v, ok := resp.Request.Context().Value(proxyCSSBaseContextKey{}).(string); ok && v != "" {
+				cssBase = v
+			}
+		}
 		rewrite = func(body []byte, prefix, capability, _ string) []byte {
 			return rewriteCSSURLsAt(body, prefix, capability, cssBase)
 		}
@@ -520,18 +524,6 @@ func rewriteProxyResponse(resp *http.Response, proxyPrefix, capability string) e
 	resp.Header.Set("Content-Length", strconv.Itoa(len(modified)))
 	resp.ContentLength = int64(len(modified))
 	return nil
-}
-
-// cssDirectoryBase returns the directory (with trailing slash) of the public
-// path being served as CSS, or "" when unavailable (the caller falls back to
-// the proxy prefix directory).
-func cssDirectoryBase(req *http.Request) string {
-	if req != nil && req.URL != nil && req.URL.Path != "" {
-		if dir := path.Dir(req.URL.Path); dir != "/" && dir != "." {
-			return strings.TrimSuffix(dir, "/") + "/"
-		}
-	}
-	return ""
 }
 
 // withCapability appends the capability query parameter to a rewritten URL,
@@ -1068,8 +1060,13 @@ func rewriteURLReferenceBase(rawURL, prefix, capability, basePath string) string
 }
 
 // resolveInSubtree reports whether a relative reference resolves to a path
-// boundary-inside the proxy prefix when merged with the document base.
+// boundary-inside the proxy prefix when merged with the document base. Only
+// the PATH portion is resolved: a trailing ?query/#fragment attached to a ..
+// segment (../?q) must not hide the escape.
 func resolveInSubtree(ref, basePath, prefix string) bool {
+	if i := strings.IndexAny(ref, "?#"); i >= 0 {
+		ref = ref[:i]
+	}
 	return inSubtreePath(resolvePathReference(ref, basePath), prefix)
 }
 

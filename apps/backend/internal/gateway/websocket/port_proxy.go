@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -61,6 +62,27 @@ const (
 // the handler into the cached proxy's ModifyResponse, which appends it to
 // rewritten asset URLs.
 type proxyCapabilityContextKey struct{}
+
+// proxyCSSBaseContextKey carries the PUBLIC directory (proxy prefix + app
+// path directory, trailing slash) that a standalone CSS response resolves
+// relative references against. The request path is rewritten to the
+// agentctl form before the proxy runs, so the public path must be captured
+// at the handler.
+type proxyCSSBaseContextKey struct{}
+
+// publicCSSBase returns the public directory (trailing slash) that a
+// standalone CSS file at the given public path resolves relative references
+// against: proxyPrefix + the directory of the app-relative path.
+func publicCSSBase(proxyPrefix, remaining string) string {
+	if remaining == "" {
+		return ""
+	}
+	dir := path.Dir(remaining)
+	if dir == "." || dir == "/" {
+		return proxyPrefix + "/"
+	}
+	return proxyPrefix + "/" + strings.TrimPrefix(dir, "/") + "/"
+}
 
 // proxyTokenConsumedKey marks that requireConnectionAuth authenticated this
 // request via ?token=<PAT>, so the port proxy strips the token from the
@@ -168,6 +190,14 @@ func (h *PortProxyHandler) HandlePortProxy(c *gin.Context) {
 
 	c.Request.URL.Path = "/api/v1/port-proxy/" + portStr + remaining
 	c.Request.URL.RawPath = ""
+
+	// The request path is rewritten to the agentctl form above, so the
+	// public path is unrecoverable at ModifyResponse time. Stash the PUBLIC
+	// stylesheet directory for standalone CSS rewriting: relative CSS
+	// references resolve against the stylesheet file's public directory.
+	if dir := publicCSSBase(prefix, remaining); dir != "" {
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), proxyCSSBaseContextKey{}, dir))
+	}
 
 	h.logger.Debug("port proxy forwarding",
 		zap.String("session_id", sessionID),

@@ -539,6 +539,62 @@ func TestPortProxyDecompressesAndRewritesCompressedHTML(t *testing.T) {
 	mustContain(t, doc.body, `<body>gzip</body>`)
 }
 
+// Nested standalone CSS served through the real proxy wiring resolves ../ and
+// relative references against the stylesheet's PUBLIC directory (stashed at
+// the handler before the path is rewritten to the agentctl form).
+func TestPortProxyRewritesNestedCSSWithPublicBase(t *testing.T) {
+	log, err := logger.NewFromZap(zap.NewNop())
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	css := `body{background:url(../img.png)}a{background:url(rel.png)}`
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/css/main.css":
+			w.Header().Set("Content-Type", "text/css; charset=utf-8")
+			_, _ = io.WriteString(w, css)
+		default:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = io.WriteString(w, `<!doctype html><html><body>app</body></html>`)
+		}
+	}))
+	t.Cleanup(app.Close)
+
+	svc, sessionToken := newProxyAuthService(t)
+	agentctl, _ := newAuthEnforcingFakeAgentctl(t, app.URL, "agentctl-token")
+	manager := newProxyTestManager(t, log)
+	manager.SetSessionAccessChecker(func(ctx context.Context, sessionID string) error {
+		identity, ok := authn.IdentityFromContext(ctx)
+		if !ok || identity.UserID != "default-user" {
+			return errors.New("foreign session")
+		}
+		return nil
+	})
+	addExecutionForURL(t, manager, "sess-css", agentctl.URL, "agentctl-token", log)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(authhttpmw.Middleware(svc))
+	gateway := NewGateway(log)
+	gateway.SetAuthPolicy(AuthPolicy{
+		Enforced:     func() bool { return svc.Mode() != auth.ModeDisabled },
+		ResolveToken: svc.ResolveBearer,
+	})
+	gateway.SetPortProxy(manager)
+	gateway.SetupRoutes(router)
+
+	request := proxyAuthGateway(t, router)
+	headers := map[string]string{"Cookie": svc.CookieName() + "=" + sessionToken}
+	doc := request(http.MethodGet, "/port-proxy/sess-css/5173/css/main.css", headers)
+	if doc.status != http.StatusOK {
+		t.Fatalf("css status = %d, want %d (body=%s)", doc.status, http.StatusOK, doc.body)
+	}
+	// ../img.png resolves to the public P/img.png (in-subtree) and caps;
+	// rel.png resolves inside the css directory and caps.
+	mustContain(t, doc.body, `url(../img.png?kandev_cap=`)
+	mustContain(t, doc.body, `url(rel.png?kandev_cap=`)
+}
+
 // TestPortProxyCapabilityRoundTrip covers the signed capability itself:
 // valid capabilities validate, and tampering, expiry, or a mismatched
 // session:port target are all rejected.

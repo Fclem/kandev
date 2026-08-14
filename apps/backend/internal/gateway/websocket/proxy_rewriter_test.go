@@ -1739,6 +1739,21 @@ func TestRewriteHTMLURLs_DotSegmentEscapesSuppressCapability(t *testing.T) {
 	mustContain(t, gotIn, `<img src="../up.png?kandev_cap=cap-dot3">`)
 }
 
+// A query or fragment attached to a dot segment (../?q, ../#f) must not
+// hide the escape: the path-only resolution leaves such references uncapped.
+func TestRewriteHTMLURLs_DotSegmentWithQueryOrFragment(t *testing.T) {
+	in := `<img src="../?q">` +
+		`<img src="../#f">` +
+		`<img src="../?q#f">` +
+		`<img src="ok.png?x=1">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-qf", ""))
+
+	mustContain(t, got, `<img src="../?q">`)
+	mustContain(t, got, `<img src="../#f">`)
+	mustContain(t, got, `<img src="../?q#f">`)
+	mustContain(t, got, `<img src="ok.png?x=1&amp;kandev_cap=cap-qf">`)
+}
+
 func mustContain(t *testing.T, haystack, needle string) {
 	t.Helper()
 	if !strings.Contains(haystack, needle) {

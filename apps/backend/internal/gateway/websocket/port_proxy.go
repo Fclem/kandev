@@ -228,11 +228,16 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 		// original bytes and order.
 		r.Out.URL.RawQuery = stripCapabilityParam(r.Out.URL.RawQuery)
 		// The browser may send a rewritten asset URL (which embeds the
-		// capability) as the Referer of a later request; sanitize it too.
-		if ref := r.Out.Header.Get("Referer"); ref != "" && strings.Contains(ref, proxyCapabilityQueryParam) {
+		// capability, possibly percent-encoded) as the Referer of a later
+		// request; sanitize every Referer. Capability-free Referers are left
+		// byte-identical.
+		if ref := r.Out.Header.Get("Referer"); ref != "" {
 			if parsed, err := url.Parse(ref); err == nil {
-				parsed.RawQuery = stripCapabilityParam(parsed.RawQuery)
-				r.Out.Header.Set("Referer", parsed.String())
+				cleaned := stripCapabilityParam(parsed.RawQuery)
+				if cleaned != parsed.RawQuery {
+					parsed.RawQuery = cleaned
+					r.Out.Header.Set("Referer", parsed.String())
+				}
 			}
 		}
 		// Inject agentctl auth token
@@ -386,6 +391,12 @@ func requestIsTLS(c *gin.Context) bool {
 // (%6bandev_cap=) are caught too. Every other parameter keeps its original
 // bytes and order — nothing is re-encoded. Returns the input unchanged when
 // the parameter is absent.
+//
+// The grammar is "&"-separated pairs, which is the only form the gateway ever
+// issues (the rewriter and runtime shim append with "?"/"&") and the only form
+// the gateway's own query parser accepts as a credential; semicolon- or
+// space-separated spellings cannot carry a gateway-issued capability, so they
+// are out of scope here.
 func stripCapabilityParam(rawQuery string) string {
 	if rawQuery == "" {
 		return rawQuery

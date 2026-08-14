@@ -260,11 +260,13 @@ func TestRuntimeShim_PatchesNavigationAPIs(t *testing.T) {
 	mustContain(t, shim, `'assign','replace'`)
 	mustContain(t, shim, `location[op]=function(u)`)
 
-	// Both patches must reuse the existing path rewriter `r()` rather than
-	// rolling their own prefix logic.
+	// Both patches must reuse the prefix-only navigation rewriter rn() rather
+	// than rolling their own prefix logic — and must NOT carry the capability
+	// (the subtree cookie covers same-origin navigations; a bearer in the
+	// address bar/history would leak).
 	for _, needle := range []string{
-		`u=r(u);return orig.call(this,s,t,u)`, // history APIs
-		`u=r(u);return orig.call(location,u)`, // location APIs
+		`u=rn(u);return orig.call(this,s,t,u)`, // history APIs
+		`u=rn(u);return orig.call(location,u)`, // location APIs
 	} {
 		mustContain(t, shim, needle)
 	}
@@ -386,7 +388,10 @@ func TestRewriteHTMLURLs_AppendsCapabilityToRelativeReferences(t *testing.T) {
 		`<a href="mailto:x@y.dev">mail</a>` +
 		`<a href="//cdn.example.com/lib.js">cdn</a>` +
 		`<a href="#section">frag</a>` +
-		`<img src="data:image/png;base64,AAA">`
+		`<img src="data:image/png;base64,AAA">` +
+		`<a href=" https://evil.example/x">spaced-scheme</a>` +
+		`<a href="&#10;//evil.example/y">newline-netrel</a>` +
+		`<a href=" /rooted">spaced-root</a>`
 	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-789"))
 
 	mustContain(t, got, `href="manifest.webmanifest?kandev_cap=cap-789"`)
@@ -397,12 +402,23 @@ func TestRewriteHTMLURLs_AppendsCapabilityToRelativeReferences(t *testing.T) {
 	mustContain(t, got, `href="//cdn.example.com/lib.js"`)
 	mustContain(t, got, `href="#section"`)
 	mustContain(t, got, `src="data:image/png;base64,AAA"`)
+	// Leading whitespace must not make an external URL look relative: the
+	// browser trims it and goes external, so the capability must not be
+	// appended.
+	mustContain(t, got, `href=" https://evil.example/x"`)
+	// The tokenizer decodes &#10; to a literal newline; the network-relative
+	// URL behind it must still be left untouched.
+	mustContain(t, got, "href=\"\n//evil.example/y\"")
+	// A spaced root-absolute reference is rewritten from its trimmed form.
+	mustContain(t, got, `href="/port-proxy/abc/3001/rooted?kandev_cap=cap-789"`)
 }
 
-// The runtime shim appends the capability to every URL its path rewriter
-// produces: fragments stay last, existing query strings are preserved, and the
-// append is skipped only for an exact kandev_cap query key. WebSocket URLs go
-// through the same path rewriter so upgrades carry the capability too.
+// The runtime shim appends the capability to every URL its network path
+// rewriter produces: fragments stay last, existing query strings are preserved,
+// and the append is skipped only for an exact kandev_cap query key. WebSocket
+// URLs (string and same-origin URL-object inputs) go through the same rewriter.
+// Navigation APIs (history/location) use a prefix-only rewriter so the bearer
+// never lands in the address bar, history, or cross-origin Referers.
 func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	mustContain(t, shim, `var K="cap-shim";`)
@@ -412,8 +428,29 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	// the append, not substrings like /kandev_cap=note or ?name=kandev_cap=.
 	mustContain(t, shim, `if(!/([?&])kandev_cap=/.test(x))`)
 	mustContain(t, shim, `x+=(x.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
-	// WebSocket wrapper rewrites through r(), which carries the capability.
+	// WebSocket wrapper rewrites string AND same-origin URL-object inputs
+	// through r(), which carries the capability.
 	mustContain(t, shim, `'//'+l.host+r(u)`)
+	mustContain(t, shim, `u.origin===window.location.origin`)
+	mustContain(t, shim, `r(u.pathname+(u.search||'')+(u.hash||''))`)
+	// Navigation APIs use the prefix-only rewriter, never the capability.
+	mustContain(t, shim, `u=rn(u);return orig.call(this,s,t,u)`)
+	mustContain(t, shim, `u=rn(u);return orig.call(location,u)`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}`)
+}
+
+// The navigation rewriter must not carry the capability even when one is
+// minted: the bearer stays out of the address bar and browser history.
+func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	// rn() is the prefix-only form: no capability splice, no K reference.
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}`)
+	// history and location rewrite through rn(), never r().
+	mustContain(t, shim, `history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);return orig.call(this,s,t,u)}`)
+	mustContain(t, shim, `location[op]=function(u){if(typeof u==='string')u=rn(u);return orig.call(location,u)}`)
+	if strings.Contains(shim, `history[op]=function(s,t,u){if(typeof u==='string')u=r(u)`) {
+		t.Fatal("history APIs must not use the capability-bearing rewriter")
+	}
 }
 
 // Without a capability the shim is byte-identical to the pre-auth output: no
@@ -426,6 +463,43 @@ func TestRuntimeShim_WithoutCapabilityStaysByteIdentical(t *testing.T) {
 	}
 	if strings.Contains(withCap, "kandev_cap") {
 		t.Fatalf("shim without capability mentions kandev_cap:\n%s", withCap)
+	}
+}
+
+// Capability-bearing rewritten responses must be uncacheable (per-user body +
+// Set-Cookie) and must not leak the embedded capability through the Referer
+// header to external origins.
+func TestRewriteProxyResponse_SetsCacheAndReferrerPolicies(t *testing.T) {
+	body := `<!doctype html><html><head><link rel="manifest" href="/manifest.webmanifest"></head><body></body></html>`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+
+	if err := rewriteProxyResponse(resp, proxyPrefix, "cap-cache"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := resp.Header.Get("Cache-Control"); got != "private, no-store" {
+		t.Fatalf("Cache-Control = %q, want %q", got, "private, no-store")
+	}
+	if got := resp.Header.Get("Referrer-Policy"); got != "no-referrer" {
+		t.Fatalf("Referrer-Policy = %q, want %q", got, "no-referrer")
+	}
+
+	// Without a capability the headers stay untouched (auth-disabled parity).
+	plain := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	plain.Header.Set("Content-Type", "text/html; charset=utf-8")
+	if err := rewriteProxyResponse(plain, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if plain.Header.Get("Cache-Control") != "" || plain.Header.Get("Referrer-Policy") != "" {
+		t.Fatalf("capability-free rewrite must not add cache/referrer headers: %v", plain.Header)
 	}
 }
 

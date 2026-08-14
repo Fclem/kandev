@@ -66,16 +66,22 @@ const runtimeShimTemplate = `<script>(function(){` +
 	// %s is the optional capability-append logic (empty when no capability is
 	// minted, keeping the auth-disabled output byte-identical).
 	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;%sreturn P+u;}` +
+	// Navigation rewriter: same prefixing WITHOUT the capability. Navigation
+	// APIs (history.pushState, location.assign) put the URL in the address bar
+	// and browser history; embedding a bearer there would leak it through
+	// copied URLs, history, and cross-origin Referers. The subtree cookie
+	// covers same-origin navigations instead.
+	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}` +
 	// fetch — string and Request-object input forms.
 	`var of=window.fetch;if(of){window.fetch=function(i,n){if(typeof i==='string')i=r(i);else if(i&&typeof i==='object'&&typeof i.url==='string'){var nu=r(i.url);if(nu!==i.url){try{i=new Request(nu,i)}catch(e){}}}return of.call(this,i,n)}}` +
 	// XMLHttpRequest.open — 2nd arg is the URL.
 	`var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=r(u);return oo.apply(this,arguments)};` +
-	// WebSocket — path-absolute ws/wss URLs need an explicit ws:// scheme + host since the constructor doesn't accept bare paths. The path is run through r() so runtime-rewritten WS URLs carry the capability like every other dynamic URL.
-	`var OW=window.WebSocket;if(OW){function W(u,p){if(typeof u==='string'&&u.charAt(0)==='/'&&(u.length<2||u.charAt(1)!=='/')){var l=window.location;u=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host+r(u)}return p?new OW(u,p):new OW(u)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
-	// history.pushState / replaceState — SPA routers (Next.js, React Router, etc.) call these to change the URL on client-side navigation. Without rewriting, the URL bar drops the proxy prefix and a reload 404s.
-	`['pushState','replaceState'].forEach(function(op){var orig=history[op];if(!orig)return;history[op]=function(s,t,u){if(typeof u==='string')u=r(u);return orig.call(this,s,t,u)}});` +
-	// location.assign / location.replace — direct navigation APIs. (Assigning to location.href cannot be intercepted on a same-origin window without redefining a non-configurable property, so we don't try; pushState covers the common SPA-router path.)
-	`['assign','replace'].forEach(function(op){var orig=location[op];if(!orig)return;try{location[op]=function(u){if(typeof u==='string')u=r(u);return orig.call(location,u)}}catch(e){}});` +
+	// WebSocket — path-absolute ws/wss URLs need an explicit ws:// scheme + host since the constructor doesn't accept bare paths. The path is run through r() so runtime-rewritten WS URLs carry the capability like every other dynamic URL. URL-object inputs are supported too: same-origin URL instances are rebuilt through the rewriter; cross-origin ones pass through unchanged.
+	`var OW=window.WebSocket;if(OW){function W(u,p){var l;if(typeof u==='string'&&u.charAt(0)==='/'&&(u.length<2||u.charAt(1)!=='/')){l=window.location;u=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host+r(u)}else if(u&&u.origin&&u.pathname&&u.origin===window.location.origin){l=window.location;u=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host+r(u.pathname+(u.search||'')+(u.hash||''))}return p?new OW(u,p):new OW(u)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
+	// history.pushState / replaceState — SPA routers (Next.js, React Router, etc.) call these to change the URL on client-side navigation. Without rewriting, the URL bar drops the proxy prefix and a reload 404s. Uses rn() (no capability — see above).
+	`['pushState','replaceState'].forEach(function(op){var orig=history[op];if(!orig)return;history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);return orig.call(this,s,t,u)}});` +
+	// location.assign / location.replace — direct navigation APIs. (Assigning to location.href cannot be intercepted on a same-origin window without redefining a non-configurable property, so we don't try; pushState covers the common SPA-router path.) Uses rn() (no capability).
+	`['assign','replace'].forEach(function(op){var orig=location[op];if(!orig)return;try{location[op]=function(u){if(typeof u==='string')u=rn(u);return orig.call(location,u)}}catch(e){}});` +
 	// MutationObserver: rewrite root-absolute URL attributes on every element that is inserted or has its URL attribute mutated. Covers the cases the network-API patches miss, notably `ReactDOM.preload()` and any framework that builds DOM nodes with absolute paths after the initial HTML has been parsed.
 	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset'];` +
 	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nv;if(a==='srcset'){nv=v.split(',').map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=r(f[0]);return f.join(' ')}).join(', ')}else{nv=r(v)}if(nv!==v)el.setAttribute(a,nv)}` +
@@ -89,12 +95,13 @@ const runtimeShimTemplate = `<script>(function(){` +
 // baked in. %q produces a JS-safe double-quoted string literal (slashes and
 // alphanumerics need no escaping, which matches every prefix we emit).
 //
-// When `capability` is non-empty, the shim's runtime path rewriter appends the
-// subtree capability to every URL it rewrites (fetch/XHR/history/location and
+// When `capability` is non-empty, the shim's network path rewriter appends the
+// subtree capability to every URL it rewrites (fetch/XHR/WebSocket and
 // dynamically injected DOM), so those requests stay authorized in contexts
-// where cookies are not sent. WebSocket upgrades are intentionally not covered
-// here: the handshake carries the capability cookie (and the document request
-// already required a credential), so the query parameter would be redundant.
+// where cookies are not sent. Navigation APIs (history/location) deliberately
+// use a prefix-only rewriter: a bearer in the address bar or history would leak
+// through copied URLs and cross-origin Referers, and the subtree cookie covers
+// same-origin navigations.
 func runtimeShim(prefix, capability string) string {
 	return fmt.Sprintf(runtimeShimTemplate, prefix, shimCapabilityJS(capability))
 }
@@ -180,6 +187,14 @@ func rewriteProxyResponse(resp *http.Response, proxyPrefix, capability string) e
 	resp.Header.Del("Content-Encoding")
 	resp.Header.Set("Content-Length", strconv.Itoa(len(modified)))
 	resp.ContentLength = int64(len(modified))
+	if capability != "" {
+		// The rewritten body embeds a per-user bearer credential and the
+		// response carries the subtree cookie: a shared intermediary must not
+		// serve it to another user, and the browser must not leak the embedded
+		// capability to external origins through the Referer header.
+		resp.Header.Set("Cache-Control", "private, no-store")
+		resp.Header.Set("Referrer-Policy", "no-referrer")
+	}
 	return nil
 }
 
@@ -336,16 +351,20 @@ func rewriteTokenURLs(token *html.Token, prefix, capability string) {
 // keep their own resolution — the document already lives in the proxy subtree,
 // so the browser lands inside it — but still get the capability appended so
 // cookie-less fetches (a relative <link rel="manifest">) stay authorized.
-// Empty, fragment-only, network-relative, and scheme-bearing values (http:,
-// data:, javascript:, mailto:, …) are left untouched.
+// Leading C0/space characters are trimmed for classification only (the browser
+// does the same when parsing): a scheme-bearing or network-relative reference
+// hidden behind leading whitespace is left untouched rather than leaking the
+// capability to an external origin. Empty, fragment-only, and scheme-bearing
+// values are never modified.
 func rewriteURLReference(rawURL, prefix, capability string) string {
-	if rawURL == "" || rawURL[0] == '#' || hasURLScheme(rawURL) {
+	trimmed := strings.TrimLeftFunc(rawURL, func(r rune) bool { return r <= ' ' })
+	if trimmed == "" || trimmed[0] == '#' || hasURLScheme(trimmed) || strings.HasPrefix(trimmed, "//") {
 		return rawURL
 	}
-	if rawURL[0] == '/' {
-		return rewriteAbsolutePath(rawURL, prefix, capability)
+	if trimmed[0] == '/' {
+		return rewriteAbsolutePath(trimmed, prefix, capability)
 	}
-	if capability == "" || strings.HasPrefix(rawURL, "//") {
+	if capability == "" {
 		return rawURL
 	}
 	return withCapability(rawURL, capability)

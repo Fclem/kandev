@@ -335,6 +335,22 @@ func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T
 		}
 	}
 
+	// A Referer whose capability key is percent-encoded must be sanitized too —
+	// the sanitizer cannot rely on the literal spelling.
+	encodedRef := "http://gateway.test/port-proxy/sess-auth/5173/x?%6bandev_cap=stale&a=1"
+	_ = request(http.MethodGet, "/port-proxy/sess-auth/5173/@vite/client?"+proxyCapabilityQueryParam+"="+capQuery,
+		map[string]string{"Referer": encodedRef})
+	_, referers = recordings.snapshot()
+	if len(referers) > 0 {
+		last := referers[len(referers)-1]
+		if strings.Contains(last, "kandev_cap") || strings.Contains(last, "%6bandev_cap") {
+			t.Fatalf("encoded capability leaked to agentctl in Referer %q", last)
+		}
+		if !strings.Contains(last, "a=1") {
+			t.Fatalf("encoded-Referer sanitization dropped unrelated params, got %q", last)
+		}
+	}
+
 	// 4. Ownership restoration: every proxied request ran the session-ownership
 	// check as the real owner (default-user), never as a synthetic or empty
 	// identity.

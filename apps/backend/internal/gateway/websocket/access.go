@@ -100,10 +100,16 @@ func (g *Gateway) resolvePortProxyCapability(c *gin.Context) bool {
 	if !ok || g.PortProxyHandler == nil {
 		return false
 	}
-	if raw := c.Query(proxyCapabilityQueryParam); raw != "" {
-		if identity, valid := g.PortProxyHandler.validateCapability(raw, sessionID, port); valid {
-			authn.SetOnGin(c, identity)
-			return true
+	// Accept ANY value of the capability parameter that validates: a
+	// credential-less request may carry multiple kandev_cap values (the app's
+	// own or an encoded duplicate), and the first one must not be able to
+	// shadow a valid one.
+	if values := c.Request.URL.Query()[proxyCapabilityQueryParam]; len(values) > 0 {
+		for _, raw := range values {
+			if identity, valid := g.PortProxyHandler.validateCapability(raw, sessionID, port); valid {
+				authn.SetOnGin(c, identity)
+				return true
+			}
 		}
 	}
 	if cookie, err := c.Cookie(proxyCapabilityCookieName); err == nil && cookie != "" {

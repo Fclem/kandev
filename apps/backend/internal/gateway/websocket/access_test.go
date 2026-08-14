@@ -286,6 +286,40 @@ func TestRequireConnectionAuthAcceptsPortProxyCapability(t *testing.T) {
 	}
 }
 
+// A request may carry multiple kandev_cap values (the app's own or encoded
+// duplicates); a valid one must win even when an invalid value comes first.
+func TestRequireConnectionAuthAcceptsAnyValidCapabilityAmongDuplicates(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gateway := newGatewayForTest(t)
+	gateway.SetPortProxy(nil)
+	gateway.SetAuthPolicy(AuthPolicy{
+		Enforced:     func() bool { return true },
+		ResolveToken: func(context.Context, string) (authn.Identity, bool) { return authn.Identity{}, false },
+	})
+	capability := gateway.PortProxyHandler.issueCapability("sess-cap", 5173,
+		authn.Identity{UserID: "owner-1", Role: authn.RoleAdmin})
+
+	router := gin.New()
+	var got struct {
+		identity authn.Identity
+		hasID    bool
+	}
+	router.Any("/port-proxy/:sessionId/:port/*path", gateway.requireConnectionAuth(), func(c *gin.Context) {
+		got.identity, got.hasID = authn.FromGin(c)
+		c.Status(http.StatusOK)
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/port-proxy/sess-cap/5173/x?"+proxyCapabilityQueryParam+"=garbage&"+proxyCapabilityQueryParam+"="+capability, nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (valid duplicate must win)", rec.Code, http.StatusOK)
+	}
+	if !got.hasID || got.identity.UserID != "owner-1" {
+		t.Fatalf("identity = %+v (has=%v), want owner-1", got.identity, got.hasID)
+	}
+}
+
 // TestRequireConnectionAuthIgnoresCapabilityWhenHandlerUnwired pins that the
 // capability gate is inert when the port proxy is not wired (SetupRoutes
 // registers no port-proxy routes then, and requireConnectionAuth must not

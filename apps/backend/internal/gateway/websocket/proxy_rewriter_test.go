@@ -285,8 +285,8 @@ func TestRuntimeShim_PatchesNavigationAPIs(t *testing.T) {
 	// (the subtree cookie covers same-origin navigations; a bearer in the
 	// address bar/history would leak).
 	for _, needle := range []string{
-		`u=rn(u);return orig.call(this,s,t,u)`, // history APIs
-		`u=rn(u);return orig.call(location,u)`, // location APIs
+		`history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u));return orig.call(this,s,t,u)}`, // history APIs (string + URL-object args)
+		`location[op]=function(u){if(typeof u==='string')u=rn(u);else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u));return orig.call(location,u)}`,    // location APIs
 	} {
 		mustContain(t, shim, needle)
 	}
@@ -497,9 +497,9 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `typeof i==='string'||(i&&typeof i==='object'&&typeof i.href==='string'&&!i.url)`)
 	mustContain(t, shim, `arguments[1]=norm(u)`)
 	// Navigation APIs use the prefix-only rewriter, never the capability.
-	mustContain(t, shim, `u=rn(u);return orig.call(this,s,t,u)`)
-	mustContain(t, shim, `u=rn(u);return orig.call(location,u)`)
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
+	mustContain(t, shim, `u=rn(String(u));return orig.call(this,s,t,u)`)
+	mustContain(t, shim, `u=rn(String(u));return orig.call(location,u)`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// Anchor navigation needs no click interception: the MutationObserver
 	// prefixes hrefs, so the browser's own default navigation stays inside
 	// the subtree and app click handlers keep control.
@@ -523,10 +523,10 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// rn() is the prefix-only form: it strips any previously issued capability
 	// and never appends a new one.
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// history and location rewrite through rn(), never r().
-	mustContain(t, shim, `history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);return orig.call(this,s,t,u)}`)
-	mustContain(t, shim, `location[op]=function(u){if(typeof u==='string')u=rn(u);return orig.call(location,u)}`)
+	mustContain(t, shim, `history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u));return orig.call(this,s,t,u)}`)
+	mustContain(t, shim, `location[op]=function(u){if(typeof u==='string')u=rn(u);else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u));return orig.call(location,u)}`)
 	if strings.Contains(shim, `history[op]=function(s,t,u){if(typeof u==='string')u=r(u)`) {
 		t.Fatal("history APIs must not use the capability-bearing rewriter")
 	}
@@ -905,7 +905,7 @@ func TestRuntimeShim_PrefixBoundaryAndPrefixedCap(t *testing.T) {
 // never retains its bearer in the address bar, history, or Referer.
 func TestRuntimeShim_RnStripsCapabilityOnAllForms(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
-	mustContain(t, shim, `if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
+	mustContain(t, shim, `if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// rn() classifies via the URL API like r(): cross-origin and
 	// network-relative navigation targets pass through untouched.
 	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);`)
@@ -927,7 +927,7 @@ func TestRuntimeShim_StyleTokenizerAndSrcSetDataURLs(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// Scanner, not regex: string-state tracking + var() skip.
 	mustContain(t, shim, `function rwaStyle(v){var o='';var i=0;var n=v.length;`)
-	mustContain(t, shim, `if(tok2.toLowerCase().indexOf('var(')!==0){o+='url('+sp+r(tok2)`)
+	mustContain(t, shim, `if(d2.toLowerCase().indexOf('var(')!==0){var rw2=r(d2);var em2=d2===rw2?tok2:cssEscTok(rw2);o+='url('+sp+em2`)
 	mustContain(t, shim, `function srcsetParts(v){var parts=[];var cur='';var inData=false;`)
 	mustContain(t, shim, `if(!inData&&cur.replace(/\s/g,'')===''&&/^data:/i.test(v.slice(i)))inData=true`)
 	// content rewriting is guarded to META http-equiv=refresh; non-refresh
@@ -992,8 +992,8 @@ func TestRewriteHTMLURLs_NavStripsIssuedCapability(t *testing.T) {
 		`<a href="/p?kandev_cap=stale&%6bandev_cap=stale2&keep=1">z</a>`
 	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-nav", ""))
 
-	mustContain(t, got, `<a href="/port-proxy/abc/3001/page">x</a>`)
-	mustContain(t, got, `<a href="rel">y</a>`)
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/page?">x</a>`)
+	mustContain(t, got, `<a href="rel?">y</a>`)
 	mustContain(t, got, `<a href="/port-proxy/abc/3001/p?keep=1">z</a>`)
 }
 
@@ -1115,7 +1115,7 @@ func TestRewriteHTMLURLs_CSPNonceScriptSrcElemPrecedence(t *testing.T) {
 func TestRuntimeShim_FragmentPreservingAndNormalizedForms(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// sc() splits the fragment off, filters the query, and re-appends it.
-	mustContain(t, shim, `function sc(u){var h='';var hi=u.indexOf('#');if(hi!==-1){h=u.slice(hi);u=u.slice(0,hi)}var qi=u.indexOf('?');if(qi===-1)return u+h;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){var k=p.split('=')[0];var d;try{d=decodeURIComponent(k)}catch(e){d=k}return d!=='kandev_cap'});return b+(q.length?'?'+q.join('&'):'')+h}`)
+	mustContain(t, shim, `function sc(u){var h='';var hi=u.indexOf('#');if(hi!==-1){h=u.slice(hi);u=u.slice(0,hi)}var qi=u.indexOf('?');if(qi===-1)return u+h;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){var k=p.split('=')[0];var d;try{d=decodeURIComponent(k)}catch(e){d=k}return d!=='kandev_cap'});if(q.length===0)return b+'?'+h;return b+'?'+q.join('&')+h}`)
 	// r() and rn() normalize the emitted form after URL-API classification.
 	mustContain(t, shim, `function nz(u){return u.replace(/[\t\n\r]/g,'').replace(/^[\u0000-\u0020]+/,'')}`)
 	mustContain(t, shim, `u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||`)
@@ -1225,7 +1225,7 @@ func TestRewriteHTMLURLs_NavStripsCapPreservesFragment(t *testing.T) {
 	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-nav", ""))
 
 	mustContain(t, got, `<a href="/port-proxy/abc/3001/p?keep=1#frag">x</a>`)
-	mustContain(t, got, `<a href="rel#top">y</a>`)
+	mustContain(t, got, `<a href="rel?#top">y</a>`)
 }
 
 // stripCapability splits the fragment off FIRST: a '?' inside a fragment
@@ -1263,6 +1263,58 @@ func TestRuntimeShim_StyleTokenizerEscapedUrl(t *testing.T) {
 	mustContain(t, shim, `function cssEsc(s,i){`)
 	mustContain(t, shim, `function cssFn(s,i,nm){`)
 	mustContain(t, shim, `(j2=cssFn(v,i,'url'))>=0`)
+}
+
+// CSS escapes inside url() TOKEN values decode before classification:
+// url(\2f asset.css) is url(/asset.css) to the browser, so the rewritten
+// token must carry the proxy prefix + capability (and be re-escaped only
+// when the decoded value contains CSS-significant characters).
+func TestRewriteCSSFragment_EscapedSlashToken(t *testing.T) {
+	css := `a{background:url(\2f asset.css);}` +
+		`b{background:url('/q.css');}` +
+		`c{background:url(foo\20 bar.png);}`
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+
+	mustContain(t, got, `url(/port-proxy/abc/3001/asset.css?kandev_cap=cap-css)`)
+	mustContain(t, got, `url('/port-proxy/abc/3001/q.css?kandev_cap=cap-css')`)
+	// The decoded space is re-escaped so the emitted token still parses.
+	mustContain(t, got, `url(foo\20 bar.png?kandev_cap=cap-css)`)
+}
+
+// At most SIX hex digits form a CSS escape: \0000075rl( decodes \000007 then
+// '5rl(' — not a url() function — so it must pass through untouched.
+func TestRewriteCSSFragment_SevenHexDigitsAreNotAFunction(t *testing.T) {
+	css := `a{background:\0000075rl(/x);}`
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+	mustContain(t, got, `\0000075rl(/x)`)
+}
+
+// Stripping the ONLY query pair preserves the explicit empty query marker
+// (?), so the reference does not inherit the current document's query.
+func TestRewriteHTMLURLs_NavStripKeepsEmptyQueryMarker(t *testing.T) {
+	in := `<a href="/p?kandev_cap=stale">x</a>` +
+		`<a href="/p?kandev_cap=stale#f">y</a>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-nav", ""))
+
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/p?">x</a>`)
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/p?#f">y</a>`)
+}
+
+// Round-4 runtime shim contracts: rwa initializes nv to the current value
+// (a non-refresh content attribute is never overwritten with "undefined"),
+// navigation wrappers normalize URL-object arguments, and cssDecTok/cssEscTok
+// decode/encode token escapes.
+func TestRuntimeShim_Round4Contracts(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	// rwa defaults nv to v so guarded branches leave the attribute alone.
+	mustContain(t, shim, `var rr=nav?rn:r;var nv=v;if(a==='srcset')`)
+	// URL-object navigation arguments are stringified through rn().
+	mustContain(t, shim, `else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u))`)
+	// Token escape decode/encode helpers exist.
+	mustContain(t, shim, `function cssDecTok(t){`)
+	mustContain(t, shim, `function cssEscTok(t){`)
+	// sc keeps the empty query marker when all pairs were stripped.
+	mustContain(t, shim, `if(q.length===0)return b+'?'+h;`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

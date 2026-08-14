@@ -26,7 +26,7 @@ func TestDumpShimProbe(t *testing.T) {
 	if idx < 0 {
 		t.Fatal("shim template does not end with the IIFE close")
 	}
-	probe := shim[:idx] + `window.__kandev__={r:r,rn:rn,sc:sc,nz:nz,norm:norm,rwaStyle:rwaStyle,srcsetParts:srcsetParts,mref:mref};` + shim[idx:]
+	probe := shim[:idx] + `window.__kandev__={r:r,rn:rn,sc:sc,nz:nz,norm:norm,rwaStyle:rwaStyle,srcsetParts:srcsetParts,mref:mref,rwa:rwa};` + shim[idx:]
 	if err := os.WriteFile("/tmp/shim_probe.js", []byte(probe), 0o644); err != nil {
 		t.Fatalf("write probe: %v", err)
 	}

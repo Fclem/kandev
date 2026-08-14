@@ -146,7 +146,7 @@ func (s *cssScanner) quotedURL(start, open, j int, spacing string) {
 		l++
 	}
 	if l < len(css) && css[l] == ')' {
-		s.out.WriteString(css[start:open+1] + spacing + string(q) + rewriteURLReference(css[j+1:k], s.prefix, s.capability) + string(q) + css[k+1:l] + ")")
+		s.out.WriteString(css[start:open+1] + spacing + string(q) + rewriteCSSURLToken(css[j+1:k], s.prefix, s.capability) + string(q) + css[k+1:l] + ")")
 		s.i = l + 1
 		return
 	}
@@ -154,12 +154,22 @@ func (s *cssScanner) quotedURL(start, open, j int, spacing string) {
 	s.i = k + 1
 }
 
-// unquotedURL rewrites url(token) with an unquoted token (runs to whitespace
-// or ')'; var() is not a URL token and is preserved).
+// unquotedURL rewrites url(token) with an unquoted token (runs to
+// whitespace or ')', but a whitespace after a hex escape is the escape's
+// terminator and part of the token; var() is not a URL token and is
+// preserved).
 func (s *cssScanner) unquotedURL(start, open, j int, spacing string) {
 	css := s.css
 	k := j
-	for k < len(css) && css[k] != ')' && !isCSSSpace(css[k]) {
+	for k < len(css) && css[k] != ')' {
+		if css[k] == '\\' {
+			_, adv := cssEscapeDecode(css, k)
+			k += adv
+			continue
+		}
+		if isCSSSpace(css[k]) {
+			break
+		}
 		k++
 	}
 	l := k
@@ -168,8 +178,9 @@ func (s *cssScanner) unquotedURL(start, open, j int, spacing string) {
 	}
 	if l < len(css) && css[l] == ')' {
 		tok := css[j:k]
-		if !strings.HasPrefix(strings.ToLower(tok), "var(") {
-			s.out.WriteString(css[start:open+1] + spacing + rewriteURLReference(tok, s.prefix, s.capability) + css[k:l] + ")")
+		decoded := cssDecodeToken(tok)
+		if !strings.HasPrefix(strings.ToLower(decoded), "var(") {
+			s.out.WriteString(css[start:open+1] + spacing + rewriteCSSURLToken(tok, s.prefix, s.capability) + css[k:l] + ")")
 			s.i = l + 1
 			return
 		}
@@ -215,6 +226,61 @@ func (s *cssScanner) consumeImport() bool {
 	}
 	// @import url(...) — the url() case rewrites it.
 	return false
+}
+
+// cssDecodeToken decodes every CSS escape in a url() token value: the
+// browser preprocesses escapes before resolving the URL, so classification
+// must see the decoded form (url(\2f asset.css) is url(/asset.css)).
+func cssDecodeToken(tok string) string {
+	var b strings.Builder
+	for i := 0; i < len(tok); {
+		if tok[i] == '\\' {
+			dec, adv := cssEscapeDecode(tok, i)
+			b.WriteString(dec)
+			i += adv
+			continue
+		}
+		b.WriteByte(tok[i])
+		i++
+	}
+	return b.String()
+}
+
+// cssEscapeToken re-escapes CSS-significant characters in a rewritten URL so
+// the emitted token survives CSS tokenization: whitespace, quotes, parens,
+// backslashes, and control characters become \XX hex escapes (the trailing
+// space is the optional hex-escape terminator and is consumed by the parser).
+// Plain proxy URLs need no escaping; this covers decoded-token rewrites whose
+// decoded value contained CSS-significant characters.
+func cssEscapeToken(tok string) string {
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(tok); i++ {
+		c := tok[i]
+		if c == '\\' || c == '\'' || c == '"' || c == '(' || c == ')' || isCSSSpace(c) || c < 0x20 || c == 0x7F {
+			b.WriteByte('\\')
+			b.WriteByte(hex[c>>4])
+			b.WriteByte(hex[c&0xF])
+			b.WriteByte(' ')
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
+// rewriteCSSURLToken classifies a url() token value (with CSS escapes
+// decoded for classification) and returns the bytes to emit: the decoded
+// rewritten URL when the reference changed, or the ORIGINAL raw token bytes
+// when it did not (external/scheme/network-relative references keep their
+// spelling).
+func rewriteCSSURLToken(rawToken, prefix, capability string) string {
+	decoded := cssDecodeToken(rawToken)
+	rewritten := rewriteURLReference(decoded, prefix, capability)
+	if rewritten == decoded {
+		return rawToken
+	}
+	return cssEscapeToken(rewritten)
 }
 
 // isCSSSpace reports whether c is CSS whitespace (per the CSS syntax spec).
@@ -275,12 +341,12 @@ func cssEscapeDecode(css string, i int) (string, int) {
 	}
 }
 
-// cssHexEscape decodes the \XXXXXX form: up to 6 hex digits with an optional
-// single whitespace terminator; invalid code points become U+FFFD.
+// cssHexEscape decodes the \XXXXXX form: at most 6 hex digits with an
+// optional single whitespace terminator; invalid code points become U+FFFD.
 func cssHexEscape(css string, i int) (string, int) {
 	j := i + 1
 	v := 0
-	for j < len(css) && j-i <= 7 && isCSSHexDigit(css[j]) {
+	for j < len(css) && j-i < 7 && isCSSHexDigit(css[j]) {
 		v = v*16 + cssHexVal(css[j])
 		j++
 	}

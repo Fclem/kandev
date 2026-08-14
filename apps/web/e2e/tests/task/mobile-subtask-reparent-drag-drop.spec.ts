@@ -145,7 +145,13 @@ test.describe("Mobile subtask re-parenting by drag and drop", () => {
           .locator('[data-testid="sortable-task-block"]')
           .evaluateAll((els) => els.map((el) => el.getAttribute("data-task-id")))
       ).filter((id) => id === parent.id || id === child.id);
+    // Wait until both rows are in the DOM: an empty before/after pair would
+    // make the order assertion vacuous.
+    await expect
+      .poll(async () => await orderOf(), { timeout: 10_000 })
+      .toEqual(expect.arrayContaining([parent.id, child.id]));
     const beforeOrder = await orderOf();
+    expect(beforeOrder).toHaveLength(2);
 
     // Long-press the row: the TouchSensor arms at 250ms and the context menu
     // opens at ~700ms; opening the menu must cancel that drag.
@@ -171,20 +177,37 @@ test.describe("Mobile subtask re-parenting by drag and drop", () => {
     await expect(handle).not.toHaveCSS("opacity", "0.5");
 
     // Keep the finger down and drag inside the open menu: the row must not
-    // move or reorder. Aim at a point inside the visible menu content (not a
-    // hard-coded offset), so a layout change cannot silently move the target
-    // outside the menu and void the containment exercise.
+    // move or reorder. Aim at an inert point in the menu content — Radix
+    // items click on pointerup when they did not receive the pointerdown, so
+    // ending on an item could run its action. Scan the content (p-1 padding)
+    // for a point that is not over a menu item.
     const menuContent = testPage.locator('[data-slot="context-menu-content"]');
     await expect(menuContent).toBeVisible();
-    const menuBox = await menuContent.boundingBox();
-    if (!menuBox) throw new Error("context menu content has no bounding box");
+    const inertPoint = await testPage.evaluate(() => {
+      const menu = document.querySelector('[data-slot="context-menu-content"]');
+      if (!menu) return null;
+      const r = menu.getBoundingClientRect();
+      for (let dy = 1; dy <= 8; dy += 1) {
+        for (let dx = 1; dx <= 8; dx += 1) {
+          const el = document.elementFromPoint(r.x + dx, r.y + dy);
+          if (el && !el.closest('[role="menuitem"]')) {
+            return { x: r.x + dx, y: r.y + dy };
+          }
+        }
+      }
+      return null;
+    });
+    if (!inertPoint) throw new Error("no inert point inside the context menu content");
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchMove",
-      touchPoints: [{ x: menuBox.x + menuBox.width / 2, y: menuBox.y + menuBox.height / 2 }],
+      touchPoints: [{ x: inertPoint.x, y: inertPoint.y }],
     });
     await testPage.waitForTimeout(100);
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 
+    // The gesture ended inside the menu: no item action ran, the menu is
+    // still open, and neither task was reordered or removed.
+    await expect(menuContent).toBeVisible();
     await expect.poll(async () => await orderOf()).toEqual(beforeOrder);
     await expect.poll(async () => (await apiClient.getTask(child.id)).parent_id ?? "").toBe("");
   });

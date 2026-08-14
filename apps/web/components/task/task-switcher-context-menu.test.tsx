@@ -182,19 +182,27 @@ describe("TaskItemWithContextMenu — touch drag cancellation", () => {
   });
 
   it("a completed touch leaves no stale cancel target for a later menu open", async () => {
-    renderWithDragHandle();
-    const row = screen.getByTestId("task-row");
-    const touchCancelListener = vi.fn();
-    row.addEventListener("touchcancel", touchCancelListener);
+    // Stub TouchEvent so the touchstart genuinely stores a target (happy-dom
+    // drops the touches init); without it this assertion would pass vacuously.
+    stubTouchEvent();
 
-    fireEvent.touchStart(row, { touches: [{ identifier: 1 }] });
-    fireEvent.touchEnd(row, { changedTouches: [{ identifier: 1 }] });
-    fireEvent.contextMenu(row);
-    await screen.findByRole("menuitem", { name: /color/i });
+    try {
+      renderWithDragHandle();
+      const row = screen.getByTestId("task-row");
+      const touchCancelListener = vi.fn();
+      row.addEventListener("touchcancel", touchCancelListener);
 
-    // No gesture is active when the menu opens, so nothing is dispatched.
-    expect(touchCancelListener).not.toHaveBeenCalled();
-    row.removeEventListener("touchcancel", touchCancelListener);
+      fireEvent.touchStart(row, { touches: [{ identifier: 1 }] });
+      fireEvent.touchEnd(row, { changedTouches: [{ identifier: 1 }] });
+      fireEvent.contextMenu(row);
+      await screen.findByRole("menuitem", { name: /color/i });
+
+      // No gesture is active when the menu opens, so nothing is dispatched.
+      expect(touchCancelListener).not.toHaveBeenCalled();
+      row.removeEventListener("touchcancel", touchCancelListener);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("a non-primary finger lifting does not clear the tracked drag target", async () => {

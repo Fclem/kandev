@@ -401,7 +401,9 @@ func (h *PortProxyHandler) validateCapability(raw, sessionID string, port int) (
 	if parsed.SessionID != sessionID || parsed.Port != port {
 		return authn.Identity{}, false
 	}
-	if time.Now().Unix() > parsed.ExpiresAt {
+	// Standard expiry semantics: the capability is valid strictly before
+	// ExpiresAt; at the exact boundary (now == ExpiresAt) it is expired.
+	if time.Now().Unix() >= parsed.ExpiresAt {
 		return authn.Identity{}, false
 	}
 	return authn.Identity{UserID: parsed.UserID, Role: authn.Role(parsed.Role)}, true

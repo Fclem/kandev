@@ -69,24 +69,36 @@ const runtimeShimTemplate = `(function(){` +
 	// The prefix check is boundary-exact (`u===P` or the next byte is
 	// `/`, `?`, `#`), so `/port-proxy/s/51730/foo` is NOT mistaken for the
 	// `/port-proxy/s/5173` subtree and an already-prefixed URL still falls
-	// through to the capability splice. %s is the optional capability-append
-	// logic (empty when no capability is minted, keeping the auth-disabled
-	// output byte-identical).
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}%sreturn u;}` +
+	// through to the capability splice. The emitted form is WHATWG-normalized
+	// (leading C0/space trimmed, embedded tabs/newlines removed) AFTER the
+	// URL-API classification passes, matching what the browser resolves: a
+	// space-prefixed dynamic src cannot escape the subtree when the browser
+	// trims it at fetch time. %s is the optional capability-append logic
+	// (empty when no capability is minted, keeping the auth-disabled output
+	// free of capability bytes).
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}%sreturn u;}` +
 	// Navigation rewriter: same prefixing WITHOUT the capability. Navigation
 	// APIs (history.pushState, location.assign) put the URL in the address bar
 	// and browser history; embedding a bearer there would leak it through
 	// copied URLs, history, and cross-origin Referers. The subtree cookie
 	// covers same-origin navigations instead.
-	`function sc(u){var qi=u.indexOf('?');if(qi===-1)return u;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){var k=p.split('=')[0];var d;try{d=decodeURIComponent(k)}catch(e){d=k}return d!=='kandev_cap'});return b+(q.length?'?'+q.join('&'):'')}` +
+	`function nz(u){return u.replace(/[\t\n\r]/g,'').replace(/^[\u0000-\u0020]+/,'')}` +
+	// sc(u): strips every query parameter whose DECODED key equals the
+	// reserved capability key (so percent-encoded key spellings are stripped
+	// too), preserving all other parameters AND any URL fragment (SPA
+	// hash-state must survive navigation rewriting).
+	`function sc(u){var h='';var hi=u.indexOf('#');if(hi!==-1){h=u.slice(hi);u=u.slice(0,hi)}var qi=u.indexOf('?');if(qi===-1)return u+h;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){var k=p.split('=')[0];var d;try{d=decodeURIComponent(k)}catch(e){d=k}return d!=='kandev_cap'});return b+(q.length?'?'+q.join('&'):'')+h}` +
 	// rn(u): prefix-only navigation rewriter. It strips any previously issued
 	// capability from EVERY same-origin form (relative, root-absolute, and
 	// absolute http/https — a fetching link reclassified to metadata must not
 	// retain its bearer) before applying the boundary-exact prefix logic.
 	// Cross-origin, network-relative, other schemes, and fragments pass
 	// through untouched; classification uses the URL API like r() so
-	// whitespace/control-obfuscated externals are never touched.
-	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}` +
+	// whitespace/control-obfuscated externals are never touched, and the
+	// emitted form is WHATWG-normalized (leading C0/space trimmed, embedded
+	// tabs/newlines removed) so a space-prefixed navigation cannot escape the
+	// subtree when the browser trims it.
+	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}` +
 	// norm(u): normalizes any URL-like input through the network rewriter
 	// using the URL API, which applies the WHATWG parsing rules (leading
 	// C0/space trimmed, embedded tabs/newlines removed, default ports and
@@ -132,7 +144,7 @@ const runtimeShimTemplate = `(function(){` +
 	// absolute paths after the initial HTML has been parsed.
 	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','style','content'];` +
 	`function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);for(var i=0;i<toks.length;i++){if(toks[i]==='stylesheet'||toks[i]==='icon'||toks[i]==='manifest'||toks[i]==='preload'||toks[i]==='modulepreload'||toks[i]==='prefetch'||toks[i]==='dns-prefetch'||toks[i]==='preconnect'||toks[i]==='shortcut'||toks[i]==='apple-touch-icon')return true}return false}` +
-	`function rwaStyle(v){var o='';var i=0;var n=v.length;while(i<n){var c=v.charAt(i);if(c==='\\'&&i+1<n){o+=v.slice(i,i+2);i+=2;continue}if(c==='\''||c==='"'){var e=v.indexOf(c,i+1);if(e<0){o+=v.slice(i);break}o+=v.slice(i,e+1);i=e+1;continue}if((c==='u'||c==='U')&&v.slice(i,i+4).toLowerCase()==='url('){var j=i+4;while(j<n&&' \t\n\r\f'.indexOf(v.charAt(j))>=0)j++;var sp=v.slice(i+4,j);if(j<n&&(v.charAt(j)==='\''||v.charAt(j)==='"')){var q=v.charAt(j);var ce=v.indexOf(q,j+1);if(ce<0){o+=v.slice(i);break}var tok=v.slice(j+1,ce);var k=ce+1;while(k<n&&' \t\n\r\f'.indexOf(v.charAt(k))>=0)k++;if(k<n&&v.charAt(k)===')'){o+='url('+sp+q+r(tok)+q+v.slice(ce+1,k)+')';i=k+1;continue}o+=v.slice(i,ce+1);i=ce+1;continue}var k2=j;while(k2<n&&v.charAt(k2)!==')'&&' \t\n\r\f'.indexOf(v.charAt(k2))<0)k2++;var tok2=v.slice(j,k2);var l2=k2;while(l2<n&&' \t\n\r\f'.indexOf(v.charAt(l2))>=0)l2++;if(l2<n&&v.charAt(l2)===')'){if(tok2.indexOf('var(')!==0){o+='url('+sp+r(tok2)+v.slice(k2,l2)+')';i=l2+1;continue}o+=v.slice(i,l2+1);i=l2+1;continue}o+=v.slice(i,k2);i=k2;continue}o+=c;i++}return o}` +
+	`function rwaStyle(v){var o='';var i=0;var n=v.length;while(i<n){var c=v.charAt(i);if(c==='\\'&&i+1<n){o+=v.slice(i,i+2);i+=2;continue}if(c==='\''||c==='"'){var j=i+1;while(j<n){if(v.charAt(j)==='\\'&&j+1<n){j+=2;continue}if(v.charAt(j)===c)break;j++}if(j>=n){o+=v.slice(i);break}o+=v.slice(i,j+1);i=j+1;continue}if((c==='u'||c==='U')&&v.slice(i,i+4).toLowerCase()==='url('&&!(i>0&&(v.charCodeAt(i-1)>=128||/[a-zA-Z0-9_-]/.test(v.charAt(i-1))))){var j2=i+4;while(j2<n&&' \t\n\r\f'.indexOf(v.charAt(j2))>=0)j2++;var sp=v.slice(i+4,j2);if(j2<n&&(v.charAt(j2)==='\''||v.charAt(j2)==='"')){var q=v.charAt(j2);var ce=j2+1;while(ce<n){if(v.charAt(ce)==='\\'&&ce+1<n){ce+=2;continue}if(v.charAt(ce)===q)break;ce++}if(ce>=n){o+=v.slice(i);break}var tok=v.slice(j2+1,ce);var k=ce+1;while(k<n&&' \t\n\r\f'.indexOf(v.charAt(k))>=0)k++;if(k<n&&v.charAt(k)===')'){o+='url('+sp+q+r(tok)+q+v.slice(ce+1,k)+')';i=k+1;continue}o+=v.slice(i,ce+1);i=ce+1;continue}var k2=j2;while(k2<n&&v.charAt(k2)!==')'&&' \t\n\r\f'.indexOf(v.charAt(k2))<0)k2++;var tok2=v.slice(j2,k2);var l2=k2;while(l2<n&&' \t\n\r\f'.indexOf(v.charAt(l2))>=0)l2++;if(l2<n&&v.charAt(l2)===')'){if(tok2.toLowerCase().indexOf('var(')!==0){o+='url('+sp+r(tok2)+v.slice(k2,l2)+')';i=l2+1;continue}o+=v.slice(i,l2+1);i=l2+1;continue}o+=v.slice(i,k2);i=k2;continue}o+=c;i++}return o}` +
 	`function srcsetParts(v){var parts=[];var cur='';var inData=false;for(var i=0;i<v.length;i++){var c=v.charAt(i);if(c===','){if(inData){cur+=c;continue}parts.push(cur);cur='';continue}if(!inData&&cur.replace(/\s/g,'')===''&&/^data:/i.test(v.slice(i)))inData=true;if(inData&&(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'))inData=false;cur+=c}if(cur.replace(/\s/g,'')!=='')parts.push(cur);return parts}` +
 	`function mref(v){var ml=v.toLowerCase();var m=/(^|;)\s*url=/.exec(ml);if(!m)return v;var mi=m.index+m[0].length-4;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)==='\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
 	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'))||a==='cite';var rr=nav?rn:r;var nv;if(a==='srcset'){nv=srcsetParts(v).map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=rwaStyle(v)}else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
@@ -229,11 +241,16 @@ const cspScriptSrcElem = "script-src-elem"
 // scriptNoncesFromCSP returns the valid script nonces a single
 // Content-Security-Policy value requires for script elements: from the
 // script-src-elem directive when present (per CSP3 it governs script
-// elements), else from script-src. Invalid nonce-shaped tokens are skipped
-// so a later valid one is used. Multiple nonces can appear in one directive;
-// all are candidates and the caller intersects across policies.
+// elements), else from script-src. When script-src-elem EXISTS it is the
+// governing directive for script elements, so script-src nonces are NEVER
+// used — even when the elem directive carries no nonce tokens (a nonce from
+// script-src is not authorized by the governing directive). Invalid
+// nonce-shaped tokens are skipped so a later valid one is used; multiple
+// nonces in one directive are all candidates and the caller intersects
+// across policies.
 func scriptNoncesFromCSP(policy string) []string {
 	var elem, src []string
+	hasElem := false
 	for _, directive := range strings.Split(policy, ";") {
 		fields := strings.Fields(strings.TrimSpace(directive))
 		if len(fields) == 0 {
@@ -242,6 +259,9 @@ func scriptNoncesFromCSP(policy string) []string {
 		name := strings.ToLower(fields[0])
 		if name != "script-src" && name != cspScriptSrcElem {
 			continue
+		}
+		if name == cspScriptSrcElem {
+			hasElem = true
 		}
 		for _, source := range fields[1:] {
 			nonce, ok := strings.CutPrefix(source, "'nonce-")
@@ -258,7 +278,7 @@ func scriptNoncesFromCSP(policy string) []string {
 			}
 		}
 	}
-	if len(elem) > 0 {
+	if hasElem {
 		return elem
 	}
 	return src
@@ -270,7 +290,9 @@ func scriptNoncesFromCSP(policy string) []string {
 // shim must match the policy's other sources), and 'self'/'*' already allow
 // the same-origin shim regardless of any nonce attribute. 'strict-dynamic'
 // inverts that: it disables 'self' for script elements (CSP3), so a nonce is
-// REQUIRED even when 'self' is present.
+// REQUIRED even when 'self' is present. All source expressions are scanned
+// before deciding, so 'strict-dynamic' later in the same directive is not
+// masked by an earlier 'self'.
 func cspScriptNonceSet(policy string) []string {
 	nonces := scriptNoncesFromCSP(policy)
 	if len(nonces) == 0 {
@@ -285,13 +307,21 @@ func cspScriptNonceSet(policy string) []string {
 			if len(fields) == 0 || !strings.EqualFold(fields[0], name) {
 				continue
 			}
+			hasStrictDynamic := false
+			hasSelfOrStar := false
 			for _, source := range fields[1:] {
 				switch source {
 				case "'strict-dynamic'":
-					return nonces // ignores 'self' for scripts; nonce required
+					hasStrictDynamic = true
 				case "'self'", "*":
-					return nil // shim allowed without a nonce
+					hasSelfOrStar = true
 				}
+			}
+			if hasStrictDynamic {
+				return nonces // ignores 'self' for scripts; nonce required
+			}
+			if hasSelfOrStar {
+				return nil // shim allowed without a nonce
 			}
 			return nonces
 		}
@@ -392,15 +422,15 @@ func responseScriptNonce(resp *http.Response, body []byte) string {
 // still gets the issued capability appended — the gateway accepts any valid
 // value among duplicates. A substring like `/foo/kandev_cap=x` in the path or
 // `?note=kandev_cap=x` in another parameter does NOT suppress the append.
-// Empty when no capability is minted, keeping the auth-disabled output
-// byte-identical.
+// Empty when no capability is minted, so the auth-disabled output carries no
+// capability bytes (see TestRuntimeShim_NoCapabilityBytes).
 func shimCapabilityJS(capability string) string {
 	if capability == "" {
 		return ""
 	}
 	param := proxyCapabilityQueryParam + "="
 	return fmt.Sprintf(`var K=%q;`+
-		`function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}if(d==='kandev_cap'&&v===K)return true}return false}`+
+		`function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}var vd;try{vd=decodeURIComponent(v)}catch(x){vd=v}if(d==='kandev_cap'&&vd===K)return true}return false}`+
 		`var fr='';var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}if(!hcp(u))u+=(u.indexOf('?')===-1?'?':'&')+%q+K;return u+fr;`,
 		capability, param)
 }
@@ -974,7 +1004,7 @@ func rewriteCSSFragment(css, prefix, capability string) string {
 			}
 			out.WriteString(css[i : j+1])
 			i = j + 1
-		case (c == 'u' || c == 'U') && i+4 <= n && strings.EqualFold(css[i:i+4], "url("):
+		case (c == 'u' || c == 'U') && i+4 <= n && strings.EqualFold(css[i:i+4], "url(") && (i == 0 || !isCSSIdentChar(css[i-1])):
 			j := i + 4
 			for j < n && isCSSSpace(css[j]) {
 				j++
@@ -1021,7 +1051,7 @@ func rewriteCSSFragment(css, prefix, capability string) string {
 			}
 			if l < n && css[l] == ')' {
 				tok := css[j:k]
-				if !strings.HasPrefix(tok, "var(") {
+				if !strings.HasPrefix(strings.ToLower(tok), "var(") {
 					out.WriteString("url(" + spacing + rewriteURLReference(tok, prefix, capability) + css[k:l] + ")")
 					i = l + 1
 					continue
@@ -1078,4 +1108,12 @@ func isCSSSpace(c byte) bool {
 		return true
 	}
 	return false
+}
+
+// isCSSIdentChar reports whether c can be part of a CSS identifier (per the
+// CSS syntax spec's ident-token: ASCII letters, digits, '-', '_', and
+// non-ASCII code points). Used to require a token boundary before `url(` so
+// `noturl(/x)` is not mistaken for a url() token.
+func isCSSIdentChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c >= 0x80
 }

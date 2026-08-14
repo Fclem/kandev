@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -500,7 +499,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	// Navigation APIs use the prefix-only rewriter, never the capability.
 	mustContain(t, shim, `u=rn(u);return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `u=rn(u);return orig.call(location,u)`)
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
 	// Anchor navigation needs no click interception: the MutationObserver
 	// prefixes hrefs, so the browser's own default navigation stays inside
 	// the subtree and app click handlers keep control.
@@ -524,7 +523,7 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// rn() is the prefix-only form: it strips any previously issued capability
 	// and never appends a new one.
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
 	// history and location rewrite through rn(), never r().
 	mustContain(t, shim, `history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);return orig.call(this,s,t,u)}`)
 	mustContain(t, shim, `location[op]=function(u){if(typeof u==='string')u=rn(u);return orig.call(location,u)}`)
@@ -533,16 +532,27 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	}
 }
 
-// Without a capability the shim is byte-identical to the pre-auth output: no
-// capability logic is spliced into the path rewriter.
-func TestRuntimeShim_WithoutCapabilityStaysByteIdentical(t *testing.T) {
-	withCap := runtimeShim(proxyPrefix, "")
-	withoutCap := fmt.Sprintf(runtimeShimTemplate, proxyPrefix, "")
-	if withCap != withoutCap {
-		t.Fatal("empty capability must not alter the shim output")
+// The auth-off contract is "no capability bytes": with an empty capability
+// the shim carries ZERO capability logic — no issued-capability constant, no
+// exact-match helper, no query append — so the rendered output cannot differ
+// from the capability-free template regardless of how the splice evolves.
+// (The old name promised byte-identity with pre-auth output; that is
+// untestable here since the splice is produced by the same implementation.
+// The gateway-level auth-off assertions in port_proxy_auth_test.go cover the
+// cookie/query/body guarantees.)
+func TestRuntimeShim_NoCapabilityBytes(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "")
+	// The unconditional sc()/rn() reference the reserved KEY name for
+	// stripping (d!=='kandev_cap'), so absence means: no issued-capability
+	// constant, no exact-match helper, no query append.
+	if strings.Contains(shim, `"kandev_cap="+K`) {
+		t.Fatalf("shim without capability appends kandev_cap:\n%s", shim)
 	}
-	if strings.Contains(withCap, `"kandev_cap="+K`) {
-		t.Fatalf("shim without capability appends kandev_cap:\n%s", withCap)
+	if strings.Contains(shim, "function hcp(") {
+		t.Fatalf("shim without capability carries the exact-match helper:\n%s", shim)
+	}
+	if strings.Contains(shim, `var K=`) {
+		t.Fatalf("shim without capability carries an issued-capability constant:\n%s", shim)
 	}
 }
 
@@ -802,7 +812,7 @@ func TestValidCSPNonce(t *testing.T) {
 func TestRuntimeShim_AppendIsIdempotentForIssuedCapability(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	mustContain(t, shim, `if(!hcp(u))u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
-	mustContain(t, shim, `function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}if(d==='kandev_cap'&&v===K)return true}return false}`)
+	mustContain(t, shim, `function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}var vd;try{vd=decodeURIComponent(v)}catch(x){vd=v}if(d==='kandev_cap'&&vd===K)return true}return false}`)
 	// r() leaves network-relative values unchanged.
 	mustContain(t, shim, `u.indexOf('//')===0`)
 	// sc() decodes query keys before stripping.
@@ -819,7 +829,7 @@ func TestRuntimeShim_CapsRelativeSubresources(t *testing.T) {
 	mustContain(t, shim, `if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}`)
 	// The splice appends to u (prefixed or relative) with fragment handling.
 	mustContain(t, shim, `if(!hcp(u))u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
-	mustContain(t, shim, `function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}if(d==='kandev_cap'&&v===K)return true}return false}`)
+	mustContain(t, shim, `function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}var vd;try{vd=decodeURIComponent(v)}catch(x){vd=v}if(d==='kandev_cap'&&vd===K)return true}return false}`)
 }
 
 // Link rel values are whitespace-separated token lists: ANY fetching token
@@ -877,7 +887,7 @@ func TestRuntimeShim_NoCapForObfuscatedExternalURLs(t *testing.T) {
 // exact issued kandev_cap=K parameter still stops the observer loop.
 func TestRuntimeShim_ExactCapIdempotencyRejectsSubstrings(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
-	mustContain(t, shim, `if(d==='kandev_cap'&&v===K)return true`)
+	mustContain(t, shim, `if(d==='kandev_cap'&&vd===K)return true`)
 	// A substring elsewhere in the URL must not satisfy hcp: the append
 	// guard tests the query parameter's decoded key AND exact value.
 	mustContain(t, shim, `var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}`)
@@ -921,7 +931,7 @@ func TestRuntimeShim_StyleTokenizerAndSrcSetDataURLs(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// Scanner, not regex: string-state tracking + var() skip.
 	mustContain(t, shim, `function rwaStyle(v){var o='';var i=0;var n=v.length;`)
-	mustContain(t, shim, `if(tok2.indexOf('var(')!==0){o+='url('+sp+r(tok2)`)
+	mustContain(t, shim, `if(tok2.toLowerCase().indexOf('var(')!==0){o+='url('+sp+r(tok2)`)
 	mustContain(t, shim, `function srcsetParts(v){var parts=[];var cur='';var inData=false;`)
 	mustContain(t, shim, `if(!inData&&cur.replace(/\s/g,'')===''&&/^data:/i.test(v.slice(i)))inData=true`)
 	// content rewriting is guarded to META http-equiv=refresh; non-refresh
@@ -1100,6 +1110,126 @@ func TestRewriteHTMLURLs_CSPNonceScriptSrcElemPrecedence(t *testing.T) {
 	}
 	got, _ := io.ReadAll(resp.Body)
 	mustContain(t, string(got), `nonce="elemB"`)
+}
+
+// The runtime shim emits WHATWG-normalized forms: sc() preserves URL
+// fragments while stripping capability parameters, r()/rn() normalize the
+// emitted value (leading C0/space trimmed, embedded tabs/newlines removed)
+// so space-prefixed dynamic references cannot escape the subtree.
+func TestRuntimeShim_FragmentPreservingAndNormalizedForms(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	// sc() splits the fragment off, filters the query, and re-appends it.
+	mustContain(t, shim, `function sc(u){var h='';var hi=u.indexOf('#');if(hi!==-1){h=u.slice(hi);u=u.slice(0,hi)}var qi=u.indexOf('?');if(qi===-1)return u+h;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){var k=p.split('=')[0];var d;try{d=decodeURIComponent(k)}catch(e){d=k}return d!=='kandev_cap'});return b+(q.length?'?'+q.join('&'):'')+h}`)
+	// r() and rn() normalize the emitted form after URL-API classification.
+	mustContain(t, shim, `function nz(u){return u.replace(/[\t\n\r]/g,'').replace(/^[\u0000-\u0020]+/,'')}`)
+	mustContain(t, shim, `u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||`)
+	mustContain(t, shim, `u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||`)
+}
+
+// hcp decodes the parameter VALUE before comparing, so a percent-encoded
+// spelling of the issued capability is recognized (idempotent, no duplicate
+// append) instead of being treated as an app value.
+func TestRuntimeShim_HcpDecodesValue(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap.ABC-_123")
+	mustContain(t, shim, `var vd;try{vd=decodeURIComponent(v)}catch(x){vd=v}if(d==='kandev_cap'&&vd===K)return true`)
+}
+
+// The runtime style tokenizer is escape-aware for CSS strings and requires a
+// token boundary before url(: an escaped quote inside a string cannot end it,
+// and noturl(...) is never rewritten.
+func TestRuntimeShim_StyleTokenizerEscapeAndBoundary(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	// Escape-aware string scan: backslash + next byte skipped before looking
+	// for the closing quote.
+	mustContain(t, shim, `if(c==='\''||c==='"'){var j=i+1;while(j<n){if(v.charAt(j)==='\\'&&j+1<n){j+=2;continue}if(v.charAt(j)===c)break;j++}`)
+	// Identifier boundary: previous char must not be ident-continuation.
+	mustContain(t, shim, `v.slice(i,i+4).toLowerCase()==='url('&&!(i>0&&(v.charCodeAt(i-1)>=128||/[a-zA-Z0-9_-]/.test(v.charAt(i-1))))`)
+}
+
+// Static CSS: url( only at a token boundary (noturl(/x) untouched) and
+// var() skip is case-insensitive (url(VAR(--x)) untouched).
+func TestRewriteCSSFragment_IdentBoundaryAndVarCase(t *testing.T) {
+	css := `a{content:noturl(/literal);b:url(VAR(--x));c:url(ok.png);}`
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+
+	mustContain(t, got, `content:noturl(/literal)`)
+	mustContain(t, got, `url(VAR(--x))`)
+	mustContain(t, got, `url(ok.png?kandev_cap=cap-css)`)
+}
+
+// strict-dynamic later in the same directive is not masked by an earlier
+// 'self': the policy still constrains the nonce choice and participates in
+// the intersection — with a conflicting second policy, no nonce is claimed.
+func TestRewriteHTMLURLs_CSPNonceStrictDynamicNotMaskedBySelf(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
+	// First policy: 'self' then 'strict-dynamic' with nonce-sdA; second
+	// policy: nonce-sdB. The first policy IS constraining (strict-dynamic
+	// beats 'self'), so the intersection is empty and NO nonce may be
+	// claimed — claiming sdB would be blocked by policy 1.
+	conflict := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'self' 'strict-dynamic' 'nonce-sdA'`, `script-src 'nonce-sdB'`},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(conflict, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gotConflict, _ := io.ReadAll(conflict.Body)
+	if strings.Contains(string(gotConflict), "nonce=") {
+		t.Fatalf("strict-dynamic policy must participate in the intersection:\n%s", gotConflict)
+	}
+
+	// Shared nonce across both (one strict-dynamic, one plain): emitted.
+	shared := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'self' 'strict-dynamic' 'nonce-sdA'`, `script-src 'nonce-sdA' 'nonce-x'`},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(shared, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gotShared, _ := io.ReadAll(shared.Body)
+	mustContain(t, string(gotShared), `nonce="sdA"`)
+}
+
+// When script-src-elem exists it is the governing directive for script
+// elements: script-src nonces are NOT used for it, even when elem carries no
+// nonce tokens (strict-dynamic without a nonce cannot be satisfied, so no
+// nonce is claimed).
+func TestRewriteHTMLURLs_CSPNonceElemIsolatesSrcNonces(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'nonce-srcA'; script-src-elem 'strict-dynamic'`},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(got), `nonce=`) {
+		t.Fatalf("script-src nonce must not be claimed for an elem-governed policy:\n%s", got)
+	}
+}
+
+// stripCapability preserves URL fragments while removing capability
+// parameters (runtime sc() matches; the static navigation path must too).
+func TestRewriteHTMLURLs_NavStripsCapPreservesFragment(t *testing.T) {
+	in := `<a href="/p?kandev_cap=stale&keep=1#frag">x</a>` +
+		`<a href="rel?kandev_cap=stale#top">y</a>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-nav", ""))
+
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/p?keep=1#frag">x</a>`)
+	mustContain(t, got, `<a href="rel#top">y</a>`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

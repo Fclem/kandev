@@ -506,6 +506,12 @@ func TestPortProxyCapabilityRoundTrip(t *testing.T) {
 		t.Fatal("expired capability validated")
 	}
 
+	// Exact boundary (now == ExpiresAt): expired per standard semantics.
+	atBoundary := handler.issueCapabilityWithTTL("sess-1", 5173, identity, 0)
+	if _, ok := handler.validateCapability(atBoundary, "sess-1", 5173); ok {
+		t.Fatal("capability at its expiry boundary validated")
+	}
+
 	// Garbage: rejected without panicking.
 	if _, ok := handler.validateCapability("not-a-capability", "sess-1", 5173); ok {
 		t.Fatal("garbage capability validated")

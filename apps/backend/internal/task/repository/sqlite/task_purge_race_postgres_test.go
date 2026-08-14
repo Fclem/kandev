@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -249,6 +250,79 @@ func TestPostgresRepository_QueueAdmissionRejectedAfterTaskDelete(t *testing.T) 
 	}
 	if count != 0 {
 		t.Fatalf("queue survived task delete: count=%d", count)
+	}
+}
+
+// TestPostgresRepository_AutoMergeCandidateIntoAbove_RejectedAfterArchive
+// proves the full-queue fold re-guards the task row in its own transaction:
+// an archive committing between the failed insert and the fold must make the
+// fold fail with ErrTaskInactive instead of accepting a message the purge
+// will silently delete. The competing backend holds the task row (simulating
+// the archive mid-flight), the fold blocks on the guard, the archive commits,
+// and the fold is rejected.
+func TestPostgresRepository_AutoMergeCandidateIntoAbove_RejectedAfterArchive(t *testing.T) {
+	repoA, repoB := newTaskPostgresRepoPair(t)
+	ctx := context.Background()
+	const (
+		taskID = "task-fold-arch-race"
+		sessID = "sess-fold-arch-race"
+	)
+	seedTaskWithSession(t, repoA, taskID, "ws-fold-arch-race", sessID)
+	queueRepoA, err := messagequeue.NewSQLiteRepository(repoA.db, repoA.db)
+	if err != nil {
+		t.Fatalf("init queue repo A: %v", err)
+	}
+	if err := queueRepoA.Insert(ctx, &messagequeue.QueuedMessage{
+		SessionID: sessID, TaskID: taskID, Content: "first", QueuedBy: messagequeue.QueuedByUser,
+	}, 0); err != nil {
+		t.Fatalf("seed tail: %v", err)
+	}
+	queueRepoB, err := messagequeue.NewSQLiteRepository(repoB.db, repoB.db)
+	if err != nil {
+		t.Fatalf("init queue repo B: %v", err)
+	}
+
+	// Simulate an archive that holds the task row while it purges.
+	dbA := repoA.db
+	lockTx, err := dbA.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `
+		SELECT id FROM tasks WHERE id = 'task-fold-arch-race' FOR UPDATE
+	`); err != nil {
+		t.Fatalf("lock task row: %v", err)
+	}
+
+	foldPID := pgBackendPID(t, repoB.db)
+	foldDone := make(chan error, 1)
+	candidate := &messagequeue.QueuedMessage{
+		SessionID: sessID, TaskID: taskID, Content: "second", QueuedBy: messagequeue.QueuedByUser,
+	}
+	go func() {
+		merged, didMerge, err := queueRepoB.AutoMergeCandidateIntoAbove(ctx, candidate)
+		if err != nil {
+			foldDone <- err
+			return
+		}
+		foldDone <- fmt.Errorf("fold succeeded (didMerge=%v merged=%+v), want ErrTaskInactive after archive", didMerge, merged)
+	}()
+
+	waitForWaitingLocks(t, lockTx, foldPID, 1, "fold on the task row guard")
+
+	// The archive commits (task archived) while the fold waits on the guard.
+	if _, err := lockTx.ExecContext(ctx, `
+		UPDATE tasks SET archived_at = now(), updated_at = now() WHERE id = 'task-fold-arch-race'
+	`); err != nil {
+		t.Fatalf("archive task: %v", err)
+	}
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit archive: %v", err)
+	}
+
+	if err := <-foldDone; !errors.Is(err, messagequeue.ErrTaskInactive) {
+		t.Fatalf("fold after archive err = %v, want ErrTaskInactive", err)
 	}
 }
 

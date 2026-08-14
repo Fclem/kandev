@@ -200,6 +200,12 @@ func (s *Service) queueMessageWithMetadataAdmission(ctx context.Context, session
 				merged, didMerge, mergeErr := s.repo.AutoMergeCandidateIntoAbove(admittedCtx, candidate)
 				switch {
 				case mergeErr != nil:
+					if errors.Is(mergeErr, ErrTaskInactive) {
+						// The task was archived or deleted while the admission
+						// was in flight; surface the inactive-task contract
+						// instead of a misleading queue-full rejection.
+						return mergeErr
+					}
 					s.logger.Error("automatic merge into full queue failed; preserving queue full rejection",
 						zap.String("session_id", sessionID),
 						zap.Error(mergeErr))

@@ -239,6 +239,25 @@ func TestService_AutoMergeFullQueueCandidateMergeErrorDegradesToQueueFull(t *tes
 	}
 }
 
+func TestService_AutoMergeFullQueueTaskInactiveSurfacesContract(t *testing.T) {
+	repo := &autoMergeCandidateErrorRepository{Repository: NewMemoryRepository(), err: ErrTaskInactive}
+	svc := newAutoMergeTestServiceWithRepository(t, repo, 1)
+	if _, err := svc.QueueMessage(context.Background(), "session", "task", "first", "", QueuedByUser, false, nil); err != nil {
+		t.Fatalf("queue first: %v", err)
+	}
+	// The full-queue fold's task guard failed (task archived/deleted between
+	// the failed insert and the fold): admission must surface ErrTaskInactive,
+	// not the stale ErrQueueFull.
+	second, err := svc.QueueMessage(context.Background(), "session", "task", "second", "", QueuedByUser, false, nil)
+	if !errors.Is(err, ErrTaskInactive) || second != nil {
+		t.Fatalf("task-inactive admission = %+v, err=%v, want ErrTaskInactive", second, err)
+	}
+	status := svc.GetStatus(context.Background(), "session")
+	if status.Count != 1 || status.Entries[0].Content != "first" {
+		t.Fatalf("queue changed after rejected admission: %+v", status)
+	}
+}
+
 func TestService_AutoMergeStorageErrorDegradesToSeparateAdmission(t *testing.T) {
 	wantErr := errors.New("automatic merge unavailable")
 	repo := &autoMergeErrorRepository{Repository: NewMemoryRepository(), err: wantErr}

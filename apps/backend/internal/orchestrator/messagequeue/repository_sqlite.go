@@ -1594,6 +1594,14 @@ func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, cand
 		return nil, false, fmt.Errorf("begin automatic candidate merge tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// The full-queue fold is its own admission and runs in its own
+	// transaction after the guarded insert failed, so it must re-guard the
+	// task row: an archive/delete can commit between the failed insert and
+	// the fold, and the fold must not accept a message the purge will then
+	// silently delete. Task row first, then the session lock.
+	if err := r.guardActiveTaskTx(ctx, tx, candidate.TaskID); err != nil {
+		return nil, false, err
+	}
 	if err := r.lockSessionTx(ctx, tx, candidate.SessionID); err != nil {
 		return nil, false, err
 	}

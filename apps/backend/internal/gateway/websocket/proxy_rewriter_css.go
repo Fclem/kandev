@@ -220,7 +220,7 @@ func (s *cssScanner) consumeImport() bool {
 			return true
 		}
 		s.out.WriteString(css[s.i:j]) // "@import " + whitespace/comments
-		s.out.WriteString(string(q) + rewriteURLReference(css[j+1:k], s.prefix, s.capability) + string(q))
+		s.out.WriteString(string(q) + rewriteCSSURLToken(css[j+1:k], s.prefix, s.capability) + string(q))
 		s.i = k + 1
 		return true
 	}

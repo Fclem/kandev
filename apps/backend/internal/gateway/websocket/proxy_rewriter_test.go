@@ -285,8 +285,8 @@ func TestRuntimeShim_PatchesNavigationAPIs(t *testing.T) {
 	// (the subtree cookie covers same-origin navigations; a bearer in the
 	// address bar/history would leak).
 	for _, needle := range []string{
-		`history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u));return orig.call(this,s,t,u)}`, // history APIs (string + URL-object args)
-		`location[op]=function(u){if(typeof u==='string')u=rn(u);else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u));return orig.call(location,u)}`,    // location APIs
+		`history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}`, // history APIs (any DOMString-able arg)
+		`location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}`,    // location APIs
 	} {
 		mustContain(t, shim, needle)
 	}
@@ -497,8 +497,8 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `typeof i==='string'||(i&&typeof i==='object'&&typeof i.href==='string'&&!i.url)`)
 	mustContain(t, shim, `arguments[1]=norm(u)`)
 	// Navigation APIs use the prefix-only rewriter, never the capability.
-	mustContain(t, shim, `u=rn(String(u));return orig.call(this,s,t,u)`)
-	mustContain(t, shim, `u=rn(String(u));return orig.call(location,u)`)
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
 	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// Anchor navigation needs no click interception: the MutationObserver
 	// prefixes hrefs, so the browser's own default navigation stays inside
@@ -525,8 +525,8 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	// and never appends a new one.
 	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// history and location rewrite through rn(), never r().
-	mustContain(t, shim, `history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u));return orig.call(this,s,t,u)}`)
-	mustContain(t, shim, `location[op]=function(u){if(typeof u==='string')u=rn(u);else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u));return orig.call(location,u)}`)
+	mustContain(t, shim, `history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}`)
+	mustContain(t, shim, `location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}`)
 	if strings.Contains(shim, `history[op]=function(s,t,u){if(typeof u==='string')u=r(u)`) {
 		t.Fatal("history APIs must not use the capability-bearing rewriter")
 	}
@@ -1309,12 +1309,35 @@ func TestRuntimeShim_Round4Contracts(t *testing.T) {
 	// rwa defaults nv to v so guarded branches leave the attribute alone.
 	mustContain(t, shim, `var rr=nav?rn:r;var nv=v;if(a==='srcset')`)
 	// URL-object navigation arguments are stringified through rn().
-	mustContain(t, shim, `else if(u&&typeof u==='object'&&typeof u.href==='string')u=rn(String(u))`)
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}`)
 	// Token escape decode/encode helpers exist.
 	mustContain(t, shim, `function cssDecTok(t){`)
 	mustContain(t, shim, `function cssEscTok(t){`)
 	// sc keeps the empty query marker when all pairs were stripped.
 	mustContain(t, shim, `if(q.length===0)return b+'?'+h;`)
+}
+
+// Escaped root slashes inside QUOTED @import strings decode before
+// classification too: @import"\2f theme.css" is @import"/theme.css" to the
+// browser, so the rewritten import must carry the proxy prefix + capability.
+func TestRewriteCSSFragment_EscapedQuotedImport(t *testing.T) {
+	css := `@import"\2f theme.css";` +
+		`@import"\61 b.css";`
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+
+	mustContain(t, got, `@import"/port-proxy/abc/3001/theme.css?kandev_cap=cap-css";`)
+	// Relative decoded import: stays in the subtree, capability appended.
+	mustContain(t, got, `@import"ab.css?kandev_cap=cap-css";`)
+}
+
+// Navigation wrappers funnel ANY DOMString-able URL argument through rn():
+// objects with toString (not just URL objects), String objects, numbers —
+// the native API stringifies them, so the shim must rewrite the stringified
+// form.
+func TestRuntimeShim_DOMStringNavigationArguments(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
+	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

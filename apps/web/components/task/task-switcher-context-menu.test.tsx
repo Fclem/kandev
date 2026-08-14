@@ -57,8 +57,14 @@ function stubTouchEvent() {
     class StubTouchEvent extends Event {
       touches: unknown[];
       changedTouches: unknown[];
-      constructor(type: string, init?: { touches?: unknown[]; changedTouches?: unknown[] }) {
-        super(type);
+      constructor(
+        type: string,
+        init?: EventInit & { touches?: unknown[]; changedTouches?: unknown[] },
+      ) {
+        // Forward bubbles/cancelable so the stub faithfully models the
+        // production `new TouchEvent("touchcancel", { bubbles: true,
+        // cancelable: true })` dispatch.
+        super(type, init);
         this.touches = init?.touches ?? [];
         this.changedTouches = init?.changedTouches ?? [];
       }

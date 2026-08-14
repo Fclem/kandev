@@ -369,10 +369,12 @@ func (r *sqliteRepository) InsertOrReplaceLifecycleByCoalesceKey(ctx context.Con
 		return nil, false, fmt.Errorf("begin lifecycle coalesce tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
-		return nil, false, err
-	}
 
+	// Global lock order: task row first, then per-session queue locks.
+	// ArchiveTaskIfActive locks the task row and then (via
+	// PurgeTaskInTransaction) the affected session locks; taking the session
+	// lock here before the task guard would invert that order and deadlock
+	// the two on Postgres (each waiting on the other's held lock).
 	guard, err := tx.ExecContext(ctx, r.db.Rebind(`
 		UPDATE tasks SET updated_at = updated_at
 		WHERE id = ? AND archived_at IS NULL
@@ -386,6 +388,9 @@ func (r *sqliteRepository) InsertOrReplaceLifecycleByCoalesceKey(ctx context.Con
 	}
 	if rows == 0 {
 		return nil, false, ErrTaskInactive
+	}
+	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
+		return nil, false, err
 	}
 	expectedGeneration, ok := lifecycleGenerationFromMetadata(msg.Metadata)
 	if !ok {

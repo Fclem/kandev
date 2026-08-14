@@ -21,6 +21,7 @@ Users can detach a subtask or nest a task under another via context-menu actions
 - No confirmation dialog is shown on drop (unlike the detach menu action): the gesture is explicit, the operation is non-destructive (workspace membership is retained) and reversible via the menu or another drag.
 - Successful re-parenting is reflected across sidebar, board, and task-detail views without a reload, via the existing optimistic snapshot update and the `task.updated` WebSocket event.
 - The mobile task switcher sheet offers the same touch drag-and-drop re-parenting.
+- A drag starts only from a row's body. Interacting with a row's context menu (including the Color submenu and every item inside it) never starts a drag and never activates the row: pointer-start and click events inside the menu are contained within the menu and do not reach the row's drag sensor listeners or its click handler.
 
 ## Data model
 
@@ -58,6 +59,8 @@ No new endpoint. Reuses and extends existing contracts:
 - **GIVEN** a drop that lands outside every nest zone, **WHEN** the drop completes, **THEN** the task keeps its original parent and no request is sent (a plain no-op); a request-error toast appears only when a valid-zone drop's request is rejected by the backend.
 - **GIVEN** a re-parented task, **WHEN** its `task.updated` event arrives over WebSocket, **THEN** cached parent relationships in sidebar, board, and task-detail views are updated.
 - **GIVEN** the mobile task switcher sheet, **WHEN** a user touch-drags a subtask onto a root's nest zone, **THEN** the same re-parenting occurs.
+- **GIVEN** a task row whose context menu is open, **WHEN** the user presses and moves inside the menu (for example on the Color submenu trigger or one of its swatches), **THEN** no drag starts: no nest drop zones appear, the row neither dims nor moves, and the menu item still works.
+- **GIVEN** a task row whose context menu is open, **WHEN** the user clicks a menu item, **THEN** the row is not activated or selected as a side effect of the click.
 
 ## Out of scope
 

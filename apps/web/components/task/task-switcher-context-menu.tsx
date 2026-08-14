@@ -111,7 +111,20 @@ export function TaskItemWithContextMenu({
       <ContextMenuTrigger asChild>
         <div>{cloneWithMenuOpen(children, contextOpen)}</div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
+      <ContextMenuContent
+        className="w-48"
+        // The menu renders in a portal whose fiber ancestors include the
+        // dnd-kit drag handle that wraps the row. React synthetic events
+        // bubble through the fiber tree, not the DOM, so without these guards
+        // a mousedown/pointerdown/touchstart on any menu item (e.g. the Color
+        // submenu trigger or a swatch) reaches the handle's sensor listeners
+        // and starts a row drag, and a click activates the row. Bubble-phase
+        // guards run after the item's own handlers, so menu actions still work.
+        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
         <TaskContextMenuItems
           task={task}
           workflows={workflows}

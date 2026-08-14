@@ -1,6 +1,8 @@
 package websocket
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -465,6 +468,75 @@ func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T
 	if !strings.Contains(last, "x=1") {
 		t.Fatalf("unrelated query param lost in forwarded request %q", last)
 	}
+}
+
+// A browser request carrying Accept-Encoding: gzip must not corrupt the
+// proxied HTML: the proxy drops the outbound header so Go's Transport
+// auto-decompresses, and the rewriter sees identity bytes. The response is
+// the REWRITTEN uncompressed HTML with no Content-Encoding.
+func TestPortProxyDecompressesAndRewritesCompressedHTML(t *testing.T) {
+	log, err := logger.NewFromZap(zap.NewNop())
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	html := `<!doctype html><html><head><link rel="manifest" href="/m.webmanifest"></head><body>gzip</body></html>`
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", "gzip")
+			var buf bytes.Buffer
+			gz := gzip.NewWriter(&buf)
+			_, _ = gz.Write([]byte(html))
+			_ = gz.Close()
+			w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
+			_, _ = w.Write(buf.Bytes())
+			return
+		}
+		_, _ = io.WriteString(w, html)
+	}))
+	t.Cleanup(app.Close)
+
+	svc, sessionToken := newProxyAuthService(t)
+	agentctl, _ := newAuthEnforcingFakeAgentctl(t, app.URL, "agentctl-token")
+	manager := newProxyTestManager(t, log)
+	manager.SetSessionAccessChecker(func(ctx context.Context, sessionID string) error {
+		identity, ok := authn.IdentityFromContext(ctx)
+		if !ok || identity.UserID != "default-user" {
+			return errors.New("foreign session")
+		}
+		return nil
+	})
+	addExecutionForURL(t, manager, "sess-gz", agentctl.URL, "agentctl-token", log)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(authhttpmw.Middleware(svc))
+	gateway := NewGateway(log)
+	gateway.SetAuthPolicy(AuthPolicy{
+		Enforced:     func() bool { return svc.Mode() != auth.ModeDisabled },
+		ResolveToken: svc.ResolveBearer,
+	})
+	gateway.SetPortProxy(manager)
+	gateway.SetupRoutes(router)
+
+	request := proxyAuthGateway(t, router)
+	headers := map[string]string{
+		"Cookie":          svc.CookieName() + "=" + sessionToken,
+		"Accept-Encoding": "gzip",
+	}
+	doc := request(http.MethodGet, "/port-proxy/sess-gz/5173/", headers)
+	if doc.status != http.StatusOK {
+		t.Fatalf("document status = %d, want %d (body=%s)", doc.status, http.StatusOK, doc.body)
+	}
+	if got := doc.headers.Get("Content-Encoding"); got != "" {
+		t.Fatalf("Content-Encoding = %q, want none (body must be decompressed before rewriting)", got)
+	}
+	// The body must be the REWRITTEN uncompressed HTML, not gzip bytes.
+	if strings.Contains(doc.body, "\x1f\x8b") {
+		t.Fatalf("body still gzip-compressed after proxying:\n%q", doc.body[:min(len(doc.body), 40)])
+	}
+	mustContain(t, doc.body, `/port-proxy/sess-gz/5173/m.webmanifest?kandev_cap=`)
+	mustContain(t, doc.body, `<body>gzip</body>`)
 }
 
 // TestPortProxyCapabilityRoundTrip covers the signed capability itself:

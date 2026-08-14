@@ -241,6 +241,12 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 		r.SetURL(target)
 		r.Out.URL.Path = r.In.URL.Path
 		r.Out.URL.RawPath = ""
+		// Never forward the browser's Accept-Encoding: Go's Transport adds
+		// its own and transparently decompresses, so ModifyResponse (and the
+		// HTML/CSS rewriter) always sees identity bytes. Forwarding gzip/br
+		// would deliver compressed bytes to the rewriter, which then strips
+		// Content-Encoding while keeping the compressed body.
+		r.Out.Header.Del("Accept-Encoding")
 		// The subtree capability is consumed by requireConnectionAuth at the
 		// gateway; strip it (in any encoding) before forwarding so it never
 		// lands in agentctl or application logs, redirects, or analytics. Only

@@ -82,7 +82,7 @@ const runtimeShimTemplate = `(function(){` +
 	// and browser history; embedding a bearer there would leak it through
 	// copied URLs, history, and cross-origin Referers. The subtree cookie
 	// covers same-origin navigations instead.
-	`function nz(u){return u.replace(/[\\\t\n\r]/g,function(m){return m==='\\'?'/':''}).replace(/^[\u0000-\u0020]+/,'')}` +
+	`function nz(u){return u.replace(/[\\\t\n\r]/g,function(m){return m==='\\'?'/':''}).replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g,'')}` +
 	// sc(u): strips every query parameter whose DECODED key equals the
 	// reserved capability key (so percent-encoded key spellings are stripped
 	// too), preserving all other parameters AND any URL fragment (SPA
@@ -1045,10 +1045,10 @@ func stripCapabilityQuery(raw string) string {
 // WHATWG parser's forgiving adjustments applied: ASCII tabs and newlines are
 // removed anywhere in the string, BACKSLASHES are converted to slashes (the
 // browser treats '\' as '/' in special-URL paths, so '\foo' resolves to
-// /foo while '\/evil' becomes the network-relative //evil), and leading
-// C0/space characters are trimmed. Only the result is used for
-// classification/emission; the original bytes are preserved when the
-// reference is returned unchanged.
+// /foo while '\/evil' becomes the network-relative //evil), and leading AND
+// trailing C0/space characters are trimmed (the parser strips both for
+// special URLs). Only the result is used for classification/emission; the
+// original bytes are preserved when the reference is returned unchanged.
 func normalizeURLForClassification(raw string) string {
 	noControls := strings.Map(func(r rune) rune {
 		switch r {
@@ -1059,7 +1059,7 @@ func normalizeURLForClassification(raw string) string {
 		}
 		return r
 	}, raw)
-	return strings.TrimLeftFunc(noControls, func(r rune) bool { return r <= ' ' })
+	return strings.TrimFunc(noControls, func(r rune) bool { return r <= ' ' })
 }
 
 // hasURLScheme reports whether a URL reference starts with a scheme per

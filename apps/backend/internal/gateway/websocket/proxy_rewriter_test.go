@@ -1118,7 +1118,7 @@ func TestRuntimeShim_FragmentPreservingAndNormalizedForms(t *testing.T) {
 	// sc() splits the fragment off, filters the query, and re-appends it.
 	mustContain(t, shim, `function sc(u){var h='';var hi=u.indexOf('#');if(hi!==-1){h=u.slice(hi);u=u.slice(0,hi)}var qi=u.indexOf('?');if(qi===-1)return u+h;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){var k=p.split('=')[0];var d;try{d=decodeURIComponent(k)}catch(e){d=k}return d!=='kandev_cap'});if(q.length===0)return b+'?'+h;return b+'?'+q.join('&')+h}`)
 	// r() and rn() normalize the emitted form after URL-API classification.
-	mustContain(t, shim, `function nz(u){return u.replace(/[\\\t\n\r]/g,function(m){return m==='\\'?'/':''}).replace(/^[\u0000-\u0020]+/,'')}`)
+	mustContain(t, shim, `function nz(u){return u.replace(/[\\\t\n\r]/g,function(m){return m==='\\'?'/':''}).replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g,'')}`)
 	mustContain(t, shim, `u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||`)
 	mustContain(t, shim, `u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||`)
 }
@@ -1675,6 +1675,17 @@ func TestRuntimeShim_PingObservedAndRewritten(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	mustContain(t, shim, `'ping','rel'`)
 	mustContain(t, shim, `else if(a==='ping'){nv=v.split(/\s+/).map(function(u){return r(u)}).join(' ')}`)
+}
+
+// WHATWG strips leading AND trailing C0/space for special URLs: a trailing
+// space must not survive into the emitted prefixed URL (it would become %20
+// in the pathname and 404).
+func TestRewriteHTMLURLs_TrailingWhitespace(t *testing.T) {
+	in := `<img src="/x ">` + `<a href="/page ">n</a>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-tw", ""))
+
+	mustContain(t, got, `<img src="/port-proxy/abc/3001/x?kandev_cap=cap-tw">`)
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/page">n</a>`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

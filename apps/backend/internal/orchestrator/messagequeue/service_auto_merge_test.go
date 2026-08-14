@@ -159,6 +159,36 @@ func TestService_AutoMergeAtFullQueueSkipsAfterInsertHook(t *testing.T) {
 	}
 }
 
+type autoMergeCandidateErrorRepository struct {
+	Repository
+	err error
+}
+
+func (r *autoMergeCandidateErrorRepository) AutoMergeCandidateIntoAbove(context.Context, *QueuedMessage) (*QueuedMessage, bool, error) {
+	return nil, false, r.err
+}
+
+func TestService_AutoMergeFullQueueCandidateMergeErrorDegradesToQueueFull(t *testing.T) {
+	wantErr := errors.New("automatic candidate merge unavailable")
+	repo := &autoMergeCandidateErrorRepository{Repository: NewMemoryRepository(), err: wantErr}
+	svc := newAutoMergeTestServiceWithRepository(t, repo, 1)
+	first, err := svc.QueueMessage(context.Background(), "session", "task", "first", "", QueuedByUser, false, nil)
+	if err != nil {
+		t.Fatalf("queue first: %v", err)
+	}
+	// The full-queue fold itself failed: admission must degrade to the
+	// original ErrQueueFull (never accept a message whose fold did not
+	// happen, and never surface the repository error).
+	second, err := svc.QueueMessage(context.Background(), "session", "task", "second", "", QueuedByUser, false, nil)
+	if !errors.Is(err, ErrQueueFull) || second != nil {
+		t.Fatalf("candidate merge error admission = %+v, err=%v, want queue full", second, err)
+	}
+	status := svc.GetStatus(context.Background(), "session")
+	if status.Count != 1 || status.Entries[0].ID != first.ID || status.Entries[0].Content != "first" {
+		t.Fatalf("queue changed after degraded full admission: %+v", status)
+	}
+}
+
 func TestService_AutoMergeStorageErrorDegradesToSeparateAdmission(t *testing.T) {
 	wantErr := errors.New("automatic merge unavailable")
 	repo := &autoMergeErrorRepository{Repository: NewMemoryRepository(), err: wantErr}

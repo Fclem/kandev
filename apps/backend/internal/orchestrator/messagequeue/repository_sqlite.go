@@ -1383,27 +1383,19 @@ func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, cand
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	target, err := r.scanTail(ctx, tx, candidate.SessionID)
+	target, storedContent, storedAttachmentsJSON, storedMetadataJSON, err := r.scanTailWithRawJSON(ctx, tx, candidate.SessionID)
 	if err != nil {
 		return nil, false, err
 	}
 	if target == nil {
 		return nil, false, nil
 	}
-	// Snapshot the tail's exact stored bytes for the compare-and-swap below.
-	// The CAS compares raw storage bytes, not re-marshalled structs: metadata
-	// values round-trip through JSON as maps whose key order differs from the
-	// struct field order used at write time, so re-marshalling would never
-	// match. Comparing the raw strings keeps the guard exact.
-	var storedContent string
-	var storedAttachmentsJSON, storedMetadataJSON string
-	if err := tx.QueryRowxContext(ctx, r.db.Rebind(`
-		SELECT content, attachments_json, metadata_json
-		FROM queued_messages
-		WHERE id = ? AND session_id = ?
-	`), target.ID, candidate.SessionID).Scan(&storedContent, &storedAttachmentsJSON, &storedMetadataJSON); err != nil {
-		return nil, false, fmt.Errorf("read automatic candidate merge tail snapshot: %w", err)
-	}
+	// The tail scan already captured the exact stored bytes for the
+	// compare-and-swap below. The CAS compares raw storage bytes, not
+	// re-marshalled structs: metadata values round-trip through JSON as maps
+	// whose key order differs from the struct field order used at write time,
+	// so re-marshalling would never match. Comparing the raw strings keeps the
+	// guard exact.
 	values, compatible := buildAutoMergedEntry(target, candidate)
 	if !compatible {
 		return nil, false, nil
@@ -1984,6 +1976,31 @@ func (r *sqliteRepository) scanTail(ctx context.Context, tx *sqlx.Tx, sessionID 
 	return msg, nil
 }
 
+// scanTailWithRawJSON reads the highest-position entry for a session plus its
+// exact stored content/attachments_json/metadata_json bytes in one query, so
+// the CAS condition in AutoMergeCandidateIntoAbove never needs a second
+// round-trip for the same row. Returns nil, "", "", "", nil when the queue is
+// empty.
+func (r *sqliteRepository) scanTailWithRawJSON(ctx context.Context, tx *sqlx.Tx, sessionID string) (*QueuedMessage, string, string, string, error) {
+	row := tx.QueryRowxContext(ctx, r.db.Rebind(`
+		SELECT id, session_id, task_id, position, content, model, plan_mode,
+		       attachments_json, metadata_json, queued_at, queued_by,
+		       content, attachments_json, metadata_json
+		FROM queued_messages
+		WHERE session_id = ?
+		ORDER BY position DESC
+		LIMIT 1
+	`), sessionID)
+	msg, rawContent, rawAttachments, rawMetadata, err := scanQueuedRowWithRawJSON(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, "", "", "", nil
+		}
+		return nil, "", "", "", fmt.Errorf("scan tail with raw bytes: %w", err)
+	}
+	return msg, rawContent, rawAttachments, rawMetadata, nil
+}
+
 // findCoalesced locates the entry matching the session, owner, and coalesce key inside a transaction.
 func (r *sqliteRepository) findCoalesced(ctx context.Context, tx *sqlx.Tx, sessionID, queuedBy, coalesceKey string) (*QueuedMessage, error) {
 	rows, err := tx.QueryxContext(ctx, r.db.Rebind(`
@@ -2045,6 +2062,43 @@ func scanQueuedRowWithMetadataJSON(
 		}
 	}
 	return &msg, metaJSON, nil
+}
+
+// scanQueuedRowWithRawJSON scans a queue row plus its exact stored
+// content/attachments_json/metadata_json strings. The raw strings back the
+// compare-and-swap in AutoMergeCandidateIntoAbove: metadata values round-trip
+// through JSON as maps whose key order differs from the struct field order
+// used at write time, so only raw bytes compare exactly. The caller's SELECT
+// must project those three columns a second time after the regular eleven.
+func scanQueuedRowWithRawJSON(
+	scanner interface{ Scan(dest ...any) error },
+) (*QueuedMessage, string, string, string, error) {
+	var (
+		msg                       QueuedMessage
+		planModeInt               int
+		attachmentsJSON, metaJSON string
+		rawContent                string
+		rawAttachments, rawMeta   string
+	)
+	if err := scanner.Scan(
+		&msg.ID, &msg.SessionID, &msg.TaskID, &msg.Position, &msg.Content, &msg.Model,
+		&planModeInt, &attachmentsJSON, &metaJSON, &msg.QueuedAt, &msg.QueuedBy,
+		&rawContent, &rawAttachments, &rawMeta,
+	); err != nil {
+		return nil, "", "", "", err
+	}
+	msg.PlanMode = planModeInt != 0
+	if attachmentsJSON != "" && attachmentsJSON != "[]" {
+		if err := json.Unmarshal([]byte(attachmentsJSON), &msg.Attachments); err != nil {
+			return nil, "", "", "", fmt.Errorf("unmarshal attachments: %w", err)
+		}
+	}
+	if metaJSON != "" && metaJSON != "{}" {
+		if err := json.Unmarshal([]byte(metaJSON), &msg.Metadata); err != nil {
+			return nil, "", "", "", fmt.Errorf("unmarshal metadata: %w", err)
+		}
+	}
+	return &msg, rawContent, rawAttachments, rawMeta, nil
 }
 
 // marshalAttachments serializes attachments for storage.

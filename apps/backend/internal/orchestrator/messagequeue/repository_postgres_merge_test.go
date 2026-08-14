@@ -44,6 +44,20 @@ func newTestPostgresRepoPair(t *testing.T) (Repository, Repository) {
 	t.Helper()
 	dsn := testutil.PostgresDSNFromEnv(t)
 	schema := "kandev_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	// Create the shared schema exactly once; each handle below only selects it
+	// via search_path so both repository instances see the same tables.
+	setupDB, err := sqlx.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	if _, err := setupDB.Exec("CREATE SCHEMA " + schema); err != nil {
+		_ = setupDB.Close()
+		t.Fatalf("create postgres schema %s: %v", schema, err)
+	}
+	t.Cleanup(func() {
+		_, _ = setupDB.Exec("DROP SCHEMA IF EXISTS " + schema + " CASCADE")
+		_ = setupDB.Close()
+	})
 	open := func() *sqlx.DB {
 		db, err := sqlx.Open("pgx", dsn)
 		if err != nil {
@@ -51,16 +65,12 @@ func newTestPostgresRepoPair(t *testing.T) (Repository, Repository) {
 		}
 		db.SetMaxOpenConns(1)
 		t.Cleanup(func() { _ = db.Close() })
-		if _, err := db.Exec("CREATE SCHEMA " + schema); err != nil {
-			t.Fatalf("create postgres schema %s: %v", schema, err)
-		}
 		if _, err := db.Exec("SET search_path TO " + schema); err != nil {
 			t.Fatalf("set postgres search_path %s: %v", schema, err)
 		}
 		return db
 	}
 	dbA, dbB := open(), open()
-	t.Cleanup(func() { _, _ = dbA.Exec("DROP SCHEMA IF EXISTS " + schema + " CASCADE") })
 	repoA, err := NewSQLiteRepository(dbA, dbA)
 	if err != nil {
 		t.Fatalf("NewSQLiteRepository(postgres A): %v", err)

@@ -930,7 +930,7 @@ func TestRuntimeShim_StyleTokenizerAndSrcSetDataURLs(t *testing.T) {
 	mustContain(t, shim, `function rwaStyle(v){var o='';var i=0;var n=v.length;`)
 	mustContain(t, shim, `if(d2.toLowerCase().indexOf('var(')!==0){var rw2=r(d2);var em2=d2===rw2?tok2:cssEscTok(rw2);o+='url('+sp+em2`)
 	mustContain(t, shim, `function srcsetParts(v){var parts=[];var cur='';var inData=false;`)
-	mustContain(t, shim, `if(!inData&&curEmpty&&/^data:/i.test(v.slice(i)))inData=true`)
+	mustContain(t, shim, `if(!inData&&curEmpty&&c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f'&&/^data:/i.test(v.slice(i)))inData=true`)
 	// content rewriting is guarded to META http-equiv=refresh; non-refresh
 	// meta content and non-META content attributes are left unchanged.
 	mustContain(t, shim, `else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}`)
@@ -1414,6 +1414,18 @@ func TestRewriteSrcSet_LargeInputLinear(t *testing.T) {
 	if !strings.HasSuffix(got, "/port-proxy/abc/3001/last.png?kandev_cap=cap-ss 2x") {
 		t.Fatalf("last candidate not rewritten: %.80s", got[len(got)-80:])
 	}
+}
+
+// A candidate with a very long leading-whitespace prefix must not trigger a
+// per-byte suffix rescan: the data: prefix is tested only at the first
+// non-whitespace byte, so this stays linear and produces the correct
+// candidates.
+func TestRewriteSrcSet_LongWhitespacePrefix(t *testing.T) {
+	prefix := strings.Repeat(" ", 20000)
+	in := prefix + `data:image/svg+xml,%3Csvg%3E 1x, /img.png 2x`
+	got := rewriteSrcSet(in, proxyPrefix, "cap-ss")
+
+	mustContain(t, got, `data:image/svg+xml,%3Csvg%3E 1x, /port-proxy/abc/3001/img.png?kandev_cap=cap-ss 2x`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

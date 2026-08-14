@@ -1688,6 +1688,21 @@ func TestRewriteHTMLURLs_TrailingWhitespace(t *testing.T) {
 	mustContain(t, got, `<a href="/port-proxy/abc/3001/page">n</a>`)
 }
 
+// Relative capability-bearing references emit the WHATWG-normalized form: a
+// trailing space must not survive into `x ?kandev_cap=…` (the browser would
+// percent-encode it into the pathname). Covers HTML and quoted CSS url().
+func TestRewriteHTMLURLs_RelativeTrailingSpace(t *testing.T) {
+	in := `<img src="x ">` + "<img src=\"y\t\">"
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-rt", ""))
+
+	mustContain(t, got, `<img src="x?kandev_cap=cap-rt">`)
+	mustContain(t, got, `<img src="y?kandev_cap=cap-rt">`)
+
+	css := `a{background:url('z ')}`
+	gotCSS := rewriteCSSFragment(css, proxyPrefix, "cap-rt")
+	mustContain(t, gotCSS, `url('z?kandev_cap=cap-rt')`)
+}
+
 func mustContain(t *testing.T, haystack, needle string) {
 	t.Helper()
 	if !strings.Contains(haystack, needle) {

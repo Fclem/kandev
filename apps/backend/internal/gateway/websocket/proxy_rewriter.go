@@ -76,7 +76,15 @@ const runtimeShimTemplate = `(function(){` +
 	// trims it at fetch time. %s is the optional capability-append logic
 	// (empty when no capability is minted, keeping the auth-disabled output
 	// free of capability bytes).
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}%sreturn u;}` +
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(nz(u).charAt(0)!=='/'&&!insub(ru))return u;u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}%sreturn u;}` +
+	// insub(ru): reports whether a resolved URL's path is boundary-inside
+	// the proxy subtree. Root-absolute references are always rewritten INTO
+	// the subtree by the prefix, but relative references resolve against the
+	// document base and absolute references resolve as-is: if either lands
+	// outside P (e.g. a same-origin <base href="http://gw/outside/">), the
+	// capability must not be appended (it would ride the bearer to a
+	// non-proxy gateway endpoint).
+	`function insub(ru){var p=ru.pathname;return p===P||p.charAt(P.length)==='/'||p.charAt(P.length)==='?'||p.charAt(P.length)==='#'}` +
 	// Navigation rewriter: same prefixing WITHOUT the capability. Navigation
 	// APIs (history.pushState, location.assign) put the URL in the address bar
 	// and browser history; embedding a bearer there would leak it through
@@ -108,7 +116,7 @@ const runtimeShimTemplate = `(function(){` +
 	// schemes (blob:, data:, file:, about:), and non-URL inputs pass through
 	// unchanged. ws:/wss: origins are compared as http:/https: so WebSocket
 	// URLs match the page origin.
-	`function norm(u){var s=typeof u==='string'?u:(u&&typeof u==='object'&&typeof u.href==='string'?u.href:null);if(s===null)return u;if(typeof s==='string'&&s.indexOf('//')===0)return u;var x;try{x=new URL(s,(typeof document!=='undefined'&&document.baseURI)||window.location.href)}catch(e){return u}var p=x.protocol;if(p!=='http:'&&p!=='https:'&&p!=='ws:'&&p!=='wss:')return u;if(x.username||x.password)return u;var o=x.origin.replace(/^ws:/,'http:').replace(/^wss:/,'https:');if(o!==window.location.origin)return u;return x.origin+r(x.pathname+(x.search||'')+(x.hash||''));}` +
+	`function norm(u){var s=typeof u==='string'?u:(u&&typeof u==='object'&&typeof u.href==='string'?u.href:null);if(s===null)return u;if(typeof s==='string'&&s.indexOf('//')===0)return u;var x;try{x=new URL(s,(typeof document!=='undefined'&&document.baseURI)||window.location.href)}catch(e){return u}var p=x.protocol;if(p!=='http:'&&p!=='https:'&&p!=='ws:'&&p!=='wss:')return u;if(x.username||x.password)return u;var o=x.origin.replace(/^ws:/,'http:').replace(/^wss:/,'https:');if(o!==window.location.origin)return u;if(nz(s).charAt(0)!=='/'&&!insub(x))return u;return x.origin+r(x.pathname+(x.search||'')+(x.hash||''));}` +
 	// fetch — string, real URL-object, and real Request-object input forms.
 	// Only branded URL/Request instances are rewritten: native fetch accepts
 	// only USVString or Request, and plain duck-typed {href}/{url} objects
@@ -988,7 +996,12 @@ func rewriteURLReference(rawURL, prefix, capability string) string {
 	if capability == "" {
 		return rawURL
 	}
-	return withCapability(rawURL, capability)
+	// Relative capability-bearing emission uses the WHATWG-normalized form
+	// (controls removed, backslashes slashed, leading/trailing C0/space
+	// trimmed) exactly like the runtime nz(): a trailing space in the raw
+	// value would otherwise survive into `x ?kandev_cap=…` and be
+	// percent-encoded into the pathname by the browser.
+	return withCapability(normalized, capability)
 }
 
 // stripCapability removes every query parameter whose DECODED key equals the

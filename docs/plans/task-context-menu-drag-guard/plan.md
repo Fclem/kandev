@@ -1,7 +1,7 @@
 ---
 spec: ../../specs/tasks/subtask-reparenting-drag-drop.md
 created: 2026-08-13
-status: pending
+status: done
 ---
 
 # Fix Plan: Task drag must not start from the context menu

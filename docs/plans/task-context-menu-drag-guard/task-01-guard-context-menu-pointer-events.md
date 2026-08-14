@@ -1,7 +1,7 @@
 ---
 id: "task-context-menu-drag-guard-01"
 title: "Guard context-menu pointer events"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -82,8 +82,17 @@ Sequential; the guard and its regression tests change together.
 - Existing precedent: `DropdownEntry` in `kanban-card-menu-items.tsx` guards
   portal menu `onClick`/`onPointerDown`; its test asserts the same containment.
 
-## Output contract
+## Completion record
 
-Report the failing-then-passing unit regression evidence (exact command and
-assertion), the E2E results, the full-gate results, changed files, and any
-residual risks. Update task and plan statuses (`done`) after the full gate.
+- Unit regression suite (`task-switcher-context-menu.test.tsx`): RED confirmed
+  (3/3 failed on the containment assertions before the fix) then GREEN after
+  the guard; task-switcher suites 21/21.
+- Desktop E2E `subtask-reparent-drag-drop.spec.ts`: 6/6 passed, including the
+  new "starting a drag inside the row context menu does not drag the row".
+- Mobile E2E `mobile-subtask-reparent-drag-drop.spec.ts` (mobile-chrome): 1/1
+  passed — touch drag still works with the guard in place.
+- `make fmt`, `make typecheck`, `make lint` passed. `make test`'s remaining
+  failures are environmental and unrelated (no Docker daemon for
+  `http-git-server` tests, missing `unzip` for `scripts/pr-state --job-log`,
+  untagged worktree HEAD and service detection for backend launcher/updates
+  tests, sandbox CPU timeouts in `git-base`/storage tests).

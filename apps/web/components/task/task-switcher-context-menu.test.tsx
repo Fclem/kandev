@@ -216,6 +216,7 @@ describe("TaskItemWithContextMenu — touch drag cancellation", () => {
 
       expect(touchCancelListener).toHaveBeenCalledTimes(1);
       expect(touchCancelListener.mock.calls[0]?.[0].type).toBe("touchcancel");
+      expect(touchCancelListener.mock.calls[0]?.[0].target).toBe(row);
       row.removeEventListener("touchcancel", touchCancelListener);
     } finally {
       vi.unstubAllGlobals();

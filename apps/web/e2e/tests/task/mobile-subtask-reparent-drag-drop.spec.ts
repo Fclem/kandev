@@ -171,10 +171,16 @@ test.describe("Mobile subtask re-parenting by drag and drop", () => {
     await expect(handle).not.toHaveCSS("opacity", "0.5");
 
     // Keep the finger down and drag inside the open menu: the row must not
-    // move or reorder.
+    // move or reorder. Aim at a point inside the visible menu content (not a
+    // hard-coded offset), so a layout change cannot silently move the target
+    // outside the menu and void the containment exercise.
+    const menuContent = testPage.locator('[data-slot="context-menu-content"]');
+    await expect(menuContent).toBeVisible();
+    const menuBox = await menuContent.boundingBox();
+    if (!menuBox) throw new Error("context menu content has no bounding box");
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchMove",
-      touchPoints: [{ x: startX + 40, y: startY + 40 }],
+      touchPoints: [{ x: menuBox.x + menuBox.width / 2, y: menuBox.y + menuBox.height / 2 }],
     });
     await testPage.waitForTimeout(100);
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });

@@ -559,21 +559,22 @@ type htmlRewriteState struct {
 	inStyle      bool
 	inScript     bool
 	shimInjected bool
-	// baseExternal reports whether the document's effective <base href>
-	// resolves OUTSIDE the proxy subtree (scheme-bearing or network-relative
-	// base). Under such a base every path-absolute and relative reference in
-	// the document resolves against the external origin, so embedding the
+	// basePath is the effective document base DIRECTORY (root-absolute,
+	// resolved against the subtree). "" means the effective base resolves
+	// OUTSIDE the proxy subtree (scheme-bearing, network-relative, or
+	// dot-segment-escaping base): every path-absolute and relative reference
+	// in the document resolves against an external origin, so embedding the
 	// capability in them would leak the bearer; rewriting is suppressed.
-	baseExternal bool
-	baseSet      bool
+	basePath string
+	baseSet  bool
 }
 
 // applyBase records the document's effective <base href> (the FIRST base
 // element wins per the HTML spec). The href is left for the normal token
-// rewrite pass (navigation: prefix-only, no capability); only the
-// externalness of the nav-rewritten value is captured here. A scheme-bearing
-// or network-relative base makes every later path/relative reference resolve
-// outside the subtree.
+// rewrite pass (navigation: prefix-only, no capability); only the RESOLVED
+// directory of the nav-rewritten value is captured here. A scheme-bearing,
+// network-relative, or dot-segment-escaping base makes every later
+// path/relative reference resolve outside the subtree (basePath = "").
 func (s *htmlRewriteState) applyBase(token *html.Token) {
 	if s.baseSet || token.Data != "base" {
 		return
@@ -583,7 +584,19 @@ func (s *htmlRewriteState) applyBase(token *html.Token) {
 			s.baseSet = true
 			rewritten := rewriteURLReference(attr.Val, s.prefix, "")
 			norm := normalizeURLForClassification(rewritten)
-			s.baseExternal = hasURLScheme(norm) || strings.HasPrefix(norm, "//")
+			if hasURLScheme(norm) || strings.HasPrefix(norm, "//") {
+				s.basePath = ""
+				return
+			}
+			if norm == "" || norm[0] == '#' {
+				return
+			}
+			resolved := resolvePathReference(norm, s.basePath)
+			if !inSubtreePath(resolved, s.prefix) {
+				s.basePath = ""
+				return
+			}
+			s.basePath = resolved
 			return
 		}
 	}
@@ -593,7 +606,7 @@ func (s *htmlRewriteState) applyBase(token *html.Token) {
 // element tracking. Also injects the runtime shim immediately after `<head>`.
 func (s *htmlRewriteState) onStartTag(token html.Token) {
 	s.applyBase(&token)
-	rewriteTokenURLs(&token, s.prefix, s.capability, s.nonce, s.depth, s.baseExternal)
+	rewriteTokenURLs(&token, s.prefix, s.capability, s.nonce, s.depth, s.basePath)
 	s.out.WriteString(token.String())
 	if !s.shimInjected && token.Data == headTagName {
 		s.out.WriteString(s.shim)
@@ -625,14 +638,14 @@ func (s *htmlRewriteState) onEndTag(token html.Token) {
 func (s *htmlRewriteState) onTextToken(token html.Token) {
 	switch {
 	case s.inStyle:
-		if s.baseExternal {
+		if s.basePath == "" {
 			// Under an external <base>, url() references inside the style
 			// body resolve against the external origin: rewriting them would
 			// leak the capability (same policy as inline style attributes).
 			s.out.WriteString(token.Data)
 			return
 		}
-		s.out.WriteString(rewriteCSSFragment(token.Data, s.prefix, s.capability))
+		s.out.WriteString(rewriteCSSFragment(token.Data, s.prefix, s.capability, s.basePath))
 	case s.inScript:
 		s.out.WriteString(token.Data)
 	default:
@@ -657,14 +670,14 @@ func rewriteHTMLURLs(body []byte, prefix, capability, nonce string) []byte {
 const maxSRCDocDepth = 5
 
 func rewriteHTMLURLsAtDepth(body []byte, prefix, capability, nonce string, depth int) []byte {
-	return rewriteHTMLURLsAtDepthWithBase(body, prefix, capability, nonce, depth, false)
+	return rewriteHTMLURLsAtDepthWithBase(body, prefix, capability, nonce, depth, prefix+"/")
 }
 
-func rewriteHTMLURLsAtDepthWithBase(body []byte, prefix, capability, nonce string, depth int, baseExternal bool) []byte {
+func rewriteHTMLURLsAtDepthWithBase(body []byte, prefix, capability, nonce string, depth int, basePath string) []byte {
 	tok := html.NewTokenizer(bytes.NewReader(body))
 	var out bytes.Buffer
 	out.Grow(len(body) + 256 + len(runtimeShimTemplate))
-	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShimTag(prefix, capability, nonce), nonce: nonce, depth: depth, baseExternal: baseExternal}
+	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShimTag(prefix, capability, nonce), nonce: nonce, depth: depth, basePath: basePath}
 	for {
 		tt := tok.Next()
 		if tt == html.ErrorToken {
@@ -679,7 +692,7 @@ func rewriteHTMLURLsAtDepthWithBase(body []byte, prefix, capability, nonce strin
 			s.onStartTag(token)
 		case html.SelfClosingTagToken:
 			s.applyBase(&token)
-			rewriteTokenURLs(&token, prefix, capability, nonce, depth, s.baseExternal)
+			rewriteTokenURLs(&token, prefix, capability, nonce, depth, s.basePath)
 			out.WriteString(token.String())
 		case html.EndTagToken:
 			s.onEndTag(token)
@@ -699,7 +712,7 @@ func rewriteHTMLURLsAtDepthWithBase(body []byte, prefix, capability, nonce strin
 // Referers (the subtree cookie authorizes the navigation instead). Subresource
 // attributes (script/img/stylesheet/manifest/iframe src-href, srcset,
 // imagesrcset, …) get the capability so cookie-less fetches stay authorized.
-func rewriteTokenURLs(token *html.Token, prefix, capability, nonce string, depth int, externalBase bool) {
+func rewriteTokenURLs(token *html.Token, prefix, capability, nonce string, depth int, basePath string) {
 	if token.Type != html.StartTagToken && token.Type != html.SelfClosingTagToken {
 		return
 	}
@@ -710,19 +723,19 @@ func rewriteTokenURLs(token *html.Token, prefix, capability, nonce string, depth
 	metaLink := token.Data == "link" && !isFetchingLinkRel(relValue(token))
 	for i, attr := range token.Attr {
 		key := strings.ToLower(attr.Key)
-		token.Attr[i].Val = rewriteTokenAttr(token, key, attr.Val, prefix, capability, nonce, depth, metaLink, externalBase)
+		token.Attr[i].Val = rewriteTokenAttr(token, key, attr.Val, prefix, capability, nonce, depth, metaLink, basePath)
 	}
 }
 
 // rewriteTokenAttr rewrites one URL-shaped attribute value of a token,
 // applying the navigation/subresource capability distinction.
-func rewriteTokenAttr(token *html.Token, key, val, prefix, capability, nonce string, depth int, metaLink, externalBase bool) string {
+func rewriteTokenAttr(token *html.Token, key, val, prefix, capability, nonce string, depth int, metaLink bool, basePath string) string {
 	// Inline srcdoc documents are dispatched FIRST: the child document can
 	// declare its own <base>, which resets the inherited external-base
 	// policy, and a srcdoc value (starting with '<') would otherwise be
 	// classified as a relative reference and suppressed unchanged.
 	if key == "srcdoc" {
-		return rewriteSrcdocValue(val, prefix, capability, nonce, depth, externalBase)
+		return rewriteSrcdocValue(val, prefix, capability, nonce, depth, basePath)
 	}
 	// Under an external <base href>, every path-absolute and relative
 	// reference in the document resolves OUTSIDE the proxy subtree: adding
@@ -731,14 +744,15 @@ func rewriteTokenAttr(token *html.Token, key, val, prefix, capability, nonce str
 	// values are left exactly as authored. Scheme-bearing and network-relative
 	// references were never rewritten anyway; only the inline style content
 	// needs an explicit guard (its leading text is not a URL).
-	if externalBase && suppressedByExternalBase(val) {
+	if basePath == "" && suppressedByExternalBase(val) {
+		// External base: leave every path/relative reference as authored.
 		return val
 	}
-	return rewriteTokenAttrKey(token, key, val, prefix, capability, nonce, depth, metaLink, externalBase)
+	return rewriteTokenAttrKey(token, key, val, prefix, capability, nonce, depth, metaLink, basePath)
 }
 
 // rewriteTokenAttrKey dispatches one attribute value to its rewriter.
-func rewriteTokenAttrKey(token *html.Token, key, val, prefix, capability, nonce string, depth int, metaLink, externalBase bool) string {
+func rewriteTokenAttrKey(token *html.Token, key, val, prefix, capability, nonce string, depth int, metaLink bool, basePath string) string {
 	switch {
 	case isNavigationAttr(token, key, metaLink):
 		// Navigation references — anchor/area/base href, form action,
@@ -750,23 +764,23 @@ func rewriteTokenAttrKey(token *html.Token, key, val, prefix, capability, nonce 
 	case rewritableURLAttrs[key]:
 		return rewriteURLReference(val, prefix, capability)
 	case key == "srcset" || key == "imagesrcset":
-		return rewriteSrcSet(val, prefix, capability)
+		return rewriteSrcSet(val, prefix, capability, basePath)
 	case key == "ping":
 		// a[ping] is a whitespace-separated URL list the browser POSTs to on
 		// activation (hyperlink auditing): each candidate is a capability-
 		// bearing subresource request.
-		return rewritePing(val, prefix, capability)
+		return rewritePing(val, prefix, capability, basePath)
 	case key == "style":
-		return rewriteStyleValue(val, prefix, capability, externalBase)
+		return rewriteStyleValue(val, prefix, capability, basePath)
 	}
 	return val
 }
 
 // rewritePing rewrites every whitespace-separated URL in an a[ping] list.
-func rewritePing(val, prefix, capability string) string {
+func rewritePing(val, prefix, capability, basePath string) string {
 	fields := strings.Fields(val)
 	for i, f := range fields {
-		fields[i] = rewriteURLReference(f, prefix, capability)
+		fields[i] = rewriteURLReferenceBase(f, prefix, capability, basePath)
 	}
 	return strings.Join(fields, " ")
 }
@@ -774,11 +788,11 @@ func rewritePing(val, prefix, capability string) string {
 // rewriteStyleValue rewrites inline style url() references, unless the
 // document has an external base (the url() references would resolve against
 // it and leak the capability).
-func rewriteStyleValue(val, prefix, capability string, externalBase bool) string {
-	if externalBase {
+func rewriteStyleValue(val, prefix, capability, basePath string) string {
+	if basePath == "" {
 		return val
 	}
-	return rewriteCSSFragment(val, prefix, capability)
+	return rewriteCSSFragment(val, prefix, capability, basePath)
 }
 
 // suppressedByExternalBase reports whether a reference resolves against an
@@ -791,9 +805,9 @@ func suppressedByExternalBase(val string) bool {
 
 // rewriteSrcdocValue rewrites an inline child document under the same base
 // policy as its parent, bounded by maxSRCDocDepth.
-func rewriteSrcdocValue(val, prefix, capability, nonce string, depth int, externalBase bool) string {
+func rewriteSrcdocValue(val, prefix, capability, nonce string, depth int, basePath string) string {
 	if depth < maxSRCDocDepth {
-		return string(rewriteHTMLURLsAtDepthWithBase([]byte(val), prefix, capability, nonce, depth+1, externalBase))
+		return string(rewriteHTMLURLsAtDepthWithBase([]byte(val), prefix, capability, nonce, depth+1, basePath))
 	}
 	return val
 }
@@ -965,6 +979,18 @@ func parseRefreshTarget(trimmed string) (target, tail, quote string) {
 // capability to an external origin. Empty, fragment-only, and scheme-bearing
 // values are never modified.
 func rewriteURLReference(rawURL, prefix, capability string) string {
+	// The default base is the proxied document directory; callers that know
+	// the effective <base> pass it via rewriteURLReferenceBase.
+	return rewriteURLReferenceBase(rawURL, prefix, capability, prefix+"/")
+}
+
+// rewriteURLReferenceBase rewrites a URL-shaped reference against an
+// explicit document base directory. Relative capability-bearing references
+// are resolved against basePath (RFC 3986 merge + dot-segment removal): a
+// reference whose resolved path escapes the proxy subtree (e.g. ../x) is
+// returned unchanged rather than carrying the capability to a non-proxy
+// endpoint.
+func rewriteURLReferenceBase(rawURL, prefix, capability, basePath string) string {
 	normalized := normalizeURLForClassification(rawURL)
 	if capability == "" {
 		// Navigation/metadata rewriting never carries the capability: strip
@@ -1000,8 +1026,56 @@ func rewriteURLReference(rawURL, prefix, capability string) string {
 	// (controls removed, backslashes slashed, leading/trailing C0/space
 	// trimmed) exactly like the runtime nz(): a trailing space in the raw
 	// value would otherwise survive into `x ?kandev_cap=…` and be
-	// percent-encoded into the pathname by the browser.
+	// percent-encoded into the pathname by the browser. Only append when the
+	// reference resolves inside the proxy subtree (.. segments can escape).
+	if !resolveInSubtree(normalized, basePath, prefix) {
+		return rawURL
+	}
 	return withCapability(normalized, capability)
+}
+
+// resolveInSubtree reports whether a relative reference resolves to a path
+// boundary-inside the proxy prefix when merged with the document base.
+func resolveInSubtree(ref, basePath, prefix string) bool {
+	return inSubtreePath(resolvePathReference(ref, basePath), prefix)
+}
+
+// inSubtreePath reports whether a root-absolute path is boundary-inside the
+// proxy prefix (path == prefix or path starts with prefix + "/").
+func inSubtreePath(path, prefix string) bool {
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
+}
+
+// resolvePathReference merges a relative reference with a base path and
+// removes dot segments per RFC 3986 section 5.3/5.2.4.
+func resolvePathReference(ref, basePath string) string {
+	merged := basePath
+	if strings.HasPrefix(ref, "/") {
+		merged = ref
+	} else if i := strings.LastIndex(basePath, "/"); i >= 0 {
+		merged = basePath[:i+1] + ref
+	}
+	return removeDotSegments(merged)
+}
+
+// removeDotSegments removes "." and ".." path segments without escaping
+// above the root (RFC 3986 5.2.4).
+func removeDotSegments(p string) string {
+	segments := strings.Split(p, "/")
+	out := make([]string, 0, len(segments))
+	for _, seg := range segments {
+		switch seg {
+		case ".":
+			// skip
+		case "..":
+			if len(out) > 1 || len(out) == 1 && out[0] != "" {
+				out = out[:len(out)-1]
+			}
+		default:
+			out = append(out, seg)
+		}
+	}
+	return strings.Join(out, "/")
 }
 
 // stripCapability removes every query parameter whose DECODED key equals the
@@ -1121,7 +1195,7 @@ func isSchemeChar(c byte) bool {
 
 // rewriteSrcSet rewrites each candidate URL in a `srcset` attribute. The
 // value format is `url [descriptor], url [descriptor], …` per the HTML spec.
-func rewriteSrcSet(value, prefix, capability string) string {
+func rewriteSrcSet(value, prefix, capability, basePath string) string {
 	parts := splitSrcSetParts(value)
 	for i, part := range parts {
 		trimmed := strings.TrimSpace(part)
@@ -1133,7 +1207,7 @@ func rewriteSrcSet(value, prefix, capability string) string {
 		if len(fields) == 0 {
 			continue
 		}
-		fields[0] = rewriteURLReference(fields[0], prefix, capability)
+		fields[0] = rewriteURLReferenceBase(fields[0], prefix, capability, basePath)
 		parts[i] = strings.Join(fields, " ")
 	}
 	return strings.Join(parts, ", ")

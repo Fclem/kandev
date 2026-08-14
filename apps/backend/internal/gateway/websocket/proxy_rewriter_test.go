@@ -295,7 +295,7 @@ func TestRuntimeShim_PatchesNavigationAPIs(t *testing.T) {
 
 func TestRewriteSrcSet(t *testing.T) {
 	in := "/a.png 1x, /b.png 2x, //cdn.example.com/c.png 3x"
-	got := rewriteSrcSet(in, proxyPrefix, "")
+	got := rewriteSrcSet(in, proxyPrefix, "", proxyPrefix+"/")
 	want := "/port-proxy/abc/3001/a.png 1x, /port-proxy/abc/3001/b.png 2x, //cdn.example.com/c.png 3x"
 	if got != want {
 		t.Fatalf("rewriteSrcSet = %q, want %q", got, want)
@@ -972,7 +972,7 @@ func TestRewriteCSSFragment_StringVarCommentData(t *testing.T) {
 		`d{background:url(data:image/png;base64,AAA,BB);}` +
 		`/* url(/commented) */` +
 		`@import "/theme.css";@import "rel.css";}`
-	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css", proxyPrefix+"/")
 
 	mustContain(t, got, `content:'url(/literal)'`)
 	mustContain(t, got, `url(var(--x))`)
@@ -1147,7 +1147,7 @@ func TestRuntimeShim_StyleTokenizerEscapeAndBoundary(t *testing.T) {
 // var() skip is case-insensitive (url(VAR(--x)) untouched).
 func TestRewriteCSSFragment_IdentBoundaryAndVarCase(t *testing.T) {
 	css := `a{content:noturl(/literal);b:url(VAR(--x));c:url(ok.png);}`
-	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css", proxyPrefix+"/")
 
 	mustContain(t, got, `content:noturl(/literal)`)
 	mustContain(t, got, `url(VAR(--x))`)
@@ -1251,7 +1251,7 @@ func TestRewriteHTMLURLs_NavStripPreservesFragmentPayload(t *testing.T) {
 func TestRewriteCSSFragment_EscapedFunctionsAndImportComments(t *testing.T) {
 	css := `a{background:\75rl(/asset.css);}` +
 		`@import/*c*/"/theme.css";`
-	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css", proxyPrefix+"/")
 
 	mustContain(t, got, `\75rl(/port-proxy/abc/3001/asset.css?kandev_cap=cap-css)`)
 	mustContain(t, got, `@import/*c*/"/port-proxy/abc/3001/theme.css?kandev_cap=cap-css"`)
@@ -1274,7 +1274,7 @@ func TestRewriteCSSFragment_EscapedSlashToken(t *testing.T) {
 	css := `a{background:url(\2f asset.css);}` +
 		`b{background:url('/q.css');}` +
 		`c{background:url(foo\20 bar.png);}`
-	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css", proxyPrefix+"/")
 
 	mustContain(t, got, `url(/port-proxy/abc/3001/asset.css?kandev_cap=cap-css)`)
 	mustContain(t, got, `url('/port-proxy/abc/3001/q.css?kandev_cap=cap-css')`)
@@ -1286,7 +1286,7 @@ func TestRewriteCSSFragment_EscapedSlashToken(t *testing.T) {
 // '5rl(' — not a url() function — so it must pass through untouched.
 func TestRewriteCSSFragment_SevenHexDigitsAreNotAFunction(t *testing.T) {
 	css := `a{background:\0000075rl(/x);}`
-	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css", proxyPrefix+"/")
 	mustContain(t, got, `\0000075rl(/x)`)
 }
 
@@ -1324,7 +1324,7 @@ func TestRuntimeShim_Round4Contracts(t *testing.T) {
 func TestRewriteCSSFragment_EscapedQuotedImport(t *testing.T) {
 	css := `@import"\2f theme.css";` +
 		`@import"\61 b.css";`
-	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css", proxyPrefix+"/")
 
 	mustContain(t, got, `@import"/port-proxy/abc/3001/theme.css?kandev_cap=cap-css";`)
 	// Relative decoded import: stays in the subtree, capability appended.
@@ -1406,7 +1406,7 @@ func TestRewriteSrcSet_LargeInputLinear(t *testing.T) {
 		fmt.Fprintf(&b, "/img-%d.png 1x, ", i)
 	}
 	b.WriteString("/last.png 2x")
-	got := rewriteSrcSet(b.String(), proxyPrefix, "cap-ss")
+	got := rewriteSrcSet(b.String(), proxyPrefix, "cap-ss", proxyPrefix+"/")
 
 	if !strings.HasPrefix(got, "/port-proxy/abc/3001/img-0.png?kandev_cap=cap-ss 1x, ") {
 		t.Fatalf("first candidate not rewritten: %.80s", got)
@@ -1423,7 +1423,7 @@ func TestRewriteSrcSet_LargeInputLinear(t *testing.T) {
 func TestRewriteSrcSet_LongWhitespacePrefix(t *testing.T) {
 	prefix := strings.Repeat(" ", 20000)
 	in := prefix + `data:image/svg+xml,%3Csvg%3E 1x, /img.png 2x`
-	got := rewriteSrcSet(in, proxyPrefix, "cap-ss")
+	got := rewriteSrcSet(in, proxyPrefix, "cap-ss", proxyPrefix+"/")
 
 	mustContain(t, got, `data:image/svg+xml,%3Csvg%3E 1x, /port-proxy/abc/3001/img.png?kandev_cap=cap-ss 2x`)
 }
@@ -1471,7 +1471,7 @@ func TestRewriteSrcSet_ManyCandidatesBounded(t *testing.T) {
 		fmt.Fprintf(&b, "  %d.png 1x, ", i)
 	}
 	b.WriteString("/last.png 2x")
-	got := rewriteSrcSet(b.String(), proxyPrefix, "cap-ss")
+	got := rewriteSrcSet(b.String(), proxyPrefix, "cap-ss", proxyPrefix+"/")
 
 	if !strings.HasPrefix(got, "0.png?kandev_cap=cap-ss 1x, ") {
 		t.Fatalf("first candidate not rewritten: %.60s", got)
@@ -1699,8 +1699,44 @@ func TestRewriteHTMLURLs_RelativeTrailingSpace(t *testing.T) {
 	mustContain(t, got, `<img src="y?kandev_cap=cap-rt">`)
 
 	css := `a{background:url('z ')}`
-	gotCSS := rewriteCSSFragment(css, proxyPrefix, "cap-rt")
+	gotCSS := rewriteCSSFragment(css, proxyPrefix, "cap-rt", proxyPrefix+"/")
 	mustContain(t, gotCSS, `url('z?kandev_cap=cap-rt')`)
+}
+
+// Relative references whose dot-segment resolution escapes the proxy
+// subtree must not carry the capability: ../x resolves to a sibling
+// gateway path, and a relative base with .. escapes the prefix entirely.
+func TestRewriteHTMLURLs_DotSegmentEscapesSuppressCapability(t *testing.T) {
+	in := `<img src="../x.png">` +
+		`<img src="./../y.png">` +
+		`<img srcset="../a.png 1x, ok.png 2x">` +
+		`<div style="background:url(../z.png)"></div>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-dot", ""))
+
+	mustContain(t, got, `<img src="../x.png">`)
+	mustContain(t, got, `<img src="./../y.png">`)
+	// The escaping ../ candidate stays uncapped; the in-subtree ok.png caps.
+	mustContain(t, got, `<img srcset="../a.png 1x, ok.png?kandev_cap=cap-dot 2x">`)
+	mustContain(t, got, `style="background:url(../z.png)"`)
+
+	// A relative base that escapes P is treated as external: everything
+	// path/relative is suppressed.
+	escaping := `<base href="../../outside/">` + `<img src="x.png">` + `<script src="/s.js"></script>`
+	gotEsc := string(rewriteHTMLURLs([]byte(escaping), proxyPrefix, "cap-dot2", ""))
+	if strings.Contains(gotEsc, "kandev_cap") {
+		t.Fatalf("capability leaked under an escaping relative base:\n%s", gotEsc)
+	}
+	mustContain(t, gotEsc, `<img src="x.png">`)
+
+	// An in-subtree base keeps capping refs that resolve inside it, but a
+	// ../ ref escaping even that base stays uncapped.
+	inSub := `<base href="sub/">` + `<img src="ok.png">` + `<img src="../up.png">`
+	gotIn := string(rewriteHTMLURLs([]byte(inSub), proxyPrefix, "cap-dot3", ""))
+	// The relative base stays as authored (nav relative refs are never
+	// prefixed); the browser resolves it to P/sub/.
+	mustContain(t, gotIn, `<base href="sub/">`)
+	mustContain(t, gotIn, `<img src="ok.png?kandev_cap=cap-dot3">`)
+	mustContain(t, gotIn, `<img src="../up.png">`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

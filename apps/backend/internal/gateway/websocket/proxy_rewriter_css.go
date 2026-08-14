@@ -8,7 +8,7 @@ import (
 // proxy_rewriter.go so the latter stays under the revive file-length limit.
 
 func rewriteCSSURLs(body []byte, prefix, capability, _ string) []byte {
-	return []byte(rewriteCSSFragment(string(body), prefix, capability))
+	return []byte(rewriteCSSFragment(string(body), prefix, capability, prefix+"/"))
 }
 
 // cssScanner rewrites CSS URL references inside an arbitrary string (either
@@ -30,11 +30,12 @@ type cssScanner struct {
 	css        string
 	prefix     string
 	capability string
+	basePath   string
 	i          int
 }
 
-func rewriteCSSFragment(css, prefix, capability string) string {
-	s := &cssScanner{css: css, prefix: prefix, capability: capability}
+func rewriteCSSFragment(css, prefix, capability, basePath string) string {
+	s := &cssScanner{css: css, prefix: prefix, capability: capability, basePath: basePath}
 	for s.i < len(css) {
 		if s.consumeComment() || s.consumeString() || s.consumeURL() || s.consumeImport() {
 			continue
@@ -146,7 +147,7 @@ func (s *cssScanner) quotedURL(start, open, j int, spacing string) {
 		l++
 	}
 	if l < len(css) && css[l] == ')' {
-		s.out.WriteString(css[start:open+1] + spacing + string(q) + rewriteCSSURLToken(css[j+1:k], s.prefix, s.capability) + string(q) + css[k+1:l] + ")")
+		s.out.WriteString(css[start:open+1] + spacing + string(q) + rewriteCSSURLToken(css[j+1:k], s.prefix, s.capability, s.basePath) + string(q) + css[k+1:l] + ")")
 		s.i = l + 1
 		return
 	}
@@ -180,7 +181,7 @@ func (s *cssScanner) unquotedURL(start, open, j int, spacing string) {
 		tok := css[j:k]
 		decoded := cssDecodeToken(tok)
 		if !strings.HasPrefix(strings.ToLower(decoded), "var(") {
-			s.out.WriteString(css[start:open+1] + spacing + rewriteCSSURLToken(tok, s.prefix, s.capability) + css[k:l] + ")")
+			s.out.WriteString(css[start:open+1] + spacing + rewriteCSSURLToken(tok, s.prefix, s.capability, s.basePath) + css[k:l] + ")")
 			s.i = l + 1
 			return
 		}
@@ -220,7 +221,7 @@ func (s *cssScanner) consumeImport() bool {
 			return true
 		}
 		s.out.WriteString(css[s.i:j]) // "@import " + whitespace/comments
-		s.out.WriteString(string(q) + rewriteCSSURLToken(css[j+1:k], s.prefix, s.capability) + string(q))
+		s.out.WriteString(string(q) + rewriteCSSURLToken(css[j+1:k], s.prefix, s.capability, s.basePath) + string(q))
 		s.i = k + 1
 		return true
 	}
@@ -274,9 +275,9 @@ func cssEscapeToken(tok string) string {
 // rewritten URL when the reference changed, or the ORIGINAL raw token bytes
 // when it did not (external/scheme/network-relative references keep their
 // spelling).
-func rewriteCSSURLToken(rawToken, prefix, capability string) string {
+func rewriteCSSURLToken(rawToken, prefix, capability, basePath string) string {
 	decoded := cssDecodeToken(rawToken)
-	rewritten := rewriteURLReference(decoded, prefix, capability)
+	rewritten := rewriteURLReferenceBase(decoded, prefix, capability, basePath)
 	if rewritten == decoded {
 		return rawToken
 	}

@@ -532,19 +532,15 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	}
 }
 
-// The auth-off contract is "no capability bytes": with an empty capability
-// the shim carries ZERO capability logic — no issued-capability constant, no
-// exact-match helper, no query append — so the rendered output cannot differ
-// from the capability-free template regardless of how the splice evolves.
-// (The old name promised byte-identity with pre-auth output; that is
-// untestable here since the splice is produced by the same implementation.
-// The gateway-level auth-off assertions in port_proxy_auth_test.go cover the
-// cookie/query/body guarantees.)
-func TestRuntimeShim_NoCapabilityBytes(t *testing.T) {
+// The auth-off contract is "no ISSUED capability": with an empty capability
+// the shim carries zero issued-capability logic — no capability constant, no
+// exact-match helper, no query append. The unconditional sc()/rn() still
+// reference the reserved KEY NAME (d!=='kandev_cap') because stripping a
+// reserved-named parameter from navigation URLs is the gateway's documented
+// behavior in every mode; the contract is that no capability is minted,
+// embedded, or appended when auth is off.
+func TestRuntimeShim_NoIssuedCapabilityLogic(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "")
-	// The unconditional sc()/rn() reference the reserved KEY name for
-	// stripping (d!=='kandev_cap'), so absence means: no issued-capability
-	// constant, no exact-match helper, no query append.
 	if strings.Contains(shim, `"kandev_cap="+K`) {
 		t.Fatalf("shim without capability appends kandev_cap:\n%s", shim)
 	}
@@ -1143,7 +1139,7 @@ func TestRuntimeShim_StyleTokenizerEscapeAndBoundary(t *testing.T) {
 	// for the closing quote.
 	mustContain(t, shim, `if(c==='\''||c==='"'){var j=i+1;while(j<n){if(v.charAt(j)==='\\'&&j+1<n){j+=2;continue}if(v.charAt(j)===c)break;j++}`)
 	// Identifier boundary: previous char must not be ident-continuation.
-	mustContain(t, shim, `v.slice(i,i+4).toLowerCase()==='url('&&!(i>0&&(v.charCodeAt(i-1)>=128||/[a-zA-Z0-9_-]/.test(v.charAt(i-1))))`)
+	mustContain(t, shim, `(j2=cssFn(v,i,'url'))>=0`)
 }
 
 // Static CSS: url( only at a token boundary (noturl(/x) untouched) and
@@ -1230,6 +1226,43 @@ func TestRewriteHTMLURLs_NavStripsCapPreservesFragment(t *testing.T) {
 
 	mustContain(t, got, `<a href="/port-proxy/abc/3001/p?keep=1#frag">x</a>`)
 	mustContain(t, got, `<a href="rel#top">y</a>`)
+}
+
+// stripCapability splits the fragment off FIRST: a '?' inside a fragment
+// (#state?x=1) is fragment payload, and data URLs whose payload contains '#'
+// or '?' are never treated as gateway queries. Scheme-bearing and
+// network-relative navigation references are preserved verbatim.
+func TestRewriteHTMLURLs_NavStripPreservesFragmentPayload(t *testing.T) {
+	in := `<a href="/x#state?kandev_cap=stale">a</a>` +
+		`<a href="data:text/plain,#payload?kandev_cap=x">b</a>` +
+		`<a href="/p?a=1&kandev_cap=stale#f?x=2">c</a>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-nav", ""))
+
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/x#state?kandev_cap=stale">a</a>`)
+	mustContain(t, got, `<a href="data:text/plain,#payload?kandev_cap=x">b</a>`)
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/p?a=1#f?x=2">c</a>`)
+}
+
+// The CSS tokenizer consumes CSS escapes when recognizing function names:
+// \75rl(/x) decodes to url(/x) and must be rewritten (browser preprocessing
+// does the same). @import accepts comments as whitespace, so
+// @import/*c*/"/theme.css" is a valid import and must be rewritten.
+func TestRewriteCSSFragment_EscapedFunctionsAndImportComments(t *testing.T) {
+	css := `a{background:\75rl(/asset.css);}` +
+		`@import/*c*/"/theme.css";`
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+
+	mustContain(t, got, `\75rl(/port-proxy/abc/3001/asset.css?kandev_cap=cap-css)`)
+	mustContain(t, got, `@import/*c*/"/port-proxy/abc/3001/theme.css?kandev_cap=cap-css"`)
+}
+
+// Runtime rwaStyle recognizes escaped url( forms too (\75rl(...)), matching
+// the static tokenizer.
+func TestRuntimeShim_StyleTokenizerEscapedUrl(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `function cssEsc(s,i){`)
+	mustContain(t, shim, `function cssFn(s,i,nm){`)
+	mustContain(t, shim, `(j2=cssFn(v,i,'url'))>=0`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

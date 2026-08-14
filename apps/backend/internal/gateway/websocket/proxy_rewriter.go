@@ -144,7 +144,9 @@ const runtimeShimTemplate = `(function(){` +
 	// absolute paths after the initial HTML has been parsed.
 	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','style','content'];` +
 	`function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);for(var i=0;i<toks.length;i++){if(toks[i]==='stylesheet'||toks[i]==='icon'||toks[i]==='manifest'||toks[i]==='preload'||toks[i]==='modulepreload'||toks[i]==='prefetch'||toks[i]==='dns-prefetch'||toks[i]==='preconnect'||toks[i]==='shortcut'||toks[i]==='apple-touch-icon')return true}return false}` +
-	`function rwaStyle(v){var o='';var i=0;var n=v.length;while(i<n){var c=v.charAt(i);if(c==='\\'&&i+1<n){o+=v.slice(i,i+2);i+=2;continue}if(c==='\''||c==='"'){var j=i+1;while(j<n){if(v.charAt(j)==='\\'&&j+1<n){j+=2;continue}if(v.charAt(j)===c)break;j++}if(j>=n){o+=v.slice(i);break}o+=v.slice(i,j+1);i=j+1;continue}if((c==='u'||c==='U')&&v.slice(i,i+4).toLowerCase()==='url('&&!(i>0&&(v.charCodeAt(i-1)>=128||/[a-zA-Z0-9_-]/.test(v.charAt(i-1))))){var j2=i+4;while(j2<n&&' \t\n\r\f'.indexOf(v.charAt(j2))>=0)j2++;var sp=v.slice(i+4,j2);if(j2<n&&(v.charAt(j2)==='\''||v.charAt(j2)==='"')){var q=v.charAt(j2);var ce=j2+1;while(ce<n){if(v.charAt(ce)==='\\'&&ce+1<n){ce+=2;continue}if(v.charAt(ce)===q)break;ce++}if(ce>=n){o+=v.slice(i);break}var tok=v.slice(j2+1,ce);var k=ce+1;while(k<n&&' \t\n\r\f'.indexOf(v.charAt(k))>=0)k++;if(k<n&&v.charAt(k)===')'){o+='url('+sp+q+r(tok)+q+v.slice(ce+1,k)+')';i=k+1;continue}o+=v.slice(i,ce+1);i=ce+1;continue}var k2=j2;while(k2<n&&v.charAt(k2)!==')'&&' \t\n\r\f'.indexOf(v.charAt(k2))<0)k2++;var tok2=v.slice(j2,k2);var l2=k2;while(l2<n&&' \t\n\r\f'.indexOf(v.charAt(l2))>=0)l2++;if(l2<n&&v.charAt(l2)===')'){if(tok2.toLowerCase().indexOf('var(')!==0){o+='url('+sp+r(tok2)+v.slice(k2,l2)+')';i=l2+1;continue}o+=v.slice(i,l2+1);i=l2+1;continue}o+=v.slice(i,k2);i=k2;continue}o+=c;i++}return o}` +
+	`function cssEsc(s,i){if(s.charAt(i)!=='\\'||i+1>=s.length)return null;var c=s.charAt(i+1);if(/[0-9a-fA-F]/.test(c)){var j=i+1;var v=0;while(j<s.length&&j-i<=7&&/[0-9a-fA-F]/.test(s.charAt(j))){v=v*16+parseInt(s.charAt(j),16);j++}if(j<s.length&&' \t\n\r\f'.indexOf(s.charAt(j))>=0)j++;if(v===0||v>0x10FFFF||v>=0xD800&&v<=0xDFFF)v=0xFFFD;return{ch:String.fromCodePoint(v),adv:j-i}}if(c==='\n'||c==='\r'||c==='\f')return{ch:'',adv:2};return{ch:c,adv:2}}` +
+	`function cssFn(s,i,nm){var j=i;var b='';var first=true;while(j<s.length){var cc=s.charAt(j);if(cc==='\\'){var e=cssEsc(s,j);if(!e||e.ch==='')break;if(!first&&!/[a-zA-Z0-9_\-\u0080-\uFFFF]/.test(e.ch))break;b+=e.ch;j+=e.adv}else if(first&&/[a-zA-Z_\u0080-\uFFFF]/.test(cc)){b+=cc;j++}else if(!first&&/[a-zA-Z0-9_\-\u0080-\uFFFF]/.test(cc)){b+=cc;j++}else break;first=false}if(j===i)return -1;if(b.toLowerCase()!==nm||s.charAt(j)!=='(')return -1;return j+1}` +
+	`function rwaStyle(v){var o='';var i=0;var n=v.length;var j2;while(i<n){var c=v.charAt(i);if((c==='u'||c==='U'||c==='\\')&&!(i>0&&(v.charCodeAt(i-1)>=128||/[a-zA-Z0-9_-]/.test(v.charAt(i-1))))&&(j2=cssFn(v,i,'url'))>=0){var jw=j2;while(jw<n&&' \t\n\r\f'.indexOf(v.charAt(jw))>=0)jw++;var sp=v.slice(j2,jw);if(jw<n&&(v.charAt(jw)==='\''||v.charAt(jw)==='"')){var q=v.charAt(jw);var ce=jw+1;while(ce<n){if(v.charAt(ce)==='\\'&&ce+1<n){ce+=2;continue}if(v.charAt(ce)===q)break;ce++}if(ce>=n){o+=v.slice(i);break}var tok=v.slice(jw+1,ce);var k=ce+1;while(k<n&&' \t\n\r\f'.indexOf(v.charAt(k))>=0)k++;if(k<n&&v.charAt(k)===')'){o+='url('+sp+q+r(tok)+q+v.slice(ce+1,k)+')';i=k+1;continue}o+=v.slice(i,ce+1);i=ce+1;continue}var k2=jw;while(k2<n&&v.charAt(k2)!==')'&&' \t\n\r\f'.indexOf(v.charAt(k2))<0)k2++;var tok2=v.slice(jw,k2);var l2=k2;while(l2<n&&' \t\n\r\f'.indexOf(v.charAt(l2))>=0)l2++;if(l2<n&&v.charAt(l2)===')'){if(tok2.toLowerCase().indexOf('var(')!==0){o+='url('+sp+r(tok2)+v.slice(k2,l2)+')';i=l2+1;continue}o+=v.slice(i,l2+1);i=l2+1;continue}o+=v.slice(i,k2);i=k2;continue}if(c==='\\'&&i+1<n){o+=v.slice(i,i+2);i+=2;continue}if(c==='\''||c==='"'){var j=i+1;while(j<n){if(v.charAt(j)==='\\'&&j+1<n){j+=2;continue}if(v.charAt(j)===c)break;j++}if(j>=n){o+=v.slice(i);break}o+=v.slice(i,j+1);i=j+1;continue}o+=c;i++}return o}` +
 	`function srcsetParts(v){var parts=[];var cur='';var inData=false;for(var i=0;i<v.length;i++){var c=v.charAt(i);if(c===','){if(inData){cur+=c;continue}parts.push(cur);cur='';continue}if(!inData&&cur.replace(/\s/g,'')===''&&/^data:/i.test(v.slice(i)))inData=true;if(inData&&(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'))inData=false;cur+=c}if(cur.replace(/\s/g,'')!=='')parts.push(cur);return parts}` +
 	`function mref(v){var ml=v.toLowerCase();var m=/(^|;)\s*url=/.exec(ml);if(!m)return v;var mi=m.index+m[0].length-4;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)==='\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
 	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'))||a==='cite';var rr=nav?rn:r;var nv;if(a==='srcset'){nv=srcsetParts(v).map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=rwaStyle(v)}else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
@@ -797,16 +799,22 @@ func parseRefreshTarget(trimmed string) (target, tail, quote string) {
 // capability to an external origin. Empty, fragment-only, and scheme-bearing
 // values are never modified.
 func rewriteURLReference(rawURL, prefix, capability string) string {
+	normalized := normalizeURLForClassification(rawURL)
 	if capability == "" {
 		// Navigation/metadata rewriting never carries the capability: strip
 		// any previously issued one (a link reclassified from fetching to
 		// metadata, or an app URL carrying a stale cap) so the bearer cannot
 		// land in the address bar, history, or a cross-origin Referer. The
 		// gateway also strips reserved pairs on forward; this keeps them out
-		// of the DOM in the first place.
-		rawURL = stripCapability(rawURL)
+		// of the DOM in the first place. Scheme-bearing references (data:,
+		// mailto:, …) and network-relative references are never gateway HTTP
+		// queries: '?' and '#' there are payload, not query/fragment, so
+		// they are preserved verbatim.
+		if normalized != "" && normalized[0] != '#' && !hasURLScheme(normalized) && !strings.HasPrefix(normalized, "//") {
+			rawURL = stripCapability(rawURL)
+			normalized = normalizeURLForClassification(rawURL)
+		}
 	}
-	normalized := normalizeURLForClassification(rawURL)
 	if normalized == "" || normalized[0] == '#' || hasURLScheme(normalized) || strings.HasPrefix(normalized, "//") {
 		return rawURL
 	}
@@ -821,17 +829,23 @@ func rewriteURLReference(rawURL, prefix, capability string) string {
 
 // stripCapability removes every query parameter whose DECODED key equals the
 // reserved proxy capability key (so percent-encoded key spellings like
-// %6bandev_cap are stripped too), preserving all other parameters and any
-// fragment. A URL with no query string is returned unchanged.
+// %6bandev_cap are stripped too), preserving all other parameters. The
+// fragment is split off FIRST: a '?' inside a fragment (#state?x=1) is
+// fragment payload, not a query, and a '#' inside a data URL is payload too.
+// A URL with no query string is returned unchanged.
 func stripCapability(raw string) string {
+	path, fragment, hasFragment := strings.Cut(raw, "#")
+	if hasFragment {
+		path = stripCapabilityQuery(path)
+		return path + "#" + fragment
+	}
+	return stripCapabilityQuery(raw)
+}
+
+func stripCapabilityQuery(raw string) string {
 	path, query, hasQuery := strings.Cut(raw, "?")
 	if !hasQuery {
 		return raw
-	}
-	fragment := ""
-	if i := strings.IndexByte(query, '#'); i >= 0 {
-		fragment = query[i:]
-		query = query[:i]
 	}
 	parts := strings.Split(query, "&")
 	kept := parts[:0]
@@ -850,9 +864,9 @@ func stripCapability(raw string) string {
 		kept = append(kept, p)
 	}
 	if len(kept) == 0 {
-		return path + fragment
+		return path
 	}
-	return path + "?" + strings.Join(kept, "&") + fragment
+	return path + "?" + strings.Join(kept, "&")
 }
 
 // normalizeURLForClassification returns a copy of a URL reference with the
@@ -953,167 +967,3 @@ func splitSrcSetParts(value string) []string {
 
 // rewriteCSSURLs rewrites url(/...) and @import "/..." occurrences inside a
 // standalone CSS document.
-func rewriteCSSURLs(body []byte, prefix, capability, _ string) []byte {
-	return []byte(rewriteCSSFragment(string(body), prefix, capability))
-}
-
-// rewriteCSSFragment rewrites CSS URL references inside an arbitrary string
-// (either a full CSS file or the contents of an inline style attribute),
-// using a small tokenizer so only REAL url() tokens and @import strings are
-// rewritten. String literals and comments are copied untouched — a CSS
-// string like content:'url(/x)' is data, not a URL reference — and
-// url(var(--x)) is left alone because var() cannot be a URL token. Unquoted
-// url() tokens run to whitespace or ')', which keeps data: URLs intact
-// (their ';' and ',' are URL content, e.g. url(data:image/png;base64,AAA)).
-// Path-absolute references get the proxy prefix plus the capability; relative
-// references keep their resolution but still get the capability appended so
-// cookie-less CSS loads stay authorized. Scheme-bearing (incl. data:),
-// network-relative, and fragment-only references are left untouched by
-// rewriteURLReference.
-func rewriteCSSFragment(css, prefix, capability string) string {
-	var out strings.Builder
-	i, n := 0, len(css)
-	for i < n {
-		c := css[i]
-		switch {
-		case c == '/' && i+1 < n && css[i+1] == '*':
-			end := strings.Index(css[i+2:], "*/")
-			if end < 0 {
-				out.WriteString(css[i:])
-				i = n
-				continue
-			}
-			out.WriteString(css[i : i+2+end+2])
-			i += 2 + end + 2
-		case c == '\'' || c == '"':
-			j := i + 1
-			for j < n {
-				if css[j] == '\\' && j+1 < n {
-					j += 2
-					continue
-				}
-				if css[j] == c {
-					break
-				}
-				j++
-			}
-			if j >= n {
-				out.WriteString(css[i:])
-				i = n
-				continue
-			}
-			out.WriteString(css[i : j+1])
-			i = j + 1
-		case (c == 'u' || c == 'U') && i+4 <= n && strings.EqualFold(css[i:i+4], "url(") && (i == 0 || !isCSSIdentChar(css[i-1])):
-			j := i + 4
-			for j < n && isCSSSpace(css[j]) {
-				j++
-			}
-			spacing := css[i+4 : j]
-			if j < n && (css[j] == '\'' || css[j] == '"') {
-				q := css[j]
-				k := j + 1
-				for k < n {
-					if css[k] == '\\' && k+1 < n {
-						k += 2
-						continue
-					}
-					if css[k] == q {
-						break
-					}
-					k++
-				}
-				if k >= n {
-					out.WriteString(css[i:])
-					i = n
-					continue
-				}
-				l := k + 1
-				for l < n && isCSSSpace(css[l]) {
-					l++
-				}
-				if l < n && css[l] == ')' {
-					out.WriteString("url(" + spacing + string(q) + rewriteURLReference(css[j+1:k], prefix, capability) + string(q) + css[k+1:l] + ")")
-					i = l + 1
-					continue
-				}
-				out.WriteString(css[i : k+1])
-				i = k + 1
-				continue
-			}
-			k := j
-			for k < n && css[k] != ')' && !isCSSSpace(css[k]) {
-				k++
-			}
-			l := k
-			for l < n && isCSSSpace(css[l]) {
-				l++
-			}
-			if l < n && css[l] == ')' {
-				tok := css[j:k]
-				if !strings.HasPrefix(strings.ToLower(tok), "var(") {
-					out.WriteString("url(" + spacing + rewriteURLReference(tok, prefix, capability) + css[k:l] + ")")
-					i = l + 1
-					continue
-				}
-				out.WriteString(css[i : l+1])
-				i = l + 1
-				continue
-			}
-			out.WriteString(css[i:k])
-			i = k
-		case c == '@' && i+7 <= n && strings.EqualFold(css[i:i+7], "@import"):
-			j := i + 7
-			for j < n && isCSSSpace(css[j]) {
-				j++
-			}
-			if j < n && (css[j] == '\'' || css[j] == '"') {
-				q := css[j]
-				k := j + 1
-				for k < n {
-					if css[k] == '\\' && k+1 < n {
-						k += 2
-						continue
-					}
-					if css[k] == q {
-						break
-					}
-					k++
-				}
-				if k >= n {
-					out.WriteString(css[i:])
-					i = n
-					continue
-				}
-				out.WriteString(css[i:j]) // "@import " + whitespace
-				out.WriteString(string(q) + rewriteURLReference(css[j+1:k], prefix, capability) + string(q))
-				i = k + 1
-				continue
-			}
-			// @import url(...) — fall through; the url() case rewrites it.
-			out.WriteString(css[i : i+1])
-			i++
-		default:
-			out.WriteString(css[i : i+1])
-			i++
-		}
-	}
-	return out.String()
-}
-
-// isCSSSpace reports whether c is CSS whitespace (per the CSS syntax spec).
-func isCSSSpace(c byte) bool {
-	switch c {
-	case ' ', '\t', '\n', '\r', '\f':
-		return true
-	}
-	return false
-}
-
-// isCSSIdentChar reports whether c can be part of a CSS identifier (per the
-// CSS syntax spec's ident-token: ASCII letters, digits, '-', '_', and
-// non-ASCII code points). Used to require a token boundary before `url(` so
-// `noturl(/x)` is not mistaken for a url() token.
-func isCSSIdentChar(c byte) bool {
-	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c >= 0x80
-}

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -76,7 +77,10 @@ func (r *Repository) lockWorkspaceRowInTx(ctx context.Context, tx *sqlx.Tx, work
 }
 
 // lockWorkspaceRowStdTx is the stdlib-transaction variant used by the task
-// creation/admission paths (which begin database/sql transactions).
+// creation/admission paths (which begin database/sql transactions). A missing
+// workspace row is tolerated: tasks.workspace_id is not a foreign key, and
+// test fixtures seed tasks with placeholder workspace ids — with no workspace
+// row there is no cascade to serialize against, so no lock is needed.
 func (r *Repository) lockWorkspaceRowStdTx(ctx context.Context, tx interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, workspaceID string) error {
@@ -87,6 +91,9 @@ func (r *Repository) lockWorkspaceRowStdTx(ctx context.Context, tx interface {
 	if err := tx.QueryRowContext(ctx, r.db.Rebind(
 		`SELECT id FROM workspaces WHERE id = ? FOR UPDATE`,
 	), workspaceID).Scan(&lockedWorkspaceID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
 		return fmt.Errorf("lock workspace row: %w", err)
 	}
 	return nil

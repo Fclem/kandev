@@ -367,7 +367,8 @@ func TestPostgresRepository_DeleteTask_SerializesWithSessionCreation(t *testing.
 
 	// A new session commits while DeleteTask waits on the task row.
 	if _, err := lockTx.ExecContext(ctx, `
-		INSERT INTO task_sessions (id, task_id) VALUES ('sess-new', 'task-del-sess-race')
+		INSERT INTO task_sessions (id, task_id, started_at, updated_at)
+		VALUES ('sess-new', 'task-del-sess-race', now(), now())
 	`); err != nil {
 		t.Fatalf("insert session mid-delete: %v", err)
 	}
@@ -457,7 +458,8 @@ func TestPostgresRepository_WorkspaceCascade_SerializesWithTaskCreation(t *testi
 		t.Fatalf("insert task mid-cascade: %v", err)
 	}
 	if _, err := lockTx.ExecContext(ctx, `
-		INSERT INTO task_sessions (id, task_id) VALUES ('sess-cascade-new', 'task-cascade-new')
+		INSERT INTO task_sessions (id, task_id, started_at, updated_at)
+		VALUES ('sess-cascade-new', 'task-cascade-new', now(), now())
 	`); err != nil {
 		t.Fatalf("insert session mid-cascade: %v", err)
 	}

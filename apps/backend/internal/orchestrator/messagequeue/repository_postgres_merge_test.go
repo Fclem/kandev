@@ -493,6 +493,102 @@ func TestPostgresRepository_UpdateContentAndMetadata_RaceWithMerge(t *testing.T)
 	}
 }
 
+// TestPostgresRepository_TransferSession_RaceWithSourceInsert proves the
+// transfer holds the SOURCE session lock too: a source-side admission must
+// serialize with the transfer instead of interleaving with its READ COMMITTED
+// move. The competing backend holds the source lock (simulating the transfer
+// mid-flight), the admission blocks on it, the transfer commits, and only then
+// does the admission land on the (now empty) source session.
+func TestPostgresRepository_TransferSession_RaceWithSourceInsert(t *testing.T) {
+	repoA, repoB := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+
+	insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("old", "first"))
+	dbA := repoA.(*sqliteRepository).db
+
+	// Instance A holds the source session lock, simulating a transfer that has
+	// begun moving "old" -> "new" and is about to commit.
+	lockTx, err := dbA.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `
+		INSERT INTO queue_session_locks (session_id) VALUES ('old')
+		ON CONFLICT(session_id) DO NOTHING
+	`); err != nil {
+		t.Fatalf("ensure session lock row: %v", err)
+	}
+	if _, err := lockTx.ExecContext(ctx, `
+		SELECT 1 FROM queue_session_locks WHERE session_id = 'old' FOR UPDATE
+	`); err != nil {
+		t.Fatalf("lock source session: %v", err)
+	}
+
+	// Instance B's source-side admission blocks on the source lock until the
+	// transfer commits.
+	insertDone := make(chan error, 1)
+	admission := defaultAutoMergeEntry("old", "inserted")
+	go func() {
+		insertDone <- repoB.Insert(ctx, &admission, 0)
+	}()
+
+	// Wait until B's admission is queued on the source session lock row.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := lockTx.QueryRowContext(ctx, `
+			-- A blocked row-lock waiter is observable as an ungranted
+			-- transactionid lock on the blocking transaction.
+			SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'transactionid'
+		`).Scan(&waiting); err != nil {
+			t.Fatalf("query pg_locks: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("instance B admission never blocked on the source session lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// The transfer commits its move while the admission is still waiting.
+	if _, err := lockTx.ExecContext(ctx, `
+		UPDATE queued_messages
+		SET session_id = 'new', position = position + 0
+		WHERE session_id = 'old'
+	`); err != nil {
+		t.Fatalf("transfer move: %v", err)
+	}
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit transfer: %v", err)
+	}
+
+	if err := <-insertDone; err != nil {
+		t.Fatalf("instance B admission: %v", err)
+	}
+
+	// The transfer moved every pre-existing row; the admission that waited
+	// landed after it, on the source session it targeted. Nothing is lost or
+	// stranded mid-move.
+	oldEntries, err := repoA.ListBySession(ctx, "old")
+	if err != nil {
+		t.Fatalf("list old: %v", err)
+	}
+	if len(oldEntries) != 1 || oldEntries[0].Content != "inserted" {
+		t.Fatalf("old entries = %+v, want the post-transfer admission only", oldEntries)
+	}
+	newEntries, err := repoA.ListBySession(ctx, "new")
+	if err != nil {
+		t.Fatalf("list new: %v", err)
+	}
+	if len(newEntries) != 1 || newEntries[0].Content != "first" {
+		t.Fatalf("new entries = %+v, want the transferred row", newEntries)
+	}
+}
+
 func TestPostgresRepository_MergeDrainOrdering_DrainWins(t *testing.T) {
 	repo := newTestPostgresRepo(t)
 	ctx := context.Background()

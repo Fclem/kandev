@@ -515,7 +515,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))`)
 	mustContain(t, shim, `function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);`)
 	mustContain(t, shim, `var rr=nav?rn:r;`)
-	mustContain(t, shim, `'[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[style],[content]'`)
+	mustContain(t, shim, `'[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[imagesrcset],[style],[content]'`)
 }
 
 // The navigation rewriter must not carry the capability even when one is
@@ -1614,6 +1614,25 @@ func TestRewriteHTMLURLs_Imagesrcset(t *testing.T) {
 func TestRuntimeShim_NormRejectsCredentials(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	mustContain(t, shim, `if(x.username||x.password)return u;`)
+}
+
+// A srcdoc child under an external parent base can declare its OWN <base>,
+// resetting the inherited external policy: its refs then resolve inside the
+// subtree and get the capability (dispatch happens before the generic
+// suppression, since a srcdoc value looks relative).
+func TestRewriteHTMLURLs_ExternalBaseSrcdocOwnBase(t *testing.T) {
+	in := `<base href="https://evil.example/"><iframe srcdoc="&lt;base href=&quot;/cdn/&quot;&gt;&lt;img src=&quot;a.png&quot;&gt;&lt;img src=&quot;/logo.png&quot;&gt;"></iframe>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-sd", ""))
+
+	mustContain(t, got, `srcdoc="&lt;base href=&#34;/port-proxy/abc/3001/cdn/&#34;&gt;&lt;img src=&#34;a.png?kandev_cap=cap-sd&#34;&gt;&lt;img src=&#34;/port-proxy/abc/3001/logo.png?kandev_cap=cap-sd&#34;&gt;"`)
+}
+
+// imagesrcset is observed at runtime: it is in the MutationObserver attribute
+// filter and the descendant selector.
+func TestRuntimeShim_ImagesrcsetObserved(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `'srcset','imagesrcset','rel'`)
+	mustContain(t, shim, `[srcset],[imagesrcset],[style]`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

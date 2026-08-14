@@ -39,6 +39,32 @@ func NewSQLiteRepository(writer, reader *sqlx.DB) (Repository, error) {
 // affected-row checks remain the authoritative guard across processes (e.g.
 // multiple backends sharing a Postgres queue); the lock makes in-process
 // merge-wins/drain-wins ordering deterministic.
+//
+// lockSessionTx is the cross-process counterpart: every mutating method takes
+// the per-session queue_session_locks row inside its transaction, so tail
+// scans and tail changes cannot interleave between backend instances. It is a
+// no-op on SQLite (single writer; FOR UPDATE is ignored).
+func (r *sqliteRepository) lockSessionTx(ctx context.Context, tx *sqlx.Tx, sessionID string) error {
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+		INSERT INTO queue_session_locks (session_id) VALUES (?)
+		ON CONFLICT(session_id) DO NOTHING
+	`), sessionID); err != nil {
+		return fmt.Errorf("ensure queue session lock row: %w", err)
+	}
+	if r.db.DriverName() != "pgx" {
+		// SQLite has a single writer: the INSERT above already holds the
+		// database write lock for this transaction, serializing it against
+		// every other writer. FOR UPDATE is not valid SQLite syntax.
+		return nil
+	}
+	var one int
+	if err := tx.GetContext(ctx, &one, r.db.Rebind(`
+		SELECT 1 FROM queue_session_locks WHERE session_id = ? FOR UPDATE
+	`), sessionID); err != nil {
+		return fmt.Errorf("acquire queue session lock: %w", err)
+	}
+	return nil
+}
 func (r *sqliteRepository) withSessionLock(sessionID string) func() {
 	r.mu.Lock()
 	lock := r.sessionLocks[sessionID]
@@ -84,6 +110,15 @@ func (r *sqliteRepository) initSchema() error {
 		queued_at        TIMESTAMP NOT NULL,
 		actor            TEXT NOT NULL DEFAULT ''
 	);
+
+	-- Per-session cross-process mutex. Every queue mutation takes this row
+	-- inside its transaction, so a tail scan and a tail change (insert,
+	-- drain, reorder, transfer) cannot interleave between backend instances
+	-- sharing one queue database. SQLite treats FOR UPDATE as a no-op and
+	-- serializes writes at the DB level anyway; Postgres enforces the row lock.
+	CREATE TABLE IF NOT EXISTS queue_session_locks (
+		session_id TEXT PRIMARY KEY
+	);
 	`)
 	if err != nil {
 		return err
@@ -104,6 +139,9 @@ func (r *sqliteRepository) Insert(ctx context.Context, msg *QueuedMessage, maxPe
 		return fmt.Errorf("begin insert tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
+		return err
+	}
 
 	if maxPerSession > 0 {
 		var count int
@@ -156,6 +194,9 @@ func (r *sqliteRepository) Restore(ctx context.Context, msg *QueuedMessage, maxP
 		return fmt.Errorf("begin restore tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
+		return err
+	}
 
 	if maxPerSession > 0 {
 		var count int
@@ -199,6 +240,9 @@ func (r *sqliteRepository) AppendOrInsertTail(ctx context.Context, sessionID, ta
 		return nil, false, fmt.Errorf("begin append tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return nil, false, err
+	}
 
 	tail, err := r.scanTail(ctx, tx, sessionID)
 	if err != nil {
@@ -275,6 +319,9 @@ func (r *sqliteRepository) InsertOrReplaceByCoalesceKey(ctx context.Context, msg
 		return nil, false, fmt.Errorf("begin coalesce tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
+		return nil, false, err
+	}
 
 	existing, err := r.findCoalesced(ctx, tx, msg.SessionID, msg.QueuedBy, coalesceKey)
 	if err != nil {
@@ -313,6 +360,9 @@ func (r *sqliteRepository) InsertOrReplaceLifecycleByCoalesceKey(ctx context.Con
 		return nil, false, fmt.Errorf("begin lifecycle coalesce tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, msg.SessionID); err != nil {
+		return nil, false, err
+	}
 
 	guard, err := tx.ExecContext(ctx, r.db.Rebind(`
 		UPDATE tasks SET updated_at = updated_at
@@ -616,6 +666,9 @@ func (r *sqliteRepository) TakeHead(ctx context.Context, sessionID string) (*Que
 		return nil, fmt.Errorf("begin take tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return nil, err
+	}
 
 	row := tx.QueryRowxContext(ctx, r.db.Rebind(`
 		SELECT id, session_id, task_id, position, content, model, plan_mode,
@@ -665,6 +718,9 @@ func (r *sqliteRepository) ReserveHead(ctx context.Context, sessionID string) (*
 		return nil, fmt.Errorf("begin reserve tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return nil, err
+	}
 
 	row := tx.QueryRowxContext(ctx, r.db.Rebind(`
 		SELECT id, session_id, task_id, position, content, model, plan_mode,
@@ -768,6 +824,9 @@ func (r *sqliteRepository) TakeByID(ctx context.Context, sessionID, entryID stri
 		return nil, fmt.Errorf("begin take tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return nil, err
+	}
 
 	row := tx.QueryRowxContext(ctx, r.db.Rebind(`
 		SELECT id, session_id, task_id, position, content, model, plan_mode,
@@ -817,6 +876,9 @@ func (r *sqliteRepository) ClaimSendNow(ctx context.Context, sessionID string, e
 		return nil, fmt.Errorf("begin send-now claim tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return nil, err
+	}
 
 	ordered, storedByID, err := r.listOrderedStoredSessionEntries(ctx, tx, sessionID)
 	if err != nil {
@@ -927,6 +989,10 @@ func (r *sqliteRepository) beginSendNowClaimTx(
 	if err != nil {
 		unlock()
 		return nil, "", nil, fmt.Errorf("begin send-now %s tx: %w", action, err)
+	}
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		unlock()
+		return nil, "", nil, err
 	}
 	return tx, sessionID, unlock, nil
 }
@@ -1289,6 +1355,9 @@ func (r *sqliteRepository) MergeIntoAbove(ctx context.Context, sessionID, source
 		return nil, fmt.Errorf("begin merge tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return nil, err
+	}
 
 	source, err := readMergeSource(ctx, r, tx, sessionID, sourceID)
 	if err != nil {
@@ -1334,6 +1403,9 @@ func (r *sqliteRepository) AutoMergeIntoAbove(ctx context.Context, sessionID, so
 		return nil, false, fmt.Errorf("begin automatic merge tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return nil, false, err
+	}
 
 	source, err := readMergeSource(ctx, r, tx, sessionID, sourceID)
 	if errors.Is(err, ErrEntryNotFound) {
@@ -1382,6 +1454,9 @@ func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, cand
 		return nil, false, fmt.Errorf("begin automatic candidate merge tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, candidate.SessionID); err != nil {
+		return nil, false, err
+	}
 
 	target, storedContent, storedAttachmentsJSON, storedMetadataJSON, err := r.scanTailWithRawJSON(ctx, tx, candidate.SessionID)
 	if err != nil {
@@ -1472,6 +1547,9 @@ func (r *sqliteRepository) ReorderEntries(ctx context.Context, sessionID string,
 		return fmt.Errorf("begin reorder tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
 
 	rows, err := tx.QueryxContext(ctx, r.db.Rebind(`
 		SELECT id, session_id, task_id, position, content, model, plan_mode,
@@ -1655,6 +1733,9 @@ func (r *sqliteRepository) DeleteByID(ctx context.Context, sessionID, entryID st
 		return fmt.Errorf("begin delete queued tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
 
 	var metadataJSON string
 	err = tx.GetContext(ctx, &metadataJSON, r.db.Rebind(`
@@ -1701,6 +1782,9 @@ func (r *sqliteRepository) DeleteAllBySession(ctx context.Context, sessionID str
 		return 0, fmt.Errorf("begin delete all queued tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return 0, err
+	}
 
 	candidates, err := cancellationCandidates(ctx, tx, sessionID)
 	if err != nil {
@@ -1784,6 +1868,12 @@ func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, ne
 		return fmt.Errorf("begin transfer tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// The transfer appends rows to the destination session, so it must hold
+	// the destination's cross-process session lock; the source only loses
+	// rows, which the row-level CAS guards cover.
+	if err := r.lockSessionTx(ctx, tx, newSessionID); err != nil {
+		return err
+	}
 
 	// Shift positions on the destination so transferred entries land at the tail
 	// without colliding on the (session_id, position) implicit ordering.
@@ -1819,6 +1909,9 @@ func (r *sqliteRepository) ReplaceSession(ctx context.Context, sessionID string,
 		return fmt.Errorf("begin replace session tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
 
 	if _, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM queued_messages WHERE session_id = ?`), sessionID); err != nil {
 		return fmt.Errorf("clear queued messages: %w", err)

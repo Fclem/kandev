@@ -269,6 +269,116 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithReorderSkips(t *
 	}
 }
 
+// TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithInsertAbove proves
+// the per-session cross-process lock: a fold must never land on a row that
+// stopped being the tail. The interleaving is forced deterministically — the
+// competing backend holds the queue_session_locks row, the fold blocks on it
+// before scanning, and only after the competing drain+insert commits does the
+// fold run — so the fold always scans the current tail, never a stale one.
+func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithInsertAbove(t *testing.T) {
+	repoA, repoB := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+
+	first := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("race-tail", "first"))
+	second := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("race-tail", "second"))
+	dbA := repoA.(*sqliteRepository).db
+
+	// Instance A holds the per-session cross-process lock, simulating a
+	// concurrent drain+insert that is about to commit.
+	lockTx, err := dbA.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `
+		INSERT INTO queue_session_locks (session_id) VALUES ('race-tail')
+		ON CONFLICT(session_id) DO NOTHING
+	`); err != nil {
+		t.Fatalf("ensure session lock row: %v", err)
+	}
+	if _, err := lockTx.ExecContext(ctx, `
+		SELECT 1 FROM queue_session_locks WHERE session_id = 'race-tail' FOR UPDATE
+	`); err != nil {
+		t.Fatalf("lock session: %v", err)
+	}
+
+	// Instance B's fold blocks on the session lock before it can scan.
+	foldDone := make(chan error, 1)
+	candidate := defaultAutoMergeEntry("race-tail", "third")
+	go func() {
+		merged, didMerge, err := repoB.(automaticMergeCandidateRepository).AutoMergeCandidateIntoAbove(ctx, &candidate)
+		if err != nil {
+			foldDone <- err
+			return
+		}
+		if !didMerge || merged == nil {
+			foldDone <- fmt.Errorf("fold skipped (didMerge=%v merged=%+v), want fold onto the new tail", didMerge, merged)
+			return
+		}
+		if merged.ID == second.ID {
+			foldDone <- errors.New("fold landed on the stale tail")
+			return
+		}
+		foldDone <- nil
+	}()
+
+	// Wait until B's fold is queued on the session lock row.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := lockTx.QueryRowContext(ctx, `
+			SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'row'
+		`).Scan(&waiting); err != nil {
+			t.Fatalf("query pg_locks: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("instance B fold never blocked on the session lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// The competing backend drains the head and inserts a new row above the
+	// old tail, then commits before the fold can run.
+	if _, err := lockTx.ExecContext(ctx, `DELETE FROM queued_messages WHERE id = $1`, first.ID); err != nil {
+		t.Fatalf("drain head: %v", err)
+	}
+	if _, err := lockTx.ExecContext(ctx, `
+		INSERT INTO queued_messages
+			(id, session_id, task_id, position, content, model, plan_mode,
+			 attachments_json, metadata_json, queued_at, queued_by)
+		VALUES ($1, 'race-tail', 'task', 3, 'drained-in', 'model', 0, '[]', '{}', now(), 'user')
+	`, uuid.NewString()); err != nil {
+		t.Fatalf("insert above tail: %v", err)
+	}
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit competing drain+insert: %v", err)
+	}
+
+	if err := <-foldDone; err != nil {
+		t.Fatalf("instance B fold: %v", err)
+	}
+
+	// The fold landed on the current tail (the newly inserted row), never on
+	// the stale "second" row, and the queue order is intact.
+	entries, err := repoA.ListBySession(ctx, "race-tail")
+	if err != nil {
+		t.Fatalf("list queue: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entries = %+v, want two rows", entries)
+	}
+	if entries[0].ID != second.ID || entries[0].Content != "second" {
+		t.Fatalf("stale tail = %s %q, want untouched second entry", entries[0].ID, entries[0].Content)
+	}
+	if entries[1].Content != "drained-in\n\nthird" {
+		t.Fatalf("new tail content = %q, want candidate folded into the current tail", entries[1].Content)
+	}
+}
+
 func TestPostgresRepository_MergeDrainOrdering_DrainWins(t *testing.T) {
 	repo := newTestPostgresRepo(t)
 	ctx := context.Background()

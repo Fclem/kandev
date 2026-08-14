@@ -150,6 +150,14 @@ func newFakeProxyApp(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "text/javascript")
 		_, _ = io.WriteString(w, `console.log("main");`)
 	})
+	mux.HandleFunc("/redirect", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "/landing")
+		w.WriteHeader(http.StatusFound)
+	})
+	mux.HandleFunc("/landing", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, `<!doctype html><html><head><title>landed</title></head><body>ok</body></html>`)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, `<!doctype html><html><head>`+
@@ -410,6 +418,52 @@ func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T
 	if script.status != http.StatusOK {
 		t.Fatalf("module script (capability cookie, no session) status = %d, want %d (body=%s)",
 			script.status, http.StatusOK, script.body)
+	}
+
+	// 8. The runtime shim is served by the gateway at its reserved path, with
+	// the prefix and capability baked in, so an app CSP allowing 'self' scripts
+	// does not block the proxy's runtime fixes.
+	shim := request(http.MethodGet, "/port-proxy/sess-auth/5173/__kandev_runtime_shim.js", cookieHeader)
+	if shim.status != http.StatusOK {
+		t.Fatalf("runtime shim status = %d, want %d", shim.status, http.StatusOK)
+	}
+	if ct := shim.headers.Get("Content-Type"); !strings.Contains(ct, "application/javascript") {
+		t.Fatalf("runtime shim Content-Type = %q, want application/javascript", ct)
+	}
+	if !strings.Contains(shim.body, `var P="/port-proxy/sess-auth/5173";`) {
+		t.Fatalf("runtime shim missing the baked-in prefix:\n%.300s", shim.body)
+	}
+	if shim.headers.Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("runtime shim Cache-Control = %q, want private, no-store", shim.headers.Get("Cache-Control"))
+	}
+	// The shim body is also the exact JS served for the injected <script src>.
+	if !strings.Contains(doc.body, "/port-proxy/sess-auth/5173/__kandev_runtime_shim.js") {
+		t.Fatalf("document does not inject the external runtime shim:\n%.500s", doc.body)
+	}
+
+	// 9. Redirect Location headers are re-anchored on the proxy subtree.
+	redir := request(http.MethodGet, "/port-proxy/sess-auth/5173/redirect", cookieHeader)
+	if redir.status != http.StatusFound {
+		t.Fatalf("redirect status = %d, want %d", redir.status, http.StatusFound)
+	}
+	if got := redir.headers.Get("Location"); got != "/port-proxy/sess-auth/5173/landing" {
+		t.Fatalf("redirect Location = %q, want the proxied landing path", got)
+	}
+
+	// 10. A cookie-authenticated request's own ?token= parameter is preserved
+	// for the app — only the gateway-consumed credential is stripped.
+	appToken := request(http.MethodGet,
+		"/port-proxy/sess-auth/5173/src/main.tsx?token=app-own-token&x=1", cookieHeader)
+	if appToken.status != http.StatusOK {
+		t.Fatalf("app-token request status = %d, want %d", appToken.status, http.StatusOK)
+	}
+	forwarded, _ = recordings.snapshot()
+	last := forwarded[len(forwarded)-1]
+	if !strings.Contains(last, "token=app-own-token") {
+		t.Fatalf("cookie-authenticated app token was stripped from forwarded request %q", last)
+	}
+	if !strings.Contains(last, "x=1") {
+		t.Fatalf("unrelated query param lost in forwarded request %q", last)
 	}
 }
 

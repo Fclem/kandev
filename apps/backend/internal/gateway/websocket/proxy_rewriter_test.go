@@ -146,11 +146,12 @@ func TestRewriteHTMLURLs_InjectsRuntimeShim(t *testing.T) {
 	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
 	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, ""))
 
-	// The shim must appear exactly once, immediately after the `<head>` open tag
-	// (so it executes before any other script that may follow).
-	const marker = "window.fetch="
+	// The shim script tag must appear exactly once, immediately after the
+	// `<head>` open tag (so it executes before any other script that may
+	// follow), and load from the proxy's reserved same-origin path.
+	const marker = `<script src="/port-proxy/abc/3001/__kandev_runtime_shim.js"></script>`
 	if strings.Count(got, marker) != 1 {
-		t.Fatalf("expected exactly one runtime shim, got %d copies\n%s",
+		t.Fatalf("expected exactly one runtime shim tag, got %d copies\n%s",
 			strings.Count(got, marker), got)
 	}
 	headIdx := strings.Index(got, "<head>")
@@ -160,9 +161,16 @@ func TestRewriteHTMLURLs_InjectsRuntimeShim(t *testing.T) {
 		t.Fatalf("shim must come between <head> and <title>: head=%d shim=%d title=%d\n%s",
 			headIdx, shimIdx, titleIdx, got)
 	}
-	// The prefix must be baked into the JS literal.
-	if !strings.Contains(got, `var P="/port-proxy/abc/3001"`) {
-		t.Fatalf("shim missing baked-in prefix:\n%s", got)
+	// With a capability minted, the shim src carries it so the shim loads even
+	// in cookie-less contexts.
+	withCap := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-shim"))
+	if !strings.Contains(withCap, `__kandev_runtime_shim.js?kandev_cap=cap-shim`) {
+		t.Fatalf("capability-bearing shim src missing the capability:\n%s", withCap)
+	}
+	// The prefix must be baked into the served shim body.
+	shim := runtimeShim(proxyPrefix, "")
+	if !strings.Contains(shim, `var P="/port-proxy/abc/3001";`) {
+		t.Fatalf("shim body missing the baked-in prefix:\n%s", shim)
 	}
 }
 
@@ -466,10 +474,12 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `x+=(x.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
 	// WebSocket wrapper rewrites string AND URL-object inputs through norm(),
 	// which carries the capability; same-origin ws/wss origins are compared
-	// as http/https and the scheme is swapped for the matching ws/wss form.
+	// as http/https via the URL API and the scheme is swapped for the
+	// matching ws/wss form.
 	mustContain(t, shim, `'//'+l.host`)
 	mustContain(t, shim, `s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)`)
-	mustContain(t, shim, `(m[1]==='ws:'?'http:':m[1]==='wss:'?'https:':m[1])+'//'+m[2]`)
+	mustContain(t, shim, `x.origin.replace(/^ws:/,'http:').replace(/^wss:/,'https:')`)
+	mustContain(t, shim, `new URL(s,window.location.href)`)
 	// fetch/XHR/WS all route URL-like inputs through norm() (URL objects,
 	// same-origin absolute strings).
 	mustContain(t, shim, `typeof i==='string'||(i&&typeof i==='object'&&typeof i.href==='string'&&!i.url)`)
@@ -478,10 +488,12 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `u=rn(u);return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `u=rn(u);return orig.call(location,u)`)
 	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}`)
-	// Click interception captures plain same-origin root-absolute anchor
-	// navigation through rn().
+	// Click interception (bubble phase) captures plain same-origin
+	// root-absolute, not-yet-prefixed anchor navigation through rn().
 	mustContain(t, shim, `document.addEventListener('click'`)
 	mustContain(t, shim, `location.href=rn(h)`)
+	mustContain(t, shim, `h.indexOf(P)!==0`)
+	mustContain(t, shim, `el.hasAttribute('download')`)
 	// MutationObserver distinguishes navigation attributes (rn) from
 	// subresource attributes (r).
 	mustContain(t, shim, `el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'`)
@@ -555,6 +567,43 @@ func TestRewriteProxyResponse_DoesNotSetCacheHeadersItself(t *testing.T) {
 	if resp.Header.Get("Cache-Control") != "" || resp.Header.Get("Referrer-Policy") != "" {
 		t.Fatalf("cache/referrer headers must be applied by ModifyResponse, not the rewriter: %v", resp.Header)
 	}
+}
+
+// Inline iframe documents (srcdoc) inherit the proxy origin; their
+// root-absolute references must be rewritten like a nested page, with the
+// capability on subresources and none on navigation.
+func TestRewriteHTMLURLs_RewritesSrcdocDocuments(t *testing.T) {
+	in := `<iframe srcdoc="&lt;a href=&quot;/page&quot;&gt;x&lt;/a&gt;&lt;img src=&quot;/logo.png&quot;&gt;"></iframe>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-srcdoc"))
+	// The nested document is rewritten (navigation no cap, subresource cap);
+	// the serializer re-escapes the srcdoc attribute value.
+	mustContain(t, got, `srcdoc="&lt;a href=&#34;/port-proxy/abc/3001/page&#34;&gt;x&lt;/a&gt;&lt;img src=&#34;/port-proxy/abc/3001/logo.png?kandev_cap=cap-srcdoc&#34;&gt;"`)
+}
+
+// Meta refresh navigation targets must be re-anchored on the proxy subtree
+// without a capability.
+func TestRewriteHTMLURLs_RewritesMetaRefresh(t *testing.T) {
+	in := `<meta http-equiv="refresh" content="5; url=/next">` +
+		`<meta http-equiv="refresh" content="0;url='https://external.example/x'">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-meta"))
+
+	mustContain(t, got, `content="5; url=/port-proxy/abc/3001/next"`)
+	mustContain(t, got, `content="0;url=&#39;https://external.example/x&#39;"`)
+}
+
+// Metadata links (rel=canonical and other non-fetching rels) must not carry
+// the capability; fetching rels (stylesheet, manifest, preload, …) keep it.
+func TestRewriteHTMLURLs_CanonicalLinkOmitsCapability(t *testing.T) {
+	in := `<link rel="canonical" href="/canonical">` +
+		`<link rel="stylesheet" href="/theme.css">` +
+		`<link rel="manifest" href="/manifest.webmanifest">` +
+		`<link rel="alternate" href="/feed.xml">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-link"))
+
+	mustContain(t, got, `rel="canonical" href="/port-proxy/abc/3001/canonical"`)
+	mustContain(t, got, `rel="alternate" href="/port-proxy/abc/3001/feed.xml"`)
+	mustContain(t, got, `rel="stylesheet" href="/port-proxy/abc/3001/theme.css?kandev_cap=cap-link"`)
+	mustContain(t, got, `rel="manifest" href="/port-proxy/abc/3001/manifest.webmanifest?kandev_cap=cap-link"`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

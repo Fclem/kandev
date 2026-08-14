@@ -58,6 +58,12 @@ const (
 // rewritten asset URLs.
 type proxyCapabilityContextKey struct{}
 
+// proxyTokenConsumedKey marks that requireConnectionAuth authenticated this
+// request via ?token=<PAT>, so the port proxy strips the token from the
+// forwarded query. When absent, a ?token= parameter belongs to the app and is
+// forwarded untouched.
+type proxyTokenConsumedKey struct{}
+
 // portProxyEntry caches a reverse proxy and its target for a session:port pair.
 type portProxyEntry struct {
 	proxy  *httputil.ReverseProxy
@@ -126,8 +132,9 @@ func (h *PortProxyHandler) HandlePortProxy(c *gin.Context) {
 	// Synthetic identities (auth disabled) skip it: with no auth anywhere the
 	// subtree needs no credential, and the proxied bodies stay byte-identical
 	// to the pre-auth behavior.
+	capability := ""
 	if identity, ok := authn.FromGin(c); ok && !identity.Synthetic {
-		capability := h.issueCapability(sessionID, port, identity)
+		capability = h.issueCapability(sessionID, port, identity)
 		h.setCapabilityCookie(c, sessionID, port, capability)
 		ctx := context.WithValue(c.Request.Context(), proxyCapabilityContextKey{}, capability)
 		c.Request = c.Request.WithContext(ctx)
@@ -146,6 +153,15 @@ func (h *PortProxyHandler) HandlePortProxy(c *gin.Context) {
 	if remaining == "" {
 		remaining = "/"
 	}
+
+	// The runtime shim is served by the gateway itself (same-origin, so an
+	// app Content-Security-Policy that allows 'self' scripts lets it load),
+	// not by the proxied app.
+	if remaining == "/"+runtimeShimPath {
+		h.serveRuntimeShim(c, prefix, capability)
+		return
+	}
+
 	c.Request.URL.Path = "/api/v1/port-proxy/" + portStr + remaining
 	c.Request.URL.RawPath = ""
 
@@ -221,12 +237,18 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 		r.SetURL(target)
 		r.Out.URL.Path = r.In.URL.Path
 		r.Out.URL.RawPath = ""
-		// The subtree capability and the ?token= PAT credential are consumed by
-		// requireConnectionAuth at the gateway; strip them (in any encoding)
-		// before forwarding so they never land in agentctl or application logs,
-		// redirects, or analytics. Only the reserved pairs are removed — every
-		// other parameter keeps its original bytes and order.
-		r.Out.URL.RawQuery = stripReservedProxyParams(r.Out.URL.RawQuery)
+		// The subtree capability is consumed by requireConnectionAuth at the
+		// gateway; strip it (in any encoding) before forwarding so it never
+		// lands in agentctl or application logs, redirects, or analytics. Only
+		// the reserved pairs are removed — every other parameter keeps its
+		// original bytes and order. The ?token= PAT is stripped only when the
+		// gateway actually consumed it for authentication; a cookie-authenticated
+		// app's own token parameter passes through.
+		if consumed, _ := r.In.Context().Value(proxyTokenConsumedKey{}).(bool); consumed {
+			r.Out.URL.RawQuery = stripReservedProxyParams(r.Out.URL.RawQuery)
+		} else {
+			r.Out.URL.RawQuery = stripCapabilityParam(r.Out.URL.RawQuery)
+		}
 		// The browser may send a rewritten asset URL (which embeds the
 		// capability, possibly percent-encoded) as the Referer of a later
 		// request; sanitize every Referer. Capability-free Referers are left
@@ -253,10 +275,6 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
-		if resp.StatusCode == http.StatusSwitchingProtocols {
-			resp.Header.Set("Connection", "Upgrade")
-			return nil
-		}
 		capability, _ := resp.Request.Context().Value(proxyCapabilityContextKey{}).(string)
 		if capability != "" {
 			// Every response in an authenticated proxy subtree carries the
@@ -264,10 +282,25 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 			// capability: a shared intermediary must not retain or replay them
 			// for another user, and the browser must not leak the embedded
 			// capability to external origins through the Referer header. This
-			// applies to every response class (JS/JSON/redirects included),
-			// not just the HTML/CSS bodies the rewriter touches.
+			// applies to every response class (JS/JSON/redirects/upgrades
+			// included), not just the HTML/CSS bodies the rewriter touches.
 			resp.Header.Set("Cache-Control", "private, no-store")
 			resp.Header.Set("Referrer-Policy", "no-referrer")
+		}
+		// Redirect Location headers are root-relative to the proxied app; the
+		// browser resolves them against the gateway origin, so they must be
+		// re-anchored on the proxy subtree (navigation: no capability).
+		if loc := resp.Header.Get("Location"); loc != "" {
+			resp.Header.Set("Location", rewriteURLReference(loc, proxyPrefix, ""))
+		}
+		if resp.StatusCode == http.StatusSwitchingProtocols {
+			resp.Header.Set("Connection", "Upgrade")
+			return nil
+		}
+		if resp.Request.Method == http.MethodHead {
+			// HEAD responses carry no body; rewriting would synthesize a
+			// misleading Content-Length for the would-be GET body.
+			return nil
 		}
 		return rewriteProxyResponse(resp, proxyPrefix, capability)
 	}
@@ -473,4 +506,16 @@ func portProxyTarget(c *gin.Context) (sessionID string, port int, ok bool) {
 		return "", 0, false
 	}
 	return sessionID, port, true
+}
+
+// serveRuntimeShim answers the reserved per-subtree runtime shim path with the
+// shim JavaScript, prefix and capability baked in. Served same-origin by the
+// gateway so an app Content-Security-Policy allowing 'self' scripts does not
+// block the proxy's runtime fixes; never cached (per-user body).
+func (h *PortProxyHandler) serveRuntimeShim(c *gin.Context, prefix, capability string) {
+	js := runtimeShim(prefix, capability)
+	c.Header("Content-Type", "application/javascript; charset=utf-8")
+	c.Header("Cache-Control", "private, no-store")
+	c.Header("Referrer-Policy", "no-referrer")
+	c.Data(http.StatusOK, "application/javascript; charset=utf-8", []byte(js))
 }

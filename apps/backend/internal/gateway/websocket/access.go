@@ -79,6 +79,10 @@ func (g *Gateway) requireConnectionAuth() gin.HandlerFunc {
 		if token := c.Query("token"); token != "" && policy.ResolveToken != nil {
 			if identity, ok := policy.ResolveToken(c.Request.Context(), token); ok {
 				authn.SetOnGin(c, identity)
+				// Remember that the gateway consumed ?token= so the port proxy
+				// can strip it from the forwarded query; a cookie-authenticated
+				// app's own token parameter must be preserved.
+				c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), proxyTokenConsumedKey{}, true))
 				c.Next()
 				return
 			}

@@ -59,7 +59,7 @@ const headTagName = "head"
 //
 // Concatenated across multiple Go strings only for readability; the resulting
 // JS is still a single self-invoking expression with no internal whitespace.
-const runtimeShimTemplate = `<script>(function(){` +
+const runtimeShimTemplate = `(function(){` +
 	`var P=%q;` +
 	`window.__kandevProxyPrefix=P;` +
 	// Path rewriter: prefix path-absolute URLs that aren't already prefixed.
@@ -72,21 +72,21 @@ const runtimeShimTemplate = `<script>(function(){` +
 	// copied URLs, history, and cross-origin Referers. The subtree cookie
 	// covers same-origin navigations instead.
 	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}` +
-	// norm(u): normalizes any URL-like input through the network rewriter.
-	// Strings that are root-absolute go through r(); strings that are
-	// ABSOLUTE with the same origin as the page (the gateway, in an iframe)
-	// get their pathname rewritten through r() with scheme+host preserved;
-	// cross-origin absolute strings and non-URL inputs pass through
-	// unchanged. URL objects are handled via their href. ws:/wss: origins
-	// are compared as http:/https: so WebSocket URL objects match the page
-	// origin.
-	`function norm(u){if(typeof u==='string'){if(u.charAt(0)==='/')return r(u);var m=/^([a-z][a-z0-9+.-]*:)\/\/([^/?#]+)(.*)$/i.exec(u);if(m){var o=(m[1]==='ws:'?'http:':m[1]==='wss:'?'https:':m[1])+'//'+m[2];if(o===window.location.origin)return m[1]+'//'+m[2]+r(m[3]||'/');return u;}return u;}if(u&&typeof u==='object'&&typeof u.href==='string'){var s=norm(u.href);return s===u.href?u:s;}return u;}` +
+	// norm(u): normalizes any URL-like input through the network rewriter
+	// using the URL API, which applies the WHATWG parsing rules (leading
+	// C0/space trimmed, embedded tabs/newlines removed, default ports and
+	// userinfo normalized). Inputs that resolve to the page's origin (the
+	// gateway, in an iframe) get their pathname rewritten through r() with
+	// scheme+host preserved; cross-origin and non-URL inputs pass through
+	// unchanged. ws:/wss: origins are compared as http:/https: so WebSocket
+	// URLs match the page origin.
+	`function norm(u){var s=typeof u==='string'?u:(u&&typeof u==='object'&&typeof u.href==='string'?u.href:null);if(s===null)return u;var x;try{x=new URL(s,window.location.href)}catch(e){return u}var o=x.origin.replace(/^ws:/,'http:').replace(/^wss:/,'https:');if(o!==window.location.origin)return u;return x.origin+r(x.pathname+(x.search||'')+(x.hash||''));}` +
 	// fetch — string, URL-object, and Request-object input forms.
 	`var of=window.fetch;if(of){window.fetch=function(i,n){if(typeof i==='string'||(i&&typeof i==='object'&&typeof i.href==='string'&&!i.url))i=norm(i);else if(i&&typeof i==='object'&&typeof i.url==='string'){var nu=norm(i.url);if(nu!==i.url){try{i=new Request(nu,i)}catch(e){}}}return of.call(this,i,n)}}` +
 	// XMLHttpRequest.open — 2nd arg is the URL (string or URL object).
 	`var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=norm(u);return oo.apply(this,arguments)};` +
-	// WebSocket — path-absolute ws/wss URLs need an explicit ws:// scheme + host since the constructor doesn't accept bare paths. String and URL-object inputs go through norm(); same-origin results are converted to the matching ws/wss scheme, fragments are dropped (WebSocket URLs cannot carry one), and cross-origin inputs pass through untouched.
-	`var OW=window.WebSocket;if(OW){function W(u,p){var n=norm(u);var l=window.location;var w=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host;var s=n;if(typeof s==='string'){if(s.charAt(0)==='/'){s=w+s}else if(s!==u&&/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.test(s)){s=s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)}var h=s.indexOf('#');if(h!==-1)s=s.slice(0,h)}return p?new OW(s,p):new OW(s)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
+	// WebSocket — path-absolute ws/wss URLs need an explicit ws:// scheme + host since the constructor doesn't accept bare paths. String and URL-object inputs go through norm(); same-origin results are converted to the matching ws/wss scheme, fragments are dropped (WebSocket URLs cannot carry one), and network-relative and cross-origin inputs pass through untouched.
+	`var OW=window.WebSocket;if(OW){function W(u,p){var n=norm(u);var l=window.location;var w=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host;var s=n;if(typeof s==='string'){if(s.charAt(0)==='/'&&s.charAt(1)!=='/'){s=w+s}else if(s!==u&&/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.test(s)){s=s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)}var h=s.indexOf('#');if(h!==-1)s=s.slice(0,h)}return p?new OW(s,p):new OW(s)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
 	// history.pushState / replaceState — SPA routers (Next.js, React Router, etc.) call these to change the URL on client-side navigation. Without rewriting, the URL bar drops the proxy prefix and a reload 404s. Uses rn() (no capability — see above).
 	`['pushState','replaceState'].forEach(function(op){var orig=history[op];if(!orig)return;history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);return orig.call(this,s,t,u)}});` +
 	// location.assign / location.replace — direct navigation APIs, patched
@@ -95,11 +95,14 @@ const runtimeShimTemplate = `<script>(function(){` +
 	// document-level click interception below is the reliable path for anchor
 	// navigation.
 	`['assign','replace'].forEach(function(op){var orig=location[op];if(!orig)return;try{location[op]=function(u){if(typeof u==='string')u=rn(u);return orig.call(location,u)}}catch(e){}});` +
-	// Click interception: plain left-clicks on same-origin root-absolute
-	// anchors navigate through the proxy prefix (rn, no capability — the
-	// subtree cookie authorizes the navigation). Modified clicks, target=_blank,
-	// relative/external hrefs, and cross-origin frames pass through untouched.
-	`if(document.addEventListener){document.addEventListener('click',function(ev){var el=ev.target;while(el&&el!==document&&el.nodeType===1){if(el.tagName==='A'){var h=el.getAttribute('href');if(h&&h.charAt(0)==='/'&&(h.length<2||h.charAt(1)!=='/')&&!el.target&&!ev.defaultPrevented&&!ev.metaKey&&!ev.ctrlKey&&!ev.shiftKey&&!ev.altKey){ev.preventDefault();location.href=rn(h);return;}}el=el.parentNode;}},true)}` +
+	// Click interception (BUBBLE phase, after the app's own handlers): a plain
+	// left-click on a root-absolute, NOT-yet-prefixed anchor that the
+	// application did not intercept (no preventDefault) navigates through the
+	// proxy prefix (rn, no capability — the subtree cookie authorizes it).
+	// Download links, target-bearing links, modified clicks, and
+	// already-prefixed or relative/external hrefs pass through untouched, and
+	// SPA routers that call preventDefault keep full control.
+	`if(document.addEventListener){document.addEventListener('click',function(ev){if(ev.defaultPrevented||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey||ev.button!==0)return;var el=ev.target;while(el&&el!==document&&el.nodeType===1){if(el.tagName==='A'){var h=el.getAttribute('href');if(h&&h.charAt(0)==='/'&&(h.length<2||h.charAt(1)!=='/')&&h.indexOf(P)!==0&&!el.target&&!el.hasAttribute('download')&&!ev.defaultPrevented){ev.preventDefault();location.href=rn(h);return;}}el=el.parentNode;}},false)}` +
 	// MutationObserver: rewrite URL attributes on every element that is
 	// inserted or has its URL attribute mutated. Navigation attributes
 	// (anchor/area/base href, form action, button/input formaction) use the
@@ -113,11 +116,11 @@ const runtimeShimTemplate = `<script>(function(){` +
 	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[srcset],[poster]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:ATTRS})}catch(e){}}` +
 	// Console forwarding: pipe iframe console output back to the parent frame via postMessage so it surfaces in the kandev UI alongside other preview events. Errors and stacks are coerced to strings; objects are JSON-cloned where possible. We continue calling the original method so the iframe's own DevTools still shows everything.
 	`var LV=['log','warn','error','info','debug'];LV.forEach(function(lv){var orig=console[lv];if(!orig)return;console[lv]=function(){try{var out=[];for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){out.push('Error: '+a.message+(a.stack?'\n'+a.stack:''))}else if(typeof a==='object'&&a!==null){try{out.push(JSON.parse(JSON.stringify(a)))}catch(e){out.push(String(a))}}else{out.push(a)}}window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},'*')}catch(e){}return orig.apply(console,arguments)}});` +
-	`})();</script>`
+	`})();`
 
-// runtimeShim returns the runtime shim script tag with the given proxy prefix
-// baked in. %q produces a JS-safe double-quoted string literal (slashes and
-// alphanumerics need no escaping, which matches every prefix we emit).
+// runtimeShim returns the runtime shim's JavaScript body with the given proxy
+// prefix baked in. %q produces a JS-safe double-quoted string literal (slashes
+// and alphanumerics need no escaping, which matches every prefix we emit).
 //
 // When `capability` is non-empty, the shim's network path rewriter appends the
 // subtree capability to every URL it rewrites (fetch/XHR/WebSocket and
@@ -126,8 +129,29 @@ const runtimeShimTemplate = `<script>(function(){` +
 // use a prefix-only rewriter: a bearer in the address bar or history would leak
 // through copied URLs and cross-origin Referers, and the subtree cookie covers
 // same-origin navigations.
+//
+// The shim is served as an external same-origin JavaScript file by the port
+// proxy (reserved path __kandev_runtime_shim.js) and injected as a <script
+// src> tag: an app's Content-Security-Policy (script-src 'self') blocks inline
+// scripts but allows a same-origin script.
 func runtimeShim(prefix, capability string) string {
 	return fmt.Sprintf(runtimeShimTemplate, prefix, shimCapabilityJS(capability))
+}
+
+// runtimeShimPath is the reserved per-subtree path the port proxy serves the
+// runtime shim JavaScript from.
+const runtimeShimPath = "__kandev_runtime_shim.js"
+
+// runtimeShimTag is the <script src> element injected at the top of <head> for
+// every HTML response we proxy; the browser loads the shim body from the
+// proxy's reserved path. When a capability is minted it rides on the src so
+// the shim itself loads even in cookie-less contexts.
+func runtimeShimTag(prefix, capability string) string {
+	src := prefix + "/" + runtimeShimPath
+	if capability != "" {
+		src += "?" + proxyCapabilityQueryParam + "=" + capability
+	}
+	return `<script src="` + src + `"></script>`
 }
 
 // shimCapabilityJS returns the JavaScript spliced into the shim's path
@@ -322,7 +346,7 @@ func rewriteHTMLURLs(body []byte, prefix, capability string) []byte {
 	tok := html.NewTokenizer(bytes.NewReader(body))
 	var out bytes.Buffer
 	out.Grow(len(body) + 256 + len(runtimeShimTemplate))
-	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShim(prefix, capability)}
+	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShimTag(prefix, capability)}
 	for {
 		tt := tok.Next()
 		if tt == html.ErrorToken {
@@ -363,11 +387,23 @@ func rewriteTokenURLs(token *html.Token, prefix, capability string) {
 	navHref := token.Data == "a" || token.Data == "area" || token.Data == "base"
 	navAction := token.Data == "form"
 	navFormAction := token.Data == "button" || token.Data == "input"
+	// Metadata links (rel=canonical, alternate, license, author, …) are not
+	// fetched; a capability in their href would leak through the emitted
+	// canonical URL. rel values that DO fetch (stylesheet, icon, manifest,
+	// preload, modulepreload, …) keep the capability.
+	metaLink := token.Data == "link" && !isFetchingLinkRel(relValue(token))
 	for i, attr := range token.Attr {
 		key := strings.ToLower(attr.Key)
 		switch {
-		case key == "href" && navHref, key == "action" && navAction, key == "formaction" && navFormAction:
+		case key == "href" && (navHref || metaLink), key == "action" && navAction, key == "formaction" && navFormAction:
 			token.Attr[i].Val = rewriteURLReference(attr.Val, prefix, "")
+		case key == "srcdoc":
+			// Inline child document: its root-absolute references resolve
+			// against the child, which inherits the proxy origin, so rewrite
+			// them like a nested page.
+			token.Attr[i].Val = string(rewriteHTMLURLs([]byte(attr.Val), prefix, capability))
+		case key == attrContent && token.Data == "meta" && isMetaRefresh(token):
+			token.Attr[i].Val = rewriteMetaRefresh(attr.Val, prefix)
 		case rewritableURLAttrs[key]:
 			token.Attr[i].Val = rewriteURLReference(attr.Val, prefix, capability)
 		case key == "srcset":
@@ -376,6 +412,59 @@ func rewriteTokenURLs(token *html.Token, prefix, capability string) {
 			token.Attr[i].Val = rewriteCSSFragment(attr.Val, prefix, capability)
 		}
 	}
+}
+
+// relValue extracts the normalized rel attribute value of a token.
+func relValue(token *html.Token) string {
+	for _, attr := range token.Attr {
+		if strings.EqualFold(attr.Key, "rel") {
+			return strings.ToLower(strings.TrimSpace(attr.Val))
+		}
+	}
+	return ""
+}
+
+// attrContent is the HTML "content" attribute key (meta refresh targets).
+const attrContent = "content"
+
+// fetchingLinkRels are link rel values whose href the browser fetches; every
+// other rel is metadata and must not carry the capability.
+var fetchingLinkRels = map[string]bool{
+	"stylesheet": true, "icon": true, "shortcut icon": true, "apple-touch-icon": true,
+	"manifest": true, "preload": true, "modulepreload": true, "prefetch": true,
+	"dns-prefetch": true, "preconnect": true, "alternate stylesheet": true,
+}
+
+// isFetchingLinkRel reports whether a link rel fetches its href.
+func isFetchingLinkRel(rel string) bool {
+	return fetchingLinkRels[rel]
+}
+
+// isMetaRefresh reports whether a meta token is an http-equiv=refresh.
+func isMetaRefresh(token *html.Token) bool {
+	for _, attr := range token.Attr {
+		if strings.EqualFold(attr.Key, "http-equiv") && strings.EqualFold(strings.TrimSpace(attr.Val), "refresh") {
+			return true
+		}
+	}
+	return false
+}
+
+// metaRefreshPattern matches the url= target inside a meta refresh content
+// value: `5; url=/next` with optional quotes.
+var metaRefreshPattern = regexp.MustCompile(`(?i)(url\s*=\s*)(['"]?)([^'";]+)`)
+
+// rewriteMetaRefresh prefixes root-absolute navigation targets inside a meta
+// refresh content value (no capability — it is a navigation).
+func rewriteMetaRefresh(content, prefix string) string {
+	return metaRefreshPattern.ReplaceAllStringFunc(content, func(match string) string {
+		sub := metaRefreshPattern.FindStringSubmatch(match)
+		if len(sub) != 4 {
+			return match
+		}
+		target := rewriteURLReference(sub[3], prefix, "")
+		return sub[1] + sub[2] + target
+	})
 }
 
 // rewriteURLReference rewrites a URL-shaped attribute value. Path-absolute

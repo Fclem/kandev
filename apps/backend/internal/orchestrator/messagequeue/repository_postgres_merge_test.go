@@ -77,11 +77,14 @@ func waitForWaitingLocks(t *testing.T, poller interface {
 }
 
 // newTestPostgresRepoPair opens one isolated Postgres schema (skipping unless
-// KANDEV_TEST_POSTGRES_DSN is set) and constructs two repository instances over
-// it. Two instances simulate two backend processes sharing one queue database:
-// their per-session admission locks are process-local, so cross-instance races
-// are guarded only by the repository's affected-row checks.
-func newTestPostgresRepoPair(t *testing.T) (Repository, Repository) {
+// KANDEV_TEST_POSTGRES_DSN is set) and constructs two repository instances
+// over it, plus an extra single-connection DB handle on the same schema. Two
+// instances simulate two backend processes sharing one queue database: their
+// per-session admission locks are process-local, so cross-instance races are
+// guarded only by the repository's affected-row checks. The extra handle gives
+// a test a third connection — each worker pool is capped at one connection, so
+// a second concurrent operation on the same worker needs its own.
+func newTestPostgresRepoPair(t *testing.T) (Repository, Repository, *sqlx.DB) {
 	t.Helper()
 	dsn := testutil.PostgresDSNFromEnv(t)
 	schema := "kandev_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -111,7 +114,7 @@ func newTestPostgresRepoPair(t *testing.T) (Repository, Repository) {
 		}
 		return db
 	}
-	dbA, dbB := open(), open()
+	dbA, dbB, dbC := open(), open(), open()
 	repoA, err := NewSQLiteRepository(dbA, dbA)
 	if err != nil {
 		t.Fatalf("NewSQLiteRepository(postgres A): %v", err)
@@ -120,7 +123,7 @@ func newTestPostgresRepoPair(t *testing.T) (Repository, Repository) {
 	if err != nil {
 		t.Fatalf("NewSQLiteRepository(postgres B): %v", err)
 	}
-	return repoA, repoB
+	return repoA, repoB, dbC
 }
 
 // TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCannotLoseContent
@@ -137,7 +140,7 @@ func newTestPostgresRepoPair(t *testing.T) (Repository, Repository) {
 // rows, and reports a skip — the winner's content survives intact and the
 // loser surfaces a failed admission instead of overwriting it.
 func TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCannotLoseContent(t *testing.T) {
-	repoA, repoB := newTestPostgresRepoPair(t)
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
 	ctx := context.Background()
 
 	tail := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("race", "first"))
@@ -155,7 +158,9 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCanno
 	}
 
 	// Instance B starts a fold while A holds the lock: B reads the original
-	// tail, then its CAS UPDATE blocks on A's row lock.
+	// tail, then its CAS UPDATE blocks on A's row lock. The PID is captured
+	// before the goroutine (single-connection pool).
+	foldPID := pgBackendPID(t, repoB.(*sqliteRepository).db)
 	foldDone := make(chan error, 1)
 	candidate := defaultAutoMergeEntry("race", "second")
 	go func() {
@@ -173,7 +178,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCanno
 
 	// Wait until B's UPDATE is queued on the row lock. Only then is B's read
 	// snapshot guaranteed to predate A's competing fold below.
-	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "instance B fold on the tail row lock")
+	waitForWaitingLocks(t, lockTx, foldPID, 1, "instance B fold on the tail row lock")
 
 	// Instance A's competing fold commits first.
 	if _, err := lockTx.ExecContext(ctx, `
@@ -210,7 +215,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCanno
 // drains in the wrong order. The interleaving is forced deterministically with
 // a row lock, mirroring the concurrent-admission test.
 func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithReorderSkips(t *testing.T) {
-	repoA, repoB := newTestPostgresRepoPair(t)
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
 	ctx := context.Background()
 
 	first := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("race-reorder", "first"))
@@ -230,6 +235,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithReorderSkips(t *
 
 	// Instance B starts a fold while A holds the lock: B scans the tail
 	// ("second", position 2), then its CAS UPDATE blocks on A's row lock.
+	foldPID := pgBackendPID(t, repoB.(*sqliteRepository).db)
 	foldDone := make(chan error, 1)
 	candidate := defaultAutoMergeEntry("race-reorder", "third")
 	go func() {
@@ -247,7 +253,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithReorderSkips(t *
 
 	// Wait until B's UPDATE is queued on the row lock, guaranteeing B's scan
 	// predates the reorder below.
-	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "instance B fold on the tail row lock")
+	waitForWaitingLocks(t, lockTx, foldPID, 1, "instance B fold on the tail row lock")
 
 	// The concurrent reorder swaps only positions: "second" becomes the head.
 	if _, err := lockTx.ExecContext(ctx, `UPDATE queued_messages SET position = 1 WHERE id = $1`, second.ID); err != nil {
@@ -285,7 +291,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithReorderSkips(t *
 // before scanning, and only after the competing drain+insert commits does the
 // fold run — so the fold always scans the current tail, never a stale one.
 func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithInsertAbove(t *testing.T) {
-	repoA, repoB := newTestPostgresRepoPair(t)
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
 	ctx := context.Background()
 
 	first := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("race-tail", "first"))
@@ -312,6 +318,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithInsertAbove(t *t
 	}
 
 	// Instance B's fold blocks on the session lock before it can scan.
+	foldPID := pgBackendPID(t, repoB.(*sqliteRepository).db)
 	foldDone := make(chan error, 1)
 	candidate := defaultAutoMergeEntry("race-tail", "third")
 	go func() {
@@ -332,7 +339,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithInsertAbove(t *t
 	}()
 
 	// Wait until B's fold is queued on the session lock row.
-	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "instance B fold on the session lock")
+	waitForWaitingLocks(t, lockTx, foldPID, 1, "instance B fold on the session lock")
 
 	// The competing backend drains the head and inserts a new row above the
 	// old tail, then commits before the fold can run.
@@ -379,7 +386,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithInsertAbove(t *t
 // session lock (simulating a merge mid-transaction), the edit blocks on it,
 // the merge commits, and only then does the edit apply on top.
 func TestPostgresRepository_UpdateContentAndMetadata_RaceWithMerge(t *testing.T) {
-	repoA, repoB := newTestPostgresRepoPair(t)
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
 	ctx := context.Background()
 
 	target := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("merge-update", "first"))
@@ -407,6 +414,7 @@ func TestPostgresRepository_UpdateContentAndMetadata_RaceWithMerge(t *testing.T)
 
 	// Instance B's content edit blocks on the session lock until the merge
 	// commits.
+	editPID := pgBackendPID(t, repoB.(*sqliteRepository).db)
 	updateDone := make(chan error, 1)
 	go func() {
 		err := repoB.UpdateContentAndMetadata(ctx, "merge-update", target.ID, "edited", nil,
@@ -415,7 +423,7 @@ func TestPostgresRepository_UpdateContentAndMetadata_RaceWithMerge(t *testing.T)
 	}()
 
 	// Wait until B's edit is queued on the session lock row.
-	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "instance B edit on the session lock")
+	waitForWaitingLocks(t, lockTx, editPID, 1, "instance B edit on the session lock")
 
 	// The merge commits its stale-snapshot write (fold target + delete
 	// source) while the edit is still waiting.
@@ -472,7 +480,7 @@ func TestPostgresRepository_UpdateContentAndMetadata_RaceWithMerge(t *testing.T)
 // If TransferSession regressed to destination-only locking, the admission
 // would never block on the source and the second barrier would time out.
 func TestPostgresRepository_TransferSession_RaceWithSourceInsert(t *testing.T) {
-	repoA, repoB := newTestPostgresRepoPair(t)
+	repoA, repoB, extraDB := newTestPostgresRepoPair(t)
 	ctx := context.Background()
 
 	const (
@@ -481,6 +489,17 @@ func TestPostgresRepository_TransferSession_RaceWithSourceInsert(t *testing.T) {
 	)
 	insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry(oldSession, "first"))
 	dbA := repoA.(*sqliteRepository).db
+	// The source-side admission runs on a THIRD connection: repoB's pool has
+	// one connection, already held by the blocked transfer.
+	repoC, err := NewSQLiteRepository(extraDB, extraDB)
+	if err != nil {
+		t.Fatalf("NewSQLiteRepository(extra): %v", err)
+	}
+	// Capture worker PIDs BEFORE starting the operations: the pools are
+	// single-connection, so a post-start lookup could block on the busy
+	// worker or observe a different connection.
+	transferPID := pgBackendPID(t, repoB.(*sqliteRepository).db)
+	insertPID := pgBackendPID(t, extraDB)
 
 	// Instance A holds the DESTINATION lock. TransferSession locks the source
 	// first (stable sorted order), so it will block here on the destination.
@@ -508,19 +527,17 @@ func TestPostgresRepository_TransferSession_RaceWithSourceInsert(t *testing.T) {
 		transferDone <- repoB.TransferSession(ctx, oldSession, newSession)
 	}()
 
-	transferPID := pgBackendPID(t, repoB.(*sqliteRepository).db)
-
 	// Transfer blocked on the destination (holding the source lock).
 	waitForWaitingLocks(t, lockTx, transferPID, 1, "transfer on the destination")
 
-	// The source-side admission must now block on the source lock held by the
-	// transfer.
+	// The source-side admission (own connection) must now block on the source
+	// lock held by the transfer.
 	insertDone := make(chan error, 1)
 	admission := defaultAutoMergeEntry(oldSession, "inserted")
 	go func() {
-		insertDone <- repoB.Insert(ctx, &admission, 0)
+		insertDone <- repoC.Insert(ctx, &admission, 0)
 	}()
-	waitForWaitingLocks(t, lockTx, transferPID, 2, "source admission on the source lock")
+	waitForWaitingLocks(t, lockTx, insertPID, 1, "source admission on the source lock")
 
 	// Release the destination: the transfer commits its move before the
 	// admission proceeds.
@@ -559,7 +576,7 @@ func TestPostgresRepository_TransferSession_RaceWithSourceInsert(t *testing.T) {
 // losing durable retry state. The competing backend holds the session lock,
 // the ack blocks on it, and only after release does the ack delete the row.
 func TestPostgresRepository_AcknowledgeByID_RaceWithSessionLock(t *testing.T) {
-	repoA, repoB := newTestPostgresRepoPair(t)
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
 	ctx := context.Background()
 	entry := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("ack", "first"))
 	dbA := repoA.(*sqliteRepository).db
@@ -581,12 +598,13 @@ func TestPostgresRepository_AcknowledgeByID_RaceWithSessionLock(t *testing.T) {
 		t.Fatalf("lock session: %v", err)
 	}
 
+	ackPID := pgBackendPID(t, repoB.(*sqliteRepository).db)
 	ackDone := make(chan error, 1)
 	go func() {
 		ackDone <- repoB.AcknowledgeByID(ctx, "ack", entry.ID)
 	}()
 
-	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "ack on the session lock")
+	waitForWaitingLocks(t, lockTx, ackPID, 1, "ack on the session lock")
 
 	if err := lockTx.Commit(); err != nil {
 		t.Fatalf("commit lock tx: %v", err)
@@ -606,7 +624,7 @@ func TestPostgresRepository_AcknowledgeByID_RaceWithSessionLock(t *testing.T) {
 // TestPostgresRepository_SetPendingMove_RaceWithTransferLock proves pending
 // moves serialize on the session lock so a transfer cannot orphan one.
 func TestPostgresRepository_SetPendingMove_RaceWithSessionLock(t *testing.T) {
-	repoA, repoB := newTestPostgresRepoPair(t)
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
 	ctx := context.Background()
 	dbA := repoA.(*sqliteRepository).db
 
@@ -627,6 +645,7 @@ func TestPostgresRepository_SetPendingMove_RaceWithSessionLock(t *testing.T) {
 		t.Fatalf("lock session: %v", err)
 	}
 
+	setPID := pgBackendPID(t, repoB.(*sqliteRepository).db)
 	setDone := make(chan error, 1)
 	go func() {
 		setDone <- repoB.SetPendingMove(ctx, "pm", &PendingMove{
@@ -634,7 +653,7 @@ func TestPostgresRepository_SetPendingMove_RaceWithSessionLock(t *testing.T) {
 		})
 	}()
 
-	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "set pending move on the session lock")
+	waitForWaitingLocks(t, lockTx, setPID, 1, "set pending move on the session lock")
 
 	if err := lockTx.Commit(); err != nil {
 		t.Fatalf("commit lock tx: %v", err)
@@ -652,7 +671,7 @@ func TestPostgresRepository_SetPendingMove_RaceWithSessionLock(t *testing.T) {
 // backends cannot both return the same pending move: the second taker blocks
 // on the session lock until the first commits, then sees no move.
 func TestPostgresRepository_TakePendingMove_TwoTakersSerialized(t *testing.T) {
-	repoA, repoB := newTestPostgresRepoPair(t)
+	repoA, repoB, _ := newTestPostgresRepoPair(t)
 	ctx := context.Background()
 	if err := repoA.SetPendingMove(ctx, "pm-take", &PendingMove{
 		TaskID: "t", WorkflowID: "w", WorkflowStepID: "s", Position: 1, Actor: "test",
@@ -678,6 +697,7 @@ func TestPostgresRepository_TakePendingMove_TwoTakersSerialized(t *testing.T) {
 		t.Fatalf("lock session: %v", err)
 	}
 
+	takePID := pgBackendPID(t, repoB.(*sqliteRepository).db)
 	takeDone := make(chan error, 1)
 	go func() {
 		move, err := repoB.TakePendingMove(ctx, "pm-take")
@@ -692,7 +712,7 @@ func TestPostgresRepository_TakePendingMove_TwoTakersSerialized(t *testing.T) {
 		takeDone <- nil
 	}()
 
-	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "take pending move on the session lock")
+	waitForWaitingLocks(t, lockTx, takePID, 1, "take pending move on the session lock")
 
 	if err := lockTx.Commit(); err != nil {
 		t.Fatalf("commit lock tx: %v", err)

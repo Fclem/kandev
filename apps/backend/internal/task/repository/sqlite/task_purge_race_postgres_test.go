@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -149,12 +150,13 @@ func TestPostgresRepository_DeleteTask_LocksEmptySessionDuringPurge(t *testing.T
 		t.Fatalf("lock session: %v", err)
 	}
 
+	delPID := pgBackendPID(t, repoB.db)
 	delDone := make(chan error, 1)
 	go func() {
 		delDone <- repoB.DeleteTask(ctx, taskID)
 	}()
 
-	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.db), 1, "DeleteTask on the empty session's lock")
+	waitForWaitingLocks(t, lockTx, delPID, 1, "DeleteTask on the empty session's lock")
 
 	if err := lockTx.Commit(); err != nil {
 		t.Fatalf("commit lock tx: %v", err)
@@ -194,13 +196,14 @@ func TestPostgresRepository_WorkspaceCascade_GuardsTaskRowsBeforeSessionLocks(t 
 		t.Fatalf("lock task row: %v", err)
 	}
 
+	cascadePID := pgBackendPID(t, repoB.db)
 	cascadeDone := make(chan error, 1)
 	go func() {
 		_, _, err := repoB.deleteWorkspaceCascade(ctx, "ws-cascade-race", nil, nil)
 		cascadeDone <- err
 	}()
 
-	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.db), 1, "cascade on the task row guard (lock order)")
+	waitForWaitingLocks(t, lockTx, cascadePID, 1, "cascade on the task row guard (lock order)")
 
 	if err := lockTx.Commit(); err != nil {
 		t.Fatalf("commit lock tx: %v", err)
@@ -214,6 +217,38 @@ func TestPostgresRepository_WorkspaceCascade_GuardsTaskRowsBeforeSessionLocks(t 
 	}
 	if count != 0 {
 		t.Fatalf("workspace survived cascade: count=%d", count)
+	}
+}
+
+// TestPostgresRepository_QueueAdmissionRejectedAfterTaskDelete proves the
+// ordinary queue admission task-liveness guard: after DeleteTask commits, a
+// stale admission targeting the deleted task's session is rejected with
+// ErrTaskInactive and no queue row survives.
+func TestPostgresRepository_QueueAdmissionRejectedAfterTaskDelete(t *testing.T) {
+	repoA, _ := newTaskPostgresRepoPair(t)
+	ctx := context.Background()
+	seedTaskWithSession(t, repoA, "task-post-del", "ws-post-del", "sess-post-del")
+	queueRepo, err := messagequeue.NewSQLiteRepository(repoA.db, repoA.db)
+	if err != nil {
+		t.Fatalf("init queue repo: %v", err)
+	}
+
+	if err := repoA.DeleteTask(ctx, "task-post-del"); err != nil {
+		t.Fatalf("delete task: %v", err)
+	}
+
+	err = queueRepo.Insert(ctx, &messagequeue.QueuedMessage{
+		SessionID: "sess-post-del", TaskID: "task-post-del", Content: "orphan", QueuedBy: messagequeue.QueuedByUser,
+	}, 0)
+	if !errors.Is(err, messagequeue.ErrTaskInactive) {
+		t.Fatalf("post-delete admission err = %v, want ErrTaskInactive", err)
+	}
+	count, err := queueRepo.CountBySession(ctx, "sess-post-del")
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("queue survived task delete: count=%d", count)
 	}
 }
 
@@ -246,11 +281,11 @@ func TestPostgresRepository_DeleteTask_SerializesWithSessionCreation(t *testing.
 		t.Fatalf("lock task row: %v", err)
 	}
 
+	delPID := pgBackendPID(t, repoB.db)
 	delDone := make(chan error, 1)
 	go func() {
 		delDone <- repoB.DeleteTask(ctx, taskID)
 	}()
-	delPID := pgBackendPID(t, repoB.db)
 	waitForWaitingLocks(t, lockTx, delPID, 1, "DeleteTask on the task row barrier")
 
 	// A new session commits while DeleteTask waits on the task row.
@@ -328,12 +363,12 @@ func TestPostgresRepository_WorkspaceCascade_SerializesWithTaskCreation(t *testi
 		t.Fatalf("lock workspace row: %v", err)
 	}
 
+	cascadePID := pgBackendPID(t, repoB.db)
 	cascadeDone := make(chan error, 1)
 	go func() {
 		_, _, err := repoB.deleteWorkspaceCascade(ctx, wsID, nil, nil)
 		cascadeDone <- err
 	}()
-	cascadePID := pgBackendPID(t, repoB.db)
 	waitForWaitingLocks(t, lockTx, cascadePID, 1, "cascade on the workspace row")
 
 	// A new task with a session commits while the cascade waits on the

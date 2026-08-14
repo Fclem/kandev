@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -71,6 +72,14 @@ func (r *Repository) lockTaskRowInTx(ctx context.Context, tx *sqlx.Tx, taskID st
 // workspace delete cascade take it so a task created after a cascade's
 // inventory cannot escape the queue purge.
 func (r *Repository) lockWorkspaceRowInTx(ctx context.Context, tx *sqlx.Tx, workspaceID string) error {
+	return r.lockWorkspaceRowStdTx(ctx, tx, workspaceID)
+}
+
+// lockWorkspaceRowStdTx is the stdlib-transaction variant used by the task
+// creation/admission paths (which begin database/sql transactions).
+func (r *Repository) lockWorkspaceRowStdTx(ctx context.Context, tx interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, workspaceID string) error {
 	if !dialect.IsPostgres(r.db.DriverName()) {
 		return nil
 	}

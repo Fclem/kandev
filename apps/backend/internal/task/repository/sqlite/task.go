@@ -215,6 +215,13 @@ func (r *Repository) CreateTaskWithWorkflowStepAdmission(
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Same order as createTask and the workspace cascade: workspace row
+	// first, then workflow-step locks. Without it an admission holding a step
+	// lock while the cascade holds the workspace and waits for that step
+	// deadlocks on Postgres.
+	if err := r.lockWorkspaceRowStdTx(ctx, tx, task.WorkspaceID); err != nil {
+		return err
+	}
 	if err := r.lockWorkflowStepsForAdmission(ctx, tx, targetStepID, feederStepID); err != nil {
 		return err
 	}
@@ -287,14 +294,11 @@ func (r *Repository) createTask(ctx context.Context, task *models.Task, targetSt
 	// workspace row before inventorying its tasks, so a task created here
 	// either commits before the cascade's inventory (and is purged with the
 	// rest) or blocks until the cascade finishes, when the workspace is gone
-	// and the insert fails its foreign key.
-	if dialect.IsPostgres(r.db.DriverName()) {
-		var lockedWorkspaceID string
-		if err := tx.QueryRowContext(ctx, r.db.Rebind(
-			`SELECT id FROM workspaces WHERE id = ? FOR UPDATE`,
-		), task.WorkspaceID).Scan(&lockedWorkspaceID); err != nil {
-			return fmt.Errorf("lock workspace for task creation: %w", err)
-		}
+	// and the insert fails its foreign key. The workspace lock is taken
+	// before any workflow-step lock so the creation/admission paths share one
+	// order with the cascade.
+	if err := r.lockWorkspaceRowStdTx(ctx, tx, task.WorkspaceID); err != nil {
+		return err
 	}
 
 	if err := r.ensureWorkflowStepCapacity(ctx, tx, targetStepID, limit); err != nil {
@@ -577,6 +581,18 @@ func (r *Repository) updateTaskWithWorkflowStepAdmission(
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Workspace row before workflow-step lock, matching createTask and the
+	// workspace cascade: the update path must not hold a step lock while the
+	// cascade holds the workspace and waits for that step (Postgres
+	// deadlock). The task's workspace is read from its row so the caller's
+	// model cannot bypass the ordering.
+	var workspaceID string
+	if err := tx.QueryRowContext(ctx, r.db.Rebind(`SELECT workspace_id FROM tasks WHERE id = ?`), task.ID).Scan(&workspaceID); err != nil {
+		return false, fmt.Errorf("read task workspace for admission: %w", err)
+	}
+	if err := r.lockWorkspaceRowStdTx(ctx, tx, workspaceID); err != nil {
+		return false, err
+	}
 	if err := lockWorkflowStepForCapacity(ctx, tx, r.db.DriverName(), r.db.Rebind, targetStepID); err != nil {
 		return false, err
 	}

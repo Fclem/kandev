@@ -379,6 +379,104 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithInsertAbove(t *t
 	}
 }
 
+// TestPostgresRepository_UpdateContentAndMetadata_RaceWithMerge proves the
+// per-session lock also covers content edits: a merge's scan-to-write window
+// must not silently overwrite a concurrent UpdateContentAndMetadata. The
+// interleaving is forced deterministically — the competing backend holds the
+// session lock (simulating a merge mid-transaction), the edit blocks on it,
+// the merge commits, and only then does the edit apply on top.
+func TestPostgresRepository_UpdateContentAndMetadata_RaceWithMerge(t *testing.T) {
+	repoA, repoB := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+
+	target := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("merge-update", "first"))
+	source := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("merge-update", "second"))
+	dbA := repoA.(*sqliteRepository).db
+
+	// Instance A holds the per-session lock, simulating a merge that has
+	// scanned its target/source and is about to write.
+	lockTx, err := dbA.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `
+		INSERT INTO queue_session_locks (session_id) VALUES ('merge-update')
+		ON CONFLICT(session_id) DO NOTHING
+	`); err != nil {
+		t.Fatalf("ensure session lock row: %v", err)
+	}
+	if _, err := lockTx.ExecContext(ctx, `
+		SELECT 1 FROM queue_session_locks WHERE session_id = 'merge-update' FOR UPDATE
+	`); err != nil {
+		t.Fatalf("lock session: %v", err)
+	}
+
+	// Instance B's content edit blocks on the session lock until the merge
+	// commits.
+	updateDone := make(chan error, 1)
+	go func() {
+		err := repoB.UpdateContentAndMetadata(ctx, "merge-update", target.ID, "edited", nil,
+			map[string]interface{}{"edited": true}, "user")
+		updateDone <- err
+	}()
+
+	// Wait until B's edit is queued on the session lock row.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := lockTx.QueryRowContext(ctx, `
+			SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'row'
+		`).Scan(&waiting); err != nil {
+			t.Fatalf("query pg_locks: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("instance B edit never blocked on the session lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// The merge commits its stale-snapshot write (fold target + delete
+	// source) while the edit is still waiting.
+	if _, err := lockTx.ExecContext(ctx, `
+		UPDATE queued_messages SET content = $1 WHERE id = $2 AND session_id = 'merge-update'
+	`, "first\n\nsecond", target.ID); err != nil {
+		t.Fatalf("merge target write: %v", err)
+	}
+	if _, err := lockTx.ExecContext(ctx, `
+		DELETE FROM queued_messages WHERE id = $1 AND session_id = 'merge-update'
+	`, source.ID); err != nil {
+		t.Fatalf("merge source delete: %v", err)
+	}
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit merge: %v", err)
+	}
+
+	if err := <-updateDone; err != nil {
+		t.Fatalf("instance B edit: %v", err)
+	}
+
+	// The edit applied after the merge and survives: nothing was silently
+	// overwritten by the merge's stale write.
+	entries, err := repoA.ListBySession(ctx, "merge-update")
+	if err != nil {
+		t.Fatalf("list queue: %v", err)
+	}
+	if len(entries) != 1 || entries[0].ID != target.ID {
+		t.Fatalf("entries = %+v, want the merged target only", entries)
+	}
+	if entries[0].Content != "edited" {
+		t.Fatalf("target content = %q, want %q (concurrent edit must survive the merge)", entries[0].Content, "edited")
+	}
+	if edited := entries[0].Metadata["edited"]; edited != true {
+		t.Fatalf("target metadata = %+v, want the edit's metadata applied", entries[0].Metadata)
+	}
+}
+
 func TestPostgresRepository_MergeDrainOrdering_DrainWins(t *testing.T) {
 	repo := newTestPostgresRepo(t)
 	ctx := context.Background()

@@ -1304,6 +1304,13 @@ func (r *sqliteRepository) UpdateContentAndMetadata(ctx context.Context, session
 		return fmt.Errorf("begin update queued tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Content edits serialize with merges/folds on the same session: without
+	// the cross-process session lock a merge's scan-to-write window could
+	// silently overwrite a concurrent edit (the merge's affected-row check
+	// only detects deletion, not stale content).
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
 
 	var metadataJSON string
 	query := `SELECT metadata_json FROM queued_messages WHERE id = ? AND session_id = ? AND queued_by = ? AND queued_by NOT IN (?, ?, ?)`

@@ -95,7 +95,7 @@ const cancelTouchDrag: CancelTouchDrag = (touchStartTarget) => {
  * capture props.
  */
 function useMenuTouchDragCancel(onOpenChange: (open: boolean) => void) {
-  const touchStartTargetRef = useRef<EventTarget | null>(null);
+  const touchStartRef = useRef<{ target: EventTarget; identifier: number } | null>(null);
   const menuOpenRef = useRef(false);
   const handleOpenChange = (open: boolean) => {
     onOpenChange(open);
@@ -104,11 +104,11 @@ function useMenuTouchDragCancel(onOpenChange: (open: boolean) => void) {
       // A touch long-press has already armed the row's TouchSensor (250ms)
       // when the menu opens (~700ms); cancel that drag at the touchstart
       // target so the menu gesture never moves the row.
-      const target = touchStartTargetRef.current;
-      touchStartTargetRef.current = null;
+      const target = touchStartRef.current?.target ?? null;
+      touchStartRef.current = null;
       cancelTouchDrag(target);
     } else {
-      touchStartTargetRef.current = null;
+      touchStartRef.current = null;
     }
   };
   return {
@@ -117,18 +117,37 @@ function useMenuTouchDragCancel(onOpenChange: (open: boolean) => void) {
       // The TouchSensor attaches its touchcancel listener to the element the
       // touch began on while a drag is active. Track only the first touch of
       // a single-touch gesture (dnd-kit's TouchSensor rejects multi-touch)
-      // and only while the menu is closed, and drop the target as soon as the
-      // touch ends or the menu closes, so a later open never dispatches a
-      // synthetic touchcancel for a gesture that is no longer active.
+      // and only while the menu is closed, and drop the target when that
+      // touch ends or the menu closes — not when another finger lifts — so a
+      // later open never dispatches a synthetic touchcancel for a gesture
+      // that is no longer active (pull-to-refresh and touch-scroll listen for
+      // bubbled touchcancel).
       onTouchStartCapture: (event: React.TouchEvent) => {
         if (menuOpenRef.current || event.touches.length !== 1) return;
-        if (!touchStartTargetRef.current) touchStartTargetRef.current = event.target;
+        if (!touchStartRef.current) {
+          touchStartRef.current = {
+            target: event.target,
+            identifier: event.touches[0].identifier,
+          };
+        }
       },
-      onTouchEndCapture: () => {
-        touchStartTargetRef.current = null;
+      onTouchEndCapture: (event: React.TouchEvent) => {
+        const tracked = touchStartRef.current;
+        if (
+          tracked &&
+          Array.from(event.changedTouches).some((t) => t.identifier === tracked.identifier)
+        ) {
+          touchStartRef.current = null;
+        }
       },
-      onTouchCancelCapture: () => {
-        touchStartTargetRef.current = null;
+      onTouchCancelCapture: (event: React.TouchEvent) => {
+        const tracked = touchStartRef.current;
+        if (
+          tracked &&
+          Array.from(event.changedTouches).some((t) => t.identifier === tracked.identifier)
+        ) {
+          touchStartRef.current = null;
+        }
       },
     },
   };

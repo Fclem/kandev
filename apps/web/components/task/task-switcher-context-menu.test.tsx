@@ -181,12 +181,37 @@ describe("TaskItemWithContextMenu — touch drag cancellation", () => {
     row.addEventListener("touchcancel", touchCancelListener);
 
     fireEvent.touchStart(row, { touches: [{ identifier: 1 }] });
-    fireEvent.touchEnd(row);
+    fireEvent.touchEnd(row, { changedTouches: [{ identifier: 1 }] });
     fireEvent.contextMenu(row);
     await screen.findByRole("menuitem", { name: /color/i });
 
     // No gesture is active when the menu opens, so nothing is dispatched.
     expect(touchCancelListener).not.toHaveBeenCalled();
     row.removeEventListener("touchcancel", touchCancelListener);
+  });
+
+  it("a non-primary finger lifting does not clear the tracked drag target", async () => {
+    // Finger 1 holds the row (long-press in progress); finger 2 lifts first.
+    // Only finger 1's touchend may clear the target, so the menu-open cancel
+    // still reaches the first touch's element.
+    stubTouchEvent();
+
+    try {
+      renderWithDragHandle();
+      const row = screen.getByTestId("task-row");
+      const touchCancelListener = vi.fn();
+      row.addEventListener("touchcancel", touchCancelListener);
+
+      fireEvent.touchStart(row, { touches: [{ identifier: 1 }] });
+      fireEvent.touchEnd(row, { changedTouches: [{ identifier: 2 }] });
+      fireEvent.contextMenu(row);
+      await screen.findByRole("menuitem", { name: /color/i });
+
+      expect(touchCancelListener).toHaveBeenCalledTimes(1);
+      expect(touchCancelListener.mock.calls[0]?.[0].type).toBe("touchcancel");
+      row.removeEventListener("touchcancel", touchCancelListener);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

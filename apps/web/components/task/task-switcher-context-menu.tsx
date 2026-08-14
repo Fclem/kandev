@@ -96,24 +96,39 @@ const cancelTouchDrag: CancelTouchDrag = (touchStartTarget) => {
  */
 function useMenuTouchDragCancel(onOpenChange: (open: boolean) => void) {
   const touchStartTargetRef = useRef<EventTarget | null>(null);
+  const menuOpenRef = useRef(false);
   const handleOpenChange = (open: boolean) => {
     onOpenChange(open);
-    // A touch long-press has already armed the row's TouchSensor (250ms)
-    // when the menu opens (~700ms); cancel that drag at the touchstart
-    // target so the menu gesture never moves the row.
+    menuOpenRef.current = open;
     if (open) {
+      // A touch long-press has already armed the row's TouchSensor (250ms)
+      // when the menu opens (~700ms); cancel that drag at the touchstart
+      // target so the menu gesture never moves the row.
       const target = touchStartTargetRef.current;
       touchStartTargetRef.current = null;
       cancelTouchDrag(target);
+    } else {
+      touchStartTargetRef.current = null;
     }
   };
   return {
     handleOpenChange,
     triggerProps: {
       // The TouchSensor attaches its touchcancel listener to the element the
-      // touch began on while a drag is active.
+      // touch began on while a drag is active. Track only the first touch of
+      // a single-touch gesture (dnd-kit's TouchSensor rejects multi-touch)
+      // and only while the menu is closed, and drop the target as soon as the
+      // touch ends or the menu closes, so a later open never dispatches a
+      // synthetic touchcancel for a gesture that is no longer active.
       onTouchStartCapture: (event: React.TouchEvent) => {
-        touchStartTargetRef.current = event.target;
+        if (menuOpenRef.current || event.touches.length !== 1) return;
+        if (!touchStartTargetRef.current) touchStartTargetRef.current = event.target;
+      },
+      onTouchEndCapture: () => {
+        touchStartTargetRef.current = null;
+      },
+      onTouchCancelCapture: () => {
+        touchStartTargetRef.current = null;
       },
     },
   };

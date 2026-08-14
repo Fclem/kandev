@@ -11,14 +11,15 @@ const PREFIX = "[preview]";
 // without manually switching DevTools' execution context to the iframe.
 //
 // The `iframeRef` argument is used to verify that incoming messages came from
-// the previewed iframe and not from another frame or extension; otherwise any
-// page with access to the parent window could spam the developer console with
-// fake `[preview]` lines.
+// the previewed iframe and not from another frame or extension; the origin is
+// additionally pinned to the gateway origin (the preview is same-origin with
+// the Kandev UI), matching the shim's scoped postMessage target.
 export function usePreviewConsoleForwarder(
   iframeRef: React.RefObject<HTMLIFrameElement | null>,
 ): void {
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
       if (event.source !== iframeRef.current?.contentWindow) return;
       if (!isInspectorMessage(event.data)) return;
       if (!isPreviewConsoleMessage(event.data)) return;

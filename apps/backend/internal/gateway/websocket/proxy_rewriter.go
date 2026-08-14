@@ -97,21 +97,30 @@ const runtimeShimTemplate = `(function(){` +
 	// rewriting already prefix anchor hrefs, so the browser's own default
 	// navigation stays inside the proxy subtree and application click
 	// handlers (including delegated document listeners) keep full control.
+	// Known limitation: an anchor created and clicked programmatically
+	// (anchor.click()) in the same task can navigate before the
+	// MutationObserver microtask rewrites its href; ordinary user clicks are
+	// unaffected because the observer delivers before the next task.
 	`['assign','replace'].forEach(function(op){var orig=location[op];if(!orig)return;try{location[op]=function(u){if(typeof u==='string')u=rn(u);return orig.call(location,u)}}catch(e){}});` +
 	// MutationObserver: rewrite URL attributes on every element that is
 	// inserted or has its URL attribute mutated. Navigation attributes
 	// (anchor/area/base href, form action, button/input formaction, metadata
 	// link rel=canonical/alternate) use the prefix-only rewriter; subresource
-	// attributes use the capability-bearing one. Covers the cases the
-	// network-API patches miss, notably `ReactDOM.preload()` and any
-	// framework that builds DOM nodes with absolute paths after the initial
-	// HTML has been parsed.
+	// attributes use the capability-bearing one. The attribute filter also
+	// watches rel (link classification can change dynamically), style, srcdoc,
+	// and meta content; style/srcdoc/meta mutations are intentionally not
+	// runtime-rewritten (the static pass covers the initial document; their
+	// subresources carry cookies, so the capability is not required).
+	// Covers the cases the network-API patches miss, notably
+	// `ReactDOM.preload()` and any framework that builds DOM nodes with
+	// absolute paths after the initial HTML has been parsed.
 	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset'];` +
 	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&(el.rel==='canonical'||el.rel==='alternate'))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'));var rr=nav?rn:r;var nv;if(a==='srcset'){nv=v.split(',').map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
 	`function rwe(el){if(!el||el.nodeType!==1)return;for(var i=0;i<ATTRS.length;i++)rwa(el,ATTRS[i])}` +
-	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:ATTRS})}catch(e){}}` +
-	// Console forwarding: pipe iframe console output back to the parent frame via postMessage so it surfaces in the kandev UI alongside other preview events. Errors and stacks are coerced to strings; objects are JSON-cloned where possible. We continue calling the original method so the iframe's own DevTools still shows everything.
-	`var LV=['log','warn','error','info','debug'];LV.forEach(function(lv){var orig=console[lv];if(!orig)return;console[lv]=function(){try{var out=[];for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){out.push('Error: '+a.message+(a.stack?'\n'+a.stack:''))}else if(typeof a==='object'&&a!==null){try{out.push(JSON.parse(JSON.stringify(a)))}catch(e){out.push(String(a))}}else{out.push(a)}}window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},'*')}catch(e){}return orig.apply(console,arguments)}});` +
+	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','rel','style','content','http-equiv','srcdoc'];` +
+	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})}catch(e){}}` +
+	// Console forwarding: pipe iframe console output back to the parent frame via postMessage so it surfaces in the kandev UI alongside other preview events. The message targets the gateway origin only (the preview is served by the gateway, same-origin with the Kandev UI), never a wildcard, so a cross-origin embedding parent cannot receive proxied app console arguments. Errors and stacks are coerced to strings; objects are JSON-cloned where possible. We continue calling the original method so the iframe's own DevTools still shows everything.
+	`var LV=['log','warn','error','info','debug'];LV.forEach(function(lv){var orig=console[lv];if(!orig)return;console[lv]=function(){try{var out=[];for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){out.push('Error: '+a.message+(a.stack?'\n'+a.stack:''))}else if(typeof a==='object'&&a!==null){try{out.push(JSON.parse(JSON.stringify(a)))}catch(e){out.push(String(a))}}else{out.push(a)}}window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},window.location.origin)}catch(e){}return orig.apply(console,arguments)}});` +
 	`})();`
 
 // runtimeShim returns the runtime shim's JavaScript body with the given proxy
@@ -142,25 +151,46 @@ const runtimeShimPath = "__kandev_runtime_shim.js"
 // every HTML response we proxy; the browser loads the shim body from the
 // proxy's reserved path. When a capability is minted it rides on the src so
 // the shim itself loads even in cookie-less contexts. When the response's
-// Content-Security-Policy uses a script nonce, the tag carries it so nonce-
-// and strict-dynamic-based policies still allow the shim.
+// Content-Security-Policy uses a script nonce, the tag carries it (validated
+// against the CSP nonce grammar and HTML-escaped) so nonce- and
+// strict-dynamic-based policies still allow the shim.
 func runtimeShimTag(prefix, capability, nonce string) string {
 	src := prefix + "/" + runtimeShimPath
 	if capability != "" {
 		src += "?" + proxyCapabilityQueryParam + "=" + capability
 	}
 	nonceAttr := ""
-	if nonce != "" {
-		nonceAttr = ` nonce="` + nonce + `"`
+	if nonce != "" && validCSPNonce(nonce) {
+		nonceAttr = ` nonce="` + html.EscapeString(nonce) + `"`
 	}
 	return `<script src="` + src + `"` + nonceAttr + `></script>`
 }
 
-// cspMetaPattern matches a Content-Security-Policy meta tag so a policy set in
-// the document body is honored for nonce extraction too. The content value may
-// be double- or single-quoted; single quotes inside a double-quoted policy are
-// preserved.
-var cspMetaPattern = regexp.MustCompile(`(?is)<meta[^>]*http-equiv\s*=\s*["']?content-security-policy["']?[^>]*content\s*=\s*(?:"([^"]*)"|'([^']*)')`)
+// validCSPNonce accepts only the CSP nonce grammar: base64/base64url
+// characters with optional padding. A malformed nonce-shaped token from an
+// app-controlled policy must never be interpolated into the injected markup.
+func validCSPNonce(nonce string) bool {
+	if nonce == "" || len(nonce) > 256 {
+		return false
+	}
+	for i := 0; i < len(nonce); i++ {
+		if !cspNonceChar(nonce[i]) {
+			return false
+		}
+		// Padding only at the end, at most two chars.
+		if nonce[i] == '=' && i < len(nonce)-2 {
+			return false
+		}
+	}
+	return true
+}
+
+// cspNonceChar reports whether a byte is valid in a CSP nonce (base64 /
+// base64url alphabet).
+func cspNonceChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
+		c == '+' || c == '/' || c == '-' || c == '_' || c == '='
+}
 
 // scriptNonceFromCSP extracts the script-src nonce from a Content-Security-
 // Policy value, e.g. `script-src 'self' 'nonce-abc123'`.
@@ -181,20 +211,44 @@ func scriptNonceFromCSP(policy string) string {
 	return ""
 }
 
+// cspMetaTagPattern matches a whole CSP meta tag so attributes can be read in
+// any order.
+var cspMetaTagPattern = regexp.MustCompile(`(?is)<meta[^>]*>`)
+
+// cspMetaHTTPEquivPattern extracts the http-equiv value of a meta tag.
+var cspMetaHTTPEquivPattern = regexp.MustCompile(`(?is)http-equiv\s*=\s*["']?([^"'\s>]+)`)
+
+// cspMetaContentPattern extracts the content value of a meta tag (double- or
+// single-quoted; single quotes inside a double-quoted policy are preserved).
+var cspMetaContentPattern = regexp.MustCompile(`(?is)content\s*=\s*(?:"([^"]*)"|'([^']*)')`)
+
 // responseScriptNonce returns the script nonce an app Content-Security-Policy
 // requires, from either the response header or a CSP meta tag in the body.
+// Every CSP meta tag is scanned — attribute order does not matter and a
+// nonce-free policy earlier in the document cannot hide a later nonce-bearing
+// one.
 func responseScriptNonce(resp *http.Response, body []byte) string {
 	for _, policy := range resp.Header.Values("Content-Security-Policy") {
 		if nonce := scriptNonceFromCSP(policy); nonce != "" {
 			return nonce
 		}
 	}
-	if m := cspMetaPattern.FindSubmatch(body); len(m) == 3 {
-		policy := m[1]
-		if len(policy) == 0 {
-			policy = m[2]
+	for _, tag := range cspMetaTagPattern.FindAll(body, -1) {
+		equiv := cspMetaHTTPEquivPattern.FindSubmatch(tag)
+		if len(equiv) != 2 || !strings.EqualFold(string(equiv[1]), "content-security-policy") {
+			continue
 		}
-		return scriptNonceFromCSP(string(policy))
+		content := cspMetaContentPattern.FindSubmatch(tag)
+		if len(content) != 3 {
+			continue
+		}
+		policy := content[1]
+		if len(policy) == 0 {
+			policy = content[2]
+		}
+		if nonce := scriptNonceFromCSP(string(policy)); nonce != "" {
+			return nonce
+		}
 	}
 	return ""
 }
@@ -202,18 +256,18 @@ func responseScriptNonce(resp *http.Response, body []byte) string {
 // shimCapabilityJS returns the JavaScript spliced into the shim's path
 // rewriter so runtime-rewritten URLs carry the subtree capability. It appends
 // the capability as a query parameter: any URL fragment is split off first so
-// the query lands before it, existing query strings are preserved, and the
-// append is skipped only when the URL already carries an exact kandev_cap
-// query key (a substring match would wrongly suppress unrelated values like
-// /kandev_cap=note or ?name=kandev_cap=). Empty when no capability is minted,
-// keeping the auth-disabled output byte-identical.
+// the query lands before it and existing query strings are preserved. The
+// append is unconditional — an app's own kandev_cap parameter must not
+// suppress the issued capability, and the gateway accepts any valid value
+// among duplicates. Empty when no capability is minted, keeping the
+// auth-disabled output byte-identical.
 func shimCapabilityJS(capability string) string {
 	if capability == "" {
 		return ""
 	}
 	param := proxyCapabilityQueryParam + "="
-	return fmt.Sprintf(`var K=%q;var x=P+u;var fr='';var fh=x.indexOf('#');if(fh!==-1){fr=x.slice(fh);x=x.slice(0,fh)}if(!/([?&])%s/.test(x))x+=(x.indexOf('?')===-1?'?':'&')+%q+K;return x+fr;`,
-		capability, proxyCapabilityQueryParam+`=`, param)
+	return fmt.Sprintf(`var K=%q;var x=P+u;var fr='';var fh=x.indexOf('#');if(fh!==-1){fr=x.slice(fh);x=x.slice(0,fh)}x+=(x.indexOf('?')===-1?'?':'&')+%q+K;return x+fr;`,
+		capability, param)
 }
 
 // urlInCSSPattern matches `url(...)` invocations in CSS where the argument is
@@ -333,7 +387,6 @@ type htmlRewriteState struct {
 	capability   string
 	shim         string
 	nonce        string
-	depth        int
 	inStyle      bool
 	inScript     bool
 	shimInjected bool
@@ -342,7 +395,7 @@ type htmlRewriteState struct {
 // onStartTag emits the (URL-rewritten) start tag and updates raw-text
 // element tracking. Also injects the runtime shim immediately after `<head>`.
 func (s *htmlRewriteState) onStartTag(token html.Token) {
-	rewriteTokenURLs(&token, s.prefix, s.capability, s.nonce, s.depth)
+	rewriteTokenURLs(&token, s.prefix, s.capability, s.nonce, 0)
 	s.out.WriteString(token.String())
 	if !s.shimInjected && token.Data == headTagName {
 		s.out.WriteString(s.shim)
@@ -402,7 +455,7 @@ func rewriteHTMLURLsAtDepth(body []byte, prefix, capability, nonce string, depth
 	tok := html.NewTokenizer(bytes.NewReader(body))
 	var out bytes.Buffer
 	out.Grow(len(body) + 256 + len(runtimeShimTemplate))
-	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShimTag(prefix, capability, nonce), nonce: nonce, depth: depth}
+	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShimTag(prefix, capability, nonce), nonce: nonce}
 	for {
 		tt := tok.Next()
 		if tt == html.ErrorToken {
@@ -519,35 +572,42 @@ func isMetaRefresh(token *html.Token) bool {
 	return false
 }
 
-// metaRefreshQuotedPattern matches a quoted url= target inside a meta refresh
-// content value: `5; url='/next path'` — the value runs to the closing quote,
-// so embedded semicolons or spaces stay inside the URL.
-var metaRefreshQuotedPattern = regexp.MustCompile(`(?i)(url\s*=\s*)(['"])([^'"]*)`)
-
-// metaRefreshUnquotedPattern matches an unquoted url= target:
-// `5; url=/next` — the value runs to the next delimiter (quote, semicolon,
-// whitespace).
-var metaRefreshUnquotedPattern = regexp.MustCompile(`(?i)(url\s*=\s*)([^'"\s;]+)`)
-
-// rewriteMetaRefresh prefixes root-absolute navigation targets inside a meta
-// refresh content value (no capability — it is a navigation). Quoted targets
-// are matched first so a semicolon or space inside the URL is preserved.
+// rewriteMetaRefresh prefixes the first root-absolute navigation target inside
+// a meta refresh content value (no capability — it is a navigation). The
+// target is parsed exactly once, respecting an optional quote; any text after
+// it — including nested url= tokens — is preserved untouched, so a quoted
+// target containing `url=` cannot be rewritten a second time.
 func rewriteMetaRefresh(content, prefix string) string {
-	content = metaRefreshQuotedPattern.ReplaceAllStringFunc(content, func(match string) string {
-		sub := metaRefreshQuotedPattern.FindStringSubmatch(match)
-		if len(sub) != 4 {
-			return match
+	lower := strings.ToLower(content)
+	idx := strings.Index(lower, "url=")
+	if idx < 0 {
+		return content
+	}
+	rest := content[idx+4:]
+	trimmed := strings.TrimLeft(rest, " \t")
+	offset := len(rest) - len(trimmed)
+	target, tail, quote := parseRefreshTarget(trimmed)
+	return content[:idx+4] + rest[:offset] + quote + rewriteURLReference(target, prefix, "") + tail
+}
+
+// parseRefreshTarget splits a meta refresh target off the text after `url=`,
+// respecting an optional quote. The tail keeps the closing quote and any
+// remaining text (including nested url= tokens) untouched.
+func parseRefreshTarget(trimmed string) (target, tail, quote string) {
+	if trimmed == "" {
+		return "", "", ""
+	}
+	if trimmed[0] != '\'' && trimmed[0] != '"' {
+		if end := strings.IndexAny(trimmed, "; \t"); end >= 0 {
+			return trimmed[:end], trimmed[end:], ""
 		}
-		// The closing quote is not consumed by the pattern; it stays in place.
-		return sub[1] + sub[2] + rewriteURLReference(sub[3], prefix, "")
-	})
-	return metaRefreshUnquotedPattern.ReplaceAllStringFunc(content, func(match string) string {
-		sub := metaRefreshUnquotedPattern.FindStringSubmatch(match)
-		if len(sub) != 3 {
-			return match
-		}
-		return sub[1] + rewriteURLReference(sub[2], prefix, "")
-	})
+		return trimmed, "", ""
+	}
+	quote = trimmed[:1]
+	if end := strings.IndexByte(trimmed[1:], quote[0]); end >= 0 {
+		return trimmed[1 : 1+end], trimmed[1+end:], quote
+	}
+	return trimmed[1:], "", quote
 }
 
 // rewriteURLReference rewrites a URL-shaped attribute value. Path-absolute

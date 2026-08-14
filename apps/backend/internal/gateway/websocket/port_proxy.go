@@ -49,7 +49,11 @@ const (
 	// asset URLs by rewriteProxyResponse.
 	proxyCapabilityQueryParam = "kandev_cap"
 	// proxyCapabilityTTL is how long a minted capability stays valid. Sliding:
-	// every proxied response mints a fresh one.
+	// every proxied response mints a fresh one. Previews opened with a durable
+	// session cookie re-authenticate indefinitely; a preview that relies
+	// solely on the capability (no cookie storage) is deliberately short-lived
+	// — after an idle proxyCapabilityTTL the capability expires and the
+	// subtree requires a fresh credential.
 	proxyCapabilityTTL = 15 * time.Minute
 )
 

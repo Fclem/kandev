@@ -227,11 +227,16 @@ func TestRuntimeShim_InstallsMutationObserver(t *testing.T) {
 	// Next.js `ReactDOM.preload()` for fonts) get their URL attributes
 	// rewritten too, not just whatever was in the initial HTML.
 	mustContain(t, shim, `new MO(function(rs)`)
-	mustContain(t, shim, `.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:ATTRS})`)
+	mustContain(t, shim, `.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})`)
 
 	// The attribute list mirrors the static HTML rewriter's coverage so the
 	// runtime path doesn't silently miss attributes the static path catches.
 	mustContain(t, shim, `'href','src','action','formaction','cite','data','poster','background','manifest','srcset'`)
+
+	// rel changes are observed so link classification (canonical/alternate vs
+	// fetching) stays current; style/srcdoc/meta are observed but documented
+	// as static-only.
+	mustContain(t, shim, `'rel','style','content','http-equiv','srcdoc'`)
 
 	// srcset has its own splitter (whitespace-separated descriptors).
 	mustContain(t, shim, `if(a==='srcset')`)
@@ -468,10 +473,13 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `var K="cap-shim";`)
 	// Fragment split: the query lands before any #fragment.
 	mustContain(t, shim, `var fh=x.indexOf('#');if(fh!==-1){fr=x.slice(fh);x=x.slice(0,fh)}`)
-	// Exact-key guard: only an actual ?kandev_cap=/&kandev_cap= key suppresses
-	// the append, not substrings like /kandev_cap=note or ?name=kandev_cap=.
-	mustContain(t, shim, `if(!/([?&])kandev_cap=/.test(x))`)
+	// The append is unconditional: an app's own kandev_cap parameter must not
+	// suppress the issued capability (the gateway accepts any valid value
+	// among duplicates).
 	mustContain(t, shim, `x+=(x.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+	if strings.Contains(shim, `if(!/([?&])kandev_cap=/.test(x))`) {
+		t.Fatal("the shim must not let an app kandev_cap key suppress the issued capability")
+	}
 	// WebSocket wrapper rewrites string AND URL-object inputs through norm(),
 	// which carries the capability; same-origin ws/wss origins are compared
 	// as http/https via the URL API and the scheme is swapped for the
@@ -658,6 +666,52 @@ func TestRewriteHTMLURLs_ShimTagCarriesCSPNonce(t *testing.T) {
 	gotPlain, _ := io.ReadAll(plain.Body)
 	if strings.Contains(string(gotPlain), "nonce=") {
 		t.Fatalf("shim tag must not carry a nonce when the policy has none:\n%s", gotPlain)
+	}
+
+	// A malformed nonce-shaped token from a hostile policy must not be
+	// interpolated into the injected markup.
+	hostile := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'self' 'nonce-x"><script>alert(1)</script>'`},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(hostile, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gotHostile, _ := io.ReadAll(hostile.Body)
+	if strings.Contains(string(gotHostile), `<script>alert(1)`) {
+		t.Fatalf("hostile nonce injected markup:\n%s", gotHostile)
+	}
+	if strings.Contains(string(gotHostile), `nonce="x"`) {
+		t.Fatalf("malformed nonce accepted into the shim tag:\n%s", gotHostile)
+	}
+}
+
+// CSP meta tags are scanned in any attribute order, and every meta is examined
+// so a nonce-free policy cannot hide a later nonce-bearing one.
+func TestRewriteHTMLURLs_CSPMetaAnyAttributeOrder(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><meta content="script-src 'self'" http-equiv="Content-Security-Policy"><meta http-equiv="Content-Security-Policy" content="script-src 'nonce-later99'"><title>x</title></head><body></body></html>`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"text/html"}},
+		Body:       io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	mustContain(t, string(got), `nonce="later99"`)
+}
+
+// Console forwarding targets only the gateway origin, never a wildcard.
+func TestRuntimeShim_ConsoleForwardingTargetsOrigin(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-console")
+	mustContain(t, shim, `window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},window.location.origin)`)
+	if strings.Contains(shim, `postMessage(`) && strings.Contains(shim, `,'*')`) {
+		t.Fatal("console forwarding must not use a wildcard postMessage target")
 	}
 }
 

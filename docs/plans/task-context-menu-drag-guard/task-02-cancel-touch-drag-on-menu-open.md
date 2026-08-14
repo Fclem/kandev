@@ -87,9 +87,11 @@ Sequential; task 02 depends on task 01 and changes the same component.
   Initial document-level touchcancel dispatch did not cancel (the TouchSensor
   listens on the touchstart target element, not the document); corrected to
   dispatch at the captured touchstart target.
-- Unit suite (`task-switcher-context-menu.test.tsx`): 8/8, including the
-  touchstart containment, menu-open touchcancel, multi-touch retention,
-  stale-target clearing, and non-primary-finger-lift assertions.
+- Unit suite (`task-switcher-context-menu.test.tsx`): 10/10, including the
+  touchstart containment, menu-open touchcancel (with dispatch-target
+  assertions), multi-touch retention, stale-target clearing, and
+  non-primary-finger touchend/touchcancel vs tracked-touch touchcancel
+  identifier cases.
 - Mobile E2E (`mobile-subtask-reparent-drag-drop.spec.ts`, mobile-chrome):
   2/2 — new "long-press opens the context menu without dragging the row" plus
   the existing touch-drag re-parenting test.

@@ -49,6 +49,23 @@ async function openContextMenu() {
   await screen.findByRole("menuitem", { name: /color/i });
 }
 
+// happy-dom's TouchEvent drops the touches/changedTouches init, so the touch
+// events in the cancellation tests stub it faithfully.
+function stubTouchEvent() {
+  vi.stubGlobal(
+    "TouchEvent",
+    class StubTouchEvent extends Event {
+      touches: unknown[];
+      changedTouches: unknown[];
+      constructor(type: string, init?: { touches?: unknown[]; changedTouches?: unknown[] }) {
+        super(type);
+        this.touches = init?.touches ?? [];
+        this.changedTouches = init?.changedTouches ?? [];
+      }
+    },
+  );
+}
+
 describe("TaskItemWithContextMenu — pointer containment", () => {
   // Regression: the menu renders in a portal whose fiber ancestors include the
   // drag handle. Without a guard, mousedown/pointerdown on any menu item
@@ -108,20 +125,6 @@ describe("TaskItemWithContextMenu — pointer containment", () => {
 });
 
 describe("TaskItemWithContextMenu — touch drag cancellation", () => {
-  // happy-dom's TouchEvent drops the touches init, so the touch events in
-  // these tests stub it faithfully.
-  const stubTouchEvent = () =>
-    vi.stubGlobal(
-      "TouchEvent",
-      class StubTouchEvent extends Event {
-        touches: unknown[];
-        constructor(type: string, init?: { touches?: unknown[] }) {
-          super(type);
-          this.touches = init?.touches ?? [];
-        }
-      },
-    );
-
   it("opening the menu cancels an in-flight touch drag at the touchstart target", async () => {
     // A touch long-press arms the row's TouchSensor (250ms) before the menu
     // opens (~700ms); dnd-kit cancels the drag when a touchcancel reaches the
@@ -140,6 +143,7 @@ describe("TaskItemWithContextMenu — touch drag cancellation", () => {
 
       expect(touchCancelListener).toHaveBeenCalledTimes(1);
       expect(touchCancelListener.mock.calls[0]?.[0].type).toBe("touchcancel");
+      expect(touchCancelListener.mock.calls[0]?.[0].target).toBe(row);
       row.removeEventListener("touchcancel", touchCancelListener);
     } finally {
       vi.unstubAllGlobals();
@@ -148,7 +152,9 @@ describe("TaskItemWithContextMenu — touch drag cancellation", () => {
 
   it("a second concurrent touch does not overwrite the captured drag target", async () => {
     // dnd-kit's TouchSensor ignores a second finger (touches.length > 1), so
-    // the first touch's target must stay the cancel target.
+    // the first touch's target must stay the cancel target. The listener sits
+    // on the row and `secondFinger` nests inside it, so a buggy overwrite
+    // would still bubble here — assert the event target itself.
     stubTouchEvent();
 
     try {
@@ -168,6 +174,7 @@ describe("TaskItemWithContextMenu — touch drag cancellation", () => {
 
       // The cancel went to the first touch's target (the row), not the second.
       expect(touchCancelListener).toHaveBeenCalledTimes(1);
+      expect(touchCancelListener.mock.calls[0]?.[0].target).toBe(row);
       row.removeEventListener("touchcancel", touchCancelListener);
     } finally {
       vi.unstubAllGlobals();
@@ -209,6 +216,58 @@ describe("TaskItemWithContextMenu — touch drag cancellation", () => {
 
       expect(touchCancelListener).toHaveBeenCalledTimes(1);
       expect(touchCancelListener.mock.calls[0]?.[0].type).toBe("touchcancel");
+      row.removeEventListener("touchcancel", touchCancelListener);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("TaskItemWithContextMenu — touch drag cancellation identifier lifecycle", () => {
+  it("a non-primary touchcancel leaves the tracked drag target live", async () => {
+    // Same rule on the touchcancel path: finger 2's cancel must not clear
+    // finger 1's tracked target.
+    stubTouchEvent();
+
+    try {
+      renderWithDragHandle();
+      const row = screen.getByTestId("task-row");
+      const touchCancelListener = vi.fn();
+      row.addEventListener("touchcancel", touchCancelListener);
+
+      fireEvent.touchStart(row, { touches: [{ identifier: 1 }] });
+      fireEvent.touchCancel(row, { changedTouches: [{ identifier: 2 }] });
+      // The fired touchcancel above is caught by the row listener; count only
+      // what the menu-open path dispatches.
+      touchCancelListener.mockClear();
+      fireEvent.contextMenu(row);
+      await screen.findByRole("menuitem", { name: /color/i });
+
+      expect(touchCancelListener).toHaveBeenCalledTimes(1);
+      expect(touchCancelListener.mock.calls[0]?.[0].target).toBe(row);
+      row.removeEventListener("touchcancel", touchCancelListener);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("the tracked touch's touchcancel clears the cancel target", async () => {
+    // When finger 1 itself is cancelled, no synthetic cancel may fire later.
+    stubTouchEvent();
+
+    try {
+      renderWithDragHandle();
+      const row = screen.getByTestId("task-row");
+      const touchCancelListener = vi.fn();
+      row.addEventListener("touchcancel", touchCancelListener);
+
+      fireEvent.touchStart(row, { touches: [{ identifier: 1 }] });
+      fireEvent.touchCancel(row, { changedTouches: [{ identifier: 1 }] });
+      touchCancelListener.mockClear();
+      fireEvent.contextMenu(row);
+      await screen.findByRole("menuitem", { name: /color/i });
+
+      expect(touchCancelListener).not.toHaveBeenCalled();
       row.removeEventListener("touchcancel", touchCancelListener);
     } finally {
       vi.unstubAllGlobals();

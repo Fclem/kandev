@@ -136,8 +136,12 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCanno
 	for {
 		var waiting int
 		if err := lockTx.QueryRowContext(ctx, `
+			-- A blocked row-lock waiter is observable as an ungranted
+			-- transactionid lock on the blocking transaction; PostgreSQL has
+			-- no locktype='row' in pg_locks (tuple/transactionid are the
+			-- real ones).
 			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'row'
+			WHERE NOT granted AND locktype = 'transactionid'
 		`).Scan(&waiting); err != nil {
 			t.Fatalf("query pg_locks: %v", err)
 		}
@@ -226,8 +230,12 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithReorderSkips(t *
 	for {
 		var waiting int
 		if err := lockTx.QueryRowContext(ctx, `
+			-- A blocked row-lock waiter is observable as an ungranted
+			-- transactionid lock on the blocking transaction; PostgreSQL has
+			-- no locktype='row' in pg_locks (tuple/transactionid are the
+			-- real ones).
 			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'row'
+			WHERE NOT granted AND locktype = 'transactionid'
 		`).Scan(&waiting); err != nil {
 			t.Fatalf("query pg_locks: %v", err)
 		}
@@ -327,8 +335,12 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithInsertAbove(t *t
 	for {
 		var waiting int
 		if err := lockTx.QueryRowContext(ctx, `
+			-- A blocked row-lock waiter is observable as an ungranted
+			-- transactionid lock on the blocking transaction; PostgreSQL has
+			-- no locktype='row' in pg_locks (tuple/transactionid are the
+			-- real ones).
 			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'row'
+			WHERE NOT granted AND locktype = 'transactionid'
 		`).Scan(&waiting); err != nil {
 			t.Fatalf("query pg_locks: %v", err)
 		}
@@ -426,8 +438,12 @@ func TestPostgresRepository_UpdateContentAndMetadata_RaceWithMerge(t *testing.T)
 	for {
 		var waiting int
 		if err := lockTx.QueryRowContext(ctx, `
+			-- A blocked row-lock waiter is observable as an ungranted
+			-- transactionid lock on the blocking transaction; PostgreSQL has
+			-- no locktype='row' in pg_locks (tuple/transactionid are the
+			-- real ones).
 			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'row'
+			WHERE NOT granted AND locktype = 'transactionid'
 		`).Scan(&waiting); err != nil {
 			t.Fatalf("query pg_locks: %v", err)
 		}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -45,20 +46,28 @@ func NewSQLiteRepository(writer, reader *sqlx.DB) (Repository, error) {
 // scans and tail changes cannot interleave between backend instances. It is a
 // no-op on SQLite (single writer; FOR UPDATE is ignored).
 func (r *sqliteRepository) lockSessionTx(ctx context.Context, tx *sqlx.Tx, sessionID string) error {
-	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
+	return lockSessionTxIn(ctx, tx, r.db, sessionID)
+}
+
+// lockSessionTxIn takes the per-session cross-process lock inside an existing
+// transaction (see lockSessionTx). It is the shared core used by the
+// repository methods and by PurgeTaskInTransaction, which runs inside the task
+// repository's archive transaction.
+func lockSessionTxIn(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, sessionID string) error {
+	if _, err := tx.ExecContext(ctx, db.Rebind(`
 		INSERT INTO queue_session_locks (session_id) VALUES (?)
 		ON CONFLICT(session_id) DO NOTHING
 	`), sessionID); err != nil {
 		return fmt.Errorf("ensure queue session lock row: %w", err)
 	}
-	if r.db.DriverName() != "pgx" {
+	if db.DriverName() != "pgx" {
 		// SQLite has a single writer: the INSERT above already holds the
 		// database write lock for this transaction, serializing it against
 		// every other writer. FOR UPDATE is not valid SQLite syntax.
 		return nil
 	}
 	var one int
-	if err := tx.GetContext(ctx, &one, r.db.Rebind(`
+	if err := tx.GetContext(ctx, &one, db.Rebind(`
 		SELECT 1 FROM queue_session_locks WHERE session_id = ? FOR UPDATE
 	`), sessionID); err != nil {
 		return fmt.Errorf("acquire queue session lock: %w", err)
@@ -467,6 +476,35 @@ func lifecycleGenerationInTx(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, task
 // durable queue invalidation one SQLite transaction. It is backend-internal:
 // user queue handlers must keep using ownership-checked deletion methods.
 func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string) (int, error) {
+	// Serialize with per-session tail operations: a purge that races a fold
+	// or insert could otherwise delete a row an admission just accepted, or
+	// admit into a queue being purged. Lock every affected session in sorted
+	// order — the same ordering every multi-session lock uses — so concurrent
+	// purges and queue mutations cannot deadlock.
+	rows, err := tx.QueryxContext(ctx, db.Rebind(`
+		SELECT DISTINCT session_id FROM queued_messages WHERE task_id = ?
+	`), taskID)
+	if err != nil {
+		return 0, fmt.Errorf("list purge sessions: %w", err)
+	}
+	var sessions []string
+	for rows.Next() {
+		var sessionID string
+		if err := rows.Scan(&sessionID); err != nil {
+			_ = rows.Close()
+			return 0, fmt.Errorf("scan purge session: %w", err)
+		}
+		sessions = append(sessions, sessionID)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("close purge sessions: %w", err)
+	}
+	sort.Strings(sessions)
+	for _, sessionID := range sessions {
+		if err := lockSessionTxIn(ctx, tx, db, sessionID); err != nil {
+			return 0, err
+		}
+	}
 	result, err := tx.ExecContext(ctx, db.Rebind(`DELETE FROM queued_messages WHERE task_id = ?`), taskID)
 	if err != nil {
 		return 0, fmt.Errorf("purge queued task entries: %w", err)
@@ -1870,16 +1908,35 @@ func isReservedMetadataJSON(metadataJSON string) (bool, error) {
 
 // TransferSession moves all entries (and any pending move) from one session to another.
 func (r *sqliteRepository) TransferSession(ctx context.Context, oldSessionID, newSessionID string) error {
+	// The transfer moves rows out of the source and into the destination, so
+	// it must hold BOTH sessions' locks: a concurrent source-side insert
+	// (holding the source lock) could otherwise commit a row the transfer's
+	// READ COMMITTED UPDATE missed, orphaning it on the old session. Acquire
+	// in stable sorted order — in-process and cross-process alike — so
+	// concurrent transfers in opposite directions cannot deadlock.
+	first, second := oldSessionID, newSessionID
+	if first > second {
+		first, second = second, first
+	}
+	unlockFirst := r.withSessionLock(first)
+	defer unlockFirst()
+	if first != second {
+		unlockSecond := r.withSessionLock(second)
+		defer unlockSecond()
+	}
+
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transfer tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	// The transfer appends rows to the destination session, so it must hold
-	// the destination's cross-process session lock; the source only loses
-	// rows, which the row-level CAS guards cover.
-	if err := r.lockSessionTx(ctx, tx, newSessionID); err != nil {
+	if err := r.lockSessionTx(ctx, tx, first); err != nil {
 		return err
+	}
+	if first != second {
+		if err := r.lockSessionTx(ctx, tx, second); err != nil {
+			return err
+		}
 	}
 
 	// Shift positions on the destination so transferred entries land at the tail

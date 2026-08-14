@@ -151,8 +151,8 @@ const runtimeShimTemplate = `(function(){` +
 	`function cssDecTok(t){var o='';var i=0;while(i<t.length){var c=t.charAt(i);if(c==='\\'){var e=cssEsc(t,i);if(!e)break;o+=e.ch;i+=e.adv}else{o+=c;i++}}return o}` +
 	`function cssEscTok(t){var o='';var i=0;while(i<t.length){var c=t.charAt(i);if(c==='\\'||c==='\''||c==='"'||c==='('||c===')'||c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'||c.charCodeAt(0)<0x20||c.charCodeAt(0)===0x7F){var h=c.charCodeAt(0).toString(16);if(h.length===1)h='0'+h;o+='\\'+h+' '}else{o+=c}i++}return o}` +
 	`function rwaStyle(v){var o='';var i=0;var n=v.length;var j2;while(i<n){var c=v.charAt(i);if((c==='u'||c==='U'||c==='\\')&&!(i>0&&(v.charCodeAt(i-1)>=128||/[a-zA-Z0-9_-]/.test(v.charAt(i-1))))&&(j2=cssFn(v,i,'url'))>=0){var jw=j2;while(jw<n&&' \t\n\r\f'.indexOf(v.charAt(jw))>=0)jw++;var sp=v.slice(j2,jw);if(jw<n&&(v.charAt(jw)==='\''||v.charAt(jw)==='"')){var q=v.charAt(jw);var ce=jw+1;while(ce<n){if(v.charAt(ce)==='\\'&&ce+1<n){ce+=2;continue}if(v.charAt(ce)===q)break;ce++}if(ce>=n){o+=v.slice(i);break}var tok=v.slice(jw+1,ce);var d1=cssDecTok(tok);var rw1=r(d1);var em1=d1===rw1?tok:cssEscTok(rw1);var k=ce+1;while(k<n&&' \t\n\r\f'.indexOf(v.charAt(k))>=0)k++;if(k<n&&v.charAt(k)===')'){o+='url('+sp+q+em1+q+v.slice(ce+1,k)+')';i=k+1;continue}o+=v.slice(i,ce+1);i=ce+1;continue}var k2=jw;while(k2<n&&v.charAt(k2)!==')'){if(v.charAt(k2)==='\\'){var ee=cssEsc(v,k2);if(!ee)break;k2+=ee.adv;continue}if(' \t\n\r\f'.indexOf(v.charAt(k2))>=0)break;k2++}var tok2=v.slice(jw,k2);var d2=cssDecTok(tok2);var l2=k2;while(l2<n&&' \t\n\r\f'.indexOf(v.charAt(l2))>=0)l2++;if(l2<n&&v.charAt(l2)===')'){if(d2.toLowerCase().indexOf('var(')!==0){var rw2=r(d2);var em2=d2===rw2?tok2:cssEscTok(rw2);o+='url('+sp+em2+v.slice(k2,l2)+')';i=l2+1;continue}o+=v.slice(i,l2+1);i=l2+1;continue}o+=v.slice(i,k2);i=k2;continue}if(c==='\\'&&i+1<n){o+=v.slice(i,i+2);i+=2;continue}if(c==='\''||c==='"'){var j=i+1;while(j<n){if(v.charAt(j)==='\\'&&j+1<n){j+=2;continue}if(v.charAt(j)===c)break;j++}if(j>=n){o+=v.slice(i);break}o+=v.slice(i,j+1);i=j+1;continue}o+=c;i++}return o}` +
-	`function srcsetParts(v){var parts=[];var cur='';var inData=false;for(var i=0;i<v.length;i++){var c=v.charAt(i);if(c===','){if(inData){cur+=c;continue}parts.push(cur);cur='';continue}if(!inData&&cur.replace(/\s/g,'')===''&&/^data:/i.test(v.slice(i)))inData=true;if(inData&&(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'))inData=false;cur+=c}if(cur.replace(/\s/g,'')!=='')parts.push(cur);return parts}` +
-	`function mref(v){var ml=v.toLowerCase();var m=/(^|;)\s*url=/.exec(ml);if(!m)return v;var mi=m.index+m[0].length-4;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)==='\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
+	`function srcsetParts(v){var parts=[];var cur='';var inData=false;var curEmpty=true;for(var i=0;i<v.length;i++){var c=v.charAt(i);if(c===','){if(inData){cur+=c;continue}parts.push(cur);cur='';curEmpty=true;inData=false;continue}if(!inData&&curEmpty&&/^data:/i.test(v.slice(i)))inData=true;if(inData&&(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'))inData=false;if(c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f')curEmpty=false;cur+=c}if(!curEmpty)parts.push(cur);return parts}` +
+	`function mref(v){var n=v.length;var mi=-1;var from=0;while(from<=n){var semi=v.indexOf(';',from);var end=semi<0?n:semi;var field=v.slice(from,end);var k=0;while(k<field.length&&' \t\n\r\f'.indexOf(field.charAt(k))>=0)k++;if(field.slice(k,k+4).toLowerCase()==='url='){mi=from+k;break}if(semi<0)break;from=semi+1}if(mi<0)return v;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)==='\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
 	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'))||a==='cite';var rr=nav?rn:r;var nv=v;if(a==='srcset'){nv=srcsetParts(v).map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=rwaStyle(v)}else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
 	`function rwe(el){if(!el||el.nodeType!==1)return;for(var i=0;i<ATTRS.length;i++)rwa(el,ATTRS[i])}` +
 	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','rel','style','content','http-equiv'];` +
@@ -736,33 +736,36 @@ func isMetaRefresh(token *html.Token) bool {
 // rewriteMetaRefresh prefixes the root-absolute navigation target inside a
 // meta refresh content value (no capability — it is a navigation). The "url"
 // token is recognized only at a field boundary — the start of the value or
-// right after any ";" separator, case-insensitive, ignoring surrounding
+// right after any ";" separator, ASCII case-insensitive, ignoring surrounding
 // whitespace — so unrelated text like `noturl=/evil` is never rewritten and a
-// multi-field value like `5;foo=bar; url=/next` is handled. The target is
-// parsed exactly once, respecting an optional quote; any text after it is
+// multi-field value like `5;foo=bar; url=/next` is handled. Matching scans
+// the ORIGINAL bytes with a length-preserving ASCII fold: strings.ToLower can
+// change UTF-8 byte length for some Unicode characters (U+212A KELVIN folds
+// 3 bytes to 1), which would corrupt byte offsets into the value. The target
+// is parsed exactly once, respecting an optional quote; any text after it is
 // preserved untouched.
 func rewriteMetaRefresh(content, prefix string) string {
-	lower := strings.ToLower(content)
 	idx := -1
-	// The "url" token is recognized at a field boundary — the start of the
-	// value or right after a ";" separator — ignoring surrounding whitespace.
-	trimmedStart := strings.TrimLeft(lower, " \t\n\r\f")
-	if strings.HasPrefix(trimmedStart, "url=") {
-		idx = len(lower) - len(trimmedStart)
-	} else {
-		for from := 0; from < len(lower); {
-			semi := strings.IndexByte(lower[from:], ';')
-			if semi < 0 {
-				break
-			}
-			from += semi + 1
-			rest := lower[from:]
-			trimmed := strings.TrimLeft(rest, " \t\n\r\f")
-			if strings.HasPrefix(trimmed, "url=") {
-				idx = from + (len(rest) - len(trimmed))
-				break
-			}
+	from := 0
+	for from <= len(content) {
+		semi := strings.IndexByte(content[from:], ';')
+		end := len(content)
+		if semi >= 0 {
+			end = from + semi
 		}
+		field := content[from:end]
+		k := 0
+		for k < len(field) && isCSSSpace(field[k]) {
+			k++
+		}
+		if asciiFoldHasPrefix(field[k:], "url=") {
+			idx = from + k
+			break
+		}
+		if semi < 0 {
+			break
+		}
+		from = end + 1
 	}
 	if idx < 0 {
 		return content
@@ -772,6 +775,28 @@ func rewriteMetaRefresh(content, prefix string) string {
 	offset := len(rest) - len(trimmed)
 	target, tail, quote := parseRefreshTarget(trimmed)
 	return content[:idx+4] + rest[:offset] + quote + rewriteURLReference(target, prefix, "") + tail
+}
+
+// asciiFoldHasPrefix reports whether s starts with prefix under ASCII
+// case folding (A-Z only). Length-preserving: unlike strings.ToLower it never
+// changes byte lengths, so offsets into s remain valid.
+func asciiFoldHasPrefix(s, prefix string) bool {
+	if len(s) < len(prefix) {
+		return false
+	}
+	for i := 0; i < len(prefix); i++ {
+		a, b := s[i], prefix[i]
+		if a >= 'A' && a <= 'Z' {
+			a += 'a' - 'A'
+		}
+		if b >= 'A' && b <= 'Z' {
+			b += 'a' - 'A'
+		}
+		if a != b {
+			return false
+		}
+	}
+	return true
 }
 
 // parseRefreshTarget splits a meta refresh target off the text after `url=`,
@@ -946,10 +971,13 @@ func rewriteSrcSet(value, prefix, capability string) string {
 // a candidate that started with data: and has not yet hit whitespace is
 // still inside its URL, so its commas are preserved. Descriptor text (after
 // the first whitespace) is ordinary candidate space where commas separate.
+// The scan is single-pass: whitespace-only and data:-prefix state is tracked
+// incrementally, never by rescanning the accumulated candidate.
 func splitSrcSetParts(value string) []string {
 	var parts []string
 	var cur strings.Builder
 	inData := false
+	curEmpty := true // cur contains only whitespace so far
 	for i := 0; i < len(value); i++ {
 		c := value[i]
 		if c == ',' {
@@ -959,17 +987,22 @@ func splitSrcSetParts(value string) []string {
 			}
 			parts = append(parts, cur.String())
 			cur.Reset()
+			curEmpty = true
+			inData = false
 			continue
 		}
-		if !inData && strings.TrimSpace(cur.String()) == "" && strings.HasPrefix(strings.ToLower(value[i:]), "data:") {
+		if !inData && curEmpty && strings.HasPrefix(strings.ToLower(value[i:]), "data:") {
 			inData = true
 		}
 		if inData && isCSSSpace(c) {
 			inData = false
 		}
+		if !isCSSSpace(c) {
+			curEmpty = false
+		}
 		cur.WriteByte(c)
 	}
-	if strings.TrimSpace(cur.String()) != "" {
+	if !curEmpty {
 		parts = append(parts, cur.String())
 	}
 	return parts

@@ -279,6 +279,7 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
+		filterReservedCookies(resp.Header)
 		capability, _ := resp.Request.Context().Value(proxyCapabilityContextKey{}).(string)
 		if capability != "" {
 			// Every response in an authenticated proxy subtree carries the
@@ -414,6 +415,37 @@ func (h *PortProxyHandler) signCapability(payload []byte) string {
 	mac := hmac.New(sha256.New, h.capabilitySecret[:])
 	_, _ = mac.Write(payload)
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// cookieName extracts the cookie name from a Set-Cookie header value (the
+// token before the first '='), trimming leading/trailing whitespace. An
+// empty or malformed value yields "".
+func cookieName(setCookie string) string {
+	name, _, _ := strings.Cut(setCookie, "=")
+	return strings.TrimSpace(name)
+}
+
+// filterReservedCookies removes every upstream Set-Cookie whose name is the
+// reserved capability cookie: a proxied app must never control
+// kandev_port_proxy, since an app value with the same or a narrower Path
+// could override the gateway's capability and 401 the authenticated subtree.
+func filterReservedCookies(h http.Header) {
+	cookies := h["Set-Cookie"]
+	if len(cookies) == 0 {
+		return
+	}
+	kept := cookies[:0]
+	for _, c := range cookies {
+		if cookieName(c) == proxyCapabilityCookieName {
+			continue
+		}
+		kept = append(kept, c)
+	}
+	if len(kept) == 0 {
+		h.Del("Set-Cookie")
+		return
+	}
+	h["Set-Cookie"] = kept
 }
 
 // setCapabilityCookie sets the subtree-scoped capability cookie on the response

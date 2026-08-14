@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -929,7 +930,7 @@ func TestRuntimeShim_StyleTokenizerAndSrcSetDataURLs(t *testing.T) {
 	mustContain(t, shim, `function rwaStyle(v){var o='';var i=0;var n=v.length;`)
 	mustContain(t, shim, `if(d2.toLowerCase().indexOf('var(')!==0){var rw2=r(d2);var em2=d2===rw2?tok2:cssEscTok(rw2);o+='url('+sp+em2`)
 	mustContain(t, shim, `function srcsetParts(v){var parts=[];var cur='';var inData=false;`)
-	mustContain(t, shim, `if(!inData&&cur.replace(/\s/g,'')===''&&/^data:/i.test(v.slice(i)))inData=true`)
+	mustContain(t, shim, `if(!inData&&curEmpty&&/^data:/i.test(v.slice(i)))inData=true`)
 	// content rewriting is guarded to META http-equiv=refresh; non-refresh
 	// meta content and non-META content attributes are left unchanged.
 	mustContain(t, shim, `else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}`)
@@ -1357,6 +1358,62 @@ func TestRewriteHTMLURLs_MetaRefreshLeadingWhitespace(t *testing.T) {
 func TestRuntimeShim_SymbolNavigationThrows(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	mustContain(t, shim, `if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string')`)
+}
+
+// Meta refresh matching is a length-preserving ASCII fold over the ORIGINAL
+// bytes: a Unicode character whose lowercase fold changes byte length (U+212A
+// KELVIN, 3 bytes to 1) before the field must not corrupt the offsets.
+func TestRewriteHTMLURLs_MetaRefreshUnicodeBeforeField(t *testing.T) {
+	in := "<meta http-equiv=\"refresh\" content=\"\u212A; url=/next\">"
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-mu", ""))
+
+	mustContain(t, got, "content=\"\u212A; url=/port-proxy/abc/3001/next\"")
+}
+
+// The reserved capability cookie is stripped from upstream Set-Cookie
+// headers: a proxied app must not be able to override kandev_port_proxy.
+func TestFilterReservedCookies(t *testing.T) {
+	h := make(http.Header)
+	h.Add("Set-Cookie", "kandev_port_proxy=invalid; Path=/port-proxy/s/1/3000")
+	h.Add("Set-Cookie", "session=ok; Path=/")
+	h.Add("Set-Cookie", "other=1")
+	filterReservedCookies(h)
+
+	got := h.Values("Set-Cookie")
+	if len(got) != 2 {
+		t.Fatalf("Set-Cookie count = %d, want 2 (reserved stripped): %v", len(got), got)
+	}
+	for _, c := range got {
+		if cookieName(c) == proxyCapabilityCookieName {
+			t.Fatalf("reserved cookie survived filtering: %q", c)
+		}
+	}
+
+	// All-reserved: the header is removed entirely.
+	h2 := make(http.Header)
+	h2.Add("Set-Cookie", "kandev_port_proxy=x")
+	filterReservedCookies(h2)
+	if len(h2.Values("Set-Cookie")) != 0 {
+		t.Fatalf("all-reserved Set-Cookie not removed: %v", h2)
+	}
+}
+
+// Large srcset values are split in a single pass (no per-byte rescan of the
+// accumulated candidate): correctness must hold on a large input.
+func TestRewriteSrcSet_LargeInputLinear(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 20000; i++ {
+		fmt.Fprintf(&b, "/img-%d.png 1x, ", i)
+	}
+	b.WriteString("/last.png 2x")
+	got := rewriteSrcSet(b.String(), proxyPrefix, "cap-ss")
+
+	if !strings.HasPrefix(got, "/port-proxy/abc/3001/img-0.png?kandev_cap=cap-ss 1x, ") {
+		t.Fatalf("first candidate not rewritten: %.80s", got)
+	}
+	if !strings.HasSuffix(got, "/port-proxy/abc/3001/last.png?kandev_cap=cap-ss 2x") {
+		t.Fatalf("last candidate not rewritten: %.80s", got[len(got)-80:])
+	}
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

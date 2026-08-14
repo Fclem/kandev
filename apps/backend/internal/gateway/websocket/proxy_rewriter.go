@@ -63,7 +63,9 @@ const runtimeShimTemplate = `<script>(function(){` +
 	`var P=%q;` +
 	`window.__kandevProxyPrefix=P;` +
 	// Path rewriter: prefix path-absolute URLs that aren't already prefixed.
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}` +
+	// %s is the optional capability-append logic (empty when no capability is
+	// minted, keeping the auth-disabled output byte-identical).
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;%sreturn P+u;}` +
 	// fetch — string and Request-object input forms.
 	`var of=window.fetch;if(of){window.fetch=function(i,n){if(typeof i==='string')i=r(i);else if(i&&typeof i==='object'&&typeof i.url==='string'){var nu=r(i.url);if(nu!==i.url){try{i=new Request(nu,i)}catch(e){}}}return of.call(this,i,n)}}` +
 	// XMLHttpRequest.open — 2nd arg is the URL.
@@ -86,8 +88,29 @@ const runtimeShimTemplate = `<script>(function(){` +
 // runtimeShim returns the runtime shim script tag with the given proxy prefix
 // baked in. %q produces a JS-safe double-quoted string literal (slashes and
 // alphanumerics need no escaping, which matches every prefix we emit).
-func runtimeShim(prefix string) string {
-	return fmt.Sprintf(runtimeShimTemplate, prefix)
+//
+// When `capability` is non-empty, the shim's runtime path rewriter appends the
+// subtree capability to every URL it rewrites (fetch/XHR/history/location and
+// dynamically injected DOM), so those requests stay authorized in contexts
+// where cookies are not sent. WebSocket upgrades are intentionally not covered
+// here: the handshake carries the capability cookie (and the document request
+// already required a credential), so the query parameter would be redundant.
+func runtimeShim(prefix, capability string) string {
+	return fmt.Sprintf(runtimeShimTemplate, prefix, shimCapabilityJS(capability))
+}
+
+// shimCapabilityJS returns the JavaScript spliced into the shim's path
+// rewriter so runtime-rewritten URLs carry the subtree capability. It appends
+// the capability as a query parameter, preserving any existing query string and
+// skipping URLs that already carry it (from the static HTML rewrite). Empty
+// when no capability is minted, keeping the auth-disabled output byte-identical.
+func shimCapabilityJS(capability string) string {
+	if capability == "" {
+		return ""
+	}
+	param := proxyCapabilityQueryParam + "="
+	return fmt.Sprintf(`var K=%q;var x=P+u;if(x.indexOf(%q)===-1)x+=(x.indexOf('?')===-1?'?':'&')+%q+K;return x;`,
+		capability, param, param)
 }
 
 // urlInCSSPattern matches `url(...)` invocations in CSS where the argument is
@@ -251,7 +274,7 @@ func rewriteHTMLURLs(body []byte, prefix, capability string) []byte {
 	tok := html.NewTokenizer(bytes.NewReader(body))
 	var out bytes.Buffer
 	out.Grow(len(body) + 256 + len(runtimeShimTemplate))
-	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShim(prefix)}
+	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShim(prefix, capability)}
 	for {
 		tt := tok.Next()
 		if tt == html.ErrorToken {
@@ -287,13 +310,48 @@ func rewriteTokenURLs(token *html.Token, prefix, capability string) {
 		key := strings.ToLower(attr.Key)
 		switch {
 		case rewritableURLAttrs[key]:
-			token.Attr[i].Val = rewriteAbsolutePath(attr.Val, prefix, capability)
+			token.Attr[i].Val = rewriteURLReference(attr.Val, prefix, capability)
 		case key == "srcset":
 			token.Attr[i].Val = rewriteSrcSet(attr.Val, prefix, capability)
 		case key == "style":
 			token.Attr[i].Val = rewriteCSSFragment(attr.Val, prefix, capability)
 		}
 	}
+}
+
+// rewriteURLReference rewrites a URL-shaped attribute value. Path-absolute
+// URLs get the proxy prefix plus the capability. Same-origin relative URLs
+// keep their own resolution — the document already lives in the proxy subtree,
+// so the browser lands inside it — but still get the capability appended so
+// cookie-less fetches (a relative <link rel="manifest">) stay authorized.
+// Empty, fragment-only, network-relative, and scheme-bearing values (http:,
+// data:, javascript:, mailto:, …) are left untouched.
+func rewriteURLReference(rawURL, prefix, capability string) string {
+	if rawURL == "" || rawURL[0] == '#' || hasURLScheme(rawURL) {
+		return rawURL
+	}
+	if rawURL[0] == '/' {
+		return rewriteAbsolutePath(rawURL, prefix, capability)
+	}
+	if capability == "" || strings.HasPrefix(rawURL, "//") {
+		return rawURL
+	}
+	return withCapability(rawURL, capability)
+}
+
+// hasURLScheme reports whether a URL reference starts with a scheme (http:,
+// data:, javascript:, mailto:, …): a colon before the first path, query, or
+// fragment delimiter. Relative references cannot contain a colon there.
+func hasURLScheme(raw string) bool {
+	for i := 0; i < len(raw); i++ {
+		switch raw[i] {
+		case '/', '?', '#':
+			return false
+		case ':':
+			return i > 0
+		}
+	}
+	return false
 }
 
 // rewriteSrcSet rewrites each candidate URL in a `srcset` attribute. The
@@ -310,7 +368,7 @@ func rewriteSrcSet(value, prefix, capability string) string {
 		if len(fields) == 0 {
 			continue
 		}
-		fields[0] = rewriteAbsolutePath(fields[0], prefix, capability)
+		fields[0] = rewriteURLReference(fields[0], prefix, capability)
 		parts[i] = strings.Join(fields, " ")
 	}
 	return strings.Join(parts, ", ")

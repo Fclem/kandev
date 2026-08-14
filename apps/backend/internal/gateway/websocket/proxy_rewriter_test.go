@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -209,7 +210,7 @@ func TestRewriteHTMLURLs_PreservesScriptContentVerbatim(t *testing.T) {
 }
 
 func TestRuntimeShim_InstallsMutationObserver(t *testing.T) {
-	shim := runtimeShim(proxyPrefix)
+	shim := runtimeShim(proxyPrefix, "")
 
 	// MutationObserver is installed so dynamically-inserted DOM nodes (e.g.
 	// Next.js `ReactDOM.preload()` for fonts) get their URL attributes
@@ -226,7 +227,7 @@ func TestRuntimeShim_InstallsMutationObserver(t *testing.T) {
 }
 
 func TestRuntimeShim_ExposesProxyPrefixToInspector(t *testing.T) {
-	shim := runtimeShim(proxyPrefix)
+	shim := runtimeShim(proxyPrefix, "")
 
 	// The inspector script uses this to report app-local routes in annotation
 	// prompts instead of the gateway's /port-proxy/... path.
@@ -234,7 +235,7 @@ func TestRuntimeShim_ExposesProxyPrefixToInspector(t *testing.T) {
 }
 
 func TestRuntimeShim_ForwardsConsoleToParent(t *testing.T) {
-	shim := runtimeShim(proxyPrefix)
+	shim := runtimeShim(proxyPrefix, "")
 
 	// Console levels are intercepted so iframe diagnostics surface in the
 	// parent window's console alongside other preview events.
@@ -247,7 +248,7 @@ func TestRuntimeShim_ForwardsConsoleToParent(t *testing.T) {
 }
 
 func TestRuntimeShim_PatchesNavigationAPIs(t *testing.T) {
-	shim := runtimeShim(proxyPrefix)
+	shim := runtimeShim(proxyPrefix, "")
 
 	// Patches history.pushState and history.replaceState so SPA routers keep
 	// the proxy prefix in the URL bar on client-side navigation.
@@ -307,6 +308,55 @@ func TestRewriteCSSURLs_AppendsCapability(t *testing.T) {
 
 	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css?kandev_cap=cap-456"`)
 	mustContain(t, got, `url("/port-proxy/abc/3001/img/bg.png?kandev_cap=cap-456")`)
+}
+
+// Same-origin relative references (a relative <link rel="manifest">, relative
+// srcset entries) resolve inside the proxy subtree but carry no cookie on
+// fetch; they must still get the capability appended. Scheme-bearing,
+// network-relative, and fragment-only values stay untouched.
+func TestRewriteHTMLURLs_AppendsCapabilityToRelativeReferences(t *testing.T) {
+	in := `<link rel="manifest" href="manifest.webmanifest">` +
+		`<a href="page">x</a>` +
+		`<img srcset="a.png 1x, ./b.png 2x">` +
+		`<a href="javascript:alert(1)">js</a>` +
+		`<a href="mailto:x@y.dev">mail</a>` +
+		`<a href="//cdn.example.com/lib.js">cdn</a>` +
+		`<a href="#section">frag</a>` +
+		`<img src="data:image/png;base64,AAA">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-789"))
+
+	mustContain(t, got, `href="manifest.webmanifest?kandev_cap=cap-789"`)
+	mustContain(t, got, `href="page?kandev_cap=cap-789"`)
+	mustContain(t, got, `srcset="a.png?kandev_cap=cap-789 1x, ./b.png?kandev_cap=cap-789 2x"`)
+	mustContain(t, got, `href="javascript:alert(1)"`)
+	mustContain(t, got, `href="mailto:x@y.dev"`)
+	mustContain(t, got, `href="//cdn.example.com/lib.js"`)
+	mustContain(t, got, `href="#section"`)
+	mustContain(t, got, `src="data:image/png;base64,AAA"`)
+}
+
+// The runtime shim appends the capability to every URL its path rewriter
+// produces, preserving existing query strings and never double-appending.
+func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `var K="cap-shim";`)
+	mustContain(t, shim, `x.indexOf("kandev_cap=")===-1`)
+	mustContain(t, shim, `x+=(x.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+	// Existing query strings are preserved by the "&" branch.
+	mustContain(t, shim, `x.indexOf('?')===-1?'?':'&'`)
+}
+
+// Without a capability the shim is byte-identical to the pre-auth output: no
+// capability logic is spliced into the path rewriter.
+func TestRuntimeShim_WithoutCapabilityStaysByteIdentical(t *testing.T) {
+	withCap := runtimeShim(proxyPrefix, "")
+	withoutCap := fmt.Sprintf(runtimeShimTemplate, proxyPrefix, "")
+	if withCap != withoutCap {
+		t.Fatal("empty capability must not alter the shim output")
+	}
+	if strings.Contains(withCap, "kandev_cap") {
+		t.Fatalf("shim without capability mentions kandev_cap:\n%s", withCap)
+	}
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

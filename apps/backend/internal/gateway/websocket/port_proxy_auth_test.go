@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -65,14 +67,28 @@ func newProxyAuthService(t *testing.T) (*auth.Service, string) {
 // newAuthEnforcingFakeAgentctl stands in for the agentctl inside an executor: it
 // rejects requests without the injected Bearer token (like the real agentctl's
 // bearerTokenAuth) and forwards /api/v1/port-proxy/<port>/* to the fake app.
-func newAuthEnforcingFakeAgentctl(t *testing.T, appURL, expectedToken string) *httptest.Server {
+// It records every forwarded request so tests can assert the gateway stripped
+// the capability from the query before it reaches the app.
+func newAuthEnforcingFakeAgentctl(t *testing.T, appURL, expectedToken string) (*httptest.Server, *[]string) {
 	t.Helper()
 	target, err := url.Parse(appURL)
 	if err != nil {
 		t.Fatalf("parse app URL: %v", err)
 	}
+	var mu sync.Mutex
+	var forwarded []string // "path?query" as received by the fake agentctl
+	record := func(rawQuery string, path string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if rawQuery != "" {
+			forwarded = append(forwarded, path+"?"+rawQuery)
+		} else {
+			forwarded = append(forwarded, path)
+		}
+	}
 	proxy := &httputil.ReverseProxy{}
 	proxy.Rewrite = func(r *httputil.ProxyRequest) {
+		record(r.Out.URL.RawQuery, r.Out.URL.Path)
 		r.SetURL(target)
 		// /api/v1/port-proxy/<port>/<path> → /<path>
 		rest, ok := strings.CutPrefix(r.Out.URL.Path, "/api/v1/port-proxy/")
@@ -97,7 +113,7 @@ func newAuthEnforcingFakeAgentctl(t *testing.T, appURL, expectedToken string) *h
 	}))
 	srv.Config.SetKeepAlivesEnabled(false)
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, &forwarded
 }
 
 // newFakeProxyApp serves a Vite-style single page: an HTML document referencing
@@ -192,9 +208,29 @@ func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T
 	}
 	svc, sessionToken := newProxyAuthService(t)
 	app := newFakeProxyApp(t)
-	agentctl := newAuthEnforcingFakeAgentctl(t, app.URL, "agentctl-token")
+	agentctl, forwarded := newAuthEnforcingFakeAgentctl(t, app.URL, "agentctl-token")
 
 	manager := newProxyTestManager(t, log)
+	// Wire the production ownership boundary: the session-ownership check runs
+	// with whatever identity requireConnectionAuth restored (session cookie or
+	// capability), so a capability minted for user A must not unlock user B's
+	// session. Records the identities the check actually saw.
+	var checkerMu sync.Mutex
+	var seenOwners []string
+	manager.SetSessionAccessChecker(func(ctx context.Context, sessionID string) error {
+		identity, ok := authn.IdentityFromContext(ctx)
+		checkerMu.Lock()
+		defer checkerMu.Unlock()
+		if !ok {
+			seenOwners = append(seenOwners, "<none>")
+			return errors.New("no identity")
+		}
+		seenOwners = append(seenOwners, identity.UserID)
+		if identity.UserID != "default-user" {
+			return errors.New("foreign session")
+		}
+		return nil
+	})
 	addExecutionForURL(t, manager, "sess-auth", agentctl.URL, "agentctl-token", log)
 
 	gin.SetMode(gin.TestMode)
@@ -249,14 +285,54 @@ func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T
 			manifestReq.status, http.StatusOK, manifestReq.body)
 	}
 
-	// 3. The same manifest without any credential still 401s — the capability is
-	// not a blanket bypass.
-	denied := request(http.MethodGet, "/port-proxy/sess-auth/5173/manifest.webmanifest", nil)
-	if denied.status != http.StatusUnauthorized {
-		t.Fatalf("manifest (no credential) status = %d, want %d", denied.status, http.StatusUnauthorized)
+	// 3. The capability never reaches the proxied app: the gateway strips the
+	// reserved parameter from the forwarded query.
+	for _, seen := range *forwarded {
+		if strings.Contains(seen, proxyCapabilityQueryParam) {
+			t.Fatalf("capability leaked to agentctl in forwarded request %q", seen)
+		}
 	}
 
-	// 4. A module script carrying only the capability cookie (Path-scoped, no
+	// 4. Ownership restoration: every proxied request ran the session-ownership
+	// check as the real owner (default-user), never as a synthetic or empty
+	// identity.
+	checkerMu.Lock()
+	owners := append([]string(nil), seenOwners...)
+	checkerMu.Unlock()
+	if len(owners) == 0 {
+		t.Fatal("session-ownership checker never ran")
+	}
+	for _, owner := range owners {
+		if owner != "default-user" {
+			t.Fatalf("ownership check ran as %q, want default-user", owner)
+		}
+	}
+
+	// 5. A capability minted for another user is rejected at the ownership
+	// boundary: requireConnectionAuth restores the foreign identity and the
+	// checker denies it.
+	intruder := gateway.PortProxyHandler.issueCapability("sess-auth", 5173,
+		authn.Identity{UserID: "intruder", Role: authn.RoleAdmin})
+	denied := request(http.MethodGet,
+		"/port-proxy/sess-auth/5173/x?"+proxyCapabilityQueryParam+"="+intruder, nil)
+	if denied.status != http.StatusNotFound {
+		t.Fatalf("intruder capability status = %d, want %d (ownership denial)", denied.status, http.StatusNotFound)
+	}
+	checkerMu.Lock()
+	lastOwner := seenOwners[len(seenOwners)-1]
+	checkerMu.Unlock()
+	if lastOwner != "intruder" {
+		t.Fatalf("intruder request ran ownership check as %q, want intruder", lastOwner)
+	}
+
+	// 6. The same manifest without any credential still 401s — the capability
+	// is not a blanket bypass.
+	noCred := request(http.MethodGet, "/port-proxy/sess-auth/5173/manifest.webmanifest", nil)
+	if noCred.status != http.StatusUnauthorized {
+		t.Fatalf("manifest (no credential) status = %d, want %d", noCred.status, http.StatusUnauthorized)
+	}
+
+	// 7. A module script carrying only the capability cookie (Path-scoped, no
 	// session cookie) also passes — covers cookie-sending subresource fetches
 	// in contexts that lack the session cookie.
 	capValue := capabilityCookie

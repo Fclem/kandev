@@ -221,6 +221,15 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 		r.SetURL(target)
 		r.Out.URL.Path = r.In.URL.Path
 		r.Out.URL.RawPath = ""
+		// The subtree capability is consumed by requireConnectionAuth at the
+		// gateway; strip it before forwarding so it never lands in agentctl or
+		// application logs, redirects, or analytics. Other query parameters are
+		// preserved.
+		if strings.Contains(r.Out.URL.RawQuery, proxyCapabilityQueryParam) {
+			q := r.Out.URL.Query()
+			q.Del(proxyCapabilityQueryParam)
+			r.Out.URL.RawQuery = q.Encode()
+		}
 		// Inject agentctl auth token
 		if authToken != "" {
 			r.Out.Header.Set("Authorization", "Bearer "+authToken)

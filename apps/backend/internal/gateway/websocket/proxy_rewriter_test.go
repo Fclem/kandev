@@ -515,7 +515,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))`)
 	mustContain(t, shim, `function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);`)
 	mustContain(t, shim, `var rr=nav?rn:r;`)
-	mustContain(t, shim, `'[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[imagesrcset],[style],[content]'`)
+	mustContain(t, shim, `'[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[imagesrcset],[ping],[style],[content]'`)
 }
 
 // The navigation rewriter must not carry the capability even when one is
@@ -1631,8 +1631,50 @@ func TestRewriteHTMLURLs_ExternalBaseSrcdocOwnBase(t *testing.T) {
 // filter and the descendant selector.
 func TestRuntimeShim_ImagesrcsetObserved(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
-	mustContain(t, shim, `'srcset','imagesrcset','rel'`)
-	mustContain(t, shim, `[srcset],[imagesrcset],[style]`)
+	mustContain(t, shim, `'srcset','imagesrcset','ping','rel'`)
+	mustContain(t, shim, `[srcset],[imagesrcset],[ping],[style]`)
+}
+
+// <style> element BODIES under an external base must not be rewritten:
+// url() references inside resolve against the external origin and would
+// leak the capability (same policy as inline style attributes).
+func TestRewriteHTMLURLs_ExternalBaseStyleBody(t *testing.T) {
+	external := `<base href="https://evil.example/">` +
+		`<style>body{background:url(/x.png)}</style>`
+	got := string(rewriteHTMLURLs([]byte(external), proxyPrefix, "cap-sb", ""))
+
+	if strings.Contains(got, "kandev_cap") {
+		t.Fatalf("capability leaked from a style body under an external base:\n%s", got)
+	}
+	mustContain(t, got, `<style>body{background:url(/x.png)}</style>`)
+
+	// Network-relative base: same suppression.
+	netRel := `<base href="//cdn.example/">` + `<style>.a{background:url(/y.png)}</style>`
+	gotNet := string(rewriteHTMLURLs([]byte(netRel), proxyPrefix, "cap-sb2", ""))
+	if strings.Contains(gotNet, "kandev_cap") {
+		t.Fatalf("capability leaked under a network-relative base:\n%s", gotNet)
+	}
+
+	// No base: style bodies are still rewritten normally.
+	plain := `<style>body{background:url(/z.png)}</style>`
+	gotPlain := string(rewriteHTMLURLs([]byte(plain), proxyPrefix, "cap-sb3", ""))
+	mustContain(t, gotPlain, `<style>body{background:url(/port-proxy/abc/3001/z.png?kandev_cap=cap-sb3)}</style>`)
+}
+
+// a[ping] is a whitespace-separated URL list POSTed on activation: every
+// candidate gets the capability-bearing subresource rewrite, statically and
+// at runtime, and ping is observed.
+func TestRewriteHTMLURLs_PingList(t *testing.T) {
+	in := `<a href="/ok" ping="/track /more">x</a>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-ping", ""))
+
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/ok" ping="/port-proxy/abc/3001/track?kandev_cap=cap-ping /port-proxy/abc/3001/more?kandev_cap=cap-ping">x</a>`)
+}
+
+func TestRuntimeShim_PingObservedAndRewritten(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `'ping','rel'`)
+	mustContain(t, shim, `else if(a==='ping'){nv=v.split(/\s+/).map(function(u){return r(u)}).join(' ')}`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

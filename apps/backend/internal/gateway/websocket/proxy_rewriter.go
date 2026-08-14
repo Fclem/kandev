@@ -154,7 +154,7 @@ const runtimeShimTemplate = `(function(){` +
 	// accepted edge. Covers the cases the network-API patches miss, notably
 	// `ReactDOM.preload()` and any framework that builds DOM nodes with
 	// absolute paths after the initial HTML has been parsed.
-	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','imagesrcset','style','content'];` +
+	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','imagesrcset','ping','style','content'];` +
 	`function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);for(var i=0;i<toks.length;i++){if(toks[i]==='stylesheet'||toks[i]==='icon'||toks[i]==='manifest'||toks[i]==='preload'||toks[i]==='modulepreload'||toks[i]==='prefetch'||toks[i]==='dns-prefetch'||toks[i]==='preconnect'||toks[i]==='shortcut'||toks[i]==='apple-touch-icon')return true}return false}` +
 	`function cssEsc(s,i){if(s.charAt(i)!=='\\'||i+1>=s.length)return null;var c=s.charAt(i+1);if(/[0-9a-fA-F]/.test(c)){var j=i+1;var v=0;while(j<s.length&&j-i<7&&/[0-9a-fA-F]/.test(s.charAt(j))){v=v*16+parseInt(s.charAt(j),16);j++}if(j<s.length&&' \t\n\r\f'.indexOf(s.charAt(j))>=0)j++;if(v===0||v>0x10FFFF||v>=0xD800&&v<=0xDFFF)v=0xFFFD;return{ch:String.fromCodePoint(v),adv:j-i}}if(c==='\n'||c==='\r'||c==='\f')return{ch:'',adv:2};return{ch:c,adv:2}}` +
 	`function cssFn(s,i,nm){var j=i;var b='';var first=true;while(j<s.length){var cc=s.charAt(j);if(cc==='\\'){var e=cssEsc(s,j);if(!e||e.ch==='')break;if(!first&&!/[a-zA-Z0-9_\-\u0080-\uFFFF]/.test(e.ch))break;b+=e.ch;j+=e.adv}else if(first&&/[a-zA-Z_\u0080-\uFFFF]/.test(cc)){b+=cc;j++}else if(!first&&/[a-zA-Z0-9_\-\u0080-\uFFFF]/.test(cc)){b+=cc;j++}else break;first=false}if(j===i)return -1;if(b.toLowerCase()!==nm||s.charAt(j)!=='(')return -1;return j+1}` +
@@ -163,10 +163,10 @@ const runtimeShimTemplate = `(function(){` +
 	`function rwaStyle(v){var o='';var i=0;var n=v.length;var j2;while(i<n){var c=v.charAt(i);if((c==='u'||c==='U'||c==='\\')&&!(i>0&&(v.charCodeAt(i-1)>=128||/[a-zA-Z0-9_-]/.test(v.charAt(i-1))))&&(j2=cssFn(v,i,'url'))>=0){var jw=j2;while(jw<n&&' \t\n\r\f'.indexOf(v.charAt(jw))>=0)jw++;var sp=v.slice(j2,jw);if(jw<n&&(v.charAt(jw)==='\''||v.charAt(jw)==='"')){var q=v.charAt(jw);var ce=jw+1;while(ce<n){if(v.charAt(ce)==='\\'&&ce+1<n){ce+=2;continue}if(v.charAt(ce)===q)break;ce++}if(ce>=n){o+=v.slice(i);break}var tok=v.slice(jw+1,ce);var d1=cssDecTok(tok);var rw1=r(d1);var em1=d1===rw1?tok:cssEscTok(rw1);var k=ce+1;while(k<n&&' \t\n\r\f'.indexOf(v.charAt(k))>=0)k++;if(k<n&&v.charAt(k)===')'){o+='url('+sp+q+em1+q+v.slice(ce+1,k)+')';i=k+1;continue}o+=v.slice(i,ce+1);i=ce+1;continue}var k2=jw;while(k2<n&&v.charAt(k2)!==')'){if(v.charAt(k2)==='\\'){var ee=cssEsc(v,k2);if(!ee)break;k2+=ee.adv;continue}if(' \t\n\r\f'.indexOf(v.charAt(k2))>=0)break;k2++}var tok2=v.slice(jw,k2);var d2=cssDecTok(tok2);var l2=k2;while(l2<n&&' \t\n\r\f'.indexOf(v.charAt(l2))>=0)l2++;if(l2<n&&v.charAt(l2)===')'){if(d2.toLowerCase().indexOf('var(')!==0){var rw2=r(d2);var em2=d2===rw2?tok2:cssEscTok(rw2);o+='url('+sp+em2+v.slice(k2,l2)+')';i=l2+1;continue}o+=v.slice(i,l2+1);i=l2+1;continue}o+=v.slice(i,k2);i=k2;continue}if(c==='\\'&&i+1<n){o+=v.slice(i,i+2);i+=2;continue}if(c==='\''||c==='"'){var j=i+1;while(j<n){if(v.charAt(j)==='\\'&&j+1<n){j+=2;continue}if(v.charAt(j)===c)break;j++}if(j>=n){o+=v.slice(i);break}o+=v.slice(i,j+1);i=j+1;continue}o+=c;i++}return o}` +
 	`function srcsetParts(v){var parts=[];var cur='';var inData=false;var curEmpty=true;for(var i=0;i<v.length;i++){var c=v.charAt(i);if(c===','){if(inData){cur+=c;continue}parts.push(cur);cur='';curEmpty=true;inData=false;continue}if(!inData&&curEmpty&&c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f'&&v.slice(i,i+5).toLowerCase()==='data:')inData=true;if(inData&&(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'))inData=false;if(c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f')curEmpty=false;cur+=c}if(!curEmpty)parts.push(cur);return parts}` +
 	`function mref(v){var n=v.length;var mi=-1;var from=0;while(from<=n){var semi=v.indexOf(';',from);var end=semi<0?n:semi;var field=v.slice(from,end);var k=0;while(k<field.length&&' \t\n\r\f'.indexOf(field.charAt(k))>=0)k++;if(field.slice(k,k+4).toLowerCase()==='url='){mi=from+k;break}if(semi<0)break;from=semi+1}if(mi<0)return v;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)==='\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
-	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'))||a==='cite';var rr=nav?rn:r;var nv=v;if(a==='srcset'||a==='imagesrcset'){nv=srcsetParts(v).map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=rwaStyle(v)}else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
+	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'))||a==='cite';var rr=nav?rn:r;var nv=v;if(a==='srcset'||a==='imagesrcset'){nv=srcsetParts(v).map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='ping'){nv=v.split(/\s+/).map(function(u){return r(u)}).join(' ')}else if(a==='style'){nv=rwaStyle(v)}else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
 	`function rwe(el){if(!el||el.nodeType!==1)return;for(var i=0;i<ATTRS.length;i++)rwa(el,ATTRS[i])}` +
-	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','imagesrcset','rel','style','content','http-equiv'];` +
-	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[imagesrcset],[style],[content]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})}catch(e){}}` +
+	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','imagesrcset','ping','rel','style','content','http-equiv'];` +
+	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[imagesrcset],[ping],[style],[content]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})}catch(e){}}` +
 	// Console forwarding: pipe iframe console output back to the parent frame via postMessage so it surfaces in the kandev UI alongside other preview events. The message targets the gateway origin only (the preview is served by the gateway, same-origin with the Kandev UI), never a wildcard, so a cross-origin embedding parent cannot receive proxied app console arguments. Errors and stacks are coerced to strings; objects are JSON-cloned where possible. We continue calling the original method so the iframe's own DevTools still shows everything.
 	`var LV=['log','warn','error','info','debug'];LV.forEach(function(lv){var orig=console[lv];if(!orig)return;console[lv]=function(){try{var out=[];for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){out.push('Error: '+a.message+(a.stack?'\n'+a.stack:''))}else if(typeof a==='object'&&a!==null){try{out.push(JSON.parse(JSON.stringify(a)))}catch(e){out.push(String(a))}}else{out.push(a)}}window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},window.location.origin)}catch(e){}return orig.apply(console,arguments)}});` +
 	`})();`
@@ -617,6 +617,13 @@ func (s *htmlRewriteState) onEndTag(token html.Token) {
 func (s *htmlRewriteState) onTextToken(token html.Token) {
 	switch {
 	case s.inStyle:
+		if s.baseExternal {
+			// Under an external <base>, url() references inside the style
+			// body resolve against the external origin: rewriting them would
+			// leak the capability (same policy as inline style attributes).
+			s.out.WriteString(token.Data)
+			return
+		}
 		s.out.WriteString(rewriteCSSFragment(token.Data, s.prefix, s.capability))
 	case s.inScript:
 		s.out.WriteString(token.Data)
@@ -736,10 +743,24 @@ func rewriteTokenAttrKey(token *html.Token, key, val, prefix, capability, nonce 
 		return rewriteURLReference(val, prefix, capability)
 	case key == "srcset" || key == "imagesrcset":
 		return rewriteSrcSet(val, prefix, capability)
+	case key == "ping":
+		// a[ping] is a whitespace-separated URL list the browser POSTs to on
+		// activation (hyperlink auditing): each candidate is a capability-
+		// bearing subresource request.
+		return rewritePing(val, prefix, capability)
 	case key == "style":
 		return rewriteStyleValue(val, prefix, capability, externalBase)
 	}
 	return val
+}
+
+// rewritePing rewrites every whitespace-separated URL in an a[ping] list.
+func rewritePing(val, prefix, capability string) string {
+	fields := strings.Fields(val)
+	for i, f := range fields {
+		fields[i] = rewriteURLReference(f, prefix, capability)
+	}
+	return strings.Join(fields, " ")
 }
 
 // rewriteStyleValue rewrites inline style url() references, unless the

@@ -452,7 +452,7 @@ func (r *sqliteRepository) PurgeTask(ctx context.Context, taskID string) (int, e
 		return 0, fmt.Errorf("begin lifecycle queue purge: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	removed, err := PurgeTaskInTransaction(ctx, tx, r.db, taskID)
+	removed, err := PurgeTaskInTransaction(ctx, tx, r.db, taskID, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -477,43 +477,30 @@ func lifecycleGenerationInTx(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, task
 	return generation, nil
 }
 
-// purgeTaskSessions returns the union of sessions that hold queued rows for
-// the task and the task's authoritative session set (task_sessions). A missing
-// task_sessions table is tolerated (the queue repository's isolated tests
-// create only queue tables); production databases always have it.
-func purgeTaskSessions(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string) ([]string, error) {
-	seen := make(map[string]struct{})
-	collect := func(query string) error {
-		rows, err := tx.QueryxContext(ctx, db.Rebind(query), taskID)
-		if err != nil {
-			if internaldb.IsMissingTableError(err) {
-				return nil
-			}
-			return err
-		}
-		for rows.Next() {
-			var sessionID string
-			if err := rows.Scan(&sessionID); err != nil {
-				_ = rows.Close()
-				return fmt.Errorf("scan purge session: %w", err)
-			}
-			seen[sessionID] = struct{}{}
-		}
-		if err := rows.Err(); err != nil {
+// purgeQueueRowSessions lists the distinct sessions holding queued rows for
+// the task, checking rows.Err() after iteration.
+func purgeQueueRowSessions(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string) ([]string, error) {
+	rows, err := tx.QueryxContext(ctx, db.Rebind(`
+		SELECT DISTINCT session_id FROM queued_messages WHERE task_id = ?
+	`), taskID)
+	if err != nil {
+		return nil, fmt.Errorf("list purge sessions: %w", err)
+	}
+	var sessions []string
+	for rows.Next() {
+		var sessionID string
+		if err := rows.Scan(&sessionID); err != nil {
 			_ = rows.Close()
-			return fmt.Errorf("iterate purge sessions: %w", err)
+			return nil, fmt.Errorf("scan purge session: %w", err)
 		}
-		return rows.Close()
-	}
-	if err := collect(`SELECT DISTINCT session_id FROM queued_messages WHERE task_id = ?`); err != nil {
-		return nil, err
-	}
-	if err := collect(`SELECT id FROM task_sessions WHERE task_id = ?`); err != nil {
-		return nil, err
-	}
-	sessions := make([]string, 0, len(seen))
-	for sessionID := range seen {
 		sessions = append(sessions, sessionID)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("iterate purge sessions: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close purge sessions: %w", err)
 	}
 	return sessions, nil
 }
@@ -521,21 +508,40 @@ func purgeTaskSessions(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID str
 // PurgeTaskInTransaction lets the task repository make archive/delete and
 // durable queue invalidation one SQLite transaction. It is backend-internal:
 // user queue handlers must keep using ownership-checked deletion methods.
-func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string) (int, error) {
+//
+// taskSessions is the task's authoritative session set, discovered by the
+// caller from its own task_sessions schema — the queue repository never
+// reaches across schemas, and a failed cross-schema query would abort the
+// caller's transaction on PostgreSQL. The standalone PurgeTask passes nil and
+// locks only the sessions that currently hold queue rows.
+func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string, taskSessions []string) (int, error) {
 	// Serialize with per-session tail operations: a purge that races a fold
 	// or insert could otherwise delete a row an admission just accepted, or
 	// admit into a queue being purged. Lock the AUTHORITATIVE session set —
-	// the task's sessions, not just sessions that currently hold queue rows:
-	// a session that is empty at discovery time could otherwise admit a task
-	// row during the purge and have it survive the DELETE snapshot. Locks are
-	// taken in sorted order — the same ordering every multi-session lock uses
-	// — so concurrent purges and queue mutations cannot deadlock.
-	sessions, err := purgeTaskSessions(ctx, tx, db, taskID)
+	// the union of sessions currently holding queue rows and the task's
+	// sessions (taskSessions, discovered by the caller from its own
+	// task_sessions schema): a session that is empty at discovery time could
+	// otherwise admit a task row during the purge and have it survive the
+	// DELETE snapshot. Locks are taken in sorted order — the same ordering
+	// every multi-session lock uses — so concurrent purges and queue
+	// mutations cannot deadlock.
+	rowSessions, err := purgeQueueRowSessions(ctx, tx, db, taskID)
 	if err != nil {
 		return 0, err
 	}
-	sort.Strings(sessions)
-	for _, sessionID := range sessions {
+	seen := make(map[string]struct{}, len(rowSessions)+len(taskSessions))
+	for _, sessionID := range rowSessions {
+		seen[sessionID] = struct{}{}
+	}
+	for _, sessionID := range taskSessions {
+		seen[sessionID] = struct{}{}
+	}
+	ordered := make([]string, 0, len(seen))
+	for sessionID := range seen {
+		ordered = append(ordered, sessionID)
+	}
+	sort.Strings(ordered)
+	for _, sessionID := range ordered {
 		if err := lockSessionTxIn(ctx, tx, db, sessionID); err != nil {
 			return 0, err
 		}

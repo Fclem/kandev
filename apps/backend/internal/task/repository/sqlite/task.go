@@ -1797,7 +1797,30 @@ func (r *Repository) ArchiveTaskIfActive(ctx context.Context, id, cascadeID stri
 }
 
 func (r *Repository) purgeTaskQueueInTx(ctx context.Context, tx *sqlx.Tx, taskID string) error {
-	_, err := messagequeue.PurgeTaskInTransaction(ctx, tx, r.db, taskID)
+	// The task's sessions are the authoritative set: locking only sessions
+	// that currently hold queue rows would let an empty session admit a task
+	// row during the purge and have it survive the DELETE snapshot.
+	var sessions []string
+	rows, err := tx.QueryxContext(ctx, r.db.Rebind(`SELECT id FROM task_sessions WHERE task_id = ?`), taskID)
+	if err != nil {
+		return fmt.Errorf("list task purge sessions: %w", err)
+	}
+	for rows.Next() {
+		var sessionID string
+		if err := rows.Scan(&sessionID); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan task purge session: %w", err)
+		}
+		sessions = append(sessions, sessionID)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate task purge sessions: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close task purge sessions: %w", err)
+	}
+	_, err = messagequeue.PurgeTaskInTransaction(ctx, tx, r.db, taskID, sessions)
 	if internaldb.IsMissingTableError(err) {
 		return nil
 	}

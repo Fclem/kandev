@@ -496,7 +496,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	// fetch/XHR/WS all route URL-like inputs through norm() (URL objects,
 	// same-origin absolute strings).
 	mustContain(t, shim, `typeof i==='string'||(i&&typeof i==='object'&&typeof i.href==='string'&&!i.url)`)
-	mustContain(t, shim, `arguments[1]=norm(u)`)
+	mustContain(t, shim, `arguments[1]=u;return oo.apply(this,arguments)`)
 	// Navigation APIs use the prefix-only rewriter, never the capability.
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
@@ -1479,6 +1479,16 @@ func TestRewriteSrcSet_ManyCandidatesBounded(t *testing.T) {
 	if !strings.HasSuffix(got, "/port-proxy/abc/3001/last.png?kandev_cap=cap-ss 2x") {
 		t.Fatalf("last candidate not rewritten: %.60s", got[len(got)-60:])
 	}
+}
+
+// XHR.open and WebSocket convert DOMString-able URL arguments to strings
+// BEFORE normalization (native Web IDL stringifies after the wrapper, which
+// would leave object args unrewritten at the gateway root); Symbols throw
+// like native DOMString conversion.
+func TestRuntimeShim_DOMStringXHRAndWebSocket(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `XMLHttpRequest.prototype.open=function(m,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=norm(u)}arguments[1]=u;return oo.apply(this,arguments)}`)
+	mustContain(t, shim, `function W(u,p){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u)}var n=norm(u);`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

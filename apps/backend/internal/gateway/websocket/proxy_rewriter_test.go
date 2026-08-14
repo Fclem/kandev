@@ -54,7 +54,7 @@ func TestRewriteHTMLURLs(t *testing.T) {
 </body>
 </html>`
 
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, ""))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "", ""))
 
 	mustContain(t, got, `href="/port-proxy/abc/3001/styles/main.css"`)
 	mustContain(t, got, `href="//cdn.example.com/lib.css"`)
@@ -81,7 +81,7 @@ func TestRewriteCSSURLs(t *testing.T) {
 .abs { background: url(http://example.com/x.png); }
 .rel { background: url(foo.png); }`
 
-	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, ""))
+	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, "", ""))
 
 	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css"`)
 	mustContain(t, got, `url("/port-proxy/abc/3001/print.css")`)
@@ -144,7 +144,7 @@ func TestRewriteProxyResponse_OtherContentTypeUnchanged(t *testing.T) {
 
 func TestRewriteHTMLURLs_InjectsRuntimeShim(t *testing.T) {
 	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, ""))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "", ""))
 
 	// The shim script tag must appear exactly once, immediately after the
 	// `<head>` open tag (so it executes before any other script that may
@@ -163,7 +163,7 @@ func TestRewriteHTMLURLs_InjectsRuntimeShim(t *testing.T) {
 	}
 	// With a capability minted, the shim src carries it so the shim loads even
 	// in cookie-less contexts.
-	withCap := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-shim"))
+	withCap := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-shim", ""))
 	if !strings.Contains(withCap, `__kandev_runtime_shim.js?kandev_cap=cap-shim`) {
 		t.Fatalf("capability-bearing shim src missing the capability:\n%s", withCap)
 	}
@@ -179,7 +179,7 @@ func TestRewriteHTMLURLs_NoHeadStillRewritesURLs(t *testing.T) {
 	// injecting the shim in that case (no good anchor point), but URL
 	// rewriting must still work.
 	in := `<a href="/foo">x</a>`
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, ""))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "", ""))
 	if !strings.Contains(got, `href="/port-proxy/abc/3001/foo"`) {
 		t.Fatalf("URL not rewritten: %q", got)
 	}
@@ -197,7 +197,7 @@ func TestRewriteHTMLURLs_PreservesScriptContentVerbatim(t *testing.T) {
 		`<script src="/static/app.js"></script>` +
 		`</body></html>`
 
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, ""))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "", ""))
 
 	// Inline script body must come through unescaped.
 	for _, needle := range []string{
@@ -302,7 +302,7 @@ func TestRewriteHTMLURLs_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 		`<img srcset="/a.png 1x, //cdn.example.com/b.png 2x">` +
 		`<link rel="manifest" href="/manifest.webmanifest">` +
 		`<a href="/docs#installation">docs</a>`
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-123"))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-123", ""))
 
 	// Navigation hrefs are prefixed but capability-free.
 	mustContain(t, got, `href="/port-proxy/abc/3001/foo"`)
@@ -322,7 +322,7 @@ func TestRewriteCSSURLs_AppendsCapability(t *testing.T) {
 	in := `@import "/theme.css"; .x { background: url("/img/bg.png"); }` +
 		`.y { background: url(rel.png); } @import "print.css";` +
 		`.z { background: url(http://cdn.example.com/x.png); }`
-	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, "cap-456"))
+	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, "cap-456", ""))
 
 	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css?kandev_cap=cap-456"`)
 	mustContain(t, got, `url("/port-proxy/abc/3001/img/bg.png?kandev_cap=cap-456")`)
@@ -429,7 +429,7 @@ func TestRewriteHTMLURLs_AppendsCapabilityToRelativeReferences(t *testing.T) {
 		`<a href=" /rooted">spaced-root</a>` +
 		`<form action="/submit"><button formaction="/alt"></button></form>` +
 		`<a href="ht&#10;tps://evil2.example/z">embedded-tab-scheme</a>`
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-789"))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-789", ""))
 
 	mustContain(t, got, `href="manifest.webmanifest?kandev_cap=cap-789"`)
 	// Navigation references: prefixed, capability-free.
@@ -488,16 +488,20 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `u=rn(u);return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `u=rn(u);return orig.call(location,u)`)
 	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}`)
-	// Click interception (bubble phase) captures plain same-origin
-	// root-absolute, not-yet-prefixed anchor navigation through rn().
-	mustContain(t, shim, `document.addEventListener('click'`)
-	mustContain(t, shim, `location.href=rn(h)`)
-	mustContain(t, shim, `h.indexOf(P)!==0`)
-	mustContain(t, shim, `el.hasAttribute('download')`)
-	// MutationObserver distinguishes navigation attributes (rn) from
-	// subresource attributes (r).
-	mustContain(t, shim, `el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'`)
+	// Anchor navigation needs no click interception: the MutationObserver
+	// prefixes hrefs, so the browser's own default navigation stays inside
+	// the subtree and app click handlers keep control.
+	if strings.Contains(shim, "addEventListener('click'") {
+		t.Fatal("click interception must not be installed (it breaks app delegation)")
+	}
+	// norm() rewrites only http/https/ws/wss inputs; other schemes pass through.
+	mustContain(t, shim, `var p=x.protocol;if(p!=='http:'&&p!=='https:'&&p!=='ws:'&&p!=='wss:')return u;`)
+	// MutationObserver distinguishes navigation attributes (rn, incl.
+	// metadata links) from subresource attributes (r), and scans the full
+	// attribute set on inserted subtrees.
+	mustContain(t, shim, `el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&(el.rel==='canonical'||el.rel==='alternate'))`)
 	mustContain(t, shim, `var rr=nav?rn:r;`)
+	mustContain(t, shim, `'[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset]'`)
 }
 
 // The navigation rewriter must not carry the capability even when one is
@@ -574,7 +578,7 @@ func TestRewriteProxyResponse_DoesNotSetCacheHeadersItself(t *testing.T) {
 // capability on subresources and none on navigation.
 func TestRewriteHTMLURLs_RewritesSrcdocDocuments(t *testing.T) {
 	in := `<iframe srcdoc="&lt;a href=&quot;/page&quot;&gt;x&lt;/a&gt;&lt;img src=&quot;/logo.png&quot;&gt;"></iframe>`
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-srcdoc"))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-srcdoc", ""))
 	// The nested document is rewritten (navigation no cap, subresource cap);
 	// the serializer re-escapes the srcdoc attribute value.
 	mustContain(t, got, `srcdoc="&lt;a href=&#34;/port-proxy/abc/3001/page&#34;&gt;x&lt;/a&gt;&lt;img src=&#34;/port-proxy/abc/3001/logo.png?kandev_cap=cap-srcdoc&#34;&gt;"`)
@@ -585,7 +589,7 @@ func TestRewriteHTMLURLs_RewritesSrcdocDocuments(t *testing.T) {
 func TestRewriteHTMLURLs_RewritesMetaRefresh(t *testing.T) {
 	in := `<meta http-equiv="refresh" content="5; url=/next">` +
 		`<meta http-equiv="refresh" content="0;url='https://external.example/x'">`
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-meta"))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-meta", ""))
 
 	mustContain(t, got, `content="5; url=/port-proxy/abc/3001/next"`)
 	mustContain(t, got, `content="0;url=&#39;https://external.example/x&#39;"`)
@@ -598,12 +602,74 @@ func TestRewriteHTMLURLs_CanonicalLinkOmitsCapability(t *testing.T) {
 		`<link rel="stylesheet" href="/theme.css">` +
 		`<link rel="manifest" href="/manifest.webmanifest">` +
 		`<link rel="alternate" href="/feed.xml">`
-	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-link"))
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-link", ""))
 
 	mustContain(t, got, `rel="canonical" href="/port-proxy/abc/3001/canonical"`)
 	mustContain(t, got, `rel="alternate" href="/port-proxy/abc/3001/feed.xml"`)
 	mustContain(t, got, `rel="stylesheet" href="/port-proxy/abc/3001/theme.css?kandev_cap=cap-link"`)
 	mustContain(t, got, `rel="manifest" href="/port-proxy/abc/3001/manifest.webmanifest?kandev_cap=cap-link"`)
+}
+
+// When the app's Content-Security-Policy uses a script nonce, the injected
+// shim tag must carry it so nonce- and strict-dynamic-based policies allow the
+// shim; the meta-tag form is honored too.
+func TestRewriteHTMLURLs_ShimTagCarriesCSPNonce(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
+	// Header-based policy.
+	headerResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {"default-src 'self'; script-src 'self' 'nonce-app123'"},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(headerResp, proxyPrefix, "cap-nonce"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, _ := io.ReadAll(headerResp.Body)
+	mustContain(t, string(got), `<script src="/port-proxy/abc/3001/__kandev_runtime_shim.js?kandev_cap=cap-nonce" nonce="app123"></script>`)
+
+	// Meta-tag policy.
+	metaResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"text/html"}},
+		Body: io.NopCloser(strings.NewReader(
+			`<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="script-src 'self' 'nonce-meta456'"><title>x</title></head><body></body></html>`)),
+	}
+	if err := rewriteProxyResponse(metaResp, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gotMeta, _ := io.ReadAll(metaResp.Body)
+	mustContain(t, string(gotMeta), `nonce="meta456"`)
+
+	// No nonce in the policy: the tag stays plain.
+	plain := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {"default-src 'self'"},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(plain, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gotPlain, _ := io.ReadAll(plain.Body)
+	if strings.Contains(string(gotPlain), "nonce=") {
+		t.Fatalf("shim tag must not carry a nonce when the policy has none:\n%s", gotPlain)
+	}
+}
+
+// Meta refresh targets: quoted URLs with embedded semicolons or spaces must be
+// preserved; unquoted targets stop at the delimiter.
+func TestRewriteMetaRefresh_QuoteAndSemicolonAware(t *testing.T) {
+	in := `<meta http-equiv="refresh" content="0; url='/next;v=1'">` +
+		`<meta http-equiv="refresh" content="3; url=/plain">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-mq", ""))
+
+	mustContain(t, got, `content="0; url=&#39;/port-proxy/abc/3001/next;v=1&#39;"`)
+	mustContain(t, got, `content="3; url=/port-proxy/abc/3001/plain"`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

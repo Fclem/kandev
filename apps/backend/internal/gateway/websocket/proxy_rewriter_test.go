@@ -235,10 +235,13 @@ func TestRuntimeShim_InstallsMutationObserver(t *testing.T) {
 	// runtime path doesn't silently miss attributes the static path catches.
 	mustContain(t, shim, `'href','src','action','formaction','cite','data','poster','background','manifest','srcset'`)
 
-	// rel changes are observed so link classification (canonical/alternate vs
-	// fetching) stays current; style/srcdoc/meta are observed but documented
-	// as static-only.
-	mustContain(t, shim, `'rel','style','content','http-equiv','srcdoc'`)
+	// rel changes are observed so link classification (metadata vs fetching)
+	// stays current; style and meta content are observed and runtime-rewritten;
+	// srcdoc is intentionally not observed (static-only, documented).
+	mustContain(t, shim, `'rel','style','content','http-equiv'`)
+	if strings.Contains(shim, "'srcdoc']") {
+		t.Fatal("srcdoc must not be observed (static-only contract)")
+	}
 
 	// srcset has its own splitter (whitespace-separated descriptors).
 	mustContain(t, shim, `if(a==='srcset')`)
@@ -497,7 +500,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	// Navigation APIs use the prefix-only rewriter, never the capability.
 	mustContain(t, shim, `u=rn(u);return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `u=rn(u);return orig.call(location,u)`)
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return sc(u);return sc(P+u);}`)
 	// Anchor navigation needs no click interception: the MutationObserver
 	// prefixes hrefs, so the browser's own default navigation stays inside
 	// the subtree and app click handlers keep control.
@@ -506,10 +509,11 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	}
 	// norm() rewrites only http/https/ws/wss inputs; other schemes pass through.
 	mustContain(t, shim, `var p=x.protocol;if(p!=='http:'&&p!=='https:'&&p!=='ws:'&&p!=='wss:')return u;`)
-	// MutationObserver distinguishes navigation attributes (rn, incl.
-	// metadata links) from subresource attributes (r), and scans the full
-	// attribute set on inserted subtrees.
-	mustContain(t, shim, `el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&(el.rel==='canonical'||el.rel==='alternate'))`)
+	// MutationObserver distinguishes navigation attributes (rn, incl. metadata
+	// links with no fetching rel token via lf()) from subresource attributes
+	// (r), and scans the full attribute set on inserted subtrees.
+	mustContain(t, shim, `el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))`)
+	mustContain(t, shim, `function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);`)
 	mustContain(t, shim, `var rr=nav?rn:r;`)
 	mustContain(t, shim, `'[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset]'`)
 }
@@ -518,8 +522,9 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 // minted: the bearer stays out of the address bar and browser history.
 func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
-	// rn() is the prefix-only form: no capability splice, no K reference.
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}`)
+	// rn() is the prefix-only form: it strips any previously issued capability
+	// and never appends a new one.
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return sc(u);return sc(P+u);}`)
 	// history and location rewrite through rn(), never r().
 	mustContain(t, shim, `history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);return orig.call(this,s,t,u)}`)
 	mustContain(t, shim, `location[op]=function(u){if(typeof u==='string')u=rn(u);return orig.call(location,u)}`)
@@ -536,8 +541,8 @@ func TestRuntimeShim_WithoutCapabilityStaysByteIdentical(t *testing.T) {
 	if withCap != withoutCap {
 		t.Fatal("empty capability must not alter the shim output")
 	}
-	if strings.Contains(withCap, "kandev_cap") {
-		t.Fatalf("shim without capability mentions kandev_cap:\n%s", withCap)
+	if strings.Contains(withCap, `"kandev_cap="+K`) {
+		t.Fatalf("shim without capability appends kandev_cap:\n%s", withCap)
 	}
 }
 
@@ -799,6 +804,55 @@ func TestRuntimeShim_CapsRelativeSubresources(t *testing.T) {
 	mustContain(t, shim, `if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}`)
 	// The splice appends to u (prefixed or relative) with fragment handling.
 	mustContain(t, shim, `var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+}
+
+// Link rel values are whitespace-separated token lists: ANY fetching token
+// makes the link a subresource; metadata-only lists (any case, extra tokens)
+// stay capability-free.
+func TestRewriteHTMLURLs_LinkRelTokenClassification(t *testing.T) {
+	in := `<link rel="canonical nofollow" href="/canonical">` +
+		`<link rel="Manifest" href="/manifest.webmanifest">` +
+		`<link rel="stylesheet preload" href="/theme.css">` +
+		`<link rel="alternate" href="/feed.xml">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-rel-tok", ""))
+
+	mustContain(t, got, `rel="canonical nofollow" href="/port-proxy/abc/3001/canonical"`)
+	mustContain(t, got, `rel="Manifest" href="/port-proxy/abc/3001/manifest.webmanifest?kandev_cap=cap-rel-tok"`)
+	mustContain(t, got, `rel="stylesheet preload" href="/port-proxy/abc/3001/theme.css?kandev_cap=cap-rel-tok"`)
+	mustContain(t, got, `rel="alternate" href="/port-proxy/abc/3001/feed.xml"`)
+}
+
+// A malformed first nonce must not hide a later valid one.
+func TestRewriteHTMLURLs_CSPNonceSkipsInvalidCandidates(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'nonce-bad"<x>' 'nonce-good99'`},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	mustContain(t, string(got), `nonce="good99"`)
+}
+
+// Meta refresh url= is recognized at ANY semicolon field boundary, not just
+// the first one.
+func TestRewriteMetaRefresh_MultiField(t *testing.T) {
+	in := `<meta http-equiv="refresh" content="5;foo=bar; url=/next">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-mf", ""))
+	mustContain(t, got, `content="5;foo=bar; url=/port-proxy/abc/3001/next"`)
+}
+
+// The runtime r() classifies via the URL API: control/whitespace-obfuscated
+// external URLs never receive the capability.
+func TestRuntimeShim_NoCapForObfuscatedExternalURLs(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-obf")
+	mustContain(t, shim, `try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

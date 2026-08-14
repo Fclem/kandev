@@ -65,13 +65,14 @@ const runtimeShimTemplate = `(function(){` +
 	// Path rewriter: prefix path-absolute URLs that aren't already prefixed.
 	// %s is the optional capability-append logic (empty when no capability is
 	// minted, keeping the auth-disabled output byte-identical).
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||/^[a-z][a-z0-9+.-]*:/i.test(u)||u.indexOf('//')===0)return u;if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}%sreturn u;}` +
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}%sreturn u;}` +
 	// Navigation rewriter: same prefixing WITHOUT the capability. Navigation
 	// APIs (history.pushState, location.assign) put the URL in the address bar
 	// and browser history; embedding a bearer there would leak it through
 	// copied URLs, history, and cross-origin Referers. The subtree cookie
 	// covers same-origin navigations instead.
-	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return u;return P+u;}` +
+	`function sc(u){var qi=u.indexOf('?');if(qi===-1)return u;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){return p.split('=')[0]!=='kandev_cap'});return b+(q.length?'?'+q.join('&'):'')}` +
+	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return sc(u);return sc(P+u);}` +
 	// norm(u): normalizes any URL-like input through the network rewriter
 	// using the URL API, which applies the WHATWG parsing rules (leading
 	// C0/space trimmed, embedded tabs/newlines removed, default ports and
@@ -105,19 +106,21 @@ const runtimeShimTemplate = `(function(){` +
 	// MutationObserver: rewrite URL attributes on every element that is
 	// inserted or has its URL attribute mutated. Navigation attributes
 	// (anchor/area/base href, form action, button/input formaction, metadata
-	// link rel=canonical/alternate) use the prefix-only rewriter; subresource
-	// attributes use the capability-bearing one. The attribute filter also
-	// watches rel (link classification can change dynamically), style, srcdoc,
-	// and meta content; style/srcdoc/meta mutations are intentionally not
-	// runtime-rewritten (the static pass covers the initial document; their
-	// subresources carry cookies, so the capability is not required).
-	// Covers the cases the network-API patches miss, notably
+	// links with no fetching rel token) use the prefix-only rewriter (and any
+	// previously issued capability is stripped); subresource attributes use
+	// the capability-bearing one. Dynamic style attributes get their
+	// root-absolute url() references rewritten, and dynamic meta-refresh
+	// content gets its url= target prefixed. Dynamic iframe srcdoc is not
+	// runtime-rewritten (static-only, documented): its children inherit the
+	// subtree cookies, so only cookie-less dynamic srcdoc escapes — an
+	// accepted edge. Covers the cases the network-API patches miss, notably
 	// `ReactDOM.preload()` and any framework that builds DOM nodes with
 	// absolute paths after the initial HTML has been parsed.
 	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset'];` +
-	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&(el.rel==='canonical'||el.rel==='alternate'))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'));var rr=nav?rn:r;var nv;if(a==='srcset'){nv=v.split(',').map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
+	`function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);for(var i=0;i<toks.length;i++){if(toks[i]==='stylesheet'||toks[i]==='icon'||toks[i]==='manifest'||toks[i]==='preload'||toks[i]==='modulepreload'||toks[i]==='prefetch'||toks[i]==='dns-prefetch'||toks[i]==='preconnect'||toks[i]==='shortcut'||toks[i]==='apple-touch-icon')return true}return false}` +
+	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'));var rr=nav?rn:r;var nv;if(a==='srcset'){nv=v.split(',').map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=v.replace(/url\(\s*(['"]?)(\/[^'")]+)/g,function(m,q,u){return 'url('+q+r(u)+')'})}else if(a==='content'&&el.tagName==='META'){var ml=v.toLowerCase();var mi=ml.indexOf('url=');if(mi>=0&&(mi===0||ml[mi-1]===';')){var mt=v.slice(mi+4).replace(/^[ \t\n\r\f]+/,'');nv=v.slice(0,mi+4)+rn(mt)}else{nv=v}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
 	`function rwe(el){if(!el||el.nodeType!==1)return;for(var i=0;i<ATTRS.length;i++)rwa(el,ATTRS[i])}` +
-	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','rel','style','content','http-equiv','srcdoc'];` +
+	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','rel','style','content','http-equiv'];` +
 	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})}catch(e){}}` +
 	// Console forwarding: pipe iframe console output back to the parent frame via postMessage so it surfaces in the kandev UI alongside other preview events. The message targets the gateway origin only (the preview is served by the gateway, same-origin with the Kandev UI), never a wildcard, so a cross-origin embedding parent cannot receive proxied app console arguments. Errors and stacks are coerced to strings; objects are JSON-cloned where possible. We continue calling the original method so the iframe's own DevTools still shows everything.
 	`var LV=['log','warn','error','info','debug'];LV.forEach(function(lv){var orig=console[lv];if(!orig)return;console[lv]=function(){try{var out=[];for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){out.push('Error: '+a.message+(a.stack?'\n'+a.stack:''))}else if(typeof a==='object'&&a!==null){try{out.push(JSON.parse(JSON.stringify(a)))}catch(e){out.push(String(a))}}else{out.push(a)}}window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},window.location.origin)}catch(e){}return orig.apply(console,arguments)}});` +
@@ -198,8 +201,9 @@ func cspNonceChar(c byte) bool {
 		c == '+' || c == '/' || c == '-' || c == '_' || c == '='
 }
 
-// scriptNonceFromCSP extracts the script-src nonce from a Content-Security-
-// Policy value, e.g. `script-src 'self' 'nonce-abc123'`.
+// scriptNonceFromCSP extracts the first VALID script-src nonce from a
+// Content-Security-Policy value, e.g. `script-src 'self' 'nonce-abc123'`.
+// Invalid nonce-shaped tokens are skipped so a later valid one is used.
 func scriptNonceFromCSP(policy string) string {
 	for _, directive := range strings.Split(policy, ";") {
 		fields := strings.Fields(strings.TrimSpace(directive))
@@ -208,7 +212,7 @@ func scriptNonceFromCSP(policy string) string {
 		}
 		for _, source := range fields[1:] {
 			if nonce, ok := strings.CutPrefix(source, "'nonce-"); ok {
-				if nonce, ok = strings.CutSuffix(nonce, "'"); ok && nonce != "" {
+				if nonce, ok = strings.CutSuffix(nonce, "'"); ok && validCSPNonce(nonce) {
 					return nonce
 				}
 			}
@@ -560,17 +564,24 @@ func relValue(token *html.Token) string {
 // attrContent is the HTML "content" attribute key (meta refresh targets).
 const attrContent = "content"
 
-// fetchingLinkRels are link rel values whose href the browser fetches; every
-// other rel is metadata and must not carry the capability.
+// fetchingLinkRels are link rel tokens whose href the browser fetches; a rel
+// value with ANY fetching token is a subresource. Metadata-only rels (no
+// fetching token) must not carry the capability.
 var fetchingLinkRels = map[string]bool{
-	"stylesheet": true, "icon": true, "shortcut icon": true, "apple-touch-icon": true,
+	"stylesheet": true, "icon": true, "shortcut": true, "apple-touch-icon": true,
 	"manifest": true, "preload": true, "modulepreload": true, "prefetch": true,
-	"dns-prefetch": true, "preconnect": true, "alternate stylesheet": true,
+	"dns-prefetch": true, "preconnect": true,
 }
 
-// isFetchingLinkRel reports whether a link rel fetches its href.
+// isFetchingLinkRel reports whether a link rel value (a whitespace-separated
+// token list, per the HTML spec) contains any fetching token.
 func isFetchingLinkRel(rel string) bool {
-	return fetchingLinkRels[rel]
+	for _, token := range strings.Fields(rel) {
+		if fetchingLinkRels[strings.ToLower(token)] {
+			return true
+		}
+	}
+	return false
 }
 
 // isMetaRefresh reports whether a meta token is an http-equiv=refresh.
@@ -585,28 +596,37 @@ func isMetaRefresh(token *html.Token) bool {
 
 // rewriteMetaRefresh prefixes the root-absolute navigation target inside a
 // meta refresh content value (no capability — it is a navigation). The "url"
-// token is recognized only at a field boundary (start of the value or right
-// after a ";" separator, case-insensitive, ignoring surrounding whitespace),
-// so unrelated text like `noturl=/evil` is never rewritten. The target is
-// parsed exactly once, respecting an optional quote; any text after it —
-// including nested url= tokens — is preserved untouched.
+// token is recognized only at a field boundary — the start of the value or
+// right after any ";" separator, case-insensitive, ignoring surrounding
+// whitespace — so unrelated text like `noturl=/evil` is never rewritten and a
+// multi-field value like `5;foo=bar; url=/next` is handled. The target is
+// parsed exactly once, respecting an optional quote; any text after it is
+// preserved untouched.
 func rewriteMetaRefresh(content, prefix string) string {
 	lower := strings.ToLower(content)
 	idx := -1
 	if strings.HasPrefix(lower, "url=") {
 		idx = 0
-	} else if semi := strings.IndexByte(lower, ';'); semi >= 0 {
-		rest := lower[semi+1:]
-		trimmed := strings.TrimLeft(rest, " \t")
-		if strings.HasPrefix(trimmed, "url=") {
-			idx = semi + 1 + (len(rest) - len(trimmed))
+	} else {
+		for from := 0; from < len(lower); {
+			semi := strings.IndexByte(lower[from:], ';')
+			if semi < 0 {
+				break
+			}
+			from += semi + 1
+			rest := lower[from:]
+			trimmed := strings.TrimLeft(rest, " \t\n\r\f")
+			if strings.HasPrefix(trimmed, "url=") {
+				idx = from + (len(rest) - len(trimmed))
+				break
+			}
 		}
 	}
 	if idx < 0 {
 		return content
 	}
 	rest := content[idx+4:]
-	trimmed := strings.TrimLeft(rest, " \t")
+	trimmed := strings.TrimLeft(rest, " \t\n\r\f")
 	offset := len(rest) - len(trimmed)
 	target, tail, quote := parseRefreshTarget(trimmed)
 	return content[:idx+4] + rest[:offset] + quote + rewriteURLReference(target, prefix, "") + tail

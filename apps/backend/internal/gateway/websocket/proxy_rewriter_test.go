@@ -1118,7 +1118,7 @@ func TestRuntimeShim_FragmentPreservingAndNormalizedForms(t *testing.T) {
 	// sc() splits the fragment off, filters the query, and re-appends it.
 	mustContain(t, shim, `function sc(u){var h='';var hi=u.indexOf('#');if(hi!==-1){h=u.slice(hi);u=u.slice(0,hi)}var qi=u.indexOf('?');if(qi===-1)return u+h;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){var k=p.split('=')[0];var d;try{d=decodeURIComponent(k)}catch(e){d=k}return d!=='kandev_cap'});if(q.length===0)return b+'?'+h;return b+'?'+q.join('&')+h}`)
 	// r() and rn() normalize the emitted form after URL-API classification.
-	mustContain(t, shim, `function nz(u){return u.replace(/[\t\n\r]/g,'').replace(/^[\u0000-\u0020]+/,'')}`)
+	mustContain(t, shim, `function nz(u){return u.replace(/[\\\t\n\r]/g,function(m){return m==='\\'?'/':''}).replace(/^[\u0000-\u0020]+/,'')}`)
 	mustContain(t, shim, `u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||`)
 	mustContain(t, shim, `u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||`)
 }
@@ -1501,6 +1501,39 @@ func TestRuntimeShim_FetchBrandChecksAndWSConstructor(t *testing.T) {
 	mustContain(t, shim, `Object.prototype.toString.call(i)==='[object URL]'`)
 	mustContain(t, shim, `Object.prototype.toString.call(i)==='[object Request]'`)
 	mustContain(t, shim, `Failed to construct 'WebSocket': Please use the 'new' operator`)
+}
+
+// Backslashes are slashes for special-URL references per WHATWG: static
+// href/src="\foo" must be prefixed (the browser resolves it to /foo), while
+// "\/evil" becomes the network-relative //evil and stays untouched.
+func TestRewriteHTMLURLs_BackslashPaths(t *testing.T) {
+	in := `<img src="\logo.png">` +
+		`<a href="\page">x</a>` +
+		`<img src="\/evil.png">` +
+		`<link rel="stylesheet" href="\theme.css">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-bs", ""))
+
+	mustContain(t, got, `<img src="/port-proxy/abc/3001/logo.png?kandev_cap=cap-bs">`)
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/page">x</a>`)
+	mustContain(t, got, `<img src="\/evil.png">`)
+	mustContain(t, got, `<link rel="stylesheet" href="/port-proxy/abc/3001/theme.css?kandev_cap=cap-bs">`)
+}
+
+// The WebSocket wrapper preserves subclass identity (Reflect.construct with
+// new.target) and passes an explicit empty protocols argument through (native
+// rejects empty subprotocols; the wrapper must not collapse it to one arg).
+func TestRuntimeShim_WSSubclassAndProtocols(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `Reflect.construct(OW,[s,p],new.target||W)`)
+	mustContain(t, shim, `if(arguments.length>1)return Reflect.construct(OW,[s,p],new.target||W);return Reflect.construct(OW,[s],new.target||W)`)
+}
+
+// fetch must not rewrite credentialed URL objects: native Request
+// construction rejects credentials, so the shim leaves the URL untouched and
+// native coercion produces its usual error.
+func TestRuntimeShim_FetchSkipsCredentialedURLs(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `if(!i.username&&!i.password){var hu=norm(i.href);`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

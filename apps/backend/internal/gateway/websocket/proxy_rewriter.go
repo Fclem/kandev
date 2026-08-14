@@ -82,7 +82,7 @@ const runtimeShimTemplate = `(function(){` +
 	// and browser history; embedding a bearer there would leak it through
 	// copied URLs, history, and cross-origin Referers. The subtree cookie
 	// covers same-origin navigations instead.
-	`function nz(u){return u.replace(/[\t\n\r]/g,'').replace(/^[\u0000-\u0020]+/,'')}` +
+	`function nz(u){return u.replace(/[\\\t\n\r]/g,function(m){return m==='\\'?'/':''}).replace(/^[\u0000-\u0020]+/,'')}` +
 	// sc(u): strips every query parameter whose DECODED key equals the
 	// reserved capability key (so percent-encoded key spellings are stripped
 	// too), preserving all other parameters AND any URL fragment (SPA
@@ -116,14 +116,14 @@ const runtimeShimTemplate = `(function(){` +
 	// TypeError rather than a shim-initiated request. Cross-realm instances
 	// are detected via the Symbol.toStringTag brand, which instanceof alone
 	// misses.
-	`var of=window.fetch;if(of){window.fetch=function(i,n){if(typeof i==='string')i=norm(i);else if(i&&typeof i==='object'&&Object.prototype.toString.call(i)==='[object URL]'){var hu=norm(i.href);if(hu!==i.href){try{i=new URL(hu)}catch(e){}}}else if(i&&typeof i==='object'&&Object.prototype.toString.call(i)==='[object Request]'){var nu=norm(i.url);if(nu!==i.url){try{i=new Request(nu,i)}catch(e){}}}return of.call(this,i,n)}}` +
+	`var of=window.fetch;if(of){window.fetch=function(i,n){if(typeof i==='string')i=norm(i);else if(i&&typeof i==='object'&&Object.prototype.toString.call(i)==='[object URL]'){if(!i.username&&!i.password){var hu=norm(i.href);if(hu!==i.href){try{i=new URL(hu)}catch(e){}}}}else if(i&&typeof i==='object'&&Object.prototype.toString.call(i)==='[object Request]'){var nu=norm(i.url);if(nu!==i.url){try{i=new Request(nu,i)}catch(e){}}}return of.call(this,i,n)}}` +
 	// XMLHttpRequest.open — 2nd arg is the URL (string, URL object, or any
 	// DOMString-able value; native Web IDL stringifies it AFTER the wrapper,
 	// so the shim must convert first to rewrite it). Symbols throw like
 	// native DOMString conversion; null/undefined pass through.
 	`var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=norm(u)}arguments[1]=u;return oo.apply(this,arguments)};` +
 	// WebSocket — path-absolute ws/wss URLs need an explicit ws:// scheme + host since the constructor doesn't accept bare paths. The URL argument may be any DOMString-able value (native stringifies after the wrapper), so it is converted to a string FIRST and then normalized; Symbols throw like native DOMString conversion; null/undefined pass through. Same-origin results are converted to the matching ws/wss scheme, fragments are dropped (WebSocket URLs cannot carry one), and network-relative and cross-origin inputs pass through untouched.
-	`var OW=window.WebSocket;if(OW){function W(u,p){if(!(this instanceof W))throw new TypeError("Failed to construct 'WebSocket': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u)}var n=norm(u);var l=window.location;var w=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host;var s=n;if(typeof s==='string'){if(s.charAt(0)==='/'&&s.charAt(1)!=='/'){s=w+s}else if(s!==u&&/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.test(s)){s=s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)}var h=s.indexOf('#');if(h!==-1)s=s.slice(0,h)}return p?new OW(s,p):new OW(s)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
+	`var OW=window.WebSocket;if(OW){function W(u,p){if(!(this instanceof W))throw new TypeError("Failed to construct 'WebSocket': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u)}var n=norm(u);var l=window.location;var w=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host;var s=n;if(typeof s==='string'){if(s.charAt(0)==='/'&&s.charAt(1)!=='/'){s=w+s}else if(s!==u&&/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.test(s)){s=s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)}var h=s.indexOf('#');if(h!==-1)s=s.slice(0,h)}if(arguments.length>1)return Reflect.construct(OW,[s,p],new.target||W);return Reflect.construct(OW,[s],new.target||W)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
 	// history.pushState / replaceState — SPA routers (Next.js, React Router, etc.) call these to change the URL on client-side navigation. Without rewriting, the URL bar drops the proxy prefix and a reload 404s. Uses rn() (no capability — see above).
 	`['pushState','replaceState'].forEach(function(op){var orig=history[op];if(!orig)return;history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}});` +
 	// location.assign / location.replace — direct navigation APIs, patched
@@ -936,11 +936,21 @@ func stripCapabilityQuery(raw string) string {
 // removed anywhere in the string, and leading C0/space characters are trimmed.
 // Only the result is used for classification; the original bytes are preserved
 // when the reference is returned unchanged.
+// normalizeURLForClassification returns a copy of a URL reference with the
+// WHATWG parser's forgiving adjustments applied: ASCII tabs and newlines are
+// removed anywhere in the string, BACKSLASHES are converted to slashes (the
+// browser treats '\' as '/' in special-URL paths, so '\foo' resolves to
+// /foo while '\/evil' becomes the network-relative //evil), and leading
+// C0/space characters are trimmed. Only the result is used for
+// classification/emission; the original bytes are preserved when the
+// reference is returned unchanged.
 func normalizeURLForClassification(raw string) string {
 	noControls := strings.Map(func(r rune) rune {
 		switch r {
 		case '\t', '\n', '\r':
 			return -1
+		case '\\':
+			return '/'
 		}
 		return r
 	}, raw)

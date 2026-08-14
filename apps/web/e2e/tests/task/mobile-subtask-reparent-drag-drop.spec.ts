@@ -1,3 +1,4 @@
+import { type CDPSession, type Page } from "@playwright/test";
 import { test, expect } from "../../fixtures/test-base";
 import { dwell } from "../../helpers/causal-waits";
 import { SessionPage } from "../../pages/session-page";
@@ -12,8 +13,8 @@ import { settledBoundingBox } from "../../helpers/settled-box";
  * coordinates are read.
  */
 async function touchDragRowToNestZone(
-  page: import("@playwright/test").Page,
-  cdp: import("@playwright/test").CDPSession,
+  page: Page,
+  cdp: CDPSession,
   handleLocator: ReturnType<Page["locator"]>,
   zoneLocator: ReturnType<Page["locator"]>,
 ) {
@@ -180,7 +181,10 @@ test.describe("Mobile subtask re-parenting by drag and drop", () => {
       "library-timer",
       "long-press hold outlasts the 250ms sensor and ~700ms menu",
     );
-    await expect(testPage.getByRole("menuitem", { name: /color/i })).toBeVisible();
+    // Scope to the menu this gesture opened: another mounted menu must not
+    // satisfy the assertion.
+    const openMenu = testPage.getByRole("menu");
+    await expect(openMenu.getByRole("menuitem", { name: /color/i })).toBeVisible();
     // The long-press drag was cancelled when the menu opened: no nest zones
     // render and the source row is not dimmed.
     await expect(taskList.getByTestId("nest-drop-zone")).toHaveCount(0);

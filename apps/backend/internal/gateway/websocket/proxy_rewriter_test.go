@@ -332,7 +332,7 @@ func TestRewriteCSSURLs_AppendsCapability(t *testing.T) {
 	in := `@import "/theme.css"; .x { background: url("/img/bg.png"); }` +
 		`.y { background: url(rel.png); } @import "print.css";` +
 		`.z { background: url(http://cdn.example.com/x.png); }`
-	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, "cap-456", ""))
+	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, "cap-456", proxyPrefix+"/"))
 
 	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css?kandev_cap=cap-456"`)
 	mustContain(t, got, `url("/port-proxy/abc/3001/img/bg.png?kandev_cap=cap-456")`)
@@ -500,7 +500,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	// Navigation APIs use the prefix-only rewriter, never the capability.
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd2=rd(u);if(!(dd2===P||dd2.charAt(P.length)==='/'||dd2.charAt(P.length)==='?'||dd2.charAt(P.length)==='#'))return u;u=dd2}return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// Anchor navigation needs no click interception: the MutationObserver
 	// prefixes hrefs, so the browser's own default navigation stays inside
 	// the subtree and app click handlers keep control.
@@ -524,7 +524,7 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// rn() is the prefix-only form: it strips any previously issued capability
 	// and never appends a new one.
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd2=rd(u);if(!(dd2===P||dd2.charAt(P.length)==='/'||dd2.charAt(P.length)==='?'||dd2.charAt(P.length)==='#'))return u;u=dd2}return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// history and location rewrite through rn(), never r().
 	mustContain(t, shim, `history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}`)
 	mustContain(t, shim, `location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}`)
@@ -823,7 +823,7 @@ func TestRuntimeShim_CapsRelativeSubresources(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-rel")
 	// r() prefixes root-absolute URLs and falls through to the capability
 	// splice for safe same-origin relative references.
-	mustContain(t, shim, `if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}`)
+	mustContain(t, shim, `if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd=rd(u);if(!(dd===P||dd.charAt(P.length)==='/'||dd.charAt(P.length)==='?'||dd.charAt(P.length)==='#'))return u;u=dd}}`)
 	// The splice appends to u (prefixed or relative) with fragment handling.
 	mustContain(t, shim, `if(!hcp(u))u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
 	mustContain(t, shim, `function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}var vd;try{vd=decodeURIComponent(v)}catch(x){vd=v}if(d==='kandev_cap'&&vd===K)return true}return false}`)
@@ -1488,7 +1488,7 @@ func TestRewriteSrcSet_ManyCandidatesBounded(t *testing.T) {
 func TestRuntimeShim_DOMStringXHRAndWebSocket(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	mustContain(t, shim, `XMLHttpRequest.prototype.open=function(m,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=norm(u)}arguments[1]=u;return oo.apply(this,arguments)}`)
-	mustContain(t, shim, `function W(u,p){if(!(this instanceof W))throw new TypeError("Failed to construct 'WebSocket': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u)}var n=norm(u);`)
+	mustContain(t, shim, `function W(u,p){if(!new.target)throw new TypeError("Failed to construct 'WebSocket': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u)}var n=norm(u);`)
 }
 
 // fetch rewrites only BRANDED URL/Request instances (Symbol.toStringTag,
@@ -1736,7 +1736,7 @@ func TestRewriteHTMLURLs_DotSegmentEscapesSuppressCapability(t *testing.T) {
 	// prefixed); the browser resolves it to P/sub/.
 	mustContain(t, gotIn, `<base href="sub/">`)
 	mustContain(t, gotIn, `<img src="ok.png?kandev_cap=cap-dot3">`)
-	mustContain(t, gotIn, `<img src="../up.png">`)
+	mustContain(t, gotIn, `<img src="../up.png?kandev_cap=cap-dot3">`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

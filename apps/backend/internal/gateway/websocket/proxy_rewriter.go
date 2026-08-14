@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 
@@ -76,7 +77,7 @@ const runtimeShimTemplate = `(function(){` +
 	// trims it at fetch time. %s is the optional capability-append logic
 	// (empty when no capability is minted, keeping the auth-disabled output
 	// free of capability bytes).
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(nz(u).charAt(0)!=='/'&&!insub(ru))return u;u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}%sreturn u;}` +
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(nz(u).charAt(0)!=='/'&&!insub(ru))return u;u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd=rd(u);if(!(dd===P||dd.charAt(P.length)==='/'||dd.charAt(P.length)==='?'||dd.charAt(P.length)==='#'))return u;u=dd}}%sreturn u;}` +
 	// insub(ru): reports whether a resolved URL's path is boundary-inside
 	// the proxy subtree. Root-absolute references are always rewritten INTO
 	// the subtree by the prefix, but relative references resolve against the
@@ -91,6 +92,9 @@ const runtimeShimTemplate = `(function(){` +
 	// copied URLs, history, and cross-origin Referers. The subtree cookie
 	// covers same-origin navigations instead.
 	`function nz(u){return u.replace(/[\\\t\n\r]/g,function(m){return m==='\\'?'/':''}).replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g,'')}` +
+	// rd(p): RFC 3986 dot-segment removal (used after prefixing so a
+	// root-absolute /../x cannot escape the subtree with a capability).
+	`function rd(p){var segs=p.split('/');var out=[];var trailing=/\/$/.test(p)||/\.$/.test(p)||/\.\.$/.test(p);for(var i=0;i<segs.length;i++){var g=segs[i];if(g==='.'){continue}if(g==='..'){if(out.length>1||out.length===1&&out[0]!=='')out.pop();continue}out.push(g)}var j=out.join('/');if(trailing&&j.charAt(j.length-1)!=='/')j+='/';return j}` +
 	// sc(u): strips every query parameter whose DECODED key equals the
 	// reserved capability key (so percent-encoded key spellings are stripped
 	// too), preserving all other parameters AND any URL fragment (SPA
@@ -106,7 +110,7 @@ const runtimeShimTemplate = `(function(){` +
 	// emitted form is WHATWG-normalized (leading C0/space trimmed, embedded
 	// tabs/newlines removed) so a space-prefixed navigation cannot escape the
 	// subtree when the browser trims it.
-	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}` +
+	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd2=rd(u);if(!(dd2===P||dd2.charAt(P.length)==='/'||dd2.charAt(P.length)==='?'||dd2.charAt(P.length)==='#'))return u;u=dd2}return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}` +
 	// norm(u): normalizes any URL-like input through the network rewriter
 	// using the URL API, which applies the WHATWG parsing rules (leading
 	// C0/space trimmed, embedded tabs/newlines removed, default ports and
@@ -132,7 +136,7 @@ const runtimeShimTemplate = `(function(){` +
 	// native DOMString conversion; null/undefined pass through.
 	`var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=norm(u)}arguments[1]=u;return oo.apply(this,arguments)};` +
 	// WebSocket — path-absolute ws/wss URLs need an explicit ws:// scheme + host since the constructor doesn't accept bare paths. The URL argument may be any DOMString-able value (native stringifies after the wrapper), so it is converted to a string FIRST and then normalized; Symbols throw like native DOMString conversion; null/undefined pass through. Same-origin results are converted to the matching ws/wss scheme, fragments are dropped (WebSocket URLs cannot carry one), and network-relative and cross-origin inputs pass through untouched.
-	`var OW=window.WebSocket;if(OW){function W(u,p){if(!(this instanceof W))throw new TypeError("Failed to construct 'WebSocket': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u)}var n=norm(u);var l=window.location;var w=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host;var s=n;if(typeof s==='string'){if(s.charAt(0)==='/'&&s.charAt(1)!=='/'){s=w+s}else if(s!==u&&/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.test(s)){s=s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)}var h=s.indexOf('#');if(h!==-1)s=s.slice(0,h)}if(arguments.length>1)return Reflect.construct(OW,[s,p],new.target||W);return Reflect.construct(OW,[s],new.target||W)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
+	`var OW=window.WebSocket;if(OW){function W(u,p){if(!new.target)throw new TypeError("Failed to construct 'WebSocket': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u)}var n=norm(u);var l=window.location;var w=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host;var s=n;if(typeof s==='string'){if(s.charAt(0)==='/'&&s.charAt(1)!=='/'){s=w+s}else if(s!==u&&/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.test(s)){s=s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)}var h=s.indexOf('#');if(h!==-1)s=s.slice(0,h)}if(arguments.length>1)return Reflect.construct(OW,[s,p],new.target||W);return Reflect.construct(OW,[s],new.target||W)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
 	// history.pushState / replaceState — SPA routers (Next.js, React Router, etc.) call these to change the URL on client-side navigation. Without rewriting, the URL bar drops the proxy prefix and a reload 404s. Uses rn() (no capability — see above).
 	`['pushState','replaceState'].forEach(function(op){var orig=history[op];if(!orig)return;history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}});` +
 	// location.assign / location.replace — direct navigation APIs, patched
@@ -488,7 +492,14 @@ func rewriteProxyResponse(resp *http.Response, proxyPrefix, capability string) e
 	case strings.Contains(ct, "text/html"):
 		rewrite = rewriteHTMLURLs
 	case strings.Contains(ct, "text/css"):
-		rewrite = rewriteCSSURLs
+		// Standalone CSS resolves relative references against the stylesheet
+		// FILE's directory, so the effective base is the directory of the
+		// public response path (e.g. P/css/main.css -> P/css/), not the
+		// document root. ../ refs from a nested stylesheet stay in-subtree.
+		cssBase := cssDirectoryBase(resp.Request)
+		rewrite = func(body []byte, prefix, capability, _ string) []byte {
+			return rewriteCSSURLsAt(body, prefix, capability, cssBase)
+		}
 	default:
 		return nil
 	}
@@ -509,6 +520,18 @@ func rewriteProxyResponse(resp *http.Response, proxyPrefix, capability string) e
 	resp.Header.Set("Content-Length", strconv.Itoa(len(modified)))
 	resp.ContentLength = int64(len(modified))
 	return nil
+}
+
+// cssDirectoryBase returns the directory (with trailing slash) of the public
+// path being served as CSS, or "" when unavailable (the caller falls back to
+// the proxy prefix directory).
+func cssDirectoryBase(req *http.Request) string {
+	if req != nil && req.URL != nil && req.URL.Path != "" {
+		if dir := path.Dir(req.URL.Path); dir != "/" && dir != "." {
+			return strings.TrimSuffix(dir, "/") + "/"
+		}
+	}
+	return ""
 }
 
 // withCapability appends the capability query parameter to a rewritten URL,
@@ -535,12 +558,22 @@ func withCapability(rewritten, capability string) string {
 // ("<prefix>/foo"). Returns the input unchanged for non-rewritable cases:
 // empty strings, network-relative URLs (`//host`), schemes (`http:`, `data:`,
 // `mailto:`, etc.), or relative paths (`foo`, `./foo`, `../foo`).
+// Dot segments in the path are normalized: a root path whose normalized form
+// escapes the subtree (/../x) is returned unchanged rather than emitting a
+// capability on a non-proxy path.
 func rewriteAbsolutePath(rawURL, prefix, capability string) string {
 	if len(rawURL) < 1 || rawURL[0] != '/' {
 		return rawURL
 	}
 	if len(rawURL) >= 2 && rawURL[1] == '/' {
 		return rawURL // network-relative
+	}
+	if strings.Contains(rawURL, "/.") {
+		resolved := removeDotSegments(prefix + rawURL)
+		if !inSubtreePath(resolved, prefix) {
+			return rawURL
+		}
+		return withCapability(resolved, capability)
 	}
 	return withCapability(prefix+rawURL, capability)
 }
@@ -762,7 +795,7 @@ func rewriteTokenAttrKey(token *html.Token, key, val, prefix, capability, nonce 
 	case key == attrContent && token.Data == "meta" && isMetaRefresh(token):
 		return rewriteMetaRefresh(val, prefix)
 	case rewritableURLAttrs[key]:
-		return rewriteURLReference(val, prefix, capability)
+		return rewriteURLReferenceBase(val, prefix, capability, basePath)
 	case key == "srcset" || key == "imagesrcset":
 		return rewriteSrcSet(val, prefix, capability, basePath)
 	case key == "ping":
@@ -1049,18 +1082,22 @@ func inSubtreePath(path, prefix string) bool {
 // resolvePathReference merges a relative reference with a base path and
 // removes dot segments per RFC 3986 section 5.3/5.2.4.
 func resolvePathReference(ref, basePath string) string {
-	merged := basePath
 	if strings.HasPrefix(ref, "/") {
-		merged = ref
-	} else if i := strings.LastIndex(basePath, "/"); i >= 0 {
-		merged = basePath[:i+1] + ref
+		return removeDotSegments(ref)
 	}
-	return removeDotSegments(merged)
+	base := basePath
+	if !strings.HasSuffix(base, "/") {
+		base += "/"
+	}
+	return removeDotSegments(base + ref)
 }
 
 // removeDotSegments removes "." and ".." path segments without escaping
-// above the root (RFC 3986 5.2.4).
+// above the root (RFC 3986 5.2.4). A trailing slash is preserved when the
+// input is directory-shaped (ends in "/", "/.", or "/.."), so the result
+// stays usable as a base directory.
 func removeDotSegments(p string) string {
+	trailing := strings.HasSuffix(p, "/") || strings.HasSuffix(p, "/.") || strings.HasSuffix(p, "/..")
 	segments := strings.Split(p, "/")
 	out := make([]string, 0, len(segments))
 	for _, seg := range segments {
@@ -1075,7 +1112,11 @@ func removeDotSegments(p string) string {
 			out = append(out, seg)
 		}
 	}
-	return strings.Join(out, "/")
+	joined := strings.Join(out, "/")
+	if trailing && !strings.HasSuffix(joined, "/") {
+		joined += "/"
+	}
+	return joined
 }
 
 // stripCapability removes every query parameter whose DECODED key equals the

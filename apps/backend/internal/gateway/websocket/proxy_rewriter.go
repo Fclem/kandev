@@ -70,8 +70,8 @@ const runtimeShimTemplate = `<script>(function(){` +
 	`var of=window.fetch;if(of){window.fetch=function(i,n){if(typeof i==='string')i=r(i);else if(i&&typeof i==='object'&&typeof i.url==='string'){var nu=r(i.url);if(nu!==i.url){try{i=new Request(nu,i)}catch(e){}}}return of.call(this,i,n)}}` +
 	// XMLHttpRequest.open — 2nd arg is the URL.
 	`var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=r(u);return oo.apply(this,arguments)};` +
-	// WebSocket — path-absolute ws/wss URLs need an explicit ws:// scheme + host since the constructor doesn't accept bare paths.
-	`var OW=window.WebSocket;if(OW){function W(u,p){if(typeof u==='string'&&u.charAt(0)==='/'&&(u.length<2||u.charAt(1)!=='/')){var l=window.location;u=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host+P+u}return p?new OW(u,p):new OW(u)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
+	// WebSocket — path-absolute ws/wss URLs need an explicit ws:// scheme + host since the constructor doesn't accept bare paths. The path is run through r() so runtime-rewritten WS URLs carry the capability like every other dynamic URL.
+	`var OW=window.WebSocket;if(OW){function W(u,p){if(typeof u==='string'&&u.charAt(0)==='/'&&(u.length<2||u.charAt(1)!=='/')){var l=window.location;u=(l.protocol==='https:'?'wss:':'ws:')+'//'+l.host+r(u)}return p?new OW(u,p):new OW(u)}W.prototype=OW.prototype;Object.getOwnPropertyNames(OW).forEach(function(k){try{W[k]=OW[k]}catch(e){}});window.WebSocket=W}` +
 	// history.pushState / replaceState — SPA routers (Next.js, React Router, etc.) call these to change the URL on client-side navigation. Without rewriting, the URL bar drops the proxy prefix and a reload 404s.
 	`['pushState','replaceState'].forEach(function(op){var orig=history[op];if(!orig)return;history[op]=function(s,t,u){if(typeof u==='string')u=r(u);return orig.call(this,s,t,u)}});` +
 	// location.assign / location.replace — direct navigation APIs. (Assigning to location.href cannot be intercepted on a same-origin window without redefining a non-configurable property, so we don't try; pushState covers the common SPA-router path.)
@@ -101,16 +101,19 @@ func runtimeShim(prefix, capability string) string {
 
 // shimCapabilityJS returns the JavaScript spliced into the shim's path
 // rewriter so runtime-rewritten URLs carry the subtree capability. It appends
-// the capability as a query parameter, preserving any existing query string and
-// skipping URLs that already carry it (from the static HTML rewrite). Empty
-// when no capability is minted, keeping the auth-disabled output byte-identical.
+// the capability as a query parameter: any URL fragment is split off first so
+// the query lands before it, existing query strings are preserved, and the
+// append is skipped only when the URL already carries an exact kandev_cap
+// query key (a substring match would wrongly suppress unrelated values like
+// /kandev_cap=note or ?name=kandev_cap=). Empty when no capability is minted,
+// keeping the auth-disabled output byte-identical.
 func shimCapabilityJS(capability string) string {
 	if capability == "" {
 		return ""
 	}
 	param := proxyCapabilityQueryParam + "="
-	return fmt.Sprintf(`var K=%q;var x=P+u;if(x.indexOf(%q)===-1)x+=(x.indexOf('?')===-1?'?':'&')+%q+K;return x;`,
-		capability, param, param)
+	return fmt.Sprintf(`var K=%q;var x=P+u;var fr='';var fh=x.indexOf('#');if(fh!==-1){fr=x.slice(fh);x=x.slice(0,fh)}if(!/([?&])%s/.test(x))x+=(x.indexOf('?')===-1?'?':'&')+%q+K;return x+fr;`,
+		capability, proxyCapabilityQueryParam+`=`, param)
 }
 
 // urlInCSSPattern matches `url(...)` invocations in CSS where the argument is
@@ -124,8 +127,17 @@ func shimCapabilityJS(capability string) string {
 // Network-relative (`//host/foo`) and absolute (`http://...`) are left alone.
 var urlInCSSPattern = regexp.MustCompile(`url\(\s*(['"]?)(/[^/'"][^'")]*)`)
 
+// urlRelativeCSSPattern matches `url(...)` invocations whose argument is a
+// same-origin relative reference. The first character is not "/", so scheme
+// (`http:`, `data:`) and network-relative (`//host`) references are excluded
+// here; the shared rewriter leaves those untouched anyway.
+var urlRelativeCSSPattern = regexp.MustCompile(`url\(\s*(['"]?)([^/'"][^'")]*)`)
+
 // importInCSSPattern matches `@import "/foo";` style root-absolute imports.
 var importInCSSPattern = regexp.MustCompile(`@import\s+(['"])(/[^/'"][^'"]*)['"]`)
+
+// importRelativeCSSPattern matches `@import "foo.css";` style relative imports.
+var importRelativeCSSPattern = regexp.MustCompile(`@import\s+(['"])([^/'"][^'"]*)['"]`)
 
 // rewriteProxyResponse mutates an `http.Response` from agentctl in place,
 // rewriting root-absolute URLs to be prefixed by `proxyPrefix` so the iframe's
@@ -339,16 +351,26 @@ func rewriteURLReference(rawURL, prefix, capability string) string {
 	return withCapability(rawURL, capability)
 }
 
-// hasURLScheme reports whether a URL reference starts with a scheme (http:,
-// data:, javascript:, mailto:, …): a colon before the first path, query, or
-// fragment delimiter. Relative references cannot contain a colon there.
+// hasURLScheme reports whether a URL reference starts with a scheme per
+// RFC 3986 — ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) followed by ":"
+// (http:, data:, javascript:, mailto:, …). A colon in a position where a
+// scheme could not start (a digit or a non-scheme character first, or after a
+// path/query/fragment delimiter) makes the reference relative instead.
 func hasURLScheme(raw string) bool {
 	for i := 0; i < len(raw); i++ {
-		switch raw[i] {
-		case '/', '?', '#':
-			return false
-		case ':':
+		c := raw[i]
+		switch {
+		case c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z':
+			continue
+		case c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.':
+			if i == 0 {
+				return false // schemes start with an ASCII letter
+			}
+			continue
+		case c == ':':
 			return i > 0
+		default:
+			return false
 		}
 	}
 	return false
@@ -382,6 +404,10 @@ func rewriteCSSURLs(body []byte, prefix, capability string) []byte {
 
 // rewriteCSSFragment rewrites CSS URL references inside an arbitrary string
 // (either a full CSS file or the contents of an inline style attribute).
+// Path-absolute references get the proxy prefix plus the capability; relative
+// references keep their resolution but still get the capability appended so
+// cookie-less CSS loads stay authorized. Scheme-bearing, network-relative, and
+// fragment-only references are left untouched.
 func rewriteCSSFragment(css, prefix, capability string) string {
 	css = urlInCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
 		sub := urlInCSSPattern.FindStringSubmatch(match)
@@ -391,12 +417,26 @@ func rewriteCSSFragment(css, prefix, capability string) string {
 		}
 		return "url(" + sub[1] + rewriteAbsolutePath(sub[2], prefix, capability)
 	})
+	css = urlRelativeCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
+		sub := urlRelativeCSSPattern.FindStringSubmatch(match)
+		if len(sub) != 3 {
+			return match
+		}
+		return "url(" + sub[1] + rewriteURLReference(sub[2], prefix, capability)
+	})
 	css = importInCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
 		sub := importInCSSPattern.FindStringSubmatch(match)
 		if len(sub) != 3 {
 			return match
 		}
 		return "@import " + sub[1] + rewriteAbsolutePath(sub[2], prefix, capability) + sub[1]
+	})
+	css = importRelativeCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
+		sub := importRelativeCSSPattern.FindStringSubmatch(match)
+		if len(sub) != 3 {
+			return match
+		}
+		return "@import " + sub[1] + rewriteURLReference(sub[2], prefix, capability) + sub[1]
 	})
 	return css
 }

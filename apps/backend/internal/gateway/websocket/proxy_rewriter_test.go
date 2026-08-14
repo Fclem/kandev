@@ -301,13 +301,77 @@ func TestRewriteHTMLURLs_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 
 // The capability is appended to rewritten CSS url() and @import references too,
 // so cookie-less CSS loads stay authorized in the same contexts as the
-// manifest fetch.
+// manifest fetch. Relative references get the capability appended as well;
+// scheme-bearing and network-relative references stay untouched.
 func TestRewriteCSSURLs_AppendsCapability(t *testing.T) {
-	in := `@import "/theme.css"; .x { background: url("/img/bg.png"); }`
+	in := `@import "/theme.css"; .x { background: url("/img/bg.png"); }` +
+		`.y { background: url(rel.png); } @import "print.css";` +
+		`.z { background: url(http://cdn.example.com/x.png); }`
 	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, "cap-456"))
 
 	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css?kandev_cap=cap-456"`)
 	mustContain(t, got, `url("/port-proxy/abc/3001/img/bg.png?kandev_cap=cap-456")`)
+	mustContain(t, got, `url(rel.png?kandev_cap=cap-456)`)
+	mustContain(t, got, `@import "print.css?kandev_cap=cap-456"`)
+	mustContain(t, got, `url(http://cdn.example.com/x.png)`)
+}
+
+// hasURLScheme follows RFC 3986 scheme grammar: a scheme starts with an ASCII
+// letter and continues with letters, digits, +, -, or . until ":". A colon in
+// a non-scheme position (digit first, or after a path/query delimiter) means
+// the reference is relative.
+func TestHasURLScheme(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want bool
+	}{
+		{"http://x", true},
+		{"https://x", true},
+		{"data:image/png;base64,AAA", true},
+		{"javascript:alert(1)", true},
+		{"mailto:x@y.dev", true},
+		{"v1:chunk.js", true}, // RFC-valid scheme
+		{"C:foo", true},
+		{"foo", false},
+		{"./foo", false},
+		{"../foo", false},
+		{"foo/bar:baz", false}, // colon after a path delimiter
+		{"1x:y", false},        // scheme must start with a letter
+		{"?a=b", false},
+		{"#frag", false},
+	}
+	for _, tc := range cases {
+		if got := hasURLScheme(tc.raw); got != tc.want {
+			t.Errorf("hasURLScheme(%q) = %v, want %v", tc.raw, got, tc.want)
+		}
+	}
+}
+
+// stripCapabilityParam removes only the capability pair from a raw query,
+// matching percent-encoded spellings and preserving every other parameter's
+// bytes and order.
+func TestStripCapabilityParam(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"empty", "", ""},
+		{"absent", "a=1&b=2", "a=1&b=2"},
+		{"plain", "a=1&kandev_cap=x&b=2", "a=1&b=2"},
+		{"first", "kandev_cap=x&a=1", "a=1"},
+		{"last", "a=1&kandev_cap=x", "a=1"},
+		{"encoded key", "a=1&%6bandev_cap=x", "a=1"},
+		{"encoded key full", "a=1&%6B%61%6E%64%65%76%5F%63%61%70=x", "a=1"},
+		{"no value", "kandev_cap", ""},
+		{"preserves order and bytes", "b=2&a=%2F&kandev_cap=x&c=3", "b=2&a=%2F&c=3"},
+		{"value contains cap name", "a=kandev_cap=x", "a=kandev_cap=x"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := stripCapabilityParam(tc.in); got != tc.want {
+				t.Fatalf("stripCapabilityParam(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
 }
 
 // Same-origin relative references (a relative <link rel="manifest">, relative
@@ -336,14 +400,20 @@ func TestRewriteHTMLURLs_AppendsCapabilityToRelativeReferences(t *testing.T) {
 }
 
 // The runtime shim appends the capability to every URL its path rewriter
-// produces, preserving existing query strings and never double-appending.
+// produces: fragments stay last, existing query strings are preserved, and the
+// append is skipped only for an exact kandev_cap query key. WebSocket URLs go
+// through the same path rewriter so upgrades carry the capability too.
 func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	mustContain(t, shim, `var K="cap-shim";`)
-	mustContain(t, shim, `x.indexOf("kandev_cap=")===-1`)
+	// Fragment split: the query lands before any #fragment.
+	mustContain(t, shim, `var fh=x.indexOf('#');if(fh!==-1){fr=x.slice(fh);x=x.slice(0,fh)}`)
+	// Exact-key guard: only an actual ?kandev_cap=/&kandev_cap= key suppresses
+	// the append, not substrings like /kandev_cap=note or ?name=kandev_cap=.
+	mustContain(t, shim, `if(!/([?&])kandev_cap=/.test(x))`)
 	mustContain(t, shim, `x+=(x.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
-	// Existing query strings are preserved by the "&" branch.
-	mustContain(t, shim, `x.indexOf('?')===-1?'?':'&'`)
+	// WebSocket wrapper rewrites through r(), which carries the capability.
+	mustContain(t, shim, `'//'+l.host+r(u)`)
 }
 
 // Without a capability the shim is byte-identical to the pre-auth output: no

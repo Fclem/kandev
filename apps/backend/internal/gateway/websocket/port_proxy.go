@@ -222,13 +222,18 @@ func (h *PortProxyHandler) createProxy(cacheKey string, target *url.URL, authTok
 		r.Out.URL.Path = r.In.URL.Path
 		r.Out.URL.RawPath = ""
 		// The subtree capability is consumed by requireConnectionAuth at the
-		// gateway; strip it before forwarding so it never lands in agentctl or
-		// application logs, redirects, or analytics. Other query parameters are
-		// preserved.
-		if strings.Contains(r.Out.URL.RawQuery, proxyCapabilityQueryParam) {
-			q := r.Out.URL.Query()
-			q.Del(proxyCapabilityQueryParam)
-			r.Out.URL.RawQuery = q.Encode()
+		// gateway; strip it (in any encoding) before forwarding so it never
+		// lands in agentctl or application logs, redirects, or analytics. Only
+		// the capability pair is removed — every other parameter keeps its
+		// original bytes and order.
+		r.Out.URL.RawQuery = stripCapabilityParam(r.Out.URL.RawQuery)
+		// The browser may send a rewritten asset URL (which embeds the
+		// capability) as the Referer of a later request; sanitize it too.
+		if ref := r.Out.Header.Get("Referer"); ref != "" && strings.Contains(ref, proxyCapabilityQueryParam) {
+			if parsed, err := url.Parse(ref); err == nil {
+				parsed.RawQuery = stripCapabilityParam(parsed.RawQuery)
+				r.Out.Header.Set("Referer", parsed.String())
+			}
 		}
 		// Inject agentctl auth token
 		if authToken != "" {
@@ -374,6 +379,29 @@ func requestIsTLS(c *gin.Context) bool {
 		return true
 	}
 	return strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+}
+
+// stripCapabilityParam removes the capability query parameter from a raw query
+// string, matching the decoded key so percent-encoded spellings
+// (%6bandev_cap=) are caught too. Every other parameter keeps its original
+// bytes and order — nothing is re-encoded. Returns the input unchanged when
+// the parameter is absent.
+func stripCapabilityParam(rawQuery string) string {
+	if rawQuery == "" {
+		return rawQuery
+	}
+	parts := strings.Split(rawQuery, "&")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		key, _, _ := strings.Cut(part, "=")
+		if decoded, err := url.QueryUnescape(key); err == nil {
+			key = decoded
+		}
+		if key != proxyCapabilityQueryParam {
+			out = append(out, part)
+		}
+	}
+	return strings.Join(out, "&")
 }
 
 // portProxyTarget extracts the session:port subtree from a request handled by

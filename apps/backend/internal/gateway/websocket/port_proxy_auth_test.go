@@ -69,7 +69,7 @@ func newProxyAuthService(t *testing.T) (*auth.Service, string) {
 // bearerTokenAuth) and forwards /api/v1/port-proxy/<port>/* to the fake app.
 // It records every forwarded request so tests can assert the gateway stripped
 // the capability from the query before it reaches the app.
-func newAuthEnforcingFakeAgentctl(t *testing.T, appURL, expectedToken string) (*httptest.Server, *[]string) {
+func newAuthEnforcingFakeAgentctl(t *testing.T, appURL, expectedToken string) (*httptest.Server, *fakeAgentctlRecordings) {
 	t.Helper()
 	target, err := url.Parse(appURL)
 	if err != nil {
@@ -77,7 +77,8 @@ func newAuthEnforcingFakeAgentctl(t *testing.T, appURL, expectedToken string) (*
 	}
 	var mu sync.Mutex
 	var forwarded []string // "path?query" as received by the fake agentctl
-	record := func(rawQuery string, path string) {
+	var referers []string
+	record := func(rawQuery string, path, referer string) {
 		mu.Lock()
 		defer mu.Unlock()
 		if rawQuery != "" {
@@ -85,10 +86,11 @@ func newAuthEnforcingFakeAgentctl(t *testing.T, appURL, expectedToken string) (*
 		} else {
 			forwarded = append(forwarded, path)
 		}
+		referers = append(referers, referer)
 	}
 	proxy := &httputil.ReverseProxy{}
 	proxy.Rewrite = func(r *httputil.ProxyRequest) {
-		record(r.Out.URL.RawQuery, r.Out.URL.Path)
+		record(r.Out.URL.RawQuery, r.Out.URL.Path, r.Out.Header.Get("Referer"))
 		r.SetURL(target)
 		// /api/v1/port-proxy/<port>/<path> → /<path>
 		rest, ok := strings.CutPrefix(r.Out.URL.Path, "/api/v1/port-proxy/")
@@ -113,7 +115,24 @@ func newAuthEnforcingFakeAgentctl(t *testing.T, appURL, expectedToken string) (*
 	}))
 	srv.Config.SetKeepAlivesEnabled(false)
 	t.Cleanup(srv.Close)
-	return srv, &forwarded
+	recordings := &fakeAgentctlRecordings{forwarded: &forwarded, referers: &referers, mu: &mu}
+	return srv, recordings
+}
+
+// fakeAgentctlRecordings captures what the fake agentctl received, with a
+// race-safe snapshot for assertions.
+type fakeAgentctlRecordings struct {
+	mu        *sync.Mutex
+	forwarded *[]string // "path?query" as received by the fake agentctl
+	referers  *[]string
+}
+
+func (r *fakeAgentctlRecordings) snapshot() (forwarded, referers []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	forwarded = append([]string(nil), (*r.forwarded)...)
+	referers = append([]string(nil), (*r.referers)...)
+	return forwarded, referers
 }
 
 // newFakeProxyApp serves a Vite-style single page: an HTML document referencing
@@ -208,7 +227,7 @@ func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T
 	}
 	svc, sessionToken := newProxyAuthService(t)
 	app := newFakeProxyApp(t)
-	agentctl, forwarded := newAuthEnforcingFakeAgentctl(t, app.URL, "agentctl-token")
+	agentctl, recordings := newAuthEnforcingFakeAgentctl(t, app.URL, "agentctl-token")
 
 	manager := newProxyTestManager(t, log)
 	// Wire the production ownership boundary: the session-ownership check runs
@@ -286,10 +305,33 @@ func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T
 	}
 
 	// 3. The capability never reaches the proxied app: the gateway strips the
-	// reserved parameter from the forwarded query.
-	for _, seen := range *forwarded {
+	// reserved parameter from the forwarded query (any encoding) and from any
+	// Referer header that would embed a rewritten asset URL.
+	forwarded, _ := recordings.snapshot()
+	for _, seen := range forwarded {
 		if strings.Contains(seen, proxyCapabilityQueryParam) {
 			t.Fatalf("capability leaked to agentctl in forwarded request %q", seen)
+		}
+	}
+	// A later request whose Referer embeds a rewritten asset URL (which carries
+	// the capability) must be forwarded with the capability stripped. The
+	// request itself authenticates with the capability, like a browser
+	// subresource would.
+	_, capQuery, _ := strings.Cut(manifestURL, proxyCapabilityQueryParam+"=")
+	warmURL := "/port-proxy/sess-auth/5173/@react-refresh?" + proxyCapabilityQueryParam + "=" + capQuery
+	warm := request(http.MethodGet, warmURL,
+		map[string]string{"Referer": "http://gateway.test" + manifestURL})
+	if warm.status != http.StatusOK {
+		t.Fatalf("warm-up request status = %d, want %d", warm.status, http.StatusOK)
+	}
+	_, referers := recordings.snapshot()
+	if len(referers) > 0 {
+		last := referers[len(referers)-1]
+		if strings.Contains(last, proxyCapabilityQueryParam) {
+			t.Fatalf("capability leaked to agentctl in Referer %q", last)
+		}
+		if !strings.Contains(last, "manifest.webmanifest") {
+			t.Fatalf("expected the manifest Referer to survive sanitization, got %q", last)
 		}
 	}
 

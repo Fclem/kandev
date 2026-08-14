@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -202,6 +203,17 @@ func (r *Repository) deleteWorkspaceCascade(
 	if err != nil {
 		return nil, nil, err
 	}
+	// Establish the global lock order task-row -> queue-session before
+	// purging the queues: lifecycle admission takes the task row first and
+	// then the session lock, so taking session locks first here would invert
+	// the order and deadlock the two on Postgres. Guard every affected task
+	// row in stable sorted order.
+	sort.Slice(tasks, func(i, j int) bool { return tasks[i].ID < tasks[j].ID })
+	for _, task := range tasks {
+		if _, err := tx.ExecContext(ctx, r.db.Rebind(`UPDATE tasks SET updated_at = updated_at WHERE id = ?`), task.ID); err != nil {
+			return nil, nil, fmt.Errorf("guard cascade task row %s: %w", task.ID, err)
+		}
+	}
 	if err := r.purgeWorkspaceTaskQueuesInTx(ctx, tx, tasks); err != nil {
 		return nil, nil, err
 	}
@@ -255,7 +267,13 @@ func (r *Repository) deleteWorkspaceCascade(
 
 func (r *Repository) purgeWorkspaceTaskQueuesInTx(ctx context.Context, tx *sqlx.Tx, tasks []*models.Task) error {
 	for _, task := range tasks {
-		if err := r.purgeTaskQueueInTx(ctx, tx, task.ID); err != nil {
+		// The tasks still exist at this point (deletion happens later in the
+		// cascade), so the authoritative session set is discoverable now.
+		sessions, err := r.taskQueueSessionsInTx(ctx, tx, task.ID)
+		if err != nil {
+			return fmt.Errorf("task queue sessions for cascade task %s: %w", task.ID, err)
+		}
+		if err := r.purgeTaskQueueInTx(ctx, tx, task.ID, sessions); err != nil {
 			return fmt.Errorf("purge task queue for workspace cascade task %s: %w", task.ID, err)
 		}
 	}

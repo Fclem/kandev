@@ -1012,6 +1012,14 @@ func (r *Repository) DeleteTask(ctx context.Context, id string) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Capture the authoritative session set BEFORE deleting the task row:
+	// task_sessions cascades on task deletion, and a post-delete discovery
+	// would miss sessions whose queues are empty, letting a concurrent
+	// admission survive the purge.
+	sessions, err := r.taskQueueSessionsInTx(ctx, tx, id)
+	if err != nil {
+		return err
+	}
 	result, err := tx.ExecContext(ctx, r.db.Rebind(`DELETE FROM tasks WHERE id = ?`), id)
 	if err != nil {
 		return err
@@ -1021,7 +1029,7 @@ func (r *Repository) DeleteTask(ctx context.Context, id string) error {
 	if rows == 0 {
 		return fmt.Errorf("%w: %s", ErrTaskNotFound, id)
 	}
-	if err := r.purgeTaskQueueInTx(ctx, tx, id); err != nil {
+	if err := r.purgeTaskQueueInTx(ctx, tx, id, sessions); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1747,7 +1755,11 @@ func (r *Repository) ArchiveTask(ctx context.Context, id string) error {
 	if rows == 0 {
 		return fmt.Errorf("%w: %s", ErrTaskNotFound, id)
 	}
-	if err := r.purgeTaskQueueInTx(ctx, tx, id); err != nil {
+	sessions, err := r.taskQueueSessionsInTx(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	if err := r.purgeTaskQueueInTx(ctx, tx, id, sessions); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1786,7 +1798,11 @@ func (r *Repository) ArchiveTaskIfActive(ctx context.Context, id, cascadeID stri
 	if rows == 0 {
 		return false, tx.Commit()
 	}
-	if err := r.purgeTaskQueueInTx(ctx, tx, id); err != nil {
+	sessions, err := r.taskQueueSessionsInTx(ctx, tx, id)
+	if err != nil {
+		return false, err
+	}
+	if err := r.purgeTaskQueueInTx(ctx, tx, id, sessions); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1796,31 +1812,37 @@ func (r *Repository) ArchiveTaskIfActive(ctx context.Context, id, cascadeID stri
 	return true, nil
 }
 
-func (r *Repository) purgeTaskQueueInTx(ctx context.Context, tx *sqlx.Tx, taskID string) error {
-	// The task's sessions are the authoritative set: locking only sessions
-	// that currently hold queue rows would let an empty session admit a task
-	// row during the purge and have it survive the DELETE snapshot.
+// taskQueueSessionsInTx returns the task's authoritative session set (its
+// task_sessions rows). Callers must capture it BEFORE any statement that
+// deletes the task row: task_sessions cascades on task deletion, so a
+// post-delete discovery returns nothing and a concurrent admission to an
+// empty session could survive the purge.
+func (r *Repository) taskQueueSessionsInTx(ctx context.Context, tx *sqlx.Tx, taskID string) ([]string, error) {
 	var sessions []string
 	rows, err := tx.QueryxContext(ctx, r.db.Rebind(`SELECT id FROM task_sessions WHERE task_id = ?`), taskID)
 	if err != nil {
-		return fmt.Errorf("list task purge sessions: %w", err)
+		return nil, fmt.Errorf("list task purge sessions: %w", err)
 	}
 	for rows.Next() {
 		var sessionID string
 		if err := rows.Scan(&sessionID); err != nil {
 			_ = rows.Close()
-			return fmt.Errorf("scan task purge session: %w", err)
+			return nil, fmt.Errorf("scan task purge session: %w", err)
 		}
 		sessions = append(sessions, sessionID)
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return fmt.Errorf("iterate task purge sessions: %w", err)
+		return nil, fmt.Errorf("iterate task purge sessions: %w", err)
 	}
 	if err := rows.Close(); err != nil {
-		return fmt.Errorf("close task purge sessions: %w", err)
+		return nil, fmt.Errorf("close task purge sessions: %w", err)
 	}
-	_, err = messagequeue.PurgeTaskInTransaction(ctx, tx, r.db, taskID, sessions)
+	return sessions, nil
+}
+
+func (r *Repository) purgeTaskQueueInTx(ctx context.Context, tx *sqlx.Tx, taskID string, sessions []string) error {
+	_, err := messagequeue.PurgeTaskInTransaction(ctx, tx, r.db, taskID, sessions)
 	if internaldb.IsMissingTableError(err) {
 		return nil
 	}

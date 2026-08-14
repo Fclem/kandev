@@ -613,6 +613,206 @@ func TestPostgresRepository_TransferSession_RaceWithSourceInsert(t *testing.T) {
 	}
 }
 
+// TestPostgresRepository_AcknowledgeByID_RaceWithRestore proves the ack is
+// cross-process serialized on the session lock: an autocommit DELETE could
+// otherwise remove a row a concurrent backend just restored/reinserted,
+// losing durable retry state. The competing backend holds the session lock,
+// the ack blocks on it, and only after release does the ack delete the row.
+func TestPostgresRepository_AcknowledgeByID_RaceWithSessionLock(t *testing.T) {
+	repoA, repoB := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+	entry := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("ack", "first"))
+	dbA := repoA.(*sqliteRepository).db
+
+	lockTx, err := dbA.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `
+		INSERT INTO queue_session_locks (session_id) VALUES ('ack')
+		ON CONFLICT(session_id) DO NOTHING
+	`); err != nil {
+		t.Fatalf("ensure session lock row: %v", err)
+	}
+	if _, err := lockTx.ExecContext(ctx, `
+		SELECT 1 FROM queue_session_locks WHERE session_id = 'ack' FOR UPDATE
+	`); err != nil {
+		t.Fatalf("lock session: %v", err)
+	}
+
+	ackDone := make(chan error, 1)
+	go func() {
+		ackDone <- repoB.AcknowledgeByID(ctx, "ack", entry.ID)
+	}()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := lockTx.QueryRowContext(ctx, `
+			SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'transactionid'
+		`).Scan(&waiting); err != nil {
+			t.Fatalf("query pg_locks: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("ack never blocked on the session lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit lock tx: %v", err)
+	}
+	if err := <-ackDone; err != nil {
+		t.Fatalf("ack: %v", err)
+	}
+	entries, err := repoA.ListBySession(ctx, "ack")
+	if err != nil {
+		t.Fatalf("list after ack: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("entries after ack = %+v, want removed", entries)
+	}
+}
+
+// TestPostgresRepository_SetPendingMove_RaceWithTransferLock proves pending
+// moves serialize on the session lock so a transfer cannot orphan one.
+func TestPostgresRepository_SetPendingMove_RaceWithSessionLock(t *testing.T) {
+	repoA, repoB := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+	dbA := repoA.(*sqliteRepository).db
+
+	lockTx, err := dbA.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `
+		INSERT INTO queue_session_locks (session_id) VALUES ('pm')
+		ON CONFLICT(session_id) DO NOTHING
+	`); err != nil {
+		t.Fatalf("ensure session lock row: %v", err)
+	}
+	if _, err := lockTx.ExecContext(ctx, `
+		SELECT 1 FROM queue_session_locks WHERE session_id = 'pm' FOR UPDATE
+	`); err != nil {
+		t.Fatalf("lock session: %v", err)
+	}
+
+	setDone := make(chan error, 1)
+	go func() {
+		setDone <- repoB.SetPendingMove(ctx, "pm", &PendingMove{
+			TaskID: "t", WorkflowID: "w", WorkflowStepID: "s", Position: 1, Actor: "test",
+		})
+	}()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := lockTx.QueryRowContext(ctx, `
+			SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'transactionid'
+		`).Scan(&waiting); err != nil {
+			t.Fatalf("query pg_locks: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("set pending move never blocked on the session lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit lock tx: %v", err)
+	}
+	if err := <-setDone; err != nil {
+		t.Fatalf("set pending move: %v", err)
+	}
+	move, err := repoA.GetPendingMove(ctx, "pm")
+	if err != nil || move == nil || move.TaskID != "t" {
+		t.Fatalf("pending move = %+v err=%v, want the set move", move, err)
+	}
+}
+
+// TestPostgresRepository_TakePendingMove_TwoTakersSerialized proves two
+// backends cannot both return the same pending move: the second taker blocks
+// on the session lock until the first commits, then sees no move.
+func TestPostgresRepository_TakePendingMove_TwoTakersSerialized(t *testing.T) {
+	repoA, repoB := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+	if err := repoA.SetPendingMove(ctx, "pm-take", &PendingMove{
+		TaskID: "t", WorkflowID: "w", WorkflowStepID: "s", Position: 1, Actor: "test",
+	}); err != nil {
+		t.Fatalf("seed pending move: %v", err)
+	}
+	dbA := repoA.(*sqliteRepository).db
+
+	lockTx, err := dbA.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `
+		INSERT INTO queue_session_locks (session_id) VALUES ('pm-take')
+		ON CONFLICT(session_id) DO NOTHING
+	`); err != nil {
+		t.Fatalf("ensure session lock row: %v", err)
+	}
+	if _, err := lockTx.ExecContext(ctx, `
+		SELECT 1 FROM queue_session_locks WHERE session_id = 'pm-take' FOR UPDATE
+	`); err != nil {
+		t.Fatalf("lock session: %v", err)
+	}
+
+	takeDone := make(chan error, 1)
+	go func() {
+		move, err := repoB.TakePendingMove(ctx, "pm-take")
+		if err != nil {
+			takeDone <- err
+			return
+		}
+		if move == nil || move.TaskID != "t" {
+			takeDone <- fmt.Errorf("take returned %+v, want the seeded move", move)
+			return
+		}
+		takeDone <- nil
+	}()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := lockTx.QueryRowContext(ctx, `
+			SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'transactionid'
+		`).Scan(&waiting); err != nil {
+			t.Fatalf("query pg_locks: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("take pending move never blocked on the session lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit lock tx: %v", err)
+	}
+	if err := <-takeDone; err != nil {
+		t.Fatalf("take pending move: %v", err)
+	}
+	if move, err := repoA.GetPendingMove(ctx, "pm-take"); err != nil || move != nil {
+		t.Fatalf("pending move after take = %+v err=%v, want gone", move, err)
+	}
+}
+
 func TestPostgresRepository_MergeDrainOrdering_DrainWins(t *testing.T) {
 	repo := newTestPostgresRepo(t)
 	ctx := context.Background()

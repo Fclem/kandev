@@ -869,7 +869,18 @@ func (r *sqliteRepository) AcknowledgeByID(ctx context.Context, sessionID, entry
 	unlock := r.withSessionLock(sessionID)
 	defer unlock()
 
-	res, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	// The ack must serialize with restore/replace on the same session across
+	// processes: an autocommit DELETE could otherwise delete a row that a
+	// concurrent backend just restored/reinserted, losing durable retry state.
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin acknowledge tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, r.db.Rebind(`
 		DELETE FROM queued_messages WHERE id = ? AND session_id = ?
 	`), entryID, sessionID)
 	if err != nil {
@@ -881,6 +892,9 @@ func (r *sqliteRepository) AcknowledgeByID(ctx context.Context, sessionID, entry
 	}
 	if affected == 0 {
 		return ErrEntryNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -2072,7 +2086,19 @@ func (r *sqliteRepository) SetPendingMove(ctx context.Context, sessionID string,
 	if move.QueuedAt.IsZero() {
 		move.QueuedAt = time.Now().UTC()
 	}
-	_, err := r.db.ExecContext(ctx, r.db.Rebind(`
+	// The pending move is session-scoped and TransferSession moves it with
+	// the session's queue, so it must serialize on the same per-session lock:
+	// an unlocked upsert could land on the old session after a transfer
+	// committed, orphaning the move.
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin set pending move tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, r.db.Rebind(`
 		INSERT INTO pending_moves (id, session_id, task_id, workflow_id, workflow_step_id, step_position, queued_at, actor)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id) DO UPDATE SET
@@ -2084,11 +2110,10 @@ func (r *sqliteRepository) SetPendingMove(ctx context.Context, sessionID string,
 			actor = excluded.actor
 	`),
 		uuid.New().String(), sessionID, move.TaskID, move.WorkflowID, move.WorkflowStepID, move.Position, move.QueuedAt, move.Actor,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("upsert pending move: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // GetPendingMove returns the deferred workflow move for a session, or nil when absent.
@@ -2125,6 +2150,11 @@ func (r *sqliteRepository) TakePendingMove(ctx context.Context, sessionID string
 		return nil, fmt.Errorf("begin take pending tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Serialize on the per-session lock so two backend instances cannot both
+	// read and delete the same pending move, or race a transfer that moves it.
+	if err := r.lockSessionTx(ctx, tx, sessionID); err != nil {
+		return nil, err
+	}
 
 	var (
 		taskID, workflowID, workflowStepID string

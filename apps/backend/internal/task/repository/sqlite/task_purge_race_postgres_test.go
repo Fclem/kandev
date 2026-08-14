@@ -88,12 +88,15 @@ func newTaskPostgresRepoPair(t *testing.T) (*Repository, *Repository) {
 		if _, err := db.Exec("SET search_path TO " + schema); err != nil {
 			t.Fatalf("set postgres search_path %s: %v", schema, err)
 		}
-		if _, err := messagequeue.NewSQLiteRepository(db, db); err != nil {
-			t.Fatalf("init queue schema: %v", err)
-		}
+		// Task schema first: the queue repository resolves tasks-table
+		// presence at construction, so it must exist by then for the
+		// admission liveness guard to engage.
 		repo, err := NewWithDB(db, db, nil)
 		if err != nil {
 			t.Fatalf("init task schema: %v", err)
+		}
+		if _, err := messagequeue.NewSQLiteRepository(db, db); err != nil {
+			t.Fatalf("init queue schema: %v", err)
 		}
 		return repo
 	}

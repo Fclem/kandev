@@ -22,6 +22,14 @@ type sqliteRepository struct {
 
 	mu           sync.Mutex
 	sessionLocks map[string]*sync.Mutex
+
+	// tasksTablePresent is whether the owning tasks table exists, resolved at
+	// construction. The queue repository's isolated tests create only queue
+	// tables; production databases always have the task schema. It is checked
+	// OUTSIDE any transaction because a failed statement on PostgreSQL aborts
+	// the whole transaction — the guard must never issue its UPDATE against a
+	// missing table inside a tx.
+	tasksTablePresent bool
 }
 
 // NewSQLiteRepository creates a SQLite-backed Repository. The supplied writer
@@ -31,6 +39,17 @@ func NewSQLiteRepository(writer, reader *sqlx.DB) (Repository, error) {
 	if err := r.initSchema(); err != nil {
 		return nil, fmt.Errorf("messagequeue: init schema: %w", err)
 	}
+	var present bool
+	var err error
+	if writer.DriverName() == "pgx" {
+		err = writer.Get(&present, `SELECT to_regclass('tasks') IS NOT NULL`)
+	} else {
+		err = writer.Get(&present, `SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tasks')`)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("messagequeue: resolve tasks table presence: %w", err)
+	}
+	r.tasksTablePresent = present
 	return r, nil
 }
 
@@ -53,18 +72,20 @@ func (r *sqliteRepository) lockSessionTx(ctx context.Context, tx *sqlx.Tx, sessi
 // (archived or deleted). It takes the task-row lock, so admission serializes
 // with task lifecycle cleanup in the global task-row -> session-lock order and
 // a post-delete/post-archive admission cannot leave a queue row that survives
-// the task's purge. SQLite's single writer is the serialization; a missing
-// tasks table (the queue repository's isolated tests create only queue
-// tables) skips the guard.
+// the task's purge. SQLite's single writer is the serialization. When the
+// owning tasks table is absent (the queue repository's isolated tests create
+// only queue tables) the guard is skipped — the presence check happens at
+// construction, never inside the transaction, because a failed statement
+// would abort the whole PostgreSQL transaction.
 func (r *sqliteRepository) guardActiveTaskTx(ctx context.Context, tx *sqlx.Tx, taskID string) error {
+	if !r.tasksTablePresent {
+		return nil
+	}
 	res, err := tx.ExecContext(ctx, r.db.Rebind(`
 		UPDATE tasks SET updated_at = updated_at
 		WHERE id = ? AND archived_at IS NULL
 	`), taskID)
 	if err != nil {
-		if internaldb.IsMissingTableError(err) {
-			return nil
-		}
 		return fmt.Errorf("guard active task for queue admission: %w", err)
 	}
 	affected, err := res.RowsAffected()

@@ -72,16 +72,6 @@ func comparableAutoMetadata(metadata map[string]interface{}) ([]byte, bool) {
 		if key == MetadataEntityReferences || key == MetadataContextFiles {
 			continue
 		}
-		if key == MetadataSenderSessionID || key == MetadataSenderSessionName {
-			// Per-session provenance of the sender task, not merge context.
-			// autoMergeAllowed already requires agent entries to share the
-			// same sender_task_id, so two messages from different sessions of
-			// that task (e.g. sibling reviewer sessions) are as foldable as
-			// manual merge treats them; the surviving entry keeps the target's
-			// session attribution. Without this exclusion every interleaved
-			// sibling-session message blocked the fold and the queue filled.
-			continue
-		}
 		comparable[key] = value
 	}
 	encoded, err := json.Marshal(comparable)

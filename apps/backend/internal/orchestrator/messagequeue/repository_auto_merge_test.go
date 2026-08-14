@@ -240,50 +240,6 @@ func TestRepository_AutoMergeIntoAbove_EmptyContentHasNoExtraSeparator(t *testin
 	}
 }
 
-func TestRepository_AutoMergeIntoAbove_AgentSameTaskDifferentSessions(t *testing.T) {
-	for _, tt := range autoMergeRepositoryFactories() {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := tt.new(t)
-			autoRepo, ok := repo.(automaticMergeRepository)
-			if !ok {
-				t.Fatalf("repository %T does not implement automatic tail merge", repo)
-			}
-			targetEntry := defaultAutoMergeEntry("sessions", "first")
-			targetEntry.QueuedBy = QueuedByAgent
-			targetEntry.Metadata = map[string]interface{}{
-				MetadataSenderTaskID:    "sender-task",
-				MetadataSenderSessionID: "session-one",
-				"sender_session_name":   "reviewer-one",
-				"sender_task_title":     "Sender task",
-			}
-			target := insertAutoMergeEntry(t, repo, targetEntry)
-			sourceEntry := defaultAutoMergeEntry("sessions", "second")
-			sourceEntry.QueuedBy = QueuedByAgent
-			sourceEntry.Metadata = map[string]interface{}{
-				MetadataSenderTaskID:    "sender-task",
-				MetadataSenderSessionID: "session-two",
-				"sender_session_name":   "reviewer-two",
-				"sender_task_title":     "Sender task",
-			}
-			source := insertAutoMergeEntry(t, repo, sourceEntry)
-
-			merged, didMerge, err := autoRepo.AutoMergeIntoAbove(context.Background(), "sessions", source.ID)
-			if err != nil || !didMerge || merged == nil {
-				t.Fatalf("same-task different-session auto merge: result=%+v merged=%v err=%v", merged, didMerge, err)
-			}
-			if merged.ID != target.ID {
-				t.Fatalf("survivor = %s, want target %s", merged.ID, target.ID)
-			}
-			if got := metadataString(merged.Metadata, MetadataSenderSessionID); got != "session-one" {
-				t.Fatalf("survivor session = %q, want target session attribution", got)
-			}
-			if merged.Content != "first\n\nsecond" {
-				t.Fatalf("content = %q, want %q", merged.Content, "first\n\nsecond")
-			}
-		})
-	}
-}
-
 func TestRepository_AutoMergeCandidateIntoAbove_FoldsIntoTail(t *testing.T) {
 	for _, tt := range autoMergeRepositoryFactories() {
 		t.Run(tt.name, func(t *testing.T) {
@@ -496,6 +452,20 @@ func autoMergeSkipCases() []autoMergeSkipCase {
 		{name: "agent sender mismatch", mutate: func(target, source *QueuedMessage) {
 			target.QueuedBy, source.QueuedBy = QueuedByAgent, QueuedByAgent
 			target.Metadata, source.Metadata = senderMetadata("one"), senderMetadata("two")
+		}},
+		{name: "agent session mismatch", mutate: func(target, source *QueuedMessage) {
+			// Different sessions of the same sender task are different agents
+			// and execution contexts; auto-merge must keep their prompts
+			// separate even though manual merge would allow the fold.
+			target.QueuedBy, source.QueuedBy = QueuedByAgent, QueuedByAgent
+			target.Metadata = map[string]interface{}{
+				"sender_task_id": "sender-task", "sender_session_id": "session-one",
+				"sender_session_name": "reviewer-one", "sender_task_title": "Sender task",
+			}
+			source.Metadata = map[string]interface{}{
+				"sender_task_id": "sender-task", "sender_session_id": "session-two",
+				"sender_session_name": "reviewer-two", "sender_task_title": "Sender task",
+			}
 		}},
 		{name: "workflow source", mutate: func(target, source *QueuedMessage) {
 			target.QueuedBy, source.QueuedBy = QueuedByWorkflow, QueuedByWorkflow

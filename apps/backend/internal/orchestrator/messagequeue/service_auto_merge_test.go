@@ -69,32 +69,30 @@ func TestService_AutoMergeChainsThreeAdmissions(t *testing.T) {
 	}
 }
 
-func TestService_AutoMergeFoldsSameTaskSiblingSessions(t *testing.T) {
+func TestService_AutoMergeKeepsDifferentSenderSessionsSeparate(t *testing.T) {
 	svc := newAutoMergeTestService(t, 10)
-	first, err := svc.QueueMessageWithMetadata(context.Background(), "session", "task", "first", "", QueuedByAgent, false, nil, map[string]interface{}{
-		MetadataSenderTaskID:    "sender-task",
-		MetadataSenderSessionID: "session-one",
-		"sender_session_name":   "reviewer-one",
-		"sender_task_title":     "Sender task",
-	})
+	sender := func(session string) map[string]interface{} {
+		return map[string]interface{}{
+			"sender_task_id": "sender-task", "sender_session_id": session,
+			"sender_session_name": "reviewer-" + session, "sender_task_title": "Sender task",
+		}
+	}
+	first, err := svc.QueueMessageWithMetadata(context.Background(), "session", "task", "first", "", QueuedByAgent, false, nil, sender("one"))
 	if err != nil {
 		t.Fatalf("queue first: %v", err)
 	}
-	second, err := svc.QueueMessageWithMetadata(context.Background(), "session", "task", "second", "", QueuedByAgent, false, nil, map[string]interface{}{
-		MetadataSenderTaskID:    "sender-task",
-		MetadataSenderSessionID: "session-two",
-		"sender_session_name":   "reviewer-two",
-		"sender_task_title":     "Sender task",
-	})
+	// A different session of the same sender task is a different agent and
+	// execution context; its prompt must stay a separate queue entry.
+	second, err := svc.QueueMessageWithMetadata(context.Background(), "session", "task", "second", "", QueuedByAgent, false, nil, sender("two"))
 	if err != nil {
 		t.Fatalf("queue second: %v", err)
 	}
-	if second.ID != first.ID || second.Content != "first\n\nsecond" {
-		t.Fatalf("second admission = %+v, want folded survivor %s", second, first.ID)
+	if second.ID == first.ID {
+		t.Fatal("different sender sessions must stay separate, got a fold")
 	}
 	status := svc.GetStatus(context.Background(), "session")
-	if status.Count != 1 || status.Entries[0].ID != first.ID {
-		t.Fatalf("status = %+v, want one merged entry", status)
+	if status.Count != 2 {
+		t.Fatalf("status = %+v, want two separate entries", status)
 	}
 }
 

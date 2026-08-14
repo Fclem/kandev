@@ -3,9 +3,14 @@ package messagequeue
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/kandev/kandev/internal/entityrefs"
 	"github.com/kandev/kandev/internal/testutil"
@@ -30,6 +35,139 @@ func newTestPostgresRepo(t *testing.T) Repository {
 // TestPostgresRepository_MergeDrainOrdering_DrainWins asserts the drain-wins
 // ordering of the merge/drain race: after the source drains, a merge reports
 // ErrEntryNotFound and the target is untouched, so no content is lost.
+// newTestPostgresRepoPair opens one isolated Postgres schema (skipping unless
+// KANDEV_TEST_POSTGRES_DSN is set) and constructs two repository instances over
+// it. Two instances simulate two backend processes sharing one queue database:
+// their per-session admission locks are process-local, so cross-instance races
+// are guarded only by the repository's affected-row checks.
+func newTestPostgresRepoPair(t *testing.T) (Repository, Repository) {
+	t.Helper()
+	dsn := testutil.PostgresDSNFromEnv(t)
+	schema := "kandev_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	open := func() *sqlx.DB {
+		db, err := sqlx.Open("pgx", dsn)
+		if err != nil {
+			t.Fatalf("open postgres: %v", err)
+		}
+		db.SetMaxOpenConns(1)
+		t.Cleanup(func() { _ = db.Close() })
+		if _, err := db.Exec("CREATE SCHEMA " + schema); err != nil {
+			t.Fatalf("create postgres schema %s: %v", schema, err)
+		}
+		if _, err := db.Exec("SET search_path TO " + schema); err != nil {
+			t.Fatalf("set postgres search_path %s: %v", schema, err)
+		}
+		return db
+	}
+	dbA, dbB := open(), open()
+	t.Cleanup(func() { _, _ = dbA.Exec("DROP SCHEMA IF EXISTS " + schema + " CASCADE") })
+	repoA, err := NewSQLiteRepository(dbA, dbA)
+	if err != nil {
+		t.Fatalf("NewSQLiteRepository(postgres A): %v", err)
+	}
+	repoB, err := NewSQLiteRepository(dbB, dbB)
+	if err != nil {
+		t.Fatalf("NewSQLiteRepository(postgres B): %v", err)
+	}
+	return repoA, repoB
+}
+
+// TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCannotLoseContent
+// proves the compare-and-swap guard in AutoMergeCandidateIntoAbove: two
+// repository instances (two backend processes) that both read the same tail
+// must not both fold successfully, silently dropping one accepted message.
+//
+// The dangerous interleaving is forced deterministically with a row lock.
+// Instance A holds a FOR UPDATE lock on the tail while instance B runs the
+// fold: B reads the original tail, then its CAS UPDATE blocks on A's lock.
+// Only once the poll observes B waiting is B's read snapshot guaranteed to
+// predate A's competing fold. A then commits its own fold, B's UPDATE
+// re-evaluates its CAS condition against the new row version, affects zero
+// rows, and reports a skip — the winner's content survives intact and the
+// loser surfaces a failed admission instead of overwriting it.
+func TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCannotLoseContent(t *testing.T) {
+	repoA, repoB := newTestPostgresRepoPair(t)
+	ctx := context.Background()
+
+	tail := insertAutoMergeEntry(t, repoA, defaultAutoMergeEntry("race", "first"))
+	dbA := repoA.(*sqliteRepository).db
+
+	// Instance A holds a row lock on the tail, simulating a competing fold
+	// that is about to commit.
+	lockTx, err := dbA.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `SELECT id FROM queued_messages WHERE id = $1 FOR UPDATE`, tail.ID); err != nil {
+		t.Fatalf("lock tail row: %v", err)
+	}
+
+	// Instance B starts a fold while A holds the lock: B reads the original
+	// tail, then its CAS UPDATE blocks on A's row lock.
+	foldDone := make(chan error, 1)
+	candidate := defaultAutoMergeEntry("race", "second")
+	go func() {
+		merged, didMerge, err := repoB.(automaticMergeCandidateRepository).AutoMergeCandidateIntoAbove(ctx, &candidate)
+		if err != nil {
+			foldDone <- err
+			return
+		}
+		if didMerge || merged != nil {
+			foldDone <- fmt.Errorf("concurrent fold succeeded (didMerge=%v merged=%+v), want stale-write skip", didMerge, merged)
+			return
+		}
+		foldDone <- nil
+	}()
+
+	// Wait until B's UPDATE is queued on the row lock. Only then is B's read
+	// snapshot guaranteed to predate A's competing fold below.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := lockTx.QueryRowContext(ctx, `
+			SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'row'
+		`).Scan(&waiting); err != nil {
+			t.Fatalf("query pg_locks: %v", err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("instance B fold never blocked on the tail row lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Instance A's competing fold commits first.
+	if _, err := lockTx.ExecContext(ctx, `
+		UPDATE queued_messages SET content = $1 WHERE id = $2
+	`, "first\n\ncompeting", tail.ID); err != nil {
+		t.Fatalf("competing fold update: %v", err)
+	}
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("commit competing fold: %v", err)
+	}
+
+	if err := <-foldDone; err != nil {
+		t.Fatalf("instance B fold: %v", err)
+	}
+
+	// The winner's content is intact and the loser's candidate is absent:
+	// no silent content loss, and the loser's admission failed loudly.
+	entries, err := repoA.ListBySession(ctx, "race")
+	if err != nil {
+		t.Fatalf("list queue: %v", err)
+	}
+	if len(entries) != 1 || entries[0].ID != tail.ID {
+		t.Fatalf("entries after concurrent admission = %+v, want one surviving tail", entries)
+	}
+	if entries[0].Content != "first\n\ncompeting" {
+		t.Fatalf("tail content = %q, want %q (loser must not overwrite the winner)", entries[0].Content, "first\n\ncompeting")
+	}
+}
+
 func TestPostgresRepository_MergeDrainOrdering_DrainWins(t *testing.T) {
 	repo := newTestPostgresRepo(t)
 	ctx := context.Background()

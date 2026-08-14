@@ -1390,6 +1390,20 @@ func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, cand
 	if target == nil {
 		return nil, false, nil
 	}
+	// Snapshot the tail's exact stored bytes for the compare-and-swap below.
+	// The CAS compares raw storage bytes, not re-marshalled structs: metadata
+	// values round-trip through JSON as maps whose key order differs from the
+	// struct field order used at write time, so re-marshalling would never
+	// match. Comparing the raw strings keeps the guard exact.
+	var storedContent string
+	var storedAttachmentsJSON, storedMetadataJSON string
+	if err := tx.QueryRowxContext(ctx, r.db.Rebind(`
+		SELECT content, attachments_json, metadata_json
+		FROM queued_messages
+		WHERE id = ? AND session_id = ?
+	`), target.ID, candidate.SessionID).Scan(&storedContent, &storedAttachmentsJSON, &storedMetadataJSON); err != nil {
+		return nil, false, fmt.Errorf("read automatic candidate merge tail snapshot: %w", err)
+	}
 	values, compatible := buildAutoMergedEntry(target, candidate)
 	if !compatible {
 		return nil, false, nil
@@ -1402,11 +1416,21 @@ func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, cand
 	if err != nil {
 		return nil, false, err
 	}
+	// The UPDATE is compare-and-swapped against the snapshot read in this
+	// transaction. Across backend processes the session mutex is process-local,
+	// so two instances can read the same tail and both attempt a fold; the
+	// CAS makes the loser's UPDATE affect zero rows and roll back instead of
+	// silently overwriting the winner's accepted message.
 	res, err := tx.ExecContext(ctx, r.db.Rebind(`
 		UPDATE queued_messages
 		SET content = ?, attachments_json = ?, metadata_json = ?
 		WHERE id = ? AND session_id = ?
-	`), values.content, attachmentsJSON, metadataJSON, target.ID, candidate.SessionID)
+		  AND content = ?
+		  AND attachments_json = ?
+		  AND metadata_json = ?
+	`), values.content, attachmentsJSON, metadataJSON,
+		target.ID, candidate.SessionID,
+		storedContent, storedAttachmentsJSON, storedMetadataJSON)
 	if err != nil {
 		return nil, false, fmt.Errorf("update automatic candidate merge target: %w", err)
 	}
@@ -1415,8 +1439,10 @@ func (r *sqliteRepository) AutoMergeCandidateIntoAbove(ctx context.Context, cand
 		return nil, false, fmt.Errorf("update automatic candidate merge rows affected: %w", err)
 	}
 	if affected == 0 {
-		// The tail was drained concurrently; roll back rather than folding
-		// into a row that no longer exists.
+		// The tail changed between our read and write — a concurrent fold
+		// committed first or the row was drained. Roll back and report the
+		// skip so the caller rejects (or retries) rather than overwriting the
+		// concurrently accepted message.
 		return nil, false, nil
 	}
 	if err := tx.Commit(); err != nil {

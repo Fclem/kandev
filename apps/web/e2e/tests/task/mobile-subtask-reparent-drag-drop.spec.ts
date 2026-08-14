@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/test-base";
+import { dwell } from "../../helpers/causal-waits";
 import { SessionPage } from "../../pages/session-page";
 import { settledBoundingBox } from "../../helpers/settled-box";
 import { dwell } from "../../helpers/causal-waits";
@@ -160,7 +161,9 @@ test.describe("Mobile subtask re-parenting by drag and drop", () => {
       .locator(`[data-testid="sortable-task-block"][data-task-id="${child.id}"]`)
       .getByTestId("sortable-task-handle");
     await handle.scrollIntoViewIfNeeded();
-    await testPage.waitForTimeout(100);
+    // Sheet scroll and Radix open animation settle on their own timers before
+    // the handle box is measured.
+    await dwell(testPage, 100, "library-timer", "sheet scroll settles before measuring the handle");
     const handleBox = await handle.boundingBox();
     if (!handleBox) throw new Error("drag source handle has no bounding box");
     const startX = handleBox.x + handleBox.width / 2;
@@ -169,7 +172,15 @@ test.describe("Mobile subtask re-parenting by drag and drop", () => {
       type: "touchStart",
       touchPoints: [{ x: startX, y: startY }],
     });
-    await testPage.waitForTimeout(1200);
+    // Hold past the dnd-kit TouchSensor arming (250ms) and the long-press
+    // contextmenu (~700ms) so the menu opens while the drag is live; the menu
+    // must then cancel it.
+    await dwell(
+      testPage,
+      1200,
+      "library-timer",
+      "long-press hold outlasts the 250ms sensor and ~700ms menu",
+    );
     await expect(testPage.getByRole("menuitem", { name: /color/i })).toBeVisible();
     // The long-press drag was cancelled when the menu opened: no nest zones
     // render and the source row is not dimmed.
@@ -202,7 +213,8 @@ test.describe("Mobile subtask re-parenting by drag and drop", () => {
       type: "touchMove",
       touchPoints: [{ x: inertPoint.x, y: inertPoint.y }],
     });
-    await testPage.waitForTimeout(100);
+    // Let dnd-kit's sensor process the move before the touch ends.
+    await dwell(testPage, 100, "library-timer", "sensor move processing settles before touch end");
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 
     // The gesture ended inside the menu: no item action ran, the menu is

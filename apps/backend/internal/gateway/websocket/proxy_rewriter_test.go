@@ -500,7 +500,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	// Navigation APIs use the prefix-only rewriter, never the capability.
 	mustContain(t, shim, `u=rn(u);return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `u=rn(u);return orig.call(location,u)`)
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return sc(u);return sc(P+u);}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
 	// Anchor navigation needs no click interception: the MutationObserver
 	// prefixes hrefs, so the browser's own default navigation stays inside
 	// the subtree and app click handlers keep control.
@@ -524,7 +524,7 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// rn() is the prefix-only form: it strips any previously issued capability
 	// and never appends a new one.
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return sc(u);return sc(P+u);}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
 	// history and location rewrite through rn(), never r().
 	mustContain(t, shim, `history[op]=function(s,t,u){if(typeof u==='string')u=rn(u);return orig.call(this,s,t,u)}`)
 	mustContain(t, shim, `location[op]=function(u){if(typeof u==='string')u=rn(u);return orig.call(location,u)}`)
@@ -801,7 +801,8 @@ func TestValidCSPNonce(t *testing.T) {
 // value still gets the issued capability appended.
 func TestRuntimeShim_AppendIsIdempotentForIssuedCapability(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
-	mustContain(t, shim, `if(u.indexOf("kandev_cap="+K)===-1)u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+	mustContain(t, shim, `if(!hcp(u))u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+	mustContain(t, shim, `function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}if(d==='kandev_cap'&&v===K)return true}return false}`)
 	// r() leaves network-relative values unchanged.
 	mustContain(t, shim, `u.indexOf('//')===0`)
 	// sc() decodes query keys before stripping.
@@ -815,9 +816,10 @@ func TestRuntimeShim_CapsRelativeSubresources(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-rel")
 	// r() prefixes root-absolute URLs and falls through to the capability
 	// splice for safe same-origin relative references.
-	mustContain(t, shim, `if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}`)
+	mustContain(t, shim, `if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}`)
 	// The splice appends to u (prefixed or relative) with fragment handling.
-	mustContain(t, shim, `if(u.indexOf("kandev_cap="+K)===-1)u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+	mustContain(t, shim, `if(!hcp(u))u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
+	mustContain(t, shim, `function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}if(d==='kandev_cap'&&v===K)return true}return false}`)
 }
 
 // Link rel values are whitespace-separated token lists: ANY fetching token
@@ -867,6 +869,237 @@ func TestRewriteMetaRefresh_MultiField(t *testing.T) {
 func TestRuntimeShim_NoCapForObfuscatedExternalURLs(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-obf")
 	mustContain(t, shim, `try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}`)
+}
+
+// The idempotency check is exact-parameter, not substring: a path like
+// /foo/kandev_cap=K or an unrelated parameter ?note=kandev_cap=K must NOT
+// suppress the issued capability (a cookie-less fetch would 401), while the
+// exact issued kandev_cap=K parameter still stops the observer loop.
+func TestRuntimeShim_ExactCapIdempotencyRejectsSubstrings(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `if(d==='kandev_cap'&&v===K)return true`)
+	// A substring elsewhere in the URL must not satisfy hcp: the append
+	// guard tests the query parameter's decoded key AND exact value.
+	mustContain(t, shim, `var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}`)
+}
+
+// r()'s prefix check is boundary-exact: a sibling path that merely STARTS
+// with the prefix (/port-proxy/s/51730/foo vs /port-proxy/s/5173) is treated
+// as an ordinary root-absolute URL (prefixed again, capped), and an
+// already-prefixed target WITHOUT the exact cap still falls through to the
+// capability splice instead of returning unauthenticated.
+func TestRuntimeShim_PrefixBoundaryAndPrefixedCap(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u`)
+}
+
+// rn() strips previously issued capabilities from EVERY same-origin form —
+// relative, root-absolute, and absolute http/https — before applying the
+// prefix-only navigation logic, so a fetching link reclassified to metadata
+// never retains its bearer in the address bar, history, or Referer.
+func TestRuntimeShim_RnStripsCapabilityOnAllForms(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}`)
+	// rn() classifies via the URL API like r(): cross-origin and
+	// network-relative navigation targets pass through untouched.
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);`)
+}
+
+// norm() (fetch/XHR/WS) rejects raw network-relative input before URL
+// normalization, matching r(): //host references never become proxied,
+// capability-bearing paths.
+func TestRuntimeShim_NormRejectsNetworkRelative(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `if(typeof s==='string'&&s.indexOf('//')===0)return u;`)
+}
+
+// The runtime style rewriter is a tokenizer, not a regex: CSS strings
+// (content:'url(/x)') and url(var(--x)) are preserved, while real url()
+// tokens are rewritten. The srcset splitter preserves commas inside data:
+// URLs.
+func TestRuntimeShim_StyleTokenizerAndSrcSetDataURLs(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	// Scanner, not regex: string-state tracking + var() skip.
+	mustContain(t, shim, `function rwaStyle(v){var o='';var i=0;var n=v.length;`)
+	mustContain(t, shim, `if(tok2.indexOf('var(')!==0){o+='url('+sp+r(tok2)`)
+	mustContain(t, shim, `function srcsetParts(v){var parts=[];var cur='';var inData=false;`)
+	mustContain(t, shim, `if(!inData&&cur.replace(/\s/g,'')===''&&/^data:/i.test(v.slice(i)))inData=true`)
+	// content rewriting is guarded to META http-equiv=refresh; non-refresh
+	// meta content and non-META content attributes are left unchanged.
+	mustContain(t, shim, `else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}`)
+	// cite is navigation (prefix-only), never capability-bearing.
+	mustContain(t, shim, `||a==='cite';var rr=nav?rn:r;`)
+}
+
+// cite (q/blockquote/del/ins) is copyable metadata the browser never fetches:
+// prefix-only, no capability — statically and at runtime.
+func TestRewriteHTMLURLs_CiteOmitsCapability(t *testing.T) {
+	in := `<blockquote cite="/source">x</blockquote>` +
+		`<q cite="rel-source">y</q>` +
+		`<img src="/img.png">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-cite", ""))
+
+	mustContain(t, got, `<blockquote cite="/port-proxy/abc/3001/source">x</blockquote>`)
+	mustContain(t, got, `<q cite="rel-source">y</q>`)
+	mustContain(t, got, `<img src="/port-proxy/abc/3001/img.png?kandev_cap=cap-cite">`)
+}
+
+// srcset candidates split on commas, but commas INSIDE a data: URL belong to
+// the URL: the data candidate is preserved whole (no fabricated second
+// candidate, no capability on its fragments) and later candidates still get
+// prefixed and capped.
+func TestRewriteHTMLURLs_SrcSetDataURLCommasPreserved(t *testing.T) {
+	in := `<img srcset="data:image/svg+xml,%3Csvg%3E 1x, /img.png 2x">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-ss", ""))
+
+	mustContain(t, got, `srcset="data:image/svg+xml,%3Csvg%3E 1x, /port-proxy/abc/3001/img.png?kandev_cap=cap-ss 2x"`)
+}
+
+// The CSS tokenizer must not rewrite CSS strings (content:'url(/x)'), CSS
+// variables (url(var(--x))), or comments; real url() tokens — quoted,
+// unquoted, root-absolute, relative — and @import strings still are, and
+// data: URLs keep their interior commas and semicolons.
+func TestRewriteCSSFragment_StringVarCommentData(t *testing.T) {
+	css := `a{content:'url(/literal)';background:url(var(--x));` +
+		`b{background:url('/b.png');}c{background:url(c.png);}` +
+		`d{background:url(data:image/png;base64,AAA,BB);}` +
+		`/* url(/commented) */` +
+		`@import "/theme.css";@import "rel.css";}`
+	got := rewriteCSSFragment(css, proxyPrefix, "cap-css")
+
+	mustContain(t, got, `content:'url(/literal)'`)
+	mustContain(t, got, `url(var(--x))`)
+	mustContain(t, got, `/* url(/commented) */`)
+	mustContain(t, got, `url('/port-proxy/abc/3001/b.png?kandev_cap=cap-css')`)
+	mustContain(t, got, `url(c.png?kandev_cap=cap-css)`)
+	mustContain(t, got, `url(data:image/png;base64,AAA,BB)`)
+	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css?kandev_cap=cap-css";`)
+	mustContain(t, got, `@import "rel.css?kandev_cap=cap-css";`)
+}
+
+// Navigation rewriting strips a previously issued capability from every URL
+// form: an anchor whose href somehow carries kandev_cap must not keep the
+// bearer in the DOM/address bar/history.
+func TestRewriteHTMLURLs_NavStripsIssuedCapability(t *testing.T) {
+	in := `<a href="/page?kandev_cap=stale">x</a>` +
+		`<a href="rel?kandev_cap=stale">y</a>` +
+		`<a href="/p?kandev_cap=stale&%6bandev_cap=stale2&keep=1">z</a>`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-nav", ""))
+
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/page">x</a>`)
+	mustContain(t, got, `<a href="rel">y</a>`)
+	mustContain(t, got, `<a href="/port-proxy/abc/3001/p?keep=1">z</a>`)
+}
+
+// 205 Reset Content is bodyless per RFC 7231 and must pass through untouched
+// like 204/304: no body rewrite, no synthesized Content-Length.
+func TestRewriteProxyResponse_Leaves205ResetContentUntouched(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusResetContent,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("")),
+	}
+	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+	resp.Header.Set("Content-Length", "0")
+	if err := rewriteProxyResponse(resp, proxyPrefix, "cap-205"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := resp.Header.Get("Content-Length"); got != "0" {
+		t.Fatalf("205: Content-Length = %q, want original %q", got, "0")
+	}
+}
+
+// With multiple ENFORCING policies using different nonces, no single nonce
+// satisfies all of them: the shim tag must not claim one. A policy that
+// already allows the shim ('self') does not constrain the choice.
+func TestRewriteHTMLURLs_CSPNonceMultipleEnforcingPolicies(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
+
+	// Two headers, different nonces, neither with 'self': intersection empty.
+	conflict := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'nonce-aaa'`, `script-src 'nonce-bbb'`},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(conflict, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gotConflict, _ := io.ReadAll(conflict.Body)
+	if strings.Contains(string(gotConflict), "nonce=") {
+		t.Fatalf("conflicting policies must not claim a nonce:\n%s", gotConflict)
+	}
+
+	// Header requires nonce-aaa; meta policy only has 'self': aaa wins.
+	headerMeta := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'nonce-aaa'`},
+		},
+		Body: io.NopCloser(strings.NewReader(
+			`<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="script-src 'self'"><title>x</title></head><body></body></html>`)),
+	}
+	if err := rewriteProxyResponse(headerMeta, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gotHeaderMeta, _ := io.ReadAll(headerMeta.Body)
+	mustContain(t, string(gotHeaderMeta), `nonce="aaa"`)
+
+	// Both policies carry the same nonce: it is emitted.
+	shared := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'nonce-shared'`, `script-src 'nonce-other' 'nonce-shared'`},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(shared, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gotShared, _ := io.ReadAll(shared.Body)
+	mustContain(t, string(gotShared), `nonce="shared"`)
+}
+
+// 'strict-dynamic' ignores 'self' for script elements (CSP3): a policy with
+// both must still get the nonce, or the shim is blocked.
+func TestRewriteHTMLURLs_CSPNonceStrictDynamicRequiresNonce(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'self' 'strict-dynamic' 'nonce-sd123'`},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	mustContain(t, string(got), `nonce="sd123"`)
+}
+
+// script-src-elem governs script elements when present (CSP3): its nonce is
+// the required one even when script-src carries a different nonce.
+func TestRewriteHTMLURLs_CSPNonceScriptSrcElemPrecedence(t *testing.T) {
+	in := `<!DOCTYPE html><html><head><title>x</title></head><body></body></html>`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":            {"text/html"},
+			"Content-Security-Policy": {`script-src 'nonce-srcA'; script-src-elem 'nonce-elemB'`},
+		},
+		Body: io.NopCloser(strings.NewReader(in)),
+	}
+	if err := rewriteProxyResponse(resp, proxyPrefix, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	mustContain(t, string(got), `nonce="elemB"`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

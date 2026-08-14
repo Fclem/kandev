@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -15,12 +15,15 @@ import (
 // URL attributes that may carry a path-absolute reference and therefore need
 // the proxy path prefix when the document is served through the port proxy.
 // Source: https://html.spec.whatwg.org/multipage/indices.html#attributes-3
+// `cite` is intentionally NOT here: the browser never fetches it (it is
+// copyable metadata on q/blockquote/del/ins), so it is rewritten prefix-only
+// like navigation references — a capability in a cite value would sit in
+// DOM/copyable metadata for no benefit. See rewriteTokenAttr.
 var rewritableURLAttrs = map[string]bool{
 	"href":       true,
 	"src":        true,
 	"action":     true,
 	"formaction": true,
-	"cite":       true,
 	"data":       true,
 	"poster":     true,
 	"background": true,
@@ -63,16 +66,27 @@ const runtimeShimTemplate = `(function(){` +
 	`var P=%q;` +
 	`window.__kandevProxyPrefix=P;` +
 	// Path rewriter: prefix path-absolute URLs that aren't already prefixed.
-	// %s is the optional capability-append logic (empty when no capability is
-	// minted, keeping the auth-disabled output byte-identical).
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){if(u.indexOf(P)===0)return u;u=P+u}%sreturn u;}` +
+	// The prefix check is boundary-exact (`u===P` or the next byte is
+	// `/`, `?`, `#`), so `/port-proxy/s/51730/foo` is NOT mistaken for the
+	// `/port-proxy/s/5173` subtree and an already-prefixed URL still falls
+	// through to the capability splice. %s is the optional capability-append
+	// logic (empty when no capability is minted, keeping the auth-disabled
+	// output byte-identical).
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}%sreturn u;}` +
 	// Navigation rewriter: same prefixing WITHOUT the capability. Navigation
 	// APIs (history.pushState, location.assign) put the URL in the address bar
 	// and browser history; embedding a bearer there would leak it through
 	// copied URLs, history, and cross-origin Referers. The subtree cookie
 	// covers same-origin navigations instead.
 	`function sc(u){var qi=u.indexOf('?');if(qi===-1)return u;var b=u.slice(0,qi);var q=u.slice(qi+1).split('&').filter(function(p){var k=p.split('=')[0];var d;try{d=decodeURIComponent(k)}catch(e){d=k}return d!=='kandev_cap'});return b+(q.length?'?'+q.join('&'):'')}` +
-	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)!=='/'||(u.length>1&&u.charAt(1)==='/'))return u;if(u.indexOf(P)===0)return sc(u);return sc(P+u);}` +
+	// rn(u): prefix-only navigation rewriter. It strips any previously issued
+	// capability from EVERY same-origin form (relative, root-absolute, and
+	// absolute http/https — a fetching link reclassified to metadata must not
+	// retain its bearer) before applying the boundary-exact prefix logic.
+	// Cross-origin, network-relative, other schemes, and fragments pass
+	// through untouched; classification uses the URL API like r() so
+	// whitespace/control-obfuscated externals are never touched.
+	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}return sc(u)}` +
 	// norm(u): normalizes any URL-like input through the network rewriter
 	// using the URL API, which applies the WHATWG parsing rules (leading
 	// C0/space trimmed, embedded tabs/newlines removed, default ports and
@@ -82,7 +96,7 @@ const runtimeShimTemplate = `(function(){` +
 	// schemes (blob:, data:, file:, about:), and non-URL inputs pass through
 	// unchanged. ws:/wss: origins are compared as http:/https: so WebSocket
 	// URLs match the page origin.
-	`function norm(u){var s=typeof u==='string'?u:(u&&typeof u==='object'&&typeof u.href==='string'?u.href:null);if(s===null)return u;var x;try{x=new URL(s,window.location.href)}catch(e){return u}var p=x.protocol;if(p!=='http:'&&p!=='https:'&&p!=='ws:'&&p!=='wss:')return u;var o=x.origin.replace(/^ws:/,'http:').replace(/^wss:/,'https:');if(o!==window.location.origin)return u;return x.origin+r(x.pathname+(x.search||'')+(x.hash||''));}` +
+	`function norm(u){var s=typeof u==='string'?u:(u&&typeof u==='object'&&typeof u.href==='string'?u.href:null);if(s===null)return u;if(typeof s==='string'&&s.indexOf('//')===0)return u;var x;try{x=new URL(s,window.location.href)}catch(e){return u}var p=x.protocol;if(p!=='http:'&&p!=='https:'&&p!=='ws:'&&p!=='wss:')return u;var o=x.origin.replace(/^ws:/,'http:').replace(/^wss:/,'https:');if(o!==window.location.origin)return u;return x.origin+r(x.pathname+(x.search||'')+(x.hash||''));}` +
 	// fetch — string, URL-object, and Request-object input forms.
 	`var of=window.fetch;if(of){window.fetch=function(i,n){if(typeof i==='string'||(i&&typeof i==='object'&&typeof i.href==='string'&&!i.url))i=norm(i);else if(i&&typeof i==='object'&&typeof i.url==='string'){var nu=norm(i.url);if(nu!==i.url){try{i=new Request(nu,i)}catch(e){}}}return of.call(this,i,n)}}` +
 	// XMLHttpRequest.open — 2nd arg is the URL (string or URL object).
@@ -118,8 +132,10 @@ const runtimeShimTemplate = `(function(){` +
 	// absolute paths after the initial HTML has been parsed.
 	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','style','content'];` +
 	`function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);for(var i=0;i<toks.length;i++){if(toks[i]==='stylesheet'||toks[i]==='icon'||toks[i]==='manifest'||toks[i]==='preload'||toks[i]==='modulepreload'||toks[i]==='prefetch'||toks[i]==='dns-prefetch'||toks[i]==='preconnect'||toks[i]==='shortcut'||toks[i]==='apple-touch-icon')return true}return false}` +
-	`function mref(v){var ml=v.toLowerCase();var m=/(^|;)\s*url=/.exec(ml);if(!m)return v;var mi=m.index+m[0].length-4;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)===\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
-	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'));var rr=nav?rn:r;var nv;if(a==='srcset'){nv=v.split(',').map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=v.replace(/url\(\s*(['"]?)([^'")]+)/g,function(m,q,u){return 'url('+q+r(u)+')'})}else if(a==='content'&&el.tagName==='META'){nv=mref(v)}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
+	`function rwaStyle(v){var o='';var i=0;var n=v.length;while(i<n){var c=v.charAt(i);if(c==='\\'&&i+1<n){o+=v.slice(i,i+2);i+=2;continue}if(c==='\''||c==='"'){var e=v.indexOf(c,i+1);if(e<0){o+=v.slice(i);break}o+=v.slice(i,e+1);i=e+1;continue}if((c==='u'||c==='U')&&v.slice(i,i+4).toLowerCase()==='url('){var j=i+4;while(j<n&&' \t\n\r\f'.indexOf(v.charAt(j))>=0)j++;var sp=v.slice(i+4,j);if(j<n&&(v.charAt(j)==='\''||v.charAt(j)==='"')){var q=v.charAt(j);var ce=v.indexOf(q,j+1);if(ce<0){o+=v.slice(i);break}var tok=v.slice(j+1,ce);var k=ce+1;while(k<n&&' \t\n\r\f'.indexOf(v.charAt(k))>=0)k++;if(k<n&&v.charAt(k)===')'){o+='url('+sp+q+r(tok)+q+v.slice(ce+1,k)+')';i=k+1;continue}o+=v.slice(i,ce+1);i=ce+1;continue}var k2=j;while(k2<n&&v.charAt(k2)!==')'&&' \t\n\r\f'.indexOf(v.charAt(k2))<0)k2++;var tok2=v.slice(j,k2);var l2=k2;while(l2<n&&' \t\n\r\f'.indexOf(v.charAt(l2))>=0)l2++;if(l2<n&&v.charAt(l2)===')'){if(tok2.indexOf('var(')!==0){o+='url('+sp+r(tok2)+v.slice(k2,l2)+')';i=l2+1;continue}o+=v.slice(i,l2+1);i=l2+1;continue}o+=v.slice(i,k2);i=k2;continue}o+=c;i++}return o}` +
+	`function srcsetParts(v){var parts=[];var cur='';var inData=false;for(var i=0;i<v.length;i++){var c=v.charAt(i);if(c===','){if(inData){cur+=c;continue}parts.push(cur);cur='';continue}if(!inData&&cur.replace(/\s/g,'')===''&&/^data:/i.test(v.slice(i)))inData=true;if(inData&&(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'))inData=false;cur+=c}if(cur.replace(/\s/g,'')!=='')parts.push(cur);return parts}` +
+	`function mref(v){var ml=v.toLowerCase();var m=/(^|;)\s*url=/.exec(ml);if(!m)return v;var mi=m.index+m[0].length-4;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)==='\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
+	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'))||a==='cite';var rr=nav?rn:r;var nv;if(a==='srcset'){nv=srcsetParts(v).map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=rwaStyle(v)}else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
 	`function rwe(el){if(!el||el.nodeType!==1)return;for(var i=0;i<ATTRS.length;i++)rwa(el,ATTRS[i])}` +
 	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','rel','style','content','http-equiv'];` +
 	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[style],[content]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})}catch(e){}}` +
@@ -206,44 +222,139 @@ func cspNonceChar(c byte) bool {
 		c == '+' || c == '/' || c == '-' || c == '_' || c == '='
 }
 
-// scriptNonceFromCSP extracts the first VALID script-src nonce from a
-// Content-Security-Policy value, e.g. `script-src 'self' 'nonce-abc123'`.
-// Invalid nonce-shaped tokens are skipped so a later valid one is used.
-func scriptNonceFromCSP(policy string) string {
+// cspScriptSrcElem is the CSP3 directive that governs script elements; when
+// present it wins over script-src for the injected shim.
+const cspScriptSrcElem = "script-src-elem"
+
+// scriptNoncesFromCSP returns the valid script nonces a single
+// Content-Security-Policy value requires for script elements: from the
+// script-src-elem directive when present (per CSP3 it governs script
+// elements), else from script-src. Invalid nonce-shaped tokens are skipped
+// so a later valid one is used. Multiple nonces can appear in one directive;
+// all are candidates and the caller intersects across policies.
+func scriptNoncesFromCSP(policy string) []string {
+	var elem, src []string
 	for _, directive := range strings.Split(policy, ";") {
 		fields := strings.Fields(strings.TrimSpace(directive))
-		if len(fields) == 0 || !strings.EqualFold(fields[0], "script-src") && !strings.EqualFold(fields[0], "script-src-elem") {
+		if len(fields) == 0 {
+			continue
+		}
+		name := strings.ToLower(fields[0])
+		if name != "script-src" && name != cspScriptSrcElem {
 			continue
 		}
 		for _, source := range fields[1:] {
-			if nonce, ok := strings.CutPrefix(source, "'nonce-"); ok {
-				if nonce, ok = strings.CutSuffix(nonce, "'"); ok && validCSPNonce(nonce) {
-					return nonce
+			nonce, ok := strings.CutPrefix(source, "'nonce-")
+			if !ok {
+				continue
+			}
+			nonce, ok = strings.CutSuffix(nonce, "'")
+			if ok && validCSPNonce(nonce) {
+				if name == cspScriptSrcElem {
+					elem = append(elem, nonce)
+				} else {
+					src = append(src, nonce)
 				}
 			}
 		}
 	}
-	return ""
+	if len(elem) > 0 {
+		return elem
+	}
+	return src
 }
 
-// responseScriptNonce returns the script nonce an app Content-Security-Policy
-// requires, from either the response header or a CSP meta tag in the body.
-// Meta tags are scanned with the HTML tokenizer: attributes are decoded
-// (entity-encoded policies work), keys match exactly (data-content decoys do
-// not), any attribute order is accepted, and every meta is examined so a
-// nonce-free policy cannot hide a later nonce-bearing one.
-func responseScriptNonce(resp *http.Response, body []byte) string {
-	for _, policy := range resp.Header.Values("Content-Security-Policy") {
-		if nonce := scriptNonceFromCSP(policy); nonce != "" {
-			return nonce
+// cspScriptNonceSet returns the nonce set a single CSP policy constrains the
+// injected script to, or nil when the policy does not constrain the choice:
+// no script nonce in its governing directive means a nonce cannot help (the
+// shim must match the policy's other sources), and 'self'/'*' already allow
+// the same-origin shim regardless of any nonce attribute. 'strict-dynamic'
+// inverts that: it disables 'self' for script elements (CSP3), so a nonce is
+// REQUIRED even when 'self' is present.
+func cspScriptNonceSet(policy string) []string {
+	nonces := scriptNoncesFromCSP(policy)
+	if len(nonces) == 0 {
+		return nil
+	}
+	// The governing directive for script elements is script-src-elem when
+	// present, else script-src (CSP3 fallback); a nonce in the non-governing
+	// directive does not apply to the shim.
+	for _, name := range []string{cspScriptSrcElem, "script-src"} {
+		for _, directive := range strings.Split(policy, ";") {
+			fields := strings.Fields(strings.TrimSpace(directive))
+			if len(fields) == 0 || !strings.EqualFold(fields[0], name) {
+				continue
+			}
+			for _, source := range fields[1:] {
+				switch source {
+				case "'strict-dynamic'":
+					return nonces // ignores 'self' for scripts; nonce required
+				case "'self'", "*":
+					return nil // shim allowed without a nonce
+				}
+			}
+			return nonces
 		}
+	}
+	return nonces
+}
+
+// responseScriptNonce returns a script nonce for the injected shim tag that
+// is valid under every ENFORCING Content-Security-Policy for the response —
+// all CSP headers plus all CSP meta tags, since meta policies append to
+// header policies — or "" when no single nonce satisfies all of them. With
+// two enforcing policies using different nonces, a nonce valid under only
+// one would still leave the injected shim blocked by the other. When no
+// policy constrains the choice, the first valid nonce found is still
+// attached: it is harmless (a nonce attribute never disables 'self'/host
+// matching in other policies) and preserves nonce-friendly app setups. Meta
+// tags are scanned with the HTML tokenizer: attributes are decoded
+// (entity-encoded policies work), keys match exactly (data-content decoys do
+// not), any attribute order is accepted, and every meta is examined.
+func responseScriptNonce(resp *http.Response, body []byte) string {
+	var constraining [][]string
+	fallback := ""
+	collect := func(policy string) {
+		if set := cspScriptNonceSet(policy); set != nil {
+			constraining = append(constraining, set)
+			return
+		}
+		if fallback == "" {
+			if ns := scriptNoncesFromCSP(policy); len(ns) > 0 {
+				fallback = ns[0]
+			}
+		}
+	}
+	for _, policy := range resp.Header.Values("Content-Security-Policy") {
+		collect(policy)
 	}
 	tok := html.NewTokenizer(bytes.NewReader(body))
 	for {
 		tt := tok.Next()
 		switch tt {
 		case html.ErrorToken:
-			return ""
+			if len(constraining) == 0 {
+				return fallback
+			}
+			// Intersect the candidate sets in order: any candidate must be
+			// present in every constraining policy.
+			candidates := constraining[0]
+			for _, set := range constraining[1:] {
+				kept := candidates[:0]
+				for _, c := range candidates {
+					for _, s := range set {
+						if c == s {
+							kept = append(kept, c)
+							break
+						}
+					}
+				}
+				candidates = kept
+				if len(candidates) == 0 {
+					return ""
+				}
+			}
+			return candidates[0]
 		case html.StartTagToken, html.SelfClosingTagToken:
 			name, hasAttr := tok.TagName()
 			if !bytes.Equal(name, []byte("meta")) || !hasAttr {
@@ -265,9 +376,7 @@ func responseScriptNonce(resp *http.Response, body []byte) string {
 			if !strings.EqualFold(strings.TrimSpace(equiv), "content-security-policy") {
 				continue
 			}
-			if nonce := scriptNonceFromCSP(content); nonce != "" {
-				return nonce
-			}
+			collect(content)
 		}
 	}
 }
@@ -276,46 +385,25 @@ func responseScriptNonce(resp *http.Response, body []byte) string {
 // rewriter so runtime-rewritten URLs carry the subtree capability. It appends
 // the capability as a query parameter: any URL fragment is split off first so
 // the query lands before it and existing query strings are preserved. The
-// append is unconditional — an app's own kandev_cap parameter must not
-// suppress the issued capability, and the gateway accepts any valid value
-// among duplicates. Empty when no capability is minted, keeping the
-// auth-disabled output byte-identical.
+// append is idempotent for the EXACT issued capability: a URL whose query has
+// a kandev_cap parameter whose DECODED key matches and whose value equals the
+// issued capability is not touched (this stops the MutationObserver from
+// looping on its own rewrites), while an app's own different kandev_cap value
+// still gets the issued capability appended — the gateway accepts any valid
+// value among duplicates. A substring like `/foo/kandev_cap=x` in the path or
+// `?note=kandev_cap=x` in another parameter does NOT suppress the append.
+// Empty when no capability is minted, keeping the auth-disabled output
+// byte-identical.
 func shimCapabilityJS(capability string) string {
 	if capability == "" {
 		return ""
 	}
 	param := proxyCapabilityQueryParam + "="
-	// The append is idempotent for the EXACT issued capability: a value that
-	// already carries kandev_cap=K is not touched (this stops the
-	// MutationObserver from looping on its own rewrites), while an app's own
-	// different kandev_cap value still gets the issued capability appended —
-	// the gateway accepts any valid value among duplicates.
-	return fmt.Sprintf(`var K=%q;var fr='';var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}if(u.indexOf(%q+K)===-1)u+=(u.indexOf('?')===-1?'?':'&')+%q+K;return u+fr;`,
-		capability, param, param)
+	return fmt.Sprintf(`var K=%q;`+
+		`function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}if(d==='kandev_cap'&&v===K)return true}return false}`+
+		`var fr='';var fh=u.indexOf('#');if(fh!==-1){fr=u.slice(fh);u=u.slice(0,fh)}if(!hcp(u))u+=(u.indexOf('?')===-1?'?':'&')+%q+K;return u+fr;`,
+		capability, param)
 }
-
-// urlInCSSPattern matches `url(...)` invocations in CSS where the argument is
-// a path-absolute URL we want to rewrite. The argument can be optionally
-// wrapped in single or double quotes and may be surrounded by whitespace.
-//
-//	url(/foo)
-//	url('/foo')
-//	url("/foo")
-//
-// Network-relative (`//host/foo`) and absolute (`http://...`) are left alone.
-var urlInCSSPattern = regexp.MustCompile(`url\(\s*(['"]?)(/[^/'"][^'")]*)`)
-
-// urlRelativeCSSPattern matches `url(...)` invocations whose argument is a
-// same-origin relative reference. The first character is not "/", so scheme
-// (`http:`, `data:`) and network-relative (`//host`) references are excluded
-// here; the shared rewriter leaves those untouched anyway.
-var urlRelativeCSSPattern = regexp.MustCompile(`url\(\s*(['"]?)([^/'"][^'")]*)`)
-
-// importInCSSPattern matches `@import "/foo";` style root-absolute imports.
-var importInCSSPattern = regexp.MustCompile(`@import\s+(['"])(/[^/'"][^'"]*)['"]`)
-
-// importRelativeCSSPattern matches `@import "foo.css";` style relative imports.
-var importRelativeCSSPattern = regexp.MustCompile(`@import\s+(['"])([^/'"][^'"]*)['"]`)
 
 // rewriteProxyResponse mutates an `http.Response` from agentctl in place,
 // rewriting root-absolute URLs to be prefixed by `proxyPrefix` so the iframe's
@@ -333,9 +421,10 @@ var importRelativeCSSPattern = regexp.MustCompile(`@import\s+(['"])([^/'"][^'"]*
 // keeps the browser's subresource fetches authorized even when they cannot
 // carry cookies (the <link rel="manifest"> fetch, sandboxed iframes).
 func rewriteProxyResponse(resp *http.Response, proxyPrefix, capability string) error {
-	// 1xx/204/304 responses carry no body (304's Content-Length describes the
-	// selected representation, not a rewritten payload): leave them untouched.
-	if resp.StatusCode < 200 || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotModified {
+	// 1xx/204/205/304 responses carry no body (304's Content-Length describes
+	// the selected representation, not a rewritten payload): leave them
+	// untouched. 205 Reset Content is bodyless per RFC 7231 §6.3.6.
+	if resp.StatusCode < 200 || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusResetContent || resp.StatusCode == http.StatusNotModified {
 		return nil
 	}
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
@@ -535,6 +624,10 @@ func rewriteTokenAttr(token *html.Token, key, val, prefix, capability, nonce str
 	switch {
 	case key == "href" && (isNavHref(token.Data) || metaLink), key == "action" && token.Data == "form", key == "formaction" && (token.Data == "button" || token.Data == "input"):
 		return rewriteURLReference(val, prefix, "")
+	case key == "cite":
+		// cite (q/blockquote/del/ins) is never fetched by the browser: it is
+		// copyable metadata. Prefix-only, no capability.
+		return rewriteURLReference(val, prefix, "")
 	case key == "srcdoc":
 		// Inline child document: its root-absolute references resolve
 		// against the child, which inherits the proxy origin, so rewrite
@@ -674,6 +767,15 @@ func parseRefreshTarget(trimmed string) (target, tail, quote string) {
 // capability to an external origin. Empty, fragment-only, and scheme-bearing
 // values are never modified.
 func rewriteURLReference(rawURL, prefix, capability string) string {
+	if capability == "" {
+		// Navigation/metadata rewriting never carries the capability: strip
+		// any previously issued one (a link reclassified from fetching to
+		// metadata, or an app URL carrying a stale cap) so the bearer cannot
+		// land in the address bar, history, or a cross-origin Referer. The
+		// gateway also strips reserved pairs on forward; this keeps them out
+		// of the DOM in the first place.
+		rawURL = stripCapability(rawURL)
+	}
 	normalized := normalizeURLForClassification(rawURL)
 	if normalized == "" || normalized[0] == '#' || hasURLScheme(normalized) || strings.HasPrefix(normalized, "//") {
 		return rawURL
@@ -685,6 +787,42 @@ func rewriteURLReference(rawURL, prefix, capability string) string {
 		return rawURL
 	}
 	return withCapability(rawURL, capability)
+}
+
+// stripCapability removes every query parameter whose DECODED key equals the
+// reserved proxy capability key (so percent-encoded key spellings like
+// %6bandev_cap are stripped too), preserving all other parameters and any
+// fragment. A URL with no query string is returned unchanged.
+func stripCapability(raw string) string {
+	path, query, hasQuery := strings.Cut(raw, "?")
+	if !hasQuery {
+		return raw
+	}
+	fragment := ""
+	if i := strings.IndexByte(query, '#'); i >= 0 {
+		fragment = query[i:]
+		query = query[:i]
+	}
+	parts := strings.Split(query, "&")
+	kept := parts[:0]
+	for _, p := range parts {
+		key := p
+		if e := strings.IndexByte(p, '='); e >= 0 {
+			key = p[:e]
+		}
+		decoded, err := url.QueryUnescape(key)
+		if err != nil {
+			decoded = key
+		}
+		if decoded == proxyCapabilityQueryParam {
+			continue
+		}
+		kept = append(kept, p)
+	}
+	if len(kept) == 0 {
+		return path + fragment
+	}
+	return path + "?" + strings.Join(kept, "&") + fragment
 }
 
 // normalizeURLForClassification returns a copy of a URL reference with the
@@ -731,7 +869,7 @@ func hasURLScheme(raw string) bool {
 // rewriteSrcSet rewrites each candidate URL in a `srcset` attribute. The
 // value format is `url [descriptor], url [descriptor], …` per the HTML spec.
 func rewriteSrcSet(value, prefix, capability string) string {
-	parts := strings.Split(value, ",")
+	parts := splitSrcSetParts(value)
 	for i, part := range parts {
 		trimmed := strings.TrimSpace(part)
 		if trimmed == "" {
@@ -748,6 +886,41 @@ func rewriteSrcSet(value, prefix, capability string) string {
 	return strings.Join(parts, ", ")
 }
 
+// splitSrcSetParts splits a srcset value into its candidate strings. The
+// spec separates candidates on commas, but a comma INSIDE a data: URL (e.g.
+// data:image/svg+xml,<svg…>) belongs to the URL, not to the candidate list:
+// a candidate that started with data: and has not yet hit whitespace is
+// still inside its URL, so its commas are preserved. Descriptor text (after
+// the first whitespace) is ordinary candidate space where commas separate.
+func splitSrcSetParts(value string) []string {
+	var parts []string
+	var cur strings.Builder
+	inData := false
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c == ',' {
+			if inData {
+				cur.WriteByte(c)
+				continue
+			}
+			parts = append(parts, cur.String())
+			cur.Reset()
+			continue
+		}
+		if !inData && strings.TrimSpace(cur.String()) == "" && strings.HasPrefix(strings.ToLower(value[i:]), "data:") {
+			inData = true
+		}
+		if inData && isCSSSpace(c) {
+			inData = false
+		}
+		cur.WriteByte(c)
+	}
+	if strings.TrimSpace(cur.String()) != "" {
+		parts = append(parts, cur.String())
+	}
+	return parts
+}
+
 // rewriteCSSURLs rewrites url(/...) and @import "/..." occurrences inside a
 // standalone CSS document.
 func rewriteCSSURLs(body []byte, prefix, capability, _ string) []byte {
@@ -755,40 +928,154 @@ func rewriteCSSURLs(body []byte, prefix, capability, _ string) []byte {
 }
 
 // rewriteCSSFragment rewrites CSS URL references inside an arbitrary string
-// (either a full CSS file or the contents of an inline style attribute).
+// (either a full CSS file or the contents of an inline style attribute),
+// using a small tokenizer so only REAL url() tokens and @import strings are
+// rewritten. String literals and comments are copied untouched — a CSS
+// string like content:'url(/x)' is data, not a URL reference — and
+// url(var(--x)) is left alone because var() cannot be a URL token. Unquoted
+// url() tokens run to whitespace or ')', which keeps data: URLs intact
+// (their ';' and ',' are URL content, e.g. url(data:image/png;base64,AAA)).
 // Path-absolute references get the proxy prefix plus the capability; relative
 // references keep their resolution but still get the capability appended so
-// cookie-less CSS loads stay authorized. Scheme-bearing, network-relative, and
-// fragment-only references are left untouched.
+// cookie-less CSS loads stay authorized. Scheme-bearing (incl. data:),
+// network-relative, and fragment-only references are left untouched by
+// rewriteURLReference.
 func rewriteCSSFragment(css, prefix, capability string) string {
-	css = urlInCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
-		sub := urlInCSSPattern.FindStringSubmatch(match)
-		// sub: full match, quote, url
-		if len(sub) != 3 {
-			return match
+	var out strings.Builder
+	i, n := 0, len(css)
+	for i < n {
+		c := css[i]
+		switch {
+		case c == '/' && i+1 < n && css[i+1] == '*':
+			end := strings.Index(css[i+2:], "*/")
+			if end < 0 {
+				out.WriteString(css[i:])
+				i = n
+				continue
+			}
+			out.WriteString(css[i : i+2+end+2])
+			i += 2 + end + 2
+		case c == '\'' || c == '"':
+			j := i + 1
+			for j < n {
+				if css[j] == '\\' && j+1 < n {
+					j += 2
+					continue
+				}
+				if css[j] == c {
+					break
+				}
+				j++
+			}
+			if j >= n {
+				out.WriteString(css[i:])
+				i = n
+				continue
+			}
+			out.WriteString(css[i : j+1])
+			i = j + 1
+		case (c == 'u' || c == 'U') && i+4 <= n && strings.EqualFold(css[i:i+4], "url("):
+			j := i + 4
+			for j < n && isCSSSpace(css[j]) {
+				j++
+			}
+			spacing := css[i+4 : j]
+			if j < n && (css[j] == '\'' || css[j] == '"') {
+				q := css[j]
+				k := j + 1
+				for k < n {
+					if css[k] == '\\' && k+1 < n {
+						k += 2
+						continue
+					}
+					if css[k] == q {
+						break
+					}
+					k++
+				}
+				if k >= n {
+					out.WriteString(css[i:])
+					i = n
+					continue
+				}
+				l := k + 1
+				for l < n && isCSSSpace(css[l]) {
+					l++
+				}
+				if l < n && css[l] == ')' {
+					out.WriteString("url(" + spacing + string(q) + rewriteURLReference(css[j+1:k], prefix, capability) + string(q) + css[k+1:l] + ")")
+					i = l + 1
+					continue
+				}
+				out.WriteString(css[i : k+1])
+				i = k + 1
+				continue
+			}
+			k := j
+			for k < n && css[k] != ')' && !isCSSSpace(css[k]) {
+				k++
+			}
+			l := k
+			for l < n && isCSSSpace(css[l]) {
+				l++
+			}
+			if l < n && css[l] == ')' {
+				tok := css[j:k]
+				if !strings.HasPrefix(tok, "var(") {
+					out.WriteString("url(" + spacing + rewriteURLReference(tok, prefix, capability) + css[k:l] + ")")
+					i = l + 1
+					continue
+				}
+				out.WriteString(css[i : l+1])
+				i = l + 1
+				continue
+			}
+			out.WriteString(css[i:k])
+			i = k
+		case c == '@' && i+7 <= n && strings.EqualFold(css[i:i+7], "@import"):
+			j := i + 7
+			for j < n && isCSSSpace(css[j]) {
+				j++
+			}
+			if j < n && (css[j] == '\'' || css[j] == '"') {
+				q := css[j]
+				k := j + 1
+				for k < n {
+					if css[k] == '\\' && k+1 < n {
+						k += 2
+						continue
+					}
+					if css[k] == q {
+						break
+					}
+					k++
+				}
+				if k >= n {
+					out.WriteString(css[i:])
+					i = n
+					continue
+				}
+				out.WriteString(css[i:j]) // "@import " + whitespace
+				out.WriteString(string(q) + rewriteURLReference(css[j+1:k], prefix, capability) + string(q))
+				i = k + 1
+				continue
+			}
+			// @import url(...) — fall through; the url() case rewrites it.
+			out.WriteString(css[i : i+1])
+			i++
+		default:
+			out.WriteString(css[i : i+1])
+			i++
 		}
-		return "url(" + sub[1] + rewriteAbsolutePath(sub[2], prefix, capability)
-	})
-	css = urlRelativeCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
-		sub := urlRelativeCSSPattern.FindStringSubmatch(match)
-		if len(sub) != 3 {
-			return match
-		}
-		return "url(" + sub[1] + rewriteURLReference(sub[2], prefix, capability)
-	})
-	css = importInCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
-		sub := importInCSSPattern.FindStringSubmatch(match)
-		if len(sub) != 3 {
-			return match
-		}
-		return "@import " + sub[1] + rewriteAbsolutePath(sub[2], prefix, capability) + sub[1]
-	})
-	css = importRelativeCSSPattern.ReplaceAllStringFunc(css, func(match string) string {
-		sub := importRelativeCSSPattern.FindStringSubmatch(match)
-		if len(sub) != 3 {
-			return match
-		}
-		return "@import " + sub[1] + rewriteURLReference(sub[2], prefix, capability) + sub[1]
-	})
-	return css
+	}
+	return out.String()
+}
+
+// isCSSSpace reports whether c is CSS whitespace (per the CSS syntax spec).
+func isCSSSpace(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\r', '\f':
+		return true
+	}
+	return false
 }

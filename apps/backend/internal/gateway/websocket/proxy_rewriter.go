@@ -76,7 +76,7 @@ const runtimeShimTemplate = `(function(){` +
 	// trims it at fetch time. %s is the optional capability-append logic
 	// (empty when no capability is minted, keeping the auth-disabled output
 	// free of capability bytes).
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}%sreturn u;}` +
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u}%sreturn u;}` +
 	// Navigation rewriter: same prefixing WITHOUT the capability. Navigation
 	// APIs (history.pushState, location.assign) put the URL in the address bar
 	// and browser history; embedding a bearer there would leak it through
@@ -98,7 +98,7 @@ const runtimeShimTemplate = `(function(){` +
 	// emitted form is WHATWG-normalized (leading C0/space trimmed, embedded
 	// tabs/newlines removed) so a space-prefixed navigation cannot escape the
 	// subtree when the browser trims it.
-	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}` +
+	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}` +
 	// norm(u): normalizes any URL-like input through the network rewriter
 	// using the URL API, which applies the WHATWG parsing rules (leading
 	// C0/space trimmed, embedded tabs/newlines removed, default ports and
@@ -108,15 +108,16 @@ const runtimeShimTemplate = `(function(){` +
 	// schemes (blob:, data:, file:, about:), and non-URL inputs pass through
 	// unchanged. ws:/wss: origins are compared as http:/https: so WebSocket
 	// URLs match the page origin.
-	`function norm(u){var s=typeof u==='string'?u:(u&&typeof u==='object'&&typeof u.href==='string'?u.href:null);if(s===null)return u;if(typeof s==='string'&&s.indexOf('//')===0)return u;var x;try{x=new URL(s,window.location.href)}catch(e){return u}var p=x.protocol;if(p!=='http:'&&p!=='https:'&&p!=='ws:'&&p!=='wss:')return u;var o=x.origin.replace(/^ws:/,'http:').replace(/^wss:/,'https:');if(o!==window.location.origin)return u;return x.origin+r(x.pathname+(x.search||'')+(x.hash||''));}` +
+	`function norm(u){var s=typeof u==='string'?u:(u&&typeof u==='object'&&typeof u.href==='string'?u.href:null);if(s===null)return u;if(typeof s==='string'&&s.indexOf('//')===0)return u;var x;try{x=new URL(s,(typeof document!=='undefined'&&document.baseURI)||window.location.href)}catch(e){return u}var p=x.protocol;if(p!=='http:'&&p!=='https:'&&p!=='ws:'&&p!=='wss:')return u;if(x.username||x.password)return u;var o=x.origin.replace(/^ws:/,'http:').replace(/^wss:/,'https:');if(o!==window.location.origin)return u;return x.origin+r(x.pathname+(x.search||'')+(x.hash||''));}` +
 	// fetch — string, real URL-object, and real Request-object input forms.
 	// Only branded URL/Request instances are rewritten: native fetch accepts
 	// only USVString or Request, and plain duck-typed {href}/{url} objects
-	// must be left untouched so native coercion produces its usual
-	// TypeError rather than a shim-initiated request. Cross-realm instances
-	// are detected via the Symbol.toStringTag brand, which instanceof alone
-	// misses.
-	`var of=window.fetch;if(of){window.fetch=function(i,n){if(typeof i==='string')i=norm(i);else if(i&&typeof i==='object'&&Object.prototype.toString.call(i)==='[object URL]'){if(!i.username&&!i.password){var hu=norm(i.href);if(hu!==i.href){try{i=new URL(hu)}catch(e){}}}}else if(i&&typeof i==='object'&&Object.prototype.toString.call(i)==='[object Request]'){var nu=norm(i.url);if(nu!==i.url){try{i=new Request(nu,i)}catch(e){}}}return of.call(this,i,n)}}` +
+	// (including Symbol.toStringTag spoofs) must be left untouched so native
+	// coercion produces its usual TypeError rather than a shim-initiated
+	// request. The brand is verified by invoking the prototype accessor with
+	// Reflect.get: it reads the internal slot (so it works cross-realm) and
+	// throws on objects without one (so it cannot be spoofed).
+	`var of=window.fetch;if(of){window.fetch=function(i,n){if(typeof i==='string')i=norm(i);else if(i&&typeof i==='object'){var ib=false;try{Reflect.get(URL.prototype,'href',i);ib=true}catch(e){}if(ib&&!i.username&&!i.password){var hu=norm(i.href);if(hu!==i.href){try{i=new URL(hu)}catch(e){}}}else if(!ib){try{Reflect.get(Request.prototype,'url',i);ib=true}catch(e){}if(ib){var nu=norm(i.url);if(nu!==i.url){try{i=new Request(nu,i)}catch(e){}}}}}return of.call(this,i,n)}}` +
 	// XMLHttpRequest.open — 2nd arg is the URL (string, URL object, or any
 	// DOMString-able value; native Web IDL stringifies it AFTER the wrapper,
 	// so the shim must convert first to rewrite it). Symbols throw like
@@ -153,7 +154,7 @@ const runtimeShimTemplate = `(function(){` +
 	// accepted edge. Covers the cases the network-API patches miss, notably
 	// `ReactDOM.preload()` and any framework that builds DOM nodes with
 	// absolute paths after the initial HTML has been parsed.
-	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','style','content'];` +
+	`var ATTRS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','imagesrcset','style','content'];` +
 	`function lf(el){var rel=el.rel;if(typeof rel!=='string')return true;var toks=rel.toLowerCase().split(/\s+/);for(var i=0;i<toks.length;i++){if(toks[i]==='stylesheet'||toks[i]==='icon'||toks[i]==='manifest'||toks[i]==='preload'||toks[i]==='modulepreload'||toks[i]==='prefetch'||toks[i]==='dns-prefetch'||toks[i]==='preconnect'||toks[i]==='shortcut'||toks[i]==='apple-touch-icon')return true}return false}` +
 	`function cssEsc(s,i){if(s.charAt(i)!=='\\'||i+1>=s.length)return null;var c=s.charAt(i+1);if(/[0-9a-fA-F]/.test(c)){var j=i+1;var v=0;while(j<s.length&&j-i<7&&/[0-9a-fA-F]/.test(s.charAt(j))){v=v*16+parseInt(s.charAt(j),16);j++}if(j<s.length&&' \t\n\r\f'.indexOf(s.charAt(j))>=0)j++;if(v===0||v>0x10FFFF||v>=0xD800&&v<=0xDFFF)v=0xFFFD;return{ch:String.fromCodePoint(v),adv:j-i}}if(c==='\n'||c==='\r'||c==='\f')return{ch:'',adv:2};return{ch:c,adv:2}}` +
 	`function cssFn(s,i,nm){var j=i;var b='';var first=true;while(j<s.length){var cc=s.charAt(j);if(cc==='\\'){var e=cssEsc(s,j);if(!e||e.ch==='')break;if(!first&&!/[a-zA-Z0-9_\-\u0080-\uFFFF]/.test(e.ch))break;b+=e.ch;j+=e.adv}else if(first&&/[a-zA-Z_\u0080-\uFFFF]/.test(cc)){b+=cc;j++}else if(!first&&/[a-zA-Z0-9_\-\u0080-\uFFFF]/.test(cc)){b+=cc;j++}else break;first=false}if(j===i)return -1;if(b.toLowerCase()!==nm||s.charAt(j)!=='(')return -1;return j+1}` +
@@ -162,7 +163,7 @@ const runtimeShimTemplate = `(function(){` +
 	`function rwaStyle(v){var o='';var i=0;var n=v.length;var j2;while(i<n){var c=v.charAt(i);if((c==='u'||c==='U'||c==='\\')&&!(i>0&&(v.charCodeAt(i-1)>=128||/[a-zA-Z0-9_-]/.test(v.charAt(i-1))))&&(j2=cssFn(v,i,'url'))>=0){var jw=j2;while(jw<n&&' \t\n\r\f'.indexOf(v.charAt(jw))>=0)jw++;var sp=v.slice(j2,jw);if(jw<n&&(v.charAt(jw)==='\''||v.charAt(jw)==='"')){var q=v.charAt(jw);var ce=jw+1;while(ce<n){if(v.charAt(ce)==='\\'&&ce+1<n){ce+=2;continue}if(v.charAt(ce)===q)break;ce++}if(ce>=n){o+=v.slice(i);break}var tok=v.slice(jw+1,ce);var d1=cssDecTok(tok);var rw1=r(d1);var em1=d1===rw1?tok:cssEscTok(rw1);var k=ce+1;while(k<n&&' \t\n\r\f'.indexOf(v.charAt(k))>=0)k++;if(k<n&&v.charAt(k)===')'){o+='url('+sp+q+em1+q+v.slice(ce+1,k)+')';i=k+1;continue}o+=v.slice(i,ce+1);i=ce+1;continue}var k2=jw;while(k2<n&&v.charAt(k2)!==')'){if(v.charAt(k2)==='\\'){var ee=cssEsc(v,k2);if(!ee)break;k2+=ee.adv;continue}if(' \t\n\r\f'.indexOf(v.charAt(k2))>=0)break;k2++}var tok2=v.slice(jw,k2);var d2=cssDecTok(tok2);var l2=k2;while(l2<n&&' \t\n\r\f'.indexOf(v.charAt(l2))>=0)l2++;if(l2<n&&v.charAt(l2)===')'){if(d2.toLowerCase().indexOf('var(')!==0){var rw2=r(d2);var em2=d2===rw2?tok2:cssEscTok(rw2);o+='url('+sp+em2+v.slice(k2,l2)+')';i=l2+1;continue}o+=v.slice(i,l2+1);i=l2+1;continue}o+=v.slice(i,k2);i=k2;continue}if(c==='\\'&&i+1<n){o+=v.slice(i,i+2);i+=2;continue}if(c==='\''||c==='"'){var j=i+1;while(j<n){if(v.charAt(j)==='\\'&&j+1<n){j+=2;continue}if(v.charAt(j)===c)break;j++}if(j>=n){o+=v.slice(i);break}o+=v.slice(i,j+1);i=j+1;continue}o+=c;i++}return o}` +
 	`function srcsetParts(v){var parts=[];var cur='';var inData=false;var curEmpty=true;for(var i=0;i<v.length;i++){var c=v.charAt(i);if(c===','){if(inData){cur+=c;continue}parts.push(cur);cur='';curEmpty=true;inData=false;continue}if(!inData&&curEmpty&&c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f'&&v.slice(i,i+5).toLowerCase()==='data:')inData=true;if(inData&&(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\f'))inData=false;if(c!==' '&&c!=='\t'&&c!=='\n'&&c!=='\r'&&c!=='\f')curEmpty=false;cur+=c}if(!curEmpty)parts.push(cur);return parts}` +
 	`function mref(v){var n=v.length;var mi=-1;var from=0;while(from<=n){var semi=v.indexOf(';',from);var end=semi<0?n:semi;var field=v.slice(from,end);var k=0;while(k<field.length&&' \t\n\r\f'.indexOf(field.charAt(k))>=0)k++;if(field.slice(k,k+4).toLowerCase()==='url='){mi=from+k;break}if(semi<0)break;from=semi+1}if(mi<0)return v;var after=v.slice(mi+4);var lead=after.replace(/^[ \t\n\r\f]+/,'');var off=after.length-lead.length;var t=lead;var q='';var rest='';if(t.charAt(0)==='\''||t.charAt(0)==='"'){q=t.charAt(0);var e=t.indexOf(q,1);if(e<0)return v;t=t.slice(1,e);rest=lead.slice(e)}else{var sp=t.search(/[; \t\n\r\f]/);if(sp>=0){t=t.slice(0,sp);rest=lead.slice(sp)}}return v.slice(0,mi+4)+after.slice(0,off)+q+rn(t)+rest}` +
-	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'))||a==='cite';var rr=nav?rn:r;var nv=v;if(a==='srcset'){nv=srcsetParts(v).map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=rwaStyle(v)}else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
+	`function rwa(el,a){if(!el.getAttribute||!el.hasAttribute(a))return;var v=el.getAttribute(a);if(typeof v!=='string')return;var nav=(a==='href'&&(el.tagName==='A'||el.tagName==='AREA'||el.tagName==='BASE'||(el.tagName==='LINK'&&!lf(el))))||(a==='action'&&el.tagName==='FORM')||(a==='formaction'&&(el.tagName==='BUTTON'||el.tagName==='INPUT'))||a==='cite';var rr=nav?rn:r;var nv=v;if(a==='srcset'||a==='imagesrcset'){nv=srcsetParts(v).map(function(p){var f=p.trim().split(/\s+/);if(f[0])f[0]=rr(f[0]);return f.join(' ')}).join(', ')}else if(a==='style'){nv=rwaStyle(v)}else if(a==='content'){if(el.tagName==='META'){var he=el.getAttribute('http-equiv');if(he&&String(he).trim().toLowerCase()==='refresh')nv=mref(v)}}else{nv=rr(v)}if(nv!==v)el.setAttribute(a,nv)}` +
 	`function rwe(el){if(!el||el.nodeType!==1)return;for(var i=0;i<ATTRS.length;i++)rwa(el,ATTRS[i])}` +
 	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','rel','style','content','http-equiv'];` +
 	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[style],[content]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})}catch(e){}}` +
@@ -466,10 +467,11 @@ func shimCapabilityJS(capability string) string {
 // keeps the browser's subresource fetches authorized even when they cannot
 // carry cookies (the <link rel="manifest"> fetch, sandboxed iframes).
 func rewriteProxyResponse(resp *http.Response, proxyPrefix, capability string) error {
-	// 1xx/204/205/304 responses carry no body (304's Content-Length describes
-	// the selected representation, not a rewritten payload): leave them
-	// untouched. 205 Reset Content is bodyless per RFC 7231 §6.3.6.
-	if resp.StatusCode < 200 || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusResetContent || resp.StatusCode == http.StatusNotModified {
+	// 1xx/204/205/206/304 responses are left untouched: 1xx/204/205/304 carry
+	// no body (304's Content-Length describes the selected representation),
+	// and 206's body is a byte RANGE whose Content-Range describes it —
+	// rewriting would desynchronize the length/range metadata.
+	if resp.StatusCode < 200 || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusResetContent || resp.StatusCode == http.StatusPartialContent || resp.StatusCode == http.StatusNotModified {
 		return nil
 	}
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
@@ -549,12 +551,41 @@ type htmlRewriteState struct {
 	inStyle      bool
 	inScript     bool
 	shimInjected bool
+	// baseExternal reports whether the document's effective <base href>
+	// resolves OUTSIDE the proxy subtree (scheme-bearing or network-relative
+	// base). Under such a base every path-absolute and relative reference in
+	// the document resolves against the external origin, so embedding the
+	// capability in them would leak the bearer; rewriting is suppressed.
+	baseExternal bool
+	baseSet      bool
+}
+
+// applyBase records the document's effective <base href> (the FIRST base
+// element wins per the HTML spec). The href is left for the normal token
+// rewrite pass (navigation: prefix-only, no capability); only the
+// externalness of the nav-rewritten value is captured here. A scheme-bearing
+// or network-relative base makes every later path/relative reference resolve
+// outside the subtree.
+func (s *htmlRewriteState) applyBase(token *html.Token) {
+	if s.baseSet || token.Data != "base" {
+		return
+	}
+	for _, attr := range token.Attr {
+		if strings.EqualFold(attr.Key, "href") {
+			s.baseSet = true
+			rewritten := rewriteURLReference(attr.Val, s.prefix, "")
+			norm := normalizeURLForClassification(rewritten)
+			s.baseExternal = hasURLScheme(norm) || strings.HasPrefix(norm, "//")
+			return
+		}
+	}
 }
 
 // onStartTag emits the (URL-rewritten) start tag and updates raw-text
 // element tracking. Also injects the runtime shim immediately after `<head>`.
 func (s *htmlRewriteState) onStartTag(token html.Token) {
-	rewriteTokenURLs(&token, s.prefix, s.capability, s.nonce, s.depth)
+	s.applyBase(&token)
+	rewriteTokenURLs(&token, s.prefix, s.capability, s.nonce, s.depth, s.baseExternal)
 	s.out.WriteString(token.String())
 	if !s.shimInjected && token.Data == headTagName {
 		s.out.WriteString(s.shim)
@@ -611,10 +642,14 @@ func rewriteHTMLURLs(body []byte, prefix, capability, nonce string) []byte {
 const maxSRCDocDepth = 5
 
 func rewriteHTMLURLsAtDepth(body []byte, prefix, capability, nonce string, depth int) []byte {
+	return rewriteHTMLURLsAtDepthWithBase(body, prefix, capability, nonce, depth, false)
+}
+
+func rewriteHTMLURLsAtDepthWithBase(body []byte, prefix, capability, nonce string, depth int, baseExternal bool) []byte {
 	tok := html.NewTokenizer(bytes.NewReader(body))
 	var out bytes.Buffer
 	out.Grow(len(body) + 256 + len(runtimeShimTemplate))
-	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShimTag(prefix, capability, nonce), nonce: nonce, depth: depth}
+	s := &htmlRewriteState{out: &out, prefix: prefix, capability: capability, shim: runtimeShimTag(prefix, capability, nonce), nonce: nonce, depth: depth, baseExternal: baseExternal}
 	for {
 		tt := tok.Next()
 		if tt == html.ErrorToken {
@@ -628,7 +663,8 @@ func rewriteHTMLURLsAtDepth(body []byte, prefix, capability, nonce string, depth
 		case html.StartTagToken:
 			s.onStartTag(token)
 		case html.SelfClosingTagToken:
-			rewriteTokenURLs(&token, prefix, capability, nonce, depth)
+			s.applyBase(&token)
+			rewriteTokenURLs(&token, prefix, capability, nonce, depth, s.baseExternal)
 			out.WriteString(token.String())
 		case html.EndTagToken:
 			s.onEndTag(token)
@@ -646,9 +682,9 @@ func rewriteHTMLURLsAtDepth(body []byte, prefix, capability, nonce string, depth
 // the capability: clicking them navigates the top-level frame, so a bearer in
 // the URL would land in the address bar, history, bookmarks, and cross-origin
 // Referers (the subtree cookie authorizes the navigation instead). Subresource
-// attributes (script/img/stylesheet/manifest/iframe src-href, srcset, …) get
-// the capability so cookie-less fetches stay authorized.
-func rewriteTokenURLs(token *html.Token, prefix, capability, nonce string, depth int) {
+// attributes (script/img/stylesheet/manifest/iframe src-href, srcset,
+// imagesrcset, …) get the capability so cookie-less fetches stay authorized.
+func rewriteTokenURLs(token *html.Token, prefix, capability, nonce string, depth int, externalBase bool) {
 	if token.Type != html.StartTagToken && token.Type != html.SelfClosingTagToken {
 		return
 	}
@@ -659,39 +695,87 @@ func rewriteTokenURLs(token *html.Token, prefix, capability, nonce string, depth
 	metaLink := token.Data == "link" && !isFetchingLinkRel(relValue(token))
 	for i, attr := range token.Attr {
 		key := strings.ToLower(attr.Key)
-		token.Attr[i].Val = rewriteTokenAttr(token, key, attr.Val, prefix, capability, nonce, depth, metaLink)
+		token.Attr[i].Val = rewriteTokenAttr(token, key, attr.Val, prefix, capability, nonce, depth, metaLink, externalBase)
 	}
 }
 
 // rewriteTokenAttr rewrites one URL-shaped attribute value of a token,
 // applying the navigation/subresource capability distinction.
-func rewriteTokenAttr(token *html.Token, key, val, prefix, capability, nonce string, depth int, metaLink bool) string {
+func rewriteTokenAttr(token *html.Token, key, val, prefix, capability, nonce string, depth int, metaLink, externalBase bool) string {
+	// Under an external <base href>, every path-absolute and relative
+	// reference in the document resolves OUTSIDE the proxy subtree: adding
+	// the proxy prefix or the capability would either change the app's
+	// intended resolution or leak the bearer to the external origin, so such
+	// values are left exactly as authored. Scheme-bearing and network-relative
+	// references were never rewritten anyway; only the inline style content
+	// needs an explicit guard (its leading text is not a URL).
+	if externalBase && suppressedByExternalBase(val) {
+		return val
+	}
+	return rewriteTokenAttrKey(token, key, val, prefix, capability, nonce, depth, metaLink, externalBase)
+}
+
+// rewriteTokenAttrKey dispatches one attribute value to its rewriter.
+func rewriteTokenAttrKey(token *html.Token, key, val, prefix, capability, nonce string, depth int, metaLink, externalBase bool) string {
 	switch {
-	case key == "href" && (isNavHref(token.Data) || metaLink), key == "action" && token.Data == "form", key == "formaction" && (token.Data == "button" || token.Data == "input"):
-		return rewriteURLReference(val, prefix, "")
-	case key == "cite":
-		// cite (q/blockquote/del/ins) is never fetched by the browser: it is
-		// copyable metadata. Prefix-only, no capability.
+	case isNavigationAttr(token, key, metaLink):
+		// Navigation references — anchor/area/base href, form action,
+		// button/input formaction — and cite (copyable metadata, never
+		// fetched): prefix-only, no capability.
 		return rewriteURLReference(val, prefix, "")
 	case key == "srcdoc":
 		// Inline child document: its root-absolute references resolve
-		// against the child, which inherits the proxy origin, so rewrite
-		// them like a nested page. Bounded so nested srcdoc cannot
-		// exhaust the stack.
-		if depth < maxSRCDocDepth {
-			return string(rewriteHTMLURLsAtDepth([]byte(val), prefix, capability, nonce, depth+1))
-		}
-		return val
+		// against the child, which inherits the proxy origin (or the
+		// external base, if the parent document has one), so rewrite them
+		// like a nested page under the same base policy. Bounded so nested
+		// srcdoc cannot exhaust the stack.
+		return rewriteSrcdocValue(val, prefix, capability, nonce, depth, externalBase)
 	case key == attrContent && token.Data == "meta" && isMetaRefresh(token):
 		return rewriteMetaRefresh(val, prefix)
 	case rewritableURLAttrs[key]:
 		return rewriteURLReference(val, prefix, capability)
-	case key == "srcset":
+	case key == "srcset" || key == "imagesrcset":
 		return rewriteSrcSet(val, prefix, capability)
 	case key == "style":
-		return rewriteCSSFragment(val, prefix, capability)
+		return rewriteStyleValue(val, prefix, capability, externalBase)
 	}
 	return val
+}
+
+// rewriteStyleValue rewrites inline style url() references, unless the
+// document has an external base (the url() references would resolve against
+// it and leak the capability).
+func rewriteStyleValue(val, prefix, capability string, externalBase bool) string {
+	if externalBase {
+		return val
+	}
+	return rewriteCSSFragment(val, prefix, capability)
+}
+
+// suppressedByExternalBase reports whether a reference resolves against an
+// external <base> (i.e. it is path-absolute or relative, not scheme-bearing,
+// network-relative, or fragment-only) and must be left exactly as authored.
+func suppressedByExternalBase(val string) bool {
+	norm := normalizeURLForClassification(val)
+	return norm != "" && norm[0] != '#' && !hasURLScheme(norm) && !strings.HasPrefix(norm, "//")
+}
+
+// rewriteSrcdocValue rewrites an inline child document under the same base
+// policy as its parent, bounded by maxSRCDocDepth.
+func rewriteSrcdocValue(val, prefix, capability, nonce string, depth int, externalBase bool) string {
+	if depth < maxSRCDocDepth {
+		return string(rewriteHTMLURLsAtDepthWithBase([]byte(val), prefix, capability, nonce, depth+1, externalBase))
+	}
+	return val
+}
+
+// isNavigationAttr reports whether an attribute is a navigation reference
+// (anchor/area/base href, form action, button/input formaction) or cite
+// (copyable metadata the browser never fetches): prefix-only, no capability.
+func isNavigationAttr(token *html.Token, key string, metaLink bool) bool {
+	return key == "cite" || key == "href" && (isNavHref(token.Data) || metaLink) ||
+		key == "action" && token.Data == "form" ||
+		key == "formaction" && (token.Data == "button" || token.Data == "input")
 }
 
 // isNavHref reports whether an element's href is a navigation reference.

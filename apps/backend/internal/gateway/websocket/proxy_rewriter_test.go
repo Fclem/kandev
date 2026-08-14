@@ -244,7 +244,7 @@ func TestRuntimeShim_InstallsMutationObserver(t *testing.T) {
 	}
 
 	// srcset has its own splitter (whitespace-separated descriptors).
-	mustContain(t, shim, `if(a==='srcset')`)
+	mustContain(t, shim, `if(a==='srcset'||a==='imagesrcset')`)
 }
 
 func TestRuntimeShim_ExposesProxyPrefixToInspector(t *testing.T) {
@@ -492,15 +492,15 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `'//'+l.host`)
 	mustContain(t, shim, `s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i,w)`)
 	mustContain(t, shim, `x.origin.replace(/^ws:/,'http:').replace(/^wss:/,'https:')`)
-	mustContain(t, shim, `new URL(s,window.location.href)`)
+	mustContain(t, shim, `new URL(s,(typeof document!=='undefined'&&document.baseURI)||window.location.href)`)
 	// fetch/XHR/WS all route URL-like inputs through norm() (URL objects,
 	// same-origin absolute strings).
-	mustContain(t, shim, `Object.prototype.toString.call(i)==='[object URL]'`)
+	mustContain(t, shim, `Reflect.get(URL.prototype,'href',i)`)
 	mustContain(t, shim, `arguments[1]=u;return oo.apply(this,arguments)`)
 	// Navigation APIs use the prefix-only rewriter, never the capability.
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// Anchor navigation needs no click interception: the MutationObserver
 	// prefixes hrefs, so the browser's own default navigation stays inside
 	// the subtree and app click handlers keep control.
@@ -524,7 +524,7 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// rn() is the prefix-only form: it strips any previously issued capability
 	// and never appends a new one.
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// history and location rewrite through rn(), never r().
 	mustContain(t, shim, `history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}`)
 	mustContain(t, shim, `location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}`)
@@ -875,7 +875,7 @@ func TestRewriteMetaRefresh_MultiField(t *testing.T) {
 // external URLs never receive the capability.
 func TestRuntimeShim_NoCapForObfuscatedExternalURLs(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-obf")
-	mustContain(t, shim, `try{var ru=new URL(u,window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}`)
+	mustContain(t, shim, `try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}`)
 }
 
 // The idempotency check is exact-parameter, not substring: a path like
@@ -909,7 +909,7 @@ func TestRuntimeShim_RnStripsCapabilityOnAllForms(t *testing.T) {
 	mustContain(t, shim, `if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// rn() classifies via the URL API like r(): cross-origin and
 	// network-relative navigation targets pass through untouched.
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,window.location.href);`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);`)
 }
 
 // norm() (fetch/XHR/WS) rejects raw network-relative input before URL
@@ -1308,7 +1308,7 @@ func TestRewriteHTMLURLs_NavStripKeepsEmptyQueryMarker(t *testing.T) {
 func TestRuntimeShim_Round4Contracts(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// rwa defaults nv to v so guarded branches leave the attribute alone.
-	mustContain(t, shim, `var rr=nav?rn:r;var nv=v;if(a==='srcset')`)
+	mustContain(t, shim, `var rr=nav?rn:r;var nv=v;if(a==='srcset'||a==='imagesrcset')`)
 	// URL-object navigation arguments are stringified through rn().
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}`)
 	// Token escape decode/encode helpers exist.
@@ -1498,8 +1498,8 @@ func TestRuntimeShim_DOMStringXHRAndWebSocket(t *testing.T) {
 // the native API.
 func TestRuntimeShim_FetchBrandChecksAndWSConstructor(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
-	mustContain(t, shim, `Object.prototype.toString.call(i)==='[object URL]'`)
-	mustContain(t, shim, `Object.prototype.toString.call(i)==='[object Request]'`)
+	mustContain(t, shim, `Reflect.get(URL.prototype,'href',i)`)
+	mustContain(t, shim, `Reflect.get(Request.prototype,'url',i)`)
 	mustContain(t, shim, `Failed to construct 'WebSocket': Please use the 'new' operator`)
 }
 
@@ -1533,7 +1533,87 @@ func TestRuntimeShim_WSSubclassAndProtocols(t *testing.T) {
 // native coercion produces its usual error.
 func TestRuntimeShim_FetchSkipsCredentialedURLs(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
-	mustContain(t, shim, `if(!i.username&&!i.password){var hu=norm(i.href);`)
+	mustContain(t, shim, `if(ib&&!i.username&&!i.password){var hu=norm(i.href);`)
+}
+
+// Under an external <base href>, every path-absolute and relative reference
+// resolves OUTSIDE the proxy subtree: the capability must not be embedded
+// (bearer exfiltration), and rewriting is suppressed entirely so the app's
+// intended resolution is preserved. A same-origin (path) base keeps normal
+// subtree rewriting.
+func TestRewriteHTMLURLs_ExternalBaseSuppressesCapability(t *testing.T) {
+	external := `<base href="https://evil.example/">` +
+		`<script src="x.js"></script>` +
+		`<img src="/logo.png">` +
+		`<a href="/page">nav</a>` +
+		`<div style="background:url(bg.png)"></div>`
+	got := string(rewriteHTMLURLs([]byte(external), proxyPrefix, "cap-base", ""))
+
+	if strings.Contains(got, "kandev_cap") {
+		t.Fatalf("capability leaked under an external base:\n%s", got)
+	}
+	mustContain(t, got, `<script src="x.js"></script>`)
+	mustContain(t, got, `<img src="/logo.png">`)
+	mustContain(t, got, `<a href="/page">nav</a>`)
+	mustContain(t, got, `style="background:url(bg.png)"`)
+	mustContain(t, got, `<base href="https://evil.example/">`)
+
+	// Network-relative base is external too.
+	netRel := `<base href="//cdn.example/">` + `<img src="/logo.png">`
+	gotNet := string(rewriteHTMLURLs([]byte(netRel), proxyPrefix, "cap-base2", ""))
+	if strings.Contains(gotNet, "kandev_cap") {
+		t.Fatalf("capability leaked under a network-relative base:\n%s", gotNet)
+	}
+	mustContain(t, gotNet, `<img src="/logo.png">`)
+
+	// Same-origin (path) base: refs resolve inside the subtree, cap applies.
+	sameOrigin := `<base href="/cdn/">` + `<img src="a.png">` + `<script src="/s.js"></script>`
+	gotSame := string(rewriteHTMLURLs([]byte(sameOrigin), proxyPrefix, "cap-base3", ""))
+	mustContain(t, gotSame, `<base href="/port-proxy/abc/3001/cdn/">`)
+	mustContain(t, gotSame, `<img src="a.png?kandev_cap=cap-base3">`)
+	mustContain(t, gotSame, `<script src="/port-proxy/abc/3001/s.js?kandev_cap=cap-base3"></script>`)
+}
+
+// 206 Partial Content bodies are byte ranges described by Content-Range:
+// rewriting would desynchronize length/range metadata, so they pass through.
+func TestRewriteProxyResponse_Leaves206Untouched(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusPartialContent,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("<html>partial</html>")),
+	}
+	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+	resp.Header.Set("Content-Range", "bytes 0-21/100")
+	resp.Header.Set("Content-Length", "22")
+	if err := rewriteProxyResponse(resp, proxyPrefix, "cap-206"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := resp.Header.Get("Content-Length"); got != "22" {
+		t.Fatalf("206: Content-Length = %q, want original %q", got, "22")
+	}
+	if got := resp.Header.Get("Content-Range"); got != "bytes 0-21/100" {
+		t.Fatalf("206: Content-Range = %q, want original", got)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "<html>partial</html>" {
+		t.Fatalf("206 body changed: %q", body)
+	}
+}
+
+// imagesrcset (link preload) is a fetching srcset attribute: it gets the
+// capability like srcset, statically and at runtime.
+func TestRewriteHTMLURLs_Imagesrcset(t *testing.T) {
+	in := `<link rel="preload" as="image" imagesrcset="/hero.png 1x, /hero@2x.png 2x">`
+	got := string(rewriteHTMLURLs([]byte(in), proxyPrefix, "cap-is", ""))
+
+	mustContain(t, got, `imagesrcset="/port-proxy/abc/3001/hero.png?kandev_cap=cap-is 1x, /port-proxy/abc/3001/hero@2x.png?kandev_cap=cap-is 2x"`)
+}
+
+// norm() rejects credentialed URLs (native Request/fetch would reject too),
+// leaving the input untouched so native validation runs.
+func TestRuntimeShim_NormRejectsCredentials(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `if(x.username||x.password)return u;`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

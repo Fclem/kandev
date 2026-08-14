@@ -495,7 +495,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	mustContain(t, shim, `new URL(s,window.location.href)`)
 	// fetch/XHR/WS all route URL-like inputs through norm() (URL objects,
 	// same-origin absolute strings).
-	mustContain(t, shim, `typeof i==='string'||(i&&typeof i==='object'&&typeof i.href==='string'&&!i.url)`)
+	mustContain(t, shim, `Object.prototype.toString.call(i)==='[object URL]'`)
 	mustContain(t, shim, `arguments[1]=u;return oo.apply(this,arguments)`)
 	// Navigation APIs use the prefix-only rewriter, never the capability.
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
@@ -1488,7 +1488,19 @@ func TestRewriteSrcSet_ManyCandidatesBounded(t *testing.T) {
 func TestRuntimeShim_DOMStringXHRAndWebSocket(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	mustContain(t, shim, `XMLHttpRequest.prototype.open=function(m,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=norm(u)}arguments[1]=u;return oo.apply(this,arguments)}`)
-	mustContain(t, shim, `function W(u,p){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u)}var n=norm(u);`)
+	mustContain(t, shim, `function W(u,p){if(!(this instanceof W))throw new TypeError("Failed to construct 'WebSocket': Please use the 'new' operator, this DOM object constructor cannot be called as a function.");if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u)}var n=norm(u);`)
+}
+
+// fetch rewrites only BRANDED URL/Request instances (Symbol.toStringTag,
+// cross-realm safe): plain duck-typed {href}/{url} objects are left for
+// native coercion, which rejects them with TypeError like unfetched fetch
+// input. WebSocket is a constructor: a plain call without 'new' throws like
+// the native API.
+func TestRuntimeShim_FetchBrandChecksAndWSConstructor(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-shim")
+	mustContain(t, shim, `Object.prototype.toString.call(i)==='[object URL]'`)
+	mustContain(t, shim, `Object.prototype.toString.call(i)==='[object Request]'`)
+	mustContain(t, shim, `Failed to construct 'WebSocket': Please use the 'new' operator`)
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

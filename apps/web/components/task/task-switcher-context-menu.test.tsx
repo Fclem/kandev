@@ -21,6 +21,7 @@ function task(overrides: Partial<TaskSwitcherItem> = {}): TaskSwitcherItem {
 function renderWithDragHandle(overrides: Partial<TaskSwitcherItem> = {}) {
   const onMouseDown = vi.fn();
   const onPointerDown = vi.fn();
+  const onTouchStart = vi.fn();
   const onClick = vi.fn();
   const onArchiveTask = vi.fn();
   render(
@@ -30,6 +31,7 @@ function renderWithDragHandle(overrides: Partial<TaskSwitcherItem> = {}) {
           data-testid="drag-handle"
           onMouseDown={onMouseDown}
           onPointerDown={onPointerDown}
+          onTouchStart={onTouchStart}
           onClick={onClick}
         >
           <TaskItemWithContextMenu task={task(overrides)} onArchiveTask={onArchiveTask}>
@@ -39,7 +41,7 @@ function renderWithDragHandle(overrides: Partial<TaskSwitcherItem> = {}) {
       </ToastProvider>
     </StateProvider>,
   );
-  return { onMouseDown, onPointerDown, onClick, onArchiveTask };
+  return { onMouseDown, onPointerDown, onTouchStart, onClick, onArchiveTask };
 }
 
 async function openContextMenu() {
@@ -61,6 +63,53 @@ describe("TaskItemWithContextMenu — pointer containment", () => {
 
     expect(onMouseDown).not.toHaveBeenCalled();
     expect(onPointerDown).not.toHaveBeenCalled();
+  });
+
+  it("touchstart on the Color submenu trigger and swatch does not reach the drag handle", async () => {
+    const { onTouchStart } = renderWithDragHandle();
+    await openContextMenu();
+
+    fireEvent.touchStart(screen.getByRole("menuitem", { name: /color/i }));
+    expect(onTouchStart).not.toHaveBeenCalled();
+
+    fireEvent.pointerMove(screen.getByRole("menuitem", { name: /color/i }), {
+      pointerType: "mouse",
+    });
+    const redSwatch = await screen.findByRole("menuitem", { name: /red/i });
+    fireEvent.touchStart(redSwatch);
+    expect(onTouchStart).not.toHaveBeenCalled();
+  });
+
+  it("opening the menu cancels an in-flight touch drag at the touchstart target", async () => {
+    // A touch long-press arms the row's TouchSensor (250ms) before the menu
+    // opens (~700ms); dnd-kit cancels the drag when a touchcancel reaches the
+    // element the touch began on, so opening the menu must emit one there.
+    // happy-dom does not construct TouchEvent, so stub it.
+    const touchCancelListener = vi.fn();
+    vi.stubGlobal(
+      "TouchEvent",
+      class StubTouchEvent extends Event {
+        constructor(type: string) {
+          super(type);
+        }
+      },
+    );
+
+    try {
+      renderWithDragHandle();
+      const row = screen.getByTestId("task-row");
+      row.addEventListener("touchcancel", touchCancelListener);
+
+      fireEvent.touchStart(row);
+      fireEvent.contextMenu(row);
+      await screen.findByRole("menuitem", { name: /color/i });
+
+      expect(touchCancelListener).toHaveBeenCalledTimes(1);
+      expect(touchCancelListener.mock.calls[0]?.[0].type).toBe("touchcancel");
+      row.removeEventListener("touchcancel", touchCancelListener);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("mousedown and pointerdown on a color swatch do not reach the drag handle", async () => {

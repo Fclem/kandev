@@ -1,6 +1,6 @@
 "use client";
 
-import { cloneElement, isValidElement, useState } from "react";
+import { cloneElement, isValidElement, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   IconCopy,
@@ -67,6 +67,58 @@ type ContextMenuProps = TaskLinkHandlers & {
   isMixedWorkflowSelection?: boolean;
 };
 
+/**
+ * dnd-kit's TouchSensor arms on touchstart and activates after the 250ms
+ * delay — before a long-press (≈700ms) can open this context menu. A
+ * stationary long-press therefore starts a row drag that is still live when
+ * the menu opens. While a drag is active the TouchSensor listens for
+ * `touchcancel` on the element the touch started on, so dispatching one at
+ * that element aborts the drag (onDragCancel) instead of dropping it: the
+ * row stays put and the menu remains usable. Inert when no touch has started
+ * on this row (desktop right-click, or a sensor that already detached after a
+ * quick tap), because then nothing listens for the event.
+ */
+type CancelTouchDrag = (touchStartTarget: EventTarget | null) => void;
+
+const cancelTouchDrag: CancelTouchDrag = (touchStartTarget) => {
+  if (touchStartTarget instanceof Element && typeof TouchEvent === "function") {
+    touchStartTarget.dispatchEvent(
+      new TouchEvent("touchcancel", { bubbles: true, cancelable: true }),
+    );
+  }
+};
+
+/**
+ * Coordinates the context menu with the row's touch-drag sensor: remembers
+ * the element the touch began on and cancels the in-flight drag when the menu
+ * opens. Returns the menu `onOpenChange` handler and the trigger-wrapper
+ * capture props.
+ */
+function useMenuTouchDragCancel(onOpenChange: (open: boolean) => void) {
+  const touchStartTargetRef = useRef<EventTarget | null>(null);
+  const handleOpenChange = (open: boolean) => {
+    onOpenChange(open);
+    // A touch long-press has already armed the row's TouchSensor (250ms)
+    // when the menu opens (~700ms); cancel that drag at the touchstart
+    // target so the menu gesture never moves the row.
+    if (open) {
+      const target = touchStartTargetRef.current;
+      touchStartTargetRef.current = null;
+      cancelTouchDrag(target);
+    }
+  };
+  return {
+    handleOpenChange,
+    triggerProps: {
+      // The TouchSensor attaches its touchcancel listener to the element the
+      // touch began on while a drag is active.
+      onTouchStartCapture: (event: React.TouchEvent) => {
+        touchStartTargetRef.current = event.target;
+      },
+    },
+  };
+}
+
 export function TaskItemWithContextMenu({
   task,
   workflows,
@@ -105,11 +157,12 @@ export function TaskItemWithContextMenu({
     setContextOpen(false);
     setMenuKey((k) => k + 1);
   };
+  const { handleOpenChange, triggerProps } = useMenuTouchDragCancel(setContextOpen);
 
   return (
-    <ContextMenu key={menuKey} onOpenChange={setContextOpen}>
+    <ContextMenu key={menuKey} onOpenChange={handleOpenChange}>
       <ContextMenuTrigger asChild>
-        <div>{cloneWithMenuOpen(children, contextOpen)}</div>
+        <div {...triggerProps}>{cloneWithMenuOpen(children, contextOpen)}</div>
       </ContextMenuTrigger>
       <ContextMenuContent
         className="w-48"

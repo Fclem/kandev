@@ -107,4 +107,79 @@ test.describe("Mobile subtask re-parenting by drag and drop", () => {
       })
       .toEqual({ parentId: newParent.id, workspaceMode: "shared_group" });
   });
+
+  test("long-press opens the context menu without dragging the row", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const placement = {
+      workflow_id: seedData.workflowId,
+      workflow_step_id: seedData.startStepId,
+    };
+    const parent = await apiClient.createTask(
+      seedData.workspaceId,
+      "Menu long-press parent",
+      placement,
+    );
+    const child = await apiClient.createTask(
+      seedData.workspaceId,
+      "Menu long-press child",
+      placement,
+    );
+
+    await testPage.goto(`/t/${parent.id}`);
+    const session = new SessionPage(testPage);
+    await session.waitForLoad();
+    await testPage.getByTestId("mobile-session-menu").click();
+
+    const taskSheet = testPage.getByRole("dialog", { name: "Tasks" });
+    const taskList = taskSheet.getByTestId("mobile-task-switcher-list");
+    // The rendered order is the DOM order of the blocks inside the list.
+    // Bounding-box comparisons are unreliable here: content-visibility rows
+    // settle lazily, and a hidden desktop-sidebar copy of the tree duplicates
+    // the test ids outside the sheet list.
+    const orderOf = async () =>
+      (
+        await taskList
+          .locator('[data-testid="sortable-task-block"]')
+          .evaluateAll((els) => els.map((el) => el.getAttribute("data-task-id")))
+      ).filter((id) => id === parent.id || id === child.id);
+    const beforeOrder = await orderOf();
+
+    // Long-press the row: the TouchSensor arms at 250ms and the context menu
+    // opens at ~700ms; opening the menu must cancel that drag.
+    const cdp = await testPage.context().newCDPSession(testPage);
+    const handle = taskList
+      .locator(`[data-testid="sortable-task-block"][data-task-id="${child.id}"]`)
+      .getByTestId("sortable-task-handle");
+    await handle.scrollIntoViewIfNeeded();
+    await testPage.waitForTimeout(100);
+    const handleBox = await handle.boundingBox();
+    if (!handleBox) throw new Error("drag source handle has no bounding box");
+    const startX = handleBox.x + handleBox.width / 2;
+    const startY = handleBox.y + handleBox.height / 2;
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: startX, y: startY }],
+    });
+    await testPage.waitForTimeout(1200);
+    await expect(testPage.getByRole("menuitem", { name: /color/i })).toBeVisible();
+    // The long-press drag was cancelled when the menu opened: no nest zones
+    // render and the source row is not dimmed.
+    await expect(taskList.getByTestId("nest-drop-zone")).toHaveCount(0);
+    await expect(handle).not.toHaveCSS("opacity", "0.5");
+
+    // Keep the finger down and drag inside the open menu: the row must not
+    // move or reorder.
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: startX + 40, y: startY + 40 }],
+    });
+    await testPage.waitForTimeout(100);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+
+    await expect.poll(async () => await orderOf()).toEqual(beforeOrder);
+    await expect.poll(async () => (await apiClient.getTask(child.id)).parent_id ?? "").toBe("");
+  });
 });

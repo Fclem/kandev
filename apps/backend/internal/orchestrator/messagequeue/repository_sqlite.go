@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	"github.com/kandev/kandev/internal/db"
+	internaldb "github.com/kandev/kandev/internal/db"
 )
 
 // sqliteRepository persists queued messages and pending moves.
@@ -135,7 +135,7 @@ func (r *sqliteRepository) initSchema() error {
 	// Existing installations may have the pre-audit shape; fresh installs
 	// already get the column from CREATE TABLE above, so this replays as a
 	// duplicate-column error there.
-	if _, alterErr := r.db.Exec(`ALTER TABLE pending_moves ADD COLUMN actor TEXT NOT NULL DEFAULT ''`); alterErr != nil && !db.IsDuplicateColumnError(alterErr) {
+	if _, alterErr := r.db.Exec(`ALTER TABLE pending_moves ADD COLUMN actor TEXT NOT NULL DEFAULT ''`); alterErr != nil && !internaldb.IsDuplicateColumnError(alterErr) {
 		return alterErr
 	}
 	return nil
@@ -477,32 +477,62 @@ func lifecycleGenerationInTx(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, task
 	return generation, nil
 }
 
+// purgeTaskSessions returns the union of sessions that hold queued rows for
+// the task and the task's authoritative session set (task_sessions). A missing
+// task_sessions table is tolerated (the queue repository's isolated tests
+// create only queue tables); production databases always have it.
+func purgeTaskSessions(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string) ([]string, error) {
+	seen := make(map[string]struct{})
+	collect := func(query string) error {
+		rows, err := tx.QueryxContext(ctx, db.Rebind(query), taskID)
+		if err != nil {
+			if internaldb.IsMissingTableError(err) {
+				return nil
+			}
+			return err
+		}
+		for rows.Next() {
+			var sessionID string
+			if err := rows.Scan(&sessionID); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("scan purge session: %w", err)
+			}
+			seen[sessionID] = struct{}{}
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("iterate purge sessions: %w", err)
+		}
+		return rows.Close()
+	}
+	if err := collect(`SELECT DISTINCT session_id FROM queued_messages WHERE task_id = ?`); err != nil {
+		return nil, err
+	}
+	if err := collect(`SELECT id FROM task_sessions WHERE task_id = ?`); err != nil {
+		return nil, err
+	}
+	sessions := make([]string, 0, len(seen))
+	for sessionID := range seen {
+		sessions = append(sessions, sessionID)
+	}
+	return sessions, nil
+}
+
 // PurgeTaskInTransaction lets the task repository make archive/delete and
 // durable queue invalidation one SQLite transaction. It is backend-internal:
 // user queue handlers must keep using ownership-checked deletion methods.
 func PurgeTaskInTransaction(ctx context.Context, tx *sqlx.Tx, db *sqlx.DB, taskID string) (int, error) {
 	// Serialize with per-session tail operations: a purge that races a fold
 	// or insert could otherwise delete a row an admission just accepted, or
-	// admit into a queue being purged. Lock every affected session in sorted
-	// order — the same ordering every multi-session lock uses — so concurrent
-	// purges and queue mutations cannot deadlock.
-	rows, err := tx.QueryxContext(ctx, db.Rebind(`
-		SELECT DISTINCT session_id FROM queued_messages WHERE task_id = ?
-	`), taskID)
+	// admit into a queue being purged. Lock the AUTHORITATIVE session set —
+	// the task's sessions, not just sessions that currently hold queue rows:
+	// a session that is empty at discovery time could otherwise admit a task
+	// row during the purge and have it survive the DELETE snapshot. Locks are
+	// taken in sorted order — the same ordering every multi-session lock uses
+	// — so concurrent purges and queue mutations cannot deadlock.
+	sessions, err := purgeTaskSessions(ctx, tx, db, taskID)
 	if err != nil {
-		return 0, fmt.Errorf("list purge sessions: %w", err)
-	}
-	var sessions []string
-	for rows.Next() {
-		var sessionID string
-		if err := rows.Scan(&sessionID); err != nil {
-			_ = rows.Close()
-			return 0, fmt.Errorf("scan purge session: %w", err)
-		}
-		sessions = append(sessions, sessionID)
-	}
-	if err := rows.Close(); err != nil {
-		return 0, fmt.Errorf("close purge sessions: %w", err)
+		return 0, err
 	}
 	sort.Strings(sessions)
 	for _, sessionID := range sessions {

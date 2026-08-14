@@ -190,6 +190,15 @@ func (r *Repository) deleteWorkspaceCascade(
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Lock the workspace row BEFORE inventorying its tasks: task creation
+	// takes the same lock, so a task created after this point either commits
+	// before the inventory (and is purged with the rest) or blocks until the
+	// cascade commits, when the workspace is gone and its insert fails. An
+	// unlocked inventory could miss a task created mid-cascade and leave its
+	// queued messages orphaned after the task rows are deleted.
+	if err := r.lockWorkspaceRowInTx(ctx, tx, id); err != nil {
+		return nil, nil, err
+	}
 	if expectedName != nil {
 		if err := r.confirmWorkspaceNameForCascadeDelete(ctx, tx, id, *expectedName); err != nil {
 			return nil, nil, err

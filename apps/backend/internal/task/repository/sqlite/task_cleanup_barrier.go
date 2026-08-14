@@ -47,3 +47,38 @@ func (r *Repository) taskCleanupBarrierLocked(ctx context.Context, tx *sqlx.Tx, 
 	}
 	return nil
 }
+
+// lockTaskRowInTx takes the task row lock (Postgres SELECT FOR UPDATE; SQLite
+// serializes via its single writer). It is the raw row lock behind the
+// creation barrier, used by lifecycle paths that must serialize against
+// session/worktree creation but should not be rejected by an in-flight
+// cleanup job.
+func (r *Repository) lockTaskRowInTx(ctx context.Context, tx *sqlx.Tx, taskID string) error {
+	if !dialect.IsPostgres(r.db.DriverName()) {
+		return nil
+	}
+	var lockedTaskID string
+	if err := tx.QueryRowContext(ctx, r.db.Rebind(
+		`SELECT id FROM tasks WHERE id = ? FOR UPDATE`,
+	), taskID).Scan(&lockedTaskID); err != nil {
+		return fmt.Errorf("lock task row: %w", err)
+	}
+	return nil
+}
+
+// lockWorkspaceRowInTx takes the workspace row lock (Postgres SELECT FOR
+// UPDATE; SQLite serializes via its single writer). Task creation and the
+// workspace delete cascade take it so a task created after a cascade's
+// inventory cannot escape the queue purge.
+func (r *Repository) lockWorkspaceRowInTx(ctx context.Context, tx *sqlx.Tx, workspaceID string) error {
+	if !dialect.IsPostgres(r.db.DriverName()) {
+		return nil
+	}
+	var lockedWorkspaceID string
+	if err := tx.QueryRowContext(ctx, r.db.Rebind(
+		`SELECT id FROM workspaces WHERE id = ? FOR UPDATE`,
+	), workspaceID).Scan(&lockedWorkspaceID); err != nil {
+		return fmt.Errorf("lock workspace row: %w", err)
+	}
+	return nil
+}

@@ -2,6 +2,7 @@ package messagequeue
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -35,6 +36,46 @@ func newTestPostgresRepo(t *testing.T) Repository {
 // TestPostgresRepository_MergeDrainOrdering_DrainWins asserts the drain-wins
 // ordering of the merge/drain race: after the source drains, a merge reports
 // ErrEntryNotFound and the target is untouched, so no content is lost.
+// pgBackendPID returns the backend PID of the repository's single connection,
+// used to scope pg_locks barrier polls to this test's worker: transactionid
+// waits are server-global, so an unrelated waiter from a concurrently running
+// package could otherwise false-trigger the barrier.
+func pgBackendPID(t *testing.T, db *sqlx.DB) int {
+	t.Helper()
+	var pid int
+	if err := db.QueryRow(`SELECT pg_backend_pid()`).Scan(&pid); err != nil {
+		t.Fatalf("pg_backend_pid: %v", err)
+	}
+	return pid
+}
+
+// waitForWaitingLocks polls pg_locks for the expected number of NOT-granted
+// transactionid waits owned by the given backend PID, scoping the barrier to
+// this test's worker. The poller must be the held transaction's connection
+// (each test handle has a single connection busy inside its lock tx).
+func waitForWaitingLocks(t *testing.T, poller interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, backendPID, want int, what string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := poller.QueryRowContext(context.Background(), `
+			SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'transactionid' AND pid = $1
+		`, backendPID).Scan(&waiting); err != nil {
+			t.Fatalf("query pg_locks: %v", err)
+		}
+		if waiting >= want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never reached %d waiting lock(s)", what, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // newTestPostgresRepoPair opens one isolated Postgres schema (skipping unless
 // KANDEV_TEST_POSTGRES_DSN is set) and constructs two repository instances over
 // it. Two instances simulate two backend processes sharing one queue database:
@@ -132,27 +173,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_ConcurrentAdmissionCanno
 
 	// Wait until B's UPDATE is queued on the row lock. Only then is B's read
 	// snapshot guaranteed to predate A's competing fold below.
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var waiting int
-		if err := lockTx.QueryRowContext(ctx, `
-			-- A blocked row-lock waiter is observable as an ungranted
-			-- transactionid lock on the blocking transaction; PostgreSQL has
-			-- no locktype='row' in pg_locks (tuple/transactionid are the
-			-- real ones).
-			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'transactionid'
-		`).Scan(&waiting); err != nil {
-			t.Fatalf("query pg_locks: %v", err)
-		}
-		if waiting > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("instance B fold never blocked on the tail row lock")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "instance B fold on the tail row lock")
 
 	// Instance A's competing fold commits first.
 	if _, err := lockTx.ExecContext(ctx, `
@@ -226,27 +247,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithReorderSkips(t *
 
 	// Wait until B's UPDATE is queued on the row lock, guaranteeing B's scan
 	// predates the reorder below.
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var waiting int
-		if err := lockTx.QueryRowContext(ctx, `
-			-- A blocked row-lock waiter is observable as an ungranted
-			-- transactionid lock on the blocking transaction; PostgreSQL has
-			-- no locktype='row' in pg_locks (tuple/transactionid are the
-			-- real ones).
-			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'transactionid'
-		`).Scan(&waiting); err != nil {
-			t.Fatalf("query pg_locks: %v", err)
-		}
-		if waiting > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("instance B fold never blocked on the tail row lock")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "instance B fold on the tail row lock")
 
 	// The concurrent reorder swaps only positions: "second" becomes the head.
 	if _, err := lockTx.ExecContext(ctx, `UPDATE queued_messages SET position = 1 WHERE id = $1`, second.ID); err != nil {
@@ -331,27 +332,7 @@ func TestPostgresRepository_AutoMergeCandidateIntoAbove_RaceWithInsertAbove(t *t
 	}()
 
 	// Wait until B's fold is queued on the session lock row.
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var waiting int
-		if err := lockTx.QueryRowContext(ctx, `
-			-- A blocked row-lock waiter is observable as an ungranted
-			-- transactionid lock on the blocking transaction; PostgreSQL has
-			-- no locktype='row' in pg_locks (tuple/transactionid are the
-			-- real ones).
-			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'transactionid'
-		`).Scan(&waiting); err != nil {
-			t.Fatalf("query pg_locks: %v", err)
-		}
-		if waiting > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("instance B fold never blocked on the session lock")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "instance B fold on the session lock")
 
 	// The competing backend drains the head and inserts a new row above the
 	// old tail, then commits before the fold can run.
@@ -434,27 +415,7 @@ func TestPostgresRepository_UpdateContentAndMetadata_RaceWithMerge(t *testing.T)
 	}()
 
 	// Wait until B's edit is queued on the session lock row.
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var waiting int
-		if err := lockTx.QueryRowContext(ctx, `
-			-- A blocked row-lock waiter is observable as an ungranted
-			-- transactionid lock on the blocking transaction; PostgreSQL has
-			-- no locktype='row' in pg_locks (tuple/transactionid are the
-			-- real ones).
-			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'transactionid'
-		`).Scan(&waiting); err != nil {
-			t.Fatalf("query pg_locks: %v", err)
-		}
-		if waiting > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("instance B edit never blocked on the session lock")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "instance B edit on the session lock")
 
 	// The merge commits its stale-snapshot write (fold target + delete
 	// source) while the edit is still waiting.
@@ -547,31 +508,10 @@ func TestPostgresRepository_TransferSession_RaceWithSourceInsert(t *testing.T) {
 		transferDone <- repoB.TransferSession(ctx, oldSession, newSession)
 	}()
 
-	waitForWaitingLocks := func(want int, what string) {
-		t.Helper()
-		deadline := time.Now().Add(10 * time.Second)
-		for {
-			var waiting int
-			if err := lockTx.QueryRowContext(ctx, `
-				-- A blocked row-lock waiter is observable as an ungranted
-				-- transactionid lock on the blocking transaction.
-				SELECT count(*) FROM pg_locks
-				WHERE NOT granted AND locktype = 'transactionid'
-			`).Scan(&waiting); err != nil {
-				t.Fatalf("query pg_locks: %v", err)
-			}
-			if waiting >= want {
-				return
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("%s never reached %d waiting lock(s)", what, want)
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	transferPID := pgBackendPID(t, repoB.(*sqliteRepository).db)
 
 	// Transfer blocked on the destination (holding the source lock).
-	waitForWaitingLocks(1, "transfer")
+	waitForWaitingLocks(t, lockTx, transferPID, 1, "transfer on the destination")
 
 	// The source-side admission must now block on the source lock held by the
 	// transfer.
@@ -580,7 +520,7 @@ func TestPostgresRepository_TransferSession_RaceWithSourceInsert(t *testing.T) {
 	go func() {
 		insertDone <- repoB.Insert(ctx, &admission, 0)
 	}()
-	waitForWaitingLocks(2, "source admission")
+	waitForWaitingLocks(t, lockTx, transferPID, 2, "source admission on the source lock")
 
 	// Release the destination: the transfer commits its move before the
 	// admission proceeds.
@@ -646,23 +586,7 @@ func TestPostgresRepository_AcknowledgeByID_RaceWithSessionLock(t *testing.T) {
 		ackDone <- repoB.AcknowledgeByID(ctx, "ack", entry.ID)
 	}()
 
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var waiting int
-		if err := lockTx.QueryRowContext(ctx, `
-			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'transactionid'
-		`).Scan(&waiting); err != nil {
-			t.Fatalf("query pg_locks: %v", err)
-		}
-		if waiting > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("ack never blocked on the session lock")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "ack on the session lock")
 
 	if err := lockTx.Commit(); err != nil {
 		t.Fatalf("commit lock tx: %v", err)
@@ -710,23 +634,7 @@ func TestPostgresRepository_SetPendingMove_RaceWithSessionLock(t *testing.T) {
 		})
 	}()
 
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var waiting int
-		if err := lockTx.QueryRowContext(ctx, `
-			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'transactionid'
-		`).Scan(&waiting); err != nil {
-			t.Fatalf("query pg_locks: %v", err)
-		}
-		if waiting > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("set pending move never blocked on the session lock")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "set pending move on the session lock")
 
 	if err := lockTx.Commit(); err != nil {
 		t.Fatalf("commit lock tx: %v", err)
@@ -784,23 +692,7 @@ func TestPostgresRepository_TakePendingMove_TwoTakersSerialized(t *testing.T) {
 		takeDone <- nil
 	}()
 
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var waiting int
-		if err := lockTx.QueryRowContext(ctx, `
-			SELECT count(*) FROM pg_locks
-			WHERE NOT granted AND locktype = 'transactionid'
-		`).Scan(&waiting); err != nil {
-			t.Fatalf("query pg_locks: %v", err)
-		}
-		if waiting > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("take pending move never blocked on the session lock")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForWaitingLocks(t, lockTx, pgBackendPID(t, repoB.(*sqliteRepository).db), 1, "take pending move on the session lock")
 
 	if err := lockTx.Commit(); err != nil {
 		t.Fatalf("commit lock tx: %v", err)

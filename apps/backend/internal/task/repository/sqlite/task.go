@@ -283,6 +283,20 @@ func (r *Repository) createTask(ctx context.Context, task *models.Task, targetSt
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Serialize with the workspace delete cascade: the cascade locks the
+	// workspace row before inventorying its tasks, so a task created here
+	// either commits before the cascade's inventory (and is purged with the
+	// rest) or blocks until the cascade finishes, when the workspace is gone
+	// and the insert fails its foreign key.
+	if dialect.IsPostgres(r.db.DriverName()) {
+		var lockedWorkspaceID string
+		if err := tx.QueryRowContext(ctx, r.db.Rebind(
+			`SELECT id FROM workspaces WHERE id = ? FOR UPDATE`,
+		), task.WorkspaceID).Scan(&lockedWorkspaceID); err != nil {
+			return fmt.Errorf("lock workspace for task creation: %w", err)
+		}
+	}
+
 	if err := r.ensureWorkflowStepCapacity(ctx, tx, targetStepID, limit); err != nil {
 		return err
 	}
@@ -1012,10 +1026,16 @@ func (r *Repository) DeleteTask(ctx context.Context, id string) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// Capture the authoritative session set BEFORE deleting the task row:
-	// task_sessions cascades on task deletion, and a post-delete discovery
-	// would miss sessions whose queues are empty, letting a concurrent
-	// admission survive the purge.
+	// Serialize with session/worktree creation FIRST (task-row lock), then
+	// capture the authoritative session set: a concurrent CreateTaskSession
+	// holds the same task-row barrier, so every session committed before this
+	// lock is visible to the capture and anything after blocks until the task
+	// row is gone. Capturing before the lock could use a stale set (a session
+	// created mid-flight would never be purged). The session capture must also
+	// precede the task-row DELETE because task_sessions cascades on deletion.
+	if err := r.lockTaskRowInTx(ctx, tx, id); err != nil {
+		return err
+	}
 	sessions, err := r.taskQueueSessionsInTx(ctx, tx, id)
 	if err != nil {
 		return err

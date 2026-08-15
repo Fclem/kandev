@@ -471,6 +471,7 @@ export function ChatInputArea({
         show={showAgentStartHint}
         needsRecovery={panelState.needsRecovery}
         executorUnavailable={executor.unavailable}
+        hasPendingClarification={Boolean(panelState.pendingClarification)}
       />
       <QueueAffordance
         sessionId={resolvedSessionId}

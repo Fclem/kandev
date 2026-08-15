@@ -10,21 +10,26 @@ import { useTranslation } from "react-i18next";
  *
  * The extra gates mirror the composer's own send-availability signals: a
  * session in recovery (needsRecovery — WAITING_FOR_INPUT with an error
- * message) disables the editor, and an unavailable executor environment
- * replaces it with the FailedSessionBanner. In both cases no message can be
- * sent, so promising that sending will start the agent would be a dead end.
+ * message) disables the editor, an unavailable executor environment
+ * replaces it with the FailedSessionBanner, and a pending clarification
+ * routes every submission to the message queue (which only persists —
+ * it does not resume the stopped agent). In all three cases no message can
+ * be delivered to the agent, so promising that sending will start it would
+ * be a dead end.
  */
 export function ComposerAgentStartHint({
   show,
   needsRecovery = false,
   executorUnavailable = false,
+  hasPendingClarification = false,
 }: {
   show: boolean;
   needsRecovery?: boolean;
   executorUnavailable?: boolean;
+  hasPendingClarification?: boolean;
 }) {
   const { t } = useTranslation();
-  if (!show || needsRecovery || executorUnavailable) return null;
+  if (!show || needsRecovery || executorUnavailable || hasPendingClarification) return null;
   return (
     <p data-testid="composer-agent-start-hint" className="px-1 pb-1 text-xs text-muted-foreground">
       {t("task:composerStartAgentHint")}

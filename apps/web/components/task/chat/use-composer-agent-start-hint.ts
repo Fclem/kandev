@@ -5,6 +5,7 @@ import type { Message, TaskSessionState } from "@/lib/types/http";
 import { useAppStore } from "@/components/state-provider";
 import { shouldShowComposerAgentStartHint } from "@/lib/session-state";
 
+/** True when any message in the list carries recovery-action metadata. */
 function hasRecoveryActions(messages: Message[]): boolean {
   return messages.some(
     (message) =>

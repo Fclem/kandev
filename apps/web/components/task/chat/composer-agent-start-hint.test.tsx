@@ -26,4 +26,9 @@ describe("ComposerAgentStartHint", () => {
     render(<ComposerAgentStartHint show executorUnavailable />);
     expect(screen.queryByTestId(HINT_TEST_ID)).toBeNull();
   });
+
+  it("renders nothing while a clarification is pending (sends only enqueue)", () => {
+    render(<ComposerAgentStartHint show hasPendingClarification />);
+    expect(screen.queryByTestId(HINT_TEST_ID)).toBeNull();
+  });
 });

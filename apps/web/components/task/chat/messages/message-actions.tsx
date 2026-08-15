@@ -218,7 +218,12 @@ function MessageDebugDialog({
         <DialogHeader className="shrink-0">
           <DialogTitle>{t("task:messageMetadataTitle")}</DialogTitle>
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 gap-3 overflow-auto pr-1">
+        <div
+          role="region"
+          aria-label={t("task:messageMetadataEntries")}
+          tabIndex={0}
+          className="grid min-h-0 flex-1 gap-3 overflow-auto pr-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
           {Object.entries(entries).map(([key, value]) => (
             <div key={key} className="grid gap-1">
               <div className="font-mono text-[10px] uppercase text-muted-foreground">{key}</div>

@@ -6,32 +6,10 @@
 import { test, expect, type Locator, type Page } from "../../fixtures/test-base";
 import type { ApiClient } from "../../helpers/api-client";
 import type { SeedData } from "../../fixtures/test-base";
+import { SEEDED_MESSAGE, largeTurnMetadata } from "../../helpers/message-metadata-fixtures";
 import { SessionPage } from "../../pages/session-page";
 
-const SEEDED_MESSAGE = "Message metadata overflow fixture";
-
-/** 40 config options make the runtime snapshot tall enough to overflow. */
-function largeTurnMetadata(): Record<string, unknown> {
-  return {
-    runtime_config_snapshot: {
-      config_baseline: {
-        mode: "default",
-        model: "anthropic/claude-sonnet-5",
-        thinking: "auto",
-      },
-      config_options: Array.from({ length: 40 }, (_, i) => ({
-        id: `opt_${i}`,
-        name: `Option ${i}`,
-        value: `v${i}`,
-        value_name: `Value ${i}`,
-      })),
-    },
-    prompt_usage: { input_tokens: 1234, output_tokens: 5678 },
-    agent_id: "agent-123",
-    agent_type: "task",
-  };
-}
-
+/** Seeds a task, session, and overflow-sized turn metadata message. */
 async function seedOverflowMessage(
   apiClient: ApiClient,
   seedData: SeedData,
@@ -137,6 +115,11 @@ test.describe("Chat message metadata dialog overflow", () => {
     expect(closeBox).not.toBeNull();
     expect(closeBox!.y).toBeGreaterThanOrEqual(dialogBox!.y);
     expect(closeBox!.y + closeBox!.height).toBeLessThanOrEqual(dialogBox!.y + dialogBox!.height);
+
+    // The entries scroll region must be keyboard-reachable so keyboard-only
+    // users can scroll to the overflowed turn_metadata field.
+    await entries.focus();
+    await expect(entries).toBeFocused();
 
     await close.click();
     await expect(dialog).toBeHidden();

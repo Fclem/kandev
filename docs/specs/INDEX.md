@@ -193,7 +193,7 @@ Subscription quota tracking and per-agent cheap-model profile routing.
 | [sidebar-queued-prompt-count](ui/sidebar-queued-prompt-count.md) | shipped |
 | [session-tab-delete-feedback](ui/session-tab-delete-feedback.md) | shipped |
 | [message-favorite-star-mobile-size](ui/message-favorite-star-mobile-size.md) | shipped |
-| [message-metadata-overflow](ui/message-metadata-overflow.md) | draft |
+| [message-metadata-overflow](ui/message-metadata-overflow.md) | shipped |
 | [slash-command-composer](ui/slash-command-composer.md) | shipped |
 | [subagent-observability](ui/subagent-observability.md) | building |
 | [entity-reference-composer](ui/entity-reference-composer.md) | draft |

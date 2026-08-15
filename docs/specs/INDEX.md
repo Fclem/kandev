@@ -261,6 +261,7 @@ System pages (Radarr/Sonarr-style) for status, disk usage, database maintenance,
 | [agent-stall-recovery](agent-stall-recovery/spec.md) | approved |
 | [mcp-session-observability](mcp-session-observability/spec.md) | approved |
 | [auth](auth/spec.md) | building |
+| [auth — self-actions guard](auth/self-actions-guard.md) | shipped |
 | [create-local-repository](create-local-repository/spec.md) | shipped |
 | [workflow-cycle-guardrails](workflow-cycle-guardrails/spec.md) | building |
 | [improve-kandev](improve-kandev/spec.md) | building |

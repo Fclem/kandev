@@ -585,6 +585,9 @@ type seedMessageRequest struct {
 	TurnMetadata map[string]interface{} `json:"turn_metadata,omitempty"`
 }
 
+// seedMessageHandler inserts a synthetic agent message, ensuring an active
+// turn exists for the session and applying optional turn_metadata to it so
+// e2e specs can exercise the message metadata dialog end to end.
 func seedMessageHandler(repo *sqliterepo.Repository, eventBus bus.EventBus, log *logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req seedMessageRequest

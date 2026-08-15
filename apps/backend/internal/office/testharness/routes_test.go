@@ -442,6 +442,9 @@ func TestSeedMessageRejectsUnknownSession(t *testing.T) {
 	}
 }
 
+// TestSeedMessagePersistsTurnMetadata covers the harness turn-metadata
+// contract: a later seed updates the pre-existing active turn's metadata, and
+// a seed without turn_metadata leaves existing metadata untouched.
 func TestSeedMessagePersistsTurnMetadata(t *testing.T) {
 	repo, sqlxDB := newTestRepo(t)
 	taskID := uuid.New().String()

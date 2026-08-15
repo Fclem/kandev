@@ -1163,6 +1163,11 @@ export class ApiClient {
     return this.request("POST", "/api/v1/_test/task-sessions", body);
   }
 
+  /**
+   * Seeds an agent message via the e2e harness. `metadata` lands on the
+   * message row; `turnMetadata` is persisted on the ensured turn so specs can
+   * exercise the metadata dialog's `turn_metadata` field.
+   */
   async seedSessionMessage(
     sessionId: string,
     opts: {

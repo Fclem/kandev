@@ -189,6 +189,11 @@ function MetadataValue({ value }: { value: unknown }) {
   );
 }
 
+/**
+ * Debug dialog exposing a message's persisted and turn-derived metadata. The
+ * entries area is a keyboard-focusable scroll region so long fields (e.g.
+ * `turn_metadata`) stay reachable on every input modality.
+ */
 function MessageDebugDialog({
   message,
   turn,

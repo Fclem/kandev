@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import path from "node:path";
 import { backendFixture as test } from "../../fixtures/backend";
 import { login, setupAdmin } from "../../helpers/auth";
 
@@ -10,9 +11,20 @@ import { login, setupAdmin } from "../../helpers/auth";
  *
  * Runs in the `auth` project (backend restarted with auth required). Serial:
  * shares the admin and users created inside the single test.
+ *
+ * Isolation: the worker-scoped backend fixture and `restart()` preserve the
+ * SQLite DB, and auth setup is single-shot per database. This spec restarts
+ * with its own database path so the full auth project stays deterministic in
+ * either file order (auth-screenshots.spec.ts sets up the same admin email on
+ * the baseline database).
  */
 const ADMIN = { email: "admin@demo.dev", password: "adminpass123", displayName: "Ada Admin" };
 const MEMBER = { email: "sam@demo.dev", password: "memberpass123", displayName: "Sam Member" };
+const DISABLED_ADMIN = {
+  email: "carol@demo.dev",
+  password: "carolpass123",
+  displayName: "Carol Admin (off)",
+};
 const SECOND_ADMIN = { email: "bob@demo.dev", password: "bobpass123", displayName: "Bob Admin" };
 
 /** Reads `user.id` from an API response body, narrowing the unknown shape. */
@@ -29,8 +41,12 @@ function responseUserId(body: unknown): string {
 test.describe.serial("users self-actions guard", () => {
   test.beforeAll(async ({ backend }) => {
     // The features.auth flag turns authentication on (setup mode) and reveals
-    // the admin surfaces.
-    await backend.restart({ KANDEV_FEATURES_AUTH: "true" });
+    // the admin surfaces. A per-file database keeps setup single-shot from
+    // colliding with other auth specs sharing the worker.
+    await backend.restart({
+      KANDEV_FEATURES_AUTH: "true",
+      KANDEV_DATABASE_PATH: path.join(backend.tmpDir, "kandev-auth-self-actions.db"),
+    });
   });
 
   test.afterAll(async ({ backend }) => {
@@ -83,7 +99,37 @@ test.describe.serial("users self-actions guard", () => {
     });
     expect(selfDemote.status(), await selfDemote.text()).toBe(409);
 
-    // A second active admin lifts the guard.
+    // A disabled admin is NOT an active admin: the guard does not apply to
+    // its toggles, and counting it must not lift the sole active admin's
+    // disablement (regression: dropping `status === "active"` in either the
+    // count or the per-row condition would flip these two assertions).
+    const disabledRes = await ctx.request.post(`${backend.baseUrl}/api/v1/users`, {
+      data: {
+        email: DISABLED_ADMIN.email,
+        password: DISABLED_ADMIN.password,
+        display_name: DISABLED_ADMIN.displayName,
+        role: "member",
+      },
+    });
+    expect(disabledRes.status(), await disabledRes.text()).toBe(201);
+    const disabledAdminId = responseUserId(await disabledRes.json());
+    const promote = await ctx.request.patch(`${backend.baseUrl}/api/v1/users/${disabledAdminId}`, {
+      data: { role: "admin" },
+    });
+    expect(promote.status(), await promote.text()).toBe(200);
+    const disable = await ctx.request.patch(`${backend.baseUrl}/api/v1/users/${disabledAdminId}`, {
+      data: { status: "disabled" },
+    });
+    expect(disable.status(), await disable.text()).toBe(200);
+
+    await page.reload();
+    const disabledAdminRow = page.locator(`[data-user-id="${disabledAdminId}"]`);
+    await expect(ownRow.getByTestId("users-table-toggle-role")).toBeDisabled();
+    await expect(ownRow.getByTestId("users-table-toggle-status")).toBeDisabled();
+    await expect(disabledAdminRow.getByTestId("users-table-toggle-role")).toBeEnabled();
+    await expect(disabledAdminRow.getByTestId("users-table-toggle-status")).toBeEnabled();
+
+    // A second active admin lifts the guard on every active-admin row.
     const secondRes = await ctx.request.post(`${backend.baseUrl}/api/v1/users`, {
       data: {
         email: SECOND_ADMIN.email,
@@ -93,10 +139,14 @@ test.describe.serial("users self-actions guard", () => {
       },
     });
     expect(secondRes.status(), await secondRes.text()).toBe(201);
+    const secondAdminId = responseUserId(await secondRes.json());
 
     await page.reload();
+    const secondAdminRow = page.locator(`[data-user-id="${secondAdminId}"]`);
     await expect(ownRow.getByTestId("users-table-toggle-role")).toBeEnabled();
     await expect(ownRow.getByTestId("users-table-toggle-status")).toBeEnabled();
+    await expect(secondAdminRow.getByTestId("users-table-toggle-role")).toBeEnabled();
+    await expect(secondAdminRow.getByTestId("users-table-toggle-status")).toBeEnabled();
 
     // No new backend behavior: self-demotion is allowed again once another
     // active admin exists.

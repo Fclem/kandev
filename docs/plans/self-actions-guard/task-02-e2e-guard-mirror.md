@@ -88,3 +88,15 @@ blockers, and risks. Update this task and `plan.md` in the same conversation.
   tests/auth/users-self-actions.spec.ts` → 1 passed (7.6s).
 - The spec also proves the backend is unchanged: sole-admin self-PATCH
   `{role:"member"}` → 409; after a second active admin, same PATCH → 200.
+- Review fixup (luna round 1): `beforeAll` now restarts with a per-file
+  `KANDEV_DATABASE_PATH` inside the fixture tmpDir. The worker-scoped
+  fixture and `restart()` preserve the SQLite DB and auth setup is
+  single-shot, so two auth specs sharing the worker collided regardless of
+  admin email; the isolated DB keeps the full `--project auth` suite
+  deterministic in either file order. Coverage widened: a disabled-admin row
+  is created and asserted enabled while the sole active admin stays disabled
+  (catches dropping `status === "active"` from the count or the per-row
+  condition), and both active-admin rows are asserted enabled after the
+  second admin is added.
+- Full auth project run: `pnpm e2e:run --no-build --project auth tests/auth/`
+  → exit 0, 15 passed (both spec files in one worker).

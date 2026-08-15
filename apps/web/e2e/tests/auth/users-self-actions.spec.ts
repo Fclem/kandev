@@ -2,6 +2,7 @@ import { expect } from "@playwright/test";
 import path from "node:path";
 import { backendFixture as test } from "../../fixtures/backend";
 import { login, setupAdmin } from "../../helpers/auth";
+import { responseUserId } from "./users-auth-helpers";
 
 /**
  * The Users page must grey out the role/status toggles on an active-admin row
@@ -26,17 +27,6 @@ const DISABLED_ADMIN = {
   displayName: "Carol Admin (off)",
 };
 const SECOND_ADMIN = { email: "bob@demo.dev", password: "bobpass123", displayName: "Bob Admin" };
-
-/** Reads `user.id` from an API response body, narrowing the unknown shape. */
-function responseUserId(body: unknown): string {
-  if (body && typeof body === "object" && "user" in body) {
-    const user = body.user;
-    if (user && typeof user === "object" && "id" in user) {
-      return String(user.id);
-    }
-  }
-  throw new Error("API response is missing user.id");
-}
 
 test.describe.serial("users self-actions guard", () => {
   test.beforeAll(async ({ backend }) => {

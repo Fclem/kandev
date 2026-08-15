@@ -100,3 +100,10 @@ blockers, and risks. Update this task and `plan.md` in the same conversation.
   second admin is added.
 - Full auth project run: `pnpm e2e:run --no-build --project auth tests/auth/`
   → exit 0, 15 passed (both spec files in one worker).
+- Review fixup (luna round 2, mobile parity): added
+  `apps/web/e2e/tests/auth/mobile-users-self-actions.spec.ts` (runs in the
+  `mobile-chrome` Pixel 5 project via a `testIgnore` on the desktop `auth`
+  project) asserting the same disabled/enabled states at the mobile viewport,
+  plus the shared `users-auth-helpers.ts` used by both specs. Mobile run:
+  `pnpm e2e:run --no-build --project mobile-chrome
+  tests/auth/mobile-users-self-actions.spec.ts` → 1 passed (8.1s).

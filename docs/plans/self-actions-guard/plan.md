@@ -118,12 +118,14 @@ CI.
 ## Mobile parity
 
 The change adds a `disabled` attribute to two buttons in the shared
-`users-table.tsx` component. No layout, touch behavior, scrolling, navigation,
-or viewport-dependent interaction changes; the Users page has no
-mobile-specific variant and the `auth` Playwright project is desktop-only by
-design (`e2e/playwright.config.ts`). The disabled state renders identically at
-all viewports via the same component. No mobile spec is added; the desktop
-auth-project spec covers the contract.
+`users-table.tsx` component; layout, scrolling, navigation, and touch targets
+are unchanged, and the state derivation is shared markup. Mobile coverage is
+still provided: `apps/web/e2e/tests/auth/mobile-users-self-actions.spec.ts`
+runs in the `mobile-chrome` project (Pixel 5) with the same per-file isolated
+auth database and asserts the sole-admin own row is disabled while member and
+disabled-admin rows stay enabled, plus re-enablement after a second active
+admin. It is routed out of the desktop `auth` project via its `testIgnore`
+(`e2e/playwright.config.ts`) so it runs exactly once, on the mobile viewport.
 
 ## Recorded Results
 

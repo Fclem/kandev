@@ -48,7 +48,10 @@ async function openMetadataDialog(
 
   const dialog = page.locator('[data-slot="dialog-content"]');
   await expect(dialog).toBeVisible();
-  const entries = dialog.locator("> div.grid").first();
+  // Strict locator: Playwright fails the test if the selector ever resolves
+  // to more than one entries container (the header is the only other direct
+  // child and carries data-slot="dialog-header").
+  const entries = dialog.locator("> div.grid");
   await expect(entries).toBeVisible();
   return { dialog, entries, turnLabel: dialog.getByText("turn_metadata", { exact: true }) };
 }

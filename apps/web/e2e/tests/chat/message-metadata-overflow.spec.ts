@@ -58,8 +58,9 @@ async function openMetadataDialog(
   const dialog = page.locator('[data-slot="dialog-content"]');
   await expect(dialog).toBeVisible();
   // The entries container is the dialog's only direct `div.grid` child (the
-  // header carries data-slot="dialog-header").
-  const entries = dialog.locator("> div.grid").first();
+  // header carries data-slot="dialog-header"). Strict locator: Playwright
+  // fails the test if the selector ever resolves to more than one container.
+  const entries = dialog.locator("> div.grid");
   await expect(entries).toBeVisible();
   return {
     dialog,

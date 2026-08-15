@@ -260,6 +260,7 @@ System pages (Radarr/Sonarr-style) for status, disk usage, database maintenance,
 | [agent-resume-runtime-recovery](agent-resume-runtime-recovery/spec.md) | shipped |
 | [agent-stall-recovery](agent-stall-recovery/spec.md) | approved |
 | [mcp-session-observability](mcp-session-observability/spec.md) | approved |
+| [subagent-context-persistence](subagent-context-persistence/spec.md) | draft |
 | [auth](auth/spec.md) | building |
 | [auth — self-actions guard](auth/self-actions-guard.md) | shipped |
 | [create-local-repository](create-local-repository/spec.md) | shipped |

@@ -385,57 +385,70 @@ func responseScriptNonce(resp *http.Response, body []byte) string {
 	for _, policy := range resp.Header.Values("Content-Security-Policy") {
 		collect(policy)
 	}
+	scanMetaCSPPolicies(body, collect)
+	if len(constraining) == 0 {
+		return fallback
+	}
+	return intersectNonceSets(constraining)
+}
+
+// scanMetaCSPPolicies walks an HTML body and invokes collect for every
+// Content-Security-Policy meta tag (attributes decoded, any order, exact
+// http-equiv key; every meta examined so a nonce-free policy cannot hide a
+// later nonce-bearing one).
+func scanMetaCSPPolicies(body []byte, collect func(string)) {
 	tok := html.NewTokenizer(bytes.NewReader(body))
 	for {
 		tt := tok.Next()
-		switch tt {
-		case html.ErrorToken:
-			if len(constraining) == 0 {
-				return fallback
+		if tt == html.ErrorToken {
+			return
+		}
+		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
+			continue
+		}
+		name, hasAttr := tok.TagName()
+		if !bytes.Equal(name, []byte("meta")) || !hasAttr {
+			continue
+		}
+		var equiv, content string
+		for {
+			key, val, more := tok.TagAttr()
+			switch {
+			case bytes.EqualFold(key, []byte("http-equiv")):
+				equiv = string(val)
+			case bytes.EqualFold(key, []byte("content")):
+				content = string(val)
 			}
-			// Intersect the candidate sets in order: any candidate must be
-			// present in every constraining policy.
-			candidates := constraining[0]
-			for _, set := range constraining[1:] {
-				kept := candidates[:0]
-				for _, c := range candidates {
-					for _, s := range set {
-						if c == s {
-							kept = append(kept, c)
-							break
-						}
-					}
-				}
-				candidates = kept
-				if len(candidates) == 0 {
-					return ""
-				}
+			if !more {
+				break
 			}
-			return candidates[0]
-		case html.StartTagToken, html.SelfClosingTagToken:
-			name, hasAttr := tok.TagName()
-			if !bytes.Equal(name, []byte("meta")) || !hasAttr {
-				continue
-			}
-			var equiv, content string
-			for {
-				key, val, more := tok.TagAttr()
-				switch {
-				case bytes.EqualFold(key, []byte("http-equiv")):
-					equiv = string(val)
-				case bytes.EqualFold(key, []byte("content")):
-					content = string(val)
-				}
-				if !more {
-					break
-				}
-			}
-			if !strings.EqualFold(strings.TrimSpace(equiv), "content-security-policy") {
-				continue
-			}
+		}
+		if strings.EqualFold(strings.TrimSpace(equiv), "content-security-policy") {
 			collect(content)
 		}
 	}
+}
+
+// intersectNonceSets returns the first candidate present in every
+// constraining set, or "" when the intersection is empty.
+func intersectNonceSets(constraining [][]string) string {
+	candidates := constraining[0]
+	for _, set := range constraining[1:] {
+		kept := candidates[:0]
+		for _, c := range candidates {
+			for _, s := range set {
+				if c == s {
+					kept = append(kept, c)
+					break
+				}
+			}
+		}
+		candidates = kept
+		if len(candidates) == 0 {
+			return ""
+		}
+	}
+	return candidates[0]
 }
 
 // shimCapabilityJS returns the JavaScript spliced into the shim's path

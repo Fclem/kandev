@@ -15,11 +15,7 @@ describe("usePreviewConsoleForwarder", () => {
     return { current: { contentWindow } } as RefObject<HTMLIFrameElement | null>;
   }
 
-  function dispatchMessage(
-    data: unknown,
-    origin: string,
-    source: unknown,
-  ) {
+  function dispatchMessage(data: unknown, origin: string, source: unknown) {
     window.dispatchEvent(
       new MessageEvent("message", { data, origin, source: source as MessageEventSource }),
     );
@@ -71,7 +67,11 @@ describe("usePreviewConsoleForwarder", () => {
     renderHook(() => usePreviewConsoleForwarder(makeIframeRef(contentWindow)));
 
     act(() => {
-      dispatchMessage({ source: "kandev-inspector", type: "other" }, window.location.origin, contentWindow);
+      dispatchMessage(
+        { source: "kandev-inspector", type: "other" },
+        window.location.origin,
+        contentWindow,
+      );
     });
 
     expect(log).not.toHaveBeenCalled();

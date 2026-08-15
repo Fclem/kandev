@@ -1169,11 +1169,13 @@ export class ApiClient {
       type: string;
       content?: string;
       metadata?: Record<string, unknown>;
+      turnMetadata?: Record<string, unknown>;
     },
   ): Promise<void> {
     const body: Record<string, unknown> = { session_id: sessionId, type: opts.type };
     if (opts.content !== undefined) body.content = opts.content;
     if (opts.metadata !== undefined) body.metadata = opts.metadata;
+    if (opts.turnMetadata !== undefined) body.turn_metadata = opts.turnMetadata;
     await this.request("POST", "/api/v1/_test/messages", body);
   }
 

@@ -579,6 +579,10 @@ type seedMessageRequest struct {
 	Type      string                 `json:"type"`
 	Content   string                 `json:"content,omitempty"`
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	// TurnMetadata is persisted on the ensured turn (the same turn the seeded
+	// message is attached to), so e2e specs can exercise the message metadata
+	// dialog's turn_metadata field end to end.
+	TurnMetadata map[string]interface{} `json:"turn_metadata,omitempty"`
 }
 
 func seedMessageHandler(repo *sqliterepo.Repository, eventBus bus.EventBus, log *logger.Logger) gin.HandlerFunc {
@@ -608,6 +612,21 @@ func seedMessageHandler(repo *sqliterepo.Repository, eventBus bus.EventBus, log 
 			log.Error("test harness: ensure turn failed", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+
+		if req.TurnMetadata != nil {
+			turn, err := repo.GetTurn(ctx, turnID)
+			if err != nil {
+				log.Error("test harness: get turn failed", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			turn.Metadata = req.TurnMetadata
+			if err := repo.UpdateTurn(ctx, turn); err != nil {
+				log.Error("test harness: update turn metadata failed", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
 		}
 
 		meta := req.Metadata

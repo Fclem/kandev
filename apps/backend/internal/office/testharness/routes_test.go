@@ -442,6 +442,67 @@ func TestSeedMessageRejectsUnknownSession(t *testing.T) {
 	}
 }
 
+func TestSeedMessagePersistsTurnMetadata(t *testing.T) {
+	repo, sqlxDB := newTestRepo(t)
+	taskID := uuid.New().String()
+	seedTask(t, sqlxDB, taskID)
+	r := newRouter(t, repo, nil)
+
+	sessBody := mustJSON(t, map[string]interface{}{
+		"task_id": taskID,
+		"state":   "RUNNING",
+	})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/_test/task-sessions", bytes.NewReader(sessBody))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("session seed: expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var sessResp seedTaskSessionResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &sessResp)
+
+	turnMeta := map[string]interface{}{
+		"runtime_config_snapshot": map[string]interface{}{
+			"config_baseline": map[string]interface{}{"mode": "default", "model": "anthropic/claude-sonnet-5"},
+			"config_options": []interface{}{
+				map[string]interface{}{"id": "mode", "name": "Mode", "value": "default", "value_name": "Default"},
+			},
+		},
+	}
+	msgBody := mustJSON(t, map[string]interface{}{
+		"session_id":    sessResp.SessionID,
+		"type":          "message",
+		"content":       "hello world",
+		"turn_metadata": turnMeta,
+	})
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/_test/messages", bytes.NewReader(msgBody))
+	req2.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w2.Code, w2.Body.String())
+	}
+
+	turn, err := repo.GetActiveTurnBySessionID(context.Background(), sessResp.SessionID)
+	if err != nil {
+		t.Fatalf("get active turn: %v", err)
+	}
+	if turn == nil {
+		t.Fatal("expected an active turn for the session")
+	}
+	if turn.Metadata == nil {
+		t.Fatal("expected turn metadata to be persisted")
+	}
+	snapshot, ok := turn.Metadata["runtime_config_snapshot"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected runtime_config_snapshot object, got %#v", turn.Metadata["runtime_config_snapshot"])
+	}
+	if snapshot["config_baseline"] == nil {
+		t.Fatal("expected config_baseline inside the snapshot")
+	}
+}
+
 // The depth-1 guard lives in the task SERVICE; the harness writes through the
 // repository so e2e tests can build arbitrary parent_id chains (depth >= 2),
 // which is the only way to exercise the sidebar's multi-level rendering.

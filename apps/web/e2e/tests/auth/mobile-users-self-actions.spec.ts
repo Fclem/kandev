@@ -1,4 +1,4 @@
-import { expect } from "@playwright/test";
+import { devices, expect } from "@playwright/test";
 import path from "node:path";
 import { backendFixture as test } from "../../fixtures/backend";
 import { login, setupAdmin } from "../../helpers/auth";
@@ -38,7 +38,12 @@ test.describe.serial("users self-actions guard (mobile)", () => {
   });
 
   test("own-row toggles track the last-admin guard on mobile", async ({ browser, backend }) => {
-    const ctx = await browser.newContext({ baseURL: backend.frontendUrl });
+    // Manual contexts do not inherit the project's device options; spread
+    // them explicitly so this spec actually exercises the mobile viewport.
+    const ctx = await browser.newContext({
+      ...devices["Pixel 5"],
+      baseURL: backend.frontendUrl,
+    });
     await setupAdmin(ctx, backend.baseUrl, ADMIN);
     await login(ctx, backend.baseUrl, ADMIN);
 
@@ -83,6 +88,10 @@ test.describe.serial("users self-actions guard (mobile)", () => {
     ).toBe(200);
 
     const page = await ctx.newPage();
+    // Guard against the manual-context device regression: the assertions
+    // below must run on the Pixel 5 width (393 CSS px; headless mobile
+    // emulation trims the height, so only the width is pinned).
+    expect((await page.viewportSize())?.width).toBe(393);
     await page.goto("/settings/system/users");
     const ownRow = page.locator(`[data-user-id="${adminId}"]`);
     const memberRow = page.locator(`[data-user-id="${memberId}"]`);

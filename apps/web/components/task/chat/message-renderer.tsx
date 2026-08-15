@@ -69,6 +69,11 @@ export function shouldShowDescriptionStartButton({
   return sessionState === "CREATED" && taskState !== "SCHEDULING" && !!taskId && !!sessionId;
 }
 
+/**
+ * "Start agent" button inside the task-description message, shown only for
+ * never-started (CREATED) sessions. Dispatches the start_created launch and
+ * hides while the workspace environment is being prepared.
+ */
 function TaskDescriptionStartButton({ taskId, sessionId }: { taskId: string; sessionId: string }) {
   const { t } = useTranslation();
   const [isStarting, setIsStarting] = useState(false);

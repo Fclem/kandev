@@ -501,6 +501,11 @@ type ChatFooterProps = {
   showAgentStartHint: boolean;
 };
 
+/**
+ * Composer footer: renders the chat input area (or the read-only archived
+ * banner) and forwards the recovered-idle agent-start-hint visibility from
+ * the panel down to the input.
+ */
 function ChatFooter({
   isArchived,
   chatInputRef,

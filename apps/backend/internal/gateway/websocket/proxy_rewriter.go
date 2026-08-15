@@ -76,7 +76,7 @@ const runtimeShimTemplate = `(function(){` +
 	// trims it at fetch time. %s is the optional capability-append logic
 	// (empty when no capability is minted, keeping the auth-disabled output
 	// free of capability bytes).
-	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(nz(u).charAt(0)!=='/'&&!insub(ru))return u;u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd=rd(u);if(!(dd===P||dd.charAt(P.length)==='/'||dd.charAt(P.length)==='?'||dd.charAt(P.length)==='#'))return u;u=dd}}%sreturn u;}` +
+	`function r(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#'||u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}if(nz(u).charAt(0)!=='/'&&!insub(ru))return u;u=nz(u);if(u.charAt(0)==='/'){if(!(u===P||u.indexOf(P+'/')===0||u.indexOf(P+'?')===0||u.indexOf(P+'#')===0))u=P+u;if(u.indexOf('/.')!==-1){var dd=rd(u);if(!(dd===P||dd.indexOf(P+'/')===0||dd.indexOf(P+'?')===0||dd.indexOf(P+'#')===0))return u;u=dd}}%sreturn u;}` +
 	// insub(ru): reports whether a resolved URL's path is boundary-inside
 	// the proxy subtree. Root-absolute references are always rewritten INTO
 	// the subtree by the prefix, but relative references resolve against the
@@ -84,7 +84,7 @@ const runtimeShimTemplate = `(function(){` +
 	// outside P (e.g. a same-origin <base href="http://gw/outside/">), the
 	// capability must not be appended (it would ride the bearer to a
 	// non-proxy gateway endpoint).
-	`function insub(ru){var p=ru.pathname;return p===P||p.charAt(P.length)==='/'||p.charAt(P.length)==='?'||p.charAt(P.length)==='#'}` +
+	`function insub(ru){var p=ru.pathname;return p===P||p.indexOf(P+'/')===0||p.indexOf(P+'?')===0||p.indexOf(P+'#')===0}` +
 	// Navigation rewriter: same prefixing WITHOUT the capability. Navigation
 	// APIs (history.pushState, location.assign) put the URL in the address bar
 	// and browser history; embedding a bearer there would leak it through
@@ -109,7 +109,7 @@ const runtimeShimTemplate = `(function(){` +
 	// emitted form is WHATWG-normalized (leading C0/space trimmed, embedded
 	// tabs/newlines removed) so a space-prefixed navigation cannot escape the
 	// subtree when the browser trims it.
-	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd2=rd(u);if(!(dd2===P||dd2.charAt(P.length)==='/'||dd2.charAt(P.length)==='?'||dd2.charAt(P.length)==='#'))return u;u=dd2}return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}` +
+	`function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.indexOf(P+'/')===0||u.indexOf(P+'?')===0||u.indexOf(P+'#')===0))u=P+u;if(u.indexOf('/.')!==-1){var dd2=rd(u);if(!(dd2===P||dd2.indexOf(P+'/')===0||dd2.indexOf(P+'?')===0||dd2.indexOf(P+'#')===0))return u;u=dd2}return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}` +
 	// norm(u): normalizes any URL-like input through the network rewriter
 	// using the URL API, which applies the WHATWG parsing rules (leading
 	// C0/space trimmed, embedded tabs/newlines removed, default ports and
@@ -498,24 +498,37 @@ func rewriteProxyResponse(resp *http.Response, proxyPrefix, capability string) e
 	if resp.StatusCode < 200 || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusResetContent || resp.StatusCode == http.StatusPartialContent || resp.StatusCode == http.StatusNotModified {
 		return nil
 	}
+	// If the upstream response is still content-encoded here, Go's Transport
+	// did not (or could not) decode it (e.g. a misbehaving upstream ignoring
+	// Accept-Encoding and sending brotli/deflate/zstd): rewriting the
+	// compressed bytes and deleting Content-Encoding would corrupt the
+	// document. Leave such responses untouched.
+	if enc := resp.Header.Get("Content-Encoding"); enc != "" {
+		return nil
+	}
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
+	// The public directory the response was served from (stashed at the
+	// handler before the request path was rewritten to the agentctl form):
+	// HTML and CSS resolve their relative references against it, so a
+	// document below the proxy root (e.g. .../pages/index.html with
+	// ../assets) stays in-subtree and keeps its capability.
+	basePath := proxyPrefix + "/"
+	if resp.Request != nil {
+		if v, ok := resp.Request.Context().Value(proxyCSSBaseContextKey{}).(string); ok && v != "" {
+			basePath = v
+		}
+	}
 	var rewrite func([]byte, string, string, string) []byte
 	switch {
 	case strings.Contains(ct, "text/html"):
-		rewrite = rewriteHTMLURLs
-	case strings.Contains(ct, "text/css"):
-		// Standalone CSS resolves relative references against the stylesheet
-		// FILE's public directory (stashed at the handler before the request
-		// path was rewritten to the agentctl form), falling back to the
-		// document root. ../ refs from a nested stylesheet stay in-subtree.
-		cssBase := proxyPrefix + "/"
-		if resp.Request != nil {
-			if v, ok := resp.Request.Context().Value(proxyCSSBaseContextKey{}).(string); ok && v != "" {
-				cssBase = v
-			}
+		base := basePath
+		rewrite = func(body []byte, prefix, capability, nonce string) []byte {
+			return rewriteHTMLURLsAtDepthWithBase(body, prefix, capability, nonce, 0, base)
 		}
+	case strings.Contains(ct, "text/css"):
+		base := basePath
 		rewrite = func(body []byte, prefix, capability, _ string) []byte {
-			return rewriteCSSURLsAt(body, prefix, capability, cssBase)
+			return rewriteCSSURLsAt(body, prefix, capability, base)
 		}
 	default:
 		return nil
@@ -1176,11 +1189,6 @@ func stripCapabilityQuery(raw string) string {
 
 // normalizeURLForClassification returns a copy of a URL reference with the
 // WHATWG parser's forgiving adjustments applied: ASCII tabs and newlines are
-// removed anywhere in the string, and leading C0/space characters are trimmed.
-// Only the result is used for classification; the original bytes are preserved
-// when the reference is returned unchanged.
-// normalizeURLForClassification returns a copy of a URL reference with the
-// WHATWG parser's forgiving adjustments applied: ASCII tabs and newlines are
 // removed anywhere in the string, BACKSLASHES are converted to slashes (the
 // browser treats '\' as '/' in special-URL paths, so '\foo' resolves to
 // /foo while '\/evil' becomes the network-relative //evil), and leading AND
@@ -1311,5 +1319,4 @@ func splitSrcSetParts(value string) []string {
 	return parts
 }
 
-// rewriteCSSURLs rewrites url(/...) and @import "/..." occurrences inside a
-// standalone CSS document.
+

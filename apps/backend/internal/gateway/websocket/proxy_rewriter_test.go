@@ -1,9 +1,11 @@
 package websocket
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -83,7 +85,7 @@ func TestRewriteCSSURLs(t *testing.T) {
 .abs { background: url(http://example.com/x.png); }
 .rel { background: url(foo.png); }`
 
-	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, "", ""))
+	got := string(rewriteCSSURLsAt([]byte(in), proxyPrefix, "", proxyPrefix+"/"))
 
 	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css"`)
 	mustContain(t, got, `url("/port-proxy/abc/3001/print.css")`)
@@ -332,7 +334,7 @@ func TestRewriteCSSURLs_AppendsCapability(t *testing.T) {
 	in := `@import "/theme.css"; .x { background: url("/img/bg.png"); }` +
 		`.y { background: url(rel.png); } @import "print.css";` +
 		`.z { background: url(http://cdn.example.com/x.png); }`
-	got := string(rewriteCSSURLs([]byte(in), proxyPrefix, "cap-456", proxyPrefix+"/"))
+	got := string(rewriteCSSURLsAt([]byte(in), proxyPrefix, "cap-456", proxyPrefix+"/"))
 
 	mustContain(t, got, `@import "/port-proxy/abc/3001/theme.css?kandev_cap=cap-456"`)
 	mustContain(t, got, `url("/port-proxy/abc/3001/img/bg.png?kandev_cap=cap-456")`)
@@ -500,7 +502,7 @@ func TestRuntimeShim_AppendsCapabilityToRewrittenURLs(t *testing.T) {
 	// Navigation APIs use the prefix-only rewriter, never the capability.
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)`)
 	mustContain(t, shim, `if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)`)
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd2=rd(u);if(!(dd2===P||dd2.charAt(P.length)==='/'||dd2.charAt(P.length)==='?'||dd2.charAt(P.length)==='#'))return u;u=dd2}return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.indexOf(P+'/')===0||u.indexOf(P+'?')===0||u.indexOf(P+'#')===0))u=P+u;if(u.indexOf('/.')!==-1){var dd2=rd(u);if(!(dd2===P||dd2.indexOf(P+'/')===0||dd2.indexOf(P+'?')===0||dd2.indexOf(P+'#')===0))return u;u=dd2}return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// Anchor navigation needs no click interception: the MutationObserver
 	// prefixes hrefs, so the browser's own default navigation stays inside
 	// the subtree and app click handlers keep control.
@@ -524,7 +526,7 @@ func TestRuntimeShim_NavigationRewriterOmitsCapability(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
 	// rn() is the prefix-only form: it strips any previously issued capability
 	// and never appends a new one.
-	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd2=rd(u);if(!(dd2===P||dd2.charAt(P.length)==='/'||dd2.charAt(P.length)==='?'||dd2.charAt(P.length)==='#'))return u;u=dd2}return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
+	mustContain(t, shim, `function rn(u){if(typeof u!=='string')return u;if(!u||u.charAt(0)==='#')return u;if(u.indexOf('//')===0)return u;try{var ru=new URL(u,(typeof document!=='undefined'&&document.baseURI)||window.location.href);if(ru.protocol!=='http:'&&ru.protocol!=='https:'||ru.origin!==window.location.origin)return u}catch(e){return u}u=nz(u);if(u.charAt(0)==='/'){u=sc(u);if(!(u===P||u.indexOf(P+'/')===0||u.indexOf(P+'?')===0||u.indexOf(P+'#')===0))u=P+u;if(u.indexOf('/.')!==-1){var dd2=rd(u);if(!(dd2===P||dd2.indexOf(P+'/')===0||dd2.indexOf(P+'?')===0||dd2.indexOf(P+'#')===0))return u;u=dd2}return u}if(/^[a-z][a-z0-9+.-]*:\/\//i.test(u)){var o=ru.origin;var pn=ru.pathname;var tail=sc(pn+(ru.search||''));if(!(tail===P||tail.charAt(P.length)==='/'||tail.charAt(P.length)==='?'||tail.charAt(P.length)==='#'))tail=P+tail;return o+tail+(ru.hash||'')}return sc(u)}`)
 	// history and location rewrite through rn(), never r().
 	mustContain(t, shim, `history[op]=function(s,t,u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(this,s,t,u)}`)
 	mustContain(t, shim, `location[op]=function(u){if(u!==null&&u!==undefined){if(typeof u==='symbol')throw new TypeError('Cannot convert a Symbol value to a string');if(typeof u!=='string')u=String(u);u=rn(u)}return orig.call(location,u)}`)
@@ -823,7 +825,7 @@ func TestRuntimeShim_CapsRelativeSubresources(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-rel")
 	// r() prefixes root-absolute URLs and falls through to the capability
 	// splice for safe same-origin relative references.
-	mustContain(t, shim, `if(u.charAt(0)==='/'){if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u;if(u.indexOf('/.')!==-1){var dd=rd(u);if(!(dd===P||dd.charAt(P.length)==='/'||dd.charAt(P.length)==='?'||dd.charAt(P.length)==='#'))return u;u=dd}}`)
+	mustContain(t, shim, `if(u.charAt(0)==='/'){if(!(u===P||u.indexOf(P+'/')===0||u.indexOf(P+'?')===0||u.indexOf(P+'#')===0))u=P+u;if(u.indexOf('/.')!==-1){var dd=rd(u);if(!(dd===P||dd.indexOf(P+'/')===0||dd.indexOf(P+'?')===0||dd.indexOf(P+'#')===0))return u;u=dd}}`)
 	// The splice appends to u (prefixed or relative) with fragment handling.
 	mustContain(t, shim, `if(!hcp(u))u+=(u.indexOf('?')===-1?'?':'&')+"kandev_cap="+K`)
 	mustContain(t, shim, `function hcp(u){var qi=u.indexOf('?');if(qi===-1)return false;var ps=u.slice(qi+1).split('&');for(var i=0;i<ps.length;i++){var p=ps[i];var e=p.indexOf('=');var k=e===-1?p:p.slice(0,e);var v=e===-1?'':p.slice(e+1);var d;try{d=decodeURIComponent(k)}catch(x){d=k}var vd;try{vd=decodeURIComponent(v)}catch(x){vd=v}if(d==='kandev_cap'&&vd===K)return true}return false}`)
@@ -897,7 +899,7 @@ func TestRuntimeShim_ExactCapIdempotencyRejectsSubstrings(t *testing.T) {
 // capability splice instead of returning unauthenticated.
 func TestRuntimeShim_PrefixBoundaryAndPrefixedCap(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-shim")
-	mustContain(t, shim, `if(!(u===P||u.charAt(P.length)==='/'||u.charAt(P.length)==='?'||u.charAt(P.length)==='#'))u=P+u`)
+	mustContain(t, shim, `if(!(u===P||u.indexOf(P+'/')===0||u.indexOf(P+'?')===0||u.indexOf(P+'#')===0))u=P+u`)
 }
 
 // rn() strips previously issued capabilities from EVERY same-origin form —
@@ -1752,6 +1754,54 @@ func TestRewriteHTMLURLs_DotSegmentWithQueryOrFragment(t *testing.T) {
 	mustContain(t, got, `<img src="../#f">`)
 	mustContain(t, got, `<img src="../?q#f">`)
 	mustContain(t, got, `<img src="ok.png?x=1&amp;kandev_cap=cap-qf">`)
+}
+
+// HTML documents served BELOW the proxy root resolve relative references
+// against their own directory (stashed in the request context), so ../ refs
+// that stay in-subtree keep the capability.
+func TestRewriteProxyResponse_HTMLUsesDocumentDirectoryBase(t *testing.T) {
+	body := `<img src="../logo.png">` + `<img src="ok.png">`
+	req := httptest.NewRequest(http.MethodGet, "/port-proxy/s/5173/pages/index.html", nil)
+	req = req.WithContext(context.WithValue(req.Context(), proxyCSSBaseContextKey{}, "/port-proxy/s/5173/pages/"))
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Request:    req,
+	}
+	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+	if err := rewriteProxyResponse(resp, "/port-proxy/s/5173", "cap-htmlbase"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	// ../logo.png resolves to /port-proxy/s/5173/logo.png (in-subtree): capped.
+	mustContain(t, string(got), `<img src="../logo.png?kandev_cap=cap-htmlbase">`)
+	mustContain(t, string(got), `<img src="ok.png?kandev_cap=cap-htmlbase">`)
+}
+
+// A response still content-encoded after transport processing (Go could not
+// decode it) must not be rewritten: rewriting compressed bytes and deleting
+// Content-Encoding would corrupt the document.
+func TestRewriteProxyResponse_SkipsUndecodedEncodings(t *testing.T) {
+	for _, enc := range []string{"br", "deflate", "zstd"} {
+		resp := &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("\x1f\x8b-compressed")),
+		}
+		resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+		resp.Header.Set("Content-Encoding", enc)
+		if err := rewriteProxyResponse(resp, proxyPrefix, "cap-enc"); err != nil {
+			t.Fatalf("%s: unexpected error: %v", enc, err)
+		}
+		if got := resp.Header.Get("Content-Encoding"); got != enc {
+			t.Fatalf("%s: Content-Encoding = %q, want preserved", enc, got)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if string(body) != "\x1f\x8b-compressed" {
+			t.Fatalf("%s: body changed: %q", enc, body)
+		}
+	}
 }
 
 func mustContain(t *testing.T, haystack, needle string) {

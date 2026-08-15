@@ -369,6 +369,39 @@ func TestPortProxyServesCredentiallessSubresourcesAfterDocumentAuth(t *testing.T
 		}
 	}
 
+	// 3b. A reload carrying BOTH the capability and ?token=<PAT> authenticates
+	// via the capability, but the valid PAT is still a gateway credential and
+	// must be stripped from the forwarded query (never reach the app), while
+	// the capability itself is also stripped.
+	// A real gateway PAT (svc.ResolveBearer only accepts stored API tokens,
+	// not the Setup bootstrap token).
+	_, pat, patErr := svc.MintToken(context.Background(), userstore.DefaultUserID, "ci", 0)
+	if patErr != nil {
+		t.Fatalf("mint PAT: %v", patErr)
+	}
+	tokenReload := "/port-proxy/sess-auth/5173/@vite/client?" + proxyCapabilityQueryParam + "=" + capQuery + "&token=" + pat
+	tok := request(http.MethodGet, tokenReload, nil)
+	if tok.status != http.StatusOK {
+		t.Fatalf("capability+token reload status = %d, want %d", tok.status, http.StatusOK)
+	}
+	forwarded, _ = recordings.snapshot()
+	if len(forwarded) > 0 {
+		last := forwarded[len(forwarded)-1]
+		if strings.Contains(last, "token=") || strings.Contains(last, proxyCapabilityQueryParam) {
+			t.Fatalf("gateway PAT/capability leaked to agentctl in forwarded request %q", last)
+		}
+	}
+
+	// 3c. Duplicate kandev_port_proxy cookies (a stale value first, then the
+	// valid subtree cookie) must not let the stale one shadow the valid one:
+	// any cookie value that validates authorizes the request.
+	staleCap := "kandev_port_proxy=stale-not-valid; Path=/port-proxy/sess-auth/5173"
+	dup := request(http.MethodGet, "/port-proxy/sess-auth/5173/@vite/client?"+proxyCapabilityQueryParam+"="+capQuery,
+		map[string]string{"Cookie": staleCap + "; " + capabilityCookie})
+	if dup.status != http.StatusOK {
+		t.Fatalf("duplicate-cookie request status = %d, want %d (stale cookie must not shadow the valid one)", dup.status, http.StatusOK)
+	}
+
 	// 4. Ownership restoration: every proxied request ran the session-ownership
 	// check as the real owner (default-user), never as a synthetic or empty
 	// identity.

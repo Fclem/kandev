@@ -7,14 +7,9 @@ import (
 // This file holds the CSS URL rewriter. It lives apart from
 // proxy_rewriter.go so the latter stays under the revive file-length limit.
 
-// rewriteCSSURLs rewrites url(/...) and @import "/..." occurrences inside a
-// standalone CSS document, resolving relative references against the
-// stylesheet file's directory.
-func rewriteCSSURLs(body []byte, prefix, capability, basePath string) []byte {
-	return []byte(rewriteCSSFragment(string(body), prefix, capability, basePath))
-}
-
-// rewriteCSSURLsAt rewrites a standalone CSS document with an explicit base.
+// rewriteCSSURLsAt rewrites url(/...) and @import "/..." occurrences inside a
+// standalone CSS document, resolving relative references against the given
+// base directory (the stylesheet file's public directory).
 func rewriteCSSURLsAt(body []byte, prefix, capability, basePath string) []byte {
 	return []byte(rewriteCSSFragment(string(body), prefix, capability, basePath))
 }

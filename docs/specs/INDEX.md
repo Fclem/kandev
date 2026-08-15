@@ -81,6 +81,8 @@ Kandev's task model: documents, execution stages, labels, blocker escalation, su
 | [subtask-reparenting-drag-drop](tasks/subtask-reparenting-drag-drop.md) | building |
 | [subtask-completion-trigger](tasks/subtask-completion-trigger.md) | draft |
 | [task-dependencies](task-dependencies/spec.md) | draft |
+| [task-dependencies - create dialog selector](task-dependencies/create-dialog-dependency-selector.md) | implemented |
+| [task-dependencies - create dialog advanced settings](task-dependencies/create-dialog-advanced-settings.md) | shipped |
 | [subtree-controls](tasks/subtree-controls.md) | shipped |
 | [blocked-task-escalation](tasks/blocked-task-escalation.md) | draft |
 | [runtime-cleanup](tasks/runtime-cleanup.md) | draft |
@@ -120,6 +122,7 @@ Roles, governance gates, and granular permissions that apply across human users 
 | [settings-profile-layout](agents/settings-profile-layout.md) | shipped |
 | [dynamic-provider-options](agents/dynamic-provider-options.md) | shipped |
 | [utility-agent-profiles](agents/utility-agent-profiles.md) | approved |
+| [collapsible-agent-blocks](agents/collapsible-agent-blocks.md) | draft |
 | [roles](agents/roles.md) | shipped |
 | [governance](agents/governance.md) | shipped |
 | [granular-permissions](agents/granular-permissions.md) | draft |
@@ -139,6 +142,7 @@ Per-workspace credentials and triage triggers for external services.
 | [github-authentication](integrations/github-authentication.md) | draft |
 | [gitlab-integration](gitlab-integration/spec.md) | shipped |
 | [gitlab-mr-status-chip](gitlab-mr-status-chip/spec.md) | draft |
+| [gitlab-mr-task-list-badges](gitlab-mr-task-list-badges/spec.md) | draft |
 | [gitlab-workflow-sync](gitlab-workflow-sync/spec.md) | shipped |
 | [jira-status-filter](jira-status-filter/spec.md) | shipped |
 | [enable-disable-toggle](integrations/enable-disable-toggle.md) | shipped |
@@ -166,13 +170,16 @@ Subscription quota tracking and per-agent cheap-model profile routing.
 
 | Spec | Status |
 |---|---|
+| [workspace-active-first-order](ui/workspace-active-first-order.md) | shipped |
 | [ci-pr-automation](ui/ci-pr-automation.md) | building |
 | [github-pr-review-actions](ui/github-pr-review-actions.md) | shipped |
 | [github-saved-query-defaults](ui/github-saved-query-defaults.md) | shipped |
+| [pr-detail-header-width](pr-detail-header-width/spec.md) | shipped |
 | [pr-task-status-summary](ui/pr-task-status-summary.md) | shipped |
 | [comment-markdown](ui/comment-markdown.md) | shipped |
 | [resizable-markdown-tables](ui/resizable-markdown-tables.md) | building |
 | [transcript-auto-scroll](ui/transcript-auto-scroll.md) | building |
+| [clarification-context](ui/clarification-context.md) | shipped |
 | [empty-turn-notice](ui/empty-turn-notice.md) | shipped |
 | [acp-shell-command-output](ui/acp-shell-command-output.md) | shipped |
 | [acp-model-configuration-summary](ui/acp-model-configuration-summary.md) | shipped |
@@ -182,6 +189,7 @@ Subscription quota tracking and per-agent cheap-model profile routing.
 | [review-markdown-preview](ui/review-markdown-preview.md) | draft |
 | [sidebar-view-creation](ui/sidebar-view-creation.md) | shipped |
 | [command-panel sidebar task reveal](ui/command-panel-sidebar-task-reveal.md) | draft |
+| [sidebar-empty-task-alignment](ui/sidebar-empty-task-alignment.md) | building |
 | [sidebar-task-completion-icons](ui/sidebar-task-completion-icons.md) | shipped |
 | [sidebar-queued-prompt-count](ui/sidebar-queued-prompt-count.md) | shipped |
 | [session-tab-delete-feedback](ui/session-tab-delete-feedback.md) | shipped |

@@ -632,12 +632,42 @@ type Service struct {
 	// clobber the task back to REVIEW while work is active.
 	taskRuntimeStateMu sync.Mutex
 
+	// taskSessionErrorLocks serialize session deletion with retained-error
+	// selection and publication for each task. Entries are reference-counted
+	// and reclaimed after the last concurrent operation releases them.
+	taskSessionErrorLocksMu sync.Mutex
+	taskSessionErrorLocks   map[string]*taskSessionErrorGuard
+
 	// completedExecutions records execution IDs that have reached a terminal
 	// agent lifecycle event. Buffered stream/tool events for these executions
 	// must not wake their session back to RUNNING after the terminal path makes
 	// it promptable again. Entries expire after a short grace window so the
 	// guard does not grow without bound in long-running backend processes.
 	completedExecutions sync.Map
+
+	// readyTurnMarks records, per (session, execution, prompt generation),
+	// the turn ID handleAgentReady confirmed and is about to close via
+	// completeTurnForSession. handleCompleteStreamEvent reads this snapshot
+	// (on both the terminal and non-terminal path) instead of trusting live
+	// active-turn state or the terminal-execution marker: agent.ready is
+	// published before the complete-stream frame for the same completion
+	// (see markReadyTurn's doc comment for the ordering guarantee and its
+	// NATS-deployment caveat), so both of those alternatives can already
+	// find the turn gone or stale by the time this runs. Entries are
+	// consumed on read and expire after the same grace window as
+	// completedExecutions so an unread entry cannot grow the map unbounded.
+	// This map is per-process — see markReadyTurn's doc comment for why a
+	// horizontally-scaled NATS deployment can miss cross-instance.
+	readyTurnMarks sync.Map
+
+	// readyTurnMarksZeroGen is readyTurnMarks' sibling for promptGeneration==0
+	// completions (transports with no generation tracking at all), which share
+	// one key per (session, execution) with no generation to disambiguate
+	// them — so entries queue FIFO here instead of occupying a single slot in
+	// readyTurnMarks. Guarded by readyTurnMarksZeroGenMu since sync.Map has no
+	// atomic append. See markReadyTurn's doc comment.
+	readyTurnMarksZeroGenMu sync.Mutex
+	readyTurnMarksZeroGen   map[string][]readyTurnMark
 
 	// executionTeardownClaims arbitrates detached runtime teardown by
 	// "<session_id>::<execution_id>". Coordinator stop requests graceful
@@ -1411,12 +1441,14 @@ func (s *Service) startTurnForSessionWithOwnership(ctx context.Context, sessionI
 
 	if turnIDVal, ok := s.activeTurns.Load(sessionID); ok {
 		if turnID, ok := turnIDVal.(string); ok && turnID != "" {
+			s.bindAcceptedDispatchTurn(sessionID, turnID)
 			return turnID, false
 		}
 	}
 
 	if turn, err := s.turnService.GetActiveTurn(ctx, sessionID); turn != nil {
 		s.activeTurns.Store(sessionID, turn.ID)
+		s.bindAcceptedDispatchTurn(sessionID, turn.ID)
 		return turn.ID, false
 	} else if err != nil {
 		// A real DB read failure here would otherwise be silently dropped, and
@@ -1437,6 +1469,7 @@ func (s *Service) startTurnForSessionWithOwnership(ctx context.Context, sessionI
 	}
 
 	s.activeTurns.Store(sessionID, turn.ID)
+	s.bindAcceptedDispatchTurn(sessionID, turn.ID)
 	return turn.ID, true
 }
 
@@ -1452,10 +1485,34 @@ func (s *Service) completeTurnForSession(ctx context.Context, sessionID string) 
 }
 
 func (s *Service) completeTurnForTaskSession(ctx context.Context, taskID, sessionID string) {
-	// Stream-only completion paths call this helper directly rather than the
-	// session wrapper. Clear the accepted queued-dispatch ownership here too,
-	// otherwise a completed Send Now/FIFO successor can permanently block the
-	// next queue action.
+	s.completeTurnForTaskSessionWithSuccessorPolicy(ctx, taskID, sessionID, true)
+}
+
+// completeTurnForTaskSessionWithSuccessorPolicy reconciles active turns while
+// optionally preserving an accepted replacement. Only a stream event that has
+// been proven to belong to a superseded prompt may preserve that replacement;
+// the current successor's own terminal event must settle it normally.
+func (s *Service) completeTurnForTaskSessionWithSuccessorPolicy(
+	ctx context.Context,
+	taskID, sessionID string,
+	preserveAcceptedSuccessor bool,
+) {
+	// Stream-only completion of a cancelled predecessor must not wipe a
+	// Send Now / FIFO successor that has already claimed prompt ownership.
+	// The ready-path wrapper (completeTurnForSession) still clears the
+	// marker when the successor turn itself settles, so the next queue
+	// action is not blocked forever.
+	if preserveAcceptedSuccessor && s.acceptedDispatchInFlight(sessionID) {
+		if successor := s.acceptedDispatchSuccessorTurn(sessionID); successor != "" {
+			if err := s.completeTurnsExcept(ctx, sessionID, successor); err != nil {
+				s.logger.Warn("failed to reconcile predecessor turn while successor dispatch is accepted",
+					zap.String("session_id", sessionID),
+					zap.String("successor_turn_id", successor),
+					zap.Error(err))
+			}
+		}
+		return
+	}
 	s.clearAcceptedQueuedDispatch(sessionID)
 	if err := s.completeTurnForTaskSessionChecked(ctx, taskID, sessionID); err != nil {
 		s.logger.Warn("failed to reconcile active turn",
@@ -1549,6 +1606,47 @@ func (s *Service) completeExpectedTurn(ctx context.Context, sessionID, expectedT
 		return fmt.Errorf("captured cancelled turn %s was superseded by active turn %s", expectedTurnID, active.ID)
 	}
 	return fmt.Errorf("captured cancelled turn %s remains open", expectedTurnID)
+}
+
+func (s *Service) completeTurnsExcept(ctx context.Context, sessionID, keepTurnID string) error {
+	if s.turnService == nil || keepTurnID == "" {
+		return nil
+	}
+
+	const maxIterations = 16
+	closed := 0
+	for closed < maxIterations {
+		turn, err := s.turnService.GetActiveTurn(ctx, sessionID)
+		if err != nil {
+			if isNoActiveTurnError(err) {
+				return nil
+			}
+			return fmt.Errorf("look up active turn: %w", err)
+		}
+		if turn == nil || turn.ID == keepTurnID {
+			s.activeTurns.Store(sessionID, keepTurnID)
+			return nil
+		}
+		if err := s.turnService.CompleteTurn(ctx, turn.ID); err != nil {
+			return fmt.Errorf("complete predecessor turn %s: %w", turn.ID, err)
+		}
+		closed++
+	}
+	active, err := s.turnService.GetActiveTurn(ctx, sessionID)
+	if err != nil {
+		if isNoActiveTurnError(err) {
+			return fmt.Errorf("closed %d predecessor turns but successor %s was not found", closed, keepTurnID)
+		}
+		return fmt.Errorf("verify successor turn %s after closing %d predecessors: %w", keepTurnID, closed, err)
+	}
+	if active == nil {
+		return fmt.Errorf("closed %d predecessor turns but successor %s was not found", closed, keepTurnID)
+	}
+	if active.ID != keepTurnID {
+		return fmt.Errorf("closed %d predecessor turns but active turn is %s, want successor %s", closed, active.ID, keepTurnID)
+	}
+	s.activeTurns.Store(sessionID, keepTurnID)
+	return nil
 }
 
 func (s *Service) completeAllTurns(ctx context.Context, sessionID string) error {

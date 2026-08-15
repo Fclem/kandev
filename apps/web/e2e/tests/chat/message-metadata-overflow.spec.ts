@@ -127,5 +127,18 @@ test.describe("Chat message metadata dialog overflow", () => {
     expect(titleBox).not.toBeNull();
     expect(titleBox!.y).toBeGreaterThanOrEqual(dialogBox!.y);
     expect(titleBox!.y + titleBox!.height).toBeLessThanOrEqual(dialogBox!.y + dialogBox!.height);
+
+    // The close control is an absolute sibling outside the entries scroller;
+    // it must stay fully inside the dialog while the entries are scrolled to
+    // the bottom, and it must still close the dialog.
+    const close = dialog.locator('[data-slot="dialog-close"]');
+    await expect(close).toBeVisible();
+    const closeBox = await close.boundingBox();
+    expect(closeBox).not.toBeNull();
+    expect(closeBox!.y).toBeGreaterThanOrEqual(dialogBox!.y);
+    expect(closeBox!.y + closeBox!.height).toBeLessThanOrEqual(dialogBox!.y + dialogBox!.height);
+
+    await close.click();
+    await expect(dialog).toBeHidden();
   });
 });

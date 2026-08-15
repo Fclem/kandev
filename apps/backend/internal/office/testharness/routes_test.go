@@ -462,6 +462,21 @@ func TestSeedMessagePersistsTurnMetadata(t *testing.T) {
 	var sessResp seedTaskSessionResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &sessResp)
 
+	// Seed a message first WITHOUT turn metadata: the harness creates the
+	// active turn, and the later seed must update that same turn.
+	firstBody := mustJSON(t, map[string]interface{}{
+		"session_id": sessResp.SessionID,
+		"type":       "message",
+		"content":    "first message",
+	})
+	wFirst := httptest.NewRecorder()
+	reqFirst := httptest.NewRequest(http.MethodPost, "/api/v1/_test/messages", bytes.NewReader(firstBody))
+	reqFirst.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(wFirst, reqFirst)
+	if wFirst.Code != http.StatusOK {
+		t.Fatalf("first seed: expected 200, got %d body=%s", wFirst.Code, wFirst.Body.String())
+	}
+
 	turnMeta := map[string]interface{}{
 		"runtime_config_snapshot": map[string]interface{}{
 			"config_baseline": map[string]interface{}{"mode": "default", "model": "anthropic/claude-sonnet-5"},
@@ -484,12 +499,27 @@ func TestSeedMessagePersistsTurnMetadata(t *testing.T) {
 		t.Fatalf("expected 200, got %d body=%s", w2.Code, w2.Body.String())
 	}
 
-	turn, err := repo.GetActiveTurnBySessionID(context.Background(), sessResp.SessionID)
+	// Exactly one active turn exists, both seeded messages share its id, and
+	// the second seed updated the metadata on the pre-existing turn.
+	turns, err := repo.ListTurnsBySession(context.Background(), sessResp.SessionID)
 	if err != nil {
-		t.Fatalf("get active turn: %v", err)
+		t.Fatalf("list turns: %v", err)
 	}
-	if turn == nil {
-		t.Fatal("expected an active turn for the session")
+	if len(turns) != 1 {
+		t.Fatalf("expected exactly 1 turn, got %d", len(turns))
+	}
+	turn := turns[0]
+	msgs, err := repo.ListMessages(context.Background(), sessResp.SessionID)
+	if err != nil {
+		t.Fatalf("list messages: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+	for _, m := range msgs {
+		if m.TurnID != turn.ID {
+			t.Fatalf("message %q on turn %q, expected shared turn %q", m.ID, m.TurnID, turn.ID)
+		}
 	}
 	if turn.Metadata == nil {
 		t.Fatal("expected turn metadata to be persisted")
@@ -500,6 +530,32 @@ func TestSeedMessagePersistsTurnMetadata(t *testing.T) {
 	}
 	if snapshot["config_baseline"] == nil {
 		t.Fatal("expected config_baseline inside the snapshot")
+	}
+
+	// Seeding another message WITHOUT turn_metadata must leave the existing
+	// metadata untouched (nil must not clear it).
+	thirdBody := mustJSON(t, map[string]interface{}{
+		"session_id": sessResp.SessionID,
+		"type":       "message",
+		"content":    "third message",
+	})
+	w3 := httptest.NewRecorder()
+	req3 := httptest.NewRequest(http.MethodPost, "/api/v1/_test/messages", bytes.NewReader(thirdBody))
+	req3.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w3, req3)
+	if w3.Code != http.StatusOK {
+		t.Fatalf("third seed: expected 200, got %d body=%s", w3.Code, w3.Body.String())
+	}
+	turnAfter, err := repo.GetTurn(context.Background(), turn.ID)
+	if err != nil {
+		t.Fatalf("get turn after third seed: %v", err)
+	}
+	afterSnapshot, ok := turnAfter.Metadata["runtime_config_snapshot"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected runtime_config_snapshot to survive a nil turn_metadata seed, got %#v", turnAfter.Metadata)
+	}
+	if afterSnapshot["config_baseline"] == nil {
+		t.Fatal("expected config_baseline to survive a nil turn_metadata seed")
 	}
 }
 

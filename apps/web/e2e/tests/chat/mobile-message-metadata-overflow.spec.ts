@@ -101,6 +101,19 @@ test.describe("Chat message metadata dialog overflow (mobile)", () => {
     expect(turnBox!.y).toBeGreaterThanOrEqual(dialogBox!.y);
     expect(turnBox!.y + turnBox!.height).toBeLessThanOrEqual(dialogBox!.y + dialogBox!.height);
 
+    // The close control is an absolute sibling outside the entries scroller;
+    // it must stay fully inside the dialog while the entries are scrolled to
+    // the bottom, and it must still close the dialog.
+    const close = dialog.locator('[data-slot="dialog-close"]');
+    await expect(close).toBeVisible();
+    const closeBox = await close.boundingBox();
+    expect(closeBox).not.toBeNull();
+    expect(closeBox!.y).toBeGreaterThanOrEqual(dialogBox!.y);
+    expect(closeBox!.y + closeBox!.height).toBeLessThanOrEqual(dialogBox!.y + dialogBox!.height);
+
+    await close.tap();
+    await expect(dialog).toBeHidden();
+
     // The dialog's internal scroll must never spill into document overflow.
     const documentOverflow = await testPage.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,

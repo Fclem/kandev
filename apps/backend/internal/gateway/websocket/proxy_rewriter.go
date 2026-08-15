@@ -178,8 +178,11 @@ const runtimeShimTemplate = `(function(){` +
 	`function rwe(el){if(!el||el.nodeType!==1)return;for(var i=0;i<ATTRS.length;i++)rwa(el,ATTRS[i])}` +
 	`var OBS=['href','src','action','formaction','cite','data','poster','background','manifest','srcset','imagesrcset','ping','rel','style','content','http-equiv'];` +
 	`var MO=window.MutationObserver;if(MO&&document.documentElement){try{new MO(function(rs){for(var i=0;i<rs.length;i++){var rec=rs[i];if(rec.type==='attributes'){rwe(rec.target)}else{for(var j=0;j<rec.addedNodes.length;j++){var n=rec.addedNodes[j];rwe(n);if(n.querySelectorAll){var nl=n.querySelectorAll('[href],[src],[action],[formaction],[cite],[data],[poster],[background],[manifest],[srcset],[imagesrcset],[ping],[style],[content]');for(var k=0;k<nl.length;k++)rwe(nl[k])}}}}}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:OBS})}catch(e){}}` +
-	// Console forwarding: pipe iframe console output back to the parent frame via postMessage so it surfaces in the kandev UI alongside other preview events. The message targets the gateway origin only (the preview is served by the gateway, same-origin with the Kandev UI), never a wildcard, so a cross-origin embedding parent cannot receive proxied app console arguments. Errors and stacks are coerced to strings; objects are JSON-cloned where possible. We continue calling the original method so the iframe's own DevTools still shows everything.
-	`var LV=['log','warn','error','info','debug'];LV.forEach(function(lv){var orig=console[lv];if(!orig)return;console[lv]=function(){try{var out=[];for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){out.push('Error: '+a.message+(a.stack?'\n'+a.stack:''))}else if(typeof a==='object'&&a!==null){try{out.push(JSON.parse(JSON.stringify(a)))}catch(e){out.push(String(a))}}else{out.push(a)}}window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},window.location.origin)}catch(e){}return orig.apply(console,arguments)}});` +
+	// Console forwarding: announce readiness without console data, then bind to
+	// the parent origin from an explicit response. This supports a UI and gateway
+	// on different origins while keeping console data off wildcard messages.
+	`var PO='';window.addEventListener('message',function(e){try{var d=e.data;if(e.source===window.parent&&d&&d.source==='kandev-inspector'&&d.type==='console-bind'&&e.origin)PO=e.origin}catch(x){}});try{window.parent.postMessage({source:'kandev-inspector',type:'console-ready',payload:{}},'*')}catch(e){}` +
+	`var LV=['log','warn','error','info','debug'];LV.forEach(function(lv){var orig=console[lv];if(!orig)return;console[lv]=function(){try{var out=[];for(var i=0;i<arguments.length;i++){var a=arguments[i];if(a instanceof Error){out.push('Error: '+a.message+(a.stack?'\n'+a.stack:''))}else if(typeof a==='object'&&a!==null){try{out.push(JSON.parse(JSON.stringify(a)))}catch(e){out.push(String(a))}}else{out.push(a)}}if(PO)window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},PO)}catch(e){}return orig.apply(console,arguments)}});` +
 	`})();`
 
 // runtimeShim returns the runtime shim's JavaScript body with the given proxy
@@ -1318,5 +1321,3 @@ func splitSrcSetParts(value string) []string {
 	}
 	return parts
 }
-
-

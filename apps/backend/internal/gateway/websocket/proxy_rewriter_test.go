@@ -270,6 +270,17 @@ func TestRuntimeShim_ForwardsConsoleToParent(t *testing.T) {
 	mustContain(t, shim, `return orig.apply(console,arguments)`)
 }
 
+func TestRuntimeShim_BindsConsoleToParentOrigin(t *testing.T) {
+	shim := runtimeShim(proxyPrefix, "cap-console")
+
+	// The child announces readiness without sending console data. The parent
+	// replies with its origin, and the child uses that origin for console data.
+	mustContain(t, shim, "console-ready")
+	mustContain(t, shim, "console-bind")
+	mustContain(t, shim, `window.parent.postMessage({source:'kandev-inspector',type:'console-ready',payload:{}},'*')`)
+	mustContain(t, shim, `window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},PO)`)
+}
+
 func TestRuntimeShim_PatchesNavigationAPIs(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "")
 
@@ -722,12 +733,14 @@ func TestRewriteHTMLURLs_CSPMetaAnyAttributeOrder(t *testing.T) {
 	mustContain(t, string(got), `nonce="later99"`)
 }
 
-// Console forwarding targets only the gateway origin, never a wildcard.
-func TestRuntimeShim_ConsoleForwardingTargetsOrigin(t *testing.T) {
+// Console forwarding binds to the embedding parent's origin. Only the
+// data-free readiness message uses a wildcard target.
+func TestRuntimeShim_ConsoleForwardingTargetsBoundParent(t *testing.T) {
 	shim := runtimeShim(proxyPrefix, "cap-console")
-	mustContain(t, shim, `window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},window.location.origin)`)
-	if strings.Contains(shim, `postMessage(`) && strings.Contains(shim, `,'*')`) {
-		t.Fatal("console forwarding must not use a wildcard postMessage target")
+	mustContain(t, shim, `window.parent.postMessage({source:'kandev-inspector',type:'console-ready',payload:{}},'*')`)
+	mustContain(t, shim, `window.parent.postMessage({source:'kandev-inspector',type:'console',payload:{level:lv,args:out}},PO)`)
+	if strings.Contains(shim, `type:'console',payload:{level:lv,args:out}},window.location.origin`) {
+		t.Fatal("console forwarding must not assume the gateway origin is the parent origin")
 	}
 }
 

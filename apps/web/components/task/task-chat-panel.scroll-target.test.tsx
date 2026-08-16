@@ -177,7 +177,9 @@ describe("useScrollTargetConsumption — success-path consumption", () => {
     expect(messageListRef.current?.scrollToMessage).not.toHaveBeenCalled();
     expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
   });
+});
 
+describe("useScrollTargetConsumption — non-dockview hosts (no panelId)", () => {
   it("does not consume without a panelId (non-dockview hosts stay unchanged)", () => {
     mockDockviewState.scrollTarget = target();
     const messageListRef = { current: scrollHandle(true) };
@@ -185,6 +187,63 @@ describe("useScrollTargetConsumption — success-path consumption", () => {
     renderHook(() => useScrollTargetConsumption({ ...PROPS, panelId: null, messageListRef }));
 
     expect(messageListRef.current?.scrollToMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not clear a dockview target when a non-dockview host unmounts", () => {
+    // Task 03: preview/center/mobile hosts (panelId=null) mount and unmount
+    // freely; their unmount cleanup must not clear a target a dockview host
+    // is waiting to consume.
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(false) };
+
+    const { unmount } = renderHook(() =>
+      useScrollTargetConsumption({ ...PROPS, panelId: null, messageListRef }),
+    );
+    unmount();
+
+    expect(mockDockviewState.clearScrollTargetForSession).not.toHaveBeenCalled();
+    expect(mockDockviewState.scrollTarget).not.toBeNull();
+  });
+
+  it("does not clear a dockview target when a non-dockview host swaps sessions", () => {
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(false) };
+
+    const { rerender } = renderHook(
+      ({ resolvedSessionId }) =>
+        useScrollTargetConsumption({
+          ...PROPS,
+          panelId: null,
+          resolvedSessionId,
+          messageListRef,
+        }),
+      { initialProps: { resolvedSessionId: "session-1" } },
+    );
+    rerender({ resolvedSessionId: "session-2" });
+
+    expect(mockDockviewState.clearScrollTargetForSession).not.toHaveBeenCalled();
+    expect(mockDockviewState.scrollTarget).not.toBeNull();
+  });
+
+  it("lets the dockview owner consume the retained target after non-dockview churn", async () => {
+    mockDockviewState.scrollTarget = target();
+    const nonDockviewRef = { current: scrollHandle(false) };
+    const ownerRef = { current: scrollHandle(true) };
+
+    const { unmount } = renderHook(() =>
+      useScrollTargetConsumption({ ...PROPS, panelId: null, messageListRef: nonDockviewRef }),
+    );
+    unmount();
+
+    renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef: ownerRef }));
+    await flushFrames();
+
+    expect(ownerRef.current?.scrollToMessage).toHaveBeenCalledWith("message-1", {
+      align: "start",
+      behavior: "auto",
+    });
+    expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
+    expect(mockDockviewState.scrollTarget).toBeNull();
   });
 });
 

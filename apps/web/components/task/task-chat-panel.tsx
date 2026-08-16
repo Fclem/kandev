@@ -235,6 +235,12 @@ export function useScrollTargetConsumption({
   const previousSessionId = useRef<string | null>(null);
 
   useEffect(() => {
+    // Only a DOCKVIEW host (defined panelId) may invalidate or clear a
+    // retained target: non-dockview callers (preview-session-tabs,
+    // task-center-panel, mobile) mount/unmount and swap resolved sessions
+    // freely, and their cleanup must not clear a target that a real dockview
+    // host (canonical `chat` / `session:<id>`) is waiting to consume.
+    if (!panelId) return;
     const previous = previousSessionId.current;
     previousSessionId.current = resolvedSessionId;
     if (previous && previous !== resolvedSessionId) {
@@ -243,7 +249,7 @@ export function useScrollTargetConsumption({
     return () => {
       if (resolvedSessionId) clearScrollTargetForSession(resolvedSessionId);
     };
-  }, [clearScrollTargetForSession, resolvedSessionId]);
+  }, [clearScrollTargetForSession, panelId, resolvedSessionId]);
 
   useEffect(() => {
     if (

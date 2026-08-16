@@ -159,11 +159,11 @@ fallback.
   function (pattern: `vite-preload-recovery.ts`).
 - Wired `installBfcacheRestoreReload()` into `apps/web/src/main.tsx` at module
   scope next to `installVitePreloadRecovery()`, before React mounts.
-- Added `apps/web/src/bfcache-restore-reload.test.ts` (12 tests) and
+- Added `apps/web/src/bfcache-restore-reload.test.ts` (13 tests) and
   `apps/web/e2e/tests/layout/bfcache-restore-reload.spec.ts`.
 - Checks passed:
   - `cd apps && pnpm --filter @kandev/web test -- --run src/bfcache-restore-reload.test.ts`
-    (12/12 tests, current HEAD).
+    (13/13 tests, current HEAD).
   - `cd apps/web && pnpm run typecheck` (clean).
   - `cd apps/web && pnpm exec eslint src/bfcache-restore-reload.ts
     src/bfcache-restore-reload.test.ts src/main.tsx

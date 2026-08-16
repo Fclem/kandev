@@ -2,13 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoreApi } from "zustand";
 import type { AppState } from "@/lib/state/store";
 
-const { mockClearScrollTargetForSession, mockRelease } = vi.hoisted(() => ({
-  mockClearScrollTargetForSession: vi.fn(),
+const { mockClearScrollTargetForSession, mockRelease, dockviewState } = vi.hoisted(() => ({
+  mockClearScrollTargetForSession: vi.fn((sessionId: string) => {
+    if (dockviewState.scrollTarget?.sessionId === sessionId) {
+      dockviewState.scrollTarget = null;
+    }
+  }),
   mockRelease: vi.fn(),
-}));
-
-const dockviewState = vi.hoisted(() => ({
-  isRestoringLayout: false,
+  dockviewState: {
+    isRestoringLayout: false,
+    scrollTarget: null as null | { sessionId: string; token: number },
+  },
 }));
 
 vi.mock("@/lib/state/dockview-store", () => ({
@@ -58,6 +62,7 @@ function makeAppStore(activeSessionId: string): StoreApi<AppState> {
 beforeEach(() => {
   vi.clearAllMocks();
   dockviewState.isRestoringLayout = false;
+  dockviewState.scrollTarget = null;
 });
 
 describe("setupPortalCleanup — scroll-target teardown", () => {
@@ -96,6 +101,31 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
 
     expect(mockClearScrollTargetForSession).toHaveBeenCalledTimes(1);
     expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-a");
+  });
+
+  it("clears the LATEST target when the panel of a superseded request is removed", () => {
+    // Task 03 teardown policy: the removal clears session-only (no token), and
+    // the target always holds the latest intent — A superseded by B, then the
+    // panel removed, must clear B, never leave it to a stale consumer.
+    const api = makeApi();
+    setupPortalCleanup(api as never, makeAppStore("session-1"));
+    dockviewState.scrollTarget = { sessionId: "session-1", token: 1 };
+    dockviewState.scrollTarget = { sessionId: "session-1", token: 2 };
+
+    api.fireRemoval({ id: "session:session-1" });
+
+    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(dockviewState.scrollTarget).toBeNull();
+  });
+
+  it("leaves the latest target intact when an unrelated session's panel is removed", () => {
+    const api = makeApi();
+    setupPortalCleanup(api as never, makeAppStore("session-1"));
+    dockviewState.scrollTarget = { sessionId: "session-1", token: 2 };
+
+    api.fireRemoval({ id: "session:session-9" });
+
+    expect(dockviewState.scrollTarget).toEqual({ sessionId: "session-1", token: 2 });
   });
 
   it("runs the clear even while a layout restore is in progress (before the restore guard)", () => {

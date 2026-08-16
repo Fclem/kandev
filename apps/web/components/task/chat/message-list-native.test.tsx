@@ -279,9 +279,15 @@ function ScrollToMessageHarness({
 
 describe("useScrollToMessage — root-scoped row lookup", () => {
   let scrollIntoView: ReturnType<typeof vi.spyOn>;
+  let scrollReceivers: HTMLElement[];
 
   beforeEach(() => {
-    scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+    scrollReceivers = [];
+    scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      scrollReceivers.push(this);
+    });
   });
 
   afterEach(() => {
@@ -353,9 +359,19 @@ describe("useScrollToMessage — root-scoped row lookup", () => {
 
     expect(h1("dup")).toBe(true);
     expect(h2("dup")).toBe(true);
-    // Each handle scrolled its own list's row (2 distinct elements, not a
-    // document-global lookup that would collapse to one).
+    // Each handle scrolled its own list's row. A document-global
+    // implementation would resolve both handles to the SAME (first) row and
+    // still call scrollIntoView twice — pin the receivers instead: the first
+    // handle's target must live in the first root and the second handle's in
+    // the second root.
+    const roots = results.container.querySelectorAll('[data-testid="scroll-to-message-root"]');
+    expect(roots).toHaveLength(2);
     expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(scrollReceivers).toHaveLength(2);
+    expect(roots[0].contains(scrollReceivers[0])).toBe(true);
+    expect(roots[0].contains(scrollReceivers[1])).toBe(false);
+    expect(roots[1].contains(scrollReceivers[1])).toBe(true);
+    expect(roots[1].contains(scrollReceivers[0])).toBe(false);
     expect(rows).toHaveLength(2);
   });
 });

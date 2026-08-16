@@ -112,6 +112,33 @@ describe("useScrollTargetConsumption — success-path consumption", () => {
     expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
   });
 
+  it("does not let a delayed consumer of request A clear or scroll request B", async () => {
+    // Task 03 supersession: B lands while A's deferred consumer is pending.
+    // A's stale consumer must not scroll A's row nor clear B; the token
+    // re-check in the deferred callback bails.
+    mockDockviewState.scrollTarget = target(); // A: token 7
+    const messageListRef = { current: scrollHandle(true) };
+    const { rerender } = renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef }));
+
+    // B supersedes A before A's deferred frame executes.
+    mockDockviewState.scrollTarget = target({ messageId: "message-b", token: 8 });
+    await flushFrames();
+
+    expect(messageListRef.current?.scrollToMessage).not.toHaveBeenCalled();
+    expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
+    expect(mockDockviewState.scrollTarget?.token).toBe(8);
+
+    // When the owner of B re-renders, B consumes normally.
+    rerender();
+    await flushFrames();
+    expect(messageListRef.current?.scrollToMessage).toHaveBeenCalledWith("message-b", {
+      align: "start",
+      behavior: "auto",
+    });
+    expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(8);
+    expect(mockDockviewState.scrollTarget).toBeNull();
+  });
+
   it("lets only the exact-owner host consume when a canonical chat and a session panel are both mounted and active", async () => {
     // Task 03 race: `session:<id>` and the canonical `chat` host are mounted
     // simultaneously (a real transient layout state), both reporting

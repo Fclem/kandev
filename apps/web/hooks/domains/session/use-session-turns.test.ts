@@ -131,7 +131,9 @@ describe("useSessionTurns", () => {
     await act(async () => {});
     expect(state.replaceSessionTurns).not.toHaveBeenCalledWith("session-a", [turn("stale")]);
   });
+});
 
+describe("useSessionTurns — ordering and isolation", () => {
   it("tracks the applied sequence per session so sibling fetches do not invalidate each other", async () => {
     const deferredA: { resolve: (v: { turns: Turn[]; total: number }) => void }[] = [];
     const deferredB: { resolve: (v: { turns: Turn[]; total: number }) => void }[] = [];
@@ -171,5 +173,31 @@ describe("useSessionTurns", () => {
     await waitFor(() =>
       expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-b", [turn("turn-a")]),
     );
+  });
+
+  it("applies the turn response despite an independent live commit mid-flight", async () => {
+    // Task 01 cross-resource isolation: a message/turn commit landing in the
+    // store after the turns fetch started must not invalidate the response —
+    // replaceSessionTurns merges over whatever the store holds.
+    let resolveFetch!: (value: { turns: Turn[]; total: number }) => void;
+    mockListSessionTurns.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+    state.turns.bySession["session-a"] = [turn("live-before")];
+    const { result, rerender } = renderHook(() => useSessionTurns("session-a"));
+
+    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(1));
+    expect(result.current).toEqual([]);
+
+    // An independent store commit lands while the fetch is in flight (e.g. a
+    // message event completing a turn before listSessionTurns resolves).
+    state.turns.bySession["session-a"] = [turn("live-before"), turn("live-mid")];
+    resolveFetch({ turns: [turn("turn-a")], total: 1 });
+    await waitFor(() => expect(state.replaceSessionTurns).toHaveBeenCalledTimes(1));
+
+    rerender();
+    expect(result.current).toEqual([turn("live-before"), turn("live-mid"), turn("turn-a")]);
   });
 });

@@ -7,6 +7,7 @@ import type { UserSettingsState } from "@/lib/state/slices/settings/types";
 import { SettingsTargetProvider } from "@/components/settings/settings-target-provider";
 import { emitSettingsTargetRequest } from "@/lib/settings-discovery/target";
 import { formatDateTime } from "@/lib/i18n/formats";
+import { ApiError } from "@/lib/api/client";
 import type { AuthSession } from "@/lib/api/domains/auth-api";
 import { SecuritySettings } from "./security-settings";
 
@@ -43,6 +44,8 @@ const LAST_SEEN_AT = "2026-08-15T15:42:00Z";
 const RELATIVE_TEST_ID = "last-seen-relative";
 const SELECT_TEST_ID = "last-seen-display-select";
 const EMPTY_TEST_ID = "last-seen-empty";
+const RELATIVE_OPTION = "Relative time";
+const ABSOLUTE_OPTION = "Absolute time";
 
 const SESSION: AuthSession = {
   id: "sess-1",
@@ -64,7 +67,18 @@ function setBaseline(overrides: Partial<UserSettingsState> = {}) {
   };
 }
 
-function patchResponse(overrides: Record<string, unknown> = {}) {
+type PatchResponse = {
+  settings: {
+    user_id: string;
+    workspace_id: string;
+    repository_ids: string[];
+    updated_at: string;
+    revision: number;
+    [key: string]: unknown;
+  };
+};
+
+function patchResponse(overrides: Record<string, unknown> = {}): PatchResponse {
   return {
     settings: {
       user_id: "default-user",
@@ -90,6 +104,20 @@ function renderLoaded() {
 async function chooseDisplay(name: "Absolute time" | "Relative time") {
   fireEvent.click(screen.getByTestId(SELECT_TEST_ID));
   fireEvent.click(await screen.findByRole("option", { name }));
+}
+
+function deferredPatch(): {
+  promise: Promise<PatchResponse>;
+  resolve: (value: PatchResponse) => void;
+  reject: (error: ApiError) => void;
+} {
+  let resolve!: (value: PatchResponse) => void;
+  let reject!: (error: ApiError) => void;
+  const promise = new Promise<PatchResponse>((complete, fail) => {
+    resolve = complete;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
 }
 
 beforeEach(() => {
@@ -138,6 +166,16 @@ describe("Last seen display rendering", () => {
     expect(trigger.getAttribute("title")).toBe(absolute);
   });
 
+  it("opens the absolute-time tooltip on keyboard focus of the relative trigger", async () => {
+    setBaseline({ lastSeenDisplay: "relative" });
+    await renderLoaded();
+
+    const trigger = screen.getByTestId(RELATIVE_TEST_ID);
+    fireEvent.focus(trigger);
+    await waitFor(() => expect(screen.getByRole("tooltip")).toBeTruthy());
+    expect(screen.getByRole("tooltip").textContent).toBe(formatDateTime(new Date(LAST_SEEN_AT)));
+  });
+
   it("renders an empty cell for an unparseable last_seen_at", async () => {
     authApiMocks.listSessions.mockResolvedValue({
       sessions: [{ ...SESSION, last_seen_at: "not-a-date" }],
@@ -154,7 +192,7 @@ describe("Last seen display persistence", () => {
   it("persists a relative selection through the queued sync", async () => {
     await renderLoaded();
 
-    await chooseDisplay("Relative time");
+    await chooseDisplay(RELATIVE_OPTION);
 
     await waitFor(() =>
       expect(settingsApiMocks.updateUserSettings).toHaveBeenCalledWith({
@@ -163,24 +201,26 @@ describe("Last seen display persistence", () => {
     );
   });
 
-  it("shows the error toast on a failed save", async () => {
+  it("shows the error toast and falls back to the baseline on a failed save", async () => {
     settingsApiMocks.updateUserSettings.mockRejectedValue(new Error("boom"));
     await renderLoaded();
 
-    await chooseDisplay("Relative time");
+    await chooseDisplay(RELATIVE_OPTION);
+    // The optimistic value shows while the write is in flight.
+    expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy();
 
     await waitFor(() => expect(toastMocks.error).toHaveBeenCalled());
+    // After the failure settles, the cell falls back to the confirmed baseline.
+    await waitFor(() => expect(screen.queryByTestId(RELATIVE_TEST_ID)).toBeNull());
+    expect(screen.getByText(formatDateTime(new Date(LAST_SEEN_AT)))).toBeTruthy();
   });
 
   it("keeps the optimistic value while a write is in flight even when the store re-asserts the baseline", async () => {
-    let resolvePatch!: (value: ReturnType<typeof patchResponse>) => void;
-    const pending = new Promise<ReturnType<typeof patchResponse>>((resolve) => {
-      resolvePatch = resolve;
-    });
+    const { promise: pending, resolve: resolvePatch } = deferredPatch();
     settingsApiMocks.updateUserSettings.mockReturnValue(pending);
     await renderLoaded();
 
-    await chooseDisplay("Relative time");
+    await chooseDisplay(RELATIVE_OPTION);
     await waitFor(() => expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy());
 
     // An unrelated full snapshot re-asserts the baseline value while the write
@@ -196,6 +236,153 @@ describe("Last seen display persistence", () => {
       resolvePatch(patchResponse({ last_seen_display: "relative", revision: 4 }));
     });
     await waitFor(() => expect(storeMocks.setUserSettings).toHaveBeenCalled());
+  });
+});
+
+describe("Last seen display queued write ordering", () => {
+  it("keeps B's optimistic value visible while queued write A settles", async () => {
+    const { promise: pendingA, resolve: resolveA } = deferredPatch();
+    settingsApiMocks.updateUserSettings
+      .mockReturnValueOnce(pendingA)
+      .mockResolvedValueOnce(patchResponse({ last_seen_display: "absolute", revision: 3 }));
+    await renderLoaded();
+
+    await chooseDisplay(RELATIVE_OPTION); // A
+    expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy();
+
+    await chooseDisplay(ABSOLUTE_OPTION); // B (queued behind A)
+    expect(screen.queryByTestId(RELATIVE_TEST_ID)).toBeNull();
+
+    // A settles first: the latest-operation guard keeps B's override visible,
+    // so the cell does NOT flip to A's confirmed relative value.
+    await act(async () => {
+      resolveA(patchResponse({ last_seen_display: "relative", revision: 2 }));
+    });
+    expect(screen.queryByTestId(RELATIVE_TEST_ID)).toBeNull();
+
+    // B settles: the confirmed absolute value renders.
+    await waitFor(() =>
+      expect((storeMocks.state.userSettings as UserSettingsState).lastSeenDisplay).toBe("absolute"),
+    );
+  });
+
+  it("does not toast or revert on a stale failed write for a newer selection", async () => {
+    const { promise: pendingA, reject: rejectA } = deferredPatch();
+    settingsApiMocks.updateUserSettings
+      .mockReturnValueOnce(pendingA)
+      .mockResolvedValueOnce(patchResponse({ last_seen_display: "absolute", revision: 3 }));
+    await renderLoaded();
+
+    await chooseDisplay(RELATIVE_OPTION); // A
+    await chooseDisplay(ABSOLUTE_OPTION); // B (queued behind A)
+
+    await act(async () => {
+      rejectA(new ApiError("boom", 400, null));
+    });
+    // A's failure is stale (B is the latest operation): no error toast, and
+    // B's optimistic absolute stays visible.
+    expect(toastMocks.error).not.toHaveBeenCalled();
+    expect(screen.queryByTestId(RELATIVE_TEST_ID)).toBeNull();
+
+    await waitFor(() =>
+      expect((storeMocks.state.userSettings as UserSettingsState).lastSeenDisplay).toBe("absolute"),
+    );
+  });
+
+  it("settles two consecutive failures on the server-confirmed baseline", async () => {
+    settingsApiMocks.updateUserSettings.mockRejectedValue(new ApiError("boom", 400, null));
+    await renderLoaded();
+
+    await chooseDisplay(RELATIVE_OPTION); // A
+    await chooseDisplay(ABSOLUTE_OPTION); // B (queued behind A)
+
+    // Both fail: the last operation clears the override and the cell renders
+    // the server-confirmed baseline (absolute), not the pre-B optimistic value.
+    await waitFor(() => expect(toastMocks.error).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId(RELATIVE_TEST_ID)).toBeNull());
+    expect(screen.getByText(formatDateTime(new Date(LAST_SEEN_AT)))).toBeTruthy();
+  });
+});
+
+describe("Last seen display write and lifecycle races", () => {
+  it("discards a deferred PATCH response older than a newer WS snapshot", async () => {
+    const { promise: pending, resolve: resolvePatch } = deferredPatch();
+    settingsApiMocks.updateUserSettings.mockReturnValue(pending);
+    await renderLoaded();
+
+    await chooseDisplay(RELATIVE_OPTION); // write in flight (resolves at rev 2)
+
+    // A newer WS snapshot (foreign change at rev 5) lands first.
+    act(() => {
+      (storeMocks.state.setUserSettings as (s: UserSettingsState) => void)(
+        makeUserSettings({ lastSeenDisplay: "absolute", revision: 5 }),
+      );
+    });
+
+    // The deferred PATCH response (rev 2) is discarded by the revision guard.
+    await act(async () => {
+      resolvePatch(patchResponse({ last_seen_display: "relative", revision: 2 }));
+    });
+    await waitFor(() => expect(storeMocks.setUserSettings).toHaveBeenCalled());
+    const settled = storeMocks.state.userSettings as UserSettingsState;
+    expect(settled.revision).toBe(5);
+    expect(settled.lastSeenDisplay).toBe("absolute");
+  });
+
+  it("converges the store when the component unmounts mid-write and remounts", async () => {
+    const { promise: pending, resolve: resolvePatch } = deferredPatch();
+    settingsApiMocks.updateUserSettings.mockReturnValue(pending);
+
+    const first = render(
+      <TooltipProvider>
+        <SecuritySettings />
+      </TooltipProvider>,
+    );
+    await screen.findByTestId(SELECT_TEST_ID);
+
+    await chooseDisplay(RELATIVE_OPTION);
+    await waitFor(() => expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy());
+
+    // Unmount mid-write; the write still settles and the store converges.
+    first.unmount();
+    await act(async () => {
+      resolvePatch(patchResponse({ last_seen_display: "relative", revision: 2 }));
+    });
+    await waitFor(() => expect(storeMocks.setUserSettings).toHaveBeenCalled());
+    expect((storeMocks.state.userSettings as UserSettingsState).lastSeenDisplay).toBe("relative");
+
+    // Remount renders the confirmed value.
+    const second = render(
+      <TooltipProvider>
+        <SecuritySettings />
+      </TooltipProvider>,
+    );
+    await screen.findByTestId(RELATIVE_TEST_ID);
+    second.unmount();
+  });
+
+  it("advances the relative label as time passes while the page stays open", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-15T15:45:00Z"));
+    setBaseline({ lastSeenDisplay: "relative" });
+    render(
+      <TooltipProvider>
+        <SecuritySettings />
+      </TooltipProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const before = screen.getByTestId(RELATIVE_TEST_ID).textContent;
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    const after = screen.getByTestId(RELATIVE_TEST_ID).textContent;
+    expect(after).not.toBe(before);
   });
 });
 

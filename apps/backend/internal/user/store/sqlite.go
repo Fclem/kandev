@@ -775,7 +775,7 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 		TerminalFontFamily                string                              `json:"terminal_font_family"`
 		TerminalFontSize                  int                                 `json:"terminal_font_size"`
 		ChangesPanelLayout                string                              `json:"changes_panel_layout"`
-		LastSeenDisplay                   string                              `json:"last_seen_display"`
+		LastSeenDisplay                   json.RawMessage                     `json:"last_seen_display"`
 		SystemMetricsDisplay              models.SystemMetricsDisplaySettings `json:"system_metrics_display"`
 		AppStatusBarEnabled               *bool                               `json:"app_status_bar_enabled"`
 		AppStatusBarOrder                 models.AppStatusBarOrder            `json:"app_status_bar_order"`
@@ -909,9 +909,25 @@ func scanUserSettings(scanner interface{ Scan(dest ...any) error }, userID strin
 	} else {
 		settings.ChangesPanelLayout = defaultChangesPanelLayout
 	}
-	settings.LastSeenDisplay = models.NormalizeLastSeenDisplay(payload.LastSeenDisplay)
+	settings.LastSeenDisplay = normalizeLastSeenDisplayStored(payload.LastSeenDisplay)
 	settings.KanbanHiddenStepIDs = decodeKanbanHiddenStepIDs(payload.KanbanHiddenStepIDs)
 	return settings, nil
+}
+
+// normalizeLastSeenDisplayStored maps a stored JSON value to the canonical
+// display mode: only a string exactly equal to "relative" is accepted. Every
+// other JSON type (number, object, boolean, null) and every other string
+// coerces to "absolute", so a hand-edited blob can never fail the settings
+// read or produce a broken column.
+func normalizeLastSeenDisplayStored(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return models.LastSeenDisplayAbsolute
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return models.LastSeenDisplayAbsolute
+	}
+	return models.NormalizeLastSeenDisplay(value)
 }
 
 // decodeKanbanHiddenStepIDs parses the persisted per-workflow hidden-step-id

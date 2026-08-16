@@ -32,6 +32,10 @@ func TestScanUserSettingsLastSeenDisplay(t *testing.T) {
 		{name: "absolute stored", raw: `{"last_seen_display":"absolute"}`, want: models.LastSeenDisplayAbsolute},
 		{name: "unknown coerced", raw: `{"last_seen_display":"garbage"}`, want: models.LastSeenDisplayAbsolute},
 		{name: "empty coerced", raw: `{"last_seen_display":""}`, want: models.LastSeenDisplayAbsolute},
+		{name: "number coerced", raw: `{"last_seen_display":123}`, want: models.LastSeenDisplayAbsolute},
+		{name: "object coerced", raw: `{"last_seen_display":{"x":1}}`, want: models.LastSeenDisplayAbsolute},
+		{name: "boolean coerced", raw: `{"last_seen_display":true}`, want: models.LastSeenDisplayAbsolute},
+		{name: "null coerced", raw: `{"last_seen_display":null}`, want: models.LastSeenDisplayAbsolute},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

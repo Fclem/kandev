@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -177,6 +178,7 @@ func (s *Service) UpdateUserSettings(ctx context.Context, req *UpdateUserSetting
 		taskCreatePatch = req.TaskCreateLastUsed
 	}
 	return s.updateUserSettingsCAS(ctx, func(settings *models.UserSettings) (bool, error) {
+		before := *settings
 		if err := applyBasicSettings(settings, req); err != nil {
 			return false, fmt.Errorf("%w: %s", ErrValidation, err.Error())
 		}
@@ -198,7 +200,7 @@ func (s *Service) UpdateUserSettings(ctx context.Context, req *UpdateUserSetting
 		if err := applyUserPreferenceBlobs(settings, req); err != nil {
 			return false, fmt.Errorf("%w: %s", ErrValidation, err.Error())
 		}
-		return true, nil
+		return !reflect.DeepEqual(*settings, before), nil
 	}, taskCreatePatch)
 }
 
@@ -207,8 +209,8 @@ func (s *Service) UpdateUserSettings(ctx context.Context, req *UpdateUserSetting
 // freshly read model and reports whether it mutated it; the immutable
 // taskCreatePatch is passed to every attempt so a retry re-applies the same
 // task-create merge against the fresh row. A no-op (apply returned false and
-// no patch) writes and publishes nothing. Exactly one event is published per
-// successful write.
+// no patch) writes and publishes nothing and returns the freshly read
+// (current) settings. Exactly one event is published per successful write.
 func (s *Service) updateUserSettingsCAS(
 	ctx context.Context,
 	apply func(*models.UserSettings) (bool, error),
@@ -226,7 +228,9 @@ func (s *Service) updateUserSettingsCAS(
 			return nil, err
 		}
 		if !applied && taskCreatePatch == nil {
-			return nil, nil
+			// No-op: report the freshly read (current) settings, write nothing,
+			// publish nothing.
+			return settings, nil
 		}
 		updated, err := s.repo.UpsertUserSettingsPreservingTaskCreateLastUsed(ctx, settings, taskCreatePatch, settings.Revision)
 		if err == nil {

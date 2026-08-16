@@ -48,6 +48,11 @@ type casFakeRepo struct {
 	blockNextUpsert bool
 	releaseUpsert   chan struct{}
 
+	// blockUpsert, when non-nil, blocks every upsert until the channel is
+	// closed. Used to force both concurrent readers to observe the same
+	// revision before either write commits.
+	blockUpsert chan struct{}
+
 	// upsertStarted and readDone are buffered phase-observation signals.
 	upsertStarted chan struct{}
 	readDone      chan struct{}
@@ -111,6 +116,7 @@ func (f *casFakeRepo) UpsertUserSettingsPreservingTaskCreateLastUsed(
 	}
 	rel := f.releaseUpsert
 	sig := f.upsertStarted
+	gate := f.blockUpsert
 	f.mu.Unlock()
 
 	if sig != nil {
@@ -121,6 +127,9 @@ func (f *casFakeRepo) UpsertUserSettingsPreservingTaskCreateLastUsed(
 	}
 	if block {
 		<-rel
+	}
+	if gate != nil {
+		<-gate
 	}
 
 	f.mu.Lock()
@@ -342,11 +351,64 @@ func TestUpdateUserSettingsRejectsInvalidLastSeenDisplay(t *testing.T) {
 	}
 }
 
+func TestUpdateUserSettingsEmptyPatchIsNoop(t *testing.T) {
+	base := &models.UserSettings{
+		UserID:          store.DefaultUserID,
+		LastSeenDisplay: models.LastSeenDisplayAbsolute,
+		Revision:        7,
+	}
+	repo := &recordingUserRepository{getSettings: base}
+	eventBus := &recordingEventBus{}
+	svc := newCASService(repo, eventBus)
+
+	got, err := svc.UpdateUserSettings(context.Background(), &UpdateUserSettingsRequest{})
+	if err != nil {
+		t.Fatalf("UpdateUserSettings: %v", err)
+	}
+	if repo.upsertUserSettingsPreservingLastUsedCalls != 0 {
+		t.Fatalf("empty patch upserts = %d, want 0", repo.upsertUserSettingsPreservingLastUsedCalls)
+	}
+	if len(eventBus.publishedEvents) != 0 {
+		t.Fatalf("empty patch events = %d, want 0", len(eventBus.publishedEvents))
+	}
+	if got == nil || got.Revision != base.Revision {
+		t.Fatalf("no-op returned settings = %+v, want current revision %d", got, base.Revision)
+	}
+}
+
+func TestUpdateUserSettingsSameValuePatchIsNoop(t *testing.T) {
+	base := &models.UserSettings{
+		UserID:          store.DefaultUserID,
+		LastSeenDisplay: models.LastSeenDisplayRelative,
+		Revision:        7,
+	}
+	repo := &recordingUserRepository{getSettings: base}
+	eventBus := &recordingEventBus{}
+	svc := newCASService(repo, eventBus)
+
+	relative := models.LastSeenDisplayRelative
+	got, err := svc.UpdateUserSettings(context.Background(), &UpdateUserSettingsRequest{LastSeenDisplay: &relative})
+	if err != nil {
+		t.Fatalf("UpdateUserSettings: %v", err)
+	}
+	if repo.upsertUserSettingsPreservingLastUsedCalls != 0 {
+		t.Fatalf("same-value patch upserts = %d, want 0", repo.upsertUserSettingsPreservingLastUsedCalls)
+	}
+	if len(eventBus.publishedEvents) != 0 {
+		t.Fatalf("same-value patch events = %d, want 0", len(eventBus.publishedEvents))
+	}
+	if got == nil || got.Revision != base.Revision {
+		t.Fatalf("no-op returned settings = %+v, want current revision %d", got, base.Revision)
+	}
+}
+
 func TestConcurrentPatchMergesLastSeenDisplay(t *testing.T) {
 	repo := newCASFakeRepo(&models.UserSettings{
 		UserID:          store.DefaultUserID,
 		LastSeenDisplay: models.LastSeenDisplayAbsolute,
 	})
+	repo.readDone = make(chan struct{}, 4)
+	repo.blockUpsert = make(chan struct{})
 	eventBus := &casEventBus{}
 	svc := newCASService(repo, eventBus)
 
@@ -365,6 +427,12 @@ func TestConcurrentPatchMergesLastSeenDisplay(t *testing.T) {
 			t.Errorf("status-bar patch: %v", err)
 		}
 	}()
+
+	// Barrier: both initial reads must observe the same revision before either
+	// write commits, so one stale upsert is forced to conflict and retry.
+	<-repo.readDone
+	<-repo.readDone
+	close(repo.blockUpsert)
 	wg.Wait()
 
 	row := repo.snapshot()
@@ -380,6 +448,32 @@ func TestConcurrentPatchMergesLastSeenDisplay(t *testing.T) {
 	if got := eventBus.count(); got != 2 {
 		t.Fatalf("events = %d, want 2", got)
 	}
+	assertOneStaleConflictAndRetry(t, repo)
+}
+
+// assertOneStaleConflictAndRetry pins the CAS retry interleaving: one write
+// commits at the shared initial revision, the other conflicts once and
+// re-reads/re-applies, so the repo sees two commits, exactly one stale
+// conflict, and a fresh retry re-read.
+func assertOneStaleConflictAndRetry(t *testing.T, repo *casFakeRepo) {
+	t.Helper()
+	var commits, conflicts int
+	for _, u := range repo.upsertLog() {
+		if u.committed {
+			commits++
+		} else {
+			conflicts++
+		}
+	}
+	if commits != 2 {
+		t.Fatalf("commits = %d, want 2", commits)
+	}
+	if conflicts != 1 {
+		t.Fatalf("stale conflicts = %d, want exactly 1", conflicts)
+	}
+	if reads := len(repo.readLog()); reads != 3 {
+		t.Fatalf("reads = %d, want 3 (two initial + one retry re-read)", reads)
+	}
 }
 
 func TestConcurrentClearEditorAndPatchMerge(t *testing.T) {
@@ -388,6 +482,8 @@ func TestConcurrentClearEditorAndPatchMerge(t *testing.T) {
 		DefaultEditorID: "editor-1",
 		LastSeenDisplay: models.LastSeenDisplayAbsolute,
 	})
+	repo.readDone = make(chan struct{}, 4)
+	repo.blockUpsert = make(chan struct{})
 	eventBus := &casEventBus{}
 	svc := newCASService(repo, eventBus)
 
@@ -406,6 +502,12 @@ func TestConcurrentClearEditorAndPatchMerge(t *testing.T) {
 			t.Errorf("relative patch: %v", err)
 		}
 	}()
+
+	// Barrier: both initial reads must observe the same revision before either
+	// write commits, so one stale upsert is forced to conflict and retry.
+	<-repo.readDone
+	<-repo.readDone
+	close(repo.blockUpsert)
 	wg.Wait()
 
 	row := repo.snapshot()
@@ -421,6 +523,7 @@ func TestConcurrentClearEditorAndPatchMerge(t *testing.T) {
 	if got := eventBus.count(); got != 2 {
 		t.Fatalf("events = %d, want 2", got)
 	}
+	assertOneStaleConflictAndRetry(t, repo)
 }
 
 // TestClearDefaultEditorIDConflictNoop forces a real CAS conflict for a Clear

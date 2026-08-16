@@ -132,6 +132,58 @@ describe("settled boundary seeding (production StateHydrator path)", () => {
   );
 });
 
+describe("stale-marker sweep install predicate", () => {
+  const STALE_TURN = {
+    activeBySession: { [SESSION_ID]: "old-turn" },
+    bySession: {
+      [SESSION_ID]: [{ id: OLD_TURN, started_at: OLD_BOUNDARY, completed_at: null }],
+    },
+  } as const;
+
+  it("sweeps a fresh non-force install", () => {
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      draft.turns.settledBoundaryBySession[SESSION_ID] = BOUNDARY;
+      hydrateState(draft, { turns: STALE_TURN } as unknown as Partial<AppState>, {
+        activeSessionId: null,
+      });
+    });
+    expect(result.turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it("sweeps a force merge over a pre-existing active-map key", () => {
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      draft.turns.activeBySession[SESSION_ID] = "live-turn";
+      draft.turns.settledBoundaryBySession[SESSION_ID] = BOUNDARY;
+      hydrateState(draft, { turns: STALE_TURN } as unknown as Partial<AppState>, {
+        forceMergeSessionId: SESSION_ID,
+      });
+    });
+    expect(result.turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it("sweeps when forceMergeSessionId equals activeSessionId", () => {
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      draft.turns.settledBoundaryBySession[SESSION_ID] = BOUNDARY;
+      hydrateState(draft, { turns: STALE_TURN } as unknown as Partial<AppState>, {
+        activeSessionId: SESSION_ID,
+        forceMergeSessionId: SESSION_ID,
+      });
+    });
+    expect(result.turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it("keeps a pre-existing non-active marker (not installed by this merge)", () => {
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      draft.turns.activeBySession[SESSION_ID] = "live-turn";
+      draft.turns.settledBoundaryBySession[SESSION_ID] = BOUNDARY;
+      hydrateState(draft, { turns: STALE_TURN } as unknown as Partial<AppState>, {
+        activeSessionId: null,
+      });
+    });
+    expect(result.turns.activeBySession[SESSION_ID]).toBe("live-turn");
+  });
+});
+
 describe("mergeInitialState — settled SSR sessions seed a boundary", () => {
   it("seeds a boundary from a settled session's updated_at", () => {
     const result = mergeInitialState({

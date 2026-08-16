@@ -46,15 +46,19 @@ DevTools target and the handler reloads synchronously during its initial
 probe persists the evidence to sessionStorage BEFORE the reload.
 
 1. In the SOURCE tab's DevTools console, clear any inherited probe from an
-   earlier run and record the attempt start time:
-   `sessionStorage.removeItem("kandev.bfcacheRestoreProbe"); const t0 = Date.now();`
+   earlier run and store the attempt start time in sessionStorage:
+   `sessionStorage.removeItem("kandev.bfcacheRestoreProbe"); sessionStorage.setItem("kandev.bfcacheProbeStart", String(Date.now()));`
    (sessionStorage survives reloads and Chrome Duplicate copies the source
-   tab's storage, so a stale probe must not be misattributed to this run.)
+   tab's storage — including this helper key — so the duplicated tab can
+   compare timestamps even though console variables are target-local.)
 2. Archive a task, then right-click the Kandev tab → **Duplicate**.
 3. In the duplicated tab's DevTools console, read the probe:
    `JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe"))`.
    It records `{ persisted, navigationType, at }` captured pre-reload.
-   Accept the record only if `at >= t0` (a newer write than this attempt).
+   Accept the record only if it is newer than this attempt:
+   `Number(sessionStorage.getItem("kandev.bfcacheProbeStart")) <= at`.
+   (A stale probe inherited from an earlier restore must not be attributed
+   to this run.)
 4. Confirm the handler reloaded from inside the duplicated tab's console
    after the reload settles:
    `performance.getEntriesByType("navigation")[0]?.type` must be `"reload"`
@@ -130,9 +134,11 @@ Sequential. Single task; no parallel candidates.
   type is `back_forward`), gated on that evidence; do not add it
   speculatively.
 - happy-dom lacks `PageTransitionEvent`; tests define the `persisted` flag on
-  a plain `Event`. The cold-`back_forward` regression test stubs a
-  `back_forward` navigation entry so a reintroduced navigation-type fallback
-  would fail it.
+  a plain `Event`. The cold-`back_forward` regression is covered twice: the
+  injected-seam case (harness `navigationType: "back_forward"` through the
+  injected reader) and the default-reader case (module installed without the
+  injected reader while global `performance` reports `back_forward`), so a
+  reintroduced navigation-type fallback fails either way.
 - E2E must use the synthetic persisted-`pageshow` signal (see plan): with an
   open WebSocket, current Chrome does not bfcache `no-store` pages on
   back/forward, so `page.goBack()` would pass trivially. The reload assertion
@@ -311,4 +317,25 @@ fallback.
   Fixed: step 4 now uses executable post-reload proof from the duplicated
   tab's own console — `performance.getEntriesByType("navigation")[0]?.type
   === "reload"` — plus the archived-task UI check.
+- No production-handler correctness defect found.
+
+### Adversarial review round 8 (50-luna-review-fix)
+
+- Finding 1 (minor, accepted): the cold-`back_forward` regression only
+  covered a fallback using the injected navigation reader; a fallback calling
+  the module's default `readNavigationType` (global performance) would stay
+  green. Fixed: the harness gained `injectNavigationType: false`, and a
+  companion test installs without the injected reader while stubbing global
+  `performance` to report `back_forward` (with `performance.now` for
+  happy-dom); the Risk text now describes both paths.
+- Finding 2 (minor, accepted): step 1 declared `const t0` in the source tab's
+  console, which is target-local and unavailable in the duplicated tab.
+  Fixed: the start time is stored in sessionStorage
+  (`kandev.bfcacheProbeStart`, copied to the duplicate) and the duplicated
+  tab compares `start <= at`.
+- Finding 3 (nit, accepted): the spec's client-storage contract only
+  mentioned writes before reload, omitting the `persisted === false`
+  `back_forward` diagnostic writes. Fixed: the contract now states the probe
+  covers frozen restores AND persisted-false candidates, with only
+  `persisted === true` causing a reload.
 - No production-handler correctness defect found.

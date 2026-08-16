@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { installBfcacheRestoreReload } from "./bfcache-restore-reload";
 
 const RESTORE_PROBE_KEY = "kandev.bfcacheRestoreProbe";
@@ -17,10 +17,12 @@ function createHarness({
   isDebug = () => false,
   storage = createMemoryStorage().storage,
   navigationType,
+  injectNavigationType = true,
 }: {
   isDebug?: () => boolean;
   storage?: Pick<Storage, "setItem">;
   navigationType?: string;
+  injectNavigationType?: boolean;
 } = {}) {
   const target = new EventTarget();
   const reload = vi.fn();
@@ -30,7 +32,7 @@ function createHarness({
     reload,
     isDebug,
     getStorage: () => storage,
-    getNavigationType,
+    ...(injectNavigationType ? { getNavigationType } : {}),
   });
 
   return {
@@ -47,6 +49,10 @@ function createHarness({
     },
   };
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("installBfcacheRestoreReload", () => {
   it("reloads when the page is restored from a frozen snapshot (persisted=true)", () => {
@@ -65,6 +71,24 @@ describe("installBfcacheRestoreReload", () => {
     // navigation-type reader returns `back_forward` here, so reintroducing
     // the navigation-type reload fallback would fail this test.
     const harness = createHarness({ navigationType: "back_forward" });
+
+    harness.dispatch(false);
+
+    expect(harness.reload).not.toHaveBeenCalled();
+  });
+
+  it("does not reload on a cold back/forward traversal via the default reader (persisted=false)", () => {
+    // Companion to the injected-seam case: a reintroduced fallback that calls
+    // the module's DEFAULT readNavigationType (reading global performance)
+    // must also fail. Stub global performance to report back_forward, install
+    // without the injected reader, and assert no reload.
+    vi.stubGlobal("performance", {
+      // happy-dom's Event constructor calls performance.now(); keep it intact
+      // while exposing the back_forward navigation entry.
+      now: () => 0,
+      getEntriesByType: (type: string) => (type === "navigation" ? [{ type: "back_forward" }] : []),
+    });
+    const harness = createHarness({ injectNavigationType: false });
 
     harness.dispatch(false);
 

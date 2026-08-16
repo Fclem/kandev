@@ -192,6 +192,9 @@ describe("Last seen display rendering", () => {
 
     const trigger = screen.getByTestId(RELATIVE_TEST_ID);
     const absolute = formatDateTime(new Date(LAST_SEEN_AT));
+    // The trigger is a semantic, focusable time element, not a bare span.
+    expect(trigger.tagName).toBe("TIME");
+    expect(trigger.getAttribute("dateTime")).toBe(new Date(LAST_SEEN_AT).toISOString());
     expect(trigger.getAttribute("aria-label")).toBe(absolute);
     expect(trigger.getAttribute("title")).toBe(absolute);
   });

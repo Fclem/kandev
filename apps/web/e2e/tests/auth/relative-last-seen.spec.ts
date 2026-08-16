@@ -51,42 +51,46 @@ test.describe.serial("relative last seen (desktop)", () => {
     backend,
   }) => {
     const ctx = await browser.newContext({ baseURL: backend.frontendUrl });
-    await setupAdmin(ctx, backend.baseUrl, ADMIN);
-    await login(ctx, backend.baseUrl, ADMIN);
-    const original = await readLastSeenDisplay(ctx, backend.baseUrl);
-    // Pin a known absolute baseline so selecting Relative time is a real
-    // transition and PATCH, not a no-op on a pre-existing relative value.
-    await restoreLastSeenDisplay(ctx, backend.baseUrl, "absolute");
-
     try {
-      const page = await ctx.newPage();
-      await page.goto(SECURITY_PATH);
-      await expect(page.getByTestId("last-seen-relative")).toHaveCount(0);
+      await setupAdmin(ctx, backend.baseUrl, ADMIN);
+      await login(ctx, backend.baseUrl, ADMIN);
+      let original = "absolute";
+      try {
+        original = await readLastSeenDisplay(ctx, backend.baseUrl);
+        // Pin a known absolute baseline so selecting Relative time is a real
+        // transition and PATCH, not a no-op on a pre-existing relative value.
+        await restoreLastSeenDisplay(ctx, backend.baseUrl, "absolute");
 
-      const select = page.getByTestId("last-seen-display-select");
-      await expect(select).toBeVisible({ timeout: 15_000 });
+        const page = await ctx.newPage();
+        await page.goto(SECURITY_PATH);
+        await expect(page.getByTestId("last-seen-relative")).toHaveCount(0);
 
-      await select.click();
-      await page.getByRole("option", { name: "Relative time" }).click();
+        const select = page.getByTestId("last-seen-display-select");
+        await expect(select).toBeVisible({ timeout: 15_000 });
 
-      const relative = page.getByTestId("last-seen-relative").first();
-      await expect(relative).toBeVisible({ timeout: 15_000 });
+        await select.click();
+        await page.getByRole("option", { name: "Relative time" }).click();
 
-      // Hover reveals the absolute timestamp in a tooltip, matching the
-      // trigger's accessible name/native title exactly.
-      const absolute = await relative.getAttribute("title");
-      expect(absolute).toBeTruthy();
-      await relative.hover();
-      const tooltip = page.getByRole("tooltip");
-      await expect(tooltip).toBeVisible();
-      await expect(tooltip).toHaveText(absolute!);
+        const relative = page.getByTestId("last-seen-relative").first();
+        await expect(relative).toBeVisible({ timeout: 15_000 });
 
-      // The choice persists to the user-settings API.
-      await expect
-        .poll(() => readLastSeenDisplay(ctx, backend.baseUrl), { timeout: 15_000 })
-        .toBe("relative");
+        // Hover reveals the absolute timestamp in a tooltip, matching the
+        // trigger's accessible name/native title exactly.
+        const absolute = await relative.getAttribute("title");
+        expect(absolute).toBeTruthy();
+        await relative.hover();
+        const tooltip = page.getByRole("tooltip");
+        await expect(tooltip).toBeVisible();
+        await expect(tooltip).toHaveText(absolute!);
+
+        // The choice persists to the user-settings API.
+        await expect
+          .poll(() => readLastSeenDisplay(ctx, backend.baseUrl), { timeout: 15_000 })
+          .toBe("relative");
+      } finally {
+        await restoreLastSeenDisplay(ctx, backend.baseUrl, original);
+      }
     } finally {
-      await restoreLastSeenDisplay(ctx, backend.baseUrl, original);
       await ctx.close();
     }
   });
@@ -97,39 +101,43 @@ test.describe.serial("relative last seen (desktop)", () => {
   }) => {
     const ctxA = await browser.newContext({ baseURL: backend.frontendUrl });
     const ctxB = await browser.newContext({ baseURL: backend.frontendUrl });
-    await login(ctxA, backend.baseUrl, ADMIN);
-    await login(ctxB, backend.baseUrl, ADMIN);
-    const original = await readLastSeenDisplay(ctxA, backend.baseUrl);
-    // Pin a known absolute baseline so tab A's pre-mutation display is
-    // established: the relative assertion below can only pass via a real WS
-    // event, not a stale pre-existing value.
-    await restoreLastSeenDisplay(ctxA, backend.baseUrl, "absolute");
-
     try {
-      const pageA = await ctxA.newPage();
-      // watchWs only observes sockets opened after it is armed, and the
-      // subscription wait itself must be armed before navigation.
-      const watcher = watchWs(pageA);
-      const subscriptionAck = watcher.waitForResponse("user.subscribe");
-      await pageA.goto(SECURITY_PATH);
-      await subscriptionAck;
-      await expect(pageA.getByTestId("last-seen-relative")).toHaveCount(0);
+      await login(ctxA, backend.baseUrl, ADMIN);
+      await login(ctxB, backend.baseUrl, ADMIN);
+      let original = "absolute";
+      try {
+        original = await readLastSeenDisplay(ctxA, backend.baseUrl);
+        // Pin a known absolute baseline so tab A's pre-mutation display is
+        // established: the relative assertion below can only pass via a real
+        // WS event, not a stale pre-existing value.
+        await restoreLastSeenDisplay(ctxA, backend.baseUrl, "absolute");
 
-      const pageB = await ctxB.newPage();
-      await pageB.goto(SECURITY_PATH);
-      await expect(pageB.getByTestId("last-seen-relative")).toHaveCount(0);
-      await pageB.getByTestId("last-seen-display-select").click();
-      await pageB.getByRole("option", { name: "Relative time" }).click();
-      await expect(pageB.getByTestId("last-seen-relative").first()).toBeVisible({
-        timeout: 15_000,
-      });
+        const pageA = await ctxA.newPage();
+        // watchWs only observes sockets opened after it is armed, and the
+        // subscription wait itself must be armed before navigation.
+        const watcher = watchWs(pageA);
+        const subscriptionAck = watcher.waitForResponse("user.subscribe");
+        await pageA.goto(SECURITY_PATH);
+        await subscriptionAck;
+        await expect(pageA.getByTestId("last-seen-relative")).toHaveCount(0);
 
-      // Tab A observes the change without a reload.
-      await expect(pageA.getByTestId("last-seen-relative").first()).toBeVisible({
-        timeout: 15_000,
-      });
+        const pageB = await ctxB.newPage();
+        await pageB.goto(SECURITY_PATH);
+        await expect(pageB.getByTestId("last-seen-relative")).toHaveCount(0);
+        await pageB.getByTestId("last-seen-display-select").click();
+        await pageB.getByRole("option", { name: "Relative time" }).click();
+        await expect(pageB.getByTestId("last-seen-relative").first()).toBeVisible({
+          timeout: 15_000,
+        });
+
+        // Tab A observes the change without a reload.
+        await expect(pageA.getByTestId("last-seen-relative").first()).toBeVisible({
+          timeout: 15_000,
+        });
+      } finally {
+        await restoreLastSeenDisplay(ctxA, backend.baseUrl, original);
+      }
     } finally {
-      await restoreLastSeenDisplay(ctxA, backend.baseUrl, original);
       await ctxA.close();
       await ctxB.close();
     }

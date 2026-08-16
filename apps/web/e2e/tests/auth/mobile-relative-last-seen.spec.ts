@@ -36,63 +36,67 @@ test.describe.serial("relative last seen (mobile)", () => {
       ...devices["Pixel 5"],
       baseURL: backend.frontendUrl,
     });
-    await setupAdmin(ctx, backend.baseUrl, ADMIN);
-    await login(ctx, backend.baseUrl, ADMIN);
-    const originalRes = await ctx.request.get(`${backend.baseUrl}/api/v1/user/settings`);
-    expect(originalRes.ok(), await originalRes.text()).toBeTruthy();
-    const originalBody = (await originalRes.json()) as {
-      settings: { last_seen_display?: string };
-    };
-    const original = originalBody.settings.last_seen_display ?? "absolute";
-    // Pin a known absolute baseline so the relative transition below is a real
-    // persisted change, not a pre-existing value.
-    const baselineRes = await ctx.request.patch(`${backend.baseUrl}/api/v1/user/settings`, {
-      data: { last_seen_display: "absolute" },
-    });
-    expect(baselineRes.ok(), await baselineRes.text()).toBeTruthy();
-
     try {
-      const page = await ctx.newPage();
-      // Manual contexts do not inherit project device options; pin the width.
-      expect((await page.viewportSize())?.width).toBe(393);
+      await setupAdmin(ctx, backend.baseUrl, ADMIN);
+      await login(ctx, backend.baseUrl, ADMIN);
+      let original = "absolute";
+      try {
+        const originalRes = await ctx.request.get(`${backend.baseUrl}/api/v1/user/settings`);
+        expect(originalRes.ok(), await originalRes.text()).toBeTruthy();
+        const originalBody = (await originalRes.json()) as {
+          settings: { last_seen_display?: string };
+        };
+        original = originalBody.settings.last_seen_display ?? "absolute";
+        // Pin a known absolute baseline so the relative transition below is a
+        // real persisted change, not a pre-existing value.
+        const baselineRes = await ctx.request.patch(`${backend.baseUrl}/api/v1/user/settings`, {
+          data: { last_seen_display: "absolute" },
+        });
+        expect(baselineRes.ok(), await baselineRes.text()).toBeTruthy();
 
-      await page.goto(SECURITY_PATH);
-      await expect(page.getByTestId("last-seen-relative")).toHaveCount(0);
+        const page = await ctx.newPage();
+        // Manual contexts do not inherit project device options; pin the width.
+        expect((await page.viewportSize())?.width).toBe(393);
 
-      const trigger = page.getByTestId("last-seen-display-select");
-      await expect(trigger).toBeVisible({ timeout: 15_000 });
+        await page.goto(SECURITY_PATH);
+        await expect(page.getByTestId("last-seen-relative")).toHaveCount(0);
 
-      // The trigger meets the 44px active-dimension touch target.
-      const triggerBox = await trigger.boundingBox();
-      expect(triggerBox).not.toBeNull();
-      expect(triggerBox!.height).toBeGreaterThanOrEqual(44);
+        const trigger = page.getByTestId("last-seen-display-select");
+        await expect(trigger).toBeVisible({ timeout: 15_000 });
 
-      await trigger.tap();
-      const option = page.getByRole("option", { name: "Relative time" });
-      await expect(option).toBeVisible();
-      const optionBox = await option.boundingBox();
-      expect(optionBox).not.toBeNull();
-      expect(Math.round(optionBox!.height)).toBeGreaterThanOrEqual(44);
-      await option.tap();
+        // The trigger meets the 44px active-dimension touch target.
+        const triggerBox = await trigger.boundingBox();
+        expect(triggerBox).not.toBeNull();
+        expect(triggerBox!.height).toBeGreaterThanOrEqual(44);
 
-      // Relative labels render without hover, with no horizontal overflow.
-      const relative = page.getByTestId("last-seen-relative").first();
-      await expect(relative).toBeVisible({ timeout: 15_000 });
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      );
-      expect(overflow).toBe(false);
+        await trigger.tap();
+        const option = page.getByRole("option", { name: "Relative time" });
+        await expect(option).toBeVisible();
+        const optionBox = await option.boundingBox();
+        expect(optionBox).not.toBeNull();
+        expect(Math.round(optionBox!.height)).toBeGreaterThanOrEqual(44);
+        await option.tap();
 
-      // The absolute stamp stays reachable without a tooltip, via the
-      // trigger's accessible name / native title.
-      const absolute = await relative.getAttribute("title");
-      expect(absolute).toBeTruthy();
-      await expect(relative).toHaveAttribute("aria-label", absolute!);
+        // Relative labels render without hover, with no horizontal overflow.
+        const relative = page.getByTestId("last-seen-relative").first();
+        await expect(relative).toBeVisible({ timeout: 15_000 });
+        const overflow = await page.evaluate(
+          () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        );
+        expect(overflow).toBe(false);
+
+        // The absolute stamp stays reachable without a tooltip, via the
+        // trigger's accessible name / native title.
+        const absolute = await relative.getAttribute("title");
+        expect(absolute).toBeTruthy();
+        await expect(relative).toHaveAttribute("aria-label", absolute!);
+      } finally {
+        const res = await ctx.request.patch(`${backend.baseUrl}/api/v1/user/settings`, {
+          data: { last_seen_display: original },
+        });
+        expect(res.ok(), await res.text()).toBeTruthy();
+      }
     } finally {
-      const res = await ctx.request.patch(`${backend.baseUrl}/api/v1/user/settings`, {
-        data: { last_seen_display: original },
-      });
-      expect(res.ok(), await res.text()).toBeTruthy();
       await ctx.close();
     }
   });

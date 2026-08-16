@@ -171,7 +171,8 @@ function RelativeLastSeenCell({ lastSeenAt }: { lastSeenAt: Date }) {
     <TableCell className="text-xs">
       <Tooltip>
         <TooltipTrigger asChild>
-          <span
+          <time
+            dateTime={lastSeenAt.toISOString()}
             tabIndex={0}
             title={absolute}
             aria-label={absolute}
@@ -179,7 +180,7 @@ function RelativeLastSeenCell({ lastSeenAt }: { lastSeenAt: Date }) {
             data-testid="last-seen-relative"
           >
             {formatRelativeTime(lastSeenAt, now)}
-          </span>
+          </time>
         </TooltipTrigger>
         <TooltipContent>{absolute}</TooltipContent>
       </Tooltip>

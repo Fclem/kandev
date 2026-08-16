@@ -386,6 +386,7 @@ export type AppState = KanbanSlice & {
     turnId: string,
     completedAt: string,
     metadata?: Record<string, unknown>,
+    updatedAt?: string,
   ) => void;
   setActiveTurn: (sessionId: string, turnId: string | null) => void;
   markTurnsLoaded: (sessionId: string) => void;

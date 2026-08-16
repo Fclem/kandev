@@ -219,6 +219,8 @@ export type SessionSliceActions = {
     turnId: string,
     completedAt: string,
     metadata?: Record<string, unknown> | null,
+    /** updated_at from the event payload; guards stale re-deliveries. */
+    updatedAt?: string,
   ) => void;
   setActiveTurn: (sessionId: string, turnId: string | null) => void;
   /** Records that the session's full persisted turn history is in the store. */

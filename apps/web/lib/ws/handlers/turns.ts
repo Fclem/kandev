@@ -81,6 +81,7 @@ export function registerTurnsHandlers(
           payload.id,
           payload.completed_at || new Date().toISOString(),
           payload.metadata,
+          payload.updated_at,
         );
       // Surface a notice when the turn finished with no agent output.
       maybeEmitEmptyTurnNotice(store, payload);

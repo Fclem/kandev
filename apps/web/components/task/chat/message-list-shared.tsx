@@ -66,7 +66,7 @@ export type MessageListProps = {
  * to an arbitrary message (e.g. the last
  * prompt) from outside the list — from the composer's scroll-up button. */
 export type MessageListHandle = {
-  scrollToMessage: (messageId: string, options?: { align?: "start" | "center" }) => void;
+  scrollToMessage: (messageId: string, options?: { align?: "start" | "center" }) => boolean;
 };
 
 export function getItemKey(item: RenderItem): string {

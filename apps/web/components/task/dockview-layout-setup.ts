@@ -490,6 +490,13 @@ export function setupPortalCleanup(
   appStore: StoreApi<AppState>,
 ): void {
   api.onDidRemovePanel((panel) => {
+    const dockviewStore = useDockviewStore.getState();
+    if (panel.id.startsWith("session:")) {
+      dockviewStore.clearScrollTargetForSession(panel.id.slice("session:".length));
+    } else if (panel.id === "chat") {
+      const activeSessionId = appStore.getState().tasks.activeSessionId;
+      if (activeSessionId) dockviewStore.clearScrollTargetForSession(activeSessionId);
+    }
     if (useDockviewStore.getState().isRestoringLayout) return;
     const remainingPanelCount = api.panels.filter((p) => p.id !== panel.id).length;
     handleMaximizeExitOnLastClose(api, panel.id, remainingPanelCount);

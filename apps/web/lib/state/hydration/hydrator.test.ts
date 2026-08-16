@@ -632,15 +632,25 @@ describe("hydrateState — session runtime model state", () => {
     });
 
     expect(result.sessionModels.bySessionId["active-session"].currentModelId).toBe(liveModelId);
-  });
-});
 
-describe("hydrateState — system slice", () => {
-  it("leaves the system slice untouched when the caller supplies no system fields", () => {
-    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+    const systemResult = produce(makeAppDraft(), (draft: Draft<AppState>) => {
       hydrateState(draft, {});
     });
-
-    expect(result.system).toEqual(defaultState.system);
+    expect(systemResult.system).toEqual(defaultState.system);
   });
 });
+it.each([true, false])(
+  "turn hydration marks a session only when it is force-merged",
+  (forceMerge) => {
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      if (!forceMerge) draft.turns.bySession["session-1"] = [];
+      hydrateState(
+        draft,
+        { turns: { bySession: { "session-1": [] } } } as unknown as Partial<AppState>,
+        { activeSessionId: "session-1", forceMergeSessionId: forceMerge ? "session-1" : null },
+      );
+    });
+
+    expect(result.turns.hydratedBySession).toEqual(forceMerge ? { "session-1": true } : {});
+  },
+);

@@ -30,6 +30,7 @@ import { usePanelSearch } from "@/hooks/use-panel-search";
 import { useSessionSearch } from "@/hooks/domains/session/use-session-search";
 import { useLazyLoadMessages } from "@/hooks/use-lazy-load-messages";
 import { findUnreadDividerItemId, lastRenderedMessageId } from "@/lib/session-unread-divider";
+import { useDockviewStore } from "@/lib/state/dockview-store";
 import { useSessionReadTracking } from "./chat/use-session-read-tracking";
 import { useDrainOlderMessages } from "@/components/task/chat/use-drain-older-messages";
 import { useAppStore } from "@/components/state-provider";
@@ -191,6 +192,7 @@ type TaskChatPanelProps = {
    * already implies visibility for them.
    */
   isVisible?: boolean;
+  panelId?: string | null;
 };
 
 // eslint-disable-next-line complexity, max-lines-per-function -- composes many sub-panels; each concern already factored into its own hook
@@ -205,6 +207,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
   onOpenFileAtLine,
   hideSessionsDropdown,
   isVisible = true,
+  panelId = null,
 }: TaskChatPanelProps) {
   const isArchived = useIsTaskArchived();
   const chatInputRef = useRef<ChatInputContainerHandle>(null);
@@ -250,6 +253,36 @@ export const TaskChatPanel = memo(function TaskChatPanel({
 
   const panelRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<MessageListHandle>(null);
+  const scrollTarget = useDockviewStore((state) => state.scrollTarget);
+  const clearScrollTargetForSession = useDockviewStore(
+    (state) => state.clearScrollTargetForSession,
+  );
+  const previousSessionId = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = previousSessionId.current;
+    previousSessionId.current = resolvedSessionId;
+    if (previous && previous !== resolvedSessionId) {
+      clearScrollTargetForSession(previous);
+    }
+    return () => {
+      if (resolvedSessionId) clearScrollTargetForSession(resolvedSessionId);
+    };
+  }, [clearScrollTargetForSession, resolvedSessionId]);
+  const clearScrollTarget = useDockviewStore((state) => state.clearScrollTarget);
+  useEffect(() => {
+    if (
+      !scrollTarget ||
+      !panelId ||
+      !isVisible ||
+      scrollTarget.sessionId !== resolvedSessionId ||
+      scrollTarget.hostPanelId !== panelId
+    ) {
+      return;
+    }
+    if (messageListRef.current?.scrollToMessage(scrollTarget.messageId, { align: "start" })) {
+      clearScrollTarget(scrollTarget.token);
+    }
+  }, [clearScrollTarget, isVisible, panelId, resolvedSessionId, scrollTarget]);
   const lastPromptMessageId = useMemo(() => getLastUserMessageId(allMessages), [allMessages]);
   const lastPromptMessage = useMemo(
     () =>

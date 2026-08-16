@@ -40,6 +40,7 @@ import { ReviewDetailPanelComponent } from "./review-detail-panel";
 import { MRDetailPanelComponent } from "@/components/gitlab/mr-detail-panel";
 import { PluginTaskPanel } from "./plugin-task-panel";
 import { PluginPanelTab } from "./plugin-panel-tab";
+import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
 import { TodosContent } from "./todos-panel-content";
 
 import { setPanelTitle, panelPortalManager } from "@/lib/layout/panel-portal-manager";
@@ -120,6 +121,7 @@ export const dockviewComponents: Record<string, React.FunctionComponent<IDockvie
   vscode: PortalSlot,
   plan: PortalSlot,
   todos: PortalSlot,
+  "prompt-history": PortalSlot,
   "pr-detail": PortalSlot,
   "mr-detail": PortalSlot,
   "review-detail": PortalSlot,
@@ -221,6 +223,7 @@ function ChatContent({ panelId, params }: { panelId: string; params: Record<stri
       onOpenFileAtLine={openFile}
       hideSessionsDropdown
       isVisible={isVisible}
+      panelId={panelId}
     />
   );
 }
@@ -406,6 +409,7 @@ const PANEL_RENDERERS: Record<string, PanelRenderer> = {
   vscode: (panelId) => <VscodePanel panelId={panelId} />,
   plan: () => <PlanContent />,
   todos: () => <TodosContent />,
+  "prompt-history": () => <PromptHistoryPanelContent />,
   "pr-detail": (panelId, params) => (
     <ReviewDetailPanelComponent panelId={panelId} params={params} />
   ),

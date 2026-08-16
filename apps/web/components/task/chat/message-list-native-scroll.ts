@@ -385,19 +385,24 @@ function useProgrammaticScrollGuard(
   return runGuardedScroll;
 }
 
-function useScrollToMessage(runGuardedScroll: (performScroll: () => void) => void) {
+function useScrollToMessage(
+  scrollRef: React.RefObject<HTMLDivElement | null>,
+  runGuardedScroll: (performScroll: () => void) => void,
+) {
   return useCallback(
     (messageId: string, options?: { align?: "start" | "center" }) => {
-      const el = document.getElementById(`msg-${messageId}`);
-      if (!el) return;
+      const selector = `[id="msg-${CSS.escape(messageId)}"]`;
+      const el = scrollRef.current?.querySelector<HTMLElement>(selector);
+      if (!el) return false;
       runGuardedScroll(() => {
         el.scrollIntoView({
           block: options?.align === "start" ? "start" : "center",
           behavior: "smooth",
         });
       });
+      return true;
     },
-    [runGuardedScroll],
+    [runGuardedScroll, scrollRef],
   );
 }
 
@@ -522,7 +527,7 @@ export function useNativeScrollManagement(params: {
     programmaticScrollLockRef,
     resyncIsNearBottom,
   );
-  const handleScrollToMessage = useScrollToMessage(runGuardedScroll);
+  const handleScrollToMessage = useScrollToMessage(scrollRef, runGuardedScroll);
   useScrollPositionOnPrepend(scrollRef, items, isProgrammaticScrollLocked);
   const sentinelRef = useLazyLoadSentinel(scrollRef, hasMore, isLoadingMore, loadMore);
   useInitialScrollPosition(scrollRef, items.length, sessionId, enabled, isNearBottomRef);

@@ -7,6 +7,7 @@ import {
   IconFolder,
   IconGitBranch,
   IconGitPullRequest,
+  IconHistory,
   IconListCheck,
   IconNetwork,
 } from "@tabler/icons-react";
@@ -222,6 +223,21 @@ function missingBuiltInReviews(
   };
 }
 
+function PromptHistoryPanelMenuItem({ groupId }: { groupId: string }) {
+  const { t } = useTranslation();
+  const addPromptHistoryPanel = useDockviewStore((s) => s.addPromptHistoryPanel);
+  return (
+    <DropdownMenuItem
+      data-testid="add-panel-prompt-history-item"
+      onClick={() => addPromptHistoryPanel({ groupId })}
+      className={MENU_ITEM_CLASS}
+    >
+      <IconHistory className={MENU_ICON_CLASS} />
+      {t("task:promptHistory")}
+    </DropdownMenuItem>
+  );
+}
+
 export function AddPanelMenuItems({
   groupId,
   state,
@@ -286,6 +302,7 @@ export function AddPanelMenuItems({
           {t("common:todos")}
         </DropdownMenuItem>
       )}
+      {!state.isPassthrough && <PromptHistoryPanelMenuItem groupId={groupId} />}
       {!state.hasChanges && (
         <DropdownMenuItem onClick={() => addChangesPanel(groupId)} className={MENU_ITEM_CLASS}>
           <IconGitBranch className={MENU_ICON_CLASS} />

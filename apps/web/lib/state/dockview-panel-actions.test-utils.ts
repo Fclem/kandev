@@ -90,6 +90,12 @@ type StoreShape = {
   rightTopGroupId: string;
   rightBottomGroupId: string;
   selectedDiff: { path: string; content?: string } | null;
+  scrollTarget: {
+    sessionId: string;
+    messageId: string;
+    token: number;
+    hostPanelId: string;
+  } | null;
 };
 
 export function makeStore(api: DockviewApi) {
@@ -99,6 +105,7 @@ export function makeStore(api: DockviewApi) {
     rightTopGroupId: "group-right-top",
     rightBottomGroupId: "group-right-bottom",
     selectedDiff: null,
+    scrollTarget: null,
   };
   return {
     get: () => state,

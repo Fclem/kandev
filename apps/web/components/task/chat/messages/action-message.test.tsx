@@ -141,13 +141,13 @@ function renderAction(
             [TEST_SESSION_ID]: { state: sessionState, error_message: sessionError } as TaskSession,
           },
         },
-        turns: {
-          bySession: {},
-          activeBySession: activeTurnId ? { [TEST_SESSION_ID]: activeTurnId } : {},
-          loadedBySession: {},
-          reconcileEpochBySession: {},
-          settledBoundaryBySession: {},
-        },
+          turns: {
+            bySession: {},
+            activeBySession: activeTurnId ? { [TEST_SESSION_ID]: activeTurnId } : {},
+            loadedBySession: {},
+            reconcileEpochBySession: {},
+            settledBoundaryBySession: {},
+          },
       }
     : {};
   return render(<ActionMessage comment={comment} />, {

@@ -389,6 +389,31 @@ function hydrateSession(
   if (state.activeModel) deepMerge(draft.activeModel, state.activeModel);
 }
 
+function hydrateTurns(
+  draft: Draft<AppState>,
+  turns: NonNullable<HydrationState["turns"]>,
+  activeSessionId: string | null,
+  forceMergeSessionId: string | null,
+): void {
+  draft.turns.hydratedBySession ??= {};
+  if (turns.bySession) {
+    const mergedSessionIds = Object.keys(turns.bySession).filter((sessionId) => {
+      const forceMerge = forceMergeSessionId === sessionId;
+      return forceMerge || (sessionId !== activeSessionId && !(sessionId in draft.turns.bySession));
+    });
+    mergeSessionMap(draft.turns.bySession, turns.bySession, activeSessionId, forceMergeSessionId);
+    for (const sessionId of mergedSessionIds) {
+      draft.turns.hydratedBySession[sessionId] = true;
+    }
+  }
+  if (turns.activeBySession)
+    mergeSessionMap(
+      draft.turns.activeBySession,
+      turns.activeBySession,
+      activeSessionId,
+      forceMergeSessionId,
+    );
+}
 /** Hydrate session runtime slices (volatile state). */
 function hydrateSessionRuntime(
   draft: Draft<AppState>,

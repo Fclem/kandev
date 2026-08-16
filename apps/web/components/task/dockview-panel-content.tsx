@@ -25,6 +25,7 @@ import { TaskChangesPanel } from "./task-changes-panel";
 import { TaskChatPanel } from "./task-chat-panel";
 import { TaskPlanPanel } from "./task-plan-panel";
 import { TerminalPanel } from "./terminal-panel";
+import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
 import { TodosContent } from "./todos-panel-content";
 import { VscodePanel } from "./vscode-panel";
 import { useTranslation } from "react-i18next";
@@ -89,6 +90,7 @@ function ChatContent({ panelId, params }: { panelId: string; params: Record<stri
       onOpenFileAtLine={openFile}
       hideSessionsDropdown
       isVisible={isVisible}
+      panelId={panelId}
     />
   );
 }
@@ -225,6 +227,7 @@ const PANEL_RENDERERS: Record<string, PanelRenderer> = {
   vscode: (panelId) => <VscodePanel panelId={panelId} />,
   plan: () => <PlanContent />,
   todos: () => <TodosContent />,
+  "prompt-history": () => <PromptHistoryPanelContent />,
   "pr-detail": (panelId, params) => (
     <ReviewDetailPanelComponent panelId={panelId} params={params} />
   ),

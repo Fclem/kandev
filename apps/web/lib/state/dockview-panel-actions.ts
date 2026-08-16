@@ -2,28 +2,32 @@ import type { DockviewApi, DockviewGroupPanel } from "dockview-react";
 import type { CommitDetailTarget } from "@/components/task/changes-diff-target";
 import { t } from "@/lib/i18n";
 import { focusOrAddPanel } from "./dockview-layout-builders";
+import { buildExtraPanelActions } from "./dockview-extra-panel-actions";
 import { reviewPanelId, type ReviewPanelTarget } from "./dockview-review-panel-id";
 import { panelTitle } from "./layout-manager/panel-title";
-import { buildTerminalPanelActions } from "./dockview-terminal-panel-actions";
-import {
-  parsePluginPanelId,
-  pluginPanelId,
-  PLUGIN_PANEL_COMPONENT,
-  PLUGIN_PANEL_TAB_COMPONENT,
-} from "./layout-manager/plugin-panels";
 
-type StoreGet = () => {
+export type ScrollTarget = {
+  sessionId: string;
+  messageId: string;
+  token: number;
+  hostPanelId: string;
+};
+export type StoreGet = () => {
   api: DockviewApi | null;
   centerGroupId: string;
   rightTopGroupId: string;
   rightBottomGroupId: string;
   selectedDiff: { path: string; content?: string } | null;
+  scrollTarget?: ScrollTarget | null;
 };
-type StoreSet = (
-  partial: Partial<{ selectedDiff: { path: string; content?: string } | null }>,
+export type StoreSet = (
+  partial: Partial<{
+    selectedDiff: { path: string; content?: string } | null;
+    scrollTarget: ScrollTarget | null;
+  }>,
 ) => void;
 
-type SimplePanelOpts = {
+export type SimplePanelOpts = {
   id: string;
   component: string;
   title: string;
@@ -31,7 +35,7 @@ type SimplePanelOpts = {
   params?: Record<string, unknown>;
 };
 
-function addSimplePanel(api: DockviewApi, groupId: string, opts: SimplePanelOpts): void {
+export function addSimplePanel(api: DockviewApi, groupId: string, opts: SimplePanelOpts): void {
   focusOrAddPanel(api, { ...opts, position: { referenceGroup: groupId } });
 }
 
@@ -63,7 +67,7 @@ function openBrowserPanel(api: DockviewApi, centerGroupId: string, url: string):
   });
 }
 
-type SidePanelOpts = { groupId?: string; quiet?: boolean; inCenter?: boolean };
+export type SidePanelOpts = { groupId?: string; quiet?: boolean; inCenter?: boolean };
 export type ReviewPanelOptions = { groupId?: string };
 
 /**
@@ -73,7 +77,7 @@ export type ReviewPanelOptions = { groupId?: string };
  * from `addPlanPanel` so `addPluginPanel` can reuse the identical placement
  * rules instead of re-deriving them.
  */
-function addSidePanel(
+export function addSidePanel(
   api: DockviewApi,
   centerGroupId: string,
   panel: SimplePanelOpts,
@@ -559,7 +563,7 @@ export function removeSessionPanel(api: DockviewApi, sessionId: string): void {
   if (panel) api.removePanel(panel);
 }
 
-function buildReviewPanelActions(get: StoreGet) {
+export function buildReviewPanelActions(get: StoreGet) {
   return {
     /**
      * Focus an existing PR tab in place, or add a keyed tab in the explicitly
@@ -649,77 +653,4 @@ function buildReviewPanelActions(get: StoreGet) {
   };
 }
 
-export function buildExtraPanelActions(get: StoreGet) {
-  return {
-    addVscodePanel: () => {
-      const { api, centerGroupId } = get();
-      if (!api) return;
-      focusOrAddPanel(api, {
-        id: "vscode",
-        component: "vscode",
-        title: panelTitle("vscode"),
-        position: { referenceGroup: centerGroupId },
-      });
-    },
-    openInternalVscode: (_goto: { file: string; line: number; col: number } | null) => {
-      const { api, centerGroupId } = get();
-      if (!api) return;
-      const existing = api.getPanel("vscode");
-      if (existing) {
-        existing.api.setActive();
-        return;
-      }
-      focusOrAddPanel(api, {
-        id: "vscode",
-        component: "vscode",
-        title: panelTitle("vscode"),
-        position: { referenceGroup: centerGroupId },
-      });
-    },
-    addPlanPanel: (opts?: SidePanelOpts) => {
-      const { api, centerGroupId } = get();
-      if (!api) return;
-      addSidePanel(
-        api,
-        centerGroupId,
-        { id: "plan", component: "plan", title: panelTitle("plan"), tabComponent: "planTab" },
-        opts,
-      );
-    },
-    addPluginPanel: (pluginId: string, panelKey: string, title: string, opts?: SidePanelOpts) => {
-      const { api, centerGroupId } = get();
-      if (!api) return;
-      addSidePanel(
-        api,
-        centerGroupId,
-        {
-          id: pluginPanelId(pluginId, panelKey),
-          component: PLUGIN_PANEL_COMPONENT,
-          title,
-          tabComponent: PLUGIN_PANEL_TAB_COMPONENT,
-          params: { pluginId, panelKey },
-        },
-        opts,
-      );
-    },
-    closePluginPanels: (pluginId: string) => {
-      const { api } = get();
-      if (!api) return;
-      api.panels
-        .filter((p) => parsePluginPanelId(p.id)?.pluginId === pluginId)
-        .forEach((p) => api.removePanel(p));
-    },
-    addTodosPanel: (opts?: SidePanelOpts) => {
-      const { api, centerGroupId } = get();
-      if (!api) return;
-      addSidePanel(
-        api,
-        centerGroupId,
-        { id: "todos", component: "todos", title: panelTitle("todos") },
-        opts,
-      );
-    },
-    ...buildReviewPanelActions(get),
-    ...buildTerminalPanelActions(get),
-  };
-}
+export { buildExtraPanelActions };

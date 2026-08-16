@@ -174,6 +174,7 @@ type DockviewStore = {
   /** Close every currently-open panel contributed by pluginId (disable/uninstall — AC4). */
   closePluginPanels: (pluginId: string) => void;
   addTodosPanel: (opts?: { groupId?: string; quiet?: boolean; inCenter?: boolean }) => void;
+  addPromptHistoryPanel: (opts?: { groupId?: string; quiet?: boolean; inCenter?: boolean }) => void;
   /** Open a PR detail panel. prKey (owner/repo/pr_number) gives multi-repo tasks one tab per PR. */
   addPRPanel: (prKey?: string, opts?: ReviewPanelOptions) => void;
   /** Open a GitLab merge request detail panel keyed by host/project/iid. */
@@ -202,6 +203,15 @@ type DockviewStore = {
   addDevServerPanel: (groupId?: string) => void;
   selectedDiff: { path: string; content?: string } | null;
   setSelectedDiff: (diff: { path: string; content?: string } | null) => void;
+  scrollTarget: {
+    sessionId: string;
+    messageId: string;
+    token: number;
+    hostPanelId: string;
+  } | null;
+  scrollTranscriptToMessage: (sessionId: string, messageId: string, title: string) => void;
+  clearScrollTarget: (token: number) => void;
+  clearScrollTargetForSession: (sessionId: string) => void;
   activeGroupId: string | null;
   centerGroupId: string;
   rightTopGroupId: string;
@@ -1176,6 +1186,7 @@ export const useDockviewStore = create<DockviewStore>((set, get) => ({
   activeGroupId: null,
   selectedDiff: null,
   setSelectedDiff: (diff) => set({ selectedDiff: diff }),
+  scrollTarget: null,
   openFiles: new Map(),
   ...buildFileStateActions(set),
   centerGroupId: CENTER_GROUP,
@@ -1217,7 +1228,7 @@ export const useDockviewStore = create<DockviewStore>((set, get) => ({
   maximizedGroupId: null,
   ...buildMaximizeActions(set, get),
   ...buildPanelActions(set, get),
-  ...buildExtraPanelActions(get),
+  ...buildExtraPanelActions(set, get),
 }));
 
 /**

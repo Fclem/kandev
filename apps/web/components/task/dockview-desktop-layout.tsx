@@ -132,6 +132,7 @@ const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
   vscode: PortalSlot,
   plan: PortalSlot,
   todos: PortalSlot,
+  "prompt-history": PortalSlot,
   "pr-detail": PortalSlot,
   "mr-detail": PortalSlot,
   "review-detail": PortalSlot,

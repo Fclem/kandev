@@ -52,9 +52,7 @@ restored from a frozen snapshot:
   click-out-and-back flow). Fresh loads (`navigate`), manual refreshes
   (`reload`), and SPA soft navigations never reload.
 - The module follows the `apps/web/src/vite-preload-recovery.ts` pattern:
-  injected `target`, `reload`, and navigation-type reader for testability;
-  defensive reads so missing `PageTransitionEvent` / Navigation Timing APIs
-  degrade to persisted-only behavior without crashing.
+  injected `target` and `reload` for testability.
 - `apps/web/src/main.tsx` installs it at module scope next to
   `installVitePreloadRecovery()`, before React mounts.
 
@@ -77,8 +75,8 @@ E2E test, `apps/web/e2e/tests/layout/bfcache-restore-reload.spec.ts`
 
 - Load the app; assert the navigation type is `navigate` and no reload fired.
 - Dispatch a real `pageshow` event with `persisted === true` from the page
-  context; `expect.poll` the navigation type becomes `reload` (the app
-  reloaded through its own installed handler).
+  context; retry (navigation-race safe) until the navigation type becomes
+  `reload` (the app reloaded through its own installed handler).
 - The synthetic-signal approach is deliberate: the e2e backend page holds an
   open WebSocket, which in current Chrome makes a `no-store` page ineligible
   for bfcache on back/forward navigations, so `page.goBack()` would reload

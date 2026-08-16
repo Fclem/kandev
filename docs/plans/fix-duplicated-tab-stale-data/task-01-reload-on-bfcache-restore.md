@@ -66,14 +66,17 @@ Sequential. Single task; no parallel candidates.
 
 ## Risks
 
-- Chrome duplicate-tab restore event delivery may vary by version. The
-  `back_forward` navigation-type check covers state-clone restores where
-  `persisted` is false. If a real-Chrome duplicate test shows no reload,
-  follow up with the WS-close fallback described in the plan (reload on
-  unexpected WS close when the navigation type is `back_forward`), gated on
-  that evidence; do not add it speculatively.
-- jsdom lacks `PageTransitionEvent` and Navigation Timing; tests inject the
-  `persisted` flag on a plain `Event` and pass a fake navigation-type reader.
+- Chrome duplicate-tab restore event delivery may vary by version. Detection
+  is `pageshow.persisted === true` only; a state-clone restore that fires no
+  `pageshow` at all is not detectable by this handler. If a real-Chrome
+  duplicate test shows no reload, follow up with the WS-close fallback
+  described in the plan (reload on unexpected WS close when the navigation
+  type is `back_forward`), gated on that evidence; do not add it
+  speculatively.
+- jsdom lacks `PageTransitionEvent`; tests define the `persisted` flag on a
+  plain `Event`. The cold-`back_forward` regression test stubs a
+  `back_forward` navigation entry so a reintroduced navigation-type fallback
+  would fail it.
 - E2E must use the synthetic persisted-`pageshow` signal (see plan): with an
   open WebSocket, current Chrome does not bfcache `no-store` pages on
   back/forward, so `page.goBack()` would pass trivially. Use `expect.poll`
@@ -128,3 +131,21 @@ fallback.
   version restores without firing `pageshow` at all (no persisted signal),
   add the plan-documented WS-close fallback gated on that evidence; none was
   needed for the signals observed here.
+
+### Adversarial review round 2 (50-luna-review-fix)
+
+- Finding 1 (minor, accepted): the cold-`back_forward` regression test only
+  dispatched `persisted=false` without exposing a `back_forward` navigation
+  entry, so it was behaviorally identical to the fresh-load test and a
+  reintroduced navigation-type fallback would stay green under jsdom (no
+  matching navigation entry). Fixed: the test now stubs
+  `performance.getEntriesByType("navigation")` to return a `back_forward`
+  entry before dispatching `persisted=false`, and asserts no reload.
+- Finding 2 (nit, accepted): the plan and task still described the removed
+  navigation-type reader and defensive Navigation Timing reads. Fixed: both
+  documents now describe only injected `target`/`reload` and the
+  plain-`Event` persisted test, retaining the separately gated WS-close
+  fallback.
+- No production-code correctness issue found. The real-Chrome duplicate-tab
+  run remains the outstanding evidence gate for the WS-close fallback
+  decision.

@@ -12,7 +12,7 @@ Chrome's Duplicate tab restores the Kandev page from a frozen browser snapshot
 (back/forward-style restore; the duplicated tab's navigation type is
 `back_forward`) instead of performing a fresh load. The restored page keeps the
 frozen JS heap and DOM, so data that changed after the snapshot (e.g., a task
-archived in the meantime) shows as stale until a manual refresh.
+archived since) shows as stale until a manual refresh.
 
 Root cause chain, with evidence:
 
@@ -105,6 +105,6 @@ E2E test, `apps/web/e2e/tests/layout/bfcache-restore-reload.spec.ts`
 
 Wave 1:
 
-- [x] [Task 01: Reload on bfcache restore](task-01-reload-on-bfcache-restore.md)
+- [ ] [Task 01: Reload on bfcache restore](task-01-reload-on-bfcache-restore.md)
 
 Sequential. Single task; no parallel candidates.

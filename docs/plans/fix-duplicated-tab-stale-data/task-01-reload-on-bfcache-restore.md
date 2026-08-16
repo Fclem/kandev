@@ -53,12 +53,15 @@ probe persists the evidence to sessionStorage BEFORE the reload.
    compare timestamps even though console variables are target-local.)
 2. Archive a task, then right-click the Kandev tab → **Duplicate**.
 3. In the duplicated tab's DevTools console, read the probe and check it is
-   newer than this attempt in one self-contained expression (console bindings
-   are not carried over from the source tab):
-   `JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe")).at >= Number(sessionStorage.getItem("kandev.bfcacheProbeStart"))`
+   newer than this attempt in one self-contained, null-safe expression
+   (console bindings are not carried over from the source tab):
+   `((JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe") ?? "null")?.at ?? -1) >= Number(sessionStorage.getItem("kandev.bfcacheProbeStart")))`
    The probe records `{ persisted, navigationType, at }` captured pre-reload;
    the comparison must be true for the record to belong to this run (a stale
-   probe inherited from an earlier restore must not be attributed to it).
+   probe inherited from an earlier restore must not be attributed to it). If
+   no `pageshow` fired, there is no probe entry and the expression evaluates
+   false instead of throwing, so the no-probe outcome in step 6 can be
+   recorded.
 4. Confirm the handler reloaded from inside the duplicated tab's console
    after the reload settles:
    `performance.getEntriesByType("navigation")[0]?.type` must be `"reload"`
@@ -169,10 +172,11 @@ fallback.
     src/bfcache-restore-reload.test.ts src/main.tsx
     e2e/tests/layout/bfcache-restore-reload.spec.ts` (clean).
   - `cd apps/web && pnpm e2e:run tests/layout/bfcache-restore-reload.spec.ts`
-    (1/1; the first attempt's assertion polled `performance` nav type during
-    the in-flight reload and hit the destroyed execution context — the reload
-    itself fired; the assertion was made navigation-race safe with
-    `expect(...).toPass` catching context-destroyed errors).
+    (1/1; the assertion arms a `framenavigated` causal wait before
+    dispatching the restore signal, then asserts the reload navigation type
+    with the default timeout — the earlier `expect(...).toPass({ timeout:
+    15_000 })` effect-polling budget was removed per the E2E causal-wait
+    convention).
 
 ### Adversarial review round 1 (50-luna-review-fix)
 
@@ -320,7 +324,6 @@ fallback.
 - No production-handler correctness defect found.
 
 ### Adversarial review round 8 (50-luna-review-fix)
-
 - Finding 1 (minor, accepted): the cold-`back_forward` regression only
   covered a fallback using the injected navigation reader; a fallback calling
   the module's default `readNavigationType` (global performance) would stay
@@ -332,13 +335,41 @@ fallback.
   console, which is target-local and unavailable in the duplicated tab.
   Fixed: the start time is stored in sessionStorage
   (`kandev.bfcacheProbeStart`, copied to the duplicate) and the duplicated
-  tab compares with a self-contained one-liner
-  (`JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe")).at >=
-  Number(sessionStorage.getItem("kandev.bfcacheProbeStart"))`), after a
-  follow-up review caught that the first revision referenced an unbound `at`.
+  tab compares with a self-contained null-safe one-liner
+  (`((JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe") ?? "null")?.at ?? -1) >= Number(sessionStorage.getItem("kandev.bfcacheProbeStart")))`),
+  after a follow-up review caught that the first revision referenced an
+  unbound `at`, and a later review caught that the expression threw on an
+  absent probe.
 - Finding 3 (nit, accepted): the spec's client-storage contract only
   mentioned writes before reload, omitting the `persisted === false`
   `back_forward` diagnostic writes. Fixed: the contract now states the probe
   covers frozen restores AND persisted-false candidates, with only
   `persisted === true` causing a reload.
 - No production-handler correctness defect found.
+
+### PR review fixup (CodeRabbit / Claude / Greptile, PR #2717)
+
+- CodeRabbit P2 (plan.md:108): the Wave-1 checkbox marked Task 01 complete
+  while the native gate is open. Fixed: unchecked; it stays `[ ]` until the
+  native result is recorded.
+- CodeRabbit P2 (e2e:30): the reload assertion polled the navigation effect
+  with a hand-picked 15s budget. Fixed: the E2E now arms a
+  `framenavigated` causal wait before dispatching the restore signal and
+  asserts the reload navigation type with the default timeout.
+- CodeRabbit + Claude (unit tests): "fresh load" and "manual refresh" tests
+  exercised identical paths. Fixed: they now pass
+  `navigationType: "navigate"` / `"reload"` through the harness, guarding a
+  reintroduced fallback keyed on either type.
+- CodeRabbit (task-01:61): the gate's probe expression threw on an absent
+  probe. Fixed: both step 3 and the round-8 record now use a null-safe
+  expression that evaluates false (no-probe outcome recordable) instead of
+  throwing.
+- CodeRabbit (plan/spec): the spec claimed native Duplicate "still delivers
+  `persisted`" — unverified. Fixed: the failure-mode bullet and the
+  Duplicate-tab scenario now mark that outcome pending until the native gate
+  is recorded; LanguageTool wording nit ("in the meantime") fixed.
+- Claude suggestion: spec status `draft` → `building` (INDEX updated).
+- Not actionable here: the merge-blocking native-Chrome Duplicate-tab
+  verification requires the user's non-headless Chrome (right-click →
+  Duplicate cannot be driven via CDP/Playwright); it remains the documented
+  gate and stays open in the task/plan records.

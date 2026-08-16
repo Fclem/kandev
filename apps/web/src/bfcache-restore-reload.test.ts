@@ -96,7 +96,9 @@ describe("installBfcacheRestoreReload", () => {
   });
 
   it("does not reload on a fresh load (persisted=false)", () => {
-    const harness = createHarness();
+    // navigationType: "navigate" distinguishes this from the manual-refresh
+    // case below, so a reintroduced fallback keyed on either type fails.
+    const harness = createHarness({ navigationType: "navigate" });
 
     harness.dispatch(false);
 
@@ -104,7 +106,7 @@ describe("installBfcacheRestoreReload", () => {
   });
 
   it("does not reload on a manual refresh (persisted=false)", () => {
-    const harness = createHarness();
+    const harness = createHarness({ navigationType: "reload" });
 
     harness.dispatch(false);
 

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: building
 created: 2026-08-16
 owner: Kandev
 ---
@@ -60,8 +60,12 @@ refresh, automated.
   is `false`, so no recursive reload.
 - Open WebSocket at freeze time can make the page ineligible for bfcache on
   back/forward navigations in some Chrome versions; such navigations reload
-  normally and are correct without the handler. Genuine restores (including
-  Chrome's Duplicate tab) still deliver `persisted` on `pageshow`.
+  normally and are correct without the handler. Genuine restores deliver
+  `persisted` on `pageshow`. Whether Chrome's native Duplicate-tab path is
+  such a restore (vs. a state clone that fires no `pageshow` at all) is
+  pending the native verification gate documented in the plan; the
+  Duplicate-tab outcome in the scenarios below is marked pending until that
+  evidence is recorded.
 
 ## Persistence guarantees
 
@@ -84,7 +88,9 @@ attempt. It contains no user data.
 
 - **GIVEN** a Kandev tab showing a task in Active tasks, **WHEN** the task is
   archived and the user duplicates the tab in Chrome, **THEN** the duplicated
-  tab reloads and the task is not shown as active.
+  tab reloads and the task is not shown as active. *(Pending: the native
+  Duplicate-tab event sequence is the outstanding verification gate; until it
+  is recorded, this outcome is expected but not yet evidenced.)*
 - **GIVEN** a loaded Kandev page, **WHEN** the browser restores it from
   bfcache (back/forward navigation), **THEN** the page reloads with fresh
   data.

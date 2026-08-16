@@ -174,6 +174,15 @@ describe("Last seen display rendering", () => {
     expect(screen.getByTestId(EMPTY_TEST_ID)).toBeTruthy();
     expect(screen.queryByTestId(RELATIVE_TEST_ID)).toBeNull();
   });
+
+  it("keeps the Last seen select accessible when no sessions are returned", async () => {
+    authApiMocks.listSessions.mockResolvedValue({ sessions: [] });
+    await renderLoaded({ lastSeenDisplay: "absolute" });
+
+    // The display option lives on the card independent of table rows.
+    expect(screen.getByTestId(SELECT_TEST_ID)).toBeTruthy();
+    expect(screen.queryByTestId("account-sessions-table")).toBeNull();
+  });
 });
 
 describe("Last seen display persistence", () => {

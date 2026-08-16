@@ -68,11 +68,14 @@ test.describe.serial("relative last seen (desktop)", () => {
       const relative = page.getByTestId("last-seen-relative").first();
       await expect(relative).toBeVisible({ timeout: 15_000 });
 
-      // Hover reveals the absolute timestamp in a tooltip.
+      // Hover reveals the absolute timestamp in a tooltip, matching the
+      // trigger's accessible name/native title exactly.
+      const absolute = await relative.getAttribute("title");
+      expect(absolute).toBeTruthy();
       await relative.hover();
       const tooltip = page.getByRole("tooltip");
       await expect(tooltip).toBeVisible();
-      await expect(tooltip).toContainText(/\d{4}/);
+      await expect(tooltip).toHaveText(absolute!);
 
       // The choice persists to the user-settings API.
       await expect

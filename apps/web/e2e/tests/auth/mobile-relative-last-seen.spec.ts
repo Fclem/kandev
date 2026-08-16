@@ -38,6 +38,12 @@ test.describe.serial("relative last seen (mobile)", () => {
     });
     await setupAdmin(ctx, backend.baseUrl, ADMIN);
     await login(ctx, backend.baseUrl, ADMIN);
+    const originalRes = await ctx.request.get(`${backend.baseUrl}/api/v1/user/settings`);
+    expect(originalRes.ok(), await originalRes.text()).toBeTruthy();
+    const originalBody = (await originalRes.json()) as {
+      settings: { last_seen_display?: string };
+    };
+    const original = originalBody.settings.last_seen_display ?? "absolute";
 
     try {
       const page = await ctx.newPage();
@@ -77,7 +83,7 @@ test.describe.serial("relative last seen (mobile)", () => {
       await expect(relative).toHaveAttribute("aria-label", absolute!);
     } finally {
       const res = await ctx.request.patch(`${backend.baseUrl}/api/v1/user/settings`, {
-        data: { last_seen_display: "absolute" },
+        data: { last_seen_display: original },
       });
       expect(res.ok(), await res.text()).toBeTruthy();
       await ctx.close();

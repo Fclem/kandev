@@ -55,8 +55,16 @@ export async function ensureSessionTurnsLoaded(
       const { turns } = await listSessionTurns(sessionId, { cache: "no-store" });
       // Re-check before merging: the session may have been removed while the
       // request was in flight.
-      if (!store.getState().taskSessions.items[sessionId]) return;
+      const state = store.getState();
+      if (!state.taskSessions.items[sessionId]) return;
+      // Only merge turns the store has not seen yet. Turns already present
+      // reached the store via WS `session.turn.*` events, which are delivered
+      // live and are therefore at least as fresh as this REST snapshot; a
+      // merge via addTurn's Object.assign would otherwise overwrite newer
+      // live fields (metadata, updated_at) with the older snapshot.
+      const existingIds = new Set((state.turns.bySession[sessionId] ?? []).map((turn) => turn.id));
       for (const turn of turns) {
+        if (existingIds.has(turn.id)) continue;
         store.getState().addTurn(turn);
       }
       store.getState().markTurnsLoaded(sessionId);

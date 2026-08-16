@@ -49,9 +49,9 @@ function turn(
 
 describe("parseTurnTimestamp", () => {
   it("accepts RFC3339 with explicit offset or UTC marker", () => {
-    expect(parseTurnTimestamp("2026-07-23T10:00:00Z")).toBeGreaterThan(0);
-    expect(parseTurnTimestamp("2026-07-23T10:00:00.123Z")).toBeGreaterThan(0);
-    expect(parseTurnTimestamp("2026-07-23T10:00:00+02:00")).toBeGreaterThan(0);
+    expect(parseTurnTimestamp("2026-07-23T10:00:00Z")).not.toBeNull();
+    expect(parseTurnTimestamp("2026-07-23T10:00:00.123Z")).not.toBeNull();
+    expect(parseTurnTimestamp("2026-07-23T10:00:00+02:00")).not.toBeNull();
   });
 
   it.each([
@@ -62,7 +62,7 @@ describe("parseTurnTimestamp", () => {
     ["", "empty"],
     [undefined, "absent"],
   ])("treats %s as stale", (_value, _reason) => {
-    expect(parseTurnTimestamp(_value)).toBe(-Infinity);
+    expect(parseTurnTimestamp(_value)).toBeNull();
   });
 
   it.each([
@@ -76,12 +76,12 @@ describe("parseTurnTimestamp", () => {
     ["2026-13-01T10:00:00Z", "month 13"],
     ["2026-01-00T10:00:00Z", "day 0"],
   ])("rejects %s (%s) as stale instead of normalizing it", (value) => {
-    expect(parseTurnTimestamp(value)).toBe(-Infinity);
+    expect(parseTurnTimestamp(value)).toBeNull();
   });
 
   it("accepts genuine leap-day timestamps", () => {
-    expect(parseTurnTimestamp("2024-02-29T10:00:00Z")).toBeGreaterThan(0);
-    expect(parseTurnTimestamp("2000-02-29T10:00:00Z")).toBeGreaterThan(0);
+    expect(parseTurnTimestamp("2024-02-29T10:00:00Z")).not.toBeNull();
+    expect(parseTurnTimestamp("2000-02-29T10:00:00Z")).not.toBeNull();
   });
 
   it("preserves sub-millisecond fraction ordering without rounding", () => {
@@ -90,9 +90,33 @@ describe("parseTurnTimestamp", () => {
     const nextSecond = parseTurnTimestamp("2026-01-01T00:00:01Z");
     const frac9995 = parseTurnTimestamp("2026-01-01T00:00:00.9995Z");
     const frac9996 = parseTurnTimestamp("2026-01-01T00:00:00.9996Z");
-    expect(frac9995).toBeLessThan(nextSecond);
-    expect(frac9995).toBeLessThan(frac9996);
-    expect(frac9996).toBeLessThan(nextSecond);
+    expect(nextSecond).not.toBeNull();
+    expect(frac9995).not.toBeNull();
+    expect(frac9996).not.toBeNull();
+    expect(frac9995!).toBeLessThan(nextSecond!);
+    expect(frac9995!).toBeLessThan(frac9996!);
+    expect(frac9996!).toBeLessThan(nextSecond!);
+  });
+
+  it("preserves nanosecond ordering from Go RFC3339Nano payloads", () => {
+    // float64 epochs collapse values closer than ~244ns; the parser must keep
+    // exact nanosecond distinctions (Go time.Time serializes RFC3339Nano).
+    const nextSecond = parseTurnTimestamp("2026-01-01T00:00:01Z");
+    const nano999 = parseTurnTimestamp("2026-01-01T00:00:00.999999999Z");
+    const nano1 = parseTurnTimestamp("2026-01-01T00:00:00.000000001Z");
+    const nano2 = parseTurnTimestamp("2026-01-01T00:00:00.000000002Z");
+    const nano123 = parseTurnTimestamp("2026-01-01T00:00:00.123456789Z");
+    const nano124 = parseTurnTimestamp("2026-01-01T00:00:00.123456790Z");
+    expect(nextSecond).not.toBeNull();
+    expect(nano999).not.toBeNull();
+    expect(nano1).not.toBeNull();
+    expect(nano2).not.toBeNull();
+    expect(nano123).not.toBeNull();
+    expect(nano124).not.toBeNull();
+    expect(nano999!).toBeLessThan(nextSecond!);
+    expect(nano1!).toBeLessThan(nano2!);
+    expect(nano1!).toBeLessThan(nextSecond!);
+    expect(nano123!).toBeLessThan(nano124!);
   });
 });
 
@@ -124,6 +148,26 @@ describe("addTurn reconciliation", () => {
     );
     expect(store.getState().turns.bySession[SESSION_ID][0].metadata).toEqual({
       model: "fraction-newer",
+    });
+  });
+
+  it("applies a row that is newer by a single nanosecond", () => {
+    const store = makeStore();
+    store.getState().addTurn(
+      turn("turn-1", {
+        completed_at: COMPLETED_AT,
+        updated_at: "2026-01-01T00:00:00.999999999Z",
+      }),
+    );
+    store.getState().addTurn(
+      turn("turn-1", {
+        completed_at: COMPLETED_AT,
+        updated_at: "2026-01-01T00:00:01Z",
+        metadata: { model: "nano-newer" },
+      }),
+    );
+    expect(store.getState().turns.bySession[SESSION_ID][0].metadata).toEqual({
+      model: "nano-newer",
     });
   });
 

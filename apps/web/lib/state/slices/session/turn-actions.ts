@@ -27,10 +27,10 @@ function validDayForMonth(year: number, month: number, day: number): boolean {
 }
 
 /**
- * Returns the UTC-offset delta in milliseconds for a matched zone, or null
- * when the offset components are out of range.
+ * Returns the UTC-offset delta in seconds for a matched zone, or null when
+ * the offset components are out of range.
  */
-function parseOffsetDelta(
+function parseOffsetSeconds(
   zone: string,
   offsetHourText: string | undefined,
   offsetMinuteText: string | undefined,
@@ -39,42 +39,53 @@ function parseOffsetDelta(
   const hour = Number(offsetHourText);
   const minute = Number(offsetMinuteText);
   if (hour > 23 || minute > 59) return null;
-  return (zone.startsWith("-") ? -1 : 1) * (hour * 60 + minute) * 60_000;
+  return (zone.startsWith("-") ? -1 : 1) * (hour * 60 + minute);
 }
 
 /**
- * Parses a turn `updated_at` into a comparable epoch. Missing, empty,
- * malformed, or non-RFC3339 values map to `-Infinity` (stale), so they can
- * never clobber a row with a valid timestamp. Calendar/time components are
- * validated explicitly because Date.parse NORMALIZES semantically invalid
- * values (e.g. `2026-02-30T10:00:00Z` becomes Mar 2) instead of rejecting
- * them, which would let malformed rows win freshness comparisons.
+ * Whether `incoming` is not newer than `existing`. A malformed incoming
+ * timestamp counts as stale (never newer).
  */
-export function parseTurnTimestamp(value: string | undefined): number {
-  if (!value) return -Infinity;
+function isNotNewerThan(incoming: string | undefined, existing: string | undefined): boolean {
+  const incomingTs = parseTurnTimestamp(incoming);
+  if (incomingTs === null) return true;
+  const existingTs = parseTurnTimestamp(existing);
+  if (existingTs === null) return false;
+  return incomingTs <= existingTs;
+}
+
+/**
+ * Parses a turn `updated_at` into a comparable epoch in nanoseconds (BigInt).
+ * Missing, empty, malformed, or non-RFC3339 values map to `null` (stale), so
+ * they can never clobber a row with a valid timestamp. Calendar/time
+ * components are validated explicitly because Date.parse NORMALIZES
+ * semantically invalid values (e.g. `2026-02-30T10:00:00Z` becomes Mar 2)
+ * instead of rejecting them. BigInt nanoseconds preserve Go RFC3339Nano
+ * payloads exactly — float64 ms epochs have a ~244ns ULP around 2026, which
+ * would collapse legitimate sub-100ns differences and misorder rows.
+ */
+export function parseTurnTimestamp(value: string | undefined): bigint | null {
+  if (!value) return null;
   const match = RFC3339_PATTERN.exec(value);
-  if (!match) return -Infinity;
+  if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
-  if (month < 1 || month > 12) return -Infinity;
-  if (!validDayForMonth(year, month, Number(match[3]))) return -Infinity;
+  if (month < 1 || month > 12) return null;
+  if (!validDayForMonth(year, month, Number(match[3]))) return null;
   if (Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6]) > 59) {
-    return -Infinity;
+    return null;
   }
-  const offsetDelta = parseOffsetDelta(match[8], match[9], match[10]);
-  if (offsetDelta === null) return -Infinity;
-  // Add the fraction EXACTLY (no rounding): Math.round collapses
-  // .9995 onto the next second's epoch, and genuinely newer sub-millisecond
-  // WS timestamps (RFC3339Nano) would compare equal and lose the strict `>`.
-  const fractionMs = match[7] ? Number(`0.${match[7]}`) * 1000 : 0;
+  const offsetSeconds = parseOffsetSeconds(match[8], match[9], match[10]);
+  if (offsetSeconds === null) return null;
   // setUTCFullYear handles years 0-99 correctly (Date.UTC maps them to
   // 1900+year); the components are validated above, so no normalization can
   // occur here.
   const utc = new Date(0);
   utc.setUTCFullYear(year, month - 1, Number(match[3]));
   utc.setUTCHours(Number(match[4]), Number(match[5]), Number(match[6]), 0);
-  const epoch = utc.getTime() + fractionMs - offsetDelta;
-  return Number.isFinite(epoch) ? epoch : -Infinity;
+  const wholeSeconds = BigInt(Math.floor(utc.getTime() / 1000)) - BigInt(offsetSeconds);
+  const fractionNs = BigInt((match[7] ?? "").padEnd(9, "0"));
+  return wholeSeconds * BigInt(1_000_000_000) + fractionNs;
 }
 
 /**
@@ -93,7 +104,11 @@ export function shouldApplyTurnUpdate(existing: Turn, incoming: Turn): boolean {
   const existingCompleted = !!existing.completed_at;
   if (incomingCompleted && !existingCompleted) return true;
   if (existingCompleted && !incomingCompleted) return false;
-  return parseTurnTimestamp(incoming.updated_at) > parseTurnTimestamp(existing.updated_at);
+  const incomingTs = parseTurnTimestamp(incoming.updated_at);
+  const existingTs = parseTurnTimestamp(existing.updated_at);
+  if (incomingTs === null) return false;
+  if (existingTs === null) return true;
+  return incomingTs > existingTs;
 }
 
 export function buildTurnActions(set: ImmerSet) {
@@ -122,12 +137,13 @@ export function buildTurnActions(set: ImmerSet) {
         if (turn) {
           // addTurn already applied the completed payload; only apply the
           // completion fields here when the event is not provably stale
-          // (equal/older updated_at on an already-completed row).
+          // (equal/older updated_at on an already-completed row, or a
+          // malformed incoming timestamp).
           const stale =
             updatedAt !== undefined &&
             turn.updated_at !== undefined &&
             turn.completed_at !== undefined &&
-            parseTurnTimestamp(updatedAt) <= parseTurnTimestamp(turn.updated_at);
+            isNotNewerThan(updatedAt, turn.updated_at);
           if (!stale) {
             turn.completed_at = completedAt;
             if (metadata) turn.metadata = metadata;

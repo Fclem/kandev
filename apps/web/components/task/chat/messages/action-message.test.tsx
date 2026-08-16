@@ -145,7 +145,7 @@ function renderAction(
           activeBySession: activeTurnId ? { TEST_SESSION_ID: activeTurnId } : {},
           loadedBySession: {},
           reconcileEpochBySession: {},
-          retiredActiveTurnIdsBySession: {},
+          settledBoundaryBySession: {},
         },
       }
     : {};

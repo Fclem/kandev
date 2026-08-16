@@ -65,43 +65,27 @@ const SETTLED_SESSION_STATES = new Set<string>([
 ]);
 
 /**
- * Records a turn id as retired so a delayed WS `session.turn.started` for it
- * cannot resurrect the marker.
+ * Parsed settled boundary for a session, or null when none is recorded.
  */
-function retireTurnId(draft: Draft<SessionSlice>, sessionId: string, turnId: string): void {
-  const retired = draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? [];
-  if (!retired.includes(turnId)) retired.push(turnId);
-  draft.turns.retiredActiveTurnIdsBySession[sessionId] = retired;
+function settledBoundary(draft: Draft<SessionSlice>, sessionId: string): bigint | null {
+  return parseTurnTimestamp(draft.turns.settledBoundaryBySession[sessionId]);
 }
 
 /**
- * Clears the active marker and retires the previously-active turn id.
+ * Whether a turn that STARTED at `startedAt` is on or before the session's
+ * settled boundary — i.e. can never become active again (delayed WS start,
+ * stale hydration, or force-merged snapshot naming it are all rejected).
  */
-function retireActiveTurn(draft: Draft<SessionSlice>, sessionId: string): void {
-  const activeId = draft.turns.activeBySession[sessionId];
-  if (!activeId) return;
-  draft.turns.activeBySession[sessionId] = null;
-  retireTurnId(draft, sessionId, activeId);
-}
-
-/**
- * Drops a retired id once its turn is known completed — a completed turn can
- * never be active (setActiveTurn rejects completed rows), so the id no longer
- * needs guarding. Keeps the retired list bounded for long-lived sessions.
- */
-function pruneRetiredTurn(draft: Draft<SessionSlice>, sessionId: string, turnId: string): void {
-  const retired = draft.turns.retiredActiveTurnIdsBySession[sessionId];
-  if (!retired) return;
-  const index = retired.indexOf(turnId);
-  if (index >= 0) {
-    retired.splice(index, 1);
-    draft.turns.retiredActiveTurnIdsBySession[sessionId] = retired;
-  }
-}
-
-/** Whether a WS start (or hydration candidate) is for a retired turn. */
-function isRetiredTurn(draft: Draft<SessionSlice>, sessionId: string, turnId: string): boolean {
-  return (draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? []).includes(turnId);
+function isAtOrBeforeBoundary(
+  draft: Draft<SessionSlice>,
+  sessionId: string,
+  startedAt: string | undefined,
+): boolean {
+  const boundary = settledBoundary(draft, sessionId);
+  if (boundary === null) return false;
+  const started = parseTurnTimestamp(startedAt);
+  if (started === null) return false;
+  return started <= boundary;
 }
 
 function isSettledSessionState(state: string): boolean {
@@ -140,31 +124,29 @@ function applyActiveTurnReconciliation(
   hydrationEpoch: number,
 ): void {
   if ((draft.turns.reconcileEpochBySession[sessionId] ?? 0) !== hydrationEpoch) return;
+  // Turns started at/before the settled boundary can never be active again —
+  // exclude them all (not just the latest orphan), so older delayed starts
+  // stay blocked too.
   const turns = (draft.turns.bySession[sessionId] ?? []).filter(
-    (turn) => !isRetiredTurn(draft, sessionId, turn.id),
+    (turn) => !isAtOrBeforeBoundary(draft, sessionId, turn.started_at),
   );
   const latestId = latestIncompleteTurnId(turns);
   if (latestId === null) {
     draft.turns.activeBySession[sessionId] = null;
     return;
   }
-  // Mirror reconcileActiveTurnForIdleSession: a settled session whose
-  // snapshot is at least as new as the candidate turn's start has no active
-  // turn — an orphaned incomplete turn must not report work in progress
-  // (files-panel source gating reads this marker).
+  // Mirror reconcileActiveTurnForIdleSession: when the session is currently
+  // settled and its snapshot is at least as new as the candidate turn's
+  // start, the candidate is an orphan — no active turn (files-panel source
+  // gating reads this marker). The settled session update records the
+  // boundary, so this is a fallback for sessions that settled without a
+  // boundary (e.g. no session update crossed the client yet).
   const latestTurn = turns.find((turn) => turn.id === latestId);
   const session = draft.taskSessions.items[sessionId];
   if (session && latestTurn && isSettledSessionState(session.state)) {
-    const sessionUpdatedAt = Date.parse(session.updated_at);
-    const turnStartedAt = Date.parse(latestTurn.started_at);
-    if (
-      !Number.isNaN(sessionUpdatedAt) &&
-      !Number.isNaN(turnStartedAt) &&
-      turnStartedAt <= sessionUpdatedAt
-    ) {
-      // The settled rule retires the candidate: a delayed WS start for it
-      // must not resurrect the marker.
-      retireTurnId(draft, sessionId, latestId);
+    const sessionUpdatedAt = parseTurnTimestamp(session.updated_at);
+    const turnStartedAt = parseTurnTimestamp(latestTurn.started_at);
+    if (sessionUpdatedAt !== null && turnStartedAt !== null && turnStartedAt <= sessionUpdatedAt) {
       draft.turns.activeBySession[sessionId] = null;
       return;
     }
@@ -241,12 +223,10 @@ export function buildTurnActions(set: ImmerSet) {
         const existing = draft.turns.bySession[sessionId].find((item) => item.id === turn.id);
         if (!existing) {
           draft.turns.bySession[sessionId].push(turn);
-          if (turn.completed_at) pruneRetiredTurn(draft, sessionId, turn.id);
           return;
         }
         if (!shouldApplyTurnUpdate(existing, turn)) return;
         Object.assign(existing, turn, { completed_at: existing.completed_at ?? turn.completed_at });
-        if (existing.completed_at) pruneRetiredTurn(draft, sessionId, turn.id);
       }),
     completeTurn: (
       sessionId: Parameters<SessionSlice["completeTurn"]>[0],
@@ -320,9 +300,11 @@ export function buildTurnActions(set: ImmerSet) {
     ) =>
       set((draft) => {
         for (const sessionId of new Set(sessionIds)) {
-          retireActiveTurn(draft, sessionId);
-          // Bump the generation so an in-flight REST hydration cannot
-          // resurrect the marker from a pre-adoption snapshot.
+          draft.turns.activeBySession[sessionId] = null;
+          // Source adoption is an authoritative idle boundary: every turn
+          // started before now can never be active again. Bump the epoch so
+          // an in-flight REST hydration cannot resurrect the marker either.
+          draft.turns.settledBoundaryBySession[sessionId] = new Date().toISOString();
           draft.turns.reconcileEpochBySession[sessionId] =
             (draft.turns.reconcileEpochBySession[sessionId] ?? 0) + 1;
         }

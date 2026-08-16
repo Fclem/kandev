@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import { original } from "immer";
 import type { Message, TaskSession } from "@/lib/types/http";
 import type { SessionSlice, SessionSliceState } from "./types";
-import { buildTurnActions } from "./turn-actions";
+import { buildTurnActions, parseTurnTimestamp } from "./turn-actions";
 import { reconcileMessages } from "./message-signature";
 import {
   migrateEnvKeyedData,
@@ -160,29 +160,36 @@ const IDLE_SESSION_STATES = new Set<TaskSession["state"]>([
 
 function reconcileActiveTurnForIdleSession(draft: SessionSliceState, session: TaskSession): void {
   if (!IDLE_SESSION_STATES.has(session.state)) return;
-  const sessionUpdatedAt = Date.parse(session.updated_at);
-  if (Number.isNaN(sessionUpdatedAt)) return;
   const turns = draft.turns.bySession[session.id] ?? [];
-  const retired = draft.turns.retiredActiveTurnIdsBySession[session.id] ?? [];
-  // Retire every incomplete turn started at/before the settled snapshot (incl.
-  // missed-start turns) so a delayed WS start cannot resurrect them.
-  for (const turn of turns) {
-    if (turn.completed_at) continue;
-    const turnStartedAt = Date.parse(turn.started_at);
-    if (
-      !Number.isNaN(turnStartedAt) &&
-      turnStartedAt <= sessionUpdatedAt &&
-      !retired.includes(turn.id)
-    ) {
-      retired.push(turn.id);
+  // Boundary-independent cleanup: drop a marker pointing at a
+  // missing/completed turn.
+  const activeTurnId = draft.turns.activeBySession[session.id];
+  if (activeTurnId) {
+    const activeTurn = turns.find((turn) => turn.id === activeTurnId);
+    if (!activeTurn || activeTurn.completed_at) {
+      draft.turns.activeBySession[session.id] = null;
     }
   }
-  draft.turns.retiredActiveTurnIdsBySession[session.id] = retired;
-  // Clear the marker when it points at a retired/missing/completed turn.
-  const activeTurnId = draft.turns.activeBySession[session.id];
-  if (!activeTurnId) return;
-  const activeTurn = turns.find((turn) => turn.id === activeTurnId);
-  if (!activeTurn || activeTurn.completed_at || retired.includes(activeTurnId)) {
+  // Advance the settled boundary (monotonic). Every turn STARTED at/before
+  // it can never be active again — covering missed-start turns and turns
+  // unknown to this client, so delayed WS starts and stale hydrations cannot
+  // resurrect them. An unparseable session timestamp leaves the boundary as
+  // it was (the cleanup above already ran).
+  const boundary = parseTurnTimestamp(session.updated_at);
+  if (boundary === null) return;
+  const currentBoundary = parseTurnTimestamp(draft.turns.settledBoundaryBySession[session.id]);
+  const effective =
+    currentBoundary === null || boundary > currentBoundary ? boundary : currentBoundary;
+  if (effective === boundary) {
+    draft.turns.settledBoundaryBySession[session.id] = session.updated_at;
+  }
+  // Clear the marker if it points at a turn started at/before the boundary.
+  const activeId = draft.turns.activeBySession[session.id];
+  if (!activeId) return;
+  const active = turns.find((turn) => turn.id === activeId);
+  if (!active || active.completed_at) return;
+  const startedAt = parseTurnTimestamp(active.started_at);
+  if (startedAt !== null && startedAt <= effective) {
     draft.turns.activeBySession[session.id] = null;
   }
 }
@@ -194,7 +201,7 @@ export const defaultSessionState: SessionSliceState = {
     activeBySession: {},
     loadedBySession: {},
     reconcileEpochBySession: {},
-    retiredActiveTurnIdsBySession: {},
+    settledBoundaryBySession: {},
   },
   taskSessions: { items: {} },
   taskSessionsByTask: { itemsByTaskId: {}, loadingByTaskId: {}, loadedByTaskId: {} },
@@ -547,7 +554,7 @@ function buildTaskSessionActions(set: ImmerSet) {
         delete draft.turns.activeBySession[sessionId];
         delete draft.turns.loadedBySession[sessionId];
         delete draft.turns.reconcileEpochBySession[sessionId];
-        delete draft.turns.retiredActiveTurnIdsBySession[sessionId];
+        delete draft.turns.settledBoundaryBySession[sessionId];
         // Cascade into the runtime slice (shell/process/git buffers + per-session
         // maps); this also removes the environmentIdBySessionId mapping.
         purgeSessionRuntimeState(draft as unknown as SessionRuntimeSliceState, sessionId);

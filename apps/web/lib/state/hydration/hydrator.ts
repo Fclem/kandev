@@ -6,6 +6,7 @@ import {
   reconcileQuickTerminalTabs,
 } from "@/lib/state/slices/ui/quick-chat-sync";
 import { compareUserSettingsRevisions } from "@/lib/settings/user-settings-revision";
+import { parseTurnTimestamp } from "@/lib/state/slices/session/turn-actions";
 import { deepMerge, mergeSessionMap, mergeLoadingState } from "./merge-strategies";
 
 /**
@@ -170,10 +171,12 @@ function bridgeSidebarViewsFromUserSettings(
 function clearHydratedRetiredActiveMarkers(draft: Draft<AppState>, state: HydrationState): void {
   for (const sessionId in state.turns!.activeBySession) {
     const hydrated = draft.turns.activeBySession[sessionId];
-    if (
-      hydrated &&
-      (draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? []).includes(hydrated)
-    ) {
+    if (!hydrated) continue;
+    const boundary = parseTurnTimestamp(draft.turns.settledBoundaryBySession[sessionId]);
+    if (boundary === null) continue;
+    const hydratedTurn = state.turns!.bySession?.[sessionId]?.find((turn) => turn.id === hydrated);
+    const started = parseTurnTimestamp(hydratedTurn?.started_at);
+    if (started !== null && started <= boundary) {
       draft.turns.activeBySession[sessionId] = null;
     }
   }

@@ -39,12 +39,14 @@ export type TurnsState = {
    */
   reconcileEpochBySession: Record<string, number>;
   /**
-   * Turn ids whose active marker an authoritative boundary retired (source
-   * adoption, settled-session clear). A delayed WS `session.turn.started`
-   * for one of these must not resurrect the marker; new turn ids are
-   * unaffected.
+   * Per-session settled-boundary timestamp (RFC3339, compared with nanosecond
+   * precision). Set by authoritative boundaries (source adoption,
+   * settled-session clears). Any turn that STARTED at or before the boundary
+   * must never become active again — a delayed WS `session.turn.started`, a
+   * stale hydration, or a force-merged snapshot naming it are all rejected.
+   * Turns started after the boundary (genuine resumes) are unaffected.
    */
-  retiredActiveTurnIdsBySession: Record<string, string[]>;
+  settledBoundaryBySession: Record<string, string>;
 };
 
 export type TaskSessionsState = {

@@ -156,8 +156,10 @@ describe("session turn WebSocket handlers", () => {
     send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
     store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
 
-    // A new turn started after the boundary is legitimate and must be marked.
-    send(store, TURN_STARTED, turn("turn-2", TURN_COMPLETED_AT));
+    // A new turn started after the (now-based) boundary is legitimate and
+    // must be marked.
+    const afterBoundary = new Date(Date.now() + 60_000).toISOString();
+    send(store, TURN_STARTED, turn("turn-2", afterBoundary));
 
     expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-2");
   });
@@ -197,5 +199,22 @@ describe("session turn WebSocket handlers", () => {
     } as never);
 
     expect(flush).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("settled boundary WS guard", () => {
+  it("rejects a delayed start for a turn unknown at the boundary", () => {
+    const store = makeStore();
+    // The boundary (IDLE settle) happens BEFORE any turn is known to this
+    // client; the delayed old start arrives afterwards.
+    store.getState().setTaskSession({
+      id: SESSION_ID,
+      state: "IDLE",
+      updated_at: TURN_COMPLETED_AT,
+    } as never);
+
+    send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeFalsy();
   });
 });

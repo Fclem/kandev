@@ -291,7 +291,7 @@ function renderAgentMessageWithSession(
           activeBySession: { "sess-1": turn?.id ?? null },
           loadedBySession: {},
           reconcileEpochBySession: {},
-          retiredActiveTurnIdsBySession: {},
+          settledBoundaryBySession: {},
         },
       }}
     >

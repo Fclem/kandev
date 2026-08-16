@@ -24,7 +24,7 @@ const mockState = {
     activeBySession: { "sess-1": null },
     loadedBySession: {} as Record<string, boolean>,
     reconcileEpochBySession: {} as Record<string, number>,
-    retiredActiveTurnIdsBySession: {} as Record<string, string[]>,
+    settledBoundaryBySession: {} as Record<string, string>,
   },
   connection: { status: "connected" },
   mergeMessages: vi.fn(),

@@ -47,6 +47,12 @@ function turn(
   };
 }
 
+function seedSession(store: ReturnType<typeof makeStore>, state: string, updatedAt: string) {
+  store.setState((s) => {
+    s.taskSessions.items[SESSION_ID] = { id: SESSION_ID, state, updated_at: updatedAt } as never;
+  });
+}
+
 describe("parseTurnTimestamp", () => {
   it("accepts RFC3339 with explicit offset or UTC marker", () => {
     expect(parseTurnTimestamp("2026-07-23T10:00:00Z")).not.toBeNull();
@@ -389,12 +395,6 @@ describe("completeTurn stale guard", () => {
 });
 
 describe("reconcileActiveTurnAfterHydration", () => {
-  function seedSession(store: ReturnType<typeof makeStore>, state: string, updatedAt: string) {
-    store.setState((s) => {
-      s.taskSessions.items[SESSION_ID] = { id: SESSION_ID, state, updated_at: updatedAt } as never;
-    });
-  }
-
   it("sets the latest incomplete turn as active for a running session", () => {
     const store = makeStore();
     seedSession(store, "RUNNING", LATER_AT);
@@ -476,12 +476,11 @@ describe("reconcileActiveTurnAfterHydration", () => {
     const store = makeStore();
     seedSession(store, "RUNNING", LATER_AT);
     store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
-    // A genuinely new turn started after the boundary.
+    // A genuinely new turn started after the (now-based) adoption boundary.
+    const afterBoundary = new Date(Date.now() + 60_000).toISOString();
     store
       .getState()
-      .addTurn(
-        turn("turn-2", { started_at: LATER_AT, updated_at: LATER_AT, completed_at: undefined }),
-      );
+      .addTurn(turn("turn-2", { started_at: afterBoundary, updated_at: afterBoundary }));
 
     store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 1);
 
@@ -507,8 +506,44 @@ describe("reconcileActiveTurnAfterHydration", () => {
   });
 });
 
-describe("retired turn id lifecycle", () => {
-  it("drops a retired id once its turn completes", () => {
+describe("reconcileActiveTurnAfterHydration — boundary precision", () => {
+  it("excludes every pre-boundary orphan, not just the latest", () => {
+    // An IDLE snapshot with TWO incomplete turns started before it; the
+    // reconciliation must leave the marker null so a delayed start for the
+    // OLDER turn cannot resurrect it.
+    const store = makeStore();
+    seedSession(store, "IDLE", LATER_AT);
+    store.setState((st) => {
+      st.turns.settledBoundaryBySession[SESSION_ID] = LATER_AT;
+    });
+    store.getState().addTurn(turn("turn-old", { started_at: STARTED_AT, updated_at: STARTED_AT }));
+    store
+      .getState()
+      .addTurn(turn("turn-new", { started_at: COMPLETED_AT, updated_at: COMPLETED_AT }));
+
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 0);
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it("keeps a sub-millisecond-post-boundary turn active", () => {
+    // The boundary comparison must use nanosecond precision: a turn started
+    // 800ns after a 100ns boundary is AFTER it.
+    const store = makeStore();
+    seedSession(store, "IDLE", "2026-01-01T00:00:00.000000100Z");
+    store.setState((st) => {
+      st.turns.settledBoundaryBySession[SESSION_ID] = "2026-01-01T00:00:00.000000100Z";
+    });
+    store.getState().addTurn(turn("turn-1", { started_at: "2026-01-01T00:00:00.000000900Z" }));
+
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 0);
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-1");
+  });
+});
+
+describe("settled boundary lifecycle", () => {
+  it("survives turn completion and blocks a stale force-hydrated snapshot", () => {
     const store = makeStore();
     store.setState((s) => {
       s.taskSessions.items[SESSION_ID] = { id: SESSION_ID, state: "RUNNING" } as never;
@@ -520,15 +555,13 @@ describe("retired turn id lifecycle", () => {
       );
     store.getState().setActiveTurn(SESSION_ID, "turn-1");
     store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
-    expect(store.getState().turns.retiredActiveTurnIdsBySession[SESSION_ID]).toEqual(["turn-1"]);
-
-    // The completion event arrives; the retired id is no longer needed (a
-    // completed turn can never be active).
+    // Completion arrives; the boundary persists (no tombstone to prune).
     store
       .getState()
       .addTurn(turn("turn-1", { completed_at: COMPLETED_AT, updated_at: COMPLETED_AT }));
 
-    expect(store.getState().turns.retiredActiveTurnIdsBySession[SESSION_ID]).toEqual([]);
+    expect(store.getState().turns.settledBoundaryBySession[SESSION_ID]).toBeDefined();
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
   });
 });
 

@@ -25,7 +25,7 @@ type TurnStoreMock = {
       bySession: Record<string, unknown[]>;
       activeBySession: Record<string, string | null>;
       reconcileEpochBySession: Record<string, number>;
-      retiredActiveTurnIdsBySession: Record<string, string[]>;
+      settledBoundaryBySession: Record<string, string>;
     };
     taskSessions: { items: Record<string, { state: string }> };
   };
@@ -108,7 +108,7 @@ function makeStore(): TurnStoreHarness {
         bySession: state.bySession,
         activeBySession: state.activeBySession,
         reconcileEpochBySession: state.reconcileEpochBySession,
-        retiredActiveTurnIdsBySession: {},
+        settledBoundaryBySession: {},
       },
       taskSessions: { items: state.sessions },
       // The zustand store exposes actions on getState() too.

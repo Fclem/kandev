@@ -321,6 +321,10 @@ function SessionsCard() {
         }
       />
       <CardContent className="space-y-3">
+        {/* The display preference is independent of session rows, so the
+            select (and its discovery target) stays reachable during loading
+            and when the sessions API fails. */}
+        <LastSeenDisplaySelect value={display} onChange={onDisplayChange} />
         {error && (
           <SettingsErrorText data-testid="account-sessions-error">{error}</SettingsErrorText>
         )}
@@ -329,13 +333,8 @@ function SessionsCard() {
             <Spinner className="size-4" /> {t("account:loadingSessions")}
           </div>
         )}
-        {loaded && (
-          <>
-            <LastSeenDisplaySelect value={display} onChange={onDisplayChange} />
-            {sessions.length > 0 && (
-              <SessionsTable sessions={sessions} display={display} onRevoke={onRevoke} />
-            )}
-          </>
+        {loaded && sessions.length > 0 && (
+          <SessionsTable sessions={sessions} display={display} onRevoke={onRevoke} />
         )}
       </CardContent>
     </SettingsCard>

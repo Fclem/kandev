@@ -226,6 +226,16 @@ describe("Last seen display rendering", () => {
     expect(screen.getByTestId(SELECT_TEST_ID)).toBeTruthy();
     expect(screen.queryByTestId("account-sessions-table")).toBeNull();
   });
+
+  it("keeps the Last seen select reachable when loading sessions fails", async () => {
+    authApiMocks.listSessions.mockRejectedValue(new Error("boom"));
+    await renderLoaded({ lastSeenDisplay: "absolute" });
+    await screen.findByTestId("account-sessions-error");
+
+    // A transient sessions API failure must not hide the persisted preference.
+    expect(screen.getByTestId(SELECT_TEST_ID)).toBeTruthy();
+    expect(screen.queryByTestId("account-sessions-table")).toBeNull();
+  });
 });
 
 describe("Last seen display persistence", () => {

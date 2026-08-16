@@ -290,6 +290,7 @@ function renderAgentMessageWithSession(
           bySession: { "sess-1": turn ? [turn] : [] },
           activeBySession: { "sess-1": turn?.id ?? null },
           loadedBySession: {},
+          reconcileEpochBySession: {},
         },
       }}
     >

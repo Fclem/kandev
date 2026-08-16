@@ -91,9 +91,10 @@ E2E test, `apps/web/e2e/tests/layout/bfcache-restore-reload.spec.ts`
 - E2E: `cd apps/web && pnpm e2e:run tests/layout/bfcache-restore-reload.spec.ts`
 - Real-Chrome manual verification (user or implementer, on a non-headless
   Chrome): open Kandev, archive a task, right-click the tab → Duplicate. The
-  duplicated tab must reload and show the task as archived. If a current
-  Chrome version restores without firing `pageshow` (unobserved so far;
-  Chromium reports duplicate as a `back_forward` navigation), record it in the
+  duplicated tab must reload and show the task as archived. This run is the
+  MERGE BLOCKING gate (instrumentation checklist and decision rule in
+  `task-01-reload-on-bfcache-restore.md`). If a current Chrome version
+  restores without firing `pageshow` (no persisted signal), record it in the
   task Results and follow up with a WS-close-based fallback
   (reload on unexpected WS close when the navigation type is `back_forward`),
   gated on that evidence.

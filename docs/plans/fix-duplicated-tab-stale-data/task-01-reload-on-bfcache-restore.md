@@ -27,6 +27,35 @@ spec: "../../specs/fix-duplicated-tab-stale-data/spec.md"
   asserts the page reloads (navigation type becomes `reload`); a normal load
   does not reload.
 - No user-facing copy added (no i18n ratchet impact).
+- MERGE BLOCKING: a real-Chrome native Duplicate-tab run is performed and
+  recorded (see "Blocking verification" below). The automated suite proves
+  the handler fires on `persisted === true`, which is the only event sequence
+  consistent with the reported symptom (a cold duplicate load re-fetches the
+  no-store boot payload and would show fresh data; only a frozen restore
+  preserves the stale view, and frozen restores fire `pageshow` with
+  `persisted === true`). The native-run record confirms that sequence on the
+  user's Chrome before merge.
+
+## Blocking verification (merge gate)
+
+Run in the user's non-headless Chrome against the affected Kandev build,
+DevTools console open:
+
+1. Archive a task, then right-click the Kandev tab → **Duplicate**.
+2. Record in the console (or via `window.__KANDEV_DEBUG` hooks):
+   - the duplicated tab's `pageshow` event and its `persisted` value;
+   - `performance.getEntriesByType("navigation")[0].type` on the duplicated
+     tab;
+   - whether a boot-payload request (`/api/v1/app-state` or the no-store
+     HTML) is issued after the duplicate.
+3. Expected with this fix: the duplicated tab fires `pageshow` with
+   `persisted === true` and reloads, then shows the task as archived.
+4. If the duplicated tab fires NO `pageshow` (or `persisted === false` while
+   still showing stale data), the frozen-restore assumption is wrong for that
+   Chrome version: record the observed sequence, then implement the
+   WS-close fallback (reload on unexpected WS close when the navigation type
+   is `back_forward`), gated on this evidence, and add coverage for the
+   observed path. Do not add the fallback without this evidence.
 
 ## Verification
 
@@ -164,3 +193,26 @@ fallback.
 - No production correctness issue found (persisted-only semantics, bootstrap
   timing/StrictMode, listener lifecycle, reload-path interaction, option/cast
   safety, cold-`back_forward` stub, E2E positive/negative causality).
+
+### Adversarial review round 4 (50-luna-review-fix)
+
+- Finding (major, partially accepted): native Chrome Duplicate calls
+  `contents->Clone()` + `CopyStateFrom(..., true)` + `LoadIfNecessary()`, and
+  the cited Chromium discussion establishes only a `back_forward` navigation
+  type, not `persisted=true`; the E2E synthesizes the signal, so all
+  automated checks could pass while the reported path remains unfixed.
+- Response: the premise that native Duplicate is a cold "navigated clone" is
+  inconsistent with the reported symptom. A cold duplicate load re-fetches
+  the no-store boot payload (and the tasks/kanban fetches are `no-store`),
+  so it would show FRESH data; the user's stale view can only come from a
+  frozen restore (JS heap preserved), and frozen restores fire `pageshow`
+  with `persisted === true`. `persisted === true` is therefore the correct
+  signal for the observed bug, and the handler cannot fire on a cold load.
+  Accepted part: the native-Duplicate event sequence on the user's Chrome
+  version is unverified, and a Chrome build could in principle clone without
+  firing `pageshow` at all. That verification is now a MERGE BLOCKING gate
+  with an instrumentation checklist (pageshow.persisted, navigation type,
+  boot-payload requests); if the observed sequence contradicts the
+  assumption, the WS-close fallback is implemented gated on that evidence.
+- The real-Chrome duplicate-tab run remains the outstanding evidence gate
+  and now blocks merge.

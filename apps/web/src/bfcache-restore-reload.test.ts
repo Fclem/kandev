@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { installBfcacheRestoreReload } from "./bfcache-restore-reload";
 
 const RESTORE_PROBE_KEY = "kandev.bfcacheRestoreProbe";
@@ -48,19 +48,6 @@ function createHarness({
   };
 }
 
-function stubBackForwardNavigation() {
-  // happy-dom's Event constructor calls performance.now(); keep it intact
-  // while exposing the back_forward navigation entry.
-  vi.stubGlobal("performance", {
-    now: () => 0,
-    getEntriesByType: (type: string) => (type === "navigation" ? [{ type: "back_forward" }] : []),
-  });
-}
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
 describe("installBfcacheRestoreReload", () => {
   it("reloads when the page is restored from a frozen snapshot (persisted=true)", () => {
     const harness = createHarness();
@@ -73,11 +60,11 @@ describe("installBfcacheRestoreReload", () => {
   it("does not reload on a cold back/forward traversal (persisted=false)", () => {
     // Regression for the round-1 finding: a history traversal not served
     // from bfcache (e.g. an open WebSocket made the no-store page ineligible)
-    // loads fresh and must not be reloaded a second time, even though its
-    // navigation entry reports type `back_forward`. Stub that entry so
-    // reintroducing the navigation-type fallback would fail this test.
-    stubBackForwardNavigation();
-    const harness = createHarness();
+    // loads fresh and must not be reloaded a second time, even when the
+    // navigation entry reports type `back_forward`. The injected
+    // navigation-type reader returns `back_forward` here, so reintroducing
+    // the navigation-type reload fallback would fail this test.
+    const harness = createHarness({ navigationType: "back_forward" });
 
     harness.dispatch(false);
 

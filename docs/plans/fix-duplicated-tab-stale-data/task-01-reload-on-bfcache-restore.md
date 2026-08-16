@@ -55,10 +55,14 @@ probe persists the evidence to sessionStorage BEFORE the reload.
    `JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe"))`.
    It records `{ persisted, navigationType, at }` captured pre-reload.
    Accept the record only if `at >= t0` (a newer write than this attempt).
-4. Corroborate with DevTools → Network → "Preserve log" on the duplicated
-   tab (open before duplicating, or inspect the document request after the
-   reload): the app issues a fresh boot-payload request (the no-store HTML
-   or `/api/v1/app-state`) after the duplicate.
+4. Confirm the handler reloaded from inside the duplicated tab's console
+   after the reload settles:
+   `performance.getEntriesByType("navigation")[0]?.type` must be `"reload"`
+   (a bfcache restore without the fix would report `"back_forward"`). The
+   archived task must no longer be listed as active. (The duplicated tab is a
+   separate DevTools target and reloads synchronously, so source-tab Network
+   capture cannot observe its document request; the navigation-type and
+   UI-state checks above are the executable proof.)
 5. Expected with this fix: the probe shows `persisted: true`, the duplicated
    tab reloads, and the task is shown as archived.
 6. If the duplicated tab fires NO `pageshow` (no probe entry) or shows a
@@ -291,3 +295,20 @@ fallback.
   but debug restores write the sessionStorage probe. Fixed: Persistence
   guarantees now document the debug-only diagnostic key, fields, lifetime,
   cleanup, and best-effort failure behavior.
+
+### Adversarial review round 7 (50-luna-review-fix)
+
+- Finding 1 (minor, accepted): the cold-`back_forward` regression test
+  stubbed global `performance`, but the harness always injects the
+  navigation-type reader, so the stub never reached the exercised code path
+  and a reintroduced fallback reading the injected option would pass. Fixed:
+  the test now passes `navigationType: "back_forward"` through the harness's
+  injected reader (the actual seam the module uses) and the ineffective
+  global stub and its cleanup were removed.
+- Finding 2 (minor, accepted): the gate's Network-capture step could not
+  observe the duplicated tab — it is a separate DevTools target that reloads
+  synchronously, so source-tab DevTools never records its document request.
+  Fixed: step 4 now uses executable post-reload proof from the duplicated
+  tab's own console — `performance.getEntriesByType("navigation")[0]?.type
+  === "reload"` — plus the archived-task UI check.
+- No production-handler correctness defect found.

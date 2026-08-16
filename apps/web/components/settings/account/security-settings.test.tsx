@@ -392,18 +392,25 @@ describe("Last seen display write and lifecycle races", () => {
     await chooseDisplay(RELATIVE_OPTION);
     await waitFor(() => expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy());
 
-    // Unmount mid-write; the write still settles and the store converges.
+    // Unmount mid-write; a newer WS snapshot lands after unmount through the
+    // real handler, then the PATCH resolves (its older revision is discarded),
+    // so the store converges on the WS value.
     first.unmount();
+    act(() => {
+      dispatchUserSettingsSnapshot(holder, { last_seen_display: "absolute", revision: 5 });
+    });
     await act(async () => {
       resolvePatch(patchResponse({ last_seen_display: "relative", revision: 2 }));
     });
     await waitFor(() =>
-      expect(holder.current!.getState().userSettings.lastSeenDisplay).toBe("relative"),
+      expect(holder.current!.getState().userSettings.lastSeenDisplay).toBe("absolute"),
     );
+    expect(holder.current!.getState().userSettings.revision).toBe(5);
 
     // Remount with the converged store state renders the confirmed value.
-    const second = renderSecurity({ lastSeenDisplay: "relative", revision: 2 }, holder);
-    await screen.findByTestId(RELATIVE_TEST_ID);
+    const second = renderSecurity({ lastSeenDisplay: "absolute", revision: 5 }, holder);
+    await screen.findByTestId(SELECT_TEST_ID);
+    expect(screen.queryByTestId(RELATIVE_TEST_ID)).toBeNull();
     second.unmount();
   });
 
@@ -418,19 +425,25 @@ describe("Last seen display write and lifecycle races", () => {
     await chooseDisplay(RELATIVE_OPTION);
     await waitFor(() => expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy());
 
-    // Unmount mid-write; the rejection is still handled: the error toast fires
-    // and the store stays at the confirmed baseline.
+    // Unmount mid-write; a newer WS snapshot lands after unmount through the
+    // real handler, then the PATCH is rejected: the toast fires, the store
+    // keeps the WS value, and no stale override survives.
     first.unmount();
+    act(() => {
+      dispatchUserSettingsSnapshot(holder, { last_seen_display: "relative", revision: 3 });
+    });
     await act(async () => {
       rejectPatch(new ApiError("boom", 400, null));
     });
     await waitFor(() => expect(toastMocks.error).toHaveBeenCalled());
-    expect(holder.current!.getState().userSettings.lastSeenDisplay).toBe("absolute");
+    await waitFor(() =>
+      expect(holder.current!.getState().userSettings.lastSeenDisplay).toBe("relative"),
+    );
 
-    // Remount renders the confirmed baseline with no stale optimistic override.
-    const second = renderSecurity({}, holder);
+    // Remount with the converged store state renders the WS value.
+    const second = renderSecurity({ lastSeenDisplay: "relative", revision: 3 }, holder);
     await screen.findByTestId(SELECT_TEST_ID);
-    expect(screen.queryByTestId(RELATIVE_TEST_ID)).toBeNull();
+    expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy();
     second.unmount();
   });
 

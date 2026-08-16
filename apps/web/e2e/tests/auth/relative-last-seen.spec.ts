@@ -54,10 +54,14 @@ test.describe.serial("relative last seen (desktop)", () => {
     await setupAdmin(ctx, backend.baseUrl, ADMIN);
     await login(ctx, backend.baseUrl, ADMIN);
     const original = await readLastSeenDisplay(ctx, backend.baseUrl);
+    // Pin a known absolute baseline so selecting Relative time is a real
+    // transition and PATCH, not a no-op on a pre-existing relative value.
+    await restoreLastSeenDisplay(ctx, backend.baseUrl, "absolute");
 
     try {
       const page = await ctx.newPage();
       await page.goto(SECURITY_PATH);
+      await expect(page.getByTestId("last-seen-relative")).toHaveCount(0);
 
       const select = page.getByTestId("last-seen-display-select");
       await expect(select).toBeVisible({ timeout: 15_000 });

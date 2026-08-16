@@ -15,6 +15,7 @@ type TurnStoreState = {
   sessions: Record<string, { state: string }>;
   bySession: Record<string, unknown[]>;
   activeBySession: Record<string, string | null>;
+  reconcileEpochBySession: Record<string, number>;
 };
 
 type TurnStoreMock = {
@@ -23,12 +24,13 @@ type TurnStoreMock = {
       loadedBySession: Record<string, boolean>;
       bySession: Record<string, unknown[]>;
       activeBySession: Record<string, string | null>;
+      reconcileEpochBySession: Record<string, number>;
     };
     taskSessions: { items: Record<string, { state: string }> };
   };
   addTurn: ReturnType<typeof vi.fn>;
   markTurnsLoaded: ReturnType<typeof vi.fn>;
-  setActiveTurn: ReturnType<typeof vi.fn>;
+  reconcileActiveTurnAfterHydration: ReturnType<typeof vi.fn>;
 };
 
 type TurnStoreHarness = TurnStoreMock & {
@@ -89,6 +91,7 @@ function makeStore(): TurnStoreHarness {
     sessions: { [SESSION_ID]: { state: "RUNNING" } },
     bySession: {},
     activeBySession: {},
+    reconcileEpochBySession: {},
   };
   const addTurn = vi.fn((turn: Record<string, unknown>) => {
     upsertTurn(state.bySession, turn);
@@ -96,25 +99,24 @@ function makeStore(): TurnStoreHarness {
   const markTurnsLoaded = vi.fn((sid: string) => {
     state.loadedBySession[sid] = true;
   });
-  const setActiveTurn = vi.fn((sid: string, turnId: string | null) => {
-    state.activeBySession[sid] = turnId;
-  });
+  const reconcileActiveTurnAfterHydration = vi.fn();
   return {
     getState: () => ({
       turns: {
         loadedBySession: state.loadedBySession,
         bySession: state.bySession,
         activeBySession: state.activeBySession,
+        reconcileEpochBySession: state.reconcileEpochBySession,
       },
       taskSessions: { items: state.sessions },
       // The zustand store exposes actions on getState() too.
       addTurn,
       markTurnsLoaded,
-      setActiveTurn,
+      reconcileActiveTurnAfterHydration,
     }),
     addTurn,
     markTurnsLoaded,
-    setActiveTurn,
+    reconcileActiveTurnAfterHydration,
     setSessions: (v) => {
       state.sessions = v;
     },
@@ -195,22 +197,27 @@ describe("ensureSessionTurnsLoaded — guards and races", () => {
 
     await ensureSessionTurnsLoaded(SESSION_ID, store as never);
 
-    expect(store.setActiveTurn).toHaveBeenCalledWith(SESSION_ID, "turn-2");
+    // The store-owned action decides the marker (latest incomplete turn vs
+    // settled-session clear vs epoch rejection); the module must hand it the
+    // epoch captured before the request.
+    expect(store.reconcileActiveTurnAfterHydration).toHaveBeenCalledWith(SESSION_ID, 0);
   });
 
-  it("clears a stale active marker when no turn remains incomplete", async () => {
-    // The WS completion event was missed; the REST snapshot shows every turn
-    // completed, so the active marker must be cleared.
-    mockListSessionTurns.mockResolvedValue({
-      turns: [makeTurn("turn-1", { completed_at: COMPLETION_AT, updated_at: COMPLETION_AT })],
-      total: 1,
-    });
+  it("passes the epoch captured before an in-flight authoritative clear", async () => {
+    // Source adoption bumps the epoch while the REST request is in flight;
+    // the module must still pass the ORIGINAL epoch so the store action
+    // rejects the stale reconciliation.
+    const { promise, resolve: resolveList } = deferredTurnsResponse();
+    mockListSessionTurns.mockReturnValue(promise);
     const store = makeStore();
-    store.getState().turns.activeBySession[SESSION_ID] = "turn-1";
+    store.getState().turns.reconcileEpochBySession[SESSION_ID] = 2;
 
-    await ensureSessionTurnsLoaded(SESSION_ID, store as never);
+    const pending = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+    store.getState().turns.reconcileEpochBySession[SESSION_ID] = 3;
+    resolveList({ turns: [makeTurn("turn-1")], total: 1 });
+    await pending;
 
-    expect(store.setActiveTurn).toHaveBeenCalledWith(SESSION_ID, null);
+    expect(store.reconcileActiveTurnAfterHydration).toHaveBeenCalledWith(SESSION_ID, 2);
   });
 
   it("does not resurrect turns after the session was removed mid-flight", async () => {

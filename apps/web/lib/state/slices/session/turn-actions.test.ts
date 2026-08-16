@@ -388,6 +388,104 @@ describe("completeTurn stale guard", () => {
   });
 });
 
+describe("reconcileActiveTurnAfterHydration", () => {
+  function seedSession(store: ReturnType<typeof makeStore>, state: string, updatedAt: string) {
+    store.setState((s) => {
+      s.taskSessions.items[SESSION_ID] = { id: SESSION_ID, state, updated_at: updatedAt } as never;
+    });
+  }
+
+  it("sets the latest incomplete turn as active for a running session", () => {
+    const store = makeStore();
+    seedSession(store, "RUNNING", LATER_AT);
+    store
+      .getState()
+      .addTurn(turn("turn-1", { completed_at: COMPLETED_AT, updated_at: COMPLETED_AT }));
+    store
+      .getState()
+      .addTurn(
+        turn("turn-2", { started_at: LATER_AT, updated_at: LATER_AT, completed_at: undefined }),
+      );
+
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 0);
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-2");
+  });
+
+  it("clears the active marker when every turn is completed", () => {
+    const store = makeStore();
+    seedSession(store, "RUNNING", LATER_AT);
+    store
+      .getState()
+      .addTurn(turn("turn-1", { completed_at: COMPLETED_AT, updated_at: COMPLETED_AT }));
+
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 0);
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it("does not mark an orphaned incomplete turn active for a settled session", () => {
+    // IDLE snapshot already in the store (reconcileActiveTurnForIdleSession
+    // would have cleared the marker); hydration must not resurrect it.
+    const store = makeStore();
+    seedSession(store, "IDLE", LATER_AT);
+    store
+      .getState()
+      .addTurn(
+        turn("turn-1", { started_at: STARTED_AT, updated_at: STARTED_AT, completed_at: undefined }),
+      );
+
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 0);
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it("keeps a turn active when it started after the settled session snapshot", () => {
+    const store = makeStore();
+    seedSession(store, "IDLE", STARTED_AT);
+    store
+      .getState()
+      .addTurn(
+        turn("turn-1", { started_at: LATER_AT, updated_at: LATER_AT, completed_at: undefined }),
+      );
+
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 0);
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-1");
+  });
+
+  it("rejects a stale hydration after source adoption bumped the epoch", () => {
+    const store = makeStore();
+    seedSession(store, "RUNNING", LATER_AT);
+    store
+      .getState()
+      .addTurn(
+        turn("turn-1", { started_at: STARTED_AT, updated_at: STARTED_AT, completed_at: undefined }),
+      );
+    // Source adoption cleared the marker and bumped the epoch mid-flight.
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 0);
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it("applies when the hydration epoch still matches", () => {
+    const store = makeStore();
+    seedSession(store, "RUNNING", LATER_AT);
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+    store
+      .getState()
+      .addTurn(
+        turn("turn-1", { started_at: STARTED_AT, updated_at: STARTED_AT, completed_at: undefined }),
+      );
+
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 1);
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-1");
+  });
+});
+
 describe("shouldApplyTurnUpdate", () => {
   it("completion precedence beats equal or older timestamps", () => {
     const existing = turn("t", { started_at: STARTED_AT, updated_at: STARTED_AT });

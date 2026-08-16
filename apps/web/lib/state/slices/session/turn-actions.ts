@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import type { Draft } from "immer";
 import type { SessionSlice } from "./types";
 import type { Turn } from "@/lib/types/http";
 
@@ -52,6 +53,78 @@ function isNotNewerThan(incoming: string | undefined, existing: string | undefin
   const existingTs = parseTurnTimestamp(existing);
   if (existingTs === null) return false;
   return incomingTs <= existingTs;
+}
+
+/** Session states that settle a turn: no agent work is in progress. */
+const SETTLED_SESSION_STATES = new Set<string>([
+  "IDLE",
+  "WAITING_FOR_INPUT",
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+]);
+
+function isSettledSessionState(state: string): boolean {
+  return SETTLED_SESSION_STATES.has(state);
+}
+
+/**
+ * Returns the id of the latest incomplete turn in the list, or null when
+ * every turn is completed. Compares via the strict timestamp parser so
+ * fractional (RFC3339Nano) and whole-second (RFC3339) started_at values
+ * order correctly.
+ */
+export function latestIncompleteTurnId(turns: Turn[]): string | null {
+  let latestId: string | null = null;
+  let latestStarted: bigint | null = null;
+  for (const turn of turns) {
+    if (turn.completed_at) continue;
+    const started = parseTurnTimestamp(turn.started_at);
+    if (started === null) continue;
+    if (latestStarted === null || started > latestStarted) {
+      latestId = turn.id;
+      latestStarted = started;
+    }
+  }
+  return latestId;
+}
+
+/**
+ * Establishes (or clears) the active-turn marker after a full REST hydration,
+ * applying the same settled-session rule as reconcileActiveTurnForIdleSession
+ * and rejecting hydrations that started before an authoritative clear.
+ */
+function applyActiveTurnReconciliation(
+  draft: Draft<SessionSlice>,
+  sessionId: string,
+  hydrationEpoch: number,
+): void {
+  if ((draft.turns.reconcileEpochBySession[sessionId] ?? 0) !== hydrationEpoch) return;
+  const turns = draft.turns.bySession[sessionId] ?? [];
+  const latestId = latestIncompleteTurnId(turns);
+  if (latestId === null) {
+    draft.turns.activeBySession[sessionId] = null;
+    return;
+  }
+  // Mirror reconcileActiveTurnForIdleSession: a settled session whose
+  // snapshot is at least as new as the candidate turn's start has no active
+  // turn — an orphaned incomplete turn must not report work in progress
+  // (files-panel source gating reads this marker).
+  const latestTurn = turns.find((turn) => turn.id === latestId);
+  const session = draft.taskSessions.items[sessionId];
+  if (session && latestTurn && isSettledSessionState(session.state)) {
+    const sessionUpdatedAt = Date.parse(session.updated_at);
+    const turnStartedAt = Date.parse(latestTurn.started_at);
+    if (
+      !Number.isNaN(sessionUpdatedAt) &&
+      !Number.isNaN(turnStartedAt) &&
+      turnStartedAt <= sessionUpdatedAt
+    ) {
+      draft.turns.activeBySession[sessionId] = null;
+      return;
+    }
+  }
+  draft.turns.activeBySession[sessionId] = latestId;
 }
 
 /**
@@ -160,6 +233,10 @@ export function buildTurnActions(set: ImmerSet) {
       set((draft) => {
         draft.turns.loadedBySession[sessionId] = true;
       }),
+    reconcileActiveTurnAfterHydration: (sessionId: string, hydrationEpoch: number) =>
+      set((draft) => {
+        applyActiveTurnReconciliation(draft, sessionId, hydrationEpoch);
+      }),
     setActiveTurn: (
       sessionId: Parameters<SessionSlice["setActiveTurn"]>[0],
       turnId: Parameters<SessionSlice["setActiveTurn"]>[1],
@@ -197,6 +274,10 @@ export function buildTurnActions(set: ImmerSet) {
       set((draft) => {
         for (const sessionId of new Set(sessionIds)) {
           draft.turns.activeBySession[sessionId] = null;
+          // Bump the generation so an in-flight REST hydration cannot
+          // resurrect the marker from a pre-adoption snapshot.
+          draft.turns.reconcileEpochBySession[sessionId] =
+            (draft.turns.reconcileEpochBySession[sessionId] ?? 0) + 1;
         }
       }),
   };

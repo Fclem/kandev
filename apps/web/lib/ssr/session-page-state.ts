@@ -243,8 +243,14 @@ function buildSessionState(p: BuildSessionPageStateParams) {
                 // history — mark it loaded so turn-derived UI never
                 // re-fetches or mistakes WS-seeded live turns for it.
                 loadedBySession: { [sessionId]: true },
+                reconcileEpochBySession: {},
               }
-            : { bySession: {}, activeBySession: {}, loadedBySession: {} },
+            : {
+                bySession: {},
+                activeBySession: {},
+                loadedBySession: {},
+                reconcileEpochBySession: {},
+              },
         }
       : {}),
     environmentIdBySessionId: Object.fromEntries(

@@ -32,6 +32,12 @@ export type TurnsState = {
    * when this marker is set.
    */
   loadedBySession: Record<string, boolean>;
+  /**
+   * Per-session generation counter bumped by authoritative active-marker
+   * clears (source adoption). A REST hydration started before the bump must
+   * not resurrect the marker from a stale snapshot.
+   */
+  reconcileEpochBySession: Record<string, number>;
 };
 
 export type TaskSessionsState = {
@@ -223,6 +229,13 @@ export type SessionSliceActions = {
     updatedAt?: string,
   ) => void;
   setActiveTurn: (sessionId: string, turnId: string | null) => void;
+  /**
+   * Establishes (or clears) the active-turn marker after a full REST
+   * hydration, applying the same settled-session rule as
+   * reconcileActiveTurnForIdleSession and rejecting hydrations that started
+   * before an authoritative clear (epoch mismatch).
+   */
+  reconcileActiveTurnAfterHydration: (sessionId: string, hydrationEpoch: number) => void;
   /** Records that the session's full persisted turn history is in the store. */
   markTurnsLoaded: (sessionId: string) => void;
   /** Source adoption is an authoritative idle boundary for the listed sessions. */

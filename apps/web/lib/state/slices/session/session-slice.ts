@@ -193,6 +193,7 @@ export const defaultSessionState: SessionSliceState = {
     bySession: {},
     activeBySession: {},
     loadedBySession: {},
+    reconcileEpochBySession: {},
   },
   taskSessions: { items: {} },
   taskSessionsByTask: { itemsByTaskId: {}, loadingByTaskId: {}, loadedByTaskId: {} },
@@ -544,6 +545,7 @@ function buildTaskSessionActions(set: ImmerSet) {
         delete draft.turns.bySession[sessionId];
         delete draft.turns.activeBySession[sessionId];
         delete draft.turns.loadedBySession[sessionId];
+        delete draft.turns.reconcileEpochBySession[sessionId];
         // Cascade into the runtime slice (shell/process/git buffers + per-session
         // maps); this also removes the environmentIdBySessionId mapping.
         purgeSessionRuntimeState(draft as unknown as SessionRuntimeSliceState, sessionId);

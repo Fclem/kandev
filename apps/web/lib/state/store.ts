@@ -389,6 +389,7 @@ export type AppState = KanbanSlice & {
     updatedAt?: string,
   ) => void;
   setActiveTurn: (sessionId: string, turnId: string | null) => void;
+  reconcileActiveTurnAfterHydration: (sessionId: string, hydrationEpoch: number) => void;
   markTurnsLoaded: (sessionId: string) => void;
   updateMessage: (message: Message) => void;
   removeMessage: (sessionId: string, messageId: string) => void;

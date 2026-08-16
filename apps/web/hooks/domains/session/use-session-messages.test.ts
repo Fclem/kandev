@@ -23,6 +23,7 @@ const mockState = {
     bySession: { "sess-1": [] as unknown[] },
     activeBySession: { "sess-1": null },
     loadedBySession: {} as Record<string, boolean>,
+    reconcileEpochBySession: {} as Record<string, number>,
   },
   connection: { status: "connected" },
   mergeMessages: vi.fn(),
@@ -34,6 +35,7 @@ const mockState = {
     mockState.turns.loadedBySession[sessionId] = true;
   }),
   setActiveTurn: vi.fn(),
+  reconcileActiveTurnAfterHydration: vi.fn(),
 };
 
 vi.mock("@/lib/api", () => ({

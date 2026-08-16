@@ -20,6 +20,35 @@ function makeAppDraft(): AppState {
 }
 
 describe("settled boundary seeding ordering", () => {
+  it("does not clear a live marker for the protected active session", () => {
+    // Non-force hydration protects the active session: the merge SKIPS its
+    // bySession/activeBySession entries (live data wins). The stale-marker
+    // sweep must not clear the live marker even though the SSR payload
+    // carries a settled session and a matching old turn row.
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      draft.turns.bySession[SESSION_ID] = [
+        { id: "live-turn", started_at: "2026-01-02T00:00:00Z" },
+      ] as never;
+      draft.turns.activeBySession[SESSION_ID] = "live-turn";
+      hydrateState(
+        draft,
+        {
+          taskSessions: {
+            items: { [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: BOUNDARY } },
+          },
+          turns: {
+            activeBySession: { [SESSION_ID]: "live-turn" },
+            bySession: {
+              [SESSION_ID]: [{ id: "live-turn", started_at: OLD_BOUNDARY, completed_at: null }],
+            },
+          },
+        } as unknown as Partial<AppState>,
+        { activeSessionId: SESSION_ID },
+      );
+    });
+    expect(result.turns.activeBySession[SESSION_ID]).toBe("live-turn");
+  });
+
   it("clears a stale SSR active marker for a turn before the seeded boundary", () => {
     // Production SSR payload: settled session + active marker naming a turn
     // started before the boundary. The marker clear must see the seeded

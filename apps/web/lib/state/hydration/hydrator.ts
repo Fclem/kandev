@@ -187,10 +187,24 @@ function seedSettledSessionBoundaries(draft: Draft<AppState>, state: HydrationSt
 /**
  * A server snapshot may still name a turn that an authoritative boundary
  * (source adoption / settled-session clear) retired client-side. Never let a
- * force-merge resurrect its marker.
+ * force-merge resurrect its marker. Only sweeps markers this merge actually
+ * INSTALLED (mirroring mergeSessionMap's write predicate): the protected
+ * active session's entries are skipped by the merge, so its live marker must
+ * not be cleared, and pre-existing non-force-merged markers are the client's
+ * live state, not the snapshot's.
  */
-function clearHydratedRetiredActiveMarkers(draft: Draft<AppState>, state: HydrationState): void {
+function clearHydratedRetiredActiveMarkers(
+  draft: Draft<AppState>,
+  state: HydrationState,
+  activeSessionId: string | null,
+  forceMergeSessionId: string | null,
+  preMergeActiveSessions: Set<string>,
+): void {
   for (const sessionId in state.turns!.activeBySession) {
+    const shouldForceMerge = forceMergeSessionId && sessionId === forceMergeSessionId;
+    const skippedAsActive = !shouldForceMerge && sessionId === activeSessionId;
+    if (skippedAsActive) continue;
+    if (!shouldForceMerge && preMergeActiveSessions.has(sessionId)) continue;
     const hydrated = draft.turns.activeBySession[sessionId];
     if (!hydrated) continue;
     const boundary = parseTurnTimestamp(draft.turns.settledBoundaryBySession[sessionId]);
@@ -272,13 +286,20 @@ function hydrateSession(
       markHydratedTurnsLoaded(draft, state, activeSessionId, forceMergeSessionId, preMergeSessions);
     }
     if (state.turns.activeBySession) {
+      const preMergeActiveSessions = new Set(Object.keys(draft.turns.activeBySession));
       mergeSessionMap(
         draft.turns.activeBySession,
         state.turns.activeBySession,
         activeSessionId,
         forceMergeSessionId,
       );
-      clearHydratedRetiredActiveMarkers(draft, state);
+      clearHydratedRetiredActiveMarkers(
+        draft,
+        state,
+        activeSessionId,
+        forceMergeSessionId,
+        preMergeActiveSessions,
+      );
     }
   }
   if (state.taskSessionsByTask) deepMerge(draft.taskSessionsByTask, state.taskSessionsByTask);

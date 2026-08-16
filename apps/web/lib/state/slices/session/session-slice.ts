@@ -158,41 +158,32 @@ const IDLE_SESSION_STATES = new Set<TaskSession["state"]>([
   "CANCELLED",
 ]);
 
-/**
- * An API session snapshot is authoritative about whether a session is idle,
- * while turn history can be incomplete after boot or a WS reconnect. Drop an
- * orphaned active-turn marker, but only retire a known turn when the idle
- * session snapshot is at least as new as that turn's start time.
- */
-function retireSessionActiveTurn(draft: SessionSliceState, sessionId: string): void {
-  const activeTurnId = draft.turns.activeBySession[sessionId];
-  if (!activeTurnId) return;
-  draft.turns.activeBySession[sessionId] = null;
-  const retired = draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? [];
-  if (!retired.includes(activeTurnId)) retired.push(activeTurnId);
-  draft.turns.retiredActiveTurnIdsBySession[sessionId] = retired;
-}
-
 function reconcileActiveTurnForIdleSession(draft: SessionSliceState, session: TaskSession): void {
   if (!IDLE_SESSION_STATES.has(session.state)) return;
-
+  const sessionUpdatedAt = Date.parse(session.updated_at);
+  if (Number.isNaN(sessionUpdatedAt)) return;
+  const turns = draft.turns.bySession[session.id] ?? [];
+  const retired = draft.turns.retiredActiveTurnIdsBySession[session.id] ?? [];
+  // Retire every incomplete turn started at/before the settled snapshot (incl.
+  // missed-start turns) so a delayed WS start cannot resurrect them.
+  for (const turn of turns) {
+    if (turn.completed_at) continue;
+    const turnStartedAt = Date.parse(turn.started_at);
+    if (
+      !Number.isNaN(turnStartedAt) &&
+      turnStartedAt <= sessionUpdatedAt &&
+      !retired.includes(turn.id)
+    ) {
+      retired.push(turn.id);
+    }
+  }
+  draft.turns.retiredActiveTurnIdsBySession[session.id] = retired;
+  // Clear the marker when it points at a retired/missing/completed turn.
   const activeTurnId = draft.turns.activeBySession[session.id];
   if (!activeTurnId) return;
-
-  const activeTurn = draft.turns.bySession[session.id]?.find((turn) => turn.id === activeTurnId);
-  if (!activeTurn || activeTurn.completed_at) {
-    retireSessionActiveTurn(draft, session.id);
-    return;
-  }
-
-  const sessionUpdatedAt = Date.parse(session.updated_at);
-  const turnStartedAt = Date.parse(activeTurn.started_at);
-  if (
-    !Number.isNaN(sessionUpdatedAt) &&
-    !Number.isNaN(turnStartedAt) &&
-    turnStartedAt <= sessionUpdatedAt
-  ) {
-    retireSessionActiveTurn(draft, session.id);
+  const activeTurn = turns.find((turn) => turn.id === activeTurnId);
+  if (!activeTurn || activeTurn.completed_at || retired.includes(activeTurnId)) {
+    draft.turns.activeBySession[session.id] = null;
   }
 }
 

@@ -48,4 +48,24 @@ describe("hydrateState — turns loadedBySession marker predicates", () => {
     expect(result.turns.bySession[sessionId]).toEqual([{ id: "fresh-turn" }]);
     expect(result.turns.loadedBySession[sessionId]).toBe(true);
   });
+
+  it("never force-merges a stale active marker for a retired turn", () => {
+    const sessionId = "session-1";
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      // The turn was retired by an authoritative boundary (source adoption /
+      // settled-session clear) while the server snapshot still names it as
+      // the active turn.
+      draft.turns.retiredActiveTurnIdsBySession[sessionId] = ["retired-turn"];
+      hydrateState(
+        draft,
+        {
+          turns: {
+            activeBySession: { [sessionId]: "retired-turn" },
+          },
+        } as unknown as Partial<AppState>,
+        { forceMergeSessionId: sessionId },
+      );
+    });
+    expect(result.turns.activeBySession[sessionId]).toBeNull();
+  });
 });

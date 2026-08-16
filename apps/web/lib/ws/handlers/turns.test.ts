@@ -21,6 +21,7 @@ function makeStore() {
       ...(createSessionSlice as any)(set),
       quickChat: { sessions: [] },
       availableCommands: { bySessionId: {} },
+      prepareProgress: { bySessionId: {} },
     })),
   );
 }
@@ -44,6 +45,20 @@ function send(
 ) {
   const handler = registerTurnsHandlers(store as never)[action]!;
   handler({ type: NOTIFICATION, action, payload } as never);
+}
+
+const IDLE_SESSION = { id: SESSION_ID, state: "IDLE", updated_at: TURN_COMPLETED_AT } as never;
+
+function settleViaSetTaskSession(store: ReturnType<typeof makeStore>): void {
+  store.getState().setTaskSession(IDLE_SESSION);
+}
+
+function settleViaSetTaskSessionsForTask(store: ReturnType<typeof makeStore>): void {
+  store.getState().setTaskSessionsForTask(TASK_ID, [IDLE_SESSION]);
+}
+
+function settleViaUpsertTaskSessionFromEvent(store: ReturnType<typeof makeStore>): void {
+  store.getState().upsertTaskSessionFromEvent(TASK_ID, IDLE_SESSION);
 }
 
 describe("session turn WebSocket handlers", () => {
@@ -94,6 +109,47 @@ describe("session turn WebSocket handlers", () => {
 
     expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
   });
+
+  it("does not resurrect the marker after a hydration settled-clear retires a turn", () => {
+    const store = makeStore();
+    // An IDLE session with an orphaned incomplete turn, hydrated via the
+    // REST reconciliation (which clears the marker by the settled rule).
+    store.getState().setTaskSession({
+      id: SESSION_ID,
+      state: "IDLE",
+      updated_at: TURN_COMPLETED_AT,
+    } as never);
+    store.getState().addTurn(turn("turn-1", TURN_STARTED_AT) as never);
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 0);
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+
+    // A delayed start for the turn the hydration settled must not resurrect
+    // the marker.
+    send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it.each([
+    ["setTaskSession", settleViaSetTaskSession],
+    ["setTaskSessionsForTask", settleViaSetTaskSessionsForTask],
+    ["upsertTaskSessionFromEvent", settleViaUpsertTaskSessionFromEvent],
+  ] as const)(
+    "retires an unmarked incomplete turn when %s settles the session",
+    (_name, settle) => {
+      const store = makeStore();
+      // The start event was missed entirely: the incomplete row exists but no
+      // active marker was ever set.
+      store.getState().addTurn(turn("turn-1", TURN_STARTED_AT) as never);
+
+      settle(store);
+
+      // A delayed start for the pre-settlement turn must not resurrect it.
+      send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
+
+      expect(store.getState().turns.activeBySession[SESSION_ID]).toBeFalsy();
+    },
+  );
 
   it("still marks a genuinely new turn active after source adoption", () => {
     const store = makeStore();

@@ -507,6 +507,31 @@ describe("reconcileActiveTurnAfterHydration", () => {
   });
 });
 
+describe("retired turn id lifecycle", () => {
+  it("drops a retired id once its turn completes", () => {
+    const store = makeStore();
+    store.setState((s) => {
+      s.taskSessions.items[SESSION_ID] = { id: SESSION_ID, state: "RUNNING" } as never;
+    });
+    store
+      .getState()
+      .addTurn(
+        turn("turn-1", { started_at: STARTED_AT, updated_at: STARTED_AT, completed_at: undefined }),
+      );
+    store.getState().setActiveTurn(SESSION_ID, "turn-1");
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+    expect(store.getState().turns.retiredActiveTurnIdsBySession[SESSION_ID]).toEqual(["turn-1"]);
+
+    // The completion event arrives; the retired id is no longer needed (a
+    // completed turn can never be active).
+    store
+      .getState()
+      .addTurn(turn("turn-1", { completed_at: COMPLETED_AT, updated_at: COMPLETED_AT }));
+
+    expect(store.getState().turns.retiredActiveTurnIdsBySession[SESSION_ID]).toEqual([]);
+  });
+});
+
 describe("shouldApplyTurnUpdate", () => {
   it("completion precedence beats equal or older timestamps", () => {
     const existing = turn("t", { started_at: STARTED_AT, updated_at: STARTED_AT });

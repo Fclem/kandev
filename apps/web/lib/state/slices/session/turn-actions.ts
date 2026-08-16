@@ -65,16 +65,38 @@ const SETTLED_SESSION_STATES = new Set<string>([
 ]);
 
 /**
- * Clears the active marker and records the retired turn id so a delayed WS
- * `session.turn.started` for that turn cannot resurrect it.
+ * Records a turn id as retired so a delayed WS `session.turn.started` for it
+ * cannot resurrect the marker.
+ */
+function retireTurnId(draft: Draft<SessionSlice>, sessionId: string, turnId: string): void {
+  const retired = draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? [];
+  if (!retired.includes(turnId)) retired.push(turnId);
+  draft.turns.retiredActiveTurnIdsBySession[sessionId] = retired;
+}
+
+/**
+ * Clears the active marker and retires the previously-active turn id.
  */
 function retireActiveTurn(draft: Draft<SessionSlice>, sessionId: string): void {
   const activeId = draft.turns.activeBySession[sessionId];
   if (!activeId) return;
   draft.turns.activeBySession[sessionId] = null;
-  const retired = draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? [];
-  if (!retired.includes(activeId)) retired.push(activeId);
-  draft.turns.retiredActiveTurnIdsBySession[sessionId] = retired;
+  retireTurnId(draft, sessionId, activeId);
+}
+
+/**
+ * Drops a retired id once its turn is known completed — a completed turn can
+ * never be active (setActiveTurn rejects completed rows), so the id no longer
+ * needs guarding. Keeps the retired list bounded for long-lived sessions.
+ */
+function pruneRetiredTurn(draft: Draft<SessionSlice>, sessionId: string, turnId: string): void {
+  const retired = draft.turns.retiredActiveTurnIdsBySession[sessionId];
+  if (!retired) return;
+  const index = retired.indexOf(turnId);
+  if (index >= 0) {
+    retired.splice(index, 1);
+    draft.turns.retiredActiveTurnIdsBySession[sessionId] = retired;
+  }
 }
 
 /** Whether a WS start (or hydration candidate) is for a retired turn. */
@@ -140,6 +162,9 @@ function applyActiveTurnReconciliation(
       !Number.isNaN(turnStartedAt) &&
       turnStartedAt <= sessionUpdatedAt
     ) {
+      // The settled rule retires the candidate: a delayed WS start for it
+      // must not resurrect the marker.
+      retireTurnId(draft, sessionId, latestId);
       draft.turns.activeBySession[sessionId] = null;
       return;
     }
@@ -216,10 +241,12 @@ export function buildTurnActions(set: ImmerSet) {
         const existing = draft.turns.bySession[sessionId].find((item) => item.id === turn.id);
         if (!existing) {
           draft.turns.bySession[sessionId].push(turn);
+          if (turn.completed_at) pruneRetiredTurn(draft, sessionId, turn.id);
           return;
         }
         if (!shouldApplyTurnUpdate(existing, turn)) return;
         Object.assign(existing, turn, { completed_at: existing.completed_at ?? turn.completed_at });
+        if (existing.completed_at) pruneRetiredTurn(draft, sessionId, turn.id);
       }),
     completeTurn: (
       sessionId: Parameters<SessionSlice["completeTurn"]>[0],

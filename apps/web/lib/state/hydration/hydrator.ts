@@ -163,6 +163,23 @@ function bridgeSidebarViewsFromUserSettings(
 }
 
 /**
+ * A server snapshot may still name a turn that an authoritative boundary
+ * (source adoption / settled-session clear) retired client-side. Never let a
+ * force-merge resurrect its marker.
+ */
+function clearHydratedRetiredActiveMarkers(draft: Draft<AppState>, state: HydrationState): void {
+  for (const sessionId in state.turns!.activeBySession) {
+    const hydrated = draft.turns.activeBySession[sessionId];
+    if (
+      hydrated &&
+      (draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? []).includes(hydrated)
+    ) {
+      draft.turns.activeBySession[sessionId] = null;
+    }
+  }
+}
+
+/**
  * Marks the sessions whose turn lists this merge actually installed as fully
  * loaded. The hydrated lists are complete server-side snapshots; the marker
  * keeps turn-derived UI from re-fetching or mistaking WS-seeded live turns
@@ -222,13 +239,15 @@ function hydrateSession(
       );
       markHydratedTurnsLoaded(draft, state, activeSessionId, forceMergeSessionId, preMergeSessions);
     }
-    if (state.turns.activeBySession)
+    if (state.turns.activeBySession) {
       mergeSessionMap(
         draft.turns.activeBySession,
         state.turns.activeBySession,
         activeSessionId,
         forceMergeSessionId,
       );
+      clearHydratedRetiredActiveMarkers(draft, state);
+    }
   }
   if (state.taskSessions) deepMerge(draft.taskSessions, state.taskSessions);
   if (state.taskSessionsByTask) deepMerge(draft.taskSessionsByTask, state.taskSessionsByTask);

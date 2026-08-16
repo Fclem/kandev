@@ -1,0 +1,226 @@
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MessageListHandle } from "./chat/message-list-shared";
+
+const { mockDockviewState } = vi.hoisted(() => {
+  const state = {
+    scrollTarget: null as null | {
+      sessionId: string;
+      messageId: string;
+      token: number;
+      hostPanelId: string;
+    },
+    clearScrollTarget: vi.fn((token: number) => {
+      if (state.scrollTarget?.token === token) state.scrollTarget = null;
+    }),
+    clearScrollTargetForSession: vi.fn((sessionId: string) => {
+      if (state.scrollTarget?.sessionId === sessionId) state.scrollTarget = null;
+    }),
+  };
+  return { mockDockviewState: state };
+});
+
+vi.mock("@/lib/state/dockview-store", () => ({
+  useDockviewStore: Object.assign(
+    (selector: (state: typeof mockDockviewState) => unknown) => selector(mockDockviewState),
+    { getState: () => mockDockviewState },
+  ),
+}));
+
+import { useScrollTargetConsumption } from "./task-chat-panel";
+
+let pendingFrames: Array<(() => void) | undefined> = [];
+
+async function flushFrames() {
+  await act(async () => {
+    const frames = pendingFrames.splice(0);
+    for (const frame of frames) frame?.();
+  });
+  await act(async () => {
+    const frames = pendingFrames.splice(0);
+    for (const frame of frames) frame?.();
+  });
+}
+
+type ScrollTarget = NonNullable<typeof mockDockviewState.scrollTarget>;
+
+function target(overrides: Partial<ScrollTarget> = {}): ScrollTarget {
+  return {
+    sessionId: "session-1",
+    messageId: "message-1",
+    token: 7,
+    hostPanelId: "panel-a",
+    ...overrides,
+  };
+}
+
+function scrollHandle(returns: boolean): MessageListHandle {
+  return { scrollToMessage: vi.fn(() => returns) };
+}
+
+const PROPS = {
+  resolvedSessionId: "session-1",
+  isVisible: true,
+  panelId: "panel-a",
+  isInitialMessagesLoading: false,
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  pendingFrames = [];
+  vi.stubGlobal("requestAnimationFrame", (callback: () => void) => {
+    pendingFrames.push(callback);
+    return pendingFrames.length;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+    pendingFrames[id - 1] = undefined;
+  });
+  mockDockviewState.scrollTarget = null;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+afterEach(() => {
+  act(() => {});
+});
+
+describe("useScrollTargetConsumption — success-path consumption", () => {
+  it("scrolls the target row and clears by token on a successful scroll", async () => {
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(true) };
+
+    renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef }));
+    await flushFrames();
+
+    expect(messageListRef.current?.scrollToMessage).toHaveBeenCalledWith("message-1", {
+      align: "start",
+      behavior: "auto",
+    });
+    expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
+    expect(mockDockviewState.scrollTarget).toBeNull();
+  });
+
+  it("does not consume when another panel owns the target (exact-owner gate)", () => {
+    mockDockviewState.scrollTarget = target({ hostPanelId: "panel-b" });
+    const messageListRef = { current: scrollHandle(true) };
+
+    renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef }));
+
+    expect(messageListRef.current?.scrollToMessage).not.toHaveBeenCalled();
+    expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
+  });
+
+  it("does not consume when the target belongs to another session", () => {
+    mockDockviewState.scrollTarget = target({ sessionId: "session-2" });
+    const messageListRef = { current: scrollHandle(true) };
+
+    renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef }));
+
+    expect(messageListRef.current?.scrollToMessage).not.toHaveBeenCalled();
+    expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
+  });
+
+  it("does not consume without a panelId (non-dockview hosts stay unchanged)", () => {
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(true) };
+
+    renderHook(() => useScrollTargetConsumption({ ...PROPS, panelId: null, messageListRef }));
+
+    expect(messageListRef.current?.scrollToMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("useScrollTargetConsumption — delayed-DOM retry", () => {
+  it("retains the target when the scroll no-ops and consumes once the list is ready", async () => {
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(false) };
+
+    const { rerender } = renderHook(
+      ({ isInitialMessagesLoading }) =>
+        useScrollTargetConsumption({
+          ...PROPS,
+          isInitialMessagesLoading,
+          messageListRef,
+        }),
+      { initialProps: { isInitialMessagesLoading: true } },
+    );
+
+    await flushFrames();
+    expect(messageListRef.current?.scrollToMessage).toHaveBeenCalled();
+    expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
+    expect(mockDockviewState.scrollTarget).not.toBeNull();
+
+    // The message list renders the row; the readiness flip retries.
+    messageListRef.current = scrollHandle(true);
+    rerender({ isInitialMessagesLoading: false });
+    await flushFrames();
+
+    expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
+    expect(mockDockviewState.scrollTarget).toBeNull();
+  });
+});
+
+describe("useScrollTargetConsumption — activation gating", () => {
+  it("retains the target while inactive and consumes on activation without clearing the session", async () => {
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(true) };
+
+    const { rerender } = renderHook(
+      ({ isVisible }) => useScrollTargetConsumption({ ...PROPS, isVisible, messageListRef }),
+      { initialProps: { isVisible: false } },
+    );
+
+    expect(messageListRef.current?.scrollToMessage).not.toHaveBeenCalled();
+    expect(mockDockviewState.clearScrollTargetForSession).not.toHaveBeenCalled();
+
+    rerender({ isVisible: true });
+    await flushFrames();
+
+    expect(messageListRef.current?.scrollToMessage).toHaveBeenCalled();
+    expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
+    expect(mockDockviewState.clearScrollTargetForSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("useScrollTargetConsumption — session-swap invalidation", () => {
+  it("clears a delayed target for the previous session when the canonical chat swaps sessions", () => {
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(false) };
+
+    const { rerender } = renderHook(
+      ({ resolvedSessionId }) =>
+        useScrollTargetConsumption({ ...PROPS, resolvedSessionId, messageListRef }),
+      { initialProps: { resolvedSessionId: "session-1" } },
+    );
+    expect(mockDockviewState.scrollTarget).not.toBeNull();
+
+    // Canonical chat resolves session B: the A-target must be invalidated.
+    rerender({ resolvedSessionId: "session-2" });
+
+    expect(mockDockviewState.clearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(mockDockviewState.scrollTarget).toBeNull();
+
+    // Returning to A must NOT re-scroll (the target was cleared).
+    messageListRef.current = scrollHandle(true);
+    rerender({ resolvedSessionId: "session-1" });
+
+    expect(messageListRef.current?.scrollToMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("useScrollTargetConsumption — canonical-host unmount ownership", () => {
+  it("clears by the last resolved session on unmount", () => {
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(false) };
+
+    const { unmount } = renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef }));
+    expect(mockDockviewState.scrollTarget).not.toBeNull();
+
+    unmount();
+
+    expect(mockDockviewState.clearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(mockDockviewState.scrollTarget).toBeNull();
+  });
+});

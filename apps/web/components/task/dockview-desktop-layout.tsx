@@ -186,7 +186,9 @@ const tabComponents: Record<string, React.FunctionComponent<IDockviewPanelHeader
 // LAYOUT RESTORATION HELPERS
 // ---------------------------------------------------------------------------
 
-const VALID_COMPONENTS = new Set(Object.keys(components));
+/** Exported seam for registry-membership tests (Office exports the same
+ *  set from `dockview-shared.tsx`). */
+export const DESKTOP_VALID_COMPONENTS = new Set(Object.keys(components));
 
 // ---------------------------------------------------------------------------
 // useEnvSwitchCleanup — backup layout switch for external session changes
@@ -304,7 +306,8 @@ function setupReadyDockview({ api, appStore, layout, refs }: ReadyDockviewSetup)
 
   const currentEnvId = refs.envIdRef.current;
   const restored =
-    !layout.initialLayout && restoreEnvLayout(api, currentEnvId, appStore, VALID_COMPONENTS);
+    !layout.initialLayout &&
+    restoreEnvLayout(api, currentEnvId, appStore, DESKTOP_VALID_COMPONENTS);
   if (!restored) {
     layout.buildDefaultLayout(
       api,

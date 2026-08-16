@@ -12,6 +12,7 @@ import { usePanelActive } from "@/hooks/use-panel-active";
 import { t } from "@/lib/i18n";
 import { setPanelTitle } from "@/lib/layout/panel-portal-manager";
 import { useDockviewStore } from "@/lib/state/dockview-store";
+import { panelTitle } from "@/lib/state/layout-manager/panel-title";
 import { BrowserPanel } from "./browser-panel";
 import type { CommitDetailTarget, OpenDiffOptions } from "./changes-diff-target";
 import { ChangesPanel } from "./changes-panel";
@@ -198,6 +199,28 @@ function PlanContent() {
   return <TaskPlanPanel taskId={taskId} visible />;
 }
 
+/**
+ * Prompt-history arrow wiring: the panel content is a pure seam consumer, so
+ * the host binds `onNavigateToPrompt` to the dockview store's
+ * `scrollTranscriptToMessage`, resolving the tab title as the session's name
+ * (truthy check — an EMPTY-string name falls back too) or the localized
+ * canonical chat title.
+ */
+function PromptHistoryContent() {
+  const sessionId = useAppStore((state) => state.tasks.activeSessionId);
+  const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
+  const scrollTranscriptToMessage = useDockviewStore((state) => state.scrollTranscriptToMessage);
+  return (
+    <PromptHistoryPanelContent
+      onNavigateToPrompt={(messageId: string) => {
+        if (sessionId) {
+          scrollTranscriptToMessage(sessionId, messageId, session?.name || panelTitle("chat"));
+        }
+      }}
+    />
+  );
+}
+
 const COMPONENT_ALIASES: Record<string, string> = {
   "diff-files": "changes",
   "all-files": "files",
@@ -227,7 +250,7 @@ const PANEL_RENDERERS: Record<string, PanelRenderer> = {
   vscode: (panelId) => <VscodePanel panelId={panelId} />,
   plan: () => <PlanContent />,
   todos: () => <TodosContent />,
-  "prompt-history": () => <PromptHistoryPanelContent />,
+  "prompt-history": () => <PromptHistoryContent />,
   "pr-detail": (panelId, params) => (
     <ReviewDetailPanelComponent panelId={panelId} params={params} />
   ),

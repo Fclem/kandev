@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Message } from "@/lib/types/http";
 
 vi.mock("@/lib/state/dockview-store", () => ({
@@ -18,7 +18,7 @@ vi.mock("@/components/state-provider", () => ({
 }));
 
 import { useScrollToDividerOrBottom } from "./message-list-native";
-import { useAutoScroll } from "./message-list-native-scroll";
+import { useAutoScroll, useScrollToMessage } from "./message-list-native-scroll";
 
 const DIVIDER_KEY = "m2";
 const DIVIDER_SCROLL_CONTAINER_TEST_ID = "divider-scroll-container";
@@ -248,5 +248,114 @@ describe("useScrollToDividerOrBottom — anchored-bar offset", () => {
 
     expect(scrollContainer.scrollTop).toBe(150);
     vi.useRealTimers();
+  });
+});
+
+type ScrollToMessageHandle = (
+  messageId: string,
+  options?: { align?: "start" | "center" },
+) => boolean;
+
+function ScrollToMessageHarness({
+  rows,
+  onHandle,
+}: {
+  rows: string[];
+  onHandle: (handle: ScrollToMessageHandle) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const handle = useScrollToMessage(scrollRef, (performScroll) => performScroll());
+  useLayoutEffect(() => {
+    onHandle(handle);
+  }, [handle, onHandle]);
+  return (
+    <div ref={scrollRef} data-testid="scroll-to-message-root">
+      {rows.map((id) => (
+        <div key={id} id={`msg-${id}`} />
+      ))}
+    </div>
+  );
+}
+
+describe("useScrollToMessage — root-scoped row lookup", () => {
+  let scrollIntoView: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    scrollIntoView.mockRestore();
+  });
+
+  function renderHandle(rows: string[]) {
+    const boxed: { current: ScrollToMessageHandle | null } = { current: null };
+    render(
+      <ScrollToMessageHarness
+        rows={rows}
+        onHandle={(next) => {
+          boxed.current = next;
+        }}
+      />,
+    );
+    const handle = boxed.current;
+    if (!handle) throw new Error("scroll handle did not render");
+    return handle;
+  }
+
+  it("returns false and does not scroll when the row is absent from the owning root", () => {
+    const handle = renderHandle(["other"]);
+
+    expect(handle("missing")).toBe(false);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("returns true and scrolls the row into view with the requested alignment", () => {
+    const handle = renderHandle(["target"]);
+
+    expect(handle("target", { align: "start" })).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      block: "start",
+      behavior: "smooth",
+    });
+
+    scrollIntoView.mockClear();
+    expect(handle("target")).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      block: "center",
+      behavior: "smooth",
+    });
+  });
+
+  it("resolves and scrolls only the matching row when duplicate ids exist across mounted lists", () => {
+    const firstHandle: { current: ScrollToMessageHandle | null } = { current: null };
+    const secondHandle: { current: ScrollToMessageHandle | null } = { current: null };
+    const results = render(
+      <>
+        <ScrollToMessageHarness
+          rows={["dup"]}
+          onHandle={(next) => {
+            firstHandle.current = next;
+          }}
+        />
+        <ScrollToMessageHarness
+          rows={["dup"]}
+          onHandle={(next) => {
+            secondHandle.current = next;
+          }}
+        />
+      </>,
+    );
+    const h1 = firstHandle.current;
+    const h2 = secondHandle.current;
+    if (!h1 || !h2) throw new Error("handles did not render");
+    const rows = results.container.querySelectorAll("#msg-dup");
+
+    expect(h1("dup")).toBe(true);
+    expect(h2("dup")).toBe(true);
+    // Each handle scrolled its own list's row (2 distinct elements, not a
+    // document-global lookup that would collapse to one).
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(rows).toHaveLength(2);
   });
 });

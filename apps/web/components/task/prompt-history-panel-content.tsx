@@ -11,8 +11,6 @@ import {
   formatPromptDuration,
   type PromptHistoryEntry,
 } from "@/lib/prompt-history";
-import { panelTitle } from "@/lib/state/layout-manager/panel-title";
-import { useDockviewStore } from "@/lib/state/dockview-store";
 import { PanelRoot } from "./panel-primitives";
 
 type PromptHistoryPanelContentProps = { onNavigateToPrompt?: (messageId: string) => void };
@@ -24,17 +22,9 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
   const { messages } = useSessionMessages(sessionId);
   const turns = useSessionTurns(sessionId);
-  const scrollTranscriptToMessage = useDockviewStore((state) => state.scrollTranscriptToMessage);
   const entries = useMemo(() => buildPromptHistoryEntries(messages, turns), [messages, turns]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const maxHeight = usePanelRowMaxHeight(rootRef);
-  const navigateToPrompt =
-    onNavigateToPrompt ??
-    ((messageId: string) => {
-      if (sessionId) {
-        scrollTranscriptToMessage(sessionId, messageId, session?.name || panelTitle("chat"));
-      }
-    });
 
   if (session?.is_passthrough || entries.length === 0) {
     return (
@@ -58,7 +48,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
           expanded={expanded === entry.messageId}
           maxHeight={maxHeight}
           onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
-          onNavigate={navigateToPrompt}
+          onNavigate={onNavigateToPrompt}
         />
       ))}
     </PanelRoot>
@@ -86,7 +76,7 @@ type PromptHistoryRowProps = {
   expanded: boolean;
   maxHeight: string;
   onToggle: () => void;
-  onNavigate: (messageId: string) => void;
+  onNavigate?: (messageId: string) => void;
 };
 
 function PromptHistoryRow({
@@ -118,12 +108,12 @@ function PromptHistoryRow({
         className="size-8 shrink-0 cursor-pointer"
         aria-label={t("task:scrollToPrompt")}
         data-testid={`prompt-history-jump-${index}`}
-        onClick={() => onNavigate(entry.messageId)}
+        onClick={() => onNavigate?.(entry.messageId)}
       >
         <IconNavigation size={16} />
       </Button>
       <div className="min-w-0 flex-1">
-        <span ref={textRef} className={expanded ? "whitespace-normal" : "block truncate"}>
+        <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
           {entry.content}
         </span>
         {expanded && (

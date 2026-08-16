@@ -10,14 +10,19 @@ import { AddPanelMenuItems, type AddPanelMenuState } from "./dockview-add-panel-
 import { pluginRegistry } from "@/lib/plugins/registry";
 import { reviewItemId } from "./review-selection";
 
-const { mockAddMRPanel, mockAddPRPanel, mockAddReviewPanel, mockAddTodosPanel } = vi.hoisted(
-  () => ({
-    mockAddMRPanel: vi.fn(),
-    mockAddPRPanel: vi.fn(),
-    mockAddReviewPanel: vi.fn(),
-    mockAddTodosPanel: vi.fn(),
-  }),
-);
+const {
+  mockAddMRPanel,
+  mockAddPRPanel,
+  mockAddReviewPanel,
+  mockAddTodosPanel,
+  mockAddPromptHistoryPanel,
+} = vi.hoisted(() => ({
+  mockAddMRPanel: vi.fn(),
+  mockAddPRPanel: vi.fn(),
+  mockAddReviewPanel: vi.fn(),
+  mockAddTodosPanel: vi.fn(),
+  mockAddPromptHistoryPanel: vi.fn(),
+}));
 
 const mockDockviewStore = vi.hoisted(() => ({
   api: null as null | {
@@ -29,6 +34,7 @@ const mockDockviewStore = vi.hoisted(() => ({
   addPlanPanel: vi.fn(),
   addPluginPanel: vi.fn(),
   addTodosPanel: mockAddTodosPanel,
+  addPromptHistoryPanel: mockAddPromptHistoryPanel,
   addChangesPanel: vi.fn(),
   addFilesPanel: vi.fn(),
   addPRPanel: mockAddPRPanel,
@@ -77,6 +83,7 @@ vi.mock("./review-panel-provider", () => ({
 }));
 
 const PR_SUBMENU_TEST_ID = "add-panel-pr-submenu";
+const INVOKING_GROUP = "group-center";
 const PR_ITEM_TEST_ID_PREFIX = "add-panel-pr-item-";
 const GITLAB_ORIGIN = "https://gitlab.example";
 const TEST_TIMESTAMP = "2026-07-31T00:00:00Z";
@@ -176,7 +183,7 @@ function renderMenu(state: Partial<AddPanelMenuState> = {}, groupId = CENTER_GRO
       <DropdownMenuTrigger>open</DropdownMenuTrigger>
       <DropdownMenuContent>
         <AddPanelMenuItems
-          groupId={groupId}
+          groupId={INVOKING_GROUP}
           state={fullState}
           onNewSession={() => {}}
           onAddTerminal={() => {}}
@@ -201,6 +208,7 @@ beforeEach(() => {
   mockAddPRPanel.mockClear();
   mockAddReviewPanel.mockClear();
   mockAddTodosPanel.mockClear();
+  mockAddPromptHistoryPanel.mockClear();
 });
 
 afterEach(() => cleanup());
@@ -466,6 +474,22 @@ describe("AddPanelMenuItems — port forwarding preference", () => {
   });
 });
 
+describe("AddPanelMenuItems — Prompt history", () => {
+  it("renders a row that opens the panel in the invoking group", () => {
+    renderMenu();
+    const item = screen.getByTestId("add-panel-prompt-history-item");
+    expect(item.textContent).toBe("Prompt history");
+
+    fireEvent.click(item);
+    expect(mockAddPromptHistoryPanel).toHaveBeenCalledWith({ groupId: INVOKING_GROUP });
+  });
+
+  it("hides the Prompt history row for a passthrough session", () => {
+    renderMenu({ isPassthrough: true });
+    expect(screen.queryByTestId("add-panel-prompt-history-item")).toBeNull();
+  });
+});
+
 describe("AddPanelMenuItems — Todos", () => {
   it("renders an always-available Todos row that opens/focuses the panel in the invoking group", () => {
     renderMenu();
@@ -473,7 +497,7 @@ describe("AddPanelMenuItems — Todos", () => {
     expect(item).toBeTruthy();
 
     fireEvent.click(item);
-    expect(mockAddTodosPanel).toHaveBeenCalledWith({ groupId: CENTER_GROUP_ID });
+    expect(mockAddTodosPanel).toHaveBeenCalledWith({ groupId: INVOKING_GROUP });
   });
 
   it("hides the Todos row for a passthrough session, matching the Plan row's guard", () => {

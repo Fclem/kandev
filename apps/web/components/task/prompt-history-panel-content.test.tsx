@@ -1,57 +1,437 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import i18n from "i18next";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Message, Turn } from "@/lib/types/http";
 
-const state = {
-  tasks: { activeSessionId: "session-1" },
-  taskSessions: { items: { "session-1": { name: "Agent" } } },
-};
-const messages = [
-  {
-    id: "prompt-1",
-    session_id: "session-1",
-    task_id: "task-1",
-    author_type: "user",
-    content: "A prompt that is rendered in history",
-    type: "message",
-    created_at: "2026-01-01T00:00:00.000Z",
+const { state, messagesBySession, turnsBySession } = vi.hoisted(() => ({
+  state: {
+    tasks: { activeSessionId: "session-a" as string | null },
+    taskSessions: {
+      items: {} as Record<string, { name?: string; is_passthrough?: boolean }>,
+    },
   },
-];
-const navigate = vi.fn();
+  messagesBySession: {} as Record<string, Message[]>,
+  turnsBySession: {} as Record<string, Turn[]>,
+}));
 
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (value: typeof state) => unknown) => selector(state),
 }));
+
 vi.mock("@/hooks/domains/session/use-session-messages", () => ({
-  useSessionMessages: () => ({ messages }),
+  useSessionMessages: (sessionId: string | null) => ({
+    messages: sessionId ? (messagesBySession[sessionId] ?? []) : [],
+  }),
 }));
+
 vi.mock("@/hooks/domains/session/use-session-turns", () => ({
-  useSessionTurns: () => [],
-}));
-vi.mock("@/lib/state/dockview-store", () => ({
-  useDockviewStore: () => navigate,
+  useSessionTurns: (sessionId: string | null) =>
+    sessionId ? (turnsBySession[sessionId] ?? []) : [],
 }));
 
 import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
 
+const SESSION_A = "session-a";
+const SESSION_B = "session-b";
+const PASSTHROUGH = "session-passthrough";
+const BASE_TIME = "2026-01-01T12:00:00.000Z";
+const COMPLETED_5S = "2026-01-01T12:00:05.000Z";
+const LATER_TIME = "2026-01-01T12:05:00.000Z";
+const NEWER_PROMPT = "newer prompt";
+const OLDER_PROMPT = "older prompt";
+const OLD_PROMPT = "old prompt";
+const MID_PROMPT = "mid prompt";
+const NEW_PROMPT = "new prompt";
+const TURN_ID = "turn-1";
+const OVERFLOW_SCROLL_WIDTH = 600;
+const EXPAND_TEST_ID = "prompt-history-expand-0";
+const PANEL_TEST_ID = "prompt-history-panel";
+const COLLAPSED_WIDTH = 100;
+const SPAN_NOT_RENDERED = "text span did not render";
+
+type ObserverEntry = { element: Element; callback: ResizeObserverCallback };
+const observerEntries: ObserverEntry[] = [];
+
+class CapturingResizeObserver {
+  private readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+
+  observe(element: Element) {
+    observerEntries.push({ element, callback: this.callback });
+  }
+
+  disconnect() {}
+  unobserve() {}
+}
+
+function message(overrides: Partial<Message> = {}): Message {
+  return {
+    id: "message-1",
+    session_id: SESSION_A as Message["session_id"],
+    task_id: "task-1" as Message["task_id"],
+    author_type: "user",
+    content: "A prompt that is rendered in history",
+    type: "message",
+    created_at: BASE_TIME,
+    ...overrides,
+  };
+}
+
+function turn(overrides: Partial<Turn> = {}): Turn {
+  return {
+    id: "turn-1",
+    session_id: SESSION_A as Turn["session_id"],
+    task_id: "task-1" as Turn["task_id"],
+    started_at: BASE_TIME,
+    created_at: BASE_TIME,
+    updated_at: BASE_TIME,
+    ...overrides,
+  };
+}
+
+function setGeometry(
+  element: Element,
+  overrides: { scrollWidth?: number; clientWidth?: number; clientHeight?: number },
+) {
+  if (overrides.scrollWidth !== undefined) {
+    Object.defineProperty(element, "scrollWidth", {
+      configurable: true,
+      value: overrides.scrollWidth,
+    });
+  }
+  if (overrides.clientWidth !== undefined) {
+    Object.defineProperty(element, "clientWidth", {
+      configurable: true,
+      value: overrides.clientWidth,
+    });
+  }
+  if (overrides.clientHeight !== undefined) {
+    Object.defineProperty(element, "clientHeight", {
+      configurable: true,
+      value: overrides.clientHeight,
+    });
+  }
+}
+
+function fireResize(element: Element) {
+  for (const entry of observerEntries) {
+    if (entry.element === element) {
+      // The component callbacks ignore both arguments; pass a stub observer
+      // so the ResizeObserverCallback typing is satisfied.
+      act(() => entry.callback([], {} as ResizeObserver));
+    }
+  }
+}
+
+function row(index: number): HTMLElement {
+  return screen.getByTestId(`prompt-history-row-${index}`);
+}
+
+function expandedBox(index: number): HTMLElement {
+  return screen.getByTestId(`prompt-history-expanded-box-${index}`);
+}
+
+function expandButton(index: number): HTMLElement {
+  return screen.getByTestId(`prompt-history-expand-${index}`);
+}
+
 beforeEach(() => {
-  navigate.mockClear();
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      disconnect() {}
-    },
-  );
+  vi.clearAllMocks();
+  observerEntries.length = 0;
+  vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+  state.tasks.activeSessionId = SESSION_A;
+  state.taskSessions.items = {
+    [SESSION_A]: { name: "Agent A", is_passthrough: false },
+    [SESSION_B]: { name: "Agent B", is_passthrough: false },
+    [PASSTHROUGH]: { name: "PT", is_passthrough: true },
+  };
+  messagesBySession[SESSION_A] = [];
+  messagesBySession[SESSION_B] = [];
+  turnsBySession[SESSION_A] = [];
+  turnsBySession[SESSION_B] = [];
 });
 
-describe("PromptHistoryPanelContent", () => {
-  it("renders an active-session prompt and calls its navigation seam", () => {
-    const onNavigateToPrompt = vi.fn();
-    render(<PromptHistoryPanelContent onNavigateToPrompt={onNavigateToPrompt} />);
+afterEach(async () => {
+  cleanup();
+  vi.unstubAllGlobals();
+  await i18n.changeLanguage("en");
+});
 
-    expect(screen.getByTestId("prompt-history-panel")).toBeTruthy();
-    expect(screen.getByTestId("prompt-history-row-0").textContent).toContain(messages[0].content);
+describe("PromptHistoryPanelContent — rows and test IDs", () => {
+  it("renders newest-first rows with the stable test IDs", () => {
+    messagesBySession[SESSION_A] = [
+      message({ id: "older", content: OLDER_PROMPT }),
+      message({ id: "newer", content: NEWER_PROMPT, created_at: LATER_TIME }),
+    ];
+
+    render(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId(PANEL_TEST_ID)).toBeTruthy();
+    expect(row(0).textContent).toContain(NEWER_PROMPT);
+    expect(row(1).textContent).toContain(OLDER_PROMPT);
+    expect(screen.getByTestId("prompt-history-jump-0")).toBeTruthy();
+    expect(screen.getByTestId("prompt-history-jump-1")).toBeTruthy();
+  });
+
+  it("renders the empty state when the session has no user prompts", () => {
+    render(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId(PANEL_TEST_ID).textContent).toBe("No prompts yet.");
+    expect(screen.queryByTestId(/^prompt-history-row-/)).toBeNull();
+  });
+
+  it("renders the empty state for a passthrough active session with zero arrows", () => {
+    messagesBySession[PASSTHROUGH] = [
+      message({ session_id: PASSTHROUGH as Message["session_id"] }),
+    ];
+    state.tasks.activeSessionId = PASSTHROUGH;
+
+    render(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId(PANEL_TEST_ID).textContent).toBe("No prompts yet.");
+    expect(screen.queryByTestId(/^prompt-history-row-/)).toBeNull();
+    expect(screen.queryByTestId(/^prompt-history-jump-/)).toBeNull();
+  });
+});
+
+describe("PromptHistoryPanelContent — navigation seam", () => {
+  it("invokes the injected callback with the row's messageId", () => {
+    messagesBySession[SESSION_A] = [message({ id: "prompt-1" })];
+    const onNavigateToPrompt = vi.fn();
+
+    render(<PromptHistoryPanelContent onNavigateToPrompt={onNavigateToPrompt} />);
     fireEvent.click(screen.getByTestId("prompt-history-jump-0"));
+
     expect(onNavigateToPrompt).toHaveBeenCalledWith("prompt-1");
+  });
+
+  it("does nothing when the callback is absent", () => {
+    messagesBySession[SESSION_A] = [message()];
+
+    render(<PromptHistoryPanelContent />);
+    fireEvent.click(screen.getByTestId("prompt-history-jump-0"));
+  });
+});
+
+describe("PromptHistoryPanelContent — active-session switch", () => {
+  it("re-derives rows for the new active session and shows the empty state for null", () => {
+    messagesBySession[SESSION_A] = [message({ id: "a-prompt", content: "A session prompt" })];
+    messagesBySession[SESSION_B] = [
+      message({
+        id: "b-prompt",
+        content: "B session prompt",
+        session_id: SESSION_B as Message["session_id"],
+      }),
+    ];
+
+    const { rerender } = render(<PromptHistoryPanelContent />);
+    expect(screen.getByTestId("prompt-history-row-0").textContent).toContain("A session prompt");
+    expect(screen.queryByText("B session prompt")).toBeNull();
+
+    state.tasks.activeSessionId = SESSION_B;
+    rerender(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId("prompt-history-row-0").textContent).toContain("B session prompt");
+    expect(screen.queryByText("A session prompt")).toBeNull();
+
+    state.tasks.activeSessionId = null;
+    rerender(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId(PANEL_TEST_ID).textContent).toBe("No prompts yet.");
+  });
+});
+
+describe("PromptHistoryPanelContent — duration rendering", () => {
+  it("composes the exact formatPromptDuration output from the localized units", () => {
+    messagesBySession[SESSION_A] = [message({ turn_id: TURN_ID })];
+    turnsBySession[SESSION_A] = [turn({ completed_at: COMPLETED_5S })];
+
+    render(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId("prompt-history-duration-0").textContent).toBe("5s");
+  });
+
+  it("renders a 0s duration for a sub-second completed turn instead of hiding it", () => {
+    messagesBySession[SESSION_A] = [message({ turn_id: TURN_ID })];
+    turnsBySession[SESSION_A] = [turn({ completed_at: BASE_TIME })];
+
+    render(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId("prompt-history-duration-0").textContent).toBe("0s");
+  });
+
+  it("omits the duration element for a running prompt", () => {
+    messagesBySession[SESSION_A] = [message({ turn_id: TURN_ID })];
+    turnsBySession[SESSION_A] = [turn({})];
+
+    render(<PromptHistoryPanelContent />);
+
+    expect(screen.queryByTestId(/^prompt-history-duration-/)).toBeNull();
+  });
+
+  it("composes durations from pseudo-locale unit labels, proving the catalog path", async () => {
+    messagesBySession[SESSION_A] = [message({ turn_id: TURN_ID })];
+    turnsBySession[SESSION_A] = [turn({ completed_at: COMPLETED_5S })];
+
+    await i18n.changeLanguage("pseudo");
+    render(<PromptHistoryPanelContent />);
+
+    const text = screen.getByTestId("prompt-history-duration-0").textContent ?? "";
+    expect(text).toMatch(/[^\x20-\x7E]/);
+    expect(text.startsWith("5")).toBe(true);
+  });
+});
+
+describe("PromptHistoryPanelContent — time element", () => {
+  it("renders dateTime, an absolute title, and the compact relative ladder", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(LATER_TIME));
+    try {
+      messagesBySession[SESSION_A] = [message()];
+
+      render(<PromptHistoryPanelContent />);
+
+      const time = row(0).querySelector("time");
+      expect(time?.getAttribute("dateTime")).toBe(BASE_TIME);
+      expect(time?.getAttribute("title")).toBe(new Date(BASE_TIME).toLocaleString());
+      expect(time?.textContent).toBe("5m ago");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("PromptHistoryPanelContent — expand/collapse behavior", () => {
+  function renderOverflowingRow() {
+    messagesBySession[SESSION_A] = [message({ id: "long", content: "long prompt text" })];
+    render(<PromptHistoryPanelContent />);
+    const text = row(0).querySelector("span");
+    if (!text) throw new Error(SPAN_NOT_RENDERED);
+    setGeometry(text, { scrollWidth: OVERFLOW_SCROLL_WIDTH, clientWidth: COLLAPSED_WIDTH });
+    fireResize(text);
+    return text;
+  }
+
+  it("shows the chevron when the collapsed text overflows and hides it after a width change", () => {
+    renderOverflowingRow();
+    expect(expandButton(0)).toBeTruthy();
+
+    const text = row(0).querySelector("span");
+    if (!text) throw new Error(SPAN_NOT_RENDERED);
+    setGeometry(text, { scrollWidth: 60 });
+    fireResize(text);
+
+    expect(screen.queryByTestId(EXPAND_TEST_ID)).toBeNull();
+  });
+
+  it("keeps the chevron visible while expanded and collapses on click", () => {
+    renderOverflowingRow();
+
+    fireEvent.click(expandButton(0));
+    expect(expandButton(0).getAttribute("aria-expanded")).toBe("true");
+    expect(expandButton(0).getAttribute("aria-label")).toBe("Collapse prompt");
+
+    // Expanded text wraps and no longer overflows horizontally, but the
+    // chevron must stay visible (a literal "only when overflow" gate fails).
+    const text = row(0).querySelector("span");
+    if (!text) throw new Error(SPAN_NOT_RENDERED);
+    setGeometry(text, { scrollWidth: 60 });
+    fireResize(text);
+    expect(expandButton(0)).toBeTruthy();
+
+    fireEvent.click(expandButton(0));
+    // Collapsed with no overflow: both the chevron and the expanded box go.
+    expect(screen.queryByTestId(EXPAND_TEST_ID)).toBeNull();
+    expect(screen.queryByTestId("prompt-history-expanded-box-0")).toBeNull();
+  });
+
+  it("renders the expanded content once inside the capped box with wrapping text", () => {
+    renderOverflowingRow();
+
+    fireEvent.click(expandButton(0));
+
+    // The collapsed span is hidden while expanded; the full content renders
+    // exactly once — inside the expanded box, not duplicated beside it.
+    expect(row(0).querySelector("span")?.className).toContain("hidden");
+    const box = expandedBox(0);
+    expect(box.className).toContain("overflow-y-auto");
+    expect(box.className).toContain("whitespace-normal");
+    expect(box.textContent).toBe("long prompt text");
+    // The only other copy is the collapsed span, which is hidden while
+    // expanded — jsdom does not apply stylesheet classes, so filter by the
+    // component's own `hidden` class instead of computed layout.
+    const nonHidden = screen
+      .getAllByText("long prompt text")
+      .filter((el) => !(el as HTMLElement).className.includes("hidden"));
+    expect(nonHidden).toHaveLength(1);
+    expect(nonHidden[0]).toBe(box);
+  });
+
+  it("caps the expanded box at 40% of the panel root clientHeight and remeasures", () => {
+    const { rerender } = render(<PromptHistoryPanelContent />);
+    messagesBySession[SESSION_A] = [message({ id: "long" })];
+    rerender(<PromptHistoryPanelContent />);
+
+    const root = screen.getByTestId(PANEL_TEST_ID);
+    setGeometry(root, { clientHeight: 1000 });
+    fireResize(root);
+
+    // Force the chevron via overflow so the row can be expanded.
+    const text = row(0).querySelector("span");
+    if (!text) throw new Error(SPAN_NOT_RENDERED);
+    setGeometry(text, { scrollWidth: OVERFLOW_SCROLL_WIDTH, clientWidth: COLLAPSED_WIDTH });
+    fireResize(text);
+    fireEvent.click(expandButton(0));
+
+    expect(expandedBox(0).style.maxHeight).toBe("400px");
+
+    // Root remeasure: a second measurement must replace the first.
+    setGeometry(root, { clientHeight: 2000 });
+    fireResize(root);
+    expect(expandedBox(0).style.maxHeight).toBe("800px");
+  });
+
+  it("falls back to 40vh when the root has no measurable height", () => {
+    messagesBySession[SESSION_A] = [message({ id: "long" })];
+    render(<PromptHistoryPanelContent />);
+
+    const text = row(0).querySelector("span");
+    if (!text) throw new Error(SPAN_NOT_RENDERED);
+    setGeometry(text, { scrollWidth: OVERFLOW_SCROLL_WIDTH, clientWidth: COLLAPSED_WIDTH });
+    fireResize(text);
+    fireEvent.click(expandButton(0));
+
+    expect(expandedBox(0).style.maxHeight).toBe("40vh");
+  });
+
+  it("keys expansion by messageId, not row index", () => {
+    messagesBySession[SESSION_A] = [
+      message({ id: "old", content: OLD_PROMPT }),
+      message({ id: "mid", content: MID_PROMPT, created_at: LATER_TIME }),
+    ];
+    const { rerender } = render(<PromptHistoryPanelContent />);
+
+    // Expand "mid" (newest-first index 0).
+    const midText = row(0).querySelector("span");
+    if (!midText) throw new Error(SPAN_NOT_RENDERED);
+    setGeometry(midText, { scrollWidth: OVERFLOW_SCROLL_WIDTH, clientWidth: COLLAPSED_WIDTH });
+    fireResize(midText);
+    fireEvent.click(expandButton(0));
+    expect(expandedBox(0).textContent).toBe(MID_PROMPT);
+
+    // Prepend a newer prompt: "mid" moves to index 1 and stays expanded.
+    messagesBySession[SESSION_A] = [
+      message({ id: "new", content: NEW_PROMPT, created_at: "2026-01-01T12:10:00.000Z" }),
+      message({ id: "mid", content: MID_PROMPT, created_at: LATER_TIME }),
+      message({ id: "old", content: OLD_PROMPT }),
+    ];
+    rerender(<PromptHistoryPanelContent />);
+
+    expect(screen.queryByTestId("prompt-history-expanded-box-0")).toBeNull();
+    expect(expandedBox(1).textContent).toBe(MID_PROMPT);
+    expect(expandButton(1).getAttribute("aria-expanded")).toBe("true");
   });
 });

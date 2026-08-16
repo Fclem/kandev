@@ -26,10 +26,10 @@ vi.mock("@/components/state-provider", () => ({
 
 import { useSessionTurns } from "./use-session-turns";
 
-function turn(id: string): Turn {
+function turn(id: string, sessionId = "session-a"): Turn {
   return {
     id,
-    session_id: "session-a" as Turn["session_id"],
+    session_id: sessionId as Turn["session_id"],
     task_id: "task-1" as Turn["task_id"],
     started_at: "2026-01-01T00:00:00.000Z",
     created_at: "2026-01-01T00:00:00.000Z",
@@ -82,5 +82,78 @@ describe("useSessionTurns", () => {
 
     await act(async () => {});
     expect(state.replaceSessionTurns).not.toHaveBeenCalledWith("session-a", [turn("stale")]);
+  });
+
+  it("discards a generation-0 response after an A→B→A active-session round trip", async () => {
+    const deferred: Array<{ resolve: (v: { turns: Turn[]; total: number }) => void }> = [];
+    for (let i = 0; i < 3; i += 1) {
+      mockListSessionTurns.mockReturnValueOnce(
+        new Promise((resolve) => {
+          deferred.push({ resolve });
+        }),
+      );
+    }
+    const { rerender } = renderHook(({ sessionId }) => useSessionTurns(sessionId), {
+      initialProps: { sessionId: "session-a" },
+    });
+
+    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(1));
+    state.tasks.activeSessionId = "session-b";
+    rerender({ sessionId: "session-a" });
+    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(2));
+    state.tasks.activeSessionId = "session-a";
+    rerender({ sessionId: "session-a" });
+    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(3));
+
+    // The newest fetch lands; the generation-0 response must be discarded
+    // even though the active session is A again.
+    deferred[2].resolve({ turns: [turn("latest")], total: 1 });
+    await act(async () => {});
+    expect(state.replaceSessionTurns).toHaveBeenLastCalledWith("session-a", [turn("latest")]);
+
+    deferred[0].resolve({ turns: [turn("stale")], total: 1 });
+    await act(async () => {});
+    expect(state.replaceSessionTurns).not.toHaveBeenCalledWith("session-a", [turn("stale")]);
+  });
+
+  it("tracks the applied sequence per session so sibling fetches do not invalidate each other", async () => {
+    const deferredA: { resolve: (v: { turns: Turn[]; total: number }) => void }[] = [];
+    const deferredB: { resolve: (v: { turns: Turn[]; total: number }) => void }[] = [];
+    mockListSessionTurns
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          deferredA.push({ resolve });
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          deferredB.push({ resolve });
+        }),
+      );
+    const turnB = turn("turn-b", "session-b");
+
+    renderHook(() => useSessionTurns("session-a"));
+    renderHook(() => useSessionTurns("session-b"));
+    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(2));
+
+    // session-b's later-sequence response applies first, then session-a's
+    // earlier-sequence response must still apply (isolation by session).
+    deferredB[0].resolve({ turns: [turnB], total: 1 });
+    await act(async () => {});
+    expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-b", [turnB]);
+
+    deferredA[0].resolve({ turns: [turn("turn-a")], total: 1 });
+    await act(async () => {});
+    expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]);
+  });
+
+  it("hydrates a sibling session lazily when its marker is absent", async () => {
+    state.turns.bySession["session-b"] = [];
+    renderHook(() => useSessionTurns("session-b"));
+
+    expect(mockListSessionTurns).toHaveBeenCalledWith("session-b");
+    await waitFor(() =>
+      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-b", [turn("turn-a")]),
+    );
   });
 });

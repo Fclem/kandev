@@ -385,20 +385,45 @@ function useProgrammaticScrollGuard(
   return runGuardedScroll;
 }
 
-function useScrollToMessage(
+export function useScrollToMessage(
   scrollRef: React.RefObject<HTMLDivElement | null>,
   runGuardedScroll: (performScroll: () => void) => void,
 ) {
   return useCallback(
-    (messageId: string, options?: { align?: "start" | "center" }) => {
+    (messageId: string, options?: { align?: "start" | "center"; behavior?: "smooth" | "auto" }) => {
       const selector = `[id="msg-${CSS.escape(messageId)}"]`;
       const el = scrollRef.current?.querySelector<HTMLElement>(selector);
       if (!el) return false;
       runGuardedScroll(() => {
         el.scrollIntoView({
           block: options?.align === "start" ? "start" : "center",
-          behavior: "smooth",
+          behavior: options?.behavior ?? "smooth",
         });
+        if (options?.behavior !== "auto") return;
+        // A dockview panel re-show (the prompt-history jump activates the
+        // chat) makes SessionPanelContent restore its saved scrollTop in a
+        // rAF that can land after this scroll and revert it. Re-assert the
+        // alignment across a few frames until it sticks.
+        const container = scrollRef.current;
+        if (!container) return;
+        const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+        const alignStart = options?.align !== "center";
+        let attempts = 0;
+        const assert = () => {
+          attempts += 1;
+          if (attempts > 4 || !container.isConnected) return;
+          const delta = alignStart
+            ? el.getBoundingClientRect().top - container.getBoundingClientRect().top - margin
+            : el.getBoundingClientRect().top +
+              el.getBoundingClientRect().height / 2 -
+              (container.getBoundingClientRect().top +
+                container.getBoundingClientRect().height / 2);
+          if (Math.abs(delta) > 2) {
+            container.scrollTop += delta;
+            requestAnimationFrame(assert);
+          }
+        };
+        requestAnimationFrame(assert);
       });
       return true;
     },

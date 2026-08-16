@@ -195,6 +195,100 @@ type TaskChatPanelProps = {
   panelId?: string | null;
 };
 
+type ScrollTargetConsumptionParams = {
+  resolvedSessionId: string | null;
+  isVisible: boolean;
+  panelId: string | null;
+  messageListRef: React.RefObject<MessageListHandle | null>;
+  /** Message-list readiness: a no-op `scrollToMessage` (row not rendered yet)
+   * is retried when this flips, instead of clearing the target. */
+  isInitialMessagesLoading: boolean;
+};
+
+/**
+ * Prompt-history transcript-jump consumption (Task 03 contract).
+ *
+ * Two deliberately separate effects:
+ * - LIFECYCLE, keyed ONLY by `resolvedSessionId`: on a session change it
+ *   clears a retained target for the PREVIOUS session (the canonical `chat`
+ *   host swaps sessions without ever unmounting), and its unmount cleanup
+ *   clears by the last resolved session (canonical-host removal during a
+ *   layout restore keeps the component mounted, so the removal-path clear in
+ *   dockview-layout-setup is the always-running fallback). It must NOT depend
+ *   on `isVisible`, so an inactive→active transition never triggers it.
+ * - CONSUMPTION, keyed by `scrollTarget`, `resolvedSessionId`, `isVisible`,
+ *   and message-list readiness, with NO cleanup: it consumes on activation
+ *   and clears only on a successful scroll (compare-and-clear by token).
+ */
+export function useScrollTargetConsumption({
+  resolvedSessionId,
+  isVisible,
+  panelId,
+  messageListRef,
+  isInitialMessagesLoading,
+}: ScrollTargetConsumptionParams) {
+  const scrollTarget = useDockviewStore((state) => state.scrollTarget);
+  const clearScrollTarget = useDockviewStore((state) => state.clearScrollTarget);
+  const clearScrollTargetForSession = useDockviewStore(
+    (state) => state.clearScrollTargetForSession,
+  );
+  const previousSessionId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const previous = previousSessionId.current;
+    previousSessionId.current = resolvedSessionId;
+    if (previous && previous !== resolvedSessionId) {
+      clearScrollTargetForSession(previous);
+    }
+    return () => {
+      if (resolvedSessionId) clearScrollTargetForSession(resolvedSessionId);
+    };
+  }, [clearScrollTargetForSession, resolvedSessionId]);
+
+  useEffect(() => {
+    if (
+      !scrollTarget ||
+      !panelId ||
+      !isVisible ||
+      scrollTarget.sessionId !== resolvedSessionId ||
+      scrollTarget.hostPanelId !== panelId
+    ) {
+      return;
+    }
+    // Defer the scroll two animation frames: re-showing a dockview panel
+    // (this jump's own `setActive` while the history panel was up) makes
+    // SessionPanelContent restore the saved scrollTop in a rAF that can land
+    // anywhere in the frame after the show — an immediate smooth scroll (or
+    // one deferred a single frame) is canceled by it. Two frames guarantee
+    // the restore has run before the jump scroll starts. Re-check the live
+    // target by token before scrolling so a superseded/cleared intent can
+    // never scroll a stale row.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        const latest = useDockviewStore.getState().scrollTarget;
+        if (!latest || latest.token !== scrollTarget.token) return;
+        if (
+          messageListRef.current?.scrollToMessage(scrollTarget.messageId, {
+            align: "start",
+            behavior: "auto",
+          })
+        ) {
+          clearScrollTarget(scrollTarget.token);
+        }
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    clearScrollTarget,
+    isInitialMessagesLoading,
+    isVisible,
+    messageListRef,
+    panelId,
+    resolvedSessionId,
+    scrollTarget,
+  ]);
+}
+
 // eslint-disable-next-line complexity, max-lines-per-function -- composes many sub-panels; each concern already factored into its own hook
 export const TaskChatPanel = memo(function TaskChatPanel({
   onSend,
@@ -253,36 +347,13 @@ export const TaskChatPanel = memo(function TaskChatPanel({
 
   const panelRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<MessageListHandle>(null);
-  const scrollTarget = useDockviewStore((state) => state.scrollTarget);
-  const clearScrollTargetForSession = useDockviewStore(
-    (state) => state.clearScrollTargetForSession,
-  );
-  const previousSessionId = useRef<string | null>(null);
-  useEffect(() => {
-    const previous = previousSessionId.current;
-    previousSessionId.current = resolvedSessionId;
-    if (previous && previous !== resolvedSessionId) {
-      clearScrollTargetForSession(previous);
-    }
-    return () => {
-      if (resolvedSessionId) clearScrollTargetForSession(resolvedSessionId);
-    };
-  }, [clearScrollTargetForSession, resolvedSessionId]);
-  const clearScrollTarget = useDockviewStore((state) => state.clearScrollTarget);
-  useEffect(() => {
-    if (
-      !scrollTarget ||
-      !panelId ||
-      !isVisible ||
-      scrollTarget.sessionId !== resolvedSessionId ||
-      scrollTarget.hostPanelId !== panelId
-    ) {
-      return;
-    }
-    if (messageListRef.current?.scrollToMessage(scrollTarget.messageId, { align: "start" })) {
-      clearScrollTarget(scrollTarget.token);
-    }
-  }, [clearScrollTarget, isVisible, panelId, resolvedSessionId, scrollTarget]);
+  useScrollTargetConsumption({
+    resolvedSessionId,
+    isVisible,
+    panelId,
+    messageListRef,
+    isInitialMessagesLoading,
+  });
   const lastPromptMessageId = useMemo(() => getLastUserMessageId(allMessages), [allMessages]);
   const lastPromptMessage = useMemo(
     () =>

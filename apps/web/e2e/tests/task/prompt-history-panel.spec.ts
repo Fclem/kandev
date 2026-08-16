@@ -32,7 +32,12 @@ test.describe("Prompt history panel", () => {
       const { sessions } = await apiClient.listTaskSessions(task.id);
       return DONE_STATES.includes(sessions[0]?.state ?? "");
     };
-    await expect.poll(settled).toBe(true);
+    await expect
+      .poll(settled, {
+        timeout: 45_000,
+        message: "Waiting for the seeded prompt-history session to settle",
+      })
+      .toBe(true);
 
     await testPage.goto(`/t/${task.id}`);
     const session = new SessionPage(testPage);
@@ -67,7 +72,12 @@ test.describe("Prompt history panel", () => {
     // (the mock agent's e2e:message emits an AGENT update, not a prompt).
     await session.clickSessionChatTab();
     await session.sendMessage(longPrompt);
-    await expect.poll(settled).toBe(true);
+    await expect
+      .poll(settled, {
+        timeout: 45_000,
+        message: "Waiting for the long prompt's turn to settle",
+      })
+      .toBe(true);
 
     // Capture the persisted sentinel message id so the transcript-jump
     // locator targets exactly #msg-<capturedId> instead of matching by text

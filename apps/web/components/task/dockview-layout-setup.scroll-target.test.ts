@@ -157,6 +157,30 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
     expect(mockRelease).not.toHaveBeenCalled();
   });
 
+  it("integration: restore detach keeps the REAL portal host mounted while the removal path clears", async () => {
+    // Exercise the actual PanelPortalManager lifecycle instead of only the
+    // mocked removal handler: the canonical chat host acquires a portal
+    // (stays mounted), the restore detaches the slot and fires the removal,
+    // and the clear must run while the portal entry survives.
+    const { panelPortalManager: realManager } = await vi.importActual<
+      typeof import("@/lib/layout/panel-portal-manager")
+    >("@/lib/layout/panel-portal-manager");
+    dockviewState.isRestoringLayout = true;
+    const api = makeApi();
+    setupPortalCleanup(api as never, makeAppStore("session-1"));
+
+    realManager.acquire("chat", "chat", {}, { component: "chat" } as never);
+    expect(realManager.has("chat")).toBe(true);
+
+    api.fireRemoval({ id: "chat" });
+
+    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    // Detach without release: the portal entry (host) is retained.
+    expect(mockRelease).not.toHaveBeenCalled();
+    expect(realManager.has("chat")).toBe(true);
+    realManager.release("chat");
+  });
+
   it("does not clear without an active session when the canonical chat is removed", () => {
     const api = makeApi();
     setupPortalCleanup(api as never, makeAppStore(""));

@@ -87,13 +87,22 @@ describe("scrollTranscriptToMessage", () => {
       position: { referenceGroup: CENTER_GROUP },
     });
     const store = makeStore(api);
-    const actions = buildExtraPanelActions(store.set, store.get);
     const chatPanel = api.getPanel("chat");
     if (!chatPanel) throw new Error("chat panel did not seed");
+    // A reversed implementation records the target BEFORE activating; the
+    // activation-time snapshot must still be null (set happens after).
+    const originalSetActive = chatPanel.api.setActive;
+    chatPanel.api.setActive = () => {
+      expect(store.state.scrollTarget).toBeNull();
+      originalSetActive();
+    };
 
-    actions.scrollTranscriptToMessage(SESSION_ID, MESSAGE_ID, "Agent");
+    const actions = buildExtraPanelActions(store.set, store.get);
+    actions.scrollTranscriptToMessage("session-1", "message-1", "Agent");
 
-    expect((chatPanel as unknown as { isActive: boolean }).isActive).toBe(true);
+    // The mock panel exposes isActive; IDockviewPanel's type omits it.
+    const typedChatPanel = chatPanel as unknown as { isActive: boolean };
+    expect(typedChatPanel.isActive).toBe(true);
     expect(store.state.scrollTarget).not.toBeNull();
   });
 

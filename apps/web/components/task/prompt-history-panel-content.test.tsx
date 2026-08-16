@@ -46,6 +46,7 @@ const TURN_ID = "turn-1";
 const OVERFLOW_SCROLL_WIDTH = 600;
 const EXPAND_TEST_ID = "prompt-history-expand-0";
 const PANEL_TEST_ID = "prompt-history-panel";
+const JUMP_TEST_ID = "prompt-history-jump";
 const COLLAPSED_WIDTH = 100;
 const SPAN_NOT_RENDERED = "text span did not render";
 
@@ -172,8 +173,8 @@ describe("PromptHistoryPanelContent — rows and test IDs", () => {
     expect(screen.getByTestId(PANEL_TEST_ID)).toBeTruthy();
     expect(row(0).textContent).toContain(NEWER_PROMPT);
     expect(row(1).textContent).toContain(OLDER_PROMPT);
-    expect(screen.getByTestId("prompt-history-jump-0")).toBeTruthy();
-    expect(screen.getByTestId("prompt-history-jump-1")).toBeTruthy();
+    expect(screen.getByTestId(`${JUMP_TEST_ID}-0`)).toBeTruthy();
+    expect(screen.getByTestId(`${JUMP_TEST_ID}-1`)).toBeTruthy();
   });
 
   it("renders the empty state when the session has no user prompts", () => {
@@ -203,7 +204,10 @@ describe("PromptHistoryPanelContent — navigation seam", () => {
     const onNavigateToPrompt = vi.fn();
 
     render(<PromptHistoryPanelContent onNavigateToPrompt={onNavigateToPrompt} />);
-    fireEvent.click(screen.getByTestId("prompt-history-jump-0"));
+    expect(screen.getByTestId(`${JUMP_TEST_ID}-0`).getAttribute("aria-label")).toBe(
+      "Scroll to prompt",
+    );
+    fireEvent.click(screen.getByTestId(`${JUMP_TEST_ID}-0`));
 
     expect(onNavigateToPrompt).toHaveBeenCalledWith("prompt-1");
   });
@@ -212,7 +216,7 @@ describe("PromptHistoryPanelContent — navigation seam", () => {
     messagesBySession[SESSION_A] = [message()];
 
     render(<PromptHistoryPanelContent />);
-    fireEvent.click(screen.getByTestId("prompt-history-jump-0"));
+    fireEvent.click(screen.getByTestId(`${JUMP_TEST_ID}-0`));
   });
 });
 
@@ -286,21 +290,34 @@ describe("PromptHistoryPanelContent — duration rendering", () => {
 });
 
 describe("PromptHistoryPanelContent — time element", () => {
-  it("renders dateTime, an absolute title, and the compact relative ladder", () => {
+  it.each([
+    { name: "just now", now: "2026-01-01T12:00:30.000Z", expected: "just now" },
+    { name: "5m", now: "2026-01-01T12:05:00.000Z", expected: "5m ago" },
+    { name: "3h", now: "2026-01-01T15:00:00.000Z", expected: "3h ago" },
+    { name: "2d", now: "2026-01-03T12:00:00.000Z", expected: "2d ago" },
+  ])("renders the $name bucket of the compact formatRelative ladder", ({ now, expected }) => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(LATER_TIME));
+    vi.setSystemTime(new Date(now));
     try {
       messagesBySession[SESSION_A] = [message()];
 
       render(<PromptHistoryPanelContent />);
 
       const time = row(0).querySelector("time");
-      expect(time?.getAttribute("dateTime")).toBe(BASE_TIME);
-      expect(time?.getAttribute("title")).toBe(new Date(BASE_TIME).toLocaleString());
-      expect(time?.textContent).toBe("5m ago");
+      expect(time?.textContent).toBe(expected);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("renders dateTime and an absolute title on the time element", () => {
+    messagesBySession[SESSION_A] = [message()];
+
+    render(<PromptHistoryPanelContent />);
+
+    const time = row(0).querySelector("time");
+    expect(time?.getAttribute("dateTime")).toBe(BASE_TIME);
+    expect(time?.getAttribute("title")).toBe(new Date(BASE_TIME).toLocaleString());
   });
 });
 
@@ -329,6 +346,9 @@ describe("PromptHistoryPanelContent — expand/collapse behavior", () => {
 
   it("keeps the chevron visible while expanded and collapses on click", () => {
     renderOverflowingRow();
+
+    expect(expandButton(0).getAttribute("aria-label")).toBe("Expand prompt");
+    expect(expandButton(0).getAttribute("aria-expanded")).toBe("false");
 
     fireEvent.click(expandButton(0));
     expect(expandButton(0).getAttribute("aria-expanded")).toBe("true");

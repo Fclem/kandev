@@ -76,6 +76,20 @@ async function renderLoaded(overrides: Partial<UserSettingsState> = {}, holder?:
   await screen.findByTestId(SELECT_TEST_ID);
 }
 
+// RemountHarness keeps one StateProvider (and thus one store) mounted while
+// toggling only SecuritySettings, so a remounted component reads the same
+// converged store the pre-unmount component mutated.
+function RemountHarness({ holder, mounted }: { holder: StoreHolder; mounted: boolean }) {
+  return (
+    <StateProvider initialState={{ userSettings: makeUserSettings({ revision: 1 }) }}>
+      <TooltipProvider>
+        <StoreCapture holder={holder} />
+        {mounted ? <SecuritySettings /> : null}
+      </TooltipProvider>
+    </StateProvider>
+  );
+}
+
 async function chooseDisplay(name: "Absolute time" | "Relative time") {
   fireEvent.click(screen.getByTestId(SELECT_TEST_ID));
   fireEvent.click(await screen.findByRole("option", { name }));
@@ -386,16 +400,16 @@ describe("Last seen display write and lifecycle races", () => {
     settingsApiMocks.updateUserSettings.mockReturnValue(pending);
     const holder: StoreHolder = { current: null };
 
-    const first = renderSecurity({}, holder);
+    const view = render(<RemountHarness holder={holder} mounted />);
     await screen.findByTestId(SELECT_TEST_ID);
 
     await chooseDisplay(RELATIVE_OPTION);
     await waitFor(() => expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy());
 
-    // Unmount mid-write; a newer WS snapshot lands after unmount through the
-    // real handler, then the PATCH resolves (its older revision is discarded),
-    // so the store converges on the WS value.
-    first.unmount();
+    // Unmount only the component; the provider and store stay mounted. A newer
+    // WS snapshot lands after unmount through the real handler, then the PATCH
+    // resolves (its older revision is discarded), so the store converges.
+    view.rerender(<RemountHarness holder={holder} mounted={false} />);
     act(() => {
       dispatchUserSettingsSnapshot(holder, { last_seen_display: "absolute", revision: 5 });
     });
@@ -407,11 +421,13 @@ describe("Last seen display write and lifecycle races", () => {
     );
     expect(holder.current!.getState().userSettings.revision).toBe(5);
 
-    // Remount with the converged store state renders the confirmed value.
-    const second = renderSecurity({ lastSeenDisplay: "absolute", revision: 5 }, holder);
+    // Re-mount the component under the SAME store: it must render the converged
+    // store value, not a seeded baseline.
+    view.rerender(<RemountHarness holder={holder} mounted />);
     await screen.findByTestId(SELECT_TEST_ID);
     expect(screen.queryByTestId(RELATIVE_TEST_ID)).toBeNull();
-    second.unmount();
+    expect(screen.getByText(formatDateTime(new Date(LAST_SEEN_AT)))).toBeTruthy();
+    view.unmount();
   });
 
   it("handles a rejected write after unmount and remounts without a stale override", async () => {
@@ -419,16 +435,16 @@ describe("Last seen display write and lifecycle races", () => {
     settingsApiMocks.updateUserSettings.mockReturnValue(pending);
     const holder: StoreHolder = { current: null };
 
-    const first = renderSecurity({}, holder);
+    const view = render(<RemountHarness holder={holder} mounted />);
     await screen.findByTestId(SELECT_TEST_ID);
 
     await chooseDisplay(RELATIVE_OPTION);
     await waitFor(() => expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy());
 
-    // Unmount mid-write; a newer WS snapshot lands after unmount through the
-    // real handler, then the PATCH is rejected: the toast fires, the store
-    // keeps the WS value, and no stale override survives.
-    first.unmount();
+    // Unmount only the component; the provider and store stay mounted. A newer
+    // WS snapshot lands after unmount through the real handler, then the PATCH
+    // is rejected: the toast fires, the store keeps the WS value.
+    view.rerender(<RemountHarness holder={holder} mounted={false} />);
     act(() => {
       dispatchUserSettingsSnapshot(holder, { last_seen_display: "relative", revision: 3 });
     });
@@ -440,11 +456,12 @@ describe("Last seen display write and lifecycle races", () => {
       expect(holder.current!.getState().userSettings.lastSeenDisplay).toBe("relative"),
     );
 
-    // Remount with the converged store state renders the WS value.
-    const second = renderSecurity({ lastSeenDisplay: "relative", revision: 3 }, holder);
+    // Re-mount the component under the SAME store: it renders the converged WS
+    // value, with no stale optimistic override.
+    view.rerender(<RemountHarness holder={holder} mounted />);
     await screen.findByTestId(SELECT_TEST_ID);
     expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy();
-    second.unmount();
+    view.unmount();
   });
 
   it("advances the relative label as time passes while the page stays open", async () => {

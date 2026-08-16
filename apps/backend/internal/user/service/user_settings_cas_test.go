@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -209,8 +210,19 @@ func cloneSettings(s *models.UserSettings) *models.UserSettings {
 	if s == nil {
 		return nil
 	}
-	c := *s
-	return &c
+	// Deep clone via JSON so nested slices/maps (TaskCreateLastUsed workflow
+	// maps, KanbanHiddenStepIDs, LspServerConfigs, KeyboardShortcuts, ...) are
+	// never aliased with the fake's stored row: a caller mutating a read result
+	// or a concurrent task-create patch must not corrupt the shared row.
+	raw, err := json.Marshal(s)
+	if err != nil {
+		panic(err)
+	}
+	var clone models.UserSettings
+	if err := json.Unmarshal(raw, &clone); err != nil {
+		panic(err)
+	}
+	return &clone
 }
 
 // applyTaskCreatePatchToFake mirrors the repository's task_create_last_used
@@ -447,6 +459,79 @@ func TestConcurrentPatchMergesLastSeenDisplay(t *testing.T) {
 	}
 	if got := eventBus.count(); got != 2 {
 		t.Fatalf("events = %d, want 2", got)
+	}
+	assertOneStaleConflictAndRetry(t, repo)
+}
+
+// TestCASFakeCloneIsDeep pins the fake's clone contract: mutating a read
+// result's nested maps must not corrupt the fake's stored row.
+func TestCASFakeCloneIsDeep(t *testing.T) {
+	repo := newCASFakeRepo(&models.UserSettings{
+		UserID: store.DefaultUserID,
+		TaskCreateLastUsed: models.TaskCreateLastUsed{
+			WorkflowIDsByWorkspace: map[string]string{"w1": "f1"},
+		},
+		KeyboardShortcuts: map[string]interface{}{},
+	})
+
+	got, err := repo.GetUserSettings(context.Background(), store.DefaultUserID)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	got.TaskCreateLastUsed.WorkflowIDsByWorkspace["w1"] = "mutated"
+	got.KeyboardShortcuts["x"] = map[string]interface{}{"key": "y"}
+
+	row := repo.snapshot()
+	if row.TaskCreateLastUsed.WorkflowIDsByWorkspace["w1"] != "f1" {
+		t.Fatalf("read clone aliased the workflow map: %+v", row.TaskCreateLastUsed.WorkflowIDsByWorkspace)
+	}
+	if _, ok := row.KeyboardShortcuts["x"]; ok {
+		t.Fatal("read clone aliased the keyboard shortcuts map")
+	}
+}
+
+// TestConcurrentTaskCreateMapPatchesMerge proves two concurrent task-create
+// patches with workflow maps survive the CAS retry and merge without
+// corrupting the fake's stored row (deep clone requirement).
+func TestConcurrentTaskCreateMapPatchesMerge(t *testing.T) {
+	repo := newCASFakeRepo(&models.UserSettings{
+		UserID: store.DefaultUserID,
+		TaskCreateLastUsed: models.TaskCreateLastUsed{
+			WorkflowIDsByWorkspace: map[string]string{"w0": "f0"},
+		},
+	})
+	repo.readDone = make(chan struct{}, 4)
+	repo.blockUpsert = make(chan struct{})
+	eventBus := &casEventBus{}
+	svc := newCASService(repo, eventBus)
+
+	ctx := context.Background()
+	patchA := models.TaskCreateLastUsed{WorkflowIDsByWorkspace: map[string]string{"wA": "fA"}}
+	patchB := models.TaskCreateLastUsed{WorkflowIDsByWorkspace: map[string]string{"wB": "fB"}}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if _, err := svc.UpdateUserSettings(ctx, &UpdateUserSettingsRequest{TaskCreateLastUsed: &patchA}); err != nil {
+			t.Errorf("patch A: %v", err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if _, err := svc.UpdateUserSettings(ctx, &UpdateUserSettingsRequest{TaskCreateLastUsed: &patchB}); err != nil {
+			t.Errorf("patch B: %v", err)
+		}
+	}()
+
+	<-repo.readDone
+	<-repo.readDone
+	close(repo.blockUpsert)
+	wg.Wait()
+
+	row := repo.snapshot()
+	workflows := row.TaskCreateLastUsed.WorkflowIDsByWorkspace
+	if workflows["w0"] != "f0" || workflows["wA"] != "fA" || workflows["wB"] != "fB" {
+		t.Fatalf("workflow maps did not merge: %+v", workflows)
 	}
 	assertOneStaleConflictAndRetry(t, repo)
 }

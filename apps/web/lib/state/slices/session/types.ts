@@ -23,6 +23,15 @@ export type MessagesState = {
 export type TurnsState = {
   bySession: Record<string, Turn[]>;
   activeBySession: Record<string, string | null>; // sessionId -> active turnId
+  /**
+   * Sessions whose FULL persisted turn history has entered the store (SSR
+   * hydration or a complete REST fetch). Distinct from `bySession` presence:
+   * WS `session.turn.*` events seed individual live turns without the history,
+   * so `bySession[sessionId]` being non-empty is NOT proof the history is
+   * loaded. The debug metadata dialog and turn-derived UI resolve turns only
+   * when this marker is set.
+   */
+  loadedBySession: Record<string, boolean>;
 };
 
 export type TaskSessionsState = {
@@ -209,9 +218,11 @@ export type SessionSliceActions = {
     sessionId: string,
     turnId: string,
     completedAt: string,
-    metadata?: Record<string, unknown>,
+    metadata?: Record<string, unknown> | null,
   ) => void;
   setActiveTurn: (sessionId: string, turnId: string | null) => void;
+  /** Records that the session's full persisted turn history is in the store. */
+  markTurnsLoaded: (sessionId: string) => void;
   /** Source adoption is an authoritative idle boundary for the listed sessions. */
   reconcileWorkspaceSourcesAdopted: (sessionIds: string[]) => void;
   setTaskSession: (session: TaskSession) => void;

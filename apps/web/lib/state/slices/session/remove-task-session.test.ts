@@ -44,15 +44,18 @@ describe("removeTaskSession cleanup cascade", () => {
     s.addMessage({ id: "m1", session_id: SESSION_ID, role: "user", content: "hi" } as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     s.addTurn({ id: "t1", session_id: SESSION_ID } as any);
+    s.markTurnsLoaded(SESSION_ID);
 
     expect(store.getState().messages.bySession[SESSION_ID]).toHaveLength(1);
     expect(store.getState().turns.bySession[SESSION_ID]).toHaveLength(1);
+    expect(store.getState().turns.loadedBySession[SESSION_ID]).toBe(true);
 
     store.getState().removeTaskSession(TASK_ID, SESSION_ID);
 
     const after = store.getState();
     expect(after.messages.bySession[SESSION_ID]).toBeUndefined();
     expect(after.turns.bySession[SESSION_ID]).toBeUndefined();
+    expect(after.turns.loadedBySession[SESSION_ID]).toBeUndefined();
     expect(after.contextWindow.bySessionId[SESSION_ID]).toBeUndefined();
     expect(after.shell.outputs["env-1"]).toBeUndefined();
     expect(after.environmentIdBySessionId[SESSION_ID]).toBeUndefined();

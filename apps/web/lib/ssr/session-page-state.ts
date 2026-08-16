@@ -239,8 +239,12 @@ function buildSessionState(p: BuildSessionPageStateParams) {
                 activeBySession: {
                   [sessionId]: turns.filter((t) => !t.completed_at).pop()?.id ?? null,
                 },
+                // The SSR turn list is the session's complete persisted
+                // history — mark it loaded so turn-derived UI never
+                // re-fetches or mistakes WS-seeded live turns for it.
+                loadedBySession: { [sessionId]: true },
               }
-            : { bySession: {}, activeBySession: {} },
+            : { bySession: {}, activeBySession: {}, loadedBySession: {} },
         }
       : {}),
     environmentIdBySessionId: Object.fromEntries(

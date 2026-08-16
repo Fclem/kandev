@@ -3,8 +3,8 @@ import { getWebSocketClient } from "@/lib/ws/connection";
 import { useForegroundRefresh } from "@/hooks/use-foreground-refresh";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import type { TaskSessionState, Message } from "@/lib/types/http";
-import { listSessionTurns } from "@/lib/api/domains/session-api";
 import { createDebugLogger, isDebug } from "@/lib/debug/log";
+import { ensureSessionTurnsLoaded } from "./use-session-turns-hydration";
 import {
   useUnknownSessionSubscriptionRetry,
   useUnknownSessionSubscriptionRetryEffect,
@@ -22,6 +22,8 @@ export {
 } from "./message-backfill";
 
 export { shouldRetryUnknownSessionSubscription } from "./use-session-subscription-retry";
+// Test seam: exported for direct unit coverage of hydration dedup/guards.
+export { ensureSessionTurnsLoaded } from "./use-session-turns-hydration";
 
 const INITIAL_FETCH_LIMIT = 100;
 const RUNNING_BACKFILL_INITIAL_DELAY_MS = 1200;
@@ -210,33 +212,6 @@ function requestSessionMessages(
     },
   );
   return promise;
-}
-
-/**
- * Ensures the store holds this session's persisted turns. The boot/SSR state
- * hydrates turns only for the page-load active session; switching to another
- * session fetches its messages but never its turns, so every message of that
- * session resolves to `turn = null` and the debug dialog shows
- * `turn_metadata: null` (and turn-derived UI like agent status stays empty)
- * even though the turns exist server-side with metadata.
- *
- * Guarded by store presence so it runs at most once per session per tab
- * lifetime; a failed fetch leaves the store empty and is retried on the next
- * message fetch. Enrichment only — never delays or fails message loading.
- */
-async function ensureSessionTurnsLoaded(
-  sessionId: string,
-  store: ReturnType<typeof useAppStoreApi>,
-): Promise<void> {
-  if ((store.getState().turns.bySession[sessionId]?.length ?? 0) > 0) return;
-  try {
-    const { turns } = await listSessionTurns(sessionId, { cache: "no-store" });
-    for (const turn of turns) {
-      store.getState().addTurn(turn);
-    }
-  } catch (err) {
-    debug("turn fetch failed", { sessionId, err });
-  }
 }
 
 /** Fetch latest messages via WS and merge with any that arrived via live notifications. */

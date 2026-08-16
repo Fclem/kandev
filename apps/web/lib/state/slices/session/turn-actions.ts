@@ -34,6 +34,10 @@ export function buildTurnActions(set: ImmerSet) {
           draft.turns.activeBySession[sessionId] = null;
         }
       }),
+    markTurnsLoaded: (sessionId: string) =>
+      set((draft) => {
+        draft.turns.loadedBySession[sessionId] = true;
+      }),
     setActiveTurn: (
       sessionId: Parameters<SessionSlice["setActiveTurn"]>[0],
       turnId: Parameters<SessionSlice["setActiveTurn"]>[1],

@@ -388,6 +388,7 @@ export type AppState = KanbanSlice & {
     metadata?: Record<string, unknown>,
   ) => void;
   setActiveTurn: (sessionId: string, turnId: string | null) => void;
+  markTurnsLoaded: (sessionId: string) => void;
   updateMessage: (message: Message) => void;
   removeMessage: (sessionId: string, messageId: string) => void;
   prependMessages: (

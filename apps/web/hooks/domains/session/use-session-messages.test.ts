@@ -19,13 +19,20 @@ const mockState = {
     },
   },
   taskSessions: { items: { "sess-1": { state: "RUNNING" } } },
-  turns: { bySession: { "sess-1": [] as unknown[] }, activeBySession: { "sess-1": null } },
+  turns: {
+    bySession: { "sess-1": [] as unknown[] },
+    activeBySession: { "sess-1": null },
+    loadedBySession: {} as Record<string, boolean>,
+  },
   connection: { status: "connected" },
   mergeMessages: vi.fn(),
   setMessagesLoading: vi.fn(),
   setMessages: vi.fn(),
   prependMessages: vi.fn(),
   addTurn: vi.fn(),
+  markTurnsLoaded: vi.fn((sessionId: string) => {
+    mockState.turns.loadedBySession[sessionId] = true;
+  }),
 };
 
 vi.mock("@/lib/api", () => ({
@@ -63,6 +70,7 @@ beforeEach(() => {
   mockState.taskSessions.items["sess-1"] = { state: "RUNNING" };
   mockState.turns.bySession["sess-1"] = [];
   mockState.turns.activeBySession["sess-1"] = null;
+  mockState.turns.loadedBySession = {};
 });
 
 afterEach(() => {
@@ -547,17 +555,48 @@ describe("turn loading for sessions without hydrated turns", () => {
         metadata: { runtime_config_snapshot: { model: "deepseek/deepseek-v4-flash" } },
       }),
     );
+    expect(mockState.markTurnsLoaded).toHaveBeenCalledWith("sess-1");
     unmount();
   });
 
-  it("skips the turn fetch when the store already holds turns for the session", async () => {
+  it("still fetches the full history when WS-seeded turns exist but no marker", async () => {
+    // WS `session.turn.*` events seed individual live turns without the full
+    // history; array presence must NOT suppress the REST hydration, or older
+    // messages keep resolving to `turn = null` (the reported regression).
     const readiness = deferred<void>();
     mockWebSocketClient.getSessionSubscriptionReadiness.mockReturnValue(readiness.promise);
     mockWebSocketClient.subscribeSessionWithReady.mockReturnValue({
       ready: readiness.promise,
       unsubscribe: vi.fn(),
     });
-    mockState.turns.bySession["sess-1"] = [{ id: "turn-existing" }];
+    mockState.turns.bySession["sess-1"] = [{ id: "turn-live" }];
+    mockListSessionTurns.mockResolvedValue({ turns: [], total: 0 });
+
+    const { unmount } = renderHook(() => useSessionMessages("sess-1"));
+
+    await act(async () => {
+      readiness.resolve();
+      await readiness.promise;
+    });
+    await act(async () => {});
+
+    // The REST hydration must run despite the partial live turn (the loaded
+    // marker is the gate, not array presence). At least one full fetch is
+    // required; the exact count is environment-dependent (multiple message
+    // fetch paths race at mount), and single-flight semantics are pinned in
+    // use-session-turns-hydration.test.ts.
+    expect(mockListSessionTurns).toHaveBeenCalled();
+    unmount();
+  });
+
+  it("skips the turn fetch when the session is marked loaded", async () => {
+    const readiness = deferred<void>();
+    mockWebSocketClient.getSessionSubscriptionReadiness.mockReturnValue(readiness.promise);
+    mockWebSocketClient.subscribeSessionWithReady.mockReturnValue({
+      ready: readiness.promise,
+      unsubscribe: vi.fn(),
+    });
+    mockState.turns.loadedBySession["sess-1"] = true;
 
     const { unmount } = renderHook(() => useSessionMessages("sess-1"));
 

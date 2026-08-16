@@ -162,6 +162,32 @@ function bridgeSidebarViewsFromUserSettings(
   }
 }
 
+/**
+ * Marks the sessions whose turn lists this merge actually installed as fully
+ * loaded. The hydrated lists are complete server-side snapshots; the marker
+ * keeps turn-derived UI from re-fetching or mistaking WS-seeded live turns
+ * for the full history. Membership must be captured BEFORE the merge (the
+ * merge writes the key, which would otherwise make every session look
+ * pre-existing), and the merge's skip-as-active predicate must be mirrored
+ * (active sessions keep their live state and marker).
+ */
+function markHydratedTurnsLoaded(
+  draft: Draft<AppState>,
+  state: HydrationState,
+  activeSessionId: string | null,
+  forceMergeSessionId: string | null,
+  preMergeSessions: Set<string>,
+): void {
+  for (const sessionId in state.turns!.bySession) {
+    const shouldForceMerge = forceMergeSessionId && sessionId === forceMergeSessionId;
+    const skippedAsActive = !shouldForceMerge && sessionId === activeSessionId;
+    if (skippedAsActive) continue;
+    if (shouldForceMerge || !preMergeSessions.has(sessionId)) {
+      draft.turns.loadedBySession[sessionId] = true;
+    }
+  }
+}
+
 /** Hydrate session slices, protecting active sessions. */
 function hydrateSession(
   draft: Draft<AppState>,
@@ -186,13 +212,16 @@ function hydrateSession(
       );
   }
   if (state.turns) {
-    if (state.turns.bySession)
+    if (state.turns.bySession) {
+      const preMergeSessions = new Set(Object.keys(draft.turns.bySession));
       mergeSessionMap(
         draft.turns.bySession,
         state.turns.bySession,
         activeSessionId,
         forceMergeSessionId,
       );
+      markHydratedTurnsLoaded(draft, state, activeSessionId, forceMergeSessionId, preMergeSessions);
+    }
     if (state.turns.activeBySession)
       mergeSessionMap(
         draft.turns.activeBySession,

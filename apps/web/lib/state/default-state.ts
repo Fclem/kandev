@@ -252,6 +252,26 @@ function mergeGitHubState(initialState: HydrationState) {
   };
 }
 
+/**
+ * Merges the turns slice for initial (SSR/boot) hydration. The server-side
+ * turn lists are complete per-session snapshots, so every session the payload
+ * installs is marked `loadedBySession`; without the marker, turn-derived UI
+ * would mistake WS-seeded live turns for the full history (the debug
+ * metadata dialog's `turn_metadata` regression).
+ */
+function mergeTurnsState(
+  current: DefaultState["turns"],
+  incoming: HydrationState["turns"],
+): DefaultState["turns"] {
+  const merged = { ...current, ...incoming };
+  if (!incoming?.bySession) return merged;
+  const loadedBySession: Record<string, boolean> = {};
+  for (const sessionId of Object.keys(incoming.bySession)) {
+    loadedBySession[sessionId] = true;
+  }
+  return { ...merged, loadedBySession };
+}
+
 export function mergeInitialState(initialState?: HydrationState): DefaultState {
   if (!initialState) return defaultState;
   return {
@@ -281,7 +301,7 @@ export function mergeInitialState(initialState?: HydrationState): DefaultState {
     sleepInhibition: { ...defaultState.sleepInhibition, ...initialState.sleepInhibition },
     userSettings: { ...defaultState.userSettings, ...initialState.userSettings },
     messages: { ...defaultState.messages, ...initialState.messages },
-    turns: { ...defaultState.turns, ...initialState.turns },
+    turns: mergeTurnsState(defaultState.turns, initialState.turns),
     taskSessions: { ...defaultState.taskSessions, ...initialState.taskSessions },
     taskSessionsByTask: { ...defaultState.taskSessionsByTask, ...initialState.taskSessionsByTask },
     sessionAgentctl: { ...defaultState.sessionAgentctl, ...initialState.sessionAgentctl },

@@ -252,24 +252,42 @@ function mergeGitHubState(initialState: HydrationState) {
   };
 }
 
+/** Session states that settle a turn: no agent work is in progress. */
+const SETTLED_SESSION_STATES = new Set<string>([
+  "IDLE",
+  "WAITING_FOR_INPUT",
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+]);
+
 /**
  * Merges the turns slice for initial (SSR/boot) hydration. The server-side
  * turn lists are complete per-session snapshots, so every session the payload
  * installs is marked `loadedBySession`; without the marker, turn-derived UI
  * would mistake WS-seeded live turns for the full history (the debug
- * metadata dialog's `turn_metadata` regression).
+ * metadata dialog's `turn_metadata` regression). Settled sessions also seed
+ * their settled boundary from `updated_at` so an old/unknown delayed WS start
+ * arriving before any session-list refresh is rejected.
  */
 function mergeTurnsState(
   current: DefaultState["turns"],
   incoming: HydrationState["turns"],
+  sessions: HydrationState["taskSessions"],
 ): DefaultState["turns"] {
   const merged = { ...current, ...incoming };
-  if (!incoming?.bySession) return merged;
+  const settledBoundaryBySession = { ...merged.settledBoundaryBySession };
+  for (const session of Object.values(sessions?.items ?? {})) {
+    if (session && SETTLED_SESSION_STATES.has(session.state)) {
+      settledBoundaryBySession[session.id] = session.updated_at;
+    }
+  }
+  if (!incoming?.bySession) return { ...merged, settledBoundaryBySession };
   const loadedBySession: Record<string, boolean> = {};
   for (const sessionId of Object.keys(incoming.bySession)) {
     loadedBySession[sessionId] = true;
   }
-  return { ...merged, loadedBySession };
+  return { ...merged, loadedBySession, settledBoundaryBySession };
 }
 
 export function mergeInitialState(initialState?: HydrationState): DefaultState {
@@ -301,7 +319,7 @@ export function mergeInitialState(initialState?: HydrationState): DefaultState {
     sleepInhibition: { ...defaultState.sleepInhibition, ...initialState.sleepInhibition },
     userSettings: { ...defaultState.userSettings, ...initialState.userSettings },
     messages: { ...defaultState.messages, ...initialState.messages },
-    turns: mergeTurnsState(defaultState.turns, initialState.turns),
+    turns: mergeTurnsState(defaultState.turns, initialState.turns, initialState.taskSessions),
     taskSessions: { ...defaultState.taskSessions, ...initialState.taskSessions },
     taskSessionsByTask: { ...defaultState.taskSessionsByTask, ...initialState.taskSessionsByTask },
     sessionAgentctl: { ...defaultState.sessionAgentctl, ...initialState.sessionAgentctl },

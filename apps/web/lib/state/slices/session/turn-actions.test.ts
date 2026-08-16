@@ -542,6 +542,23 @@ describe("reconcileActiveTurnAfterHydration — boundary precision", () => {
   });
 });
 
+describe("settled boundary monotonicity", () => {
+  it("never regresses the boundary when adoption would record an older time", () => {
+    const store = makeStore();
+    store.setState((s) => {
+      s.taskSessions.items[SESSION_ID] = { id: SESSION_ID, state: "RUNNING" } as never;
+      // A future server-reported boundary (clock skew / future updated_at).
+      s.turns.settledBoundaryBySession[SESSION_ID] = "2099-01-01T00:00:00Z";
+    });
+
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+
+    expect(store.getState().turns.settledBoundaryBySession[SESSION_ID]).toBe(
+      "2099-01-01T00:00:00Z",
+    );
+  });
+});
+
 describe("settled boundary lifecycle", () => {
   it("survives turn completion and blocks a stale force-hydrated snapshot", () => {
     const store = makeStore();
@@ -562,6 +579,23 @@ describe("settled boundary lifecycle", () => {
 
     expect(store.getState().turns.settledBoundaryBySession[SESSION_ID]).toBeDefined();
     expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+});
+
+describe("setActiveTurn nanosecond promotion", () => {
+  it("promotes a start that is newer by sub-millisecond precision", () => {
+    const store = makeStore();
+    store.setState((s) => {
+      s.taskSessions.items[SESSION_ID] = { id: SESSION_ID, state: "RUNNING" } as never;
+    });
+    store.getState().addTurn(turn("turn-a", { started_at: "2026-01-01T00:00:00.000000900Z" }));
+    store.getState().setActiveTurn(SESSION_ID, "turn-a");
+    store.getState().addTurn(turn("turn-b", { started_at: "2026-01-01T00:00:00.000001000Z" }));
+    store.getState().setActiveTurn(SESSION_ID, "turn-b");
+
+    // Date.parse would collapse both to the same millisecond and refuse to
+    // promote; nanosecond precision must promote turn-b.
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-b");
   });
 });
 

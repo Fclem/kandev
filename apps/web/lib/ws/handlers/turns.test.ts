@@ -203,6 +203,27 @@ describe("session turn WebSocket handlers", () => {
 });
 
 describe("settled boundary WS guard", () => {
+  it("does not mark a malformed started_at even without a boundary", () => {
+    const store = makeStore();
+
+    send(store, TURN_STARTED, turn("turn-1", "not-a-timestamp"));
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeFalsy();
+  });
+
+  it("does not mark a malformed started_at with a boundary", () => {
+    const store = makeStore();
+    store.getState().setTaskSession({
+      id: SESSION_ID,
+      state: "IDLE",
+      updated_at: TURN_COMPLETED_AT,
+    } as never);
+
+    send(store, TURN_STARTED, turn("turn-1", "not-a-timestamp"));
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeFalsy();
+  });
+
   it("rejects a delayed start for a turn unknown at the boundary", () => {
     const store = makeStore();
     // The boundary (IDLE settle) happens BEFORE any turn is known to this

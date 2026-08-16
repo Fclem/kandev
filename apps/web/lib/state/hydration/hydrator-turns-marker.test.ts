@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { produce } from "immer";
 import type { Draft } from "immer";
 import { hydrateState } from "./hydrator";
-import { defaultState } from "@/lib/state/default-state";
+import { defaultState, mergeInitialState } from "@/lib/state/default-state";
 import type { AppState } from "@/lib/state/store";
 
 // Dedicated file for the turns `loadedBySession` marker predicates so
@@ -15,6 +15,32 @@ const FRESH_TURN = "fresh-turn";
 function makeAppDraft(): AppState {
   return structuredClone(defaultState) as AppState;
 }
+
+describe("mergeInitialState — settled SSR sessions seed a boundary", () => {
+  it("seeds a boundary from a settled session's updated_at", () => {
+    const result = mergeInitialState({
+      taskSessions: {
+        items: {
+          [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: BOUNDARY },
+        },
+      } as never,
+      turns: { bySession: { [SESSION_ID]: [] } } as never,
+    });
+    expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBe(BOUNDARY);
+  });
+
+  it("does not seed a boundary for a running session", () => {
+    const result = mergeInitialState({
+      taskSessions: {
+        items: {
+          [SESSION_ID]: { id: SESSION_ID, state: "RUNNING", updated_at: BOUNDARY },
+        },
+      } as never,
+      turns: { bySession: { [SESSION_ID]: [] } } as never,
+    });
+    expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBeUndefined();
+  });
+});
 
 describe("hydrateState — turns loadedBySession marker predicates", () => {
   it.each([

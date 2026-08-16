@@ -285,11 +285,14 @@ export function buildTurnActions(set: ImmerSet) {
         }
         if (current.id === turnId) return;
 
-        const currentStartedAt = Date.parse(current.started_at);
-        const nextStartedAt = Date.parse(next.started_at);
+        // Compare with nanosecond precision: Date.parse collapses two starts
+        // in the same millisecond, which would refuse to promote a genuinely
+        // newer RFC3339Nano start (the WS guard already accepted it).
+        const currentStartedAt = parseTurnTimestamp(current.started_at);
+        const nextStartedAt = parseTurnTimestamp(next.started_at);
         if (
-          !Number.isNaN(currentStartedAt) &&
-          !Number.isNaN(nextStartedAt) &&
+          currentStartedAt !== null &&
+          nextStartedAt !== null &&
           nextStartedAt > currentStartedAt
         ) {
           draft.turns.activeBySession[sessionId] = turnId;
@@ -302,9 +305,18 @@ export function buildTurnActions(set: ImmerSet) {
         for (const sessionId of new Set(sessionIds)) {
           draft.turns.activeBySession[sessionId] = null;
           // Source adoption is an authoritative idle boundary: every turn
-          // started before now can never be active again. Bump the epoch so
-          // an in-flight REST hydration cannot resurrect the marker either.
-          draft.turns.settledBoundaryBySession[sessionId] = new Date().toISOString();
+          // started before now can never be active again. Advance the
+          // boundary monotonically — a server-reported future boundary
+          // (clock skew) or a nanosecond-precise one must never be replaced
+          // by an older ms-truncated "now".
+          const now = new Date().toISOString();
+          const candidate = parseTurnTimestamp(now);
+          const current = parseTurnTimestamp(draft.turns.settledBoundaryBySession[sessionId]);
+          if (candidate !== null && (current === null || candidate > current)) {
+            draft.turns.settledBoundaryBySession[sessionId] = now;
+          }
+          // Bump the epoch so an in-flight REST hydration cannot resurrect
+          // the marker either.
           draft.turns.reconcileEpochBySession[sessionId] =
             (draft.turns.reconcileEpochBySession[sessionId] ?? 0) + 1;
         }

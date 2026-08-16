@@ -60,7 +60,7 @@ export function registerTurnsHandlers(
         store.getState().turns.settledBoundaryBySession[payload.session_id],
       );
       const started = parseTurnTimestamp(payload.started_at);
-      if (boundary === null || (started !== null && started > boundary)) {
+      if (started !== null && (boundary === null || started > boundary)) {
         store.getState().setActiveTurn(payload.session_id, payload.id);
       }
     },

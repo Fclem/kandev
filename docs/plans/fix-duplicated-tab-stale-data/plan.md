@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/fix-duplicated-tab-stale-data/spec.md
 created: 2026-08-16
-status: complete
+status: in-progress
 ---
 
 # Implementation Plan: Reload on Frozen-Snapshot Restore
@@ -27,10 +27,11 @@ Root cause chain, with evidence:
    https://groups.google.com/a/chromium.org/g/bfcache-dev/c/Cs5ISWbKhKU), and
    Chrome has been rolling out bfcache admission for `Cache-Control: no-store`
    pages (https://developer.chrome.com/docs/web-platform/bfcache-ccns).
-3. The app has no restore handling: no `pageshow`/`pagehide`/`freeze`/`resume`
-   handlers exist anywhere in `apps/web`. The `useForegroundRefresh` hooks
-   refresh only subsets of surfaces and do not distinguish restores from
-   focus/visibility events.
+3. The app has no restore-specific handling: no handler inspects
+   `pageshow.persisted` (the generic `useForegroundRefresh` hook registers a
+   `pageshow` listener in `apps/web/hooks/use-foreground-refresh.ts` but does
+   not distinguish restores from focus/visibility events, and covers only
+   subsets of surfaces).
 4. Verified in real Chrome (headless, via a test page): a bfcache restore
    fires `pageshow` with `persisted === true`, and the frozen timers resume.
    Platform guidance for this class of bug is to handle `pageshow` with
@@ -95,9 +96,10 @@ E2E test, `apps/web/e2e/tests/layout/bfcache-restore-reload.spec.ts`
   MERGE BLOCKING gate (instrumentation checklist and decision rule in
   `task-01-reload-on-bfcache-restore.md`). If a current Chrome version
   restores without firing `pageshow` (no persisted signal), record it in the
-  task Results and follow up with a WS-close-based fallback
-  (reload on unexpected WS close when the navigation type is `back_forward`),
-  gated on that evidence.
+  task Results and follow up with a WS-close-based fallback, gated on that
+  evidence and subject to the restore-bounding caveat and regression-test
+  requirement recorded in `task-01-reload-on-bfcache-restore.md`
+  ("WS-close fallback caveat").
 
 ## Implementation Waves And Parallel Candidates
 

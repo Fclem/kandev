@@ -1,10 +1,23 @@
 const PAGESHOW_EVENT = "pageshow";
+const RESTORE_PROBE_KEY = "kandev.bfcacheRestoreProbe";
 
 type RestoreReloadTarget = Pick<EventTarget, "addEventListener" | "removeEventListener">;
 
 interface RestoreReloadOptions {
   target?: RestoreReloadTarget;
   reload?: () => void;
+  isDebug?: () => boolean;
+  getStorage?: () => Pick<Storage, "setItem">;
+  getNavigationType?: () => string | undefined;
+}
+
+function readNavigationType(): string | undefined {
+  try {
+    const entry = performance.getEntriesByType("navigation")[0];
+    return entry ? (entry as PerformanceNavigationTiming).type : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -21,16 +34,41 @@ interface RestoreReloadOptions {
  * (`navigate`), manual refreshes (`reload`), and in-app SPA routing never
  * reload; a reload produces a fresh document and cannot loop.
  *
+ * In debug builds (`window.__KANDEV_DEBUG`), the restore evidence is written
+ * to sessionStorage before the reload so a native Duplicate-tab run can be
+ * verified after the fact: the reload destroys the document, and the
+ * duplicated tab is a separate DevTools target, so the event data must be
+ * persisted pre-reload. The probe never blocks the reload.
+ *
  * Returns an uninstall function.
  */
 export function installBfcacheRestoreReload({
   target = window,
   reload = () => window.location.reload(),
+  isDebug = () => window.__KANDEV_DEBUG === true,
+  getStorage = () => window.sessionStorage,
+  getNavigationType = readNavigationType,
 }: RestoreReloadOptions = {}): () => void {
-  const handlePageshow = (event: Event) => {
-    if ((event as PageTransitionEvent).persisted === true) {
-      reload();
+  const recordProbe = () => {
+    if (!isDebug()) return;
+    try {
+      getStorage().setItem(
+        RESTORE_PROBE_KEY,
+        JSON.stringify({
+          persisted: true,
+          navigationType: getNavigationType(),
+          at: Date.now(),
+        }),
+      );
+    } catch {
+      // Best-effort diagnostics; never block the reload.
     }
+  };
+
+  const handlePageshow = (event: Event) => {
+    if ((event as PageTransitionEvent).persisted !== true) return;
+    recordProbe();
+    reload();
   };
 
   target.addEventListener(PAGESHOW_EVENT, handlePageshow);

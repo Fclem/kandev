@@ -1,7 +1,7 @@
 ---
 id: "01-reload-on-bfcache-restore"
 title: "Reload on bfcache restore"
-status: done
+status: in-progress
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -38,24 +38,41 @@ spec: "../../specs/fix-duplicated-tab-stale-data/spec.md"
 
 ## Blocking verification (merge gate)
 
-Run in the user's non-headless Chrome against the affected Kandev build,
-DevTools console open:
+Run in the user's non-headless Chrome against a debug build of the affected
+Kandev (debug mode sets `window.__KANDEV_DEBUG`, which arms the pre-reload
+probe in `bfcache-restore-reload.ts`). The duplicated tab is a SEPARATE
+DevTools target and the handler reloads synchronously during its initial
+`pageshow`, so attaching DevTools afterward cannot observe the restore; the
+probe persists the evidence to sessionStorage BEFORE the reload.
 
 1. Archive a task, then right-click the Kandev tab → **Duplicate**.
-2. Record in the console (or via `window.__KANDEV_DEBUG` hooks):
-   - the duplicated tab's `pageshow` event and its `persisted` value;
-   - `performance.getEntriesByType("navigation")[0].type` on the duplicated
-     tab;
-   - whether a boot-payload request (`/api/v1/app-state` or the no-store
-     HTML) is issued after the duplicate.
-3. Expected with this fix: the duplicated tab fires `pageshow` with
-   `persisted === true` and reloads, then shows the task as archived.
-4. If the duplicated tab fires NO `pageshow` (or `persisted === false` while
-   still showing stale data), the frozen-restore assumption is wrong for that
-   Chrome version: record the observed sequence, then implement the
-   WS-close fallback (reload on unexpected WS close when the navigation type
-   is `back_forward`), gated on this evidence, and add coverage for the
-   observed path. Do not add the fallback without this evidence.
+2. In the duplicated tab's DevTools console, read the probe:
+   `JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe"))`.
+   It records `{ persisted: true, navigationType, at }` captured pre-reload.
+3. Corroborate with DevTools → Network → "Preserve log" on the duplicated
+   tab (open before duplicating, or inspect the document request after the
+   reload): the app issues a fresh boot-payload request (the no-store HTML
+   or `/api/v1/app-state`) after the duplicate.
+4. Expected with this fix: the probe shows `persisted: true`, the duplicated
+   tab reloads, and the task is shown as archived.
+5. If the duplicated tab fires NO `pageshow` (no probe entry) or shows a
+   probe with `persisted: false` while still displaying stale data, the
+   frozen-restore assumption is wrong for that Chrome version: record the
+   observed sequence (including WebSocket close code/timing, if any), then
+   design a fallback from that evidence — see the WS-close caveat below. Do
+   not add a fallback without this evidence.
+
+### WS-close fallback caveat (only if step 5 triggers)
+
+The navigation type `back_forward` is fixed for the document lifetime, and
+`WebSocketClient.handleDisconnect` observes every later unintentional
+disconnect, so reloading on "unexpected WS close while the navigation type is
+`back_forward`" would also fire after a cold history/session restore followed
+by an ordinary network loss — recreating the round-1 false-positive class.
+Any WS-based fallback must be bounded to the restore/bootstrap context (e.g.
+only within a short window after the restore, or only when the sessionStorage
+probe from this handler is present) and must include a regression test that a
+routine disconnect after a cold `back_forward` load does NOT reload.
 
 ## Verification
 
@@ -216,3 +233,30 @@ fallback.
   assumption, the WS-close fallback is implemented gated on that evidence.
 - The real-Chrome duplicate-tab run remains the outstanding evidence gate
   and now blocks merge.
+
+### Adversarial review round 5 (50-luna-review-fix)
+
+- Finding 1 (major, accepted): the task/plan were marked done/complete while
+  the merge gate was outstanding. Fixed: both are now `in-progress`; they are
+  flipped to done/complete only after the native run is recorded.
+- Finding 2 (major, accepted): the gate checklist could not capture the
+  evidence — `window.__KANDEV_DEBUG` is only a boolean, the duplicated tab is
+  a separate DevTools target, and the synchronous reload destroys the
+  pre-reload event/navigation data. Fixed: the module now writes a
+  debug-gated probe (`kandev.bfcacheRestoreProbe`) to sessionStorage BEFORE
+  reloading, recording `{ persisted: true, navigationType, at }`; the
+  checklist reads the probe post-duplicate and corroborates with a fresh
+  boot-payload request. Probe covered by 3 new unit tests (records in debug,
+  silent in non-debug, never blocks the reload).
+- Finding 3 (minor, accepted): the WS-close fallback rule was not
+  restore-specific — `back_forward` is fixed for the document lifetime and
+  `handleDisconnect` observes every later unintentional disconnect, which
+  would recreate the round-1 false-positive class after a cold restore plus
+  ordinary network loss. Fixed: the fallback is now explicitly caveated (must
+  be bounded to the restore/bootstrap context, e.g. a short post-restore
+  window or the presence of this handler's sessionStorage probe, and must
+  include a routine-disconnect-after-cold-back_forward regression test) and
+  is only designed after the step-5 evidence.
+- Finding 4 (nit, accepted): the plan claimed no `pageshow` handlers existed
+  anywhere, but `useForegroundRefresh` already registers one. Fixed: the
+  claim now says no handler inspects `pageshow.persisted`.

@@ -1,18 +1,43 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { installBfcacheRestoreReload } from "./bfcache-restore-reload";
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
+const RESTORE_PROBE_KEY = "kandev.bfcacheRestoreProbe";
 
-function createHarness() {
+function createMemoryStorage() {
+  const values = new Map<string, string>();
+  return {
+    storage: {
+      setItem: vi.fn((key: string, value: string) => values.set(key, value)),
+    },
+    value: () => values.get(RESTORE_PROBE_KEY) ?? null,
+  };
+}
+
+function createHarness({
+  isDebug = () => false,
+  storage = createMemoryStorage().storage,
+  navigationType,
+}: {
+  isDebug?: () => boolean;
+  storage?: Pick<Storage, "setItem">;
+  navigationType?: string;
+} = {}) {
   const target = new EventTarget();
   const reload = vi.fn();
-  const cleanup = installBfcacheRestoreReload({ target, reload });
+  const getNavigationType = vi.fn(() => navigationType);
+  const cleanup = installBfcacheRestoreReload({
+    target,
+    reload,
+    isDebug,
+    getStorage: () => storage,
+    getNavigationType,
+  });
 
   return {
     target,
     reload,
+    storage,
+    getNavigationType,
     cleanup,
     dispatch(persisted: boolean) {
       const event = new Event("pageshow");
@@ -22,6 +47,10 @@ function createHarness() {
     },
   };
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("installBfcacheRestoreReload", () => {
   it("reloads when the page is restored from a frozen snapshot (persisted=true)", () => {
@@ -82,5 +111,48 @@ describe("installBfcacheRestoreReload", () => {
     harness.dispatch(true);
 
     expect(harness.reload).not.toHaveBeenCalled();
+  });
+
+  it("records restore evidence before reloading in debug builds", () => {
+    const memory = createMemoryStorage();
+    const harness = createHarness({
+      isDebug: () => true,
+      storage: memory.storage,
+      navigationType: "back_forward",
+    });
+
+    harness.dispatch(true);
+
+    expect(harness.reload).toHaveBeenCalledOnce();
+    expect(memory.value()).not.toBeNull();
+    expect(JSON.parse(memory.value()!)).toMatchObject({
+      persisted: true,
+      navigationType: "back_forward",
+    });
+    expect(Number.isFinite(JSON.parse(memory.value()!).at)).toBe(true);
+  });
+
+  it("does not record evidence when debug is disabled", () => {
+    const memory = createMemoryStorage();
+    const harness = createHarness({ isDebug: () => false, storage: memory.storage });
+
+    harness.dispatch(true);
+
+    expect(harness.reload).toHaveBeenCalledOnce();
+    expect(memory.value()).toBeNull();
+  });
+
+  it("a failing probe never blocks the reload", () => {
+    const harness = createHarness({
+      isDebug: () => true,
+      storage: {
+        setItem: vi.fn(() => {
+          throw new Error("storage unavailable");
+        }),
+      },
+    });
+
+    expect(() => harness.dispatch(true)).not.toThrow();
+    expect(harness.reload).toHaveBeenCalledOnce();
   });
 });

@@ -60,7 +60,7 @@ No backend change. No new user-facing copy (no i18n impact).
 
 ## Tests
 
-Unit tests, `apps/web/src/bfcache-restore-reload.test.ts` (vitest + jsdom,
+Unit tests, `apps/web/src/bfcache-restore-reload.test.ts` (vitest + happy-dom,
 mirroring `vite-preload-recovery.test.ts` conventions):
 
 - `pageshow` with `persisted === true` triggers the reload.

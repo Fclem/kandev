@@ -73,14 +73,15 @@ Sequential. Single task; no parallel candidates.
   described in the plan (reload on unexpected WS close when the navigation
   type is `back_forward`), gated on that evidence; do not add it
   speculatively.
-- jsdom lacks `PageTransitionEvent`; tests define the `persisted` flag on a
-  plain `Event`. The cold-`back_forward` regression test stubs a
+- happy-dom lacks `PageTransitionEvent`; tests define the `persisted` flag on
+  a plain `Event`. The cold-`back_forward` regression test stubs a
   `back_forward` navigation entry so a reintroduced navigation-type fallback
   would fail it.
 - E2E must use the synthetic persisted-`pageshow` signal (see plan): with an
   open WebSocket, current Chrome does not bfcache `no-store` pages on
-  back/forward, so `page.goBack()` would pass trivially. Use `expect.poll`
-  with default timeouts; no sleeps.
+  back/forward, so `page.goBack()` would pass trivially. The reload assertion
+  retries with `expect(...).toPass({ timeout: 15_000 })` (catching the
+  destroyed execution context mid-navigation); no sleeps.
 
 ## Output Contract
 
@@ -137,7 +138,7 @@ fallback.
 - Finding 1 (minor, accepted): the cold-`back_forward` regression test only
   dispatched `persisted=false` without exposing a `back_forward` navigation
   entry, so it was behaviorally identical to the fresh-load test and a
-  reintroduced navigation-type fallback would stay green under jsdom (no
+  reintroduced navigation-type fallback would stay green under happy-dom (no
   matching navigation entry). Fixed: the test now stubs
   `performance.getEntriesByType("navigation")` to return a `back_forward`
   entry before dispatching `persisted=false`, and asserts no reload.
@@ -149,3 +150,17 @@ fallback.
 - No production-code correctness issue found. The real-Chrome duplicate-tab
   run remains the outstanding evidence gate for the WS-close fallback
   decision.
+
+### Adversarial review round 3 (50-luna-review-fix)
+
+- Finding (nit, accepted): the durable plan/task record said the unit
+  environment is jsdom and the E2E uses `expect.poll` with default timeouts,
+  but `apps/web/vitest.config.ts` configures happy-dom and the implemented
+  E2E uses `expect(...).toPass({ timeout: 15_000 })` (the reload teardown
+  destroys the evaluate context, so the retry swallows those errors; 15s
+  covers the reload plus a fresh app boot). Fixed: all jsdom references in
+  the plan package now name happy-dom, and the E2E wait strategy is
+  documented as `toPass`/15s.
+- No production correctness issue found (persisted-only semantics, bootstrap
+  timing/StrictMode, listener lifecycle, reload-path interaction, option/cast
+  safety, cold-`back_forward` stub, E2E positive/negative causality).

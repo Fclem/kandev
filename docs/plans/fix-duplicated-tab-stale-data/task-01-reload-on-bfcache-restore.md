@@ -52,13 +52,13 @@ probe persists the evidence to sessionStorage BEFORE the reload.
    tab's storage — including this helper key — so the duplicated tab can
    compare timestamps even though console variables are target-local.)
 2. Archive a task, then right-click the Kandev tab → **Duplicate**.
-3. In the duplicated tab's DevTools console, read the probe:
-   `JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe"))`.
-   It records `{ persisted, navigationType, at }` captured pre-reload.
-   Accept the record only if it is newer than this attempt:
-   `Number(sessionStorage.getItem("kandev.bfcacheProbeStart")) <= at`.
-   (A stale probe inherited from an earlier restore must not be attributed
-   to this run.)
+3. In the duplicated tab's DevTools console, read the probe and check it is
+   newer than this attempt in one self-contained expression (console bindings
+   are not carried over from the source tab):
+   `JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe")).at >= Number(sessionStorage.getItem("kandev.bfcacheProbeStart"))`
+   The probe records `{ persisted, navigationType, at }` captured pre-reload;
+   the comparison must be true for the record to belong to this run (a stale
+   probe inherited from an earlier restore must not be attributed to it).
 4. Confirm the handler reloaded from inside the duplicated tab's console
    after the reload settles:
    `performance.getEntriesByType("navigation")[0]?.type` must be `"reload"`
@@ -332,7 +332,10 @@ fallback.
   console, which is target-local and unavailable in the duplicated tab.
   Fixed: the start time is stored in sessionStorage
   (`kandev.bfcacheProbeStart`, copied to the duplicate) and the duplicated
-  tab compares `start <= at`.
+  tab compares with a self-contained one-liner
+  (`JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe")).at >=
+  Number(sessionStorage.getItem("kandev.bfcacheProbeStart"))`), after a
+  follow-up review caught that the first revision referenced an unbound `at`.
 - Finding 3 (nit, accepted): the spec's client-storage contract only
   mentioned writes before reload, omitting the `persisted === false`
   `back_forward` diagnostic writes. Fixed: the contract now states the probe

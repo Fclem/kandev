@@ -63,14 +63,17 @@ export function parseTurnTimestamp(value: string | undefined): number {
   }
   const offsetDelta = parseOffsetDelta(match[8], match[9], match[10]);
   if (offsetDelta === null) return -Infinity;
-  const fractionMs = match[7] ? Math.round(Number(`0.${match[7]}`) * 1000) : 0;
+  // Add the fraction EXACTLY (no rounding): Math.round collapses
+  // .9995 onto the next second's epoch, and genuinely newer sub-millisecond
+  // WS timestamps (RFC3339Nano) would compare equal and lose the strict `>`.
+  const fractionMs = match[7] ? Number(`0.${match[7]}`) * 1000 : 0;
   // setUTCFullYear handles years 0-99 correctly (Date.UTC maps them to
   // 1900+year); the components are validated above, so no normalization can
   // occur here.
   const utc = new Date(0);
   utc.setUTCFullYear(year, month - 1, Number(match[3]));
-  utc.setUTCHours(Number(match[4]), Number(match[5]), Number(match[6]), fractionMs);
-  const epoch = utc.getTime() - offsetDelta;
+  utc.setUTCHours(Number(match[4]), Number(match[5]), Number(match[6]), 0);
+  const epoch = utc.getTime() + fractionMs - offsetDelta;
   return Number.isFinite(epoch) ? epoch : -Infinity;
 }
 

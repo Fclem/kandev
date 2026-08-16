@@ -83,6 +83,17 @@ describe("parseTurnTimestamp", () => {
     expect(parseTurnTimestamp("2024-02-29T10:00:00Z")).toBeGreaterThan(0);
     expect(parseTurnTimestamp("2000-02-29T10:00:00Z")).toBeGreaterThan(0);
   });
+
+  it("preserves sub-millisecond fraction ordering without rounding", () => {
+    // Math.round on the fraction would collapse .9995 onto the next second's
+    // epoch; the parser must keep .9995 < .9996 < next second.
+    const nextSecond = parseTurnTimestamp("2026-01-01T00:00:01Z");
+    const frac9995 = parseTurnTimestamp("2026-01-01T00:00:00.9995Z");
+    const frac9996 = parseTurnTimestamp("2026-01-01T00:00:00.9996Z");
+    expect(frac9995).toBeLessThan(nextSecond);
+    expect(frac9995).toBeLessThan(frac9996);
+    expect(frac9996).toBeLessThan(nextSecond);
+  });
 });
 
 describe("addTurn reconciliation", () => {
@@ -95,6 +106,25 @@ describe("addTurn reconciliation", () => {
     expect(store.getState().turns.bySession[SESSION_ID][0]).toEqual(
       expect.objectContaining({ completed_at: COMPLETED_AT, metadata: { model: "new" } }),
     );
+  });
+
+  it("applies a row that is newer by sub-millisecond fraction", () => {
+    const store = makeStore();
+    store
+      .getState()
+      .addTurn(
+        turn("turn-1", { completed_at: COMPLETED_AT, updated_at: "2026-01-01T00:00:00.9995Z" }),
+      );
+    store.getState().addTurn(
+      turn("turn-1", {
+        completed_at: COMPLETED_AT,
+        updated_at: "2026-01-01T00:00:00.9996Z",
+        metadata: { model: "fraction-newer" },
+      }),
+    );
+    expect(store.getState().turns.bySession[SESSION_ID][0].metadata).toEqual({
+      model: "fraction-newer",
+    });
   });
 
   it("rejects a stale WS started event after a completed row was hydrated", () => {

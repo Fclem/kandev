@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Message } from "@/lib/types/http";
 
 const mockListTaskSessionMessages = vi.fn();
+const mockListSessionTurns = vi.fn();
 const mockWebSocketClient = {
   getSessionSubscriptionReadiness: vi.fn(),
   request: vi.fn(),
@@ -18,16 +19,21 @@ const mockState = {
     },
   },
   taskSessions: { items: { "sess-1": { state: "RUNNING" } } },
-  turns: { activeBySession: { "sess-1": null } },
+  turns: { bySession: { "sess-1": [] as unknown[] }, activeBySession: { "sess-1": null } },
   connection: { status: "connected" },
   mergeMessages: vi.fn(),
   setMessagesLoading: vi.fn(),
   setMessages: vi.fn(),
   prependMessages: vi.fn(),
+  addTurn: vi.fn(),
 };
 
 vi.mock("@/lib/api", () => ({
   listTaskSessionMessages: (...args: unknown[]) => mockListTaskSessionMessages(...args),
+}));
+
+vi.mock("@/lib/api/domains/session-api", () => ({
+  listSessionTurns: (...args: unknown[]) => mockListSessionTurns(...args),
 }));
 
 vi.mock("@/lib/ws/connection", () => ({
@@ -44,6 +50,7 @@ import { taskId, sessionId } from "@/lib/types/ids";
 beforeEach(() => {
   vi.clearAllMocks();
   mockListTaskSessionMessages.mockResolvedValue({ messages: [], has_more: false });
+  mockListSessionTurns.mockResolvedValue({ turns: [], total: 0 });
   mockWebSocketClient.request.mockResolvedValue({ messages: [], has_more: false });
   mockWebSocketClient.subscribeSession.mockReturnValue(vi.fn());
   mockState.messages.bySession["sess-1"] = [];
@@ -54,6 +61,7 @@ beforeEach(() => {
   };
   mockState.connection.status = "connected";
   mockState.taskSessions.items["sess-1"] = { state: "RUNNING" };
+  mockState.turns.bySession["sess-1"] = [];
   mockState.turns.activeBySession["sess-1"] = null;
 });
 
@@ -495,5 +503,71 @@ describe("session subscription hydration ordering", () => {
 
     expect(mockWebSocketClient.request).not.toHaveBeenCalled();
     expect(mockState.setMessagesLoading).toHaveBeenLastCalledWith("sess-1", false);
+  });
+});
+
+describe("turn loading for sessions without hydrated turns", () => {
+  it("fetches and merges turns when the session has none in the store", async () => {
+    const readiness = deferred<void>();
+    mockWebSocketClient.getSessionSubscriptionReadiness.mockReturnValue(readiness.promise);
+    mockWebSocketClient.subscribeSessionWithReady.mockReturnValue({
+      ready: readiness.promise,
+      unsubscribe: vi.fn(),
+    });
+    mockListSessionTurns.mockResolvedValue({
+      turns: [
+        {
+          id: "turn-1",
+          session_id: "sess-1",
+          task_id: "task-1",
+          started_at: "2026-08-10T10:00:00Z",
+          completed_at: "2026-08-10T10:05:00Z",
+          metadata: { runtime_config_snapshot: { model: "deepseek/deepseek-v4-flash" } },
+          created_at: "2026-08-10T10:00:00Z",
+          updated_at: "2026-08-10T10:05:00Z",
+        },
+      ],
+      total: 1,
+    });
+    mockState.turns.bySession["sess-1"] = [];
+
+    const { unmount } = renderHook(() => useSessionMessages("sess-1"));
+
+    await act(async () => {
+      readiness.resolve();
+      await readiness.promise;
+    });
+    // Flush the chained message/turn fetch microtasks.
+    await act(async () => {});
+
+    expect(mockListSessionTurns).toHaveBeenCalledWith("sess-1", expect.anything());
+    expect(mockState.addTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "turn-1",
+        metadata: { runtime_config_snapshot: { model: "deepseek/deepseek-v4-flash" } },
+      }),
+    );
+    unmount();
+  });
+
+  it("skips the turn fetch when the store already holds turns for the session", async () => {
+    const readiness = deferred<void>();
+    mockWebSocketClient.getSessionSubscriptionReadiness.mockReturnValue(readiness.promise);
+    mockWebSocketClient.subscribeSessionWithReady.mockReturnValue({
+      ready: readiness.promise,
+      unsubscribe: vi.fn(),
+    });
+    mockState.turns.bySession["sess-1"] = [{ id: "turn-existing" }];
+
+    const { unmount } = renderHook(() => useSessionMessages("sess-1"));
+
+    await act(async () => {
+      readiness.resolve();
+      await readiness.promise;
+    });
+    await act(async () => {});
+
+    expect(mockListSessionTurns).not.toHaveBeenCalled();
+    unmount();
   });
 });

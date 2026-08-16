@@ -3,6 +3,7 @@ import { getWebSocketClient } from "@/lib/ws/connection";
 import { useForegroundRefresh } from "@/hooks/use-foreground-refresh";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import type { TaskSessionState, Message } from "@/lib/types/http";
+import { listSessionTurns } from "@/lib/api/domains/session-api";
 import { createDebugLogger, isDebug } from "@/lib/debug/log";
 import {
   useUnknownSessionSubscriptionRetry,
@@ -211,6 +212,33 @@ function requestSessionMessages(
   return promise;
 }
 
+/**
+ * Ensures the store holds this session's persisted turns. The boot/SSR state
+ * hydrates turns only for the page-load active session; switching to another
+ * session fetches its messages but never its turns, so every message of that
+ * session resolves to `turn = null` and the debug dialog shows
+ * `turn_metadata: null` (and turn-derived UI like agent status stays empty)
+ * even though the turns exist server-side with metadata.
+ *
+ * Guarded by store presence so it runs at most once per session per tab
+ * lifetime; a failed fetch leaves the store empty and is retried on the next
+ * message fetch. Enrichment only — never delays or fails message loading.
+ */
+async function ensureSessionTurnsLoaded(
+  sessionId: string,
+  store: ReturnType<typeof useAppStoreApi>,
+): Promise<void> {
+  if ((store.getState().turns.bySession[sessionId]?.length ?? 0) > 0) return;
+  try {
+    const { turns } = await listSessionTurns(sessionId, { cache: "no-store" });
+    for (const turn of turns) {
+      store.getState().addTurn(turn);
+    }
+  } catch (err) {
+    debug("turn fetch failed", { sessionId, err });
+  }
+}
+
 /** Fetch latest messages via WS and merge with any that arrived via live notifications. */
 async function fetchAndStoreMessages(
   sessionId: string,
@@ -221,6 +249,9 @@ async function fetchAndStoreMessages(
   if (!client) {
     return [];
   }
+  // The messages fetch is the session-entry chokepoint: any path that opens a
+  // session's transcript must also make its turns resolvable.
+  void ensureSessionTurnsLoaded(sessionId, store);
   // Initial and recovery fetches must not overtake the server-side
   // session.subscribe registration. The client returns an already-resolved
   // promise when no durable subscription is active, preserving fetch behavior

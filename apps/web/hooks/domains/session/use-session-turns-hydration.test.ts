@@ -14,15 +14,21 @@ type TurnStoreState = {
   loadedBySession: Record<string, boolean>;
   sessions: Record<string, { state: string }>;
   bySession: Record<string, unknown[]>;
+  activeBySession: Record<string, string | null>;
 };
 
 type TurnStoreMock = {
   getState: () => {
-    turns: { loadedBySession: Record<string, boolean>; bySession: Record<string, unknown[]> };
+    turns: {
+      loadedBySession: Record<string, boolean>;
+      bySession: Record<string, unknown[]>;
+      activeBySession: Record<string, string | null>;
+    };
     taskSessions: { items: Record<string, { state: string }> };
   };
   addTurn: ReturnType<typeof vi.fn>;
   markTurnsLoaded: ReturnType<typeof vi.fn>;
+  setActiveTurn: ReturnType<typeof vi.fn>;
 };
 
 type TurnStoreHarness = TurnStoreMock & {
@@ -82,6 +88,7 @@ function makeStore(): TurnStoreHarness {
     loadedBySession: {},
     sessions: { [SESSION_ID]: { state: "RUNNING" } },
     bySession: {},
+    activeBySession: {},
   };
   const addTurn = vi.fn((turn: Record<string, unknown>) => {
     upsertTurn(state.bySession, turn);
@@ -89,16 +96,25 @@ function makeStore(): TurnStoreHarness {
   const markTurnsLoaded = vi.fn((sid: string) => {
     state.loadedBySession[sid] = true;
   });
+  const setActiveTurn = vi.fn((sid: string, turnId: string | null) => {
+    state.activeBySession[sid] = turnId;
+  });
   return {
     getState: () => ({
-      turns: { loadedBySession: state.loadedBySession, bySession: state.bySession },
+      turns: {
+        loadedBySession: state.loadedBySession,
+        bySession: state.bySession,
+        activeBySession: state.activeBySession,
+      },
       taskSessions: { items: state.sessions },
       // The zustand store exposes actions on getState() too.
       addTurn,
       markTurnsLoaded,
+      setActiveTurn,
     }),
     addTurn,
     markTurnsLoaded,
+    setActiveTurn,
     setSessions: (v) => {
       state.sessions = v;
     },
@@ -159,6 +175,44 @@ describe("ensureSessionTurnsLoaded — hydration and marker", () => {
 });
 
 describe("ensureSessionTurnsLoaded — guards and races", () => {
+  it("establishes the active marker for the latest incomplete turn", async () => {
+    // The WS session.turn.started event may have been missed; the REST rows
+    // are the only source for the running turn, and agent-status / files-panel
+    // gating read activeBySession.
+    mockListSessionTurns.mockResolvedValue({
+      turns: [
+        makeTurn("turn-1", { completed_at: COMPLETION_AT, updated_at: COMPLETION_AT }),
+        makeTurn("turn-2", {
+          started_at: "2026-08-11T09:00:00Z",
+          created_at: "2026-08-11T09:00:00Z",
+          updated_at: "2026-08-11T09:00:00Z",
+          completed_at: undefined,
+        }),
+      ],
+      total: 2,
+    });
+    const store = makeStore();
+
+    await ensureSessionTurnsLoaded(SESSION_ID, store as never);
+
+    expect(store.setActiveTurn).toHaveBeenCalledWith(SESSION_ID, "turn-2");
+  });
+
+  it("clears a stale active marker when no turn remains incomplete", async () => {
+    // The WS completion event was missed; the REST snapshot shows every turn
+    // completed, so the active marker must be cleared.
+    mockListSessionTurns.mockResolvedValue({
+      turns: [makeTurn("turn-1", { completed_at: COMPLETION_AT, updated_at: COMPLETION_AT })],
+      total: 1,
+    });
+    const store = makeStore();
+    store.getState().turns.activeBySession[SESSION_ID] = "turn-1";
+
+    await ensureSessionTurnsLoaded(SESSION_ID, store as never);
+
+    expect(store.setActiveTurn).toHaveBeenCalledWith(SESSION_ID, null);
+  });
+
   it("does not resurrect turns after the session was removed mid-flight", async () => {
     const { promise, resolve: resolveList } = deferredTurnsResponse();
     mockListSessionTurns.mockReturnValue(promise);

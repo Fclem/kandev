@@ -1,7 +1,8 @@
 import { listSessionTurns } from "@/lib/api/domains/session-api";
 import { useAppStoreApi } from "@/components/state-provider";
 import { createDebugLogger } from "@/lib/debug/log";
-import { shouldApplyTurnUpdate } from "@/lib/state/slices/session/turn-actions";
+import type { Turn } from "@/lib/types/http";
+import { parseTurnTimestamp, shouldApplyTurnUpdate } from "@/lib/state/slices/session/turn-actions";
 
 const debug = createDebugLogger("messages:fetch:turns");
 
@@ -14,6 +15,27 @@ const inFlightTurnsLoad = new Map<string, Promise<void>>();
 /** Test seam: drop in-flight entries so tests don't leak dedup state. */
 export function clearInFlightTurnsLoadForTest(): void {
   inFlightTurnsLoad.clear();
+}
+
+/**
+ * Returns the id of the latest incomplete turn in the list, or null when
+ * every turn is completed. Compares via the strict timestamp parser so
+ * fractional (RFC3339Nano) and whole-second (RFC3339) started_at values
+ * order correctly.
+ */
+function latestIncompleteTurnId(turns: Turn[]): string | null {
+  let latestId: string | null = null;
+  let latestStarted: bigint | null = null;
+  for (const turn of turns) {
+    if (turn.completed_at) continue;
+    const started = parseTurnTimestamp(turn.started_at);
+    if (started === null) continue;
+    if (latestStarted === null || started > latestStarted) {
+      latestId = turn.id;
+      latestStarted = started;
+    }
+  }
+  return latestId;
 }
 
 /**
@@ -73,6 +95,16 @@ export async function ensureSessionTurnsLoaded(
           store.getState().addTurn(turn);
         }
       }
+      // Reconcile the active-turn marker: the WS session.turn.started event
+      // may have been missed (the same REST/WS gap this hydration closes),
+      // leaving activeBySession null while the session runs — agent status
+      // and files-panel source gating read it. Mirror the boot-state rule:
+      // latest incomplete turn, or null when none remains incomplete (the WS
+      // completion event may have been missed instead).
+      const activeTurnId = latestIncompleteTurnId(
+        store.getState().turns.bySession[sessionId] ?? [],
+      );
+      store.getState().setActiveTurn(sessionId, activeTurnId);
       store.getState().markTurnsLoaded(sessionId);
     } catch (err) {
       debug("turn fetch failed", { sessionId, err });

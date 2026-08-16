@@ -33,6 +33,7 @@ const mockState = {
   markTurnsLoaded: vi.fn((sessionId: string) => {
     mockState.turns.loadedBySession[sessionId] = true;
   }),
+  setActiveTurn: vi.fn(),
 };
 
 vi.mock("@/lib/api", () => ({

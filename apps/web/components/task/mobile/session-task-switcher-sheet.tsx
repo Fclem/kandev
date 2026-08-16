@@ -13,6 +13,7 @@ import type { StepDef } from "../task-switcher-context-menu";
 import type { TaskMoveWorkflow } from "../task-move-context-menu";
 import { applyView } from "@/lib/sidebar/apply-view";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
+import { selectQuickChatHasUnseenIdle } from "@/lib/state/slices/ui/quick-chat-unseen-selectors";
 import { useEffectiveSidebarView } from "@/hooks/domains/sidebar/use-effective-sidebar-view";
 import { useSidebarTaskPrefs } from "@/hooks/domains/sidebar/use-sidebar-task-prefs";
 import { useRepositories } from "@/hooks/domains/workspace/use-repositories";
@@ -205,6 +206,9 @@ function TaskSwitcherSurfaceHeader({
   presentation: "sheet" | "drawer";
 }) {
   const { t } = useTranslation();
+  const quickChatHasUnseenIdle = useAppStore((state) =>
+    selectQuickChatHasUnseenIdle(state, workspaceId),
+  );
   const content = (
     <>
       <div className="flex items-center justify-between">
@@ -222,7 +226,16 @@ function TaskSwitcherSurfaceHeader({
               onClick={onQuickChat}
               data-testid="mobile-sheet-quick-chat"
             >
-              <IconMessageCircle className="h-4 w-4" />
+              <span className={quickChatHasUnseenIdle ? "relative flex" : undefined}>
+                <IconMessageCircle className="h-4 w-4" />
+                {quickChatHasUnseenIdle && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background"
+                    data-testid="quick-chat-unseen-dot"
+                  />
+                )}
+              </span>
               {t("task:chat")}
             </Button>
           )}

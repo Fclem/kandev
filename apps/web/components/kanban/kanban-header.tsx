@@ -28,6 +28,7 @@ import type { TasksListDisplayOptions } from "./mobile-menu-task-list-options";
 import { linkToTaskOverview, linkToTasks } from "@/lib/links";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { useAppStore } from "@/components/state-provider";
+import { selectQuickChatHasUnseenIdle } from "@/lib/state/slices/ui/quick-chat-unseen-selectors";
 import { useKanbanDisplaySettings } from "@/hooks/use-kanban-display-settings";
 import { useReleaseNotes } from "@/hooks/use-release-notes";
 import { useSystemHealthIndicator } from "@/hooks/use-system-health-indicator";
@@ -162,6 +163,9 @@ function useIsHeaderNarrow(ref: RefObject<HTMLElement | null>): boolean {
 function TabletQuickActions({ workspaceId }: { workspaceId?: string }) {
   const { t } = useTranslation();
   const handleOpenQuickChat = useQuickChatLauncher(workspaceId);
+  const quickChatHasUnseenIdle = useAppStore((state) =>
+    selectQuickChatHasUnseenIdle(state, workspaceId),
+  );
   const handleOpenQuickTerminal = useQuickTerminalLauncher(workspaceId);
   if (!workspaceId) return null;
 
@@ -185,7 +189,16 @@ function TabletQuickActions({ workspaceId }: { workspaceId?: string }) {
         aria-label={t("sidebar:quickChat")}
         data-testid="tablet-quick-chat-button"
       >
-        <IconMessageCircle className="h-4 w-4" />
+        <span className={quickChatHasUnseenIdle ? "relative flex" : undefined}>
+          <IconMessageCircle className="h-4 w-4" />
+          {quickChatHasUnseenIdle && (
+            <span
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background"
+              data-testid="quick-chat-unseen-dot"
+            />
+          )}
+        </span>
       </Button>
     </>
   );

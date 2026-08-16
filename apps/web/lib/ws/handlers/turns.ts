@@ -57,6 +57,11 @@ export function registerTurnsHandlers(
       if (!payload.session_id || !payload.id) {
         return;
       }
+      const wasCompleted = store
+        .getState()
+        .turns.bySession[
+          payload.session_id
+        ]?.some((turn) => turn.id === payload.id && Boolean(turn.completed_at));
       messageScheduler?.flush();
       debug("turn.completed", {
         sessionId: payload.session_id,
@@ -82,6 +87,13 @@ export function registerTurnsHandlers(
           payload.completed_at || new Date().toISOString(),
           payload.metadata,
         );
+      const quickChat = store.getState().quickChat;
+      const quickChatSession = quickChat.sessions.find(
+        (session) => session.sessionId === payload.session_id,
+      );
+      if (quickChatSession && !quickChat.isOpen && !wasCompleted) {
+        store.getState().markQuickChatUnseenIdle(payload.session_id, quickChatSession.workspaceId);
+      }
       // Surface a notice when the turn finished with no agent output.
       maybeEmitEmptyTurnNotice(store, payload);
 

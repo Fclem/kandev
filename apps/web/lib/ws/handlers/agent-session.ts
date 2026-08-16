@@ -14,6 +14,7 @@ import type { QueueStatusChangedPayload } from "@/lib/types/backend";
 import { syncKanbanPrimarySessionState } from "@/lib/ws/handlers/agent-session-kanban-sync";
 import { parseContextWindowEntry } from "@/lib/state/slices/session-runtime/context-window";
 import { t } from "@/lib/i18n";
+import { maybeMarkQuickChatUnseenIdle } from "@/lib/ws/handlers/quick-chat-unseen";
 
 const debug = createDebugLogger("session:state");
 
@@ -727,6 +728,12 @@ export function registerTaskSessionHandlers(store: StoreApi<AppState>): WsHandle
         newState: newState ?? "-",
       });
 
+      maybeMarkQuickChatUnseenIdle(store, sessionId, {
+        previousState: existingSession?.state,
+        fallbackPreviousState: payload.old_state as TaskSessionState | undefined,
+        newState,
+        updatedAt: payload.updated_at,
+      });
       upsertTaskSessionList(store, taskId, sessionId, payload, sessionUpdate);
       syncKanbanPrimarySessionState(store, taskId, sessionId, newState);
       extractContextWindow(store, sessionId, payload);

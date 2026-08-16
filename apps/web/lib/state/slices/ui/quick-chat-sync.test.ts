@@ -38,6 +38,11 @@ function state(sessions: QuickChatSession[], overrides: Partial<QuickChatState> 
     activeKind: "conversation" as const,
     activeTerminalTabId: null,
     lastTerminalTabIdByWorkspace: {},
+    unseenIdleByWorkspace: {},
+    lastSettledAtBySession: {},
+    sessionOwnership: {},
+    syncRevisionByWorkspace: {},
+    tombstonedSessions: {},
     ...overrides,
   };
 }

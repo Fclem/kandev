@@ -35,4 +35,27 @@ test.describe("quick chat idle dot", () => {
     await secondCompletion;
     await expect(shortcut.getByTestId("quick-chat-unseen-dot")).toBeVisible();
   });
+
+  test("marks the tablet header after a closed quick chat turn completes", async ({
+    tabletTestPage,
+  }) => {
+    const ws = watchWs(tabletTestPage);
+    const created = tabletTestPage.waitForResponse(
+      (response) =>
+        response.url().includes("/quick-chat") && response.request().method() === "POST",
+    );
+    const dialog = await openQuickChatWithAgent(tabletTestPage);
+    const { session_id: sessionId } = (await (await created).json()) as { session_id: string };
+    const button = tabletTestPage.getByTestId("tablet-quick-chat-button");
+
+    await expect(button.getByTestId("quick-chat-unseen-dot")).toHaveCount(0);
+    const completed = ws.waitForEvent("session.turn.completed", {
+      where: (payload) => payload.session_id === sessionId,
+    });
+    await sendQuickChatMessage(dialog, tabletTestPage, "/slow 8s");
+    await tabletTestPage.keyboard.press("Escape");
+    await completed;
+
+    await expect(button.getByTestId("quick-chat-unseen-dot")).toBeVisible();
+  });
 });

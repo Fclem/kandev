@@ -1,7 +1,7 @@
 ---
 id: "03-entry-point-dots"
 title: "Entry-point dot rendering"
-status: pending
+status: complete
 wave: 2
 depends_on: ["01-unseen-idle-state"]
 plan: "plan.md"
@@ -50,4 +50,6 @@ mobile task-switcher sheet button — driven by
 - **Output contract:** summary, files changed, tests run with counts, blockers, risks; update task + plan statuses in the same conversation.
 
 ## Results
-Pending.
+
+Rendered decorative markers on sidebar, tablet, mobile header, and task-switcher entries.
+Component tests passed.

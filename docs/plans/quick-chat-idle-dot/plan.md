@@ -1,7 +1,7 @@
 ---
 spec: docs/specs/quick-chat-idle-dot/spec.md
 created: 2026-08-16
-status: draft
+status: complete
 ---
 
 # Implementation Plan: Quick Chat Idle Dot
@@ -216,7 +216,8 @@ pnpm e2e:raw --project=mobile-chrome -g "quick chat idle dot"`.
 
 ## Verification Results
 
-Pending. On completion, synchronize this section with each task's `## Results`.
+Targeted state, hydration, handler, and component tests passed. Typecheck and lint passed.
+Desktop/tablet Chromium and mobile-chrome idle-dot E2E runs passed.
 
 ---
 
@@ -224,10 +225,10 @@ Pending. On completion, synchronize this section with each task's `## Results`.
 
 Sequential (state → handlers → UI → E2E; each builds on the previous).
 
-- [ ] [task-01-unseen-idle-state](task-01-unseen-idle-state.md)
-- [ ] [task-02-ws-marking-hooks](task-02-ws-marking-hooks.md)
-- [ ] [task-03-entry-point-dots](task-03-entry-point-dots.md)
-- [ ] [task-04-idle-dot-e2e](task-04-idle-dot-e2e.md)
+- [x] [task-01-unseen-idle-state](task-01-unseen-idle-state.md)
+- [x] [task-02-ws-marking-hooks](task-02-ws-marking-hooks.md)
+- [x] [task-03-entry-point-dots](task-03-entry-point-dots.md)
+- [x] [task-04-idle-dot-e2e](task-04-idle-dot-e2e.md)
 
 ## Open Questions
 

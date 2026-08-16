@@ -1,7 +1,7 @@
 ---
 id: "01-unseen-idle-state"
 title: "Unseen-idle state in the UI slice"
-status: pending
+status: complete
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -85,4 +85,6 @@ survives hydration of a different workspace's session list.
 - **Output contract:** summary, files changed, tests run with counts, blockers, risks; update task + plan statuses in the same conversation.
 
 ## Results
-Pending.
+
+Implemented workspace-scoped ephemeral markers, settlement deduplication, lifecycle cleanup,
+hydration defaults, and selector coverage. Targeted state and hydration tests passed.

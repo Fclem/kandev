@@ -1,7 +1,7 @@
 ---
 id: "02-ws-marking-hooks"
 title: "WS handler marking hooks"
-status: pending
+status: complete
 wave: 1
 depends_on: ["01-unseen-idle-state"]
 plan: "plan.md"
@@ -44,4 +44,5 @@ handlers, guarded by dialog-open state and session membership.
 - **Output contract:** summary, files changed, tests run with counts, blockers, risks; update task + plan statuses in the same conversation.
 
 ## Results
-Pending.
+
+Implemented state-transition and turn-completion marker hooks. Handler tests passed.

@@ -71,7 +71,6 @@ export async function openQuickChatWithAgent(page: Page, navigateHome = true): P
 
 export async function sendQuickChatMessage(dialog: Locator, page: Page, text: string) {
   const editor = dialog.locator(".tiptap.ProseMirror");
-  const modifier = process.platform === "darwin" ? "Meta" : "Control";
   // With eager init, the agent boots during picker -> tab transition and the
   // input can briefly toggle disabled while the FE store catches up. Retry the
   // full edit action so fill() cannot race a contenteditable=false flip.
@@ -80,7 +79,7 @@ export async function sendQuickChatMessage(dialog: Locator, page: Page, text: st
     await editor.click({ timeout: 1_000 });
     await editor.fill(text, { timeout: 1_000 });
     await expect(editor).toHaveText(text, { timeout: 1_000 });
-    await editor.press(`${modifier}+Enter`, { timeout: 1_000 });
+    await dialog.getByTestId("submit-message-button").click({ timeout: 1_000 });
     await expect(editor).toHaveText("", { timeout: 2_000 });
   }).toPass({ timeout: 30_000, intervals: [250, 500, 1_000] });
 }

@@ -1,7 +1,7 @@
 ---
 id: "04-idle-dot-e2e"
 title: "Idle dot E2E"
-status: pending
+status: complete
 wave: 3
 depends_on: ["02-ws-marking-hooks", "03-entry-point-dots"]
 plan: "plan.md"
@@ -46,4 +46,6 @@ Quick Chat entry points.
 - **Output contract:** summary, files changed, commands + outcomes, blockers, risks; update task + plan statuses in the same conversation.
 
 ## Results
-Pending.
+
+Added desktop, tablet, mobile-header, and mobile task-switcher lifecycle coverage. Chromium
+and mobile-chrome targeted E2E runs passed.

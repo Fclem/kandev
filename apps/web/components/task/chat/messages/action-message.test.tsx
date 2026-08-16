@@ -10,8 +10,6 @@ import {
   type TaskSessionState,
 } from "@/lib/types/http";
 import type { AppState } from "@/lib/state/store";
-const TEST_SESSION_ID = "sess-1";
-const TEST_TASK_ID = "task-1";
 
 const requestMock = vi.fn().mockResolvedValue({});
 const getWebSocketClientMock = vi.fn<() => { request: typeof requestMock } | null>(() => ({
@@ -34,6 +32,9 @@ const RECOVERY_MESSAGE = "Agent encountered an error";
 const RESUME_LABEL = "Resume session";
 const RESUME_TEST_ID = "recovery-resume-button";
 const STALL_CANCEL_TEST_ID = "stall-cancel-turn-button";
+const TEST_SESSION_ID = "sess-1";
+const TEST_TASK_ID = "task-1";
+const SESSION_RECOVER_METHOD = "session.recover";
 
 function retryMessage(overrides: Partial<Message> = {}): Message {
   return {
@@ -59,7 +60,7 @@ function retryMessage(overrides: Partial<Message> = {}): Message {
           icon: "x",
           test_id: CANCEL_TEST_ID,
           params: {
-            method: "session.recover",
+            method: SESSION_RECOVER_METHOD,
             payload: { task_id: TEST_TASK_ID, session_id: TEST_SESSION_ID, action: "cancel_retry" },
           },
         },
@@ -96,7 +97,7 @@ function recoveryMessage(withParams = false): Message {
           ...(withParams
             ? {
                 params: {
-                  method: "session.recover",
+                  method: SESSION_RECOVER_METHOD,
                   payload: { task_id: TEST_TASK_ID, session_id: TEST_SESSION_ID },
                 },
               }
@@ -137,12 +138,12 @@ function renderAction(
     ? {
         taskSessions: {
           items: {
-            TEST_SESSION_ID: { state: sessionState, error_message: sessionError } as TaskSession,
+            [TEST_SESSION_ID]: { state: sessionState, error_message: sessionError } as TaskSession,
           },
         },
         turns: {
           bySession: {},
-          activeBySession: activeTurnId ? { TEST_SESSION_ID: activeTurnId } : {},
+          activeBySession: activeTurnId ? { [TEST_SESSION_ID]: activeTurnId } : {},
           loadedBySession: {},
           reconcileEpochBySession: {},
           settledBoundaryBySession: {},
@@ -201,7 +202,7 @@ describe("ActionMessage — transient retry (warning variant)", () => {
     renderAction(retryMessage(), "WAITING_FOR_INPUT");
     fireEvent.click(screen.getByTestId(CANCEL_TEST_ID));
     await waitFor(() => expect(requestMock).toHaveBeenCalledTimes(1));
-    expect(requestMock).toHaveBeenCalledWith("session.recover", {
+    expect(requestMock).toHaveBeenCalledWith(SESSION_RECOVER_METHOD, {
       task_id: TEST_TASK_ID,
       session_id: TEST_SESSION_ID,
       action: "cancel_retry",
@@ -463,6 +464,57 @@ describe("ActionMessage — provider quota recovery", () => {
 
     expect(screen.getByTestId("provider-quota-recovery")).toBeTruthy();
     expect(screen.getByText(/when the provider makes capacity available/i)).toBeTruthy();
+  });
+});
+
+describe("ActionMessage — managed npm runtime recovery", () => {
+  it("renders one localized retry action with collapsed technical details", async () => {
+    renderAction(
+      retryMessage({
+        content: "managed runtime failed",
+        metadata: {
+          variant: "error",
+          recovery_actions: true,
+          failure_kind: "managed_runtime_npm_resolution",
+          error_output: "npm error code ETARGET\nnpm error notarget No matching version found",
+          actions: [
+            {
+              type: "ws_request",
+              label: "backend label is ignored",
+              test_id: "managed-runtime-npm-retry-button",
+              params: {
+                method: SESSION_RECOVER_METHOD,
+                payload: {
+                  task_id: TEST_TASK_ID,
+                  session_id: TEST_SESSION_ID,
+                  action: "runtime_retry",
+                },
+              },
+            },
+          ],
+        },
+      } as Partial<Message>),
+      "WAITING_FOR_INPUT",
+    );
+
+    const card = screen.getByTestId("managed-runtime-npm-recovery");
+    expect(card.textContent).toContain("npm could not prepare the runtime");
+    expect(card.textContent).toContain("Kandev refreshed package data");
+    expect(card.textContent).not.toMatch(/ACP/i);
+    expect(screen.getByText(TECHNICAL_DETAILS).closest("details")?.open).toBe(false);
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByTestId("managed-runtime-npm-retry-button").textContent).toContain(
+      "Retry runtime",
+    );
+
+    fireEvent.click(screen.getByTestId("managed-runtime-npm-retry-button"));
+    await waitFor(() =>
+      expect(requestMock).toHaveBeenCalledWith(SESSION_RECOVER_METHOD, {
+        task_id: TEST_TASK_ID,
+        session_id: TEST_SESSION_ID,
+        action: "runtime_retry",
+      }),
+    );
   });
 });
 

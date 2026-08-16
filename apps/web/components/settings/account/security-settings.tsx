@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import { CardContent } from "@kandev/ui/card";
 import { Input } from "@kandev/ui/input";
+import { Label } from "@kandev/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kandev/ui/select";
 import { Spinner } from "@kandev/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kandev/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { Badge } from "@kandev/ui/badge";
 import { IconDevices, IconKey } from "@tabler/icons-react";
 import { ApiError } from "@/lib/api/client";
@@ -17,10 +20,21 @@ import {
   type AuthSession,
 } from "@/lib/api/domains/auth-api";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { useSettingsTargetRegistration } from "@/components/settings/settings-target-provider";
 import { ACCOUNT_SETTINGS_TARGETS } from "@/lib/settings-discovery/catalog/account";
-import { formatDateTime } from "@/lib/i18n/formats";
+import { formatDateTime, formatRelativeTime } from "@/lib/i18n/formats";
 import { SettingsCardHeader } from "@/components/settings/settings-card-header";
 import { SettingsErrorText, SettingsFieldLabel } from "@/components/settings/settings-typography";
+import { useNow } from "@/hooks/use-now";
+import { useAppStore, useAppStoreApi } from "@/components/state-provider";
+import { createQueuedUserSettingsSyncWithResponse } from "@/lib/user-settings-sync";
+import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
+import { toast } from "@/lib/toast/sonner";
+import type { LastSeenDisplay } from "@/lib/types/http";
+
+const syncLastSeenDisplay = createQueuedUserSettingsSyncWithResponse<LastSeenDisplay>(
+  (lastSeenDisplay) => ({ last_seen_display: lastSeenDisplay }),
+);
 
 function ChangePasswordCard() {
   const { t } = useTranslation();
@@ -132,9 +146,108 @@ function useSessionsList() {
   return { sessions, loaded, error, reload };
 }
 
+function parseLastSeenAt(lastSeenAt: string): Date | null {
+  const parsed = new Date(lastSeenAt);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function LastSeenCell({ lastSeenAt, display }: { lastSeenAt: string; display: LastSeenDisplay }) {
+  const absolute = useMemo(() => parseLastSeenAt(lastSeenAt), [lastSeenAt]);
+
+  if (!absolute) {
+    // Guard formatDateTime, which throws RangeError on invalid dates.
+    return <TableCell className="text-xs" data-testid="last-seen-empty" />;
+  }
+  if (display === "absolute") {
+    return <TableCell className="text-xs">{formatDateTime(absolute)}</TableCell>;
+  }
+  return <RelativeLastSeenCell lastSeenAt={absolute} />;
+}
+
+function RelativeLastSeenCell({ lastSeenAt }: { lastSeenAt: Date }) {
+  const now = useNow(30_000);
+  const absolute = formatDateTime(lastSeenAt);
+  return (
+    <TableCell className="text-xs">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            tabIndex={0}
+            title={absolute}
+            aria-label={absolute}
+            className="cursor-default rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="last-seen-relative"
+          >
+            {formatRelativeTime(lastSeenAt, now)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{absolute}</TooltipContent>
+      </Tooltip>
+    </TableCell>
+  );
+}
+
+function LastSeenDisplaySelect({
+  value,
+  onChange,
+}: {
+  value: LastSeenDisplay;
+  onChange: (value: LastSeenDisplay) => void;
+}) {
+  const { t } = useTranslation();
+  const registerTarget = useSettingsTargetRegistration(ACCOUNT_SETTINGS_TARGETS.lastSeenDisplay);
+  return (
+    <div ref={registerTarget} className="space-y-2" data-testid="last-seen-display-control">
+      <Label htmlFor="last-seen-display">{t("account:lastSeenDisplay")}</Label>
+      <Select value={value} onValueChange={(next) => onChange(next as LastSeenDisplay)}>
+        <SelectTrigger
+          id="last-seen-display"
+          data-testid="last-seen-display-select"
+          className="min-h-11 cursor-pointer"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="absolute" className="min-h-11">
+            {t("account:absoluteTime")}
+          </SelectItem>
+          <SelectItem value="relative" className="min-h-11">
+            {t("account:relativeTime")}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">{t("account:lastSeenDisplayDescription")}</p>
+    </div>
+  );
+}
+
 function SessionsCard() {
   const { t } = useTranslation();
   const { sessions, loaded, error, reload } = useSessionsList();
+  const savedDisplay = useAppStore((state) => state.userSettings.lastSeenDisplay);
+  const store = useAppStoreApi();
+  const [optimisticDisplay, setOptimisticDisplay] = useState<LastSeenDisplay | null>(null);
+  const latestRevision = useRef(0);
+  const display = optimisticDisplay ?? savedDisplay;
+
+  const onDisplayChange = useCallback(
+    (next: LastSeenDisplay) => {
+      const revision = ++latestRevision.current;
+      setOptimisticDisplay(next);
+      void syncLastSeenDisplay(next)
+        .then((response) => {
+          const state = store.getState();
+          state.setUserSettings(mapUserSettingsResponse(response, state.userSettings));
+          if (latestRevision.current === revision) setOptimisticDisplay(null);
+        })
+        .catch(() => {
+          if (latestRevision.current !== revision) return;
+          setOptimisticDisplay(null);
+          toast.error(t("account:failedToSaveLastSeenDisplay"));
+        });
+    },
+    [store, t],
+  );
 
   const onRevoke = async (id: string) => {
     await revokeSession(id);
@@ -163,45 +276,48 @@ function SessionsCard() {
           </div>
         )}
         {loaded && sessions.length > 0 && (
-          <Table data-testid="account-sessions-table">
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("account:device")}</TableHead>
-                <TableHead>{t("account:ipAddress")}</TableHead>
-                <TableHead>{t("account:lastSeen")}</TableHead>
-                <TableHead className="text-right">{t("account:actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sessions.map((session) => (
-                <TableRow key={session.id} data-testid="account-sessions-row">
-                  <TableCell className="text-xs">
-                    {session.user_agent}
-                    {session.current && (
-                      <Badge variant="default" className="ml-2 text-[10px]">
-                        {t("account:thisDevice")}
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs">{session.ip}</TableCell>
-                  <TableCell className="text-xs">{formatDateTime(session.last_seen_at)}</TableCell>
-                  <TableCell className="text-right">
-                    {!session.current && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="cursor-pointer text-destructive"
-                        onClick={() => void onRevoke(session.id)}
-                        data-testid="account-sessions-revoke"
-                      >
-                        {t("account:signOut")}
-                      </Button>
-                    )}
-                  </TableCell>
+          <>
+            <LastSeenDisplaySelect value={display} onChange={onDisplayChange} />
+            <Table data-testid="account-sessions-table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("account:device")}</TableHead>
+                  <TableHead>{t("account:ipAddress")}</TableHead>
+                  <TableHead>{t("account:lastSeen")}</TableHead>
+                  <TableHead className="text-right">{t("account:actions")}</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {sessions.map((session) => (
+                  <TableRow key={session.id} data-testid="account-sessions-row">
+                    <TableCell className="text-xs">
+                      {session.user_agent}
+                      {session.current && (
+                        <Badge variant="default" className="ml-2 text-[10px]">
+                          {t("account:thisDevice")}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">{session.ip}</TableCell>
+                    <LastSeenCell lastSeenAt={session.last_seen_at} display={display} />
+                    <TableCell className="text-right">
+                      {!session.current && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="cursor-pointer text-destructive"
+                          onClick={() => void onRevoke(session.id)}
+                          data-testid="account-sessions-revoke"
+                        >
+                          {t("account:signOut")}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </>
         )}
       </CardContent>
     </SettingsCard>

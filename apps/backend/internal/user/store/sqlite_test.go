@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
-	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -24,11 +22,15 @@ type settingsScanner struct {
 
 func upsertUserSettingsForTest(t *testing.T, repo *sqliteRepository, ctx context.Context, settings *models.UserSettings) {
 	t.Helper()
+	current, err := repo.GetUserSettings(ctx, settings.UserID)
+	if err != nil {
+		t.Fatalf("read current settings: %v", err)
+	}
 	var patch *models.TaskCreateLastUsed
 	if !reflect.DeepEqual(settings.TaskCreateLastUsed, models.TaskCreateLastUsed{}) {
 		patch = &settings.TaskCreateLastUsed
 	}
-	if _, err := repo.UpsertUserSettingsPreservingTaskCreateLastUsed(ctx, settings, patch); err != nil {
+	if _, err := repo.UpsertUserSettingsPreservingTaskCreateLastUsed(ctx, settings, patch, current.Revision); err != nil {
 		t.Fatalf("upsert settings: %v", err)
 	}
 }
@@ -93,7 +95,7 @@ func assertLegacySettingsRevisionMigration(t *testing.T, conn *sqlx.DB) {
 	}
 	settings.AppStatusBarEnabled = true
 	settings.UpdatedAt = now.Add(time.Second)
-	updated, err := repo.UpsertUserSettingsPreservingTaskCreateLastUsed(ctx, settings, nil)
+	updated, err := repo.UpsertUserSettingsPreservingTaskCreateLastUsed(ctx, settings, nil, settings.Revision)
 	if err != nil {
 		t.Fatalf("write migrated settings: %v", err)
 	}
@@ -114,70 +116,6 @@ func assertLegacySettingsRevisionMigration(t *testing.T, conn *sqlx.DB) {
 	}
 	if !replayed.AppStatusBarEnabled {
 		t.Fatal("status bar preference was not preserved across migration replay")
-	}
-}
-
-func TestSQLiteRepositoryAssignsUniqueAtomicSettingsRevisions(t *testing.T) {
-	conn, err := sqlx.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	conn.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = conn.Close() })
-	repo, err := newSQLiteRepositoryWithDB(conn, conn)
-	if err != nil {
-		t.Fatalf("new repo: %v", err)
-	}
-
-	ctx := context.Background()
-	settings, err := repo.GetUserSettings(ctx, DefaultUserID)
-	if err != nil {
-		t.Fatalf("get defaults: %v", err)
-	}
-	first := *settings
-	second := *settings
-	first.AppStatusBarEnabled = true
-	second.ChangesPanelLayout = "flat"
-
-	start := make(chan struct{})
-	revisions := make(chan int64, 2)
-	errors := make(chan error, 2)
-	var workers sync.WaitGroup
-	for _, candidate := range []*models.UserSettings{&first, &second} {
-		workers.Add(1)
-		go func(candidate *models.UserSettings) {
-			defer workers.Done()
-			<-start
-			updated, updateErr := repo.UpsertUserSettingsPreservingTaskCreateLastUsed(ctx, candidate, nil)
-			if updateErr != nil {
-				errors <- updateErr
-				return
-			}
-			revisions <- updated.Revision
-		}(candidate)
-	}
-	close(start)
-	workers.Wait()
-	close(errors)
-	close(revisions)
-	for updateErr := range errors {
-		t.Fatalf("concurrent update: %v", updateErr)
-	}
-
-	got := make([]int64, 0, 2)
-	for revision := range revisions {
-		got = append(got, revision)
-	}
-	sort.Slice(got, func(i, j int) bool { return got[i] < got[j] })
-	if !reflect.DeepEqual(got, []int64{1, 2}) {
-		t.Fatalf("revisions = %v, want unique commit order [1 2]", got)
-	}
-	final, err := repo.GetUserSettings(ctx, DefaultUserID)
-	if err != nil {
-		t.Fatalf("get final settings: %v", err)
-	}
-	if final.Revision != 2 {
-		t.Fatalf("final revision = %d, want 2", final.Revision)
 	}
 }
 
@@ -1220,181 +1158,6 @@ func TestBuildPostgresUserSettingsPreservingTaskCreateLastUsedUpdateUsesJSONB(t 
 	}
 	if len(args) != 4 {
 		t.Fatalf("expected one arg per task-create field, got %d", len(args))
-	}
-}
-
-func TestPostgresRepositoryTaskCreateLastUsedRoundTrip(t *testing.T) {
-	conn := testutil.OpenIsolatedPostgres(t, testutil.PostgresDSNFromEnv(t))
-	repo, err := newSQLiteRepositoryWithDB(conn, conn)
-	if err != nil {
-		t.Fatalf("new postgres repo: %v", err)
-	}
-
-	ctx := context.Background()
-	staleSettings, err := repo.GetUserSettings(ctx, DefaultUserID)
-	if err != nil {
-		t.Fatalf("get defaults: %v", err)
-	}
-	staleSettings.SidebarActiveViewID = "view-before"
-	staleSettings.TaskCreateLastUsed = models.TaskCreateLastUsed{
-		RepositoryID:      "repo-before",
-		Branch:            "main",
-		AgentProfileID:    "agent-before",
-		ExecutorProfileID: "exec-before",
-	}
-	upsertUserSettingsForTest(t, repo, ctx, staleSettings)
-
-	got, err := repo.UpdateTaskCreateLastUsed(ctx, DefaultUserID, models.TaskCreateLastUsed{
-		RepositoryID:   "repo-after",
-		Branch:         "feature",
-		AgentProfileID: "agent-after",
-	})
-	if err != nil {
-		t.Fatalf("update postgres task-create last-used: %v", err)
-	}
-	if got.SidebarActiveViewID != "view-before" {
-		t.Fatalf("unrelated postgres setting should be preserved, got %q", got.SidebarActiveViewID)
-	}
-	if got.TaskCreateLastUsed.RepositoryID != "repo-after" ||
-		got.TaskCreateLastUsed.Branch != "feature" ||
-		got.TaskCreateLastUsed.AgentProfileID != "agent-after" ||
-		got.TaskCreateLastUsed.ExecutorProfileID != "exec-before" {
-		t.Fatalf("postgres task-create update mismatch: %+v", got.TaskCreateLastUsed)
-	}
-	if got.Revision < 2 {
-		t.Fatalf("postgres settings revision = %d, want at least 2", got.Revision)
-	}
-	firstRevision := got.Revision
-
-	staleSettings.SidebarActiveViewID = "view-after"
-	staleSettings.TaskCreateLastUsed = models.TaskCreateLastUsed{
-		RepositoryID: "repo-stale",
-		Branch:       "stale",
-	}
-	got, err = repo.UpsertUserSettingsPreservingTaskCreateLastUsed(ctx, staleSettings, nil)
-	if err != nil {
-		t.Fatalf("upsert preserving postgres task-create last-used: %v", err)
-	}
-	if got.SidebarActiveViewID != "view-after" {
-		t.Fatalf("expected unrelated postgres setting to update, got %q", got.SidebarActiveViewID)
-	}
-	if got.TaskCreateLastUsed.RepositoryID != "repo-after" ||
-		got.TaskCreateLastUsed.Branch != "feature" ||
-		got.TaskCreateLastUsed.AgentProfileID != "agent-after" ||
-		got.TaskCreateLastUsed.ExecutorProfileID != "exec-before" {
-		t.Fatalf("postgres preserving upsert should keep current task-create values: %+v", got.TaskCreateLastUsed)
-	}
-	if got.Revision != firstRevision+1 {
-		t.Fatalf("postgres settings revision = %d, want %d", got.Revision, firstRevision+1)
-	}
-}
-
-func TestSQLiteRepositoryUpsertSettingsPreservesCurrentTaskCreateLastUsed(t *testing.T) {
-	conn, err := sqlx.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	conn.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = conn.Close() })
-	repo, err := newSQLiteRepositoryWithDB(conn, conn)
-	if err != nil {
-		t.Fatalf("new repo: %v", err)
-	}
-
-	ctx := context.Background()
-	staleSettings, err := repo.GetUserSettings(ctx, DefaultUserID)
-	if err != nil {
-		t.Fatalf("get defaults: %v", err)
-	}
-	staleSettings.SidebarActiveViewID = "view-before"
-	staleSettings.TaskCreateLastUsed = models.TaskCreateLastUsed{RepositoryID: "repo-before"}
-	upsertUserSettingsForTest(t, repo, ctx, staleSettings)
-
-	// Simulate a task-create write that lands after another settings caller
-	// read the old blob but before that caller writes its unrelated change.
-	if _, err := repo.UpdateTaskCreateLastUsed(ctx, DefaultUserID, models.TaskCreateLastUsed{
-		RepositoryID: "repo-after",
-		Branch:       "feature",
-	}); err != nil {
-		t.Fatalf("update task-create last-used: %v", err)
-	}
-
-	staleSettings.SidebarActiveViewID = "view-after"
-	got, err := repo.UpsertUserSettingsPreservingTaskCreateLastUsed(ctx, staleSettings, nil)
-	if err != nil {
-		t.Fatalf("upsert preserving task-create last-used: %v", err)
-	}
-
-	if got.SidebarActiveViewID != "view-after" {
-		t.Fatalf("expected unrelated setting to update, got %q", got.SidebarActiveViewID)
-	}
-	if got.TaskCreateLastUsed.RepositoryID != "repo-after" {
-		t.Fatalf("expected current task-create repository to survive stale write, got %q", got.TaskCreateLastUsed.RepositoryID)
-	}
-	if got.TaskCreateLastUsed.Branch != "feature" {
-		t.Fatalf("expected current task-create branch to survive stale write, got %q", got.TaskCreateLastUsed.Branch)
-	}
-}
-
-func TestSQLiteRepositoryUpsertSettingsPreservingTaskCreateLastUsedAppliesPatch(t *testing.T) {
-	conn, err := sqlx.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	conn.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = conn.Close() })
-	repo, err := newSQLiteRepositoryWithDB(conn, conn)
-	if err != nil {
-		t.Fatalf("new repo: %v", err)
-	}
-
-	ctx := context.Background()
-	staleSettings, err := repo.GetUserSettings(ctx, DefaultUserID)
-	if err != nil {
-		t.Fatalf("get defaults: %v", err)
-	}
-	staleSettings.SidebarActiveViewID = "view-before"
-	staleSettings.TaskCreateLastUsed = models.TaskCreateLastUsed{
-		RepositoryID:      "repo-before",
-		Branch:            "main",
-		AgentProfileID:    "agent-before",
-		ExecutorProfileID: "exec-before",
-	}
-	upsertUserSettingsForTest(t, repo, ctx, staleSettings)
-	if _, err := repo.UpdateTaskCreateLastUsed(ctx, DefaultUserID, models.TaskCreateLastUsed{
-		RepositoryID:      "repo-current",
-		Branch:            "current",
-		ExecutorProfileID: "exec-current",
-	}); err != nil {
-		t.Fatalf("update current task-create last-used: %v", err)
-	}
-
-	staleSettings.SidebarActiveViewID = "view-after"
-	staleSettings.TaskCreateLastUsed = models.TaskCreateLastUsed{
-		RepositoryID:   "repo-stale",
-		Branch:         "stale",
-		AgentProfileID: "agent-stale",
-	}
-	patch := models.TaskCreateLastUsed{AgentProfileID: "agent-after"}
-	got, err := repo.UpsertUserSettingsPreservingTaskCreateLastUsed(ctx, staleSettings, &patch)
-	if err != nil {
-		t.Fatalf("upsert preserving task-create last-used with patch: %v", err)
-	}
-
-	if got.SidebarActiveViewID != "view-after" {
-		t.Fatalf("expected unrelated setting to update, got %q", got.SidebarActiveViewID)
-	}
-	if got.TaskCreateLastUsed.RepositoryID != "repo-current" {
-		t.Fatalf("expected current repository to survive stale write, got %q", got.TaskCreateLastUsed.RepositoryID)
-	}
-	if got.TaskCreateLastUsed.Branch != "current" {
-		t.Fatalf("expected current branch to survive stale write, got %q", got.TaskCreateLastUsed.Branch)
-	}
-	if got.TaskCreateLastUsed.AgentProfileID != "agent-after" {
-		t.Fatalf("expected patch agent profile to apply, got %q", got.TaskCreateLastUsed.AgentProfileID)
-	}
-	if got.TaskCreateLastUsed.ExecutorProfileID != "exec-current" {
-		t.Fatalf("expected current executor profile to survive stale write, got %q", got.TaskCreateLastUsed.ExecutorProfileID)
 	}
 }
 

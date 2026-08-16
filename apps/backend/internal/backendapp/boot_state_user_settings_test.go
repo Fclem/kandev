@@ -137,6 +137,30 @@ func TestMapUserSettingsStateNormalizesLspStatusLocation(t *testing.T) {
 	}
 }
 
+func TestMapUserSettingsStateNormalizesLastSeenDisplay(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "relative is preserved", value: usermodels.LastSeenDisplayRelative, want: usermodels.LastSeenDisplayRelative},
+		{name: "empty uses absolute", value: "", want: usermodels.LastSeenDisplayAbsolute},
+		{name: "unknown uses absolute", value: "future_value", want: usermodels.LastSeenDisplayAbsolute},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := mapUserSettingsState(userdto.UserSettingsResponse{
+				Settings: userdto.UserSettingsDTO{LastSeenDisplay: tt.value},
+			}, "workspace-1")
+
+			if got := state["lastSeenDisplay"]; got != tt.want {
+				t.Fatalf("lastSeenDisplay = %#v, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMapUserSettingsStateIncludesSystemMetricsDisplayPreference(t *testing.T) {
 	state := mapUserSettingsState(userdto.UserSettingsResponse{
 		Settings: userdto.UserSettingsDTO{SystemMetricsDisplay: usermodels.SystemMetricsDisplaySettings{

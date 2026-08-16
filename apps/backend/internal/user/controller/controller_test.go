@@ -38,6 +38,7 @@ func (r *settingsRepository) UpsertUserSettingsPreservingTaskCreateLastUsed(
 	_ context.Context,
 	settings *models.UserSettings,
 	_ *models.TaskCreateLastUsed,
+	_ int64,
 ) (*models.UserSettings, error) {
 	copy := *settings
 	r.settings = &copy
@@ -113,6 +114,28 @@ func TestUpdateUserSettingsMapsStartupPage(t *testing.T) {
 	}
 	if response.Settings.StartupPage != want {
 		t.Fatalf("StartupPage = %q, want %q", response.Settings.StartupPage, want)
+	}
+}
+
+func TestUpdateUserSettingsMapsLastSeenDisplay(t *testing.T) {
+	log, err := logger.NewFromZap(zap.NewNop())
+	if err != nil {
+		t.Fatalf("logger.NewFromZap: %v", err)
+	}
+	repo := &settingsRepository{settings: &models.UserSettings{
+		LastSeenDisplay: models.LastSeenDisplayAbsolute,
+	}}
+	controller := NewController(service.NewService(repo, nil, log))
+	want := models.LastSeenDisplayRelative
+
+	response, err := controller.UpdateUserSettings(context.Background(), dto.UpdateUserSettingsRequest{
+		LastSeenDisplay: &want,
+	})
+	if err != nil {
+		t.Fatalf("UpdateUserSettings: %v", err)
+	}
+	if response.Settings.LastSeenDisplay != want {
+		t.Fatalf("LastSeenDisplay = %q, want %q", response.Settings.LastSeenDisplay, want)
 	}
 }
 

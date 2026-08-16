@@ -303,6 +303,33 @@ func TestFromUserSettingsIncludesNormalizedStartupPage(t *testing.T) {
 	}
 }
 
+func TestFromUserSettingsIncludesNormalizedLastSeenDisplay(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "relative", value: models.LastSeenDisplayRelative, want: models.LastSeenDisplayRelative},
+		{name: "unknown defaults to absolute", value: "future_value", want: models.LastSeenDisplayAbsolute},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := json.Marshal(FromUserSettings(&models.UserSettings{LastSeenDisplay: tt.value}))
+			if err != nil {
+				t.Fatalf("marshal DTO: %v", err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(raw, &payload); err != nil {
+				t.Fatalf("decode DTO: %v", err)
+			}
+			if got := payload["last_seen_display"]; got != tt.want {
+				t.Fatalf("last_seen_display = %#v, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestUpdateUserSettingsRequestStartupPagePatchSemantics(t *testing.T) {
 	t.Run("omitted value stays nil", func(t *testing.T) {
 		var req UpdateUserSettingsRequest

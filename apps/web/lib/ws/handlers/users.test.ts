@@ -103,6 +103,46 @@ describe("status bar visibility websocket sync", () => {
   });
 });
 
+describe("last seen display websocket sync", () => {
+  it("applies a relative value and normalizes unknown values", () => {
+    const store = makeStore();
+    expect(store.getState().userSettings.lastSeenDisplay).toBe("absolute");
+
+    registerUsersHandlers(store)["user.settings.updated"]?.(
+      userSettingsMessage({ last_seen_display: "relative" }),
+    );
+    expect(store.getState().userSettings.lastSeenDisplay).toBe("relative");
+
+    registerUsersHandlers(store)["user.settings.updated"]?.(
+      userSettingsMessage({
+        last_seen_display: "unexpected",
+      } as unknown as Partial<BackendMessageMap["user.settings.updated"]["payload"]>),
+    );
+    expect(store.getState().userSettings.lastSeenDisplay).toBe("absolute");
+  });
+
+  it("preserves the current value when omitted", () => {
+    const store = makeStore();
+    store.setState((state) => ({
+      ...state,
+      userSettings: { ...state.userSettings, lastSeenDisplay: "relative" },
+    }));
+    registerUsersHandlers(store)["user.settings.updated"]?.(userSettingsMessage({}));
+    expect(store.getState().userSettings.lastSeenDisplay).toBe("relative");
+  });
+
+  it("ignores older settings revisions", () => {
+    const store = makeStore();
+    store.setState((state) => ({
+      ...state,
+      userSettings: { ...state.userSettings, lastSeenDisplay: "absolute", revision: 2 },
+    }));
+    const handler = registerUsersHandlers(store)["user.settings.updated"];
+    handler?.(userSettingsMessage({ last_seen_display: "relative", revision: 1 }));
+    expect(store.getState().userSettings.lastSeenDisplay).toBe("absolute");
+  });
+});
+
 describe("user settings websocket handler", () => {
   it("updates LSP status location, normalizes unknown values, and preserves omissions", () => {
     const store = makeStore();

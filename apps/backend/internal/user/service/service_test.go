@@ -1754,6 +1754,7 @@ func (r *recordingUserRepository) UpsertUserSettingsPreservingTaskCreateLastUsed
 	_ context.Context,
 	settings *models.UserSettings,
 	patch *models.TaskCreateLastUsed,
+	_ int64,
 ) (*models.UserSettings, error) {
 	r.upsertUserSettingsPreservingLastUsedCalls++
 	settingsCopy := *settings

@@ -10,6 +10,7 @@ import { type UserSettingsState } from "@/lib/state/slices/settings/types";
 import type { SidebarTaskPrefsApi, UserSettings, UserSettingsResponse } from "@/lib/types/http";
 import type {
   LspStatusLocation,
+  LastSeenDisplay,
   MCPTaskAgentProfileDefault,
   StartupPage,
 } from "@/lib/types/http-user-settings";
@@ -77,6 +78,7 @@ export function createDefaultUserSettings(): UserSettingsState {
     terminalFontFamily: null,
     terminalFontSize: null,
     changesPanelLayout: "tree",
+    lastSeenDisplay: "absolute",
     systemMetricsDisplay: { showInTopbar: false, simplified: false },
     appStatusBarEnabled: false,
     appStatusBarOrder: { leftItemIds: [], rightItemIds: [] },
@@ -91,6 +93,10 @@ export function parseTerminalLinkBehavior(value: string | undefined): "new_tab" 
 
 export function parseChangesPanelLayout(value: string | undefined): "flat" | "tree" {
   return value === "flat" ? "flat" : "tree";
+}
+
+export function parseLastSeenDisplay(value: string | undefined): LastSeenDisplay {
+  return value === "relative" ? "relative" : "absolute";
 }
 
 export function parseMCPTaskAgentProfileDefault(
@@ -248,6 +254,7 @@ function buildAppearanceFields(s: UserSettingsData, current: UserSettingsState) 
       s.release_notes_last_seen_version,
       current.releaseNotesLastSeenVersion,
     ),
+    lastSeenDisplay: mapDefined(s.last_seen_display, current.lastSeenDisplay, parseLastSeenDisplay),
   };
 }
 

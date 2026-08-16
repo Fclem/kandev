@@ -57,15 +57,22 @@ export async function ensureSessionTurnsLoaded(
       // request was in flight.
       const state = store.getState();
       if (!state.taskSessions.items[sessionId]) return;
-      // Reconcile each REST row against the store's existing row (if any) by
-      // per-turn freshness. Two directions matter:
+      // Reconcile each REST row against the store's existing row (if any).
+      // Two directions matter:
       // - A WS-delivered row can be NEWER than this REST snapshot (completion
       //   delivered while the request was in flight); merging it would
       //   clobber newer live fields via addTurn's Object.assign.
       // - A WS-delivered row can be OLDER (the matching completion event was
       //   missed during a disconnect window), leaving an incomplete start
       //   snapshot; the REST full history is the fix and must win.
-      // `updated_at` is the per-turn revision on both channels.
+      // Completion state takes precedence over timestamps: WS rows carry
+      // RFC3339Nano fractions while the REST DTO truncates to whole seconds,
+      // so a completion within the same second can look equal or older — but
+      // a completed REST row is always more advanced than an incomplete WS
+      // row for the same turn, and an existing completion must never be
+      // rolled back. Only when the completion states agree do we fall back
+      // to `updated_at`; a missing/invalid timestamp is treated as stale
+      // (never newest) so malformed rows cannot clobber live data.
       const existingById = new Map(
         (state.turns.bySession[sessionId] ?? []).map((turn) => [turn.id, turn]),
       );
@@ -75,10 +82,17 @@ export async function ensureSessionTurnsLoaded(
           store.getState().addTurn(turn);
           continue;
         }
-        const existingUpdated = existing.updated_at ? Date.parse(existing.updated_at) : 0;
-        const restUpdated = turn.updated_at
-          ? Date.parse(turn.updated_at)
-          : Number.POSITIVE_INFINITY;
+        const restCompleted = !!turn.completed_at;
+        const existingCompleted = !!existing.completed_at;
+        if (restCompleted && !existingCompleted) {
+          store.getState().addTurn(turn);
+          continue;
+        }
+        if (existingCompleted && !restCompleted) {
+          continue;
+        }
+        const existingUpdated = existing.updated_at ? Date.parse(existing.updated_at) : -Infinity;
+        const restUpdated = turn.updated_at ? Date.parse(turn.updated_at) : -Infinity;
         if (restUpdated > existingUpdated) {
           store.getState().addTurn(turn);
         }

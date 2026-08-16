@@ -32,6 +32,9 @@ type TurnStoreHarness = TurnStoreMock & {
 const SESSION_ID = "sess-1";
 const EMPTY_TURNS = { turns: [], total: 0 };
 const BASE_TIMESTAMP = "2026-08-10T10:00:00Z";
+const COMPLETION_AT = "2026-08-10T10:55:00Z";
+const LIVE_UPDATED_AT = "2026-08-10T11:00:00Z";
+const SAME_SECOND_COMPLETION = "2026-08-10T10:05:00Z";
 
 /** Builds a REST-shaped turn row; overrides win for race-specific fields. */
 function makeTurn(id: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -45,6 +48,18 @@ function makeTurn(id: string, overrides: Record<string, unknown> = {}): Record<s
     updated_at: BASE_TIMESTAMP,
     ...overrides,
   };
+}
+
+/** Returns a REST promise the test resolves manually (for race timing). */
+function deferredTurnsResponse(): {
+  promise: Promise<{ turns: unknown[]; total: number }>;
+  resolve: (value: { turns: unknown[]; total: number }) => void;
+} {
+  let resolve!: (value: { turns: unknown[]; total: number }) => void;
+  const promise = new Promise<{ turns: unknown[]; total: number }>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
 }
 
 /** Mirrors the store's addTurn upsert (Object.assign, completed_at preserved). */
@@ -145,12 +160,8 @@ describe("ensureSessionTurnsLoaded — hydration and marker", () => {
 
 describe("ensureSessionTurnsLoaded — guards and races", () => {
   it("does not resurrect turns after the session was removed mid-flight", async () => {
-    let resolveList!: (value: { turns: unknown[]; total: number }) => void;
-    mockListSessionTurns.mockReturnValue(
-      new Promise<{ turns: unknown[]; total: number }>((resolve) => {
-        resolveList = resolve;
-      }),
-    );
+    const { promise, resolve: resolveList } = deferredTurnsResponse();
+    mockListSessionTurns.mockReturnValue(promise);
     const store = makeStore();
 
     const pending = ensureSessionTurnsLoaded(SESSION_ID, store as never);
@@ -195,12 +206,8 @@ describe("ensureSessionTurnsLoaded — REST/WS reconciliation", () => {
     // store with an incomplete row for a turn the REST full history has as
     // completed. The hydration must merge the newer REST row instead of
     // skipping the ID as "already present".
-    let resolveList!: (value: { turns: unknown[]; total: number }) => void;
-    mockListSessionTurns.mockReturnValue(
-      new Promise<{ turns: unknown[]; total: number }>((resolve) => {
-        resolveList = resolve;
-      }),
-    );
+    const { promise, resolve: resolveList } = deferredTurnsResponse();
+    mockListSessionTurns.mockReturnValue(promise);
     const store = makeStore();
     // WS start snapshot: no completed_at, older updated_at.
     store.getState().turns.bySession[SESSION_ID] = [
@@ -215,8 +222,8 @@ describe("ensureSessionTurnsLoaded — REST/WS reconciliation", () => {
     resolveList({
       turns: [
         makeTurn("turn-1", {
-          completed_at: "2026-08-10T10:05:00Z",
-          updated_at: "2026-08-10T10:05:00Z",
+          completed_at: SAME_SECOND_COMPLETION,
+          updated_at: SAME_SECOND_COMPLETION,
         }),
       ],
       total: 1,
@@ -224,29 +231,91 @@ describe("ensureSessionTurnsLoaded — REST/WS reconciliation", () => {
     await pending;
 
     const stored = store.getState().turns.bySession[SESSION_ID][0] as Record<string, unknown>;
-    expect(stored.completed_at).toBe("2026-08-10T10:05:00Z");
+    expect(stored.completed_at).toBe(SAME_SECOND_COMPLETION);
     expect(store.addTurn).toHaveBeenCalledWith(expect.objectContaining({ id: "turn-1" }));
+  });
+});
+
+describe("ensureSessionTurnsLoaded — timestamp edge cases", () => {
+  it("applies a completed REST row when timestamps collide after precision truncation", async () => {
+    // WS rows carry RFC3339Nano fractions; the REST DTO truncates to whole
+    // seconds (time.RFC3339). A completion in the same second as the WS start
+    // therefore has a REST updated_at <= the WS row's fractional timestamp.
+    // The completion state, not the colliding timestamp, must decide.
+    const { promise, resolve: resolveList } = deferredTurnsResponse();
+    mockListSessionTurns.mockReturnValue(promise);
+    const store = makeStore();
+    // WS start snapshot with fractional updated_at, no completion.
+    store.getState().turns.bySession[SESSION_ID] = [
+      makeTurn("turn-1", {
+        updated_at: "2026-08-10T10:05:00.123Z",
+        completed_at: undefined,
+      }),
+    ];
+
+    const pending = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+    // REST completion row, updated_at truncated to the same second (<= WS).
+    resolveList({
+      turns: [
+        makeTurn("turn-1", {
+          completed_at: "2026-08-10T10:05:00.456Z",
+          updated_at: SAME_SECOND_COMPLETION,
+        }),
+      ],
+      total: 1,
+    });
+    await pending;
+
+    const stored = store.getState().turns.bySession[SESSION_ID][0] as Record<string, unknown>;
+    expect(stored.completed_at).toBe("2026-08-10T10:05:00.456Z");
+  });
+
+  it("treats a REST row without a timestamp as stale, never newest", async () => {
+    const { promise, resolve: resolveList } = deferredTurnsResponse();
+    mockListSessionTurns.mockReturnValue(promise);
+    const store = makeStore();
+    // Newer live WS row.
+    store.getState().turns.bySession[SESSION_ID] = [
+      makeTurn("turn-1", {
+        updated_at: LIVE_UPDATED_AT,
+        completed_at: COMPLETION_AT,
+        metadata: { runtime_config_snapshot: { model: "newer" } },
+      }),
+    ];
+
+    const pending = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+    // Malformed REST row: no updated_at at all.
+    resolveList({
+      turns: [
+        makeTurn("turn-1", {
+          updated_at: undefined,
+          metadata: { runtime_config_snapshot: { model: "stale" } },
+        }),
+      ],
+      total: 1,
+    });
+    await pending;
+
+    expect(store.addTurn).not.toHaveBeenCalled();
+    const stored = store.getState().turns.bySession[SESSION_ID][0] as Record<string, unknown>;
+    expect(stored.updated_at).toBe(LIVE_UPDATED_AT);
+    expect(stored.completed_at).toBe(COMPLETION_AT);
   });
 
   it("does not clobber live WS turn data with a stale REST snapshot", async () => {
     // WS `session.turn.completed` for turn-1 arrives WHILE the REST request
     // is in flight; the REST response is an older snapshot of the same turn
     // plus the pre-WS history (turn-2). The newer live metadata must survive.
-    let resolveList!: (value: { turns: unknown[]; total: number }) => void;
-    mockListSessionTurns.mockReturnValue(
-      new Promise<{ turns: unknown[]; total: number }>((resolve) => {
-        resolveList = resolve;
-      }),
-    );
+    const { promise, resolve: resolveList } = deferredTurnsResponse();
+    mockListSessionTurns.mockReturnValue(promise);
     const store = makeStore();
-    const liveUpdatedAt = "2026-08-10T11:00:00Z";
 
     const pending = ensureSessionTurnsLoaded(SESSION_ID, store as never);
     // Live WS completion lands while the request is pending: newer row.
     store.getState().turns.bySession[SESSION_ID] = [
       makeTurn("turn-1", {
-        updated_at: liveUpdatedAt,
-        completed_at: "2026-08-10T10:55:00Z",
+        updated_at: LIVE_UPDATED_AT,
+        completed_at: COMPLETION_AT,
         metadata: {
           runtime_config_snapshot: { model: "newer" },
           prompt_usage: { total_tokens: 9 },
@@ -273,8 +342,8 @@ describe("ensureSessionTurnsLoaded — REST/WS reconciliation", () => {
       string,
       unknown
     >;
-    expect(stored.updated_at).toBe(liveUpdatedAt);
-    expect(stored.completed_at).toBe("2026-08-10T10:55:00Z");
+    expect(stored.updated_at).toBe(LIVE_UPDATED_AT);
+    expect(stored.completed_at).toBe(COMPLETION_AT);
     expect(stored.metadata).toEqual({
       runtime_config_snapshot: { model: "newer" },
       prompt_usage: { total_tokens: 9 },

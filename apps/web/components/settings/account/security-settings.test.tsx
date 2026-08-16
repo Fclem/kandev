@@ -9,6 +9,8 @@ import { emitSettingsTargetRequest } from "@/lib/settings-discovery/target";
 import { formatDateTime } from "@/lib/i18n/formats";
 import { ApiError } from "@/lib/api/client";
 import type { AuthSession } from "@/lib/api/domains/auth-api";
+import { registerUsersHandlers } from "@/lib/ws/handlers/users";
+import type { BackendMessageMap } from "@/lib/types/backend";
 import { SecuritySettings } from "./security-settings";
 
 const authApiMocks = vi.hoisted(() => ({
@@ -102,6 +104,30 @@ function patchResponse(overrides: Record<string, unknown> = {}): PatchResponse {
       ...overrides,
     },
   };
+}
+
+function settingsUpdatedMessage(
+  payload: Partial<BackendMessageMap["user.settings.updated"]["payload"]>,
+): BackendMessageMap["user.settings.updated"] {
+  return {
+    type: "notification",
+    action: "user.settings.updated",
+    payload: {
+      user_id: "default-user",
+      workspace_id: "workspace-1",
+      repository_ids: [],
+      ...payload,
+    },
+  };
+}
+
+function dispatchUserSettingsSnapshot(
+  holder: StoreHolder,
+  payload: Partial<BackendMessageMap["user.settings.updated"]["payload"]>,
+) {
+  registerUsersHandlers(holder.current!)["user.settings.updated"]?.(
+    settingsUpdatedMessage(payload),
+  );
 }
 
 function deferredPatch(): {
@@ -224,9 +250,7 @@ describe("Last seen display persistence", () => {
     // An unrelated full snapshot re-asserts the baseline value while the write
     // is still in flight; the optimistic override must survive and still render.
     act(() => {
-      holder
-        .current!.getState()
-        .setUserSettings(makeUserSettings({ lastSeenDisplay: "absolute", revision: 3 }));
+      dispatchUserSettingsSnapshot(holder, { last_seen_display: "absolute", revision: 3 });
     });
     expect(screen.getByTestId(RELATIVE_TEST_ID)).toBeTruthy();
 
@@ -309,9 +333,7 @@ describe("Last seen display queued write ordering", () => {
 
     // Foreign snapshot changes the server baseline while both writes pend.
     act(() => {
-      holder
-        .current!.getState()
-        .setUserSettings(makeUserSettings({ lastSeenDisplay: "relative", revision: 3 }));
+      dispatchUserSettingsSnapshot(holder, { last_seen_display: "relative", revision: 3 });
     });
 
     // Reject A (stale, B is the latest operation): no toast, and B's
@@ -342,11 +364,10 @@ describe("Last seen display write and lifecycle races", () => {
 
     await chooseDisplay(RELATIVE_OPTION); // write in flight (resolves at rev 2)
 
-    // A newer WS snapshot (foreign change at rev 5) lands first.
+    // A newer WS snapshot (foreign change at rev 5) lands first through the
+    // real user.settings.updated handler.
     act(() => {
-      holder
-        .current!.getState()
-        .setUserSettings(makeUserSettings({ lastSeenDisplay: "absolute", revision: 5 }));
+      dispatchUserSettingsSnapshot(holder, { last_seen_display: "absolute", revision: 5 });
     });
 
     // The deferred PATCH response (rev 2) is discarded by the revision guard;

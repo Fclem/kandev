@@ -44,6 +44,12 @@ test.describe.serial("relative last seen (mobile)", () => {
       settings: { last_seen_display?: string };
     };
     const original = originalBody.settings.last_seen_display ?? "absolute";
+    // Pin a known absolute baseline so the relative transition below is a real
+    // persisted change, not a pre-existing value.
+    const baselineRes = await ctx.request.patch(`${backend.baseUrl}/api/v1/user/settings`, {
+      data: { last_seen_display: "absolute" },
+    });
+    expect(baselineRes.ok(), await baselineRes.text()).toBeTruthy();
 
     try {
       const page = await ctx.newPage();
@@ -51,6 +57,7 @@ test.describe.serial("relative last seen (mobile)", () => {
       expect((await page.viewportSize())?.width).toBe(393);
 
       await page.goto(SECURITY_PATH);
+      await expect(page.getByTestId("last-seen-relative")).toHaveCount(0);
 
       const trigger = page.getByTestId("last-seen-display-select");
       await expect(trigger).toBeVisible({ timeout: 15_000 });

@@ -96,6 +96,10 @@ test.describe.serial("relative last seen (desktop)", () => {
     await login(ctxA, backend.baseUrl, ADMIN);
     await login(ctxB, backend.baseUrl, ADMIN);
     const original = await readLastSeenDisplay(ctxA, backend.baseUrl);
+    // Pin a known absolute baseline so tab A's pre-mutation display is
+    // established: the relative assertion below can only pass via a real WS
+    // event, not a stale pre-existing value.
+    await restoreLastSeenDisplay(ctxA, backend.baseUrl, "absolute");
 
     try {
       const pageA = await ctxA.newPage();
@@ -105,9 +109,11 @@ test.describe.serial("relative last seen (desktop)", () => {
       const subscriptionAck = watcher.waitForResponse("user.subscribe");
       await pageA.goto(SECURITY_PATH);
       await subscriptionAck;
+      await expect(pageA.getByTestId("last-seen-relative")).toHaveCount(0);
 
       const pageB = await ctxB.newPage();
       await pageB.goto(SECURITY_PATH);
+      await expect(pageB.getByTestId("last-seen-relative")).toHaveCount(0);
       await pageB.getByTestId("last-seen-display-select").click();
       await pageB.getByRole("option", { name: "Relative time" }).click();
       await expect(pageB.getByTestId("last-seen-relative").first()).toBeVisible({

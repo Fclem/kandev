@@ -84,6 +84,24 @@ describe("parseTurnTimestamp", () => {
     expect(parseTurnTimestamp("2000-02-29T10:00:00Z")).not.toBeNull();
   });
 
+  it("applies UTC offsets in seconds (positive, negative, pre-epoch)", () => {
+    expect(parseTurnTimestamp("2026-01-01T02:00:00+02:00")).toBe(
+      parseTurnTimestamp("2026-01-01T00:00:00Z"),
+    );
+    expect(parseTurnTimestamp("2026-01-01T00:00:00-02:00")).toBe(
+      parseTurnTimestamp("2026-01-01T02:00:00Z"),
+    );
+    expect(parseTurnTimestamp("1969-12-31T22:00:00-02:00")).toBe(
+      parseTurnTimestamp("1970-01-01T00:00:00Z"),
+    );
+  });
+
+  it("rejects fractions longer than 9 digits", () => {
+    // RFC3339Nano caps at 9 fractional digits; a 10-digit fraction would
+    // otherwise overflow into the seconds component.
+    expect(parseTurnTimestamp("2026-01-01T00:00:00.1234567890Z")).toBeNull();
+  });
+
   it("preserves sub-millisecond fraction ordering without rounding", () => {
     // Math.round on the fraction would collapse .9995 onto the next second's
     // epoch; the parser must keep .9995 < .9996 < next second.
@@ -300,6 +318,21 @@ describe("addTurn malformed timestamps", () => {
     );
     expect(store.getState().turns.bySession[SESSION_ID][0].metadata).toEqual({ model: "valid" });
   });
+
+  it("treats an over-precision fraction as stale in a merge", () => {
+    const store = makeStore();
+    store
+      .getState()
+      .addTurn(turn("turn-1", { completed_at: COMPLETED_AT, metadata: { model: "valid" } }));
+    store.getState().addTurn(
+      turn("turn-1", {
+        completed_at: COMPLETED_AT,
+        updated_at: "2026-01-01T00:00:00.1234567890Z",
+        metadata: { model: "overprecise" },
+      }),
+    );
+    expect(store.getState().turns.bySession[SESSION_ID][0].metadata).toEqual({ model: "valid" });
+  });
 });
 
 describe("completeTurn stale guard", () => {
@@ -331,6 +364,23 @@ describe("completeTurn stale guard", () => {
     store
       .getState()
       .completeTurn(SESSION_ID, "turn-1", COMPLETED_AT, { model: "stale" }, COMPLETED_AT);
+
+    const stored = store.getState().turns.bySession[SESSION_ID][0];
+    expect(stored.completed_at).toBe(LATER_AT);
+    expect(stored.metadata).toEqual({ model: "newer" });
+  });
+
+  it("ignores a re-delivered completion without updated_at", () => {
+    const store = makeStore();
+    store.getState().addTurn(
+      turn("turn-1", {
+        completed_at: LATER_AT,
+        updated_at: LATER_AT,
+        metadata: { model: "newer" },
+      }),
+    );
+
+    store.getState().completeTurn(SESSION_ID, "turn-1", COMPLETED_AT, { model: "stale" });
 
     const stored = store.getState().turns.bySession[SESSION_ID][0];
     expect(stored.completed_at).toBe(LATER_AT);

@@ -27,7 +27,7 @@ function validDayForMonth(year: number, month: number, day: number): boolean {
 }
 
 /**
- * Returns the UTC-offset delta in seconds for a matched zone, or null when
+ * Returns the UTC-offset delta in SECONDS for a matched zone, or null when
  * the offset components are out of range.
  */
 function parseOffsetSeconds(
@@ -39,7 +39,7 @@ function parseOffsetSeconds(
   const hour = Number(offsetHourText);
   const minute = Number(offsetMinuteText);
   if (hour > 23 || minute > 59) return null;
-  return (zone.startsWith("-") ? -1 : 1) * (hour * 60 + minute);
+  return (zone.startsWith("-") ? -1 : 1) * (hour * 60 + minute) * 60;
 }
 
 /**
@@ -77,6 +77,9 @@ export function parseTurnTimestamp(value: string | undefined): bigint | null {
   }
   const offsetSeconds = parseOffsetSeconds(match[8], match[9], match[10]);
   if (offsetSeconds === null) return null;
+  // RFC3339Nano caps the fraction at 9 digits; longer fractions would
+  // overflow into the seconds component (padEnd does not cap).
+  if (match[7] !== undefined && match[7].length > 9) return null;
   // setUTCFullYear handles years 0-99 correctly (Date.UTC maps them to
   // 1900+year); the components are validated above, so no normalization can
   // occur here.
@@ -136,14 +139,14 @@ export function buildTurnActions(set: ImmerSet) {
         const turn = draft.turns.bySession[sessionId]?.find((item) => item.id === turnId);
         if (turn) {
           // addTurn already applied the completed payload; only apply the
-          // completion fields here when the event is not provably stale
-          // (equal/older updated_at on an already-completed row, or a
-          // malformed incoming timestamp).
+          // completion fields here when the event is not provably stale.
+          // On an already-completed row, a missing, malformed, or
+          // equal/older `updated_at` is stale — the same null policy as
+          // isNotNewerThan, with an absent incoming timestamp treated as
+          // stale too (the event type always carries updated_at).
           const stale =
-            updatedAt !== undefined &&
-            turn.updated_at !== undefined &&
             turn.completed_at !== undefined &&
-            isNotNewerThan(updatedAt, turn.updated_at);
+            (updatedAt === undefined || isNotNewerThan(updatedAt, turn.updated_at));
           if (!stale) {
             turn.completed_at = completedAt;
             if (metadata) turn.metadata = metadata;

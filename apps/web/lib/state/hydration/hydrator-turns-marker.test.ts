@@ -11,10 +11,40 @@ import type { AppState } from "@/lib/state/store";
 const SESSION_ID = "session-1";
 const BOUNDARY = "2026-01-01T00:00:00Z";
 const FRESH_TURN = "fresh-turn";
+const IDLE_SESSION = { id: SESSION_ID, state: "IDLE", updated_at: BOUNDARY };
+const OLD_TURN = "old-turn";
+const OLD_BOUNDARY = "2025-12-31T00:00:00Z";
 
 function makeAppDraft(): AppState {
   return structuredClone(defaultState) as AppState;
 }
+
+describe("settled boundary seeding ordering", () => {
+  it("clears a stale SSR active marker for a turn before the seeded boundary", () => {
+    // Production SSR payload: settled session + active marker naming a turn
+    // started before the boundary. The marker clear must see the seeded
+    // boundary, or the stale marker survives and drives turn/source UI.
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      hydrateState(
+        draft,
+        {
+          taskSessions: {
+            items: { [SESSION_ID]: IDLE_SESSION },
+          },
+          turns: {
+            activeBySession: { [SESSION_ID]: OLD_TURN },
+            bySession: {
+              [SESSION_ID]: [{ id: OLD_TURN, started_at: OLD_BOUNDARY, completed_at: null }],
+            },
+          },
+        } as unknown as Partial<AppState>,
+        { forceMergeSessionId: SESSION_ID },
+      );
+    });
+    expect(result.turns.activeBySession[SESSION_ID]).toBeNull();
+    expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBe(BOUNDARY);
+  });
+});
 
 describe("settled boundary seeding (production StateHydrator path)", () => {
   it("seeds a boundary from a settled session via hydrateState", () => {
@@ -23,7 +53,7 @@ describe("settled boundary seeding (production StateHydrator path)", () => {
         draft,
         {
           taskSessions: {
-            items: { [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: BOUNDARY } },
+            items: { [SESSION_ID]: IDLE_SESSION },
           },
         } as unknown as Partial<AppState>,
         {},
@@ -46,6 +76,31 @@ describe("settled boundary seeding (production StateHydrator path)", () => {
     });
     expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBeUndefined();
   });
+
+  it.each([
+    ["older valid", OLD_BOUNDARY],
+    ["malformed", "not-a-timestamp"],
+    ["equal", BOUNDARY],
+  ])(
+    "preserves an existing boundary against a %s SSR candidate via hydrateState",
+    (_name, updatedAt) => {
+      const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+        draft.turns.settledBoundaryBySession[SESSION_ID] = BOUNDARY;
+        hydrateState(
+          draft,
+          {
+            taskSessions: {
+              items: {
+                [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: updatedAt },
+              },
+            },
+          } as unknown as Partial<AppState>,
+          {},
+        );
+      });
+      expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBe(BOUNDARY);
+    },
+  );
 });
 
 describe("mergeInitialState — settled SSR sessions seed a boundary", () => {
@@ -53,7 +108,7 @@ describe("mergeInitialState — settled SSR sessions seed a boundary", () => {
     const result = mergeInitialState({
       taskSessions: {
         items: {
-          [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: BOUNDARY },
+          [SESSION_ID]: IDLE_SESSION,
         },
       } as never,
       turns: { bySession: { [SESSION_ID]: [] } } as never,
@@ -77,7 +132,7 @@ describe("mergeInitialState — settled SSR sessions seed a boundary", () => {
     const result = mergeInitialState({
       taskSessions: {
         items: {
-          [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: "2025-12-31T00:00:00Z" },
+          [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: OLD_BOUNDARY },
         },
       } as never,
       turns: {
@@ -152,9 +207,7 @@ describe("hydrateState — turns loadedBySession marker predicates", () => {
           turns: {
             activeBySession: { [SESSION_ID]: "retired-turn" },
             bySession: {
-              [SESSION_ID]: [
-                { id: "retired-turn", started_at: "2025-12-31T00:00:00Z", completed_at: null },
-              ],
+              [SESSION_ID]: [{ id: "retired-turn", started_at: OLD_BOUNDARY, completed_at: null }],
             },
           },
         } as unknown as Partial<AppState>,

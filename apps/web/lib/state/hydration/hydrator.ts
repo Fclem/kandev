@@ -252,6 +252,14 @@ function hydrateSession(
         forceMergeSessionId,
       );
   }
+  // Seed settled boundaries BEFORE the marker merge/clear: the stale-marker
+  // sweep reads the boundary, so a settled SSR session must have it installed
+  // first or a pre-boundary active marker survives (see
+  // clearHydratedRetiredActiveMarkers).
+  if (state.taskSessions) {
+    deepMerge(draft.taskSessions, state.taskSessions);
+    seedSettledSessionBoundaries(draft, state);
+  }
   if (state.turns) {
     if (state.turns.bySession) {
       const preMergeSessions = new Set(Object.keys(draft.turns.bySession));
@@ -272,10 +280,6 @@ function hydrateSession(
       );
       clearHydratedRetiredActiveMarkers(draft, state);
     }
-  }
-  if (state.taskSessions) {
-    deepMerge(draft.taskSessions, state.taskSessions);
-    seedSettledSessionBoundaries(draft, state);
   }
   if (state.taskSessionsByTask) deepMerge(draft.taskSessionsByTask, state.taskSessionsByTask);
   if (state.sessionAgentctl) {

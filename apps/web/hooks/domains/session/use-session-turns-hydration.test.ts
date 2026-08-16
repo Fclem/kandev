@@ -31,6 +31,7 @@ type TurnStoreHarness = TurnStoreMock & {
 
 const SESSION_ID = "sess-1";
 const EMPTY_TURNS = { turns: [], total: 0 };
+const BASE_TIMESTAMP = "2026-08-10T10:00:00Z";
 
 /** Builds a REST-shaped turn row; overrides win for race-specific fields. */
 function makeTurn(id: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -38,12 +39,27 @@ function makeTurn(id: string, overrides: Record<string, unknown> = {}): Record<s
     id,
     session_id: SESSION_ID,
     task_id: "task-1",
-    started_at: "2026-08-10T10:00:00Z",
+    started_at: BASE_TIMESTAMP,
     metadata: { runtime_config_snapshot: { model: "mock-fast" } },
-    created_at: "2026-08-10T10:00:00Z",
-    updated_at: "2026-08-10T10:00:00Z",
+    created_at: BASE_TIMESTAMP,
+    updated_at: BASE_TIMESTAMP,
     ...overrides,
   };
+}
+
+/** Mirrors the store's addTurn upsert (Object.assign, completed_at preserved). */
+function upsertTurn(bySession: Record<string, unknown[]>, turn: Record<string, unknown>): void {
+  const sessionId = turn.session_id as string;
+  const turns = (bySession[sessionId] ??= []);
+  const existing = turns.find((item) => (item as Record<string, unknown>).id === turn.id);
+  if (!existing) {
+    turns.push(turn);
+    return;
+  }
+  const existingRecord = existing as Record<string, unknown>;
+  Object.assign(existingRecord, turn, {
+    completed_at: existingRecord.completed_at ?? turn.completed_at,
+  });
 }
 
 function makeStore(): TurnStoreHarness {
@@ -52,7 +68,9 @@ function makeStore(): TurnStoreHarness {
     sessions: { [SESSION_ID]: { state: "RUNNING" } },
     bySession: {},
   };
-  const addTurn = vi.fn();
+  const addTurn = vi.fn((turn: Record<string, unknown>) => {
+    upsertTurn(state.bySession, turn);
+  });
   const markTurnsLoaded = vi.fn((sid: string) => {
     state.loadedBySession[sid] = true;
   });
@@ -168,37 +186,98 @@ describe("ensureSessionTurnsLoaded — guards and races", () => {
     expect(mockListSessionTurns).not.toHaveBeenCalled();
     expect(store.addTurn).not.toHaveBeenCalled();
   });
+});
+
+describe("ensureSessionTurnsLoaded — REST/WS reconciliation", () => {
+  it("reconciles an older WS start-snapshot with the newer REST completion", async () => {
+    // A `session.turn.started` was delivered but the matching
+    // `session.turn.completed` was missed (disconnect window), leaving the
+    // store with an incomplete row for a turn the REST full history has as
+    // completed. The hydration must merge the newer REST row instead of
+    // skipping the ID as "already present".
+    let resolveList!: (value: { turns: unknown[]; total: number }) => void;
+    mockListSessionTurns.mockReturnValue(
+      new Promise<{ turns: unknown[]; total: number }>((resolve) => {
+        resolveList = resolve;
+      }),
+    );
+    const store = makeStore();
+    // WS start snapshot: no completed_at, older updated_at.
+    store.getState().turns.bySession[SESSION_ID] = [
+      makeTurn("turn-1", {
+        updated_at: BASE_TIMESTAMP,
+        completed_at: undefined,
+      }),
+    ];
+
+    const pending = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+    // REST resolves with the completed row (newer updated_at).
+    resolveList({
+      turns: [
+        makeTurn("turn-1", {
+          completed_at: "2026-08-10T10:05:00Z",
+          updated_at: "2026-08-10T10:05:00Z",
+        }),
+      ],
+      total: 1,
+    });
+    await pending;
+
+    const stored = store.getState().turns.bySession[SESSION_ID][0] as Record<string, unknown>;
+    expect(stored.completed_at).toBe("2026-08-10T10:05:00Z");
+    expect(store.addTurn).toHaveBeenCalledWith(expect.objectContaining({ id: "turn-1" }));
+  });
 
   it("does not clobber live WS turn data with a stale REST snapshot", async () => {
-    // WS session.turn.started/completed seeded turn-1 with the completion
-    // metadata while the REST request was in flight; the REST response is an
-    // older snapshot of the same turn plus the pre-WS history (turn-2).
-    // addTurn's Object.assign would overwrite the newer live metadata, so the
-    // hydration must only merge turns the store has not seen yet.
-    mockListSessionTurns.mockResolvedValue({
+    // WS `session.turn.completed` for turn-1 arrives WHILE the REST request
+    // is in flight; the REST response is an older snapshot of the same turn
+    // plus the pre-WS history (turn-2). The newer live metadata must survive.
+    let resolveList!: (value: { turns: unknown[]; total: number }) => void;
+    mockListSessionTurns.mockReturnValue(
+      new Promise<{ turns: unknown[]; total: number }>((resolve) => {
+        resolveList = resolve;
+      }),
+    );
+    const store = makeStore();
+    const liveUpdatedAt = "2026-08-10T11:00:00Z";
+
+    const pending = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+    // Live WS completion lands while the request is pending: newer row.
+    store.getState().turns.bySession[SESSION_ID] = [
+      makeTurn("turn-1", {
+        updated_at: liveUpdatedAt,
+        completed_at: "2026-08-10T10:55:00Z",
+        metadata: {
+          runtime_config_snapshot: { model: "newer" },
+          prompt_usage: { total_tokens: 9 },
+        },
+      }),
+    ];
+    resolveList({
       turns: [
         makeTurn("turn-1", { metadata: { runtime_config_snapshot: { model: "older" } } }),
         makeTurn("turn-2", { started_at: "2026-08-11T10:00:00Z" }),
       ],
       total: 2,
     });
-    const store = makeStore();
-    // The live WS turn already in the store: newer metadata than the REST
-    // snapshot for the same id.
-    store.getState().turns.bySession[SESSION_ID] = [
-      {
-        id: "turn-1",
-        metadata: {
-          runtime_config_snapshot: { model: "newer" },
-          prompt_usage: { total_tokens: 9 },
-        },
-      },
-    ] as never;
+    await pending;
 
-    await ensureSessionTurnsLoaded(SESSION_ID, store as never);
-
-    // Only the unseen history turn may be merged.
+    // Only the unseen history turn may be merged; the live row is untouched.
     expect(store.addTurn).toHaveBeenCalledTimes(1);
     expect(store.addTurn).toHaveBeenCalledWith(expect.objectContaining({ id: "turn-2" }));
+    const stored = store
+      .getState()
+      .turns.bySession[
+        SESSION_ID
+      ].find((turn) => (turn as Record<string, unknown>).id === "turn-1") as Record<
+      string,
+      unknown
+    >;
+    expect(stored.updated_at).toBe(liveUpdatedAt);
+    expect(stored.completed_at).toBe("2026-08-10T10:55:00Z");
+    expect(stored.metadata).toEqual({
+      runtime_config_snapshot: { model: "newer" },
+      prompt_usage: { total_tokens: 9 },
+    });
   });
 });

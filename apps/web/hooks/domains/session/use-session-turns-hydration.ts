@@ -57,15 +57,31 @@ export async function ensureSessionTurnsLoaded(
       // request was in flight.
       const state = store.getState();
       if (!state.taskSessions.items[sessionId]) return;
-      // Only merge turns the store has not seen yet. Turns already present
-      // reached the store via WS `session.turn.*` events, which are delivered
-      // live and are therefore at least as fresh as this REST snapshot; a
-      // merge via addTurn's Object.assign would otherwise overwrite newer
-      // live fields (metadata, updated_at) with the older snapshot.
-      const existingIds = new Set((state.turns.bySession[sessionId] ?? []).map((turn) => turn.id));
+      // Reconcile each REST row against the store's existing row (if any) by
+      // per-turn freshness. Two directions matter:
+      // - A WS-delivered row can be NEWER than this REST snapshot (completion
+      //   delivered while the request was in flight); merging it would
+      //   clobber newer live fields via addTurn's Object.assign.
+      // - A WS-delivered row can be OLDER (the matching completion event was
+      //   missed during a disconnect window), leaving an incomplete start
+      //   snapshot; the REST full history is the fix and must win.
+      // `updated_at` is the per-turn revision on both channels.
+      const existingById = new Map(
+        (state.turns.bySession[sessionId] ?? []).map((turn) => [turn.id, turn]),
+      );
       for (const turn of turns) {
-        if (existingIds.has(turn.id)) continue;
-        store.getState().addTurn(turn);
+        const existing = existingById.get(turn.id);
+        if (!existing) {
+          store.getState().addTurn(turn);
+          continue;
+        }
+        const existingUpdated = existing.updated_at ? Date.parse(existing.updated_at) : 0;
+        const restUpdated = turn.updated_at
+          ? Date.parse(turn.updated_at)
+          : Number.POSITIVE_INFINITY;
+        if (restUpdated > existingUpdated) {
+          store.getState().addTurn(turn);
+        }
       }
       store.getState().markTurnsLoaded(sessionId);
     } catch (err) {

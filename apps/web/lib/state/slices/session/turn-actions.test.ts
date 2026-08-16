@@ -64,6 +64,25 @@ describe("parseTurnTimestamp", () => {
   ])("treats %s as stale", (_value, _reason) => {
     expect(parseTurnTimestamp(_value)).toBe(-Infinity);
   });
+
+  it.each([
+    ["2026-02-30T10:00:00Z", "Feb 30 (Date.parse normalizes to Mar 2)"],
+    ["2025-02-29T10:00:00Z", "Feb 29 in a non-leap year"],
+    ["2026-04-31T10:00:00Z", "April has 30 days"],
+    ["2026-01-01T24:00:00Z", "hour 24 (RFC3339 allows 00-23)"],
+    ["2026-01-01T23:60:00Z", "minute 60"],
+    ["2026-01-01T23:59:60Z", "second 60 (leap second; backend never emits)"],
+    ["2026-01-01T10:00:00+24:00", "offset hour 24"],
+    ["2026-13-01T10:00:00Z", "month 13"],
+    ["2026-01-00T10:00:00Z", "day 0"],
+  ])("rejects %s (%s) as stale instead of normalizing it", (value) => {
+    expect(parseTurnTimestamp(value)).toBe(-Infinity);
+  });
+
+  it("accepts genuine leap-day timestamps", () => {
+    expect(parseTurnTimestamp("2024-02-29T10:00:00Z")).toBeGreaterThan(0);
+    expect(parseTurnTimestamp("2000-02-29T10:00:00Z")).toBeGreaterThan(0);
+  });
 });
 
 describe("addTurn reconciliation", () => {
@@ -191,6 +210,21 @@ describe("addTurn malformed timestamps", () => {
       .getState()
       .addTurn(turn("turn-1", { completed_at: LATER_AT, metadata: { model: "fresh" } }));
     expect(store.getState().turns.bySession[SESSION_ID][0].metadata).toEqual({ model: "fresh" });
+  });
+
+  it("treats a semantically invalid calendar date as stale in a merge", () => {
+    const store = makeStore();
+    store
+      .getState()
+      .addTurn(turn("turn-1", { completed_at: COMPLETED_AT, metadata: { model: "valid" } }));
+    store.getState().addTurn(
+      turn("turn-1", {
+        completed_at: COMPLETED_AT,
+        updated_at: "2026-02-30T10:00:00Z",
+        metadata: { model: "normalized" },
+      }),
+    );
+    expect(store.getState().turns.bySession[SESSION_ID][0].metadata).toEqual({ model: "valid" });
   });
 });
 

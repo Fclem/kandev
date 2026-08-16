@@ -10,17 +10,68 @@ type ImmerSet = Parameters<
 // Date.parse is permissive (e.g. "0" parses as 2000-01-01, partial dates as
 // midnight, timezone-less values in the local zone), so shape validation must
 // come first or malformed rows would win freshness comparisons.
-const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const RFC3339_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-](\d{2}):(\d{2}))$/;
+
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+/** Whether the day exists in the month (leap-year aware). */
+function validDayForMonth(year: number, month: number, day: number): boolean {
+  if (day < 1) return false;
+  const maxDay = month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
+  return day <= maxDay;
+}
+
+/**
+ * Returns the UTC-offset delta in milliseconds for a matched zone, or null
+ * when the offset components are out of range.
+ */
+function parseOffsetDelta(
+  zone: string,
+  offsetHourText: string | undefined,
+  offsetMinuteText: string | undefined,
+): number | null {
+  if (zone === "Z") return 0;
+  const hour = Number(offsetHourText);
+  const minute = Number(offsetMinuteText);
+  if (hour > 23 || minute > 59) return null;
+  return (zone.startsWith("-") ? -1 : 1) * (hour * 60 + minute) * 60_000;
+}
 
 /**
  * Parses a turn `updated_at` into a comparable epoch. Missing, empty,
  * malformed, or non-RFC3339 values map to `-Infinity` (stale), so they can
- * never clobber a row with a valid timestamp.
+ * never clobber a row with a valid timestamp. Calendar/time components are
+ * validated explicitly because Date.parse NORMALIZES semantically invalid
+ * values (e.g. `2026-02-30T10:00:00Z` becomes Mar 2) instead of rejecting
+ * them, which would let malformed rows win freshness comparisons.
  */
 export function parseTurnTimestamp(value: string | undefined): number {
-  if (!value || !RFC3339_PATTERN.test(value)) return -Infinity;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : -Infinity;
+  if (!value) return -Infinity;
+  const match = RFC3339_PATTERN.exec(value);
+  if (!match) return -Infinity;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return -Infinity;
+  if (!validDayForMonth(year, month, Number(match[3]))) return -Infinity;
+  if (Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6]) > 59) {
+    return -Infinity;
+  }
+  const offsetDelta = parseOffsetDelta(match[8], match[9], match[10]);
+  if (offsetDelta === null) return -Infinity;
+  const fractionMs = match[7] ? Math.round(Number(`0.${match[7]}`) * 1000) : 0;
+  // setUTCFullYear handles years 0-99 correctly (Date.UTC maps them to
+  // 1900+year); the components are validated above, so no normalization can
+  // occur here.
+  const utc = new Date(0);
+  utc.setUTCFullYear(year, month - 1, Number(match[3]));
+  utc.setUTCHours(Number(match[4]), Number(match[5]), Number(match[6]), fractionMs);
+  const epoch = utc.getTime() - offsetDelta;
+  return Number.isFinite(epoch) ? epoch : -Infinity;
 }
 
 /**

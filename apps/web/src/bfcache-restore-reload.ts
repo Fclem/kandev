@@ -34,11 +34,15 @@ function readNavigationType(): string | undefined {
  * (`navigate`), manual refreshes (`reload`), and in-app SPA routing never
  * reload; a reload produces a fresh document and cannot loop.
  *
- * In debug builds (`window.__KANDEV_DEBUG`), the restore evidence is written
- * to sessionStorage before the reload so a native Duplicate-tab run can be
+ * In debug builds (`window.__KANDEV_DEBUG`), restore evidence is written to
+ * sessionStorage BEFORE the reload so a native Duplicate-tab run can be
  * verified after the fact: the reload destroys the document, and the
  * duplicated tab is a separate DevTools target, so the event data must be
- * persisted pre-reload. The probe never blocks the reload.
+ * persisted pre-reload. For duplicate/history candidates the actual
+ * `persisted` value is recorded even when it is false, so the merge gate can
+ * distinguish "no pageshow at all" from "pageshow with persisted=false". The
+ * probe is diagnostics only, is skipped outside debug builds, and never
+ * blocks the reload.
  *
  * Returns an uninstall function.
  */
@@ -49,16 +53,17 @@ export function installBfcacheRestoreReload({
   getStorage = () => window.sessionStorage,
   getNavigationType = readNavigationType,
 }: RestoreReloadOptions = {}): () => void {
-  const recordProbe = () => {
-    if (!isDebug()) return;
+  const recordProbe = (persisted: boolean) => {
     try {
+      if (!isDebug()) return;
+      const navigationType = getNavigationType();
+      // Only duplicate/history candidates are probed: a frozen restore, or
+      // any document reached via a `back_forward` traversal. Fresh loads and
+      // manual refreshes are not candidates and are never recorded.
+      if (!persisted && navigationType !== "back_forward") return;
       getStorage().setItem(
         RESTORE_PROBE_KEY,
-        JSON.stringify({
-          persisted: true,
-          navigationType: getNavigationType(),
-          at: Date.now(),
-        }),
+        JSON.stringify({ persisted, navigationType, at: Date.now() }),
       );
     } catch {
       // Best-effort diagnostics; never block the reload.
@@ -66,9 +71,11 @@ export function installBfcacheRestoreReload({
   };
 
   const handlePageshow = (event: Event) => {
-    if ((event as PageTransitionEvent).persisted !== true) return;
-    recordProbe();
-    reload();
+    const persisted = (event as PageTransitionEvent).persisted === true;
+    recordProbe(persisted);
+    if (persisted) {
+      reload();
+    }
   };
 
   target.addEventListener(PAGESHOW_EVENT, handlePageshow);

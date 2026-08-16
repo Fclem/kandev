@@ -65,8 +65,17 @@ refresh, automated.
 
 ## Persistence guarantees
 
-None new. Server state remains the source of truth; the reload re-reads it.
-The fix writes no client storage.
+Server state remains the source of truth; the reload re-reads it. The fix
+writes no server state.
+
+Client storage: in debug builds only (`window.__KANDEV_DEBUG`), a restored
+page writes a diagnostic record to sessionStorage under
+`kandev.bfcacheRestoreProbe` before reloading — `{ persisted,
+navigationType, at }` — so a native Duplicate-tab run can be verified after
+the reload destroys the document. The write is best-effort (never blocks the
+reload), is skipped outside debug builds, and is scoped to the tab session:
+it is overwritten on the next restore candidate and cleared by the merge-gate
+checklist before each attempt. It contains no user data.
 
 ## Scenarios
 

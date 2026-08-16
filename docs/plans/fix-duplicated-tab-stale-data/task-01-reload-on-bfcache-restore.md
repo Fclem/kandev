@@ -45,24 +45,30 @@ DevTools target and the handler reloads synchronously during its initial
 `pageshow`, so attaching DevTools afterward cannot observe the restore; the
 probe persists the evidence to sessionStorage BEFORE the reload.
 
-1. Archive a task, then right-click the Kandev tab → **Duplicate**.
-2. In the duplicated tab's DevTools console, read the probe:
+1. In the SOURCE tab's DevTools console, clear any inherited probe from an
+   earlier run and record the attempt start time:
+   `sessionStorage.removeItem("kandev.bfcacheRestoreProbe"); const t0 = Date.now();`
+   (sessionStorage survives reloads and Chrome Duplicate copies the source
+   tab's storage, so a stale probe must not be misattributed to this run.)
+2. Archive a task, then right-click the Kandev tab → **Duplicate**.
+3. In the duplicated tab's DevTools console, read the probe:
    `JSON.parse(sessionStorage.getItem("kandev.bfcacheRestoreProbe"))`.
-   It records `{ persisted: true, navigationType, at }` captured pre-reload.
-3. Corroborate with DevTools → Network → "Preserve log" on the duplicated
+   It records `{ persisted, navigationType, at }` captured pre-reload.
+   Accept the record only if `at >= t0` (a newer write than this attempt).
+4. Corroborate with DevTools → Network → "Preserve log" on the duplicated
    tab (open before duplicating, or inspect the document request after the
    reload): the app issues a fresh boot-payload request (the no-store HTML
    or `/api/v1/app-state`) after the duplicate.
-4. Expected with this fix: the probe shows `persisted: true`, the duplicated
+5. Expected with this fix: the probe shows `persisted: true`, the duplicated
    tab reloads, and the task is shown as archived.
-5. If the duplicated tab fires NO `pageshow` (no probe entry) or shows a
+6. If the duplicated tab fires NO `pageshow` (no probe entry) or shows a
    probe with `persisted: false` while still displaying stale data, the
    frozen-restore assumption is wrong for that Chrome version: record the
    observed sequence (including WebSocket close code/timing, if any), then
    design a fallback from that evidence — see the WS-close caveat below. Do
    not add a fallback without this evidence.
 
-### WS-close fallback caveat (only if step 5 triggers)
+### WS-close fallback caveat (only if step 6 triggers)
 
 The navigation type `back_forward` is fixed for the document lifetime, and
 `WebSocketClient.handleDisconnect` observes every later unintentional
@@ -143,11 +149,11 @@ fallback.
   function (pattern: `vite-preload-recovery.ts`).
 - Wired `installBfcacheRestoreReload()` into `apps/web/src/main.tsx` at module
   scope next to `installVitePreloadRecovery()`, before React mounts.
-- Added `apps/web/src/bfcache-restore-reload.test.ts` (6 tests) and
+- Added `apps/web/src/bfcache-restore-reload.test.ts` (12 tests) and
   `apps/web/e2e/tests/layout/bfcache-restore-reload.spec.ts`.
 - Checks passed:
   - `cd apps && pnpm --filter @kandev/web test -- --run src/bfcache-restore-reload.test.ts`
-    (6/6 tests).
+    (12/12 tests, current HEAD).
   - `cd apps/web && pnpm run typecheck` (clean).
   - `cd apps/web && pnpm exec eslint src/bfcache-restore-reload.ts
     src/bfcache-restore-reload.test.ts src/main.tsx
@@ -260,3 +266,28 @@ fallback.
 - Finding 4 (nit, accepted): the plan claimed no `pageshow` handlers existed
   anywhere, but `useForegroundRefresh` already registers one. Fixed: the
   claim now says no handler inspects `pageshow.persisted`.
+
+### Adversarial review round 6 (50-luna-review-fix)
+
+- Finding 1 (major, accepted): the probe could not capture the falsifying
+  `persisted=false` case — the handler returned before recording and the
+  payload hard-coded `persisted: true`. Fixed: the handler now records the
+  ACTUAL `persisted` value for duplicate/history candidates (`persisted ===
+  true`, or any `back_forward`-typed document) before any reload decision,
+  and the record survives the reload in sessionStorage; a
+  persisted=false/back_forward record-without-reload unit test was added.
+- Finding 2 (minor, accepted): `isDebug()` ran outside the best-effort
+  guard, so a throwing predicate aborted the handler before `reload()`.
+  Fixed: the predicate is inside the diagnostic try/catch; a throwing-`isDebug`
+  test proves the reload still runs.
+- Finding 3 (minor, accepted): the gate read the fixed sessionStorage key
+  without clearing it, and Chrome Duplicate copies the source tab's storage,
+  so a stale probe could be misattributed. Fixed: the checklist now clears
+  the key and records `t0` before Duplicate, and requires `at >= t0`.
+- Finding 4 (minor, accepted): Results recorded 6/6 for a file now containing
+  12 tests. Fixed: re-ran the focused unit command on current HEAD (12/12)
+  and updated the record.
+- Finding 5 (nit, accepted): the spec said the fix writes no client storage,
+  but debug restores write the sessionStorage probe. Fixed: Persistence
+  guarantees now document the debug-only diagnostic key, fields, lifetime,
+  cleanup, and best-effort failure behavior.

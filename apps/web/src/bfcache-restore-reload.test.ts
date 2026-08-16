@@ -48,6 +48,15 @@ function createHarness({
   };
 }
 
+function stubBackForwardNavigation() {
+  // happy-dom's Event constructor calls performance.now(); keep it intact
+  // while exposing the back_forward navigation entry.
+  vi.stubGlobal("performance", {
+    now: () => 0,
+    getEntriesByType: (type: string) => (type === "navigation" ? [{ type: "back_forward" }] : []),
+  });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -67,12 +76,7 @@ describe("installBfcacheRestoreReload", () => {
     // loads fresh and must not be reloaded a second time, even though its
     // navigation entry reports type `back_forward`. Stub that entry so
     // reintroducing the navigation-type fallback would fail this test.
-    vi.stubGlobal("performance", {
-      // happy-dom's Event constructor calls performance.now(); keep it intact
-      // while exposing the back_forward navigation entry.
-      now: () => 0,
-      getEntriesByType: (type: string) => (type === "navigation" ? [{ type: "back_forward" }] : []),
-    });
+    stubBackForwardNavigation();
     const harness = createHarness();
 
     harness.dispatch(false);
@@ -112,7 +116,9 @@ describe("installBfcacheRestoreReload", () => {
 
     expect(harness.reload).not.toHaveBeenCalled();
   });
+});
 
+describe("installBfcacheRestoreReload debug probe", () => {
   it("records restore evidence before reloading in debug builds", () => {
     const memory = createMemoryStorage();
     const harness = createHarness({
@@ -132,6 +138,42 @@ describe("installBfcacheRestoreReload", () => {
     expect(Number.isFinite(JSON.parse(memory.value()!).at)).toBe(true);
   });
 
+  it("records a persisted=false duplicate candidate without reloading", () => {
+    // The merge gate must be able to distinguish "no pageshow at all" from
+    // "pageshow with persisted=false": a duplicate that restores stale heap
+    // state while reporting persisted=false (a cold back_forward traversal)
+    // is recorded for diagnosis but never reloaded.
+    const memory = createMemoryStorage();
+    const harness = createHarness({
+      isDebug: () => true,
+      storage: memory.storage,
+      navigationType: "back_forward",
+    });
+
+    harness.dispatch(false);
+
+    expect(harness.reload).not.toHaveBeenCalled();
+    expect(memory.value()).not.toBeNull();
+    expect(JSON.parse(memory.value()!)).toMatchObject({
+      persisted: false,
+      navigationType: "back_forward",
+    });
+  });
+
+  it("does not record non-candidates even in debug builds", () => {
+    const memory = createMemoryStorage();
+    const harness = createHarness({
+      isDebug: () => true,
+      storage: memory.storage,
+      navigationType: "navigate",
+    });
+
+    harness.dispatch(false);
+
+    expect(harness.reload).not.toHaveBeenCalled();
+    expect(memory.value()).toBeNull();
+  });
+
   it("does not record evidence when debug is disabled", () => {
     const memory = createMemoryStorage();
     const harness = createHarness({ isDebug: () => false, storage: memory.storage });
@@ -149,6 +191,17 @@ describe("installBfcacheRestoreReload", () => {
         setItem: vi.fn(() => {
           throw new Error("storage unavailable");
         }),
+      },
+    });
+
+    expect(() => harness.dispatch(true)).not.toThrow();
+    expect(harness.reload).toHaveBeenCalledOnce();
+  });
+
+  it("a throwing debug predicate never blocks the reload", () => {
+    const harness = createHarness({
+      isDebug: () => {
+        throw new Error("debug flag unavailable");
       },
     });
 

@@ -88,7 +88,7 @@ function isAtOrBeforeBoundary(
   return started <= boundary;
 }
 
-function isSettledSessionState(state: string): boolean {
+export function isSettledSessionState(state: string): boolean {
   return SETTLED_SESSION_STATES.has(state);
 }
 

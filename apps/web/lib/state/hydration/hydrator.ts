@@ -6,7 +6,7 @@ import {
   reconcileQuickTerminalTabs,
 } from "@/lib/state/slices/ui/quick-chat-sync";
 import { compareUserSettingsRevisions } from "@/lib/settings/user-settings-revision";
-import { parseTurnTimestamp } from "@/lib/state/slices/session/turn-actions";
+import { isSettledSessionState, parseTurnTimestamp } from "@/lib/state/slices/session/turn-actions";
 import { deepMerge, mergeSessionMap, mergeLoadingState } from "./merge-strategies";
 
 /**
@@ -164,6 +164,27 @@ function bridgeSidebarViewsFromUserSettings(
 }
 
 /**
+ * Seeds settled boundaries for settled sessions in the hydrated payload
+ * (monotonically: a valid, strictly-newer candidate wins; existing boundaries
+ * and their precision are preserved otherwise). This is the production SSR
+ * path — StateHydrator hydrates the root store through hydrateState, so
+ * settled-session boundaries must be established here, not only in
+ * mergeInitialState, or an old/unknown delayed WS start would pass the guard
+ * before any later session-list refresh.
+ */
+function seedSettledSessionBoundaries(draft: Draft<AppState>, state: HydrationState): void {
+  for (const session of Object.values(state.taskSessions?.items ?? {})) {
+    if (!session || !isSettledSessionState(session.state)) continue;
+    const candidate = parseTurnTimestamp(session.updated_at);
+    if (candidate === null) continue;
+    const current = parseTurnTimestamp(draft.turns.settledBoundaryBySession[session.id]);
+    if (current === null || candidate > current) {
+      draft.turns.settledBoundaryBySession[session.id] = session.updated_at;
+    }
+  }
+}
+
+/**
  * A server snapshot may still name a turn that an authoritative boundary
  * (source adoption / settled-session clear) retired client-side. Never let a
  * force-merge resurrect its marker.
@@ -252,7 +273,10 @@ function hydrateSession(
       clearHydratedRetiredActiveMarkers(draft, state);
     }
   }
-  if (state.taskSessions) deepMerge(draft.taskSessions, state.taskSessions);
+  if (state.taskSessions) {
+    deepMerge(draft.taskSessions, state.taskSessions);
+    seedSettledSessionBoundaries(draft, state);
+  }
   if (state.taskSessionsByTask) deepMerge(draft.taskSessionsByTask, state.taskSessionsByTask);
   if (state.sessionAgentctl) {
     mergeSessionMap(

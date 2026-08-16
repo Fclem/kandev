@@ -16,6 +16,38 @@ function makeAppDraft(): AppState {
   return structuredClone(defaultState) as AppState;
 }
 
+describe("settled boundary seeding (production StateHydrator path)", () => {
+  it("seeds a boundary from a settled session via hydrateState", () => {
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      hydrateState(
+        draft,
+        {
+          taskSessions: {
+            items: { [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: BOUNDARY } },
+          },
+        } as unknown as Partial<AppState>,
+        {},
+      );
+    });
+    expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBe(BOUNDARY);
+  });
+
+  it("does not seed a boundary for a running session via hydrateState", () => {
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      hydrateState(
+        draft,
+        {
+          taskSessions: {
+            items: { [SESSION_ID]: { id: SESSION_ID, state: "RUNNING", updated_at: BOUNDARY } },
+          },
+        } as unknown as Partial<AppState>,
+        {},
+      );
+    });
+    expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBeUndefined();
+  });
+});
+
 describe("mergeInitialState — settled SSR sessions seed a boundary", () => {
   it("seeds a boundary from a settled session's updated_at", () => {
     const result = mergeInitialState({
@@ -39,6 +71,36 @@ describe("mergeInitialState — settled SSR sessions seed a boundary", () => {
       turns: { bySession: { [SESSION_ID]: [] } } as never,
     });
     expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBeUndefined();
+  });
+
+  it("never regresses an existing newer boundary with an older SSR snapshot", () => {
+    const result = mergeInitialState({
+      taskSessions: {
+        items: {
+          [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: "2025-12-31T00:00:00Z" },
+        },
+      } as never,
+      turns: {
+        bySession: { [SESSION_ID]: [] },
+        settledBoundaryBySession: { [SESSION_ID]: BOUNDARY },
+      } as never,
+    });
+    expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBe(BOUNDARY);
+  });
+
+  it("keeps an existing boundary when the SSR updated_at is malformed", () => {
+    const result = mergeInitialState({
+      taskSessions: {
+        items: {
+          [SESSION_ID]: { id: SESSION_ID, state: "IDLE", updated_at: "not-a-timestamp" },
+        },
+      } as never,
+      turns: {
+        bySession: { [SESSION_ID]: [] },
+        settledBoundaryBySession: { [SESSION_ID]: BOUNDARY },
+      } as never,
+    });
+    expect(result.turns.settledBoundaryBySession[SESSION_ID]).toBe(BOUNDARY);
   });
 });
 

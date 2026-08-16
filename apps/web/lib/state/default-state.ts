@@ -20,6 +20,7 @@ import {
 import { applyStoredQuickChatNames } from "@/lib/state/slices/ui/quick-chat-sync";
 import type { AgentRuntimeAvailability } from "@/lib/types/agent-runtime";
 import type { HydrationState } from "./store";
+import { isSettledSessionState, parseTurnTimestamp } from "@/lib/state/slices/session/turn-actions";
 import { migrateSidebarViewDraft, migrateView } from "./slices/ui/ui-slice";
 
 export const defaultState = {
@@ -252,23 +253,15 @@ function mergeGitHubState(initialState: HydrationState) {
   };
 }
 
-/** Session states that settle a turn: no agent work is in progress. */
-const SETTLED_SESSION_STATES = new Set<string>([
-  "IDLE",
-  "WAITING_FOR_INPUT",
-  "COMPLETED",
-  "FAILED",
-  "CANCELLED",
-]);
-
 /**
  * Merges the turns slice for initial (SSR/boot) hydration. The server-side
  * turn lists are complete per-session snapshots, so every session the payload
  * installs is marked `loadedBySession`; without the marker, turn-derived UI
  * would mistake WS-seeded live turns for the full history (the debug
  * metadata dialog's `turn_metadata` regression). Settled sessions also seed
- * their settled boundary from `updated_at` so an old/unknown delayed WS start
- * arriving before any session-list refresh is rejected.
+ * their settled boundary from `updated_at` (monotonically) so an
+ * old/unknown delayed WS start arriving before any session-list refresh is
+ * rejected.
  */
 function mergeTurnsState(
   current: DefaultState["turns"],
@@ -278,7 +271,11 @@ function mergeTurnsState(
   const merged = { ...current, ...incoming };
   const settledBoundaryBySession = { ...merged.settledBoundaryBySession };
   for (const session of Object.values(sessions?.items ?? {})) {
-    if (session && SETTLED_SESSION_STATES.has(session.state)) {
+    if (!session || !isSettledSessionState(session.state)) continue;
+    const candidate = parseTurnTimestamp(session.updated_at);
+    if (candidate === null) continue;
+    const existing = parseTurnTimestamp(settledBoundaryBySession[session.id]);
+    if (existing === null || candidate > existing) {
       settledBoundaryBySession[session.id] = session.updated_at;
     }
   }

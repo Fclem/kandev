@@ -1,23 +1,10 @@
 const PAGESHOW_EVENT = "pageshow";
-const RESTORED_NAVIGATION_TYPE = "back_forward";
 
 type RestoreReloadTarget = Pick<EventTarget, "addEventListener" | "removeEventListener">;
 
 interface RestoreReloadOptions {
   target?: RestoreReloadTarget;
   reload?: () => void;
-  getNavigationType?: () => string | undefined;
-}
-
-function readNavigationType(): string | undefined {
-  try {
-    const entry = performance.getEntriesByType("navigation")[0];
-    return entry ? (entry as PerformanceNavigationTiming).type : undefined;
-  } catch {
-    // Navigation Timing is unavailable (or the entry is not exposed); the
-    // persisted flag on pageshow remains the restore signal.
-    return undefined;
-  }
 }
 
 /**
@@ -27,9 +14,10 @@ function readNavigationType(): string | undefined {
  * state can be stale until a real load; the reload re-fetches the no-store
  * boot payload and reconnects the WebSocket.
  *
- * A restore is detected on `pageshow` when `event.persisted` is true, or when
- * the current document's navigation type is `back_forward` (covers
- * state-clone restores where `persisted` is false). Fresh loads
+ * A restore is detected on `pageshow` when `event.persisted` is true. That is
+ * the only reliable frozen-restore signal: the navigation type
+ * `back_forward` also covers cold history traversals and session-restored
+ * tabs, which load fresh and must NOT be reloaded a second time. Fresh loads
  * (`navigate`), manual refreshes (`reload`), and in-app SPA routing never
  * reload; a reload produces a fresh document and cannot loop.
  *
@@ -38,18 +26,9 @@ function readNavigationType(): string | undefined {
 export function installBfcacheRestoreReload({
   target = window,
   reload = () => window.location.reload(),
-  getNavigationType = readNavigationType,
 }: RestoreReloadOptions = {}): () => void {
   const handlePageshow = (event: Event) => {
-    const persisted = (event as PageTransitionEvent).persisted === true;
-    let restoredByNavigationType = false;
-    try {
-      restoredByNavigationType = getNavigationType() === RESTORED_NAVIGATION_TYPE;
-    } catch {
-      // A throwing navigation-type reader degrades to persisted-only
-      // detection; a restore is still reloaded when persisted is true.
-    }
-    if (persisted || restoredByNavigationType) {
+    if ((event as PageTransitionEvent).persisted === true) {
       reload();
     }
   };

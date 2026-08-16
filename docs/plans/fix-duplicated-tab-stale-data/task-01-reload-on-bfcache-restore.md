@@ -14,14 +14,15 @@ spec: "../../specs/fix-duplicated-tab-stale-data/spec.md"
 
 - `apps/web/src/bfcache-restore-reload.ts` exports `installBfcacheRestoreReload`
   which reloads the page on a `pageshow` event when `event.persisted === true`
-  OR the current document navigation type is `back_forward`, does nothing for
-  normal loads (`navigate`/`reload`), and returns an uninstall function.
+  only (never on the `back_forward` navigation type alone, which also covers
+  cold history traversals and session-restored tabs), and returns an
+  uninstall function.
 - `apps/web/src/main.tsx` installs it at module scope next to
   `installVitePreloadRecovery()`, before React mounts.
-- Unit tests cover: persisted restore reloads; persisted=false +
-  `back_forward` reloads; persisted=false + `navigate` does not reload;
-  persisted=false + `reload` does not reload; missing Navigation Timing API
-  degrades to persisted-only without throwing; uninstall removes the listener.
+- Unit tests cover: persisted restore reloads; persisted=false does not reload
+  (fresh load, manual refresh, and cold `back_forward` traversal regression);
+  an event with no persisted flag does not reload; uninstall removes the
+  listener.
 - E2E test dispatches a real persisted `pageshow` in the running app and
   asserts the page reloads (navigation type becomes `reload`); a normal load
   does not reload.
@@ -88,16 +89,15 @@ fallback.
 ## Results
 
 - Added `apps/web/src/bfcache-restore-reload.ts`: a `pageshow` handler that
-  reloads the page when `event.persisted === true` or the navigation type is
-  `back_forward`, with a guarded navigation-type reader and an uninstall
+  reloads the page when `event.persisted === true`, with an uninstall
   function (pattern: `vite-preload-recovery.ts`).
 - Wired `installBfcacheRestoreReload()` into `apps/web/src/main.tsx` at module
   scope next to `installVitePreloadRecovery()`, before React mounts.
-- Added `apps/web/src/bfcache-restore-reload.test.ts` (7 tests) and
+- Added `apps/web/src/bfcache-restore-reload.test.ts` (6 tests) and
   `apps/web/e2e/tests/layout/bfcache-restore-reload.spec.ts`.
 - Checks passed:
   - `cd apps && pnpm --filter @kandev/web test -- --run src/bfcache-restore-reload.test.ts`
-    (7/7 tests).
+    (6/6 tests).
   - `cd apps/web && pnpm run typecheck` (clean).
   - `cd apps/web && pnpm exec eslint src/bfcache-restore-reload.ts
     src/bfcache-restore-reload.test.ts src/main.tsx
@@ -107,9 +107,24 @@ fallback.
     the in-flight reload and hit the destroyed execution context — the reload
     itself fired; the assertion was made navigation-race safe with
     `expect(...).toPass` catching context-destroyed errors).
+
+### Adversarial review round 1 (50-luna-review-fix)
+
+- Finding (P2, accepted): the initial version reloaded on the
+  `back_forward` navigation type in addition to `persisted === true`, but
+  `back_forward` identifies every history traversal, not only frozen
+  restores. A cold back/forward load or session-restored tab (both load
+  fresh) was therefore reloaded a second time, discarding restored scroll/UI
+  state on the common click-out-and-back flow. Frozen restores always fire
+  `pageshow` with `persisted === true`, so the fallback added false positives
+  without covering any additional restore path.
+- Resolution: detection is now `persisted === true` only; the navigation-type
+  fallback and its tests were removed; a regression test asserts no reload on
+  a cold `back_forward` traversal. Spec, plan, and this file updated to match.
+
 - Real-Chrome duplicate-tab verification (non-headless, user's environment)
   remains outstanding: archive a task, right-click the tab → Duplicate, expect
   the duplicated tab to reload and show the task as archived. If a Chrome
-  version restores without the `pageshow`/`back_forward` signals, add the
-  plan-documented WS-close fallback gated on that evidence; none was needed
-  for the signals observed here.
+  version restores without firing `pageshow` at all (no persisted signal),
+  add the plan-documented WS-close fallback gated on that evidence; none was
+  needed for the signals observed here.

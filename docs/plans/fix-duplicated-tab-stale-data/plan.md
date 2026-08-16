@@ -44,10 +44,13 @@ restored from a frozen snapshot:
 
 - `apps/web/src/bfcache-restore-reload.ts` exports
   `installBfcacheRestoreReload(options?)` returning an uninstall function. It
-  listens for `pageshow` and reloads when `event.persisted === true` OR the
-  current document's navigation type is `back_forward` (the latter covers
-  state-clone restores where `persisted` is false). Fresh loads (`navigate`),
-  manual refreshes (`reload`), and SPA soft navigations never reload.
+  listens for `pageshow` and reloads when `event.persisted === true`. That is
+  the only reliable frozen-restore signal: the navigation type
+  `back_forward` also covers cold history traversals and session-restored
+  tabs, which load fresh and must NOT be reloaded a second time (a redundant
+  reload would discard restored scroll/UI state on the common
+  click-out-and-back flow). Fresh loads (`navigate`), manual refreshes
+  (`reload`), and SPA soft navigations never reload.
 - The module follows the `apps/web/src/vite-preload-recovery.ts` pattern:
   injected `target`, `reload`, and navigation-type reader for testability;
   defensive reads so missing `PageTransitionEvent` / Navigation Timing APIs
@@ -63,14 +66,10 @@ Unit tests, `apps/web/src/bfcache-restore-reload.test.ts` (vitest + jsdom,
 mirroring `vite-preload-recovery.test.ts` conventions):
 
 - `pageshow` with `persisted === true` triggers the reload.
-- `pageshow` with `persisted === false` and navigation type `back_forward`
-  triggers the reload (state-clone restore case).
-- `pageshow` with `persisted === false` and type `navigate` (fresh load) does
-  not reload.
-- `pageshow` with `persisted === false` and type `reload` (manual refresh)
-  does not reload.
-- Missing Navigation Timing API degrades to persisted-only behavior without
-  throwing.
+- `pageshow` with `persisted === false` does not reload — including on a cold
+  `back_forward` traversal and on a manual refresh (regression: the
+  navigation type must not be treated as a restore signal).
+- An event carrying no `persisted` flag does not reload.
 - The uninstall function removes the listener.
 
 E2E test, `apps/web/e2e/tests/layout/bfcache-restore-reload.spec.ts`

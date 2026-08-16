@@ -64,6 +64,24 @@ const SETTLED_SESSION_STATES = new Set<string>([
   "CANCELLED",
 ]);
 
+/**
+ * Clears the active marker and records the retired turn id so a delayed WS
+ * `session.turn.started` for that turn cannot resurrect it.
+ */
+function retireActiveTurn(draft: Draft<SessionSlice>, sessionId: string): void {
+  const activeId = draft.turns.activeBySession[sessionId];
+  if (!activeId) return;
+  draft.turns.activeBySession[sessionId] = null;
+  const retired = draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? [];
+  if (!retired.includes(activeId)) retired.push(activeId);
+  draft.turns.retiredActiveTurnIdsBySession[sessionId] = retired;
+}
+
+/** Whether a WS start (or hydration candidate) is for a retired turn. */
+function isRetiredTurn(draft: Draft<SessionSlice>, sessionId: string, turnId: string): boolean {
+  return (draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? []).includes(turnId);
+}
+
 function isSettledSessionState(state: string): boolean {
   return SETTLED_SESSION_STATES.has(state);
 }
@@ -100,7 +118,9 @@ function applyActiveTurnReconciliation(
   hydrationEpoch: number,
 ): void {
   if ((draft.turns.reconcileEpochBySession[sessionId] ?? 0) !== hydrationEpoch) return;
-  const turns = draft.turns.bySession[sessionId] ?? [];
+  const turns = (draft.turns.bySession[sessionId] ?? []).filter(
+    (turn) => !isRetiredTurn(draft, sessionId, turn.id),
+  );
   const latestId = latestIncompleteTurnId(turns);
   if (latestId === null) {
     draft.turns.activeBySession[sessionId] = null;
@@ -273,7 +293,7 @@ export function buildTurnActions(set: ImmerSet) {
     ) =>
       set((draft) => {
         for (const sessionId of new Set(sessionIds)) {
-          draft.turns.activeBySession[sessionId] = null;
+          retireActiveTurn(draft, sessionId);
           // Bump the generation so an in-flight REST hydration cannot
           // resurrect the marker from a pre-adoption snapshot.
           draft.turns.reconcileEpochBySession[sessionId] =

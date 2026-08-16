@@ -49,8 +49,17 @@ export function registerTurnsHandlers(
         created_at: payload.created_at,
         updated_at: payload.updated_at,
       });
-      // Track this as the active turn for the session
-      store.getState().setActiveTurn(payload.session_id, payload.id);
+      // Track this as the active turn for the session — unless an
+      // authoritative boundary (source adoption, settled-session clear)
+      // retired this turn while the event was in flight; a delayed delivery
+      // must not resurrect the marker.
+      const retired =
+        store
+          .getState()
+          .turns.retiredActiveTurnIdsBySession[payload.session_id]?.includes(payload.id) ?? false;
+      if (!retired) {
+        store.getState().setActiveTurn(payload.session_id, payload.id);
+      }
     },
     "session.turn.completed": (message) => {
       const payload = message.payload;

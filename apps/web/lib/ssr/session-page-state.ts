@@ -244,12 +244,14 @@ function buildSessionState(p: BuildSessionPageStateParams) {
                 // re-fetches or mistakes WS-seeded live turns for it.
                 loadedBySession: { [sessionId]: true },
                 reconcileEpochBySession: {},
+                retiredActiveTurnIdsBySession: {},
               }
             : {
                 bySession: {},
                 activeBySession: {},
                 loadedBySession: {},
                 reconcileEpochBySession: {},
+                retiredActiveTurnIdsBySession: {},
               },
         }
       : {}),

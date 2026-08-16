@@ -462,8 +462,10 @@ describe("reconcileActiveTurnAfterHydration", () => {
       .addTurn(
         turn("turn-1", { started_at: STARTED_AT, updated_at: STARTED_AT, completed_at: undefined }),
       );
+    store.getState().setActiveTurn(SESSION_ID, "turn-1");
     // Source adoption cleared the marker and bumped the epoch mid-flight.
     store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
 
     store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 0);
 
@@ -474,15 +476,34 @@ describe("reconcileActiveTurnAfterHydration", () => {
     const store = makeStore();
     seedSession(store, "RUNNING", LATER_AT);
     store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+    // A genuinely new turn started after the boundary.
+    store
+      .getState()
+      .addTurn(
+        turn("turn-2", { started_at: LATER_AT, updated_at: LATER_AT, completed_at: undefined }),
+      );
+
+    store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 1);
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-2");
+  });
+
+  it("never re-activates a turn retired by an authoritative boundary", () => {
+    // Adoption retired turn-1; a post-adoption hydration (fresh epoch) sees
+    // the still-incomplete row and must not choose it as the active turn.
+    const store = makeStore();
+    seedSession(store, "RUNNING", LATER_AT);
     store
       .getState()
       .addTurn(
         turn("turn-1", { started_at: STARTED_AT, updated_at: STARTED_AT, completed_at: undefined }),
       );
+    store.getState().setActiveTurn(SESSION_ID, "turn-1");
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
 
     store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 1);
 
-    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-1");
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
   });
 });
 

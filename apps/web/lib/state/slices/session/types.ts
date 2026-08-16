@@ -38,6 +38,13 @@ export type TurnsState = {
    * not resurrect the marker from a stale snapshot.
    */
   reconcileEpochBySession: Record<string, number>;
+  /**
+   * Turn ids whose active marker an authoritative boundary retired (source
+   * adoption, settled-session clear). A delayed WS `session.turn.started`
+   * for one of these must not resurrect the marker; new turn ids are
+   * unaffected.
+   */
+  retiredActiveTurnIdsBySession: Record<string, string[]>;
 };
 
 export type TaskSessionsState = {

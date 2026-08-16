@@ -60,6 +60,52 @@ describe("session turn WebSocket handlers", () => {
     ]);
   });
 
+  it("does not resurrect the marker after source adoption retires a turn", () => {
+    const store = makeStore();
+    // An incomplete turn with an active marker, as a pre-adoption WS start
+    // left it.
+    send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-1");
+
+    // Source adoption clears the marker and retires the turn.
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+
+    // A delayed delivery of the SAME older start arrives after adoption.
+    send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it("does not resurrect the marker after a settled-session clear retires a turn", () => {
+    const store = makeStore();
+    send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
+
+    // An IDLE session snapshot at/after the turn's start retires it.
+    store.getState().setTaskSession({
+      id: SESSION_ID,
+      state: "IDLE",
+      updated_at: TURN_COMPLETED_AT,
+    } as never);
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+
+    // The delayed start for the retired turn must not resurrect the marker.
+    send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+
+  it("still marks a genuinely new turn active after source adoption", () => {
+    const store = makeStore();
+    send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+
+    // A new turn started after the boundary is legitimate and must be marked.
+    send(store, TURN_STARTED, turn("turn-2", TURN_COMPLETED_AT));
+
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-2");
+  });
+
   it("does not clear a newer active turn when an older turn completes", () => {
     const store = makeStore();
 

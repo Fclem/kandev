@@ -164,6 +164,15 @@ const IDLE_SESSION_STATES = new Set<TaskSession["state"]>([
  * orphaned active-turn marker, but only retire a known turn when the idle
  * session snapshot is at least as new as that turn's start time.
  */
+function retireSessionActiveTurn(draft: SessionSliceState, sessionId: string): void {
+  const activeTurnId = draft.turns.activeBySession[sessionId];
+  if (!activeTurnId) return;
+  draft.turns.activeBySession[sessionId] = null;
+  const retired = draft.turns.retiredActiveTurnIdsBySession[sessionId] ?? [];
+  if (!retired.includes(activeTurnId)) retired.push(activeTurnId);
+  draft.turns.retiredActiveTurnIdsBySession[sessionId] = retired;
+}
+
 function reconcileActiveTurnForIdleSession(draft: SessionSliceState, session: TaskSession): void {
   if (!IDLE_SESSION_STATES.has(session.state)) return;
 
@@ -172,7 +181,7 @@ function reconcileActiveTurnForIdleSession(draft: SessionSliceState, session: Ta
 
   const activeTurn = draft.turns.bySession[session.id]?.find((turn) => turn.id === activeTurnId);
   if (!activeTurn || activeTurn.completed_at) {
-    draft.turns.activeBySession[session.id] = null;
+    retireSessionActiveTurn(draft, session.id);
     return;
   }
 
@@ -183,7 +192,7 @@ function reconcileActiveTurnForIdleSession(draft: SessionSliceState, session: Ta
     !Number.isNaN(turnStartedAt) &&
     turnStartedAt <= sessionUpdatedAt
   ) {
-    draft.turns.activeBySession[session.id] = null;
+    retireSessionActiveTurn(draft, session.id);
   }
 }
 
@@ -194,6 +203,7 @@ export const defaultSessionState: SessionSliceState = {
     activeBySession: {},
     loadedBySession: {},
     reconcileEpochBySession: {},
+    retiredActiveTurnIdsBySession: {},
   },
   taskSessions: { items: {} },
   taskSessionsByTask: { itemsByTaskId: {}, loadingByTaskId: {}, loadedByTaskId: {} },
@@ -546,6 +556,7 @@ function buildTaskSessionActions(set: ImmerSet) {
         delete draft.turns.activeBySession[sessionId];
         delete draft.turns.loadedBySession[sessionId];
         delete draft.turns.reconcileEpochBySession[sessionId];
+        delete draft.turns.retiredActiveTurnIdsBySession[sessionId];
         // Cascade into the runtime slice (shell/process/git buffers + per-session
         // maps); this also removes the environmentIdBySessionId mapping.
         purgeSessionRuntimeState(draft as unknown as SessionRuntimeSliceState, sessionId);

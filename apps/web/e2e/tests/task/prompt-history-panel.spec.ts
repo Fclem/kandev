@@ -69,6 +69,22 @@ test.describe("Prompt history panel", () => {
     await session.sendMessage(longPrompt);
     await expect.poll(settled).toBe(true);
 
+    // Capture the persisted sentinel message id so the transcript-jump
+    // locator targets exactly #msg-<capturedId> instead of matching by text
+    // (the sentinel also renders in the prompt-history rows).
+    let sentinelMessageId: string | null = null;
+    await expect
+      .poll(async () => {
+        const { messages } = await apiClient.listSessionMessages(task.session_id);
+        const match = messages.find(
+          (m) => m.author_type === "user" && m.content.includes(SENTINEL),
+        );
+        if (match) sentinelMessageId = match.id;
+        return Boolean(match);
+      })
+      .toBe(true);
+    if (!sentinelMessageId) throw new Error("sentinel prompt was not persisted");
+
     // (3) Re-activate Prompt history: two rows, newest first.
     await session.clickTab("Prompt history");
     const sentinelRow = testPage.getByTestId("prompt-history-row-0");
@@ -117,24 +133,40 @@ test.describe("Prompt history panel", () => {
     await sentinelRow.getByTestId("prompt-history-jump-0").click();
 
     await expect(session.activeChat()).toBeVisible();
-    const msg = chat.locator('[id^="msg-"]').filter({ hasText: SENTINEL }).first();
+    const msg = chat.locator(`#msg-${sentinelMessageId}`);
+    await expect(msg).toHaveCount(1);
     await expect(msg).toBeAttached();
-    const targetMargin = await msg.evaluate(
-      (el) => parseFloat(getComputedStyle(el).scrollMarginTop) || 0,
-    );
+
+    // Scroll-settle poll on the transcript viewport: sample scrollTop until
+    // it is unchanged across consecutive reads, then measure the settled
+    // geometry (an immediate measurement can observe a transient position).
+    let lastScrollTop = -1;
+    let stableReads = 0;
     await expect
       .poll(
         async () => {
-          const { elTop, listTop } = await msg.evaluate((el) => {
-            const list = el.closest(".chat-message-list");
-            const listRect = list?.getBoundingClientRect();
-            const rect = el.getBoundingClientRect();
-            return { elTop: rect.top, listTop: listRect?.top ?? 0 };
-          });
-          return Math.abs(elTop - listTop - targetMargin);
+          const current = await messageList.evaluate((el) => el.scrollTop);
+          if (current === lastScrollTop) stableReads += 1;
+          else stableReads = 0;
+          lastScrollTop = current;
+          return stableReads;
         },
         { timeout: 5000 },
       )
-      .toBeLessThanOrEqual(2);
+      .toBeGreaterThanOrEqual(2);
+
+    // Top alignment: the row's top relative to its scrollport equals its
+    // computed scroll-margin-top (dynamic via --anchored-bar-h), within a
+    // small documented tolerance.
+    const targetMargin = await msg.evaluate(
+      (el) => parseFloat(getComputedStyle(el).scrollMarginTop) || 0,
+    );
+    const { elTop, listTop } = await msg.evaluate((el) => {
+      const list = el.closest(".chat-message-list");
+      const listRect = list?.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      return { elTop: rect.top, listTop: listRect?.top ?? 0 };
+    });
+    expect(Math.abs(elTop - listTop - targetMargin)).toBeLessThanOrEqual(2);
   });
 });

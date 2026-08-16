@@ -94,6 +94,24 @@ const ENTRY_CASES = [
     ],
   },
   {
+    name: "treats an unparseable turn completed_at as absent with no later prompt",
+    messages: [message({ id: "no-bound", turn_id: "turn-1" })],
+    turns: [turn({ completed_at: "not-a-time" })],
+    expected: [{ messageId: "no-bound", durationSeconds: null, isLastPrompt: true }],
+  },
+  {
+    name: "lets the next-prompt bound win when the turn completed_at is unparseable",
+    messages: [
+      message({ id: "bad-turn", turn_id: "turn-1" }),
+      message({ id: "later", created_at: "2026-01-01T00:00:04.000Z" }),
+    ],
+    turns: [turn({ completed_at: "not-a-time" })],
+    expected: [
+      { messageId: "later", durationSeconds: null, isLastPrompt: true },
+      { messageId: "bad-turn", durationSeconds: 4, isLastPrompt: false },
+    ],
+  },
+  {
     name: "scopes turn matching and last prompts to each session",
     messages: [
       message({ id: "a", session_id: "session-a" as Message["session_id"], turn_id: "turn-a" }),

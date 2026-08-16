@@ -10,7 +10,7 @@ const state = {
     hydratedBySession: {} as Record<string, boolean>,
   },
   replaceSessionTurns: vi.fn((sessionId: string, turns: Turn[]) => {
-    state.turns.bySession[sessionId] = turns;
+    state.turns.bySession[sessionId] = [...(state.turns.bySession[sessionId] ?? []), ...turns];
     state.turns.hydratedBySession[sessionId] = true;
   }),
 };
@@ -46,15 +46,31 @@ beforeEach(() => {
 });
 
 describe("useSessionTurns", () => {
-  it("fetches when the marker is absent even if a live partial turn exists", async () => {
+  it("fetches when the marker is absent and suppresses partial turns until hydration", async () => {
     state.turns.bySession["session-a"] = [turn("live")];
-    const { result } = renderHook(() => useSessionTurns("session-a"));
+    const { result, rerender } = renderHook(() => useSessionTurns("session-a"));
+
+    // While the marker is absent (fetch in flight) the partial live snapshot
+    // must not leak durations to the panel.
+    expect(result.current).toEqual([]);
 
     await waitFor(() =>
       expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]),
     );
 
-    expect(result.current).toEqual([turn("live")]);
+    // After the marker lands the merged turns (live + fetched) are exposed.
+    rerender();
+    expect(result.current).toEqual([turn("live"), turn("turn-a")]);
+  });
+
+  it("does not expose a live completed turn as a duration before hydration completes", async () => {
+    // A live completeTurn event writes a completed turn while
+    // listSessionTurns is still in flight; the unhydrated snapshot must not
+    // reach the panel (which would derive a duration from it).
+    state.turns.bySession["session-a"] = [turn("completed")];
+    const { result } = renderHook(() => useSessionTurns("session-a"));
+
+    expect(result.current).toEqual([]);
   });
 
   it("does not refetch a hydrated session", () => {

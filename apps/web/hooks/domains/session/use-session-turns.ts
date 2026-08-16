@@ -49,5 +49,5 @@ export function useSessionTurns(sessionId: string | null): Turn[] {
     };
   }, [sessionId, hydrated, store, activeSessionId]);
 
-  return turns ?? EMPTY_TURNS;
+  return hydrated ? (turns ?? EMPTY_TURNS) : EMPTY_TURNS;
 }

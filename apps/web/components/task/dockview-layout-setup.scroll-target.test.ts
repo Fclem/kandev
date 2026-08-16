@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoreApi } from "zustand";
 import type { AppState } from "@/lib/state/store";
 
-const { mockClearScrollTargetForSession } = vi.hoisted(() => ({
+const { mockClearScrollTargetForSession, mockRelease } = vi.hoisted(() => ({
   mockClearScrollTargetForSession: vi.fn(),
+  mockRelease: vi.fn(),
 }));
 
 const dockviewState = vi.hoisted(() => ({
@@ -25,7 +26,7 @@ vi.mock("@/lib/state/dockview-store", () => ({
 vi.mock("@/lib/layout/panel-portal-manager", () => ({
   panelPortalManager: {
     get: vi.fn(() => undefined),
-    release: vi.fn(),
+    release: mockRelease,
   },
 }));
 
@@ -107,6 +108,23 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
 
     expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-3");
     expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+  });
+
+  it("clears the target during a restore detach that keeps the host portal alive", () => {
+    // Task 03 persistent-portal restore: `fromJSON` DETACHES the canonical
+    // chat slot but deliberately does NOT release its portal, so the
+    // TaskChatPanel host stays MOUNTED and its unmount cleanup never runs.
+    // The removal-path clear (before the restore guard) is the only cleanup —
+    // assert both halves: the target IS cleared and the portal is NOT
+    // released (host stays mounted).
+    dockviewState.isRestoringLayout = true;
+    const api = makeApi();
+    setupPortalCleanup(api as never, makeAppStore("session-1"));
+
+    api.fireRemoval({ id: "chat" });
+
+    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(mockRelease).not.toHaveBeenCalled();
   });
 
   it("does not clear without an active session when the canonical chat is removed", () => {

@@ -112,6 +112,35 @@ describe("useScrollTargetConsumption — success-path consumption", () => {
     expect(mockDockviewState.clearScrollTarget).not.toHaveBeenCalled();
   });
 
+  it("lets only the exact-owner host consume when a canonical chat and a session panel are both mounted and active", async () => {
+    // Task 03 race: `session:<id>` and the canonical `chat` host are mounted
+    // simultaneously (a real transient layout state), both reporting
+    // isVisible=true. Only the host whose panelId equals the target's
+    // hostPanelId may scroll and clear; the hidden canonical duplicate must
+    // never consume the target meant for the visible transcript.
+    mockDockviewState.scrollTarget = target();
+    const sessionHostRef = { current: scrollHandle(true) };
+    const canonicalHostRef = { current: scrollHandle(true) };
+
+    renderHook(() => useScrollTargetConsumption({ ...PROPS, messageListRef: sessionHostRef }));
+    renderHook(() =>
+      useScrollTargetConsumption({
+        ...PROPS,
+        panelId: "chat",
+        messageListRef: canonicalHostRef,
+      }),
+    );
+    await flushFrames();
+
+    expect(sessionHostRef.current?.scrollToMessage).toHaveBeenCalledWith("message-1", {
+      align: "start",
+      behavior: "auto",
+    });
+    expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
+    expect(canonicalHostRef.current?.scrollToMessage).not.toHaveBeenCalled();
+    expect(mockDockviewState.clearScrollTargetForSession).not.toHaveBeenCalled();
+  });
+
   it("does not consume when the target belongs to another session", () => {
     mockDockviewState.scrollTarget = target({ sessionId: "session-2" });
     const messageListRef = { current: scrollHandle(true) };

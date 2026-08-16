@@ -302,6 +302,118 @@ describe("ensureSessionTurnsLoaded — timestamp edge cases", () => {
     expect(stored.completed_at).toBe(COMPLETION_AT);
   });
 
+  it("merges a valid REST row when the existing row has an invalid timestamp", async () => {
+    // Date.parse of a malformed string yields NaN, and NaN comparisons are
+    // always false — the valid REST row must not lose to an invalid existing
+    // timestamp. Same completion state so the timestamp path is exercised.
+    let resolveList!: (value: { turns: unknown[]; total: number }) => void;
+    mockListSessionTurns.mockReturnValue(
+      new Promise<{ turns: unknown[]; total: number }>((resolve) => {
+        resolveList = resolve;
+      }),
+    );
+    const store = makeStore();
+    store.getState().turns.bySession[SESSION_ID] = [
+      makeTurn("turn-1", {
+        updated_at: "not-a-timestamp",
+        completed_at: COMPLETION_AT,
+        metadata: { runtime_config_snapshot: { model: "stale" } },
+      }),
+    ];
+
+    const pending = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+    resolveList({
+      turns: [
+        makeTurn("turn-1", {
+          updated_at: LIVE_UPDATED_AT,
+          completed_at: COMPLETION_AT,
+          metadata: { runtime_config_snapshot: { model: "fresh" } },
+        }),
+      ],
+      total: 1,
+    });
+    await pending;
+
+    const stored = store.getState().turns.bySession[SESSION_ID][0] as Record<string, unknown>;
+    expect(stored.metadata).toEqual({ runtime_config_snapshot: { model: "fresh" } });
+    expect(store.addTurn).toHaveBeenCalledWith(expect.objectContaining({ id: "turn-1" }));
+  });
+});
+
+it("keeps the existing row when timestamps are equal", async () => {
+  mockListSessionTurns.mockResolvedValue({
+    turns: [makeTurn("turn-1", { completed_at: COMPLETION_AT })],
+    total: 1,
+  });
+  const store = makeStore();
+  store.getState().turns.bySession[SESSION_ID] = [
+    makeTurn("turn-1", {
+      completed_at: COMPLETION_AT,
+      metadata: { runtime_config_snapshot: { model: "existing" } },
+    }),
+  ];
+
+  await ensureSessionTurnsLoaded(SESSION_ID, store as never);
+
+  expect(store.addTurn).not.toHaveBeenCalled();
+  const stored = store.getState().turns.bySession[SESSION_ID][0] as Record<string, unknown>;
+  expect(stored.metadata).toEqual({ runtime_config_snapshot: { model: "existing" } });
+});
+
+describe("ensureSessionTurnsLoaded — timestamp comparison semantics", () => {
+  it("skips a REST row with an invalid timestamp over a valid existing row", async () => {
+    mockListSessionTurns.mockResolvedValue({
+      turns: [
+        makeTurn("turn-1", {
+          updated_at: "not-a-timestamp",
+          completed_at: COMPLETION_AT,
+          metadata: { runtime_config_snapshot: { model: "stale" } },
+        }),
+      ],
+      total: 1,
+    });
+    const store = makeStore();
+    store.getState().turns.bySession[SESSION_ID] = [
+      makeTurn("turn-1", {
+        updated_at: LIVE_UPDATED_AT,
+        completed_at: COMPLETION_AT,
+        metadata: { runtime_config_snapshot: { model: "fresh" } },
+      }),
+    ];
+
+    await ensureSessionTurnsLoaded(SESSION_ID, store as never);
+
+    expect(store.addTurn).not.toHaveBeenCalled();
+    const stored = store.getState().turns.bySession[SESSION_ID][0] as Record<string, unknown>;
+    expect(stored.metadata).toEqual({ runtime_config_snapshot: { model: "fresh" } });
+  });
+
+  it("merges when both rows are completed and the REST row is newer", async () => {
+    mockListSessionTurns.mockResolvedValue({
+      turns: [
+        makeTurn("turn-1", {
+          updated_at: LIVE_UPDATED_AT,
+          completed_at: COMPLETION_AT,
+          metadata: { runtime_config_snapshot: { model: "rest-newer" } },
+        }),
+      ],
+      total: 1,
+    });
+    const store = makeStore();
+    store.getState().turns.bySession[SESSION_ID] = [
+      makeTurn("turn-1", {
+        updated_at: BASE_TIMESTAMP,
+        completed_at: COMPLETION_AT,
+        metadata: { runtime_config_snapshot: { model: "ws-older" } },
+      }),
+    ];
+
+    await ensureSessionTurnsLoaded(SESSION_ID, store as never);
+
+    const stored = store.getState().turns.bySession[SESSION_ID][0] as Record<string, unknown>;
+    expect(stored.metadata).toEqual({ runtime_config_snapshot: { model: "rest-newer" } });
+  });
+
   it("does not clobber live WS turn data with a stale REST snapshot", async () => {
     // WS `session.turn.completed` for turn-1 arrives WHILE the REST request
     // is in flight; the REST response is an older snapshot of the same turn

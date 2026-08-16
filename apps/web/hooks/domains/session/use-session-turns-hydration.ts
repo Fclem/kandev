@@ -16,6 +16,18 @@ export function clearInFlightTurnsLoadForTest(): void {
 }
 
 /**
+ * Parses a turn `updated_at` into a comparable epoch. Missing, empty, or
+ * malformed values map to `-Infinity` (stale) — `Date.parse` yields NaN for
+ * invalid strings, and NaN comparisons are always false, which would let an
+ * invalid existing timestamp silently defeat a valid REST row.
+ */
+function parseTurnTimestamp(value: string | undefined): number {
+  if (!value) return -Infinity;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : -Infinity;
+}
+
+/**
  * Ensures the store holds this session's FULL persisted turn history.
  *
  * The boot/SSR state hydrates turns only for the page-load active session;
@@ -91,8 +103,8 @@ export async function ensureSessionTurnsLoaded(
         if (existingCompleted && !restCompleted) {
           continue;
         }
-        const existingUpdated = existing.updated_at ? Date.parse(existing.updated_at) : -Infinity;
-        const restUpdated = turn.updated_at ? Date.parse(turn.updated_at) : -Infinity;
+        const existingUpdated = parseTurnTimestamp(existing.updated_at);
+        const restUpdated = parseTurnTimestamp(turn.updated_at);
         if (restUpdated > existingUpdated) {
           store.getState().addTurn(turn);
         }

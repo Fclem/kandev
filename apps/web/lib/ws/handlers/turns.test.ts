@@ -14,12 +14,23 @@ const NOTIFICATION = "notification";
 const TURN_STARTED_AT = "2026-07-23T10:00:00.000Z";
 const TURN_COMPLETED_AT = "2026-07-23T10:01:00.000Z";
 
-function makeStore() {
-  return create<SessionSlice>()(
+type TurnTestState = SessionSlice & {
+  quickChat: {
+    isOpen: boolean;
+    activeSessionId: string | null;
+    sessions: Array<{ sessionId: string; workspaceId: string }>;
+  };
+  markQuickChatUnseenIdle: ReturnType<typeof vi.fn>;
+};
+
+function makeStore(
+  quickChat: TurnTestState["quickChat"] = { isOpen: false, activeSessionId: null, sessions: [] },
+) {
+  return create<TurnTestState>()(
     immer((set) => ({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ...(createSessionSlice as any)(set),
-      quickChat: { sessions: [] },
+      ...(createSessionSlice as unknown as (storeSet: typeof set) => SessionSlice)(set),
+      quickChat,
+      markQuickChatUnseenIdle: vi.fn(),
       availableCommands: { bySessionId: {} },
     })),
   );
@@ -95,5 +106,38 @@ describe("session turn WebSocket handlers", () => {
     } as never);
 
     expect(flush).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a closed quick chat once and ignores visible or unrelated sessions", () => {
+    const quickChat = {
+      isOpen: false,
+      activeSessionId: null,
+      sessions: [{ sessionId: SESSION_ID, workspaceId: "workspace-1" }],
+    };
+    const store = makeStore(quickChat);
+
+    send(store, TURN_COMPLETED, turn("turn-1", TURN_STARTED_AT, TURN_COMPLETED_AT));
+    send(store, TURN_COMPLETED, turn("turn-1", TURN_STARTED_AT, TURN_COMPLETED_AT));
+
+    expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledTimes(1);
+    expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledWith(
+      SESSION_ID,
+      "workspace-1",
+    );
+
+    store.setState({
+      quickChat: {
+        ...quickChat,
+        isOpen: true,
+        activeSessionId: "other-session",
+        sessions: [
+          ...quickChat.sessions,
+          { sessionId: "other-session", workspaceId: "workspace-1" },
+        ],
+      },
+    });
+    send(store, TURN_COMPLETED, turn("turn-2", TURN_STARTED_AT, TURN_COMPLETED_AT));
+
+    expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledTimes(2);
   });
 });

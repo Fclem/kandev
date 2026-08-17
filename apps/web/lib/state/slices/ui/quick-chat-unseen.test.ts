@@ -10,6 +10,8 @@ type QuickChatWithUnseenMarkers = {
 const SESSION_ID = "session-1";
 const WORKSPACE_ID = "workspace-1";
 const SETTLED_AT = "2026-08-17T07:00:00Z";
+const OTHER_SESSION_ID = "session-2";
+const OTHER_WORKSPACE_ID = "workspace-2";
 
 describe("quick chat unseen idle markers", () => {
   it("clears all markers when opening quick chat", () => {
@@ -69,6 +71,16 @@ describe("quick chat unseen idle WebSocket scheduling", () => {
     settle(store, SESSION_ID, SETTLED_AT);
 
     expect(selectQuickChatHasUnseenIdle(store.getState(), WORKSPACE_ID)).toBe(false);
+  });
+
+  it("marks a completion outside the visible quick-chat dialog workspace", () => {
+    const store = createAppStore();
+    store.getState().openQuickChat(SESSION_ID, WORKSPACE_ID);
+    store.getState().addQuickChatSession(OTHER_SESSION_ID, OTHER_WORKSPACE_ID);
+
+    settle(store, OTHER_SESSION_ID, SETTLED_AT);
+
+    expect(selectQuickChatHasUnseenIdle(store.getState(), OTHER_WORKSPACE_ID)).toBe(true);
   });
 
   it("does not re-mark after a cleared duplicate completion", () => {

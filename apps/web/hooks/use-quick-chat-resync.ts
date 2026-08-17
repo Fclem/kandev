@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { listQuickChatSessions } from "@/lib/api/domains/workspace-api";
 import { listQuickTerminalTabs, toQuickTerminalTab } from "@/lib/api/domains/quick-terminal-api";
@@ -25,6 +25,7 @@ export function useQuickChatResync(workspaceId: string | null): void {
   const setTaskSession = useAppStore((state) => state.setTaskSession);
   // Resync once per connection, not on every unrelated status re-render.
   const lastSyncedConnection = useRef<string | null>(null);
+  const [, retryResync] = useReducer((attempt: number) => attempt + 1, 0);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -38,10 +39,10 @@ export function useQuickChatResync(workspaceId: string | null): void {
     let cancelled = false;
     Promise.all([listQuickChatSessions(workspaceId), listQuickTerminalTabs(workspaceId)])
       .then(([response, terminalResponse]) => {
-        if (
-          cancelled ||
-          store.getState().quickChat.syncRevisionByWorkspace[workspaceId] !== revision
-        ) {
+        if (cancelled) return;
+        if (store.getState().quickChat.syncRevisionByWorkspace[workspaceId] !== revision) {
+          lastSyncedConnection.current = null;
+          retryResync();
           return;
         }
         const sessions = toQuickChatSessions(response.sessions);

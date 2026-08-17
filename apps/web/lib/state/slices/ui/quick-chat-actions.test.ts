@@ -56,6 +56,7 @@ function makeStore() {
   );
 }
 
+// eslint-disable-next-line max-lines-per-function -- related quick-chat session state transitions share a store fixture.
 describe("typed quick chat sessions", () => {
   it("registers a shared session without opening the Quick Chat dialog", () => {
     const store = makeStore();
@@ -74,6 +75,20 @@ describe("typed quick chat sessions", () => {
           initialPrompt: "Configure my workflow",
         },
       ],
+    });
+  });
+
+  it("preserves task ownership when reopening or refreshing an existing session", () => {
+    const store = makeStore();
+    store.getState().addQuickChatSession(SESSION_A, WORKSPACE_A, "agent-a", "chat", "task-a");
+    store.getState().closeQuickChat();
+
+    store.getState().openQuickChat(SESSION_A, WORKSPACE_A);
+    store.getState().addQuickChatSession(SESSION_A, WORKSPACE_A);
+
+    expect(store.getState().quickChat.sessionOwnership[SESSION_A]).toEqual({
+      workspaceId: WORKSPACE_A,
+      taskId: "task-a",
     });
   });
 

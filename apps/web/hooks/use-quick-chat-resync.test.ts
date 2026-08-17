@@ -1,4 +1,4 @@
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ListQuickTerminalTabsResponse } from "@/lib/api/domains/quick-terminal-api";
 import type { ListQuickChatSessionsResponse } from "@/lib/api/domains/workspace-api";
@@ -67,23 +67,36 @@ describe("useQuickChatResync", () => {
 
   afterEach(cleanup);
 
-  it("discards a response superseded by a quick-chat state change", async () => {
-    const sessions = deferred<ListQuickChatSessionsResponse>();
-    const terminals = deferred<ListQuickTerminalTabsResponse>();
-    apiMock.listQuickChatSessions.mockReturnValueOnce(sessions.promise);
-    apiMock.listQuickTerminalTabs.mockReturnValueOnce(terminals.promise);
+  it("discards a superseded response and retries the latest workspace state", async () => {
+    const firstSessions = deferred<ListQuickChatSessionsResponse>();
+    const firstTerminals = deferred<ListQuickTerminalTabsResponse>();
+    const latestSessions = deferred<ListQuickChatSessionsResponse>();
+    const latestTerminals = deferred<ListQuickTerminalTabsResponse>();
+    apiMock.listQuickChatSessions
+      .mockReturnValueOnce(firstSessions.promise)
+      .mockReturnValueOnce(latestSessions.promise);
+    apiMock.listQuickTerminalTabs
+      .mockReturnValueOnce(firstTerminals.promise)
+      .mockReturnValueOnce(latestTerminals.promise);
 
     renderHook(() => useQuickChatResync("workspace-1"));
 
     await act(async () => {
       mockState.quickChat.syncRevisionByWorkspace["workspace-1"] = 1;
-      sessions.resolve({ sessions: [], task_sessions: [] });
-      terminals.resolve({ tabs: [] });
+      firstSessions.resolve({ sessions: [], task_sessions: [] });
+      firstTerminals.resolve({ tabs: [] });
       await Promise.resolve();
     });
 
-    expect(mockState.setTaskSession).not.toHaveBeenCalled();
-    expect(mockState.syncQuickChatSessions).not.toHaveBeenCalled();
-    expect(mockState.syncQuickTerminalTabs).not.toHaveBeenCalled();
+    await waitFor(() => expect(apiMock.listQuickChatSessions).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      latestSessions.resolve({ sessions: [], task_sessions: [] });
+      latestTerminals.resolve({ tabs: [] });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(mockState.syncQuickChatSessions).toHaveBeenCalledTimes(1));
+    expect(mockState.syncQuickTerminalTabs).toHaveBeenCalledTimes(1);
   });
 });

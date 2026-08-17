@@ -87,6 +87,7 @@ function withLifecyclePruning(
   let markers = state.unseenIdleByWorkspace;
   const ownership = { ...state.sessionOwnership };
   const tombstones = { ...state.tombstonedSessions };
+  const lastSettledAtBySession = { ...state.lastSettledAtBySession };
   const sessions = state.sessions.filter((session) => !removedIds.has(session.sessionId));
   for (const sessionId of removedIds) {
     const session = state.sessions.find((item) => item.sessionId === sessionId);
@@ -96,6 +97,7 @@ function withLifecyclePruning(
     if (!owner) continue;
     markers = clearMarker(markers, owner.workspaceId, sessionId);
     delete ownership[sessionId];
+    delete lastSettledAtBySession[sessionId];
     if (tombstone && !isQuickChatSetupSessionId(sessionId)) {
       tombstones[sessionId] = {
         workspaceId: owner.workspaceId,
@@ -107,6 +109,7 @@ function withLifecyclePruning(
     {
       ...state,
       unseenIdleByWorkspace: markers,
+      lastSettledAtBySession,
       sessionOwnership: ownership,
       tombstonedSessions: pruneTombstones(tombstones),
     },
@@ -363,7 +366,7 @@ function withValidActiveSession(
   const workspaceId = state.sessions.find(
     (session) => session.sessionId === state.activeSessionId,
   )?.workspaceId;
-  const fallback = sessions.find((session) => session.workspaceId === workspaceId) ?? sessions[0];
+  const fallback = sessions.find((session) => session.workspaceId === workspaceId);
   const terminalFallback = state.terminalTabs.find((tab) => tab.workspaceId === workspaceId);
   if (!fallback && terminalFallback)
     return {

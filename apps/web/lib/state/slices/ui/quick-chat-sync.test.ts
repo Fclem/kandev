@@ -379,6 +379,20 @@ describe("removeQuickChatSessionsForTask", () => {
     expect(after.activeSessionId).toBeNull();
   });
 
+  it("removes lifecycle state using ownership after its tab has disappeared", () => {
+    const before = state([], {
+      sessionOwnership: { removed: { workspaceId: WS, taskId: "task-removed" } },
+      unseenIdleByWorkspace: { [WS]: { removed: true } },
+      lastSettledAtBySession: { removed: "2026-08-17T07:00:00Z" },
+    });
+
+    const after = removeQuickChatSessionsForTask(before, "task-removed");
+
+    expect(after.sessionOwnership).toEqual({});
+    expect(after.unseenIdleByWorkspace).toEqual({});
+    expect(after.lastSettledAtBySession).toEqual({});
+  });
+
   it("returns the same state when no tab is affected", () => {
     const before = state([chat("a")]);
 

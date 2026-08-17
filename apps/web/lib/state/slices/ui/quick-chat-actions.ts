@@ -22,6 +22,26 @@ function findWorkspaceConfigSession(
   );
 }
 
+function upsertQuickChatSession(
+  quickChat: Draft<UISlice["quickChat"]>,
+  session: QuickChatSession,
+): boolean {
+  const { sessionId, workspaceId, agentProfileId, kind, taskId } = session;
+  const existing = quickChat.sessions.find((session) => session.sessionId === sessionId);
+  if (existing) {
+    if (existing.workspaceId !== workspaceId) return false;
+    if (agentProfileId) existing.agentProfileId = agentProfileId;
+    if (taskId) existing.taskId = taskId;
+  } else {
+    quickChat.sessions.push({ sessionId, workspaceId, agentProfileId, kind, taskId });
+  }
+  const ownedTaskId = taskId ?? existing?.taskId ?? quickChat.sessionOwnership[sessionId]?.taskId;
+  quickChat.sessionOwnership[sessionId] = { workspaceId, taskId: ownedTaskId };
+  quickChat.syncRevisionByWorkspace[workspaceId] =
+    (quickChat.syncRevisionByWorkspace[workspaceId] ?? 0) + 1;
+  return true;
+}
+
 function openQuickChat(set: ImmerSet) {
   return (
     sessionId: string,
@@ -49,17 +69,16 @@ function openQuickChat(set: ImmerSet) {
         draft.quickChat.activeKind = "conversation";
         return;
       }
-      const existing = draft.quickChat.sessions.find((session) => session.sessionId === sessionId);
-      if (existing) {
-        if (existing.workspaceId !== workspaceId) return;
-        if (agentProfileId) existing.agentProfileId = agentProfileId;
-        if (taskId) existing.taskId = taskId;
-      } else {
-        draft.quickChat.sessions.push({ sessionId, workspaceId, agentProfileId, kind, taskId });
-      }
-      draft.quickChat.sessionOwnership[sessionId] = { workspaceId, taskId };
-      draft.quickChat.syncRevisionByWorkspace[workspaceId] =
-        (draft.quickChat.syncRevisionByWorkspace[workspaceId] ?? 0) + 1;
+      if (
+        !upsertQuickChatSession(draft.quickChat, {
+          sessionId,
+          workspaceId,
+          agentProfileId,
+          kind,
+          taskId,
+        })
+      )
+        return;
       draft.quickChat.isOpen = true;
       draft.quickChat.activeSessionId = sessionId;
       draft.quickChat.activeKind = "conversation";
@@ -75,20 +94,19 @@ function addQuickChatSession(set: ImmerSet) {
     taskId?: string,
   ) =>
     set((draft) => {
-      const existing = draft.quickChat.sessions.find((session) => session.sessionId === sessionId);
       const activeWorkspaceId = draft.quickChat.sessions.find(
         (session) => session.sessionId === draft.quickChat.activeSessionId,
       )?.workspaceId;
-      if (existing) {
-        if (existing.workspaceId !== workspaceId) return;
-        if (agentProfileId) existing.agentProfileId = agentProfileId;
-        if (taskId) existing.taskId = taskId;
-      } else {
-        draft.quickChat.sessions.push({ sessionId, workspaceId, agentProfileId, kind, taskId });
-      }
-      draft.quickChat.sessionOwnership[sessionId] = { workspaceId, taskId };
-      draft.quickChat.syncRevisionByWorkspace[workspaceId] =
-        (draft.quickChat.syncRevisionByWorkspace[workspaceId] ?? 0) + 1;
+      if (
+        !upsertQuickChatSession(draft.quickChat, {
+          sessionId,
+          workspaceId,
+          agentProfileId,
+          kind,
+          taskId,
+        })
+      )
+        return;
       if (!draft.quickChat.isOpen || !activeWorkspaceId || activeWorkspaceId === workspaceId) {
         draft.quickChat.activeSessionId = sessionId;
         draft.quickChat.activeKind = "conversation";

@@ -72,9 +72,13 @@ test.describe.serial("relative last seen (mobile)", () => {
         await trigger.tap();
         const option = page.getByRole("option", { name: "Relative time" });
         await expect(option).toBeVisible();
-        const optionBox = await option.boundingBox();
-        expect(optionBox).not.toBeNull();
-        expect(Math.round(optionBox!.height)).toBeGreaterThanOrEqual(44);
+        // The dropdown entrance animation (zoom-in-95 over 100ms) scales the
+        // whole content, so a one-shot boundingBox() can measure mid-flight
+        // and read ~42px. Poll until the box settles at the real size before
+        // asserting the 44px active-dimension touch target.
+        await expect
+          .poll(async () => Math.round((await option.boundingBox())?.height ?? 0))
+          .toBeGreaterThanOrEqual(44);
         await option.tap();
 
         // Relative labels render without hover, with no horizontal overflow.

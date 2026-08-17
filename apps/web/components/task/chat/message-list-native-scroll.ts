@@ -395,11 +395,14 @@ export function useScrollToMessage(
   const generationRef = useRef(0);
   return useCallback(
     (messageId: string, options?: { align?: "start" | "center"; behavior?: "smooth" | "auto" }) => {
+      // Advance the generation BEFORE the lookup: a superseding request whose
+      // row is not rendered yet still returns false, but must invalidate any
+      // in-flight verifier so it can never force-land on a stale prompt.
+      const generation = ++generationRef.current;
       const selector = `[id="msg-${CSS.escape(messageId)}"]`;
       const el = scrollRef.current?.querySelector<HTMLElement>(selector);
       if (!el) return false;
       const alignStart = options?.align === "start";
-      const generation = ++generationRef.current;
       runGuardedScroll(() => {
         el.scrollIntoView({
           block: alignStart ? "start" : "center",
@@ -420,7 +423,7 @@ export function useScrollToMessage(
         let lastAbsDelta = Infinity;
         const verify = () => {
           frames += 1;
-          if (frames > 30 || !container.isConnected) return;
+          if (frames > 30 || !container.isConnected || !el.isConnected) return;
           if (generationRef.current !== generation) return; // superseded
           const delta = alignStart
             ? el.getBoundingClientRect().top - container.getBoundingClientRect().top - margin

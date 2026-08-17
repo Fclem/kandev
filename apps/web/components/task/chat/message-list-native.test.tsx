@@ -22,6 +22,7 @@ import { useAutoScroll, useScrollToMessage } from "./message-list-native-scroll"
 
 const DIVIDER_KEY = "m2";
 const DIVIDER_SCROLL_CONTAINER_TEST_ID = "divider-scroll-container";
+const SCROLL_TO_MESSAGE_ROOT = "scroll-to-message-root";
 const MISSING_SCROLL_CONTAINER_ERROR = "scroll container did not render";
 const TEST_MESSAGES = [{} as Message];
 const NEVER_LOCKED = () => false;
@@ -269,7 +270,7 @@ function ScrollToMessageHarness({
     onHandle(handle);
   }, [handle, onHandle]);
   return (
-    <div ref={scrollRef} data-testid="scroll-to-message-root">
+    <div ref={scrollRef} data-testid={SCROLL_TO_MESSAGE_ROOT}>
       {rows.map((id) => (
         <div key={id} id={`msg-${id}`} />
       ))}
@@ -364,7 +365,7 @@ describe("useScrollToMessage — root-scoped row lookup", () => {
     // still call scrollIntoView twice — pin the receivers instead: the first
     // handle's target must live in the first root and the second handle's in
     // the second root.
-    const roots = results.container.querySelectorAll('[data-testid="scroll-to-message-root"]');
+    const roots = results.container.querySelectorAll(`[data-testid="${SCROLL_TO_MESSAGE_ROOT}"]`);
     expect(roots).toHaveLength(2);
     expect(scrollIntoView).toHaveBeenCalledTimes(2);
     expect(scrollReceivers).toHaveLength(2);
@@ -403,7 +404,9 @@ describe("useScrollToMessage — canceled-scroll landing", () => {
       );
       const handle = boxedHandle.current;
       if (!handle) throw new Error("handle did not render");
-      const root = container.querySelector<HTMLElement>('[data-testid="scroll-to-message-root"]');
+      const root = container.querySelector<HTMLElement>(
+        `[data-testid="${SCROLL_TO_MESSAGE_ROOT}"]`,
+      );
       const target = container.querySelector("#msg-target");
       if (!root || !target) throw new Error("harness did not render");
       Object.defineProperty(root, "scrollTop", {
@@ -465,7 +468,9 @@ describe("useScrollToMessage — superseded verifiers", () => {
       );
       const handle = boxedHandle.current;
       if (!handle) throw new Error("handle did not render");
-      const root = container.querySelector<HTMLElement>('[data-testid="scroll-to-message-root"]');
+      const root = container.querySelector<HTMLElement>(
+        `[data-testid="${SCROLL_TO_MESSAGE_ROOT}"]`,
+      );
       const targetA = container.querySelector("#msg-target-a");
       const targetB = container.querySelector("#msg-target-b");
       if (!root || !targetA || !targetB) throw new Error("harness did not render");
@@ -500,6 +505,70 @@ describe("useScrollToMessage — superseded verifiers", () => {
       }
       // The transcript lands on B (240), never on the stale A (120).
       expect(root.scrollTop).toBe(240);
+    } finally {
+      vi.unstubAllGlobals();
+      scrollIntoView.mockRestore();
+    }
+  });
+});
+
+describe("useScrollToMessage — absent superseder", () => {
+  it("invalidates an in-flight verifier even when the superseding row is absent", () => {
+    // Round-15 regression: a newer scrollToMessage whose row is not rendered
+    // yet returns false but must still advance the generation, so A's
+    // in-flight verifier can never force-land on the stale prompt.
+    const frames: Array<() => void> = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    try {
+      const boxedHandle: { current: ScrollToMessageHandle | null } = { current: null };
+      const { container } = render(
+        <ScrollToMessageHarness
+          rows={["target-a"]}
+          onHandle={(next) => {
+            boxedHandle.current = next;
+          }}
+        />,
+      );
+      const handle = boxedHandle.current;
+      if (!handle) throw new Error("handle did not render");
+      const root = container.querySelector<HTMLElement>(
+        `[data-testid="${SCROLL_TO_MESSAGE_ROOT}"]`,
+      );
+      const targetA = container.querySelector("#msg-target-a");
+      if (!root || !targetA) throw new Error("harness did not render");
+      Object.defineProperty(root, "scrollTop", {
+        configurable: true,
+        writable: true,
+        value: 0,
+      });
+      Object.defineProperty(root, "getBoundingClientRect", {
+        configurable: true,
+        value: () => createRect(0, 400),
+      });
+      Object.defineProperty(targetA, "getBoundingClientRect", {
+        configurable: true,
+        value: () => createRect(120 - root.scrollTop, 20),
+      });
+
+      expect(handle("target-a", { align: "start" })).toBe(true);
+      // The superseding target row is absent: the call returns false but
+      // must invalidate A's pending verifier.
+      expect(handle("missing-b", { align: "start" })).toBe(false);
+
+      for (let i = 0; i < 10; i += 1) {
+        act(() => {
+          const pending = frames.splice(0);
+          for (const frame of pending) frame();
+        });
+      }
+      expect(root.scrollTop).toBe(0);
     } finally {
       vi.unstubAllGlobals();
       scrollIntoView.mockRestore();

@@ -2,10 +2,11 @@
 
 import { useCallback, useMemo, useState, memo } from "react";
 import { useTranslation } from "react-i18next";
-import { IconCheck, IconMessageCircle, IconNetwork, IconPlus } from "@tabler/icons-react";
+import { IconCheck, IconNetwork, IconPlus } from "@tabler/icons-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@kandev/ui/sheet";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@kandev/ui/drawer";
 import { Button } from "@kandev/ui/button";
+import { QuickChatSheetButton } from "./quick-chat-sheet-button";
 import { TaskSwitcher } from "../task-switcher";
 import type { TaskSwitcherItem, TaskSwitcherProps } from "../task-switcher";
 import { SidebarFilterBar } from "../sidebar-filter/sidebar-filter-bar";
@@ -13,7 +14,6 @@ import type { StepDef } from "../task-switcher-context-menu";
 import type { TaskMoveWorkflow } from "../task-move-context-menu";
 import { applyView } from "@/lib/sidebar/apply-view";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
-import { selectQuickChatHasUnseenIdle } from "@/lib/state/slices/ui/quick-chat-unseen-selectors";
 import { useEffectiveSidebarView } from "@/hooks/domains/sidebar/use-effective-sidebar-view";
 import { useSidebarTaskPrefs } from "@/hooks/domains/sidebar/use-sidebar-task-prefs";
 import { useRepositories } from "@/hooks/domains/workspace/use-repositories";
@@ -206,9 +206,6 @@ function TaskSwitcherSurfaceHeader({
   presentation: "sheet" | "drawer";
 }) {
   const { t } = useTranslation();
-  const quickChatHasUnseenIdle = useAppStore((state) =>
-    selectQuickChatHasUnseenIdle(state, workspaceId),
-  );
   const content = (
     <>
       <div className="flex items-center justify-between">
@@ -218,27 +215,7 @@ function TaskSwitcherSurfaceHeader({
           <SheetTitle className="text-base">{t("task:tasks")}</SheetTitle>
         )}
         <div className="flex items-center gap-2">
-          {workspaceId && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 cursor-pointer"
-              onClick={onQuickChat}
-              data-testid="mobile-sheet-quick-chat"
-            >
-              <span className={quickChatHasUnseenIdle ? "relative flex" : undefined}>
-                <IconMessageCircle className="h-4 w-4" />
-                {quickChatHasUnseenIdle && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background"
-                    data-testid="quick-chat-unseen-dot"
-                  />
-                )}
-              </span>
-              {t("task:chat")}
-            </Button>
-          )}
+          {workspaceId && <QuickChatSheetButton workspaceId={workspaceId} onClick={onQuickChat} />}
           <Button
             size="sm"
             variant="outline"

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { createSessionSlice } from "@/lib/state/slices/session/session-slice";
@@ -13,6 +13,7 @@ const TURN_COMPLETED = "session.turn.completed";
 const NOTIFICATION = "notification";
 const TURN_STARTED_AT = "2026-07-23T10:00:00.000Z";
 const TURN_COMPLETED_AT = "2026-07-23T10:01:00.000Z";
+const WORKSPACE_ID = "workspace-1";
 
 type TurnTestState = SessionSlice & {
   quickChat: {
@@ -20,17 +21,24 @@ type TurnTestState = SessionSlice & {
     activeSessionId: string | null;
     sessions: Array<{ sessionId: string; workspaceId: string }>;
   };
-  markQuickChatUnseenIdle: ReturnType<typeof vi.fn>;
+  markQuickChatUnseenIdle: Mock;
+  recordQuickChatSettled: (sessionId: string, updatedAt: string) => boolean;
 };
 
 function makeStore(
   quickChat: TurnTestState["quickChat"] = { isOpen: false, activeSessionId: null, sessions: [] },
 ) {
+  const settledLedger: Record<string, string> = {};
   return create<TurnTestState>()(
     immer((set) => ({
       ...(createSessionSlice as unknown as (storeSet: typeof set) => SessionSlice)(set),
       quickChat,
       markQuickChatUnseenIdle: vi.fn(),
+      recordQuickChatSettled: (sessionId: string, updatedAt: string) => {
+        if (!updatedAt || settledLedger[sessionId] >= updatedAt) return false;
+        settledLedger[sessionId] = updatedAt;
+        return true;
+      },
       availableCommands: { bySessionId: {} },
     })),
   );
@@ -112,7 +120,7 @@ describe("session turn WebSocket handlers", () => {
     const quickChat = {
       isOpen: false,
       activeSessionId: null,
-      sessions: [{ sessionId: SESSION_ID, workspaceId: "workspace-1" }],
+      sessions: [{ sessionId: SESSION_ID, workspaceId: WORKSPACE_ID }],
     };
     const store = makeStore(quickChat);
 
@@ -120,10 +128,7 @@ describe("session turn WebSocket handlers", () => {
     send(store, TURN_COMPLETED, turn("turn-1", TURN_STARTED_AT, TURN_COMPLETED_AT));
 
     expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledTimes(1);
-    expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledWith(
-      SESSION_ID,
-      "workspace-1",
-    );
+    expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledWith(SESSION_ID, WORKSPACE_ID);
 
     store.setState({
       quickChat: {
@@ -132,12 +137,41 @@ describe("session turn WebSocket handlers", () => {
         activeSessionId: "other-session",
         sessions: [
           ...quickChat.sessions,
-          { sessionId: "other-session", workspaceId: "workspace-1" },
+          { sessionId: "other-session", workspaceId: WORKSPACE_ID },
         ],
       },
     });
     send(store, TURN_COMPLETED, turn("turn-2", TURN_STARTED_AT, TURN_COMPLETED_AT));
 
     expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-mark an older replay after the settled ledger recorded the completion", () => {
+    const store = makeStore({
+      isOpen: false,
+      activeSessionId: null,
+      sessions: [{ sessionId: SESSION_ID, workspaceId: WORKSPACE_ID }],
+    });
+
+    send(store, TURN_COMPLETED, turn("turn-1", TURN_STARTED_AT, TURN_COMPLETED_AT));
+    // A delayed replay of an older completion arrives with a fresh turn id.
+    send(store, TURN_COMPLETED, turn("turn-2", TURN_STARTED_AT, TURN_COMPLETED_AT));
+
+    expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it("suppresses a completion in another workspace while the dialog is open", () => {
+    const store = makeStore({
+      isOpen: true,
+      activeSessionId: "session-a",
+      sessions: [
+        { sessionId: "session-a", workspaceId: "workspace-a" },
+        { sessionId: SESSION_ID, workspaceId: "workspace-b" },
+      ],
+    });
+
+    send(store, TURN_COMPLETED, turn("turn-1", TURN_STARTED_AT, TURN_COMPLETED_AT));
+
+    expect(store.getState().markQuickChatUnseenIdle).not.toHaveBeenCalled();
   });
 });

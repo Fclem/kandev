@@ -189,7 +189,7 @@ function TabletQuickActions({ workspaceId }: { workspaceId?: string }) {
         aria-label={t("sidebar:quickChat")}
         data-testid="tablet-quick-chat-button"
       >
-        <span className={quickChatHasUnseenIdle ? "relative flex" : undefined}>
+        <span className="relative flex">
           <IconMessageCircle className="h-4 w-4" />
           {quickChatHasUnseenIdle && (
             <span

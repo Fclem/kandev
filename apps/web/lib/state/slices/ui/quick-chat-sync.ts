@@ -197,7 +197,14 @@ export function upsertQuickChatSession(
   state: QuickChatState,
   session: QuickChatSession,
 ): QuickChatState {
-  if (state.tombstonedSessions[session.sessionId]) return state;
+  if (state.tombstonedSessions[session.sessionId]) {
+    // A tombstone expires after its retention window even when no later
+    // removal or reconciliation prunes it; otherwise the rejection below
+    // would discard this session forever.
+    const tombstones = pruneTombstones(state.tombstonedSessions);
+    if (tombstones[session.sessionId]) return state;
+    state = { ...state, tombstonedSessions: tombstones };
+  }
   const [named] = applyStoredQuickChatNames([session]);
   const index = state.sessions.findIndex((item) => item.sessionId === named.sessionId);
   const sessions =

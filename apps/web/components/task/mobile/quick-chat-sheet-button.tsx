@@ -22,7 +22,7 @@ export function QuickChatSheetButton({
       onClick={onClick}
       data-testid="mobile-sheet-quick-chat"
     >
-      <span className={hasUnseenIdle ? "relative flex" : undefined}>
+      <span className="relative flex">
         <IconMessageCircle className="h-4 w-4" />
         {hasUnseenIdle && (
           <span

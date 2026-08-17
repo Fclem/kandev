@@ -92,7 +92,18 @@ export function registerTurnsHandlers(
         (session) => session.sessionId === payload.session_id,
       );
       if (quickChatSession && !quickChat.isOpen && !wasCompleted) {
-        store.getState().markQuickChatUnseenIdle(payload.session_id, quickChatSession.workspaceId);
+        // Share the settled ledger with the state_changed path so a replay of
+        // the same completion (reconnect, delayed event) cannot re-mark after
+        // the user already saw the dot. completed_at is the stable identity of
+        // this completion; a missing value falls through to the mark.
+        if (
+          !payload.completed_at ||
+          store.getState().recordQuickChatSettled(payload.session_id, payload.completed_at)
+        ) {
+          store
+            .getState()
+            .markQuickChatUnseenIdle(payload.session_id, quickChatSession.workspaceId);
+        }
       }
       // Surface a notice when the turn finished with no agent output.
       maybeEmitEmptyTurnNotice(store, payload);

@@ -8,6 +8,27 @@ import { getStoredQuickChatNames } from "@/lib/local-storage";
 import { toQuickChatSessions } from "@/lib/quick-chat/map-sessions";
 import { migrateStoredQuickChatNames } from "@/lib/quick-chat/rename";
 
+/** How many times a resync may refetch after observing a newer revision. */
+const MAX_RESYNC_RETRIES = 3;
+
+/**
+ * Whether a reconnect snapshot is older than the live row. Parses both
+ * timestamps so an exact-second value ("...00Z") compares correctly against a
+ * newer fractional one ("...00.1Z"); a lexicographic comparison would misorder
+ * them. Mirrors isStaleSessionStateEvent without pulling the handler module
+ * graph (and its i18n init) into the resync hook.
+ */
+function isStaleTaskSession(
+  live: { updated_at?: string } | undefined,
+  snapshotUpdatedAt: string | undefined,
+): boolean {
+  if (!snapshotUpdatedAt || !live?.updated_at) return false;
+  const snapshotTime = Date.parse(snapshotUpdatedAt);
+  const liveTime = Date.parse(live.updated_at);
+  if (Number.isNaN(snapshotTime) || Number.isNaN(liveTime)) return false;
+  return snapshotTime < liveTime;
+}
+
 /**
  * Keeps this client's quick-chat tabs in step with the server's list.
  *
@@ -41,22 +62,21 @@ export function useQuickChatResync(workspaceId: string | null): void {
       .then(([response, terminalResponse]) => {
         if (cancelled) return;
         if (store.getState().quickChat.syncRevisionByWorkspace[workspaceId] !== revision) {
-          lastSyncedConnection.current = null;
-          retryResync();
+          if (resyncAttempt < MAX_RESYNC_RETRIES) {
+            lastSyncedConnection.current = null;
+            retryResync();
+          }
           return;
         }
         const sessions = toQuickChatSessions(response.sessions);
         // Store the session rows before the tabs. A tab without its row cannot
         // subscribe or accept input (useSession bails, requireSessionInputMode
         // throws), so a resync-only tab would otherwise render but be dead.
+        // Rows older than the live row are skipped: a reconnect snapshot must
+        // never regress state a newer WebSocket event already applied.
         for (const taskSession of response.task_sessions) {
           const liveSession = store.getState().taskSessions.items[taskSession.id];
-          if (
-            liveSession?.updated_at &&
-            taskSession.updated_at &&
-            taskSession.updated_at < liveSession.updated_at
-          )
-            continue;
+          if (isStaleTaskSession(liveSession, taskSession.updated_at)) continue;
           setTaskSession(taskSession);
         }
         syncQuickChatSessions(workspaceId, sessions);

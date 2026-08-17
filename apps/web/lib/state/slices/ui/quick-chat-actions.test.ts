@@ -92,6 +92,29 @@ describe("typed quick chat sessions", () => {
     });
   });
 
+  it("clears every workspace's unseen markers when the dialog opens", () => {
+    const store = makeStore();
+    store.getState().markQuickChatUnseenIdle("session-a", WORKSPACE_A);
+    store.getState().markQuickChatUnseenIdle("session-b", WORKSPACE_B);
+
+    store.getState().openQuickChat(SESSION_A, WORKSPACE_A);
+
+    expect(store.getState().quickChat.unseenIdleByWorkspace).toEqual({});
+  });
+
+  it("keeps unseen markers when opening a session owned by another workspace fails", () => {
+    const store = makeStore();
+    store.getState().addQuickChatSession(SESSION_A, WORKSPACE_A);
+    store.getState().markQuickChatUnseenIdle(SESSION_A, WORKSPACE_A);
+
+    store.getState().openQuickChat(SESSION_A, WORKSPACE_B);
+
+    expect(store.getState().quickChat.isOpen).toBe(false);
+    expect(store.getState().quickChat.unseenIdleByWorkspace).toEqual({
+      [WORKSPACE_A]: { [SESSION_A]: true },
+    });
+  });
+
   it("opens a configuration setup tab in the unified quick chat store", () => {
     const store = makeStore();
     const setupId = getQuickChatSetupSessionId(WORKSPACE_A, "config");

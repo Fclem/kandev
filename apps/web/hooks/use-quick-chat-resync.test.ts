@@ -68,11 +68,15 @@ function taskSession(state: TaskSession["state"], updatedAt: string): TaskSessio
   } as unknown as TaskSession;
 }
 
+const WORKSPACE_ID = "workspace-1";
+const EMPTY_SESSIONS_RESPONSE = { sessions: [], task_sessions: [] };
+const EMPTY_TABS_RESPONSE = { tabs: [] };
+
 describe("useQuickChatResync", () => {
   beforeEach(() => {
     mockState = {
       connection: { status: "connected" },
-      quickChat: { syncRevisionByWorkspace: { "workspace-1": 0 } },
+      quickChat: { syncRevisionByWorkspace: { [WORKSPACE_ID]: 0 } },
       setTaskSession: vi.fn(),
       taskSessions: { items: {} },
       syncQuickChatSessions: vi.fn(),
@@ -95,20 +99,20 @@ describe("useQuickChatResync", () => {
       .mockReturnValueOnce(firstTerminals.promise)
       .mockReturnValueOnce(latestTerminals.promise);
 
-    renderHook(() => useQuickChatResync("workspace-1"));
+    renderHook(() => useQuickChatResync(WORKSPACE_ID));
 
     await act(async () => {
-      mockState.quickChat.syncRevisionByWorkspace["workspace-1"] = 1;
-      firstSessions.resolve({ sessions: [], task_sessions: [] });
-      firstTerminals.resolve({ tabs: [] });
+      mockState.quickChat.syncRevisionByWorkspace[WORKSPACE_ID] = 1;
+      firstSessions.resolve(EMPTY_SESSIONS_RESPONSE);
+      firstTerminals.resolve(EMPTY_TABS_RESPONSE);
       await Promise.resolve();
     });
 
     await waitFor(() => expect(apiMock.listQuickChatSessions).toHaveBeenCalledTimes(2));
 
     await act(async () => {
-      latestSessions.resolve({ sessions: [], task_sessions: [] });
-      latestTerminals.resolve({ tabs: [] });
+      latestSessions.resolve(EMPTY_SESSIONS_RESPONSE);
+      latestTerminals.resolve(EMPTY_TABS_RESPONSE);
       await Promise.resolve();
     });
 
@@ -123,12 +127,67 @@ describe("useQuickChatResync", () => {
       sessions: [],
       task_sessions: [stale],
     });
-    apiMock.listQuickTerminalTabs.mockResolvedValueOnce({ tabs: [] });
+    apiMock.listQuickTerminalTabs.mockResolvedValueOnce(EMPTY_TABS_RESPONSE);
 
-    renderHook(() => useQuickChatResync("workspace-1"));
+    renderHook(() => useQuickChatResync(WORKSPACE_ID));
 
     await waitFor(() => expect(mockState.syncQuickChatSessions).toHaveBeenCalledTimes(1));
 
     expect(mockState.setTaskSession).not.toHaveBeenCalled();
+  });
+
+  it("does not let an exact-second resync row regress a fractional-second live row", async () => {
+    // "2099-01-01T00:00:00.1Z" is newer than "2099-01-01T00:00:00Z" even though a
+    // lexicographic comparison sorts the exact-second string as larger.
+    const stale = taskSession("RUNNING", "2099-01-01T00:00:00Z");
+    mockState.taskSessions.items[stale.id] = taskSession("IDLE", "2099-01-01T00:00:00.1Z");
+    apiMock.listQuickChatSessions.mockResolvedValueOnce({
+      sessions: [],
+      task_sessions: [stale],
+    });
+    apiMock.listQuickTerminalTabs.mockResolvedValueOnce(EMPTY_TABS_RESPONSE);
+
+    renderHook(() => useQuickChatResync(WORKSPACE_ID));
+
+    await waitFor(() => expect(mockState.syncQuickChatSessions).toHaveBeenCalledTimes(1));
+
+    expect(mockState.setTaskSession).not.toHaveBeenCalled();
+  });
+
+  it("applies a fractional-second resync row newer than an exact-second live row", async () => {
+    const fresh = taskSession("IDLE", "2099-01-01T00:00:00.1Z");
+    mockState.taskSessions.items[fresh.id] = taskSession("RUNNING", "2099-01-01T00:00:00Z");
+    apiMock.listQuickChatSessions.mockResolvedValueOnce({
+      sessions: [],
+      task_sessions: [fresh],
+    });
+    apiMock.listQuickTerminalTabs.mockResolvedValueOnce(EMPTY_TABS_RESPONSE);
+
+    renderHook(() => useQuickChatResync(WORKSPACE_ID));
+
+    await waitFor(() => expect(mockState.syncQuickChatSessions).toHaveBeenCalledTimes(1));
+
+    expect(mockState.setTaskSession).toHaveBeenCalledWith(fresh);
+  });
+
+  it("stops retrying after the cap when every response observes a newer revision", async () => {
+    // Every fetch captures revision R, then the store bumps to R+1 before the
+    // response is compared, so each attempt is discarded as stale.
+    apiMock.listQuickChatSessions.mockImplementation(() => {
+      const response = Promise.resolve(EMPTY_SESSIONS_RESPONSE);
+      queueMicrotask(() => {
+        mockState.quickChat.syncRevisionByWorkspace[WORKSPACE_ID] += 1;
+      });
+      return response;
+    });
+    apiMock.listQuickTerminalTabs.mockResolvedValue(EMPTY_TABS_RESPONSE);
+
+    renderHook(() => useQuickChatResync(WORKSPACE_ID));
+
+    await waitFor(() => expect(apiMock.listQuickChatSessions.mock.calls.length).toBe(4));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(apiMock.listQuickChatSessions.mock.calls.length).toBe(4);
+    expect(mockState.syncQuickChatSessions).not.toHaveBeenCalled();
   });
 });

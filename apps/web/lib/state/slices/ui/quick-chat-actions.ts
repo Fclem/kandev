@@ -51,7 +51,6 @@ function openQuickChat(set: ImmerSet) {
     taskId?: string,
   ) =>
     set((draft) => {
-      draft.quickChat.unseenIdleByWorkspace = {};
       if (!sessionId) {
         const existing =
           kind === "config"
@@ -67,6 +66,8 @@ function openQuickChat(set: ImmerSet) {
         draft.quickChat.isOpen = true;
         draft.quickChat.activeSessionId = existing?.sessionId ?? setupSessionId;
         draft.quickChat.activeKind = "conversation";
+        // The dialog is open now, so every workspace's dots are obsolete.
+        draft.quickChat.unseenIdleByWorkspace = {};
         return;
       }
       if (
@@ -82,6 +83,9 @@ function openQuickChat(set: ImmerSet) {
       draft.quickChat.isOpen = true;
       draft.quickChat.activeSessionId = sessionId;
       draft.quickChat.activeKind = "conversation";
+      // Only a successful open clears the dots; a rejected cross-workspace open
+      // must not erase markers the user never saw.
+      draft.quickChat.unseenIdleByWorkspace = {};
     });
 }
 

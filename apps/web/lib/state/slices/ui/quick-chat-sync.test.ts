@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   reconcileQuickTerminalTabs,
   reconcileQuickChatSessions,
+  removeQuickChatSession,
   removeQuickChatSessionsForTask,
   upsertQuickChatSession,
 } from "./quick-chat-sync";
@@ -358,6 +359,18 @@ describe("upsertQuickChatSession", () => {
 
     expect(after.sessions[0].name).toBe("Mine");
   });
+
+  it("accepts a session once its tombstone has expired", () => {
+    const expiredAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const before = state([], {
+      tombstonedSessions: { a: { workspaceId: WS, tombstonedAt: expiredAt } },
+    });
+
+    const after = upsertQuickChatSession(before, chat("a"));
+
+    expect(after.sessions.map((s) => s.sessionId)).toEqual(["a"]);
+    expect(after.tombstonedSessions).toEqual({});
+  });
 });
 
 describe("removeQuickChatSessionsForTask", () => {
@@ -391,6 +404,17 @@ describe("removeQuickChatSessionsForTask", () => {
     expect(after.sessionOwnership).toEqual({});
     expect(after.unseenIdleByWorkspace).toEqual({});
     expect(after.lastSettledAtBySession).toEqual({});
+  });
+
+  it("clears a pre-existing unseen marker when the session is removed directly", () => {
+    const before = state([chat("a")], {
+      unseenIdleByWorkspace: { [WS]: { a: true } },
+    });
+
+    const after = removeQuickChatSession(before, "a");
+
+    expect(after.unseenIdleByWorkspace).toEqual({});
+    expect(after.sessions.map((s) => s.sessionId)).toEqual([]);
   });
 
   it("returns the same state when no tab is affected", () => {

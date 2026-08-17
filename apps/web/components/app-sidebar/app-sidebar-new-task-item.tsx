@@ -83,7 +83,7 @@ function RowActionButton({
           data-testid={testId}
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground cursor-pointer"
         >
-          <span className={dot ? "relative flex" : undefined}>
+          <span className="relative flex">
             <Icon className="h-3.5 w-3.5" />
             {dot && (
               <span

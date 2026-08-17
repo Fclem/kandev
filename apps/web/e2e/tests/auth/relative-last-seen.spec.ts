@@ -121,6 +121,10 @@ test.describe.serial("relative last seen (desktop)", () => {
         await subscriptionAck;
         await expect(pageA.getByTestId("last-seen-relative")).toHaveCount(0);
 
+        // Arm the WS event wait before tab B mutates; frames are not buffered,
+        // so a wait armed after the mutation could miss the push entirely.
+        const settingsUpdated = watcher.waitForEvent("user.settings.updated");
+
         const pageB = await ctxB.newPage();
         await pageB.goto(SECURITY_PATH);
         await expect(pageB.getByTestId("last-seen-relative")).toHaveCount(0);
@@ -130,10 +134,9 @@ test.describe.serial("relative last seen (desktop)", () => {
           timeout: 15_000,
         });
 
-        // Tab A observes the change without a reload.
-        await expect(pageA.getByTestId("last-seen-relative").first()).toBeVisible({
-          timeout: 15_000,
-        });
+        // Tab A observes the change over WebSocket, without a reload.
+        await settingsUpdated;
+        await expect(pageA.getByTestId("last-seen-relative").first()).toBeVisible();
       } finally {
         await restoreLastSeenDisplay(ctxA, backend.baseUrl, original);
       }

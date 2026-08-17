@@ -19,6 +19,7 @@
   "failedToLoadSessions": "Failed to load sessions.",
   "failedToLoadTokens": "Failed to load tokens.",
   "failedToSaveLastSeenDisplay": "Failed to save the last seen display.",
+  "failedToRevokeSession": "Failed to revoke the session.",
   "ipAddress": "IP",
   "lastSeen": "Last seen",
   "lastSeenDisplay": "Last seen display",

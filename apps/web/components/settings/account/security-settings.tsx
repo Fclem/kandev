@@ -143,7 +143,7 @@ function useSessionsList() {
     void reload();
   }, [reload]);
 
-  return { sessions, loaded, error, reload };
+  return { sessions, loaded, error, reload, setError };
 }
 
 function parseLastSeenAt(lastSeenAt: string): Date | null {
@@ -210,15 +210,15 @@ function LastSeenDisplaySelect({
         <SelectTrigger
           id="last-seen-display"
           data-testid="last-seen-display-select"
-          className="min-h-11 cursor-pointer"
+          className="min-h-[44px] cursor-pointer"
         >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="absolute" className="min-h-11">
+          <SelectItem value="absolute" className="min-h-[44px]">
             {t("account:absoluteTime")}
           </SelectItem>
-          <SelectItem value="relative" className="min-h-11">
+          <SelectItem value="relative" className="min-h-[44px]">
             {t("account:relativeTime")}
           </SelectItem>
         </SelectContent>
@@ -283,7 +283,7 @@ function SessionsTable({
 
 function SessionsCard() {
   const { t } = useTranslation();
-  const { sessions, loaded, error, reload } = useSessionsList();
+  const { sessions, loaded, error, reload, setError } = useSessionsList();
   const savedDisplay = useAppStore((state) => state.userSettings.lastSeenDisplay);
   const store = useAppStoreApi();
   const [optimisticDisplay, setOptimisticDisplay] = useState<LastSeenDisplay | null>(null);
@@ -310,8 +310,12 @@ function SessionsCard() {
   );
 
   const onRevoke = async (id: string) => {
-    await revokeSession(id);
-    await reload();
+    try {
+      await revokeSession(id);
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("account:failedToRevokeSession"));
+    }
   };
 
   return (

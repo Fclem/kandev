@@ -270,6 +270,19 @@ describe("Last seen display persistence", () => {
     );
   });
 
+  it("surfaces a revoke failure in the sessions card", async () => {
+    authApiMocks.revokeSession.mockRejectedValue(new ApiError("boom", 400, null));
+    authApiMocks.listSessions.mockResolvedValue({
+      sessions: [{ ...SESSION, current: false, id: "sess-2" }],
+    });
+    await renderLoaded();
+
+    fireEvent.click(screen.getByTestId("account-sessions-revoke"));
+    await waitFor(() =>
+      expect(screen.getByTestId("account-sessions-error").textContent).toContain("boom"),
+    );
+  });
+
   it("shows the error toast and falls back to the baseline on a failed save", async () => {
     settingsApiMocks.updateUserSettings.mockRejectedValue(new Error("boom"));
     await renderLoaded();

@@ -19,6 +19,7 @@
   "failedToLoadSessions": "Não foi possível carregar as sessões.",
   "failedToLoadTokens": "Não foi possível carregar os tokens.",
   "failedToSaveLastSeenDisplay": "Não foi possível guardar a forma de apresentação da última atividade.",
+  "failedToRevokeSession": "Não foi possível revogar a sessão.",
   "ipAddress": "IP",
   "lastSeen": "Visto pela última vez",
   "lastSeenDisplay": "Apresentação da última atividade",

@@ -19,6 +19,7 @@
   "failedToLoadSessions": "加载会话失败。",
   "failedToLoadTokens": "加载令牌失败。",
   "failedToSaveLastSeenDisplay": "无法保存上次活动的显示方式。",
+  "failedToRevokeSession": "无法吊销会话。",
   "ipAddress": "IP",
   "lastSeen": "上次活动",
   "lastSeenDisplay": "上次活动显示",

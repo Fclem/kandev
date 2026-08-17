@@ -19,6 +19,7 @@
   "failedToLoadSessions": "載入工作階段失敗。",
   "failedToLoadTokens": "載入權杖失敗。",
   "failedToSaveLastSeenDisplay": "無法儲存上次活動的顯示方式。",
+  "failedToRevokeSession": "無法吊銷工作階段。",
   "ipAddress": "IP",
   "lastSeen": "上次活動",
   "lastSeenDisplay": "上次活動顯示",

@@ -94,6 +94,34 @@ describe("quick chat unseen idle WebSocket scheduling", () => {
     expect(selectQuickChatHasUnseenIdle(store.getState(), WORKSPACE_ID)).toBe(false);
   });
 
+  it("does not re-mark the state_changed echo of a turn completion the user viewed", () => {
+    const store = createAppStore();
+    store.getState().addQuickChatSession(SESSION_ID, WORKSPACE_ID);
+    // The turn.completed path records completed_at into the settled ledger.
+    store.getState().recordQuickChatSettled(SESSION_ID, "2099-01-01T00:00:00Z");
+    store.getState().markQuickChatUnseenIdle(SESSION_ID, WORKSPACE_ID);
+    store.getState().openQuickChat(SESSION_ID, WORKSPACE_ID);
+    store.getState().closeQuickChat();
+    // The corresponding state_changed arrives moments later with a newer
+    // session updated_at; it is the same logical completion.
+    settle(store, SESSION_ID, "2099-01-01T00:00:01Z");
+
+    expect(selectQuickChatHasUnseenIdle(store.getState(), WORKSPACE_ID)).toBe(false);
+  });
+
+  it("marks a genuinely new settle that lands outside the echo grace window", () => {
+    const store = createAppStore();
+    store.getState().addQuickChatSession(SESSION_ID, WORKSPACE_ID);
+    store.getState().recordQuickChatSettled(SESSION_ID, "2099-01-01T00:00:00Z");
+    store.getState().markQuickChatUnseenIdle(SESSION_ID, WORKSPACE_ID);
+    store.getState().openQuickChat(SESSION_ID, WORKSPACE_ID);
+    store.getState().closeQuickChat();
+
+    settle(store, SESSION_ID, "2099-01-01T00:10:00Z");
+
+    expect(selectQuickChatHasUnseenIdle(store.getState(), WORKSPACE_ID)).toBe(true);
+  });
+
   it("does not mark a completion received before its tab is known", () => {
     const store = createAppStore();
     settle(store, SESSION_ID, SETTLED_AT);

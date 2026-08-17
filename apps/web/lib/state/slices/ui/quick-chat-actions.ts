@@ -189,7 +189,16 @@ export function buildQuickChatActions(set: ImmerSet) {
     recordQuickChatSettled: (sessionId: string, updatedAt: string) => {
       let recorded = false;
       set((draft) => {
-        if (!updatedAt || draft.quickChat.lastSettledAtBySession[sessionId] >= updatedAt) return;
+        if (!updatedAt) return;
+        // Compare parsed epochs, not strings: an exact-second value ("...00Z")
+        // must not be treated as newer than a fractional one ("...00.1Z").
+        const updatedTime = Date.parse(updatedAt);
+        if (Number.isNaN(updatedTime)) return;
+        const existing = draft.quickChat.lastSettledAtBySession[sessionId];
+        if (existing) {
+          const existingTime = Date.parse(existing);
+          if (!Number.isNaN(existingTime) && updatedTime <= existingTime) return;
+        }
         draft.quickChat.lastSettledAtBySession = pruneStaleSettledLedger({
           ...draft.quickChat.lastSettledAtBySession,
           [sessionId]: updatedAt,

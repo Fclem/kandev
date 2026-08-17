@@ -2,7 +2,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ListQuickTerminalTabsResponse } from "@/lib/api/domains/quick-terminal-api";
 import type { ListQuickChatSessionsResponse } from "@/lib/api/domains/workspace-api";
-
+import type { TaskSession } from "@/lib/types/http";
 const apiMock = vi.hoisted(() => ({
   listQuickChatSessions: vi.fn(),
   listQuickTerminalTabs: vi.fn(),
@@ -21,7 +21,8 @@ const storeApiMock = vi.hoisted(() => ({
 type MockState = {
   connection: { status: string };
   quickChat: { syncRevisionByWorkspace: Record<string, number> };
-  setTaskSession: (...args: unknown[]) => void;
+  taskSessions: { items: Record<string, TaskSession> };
+  setTaskSession: (session: TaskSession) => void;
   syncQuickChatSessions: (...args: unknown[]) => void;
   syncQuickTerminalTabs: (...args: unknown[]) => void;
 };
@@ -57,12 +58,23 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function taskSession(state: TaskSession["state"], updatedAt: string): TaskSession {
+  // The resync boundary only reads the stable identity, state, and update timestamp.
+  return {
+    id: "session-1",
+    task_id: "task-1",
+    state,
+    updated_at: updatedAt,
+  } as unknown as TaskSession;
+}
+
 describe("useQuickChatResync", () => {
   beforeEach(() => {
     mockState = {
       connection: { status: "connected" },
       quickChat: { syncRevisionByWorkspace: { "workspace-1": 0 } },
       setTaskSession: vi.fn(),
+      taskSessions: { items: {} },
       syncQuickChatSessions: vi.fn(),
       syncQuickTerminalTabs: vi.fn(),
     };
@@ -102,5 +114,21 @@ describe("useQuickChatResync", () => {
 
     await waitFor(() => expect(mockState.syncQuickChatSessions).toHaveBeenCalledTimes(1));
     expect(mockState.syncQuickTerminalTabs).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not overwrite a newer live task session with a stale resync row", async () => {
+    const stale = taskSession("RUNNING", "2099-01-01T00:00:00Z");
+    mockState.taskSessions.items[stale.id] = taskSession("IDLE", "2099-01-01T00:01:00Z");
+    apiMock.listQuickChatSessions.mockResolvedValueOnce({
+      sessions: [],
+      task_sessions: [stale],
+    });
+    apiMock.listQuickTerminalTabs.mockResolvedValueOnce({ tabs: [] });
+
+    renderHook(() => useQuickChatResync("workspace-1"));
+
+    await waitFor(() => expect(mockState.syncQuickChatSessions).toHaveBeenCalledTimes(1));
+
+    expect(mockState.setTaskSession).not.toHaveBeenCalled();
   });
 });

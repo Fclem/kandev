@@ -50,6 +50,13 @@ export function useQuickChatResync(workspaceId: string | null): void {
         // subscribe or accept input (useSession bails, requireSessionInputMode
         // throws), so a resync-only tab would otherwise render but be dead.
         for (const taskSession of response.task_sessions) {
+          const liveSession = store.getState().taskSessions.items[taskSession.id];
+          if (
+            liveSession?.updated_at &&
+            taskSession.updated_at &&
+            taskSession.updated_at < liveSession.updated_at
+          )
+            continue;
           setTaskSession(taskSession);
         }
         syncQuickChatSessions(workspaceId, sessions);

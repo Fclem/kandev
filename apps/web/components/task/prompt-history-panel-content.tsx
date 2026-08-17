@@ -93,10 +93,12 @@ type PromptHistoryRowProps = {
   onNavigate?: (messageId: string) => void;
 };
 
-/** One prompt-history row: a scroll-to-prompt jump button, the prompt text
- * (truncated, or expanded into a scrollable box), its relative time and
- * duration, plus an expand/collapse chevron that floats over the truncated
- * text's ellipsis inside the bubble when the text overflows. */
+/** One prompt-history row: the prompt text (truncated, or expanded into a
+ * scrollable box) inside the transcript-style bubble, its relative time and
+ * duration. A jump button floats over the bubble's left edge (revealed on
+ * hover for fine pointers, always visible on touch) and an expand/collapse
+ * chevron floats over the truncated text's ellipsis when the text overflows,
+ * both overlapping the text to keep rows compact. */
 function PromptHistoryRow({
   sessionId,
   entry,
@@ -123,35 +125,37 @@ function PromptHistoryRow({
   const showToggle = overflow || expanded;
   return (
     <div data-testid={`prompt-history-row-${index}`} className="flex items-start gap-1 py-1">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-11 shrink-0 cursor-pointer sm:size-8"
-        aria-label={t("task:scrollToPrompt")}
-        data-testid={`prompt-history-jump-${index}`}
-        onClick={() => onNavigate?.(entry.messageId)}
-      >
-        <IconNavigation size={16} />
-      </Button>
       <div className="min-w-0 flex-1">
         {/* Same bubble as the transcript's user message: markdown-body
             font, rounded-2xl, blue when not favorited / yellow when the
-            message is starred — with lighter padding. The expand/collapse
-            chevron floats inside the bubble at the end of the truncated
-            line (over the ellipsis) instead of trailing the row. */}
+            message is starred — with lighter padding. The jump button
+            floats inside the bubble's left edge (revealed on hover for
+            fine pointers, always visible on touch) and the expand/collapse
+            chevron floats at the end of the truncated line (over the
+            ellipsis), both overlapping the text to keep rows compact. */}
         <div
           className={cn(
-            "markdown-body markdown-body-user relative overflow-hidden rounded-2xl px-3 py-1.5",
+            "markdown-body markdown-body-user group relative overflow-hidden rounded-2xl px-3 py-1.5",
             isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
           )}
         >
-          <span ref={textRef} className={expanded ? "hidden" : "block truncate pr-8"}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute left-1 top-1/2 z-10 size-11 -translate-y-1/2 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 focus-visible:bg-background/90 sm:size-8 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+            aria-label={t("task:scrollToPrompt")}
+            data-testid={`prompt-history-jump-${index}`}
+            onClick={() => onNavigate?.(entry.messageId)}
+          >
+            <IconNavigation size={16} />
+          </Button>
+          <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
             {entry.content}
           </span>
           {expanded && (
             <div
               data-testid={`prompt-history-expanded-box-${index}`}
-              className="overflow-y-auto whitespace-normal pr-8"
+              className="overflow-y-auto whitespace-normal"
               style={{ maxHeight }}
             >
               {entry.content}
@@ -162,10 +166,8 @@ function PromptHistoryRow({
               variant="ghost"
               size="icon"
               className={cn(
-                "absolute z-10 size-11 cursor-pointer rounded-md sm:size-6",
-                expanded
-                  ? "right-1 top-1"
-                  : "right-1 top-1/2 -translate-y-1/2 bg-background/70 hover:bg-background/90",
+                "absolute right-1 z-10 size-11 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 sm:size-6",
+                expanded ? "top-1" : "top-1/2 -translate-y-1/2",
               )}
               aria-expanded={expanded}
               aria-label={t(expanded ? "task:collapsePrompt" : "task:expandPrompt")}

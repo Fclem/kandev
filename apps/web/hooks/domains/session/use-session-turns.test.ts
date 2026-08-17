@@ -91,7 +91,12 @@ describe("useSessionTurns", () => {
       initialProps: { sessionId: "session-a" },
     });
 
-    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledWith("session-a"));
+    await waitFor(() =>
+      expect(mockListSessionTurns).toHaveBeenCalledWith(
+        "session-a",
+        expect.objectContaining({ init: expect.anything() }),
+      ),
+    );
     state.tasks.activeSessionId = "session-b";
     rerender({ sessionId: "session-b" });
     resolveA({ turns: [turn("stale")], total: 1 });
@@ -205,10 +210,41 @@ describe("useSessionTurns — ordering and isolation", () => {
     state.turns.bySession["session-b"] = [];
     renderHook(() => useSessionTurns("session-b"));
 
-    expect(mockListSessionTurns).toHaveBeenCalledWith("session-b");
+    expect(mockListSessionTurns).toHaveBeenCalledWith(
+      "session-b",
+      expect.objectContaining({ init: expect.anything() }),
+    );
     await waitFor(() =>
       expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-b", [turn("turn-a")]),
     );
+  });
+});
+
+describe("useSessionTurns — fetch failure recovery", () => {
+  it("retries a transient fetch failure and hydrates on the retry", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockListSessionTurns
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce({ turns: [turn("turn-a")], total: 1 });
+    const { result, rerender } = renderHook(() => useSessionTurns("session-a"));
+
+    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(1));
+    // The failure logs and schedules a bounded backoff retry.
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[useSessionTurns] failed to fetch turns for",
+      "session-a",
+      expect.any(Error),
+    );
+    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(2), {
+      timeout: 5000,
+    });
+    await waitFor(() =>
+      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]),
+    );
+
+    rerender();
+    expect(result.current).toEqual([turn("turn-a")]);
+    errorSpy.mockRestore();
   });
 
   it("applies the turn response despite an independent live commit mid-flight", async () => {

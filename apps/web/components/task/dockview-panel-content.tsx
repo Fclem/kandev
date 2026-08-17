@@ -12,7 +12,6 @@ import { usePanelActive } from "@/hooks/use-panel-active";
 import { t } from "@/lib/i18n";
 import { setPanelTitle } from "@/lib/layout/panel-portal-manager";
 import { useDockviewStore } from "@/lib/state/dockview-store";
-import { panelTitle } from "@/lib/state/layout-manager/panel-title";
 import { BrowserPanel } from "./browser-panel";
 import type { CommitDetailTarget, OpenDiffOptions } from "./changes-diff-target";
 import { ChangesPanel } from "./changes-panel";
@@ -26,7 +25,7 @@ import { TaskChangesPanel } from "./task-changes-panel";
 import { TaskChatPanel } from "./task-chat-panel";
 import { TaskPlanPanel } from "./task-plan-panel";
 import { TerminalPanel } from "./terminal-panel";
-import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
+import { PromptHistoryContent } from "./prompt-history-panel-host";
 import { TodosContent } from "./todos-panel-content";
 import { VscodePanel } from "./vscode-panel";
 import { useTranslation } from "react-i18next";
@@ -197,28 +196,6 @@ function FilesContent() {
 function PlanContent() {
   const taskId = useAppStore((state) => state.tasks.activeTaskId);
   return <TaskPlanPanel taskId={taskId} visible />;
-}
-
-/**
- * Prompt-history arrow wiring: the panel content is a pure seam consumer, so
- * the host binds `onNavigateToPrompt` to the dockview store's
- * `scrollTranscriptToMessage`, resolving the tab title as the session's name
- * (truthy check — an EMPTY-string name falls back too) or the localized
- * canonical chat title.
- */
-function PromptHistoryContent() {
-  const sessionId = useAppStore((state) => state.tasks.activeSessionId);
-  const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
-  const scrollTranscriptToMessage = useDockviewStore((state) => state.scrollTranscriptToMessage);
-  return (
-    <PromptHistoryPanelContent
-      onNavigateToPrompt={(messageId: string) => {
-        if (sessionId) {
-          scrollTranscriptToMessage(sessionId, messageId, session?.name || panelTitle("chat"));
-        }
-      }}
-    />
-  );
 }
 
 const COMPONENT_ALIASES: Record<string, string> = {

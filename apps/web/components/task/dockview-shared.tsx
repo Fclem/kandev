@@ -15,7 +15,6 @@ import { useSessionCommits } from "@/hooks/domains/session/use-session-commits";
 import { useEnvironmentSessionId } from "@/hooks/use-environment-session-id";
 import type { ReviewSource } from "@/hooks/domains/session/use-review-sources";
 import { t } from "@/lib/i18n";
-import { panelTitle } from "@/lib/state/layout-manager/panel-title";
 
 // Panel components (rendered via portals, not directly by dockview)
 import { TaskChatPanel } from "./task-chat-panel";
@@ -41,7 +40,7 @@ import { ReviewDetailPanelComponent } from "./review-detail-panel";
 import { MRDetailPanelComponent } from "@/components/gitlab/mr-detail-panel";
 import { PluginTaskPanel } from "./plugin-task-panel";
 import { PluginPanelTab } from "./plugin-panel-tab";
-import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
+import { PromptHistoryContent } from "./prompt-history-panel-host";
 import { TodosContent } from "./todos-panel-content";
 
 import { setPanelTitle, panelPortalManager } from "@/lib/layout/panel-portal-manager";
@@ -374,28 +373,6 @@ function FilesContent() {
 function PlanContent() {
   const taskId = useAppStore((state) => state.tasks.activeTaskId);
   return <TaskPlanPanel taskId={taskId} visible />;
-}
-
-/**
- * Prompt-history arrow wiring: the panel content is a pure seam consumer, so
- * the host binds `onNavigateToPrompt` to the dockview store's
- * `scrollTranscriptToMessage`, resolving the tab title as the session's name
- * (truthy check — an EMPTY-string name falls back too) or the localized
- * canonical chat title.
- */
-function PromptHistoryContent() {
-  const sessionId = useAppStore((state) => state.tasks.activeSessionId);
-  const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
-  const scrollTranscriptToMessage = useDockviewStore((state) => state.scrollTranscriptToMessage);
-  return (
-    <PromptHistoryPanelContent
-      onNavigateToPrompt={(messageId: string) => {
-        if (sessionId) {
-          scrollTranscriptToMessage(sessionId, messageId, session?.name || panelTitle("chat"));
-        }
-      }}
-    />
-  );
 }
 
 // ---------------------------------------------------------------------------

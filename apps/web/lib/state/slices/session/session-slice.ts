@@ -529,6 +529,7 @@ function buildTaskSessionActions(set: ImmerSet) {
         syncEnvironmentMapping(draft, session.id, mergedSession.task_environment_id);
         reconcileActiveTurnForIdleSession(draft, mergedSession);
       }),
+    /** Narrowly updates only the session's read cursor (last_read_message_id). */
     updateSessionReadCursor: (sessionId: string, lastReadMessageId: string) =>
       set((draft) => {
         const session = draft.taskSessions.items[sessionId];

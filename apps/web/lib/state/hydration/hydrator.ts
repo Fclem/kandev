@@ -127,6 +127,7 @@ function hydrateSettings(draft: Draft<AppState>, state: HydrationState): void {
   }
 }
 
+/** Whether the incoming user-settings revision should win over the current draft. */
 function shouldHydrateUserSettings(
   current: Draft<AppState["userSettings"]>,
   incoming: Partial<AppState["userSettings"]>,
@@ -169,15 +170,6 @@ function bridgeSidebarViewsFromUserSettings(
   }
 }
 
-/**
- * A server snapshot may still name a turn that an authoritative boundary
- * (source adoption / settled-session clear) retired client-side. Never let a
- * force-merge resurrect its marker. Only sweeps markers this merge actually
- * INSTALLED (mirroring mergeSessionMap's write predicate): the protected
- * active session's entries are skipped by the merge, so its live marker must
- * not be cleared, and pre-existing non-force-merged markers are the client's
- * live state, not the snapshot's.
- */
 type HydratedTurnMarkerContext = {
   draft: Draft<AppState>;
   turns: NonNullable<HydrationState["turns"]>;
@@ -187,6 +179,16 @@ type HydratedTurnMarkerContext = {
   reconciledTurnSessions: Set<string>;
 };
 
+/**
+ * A server snapshot may still name a turn that an authoritative boundary
+ * (source adoption / settled-session clear) retired client-side. Never let a
+ * force-merge resurrect its marker. Only sweeps markers this merge actually
+ * INSTALLED (mirroring mergeSessionMap's write predicate): the protected
+ * active session's entries are skipped by the merge, so its live marker must
+ * not be cleared, pre-existing non-force-merged markers are the client's
+ * live state (not the snapshot's), and sessions whose markers were already
+ * derived from merged rows are skipped.
+ */
 function clearHydratedRetiredActiveMarkers({
   draft,
   turns,
@@ -259,6 +261,13 @@ function mergeHydratedTurns(
   return reconciledTurnSessions;
 }
 
+/**
+ * Merges the hydrated active-turn marker map for sessions whose turn lists
+ * were NOT reconciled by mergeHydratedTurns (their markers were derived from
+ * merged rows), then sweeps retired markers. Mirrors the merge write
+ * predicate: the protected active session and pre-existing non-force markers
+ * are client live state and are kept.
+ */
 function mergeHydratedActiveTurnMarkers(
   draft: Draft<AppState>,
   turns: NonNullable<HydrationState["turns"]>,
@@ -286,6 +295,12 @@ function mergeHydratedActiveTurnMarkers(
   });
 }
 
+/**
+ * Hydrates the turns slice from the SSR payload: merges turn lists
+ * freshness-guarded (protecting live WS data), derives active markers from
+ * the merged rows, merges any remaining marker map entries, and sweeps
+ * retired markers.
+ */
 function hydrateTurnState(
   draft: Draft<AppState>,
   turns: NonNullable<HydrationState["turns"]>,

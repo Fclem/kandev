@@ -374,6 +374,7 @@ export type AppState = KanbanSlice & {
     messages: Message[],
     meta?: { hasMore?: boolean; oldestCursor?: string | null },
   ) => void;
+  /** Adds a message to a session, merging fields when the message already exists. */
   addMessage: (message: Message) => void;
   mergeMessages: (
     sessionId: string,

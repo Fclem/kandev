@@ -618,6 +618,7 @@ function applyCancellationPending(
   });
 }
 
+/** Prefers the event's active-subagent count, falling back to the existing session value. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function pickActiveSubagentCount(payload: any, existing: TaskSession): number {
   return payload.active_subagent_count !== undefined

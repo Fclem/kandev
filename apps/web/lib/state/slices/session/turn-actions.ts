@@ -273,6 +273,7 @@ export function shouldApplyTurnUpdate(existing: Turn, incoming: Turn): boolean {
   return incomingTs > existingTs;
 }
 
+/** Store action: merges a complete REST turn snapshot and reconciles its marker atomically. */
 function mergeTurnsSnapshotAction(set: ImmerSet) {
   return (sessionId: string, turns: Turn[], hydrationEpoch: number) =>
     set((draft) => {
@@ -284,6 +285,7 @@ function mergeTurnsSnapshotAction(set: ImmerSet) {
     });
 }
 
+/** Builds the turn store actions (upsert, completion, markers, snapshots). */
 export function buildTurnActions(set: ImmerSet) {
   return {
     /**

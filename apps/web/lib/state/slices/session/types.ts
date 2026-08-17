@@ -227,6 +227,7 @@ export type SessionSliceActions = {
     sessionId: string,
     meta: { hasMore?: boolean; isLoading?: boolean; oldestCursor?: string | null },
   ) => void;
+  /** Sets the session's message-loading flag. */
   setMessagesLoading: (sessionId: string, loading: boolean) => void;
   /** Upserts a turn row, rejecting stale updates (see shouldApplyTurnUpdate). */
   addTurn: (turn: Turn) => void;

@@ -164,6 +164,7 @@ function buildSessionPageState(p: BuildSessionPageStateParams) {
   };
 }
 
+/** Builds the session-page hydration slice for repositories, agents, and workflow resources. */
 function buildResourceState(p: BuildSessionPageStateParams) {
   const { task, agents, repositories, workspaces, workflows } = p;
   const repositoryId = task.repositories?.[0]?.repository_id;

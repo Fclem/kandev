@@ -9,6 +9,7 @@ import type { MessageUpdateScheduler } from "@/lib/ws/handlers/messages";
 
 const debug = createDebugLogger("session:turns");
 
+/** Marks in-flight tool-call messages complete/errored when a turn completes. */
 function completePendingToolCalls(store: StoreApi<AppState>, sessionId: string): void {
   const messages = store.getState().messages.bySession[sessionId];
   if (!messages) return;

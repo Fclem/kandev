@@ -9,8 +9,14 @@ const lastAppliedSequence = new Map<string, number>();
 /** Bounded retries with backoff for transient turn-fetch failures. */
 const MAX_TURN_FETCH_ATTEMPTS = 3;
 
-/** Subscribe to a session's turns, fetching and hydrating them on demand with bounded retries and backoff; returns cached turns once hydrated, otherwise an empty array. */
-export function useSessionTurns(sessionId: string | null): Turn[] {
+export type SessionTurnsState = {
+  turns: Turn[];
+  /** True when the initial server snapshot has been merged into the store. */
+  isHydrated: boolean;
+};
+
+/** Subscribe to a session's turns and expose readiness for derived views. */
+export function useSessionTurnsState(sessionId: string | null): SessionTurnsState {
   const turns = useAppStore((state) => (sessionId ? state.turns.bySession[sessionId] : undefined));
   const hydrated = useAppStore((state) =>
     sessionId ? Boolean(state.turns.hydratedBySession[sessionId]) : true,
@@ -77,5 +83,13 @@ export function useSessionTurns(sessionId: string | null): Turn[] {
     };
   }, [sessionId, hydrated, store, activeSessionId, retryTick]);
 
-  return hydrated ? (turns ?? EMPTY_TURNS) : EMPTY_TURNS;
+  return {
+    turns: hydrated ? (turns ?? EMPTY_TURNS) : EMPTY_TURNS,
+    isHydrated: hydrated,
+  };
+}
+
+/** Backward-compatible turns-only selector for callers that do not need readiness. */
+export function useSessionTurns(sessionId: string | null): Turn[] {
+  return useSessionTurnsState(sessionId).turns;
 }

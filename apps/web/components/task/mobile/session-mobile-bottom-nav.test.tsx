@@ -150,3 +150,24 @@ describe("SessionMobileBottomNav plugin panels", () => {
     expect(screen.getByRole("button", { name: "Panels" }).className).toContain("text-primary");
   });
 });
+
+describe("SessionMobileBottomNav panel picker", () => {
+  it("offers Prompt history through the grouped Panels action", () => {
+    const onPanelChange = vi.fn();
+
+    render(
+      <SessionMobileBottomNav
+        activePanel="chat"
+        onPanelChange={onPanelChange}
+        showPromptHistory
+        showStatus={false}
+        onOpenStatus={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Panels" }));
+    fireEvent.click(screen.getByTestId("mobile-prompt-history-option"));
+
+    expect(onPanelChange).toHaveBeenCalledWith("prompt-history");
+  });
+});

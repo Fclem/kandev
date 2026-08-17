@@ -13,6 +13,14 @@ const { mockDockviewState } = vi.hoisted(() => {
     clearScrollTarget: vi.fn((token: number) => {
       if (state.scrollTarget?.token === token) state.scrollTarget = null;
     }),
+    clearScrollTargetForOwner: vi.fn((sessionId: string, hostPanelId: string) => {
+      if (
+        state.scrollTarget?.sessionId === sessionId &&
+        state.scrollTarget.hostPanelId === hostPanelId
+      ) {
+        state.scrollTarget = null;
+      }
+    }),
     clearScrollTargetForSession: vi.fn((sessionId: string) => {
       if (state.scrollTarget?.sessionId === sessionId) state.scrollTarget = null;
     }),
@@ -313,7 +321,10 @@ describe("useScrollTargetConsumption — session-swap invalidation", () => {
     // Canonical chat resolves session B: the A-target must be invalidated.
     rerender({ resolvedSessionId: "session-2" });
 
-    expect(mockDockviewState.clearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(mockDockviewState.clearScrollTargetForOwner).toHaveBeenCalledWith(
+      "session-1",
+      "panel-a",
+    );
     expect(mockDockviewState.scrollTarget).toBeNull();
 
     // Returning to A must NOT re-scroll (the target was cleared).
@@ -325,7 +336,7 @@ describe("useScrollTargetConsumption — session-swap invalidation", () => {
 });
 
 describe("useScrollTargetConsumption — canonical-host unmount ownership", () => {
-  it("clears by the last resolved session on unmount", () => {
+  it("clears by the last resolved session and exact panel owner on unmount", () => {
     mockDockviewState.scrollTarget = target();
     const messageListRef = { current: scrollHandle(false) };
 
@@ -334,7 +345,26 @@ describe("useScrollTargetConsumption — canonical-host unmount ownership", () =
 
     unmount();
 
-    expect(mockDockviewState.clearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(mockDockviewState.clearScrollTargetForOwner).toHaveBeenCalledWith(
+      "session-1",
+      "panel-a",
+    );
     expect(mockDockviewState.scrollTarget).toBeNull();
+  });
+
+  it("does not clear a target owned by another panel on unmount", () => {
+    mockDockviewState.scrollTarget = target({ hostPanelId: "panel-a" });
+    const messageListRef = { current: scrollHandle(false) };
+
+    const { unmount } = renderHook(() =>
+      useScrollTargetConsumption({ ...PROPS, panelId: "panel-b", messageListRef }),
+    );
+    unmount();
+
+    expect(mockDockviewState.clearScrollTargetForOwner).toHaveBeenCalledWith(
+      "session-1",
+      "panel-b",
+    );
+    expect(mockDockviewState.scrollTarget).not.toBeNull();
   });
 });

@@ -21,7 +21,7 @@ let scrollTargetToken = 0;
 /**
  * Build the transcript actions: `scrollTranscriptToMessage` activates (or
  * adds) the session's chat panel and records a scroll target;
- * `clearScrollTarget`/`clearScrollTargetForSession` clear it;
+ * `clearScrollTarget`/`clearScrollTargetForOwner` clear it;
  * `addVscodePanel`/`openInternalVscode` open or focus the VSCode panel.
  */
 function buildTranscriptActions(set: StoreSet, get: StoreGet) {
@@ -49,8 +49,11 @@ function buildTranscriptActions(set: StoreSet, get: StoreGet) {
     clearScrollTarget: (token: number) => {
       if (get().scrollTarget?.token === token) set({ scrollTarget: null });
     },
-    clearScrollTargetForSession: (sessionId: string) => {
-      if (get().scrollTarget?.sessionId === sessionId) set({ scrollTarget: null });
+    clearScrollTargetForOwner: (sessionId: string, hostPanelId: string) => {
+      const target = get().scrollTarget;
+      if (target?.sessionId === sessionId && target.hostPanelId === hostPanelId) {
+        set({ scrollTarget: null });
+      }
     },
     addVscodePanel: () => {
       const { api, centerGroupId } = get();

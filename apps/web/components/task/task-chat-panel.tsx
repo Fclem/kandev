@@ -61,6 +61,35 @@ function useClarificationKey(agentMessageCount: number) {
   return { clarificationKey, handleClarificationResolved };
 }
 
+/** Scrolls a non-Dockview host target after the message row becomes rendered. */
+function usePendingMessageScroll(
+  messageListRef: RefObject<MessageListHandle | null>,
+  messageId: string | null | undefined,
+  onConsumed: ((messageId: string) => void) | undefined,
+  readinessKey: string,
+) {
+  useEffect(() => {
+    if (!messageId) return;
+    let attempts = 0;
+    let frame = 0;
+    const attemptScroll = () => {
+      if (
+        messageListRef.current?.scrollToMessage(messageId, {
+          align: "start",
+          behavior: "auto",
+        })
+      ) {
+        onConsumed?.(messageId);
+        return;
+      }
+      attempts += 1;
+      if (attempts < 30) frame = requestAnimationFrame(attemptScroll);
+    };
+    frame = requestAnimationFrame(attemptScroll);
+    return () => cancelAnimationFrame(frame);
+  }, [messageId, messageListRef, onConsumed, readinessKey]);
+}
+
 /** Computes the render-item key the unread "New" divider should appear
  * immediately before: tracks the latest rendered message id for session read
  * tracking, then maps the resulting divider anchor onto the grouped items. */
@@ -202,6 +231,10 @@ type TaskChatPanelProps = {
    */
   isVisible?: boolean;
   panelId?: string | null;
+  /** Message ID requested by a non-Dockview host, such as the phone history surface. */
+  pendingScrollToMessageId?: string | null;
+  /** Called after a non-Dockview scroll target reaches a rendered row. */
+  onPendingScrollConsumed?: (messageId: string) => void;
 };
 
 type ScrollTargetConsumptionParams = {
@@ -238,9 +271,7 @@ export function useScrollTargetConsumption({
 }: ScrollTargetConsumptionParams) {
   const scrollTarget = useDockviewStore((state) => state.scrollTarget);
   const clearScrollTarget = useDockviewStore((state) => state.clearScrollTarget);
-  const clearScrollTargetForSession = useDockviewStore(
-    (state) => state.clearScrollTargetForSession,
-  );
+  const clearScrollTargetForOwner = useDockviewStore((state) => state.clearScrollTargetForOwner);
   const previousSessionId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -253,12 +284,14 @@ export function useScrollTargetConsumption({
     const previous = previousSessionId.current;
     previousSessionId.current = resolvedSessionId;
     if (previous && previous !== resolvedSessionId) {
-      clearScrollTargetForSession(previous);
+      if (panelId) clearScrollTargetForOwner(previous, panelId);
     }
     return () => {
-      if (resolvedSessionId) clearScrollTargetForSession(resolvedSessionId);
+      if (resolvedSessionId && panelId) {
+        clearScrollTargetForOwner(resolvedSessionId, panelId);
+      }
     };
-  }, [clearScrollTargetForSession, panelId, resolvedSessionId]);
+  }, [clearScrollTargetForOwner, panelId, resolvedSessionId]);
 
   useEffect(() => {
     if (
@@ -312,6 +345,8 @@ export const TaskChatPanel = memo(function TaskChatPanel({
   hideSessionsDropdown,
   isVisible = true,
   panelId = null,
+  pendingScrollToMessageId = null,
+  onPendingScrollConsumed,
 }: TaskChatPanelProps) {
   const isArchived = useIsTaskArchived();
   const chatInputRef = useRef<ChatInputContainerHandle>(null);
@@ -364,6 +399,12 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     messageListRef,
     isInitialMessagesLoading,
   });
+  usePendingMessageScroll(
+    messageListRef,
+    pendingScrollToMessageId,
+    onPendingScrollConsumed,
+    `${allMessages.length}:${isInitialMessagesLoading}`,
+  );
   const lastPromptMessageId = useMemo(() => getLastUserMessageId(allMessages), [allMessages]);
   const lastPromptMessage = useMemo(
     () =>

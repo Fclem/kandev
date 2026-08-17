@@ -398,7 +398,9 @@ function useProgrammaticScrollGuard(
  * message's row into view (start- or center-aligned) under the programmatic
  * scroll guard, then watches the animation and force-lands the alignment if
  * the browser settles misaligned. Returns false when the row isn't rendered
- * yet; a superseding request invalidates in-flight verification.
+ * yet; a superseding request invalidates in-flight verification. When the
+ * requested alignment exceeds the scroll range, the nearest reachable
+ * position is accepted.
  */
 export function useScrollToMessage(
   scrollRef: React.RefObject<HTMLDivElement | null>,
@@ -457,9 +459,17 @@ export function useScrollToMessage(
             requestAnimationFrame(verify);
             return;
           }
-          // Settled (or never moved): the scroll was canceled/no-op'd — land
-          // the requested alignment and keep verifying the landing.
-          container.scrollTop += delta;
+          // Settled (or never moved): land the requested alignment. Browsers
+          // clamp scrollTop at the scroll range, so accept that boundary as
+          // the nearest reachable position instead of retrying forever.
+          const hasScrollMetrics = container.scrollHeight > 0 || container.clientHeight > 0;
+          const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+          const desiredScrollTop = container.scrollTop + delta;
+          const nextScrollTop = hasScrollMetrics
+            ? Math.min(maxScrollTop, Math.max(0, desiredScrollTop))
+            : desiredScrollTop;
+          if (hasScrollMetrics && nextScrollTop === container.scrollTop) return;
+          container.scrollTop = nextScrollTop;
           lastAbsDelta = Infinity;
           requestAnimationFrame(verify);
         };

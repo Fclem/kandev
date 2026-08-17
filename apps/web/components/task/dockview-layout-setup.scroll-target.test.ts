@@ -2,23 +2,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoreApi } from "zustand";
 import type { AppState } from "@/lib/state/store";
 
-const { mockClearScrollTargetForSession, mockRelease, dockviewState } = vi.hoisted(() => ({
-  mockClearScrollTargetForSession: vi.fn((sessionId: string) => {
-    if (dockviewState.scrollTarget?.sessionId === sessionId) {
+const SESSION_ONE_PANEL_ID = "session:session-1";
+
+const { mockClearScrollTargetForOwner, mockRelease, dockviewState } = vi.hoisted(() => ({
+  mockClearScrollTargetForOwner: vi.fn((sessionId: string, hostPanelId: string) => {
+    if (
+      dockviewState.scrollTarget?.sessionId === sessionId &&
+      dockviewState.scrollTarget.hostPanelId === hostPanelId
+    ) {
       dockviewState.scrollTarget = null;
     }
   }),
   mockRelease: vi.fn(),
   dockviewState: {
     isRestoringLayout: false,
-    scrollTarget: null as null | { sessionId: string; token: number },
+    scrollTarget: null as null | { sessionId: string; token: number; hostPanelId: string },
   },
 }));
 
 vi.mock("@/lib/state/dockview-store", () => ({
   useDockviewStore: Object.assign(() => ({}), {
     getState: () => ({
-      clearScrollTargetForSession: mockClearScrollTargetForSession,
+      clearScrollTargetForOwner: mockClearScrollTargetForOwner,
       isRestoringLayout: dockviewState.isRestoringLayout,
       // Non-maximized so handleMaximizeExitOnLastClose early-returns without
       // touching the maximize helpers this test does not mock.
@@ -75,7 +80,7 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
 
     api.fireRemoval({ id: "session:session-7" });
 
-    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-7");
+    expect(mockClearScrollTargetForOwner).toHaveBeenCalledWith("session-7", "session:session-7");
   });
 
   it("clears by the active session when the canonical chat panel is removed", () => {
@@ -84,7 +89,7 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
 
     api.fireRemoval({ id: "chat" });
 
-    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-9");
+    expect(mockClearScrollTargetForOwner).toHaveBeenCalledWith("session-9", "chat");
   });
 
   it("leaves targets intact when an unrelated panel is removed", () => {
@@ -93,7 +98,7 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
 
     api.fireRemoval({ id: "files" });
 
-    expect(mockClearScrollTargetForSession).not.toHaveBeenCalled();
+    expect(mockClearScrollTargetForOwner).not.toHaveBeenCalled();
   });
 
   it("clears the removed session only, never the other sessions' targets", () => {
@@ -102,8 +107,8 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
 
     api.fireRemoval({ id: "session:session-a" });
 
-    expect(mockClearScrollTargetForSession).toHaveBeenCalledTimes(1);
-    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-a");
+    expect(mockClearScrollTargetForOwner).toHaveBeenCalledTimes(1);
+    expect(mockClearScrollTargetForOwner).toHaveBeenCalledWith("session-a", "session:session-a");
   });
 
   it("clears the LATEST target when the panel of a superseded request is removed", () => {
@@ -112,23 +117,39 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
     // panel removed, must clear B, never leave it to a stale consumer.
     const api = makeApi();
     setupPortalCleanup(api as never, makeAppStore("session-1"));
-    dockviewState.scrollTarget = { sessionId: "session-1", token: 1 };
-    dockviewState.scrollTarget = { sessionId: "session-1", token: 2 };
+    dockviewState.scrollTarget = {
+      sessionId: "session-1",
+      token: 1,
+      hostPanelId: SESSION_ONE_PANEL_ID,
+    };
+    dockviewState.scrollTarget = {
+      sessionId: "session-1",
+      token: 2,
+      hostPanelId: SESSION_ONE_PANEL_ID,
+    };
 
-    api.fireRemoval({ id: "session:session-1" });
+    api.fireRemoval({ id: SESSION_ONE_PANEL_ID });
 
-    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(mockClearScrollTargetForOwner).toHaveBeenCalledWith("session-1", SESSION_ONE_PANEL_ID);
     expect(dockviewState.scrollTarget).toBeNull();
   });
 
   it("leaves the latest target intact when an unrelated session's panel is removed", () => {
     const api = makeApi();
     setupPortalCleanup(api as never, makeAppStore("session-1"));
-    dockviewState.scrollTarget = { sessionId: "session-1", token: 2 };
+    dockviewState.scrollTarget = {
+      sessionId: "session-1",
+      token: 2,
+      hostPanelId: SESSION_ONE_PANEL_ID,
+    };
 
     api.fireRemoval({ id: "session:session-9" });
 
-    expect(dockviewState.scrollTarget).toEqual({ sessionId: "session-1", token: 2 });
+    expect(dockviewState.scrollTarget).toEqual({
+      sessionId: "session-1",
+      token: 2,
+      hostPanelId: SESSION_ONE_PANEL_ID,
+    });
   });
 
   it("runs the clear even while a layout restore is in progress (before the restore guard)", () => {
@@ -139,8 +160,8 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
     api.fireRemoval({ id: "session:session-3" });
     api.fireRemoval({ id: "chat" });
 
-    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-3");
-    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(mockClearScrollTargetForOwner).toHaveBeenCalledWith("session-3", "session:session-3");
+    expect(mockClearScrollTargetForOwner).toHaveBeenCalledWith("session-1", "chat");
   });
 
   it("clears the target during a restore detach that keeps the host portal alive", () => {
@@ -156,7 +177,7 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
 
     api.fireRemoval({ id: "chat" });
 
-    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(mockClearScrollTargetForOwner).toHaveBeenCalledWith("session-1", "chat");
     expect(mockRelease).not.toHaveBeenCalled();
   });
 
@@ -177,7 +198,7 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
 
     api.fireRemoval({ id: "chat" });
 
-    expect(mockClearScrollTargetForSession).toHaveBeenCalledWith("session-1");
+    expect(mockClearScrollTargetForOwner).toHaveBeenCalledWith("session-1", "chat");
     // Detach without release: the portal entry (host) is retained.
     expect(mockRelease).not.toHaveBeenCalled();
     expect(realManager.has("chat")).toBe(true);
@@ -190,6 +211,6 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
 
     api.fireRemoval({ id: "chat" });
 
-    expect(mockClearScrollTargetForSession).not.toHaveBeenCalled();
+    expect(mockClearScrollTargetForOwner).not.toHaveBeenCalled();
   });
 });

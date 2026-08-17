@@ -3,7 +3,7 @@ import i18n from "i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Message, Turn } from "@/lib/types/http";
 
-const { state, messagesBySession, turnsBySession } = vi.hoisted(() => ({
+const { state, messagesBySession, turnsBySession, turnsHydratedBySession } = vi.hoisted(() => ({
   state: {
     tasks: { activeSessionId: "session-a" as string | null },
     taskSessions: {
@@ -12,6 +12,7 @@ const { state, messagesBySession, turnsBySession } = vi.hoisted(() => ({
   },
   messagesBySession: {} as Record<string, Message[]>,
   turnsBySession: {} as Record<string, Turn[]>,
+  turnsHydratedBySession: {} as Record<string, boolean>,
 }));
 
 vi.mock("@/components/state-provider", () => ({
@@ -27,6 +28,10 @@ vi.mock("@/hooks/domains/session/use-session-messages", () => ({
 vi.mock("@/hooks/domains/session/use-session-turns", () => ({
   useSessionTurns: (sessionId: string | null) =>
     sessionId ? (turnsBySession[sessionId] ?? []) : [],
+  useSessionTurnsState: (sessionId: string | null) => ({
+    turns: sessionId ? (turnsBySession[sessionId] ?? []) : [],
+    isHydrated: sessionId ? (turnsHydratedBySession[sessionId] ?? true) : true,
+  }),
 }));
 
 import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
@@ -165,6 +170,8 @@ beforeEach(() => {
   messagesBySession[SESSION_B] = [];
   turnsBySession[SESSION_A] = [];
   turnsBySession[SESSION_B] = [];
+  turnsHydratedBySession[SESSION_A] = true;
+  turnsHydratedBySession[SESSION_B] = true;
 });
 
 afterEach(async () => {
@@ -290,6 +297,25 @@ describe("PromptHistoryPanelContent — active-session switch", () => {
 });
 
 describe("PromptHistoryPanelContent — duration rendering", () => {
+  it("hides provisional durations while turn hydration is in flight", () => {
+    messagesBySession[SESSION_A] = [
+      message({ id: "older", turn_id: TURN_ID }),
+      message({ id: "newer", created_at: LATER_TIME }),
+    ];
+    turnsBySession[SESSION_A] = [];
+    turnsHydratedBySession[SESSION_A] = false;
+
+    const { rerender } = render(<PromptHistoryPanelContent />);
+
+    expect(screen.queryByTestId(/^prompt-history-duration-/)).toBeNull();
+
+    turnsHydratedBySession[SESSION_A] = true;
+    turnsBySession[SESSION_A] = [turn({ completed_at: COMPLETED_5S })];
+    rerender(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId("prompt-history-duration-1").textContent).toBe("5s");
+  });
+
   it("composes the exact formatPromptDuration output from the localized units", () => {
     messagesBySession[SESSION_A] = [message({ turn_id: TURN_ID })];
     turnsBySession[SESSION_A] = [turn({ completed_at: COMPLETED_5S })];

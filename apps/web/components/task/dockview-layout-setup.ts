@@ -533,10 +533,10 @@ export function setupPortalCleanup(
   api.onDidRemovePanel((panel) => {
     const dockviewStore = useDockviewStore.getState();
     if (panel.id.startsWith("session:")) {
-      dockviewStore.clearScrollTargetForSession(panel.id.slice("session:".length));
+      dockviewStore.clearScrollTargetForOwner(panel.id.slice("session:".length), panel.id);
     } else if (panel.id === "chat") {
       const activeSessionId = appStore.getState().tasks.activeSessionId;
-      if (activeSessionId) dockviewStore.clearScrollTargetForSession(activeSessionId);
+      if (activeSessionId) dockviewStore.clearScrollTargetForOwner(activeSessionId, panel.id);
     }
     if (useDockviewStore.getState().isRestoringLayout) return;
     const remainingPanelCount = api.panels.filter((p) => p.id !== panel.id).length;

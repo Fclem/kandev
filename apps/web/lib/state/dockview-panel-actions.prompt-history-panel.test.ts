@@ -178,16 +178,16 @@ describe("scrollTranscriptToMessage", () => {
     expect(store.state.scrollTarget).toBeNull();
   });
 
-  it("clearScrollTargetForSession clears only the matching session", () => {
+  it("clearScrollTargetForOwner clears only the matching host", () => {
     const api = makeApi();
     const store = makeStore(api);
     const actions = buildExtraPanelActions(store.set, store.get);
     actions.scrollTranscriptToMessage(SESSION_ID, MESSAGE_ID, "Agent");
 
-    actions.clearScrollTargetForSession("session-2");
+    actions.clearScrollTargetForOwner(SESSION_ID, "chat");
     expect(store.state.scrollTarget).not.toBeNull();
 
-    actions.clearScrollTargetForSession(SESSION_ID);
+    actions.clearScrollTargetForOwner(SESSION_ID, `session:${SESSION_ID}`);
     expect(store.state.scrollTarget).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { Button } from "@kandev/ui/button";
 import { IconChevronDown, IconChevronUp, IconNavigation } from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
 import { useSessionMessages } from "@/hooks/domains/session/use-session-messages";
-import { useSessionTurns } from "@/hooks/domains/session/use-session-turns";
+import { useSessionTurnsState } from "@/hooks/domains/session/use-session-turns";
 import { useMessageFavorite } from "@/hooks/domains/session/use-message-favorite";
 import { formatRelative } from "@/lib/i18n/formats";
 import { cn } from "@/lib/utils";
@@ -26,8 +26,12 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
   const { messages } = useSessionMessages(sessionId);
-  const turns = useSessionTurns(sessionId);
-  const entries = useMemo(() => buildPromptHistoryEntries(messages, turns), [messages, turns]);
+  const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
+  const entries = useMemo(() => {
+    const derived = buildPromptHistoryEntries(messages, turns);
+    if (turnsHydrated) return derived;
+    return derived.map((entry) => ({ ...entry, durationSeconds: null }));
+  }, [messages, turns, turnsHydrated]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const maxHeight = usePanelRowMaxHeight(rootRef);
 
@@ -122,7 +126,7 @@ function PromptHistoryRow({
       <Button
         variant="ghost"
         size="icon"
-        className="size-8 shrink-0 cursor-pointer"
+        className="size-11 shrink-0 cursor-pointer sm:size-8"
         aria-label={t("task:scrollToPrompt")}
         data-testid={`prompt-history-jump-${index}`}
         onClick={() => onNavigate?.(entry.messageId)}
@@ -158,7 +162,7 @@ function PromptHistoryRow({
               variant="ghost"
               size="icon"
               className={cn(
-                "absolute z-10 size-6 cursor-pointer rounded-md",
+                "absolute z-10 size-11 cursor-pointer rounded-md sm:size-6",
                 expanded
                   ? "right-1 top-1"
                   : "right-1 top-1/2 -translate-y-1/2 bg-background/70 hover:bg-background/90",

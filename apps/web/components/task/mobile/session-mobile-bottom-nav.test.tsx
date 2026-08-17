@@ -149,6 +149,20 @@ describe("SessionMobileBottomNav plugin panels", () => {
 
     expect(screen.getByRole("button", { name: "Panels" }).className).toContain("text-primary");
   });
+
+  it("keeps the grouped Panels action active for Prompt history", () => {
+    render(
+      <SessionMobileBottomNav
+        activePanel="prompt-history"
+        onPanelChange={vi.fn()}
+        showPromptHistory
+        showStatus={false}
+        onOpenStatus={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Panels" }).className).toContain("text-primary");
+  });
 });
 
 describe("SessionMobileBottomNav panel picker", () => {

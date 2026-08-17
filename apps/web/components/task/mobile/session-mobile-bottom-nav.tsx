@@ -120,7 +120,8 @@ function buildMobileNavItems({
           {
             label: t("common:panels"),
             icon: <IconLayoutGrid className="h-5 w-5" />,
-            active: parsePluginPanelId(activePanel) !== undefined,
+            active:
+              parsePluginPanelId(activePanel) !== undefined || activePanel === "prompt-history",
             onClick: onOpenPluginPicker,
           },
         ]

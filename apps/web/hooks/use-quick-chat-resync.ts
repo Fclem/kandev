@@ -25,7 +25,7 @@ export function useQuickChatResync(workspaceId: string | null): void {
   const setTaskSession = useAppStore((state) => state.setTaskSession);
   // Resync once per connection, not on every unrelated status re-render.
   const lastSyncedConnection = useRef<string | null>(null);
-  const [, retryResync] = useReducer((attempt: number) => attempt + 1, 0);
+  const [resyncAttempt, retryResync] = useReducer((attempt: number) => attempt + 1, 0);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -73,5 +73,6 @@ export function useQuickChatResync(workspaceId: string | null): void {
     setTaskSession,
     syncQuickChatSessions,
     syncQuickTerminalTabs,
+    resyncAttempt,
   ]);
 }

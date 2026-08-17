@@ -91,11 +91,7 @@ export function registerTurnsHandlers(
       const quickChatSession = quickChat.sessions.find(
         (session) => session.sessionId === payload.session_id,
       );
-      if (
-        quickChatSession &&
-        (!quickChat.isOpen || quickChat.activeSessionId !== payload.session_id) &&
-        !wasCompleted
-      ) {
+      if (quickChatSession && !quickChat.isOpen && !wasCompleted) {
         store.getState().markQuickChatUnseenIdle(payload.session_id, quickChatSession.workspaceId);
       }
       // Surface a notice when the turn finished with no agent output.

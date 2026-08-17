@@ -22,7 +22,7 @@ function findWorkspaceConfigSession(
   );
 }
 
-function upsertQuickChatSession(
+function upsertQuickChatSessionDraft(
   quickChat: Draft<UISlice["quickChat"]>,
   session: QuickChatSession,
 ): boolean {
@@ -70,7 +70,7 @@ function openQuickChat(set: ImmerSet) {
         return;
       }
       if (
-        !upsertQuickChatSession(draft.quickChat, {
+        !upsertQuickChatSessionDraft(draft.quickChat, {
           sessionId,
           workspaceId,
           agentProfileId,
@@ -98,7 +98,7 @@ function addQuickChatSession(set: ImmerSet) {
         (session) => session.sessionId === draft.quickChat.activeSessionId,
       )?.workspaceId;
       if (
-        !upsertQuickChatSession(draft.quickChat, {
+        !upsertQuickChatSessionDraft(draft.quickChat, {
           sessionId,
           workspaceId,
           agentProfileId,

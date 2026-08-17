@@ -14,6 +14,10 @@ const syncMock = vi.hoisted(() => ({
   toQuickTerminalTab: vi.fn((tab: unknown) => tab),
 }));
 
+const storeApiMock = vi.hoisted(() => ({
+  getState: () => mockState,
+}));
+
 type MockState = {
   connection: { status: string };
   quickChat: { syncRevisionByWorkspace: Record<string, number> };
@@ -26,7 +30,7 @@ let mockState: MockState;
 
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (state: MockState) => unknown) => selector(mockState),
-  useAppStoreApi: () => ({ getState: () => mockState }),
+  useAppStoreApi: () => storeApiMock,
 }));
 vi.mock("@/lib/api/domains/workspace-api", () => ({
   listQuickChatSessions: apiMock.listQuickChatSessions,

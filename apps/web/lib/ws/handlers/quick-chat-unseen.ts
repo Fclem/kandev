@@ -34,6 +34,6 @@ export function maybeMarkQuickChatUnseenIdle(
   if (!store.getState().recordQuickChatSettled(sessionId, updatedAt)) return;
   const quickChat = store.getState().quickChat;
   const session = quickChat.sessions.find((item) => item.sessionId === sessionId);
-  if (session && (!quickChat.isOpen || quickChat.activeSessionId !== sessionId))
+  if (session && !quickChat.isOpen)
     store.getState().markQuickChatUnseenIdle(sessionId, session.workspaceId);
 }

@@ -108,7 +108,7 @@ describe("session turn WebSocket handlers", () => {
     expect(flush).toHaveBeenCalledTimes(1);
   });
 
-  it("marks a closed quick chat once and ignores visible or unrelated sessions", () => {
+  it("marks a closed quick chat once and suppresses all dialog-open completions", () => {
     const quickChat = {
       isOpen: false,
       activeSessionId: null,
@@ -138,6 +138,6 @@ describe("session turn WebSocket handlers", () => {
     });
     send(store, TURN_COMPLETED, turn("turn-2", TURN_STARTED_AT, TURN_COMPLETED_AT));
 
-    expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledTimes(2);
+    expect(store.getState().markQuickChatUnseenIdle).toHaveBeenCalledTimes(1);
   });
 });

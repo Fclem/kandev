@@ -74,6 +74,7 @@ const PROPS = {
   isVisible: true,
   panelId: "panel-a",
   isInitialMessagesLoading: false,
+  renderedMessageCount: 0,
 };
 
 beforeEach(() => {
@@ -279,6 +280,33 @@ describe("useScrollTargetConsumption — delayed-DOM retry", () => {
     rerender({ isInitialMessagesLoading: false });
     await flushFrames();
 
+    expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
+    expect(mockDockviewState.scrollTarget).toBeNull();
+  });
+
+  it("retries when rendered message count changes after loading is complete", async () => {
+    mockDockviewState.scrollTarget = target();
+    const messageListRef = { current: scrollHandle(false) };
+    const { rerender } = renderHook(
+      ({ renderedMessageCount }) =>
+        useScrollTargetConsumption({
+          ...PROPS,
+          renderedMessageCount,
+          messageListRef,
+        }),
+      { initialProps: { renderedMessageCount: 0 } },
+    );
+
+    await flushFrames();
+    expect(mockDockviewState.scrollTarget).not.toBeNull();
+
+    messageListRef.current = scrollHandle(true);
+    rerender({ renderedMessageCount: 1 });
+    await flushFrames();
+
+    expect(messageListRef.current?.scrollToMessage).toHaveBeenCalledWith("message-1", {
+      align: "start",
+    });
     expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
     expect(mockDockviewState.scrollTarget).toBeNull();
   });

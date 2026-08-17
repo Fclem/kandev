@@ -36,6 +36,7 @@ vi.mock("@/hooks/domains/session/use-session-turns", () => ({
 
 import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
 import { useMessageFavoritesStore } from "@/lib/state/slices/message-favorites";
+import { formatDateTime } from "@/lib/i18n/formats";
 
 const SESSION_A = "session-a";
 const SESSION_B = "session-b";
@@ -384,7 +385,7 @@ describe("PromptHistoryPanelContent — time element", () => {
 
     const time = row(0).querySelector("time");
     expect(time?.getAttribute("dateTime")).toBe(BASE_TIME);
-    expect(time?.getAttribute("title")).toBe(new Date(BASE_TIME).toLocaleString());
+    expect(time?.getAttribute("title")).toBe(formatDateTime(BASE_TIME));
   });
 });
 

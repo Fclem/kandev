@@ -70,16 +70,18 @@ export function buildPromptHistoryEntries(
     .sort(comparePrompts);
   const completions = turnCompletionByPrompt(prompts, turns);
   const promptsBySession = new Map<string, PromptWithTimestamp[]>();
+  const indexByPrompt = new Map<PromptWithTimestamp, number>();
 
   for (const prompt of prompts) {
     const sessionPrompts = promptsBySession.get(prompt.session_id) ?? [];
+    indexByPrompt.set(prompt, sessionPrompts.length);
     sessionPrompts.push(prompt);
     promptsBySession.set(prompt.session_id, sessionPrompts);
   }
 
   const entries = prompts.map((prompt) => {
     const sessionPrompts = promptsBySession.get(prompt.session_id)!;
-    const index = sessionPrompts.indexOf(prompt);
+    const index = indexByPrompt.get(prompt)!;
     const nextPrompt = sessionPrompts[index + 1];
     const completedAt = completions.get(`${prompt.session_id}:${prompt.id}`) ?? null;
     const nextPromptAt = nextPrompt?.timestamp ?? null;

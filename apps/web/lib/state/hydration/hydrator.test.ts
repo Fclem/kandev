@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- hydration paths share one complete-state fixture. */
 import { beforeEach, describe, expect, it } from "vitest";
 import { produce } from "immer";
 import type { Draft } from "immer";
@@ -656,3 +657,15 @@ it.each([true, false])(
     expect(result.turns.hydratedBySession).toEqual(forceMerge ? { "session-1": true } : {});
   },
 );
+
+it("marks an absent inactive session after ordinary turn hydration", () => {
+  const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+    hydrateState(
+      draft,
+      { turns: { bySession: { "session-1": [] } } } as unknown as Partial<AppState>,
+      { activeSessionId: "other-session", forceMergeSessionId: null },
+    );
+  });
+
+  expect(result.turns.hydratedBySession["session-1"]).toBe(true);
+});

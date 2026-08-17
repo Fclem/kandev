@@ -445,12 +445,14 @@ export function useScrollToMessage(
           frames += 1;
           if (frames > 30 || !container.isConnected || !el.isConnected) return;
           if (generationRef.current !== generation) return; // superseded
+          const elementRect = el.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
           const delta = alignStart
-            ? el.getBoundingClientRect().top - container.getBoundingClientRect().top - margin
-            : el.getBoundingClientRect().top +
-              el.getBoundingClientRect().height / 2 -
-              (container.getBoundingClientRect().top +
-                container.getBoundingClientRect().height / 2);
+            ? elementRect.top - containerRect.top - margin
+            : elementRect.top +
+              elementRect.height / 2 -
+              (containerRect.top + containerRect.height / 2) -
+              margin / 2;
           const absDelta = Math.abs(delta);
           if (absDelta <= 2) return; // aligned
           if (absDelta < lastAbsDelta) {

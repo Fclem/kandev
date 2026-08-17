@@ -6,7 +6,7 @@ import { useAppStore } from "@/components/state-provider";
 import { useSessionMessages } from "@/hooks/domains/session/use-session-messages";
 import { useSessionTurnsState } from "@/hooks/domains/session/use-session-turns";
 import { useMessageFavorite } from "@/hooks/domains/session/use-message-favorite";
-import { formatRelative } from "@/lib/i18n/formats";
+import { formatDateTime, formatRelative } from "@/lib/i18n/formats";
 import { cn } from "@/lib/utils";
 import {
   buildPromptHistoryEntries,
@@ -179,7 +179,7 @@ function PromptHistoryRow({
       </div>
       <time
         dateTime={entry.sentAt}
-        title={new Date(entry.sentAt).toLocaleString()}
+        title={formatDateTime(entry.sentAt)}
         className="shrink-0 text-xs text-muted-foreground"
       >
         {formatRelative(entry.sentAt)}

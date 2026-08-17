@@ -245,6 +245,9 @@ type ScrollTargetConsumptionParams = {
   /** Message-list readiness: a no-op `scrollToMessage` (row not rendered yet)
    * is retried when this flips, instead of clearing the target. */
   isInitialMessagesLoading: boolean;
+  /** Rendered-transcript revision: retry a retained target when a row mounts
+   * after the initial load or when older pages are prepended. */
+  renderedMessageCount: number;
 };
 
 /**
@@ -268,6 +271,7 @@ export function useScrollTargetConsumption({
   panelId,
   messageListRef,
   isInitialMessagesLoading,
+  renderedMessageCount,
 }: ScrollTargetConsumptionParams) {
   const scrollTarget = useDockviewStore((state) => state.scrollTarget);
   const clearScrollTarget = useDockviewStore((state) => state.clearScrollTarget);
@@ -327,6 +331,7 @@ export function useScrollTargetConsumption({
     isVisible,
     messageListRef,
     panelId,
+    renderedMessageCount,
     resolvedSessionId,
     scrollTarget,
   ]);
@@ -398,6 +403,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     panelId,
     messageListRef,
     isInitialMessagesLoading,
+    renderedMessageCount: allMessages.length,
   });
   usePendingMessageScroll(
     messageListRef,

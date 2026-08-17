@@ -1,7 +1,7 @@
 ---
 id: "04-e2e-and-locales"
 title: "E2E and locale parity"
-status: pending
+status: done
 wave: 4
 depends_on: ["03-transcript-navigation"]
 plan: "plan.md"

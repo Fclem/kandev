@@ -699,4 +699,17 @@ describe("shouldApplyTurnUpdate", () => {
     const incoming = turn("t", { started_at: LATER_AT, updated_at: LATER_AT });
     expect(shouldApplyTurnUpdate(existing, incoming)).toBe(false);
   });
+
+  it("retains stored turns that the snapshot omits", () => {
+    const store = makeStore();
+    seedSession(store, "RUNNING", LATER_AT);
+    store.getState().addTurn(turn("live-only"));
+
+    store.getState().mergeTurnsSnapshot(SESSION_ID, [turn("turn-1")], 0);
+
+    expect(store.getState().turns.bySession[SESSION_ID].map((item) => item.id)).toEqual([
+      "live-only",
+      "turn-1",
+    ]);
+  });
 });

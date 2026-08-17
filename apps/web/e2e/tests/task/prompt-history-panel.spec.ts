@@ -28,6 +28,7 @@ test.describe("Prompt history panel", () => {
       },
     );
     if (!task.session_id) throw new Error("Prompt history task did not create a session");
+    const sessionId = task.session_id;
     /** Polls the task's sessions until one has reached a terminal DONE_STATES state. */
     const settled = async () => {
       const { sessions } = await apiClient.listTaskSessions(task.id);
@@ -86,7 +87,7 @@ test.describe("Prompt history panel", () => {
     let sentinelMessageId: string | null = null;
     await expect
       .poll(async () => {
-        const { messages } = await apiClient.listSessionMessages(task.session_id);
+        const { messages } = await apiClient.listSessionMessages(sessionId);
         const match = messages.find(
           (m) => m.author_type === "user" && m.content.includes(SENTINEL),
         );

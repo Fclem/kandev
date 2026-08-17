@@ -8,6 +8,7 @@ import {
   type StoreSet,
 } from "./dockview-panel-actions";
 import { buildTerminalPanelActions } from "./dockview-terminal-panel-actions";
+import { PROMPT_HISTORY_PANEL_ID } from "./layout-manager/constants";
 import { panelTitle } from "./layout-manager/panel-title";
 import {
   parsePluginPanelId,
@@ -139,7 +140,11 @@ function buildSidePanelActions(get: StoreGet) {
       addSidePanel(
         api,
         centerGroupId,
-        { id: "prompt-history", component: "prompt-history", title: panelTitle("prompt-history") },
+        {
+          id: PROMPT_HISTORY_PANEL_ID,
+          component: PROMPT_HISTORY_PANEL_ID,
+          title: panelTitle(PROMPT_HISTORY_PANEL_ID),
+        },
         opts,
       );
     },
@@ -148,11 +153,10 @@ function buildSidePanelActions(get: StoreGet) {
 
 /**
  * Build the store's extra panel actions: transcript, side-panel, review, and
- * terminal actions. Accepts either a (set, get) pair or a bare getter.
+ * terminal actions. Both store accessors are required so stateful actions
+ * cannot silently degrade to no-op setters in test or alternate compositions.
  */
-export function buildExtraPanelActions(setOrGet: StoreSet | StoreGet, maybeGet?: StoreGet) {
-  const set: StoreSet = maybeGet ? (setOrGet as StoreSet) : () => {};
-  const get: StoreGet = maybeGet ?? (setOrGet as StoreGet);
+export function buildExtraPanelActions(set: StoreSet, get: StoreGet) {
   return {
     ...buildTranscriptActions(set, get),
     ...buildSidePanelActions(get),

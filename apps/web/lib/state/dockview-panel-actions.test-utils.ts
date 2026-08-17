@@ -1,5 +1,6 @@
 import type { AddPanelOptions, DockviewApi } from "dockview-react";
 import { buildPanelActions } from "./dockview-panel-actions";
+import type { ScrollTarget } from "./dockview-panel-actions";
 import { CENTER_GROUP } from "./layout-manager";
 
 export type MockPanel = {
@@ -108,12 +109,7 @@ type StoreShape = {
   rightTopGroupId: string;
   rightBottomGroupId: string;
   selectedDiff: { path: string; content?: string } | null;
-  scrollTarget: {
-    sessionId: string;
-    messageId: string;
-    token: number;
-    hostPanelId: string;
-  } | null;
+  scrollTarget: ScrollTarget | null;
 };
 
 /**

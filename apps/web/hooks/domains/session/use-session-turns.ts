@@ -32,12 +32,13 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
     failedAttemptsRef.current = 0;
   }, [sessionId]);
 
-  if (activeGeneration.current.sessionId !== activeSessionId) {
+  useEffect(() => {
+    if (activeGeneration.current.sessionId === activeSessionId) return;
     activeGeneration.current = {
       sessionId: activeSessionId,
       value: activeGeneration.current.value + 1,
     };
-  }
+  }, [activeSessionId]);
 
   useEffect(() => {
     if (!sessionId || hydrated) return;

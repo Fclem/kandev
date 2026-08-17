@@ -2,7 +2,6 @@ import type { DockviewApi, DockviewGroupPanel } from "dockview-react";
 import type { CommitDetailTarget } from "@/components/task/changes-diff-target";
 import { t } from "@/lib/i18n";
 import { focusOrAddPanel } from "./dockview-layout-builders";
-import { buildExtraPanelActions } from "./dockview-extra-panel-actions";
 import { reviewPanelId, type ReviewPanelTarget } from "./dockview-review-panel-id";
 import { panelTitle } from "./layout-manager/panel-title";
 
@@ -687,5 +686,3 @@ export function buildReviewPanelActions(get: StoreGet) {
     },
   };
 }
-
-export { buildExtraPanelActions };

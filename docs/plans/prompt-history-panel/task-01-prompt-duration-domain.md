@@ -1,7 +1,7 @@
 ---
 id: "01-prompt-duration-domain"
 title: "Prompt duration domain"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"

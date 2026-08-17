@@ -7,11 +7,11 @@ import {
   PANEL_REGISTRY,
   REUSABLE_PANEL_IDS,
   KNOWN_PANEL_IDS,
+  PROMPT_HISTORY_PANEL_ID,
 } from "./constants";
 import { panelTitle } from "./panel-title";
 import { toSerializedDockview } from "./serializer";
 
-const PROMPT_HISTORY_ID = "prompt-history";
 import type { LayoutState } from "./types";
 
 /**
@@ -79,19 +79,19 @@ describe("panelTitle", () => {
   });
 
   it("resolves the prompt-history panel title and canonical title", async () => {
-    expect(panelTitle(PROMPT_HISTORY_ID)).toBe("Prompt history");
-    expect(canonicalPanelTitle(PROMPT_HISTORY_ID)).toBe("Prompt History");
+    expect(panelTitle(PROMPT_HISTORY_PANEL_ID)).toBe("Prompt history");
+    expect(canonicalPanelTitle(PROMPT_HISTORY_PANEL_ID)).toBe("Prompt History");
 
     await i18n.changeLanguage("pseudo");
-    expect(panelTitle(PROMPT_HISTORY_ID)).not.toBe("Prompt history");
-    expect(panelTitle(PROMPT_HISTORY_ID)).toMatch(/[^\x20-\x7E]/);
+    expect(panelTitle(PROMPT_HISTORY_PANEL_ID)).not.toBe("Prompt history");
+    expect(panelTitle(PROMPT_HISTORY_PANEL_ID)).toMatch(/[^\x20-\x7E]/);
     // Storage stays canonical whatever the locale.
-    expect(canonicalPanelTitle(PROMPT_HISTORY_ID)).toBe("Prompt History");
+    expect(canonicalPanelTitle(PROMPT_HISTORY_PANEL_ID)).toBe("Prompt History");
   });
 
   it("keeps the prompt-history panel in the reusable and known panel sets", () => {
-    expect(REUSABLE_PANEL_IDS).toContain(PROMPT_HISTORY_ID);
-    expect(KNOWN_PANEL_IDS.has(PROMPT_HISTORY_ID)).toBe(true);
+    expect(REUSABLE_PANEL_IDS).toContain(PROMPT_HISTORY_PANEL_ID);
+    expect(KNOWN_PANEL_IDS.has(PROMPT_HISTORY_PANEL_ID)).toBe(true);
   });
 });
 

@@ -227,25 +227,31 @@ describe("useSessionTurns — fetch failure recovery", () => {
     mockListSessionTurns
       .mockRejectedValueOnce(new Error("network down"))
       .mockResolvedValueOnce({ turns: [turn("turn-a")], total: 1 });
-    const { result, rerender } = renderHook(() => useSessionTurns("session-a"));
+    vi.useFakeTimers();
+    try {
+      const { result, rerender } = renderHook(() => useSessionTurns("session-a"));
 
-    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(1));
-    // The failure logs and schedules a bounded backoff retry.
-    expect(errorSpy).toHaveBeenCalledWith(
-      "[useSessionTurns] failed to fetch turns for",
-      "session-a",
-      expect.any(Error),
-    );
-    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(2), {
-      timeout: 5000,
-    });
-    await waitFor(() =>
-      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]),
-    );
+      await act(async () => {});
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(1);
+      // The failure logs and schedules a bounded backoff retry.
+      expect(errorSpy).toHaveBeenCalledWith(
+        "[useSessionTurns] failed to fetch turns for",
+        "session-a",
+        expect.any(Error),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+      await act(async () => {});
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(2);
+      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]);
 
-    rerender();
-    expect(result.current).toEqual([turn("turn-a")]);
-    errorSpy.mockRestore();
+      rerender();
+      expect(result.current).toEqual([turn("turn-a")]);
+    } finally {
+      vi.useRealTimers();
+      errorSpy.mockRestore();
+    }
   });
 
   it("applies the turn response despite an independent live commit mid-flight", async () => {

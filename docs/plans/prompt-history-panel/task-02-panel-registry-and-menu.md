@@ -1,7 +1,7 @@
 ---
 id: "02-panel-registry-and-menu"
 title: "Panel registry and menu"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-prompt-duration-domain"]
 plan: "plan.md"

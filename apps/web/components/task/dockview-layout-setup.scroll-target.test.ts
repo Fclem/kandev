@@ -111,17 +111,11 @@ describe("setupPortalCleanup — scroll-target teardown", () => {
     expect(mockClearScrollTargetForOwner).toHaveBeenCalledWith("session-a", "session:session-a");
   });
 
-  it("clears the LATEST target when the panel of a superseded request is removed", () => {
-    // Task 03 teardown policy: the removal clears session-only (no token), and
-    // the target always holds the latest intent — A superseded by B, then the
-    // panel removed, must clear B, never leave it to a stale consumer.
+  it("clears the latest target when its panel is removed", () => {
+    // Task 03 teardown policy: removal clears by session and owner (no token),
+    // so the latest target is invalidated before a stale consumer can use it.
     const api = makeApi();
     setupPortalCleanup(api as never, makeAppStore("session-1"));
-    dockviewState.scrollTarget = {
-      sessionId: "session-1",
-      token: 1,
-      hostPanelId: SESSION_ONE_PANEL_ID,
-    };
     dockviewState.scrollTarget = {
       sessionId: "session-1",
       token: 2,

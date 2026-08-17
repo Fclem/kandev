@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- native scroll behavior and regression cases share one harness. */
 import { useLayoutEffect, useRef } from "react";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -446,6 +447,77 @@ describe("useScrollToMessage — canceled-scroll landing", () => {
         });
       }
       expect(root.scrollTop).toBe(120);
+    } finally {
+      vi.unstubAllGlobals();
+      scrollIntoView.mockRestore();
+    }
+  });
+
+  it("does not correct a centered row that is offset by scroll margin", () => {
+    const frames: Array<() => void> = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      scrollMarginTop: "20px",
+    } as CSSStyleDeclaration);
+    try {
+      const boxedHandle: { current: ScrollToMessageHandle | null } = { current: null };
+      const { container } = render(
+        <ScrollToMessageHarness
+          rows={[TARGET_MESSAGE_ID]}
+          onHandle={(next) => {
+            boxedHandle.current = next;
+          }}
+        />,
+      );
+      const handle = boxedHandle.current;
+      if (!handle) throw new Error(HANDLE_RENDER_ERROR);
+      const root = container.querySelector<HTMLElement>(
+        `[data-testid="${SCROLL_TO_MESSAGE_ROOT}"]`,
+      );
+      const target = container.querySelector(`#msg-${TARGET_MESSAGE_ID}`);
+      if (!root || !target) throw new Error(HARNESS_RENDER_ERROR);
+      let scrollTop = 0;
+      let writes = 0;
+      Object.defineProperties(root, {
+        scrollTop: {
+          configurable: true,
+          get: () => scrollTop,
+          set: (value: number) => {
+            writes += 1;
+            scrollTop = value;
+          },
+        },
+        scrollHeight: { configurable: true, value: 1000 },
+        clientHeight: { configurable: true, value: 400 },
+        getBoundingClientRect: {
+          configurable: true,
+          value: () => createRect(0, 400),
+        },
+      });
+      Object.defineProperty(target, "getBoundingClientRect", {
+        configurable: true,
+        // Center alignment with a 20px scroll margin places the row center
+        // 10px below the viewport center.
+        value: () => createRect(200, 20),
+      });
+
+      expect(handle(TARGET_MESSAGE_ID)).toBe(true);
+      for (let i = 0; i < 2; i += 1) {
+        act(() => {
+          const pending = frames.splice(0);
+          for (const frame of pending) frame();
+        });
+      }
+
+      expect(writes).toBe(0);
+      expect(scrollTop).toBe(0);
     } finally {
       vi.unstubAllGlobals();
       scrollIntoView.mockRestore();

@@ -45,11 +45,11 @@ import {
 import { buildFileStateActions } from "./dockview-file-state";
 import {
   buildPanelActions,
-  buildExtraPanelActions,
   type OpenPanelOpts,
   type PreviewType,
   type ReviewPanelOptions,
 } from "./dockview-panel-actions";
+import { buildExtraPanelActions } from "./dockview-extra-panel-actions";
 import { preserveChatScrollDuringLayout } from "./dockview-scroll-preserve";
 import { measureDockviewContainer } from "./dockview-measure";
 import { panelPortalManager } from "@/lib/layout/panel-portal-manager";

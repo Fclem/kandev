@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildExtraPanelActions } from "./dockview-panel-actions";
+import { buildExtraPanelActions } from "./dockview-extra-panel-actions";
 import { makeApi, makeStore } from "./dockview-panel-actions.test-utils";
-import { CENTER_GROUP } from "./layout-manager";
-import { panelTitle } from "./layout-manager/panel-title";
+import { CENTER_GROUP, PROMPT_HISTORY_PANEL_ID } from "./layout-manager";
 
-const PROMPT_HISTORY_ID = "prompt-history";
+const PROMPT_HISTORY_TITLE = "Prompt history";
 
 const SESSION_ID = "session-1";
 const MESSAGE_ID = "message-1";
@@ -17,11 +16,11 @@ describe("addPromptHistoryPanel", () => {
 
     actions.addPromptHistoryPanel({ groupId: "group-invoking", inCenter: true });
 
-    const panel = api.getPanel(PROMPT_HISTORY_ID);
+    const panel = api.getPanel(PROMPT_HISTORY_PANEL_ID);
     expect(panel).toMatchObject({
-      id: PROMPT_HISTORY_ID,
+      id: PROMPT_HISTORY_PANEL_ID,
       group: { id: "group-invoking" },
-      api: { component: PROMPT_HISTORY_ID },
+      api: { component: PROMPT_HISTORY_PANEL_ID },
     });
   });
 
@@ -32,7 +31,7 @@ describe("addPromptHistoryPanel", () => {
 
     actions.addPromptHistoryPanel();
 
-    expect(api.getPanel(PROMPT_HISTORY_ID)?.title).toBe(panelTitle(PROMPT_HISTORY_ID));
+    expect(api.getPanel(PROMPT_HISTORY_PANEL_ID)?.title).toBe(PROMPT_HISTORY_TITLE);
   });
 
   it("falls back to the center group when no groupId is given", () => {
@@ -42,7 +41,7 @@ describe("addPromptHistoryPanel", () => {
 
     actions.addPromptHistoryPanel();
 
-    expect(api.getPanel(PROMPT_HISTORY_ID)?.group.id).toBe(CENTER_GROUP);
+    expect(api.getPanel(PROMPT_HISTORY_PANEL_ID)?.group.id).toBe(CENTER_GROUP);
   });
 
   it("places in the center group when inCenter is set without a groupId", () => {
@@ -52,7 +51,7 @@ describe("addPromptHistoryPanel", () => {
 
     actions.addPromptHistoryPanel({ inCenter: true });
 
-    expect(api.getPanel(PROMPT_HISTORY_ID)?.group.id).toBe(CENTER_GROUP);
+    expect(api.getPanel(PROMPT_HISTORY_PANEL_ID)?.group.id).toBe(CENTER_GROUP);
   });
 
   it("adds without activating the panel when opened quietly", () => {
@@ -63,7 +62,11 @@ describe("addPromptHistoryPanel", () => {
     actions.addPromptHistoryPanel({ quiet: true });
 
     // The mock panel exposes isActive; IDockviewPanel's type omits it.
-    const panel = api.getPanel(PROMPT_HISTORY_ID) as unknown as { isActive: boolean } | undefined;
+    const panel = api.getPanel(PROMPT_HISTORY_PANEL_ID) as unknown as
+      | {
+          isActive: boolean;
+        }
+      | undefined;
     expect(panel?.isActive).toBe(false);
   });
 });

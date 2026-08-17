@@ -639,6 +639,7 @@ function handleWorkspaceSourcesUpdated(
   store: StoreApi<AppState>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload: any,
+  boundaryTimestamp?: string,
 ): void {
   const {
     session_id: sessionId,
@@ -649,7 +650,13 @@ function handleWorkspaceSourcesUpdated(
   if (existing && workspacePath) {
     store.getState().setTaskSession({ ...existing, workspace_path: workspacePath });
   }
-  store.getState().reconcileWorkspaceSourcesAdopted(adoptedSessionIds ?? [sessionId]);
+  // The adoption boundary must be SERVER time, so forward the WS envelope's
+  // server-issued timestamp — never a client-clock value (a browser clock
+  // ahead of the backend would reject legitimate new turn.started events
+  // until server time caught up).
+  store
+    .getState()
+    .reconcileWorkspaceSourcesAdopted(adoptedSessionIds ?? [sessionId], boundaryTimestamp);
   store.getState().bumpWorkspaceFilesRefresh(sessionId);
   store.getState().clearLegacyGitStatusEntry(sessionId);
   store.getState().bumpSessionCommitsRefetch(sessionId);
@@ -795,6 +802,6 @@ export function registerTaskSessionHandlers(store: StoreApi<AppState>): WsHandle
       });
     },
     "session.workspace_sources.updated": (message) =>
-      handleWorkspaceSourcesUpdated(store, message.payload),
+      handleWorkspaceSourcesUpdated(store, message.payload, message.timestamp),
   };
 }

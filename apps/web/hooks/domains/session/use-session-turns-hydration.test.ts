@@ -250,6 +250,38 @@ describe("ensureSessionTurnsLoaded — guards and races", () => {
     expect(store.markTurnsLoaded).toHaveBeenCalledTimes(1);
   });
 
+  it("retries a transient failure automatically until it succeeds", async () => {
+    mockListSessionTurns.mockRejectedValueOnce(new Error("network blip"));
+    mockListSessionTurns.mockRejectedValueOnce(new Error("network blip"));
+    mockListSessionTurns.mockResolvedValueOnce({ turns: [], total: 0 });
+    const store = makeStore();
+
+    await ensureSessionTurnsLoaded(SESSION_ID, store as never);
+
+    // Two failures are absorbed by the bounded backoff; the third attempt
+    // lands, so a transient failure never leaves metadata unresolved.
+    expect(mockListSessionTurns).toHaveBeenCalledTimes(3);
+    expect(store.markTurnsLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up after exhausting retries and leaves the marker unset for a later fetch", async () => {
+    mockListSessionTurns.mockRejectedValue(new Error("backend down"));
+    const store = makeStore();
+
+    await ensureSessionTurnsLoaded(SESSION_ID, store as never);
+
+    // Bounded: no unbounded hammering of a failing endpoint.
+    expect(mockListSessionTurns).toHaveBeenCalledTimes(3);
+    expect(store.markTurnsLoaded).not.toHaveBeenCalled();
+
+    // In-flight entry is cleared; the next natural trigger retries and wins.
+    mockListSessionTurns.mockResolvedValueOnce({ turns: [], total: 0 });
+    await ensureSessionTurnsLoaded(SESSION_ID, store as never);
+
+    expect(mockListSessionTurns).toHaveBeenCalledTimes(4);
+    expect(store.markTurnsLoaded).toHaveBeenCalledTimes(1);
+  });
+
   it("skips the fetch when the session is absent from the store at entry", async () => {
     mockListSessionTurns.mockResolvedValue(EMPTY_TURNS);
     const store = makeStore();

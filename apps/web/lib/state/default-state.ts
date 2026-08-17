@@ -20,7 +20,7 @@ import {
 import { applyStoredQuickChatNames } from "@/lib/state/slices/ui/quick-chat-sync";
 import type { AgentRuntimeAvailability } from "@/lib/types/agent-runtime";
 import type { HydrationState } from "./store";
-import { isSettledSessionState, parseTurnTimestamp } from "@/lib/state/slices/session/turn-actions";
+import { seedSettledSessionBoundaries } from "@/lib/state/slices/session/turn-actions";
 import { migrateSidebarViewDraft, migrateView } from "./slices/ui/ui-slice";
 
 export const defaultState = {
@@ -270,15 +270,9 @@ function mergeTurnsState(
 ): DefaultState["turns"] {
   const merged = { ...current, ...incoming };
   const settledBoundaryBySession = { ...merged.settledBoundaryBySession };
-  for (const session of Object.values(sessions?.items ?? {})) {
-    if (!session || !isSettledSessionState(session.state)) continue;
-    const candidate = parseTurnTimestamp(session.updated_at);
-    if (candidate === null) continue;
-    const existing = parseTurnTimestamp(settledBoundaryBySession[session.id]);
-    if (existing === null || candidate > existing) {
-      settledBoundaryBySession[session.id] = session.updated_at;
-    }
-  }
+  // One shared seeding invariant (turn-actions) with the production
+  // StateHydrator path, so the SSR and hydration boundary rules cannot drift.
+  seedSettledSessionBoundaries(settledBoundaryBySession, Object.values(sessions?.items ?? {}));
   if (!incoming?.bySession) return { ...merged, settledBoundaryBySession };
   const loadedBySession: Record<string, boolean> = {};
   for (const sessionId of Object.keys(incoming.bySession)) {

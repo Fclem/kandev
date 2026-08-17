@@ -82,8 +82,9 @@ describe("session turn WebSocket handlers", () => {
     send(store, TURN_STARTED, turn("turn-1", TURN_STARTED_AT));
     expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-1");
 
-    // Source adoption clears the marker and retires the turn.
-    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+    // Source adoption clears the marker and retires the turn (server-issued
+    // boundary after the turn's start — the WS envelope timestamp).
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID], "2026-07-23T10:00:30.000Z");
     expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
 
     // A delayed delivery of the SAME older start arrives after adoption.

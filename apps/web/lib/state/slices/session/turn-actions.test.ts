@@ -475,12 +475,15 @@ describe("reconcileActiveTurnAfterHydration", () => {
   it("applies when the hydration epoch still matches", () => {
     const store = makeStore();
     seedSession(store, "RUNNING", LATER_AT);
-    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
-    // A genuinely new turn started after the (now-based) adoption boundary.
-    const afterBoundary = new Date(Date.now() + 60_000).toISOString();
-    store
-      .getState()
-      .addTurn(turn("turn-2", { started_at: afterBoundary, updated_at: afterBoundary }));
+    // Server-issued adoption boundary (WS envelope timestamp).
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID], "2026-07-23T10:03:00.000Z");
+    // A genuinely new turn started after the adoption boundary.
+    store.getState().addTurn(
+      turn("turn-2", {
+        started_at: "2026-07-23T10:04:00.000Z",
+        updated_at: "2026-07-23T10:04:00.000Z",
+      }),
+    );
 
     store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 1);
 
@@ -488,8 +491,9 @@ describe("reconcileActiveTurnAfterHydration", () => {
   });
 
   it("never re-activates a turn retired by an authoritative boundary", () => {
-    // Adoption retired turn-1; a post-adoption hydration (fresh epoch) sees
-    // the still-incomplete row and must not choose it as the active turn.
+    // Adoption retired turn-1 (server-issued boundary after its start); a
+    // post-adoption hydration (fresh epoch) sees the still-incomplete row
+    // and must not choose it as the active turn.
     const store = makeStore();
     seedSession(store, "RUNNING", LATER_AT);
     store
@@ -498,7 +502,7 @@ describe("reconcileActiveTurnAfterHydration", () => {
         turn("turn-1", { started_at: STARTED_AT, updated_at: STARTED_AT, completed_at: undefined }),
       );
     store.getState().setActiveTurn(SESSION_ID, "turn-1");
-    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID], "2026-07-23T10:00:30.000Z");
 
     store.getState().reconcileActiveTurnAfterHydration(SESSION_ID, 1);
 
@@ -551,11 +555,41 @@ describe("settled boundary monotonicity", () => {
       s.turns.settledBoundaryBySession[SESSION_ID] = "2099-01-01T00:00:00Z";
     });
 
-    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID], "2000-01-01T00:00:00Z");
 
     expect(store.getState().turns.settledBoundaryBySession[SESSION_ID]).toBe(
       "2099-01-01T00:00:00Z",
     );
+  });
+
+  it("records the server-issued adoption boundary", () => {
+    const store = makeStore();
+    store.setState((s) => {
+      s.taskSessions.items[SESSION_ID] = { id: SESSION_ID, state: "RUNNING" } as never;
+    });
+
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID], "2026-07-23T10:03:00.000Z");
+
+    expect(store.getState().turns.settledBoundaryBySession[SESSION_ID]).toBe(
+      "2026-07-23T10:03:00.000Z",
+    );
+  });
+
+  it("does not advance the boundary without a server timestamp (no client clock)", () => {
+    // The optimistic REST submission has no server timestamp; the action must
+    // not fall back to the client clock, which would retire legitimate turns
+    // when the browser clock runs ahead of the backend. The authoritative WS
+    // adoption event records the boundary on arrival.
+    const store = makeStore();
+    store.setState((s) => {
+      s.taskSessions.items[SESSION_ID] = { id: SESSION_ID, state: "RUNNING" } as never;
+    });
+
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+
+    expect(store.getState().turns.settledBoundaryBySession[SESSION_ID]).toBeUndefined();
+    // The marker clear and epoch bump still apply.
+    expect(store.getState().turns.reconcileEpochBySession[SESSION_ID]).toBe(1);
   });
 });
 
@@ -571,13 +605,15 @@ describe("settled boundary lifecycle", () => {
         turn("turn-1", { started_at: STARTED_AT, updated_at: STARTED_AT, completed_at: undefined }),
       );
     store.getState().setActiveTurn(SESSION_ID, "turn-1");
-    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID]);
+    store.getState().reconcileWorkspaceSourcesAdopted([SESSION_ID], "2026-07-23T10:00:30.000Z");
     // Completion arrives; the boundary persists (no tombstone to prune).
     store
       .getState()
       .addTurn(turn("turn-1", { completed_at: COMPLETED_AT, updated_at: COMPLETED_AT }));
 
-    expect(store.getState().turns.settledBoundaryBySession[SESSION_ID]).toBeDefined();
+    expect(store.getState().turns.settledBoundaryBySession[SESSION_ID]).toBe(
+      "2026-07-23T10:00:30.000Z",
+    );
     expect(store.getState().turns.activeBySession[SESSION_ID]).toBeNull();
   });
 });

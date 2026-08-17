@@ -6,7 +6,10 @@ import {
   reconcileQuickTerminalTabs,
 } from "@/lib/state/slices/ui/quick-chat-sync";
 import { compareUserSettingsRevisions } from "@/lib/settings/user-settings-revision";
-import { isSettledSessionState, parseTurnTimestamp } from "@/lib/state/slices/session/turn-actions";
+import {
+  parseTurnTimestamp,
+  seedSettledSessionBoundaries,
+} from "@/lib/state/slices/session/turn-actions";
 import { deepMerge, mergeSessionMap, mergeLoadingState } from "./merge-strategies";
 
 /**
@@ -164,27 +167,6 @@ function bridgeSidebarViewsFromUserSettings(
 }
 
 /**
- * Seeds settled boundaries for settled sessions in the hydrated payload
- * (monotonically: a valid, strictly-newer candidate wins; existing boundaries
- * and their precision are preserved otherwise). This is the production SSR
- * path — StateHydrator hydrates the root store through hydrateState, so
- * settled-session boundaries must be established here, not only in
- * mergeInitialState, or an old/unknown delayed WS start would pass the guard
- * before any later session-list refresh.
- */
-function seedSettledSessionBoundaries(draft: Draft<AppState>, state: HydrationState): void {
-  for (const session of Object.values(state.taskSessions?.items ?? {})) {
-    if (!session || !isSettledSessionState(session.state)) continue;
-    const candidate = parseTurnTimestamp(session.updated_at);
-    if (candidate === null) continue;
-    const current = parseTurnTimestamp(draft.turns.settledBoundaryBySession[session.id]);
-    if (current === null || candidate > current) {
-      draft.turns.settledBoundaryBySession[session.id] = session.updated_at;
-    }
-  }
-}
-
-/**
  * A server snapshot may still name a turn that an authoritative boundary
  * (source adoption / settled-session clear) retired client-side. Never let a
  * force-merge resurrect its marker. Only sweeps markers this merge actually
@@ -243,6 +225,26 @@ function markHydratedTurnsLoaded(
   }
 }
 
+/**
+ * Seeds settled boundaries for the hydrated task sessions (monotonically: a
+ * valid, strictly-newer candidate wins; existing boundaries and their
+ * precision are preserved otherwise). This is the production SSR path —
+ * StateHydrator hydrates the root store through hydrateState, so settled
+ * boundaries must be established here, not only in mergeInitialState, or an
+ * old/unknown delayed WS start would pass the guard before any later
+ * session-list refresh. Delegates to the shared turn-actions invariant used
+ * by the SSR/boot merge path, so the two can never drift.
+ */
+function seedHydrationSettledBoundaries(
+  draft: Draft<AppState>,
+  taskSessions: HydrationState["taskSessions"],
+): void {
+  seedSettledSessionBoundaries(
+    draft.turns.settledBoundaryBySession,
+    Object.values(taskSessions?.items ?? {}),
+  );
+}
+
 /** Hydrate session slices, protecting active sessions. */
 function hydrateSession(
   draft: Draft<AppState>,
@@ -272,7 +274,7 @@ function hydrateSession(
   // clearHydratedRetiredActiveMarkers).
   if (state.taskSessions) {
     deepMerge(draft.taskSessions, state.taskSessions);
-    seedSettledSessionBoundaries(draft, state);
+    seedHydrationSettledBoundaries(draft, state.taskSessions);
   }
   if (state.turns) {
     if (state.turns.bySession) {

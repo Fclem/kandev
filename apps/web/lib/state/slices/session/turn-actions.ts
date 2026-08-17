@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { Draft } from "immer";
 import type { SessionSlice } from "./types";
-import type { Turn } from "@/lib/types/http";
+import type { Turn, TaskSession } from "@/lib/types/http";
 
 type ImmerSet = Parameters<
   StateCreator<SessionSlice, [["zustand/immer", never]], [], SessionSlice>
@@ -90,6 +90,31 @@ function isAtOrBeforeBoundary(
 
 export function isSettledSessionState(state: string): boolean {
   return SETTLED_SESSION_STATES.has(state);
+}
+
+/**
+ * Records the settled boundary for every settled session in `sessions` into
+ * `boundaryBySession`, monotonically: a valid, strictly-newer candidate wins;
+ * existing boundaries and their precision are preserved otherwise, and a
+ * session without a parseable `updated_at` leaves its entry as it was. The
+ * ONE definition of the seeding invariant — shared by the production
+ * StateHydrator path and the SSR/boot merge path so the two can never drift
+ * (a later fix applied to one would otherwise silently leave the other
+ * accepting a stale delayed WS start).
+ */
+export function seedSettledSessionBoundaries(
+  boundaryBySession: Record<string, string>,
+  sessions: Iterable<TaskSession | undefined>,
+): void {
+  for (const session of sessions) {
+    if (!session || !isSettledSessionState(session.state)) continue;
+    const candidate = parseTurnTimestamp(session.updated_at);
+    if (candidate === null) continue;
+    const current = parseTurnTimestamp(boundaryBySession[session.id]);
+    if (current === null || candidate > current) {
+      boundaryBySession[session.id] = session.updated_at;
+    }
+  }
 }
 
 /**
@@ -226,6 +251,15 @@ export function buildTurnActions(set: ImmerSet) {
           return;
         }
         if (!shouldApplyTurnUpdate(existing, turn)) return;
+        // Preserve an existing completed_at: WS arrivals carry nanosecond
+        // precision (Go RFC3339Nano) while the REST DTO truncates to whole
+        // seconds. When WS arrives first the high-precision value is kept and
+        // a later REST row must not replace it with a truncated one. When
+        // REST arrives first, a later WS nanosecond value is lost
+        // (completed_at stays whole-second) — acceptable, because the field
+        // only gates presence checks; note the third argument is evaluated
+        // BEFORE the mutation, so this intentionally captures the pre-merge
+        // value.
         Object.assign(existing, turn, { completed_at: existing.completed_at ?? turn.completed_at });
       }),
     completeTurn: (
@@ -252,6 +286,10 @@ export function buildTurnActions(set: ImmerSet) {
             if (metadata) turn.metadata = metadata;
           }
         }
+        // Clear unconditionally: even when the completion fields were stale
+        // and the data block above was skipped, the active marker must be
+        // retired — a completed turn can never be active. Decoupled from the
+        // staleness check on purpose; the two blocks are not a missed guard.
         if (draft.turns.activeBySession[sessionId] === turnId) {
           draft.turns.activeBySession[sessionId] = null;
         }
@@ -300,20 +338,30 @@ export function buildTurnActions(set: ImmerSet) {
       }),
     reconcileWorkspaceSourcesAdopted: (
       sessionIds: Parameters<SessionSlice["reconcileWorkspaceSourcesAdopted"]>[0],
+      boundaryTimestamp?: Parameters<SessionSlice["reconcileWorkspaceSourcesAdopted"]>[1],
     ) =>
       set((draft) => {
         for (const sessionId of new Set(sessionIds)) {
           draft.turns.activeBySession[sessionId] = null;
           // Source adoption is an authoritative idle boundary: every turn
-          // started before now can never be active again. Advance the
-          // boundary monotonically — a server-reported future boundary
-          // (clock skew) or a nanosecond-precise one must never be replaced
-          // by an older ms-truncated "now".
-          const now = new Date().toISOString();
-          const candidate = parseTurnTimestamp(now);
-          const current = parseTurnTimestamp(draft.turns.settledBoundaryBySession[sessionId]);
-          if (candidate !== null && (current === null || candidate > current)) {
-            draft.turns.settledBoundaryBySession[sessionId] = now;
+          // started before it can never be active again. The boundary must
+          // come from the SERVER clock (the WS envelope timestamp that the
+          // handler forwards), never from the client: a browser clock ahead
+          // of the backend would record a future boundary and reject
+          // legitimate new `session.turn.started` timestamps until server
+          // time caught up, breaking turn-derived agent status and
+          // file-source gating. When no server timestamp is available (e.g.
+          // the optimistic REST submission, whose response carries none and
+          // whose authoritative WS event follows), skip the boundary advance
+          // entirely rather than fall back to the client clock — the marker
+          // clear and epoch bump still apply, and the server-published
+          // adoption event records the boundary on arrival.
+          if (boundaryTimestamp) {
+            const candidate = parseTurnTimestamp(boundaryTimestamp);
+            const current = parseTurnTimestamp(draft.turns.settledBoundaryBySession[sessionId]);
+            if (candidate !== null && (current === null || candidate > current)) {
+              draft.turns.settledBoundaryBySession[sessionId] = boundaryTimestamp;
+            }
           }
           // Bump the epoch so an in-flight REST hydration cannot resurrect
           // the marker either.

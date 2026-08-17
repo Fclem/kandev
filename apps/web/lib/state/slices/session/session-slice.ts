@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import { original } from "immer";
 import type { Message, TaskSession } from "@/lib/types/http";
 import type { SessionSlice, SessionSliceState } from "./types";
-import { buildTurnActions, parseTurnTimestamp } from "./turn-actions";
+import { buildTurnActions, isSettledSessionState, parseTurnTimestamp } from "./turn-actions";
 import { reconcileMessages } from "./message-signature";
 import {
   migrateEnvKeyedData,
@@ -150,16 +150,12 @@ function mergeTaskSession(existing: TaskSession, incoming: TaskSession): TaskSes
   };
 }
 
-const IDLE_SESSION_STATES = new Set<TaskSession["state"]>([
-  "IDLE",
-  "WAITING_FOR_INPUT",
-  "COMPLETED",
-  "FAILED",
-  "CANCELLED",
-]);
-
+// Settled states are defined once in turn-actions (SETTLED_SESSION_STATES /
+// isSettledSessionState); this file must use the shared predicate so every
+// settled-boundary path — hydration seeding, session updates, and the WS
+// turn guard — stays on one definition.
 function reconcileActiveTurnForIdleSession(draft: SessionSliceState, session: TaskSession): void {
-  if (!IDLE_SESSION_STATES.has(session.state)) return;
+  if (!isSettledSessionState(session.state)) return;
   const turns = draft.turns.bySession[session.id] ?? [];
   // Boundary-independent cleanup: drop a marker pointing at a
   // missing/completed turn.

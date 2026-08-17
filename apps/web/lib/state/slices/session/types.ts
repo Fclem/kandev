@@ -247,8 +247,16 @@ export type SessionSliceActions = {
   reconcileActiveTurnAfterHydration: (sessionId: string, hydrationEpoch: number) => void;
   /** Records that the session's full persisted turn history is in the store. */
   markTurnsLoaded: (sessionId: string) => void;
-  /** Source adoption is an authoritative idle boundary for the listed sessions. */
-  reconcileWorkspaceSourcesAdopted: (sessionIds: string[]) => void;
+  /**
+   * Source adoption is an authoritative idle boundary for the listed
+   * sessions. `boundaryTimestamp` MUST be server-issued (the WS envelope
+   * timestamp) so the boundary stays on the backend clock — a client-clock
+   * fallback would retire legitimate turns when the browser clock runs
+   * ahead of the backend. Absent a server timestamp, only the marker clear
+   * and epoch bump apply; the server-published adoption event records the
+   * boundary on arrival.
+   */
+  reconcileWorkspaceSourcesAdopted: (sessionIds: string[], boundaryTimestamp?: string) => void;
   setTaskSession: (session: TaskSession) => void;
   /**
    * Narrowly updates only a session's Slack-style read cursor

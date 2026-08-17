@@ -23,6 +23,7 @@ import type { Terminal } from "@/hooks/domains/session/use-terminals";
 import { snapshotToState, taskToState } from "@/lib/ssr/mapper";
 import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
 import { prepareResultToSessionState } from "@/lib/state/slices/session-runtime/prepare-result";
+import { latestIncompleteTurnId } from "@/lib/state/slices/session/turn-actions";
 import type { SessionPrepareState } from "@/lib/state/slices/session-runtime/types";
 import type { AppState } from "@/lib/state/store";
 import { mapWorkspaceItem } from "@/lib/routing/route-bootstrap";
@@ -237,7 +238,12 @@ function buildSessionState(p: BuildSessionPageStateParams) {
             ? {
                 bySession: { [sessionId]: turns },
                 activeBySession: {
-                  [sessionId]: turns.filter((t) => !t.completed_at).pop()?.id ?? null,
+                  // Same timestamp-aware selection as the store's
+                  // reconciliation (latestIncompleteTurnId compares
+                  // started_at with nanosecond precision) — not array
+                  // position, which a non-chronological API response
+                  // would misorder.
+                  [sessionId]: latestIncompleteTurnId(turns) ?? null,
                 },
                 // The SSR turn list is the session's complete persisted
                 // history — mark it loaded so turn-derived UI never

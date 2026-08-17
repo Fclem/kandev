@@ -96,7 +96,6 @@ describe("useScrollTargetConsumption — success-path consumption", () => {
 
     expect(messageListRef.current?.scrollToMessage).toHaveBeenCalledWith("message-1", {
       align: "start",
-      behavior: "auto",
     });
     expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
     expect(mockDockviewState.scrollTarget).toBeNull();
@@ -133,7 +132,6 @@ describe("useScrollTargetConsumption — success-path consumption", () => {
     await flushFrames();
     expect(messageListRef.current?.scrollToMessage).toHaveBeenCalledWith("message-b", {
       align: "start",
-      behavior: "auto",
     });
     expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(8);
     expect(mockDockviewState.scrollTarget).toBeNull();
@@ -161,7 +159,6 @@ describe("useScrollTargetConsumption — success-path consumption", () => {
 
     expect(sessionHostRef.current?.scrollToMessage).toHaveBeenCalledWith("message-1", {
       align: "start",
-      behavior: "auto",
     });
     expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
     expect(canonicalHostRef.current?.scrollToMessage).not.toHaveBeenCalled();
@@ -240,7 +237,6 @@ describe("useScrollTargetConsumption — non-dockview hosts (no panelId)", () =>
 
     expect(ownerRef.current?.scrollToMessage).toHaveBeenCalledWith("message-1", {
       align: "start",
-      behavior: "auto",
     });
     expect(mockDockviewState.clearScrollTarget).toHaveBeenCalledWith(7);
     expect(mockDockviewState.scrollTarget).toBeNull();

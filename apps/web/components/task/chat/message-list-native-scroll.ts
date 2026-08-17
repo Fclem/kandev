@@ -394,24 +394,26 @@ export function useScrollToMessage(
       const selector = `[id="msg-${CSS.escape(messageId)}"]`;
       const el = scrollRef.current?.querySelector<HTMLElement>(selector);
       if (!el) return false;
+      const alignStart = options?.align === "start";
       runGuardedScroll(() => {
         el.scrollIntoView({
-          block: options?.align === "start" ? "start" : "center",
+          block: alignStart ? "start" : "center",
           behavior: options?.behavior ?? "smooth",
         });
-        if (options?.behavior !== "auto") return;
-        // A dockview panel re-show (the prompt-history jump activates the
-        // chat) makes SessionPanelContent restore its saved scrollTop in a
-        // rAF that can land after this scroll and revert it. Re-assert the
-        // alignment across a few frames until it sticks.
         const container = scrollRef.current;
         if (!container) return;
         const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
-        const alignStart = options?.align !== "center";
-        let attempts = 0;
-        const assert = () => {
-          attempts += 1;
-          if (attempts > 4 || !container.isConnected) return;
+        // A dockview panel re-show (the prompt-history jump activates the
+        // chat) makes SessionPanelContent restore its saved scrollTop in a
+        // rAF that can cancel the scroll, and some runtimes no-op a smooth
+        // scrollIntoView entirely. Verify the container actually moved after
+        // a couple of frames and force-land the alignment when it did not.
+        const before = container.scrollTop;
+        let frames = 0;
+        const verify = () => {
+          frames += 1;
+          if (frames > 3 || !container.isConnected) return;
+          if (container.scrollTop !== before) return; // animation in progress
           const delta = alignStart
             ? el.getBoundingClientRect().top - container.getBoundingClientRect().top - margin
             : el.getBoundingClientRect().top +
@@ -420,10 +422,11 @@ export function useScrollToMessage(
                 container.getBoundingClientRect().height / 2);
           if (Math.abs(delta) > 2) {
             container.scrollTop += delta;
-            requestAnimationFrame(assert);
+            return;
           }
+          requestAnimationFrame(verify);
         };
-        requestAnimationFrame(assert);
+        requestAnimationFrame(verify);
       });
       return true;
     },

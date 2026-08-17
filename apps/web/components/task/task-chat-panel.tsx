@@ -273,12 +273,7 @@ export function useScrollTargetConsumption({
       frame = requestAnimationFrame(() => {
         const latest = useDockviewStore.getState().scrollTarget;
         if (!latest || latest.token !== scrollTarget.token) return;
-        if (
-          messageListRef.current?.scrollToMessage(scrollTarget.messageId, {
-            align: "start",
-            behavior: "auto",
-          })
-        ) {
+        if (messageListRef.current?.scrollToMessage(scrollTarget.messageId, { align: "start" })) {
           clearScrollTarget(scrollTarget.token);
         }
       });

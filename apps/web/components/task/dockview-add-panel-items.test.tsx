@@ -188,7 +188,7 @@ function renderMenu(state: Partial<AddPanelMenuState> = {}, groupId = CENTER_GRO
       <DropdownMenuTrigger>open</DropdownMenuTrigger>
       <DropdownMenuContent>
         <AddPanelMenuItems
-          groupId={INVOKING_GROUP}
+          groupId={groupId}
           state={fullState}
           onNewSession={() => {}}
           onAddTerminal={() => {}}

@@ -12,6 +12,10 @@ const MAX_TURN_FETCH_ATTEMPTS = 3;
  *  while the session stays mounted so a later reconnect can still hydrate,
  *  instead of stranding durations until a remount or session switch. */
 const SLOW_RETRY_INTERVAL_MS = 30_000;
+/** Bounds a single turn fetch so a hung request (never settling) cannot stop
+ *  hydration forever — the timeout aborts it and routes it into the retry
+ *  path like any other transient failure. */
+const TURN_FETCH_TIMEOUT_MS = 15_000;
 
 export type SessionTurnsState = {
   turns: Turn[];
@@ -52,6 +56,13 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
     const controller = new AbortController();
     let retryTimer: number | undefined;
     let slowRetryTimer: number | undefined;
+    /** True when the fetch-timeout aborted the request (as opposed to a
+     *  cleanup abort), so the rejection is retried rather than ignored. */
+    let timedOut = false;
+    const timeoutTimer = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, TURN_FETCH_TIMEOUT_MS);
     /** Immediate recovery trigger: reconnect or returning to the foreground
      *  restarts the fetch while the session is still unhydrated. */
     const wake = () => setRetryTick((tick) => tick + 1);
@@ -71,7 +82,8 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
         store.getState().replaceSessionTurns(sessionId, fetchedTurns);
       })
       .catch((error: unknown) => {
-        if (disposed || controller.signal.aborted) return;
+        if (disposed) return;
+        if (controller.signal.aborted && !timedOut) return;
         const attempts = failedAttemptsRef.current + 1;
         failedAttemptsRef.current = attempts;
         console.error("[useSessionTurns] failed to fetch turns for", sessionId, error);
@@ -93,6 +105,7 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
     return () => {
       disposed = true;
       controller.abort();
+      window.clearTimeout(timeoutTimer);
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
       if (slowRetryTimer !== undefined) window.clearTimeout(slowRetryTimer);
       window.removeEventListener("online", wake);

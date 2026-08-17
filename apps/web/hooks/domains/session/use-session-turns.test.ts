@@ -38,6 +38,26 @@ function turn(id: string, sessionId = "session-a"): Turn {
   };
 }
 
+/** Fetch mock whose first call never settles until the request signal aborts
+ *  (as a real fetch does), then resolves like the backend. */
+function hungFirstCallTurnsMock(): void {
+  let attempts = 0;
+  mockListSessionTurns.mockImplementation(
+    (_sessionId: string, options?: { init?: { signal?: AbortSignal } }) => {
+      attempts += 1;
+      const signal = options?.init?.signal;
+      if (attempts === 1) {
+        return new Promise<{ turns: Turn[]; total: number }>((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          );
+        });
+      }
+      return Promise.resolve({ turns: [turn("turn-a")], total: 1 });
+    },
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   state.tasks.activeSessionId = "session-a";
@@ -286,6 +306,40 @@ describe("useSessionTurns — fetch failure recovery", () => {
       });
       await act(async () => {});
       expect(mockListSessionTurns).toHaveBeenCalledTimes(4);
+      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]);
+
+      rerender();
+      expect(result.current).toEqual([turn("turn-a")]);
+    } finally {
+      vi.useRealTimers();
+      errorSpy.mockRestore();
+    }
+  });
+});
+
+describe("useSessionTurns — hung request timeout", () => {
+  it("recovers from a hung request via the fetch timeout and a retry", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    hungFirstCallTurnsMock();
+    vi.useFakeTimers();
+    try {
+      const { result, rerender } = renderHook(() => useSessionTurns("session-a"));
+
+      await act(async () => {});
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(1);
+      expect(result.current).toEqual([]);
+
+      // The fetch timeout (15s) aborts the hung request and schedules a retry
+      // as if it were any other transient failure.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      await act(async () => {});
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+      await act(async () => {});
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(2);
       expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]);
 
       rerender();

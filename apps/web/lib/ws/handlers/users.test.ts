@@ -5,10 +5,12 @@ import { defaultState } from "@/lib/state/default-state";
 import type { AppState } from "@/lib/state/store";
 import type { BackendMessageMap } from "@/lib/types/backend";
 
+/** Creates a vanilla Zustand store seeded with a structured clone of the default app state. */
 function makeStore() {
   return createStore<AppState>(() => structuredClone(defaultState) as AppState);
 }
 
+/** Builds a `user.settings.updated` notification frame merging the given payload over default values. */
 function userSettingsMessage(
   payload: Partial<BackendMessageMap["user.settings.updated"]["payload"]>,
 ): BackendMessageMap["user.settings.updated"] {

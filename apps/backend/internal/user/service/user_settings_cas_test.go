@@ -59,36 +59,43 @@ type casFakeRepo struct {
 	readDone      chan struct{}
 }
 
+// newCASFakeRepo builds a casFakeRepo seeded with a clone of row.
 func newCASFakeRepo(row *models.UserSettings) *casFakeRepo {
 	return &casFakeRepo{row: cloneSettings(row)}
 }
 
+// snapshot returns a deep clone of the current row.
 func (f *casFakeRepo) snapshot() *models.UserSettings {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return cloneSettings(f.row)
 }
 
+// readLog returns a copy of the recorded reads.
 func (f *casFakeRepo) readLog() []casRead {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]casRead(nil), f.reads...)
 }
 
+// upsertLog returns a copy of the recorded upsert attempts.
 func (f *casFakeRepo) upsertLog() []casUpsert {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]casUpsert(nil), f.upserts...)
 }
 
+// GetUser returns an unexpected-call error.
 func (f *casFakeRepo) GetUser(context.Context, string) (*models.User, error) {
 	return nil, errors.New("unexpected GetUser call")
 }
 
+// GetDefaultUser returns an unexpected-call error.
 func (f *casFakeRepo) GetDefaultUser(context.Context) (*models.User, error) {
 	return nil, errors.New("unexpected GetDefaultUser call")
 }
 
+// GetUserSettings returns a clone of the row, records the read, and signals phase observers.
 func (f *casFakeRepo) GetUserSettings(_ context.Context, _ string) (*models.UserSettings, error) {
 	f.mu.Lock()
 	row := cloneSettings(f.row)
@@ -104,6 +111,7 @@ func (f *casFakeRepo) GetUserSettings(_ context.Context, _ string) (*models.User
 	return row, nil
 }
 
+// UpsertUserSettingsPreservingTaskCreateLastUsed commits revision-conditionally, merging the task-create patch, or returns a revision conflict.
 func (f *casFakeRepo) UpsertUserSettingsPreservingTaskCreateLastUsed(
 	_ context.Context,
 	settings *models.UserSettings,
@@ -155,10 +163,12 @@ func (f *casFakeRepo) UpsertUserSettingsPreservingTaskCreateLastUsed(
 	return cloneSettings(next), nil
 }
 
+// UpdateTaskCreateLastUsed returns an unexpected-call error.
 func (f *casFakeRepo) UpdateTaskCreateLastUsed(context.Context, string, models.TaskCreateLastUsed) (*models.UserSettings, error) {
 	return nil, errors.New("unexpected UpdateTaskCreateLastUsed call")
 }
 
+// Close is a no-op.
 func (f *casFakeRepo) Close() error { return nil }
 
 // casEventBus is a thread-safe recording bus for concurrent service tests.
@@ -168,6 +178,7 @@ type casEventBus struct {
 	events   []*bus.Event
 }
 
+// Publish records the published subject and event.
 func (b *casEventBus) Publish(_ context.Context, subject string, event *bus.Event) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -176,28 +187,35 @@ func (b *casEventBus) Publish(_ context.Context, subject string, event *bus.Even
 	return nil
 }
 
+// count returns the number of published events.
 func (b *casEventBus) count() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return len(b.events)
 }
 
+// Subscribe returns an unexpected-call error.
 func (b *casEventBus) Subscribe(string, bus.EventHandler) (bus.Subscription, error) {
 	return nil, errors.New("unexpected Subscribe call")
 }
 
+// QueueSubscribe returns an unexpected-call error.
 func (b *casEventBus) QueueSubscribe(string, string, bus.EventHandler) (bus.Subscription, error) {
 	return nil, errors.New("unexpected QueueSubscribe call")
 }
 
+// Request returns an unexpected-call error.
 func (b *casEventBus) Request(context.Context, string, *bus.Event, time.Duration) (*bus.Event, error) {
 	return nil, errors.New("unexpected Request call")
 }
 
+// Close is a no-op.
 func (b *casEventBus) Close() {}
 
+// IsConnected reports the fake bus as connected.
 func (b *casEventBus) IsConnected() bool { return true }
 
+// newCASService builds a Service wired to the given repository and bus with a nop logger.
 func newCASService(repo store.Repository, eventBus bus.EventBus) *Service {
 	log, err := logger.NewFromZap(zap.NewNop())
 	if err != nil {
@@ -206,6 +224,7 @@ func newCASService(repo store.Repository, eventBus bus.EventBus) *Service {
 	return NewService(repo, eventBus, log)
 }
 
+// cloneSettings deep-clones settings via JSON so nested maps and slices are never aliased.
 func cloneSettings(s *models.UserSettings) *models.UserSettings {
 	if s == nil {
 		return nil
@@ -258,6 +277,8 @@ func applyTaskCreatePatchToFake(current models.TaskCreateLastUsed, patch *models
 	}
 	return current
 }
+
+// TestApplyLastSeenDisplay verifies applyLastSeenDisplay preserves nil, accepts absolute and relative, rejects invalid, and trims whitespace.
 func TestApplyLastSeenDisplay(t *testing.T) {
 	t.Run("nil leaves settings unchanged", func(t *testing.T) {
 		settings := &models.UserSettings{LastSeenDisplay: models.LastSeenDisplayRelative}
@@ -306,6 +327,7 @@ func TestApplyLastSeenDisplay(t *testing.T) {
 	})
 }
 
+// TestPublishUserSettingsEventIncludesNormalizedLastSeenDisplay verifies the event normalizes an unknown last_seen_display to absolute.
 func TestPublishUserSettingsEventIncludesNormalizedLastSeenDisplay(t *testing.T) {
 	eventBus := &casEventBus{}
 	svc := newCASService(&casFakeRepo{row: &models.UserSettings{}}, eventBus)
@@ -323,6 +345,7 @@ func TestPublishUserSettingsEventIncludesNormalizedLastSeenDisplay(t *testing.T)
 	}
 }
 
+// TestUpdateUserSettingsPublishesLastSeenDisplay verifies UpdateUserSettings publishes the applied last_seen_display.
 func TestUpdateUserSettingsPublishesLastSeenDisplay(t *testing.T) {
 	updated := &models.UserSettings{
 		UserID:          store.DefaultUserID,
@@ -350,6 +373,7 @@ func TestUpdateUserSettingsPublishesLastSeenDisplay(t *testing.T) {
 	}
 }
 
+// TestUpdateUserSettingsRejectsInvalidLastSeenDisplay verifies an invalid last_seen_display is rejected without an upsert.
 func TestUpdateUserSettingsRejectsInvalidLastSeenDisplay(t *testing.T) {
 	repo := &recordingUserRepository{getSettings: &models.UserSettings{UserID: store.DefaultUserID}}
 	eventBus := &recordingEventBus{}
@@ -363,6 +387,7 @@ func TestUpdateUserSettingsRejectsInvalidLastSeenDisplay(t *testing.T) {
 	}
 }
 
+// TestUpdateUserSettingsEmptyPatchIsNoop verifies an empty patch performs no write or publish.
 func TestUpdateUserSettingsEmptyPatchIsNoop(t *testing.T) {
 	base := &models.UserSettings{
 		UserID:          store.DefaultUserID,
@@ -388,6 +413,7 @@ func TestUpdateUserSettingsEmptyPatchIsNoop(t *testing.T) {
 	}
 }
 
+// TestUpdateUserSettingsSameValuePatchIsNoop verifies a same-value patch performs no write or publish.
 func TestUpdateUserSettingsSameValuePatchIsNoop(t *testing.T) {
 	base := &models.UserSettings{
 		UserID:          store.DefaultUserID,
@@ -414,6 +440,7 @@ func TestUpdateUserSettingsSameValuePatchIsNoop(t *testing.T) {
 	}
 }
 
+// TestConcurrentPatchMergesLastSeenDisplay verifies concurrent patches merge via a single CAS retry.
 func TestConcurrentPatchMergesLastSeenDisplay(t *testing.T) {
 	repo := newCASFakeRepo(&models.UserSettings{
 		UserID:          store.DefaultUserID,
@@ -561,6 +588,7 @@ func assertOneStaleConflictAndRetry(t *testing.T, repo *casFakeRepo) {
 	}
 }
 
+// TestConcurrentClearEditorAndPatchMerge verifies a concurrent Clear and patch both commit via a single CAS retry.
 func TestConcurrentClearEditorAndPatchMerge(t *testing.T) {
 	repo := newCASFakeRepo(&models.UserSettings{
 		UserID:          store.DefaultUserID,
@@ -681,6 +709,7 @@ func TestClearDefaultEditorIDConflictNoop(t *testing.T) {
 	}
 }
 
+// TestClearDefaultEditorIDFreshReadNoop verifies Clear after the competing patch committed is an immediate no-op.
 func TestClearDefaultEditorIDFreshReadNoop(t *testing.T) {
 	repo := newCASFakeRepo(&models.UserSettings{
 		UserID:          store.DefaultUserID,

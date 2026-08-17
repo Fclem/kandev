@@ -20,6 +20,7 @@ type settingsScanner struct {
 	revision int64
 }
 
+// upsertUserSettingsForTest writes settings via UpsertUserSettingsPreservingTaskCreateLastUsed at the current stored revision.
 func upsertUserSettingsForTest(t *testing.T, repo *sqliteRepository, ctx context.Context, settings *models.UserSettings) {
 	t.Helper()
 	current, err := repo.GetUserSettings(ctx, settings.UserID)
@@ -35,6 +36,7 @@ func upsertUserSettingsForTest(t *testing.T, repo *sqliteRepository, ctx context
 	}
 }
 
+// Scan copies the scanner's raw settings string, zero time, and revision into dest.
 func (s settingsScanner) Scan(dest ...any) error {
 	*(dest[0].(*string)) = s.raw
 	*(dest[1].(*time.Time)) = time.Time{}
@@ -42,6 +44,7 @@ func (s settingsScanner) Scan(dest ...any) error {
 	return nil
 }
 
+// TestSQLiteRepositoryMigratesLegacySettingsRevision verifies the legacy settings revision migration against an in-memory SQLite database.
 func TestSQLiteRepositoryMigratesLegacySettingsRevision(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -52,11 +55,13 @@ func TestSQLiteRepositoryMigratesLegacySettingsRevision(t *testing.T) {
 	assertLegacySettingsRevisionMigration(t, conn)
 }
 
+// TestPostgresRepositoryMigratesLegacySettingsRevision verifies the legacy settings revision migration against Postgres.
 func TestPostgresRepositoryMigratesLegacySettingsRevision(t *testing.T) {
 	conn := testutil.OpenIsolatedPostgres(t, testutil.PostgresDSNFromEnv(t))
 	assertLegacySettingsRevisionMigration(t, conn)
 }
 
+// assertLegacySettingsRevisionMigration verifies a legacy settings blob migrates to revision 0, bumps to 1 on write, and survives a migration replay.
 func assertLegacySettingsRevisionMigration(t *testing.T, conn *sqlx.DB) {
 	t.Helper()
 	now := time.Now().UTC()
@@ -119,6 +124,7 @@ func assertLegacySettingsRevisionMigration(t *testing.T, conn *sqlx.DB) {
 	}
 }
 
+// TestScanUserSettingsStartupPage verifies startup_page defaults to task_overview and preserves an explicit last_task value.
 func TestScanUserSettingsStartupPage(t *testing.T) {
 	tests := []struct {
 		name string
@@ -152,6 +158,7 @@ func TestScanUserSettingsStartupPage(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsSidebarDefaults verifies the canonical default sidebar view and that explicit sidebar settings are preserved.
 func TestScanUserSettingsSidebarDefaults(t *testing.T) {
 	defaultView := models.SidebarView{
 		ID:              "view-all-tasks",
@@ -198,6 +205,7 @@ func TestScanUserSettingsSidebarDefaults(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsPreservesExplicitEmptySidebarSettings verifies explicitly empty sidebar view lists survive scanning.
 func TestScanUserSettingsPreservesExplicitEmptySidebarSettings(t *testing.T) {
 	for _, raw := range []string{
 		`{"sidebar_views":[],"sidebar_active_view_id":""}`,
@@ -218,6 +226,7 @@ func TestScanUserSettingsPreservesExplicitEmptySidebarSettings(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsChangesPanelLayoutDefault verifies changes_panel_layout defaults to tree and preserves an explicit flat value.
 func TestScanUserSettingsChangesPanelLayoutDefault(t *testing.T) {
 	t.Run("empty settings default to tree", func(t *testing.T) {
 		settings, err := scanUserSettings(settingsScanner{raw: "{}"}, DefaultUserID)
@@ -250,6 +259,7 @@ func TestScanUserSettingsChangesPanelLayoutDefault(t *testing.T) {
 	})
 }
 
+// TestScanUserSettingsConfirmTaskArchiveDefault verifies confirm_task_archive defaults to true and preserves an explicit false.
 func TestScanUserSettingsConfirmTaskArchiveDefault(t *testing.T) {
 	tests := []struct {
 		name string
@@ -274,6 +284,7 @@ func TestScanUserSettingsConfirmTaskArchiveDefault(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsUnreadDividerDefault verifies unread_divider defaults to false and honors explicit values.
 func TestScanUserSettingsUnreadDividerDefault(t *testing.T) {
 	tests := []struct {
 		name string
@@ -299,6 +310,7 @@ func TestScanUserSettingsUnreadDividerDefault(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsAgentGeneratedTaskTitlesDefault verifies agent_generated_task_titles defaults to true and honors explicit values.
 func TestScanUserSettingsAgentGeneratedTaskTitlesDefault(t *testing.T) {
 	tests := []struct {
 		name string
@@ -324,6 +336,7 @@ func TestScanUserSettingsAgentGeneratedTaskTitlesDefault(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsMCPTaskAgentProfileDefault verifies mcp_task_agent_profile_default defaults to current_task and preserves workspace_default.
 func TestScanUserSettingsMCPTaskAgentProfileDefault(t *testing.T) {
 	tests := []struct {
 		name string
@@ -357,6 +370,7 @@ func TestScanUserSettingsMCPTaskAgentProfileDefault(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsShowAnchoredPromptBarDefault verifies show_anchored_prompt_bar defaults to false.
 func TestScanUserSettingsShowAnchoredPromptBarDefault(t *testing.T) {
 	settings, err := scanUserSettings(settingsScanner{raw: "{}"}, DefaultUserID)
 	if err != nil {
@@ -375,6 +389,7 @@ func TestScanUserSettingsShowAnchoredPromptBarDefault(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsTranscriptNavigationDefaults verifies transcript navigation control defaults and stored preferences.
 func TestScanUserSettingsTranscriptNavigationDefaults(t *testing.T) {
 	settings, err := scanUserSettings(settingsScanner{raw: "{}"}, DefaultUserID)
 	if err != nil {
@@ -418,6 +433,7 @@ func TestScanUserSettingsTranscriptNavigationDefaults(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsDefaultsTranscriptAutoScrollControlToHidden verifies the transcript auto-scroll control defaults to hidden.
 func TestScanUserSettingsDefaultsTranscriptAutoScrollControlToHidden(t *testing.T) {
 	settings, err := scanUserSettings(settingsScanner{raw: "{}"}, DefaultUserID)
 	if err != nil {
@@ -428,6 +444,7 @@ func TestScanUserSettingsDefaultsTranscriptAutoScrollControlToHidden(t *testing.
 	}
 }
 
+// TestTranscriptNavigationSettingsRoundTripThroughMarshalAndScan verifies transcript navigation settings survive a marshal and scan round trip.
 func TestTranscriptNavigationSettingsRoundTripThroughMarshalAndScan(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{
 		ShowScrollToLastPrompt:          false,
@@ -451,6 +468,7 @@ func TestTranscriptNavigationSettingsRoundTripThroughMarshalAndScan(t *testing.T
 	}
 }
 
+// TestScanUserSettingsTodoListPanelDefault verifies show_todo_list_panel defaults to false and honors explicit values.
 func TestScanUserSettingsTodoListPanelDefault(t *testing.T) {
 	settings, err := scanUserSettings(settingsScanner{raw: "{}"}, DefaultUserID)
 	if err != nil {
@@ -483,6 +501,7 @@ func TestScanUserSettingsTodoListPanelDefault(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsTodoListPanelOnlyWhenNotEmptyDefault verifies show_todo_list_panel_only_when_not_empty defaults to false and honors explicit values.
 func TestScanUserSettingsTodoListPanelOnlyWhenNotEmptyDefault(t *testing.T) {
 	settings, err := scanUserSettings(settingsScanner{raw: "{}"}, DefaultUserID)
 	if err != nil {
@@ -515,6 +534,7 @@ func TestScanUserSettingsTodoListPanelOnlyWhenNotEmptyDefault(t *testing.T) {
 	}
 }
 
+// TestTodoListPanelSettingRoundTripThroughMarshalAndScan verifies the todo list panel setting survives a marshal and scan round trip.
 func TestTodoListPanelSettingRoundTripThroughMarshalAndScan(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{ShowTodoListPanel: true})
 	if err != nil {
@@ -529,6 +549,7 @@ func TestTodoListPanelSettingRoundTripThroughMarshalAndScan(t *testing.T) {
 	}
 }
 
+// TestTodoListPanelOnlyWhenNotEmptyRoundTripThroughMarshalAndScan verifies the todo list panel visibility setting survives a marshal and scan round trip.
 func TestTodoListPanelOnlyWhenNotEmptyRoundTripThroughMarshalAndScan(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{
 		ShowTodoListPanelOnlyWhenNotEmpty: true,
@@ -545,6 +566,7 @@ func TestTodoListPanelOnlyWhenNotEmptyRoundTripThroughMarshalAndScan(t *testing.
 	}
 }
 
+// TestMarshalUserSettingsPersistsDisabledArchiveConfirmation verifies marshaling preserves an explicit false confirm_task_archive.
 func TestMarshalUserSettingsPersistsDisabledArchiveConfirmation(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{ConfirmTaskArchive: false})
 	if err != nil {
@@ -560,6 +582,7 @@ func TestMarshalUserSettingsPersistsDisabledArchiveConfirmation(t *testing.T) {
 	}
 }
 
+// TestShowAnchoredPromptBarRoundTripsThroughMarshalAndScan verifies show_anchored_prompt_bar survives a marshal and scan round trip.
 func TestShowAnchoredPromptBarRoundTripsThroughMarshalAndScan(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{ShowAnchoredPromptBar: true})
 	if err != nil {
@@ -574,6 +597,7 @@ func TestShowAnchoredPromptBarRoundTripsThroughMarshalAndScan(t *testing.T) {
 	}
 }
 
+// TestMarshalUserSettingsPersistsTasksListShowDetails verifies marshaling preserves tasks_list_show_details true.
 func TestMarshalUserSettingsPersistsTasksListShowDetails(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{TasksListShowDetails: true})
 	if err != nil {
@@ -589,6 +613,7 @@ func TestMarshalUserSettingsPersistsTasksListShowDetails(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsTasksListShowDetailsDefaultsAndLoads verifies tasks_list_show_details defaults to false and loads a stored true.
 func TestScanUserSettingsTasksListShowDetailsDefaultsAndLoads(t *testing.T) {
 	settings, err := scanUserSettings(settingsScanner{raw: "{}"}, DefaultUserID)
 	if err != nil {
@@ -607,6 +632,7 @@ func TestScanUserSettingsTasksListShowDetailsDefaultsAndLoads(t *testing.T) {
 	}
 }
 
+// TestMarshalUserSettingsPersistsMCPTaskAgentProfileDefault verifies marshaling preserves the workspace_default MCP task agent profile.
 func TestMarshalUserSettingsPersistsMCPTaskAgentProfileDefault(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{
 		MCPTaskAgentProfileDefault: models.MCPTaskAgentProfileDefaultWorkspaceDefault,
@@ -624,6 +650,7 @@ func TestMarshalUserSettingsPersistsMCPTaskAgentProfileDefault(t *testing.T) {
 	}
 }
 
+// TestSQLiteRepositoryMCPTaskAgentProfileDefaultRoundTrip verifies the MCP task agent profile default round-trips through the SQLite repository.
 func TestSQLiteRepositoryMCPTaskAgentProfileDefaultRoundTrip(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -653,6 +680,7 @@ func TestSQLiteRepositoryMCPTaskAgentProfileDefaultRoundTrip(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsLspStatusLocationDefaultsAndLoads verifies lsp_status_location defaults to toolbar and preserves stored values.
 func TestScanUserSettingsLspStatusLocationDefaultsAndLoads(t *testing.T) {
 	tests := []struct {
 		name string
@@ -678,6 +706,7 @@ func TestScanUserSettingsLspStatusLocationDefaultsAndLoads(t *testing.T) {
 	}
 }
 
+// TestMarshalUserSettingsLspStatusLocation verifies marshaling preserves the stored LSP status location.
 func TestMarshalUserSettingsLspStatusLocation(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{
 		LspStatusLocation: models.LspStatusLocationStatusBar,
@@ -694,6 +723,7 @@ func TestMarshalUserSettingsLspStatusLocation(t *testing.T) {
 	}
 }
 
+// TestSQLiteRepositoryLspStatusLocationRoundTrip verifies the LSP status location round-trips through the SQLite repository.
 func TestSQLiteRepositoryLspStatusLocationRoundTrip(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -723,6 +753,7 @@ func TestSQLiteRepositoryLspStatusLocationRoundTrip(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsSystemMetricsDisplayDefault verifies the system metrics display defaults to disabled and honors stored preferences.
 func TestScanUserSettingsSystemMetricsDisplayDefault(t *testing.T) {
 	settings, err := scanUserSettings(settingsScanner{raw: "{}"}, DefaultUserID)
 	if err != nil {
@@ -755,6 +786,7 @@ func TestScanUserSettingsSystemMetricsDisplayDefault(t *testing.T) {
 	}
 }
 
+// TestSQLiteRepositorySystemMetricsDisplayRoundTrip verifies the system metrics display preference round-trips through the SQLite repository.
 func TestSQLiteRepositorySystemMetricsDisplayRoundTrip(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -783,6 +815,7 @@ func TestSQLiteRepositorySystemMetricsDisplayRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSQLiteRepositoryAppStatusBarOrderDefaultAndRoundTrip verifies the status bar order defaults to non-nil empty arrays and round-trips through the SQLite repository.
 func TestSQLiteRepositoryAppStatusBarOrderDefaultAndRoundTrip(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -817,6 +850,7 @@ func TestSQLiteRepositoryAppStatusBarOrderDefaultAndRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSQLiteRepositoryKanbanHiddenStepIDsDefaultAndRoundTrip verifies kanban hidden step IDs default to empty and round-trip through the SQLite repository.
 func TestSQLiteRepositoryKanbanHiddenStepIDsDefaultAndRoundTrip(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -851,6 +885,7 @@ func TestSQLiteRepositoryKanbanHiddenStepIDsDefaultAndRoundTrip(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsKanbanHiddenStepIDsCorruptFallsBackToEmpty verifies corrupt kanban_hidden_step_ids values fall back to empty while sibling fields still load.
 func TestScanUserSettingsKanbanHiddenStepIDsCorruptFallsBackToEmpty(t *testing.T) {
 	tests := []struct {
 		name string
@@ -898,6 +933,7 @@ func TestScanUserSettingsKanbanHiddenStepIDsCorruptFallsBackToEmpty(t *testing.T
 	}
 }
 
+// TestSQLiteRepositoryUpdateTaskCreateLastUsedPatchesNonEmptyFields verifies updating task-create last-used patches only non-empty fields.
 func TestSQLiteRepositoryUpdateTaskCreateLastUsedPatchesNonEmptyFields(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -949,6 +985,7 @@ func TestSQLiteRepositoryUpdateTaskCreateLastUsedPatchesNonEmptyFields(t *testin
 	}
 }
 
+// TestSQLiteRepositoryUpdateTaskCreateLastUsedPreservesWorkflowHistory verifies workflow history entries are merged rather than replaced.
 func TestSQLiteRepositoryUpdateTaskCreateLastUsedPreservesWorkflowHistory(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -995,6 +1032,7 @@ func TestSQLiteRepositoryUpdateTaskCreateLastUsedPreservesWorkflowHistory(t *tes
 	}
 }
 
+// TestSQLiteRepositoryUpdateTaskCreateLastUsedClearsBranchOnRepositoryChange verifies the branch is cleared when the repository changes.
 func TestSQLiteRepositoryUpdateTaskCreateLastUsedClearsBranchOnRepositoryChange(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -1041,6 +1079,7 @@ func TestSQLiteRepositoryUpdateTaskCreateLastUsedClearsBranchOnRepositoryChange(
 	}
 }
 
+// TestBuildPostgresTaskCreateLastUsedUpdatePatchesNonEmptyFields verifies the generated Postgres update patches task-create fields with jsonb_set.
 func TestBuildPostgresTaskCreateLastUsedUpdatePatchesNonEmptyFields(t *testing.T) {
 	query, args := buildPostgresTaskCreateLastUsedUpdate(models.TaskCreateLastUsed{
 		RepositoryID:      "repo-1",
@@ -1070,6 +1109,7 @@ func TestBuildPostgresTaskCreateLastUsedUpdatePatchesNonEmptyFields(t *testing.T
 	}
 }
 
+// TestBuildPostgresTaskCreateLastUsedUpdatePatchesWorkflowHistoryEntries verifies the generated Postgres update patches workflow history entries.
 func TestBuildPostgresTaskCreateLastUsedUpdatePatchesWorkflowHistoryEntries(t *testing.T) {
 	query, args := buildPostgresTaskCreateLastUsedUpdate(models.TaskCreateLastUsed{
 		WorkflowIDsByWorkspace: map[string]string{
@@ -1092,6 +1132,7 @@ func TestBuildPostgresTaskCreateLastUsedUpdatePatchesWorkflowHistoryEntries(t *t
 	}
 }
 
+// TestMakeTaskCreateLastUsedJSONSetArgsRejectsUnsafeWorkspacePathKeys verifies unsafe workspace keys are excluded from JSON set arguments.
 func TestMakeTaskCreateLastUsedJSONSetArgsRejectsUnsafeWorkspacePathKeys(t *testing.T) {
 	args := makeTaskCreateLastUsedJSONSetArgs(models.TaskCreateLastUsed{
 		WorkflowIDsByWorkspace: map[string]string{
@@ -1110,6 +1151,7 @@ func TestMakeTaskCreateLastUsedJSONSetArgsRejectsUnsafeWorkspacePathKeys(t *test
 	}
 }
 
+// TestBuildPostgresTaskCreateLastUsedUpdateClearsBranchOnRepositoryChange verifies the generated Postgres update clears the branch when the repository changes.
 func TestBuildPostgresTaskCreateLastUsedUpdateClearsBranchOnRepositoryChange(t *testing.T) {
 	query, args := buildPostgresTaskCreateLastUsedUpdate(models.TaskCreateLastUsed{
 		RepositoryID: "repo-after",
@@ -1131,6 +1173,7 @@ func TestBuildPostgresTaskCreateLastUsedUpdateClearsBranchOnRepositoryChange(t *
 	}
 }
 
+// TestBuildPostgresUserSettingsPreservingTaskCreateLastUsedUpdateUsesJSONB verifies the generated Postgres preserving update merges the payload with jsonb_set.
 func TestBuildPostgresUserSettingsPreservingTaskCreateLastUsedUpdateUsesJSONB(t *testing.T) {
 	patch := models.TaskCreateLastUsed{
 		RepositoryID:      "repo-1",
@@ -1161,6 +1204,7 @@ func TestBuildPostgresUserSettingsPreservingTaskCreateLastUsedUpdateUsesJSONB(t 
 	}
 }
 
+// TestSQLiteRepositorySidebarViewStateRoundTrip verifies sidebar view state round-trips through the SQLite repository.
 func TestSQLiteRepositorySidebarViewStateRoundTrip(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {

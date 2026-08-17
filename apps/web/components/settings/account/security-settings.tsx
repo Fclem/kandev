@@ -32,10 +32,12 @@ import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
 import { toast } from "@/lib/toast/sonner";
 import type { LastSeenDisplay } from "@/lib/types/http";
 
+/** Queued sync that persists the last-seen display preference to the backend. */
 const syncLastSeenDisplay = createQueuedUserSettingsSyncWithResponse<LastSeenDisplay>(
   (lastSeenDisplay) => ({ last_seen_display: lastSeenDisplay }),
 );
 
+/** Renders the change-password form card. */
 function ChangePasswordCard() {
   const { t } = useTranslation();
   const [current, setCurrent] = useState("");
@@ -44,6 +46,7 @@ function ChangePasswordCard() {
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  /** Submits the password change and updates success/error state. */
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -122,12 +125,14 @@ function ChangePasswordCard() {
   );
 }
 
+/** Loads the active sessions list and exposes reload/error state. */
 function useSessionsList() {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<AuthSession[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** Fetches the latest sessions from the API and updates state. */
   const reload = useCallback(async () => {
     setError(null);
     try {
@@ -146,11 +151,13 @@ function useSessionsList() {
   return { sessions, loaded, error, reload, setError };
 }
 
+/** Parses a last-seen timestamp into a Date, or null when invalid. */
 function parseLastSeenAt(lastSeenAt: string): Date | null {
   const parsed = new Date(lastSeenAt);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/** Renders a session's last-seen timestamp in the selected display format. */
 function LastSeenCell({ lastSeenAt, display }: { lastSeenAt: string; display: LastSeenDisplay }) {
   const absolute = useMemo(() => parseLastSeenAt(lastSeenAt), [lastSeenAt]);
 
@@ -164,6 +171,7 @@ function LastSeenCell({ lastSeenAt, display }: { lastSeenAt: string; display: La
   return <RelativeLastSeenCell lastSeenAt={absolute} />;
 }
 
+/** Renders a live-updating relative last-seen time with an absolute-time tooltip. */
 function RelativeLastSeenCell({ lastSeenAt }: { lastSeenAt: Date }) {
   // Tick every second while the timestamp is under a minute old (second-scale
   // labels like "45 seconds ago" need live updates), then every minute once
@@ -194,6 +202,7 @@ function RelativeLastSeenCell({ lastSeenAt }: { lastSeenAt: Date }) {
   );
 }
 
+/** Renders the last-seen display format preference selector. */
 function LastSeenDisplaySelect({
   value,
   onChange,
@@ -202,6 +211,7 @@ function LastSeenDisplaySelect({
   onChange: (value: LastSeenDisplay) => void;
 }) {
   const { t } = useTranslation();
+  /** Ref callback that registers this element as the last-seen display discovery target. */
   const registerTarget = useSettingsTargetRegistration(ACCOUNT_SETTINGS_TARGETS.lastSeenDisplay);
   return (
     <div ref={registerTarget} className="space-y-2" data-testid="last-seen-display-control">
@@ -228,6 +238,7 @@ function LastSeenDisplaySelect({
   );
 }
 
+/** Renders the active sessions table with revoke actions. */
 function SessionsTable({
   sessions,
   display,
@@ -281,6 +292,7 @@ function SessionsTable({
   );
 }
 
+/** Renders the active-sessions settings card with display preference and revoke. */
 function SessionsCard() {
   const { t } = useTranslation();
   const { sessions, loaded, error, reload, setError } = useSessionsList();
@@ -290,6 +302,7 @@ function SessionsCard() {
   const latestRevision = useRef(0);
   const display = optimisticDisplay ?? savedDisplay;
 
+  /** Optimistically updates the last-seen display preference and syncs it to the backend. */
   const onDisplayChange = useCallback(
     (next: LastSeenDisplay) => {
       const revision = ++latestRevision.current;
@@ -309,6 +322,7 @@ function SessionsCard() {
     [store, t],
   );
 
+  /** Revokes a session and reloads the sessions list. */
   const onRevoke = async (id: string) => {
     try {
       await revokeSession(id);
@@ -351,6 +365,7 @@ function SessionsCard() {
   );
 }
 
+/** Renders the account security settings section. */
 export function SecuritySettings() {
   return (
     <div className="space-y-4">

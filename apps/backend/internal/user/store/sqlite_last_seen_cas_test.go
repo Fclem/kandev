@@ -14,6 +14,7 @@ import (
 	"github.com/kandev/kandev/internal/user/models"
 )
 
+// TestDefaultUserSettingsLastSeenDisplay verifies the default LastSeenDisplay is absolute.
 func TestDefaultUserSettingsLastSeenDisplay(t *testing.T) {
 	settings := defaultUserSettings(DefaultUserID)
 	if settings.LastSeenDisplay != models.LastSeenDisplayAbsolute {
@@ -21,6 +22,7 @@ func TestDefaultUserSettingsLastSeenDisplay(t *testing.T) {
 	}
 }
 
+// TestScanUserSettingsLastSeenDisplay verifies last_seen_display defaults to absolute, loads stored values, and coerces unknown values.
 func TestScanUserSettingsLastSeenDisplay(t *testing.T) {
 	tests := []struct {
 		name string
@@ -50,6 +52,7 @@ func TestScanUserSettingsLastSeenDisplay(t *testing.T) {
 	}
 }
 
+// TestMarshalUserSettingsPersistsLastSeenDisplay verifies a relative LastSeenDisplay survives a marshal and scan round trip.
 func TestMarshalUserSettingsPersistsLastSeenDisplay(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{LastSeenDisplay: models.LastSeenDisplayRelative})
 	if err != nil {
@@ -64,6 +67,7 @@ func TestMarshalUserSettingsPersistsLastSeenDisplay(t *testing.T) {
 	}
 }
 
+// TestMarshalUserSettingsNormalizesUnknownLastSeenDisplay verifies an unknown LastSeenDisplay is marshaled as absolute.
 func TestMarshalUserSettingsNormalizesUnknownLastSeenDisplay(t *testing.T) {
 	raw, err := marshalUserSettingsPayload(&models.UserSettings{LastSeenDisplay: "garbage"})
 	if err != nil {
@@ -74,6 +78,7 @@ func TestMarshalUserSettingsNormalizesUnknownLastSeenDisplay(t *testing.T) {
 	}
 }
 
+// TestSQLiteRepositoryLastSeenDisplayRoundTrip verifies LastSeenDisplay round-trips through the SQLite repository.
 func TestSQLiteRepositoryLastSeenDisplayRoundTrip(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -118,6 +123,7 @@ func TestSQLiteRepositoryLastSeenDisplayRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSQLiteRepositoryUpsertSettingsRevisionConflict verifies a stale revision write fails with ErrUserSettingsRevisionConflict.
 func TestSQLiteRepositoryUpsertSettingsRevisionConflict(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -148,6 +154,7 @@ func TestSQLiteRepositoryUpsertSettingsRevisionConflict(t *testing.T) {
 	}
 }
 
+// TestSQLiteRepositoryUpsertSettingsMissingUser verifies upserting settings for a missing user fails with a user-not-found error.
 func TestSQLiteRepositoryUpsertSettingsMissingUser(t *testing.T) {
 	conn, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -170,6 +177,7 @@ func TestSQLiteRepositoryUpsertSettingsMissingUser(t *testing.T) {
 	}
 }
 
+// TestPostgresRepositoryUpsertSettingsRevisionConflict verifies a stale revision write fails with ErrUserSettingsRevisionConflict on Postgres.
 func TestPostgresRepositoryUpsertSettingsRevisionConflict(t *testing.T) {
 	conn := testutil.OpenIsolatedPostgres(t, testutil.PostgresDSNFromEnv(t))
 	repo, err := newSQLiteRepositoryWithDB(conn, conn)
@@ -195,6 +203,7 @@ func TestPostgresRepositoryUpsertSettingsRevisionConflict(t *testing.T) {
 	}
 }
 
+// TestPostgresRepositoryUpsertSettingsMissingUser verifies upserting settings for a missing user fails with a user-not-found error on Postgres.
 func TestPostgresRepositoryUpsertSettingsMissingUser(t *testing.T) {
 	conn := testutil.OpenIsolatedPostgres(t, testutil.PostgresDSNFromEnv(t))
 	repo, err := newSQLiteRepositoryWithDB(conn, conn)

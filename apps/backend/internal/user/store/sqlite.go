@@ -317,6 +317,7 @@ func (r *sqliteRepository) UpsertUserSettingsPreservingTaskCreateLastUsed(
 	)
 }
 
+// upsertUserSettingsPreservingTaskCreateLastUsedPostgres writes the settings via a Postgres jsonb_set UPDATE that merges the task_create_last_used patch.
 func (r *sqliteRepository) upsertUserSettingsPreservingTaskCreateLastUsedPostgres(
 	ctx context.Context,
 	settings *models.UserSettings,

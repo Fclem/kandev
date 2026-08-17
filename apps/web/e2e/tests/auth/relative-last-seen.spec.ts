@@ -16,6 +16,7 @@ import { watchWs } from "../../helpers/causal-waits";
 const ADMIN = { email: "admin@demo.dev", password: "adminpass123", displayName: "Ada Admin" };
 const SECURITY_PATH = "/settings/account/security";
 
+/** Fetches the user's current last_seen_display setting from the settings API. */
 async function readLastSeenDisplay(ctx: BrowserContext, baseUrl: string): Promise<string> {
   const res = await ctx.request.get(`${baseUrl}/api/v1/user/settings`);
   expect(res.ok(), await res.text()).toBeTruthy();
@@ -23,6 +24,7 @@ async function readLastSeenDisplay(ctx: BrowserContext, baseUrl: string): Promis
   return body.settings.last_seen_display ?? "absolute";
 }
 
+/** Persists the given last_seen_display value through the settings API. */
 async function restoreLastSeenDisplay(
   ctx: BrowserContext,
   baseUrl: string,

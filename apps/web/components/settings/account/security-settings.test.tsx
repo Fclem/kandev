@@ -49,17 +49,20 @@ const SESSION: AuthSession = {
   current: true,
 };
 
+/** Returns default user settings merged with the given overrides. */
 function makeUserSettings(overrides: Partial<UserSettingsState> = {}): UserSettingsState {
   return { ...createDefaultUserSettings(), ...overrides };
 }
 
 type StoreHolder = { current: ReturnType<typeof useAppStoreApi> | null };
 
+/** Stores the app store API in the holder and renders nothing. */
 function StoreCapture({ holder }: { holder: StoreHolder }) {
   holder.current = useAppStoreApi();
   return null;
 }
 
+/** Renders SecuritySettings inside a store provider, optionally capturing the store API. */
 function renderSecurity(overrides: Partial<UserSettingsState> = {}, holder?: StoreHolder) {
   return render(
     <StateProvider initialState={{ userSettings: makeUserSettings({ revision: 1, ...overrides }) }}>
@@ -71,6 +74,7 @@ function renderSecurity(overrides: Partial<UserSettingsState> = {}, holder?: Sto
   );
 }
 
+/** Renders SecuritySettings and waits for the last-seen display select to appear. */
 async function renderLoaded(overrides: Partial<UserSettingsState> = {}, holder?: StoreHolder) {
   renderSecurity(overrides, holder);
   await screen.findByTestId(SELECT_TEST_ID);
@@ -109,6 +113,7 @@ async function renderRelativeWithFakeTime(lastSeenAt?: string) {
   });
 }
 
+/** Opens the last-seen display select and clicks the option with the given name. */
 async function chooseDisplay(name: "Absolute time" | "Relative time") {
   fireEvent.click(screen.getByTestId(SELECT_TEST_ID));
   fireEvent.click(await screen.findByRole("option", { name }));
@@ -125,6 +130,7 @@ type PatchResponse = {
   };
 };
 
+/** Returns a default settings PATCH response merged with the given overrides. */
 function patchResponse(overrides: Record<string, unknown> = {}): PatchResponse {
   return {
     settings: {
@@ -139,6 +145,7 @@ function patchResponse(overrides: Record<string, unknown> = {}): PatchResponse {
   };
 }
 
+/** Builds a user.settings.updated WebSocket message from the given payload. */
 function settingsUpdatedMessage(
   payload: Partial<BackendMessageMap["user.settings.updated"]["payload"]>,
 ): BackendMessageMap["user.settings.updated"] {
@@ -154,6 +161,7 @@ function settingsUpdatedMessage(
   };
 }
 
+/** Feeds a user.settings.updated snapshot through the registered WS handler. */
 function dispatchUserSettingsSnapshot(
   holder: StoreHolder,
   payload: Partial<BackendMessageMap["user.settings.updated"]["payload"]>,
@@ -163,6 +171,7 @@ function dispatchUserSettingsSnapshot(
   );
 }
 
+/** Creates a PATCH promise with externally callable resolve and reject functions. */
 function deferredPatch(): {
   promise: Promise<PatchResponse>;
   resolve: (value: PatchResponse) => void;

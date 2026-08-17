@@ -254,6 +254,48 @@ describe("useSessionTurns — fetch failure recovery", () => {
     }
   });
 
+  it("recovers hydration via the slow retry after the bounded budget is exhausted", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockListSessionTurns
+      .mockRejectedValueOnce(new Error("down-1"))
+      .mockRejectedValueOnce(new Error("down-2"))
+      .mockRejectedValueOnce(new Error("down-3"))
+      .mockResolvedValueOnce({ turns: [turn("turn-a")], total: 1 });
+    vi.useFakeTimers();
+    try {
+      const { result, rerender } = renderHook(() => useSessionTurns("session-a"));
+
+      await act(async () => {});
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(1);
+      // Drain the bounded backoff (4s then 8s) so all three fast attempts fail.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+      await act(async () => {});
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(8000);
+      });
+      await act(async () => {});
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(3);
+      expect(result.current).toEqual([]);
+
+      // No fast retry is scheduled after exhaustion; the slow poll fires at
+      // 30s (SLOW_RETRY_INTERVAL_MS) and the 4th attempt hydrates the session.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      await act(async () => {});
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(4);
+      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]);
+
+      rerender();
+      expect(result.current).toEqual([turn("turn-a")]);
+    } finally {
+      vi.useRealTimers();
+      errorSpy.mockRestore();
+    }
+  });
+
   it("applies the turn response despite an independent live commit mid-flight", async () => {
     // Task 01 cross-resource isolation: a message/turn commit landing in the
     // store after the turns fetch started must not invalidate the response —

@@ -8,6 +8,10 @@ let fetchSequence = 0;
 const lastAppliedSequence = new Map<string, number>();
 /** Bounded retries with backoff for transient turn-fetch failures. */
 const MAX_TURN_FETCH_ATTEMPTS = 3;
+/** Slow recovery poll once the bounded budget is exhausted: keeps retrying
+ *  while the session stays mounted so a later reconnect can still hydrate,
+ *  instead of stranding durations until a remount or session switch. */
+const SLOW_RETRY_INTERVAL_MS = 30_000;
 
 export type SessionTurnsState = {
   turns: Turn[];
@@ -47,6 +51,15 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
     let disposed = false;
     const controller = new AbortController();
     let retryTimer: number | undefined;
+    let slowRetryTimer: number | undefined;
+    /** Immediate recovery trigger: reconnect or returning to the foreground
+     *  restarts the fetch while the session is still unhydrated. */
+    const wake = () => setRetryTick((tick) => tick + 1);
+    window.addEventListener("online", wake);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") wake();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     void listSessionTurns(sessionId, { init: { signal: controller.signal } })
       .then(({ turns: fetchedTurns }) => {
@@ -67,6 +80,13 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
             () => setRetryTick((tick) => tick + 1),
             2000 * 2 ** attempts,
           );
+        } else {
+          // Budget exhausted: fall back to a slow recovery poll instead of
+          // stranding the session unhydrated until a remount/switch.
+          slowRetryTimer = window.setTimeout(
+            () => setRetryTick((tick) => tick + 1),
+            SLOW_RETRY_INTERVAL_MS,
+          );
         }
       });
 
@@ -74,6 +94,9 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
       disposed = true;
       controller.abort();
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      if (slowRetryTimer !== undefined) window.clearTimeout(slowRetryTimer);
+      window.removeEventListener("online", wake);
+      document.removeEventListener("visibilitychange", onVisibility);
       // Clear the stale sequence guard when a session is abandoned before
       // hydration, so a re-created same-ID session cannot be poisoned. Fully
       // hydrated sessions keep the entry — session IDs are UUIDs, so reuse is

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { t } from "@/lib/i18n";
-import { CHAT_PANEL_FALLBACK_LABEL, resolveChatPanelTitle } from "./dockview-panel-content";
+import { resolveChatPanelTitle } from "./dockview-panel-content";
 import { DESKTOP_VALID_COMPONENTS } from "./dockview-desktop-layout";
 
 describe("dockview desktop layout registry", () => {

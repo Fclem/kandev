@@ -30,6 +30,11 @@ test.describe("quick chat idle dot", () => {
 
     await button.tap();
     await expect(button.getByTestId("quick-chat-unseen-dot")).toHaveCount(0);
+    // The reopened dialog re-subscribes over WS; wait until the previous
+    // exchange has rendered so the send cannot race a dead subscription.
+    await expect(dialog.getByText("Slow response complete", { exact: false })).toBeVisible({
+      timeout: 15_000,
+    });
     const secondCompleted = ws.waitForEvent("session.turn.completed", {
       where: (payload) => payload.session_id === sessionId,
     });

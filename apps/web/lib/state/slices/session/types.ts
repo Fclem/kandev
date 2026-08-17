@@ -230,6 +230,8 @@ export type SessionSliceActions = {
   setMessagesLoading: (sessionId: string, loading: boolean) => void;
   /** Upserts a turn row, rejecting stale updates (see shouldApplyTurnUpdate). */
   addTurn: (turn: Turn) => void;
+  /** Merges a complete REST snapshot and reconciles its marker atomically. */
+  mergeTurnsSnapshot: (sessionId: string, turns: Turn[], hydrationEpoch: number) => void;
   completeTurn: (
     sessionId: string,
     turnId: string,

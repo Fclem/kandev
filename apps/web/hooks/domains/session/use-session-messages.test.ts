@@ -32,6 +32,7 @@ const mockState = {
   setMessages: vi.fn(),
   prependMessages: vi.fn(),
   addTurn: vi.fn(),
+  mergeTurnsSnapshot: vi.fn(),
   markTurnsLoaded: vi.fn((sessionId: string) => {
     mockState.turns.loadedBySession[sessionId] = true;
   }),
@@ -75,6 +76,13 @@ beforeEach(() => {
   mockState.turns.bySession["sess-1"] = [];
   mockState.turns.activeBySession["sess-1"] = null;
   mockState.turns.loadedBySession = {};
+  mockState.mergeTurnsSnapshot.mockImplementation(
+    (_sessionId: string, turns: unknown[], hydrationEpoch: number) => {
+      turns.forEach((turn) => mockState.addTurn(turn));
+      mockState.reconcileActiveTurnAfterHydration("sess-1", hydrationEpoch);
+      mockState.markTurnsLoaded("sess-1");
+    },
+  );
 });
 
 afterEach(() => {
@@ -482,6 +490,7 @@ describe("session subscription hydration ordering", () => {
     const { unmount } = renderHook(() => useSessionMessages("sess-1"));
 
     expect(mockWebSocketClient.request).not.toHaveBeenCalled();
+    expect(mockListSessionTurns).not.toHaveBeenCalled();
 
     await act(async () => {
       readiness.resolve();
@@ -593,7 +602,7 @@ describe("turn loading for sessions without hydrated turns", () => {
     unmount();
   });
 
-  it("skips the turn fetch when the session is marked loaded", async () => {
+  it("refreshes the turn snapshot for the current subscription generation", async () => {
     const readiness = deferred<void>();
     mockWebSocketClient.getSessionSubscriptionReadiness.mockReturnValue(readiness.promise);
     mockWebSocketClient.subscribeSessionWithReady.mockReturnValue({
@@ -610,7 +619,7 @@ describe("turn loading for sessions without hydrated turns", () => {
     });
     await act(async () => {});
 
-    expect(mockListSessionTurns).not.toHaveBeenCalled();
+    expect(mockListSessionTurns).toHaveBeenCalledWith("sess-1", expect.anything());
     unmount();
   });
 });

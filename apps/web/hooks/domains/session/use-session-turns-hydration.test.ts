@@ -3,6 +3,8 @@ import {
   ensureSessionTurnsLoaded,
   clearInFlightTurnsLoadForTest,
 } from "./use-session-turns-hydration";
+import { shouldApplyTurnUpdate } from "@/lib/state/slices/session/turn-actions";
+import type { Turn } from "@/lib/types/http";
 
 const mockListSessionTurns = vi.fn();
 
@@ -30,6 +32,7 @@ type TurnStoreMock = {
     taskSessions: { items: Record<string, { state: string }> };
   };
   addTurn: ReturnType<typeof vi.fn>;
+  mergeTurnsSnapshot: ReturnType<typeof vi.fn>;
   markTurnsLoaded: ReturnType<typeof vi.fn>;
   reconcileActiveTurnAfterHydration: ReturnType<typeof vi.fn>;
 };
@@ -102,6 +105,19 @@ function makeStore(): TurnStoreHarness {
     state.loadedBySession[sid] = true;
   });
   const reconcileActiveTurnAfterHydration = vi.fn();
+  const mergeTurnsSnapshot = vi.fn(
+    (sid: string, turns: Record<string, unknown>[], epoch: number) => {
+      const existingById = new Map(
+        (state.bySession[sid] as Turn[] | undefined)?.map((turn) => [turn.id, turn]),
+      );
+      for (const turn of turns as Turn[]) {
+        const existing = existingById.get(turn.id);
+        if (!existing || shouldApplyTurnUpdate(existing, turn)) addTurn(turn);
+      }
+      reconcileActiveTurnAfterHydration(sid, epoch);
+      markTurnsLoaded(sid);
+    },
+  );
   return {
     getState: () => ({
       turns: {
@@ -114,10 +130,12 @@ function makeStore(): TurnStoreHarness {
       taskSessions: { items: state.sessions },
       // The zustand store exposes actions on getState() too.
       addTurn,
+      mergeTurnsSnapshot,
       markTurnsLoaded,
       reconcileActiveTurnAfterHydration,
     }),
     addTurn,
+    mergeTurnsSnapshot,
     markTurnsLoaded,
     reconcileActiveTurnAfterHydration,
     setSessions: (v) => {
@@ -177,6 +195,29 @@ describe("ensureSessionTurnsLoaded — hydration and marker", () => {
     await ensureSessionTurnsLoaded(SESSION_ID, store as never);
 
     expect(mockListSessionTurns).not.toHaveBeenCalled();
+  });
+
+  it("refreshes a loaded session after a new subscription readiness generation", async () => {
+    const store = makeStore();
+    store.getState().turns.loadedBySession[SESSION_ID] = true;
+    mockListSessionTurns.mockResolvedValue({
+      turns: [makeTurn("turn-after-reconnect")],
+      total: 1,
+    });
+
+    const readiness = Promise.resolve();
+    await (
+      ensureSessionTurnsLoaded as unknown as (
+        sessionId: string,
+        store: unknown,
+        options: { readiness: Promise<void> },
+      ) => Promise<void>
+    )(SESSION_ID, store, { readiness });
+
+    expect(mockListSessionTurns).toHaveBeenCalledTimes(1);
+    expect(store.addTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "turn-after-reconnect" }),
+    );
   });
 });
 

@@ -1,15 +1,15 @@
 import { listSessionTurns } from "@/lib/api/domains/session-api";
 import { useAppStoreApi } from "@/components/state-provider";
 import { createDebugLogger } from "@/lib/debug/log";
-import { shouldApplyTurnUpdate } from "@/lib/state/slices/session/turn-actions";
 
 const debug = createDebugLogger("messages:fetch:turns");
 
 // Single-flight promises for in-progress turn hydration per session. The
 // loaded marker lives in the store (`turns.loadedBySession`) because it must
-// be seeded by SSR hydration too; this module map only deduplicates requests
-// racing while the first is still in flight.
+// be seeded by SSR hydration too; the module maps deduplicate in-flight work
+// and associate a successful load with the current subscription readiness.
 const inFlightTurnsLoad = new Map<string, Promise<void>>();
+const lastHydrationReadiness = new Map<string, Promise<void> | undefined>();
 
 // Transient failures (network blip, backend restart) must not leave a
 // session's turn metadata unresolved indefinitely: message loading proceeds
@@ -36,6 +36,7 @@ const recoveryDelayBySession = new Map<string, number>();
  * don't leak dedup state or scheduled work. */
 export function clearInFlightTurnsLoadForTest(): void {
   inFlightTurnsLoad.clear();
+  lastHydrationReadiness.clear();
   for (const timer of recoveryTimers.values()) clearTimeout(timer);
   recoveryTimers.clear();
   recoveryDelayBySession.clear();
@@ -87,30 +88,10 @@ async function fetchAndReconcileSessionTurns(
     // request was in flight.
     const state = store.getState();
     if (!state.taskSessions.items[sessionId]) return true;
-    // Reconcile each REST row against the store's existing row (if any) via
-    // the store's shared predicate (see shouldApplyTurnUpdate in
-    // turn-actions.ts — completion state takes precedence over timestamps,
-    // and malformed timestamps are stale). The same predicate guards the WS
-    // write path in addTurn, so every post-hydration update is
-    // freshness-protected against stale rows from either transport.
-    const existingById = new Map(
-      (state.turns.bySession[sessionId] ?? []).map((turn) => [turn.id, turn]),
-    );
-    for (const turn of turns) {
-      const existing = existingById.get(turn.id);
-      if (!existing || shouldApplyTurnUpdate(existing, turn)) {
-        store.getState().addTurn(turn);
-      }
-    }
-    // Reconcile the active-turn marker in the store: the WS
-    // session.turn.started event may have been missed (the same REST/WS gap
-    // this hydration closes), leaving activeBySession null while the session
-    // runs — agent status and files-panel source gating read it. The
-    // store-owned action applies the settled-session rule (no marker for
-    // orphaned incomplete turns on IDLE/etc. sessions) and rejects this
-    // hydration if an authoritative clear bumped the epoch meanwhile.
-    store.getState().reconcileActiveTurnAfterHydration(sessionId, hydrationEpoch);
-    store.getState().markTurnsLoaded(sessionId);
+    // Merge rows, reconcile the active marker, and record the loaded marker in
+    // one store transaction. This keeps a live WS update from landing between
+    // separate row/marker writes and avoids one Zustand notification per row.
+    store.getState().mergeTurnsSnapshot(sessionId, turns, hydrationEpoch);
     return true;
   } catch (err) {
     debug("turn fetch failed", { sessionId, err });
@@ -143,46 +124,65 @@ async function fetchAndReconcileSessionTurns(
 export async function ensureSessionTurnsLoaded(
   sessionId: string,
   store: ReturnType<typeof useAppStoreApi>,
+  options?: { readiness?: Promise<void> },
 ): Promise<void> {
-  const state = store.getState();
-  if (state.turns.loadedBySession[sessionId]) return;
-  const inFlight = inFlightTurnsLoad.get(sessionId);
-  if (inFlight) return inFlight;
-  // The session may have been removed since the message fetch started; a
-  // pending hydration must not resurrect `turns.bySession[sessionId]` via
-  // addTurn after removeTaskSession deleted it. Deliberately NOT tied to the
-  // message fetch's liveness flag: dockview keeps sibling session panels
-  // mounted (hidden) and their fetch liveness flips during layout settle,
-  // which would abort legitimate hydration. The REST response is the DB's
-  // authoritative turn list, so merging it is always safe.
-  if (!state.taskSessions.items[sessionId]) return;
-  // Capture the active-marker generation: if an authoritative clear (source
-  // adoption) bumps it while the request is in flight, the store-owned
-  // reconciliation rejects this hydration's marker write.
-  const hydrationEpoch = state.turns.reconcileEpochBySession[sessionId] ?? 0;
-
-  const promise = (async () => {
-    try {
-      for (let attempt = 1; ; attempt++) {
-        if (await fetchAndReconcileSessionTurns(store, sessionId, hydrationEpoch)) return;
-        debug("turn fetch attempt failed", { sessionId, attempt });
-        if (attempt >= TURN_HYDRATION_MAX_ATTEMPTS) {
-          // Guaranteed eventual recovery: schedule a delayed retry so a
-          // prolonged outage resolves once the endpoint returns, without
-          // requiring an unrelated lifecycle event.
-          scheduleTurnHydrationRecovery(sessionId, store);
-          return;
-        }
-        const delay = Math.min(
-          TURN_HYDRATION_RETRY_BASE_MS * 2 ** (attempt - 1),
-          TURN_HYDRATION_RETRY_MAX_MS,
-        );
-        await new Promise((resolve) => window.setTimeout(resolve, delay));
-      }
-    } finally {
-      inFlightTurnsLoad.delete(sessionId);
+  const readiness = options?.readiness;
+  while (true) {
+    const state = store.getState();
+    if (!state.taskSessions.items[sessionId]) {
+      lastHydrationReadiness.delete(sessionId);
+      return;
     }
-  })();
-  inFlightTurnsLoad.set(sessionId, promise);
-  await promise;
+    const loaded = state.turns.loadedBySession[sessionId];
+    // A caller without a subscription-generation token keeps the historical
+    // one-shot behavior. A readiness promise identifies the current durable
+    // WebSocket subscription, so a reconnect gets one fresh REST snapshot.
+    if (
+      loaded &&
+      (readiness === undefined || lastHydrationReadiness.get(sessionId) === readiness)
+    ) {
+      return;
+    }
+
+    const inFlight = inFlightTurnsLoad.get(sessionId);
+    if (inFlight) {
+      // If this call represents a newer subscription generation, wait for the
+      // older request, then loop so it can start a refresh instead of being
+      // incorrectly deduplicated by the session-only key.
+      await inFlight;
+      continue;
+    }
+
+    // Capture the active-marker generation: if an authoritative clear (source
+    // adoption) bumps it while the request is in flight, the store-owned
+    // reconciliation rejects this hydration's marker write.
+    const hydrationEpoch = state.turns.reconcileEpochBySession[sessionId] ?? 0;
+    const promise = (async () => {
+      try {
+        for (let attempt = 1; ; attempt++) {
+          if (await fetchAndReconcileSessionTurns(store, sessionId, hydrationEpoch)) {
+            if (store.getState().taskSessions.items[sessionId]) {
+              lastHydrationReadiness.set(sessionId, readiness);
+            }
+            return;
+          }
+          debug("turn fetch attempt failed", { sessionId, attempt });
+          if (attempt >= TURN_HYDRATION_MAX_ATTEMPTS) {
+            scheduleTurnHydrationRecovery(sessionId, store);
+            return;
+          }
+          const delay = Math.min(
+            TURN_HYDRATION_RETRY_BASE_MS * 2 ** (attempt - 1),
+            TURN_HYDRATION_RETRY_MAX_MS,
+          );
+          await new Promise((resolve) => window.setTimeout(resolve, delay));
+        }
+      } finally {
+        inFlightTurnsLoad.delete(sessionId);
+      }
+    })();
+    inFlightTurnsLoad.set(sessionId, promise);
+    await promise;
+    return;
+  }
 }

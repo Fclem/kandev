@@ -236,6 +236,54 @@ describe("addTurn reconciliation", () => {
   });
 });
 
+describe("mergeTurnsSnapshot", () => {
+  it("merges rows, preserves live completion, and reconciles once", () => {
+    const store = makeStore();
+    seedSession(store, "RUNNING", LATER_AT);
+    store.getState().addTurn(
+      turn("turn-live", {
+        completed_at: COMPLETED_AT,
+        updated_at: COMPLETED_AT,
+        metadata: { model: "live" },
+      }),
+    );
+    store.getState().setActiveTurn(SESSION_ID, "turn-live");
+
+    let notifications = 0;
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1;
+    });
+    store.getState().mergeTurnsSnapshot(
+      SESSION_ID,
+      [
+        turn("turn-live", {
+          completed_at: undefined,
+          updated_at: STARTED_AT,
+          metadata: { model: "stale-route" },
+        }),
+        turn("turn-new", {
+          started_at: LATER_AT,
+          updated_at: LATER_AT,
+          completed_at: undefined,
+        }),
+      ],
+      0,
+    );
+    unsubscribe();
+
+    expect(notifications).toBe(1);
+    expect(store.getState().turns.bySession[SESSION_ID]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "turn-live", completed_at: COMPLETED_AT }),
+        expect.objectContaining({ id: "turn-new" }),
+      ]),
+    );
+    expect(store.getState().turns.bySession[SESSION_ID]).toHaveLength(2);
+    expect(store.getState().turns.loadedBySession[SESSION_ID]).toBe(true);
+    expect(store.getState().turns.activeBySession[SESSION_ID]).toBe("turn-new");
+  });
+});
+
 describe("addTurn malformed timestamps", () => {
   it("treats a malformed incoming timestamp as stale", () => {
     const store = makeStore();

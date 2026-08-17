@@ -10,6 +10,10 @@ import type { AppState } from "@/lib/state/store";
 
 const SESSION_ID = "session-1";
 const BOUNDARY = "2026-01-01T00:00:00Z";
+const TASK_ID = "task-1";
+const TURN_STARTED_AT = "2026-01-01T00:00:00Z";
+const TURN_COMPLETED_AT = "2026-01-01T00:01:00Z";
+const STALE_ROUTE_UPDATED_AT = "2026-01-01T00:00:30Z";
 const FRESH_TURN = "fresh-turn";
 const IDLE_SESSION = { id: SESSION_ID, state: "IDLE", updated_at: BOUNDARY };
 const OLD_TURN = "old-turn";
@@ -240,6 +244,63 @@ describe("mergeInitialState — settled SSR sessions seed a boundary", () => {
   });
 });
 
+describe("hydrated turn row freshness", () => {
+  it("keeps a newer live completion when a forced route snapshot is stale", () => {
+    const result = produce(makeAppDraft(), (draft: Draft<AppState>) => {
+      draft.taskSessions.items[SESSION_ID] = {
+        id: SESSION_ID,
+        state: "RUNNING",
+        updated_at: "2026-01-02T00:00:00Z",
+      } as never;
+      draft.turns.bySession[SESSION_ID] = [
+        {
+          id: FRESH_TURN,
+          session_id: SESSION_ID,
+          task_id: TASK_ID,
+          started_at: TURN_STARTED_AT,
+          completed_at: TURN_COMPLETED_AT,
+          created_at: TURN_STARTED_AT,
+          updated_at: TURN_COMPLETED_AT,
+          metadata: { model: "live" },
+        },
+      ] as never;
+      draft.turns.activeBySession[SESSION_ID] = FRESH_TURN;
+
+      hydrateState(
+        draft,
+        {
+          turns: {
+            bySession: {
+              [SESSION_ID]: [
+                {
+                  id: FRESH_TURN,
+                  session_id: SESSION_ID,
+                  task_id: TASK_ID,
+                  started_at: TURN_STARTED_AT,
+                  completed_at: null,
+                  created_at: TURN_STARTED_AT,
+                  updated_at: STALE_ROUTE_UPDATED_AT,
+                  metadata: { model: "stale-route" },
+                },
+              ],
+            },
+            activeBySession: { [SESSION_ID]: FRESH_TURN },
+          },
+        } as unknown as Partial<AppState>,
+        { forceMergeSessionId: SESSION_ID },
+      );
+    });
+
+    expect(result.turns.bySession[SESSION_ID][0]).toEqual(
+      expect.objectContaining({
+        completed_at: TURN_COMPLETED_AT,
+        metadata: { model: "live" },
+      }),
+    );
+    expect(result.turns.activeBySession[SESSION_ID]).toBeNull();
+  });
+});
+
 describe("hydrateState — turns loadedBySession marker predicates", () => {
   it.each([
     ["active", "active-session"],
@@ -272,7 +333,7 @@ describe("hydrateState — turns loadedBySession marker predicates", () => {
         { forceMergeSessionId: SESSION_ID },
       );
     });
-    expect(result.turns.bySession[SESSION_ID]).toEqual([{ id: FRESH_TURN }]);
+    expect(result.turns.bySession[SESSION_ID]).toEqual([{ id: "live-turn" }, { id: FRESH_TURN }]);
     expect(result.turns.loadedBySession[SESSION_ID]).toBe(true);
   });
 

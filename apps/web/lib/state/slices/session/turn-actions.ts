@@ -7,6 +7,8 @@ type ImmerSet = Parameters<
   StateCreator<SessionSlice, [["zustand/immer", never]], [], SessionSlice>
 >[0];
 
+type TurnReconciliationDraft = Pick<Draft<SessionSlice>, "turns" | "taskSessions">;
+
 // Strict wire format: full RFC3339 with explicit offset/UTC marker. JS
 // Date.parse is permissive (e.g. "0" parses as 2000-01-01, partial dates as
 // midnight, timezone-less values in the local zone), so shape validation must
@@ -68,7 +70,7 @@ const SETTLED_SESSION_STATES = new Set<string>([
 /**
  * Parsed settled boundary for a session, or null when none is recorded.
  */
-function settledBoundary(draft: Draft<SessionSlice>, sessionId: string): bigint | null {
+function settledBoundary(draft: TurnReconciliationDraft, sessionId: string): bigint | null {
   return parseTurnTimestamp(draft.turns.settledBoundaryBySession[sessionId]);
 }
 
@@ -78,7 +80,7 @@ function settledBoundary(draft: Draft<SessionSlice>, sessionId: string): bigint 
  * stale hydration, or force-merged snapshot naming it are all rejected).
  */
 function isAtOrBeforeBoundary(
-  draft: Draft<SessionSlice>,
+  draft: TurnReconciliationDraft,
   sessionId: string,
   startedAt: string | undefined,
 ): boolean {
@@ -146,7 +148,7 @@ export function latestIncompleteTurnId(turns: Turn[]): string | null {
  * and rejecting hydrations that started before an authoritative clear.
  */
 function applyActiveTurnReconciliation(
-  draft: Draft<SessionSlice>,
+  draft: TurnReconciliationDraft,
   sessionId: string,
   hydrationEpoch: number,
 ): void {
@@ -179,6 +181,36 @@ function applyActiveTurnReconciliation(
     }
   }
   draft.turns.activeBySession[sessionId] = latestId;
+}
+
+/**
+ * Merges a complete REST turn snapshot into an existing session list.
+ *
+ * The list is updated in one caller-owned Immer transaction. A map makes the
+ * reconciliation linear in the number of rows, and the freshness predicate
+ * prevents a delayed snapshot from rolling back a live WebSocket update.
+ */
+export function mergeTurnRows(target: Draft<Turn[]>, incoming: Turn[]): void {
+  const existingById = new Map(target.map((turn) => [turn.id, turn]));
+  for (const turn of incoming) {
+    const existing = existingById.get(turn.id);
+    if (!existing) {
+      target.push(turn);
+      existingById.set(turn.id, target[target.length - 1]);
+      continue;
+    }
+    if (!shouldApplyTurnUpdate(existing as Turn, turn)) continue;
+    Object.assign(existing, turn, { completed_at: existing.completed_at ?? turn.completed_at });
+  }
+}
+
+/** Applies active-turn reconciliation to a draft owned by a hydration path. */
+export function reconcileActiveTurnAfterHydrationDraft(
+  draft: TurnReconciliationDraft,
+  sessionId: string,
+  hydrationEpoch: number,
+): void {
+  applyActiveTurnReconciliation(draft, sessionId, hydrationEpoch);
 }
 
 /**
@@ -241,6 +273,17 @@ export function shouldApplyTurnUpdate(existing: Turn, incoming: Turn): boolean {
   return incomingTs > existingTs;
 }
 
+function mergeTurnsSnapshotAction(set: ImmerSet) {
+  return (sessionId: string, turns: Turn[], hydrationEpoch: number) =>
+    set((draft) => {
+      if (!draft.taskSessions.items[sessionId]) return;
+      const target = (draft.turns.bySession[sessionId] ??= []);
+      mergeTurnRows(target, turns);
+      applyActiveTurnReconciliation(draft, sessionId, hydrationEpoch);
+      draft.turns.loadedBySession[sessionId] = true;
+    });
+}
+
 export function buildTurnActions(set: ImmerSet) {
   return {
     /**
@@ -268,6 +311,8 @@ export function buildTurnActions(set: ImmerSet) {
         // value.
         Object.assign(existing, turn, { completed_at: existing.completed_at ?? turn.completed_at });
       }),
+    /** Merges a complete turn snapshot and reconciles its marker atomically. */
+    mergeTurnsSnapshot: mergeTurnsSnapshotAction(set),
     completeTurn: (
       sessionId: Parameters<SessionSlice["completeTurn"]>[0],
       turnId: Parameters<SessionSlice["completeTurn"]>[1],

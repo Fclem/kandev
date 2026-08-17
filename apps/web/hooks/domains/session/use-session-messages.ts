@@ -224,9 +224,6 @@ async function fetchAndStoreMessages(
   if (!client) {
     return [];
   }
-  // The messages fetch is the session-entry chokepoint: any path that opens a
-  // session's transcript must also make its turns resolvable.
-  void ensureSessionTurnsLoaded(sessionId, store);
   // Initial and recovery fetches must not overtake the server-side
   // session.subscribe registration. The client returns an already-resolved
   // promise when no durable subscription is active, preserving fetch behavior
@@ -234,6 +231,11 @@ async function fetchAndStoreMessages(
   const readiness = client.getSessionSubscriptionReadiness(sessionId);
   await readiness;
   if (isActive && !isActive()) return [];
+  // The messages fetch is the session-entry chokepoint: any path that opens a
+  // session's transcript must also make its turns resolvable. Start it only
+  // after subscription acknowledgement so the REST snapshot cannot race the
+  // initial WebSocket subscription registration.
+  void ensureSessionTurnsLoaded(sessionId, store, { readiness });
   const seq = nextFetchSeq();
   const response = await requestSessionMessages(client, sessionId, readiness);
   if (isActive && !isActive()) return [];

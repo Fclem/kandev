@@ -7,7 +7,9 @@ import {
 } from "@/lib/state/slices/ui/quick-chat-sync";
 import { compareUserSettingsRevisions } from "@/lib/settings/user-settings-revision";
 import {
+  mergeTurnRows,
   parseTurnTimestamp,
+  reconcileActiveTurnAfterHydrationDraft,
   seedSettledSessionBoundaries,
 } from "@/lib/state/slices/session/turn-actions";
 import { deepMerge, mergeSessionMap, mergeLoadingState } from "./merge-strategies";
@@ -176,23 +178,34 @@ function bridgeSidebarViewsFromUserSettings(
  * not be cleared, and pre-existing non-force-merged markers are the client's
  * live state, not the snapshot's.
  */
-function clearHydratedRetiredActiveMarkers(
-  draft: Draft<AppState>,
-  state: HydrationState,
-  activeSessionId: string | null,
-  forceMergeSessionId: string | null,
-  preMergeActiveSessions: Set<string>,
-): void {
-  for (const sessionId in state.turns!.activeBySession) {
+type HydratedTurnMarkerContext = {
+  draft: Draft<AppState>;
+  turns: NonNullable<HydrationState["turns"]>;
+  activeSessionId: string | null;
+  forceMergeSessionId: string | null;
+  preMergeActiveSessions: Set<string>;
+  reconciledTurnSessions: Set<string>;
+};
+
+function clearHydratedRetiredActiveMarkers({
+  draft,
+  turns,
+  activeSessionId,
+  forceMergeSessionId,
+  preMergeActiveSessions,
+  reconciledTurnSessions,
+}: HydratedTurnMarkerContext): void {
+  for (const sessionId in turns.activeBySession) {
     const shouldForceMerge = forceMergeSessionId && sessionId === forceMergeSessionId;
     const skippedAsActive = !shouldForceMerge && sessionId === activeSessionId;
     if (skippedAsActive) continue;
+    if (reconciledTurnSessions.has(sessionId)) continue;
     if (!shouldForceMerge && preMergeActiveSessions.has(sessionId)) continue;
     const hydrated = draft.turns.activeBySession[sessionId];
     if (!hydrated) continue;
     const boundary = parseTurnTimestamp(draft.turns.settledBoundaryBySession[sessionId]);
     if (boundary === null) continue;
-    const hydratedTurn = state.turns!.bySession?.[sessionId]?.find((turn) => turn.id === hydrated);
+    const hydratedTurn = turns.bySession?.[sessionId]?.find((turn) => turn.id === hydrated);
     const started = parseTurnTimestamp(hydratedTurn?.started_at);
     if (started !== null && started <= boundary) {
       draft.turns.activeBySession[sessionId] = null;
@@ -209,21 +222,86 @@ function clearHydratedRetiredActiveMarkers(
  * pre-existing), and the merge's skip-as-active predicate must be mirrored
  * (active sessions keep their live state and marker).
  */
-function markHydratedTurnsLoaded(
+function mergeHydratedTurns(
   draft: Draft<AppState>,
-  state: HydrationState,
+  turns: NonNullable<HydrationState["turns"]>,
   activeSessionId: string | null,
   forceMergeSessionId: string | null,
-  preMergeSessions: Set<string>,
-): void {
-  for (const sessionId in state.turns!.bySession) {
+): Set<string> {
+  const reconciledTurnSessions = new Set<string>();
+  const preMergeActiveSessions = new Set(Object.keys(draft.turns.activeBySession));
+  for (const [sessionId, incoming] of Object.entries(turns.bySession ?? {})) {
     const shouldForceMerge = forceMergeSessionId && sessionId === forceMergeSessionId;
     const skippedAsActive = !shouldForceMerge && sessionId === activeSessionId;
     if (skippedAsActive) continue;
-    if (shouldForceMerge || !preMergeSessions.has(sessionId)) {
-      draft.turns.loadedBySession[sessionId] = true;
+
+    const target = draft.turns.bySession[sessionId];
+    // Preserve an existing non-active session's live list. Navigation uses the
+    // force flag when it owns the refresh; background hydration must not
+    // introduce a second merge policy for sessions already being edited.
+    if (target && !shouldForceMerge) continue;
+    if (target) {
+      mergeTurnRows(target, incoming);
+    } else {
+      draft.turns.bySession[sessionId] = [...incoming];
+    }
+    reconciledTurnSessions.add(sessionId);
+    draft.turns.loadedBySession[sessionId] = true;
+
+    // A pre-existing marker is live client state unless this is an explicit
+    // route refresh. New installs and forced refreshes derive the marker from
+    // the merged rows instead of trusting the snapshot's stale marker field.
+    if (shouldForceMerge || !preMergeActiveSessions.has(sessionId)) {
+      const hydrationEpoch = draft.turns.reconcileEpochBySession[sessionId] ?? 0;
+      reconcileActiveTurnAfterHydrationDraft(draft, sessionId, hydrationEpoch);
     }
   }
+  return reconciledTurnSessions;
+}
+
+function mergeHydratedActiveTurnMarkers(
+  draft: Draft<AppState>,
+  turns: NonNullable<HydrationState["turns"]>,
+  activeSessionId: string | null,
+  forceMergeSessionId: string | null,
+  reconciledTurnSessions: Set<string>,
+): void {
+  if (!turns.activeBySession) return;
+  const preMergeActiveSessions = new Set(Object.keys(draft.turns.activeBySession));
+  for (const [sessionId, activeTurnId] of Object.entries(turns.activeBySession)) {
+    const shouldForceMerge = forceMergeSessionId && sessionId === forceMergeSessionId;
+    const skippedAsActive = !shouldForceMerge && sessionId === activeSessionId;
+    if (skippedAsActive || reconciledTurnSessions.has(sessionId)) continue;
+    if (shouldForceMerge || !(sessionId in draft.turns.activeBySession)) {
+      draft.turns.activeBySession[sessionId] = activeTurnId;
+    }
+  }
+  clearHydratedRetiredActiveMarkers({
+    draft,
+    turns,
+    activeSessionId,
+    forceMergeSessionId,
+    preMergeActiveSessions,
+    reconciledTurnSessions,
+  });
+}
+
+function hydrateTurnState(
+  draft: Draft<AppState>,
+  turns: NonNullable<HydrationState["turns"]>,
+  activeSessionId: string | null,
+  forceMergeSessionId: string | null,
+): void {
+  const reconciledTurnSessions = turns.bySession
+    ? mergeHydratedTurns(draft, turns, activeSessionId, forceMergeSessionId)
+    : new Set<string>();
+  mergeHydratedActiveTurnMarkers(
+    draft,
+    turns,
+    activeSessionId,
+    forceMergeSessionId,
+    reconciledTurnSessions,
+  );
 }
 
 /**
@@ -278,32 +356,7 @@ function hydrateSession(
     seedHydrationSettledBoundaries(draft, state.taskSessions);
   }
   if (state.turns) {
-    if (state.turns.bySession) {
-      const preMergeSessions = new Set(Object.keys(draft.turns.bySession));
-      mergeSessionMap(
-        draft.turns.bySession,
-        state.turns.bySession,
-        activeSessionId,
-        forceMergeSessionId,
-      );
-      markHydratedTurnsLoaded(draft, state, activeSessionId, forceMergeSessionId, preMergeSessions);
-    }
-    if (state.turns.activeBySession) {
-      const preMergeActiveSessions = new Set(Object.keys(draft.turns.activeBySession));
-      mergeSessionMap(
-        draft.turns.activeBySession,
-        state.turns.activeBySession,
-        activeSessionId,
-        forceMergeSessionId,
-      );
-      clearHydratedRetiredActiveMarkers(
-        draft,
-        state,
-        activeSessionId,
-        forceMergeSessionId,
-        preMergeActiveSessions,
-      );
-    }
+    hydrateTurnState(draft, state.turns, activeSessionId, forceMergeSessionId);
   }
   if (state.taskSessionsByTask) deepMerge(draft.taskSessionsByTask, state.taskSessionsByTask);
   if (state.sessionAgentctl) {

@@ -63,6 +63,12 @@ const ENTRY_CASES = [
     expected: [{ messageId: "no-turn", durationSeconds: null, isLastPrompt: true }],
   },
   {
+    name: "treats an absent turn_id as no completion bound even when a turn is id 'undefined'",
+    messages: [message({ id: "no-turn-undefined" })],
+    turns: [turn({ id: "undefined", completed_at: "2026-01-01T00:00:05.000Z" })],
+    expected: [{ messageId: "no-turn-undefined", durationSeconds: null, isLastPrompt: true }],
+  },
+  {
     name: "uses a following prompt when turn id is absent or dangling",
     messages: [
       message({ id: "missing", created_at: CREATED_AT }),

@@ -42,7 +42,13 @@ function turnCompletionByPrompt(messages: PromptWithTimestamp[], turns: Turn[]) 
   return new Map(
     messages.map((message) => [
       `${message.session_id}:${message.id}`,
-      timestamp(turnsBySessionAndId.get(`${message.session_id}:${message.turn_id}`)?.completed_at),
+      // Absent turn_id must never match: interpolating it would collide with
+      // a turn literally id'd "undefined"/"null" in the same session.
+      message.turn_id
+        ? timestamp(
+            turnsBySessionAndId.get(`${message.session_id}:${message.turn_id}`)?.completed_at,
+          )
+        : null,
     ]),
   );
 }

@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { selectQuickChatHasUnseenIdle } from "./quick-chat-unseen-selectors";
+import type { StoreApi } from "zustand";
+import { maybeMarkQuickChatUnseenIdle } from "@/lib/ws/handlers/quick-chat-unseen";
+import type { AppState } from "@/lib/state/store";
 import { createAppStore } from "@/lib/state/store";
+import { selectQuickChatHasUnseenIdle } from "./quick-chat-unseen-selectors";
 type QuickChatWithUnseenMarkers = {
   unseenIdleByWorkspace: Record<string, Record<string, true>>;
 };
+const SESSION_ID = "session-1";
+const WORKSPACE_ID = "workspace-1";
+const SETTLED_AT = "2026-08-17T07:00:00Z";
 
 describe("quick chat unseen idle markers", () => {
   it("clears all markers when opening quick chat", () => {
@@ -11,11 +17,11 @@ describe("quick chat unseen idle markers", () => {
     store.setState({
       quickChat: {
         ...store.getState().quickChat,
-        unseenIdleByWorkspace: { "workspace-1": { "session-1": true } },
+        unseenIdleByWorkspace: { [WORKSPACE_ID]: { [SESSION_ID]: true } },
       } as never,
     });
 
-    store.getState().openQuickChat("session-1", "workspace-1");
+    store.getState().openQuickChat(SESSION_ID, WORKSPACE_ID);
 
     expect(
       (store.getState().quickChat as unknown as QuickChatWithUnseenMarkers).unseenIdleByWorkspace,
@@ -32,5 +38,66 @@ describe("quick chat unseen idle markers", () => {
     expect(selectQuickChatHasUnseenIdle(store.getState(), "workspace-a")).toBe(false);
     expect(selectQuickChatHasUnseenIdle(store.getState(), "workspace-b")).toBe(true);
     expect(selectQuickChatHasUnseenIdle(store.getState(), null)).toBe(false);
+  });
+});
+
+function settle(store: StoreApi<AppState>, sessionId: string, updatedAt: string) {
+  maybeMarkQuickChatUnseenIdle(store, sessionId, {
+    previousState: "RUNNING",
+    fallbackPreviousState: undefined,
+    newState: "IDLE",
+    updatedAt,
+  });
+}
+
+describe("quick chat unseen idle WebSocket scheduling", () => {
+  it("marks a closed quick chat after an active-to-settled transition", () => {
+    const store = createAppStore();
+    store.getState().addQuickChatSession(SESSION_ID, WORKSPACE_ID);
+
+    settle(store, SESSION_ID, SETTLED_AT);
+
+    expect(selectQuickChatHasUnseenIdle(store.getState(), WORKSPACE_ID)).toBe(true);
+  });
+
+  it("suppresses a completion observed while quick chat is open", () => {
+    const store = createAppStore();
+    store.getState().openQuickChat(SESSION_ID, WORKSPACE_ID);
+
+    settle(store, SESSION_ID, SETTLED_AT);
+    store.getState().closeQuickChat();
+    settle(store, SESSION_ID, SETTLED_AT);
+
+    expect(selectQuickChatHasUnseenIdle(store.getState(), WORKSPACE_ID)).toBe(false);
+  });
+
+  it("does not re-mark after a cleared duplicate completion", () => {
+    const store = createAppStore();
+    store.getState().addQuickChatSession(SESSION_ID, WORKSPACE_ID);
+    settle(store, SESSION_ID, SETTLED_AT);
+    store.getState().clearQuickChatUnseenIdle(SESSION_ID, WORKSPACE_ID);
+
+    settle(store, SESSION_ID, SETTLED_AT);
+
+    expect(selectQuickChatHasUnseenIdle(store.getState(), WORKSPACE_ID)).toBe(false);
+  });
+
+  it("does not mark a completion received before its tab is known", () => {
+    const store = createAppStore();
+    settle(store, SESSION_ID, SETTLED_AT);
+    store.getState().addQuickChatSession(SESSION_ID, WORKSPACE_ID);
+    settle(store, SESSION_ID, SETTLED_AT);
+
+    expect(selectQuickChatHasUnseenIdle(store.getState(), WORKSPACE_ID)).toBe(false);
+  });
+
+  it("does not mark a late completion for a removed quick chat", () => {
+    const store = createAppStore();
+    store.getState().addQuickChatSession(SESSION_ID, WORKSPACE_ID);
+    store.getState().removeQuickChatSession(SESSION_ID);
+
+    settle(store, SESSION_ID, SETTLED_AT);
+
+    expect(selectQuickChatHasUnseenIdle(store.getState(), WORKSPACE_ID)).toBe(false);
   });
 });

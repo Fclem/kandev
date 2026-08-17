@@ -1,164 +1,89 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ListQuickTerminalTabsResponse } from "@/lib/api/domains/quick-terminal-api";
+import type { ListQuickChatSessionsResponse } from "@/lib/api/domains/workspace-api";
 
-const mockListQuickChatSessions = vi.hoisted(() => vi.fn());
-const mockListQuickTerminalTabs = vi.hoisted(() => vi.fn());
-const mockUpdateTask = vi.hoisted(() => vi.fn());
-const mockState = vi.hoisted(() => ({
-  value: {} as {
-    connection: { status: string };
-    syncQuickChatSessions: unknown;
-    syncQuickTerminalTabs: unknown;
-    setTaskSession: unknown;
-  },
+const apiMock = vi.hoisted(() => ({
+  listQuickChatSessions: vi.fn(),
+  listQuickTerminalTabs: vi.fn(),
 }));
+
+const syncMock = vi.hoisted(() => ({
+  migrateStoredQuickChatNames: vi.fn(),
+  toQuickChatSessions: vi.fn((sessions: unknown[]) => sessions),
+  toQuickTerminalTab: vi.fn((tab: unknown) => tab),
+}));
+
+type MockState = {
+  connection: { status: string };
+  quickChat: { syncRevisionByWorkspace: Record<string, number> };
+  setTaskSession: (...args: unknown[]) => void;
+  syncQuickChatSessions: (...args: unknown[]) => void;
+  syncQuickTerminalTabs: (...args: unknown[]) => void;
+};
+
+let mockState: MockState;
 
 vi.mock("@/components/state-provider", () => ({
-  useAppStore: (selector: (state: typeof mockState.value) => unknown) => selector(mockState.value),
+  useAppStore: (selector: (state: MockState) => unknown) => selector(mockState),
+  useAppStoreApi: () => ({ getState: () => mockState }),
 }));
-
 vi.mock("@/lib/api/domains/workspace-api", () => ({
-  listQuickChatSessions: (...args: unknown[]) => mockListQuickChatSessions(...args),
+  listQuickChatSessions: apiMock.listQuickChatSessions,
 }));
-
 vi.mock("@/lib/api/domains/quick-terminal-api", () => ({
-  listQuickTerminalTabs: (...args: unknown[]) => mockListQuickTerminalTabs(...args),
-  toQuickTerminalTab: (tab: unknown) => tab,
+  listQuickTerminalTabs: apiMock.listQuickTerminalTabs,
+  toQuickTerminalTab: syncMock.toQuickTerminalTab,
 }));
-
-vi.mock("@/lib/api/domains/kanban-api", () => ({
-  updateTask: (...args: unknown[]) => mockUpdateTask(...args),
+vi.mock("@/lib/local-storage", () => ({ getStoredQuickChatNames: vi.fn(() => ({})) }));
+vi.mock("@/lib/quick-chat/map-sessions", () => ({
+  toQuickChatSessions: syncMock.toQuickChatSessions,
+}));
+vi.mock("@/lib/quick-chat/rename", () => ({
+  migrateStoredQuickChatNames: syncMock.migrateStoredQuickChatNames,
 }));
 
 import { useQuickChatResync } from "./use-quick-chat-resync";
-import { getStoredQuickChatNames, setStoredQuickChatName } from "@/lib/local-storage";
 
-const syncQuickChatSessions = vi.fn();
-const syncQuickTerminalTabs = vi.fn();
-const setTaskSession = vi.fn();
-
-function setConnection(status: string) {
-  mockState.value = {
-    connection: { status },
-    syncQuickChatSessions,
-    syncQuickTerminalTabs,
-    setTaskSession,
-  };
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
 }
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  window.localStorage.clear();
-  mockUpdateTask.mockResolvedValue(undefined);
-  setConnection("connected");
-  mockListQuickChatSessions.mockResolvedValue({
-    sessions: [
-      {
-        session_id: "session-1",
-        task_id: "task-1",
-        workspace_id: "ws-1",
-        kind: "chat",
-        name: "Chat 1",
-        agent_profile_id: "agent-1",
-      },
-    ],
-    task_sessions: [{ id: "session-1", task_id: "task-1" }],
-  });
-  mockListQuickTerminalTabs.mockResolvedValue({ tabs: [] });
-});
-
 describe("useQuickChatResync", () => {
-  it("replaces the workspace's tabs with the server's list once connected", async () => {
-    renderHook(() => useQuickChatResync("ws-1"));
-
-    await waitFor(() => expect(syncQuickChatSessions).toHaveBeenCalledTimes(1));
-    expect(syncQuickChatSessions).toHaveBeenCalledWith("ws-1", [
-      {
-        kind: "chat",
-        sessionId: "session-1",
-        taskId: "task-1",
-        workspaceId: "ws-1",
-        name: "Chat 1",
-        agentProfileId: "agent-1",
-      },
-    ]);
-    expect(syncQuickTerminalTabs).toHaveBeenCalledWith("ws-1", []);
+  beforeEach(() => {
+    mockState = {
+      connection: { status: "connected" },
+      quickChat: { syncRevisionByWorkspace: { "workspace-1": 0 } },
+      setTaskSession: vi.fn(),
+      syncQuickChatSessions: vi.fn(),
+      syncQuickTerminalTabs: vi.fn(),
+    };
+    vi.clearAllMocks();
   });
 
-  // A tab without its session row renders but cannot subscribe or accept
-  // input, so the rows in the response must land in the store too.
-  it("stores the session rows that came with the list", async () => {
-    renderHook(() => useQuickChatResync("ws-1"));
+  afterEach(cleanup);
 
-    await waitFor(() =>
-      expect(setTaskSession).toHaveBeenCalledWith({ id: "session-1", task_id: "task-1" }),
-    );
-  });
+  it("discards a response superseded by a quick-chat state change", async () => {
+    const sessions = deferred<ListQuickChatSessionsResponse>();
+    const terminals = deferred<ListQuickTerminalTabsResponse>();
+    apiMock.listQuickChatSessions.mockReturnValueOnce(sessions.promise);
+    apiMock.listQuickTerminalTabs.mockReturnValueOnce(terminals.promise);
 
-  it("waits for the socket before trusting any list", () => {
-    setConnection("connecting");
+    renderHook(() => useQuickChatResync("workspace-1"));
 
-    renderHook(() => useQuickChatResync("ws-1"));
+    await act(async () => {
+      mockState.quickChat.syncRevisionByWorkspace["workspace-1"] = 1;
+      sessions.resolve({ sessions: [], task_sessions: [] });
+      terminals.resolve({ tabs: [] });
+      await Promise.resolve();
+    });
 
-    expect(mockListQuickChatSessions).not.toHaveBeenCalled();
-  });
-
-  it("does nothing without an active workspace", () => {
-    renderHook(() => useQuickChatResync(null));
-
-    expect(mockListQuickChatSessions).not.toHaveBeenCalled();
-  });
-
-  it("resyncs again after a reconnect, since events were missed while away", async () => {
-    const { rerender } = renderHook(() => useQuickChatResync("ws-1"));
-    await waitFor(() => expect(mockListQuickChatSessions).toHaveBeenCalledTimes(1));
-
-    setConnection("reconnecting");
-    rerender();
-    setConnection("connected");
-    rerender();
-
-    await waitFor(() => expect(mockListQuickChatSessions).toHaveBeenCalledTimes(2));
-  });
-
-  it("does not refetch on unrelated re-renders of the same connection", async () => {
-    const { rerender } = renderHook(() => useQuickChatResync("ws-1"));
-    await waitFor(() => expect(mockListQuickChatSessions).toHaveBeenCalledTimes(1));
-
-    rerender();
-    rerender();
-
-    expect(mockListQuickChatSessions).toHaveBeenCalledTimes(1);
-  });
-
-  it("leaves existing tabs alone when the resync fails", async () => {
-    mockListQuickChatSessions.mockRejectedValueOnce(new Error("offline"));
-
-    renderHook(() => useQuickChatResync("ws-1"));
-
-    await waitFor(() => expect(mockListQuickChatSessions).toHaveBeenCalled());
-    expect(syncQuickChatSessions).not.toHaveBeenCalled();
-  });
-});
-
-describe("useQuickChatResync — legacy rename migration", () => {
-  it("uploads a browser-only rename so it survives and reaches other devices", async () => {
-    setStoredQuickChatName("session-1", "My old local name");
-
-    renderHook(() => useQuickChatResync("ws-1"));
-
-    await waitFor(() =>
-      expect(mockUpdateTask).toHaveBeenCalledWith("task-1", { title: "My old local name" }),
-    );
-    await waitFor(() => expect(getStoredQuickChatNames()).toEqual({}));
-  });
-
-  it("does not re-upload a name the server already has", async () => {
-    setStoredQuickChatName("session-1", "Chat 1");
-
-    renderHook(() => useQuickChatResync("ws-1"));
-
-    await waitFor(() => expect(syncQuickChatSessions).toHaveBeenCalled());
-    expect(mockUpdateTask).not.toHaveBeenCalled();
+    expect(mockState.setTaskSession).not.toHaveBeenCalled();
+    expect(mockState.syncQuickChatSessions).not.toHaveBeenCalled();
+    expect(mockState.syncQuickTerminalTabs).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,7 @@ const mockToast = vi.fn().mockReturnValue("toast-1");
 const mockUpdateToast = vi.fn();
 const mockRequest = vi.fn();
 const mockRemoveTaskSession = vi.fn();
+const mockRemoveQuickChatSession = vi.fn();
 const mockSetActiveSessionAuto = vi.fn();
 const mockClearActiveSession = vi.fn();
 const networkErrorMessage = "network down";
@@ -41,6 +42,7 @@ vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({
       removeTaskSession: mockRemoveTaskSession,
+      removeQuickChatSession: mockRemoveQuickChatSession,
     }),
   useAppStoreApi: () => ({
     getState: () => mockState,
@@ -107,6 +109,7 @@ describe("useSessionActions", () => {
     await waitFor(() => expect(onDeleted).toHaveBeenCalled());
     expect(mockRequest).toHaveBeenCalledWith("session.delete", { session_id: "s1" }, 15000);
     expect(mockRemoveTaskSession).toHaveBeenCalledWith("t1", "s1");
+    expect(mockRemoveQuickChatSession).toHaveBeenCalledWith("s1");
     expect(mockToast).toHaveBeenCalledWith({
       title: "Deleting session...",
       variant: "loading",

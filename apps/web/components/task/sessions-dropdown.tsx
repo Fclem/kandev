@@ -145,6 +145,7 @@ function useSessionLifecycleActions(
   taskId: string | null,
   loadSessions: (force?: boolean) => void,
 ) {
+  const removeQuickChatSession = useAppStore((state) => state.removeQuickChatSession);
   const handleResumeSession = useCallback(
     async (sessionId: string) => {
       if (!taskId) return;
@@ -170,12 +171,13 @@ function useSessionLifecycleActions(
       if (!client) return;
       try {
         await client.request("session.delete", { session_id: sessionId }, 15000);
+        removeQuickChatSession(sessionId);
         loadSessions(true);
       } catch (error) {
         console.error("Failed to delete session:", error);
       }
     },
-    [loadSessions],
+    [loadSessions, removeQuickChatSession],
   );
 
   const handleSetPrimary = useCallback(

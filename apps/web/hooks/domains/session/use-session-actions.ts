@@ -84,6 +84,7 @@ function useWsAction(): WsActionFn {
 export function useSessionActions({ sessionId, taskId, onDeleted }: SessionActionsArgs) {
   const wsAction = useWsAction();
   const removeTaskSession = useAppStore((state) => state.removeTaskSession);
+  const removeQuickChatSession = useAppStore((state) => state.removeQuickChatSession);
   const appStoreApi = useAppStoreApi();
 
   const setPrimary = useCallback(
@@ -146,10 +147,19 @@ export function useSessionActions({ sessionId, taskId, onDeleted }: SessionActio
       }
 
       removeTaskSession(taskId, sessionId);
+      removeQuickChatSession(sessionId);
       onDeleted?.();
       return true;
     },
-    [sessionId, taskId, wsAction, removeTaskSession, appStoreApi, onDeleted],
+    [
+      sessionId,
+      taskId,
+      wsAction,
+      removeTaskSession,
+      removeQuickChatSession,
+      appStoreApi,
+      onDeleted,
+    ],
   );
 
   return { setPrimary, stop, resume, remove };

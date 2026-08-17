@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useAppStore } from "@/components/state-provider";
+import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { listQuickChatSessions } from "@/lib/api/domains/workspace-api";
 import { listQuickTerminalTabs, toQuickTerminalTab } from "@/lib/api/domains/quick-terminal-api";
 import { getStoredQuickChatNames } from "@/lib/local-storage";
@@ -18,6 +18,7 @@ import { migrateStoredQuickChatNames } from "@/lib/quick-chat/rename";
  * Re-reading the list whenever the socket (re)connects closes that gap.
  */
 export function useQuickChatResync(workspaceId: string | null): void {
+  const store = useAppStoreApi();
   const connectionStatus = useAppStore((state) => state.connection.status);
   const syncQuickChatSessions = useAppStore((state) => state.syncQuickChatSessions);
   const syncQuickTerminalTabs = useAppStore((state) => state.syncQuickTerminalTabs);
@@ -32,11 +33,17 @@ export function useQuickChatResync(workspaceId: string | null): void {
     }
     if (!workspaceId || lastSyncedConnection.current === workspaceId) return;
     lastSyncedConnection.current = workspaceId;
+    const revision = store.getState().quickChat.syncRevisionByWorkspace[workspaceId] ?? 0;
 
     let cancelled = false;
     Promise.all([listQuickChatSessions(workspaceId), listQuickTerminalTabs(workspaceId)])
       .then(([response, terminalResponse]) => {
-        if (cancelled) return;
+        if (
+          cancelled ||
+          store.getState().quickChat.syncRevisionByWorkspace[workspaceId] !== revision
+        ) {
+          return;
+        }
         const sessions = toQuickChatSessions(response.sessions);
         // Store the session rows before the tabs. A tab without its row cannot
         // subscribe or accept input (useSession bails, requireSessionInputMode
@@ -58,5 +65,12 @@ export function useQuickChatResync(workspaceId: string | null): void {
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus, workspaceId, setTaskSession, syncQuickChatSessions, syncQuickTerminalTabs]);
+  }, [
+    connectionStatus,
+    workspaceId,
+    store,
+    setTaskSession,
+    syncQuickChatSessions,
+    syncQuickTerminalTabs,
+  ]);
 }

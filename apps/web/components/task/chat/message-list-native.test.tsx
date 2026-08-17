@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Message } from "@/lib/types/http";
 
@@ -373,5 +373,68 @@ describe("useScrollToMessage — root-scoped row lookup", () => {
     expect(roots[1].contains(scrollReceivers[1])).toBe(true);
     expect(roots[1].contains(scrollReceivers[0])).toBe(false);
     expect(rows).toHaveLength(2);
+  });
+});
+
+describe("useScrollToMessage — canceled-scroll landing", () => {
+  it("force-lands the alignment when the smooth scroll is canceled without moving", () => {
+    // Round-12 regression: the verifier must NOT exit on the first frame of
+    // movement (or no movement). A dockview restore that cancels the smooth
+    // scroll leaves the row misaligned; the verifier watches a bounded frame
+    // window and lands the requested alignment.
+    const frames: Array<() => void> = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    try {
+      const boxedHandle: { current: ScrollToMessageHandle | null } = { current: null };
+      const { container } = render(
+        <ScrollToMessageHarness
+          rows={["target"]}
+          onHandle={(next) => {
+            boxedHandle.current = next;
+          }}
+        />,
+      );
+      const handle = boxedHandle.current;
+      if (!handle) throw new Error("handle did not render");
+      const root = container.querySelector<HTMLElement>('[data-testid="scroll-to-message-root"]');
+      const target = container.querySelector("#msg-target");
+      if (!root || !target) throw new Error("harness did not render");
+      Object.defineProperty(root, "scrollTop", {
+        configurable: true,
+        writable: true,
+        value: 0,
+      });
+      Object.defineProperty(root, "getBoundingClientRect", {
+        configurable: true,
+        value: () => createRect(0, 400),
+      });
+      // The target sits 120px below the scrollport top and moves with scroll.
+      Object.defineProperty(target, "getBoundingClientRect", {
+        configurable: true,
+        value: () => createRect(120 - root.scrollTop, 20),
+      });
+
+      expect(handle("target", { align: "start" })).toBe(true);
+
+      // The smooth scroll never moves the container on its own; the verifier
+      // must land the alignment within its bounded window.
+      for (let i = 0; i < 10; i += 1) {
+        act(() => {
+          const pending = frames.splice(0);
+          for (const frame of pending) frame();
+        });
+      }
+      expect(root.scrollTop).toBe(120);
+    } finally {
+      vi.unstubAllGlobals();
+      scrollIntoView.mockRestore();
+    }
   });
 });

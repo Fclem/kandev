@@ -406,24 +406,34 @@ export function useScrollToMessage(
         // A dockview panel re-show (the prompt-history jump activates the
         // chat) makes SessionPanelContent restore its saved scrollTop in a
         // rAF that can cancel the scroll, and some runtimes no-op a smooth
-        // scrollIntoView entirely. Verify the container actually moved after
-        // a couple of frames and force-land the alignment when it did not.
-        const before = container.scrollTop;
+        // scrollIntoView entirely. Watch a bounded frame window: follow an
+        // in-progress animation toward the target, and force-land the
+        // alignment whenever the container settles misaligned (movement
+        // stopped short or never started). Exiting on the FIRST movement
+        // would miss a cancel-then-settle-misaligned case.
         let frames = 0;
+        let lastAbsDelta = Infinity;
         const verify = () => {
           frames += 1;
-          if (frames > 3 || !container.isConnected) return;
-          if (container.scrollTop !== before) return; // animation in progress
+          if (frames > 30 || !container.isConnected) return;
           const delta = alignStart
             ? el.getBoundingClientRect().top - container.getBoundingClientRect().top - margin
             : el.getBoundingClientRect().top +
               el.getBoundingClientRect().height / 2 -
               (container.getBoundingClientRect().top +
                 container.getBoundingClientRect().height / 2);
-          if (Math.abs(delta) > 2) {
-            container.scrollTop += delta;
+          const absDelta = Math.abs(delta);
+          if (absDelta <= 2) return; // aligned
+          if (absDelta < lastAbsDelta) {
+            // Animation still moving toward the target — keep watching.
+            lastAbsDelta = absDelta;
+            requestAnimationFrame(verify);
             return;
           }
+          // Settled (or never moved): the scroll was canceled/no-op'd — land
+          // the requested alignment and keep verifying the landing.
+          container.scrollTop += delta;
+          lastAbsDelta = Infinity;
           requestAnimationFrame(verify);
         };
         requestAnimationFrame(verify);

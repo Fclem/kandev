@@ -16,6 +16,7 @@ const RFC3339_PATTERN =
 
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
+/** Whether the year is a leap year (proleptic Gregorian calendar). */
 function isLeapYear(year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
@@ -88,6 +89,7 @@ function isAtOrBeforeBoundary(
   return started <= boundary;
 }
 
+/** Whether the session state is settled — no agent work in progress. */
 export function isSettledSessionState(state: string): boolean {
   return SETTLED_SESSION_STATES.has(state);
 }
@@ -241,6 +243,10 @@ export function shouldApplyTurnUpdate(existing: Turn, incoming: Turn): boolean {
 
 export function buildTurnActions(set: ImmerSet) {
   return {
+    /**
+     * Upserts a turn row, rejecting stale/out-of-order updates via
+     * shouldApplyTurnUpdate and preserving an existing completion.
+     */
     addTurn: (turn: Parameters<SessionSlice["addTurn"]>[0]) =>
       set((draft) => {
         const sessionId = turn.session_id;
@@ -294,10 +300,16 @@ export function buildTurnActions(set: ImmerSet) {
           draft.turns.activeBySession[sessionId] = null;
         }
       }),
+    /** Records that the session's full persisted turn history is in the store. */
     markTurnsLoaded: (sessionId: string) =>
       set((draft) => {
         draft.turns.loadedBySession[sessionId] = true;
       }),
+    /**
+     * Reconciles the active-turn marker after a full REST hydration, applying
+     * the settled-session rule and rejecting hydrations that started before
+     * an authoritative clear (epoch mismatch).
+     */
     reconcileActiveTurnAfterHydration: (sessionId: string, hydrationEpoch: number) =>
       set((draft) => {
         applyActiveTurnReconciliation(draft, sessionId, hydrationEpoch);

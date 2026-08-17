@@ -380,6 +380,7 @@ export type AppState = KanbanSlice & {
     messages: Message[],
     meta?: { hasMore?: boolean; oldestCursor?: string | null },
   ) => void;
+  /** Upserts a turn row, rejecting stale updates (see shouldApplyTurnUpdate). */
   addTurn: (turn: Turn) => void;
   completeTurn: (
     sessionId: string,
@@ -388,8 +389,11 @@ export type AppState = KanbanSlice & {
     metadata?: Record<string, unknown>,
     updatedAt?: string,
   ) => void;
+  /** Marks a turn as the session's active turn (or null to clear it). */
   setActiveTurn: (sessionId: string, turnId: string | null) => void;
+  /** Reconciles the active-turn marker after REST hydration, epoch-guarded. */
   reconcileActiveTurnAfterHydration: (sessionId: string, hydrationEpoch: number) => void;
+  /** Records that the session's full persisted turn history is in the store. */
   markTurnsLoaded: (sessionId: string) => void;
   updateMessage: (message: Message) => void;
   removeMessage: (sessionId: string, messageId: string) => void;

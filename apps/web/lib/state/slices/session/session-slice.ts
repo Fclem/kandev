@@ -154,6 +154,12 @@ function mergeTaskSession(existing: TaskSession, incoming: TaskSession): TaskSes
 // isSettledSessionState); this file must use the shared predicate so every
 // settled-boundary path — hydration seeding, session updates, and the WS
 // turn guard — stays on one definition.
+/**
+ * Retires stale active-turn markers and advances the settled boundary when a
+ * session update reports a settled state: any turn started at/before the
+ * boundary can never be active again (delayed WS start, stale hydration, or
+ * a force-merged snapshot naming it are all rejected).
+ */
 function reconcileActiveTurnForIdleSession(draft: SessionSliceState, session: TaskSession): void {
   if (!isSettledSessionState(session.state)) return;
   const turns = draft.turns.bySession[session.id] ?? [];
@@ -534,6 +540,11 @@ function buildTaskSessionActions(set: ImmerSet) {
           if (match) match.last_read_message_id = lastReadMessageId;
         }
       }),
+    /**
+     * Removes a session and all its per-session state: task session rows,
+     * messages, turns, reconciliation maps (loaded/epoch/boundary), and the
+     * cascaded runtime buffers.
+     */
     removeTaskSession: (taskId: string, sessionId: string) =>
       set((draft) => {
         delete draft.taskSessions.items[sessionId];

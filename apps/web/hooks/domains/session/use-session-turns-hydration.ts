@@ -28,24 +28,6 @@ export function clearInFlightTurnsLoadForTest(): void {
 }
 
 /**
- * Ensures the store holds this session's FULL persisted turn history.
- *
- * The boot/SSR state hydrates turns only for the page-load active session;
- * switching to another session fetched its messages but never its turns, so
- * every message of that session resolved to `turn = null` and the debug
- * dialog showed `turn_metadata: null` (and turn-derived UI like agent status
- * stayed empty) even though the turns exist server-side with metadata.
- *
- * Completion is recorded in `turns.loadedBySession[sessionId]`, NOT by array
- * presence: WS `session.turn.*` events seed individual live turns without the
- * history, so a non-empty `bySession` list must never suppress the full
- * hydration. The marker is set even when the REST list is empty, so sessions
- * without turns are fetched exactly once; it is cleared only by session
- * removal (the store slice deletes it) or not set at all on failure, so a
- * failed fetch is retried on the next message fetch. Enrichment only — never
- * delays or fails message loading.
- */
-/**
  * One hydration attempt: fetch the session's full persisted turn history and
  * merge it into the store. Returns true on success (marker set) and false on
  * a transient failure the caller may retry.
@@ -92,6 +74,26 @@ async function fetchAndReconcileSessionTurns(
   }
 }
 
+/**
+ * Ensures the store holds this session's FULL persisted turn history.
+ *
+ * The boot/SSR state hydrates turns only for the page-load active session;
+ * switching to another session fetched its messages but never its turns, so
+ * every message of that session resolved to `turn = null` and the debug
+ * dialog showed `turn_metadata: null` (and turn-derived UI like agent status
+ * stayed empty) even though the turns exist server-side with metadata.
+ *
+ * Completion is recorded in `turns.loadedBySession[sessionId]`, NOT by array
+ * presence: WS `session.turn.*` events seed individual live turns without the
+ * history, so a non-empty `bySession` list must never suppress the full
+ * hydration. The marker is set even when the REST list is empty, so sessions
+ * without turns are fetched exactly once; it is cleared only by session
+ * removal (the store slice deletes it) or not set at all on failure.
+ * Transient failures are retried with bounded backoff inside this call
+ * (see fetchAndReconcileSessionTurns); after exhaustion the marker stays
+ * unset so the next natural trigger retries. Enrichment only — never delays
+ * or fails message loading.
+ */
 export async function ensureSessionTurnsLoaded(
   sessionId: string,
   store: ReturnType<typeof useAppStoreApi>,

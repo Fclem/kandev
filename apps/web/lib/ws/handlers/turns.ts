@@ -25,6 +25,7 @@ function completePendingToolCalls(store: StoreApi<AppState>, sessionId: string):
   }
 }
 
+/** Registers the session.turn.* WebSocket handlers (started/completed) against the store. */
 export function registerTurnsHandlers(
   store: StoreApi<AppState>,
   messageScheduler?: Pick<MessageUpdateScheduler, "flush">,

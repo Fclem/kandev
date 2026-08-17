@@ -228,6 +228,7 @@ export type SessionSliceActions = {
     meta: { hasMore?: boolean; isLoading?: boolean; oldestCursor?: string | null },
   ) => void;
   setMessagesLoading: (sessionId: string, loading: boolean) => void;
+  /** Upserts a turn row, rejecting stale updates (see shouldApplyTurnUpdate). */
   addTurn: (turn: Turn) => void;
   completeTurn: (
     sessionId: string,
@@ -237,6 +238,7 @@ export type SessionSliceActions = {
     /** updated_at from the event payload; guards stale re-deliveries. */
     updatedAt?: string,
   ) => void;
+  /** Marks a turn as the session's active turn (or null to clear it). */
   setActiveTurn: (sessionId: string, turnId: string | null) => void;
   /**
    * Establishes (or clears) the active-turn marker after a full REST

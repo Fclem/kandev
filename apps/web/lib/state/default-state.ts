@@ -243,6 +243,7 @@ function mergeAgentReviewArtifacts(initialState: HydrationState) {
   };
 }
 
+/** Merges the GitHub slices for initial (SSR/boot) hydration. */
 function mergeGitHubState(initialState: HydrationState) {
   return {
     githubStatus: { ...defaultState.githubStatus, ...initialState.githubStatus },
@@ -281,6 +282,11 @@ function mergeTurnsState(
   return { ...merged, loadedBySession, settledBoundaryBySession };
 }
 
+/**
+ * Builds the full default state from the SSR/boot hydration payload, merging
+ * per-slice (kanban, turns, settings, ...) so partial payloads never clobber
+ * the client's live defaults.
+ */
 export function mergeInitialState(initialState?: HydrationState): DefaultState {
   if (!initialState) return defaultState;
   return {

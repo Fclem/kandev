@@ -215,6 +215,7 @@ function buildResourceState(p: BuildSessionPageStateParams) {
   };
 }
 
+/** Builds the session-page hydration slice (task sessions, turns, models) for the page's task. */
 function buildSessionState(p: BuildSessionPageStateParams) {
   const { task, sessionId, allSessions, activeSession, turns } = p;
   // Prefer the full active session payload (with agent_profile_snapshot) over

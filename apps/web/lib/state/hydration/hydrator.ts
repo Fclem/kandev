@@ -133,6 +133,7 @@ function shouldHydrateUserSettings(
   return order === null ? !current.loaded : order >= 0;
 }
 
+/** Applies the server-side sidebar view preferences onto the draft (normalizing legacy view shapes). */
 function bridgeSidebarViewsFromUserSettings(
   draft: Draft<AppState>,
   userSettings: Partial<AppState["userSettings"]>,

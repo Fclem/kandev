@@ -625,6 +625,7 @@ function pickActiveSubagentCount(payload: any, existing: TaskSession): number {
     : (existing.active_subagent_count ?? 0);
 }
 
+/** Prefers the event's steering-support flag, falling back to the existing session value. */
 function pickSupportsSteering(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload: any,
@@ -635,6 +636,11 @@ function pickSupportsSteering(
     : existing.supports_steering;
 }
 
+/**
+ * Applies a workspace-sources adoption event: updates the session's
+ * workspace path and records the server-issued adoption boundary (WS envelope
+ * timestamp) so pre-adoption turns can never become active again.
+ */
 function handleWorkspaceSourcesUpdated(
   store: StoreApi<AppState>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -695,6 +701,7 @@ function handleQueueStatusChangedMessage(
   store.getState().setQueueEntries(payload.session_id, entries, { count, max, mergeEnabled });
 }
 
+/** Registers the task-session WebSocket handlers (state, messages, workspace sources, queue). */
 export function registerTaskSessionHandlers(store: StoreApi<AppState>): WsHandlers {
   return {
     "message.queue.status_changed": (message) =>

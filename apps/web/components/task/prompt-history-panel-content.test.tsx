@@ -177,6 +177,19 @@ describe("PromptHistoryPanelContent — rows and test IDs", () => {
     expect(screen.getByTestId(`${JUMP_TEST_ID}-1`)).toBeTruthy();
   });
 
+  it("styles the prompt like the transcript user bubble with lighter padding", () => {
+    messagesBySession[SESSION_A] = [message({ content: "bubbled prompt" })];
+
+    render(<PromptHistoryPanelContent />);
+
+    const bubble = row(0).querySelector(".rounded-2xl");
+    expect(bubble).toBeTruthy();
+    expect(bubble?.classList.contains("bg-primary/30")).toBe(true);
+    expect(bubble?.classList.contains("px-3")).toBe(true);
+    expect(bubble?.classList.contains("py-1.5")).toBe(true);
+    expect(bubble?.textContent).toContain("bubbled prompt");
+  });
+
   it("renders the empty state when the session has no user prompts", () => {
     render(<PromptHistoryPanelContent />);
 

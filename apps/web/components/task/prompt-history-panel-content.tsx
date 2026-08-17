@@ -113,18 +113,22 @@ function PromptHistoryRow({
         <IconNavigation size={16} />
       </Button>
       <div className="min-w-0 flex-1">
-        <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
-          {entry.content}
-        </span>
-        {expanded && (
-          <div
-            data-testid={`prompt-history-expanded-box-${index}`}
-            className="overflow-y-auto whitespace-normal"
-            style={{ maxHeight }}
-          >
+        {/* Same bubble as the transcript's user message (rounded-2xl
+            bg-primary/30, inherited font) with lighter padding. */}
+        <div className="overflow-hidden rounded-2xl bg-primary/30 px-3 py-1.5">
+          <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
             {entry.content}
-          </div>
-        )}
+          </span>
+          {expanded && (
+            <div
+              data-testid={`prompt-history-expanded-box-${index}`}
+              className="overflow-y-auto whitespace-normal"
+              style={{ maxHeight }}
+            >
+              {entry.content}
+            </div>
+          )}
+        </div>
       </div>
       <time
         dateTime={entry.sentAt}

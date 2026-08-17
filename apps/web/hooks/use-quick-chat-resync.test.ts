@@ -72,6 +72,7 @@ const WORKSPACE_ID = "workspace-1";
 const EMPTY_SESSIONS_RESPONSE = { sessions: [], task_sessions: [] };
 const EMPTY_TABS_RESPONSE = { tabs: [] };
 
+// eslint-disable-next-line max-lines-per-function -- resync scenarios share one connection fixture.
 describe("useQuickChatResync", () => {
   beforeEach(() => {
     mockState = {
@@ -117,6 +118,19 @@ describe("useQuickChatResync", () => {
     });
 
     await waitFor(() => expect(mockState.syncQuickChatSessions).toHaveBeenCalledTimes(1));
+    expect(mockState.syncQuickTerminalTabs).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a snapshot when the workspace has no revision entry yet", async () => {
+    mockState.quickChat.syncRevisionByWorkspace = {};
+    apiMock.listQuickChatSessions.mockResolvedValueOnce(EMPTY_SESSIONS_RESPONSE);
+    apiMock.listQuickTerminalTabs.mockResolvedValueOnce(EMPTY_TABS_RESPONSE);
+
+    renderHook(() => useQuickChatResync(WORKSPACE_ID));
+
+    await waitFor(() => expect(mockState.syncQuickChatSessions).toHaveBeenCalledTimes(1));
+
+    expect(apiMock.listQuickChatSessions).toHaveBeenCalledTimes(1);
     expect(mockState.syncQuickTerminalTabs).toHaveBeenCalledTimes(1);
   });
 
@@ -189,5 +203,38 @@ describe("useQuickChatResync", () => {
 
     expect(apiMock.listQuickChatSessions.mock.calls.length).toBe(4);
     expect(mockState.syncQuickChatSessions).not.toHaveBeenCalled();
+  });
+
+  it("starts a fresh retry budget after reconnecting", async () => {
+    let phase: "first" | "second" = "first";
+    let requestsInPhase = 0;
+    apiMock.listQuickChatSessions.mockImplementation(() => {
+      requestsInPhase += 1;
+      const response = Promise.resolve(EMPTY_SESSIONS_RESPONSE);
+      if (phase === "first" || requestsInPhase === 1) {
+        queueMicrotask(() => {
+          mockState.quickChat.syncRevisionByWorkspace[WORKSPACE_ID] += 1;
+        });
+      }
+      return response;
+    });
+    apiMock.listQuickTerminalTabs.mockResolvedValue(EMPTY_TABS_RESPONSE);
+
+    const rendered = renderHook(() => useQuickChatResync(WORKSPACE_ID));
+    await waitFor(() => expect(apiMock.listQuickChatSessions).toHaveBeenCalledTimes(4));
+
+    act(() => {
+      mockState.connection.status = "disconnected";
+      rendered.rerender();
+    });
+    phase = "second";
+    requestsInPhase = 0;
+    act(() => {
+      mockState.connection.status = "connected";
+      rendered.rerender();
+    });
+
+    await waitFor(() => expect(mockState.syncQuickChatSessions).toHaveBeenCalledTimes(1));
+    expect(apiMock.listQuickChatSessions).toHaveBeenCalledTimes(6);
   });
 });

@@ -52,13 +52,14 @@ function MobileQuickChatButton({
 }) {
   const { t } = useTranslation();
   const dot = useAppStore((state) => selectQuickChatHasUnseenIdle(state, workspaceId));
+  const quickChatLabel = t(dot ? "sidebar:quickChatUnseen" : "sidebar:quickChat");
   return (
     <Button
       variant="outline"
       size="icon-lg"
       onClick={onClick}
       className="!size-11 cursor-pointer"
-      aria-label={t("sidebar:quickChat")}
+      aria-label={quickChatLabel}
       data-testid="mobile-quick-chat-button"
     >
       <span className="relative flex">

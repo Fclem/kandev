@@ -79,7 +79,7 @@ export async function sendQuickChatMessage(dialog: Locator, page: Page, text: st
     await editor.click({ timeout: 1_000 });
     await editor.fill(text, { timeout: 1_000 });
     await expect(editor).toHaveText(text, { timeout: 1_000 });
-    await dialog.getByTestId("submit-message-button").click({ timeout: 1_000 });
-    await expect(editor).toHaveText("", { timeout: 2_000 });
   }).toPass({ timeout: 30_000, intervals: [250, 500, 1_000] });
+  await dialog.getByTestId("submit-message-button").click({ timeout: 1_000 });
+  await expect(editor).toHaveText("", { timeout: 2_000 });
 }

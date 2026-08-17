@@ -166,6 +166,9 @@ function TabletQuickActions({ workspaceId }: { workspaceId?: string }) {
   const quickChatHasUnseenIdle = useAppStore((state) =>
     selectQuickChatHasUnseenIdle(state, workspaceId),
   );
+  const quickChatLabel = t(
+    quickChatHasUnseenIdle ? "sidebar:quickChatUnseen" : "sidebar:quickChat",
+  );
   const handleOpenQuickTerminal = useQuickTerminalLauncher(workspaceId);
   if (!workspaceId) return null;
 
@@ -186,7 +189,7 @@ function TabletQuickActions({ workspaceId }: { workspaceId?: string }) {
         size="icon-lg"
         onClick={handleOpenQuickChat}
         className="!size-11 cursor-pointer"
-        aria-label={t("sidebar:quickChat")}
+        aria-label={quickChatLabel}
         data-testid="tablet-quick-chat-button"
       >
         <span className="relative flex">

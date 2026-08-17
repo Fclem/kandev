@@ -71,6 +71,7 @@
   "queuedPromptCount_one": "{{count}} 條排隊提示",
   "queuedPromptCount_other": "{{count}} 條排隊提示",
   "quickChat": "快速聊天",
+  "quickChatUnseen": "快速聊天，有新回覆",
   "quickTerminal": "快速終端",
   "quickChatTerminals": "終端",
   "quickChatNewAgent": "新建代理程式",

@@ -182,6 +182,9 @@ export function AppSidebarNewTaskItem({ collapsed }: AppSidebarNewTaskItemProps)
   const quickChatHasUnseenIdle = useAppStore((state) =>
     selectQuickChatHasUnseenIdle(state, workspaceId),
   );
+  const quickChatLabel = t(
+    quickChatHasUnseenIdle ? "sidebar:quickChatUnseen" : "sidebar:quickChat",
+  );
   const handleOpenQuickTerminal = useQuickTerminalLauncher(workspaceId);
   const [open, setOpen] = useState(false);
   const isImproveWorkspace = activeWorkspace?.name === IMPROVE_KANDEV_WORKSPACE_NAME;
@@ -236,7 +239,7 @@ export function AppSidebarNewTaskItem({ collapsed }: AppSidebarNewTaskItemProps)
             />
             <RowActionButton
               icon={IconMessageCircle}
-              label={t("sidebar:quickChat")}
+              label={quickChatLabel}
               testId="sidebar-quick-chat-shortcut"
               onClick={handleOpenQuickChat}
               dot={quickChatHasUnseenIdle}

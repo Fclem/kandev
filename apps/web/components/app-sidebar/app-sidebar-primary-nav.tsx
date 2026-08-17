@@ -25,6 +25,9 @@ export function AppSidebarPrimaryNav({ collapsed }: AppSidebarPrimaryNavProps) {
   const quickChatHasUnseenIdle = useAppStore((state) =>
     selectQuickChatHasUnseenIdle(state, workspaceId),
   );
+  const quickChatLabel = t(
+    quickChatHasUnseenIdle ? "sidebar:quickChatUnseen" : "sidebar:quickChat",
+  );
   const homeHref = mode === "unknown" ? undefined : homeDestinationHref({ workspaceId, inOffice });
 
   return (
@@ -51,7 +54,7 @@ export function AppSidebarPrimaryNav({ collapsed }: AppSidebarPrimaryNavProps) {
       {workspaceId && collapsed && (
         <AppSidebarNavItem
           icon={IconMessageCircle}
-          label={t("sidebar:quickChat")}
+          label={quickChatLabel}
           onClick={handleOpenQuickChat}
           collapsed={collapsed}
           dot={quickChatHasUnseenIdle}

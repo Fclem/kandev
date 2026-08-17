@@ -1,6 +1,7 @@
 import type { Draft } from "immer";
 import { getQuickChatSetupSessionId } from "./quick-chat-session";
 import {
+  clearMarker,
   closeQuickChatSession,
   pruneStaleSettledLedger,
   reconcileQuickChatSessions,
@@ -134,8 +135,11 @@ export function buildQuickChatActions(set: ImmerSet) {
       set((draft) => {
         const session = draft.quickChat.sessions.find((item) => item.sessionId === sessionId);
         if (!session || session.workspaceId !== workspaceId) return;
-        const markers = draft.quickChat.unseenIdleByWorkspace[workspaceId];
-        if (markers) delete markers[sessionId];
+        draft.quickChat.unseenIdleByWorkspace = clearMarker(
+          draft.quickChat.unseenIdleByWorkspace,
+          workspaceId,
+          sessionId,
+        );
         draft.quickChat.activeSessionId = sessionId;
         draft.quickChat.activeKind = "conversation";
       }),
@@ -180,11 +184,11 @@ export function buildQuickChatActions(set: ImmerSet) {
           draft.quickChat.unseenIdleByWorkspace = {};
           return;
         }
-        const markers = draft.quickChat.unseenIdleByWorkspace[workspaceId];
-        if (!markers) return;
-        delete markers[sessionId];
-        if (Object.keys(markers).length === 0)
-          delete draft.quickChat.unseenIdleByWorkspace[workspaceId];
+        draft.quickChat.unseenIdleByWorkspace = clearMarker(
+          draft.quickChat.unseenIdleByWorkspace,
+          workspaceId,
+          sessionId,
+        );
       }),
     recordQuickChatSettled: (sessionId: string, updatedAt: string) => {
       let recorded = false;

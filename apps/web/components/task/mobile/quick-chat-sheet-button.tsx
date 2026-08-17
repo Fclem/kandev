@@ -14,12 +14,14 @@ export function QuickChatSheetButton({
 }) {
   const { t } = useTranslation();
   const hasUnseenIdle = useAppStore((state) => selectQuickChatHasUnseenIdle(state, workspaceId));
+  const quickChatLabel = t(hasUnseenIdle ? "sidebar:quickChatUnseen" : "sidebar:quickChat");
   return (
     <Button
       size="sm"
       variant="outline"
       className="h-7 gap-1 cursor-pointer"
       onClick={onClick}
+      aria-label={quickChatLabel}
       data-testid="mobile-sheet-quick-chat"
     >
       <span className="relative flex">

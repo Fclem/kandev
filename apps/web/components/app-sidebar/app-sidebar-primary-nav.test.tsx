@@ -12,6 +12,7 @@ const state = {
   quickChat: { unseenIdleByWorkspace: {} as Record<string, Record<string, true>> },
 };
 const QUICK_CHAT_LABEL = "Quick Chat";
+const QUICK_CHAT_UNSEEN_LABEL = "Quick Chat, new response";
 let mode: "office" | "kanban" | "unknown" = "kanban";
 let pathname = "/";
 
@@ -71,7 +72,7 @@ describe("AppSidebarPrimaryNav", () => {
   it("renders an unseen marker on the collapsed Quick Chat rail entry", () => {
     state.quickChat.unseenIdleByWorkspace = { "ws-1": { "session-1": true } };
     renderNav(true);
-    const quickChat = screen.getByRole("button", { name: QUICK_CHAT_LABEL });
+    const quickChat = screen.getByRole("button", { name: QUICK_CHAT_UNSEEN_LABEL });
 
     expect(quickChat.querySelector('[data-testid="quick-chat-unseen-dot"]')).not.toBeNull();
   });

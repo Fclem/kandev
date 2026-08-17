@@ -2,7 +2,7 @@ import { getStoredQuickChatNames } from "@/lib/local-storage";
 import { isQuickChatSetupSessionId } from "./quick-chat-session";
 import type { QuickChatSession, QuickChatState, QuickTerminalTab } from "./types";
 
-const SETTLED_LEDGER_RETENTION_MS = 60 * 60 * 1000;
+const QUICK_CHAT_LIFECYCLE_RETENTION_MS = 60 * 60 * 1000;
 const SETTLED_LEDGER_MAX_ENTRIES = 500;
 
 /** Applies locally stored tab renames over a server-provided session list. */
@@ -21,7 +21,7 @@ export function pruneStaleSettledLedger(
   const retained = Object.entries(bySession)
     .filter(([, updatedAt]) => {
       const timestamp = Date.parse(updatedAt);
-      return Number.isFinite(timestamp) && now - timestamp <= SETTLED_LEDGER_RETENTION_MS;
+      return Number.isFinite(timestamp) && now - timestamp <= QUICK_CHAT_LIFECYCLE_RETENTION_MS;
     })
     .sort(([, left], [, right]) => Date.parse(right) - Date.parse(left))
     .slice(0, SETTLED_LEDGER_MAX_ENTRIES);
@@ -35,7 +35,7 @@ function pruneTombstones(
   return Object.fromEntries(
     Object.entries(tombstones).filter(([, tombstone]) => {
       const timestamp = Date.parse(tombstone.tombstonedAt);
-      return Number.isFinite(timestamp) && now - timestamp <= SETTLED_LEDGER_RETENTION_MS;
+      return Number.isFinite(timestamp) && now - timestamp <= QUICK_CHAT_LIFECYCLE_RETENTION_MS;
     }),
   );
 }
@@ -63,7 +63,7 @@ function withRevision(state: QuickChatState, workspaceId: string): QuickChatStat
   };
 }
 
-function clearMarker(
+export function clearMarker(
   byWorkspace: QuickChatState["unseenIdleByWorkspace"],
   workspaceId: string,
   sessionId: string,
@@ -180,8 +180,9 @@ export function mergeHydratedQuickChatSessions(
   state: QuickChatState,
   sessions: QuickChatSession[],
 ): QuickChatState {
+  const tombstonedSessions = pruneTombstones(state.tombstonedSessions);
   const hydrated = applyStoredQuickChatNames(sessions).filter(
-    (session) => !state.tombstonedSessions[session.sessionId],
+    (session) => !tombstonedSessions[session.sessionId],
   );
   const existingIds = new Set(state.sessions.map((session) => session.sessionId));
   const added = hydrated.filter((session) => !existingIds.has(session.sessionId));
@@ -189,6 +190,7 @@ export function mergeHydratedQuickChatSessions(
     ...state,
     sessions: [...state.sessions, ...added],
     sessionOwnership: indexSessionOwnership(state.sessionOwnership, added),
+    tombstonedSessions,
   };
 }
 

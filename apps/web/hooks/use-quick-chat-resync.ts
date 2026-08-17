@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { listQuickChatSessions } from "@/lib/api/domains/workspace-api";
 import { listQuickTerminalTabs, toQuickTerminalTab } from "@/lib/api/domains/quick-terminal-api";
@@ -10,6 +10,7 @@ import { migrateStoredQuickChatNames } from "@/lib/quick-chat/rename";
 
 /** How many times a resync may refetch after observing a newer revision. */
 const MAX_RESYNC_RETRIES = 3;
+const RESYNC_RETRY_DELAY_MS = 50;
 
 /**
  * Whether a reconnect snapshot is older than the live row. Parses both
@@ -46,7 +47,6 @@ export function useQuickChatResync(workspaceId: string | null): void {
   const setTaskSession = useAppStore((state) => state.setTaskSession);
   // Resync once per connection, not on every unrelated status re-render.
   const lastSyncedConnection = useRef<string | null>(null);
-  const [resyncAttempt, retryResync] = useReducer((attempt: number) => attempt + 1, 0);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -55,40 +55,53 @@ export function useQuickChatResync(workspaceId: string | null): void {
     }
     if (!workspaceId || lastSyncedConnection.current === workspaceId) return;
     lastSyncedConnection.current = workspaceId;
-    const revision = store.getState().quickChat.syncRevisionByWorkspace[workspaceId] ?? 0;
 
     let cancelled = false;
-    Promise.all([listQuickChatSessions(workspaceId), listQuickTerminalTabs(workspaceId)])
-      .then(([response, terminalResponse]) => {
-        if (cancelled) return;
-        if (store.getState().quickChat.syncRevisionByWorkspace[workspaceId] !== revision) {
-          if (resyncAttempt < MAX_RESYNC_RETRIES) {
-            lastSyncedConnection.current = null;
-            retryResync();
+    const resync = async () => {
+      let retryCount = 0;
+      while (!cancelled) {
+        const revision = store.getState().quickChat.syncRevisionByWorkspace[workspaceId] ?? 0;
+        try {
+          const [response, terminalResponse] = await Promise.all([
+            listQuickChatSessions(workspaceId),
+            listQuickTerminalTabs(workspaceId),
+          ]);
+          if (cancelled) return;
+
+          const currentRevision =
+            store.getState().quickChat.syncRevisionByWorkspace[workspaceId] ?? 0;
+          if (currentRevision !== revision) {
+            if (retryCount >= MAX_RESYNC_RETRIES) return;
+            retryCount += 1;
+            await new Promise((resolve) => setTimeout(resolve, RESYNC_RETRY_DELAY_MS));
+            continue;
           }
+
+          const sessions = toQuickChatSessions(response.sessions);
+          // Store the session rows before the tabs. A tab without its row cannot
+          // subscribe or accept input (useSession bails, requireSessionInputMode
+          // throws), so a resync-only tab would otherwise render but be dead.
+          // Rows older than the live row are skipped: a reconnect snapshot must
+          // never regress state a newer WebSocket event already applied.
+          for (const taskSession of response.task_sessions) {
+            const liveSession = store.getState().taskSessions.items[taskSession.id];
+            if (isStaleTaskSession(liveSession, taskSession.updated_at)) continue;
+            setTaskSession(taskSession);
+          }
+          syncQuickChatSessions(workspaceId, sessions);
+          syncQuickTerminalTabs(workspaceId, terminalResponse.tabs.map(toQuickTerminalTab));
+          // Renames made before names were stored server-side live only in this
+          // browser; push them up once so they reach the user's other devices.
+          void migrateStoredQuickChatNames(sessions, getStoredQuickChatNames());
+          return;
+        } catch {
+          // A failed resync must not clear the user's tabs; retry on next connect.
+          if (!cancelled) lastSyncedConnection.current = null;
           return;
         }
-        const sessions = toQuickChatSessions(response.sessions);
-        // Store the session rows before the tabs. A tab without its row cannot
-        // subscribe or accept input (useSession bails, requireSessionInputMode
-        // throws), so a resync-only tab would otherwise render but be dead.
-        // Rows older than the live row are skipped: a reconnect snapshot must
-        // never regress state a newer WebSocket event already applied.
-        for (const taskSession of response.task_sessions) {
-          const liveSession = store.getState().taskSessions.items[taskSession.id];
-          if (isStaleTaskSession(liveSession, taskSession.updated_at)) continue;
-          setTaskSession(taskSession);
-        }
-        syncQuickChatSessions(workspaceId, sessions);
-        syncQuickTerminalTabs(workspaceId, terminalResponse.tabs.map(toQuickTerminalTab));
-        // Renames made before names were stored server-side live only in this
-        // browser; push them up once so they reach the user's other devices.
-        void migrateStoredQuickChatNames(sessions, getStoredQuickChatNames());
-      })
-      .catch(() => {
-        // A failed resync must not clear the user's tabs; retry on next connect.
-        if (!cancelled) lastSyncedConnection.current = null;
-      });
+      }
+    };
+    void resync();
 
     return () => {
       cancelled = true;
@@ -100,6 +113,5 @@ export function useQuickChatResync(workspaceId: string | null): void {
     setTaskSession,
     syncQuickChatSessions,
     syncQuickTerminalTabs,
-    resyncAttempt,
   ]);
 }

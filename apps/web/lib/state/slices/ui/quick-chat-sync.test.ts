@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   reconcileQuickTerminalTabs,
   reconcileQuickChatSessions,
+  mergeHydratedQuickChatSessions,
   removeQuickChatSession,
   removeQuickChatSessionsForTask,
   upsertQuickChatSession,
@@ -369,6 +370,20 @@ describe("upsertQuickChatSession", () => {
     const after = upsertQuickChatSession(before, chat("a"));
 
     expect(after.sessions.map((s) => s.sessionId)).toEqual(["a"]);
+    expect(after.tombstonedSessions).toEqual({});
+  });
+});
+
+describe("mergeHydratedQuickChatSessions", () => {
+  it("accepts a session when its tombstone has expired", () => {
+    const expiredAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const before = state([], {
+      tombstonedSessions: { a: { workspaceId: WS, tombstonedAt: expiredAt } },
+    });
+
+    const after = mergeHydratedQuickChatSessions(before, [chat("a")]);
+
+    expect(after.sessions.map((session) => session.sessionId)).toEqual(["a"]);
     expect(after.tombstonedSessions).toEqual({});
   });
 });

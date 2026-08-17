@@ -102,6 +102,16 @@ describe("typed quick chat sessions", () => {
     expect(store.getState().quickChat.unseenIdleByWorkspace).toEqual({});
   });
 
+  it("prunes the workspace marker bucket when the active session is selected", () => {
+    const store = makeStore();
+    store.getState().addQuickChatSession(SESSION_A, WORKSPACE_A);
+    store.getState().markQuickChatUnseenIdle(SESSION_A, WORKSPACE_A);
+
+    store.getState().setActiveQuickChatSession(SESSION_A, WORKSPACE_A);
+
+    expect(store.getState().quickChat.unseenIdleByWorkspace).toEqual({});
+  });
+
   it("keeps unseen markers when opening a session owned by another workspace fails", () => {
     const store = makeStore();
     store.getState().addQuickChatSession(SESSION_A, WORKSPACE_A);

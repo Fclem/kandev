@@ -27,6 +27,16 @@ test.describe("quick chat idle dot", () => {
     await dialog.getByTestId("quick-chat-close").tap();
     await completed;
     await expect(button.getByTestId("quick-chat-unseen-dot")).toBeVisible({ timeout: 15_000 });
+
+    await button.tap();
+    await expect(button.getByTestId("quick-chat-unseen-dot")).toHaveCount(0);
+    const secondCompleted = ws.waitForEvent("session.turn.completed", {
+      where: (payload) => payload.session_id === sessionId,
+    });
+    await sendQuickChatMessage(dialog, testPage, "/slow 8s");
+    await dialog.getByTestId("quick-chat-close").tap();
+    await secondCompleted;
+    await expect(button.getByTestId("quick-chat-unseen-dot")).toBeVisible({ timeout: 15_000 });
   });
 
   test("marks the task switcher entry after a closed quick chat turn completes", async ({

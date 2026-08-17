@@ -10,6 +10,7 @@ import {
 const mockToast = vi.fn().mockReturnValue("toast-1");
 const mockUpdateToast = vi.fn();
 const mockRequest = vi.fn();
+const mockDeleteTask = vi.hoisted(() => vi.fn());
 const mockRemoveTaskSession = vi.fn();
 const mockRemoveQuickChatSession = vi.fn();
 const mockSetActiveSessionAuto = vi.fn();
@@ -22,9 +23,11 @@ function resetSessionActionMocks() {
   vi.clearAllMocks();
   mockToast.mockReturnValue("toast-1");
   mockRequest.mockResolvedValue(undefined);
+  mockDeleteTask.mockResolvedValue(undefined);
   mockState = {
     tasks: { activeSessionId: null },
     taskSessionsByTask: { itemsByTaskId: {} },
+    quickChat: { sessions: [] },
     setActiveSessionAuto: mockSetActiveSessionAuto,
     clearActiveSession: mockClearActiveSession,
   };
@@ -37,6 +40,8 @@ vi.mock("@/components/toast-provider", () => ({
 vi.mock("@/lib/ws/connection", () => ({
   getWebSocketClient: () => ({ request: mockRequest }),
 }));
+
+vi.mock("@/lib/api/domains/kanban-api", () => ({ deleteTask: mockDeleteTask }));
 
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (state: Record<string, unknown>) => unknown) =>
@@ -75,6 +80,7 @@ describe("session state predicates", () => {
   });
 });
 
+// eslint-disable-next-line max-lines-per-function -- session action scenarios share one lifecycle fixture.
 describe("useSessionActions", () => {
   beforeEach(resetSessionActionMocks);
 
@@ -120,6 +126,19 @@ describe("useSessionActions", () => {
     });
   });
 
+  it("remove deletes the backing task for a Quick Chat session", async () => {
+    mockState.quickChat = { sessions: [{ sessionId: "s1", taskId: "t1" }] };
+    const { result } = renderHook(() => useSessionActions({ sessionId: "s1", taskId: "t1" }));
+
+    const ok = await result.current.remove();
+
+    expect(ok).toBe(true);
+    expect(mockDeleteTask).toHaveBeenCalledWith("t1");
+    expect(mockRequest).not.toHaveBeenCalled();
+    expect(mockRemoveTaskSession).toHaveBeenCalledWith("t1", "s1");
+    expect(mockRemoveQuickChatSession).toHaveBeenCalledWith("s1");
+  });
+
   it("remove no-ops when WS request fails (store untouched)", async () => {
     mockRequest.mockRejectedValueOnce(new Error(networkErrorMessage));
     const onDeleted = vi.fn();
@@ -134,6 +153,7 @@ describe("useSessionActions", () => {
   it("remove hands off to most-recent remaining session when active was deleted", async () => {
     mockState = {
       tasks: { activeSessionId: "s1" },
+      quickChat: { sessions: [] },
       taskSessionsByTask: {
         itemsByTaskId: {
           t1: [
@@ -155,6 +175,7 @@ describe("useSessionActions", () => {
   it("remove clears active session when no other sessions remain", async () => {
     mockState = {
       tasks: { activeSessionId: "s1" },
+      quickChat: { sessions: [] },
       taskSessionsByTask: {
         itemsByTaskId: { t1: [{ id: "s1", started_at: "2025-01-01T00:00:00Z" }] },
       },

@@ -134,6 +134,42 @@ describe("useSessionTurns", () => {
 });
 
 describe("useSessionTurns — ordering and isolation", () => {
+  it("discards an out-of-order response for the SAME session (stale sequence)", async () => {
+    // Task 01 stale-sequence discard: two concurrent fetches for the same
+    // session (two mounted hook instances share the module fetch sequence).
+    // The newer response applies first; the older response must be discarded
+    // by `sequence < appliedSequence` and never reach replaceSessionTurns.
+    const deferredA: Array<{ resolve: (v: { turns: Turn[]; total: number }) => void }> = [];
+    const deferredB: Array<{ resolve: (v: { turns: Turn[]; total: number }) => void }> = [];
+    mockListSessionTurns
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          deferredA.push({ resolve });
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          deferredB.push({ resolve });
+        }),
+      );
+
+    renderHook(() => useSessionTurns("session-a"));
+    renderHook(() => useSessionTurns("session-a"));
+    await waitFor(() => expect(mockListSessionTurns).toHaveBeenCalledTimes(2));
+
+    // Newer response lands first and applies.
+    deferredB[0].resolve({ turns: [turn("stale-b")], total: 1 });
+    await waitFor(() =>
+      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("stale-b")]),
+    );
+
+    // The older response must be discarded by the sequence check.
+    deferredA[0].resolve({ turns: [turn("stale-a")], total: 1 });
+    await act(async () => {});
+    expect(state.replaceSessionTurns).not.toHaveBeenCalledWith("session-a", [turn("stale-a")]);
+    expect(state.replaceSessionTurns).toHaveBeenCalledTimes(1);
+  });
+
   it("tracks the applied sequence per session so sibling fetches do not invalidate each other", async () => {
     const deferredA: { resolve: (v: { turns: Turn[]; total: number }) => void }[] = [];
     const deferredB: { resolve: (v: { turns: Turn[]; total: number }) => void }[] = [];

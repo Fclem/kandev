@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- comprehensive session-state handler; merge with main pushed it past 600. */
 import type { StoreApi } from "zustand";
 import { createDebugLogger } from "@/lib/debug/log";
 import type { AppState } from "@/lib/state/store";

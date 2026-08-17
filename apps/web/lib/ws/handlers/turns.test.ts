@@ -80,6 +80,7 @@ function settleViaUpsertTaskSessionFromEvent(store: ReturnType<typeof makeStore>
   store.getState().upsertTaskSessionFromEvent(TASK_ID, IDLE_SESSION);
 }
 
+// eslint-disable-next-line max-lines-per-function -- turn handler contract tests share the store fixture.
 describe("session turn WebSocket handlers", () => {
   it("keeps a completed turn inactive when its delayed started event arrives", () => {
     const store = makeStore();

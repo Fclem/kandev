@@ -438,3 +438,71 @@ describe("useScrollToMessage — canceled-scroll landing", () => {
     }
   });
 });
+
+describe("useScrollToMessage — superseded verifiers", () => {
+  it("lets a newer scroll supersede an in-flight verifier without stale force-landing", () => {
+    // Round-14 regression: a verifier scheduled by prompt A must not force-
+    // land the transcript after a newer prompt B consumed. The generation
+    // guard makes A's callback bail; B's lands the target.
+    const frames: Array<() => void> = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    try {
+      const boxedHandle: { current: ScrollToMessageHandle | null } = { current: null };
+      const { container } = render(
+        <ScrollToMessageHarness
+          rows={["target-a", "target-b"]}
+          onHandle={(next) => {
+            boxedHandle.current = next;
+          }}
+        />,
+      );
+      const handle = boxedHandle.current;
+      if (!handle) throw new Error("handle did not render");
+      const root = container.querySelector<HTMLElement>('[data-testid="scroll-to-message-root"]');
+      const targetA = container.querySelector("#msg-target-a");
+      const targetB = container.querySelector("#msg-target-b");
+      if (!root || !targetA || !targetB) throw new Error("harness did not render");
+      Object.defineProperty(root, "scrollTop", {
+        configurable: true,
+        writable: true,
+        value: 0,
+      });
+      Object.defineProperty(root, "getBoundingClientRect", {
+        configurable: true,
+        value: () => createRect(0, 400),
+      });
+      // A sits at 120px, B at 240px below the scrollport top.
+      Object.defineProperty(targetA, "getBoundingClientRect", {
+        configurable: true,
+        value: () => createRect(120 - root.scrollTop, 20),
+      });
+      Object.defineProperty(targetB, "getBoundingClientRect", {
+        configurable: true,
+        value: () => createRect(240 - root.scrollTop, 20),
+      });
+
+      expect(handle("target-a", { align: "start" })).toBe(true);
+      // B supersedes A before A's verifier ever lands.
+      expect(handle("target-b", { align: "start" })).toBe(true);
+
+      for (let i = 0; i < 15; i += 1) {
+        act(() => {
+          const pending = frames.splice(0);
+          for (const frame of pending) frame();
+        });
+      }
+      // The transcript lands on B (240), never on the stale A (120).
+      expect(root.scrollTop).toBe(240);
+    } finally {
+      vi.unstubAllGlobals();
+      scrollIntoView.mockRestore();
+    }
+  });
+});

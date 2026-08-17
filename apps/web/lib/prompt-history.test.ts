@@ -135,6 +135,28 @@ const ENTRY_CASES = [
     ],
   },
   {
+    name: "bounds the earlier prompt by the later prompt when both share one turn",
+    messages: [
+      message({ id: "first", turn_id: TURN_ID }),
+      message({ id: "second", turn_id: TURN_ID, created_at: "2026-01-01T00:00:04.000Z" }),
+    ],
+    turns: [turn({ completed_at: "2026-01-01T00:00:10.000Z" })],
+    expected: [
+      { messageId: "second", durationSeconds: 6, isLastPrompt: true },
+      { messageId: "first", durationSeconds: 4, isLastPrompt: false },
+    ],
+  },
+  {
+    name: "orders equal timestamps by message id in code-unit order regardless of locale",
+    messages: [message({ id: "z-0" }), message({ id: "a-1" }), message({ id: "Z-9" })],
+    turns: [],
+    expected: [
+      { messageId: "z-0", durationSeconds: null, isLastPrompt: true },
+      { messageId: "a-1", durationSeconds: 0, isLastPrompt: false },
+      { messageId: "Z-9", durationSeconds: 0, isLastPrompt: false },
+    ],
+  },
+  {
     name: "orders equal timestamps by message id and clamps negative durations",
     messages: [message({ id: "z", turn_id: TURN_ID }), message({ id: "a", turn_id: "turn-2" })],
     turns: [

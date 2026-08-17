@@ -24,7 +24,13 @@ function timestamp(value: string | undefined): number | null {
 }
 
 function comparePrompts(a: PromptWithTimestamp, b: PromptWithTimestamp): number {
-  return a.timestamp - b.timestamp || a.id.localeCompare(b.id);
+  // Deterministic code-unit ascending id order — localeCompare collation can
+  // reorder mixed-case/punctuation ids across runtimes and locales.
+  const timeDiff = a.timestamp - b.timestamp;
+  if (timeDiff !== 0) return timeDiff;
+  if (a.id < b.id) return -1;
+  if (a.id > b.id) return 1;
+  return 0;
 }
 
 function turnCompletionByPrompt(messages: PromptWithTimestamp[], turns: Turn[]) {

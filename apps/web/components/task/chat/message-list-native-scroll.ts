@@ -389,12 +389,17 @@ export function useScrollToMessage(
   scrollRef: React.RefObject<HTMLDivElement | null>,
   runGuardedScroll: (performScroll: () => void) => void,
 ) {
+  // Bumped on every scrollToMessage call; in-flight verifiers of a superseded
+  // request bail on the next frame so stale work can never land the
+  // transcript on an older prompt after a newer one consumed.
+  const generationRef = useRef(0);
   return useCallback(
     (messageId: string, options?: { align?: "start" | "center"; behavior?: "smooth" | "auto" }) => {
       const selector = `[id="msg-${CSS.escape(messageId)}"]`;
       const el = scrollRef.current?.querySelector<HTMLElement>(selector);
       if (!el) return false;
       const alignStart = options?.align === "start";
+      const generation = ++generationRef.current;
       runGuardedScroll(() => {
         el.scrollIntoView({
           block: alignStart ? "start" : "center",
@@ -409,13 +414,14 @@ export function useScrollToMessage(
         // scrollIntoView entirely. Watch a bounded frame window: follow an
         // in-progress animation toward the target, and force-land the
         // alignment whenever the container settles misaligned (movement
-        // stopped short or never started). Exiting on the FIRST movement
-        // would miss a cancel-then-settle-misaligned case.
+        // stopped short or never started). Bail immediately if a newer
+        // scroll request superseded this one.
         let frames = 0;
         let lastAbsDelta = Infinity;
         const verify = () => {
           frames += 1;
           if (frames > 30 || !container.isConnected) return;
+          if (generationRef.current !== generation) return; // superseded
           const delta = alignStart
             ? el.getBoundingClientRect().top - container.getBoundingClientRect().top - margin
             : el.getBoundingClientRect().top +

@@ -28,6 +28,7 @@ test.describe("Prompt history panel", () => {
       },
     );
     if (!task.session_id) throw new Error("Prompt history task did not create a session");
+    /** Polls the task's sessions until one has reached a terminal DONE_STATES state. */
     const settled = async () => {
       const { sessions } = await apiClient.listTaskSessions(task.id);
       return DONE_STATES.includes(sessions[0]?.state ?? "");

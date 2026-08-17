@@ -48,6 +48,9 @@ import { useTranslation } from "react-i18next";
  */
 const MAX_LAST_PROMPT_LOOKUP_PAGES = 3;
 
+/** Returns a `clarificationKey` that increments each time a pending
+ * clarification is resolved, letting the composer reset its input state for
+ * the next clarification round. */
 function useClarificationKey(agentMessageCount: number) {
   const lastCountRef = useRef(agentMessageCount);
   const [clarificationKey, setClarificationKey] = useState(0);
@@ -58,6 +61,9 @@ function useClarificationKey(agentMessageCount: number) {
   return { clarificationKey, handleClarificationResolved };
 }
 
+/** Computes the render-item key the unread "New" divider should appear
+ * immediately before: tracks the latest rendered message id for session read
+ * tracking, then maps the resulting divider anchor onto the grouped items. */
 function useUnreadDividerBeforeItemKey(
   sessionId: string | null,
   isVisible: boolean,
@@ -77,6 +83,9 @@ function useUnreadDividerBeforeItemKey(
   );
 }
 
+/** Floating session-search overlay over the transcript: the search bar plus
+ * its hits list, with next/prev cycling through hits. Renders nothing while
+ * the search is closed. */
 function SessionSearchOverlay({
   search,
   agentLabel,

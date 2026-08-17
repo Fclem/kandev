@@ -9,6 +9,7 @@ import type { Turn } from "@/lib/types/http";
 
 type CombinedSlice = SessionSlice & SessionRuntimeSlice;
 
+/** Creates a zustand store combining the session and session-runtime slices. */
 function makeStore() {
   return create<CombinedSlice>()(
     immer((set) => ({

@@ -31,6 +31,7 @@ import { useScrollTargetConsumption } from "./task-chat-panel";
 
 let pendingFrames: Array<(() => void) | undefined> = [];
 
+/** Runs two rounds of pending requestAnimationFrame callbacks inside act. */
 async function flushFrames() {
   await act(async () => {
     const frames = pendingFrames.splice(0);
@@ -44,6 +45,7 @@ async function flushFrames() {
 
 type ScrollTarget = NonNullable<typeof mockDockviewState.scrollTarget>;
 
+/** Builds a dockview scroll-target object with defaults, merged with the given overrides. */
 function target(overrides: Partial<ScrollTarget> = {}): ScrollTarget {
   return {
     sessionId: "session-1",
@@ -54,6 +56,7 @@ function target(overrides: Partial<ScrollTarget> = {}): ScrollTarget {
   };
 }
 
+/** Builds a MessageListHandle whose scrollToMessage mock returns the given value. */
 function scrollHandle(returns: boolean): MessageListHandle {
   return { scrollToMessage: vi.fn(() => returns) };
 }

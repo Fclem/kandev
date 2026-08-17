@@ -38,6 +38,8 @@ function useScrollPositionOnPrepend(
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    /** Captures the container's current scrollHeight/scrollTop so a later
+     * prepend can restore the visual position. */
     const onScroll = () => {
       scrollState.current.scrollHeight = el.scrollHeight;
       scrollState.current.scrollTop = el.scrollTop;
@@ -188,6 +190,8 @@ export function useAutoScroll(params: {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    /** Persists the container's current scrollTop for the session (used when
+     * auto-scroll is disabled). */
     const captureScrollTop = () => {
       if (sessionId) storeApi.getState().setTranscriptScrollTop(sessionId, el.scrollTop);
     };
@@ -195,6 +199,8 @@ export function useAutoScroll(params: {
     // scroll events can fire far more often than that, and each write is a
     // synchronous sessionStorage.setItem plus a store update.
     const coalescer = createFrameCoalescer(captureScrollTop);
+    /** Scroll listener: resyncs the near-bottom flag and schedules a
+     * coalesced persistence of the scroll position. */
     const onScroll = () => {
       resyncIsNearBottom();
       coalescer.schedule();
@@ -277,6 +283,8 @@ function useCatchUpOnReEnable(
   useEffect(() => {
     const wasEnabled = prevEnabledRef.current;
     prevEnabledRef.current = enabled;
+    /** Snapshots the current transcript tail (count, last id, last updated
+     * timestamp) as the disable-time baseline for detecting progression. */
     const captureBaseline = () => {
       const last = messages[messages.length - 1];
       baselineRef.current = {
@@ -385,6 +393,13 @@ function useProgrammaticScrollGuard(
   return runGuardedScroll;
 }
 
+/**
+ * Returns a `scrollToMessage(messageId, options?)` callback that scrolls the
+ * message's row into view (start- or center-aligned) under the programmatic
+ * scroll guard, then watches the animation and force-lands the alignment if
+ * the browser settles misaligned. Returns false when the row isn't rendered
+ * yet; a superseding request invalidates in-flight verification.
+ */
 export function useScrollToMessage(
   scrollRef: React.RefObject<HTMLDivElement | null>,
   runGuardedScroll: (performScroll: () => void) => void,
@@ -421,6 +436,9 @@ export function useScrollToMessage(
         // scroll request superseded this one.
         let frames = 0;
         let lastAbsDelta = Infinity;
+        /** Frame-watch verifier: follows an in-progress animation toward the
+         * target and force-lands the alignment once the container settles
+         * misaligned; bails when superseded or the nodes disconnect. */
         const verify = () => {
           frames += 1;
           if (frames > 30 || !container.isConnected || !el.isConnected) return;
@@ -501,6 +519,8 @@ function useInitialScrollPosition(
     didInitialScroll.current = true;
     if (scrollTop === null) return;
 
+    /** Derives and stores the near-bottom flag from the applied scrollTop
+     * against the container's current dimensions. */
     const syncNearBottom = () => {
       isNearBottomRef.current = !hasTranscriptProgressedPastView({
         scrollTop,

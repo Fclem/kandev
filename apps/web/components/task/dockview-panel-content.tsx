@@ -30,6 +30,8 @@ import { TodosContent } from "./todos-panel-content";
 import { VscodePanel } from "./vscode-panel";
 import { useTranslation } from "react-i18next";
 
+/** Resolve the chat panel's tab title: the session's agent label when present,
+ *  otherwise the translated default label. */
 export function resolveChatPanelTitle(
   agentLabel: string | null | undefined,
   translate: (key: string) => string,
@@ -37,6 +39,8 @@ export function resolveChatPanelTitle(
   return agentLabel || translate("task:panelAgent");
 }
 
+/** Derive the chat session's label (user session name, then profile label)
+ *  and push it as the panel title, re-running on locale changes. */
 function useChatSessionTitle(panelId: string, sessionId: string | null) {
   const { t } = useTranslation();
   const agentLabel = useAppStore((state) => {
@@ -60,6 +64,8 @@ function useChatSessionTitle(panelId: string, sessionId: string | null) {
   }, [panelId, agentLabel, t]);
 }
 
+/** Render the chat panel for the session from `params` or the active session,
+ *  or a passthrough toolbar for passthrough sessions. */
 function ChatContent({ panelId, params }: { panelId: string; params: Record<string, unknown> }) {
   const paramSessionId = params?.sessionId as string | undefined;
   const storeSessionId = useAppStore((state) => state.tasks.activeSessionId);
@@ -95,6 +101,8 @@ function ChatContent({ panelId, params }: { panelId: string; params: Record<stri
   );
 }
 
+/** Render the changes/diff viewer for the panel's params (`kind` "all" or
+ *  "file"), closing the panel when it becomes empty. */
 function DiffViewerContent({
   panelId,
   params,
@@ -133,6 +141,8 @@ function DiffViewerContent({
   );
 }
 
+/** Render the changes list panel with a tab title showing the pending change
+ *  count (files + commits), wiring up diff/file/commit/review handlers. */
 function ChangesContent({ panelId }: { panelId: string }) {
   const { t } = useTranslation();
   const addDiffViewerPanel = useDockviewStore((s) => s.addDiffViewerPanel);
@@ -184,6 +194,7 @@ function ChangesContent({ panelId }: { panelId: string }) {
   );
 }
 
+/** Render the workspace files panel, opening the selected file in the editor. */
 function FilesContent() {
   const { openFile } = useFileEditors();
   const handleOpenFile = useCallback(
@@ -193,6 +204,7 @@ function FilesContent() {
   return <FilesPanel onOpenFile={handleOpenFile} />;
 }
 
+/** Render the plan panel for the active task. */
 function PlanContent() {
   const taskId = useAppStore((state) => state.tasks.activeTaskId);
   return <TaskPlanPanel taskId={taskId} visible />;
@@ -203,6 +215,8 @@ const COMPONENT_ALIASES: Record<string, string> = {
   "all-files": "files",
 };
 
+/** Resolve a legacy component alias to its current name, passing through
+ *  unknown names unchanged. */
 function resolveComponent(component: string): string {
   return COMPONENT_ALIASES[component] ?? component;
 }
@@ -250,6 +264,8 @@ const PANEL_RENDERERS: Record<string, PanelRenderer> = {
   ),
 };
 
+/** Render a dockview panel's portal content by looking up its (alias-resolved)
+ *  component renderer; falls back to an "unknown panel" placeholder. */
 export function renderPanel(
   panelId: string,
   component: string,

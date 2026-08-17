@@ -17,12 +17,14 @@ export type PromptDurationUnits = {
 
 type PromptWithTimestamp = Message & { timestamp: number };
 
+/** Parse a date string into a millisecond epoch timestamp, returning `null` for missing or unparseable values. */
 function timestamp(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+/** Sort prompts by timestamp ascending, breaking ties by id in code-unit order for deterministic results. */
 function comparePrompts(a: PromptWithTimestamp, b: PromptWithTimestamp): number {
   // Deterministic code-unit ascending id order — localeCompare collation can
   // reorder mixed-case/punctuation ids across runtimes and locales.
@@ -33,6 +35,7 @@ function comparePrompts(a: PromptWithTimestamp, b: PromptWithTimestamp): number 
   return 0;
 }
 
+/** Map each prompt's `session_id:id` key to its turn's completion timestamp, or `null` when the prompt has no turn or the turn lacks a completion time. */
 function turnCompletionByPrompt(messages: PromptWithTimestamp[], turns: Turn[]) {
   const turnsBySessionAndId = new Map<string, Turn>();
   for (const turn of turns) {
@@ -53,6 +56,7 @@ function turnCompletionByPrompt(messages: PromptWithTimestamp[], turns: Turn[]) 
   );
 }
 
+/** Build prompt-history entries from user messages and turns, newest-first, with each prompt's duration bounded by its turn completion or the next prompt's send time. */
 export function buildPromptHistoryEntries(
   messages: Message[],
   turns: Turn[],
@@ -99,6 +103,7 @@ export function buildPromptHistoryEntries(
   return entries.reverse();
 }
 
+/** Format a duration in seconds as a compact `h m s` string using the given unit labels, omitting empty hour/minute parts. */
 export function formatPromptDuration(seconds: number, units: PromptDurationUnits): string {
   const totalSeconds = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(totalSeconds / 3600);

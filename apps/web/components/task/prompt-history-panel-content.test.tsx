@@ -57,18 +57,23 @@ const observerEntries: ObserverEntry[] = [];
 class CapturingResizeObserver {
   private readonly callback: ResizeObserverCallback;
 
+  /** Stores the ResizeObserver callback for later manual invocation. */
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
   }
 
+  /** Records the observed element and its callback for later manual resize firing. */
   observe(element: Element) {
     observerEntries.push({ element, callback: this.callback });
   }
 
+  /** No-op: recorded observations are retained so tests can fire them manually. */
   disconnect() {}
+  /** No-op: recorded observations are retained so tests can fire them manually. */
   unobserve() {}
 }
 
+/** Builds a user Message for the active session with default fields, merged with the given overrides. */
 function message(overrides: Partial<Message> = {}): Message {
   return {
     id: "message-1",
@@ -82,6 +87,7 @@ function message(overrides: Partial<Message> = {}): Message {
   };
 }
 
+/** Builds a Turn for the active session with default fields, merged with the given overrides. */
 function turn(overrides: Partial<Turn> = {}): Turn {
   return {
     id: "turn-1",
@@ -94,6 +100,7 @@ function turn(overrides: Partial<Turn> = {}): Turn {
   };
 }
 
+/** Stubs the given scrollWidth/clientWidth/clientHeight values onto an element. */
 function setGeometry(
   element: Element,
   overrides: { scrollWidth?: number; clientWidth?: number; clientHeight?: number },
@@ -118,6 +125,7 @@ function setGeometry(
   }
 }
 
+/** Fires the captured ResizeObserver callback recorded for the given element. */
 function fireResize(element: Element) {
   for (const entry of observerEntries) {
     if (entry.element === element) {
@@ -128,14 +136,17 @@ function fireResize(element: Element) {
   }
 }
 
+/** Returns the prompt-history row element for the given row index. */
 function row(index: number): HTMLElement {
   return screen.getByTestId(`prompt-history-row-${index}`);
 }
 
+/** Returns the expanded-content box element for the given row index. */
 function expandedBox(index: number): HTMLElement {
   return screen.getByTestId(`prompt-history-expanded-box-${index}`);
 }
 
+/** Returns the expand/collapse chevron button element for the given row index. */
 function expandButton(index: number): HTMLElement {
   return screen.getByTestId(`prompt-history-expand-${index}`);
 }
@@ -352,6 +363,7 @@ describe("PromptHistoryPanelContent — time element", () => {
 });
 
 describe("PromptHistoryPanelContent — expand/collapse behavior", () => {
+  /** Renders a row whose collapsed text overflows, firing the resize that reveals the chevron. */
   function renderOverflowingRow() {
     messagesBySession[SESSION_A] = [message({ id: "long", content: "long prompt text" })];
     render(<PromptHistoryPanelContent />);

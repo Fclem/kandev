@@ -88,6 +88,7 @@ const PR_ITEM_TEST_ID_PREFIX = "add-panel-pr-item-";
 const GITLAB_ORIGIN = "https://gitlab.example";
 const TEST_TIMESTAMP = "2026-07-31T00:00:00Z";
 
+/** Builds an open TaskPR for the acme/kandev task with the given id, number, and repo. */
 function makePR(id: string, number: number, repo = "kandev"): TaskPR {
   return {
     id,
@@ -120,6 +121,7 @@ function makePR(id: string, number: number, repo = "kandev"): TaskPR {
   };
 }
 
+/** Builds an open TaskMR hosted on GITLAB_ORIGIN with the given id, number, and project path. */
 function makeMR(id: string, number: number, projectPath = "acme/kandev"): TaskMR {
   return {
     id,
@@ -149,6 +151,7 @@ function makeMR(id: string, number: number, projectPath = "acme/kandev"): TaskMR
   };
 }
 
+/** Builds an open bitbucket ReviewItemSummary for the given change request number. */
 function makeRegisteredReview(number: number): ReviewItemSummary {
   return {
     providerId: "bitbucket",
@@ -162,12 +165,14 @@ function makeRegisteredReview(number: number): ReviewItemSummary {
   };
 }
 
+/** Stubs the dockview store API so getPanel reports the given open panels and their params. */
 function setOpenPanels(panels: Record<string, Record<string, unknown>>) {
   mockDockviewStore.api = {
     getPanel: (id) => (Object.hasOwn(panels, id) ? { params: panels[id] } : undefined),
   };
 }
 
+/** Renders AddPanelMenuItems inside an open dropdown with the given menu state and target group. */
 function renderMenu(state: Partial<AddPanelMenuState> = {}, groupId = CENTER_GROUP_ID) {
   const fullState: AddPanelMenuState = {
     taskId: null,
@@ -195,6 +200,7 @@ function renderMenu(state: Partial<AddPanelMenuState> = {}, groupId = CENTER_GRO
   );
 }
 
+/** Opens the PR submenu trigger and resolves the acme-web-42 PR row once it renders. */
 async function openPRSubmenu() {
   const trigger = screen.getByTestId(PR_SUBMENU_TEST_ID);
   fireEvent.click(trigger);
@@ -398,6 +404,7 @@ describe("AddPanelMenuItems — open review identities", () => {
 });
 
 describe("AddPanelMenuItems — plugin task panels (AC1)", () => {
+  /** Stub task-panel component that renders nothing. */
   function Notes() {
     return null;
   }
@@ -431,6 +438,7 @@ describe("AddPanelMenuItems — plugin task panels (AC1)", () => {
 });
 
 describe("AddPanelMenuItems — port forwarding preference", () => {
+  /** Builds a default AddPanelMenuState port-forwarding object, merged with the given overrides. */
   function portForwardingState(
     overrides: Partial<NonNullable<AddPanelMenuState["portForwarding"]>> = {},
   ): NonNullable<AddPanelMenuState["portForwarding"]> {

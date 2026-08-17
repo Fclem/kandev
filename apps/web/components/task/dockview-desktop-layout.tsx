@@ -143,6 +143,8 @@ const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> =
 };
 
 // --- TAB COMPONENTS ---
+/** Tab header for permanent panels: renders the default dockview tab without
+ * a close button and maximizes the panel on double-click. */
 function PermanentTab(props: IDockviewPanelHeaderProps) {
   const onDoubleClick = useTabMaximizeOnDoubleClick(props.api);
   return (
@@ -194,6 +196,13 @@ export const DESKTOP_VALID_COMPONENTS = new Set(Object.keys(components));
 // useEnvSwitchCleanup — backup layout switch for external session changes
 // ---------------------------------------------------------------------------
 
+/**
+ * Backup layout-switch hook for external session changes (e.g. WS-driven)
+ * that don't go through the sidebar/dropdown switch helpers. When the
+ * effective task env actually changes (ignoring the same-task env-id bounce
+ * that launch races can produce), performs a layout switch to the new env;
+ * same-env session switches are a no-op.
+ */
 function useEnvSwitchCleanup(
   effectiveSessionId: string | null,
   effectiveEnvId: string | null,
@@ -293,6 +302,14 @@ type ReadyDockviewSetup = {
   refs: ReadyDockviewRefs;
 };
 
+/**
+ * One-time dockview-ready setup: seeds the store's user default layout,
+ * registers the layout root for size measurement, restores the env's saved
+ * layout (or builds the default one), and installs the group-tracking,
+ * session-tab sync, chat-panel safety net, layout persistence, portal
+ * cleanup, container resize, and sash-drag-cap disposers — all recorded on
+ * `refs.readyDisposersRef`.
+ */
 function setupReadyDockview({ api, appStore, layout, refs }: ReadyDockviewSetup): void {
   // Dockview can become ready before the parent passive effect synchronizes
   // settings. Seed the store before exposing the API or building a cold layout.
@@ -336,6 +353,9 @@ type DockviewMainAreaProps = {
   onReady: (event: DockviewReadyEvent) => void;
 };
 
+/** Renders the dockview surface itself: the preview controller above the
+ * `DockviewReact` grid wired with the desktop component/tab maps, header
+ * actions, watermark, and default tab; forwards the ready event via `onReady`. */
 function DockviewMainArea({ effectiveSessionId, hasDevScript, onReady }: DockviewMainAreaProps) {
   return (
     <div className="min-h-0 min-w-0 overflow-hidden flex flex-col">

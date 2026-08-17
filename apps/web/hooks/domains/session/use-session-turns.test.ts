@@ -26,6 +26,7 @@ vi.mock("@/components/state-provider", () => ({
 
 import { useSessionTurns } from "./use-session-turns";
 
+/** Builds a Turn for the given id and session, with fixed test timestamps. */
 function turn(id: string, sessionId = "session-a"): Turn {
   return {
     id,

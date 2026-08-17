@@ -38,6 +38,7 @@ import { setupPortalCleanup } from "./dockview-layout-setup";
 
 type RemoveHandler = (panel: { id: string }) => void;
 
+/** Builds a fake dockview API that captures removal handlers and exposes fireRemoval. */
 function makeApi() {
   const handlers: RemoveHandler[] = [];
   return {
@@ -47,12 +48,14 @@ function makeApi() {
     },
     panels: [] as Array<{ id: string }>,
     hasMaximizedGroup: () => false,
+    /** Fires every captured onDidRemovePanel handler with the given panel. */
     fireRemoval(panel: { id: string }) {
       for (const handler of handlers) handler(panel);
     },
   };
 }
 
+/** Builds a minimal zustand store whose state exposes the given active session id. */
 function makeAppStore(activeSessionId: string): StoreApi<AppState> {
   return {
     getState: () => ({ tasks: { activeSessionId } }) as unknown as AppState,

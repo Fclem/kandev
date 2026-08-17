@@ -135,6 +135,8 @@ export const dockviewComponents: Record<string, React.FunctionComponent<IDockvie
 };
 
 // --- TAB COMPONENTS ---
+/** Tab header for permanent panels: the default dockview tab with the close
+ *  button hidden. */
 function PermanentTab(props: IDockviewPanelHeaderProps) {
   return <DockviewDefaultTab {...props} hideClose />;
 }
@@ -164,6 +166,8 @@ export { ContextMenuTab };
 // Each content component renders the real panel UI.  They live permanently
 // in the PanelPortalHost and survive dockview layout switches.
 
+/** Push the session's agent label (or "Agent" fallback) as the panel title;
+ *  the label is only applied when `isSessionTab` is set. */
 function useChatSessionTitle(panelId: string, sessionId: string | null, isSessionTab: boolean) {
   const agentLabel = useAppStore((state) => {
     if (!sessionId) return null;
@@ -188,6 +192,8 @@ function useChatSessionTitle(panelId: string, sessionId: string | null, isSessio
   }, [panelId, isSessionTab, agentLabel]);
 }
 
+/** Render the chat panel for the session from `params` or the active session
+ *  (or a passthrough toolbar), keeping the tab title in sync. */
 function ChatContent({ panelId, params }: { panelId: string; params: Record<string, unknown> }) {
   const paramSessionId = params?.sessionId as string | undefined;
   const storeSessionId = useAppStore((state) => state.tasks.activeSessionId);
@@ -252,6 +258,8 @@ function useResyncGitStatusOnTabActivate(panelId: string, sessionId: string | nu
     if (!sessionId) return;
     const entry = panelPortalManager.get(panelId);
     if (!entry?.api) return;
+    /** Ask the WebSocket client for a fresh git-status snapshot for the
+     *  session. */
     const refreshNow = () => {
       const client = getWebSocketClient();
       client?.refreshSessionData(sessionId);
@@ -267,6 +275,9 @@ function useResyncGitStatusOnTabActivate(panelId: string, sessionId: string | nu
   }, [panelId, sessionId]);
 }
 
+/** Render the changes/diff viewer for the panel's params (`kind` "all" or
+ *  "file"), resyncing git status when the panel becomes the active tab and
+ *  closing the panel when it becomes empty. */
 function DiffViewerContent({
   panelId,
   params,
@@ -307,6 +318,9 @@ function DiffViewerContent({
   );
 }
 
+/** Render the changes list panel with a tab title showing the pending change
+ *  count (git status files + commits), wiring up diff/file/commit/review
+ *  handlers. */
 function ChangesContent({ panelId }: { panelId: string }) {
   const { t } = useTranslation();
   const addDiffViewerPanel = useDockviewStore((s) => s.addDiffViewerPanel);
@@ -361,6 +375,7 @@ function ChangesContent({ panelId }: { panelId: string }) {
   );
 }
 
+/** Render the workspace files panel, opening the selected file in the editor. */
 function FilesContent() {
   const { openFile } = useFileEditors();
   const handleOpenFile = useCallback(
@@ -370,6 +385,7 @@ function FilesContent() {
   return <FilesPanel onOpenFile={handleOpenFile} />;
 }
 
+/** Render the plan panel for the active task. */
 function PlanContent() {
   const taskId = useAppStore((state) => state.tasks.activeTaskId);
   return <TaskPlanPanel taskId={taskId} visible />;
@@ -385,6 +401,8 @@ const COMPONENT_ALIASES: Record<string, string> = {
   "all-files": "files",
 };
 
+/** Resolve a legacy component alias to its current name, passing through
+ *  unknown names unchanged. */
 function resolveComponent(component: string): string {
   return COMPONENT_ALIASES[component] ?? component;
 }
@@ -432,6 +450,8 @@ const PANEL_RENDERERS: Record<string, PanelRenderer> = {
   ),
 };
 
+/** Render a dockview panel's portal content by looking up its (alias-resolved)
+ *  component renderer; falls back to an "unknown panel" placeholder. */
 export function renderPanel(
   panelId: string,
   component: string,

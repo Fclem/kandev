@@ -13,6 +13,7 @@ const STARTED_AT = "2026-07-23T10:00:00.000Z";
 const COMPLETED_AT = "2026-07-23T10:01:00.000Z";
 const LATER_AT = "2026-07-23T10:02:00.000Z";
 
+/** Creates a zustand store backed by the session slice. */
 function makeStore() {
   return create<SessionSlice>()(
     immer((set) => ({

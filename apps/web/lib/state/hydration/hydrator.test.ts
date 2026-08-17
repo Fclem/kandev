@@ -9,12 +9,14 @@ import type { MCPAttachmentHistory } from "@/lib/state/slices/session-runtime/ty
 
 const TERMINAL_TAB_ID = "terminal-1";
 
+/** Builds an AppState draft carrying only the default UI slice for hydrateUI tests. */
 function makeDraft(): AppState {
   // hydrateUI only touches UI-slice fields; an empty object cast satisfies
   // the rest without dragging the full AppState shape into this test.
   return { ...defaultUIState } as unknown as AppState;
 }
 
+/** Builds a deep-cloned AppState from the default state for full-state hydration tests. */
 function makeAppDraft(): AppState {
   return structuredClone(defaultState) as AppState;
 }

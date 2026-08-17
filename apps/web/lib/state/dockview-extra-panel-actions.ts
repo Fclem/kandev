@@ -18,6 +18,12 @@ import {
 
 let scrollTargetToken = 0;
 
+/**
+ * Build the transcript actions: `scrollTranscriptToMessage` activates (or
+ * adds) the session's chat panel and records a scroll target;
+ * `clearScrollTarget`/`clearScrollTargetForSession` clear it;
+ * `addVscodePanel`/`openInternalVscode` open or focus the VSCode panel.
+ */
 function buildTranscriptActions(set: StoreSet, get: StoreGet) {
   return {
     scrollTranscriptToMessage: (sessionId: string, messageId: string, title: string) => {
@@ -74,6 +80,11 @@ function buildTranscriptActions(set: StoreSet, get: StoreGet) {
   };
 }
 
+/**
+ * Build the single-instance side-panel actions (plan, plugin task panel,
+ * todos, prompt-history) via shared placement rules, plus
+ * `closePluginPanels` which removes every open panel contributed by a plugin.
+ */
 function buildSidePanelActions(get: StoreGet) {
   return {
     addPlanPanel: (opts?: SidePanelOpts) => {
@@ -132,6 +143,10 @@ function buildSidePanelActions(get: StoreGet) {
   };
 }
 
+/**
+ * Build the store's extra panel actions: transcript, side-panel, review, and
+ * terminal actions. Accepts either a (set, get) pair or a bare getter.
+ */
 export function buildExtraPanelActions(setOrGet: StoreSet | StoreGet, maybeGet?: StoreGet) {
   const set: StoreSet = maybeGet ? (setOrGet as StoreSet) : () => {};
   const get: StoreGet = maybeGet ?? (setOrGet as StoreGet);

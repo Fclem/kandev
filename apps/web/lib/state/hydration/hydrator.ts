@@ -80,6 +80,7 @@ const SERVER_DERIVED_TASK_FIELDS = [
   "startWhenUnblocked",
 ] as const;
 
+/** Copy server-derived task fields (blocked and dependency edges) from source into target only where target lacks a value, so real WS values still win. */
 function backfillServerDerivedFields(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   target: any,
@@ -389,6 +390,7 @@ function hydrateSession(
   if (state.activeModel) deepMerge(draft.activeModel, state.activeModel);
 }
 
+/** Merge hydrated turns into the store, marking newly merged non-active sessions as hydrated while protecting the active session. */
 function hydrateTurns(
   draft: Draft<AppState>,
   turns: NonNullable<HydrationState["turns"]>,
@@ -421,7 +423,7 @@ function hydrateSessionRuntime(
   activeSessionId: string | null,
   forceMergeSessionId: string | null,
 ): void {
-  // Merge a `{ bySessionId }`-shaped slice, protecting the active session.
+  /** Merge a `{ bySessionId }`-shaped slice from hydration state into the draft, protecting the active session. */
   const mergeBySession = (key: keyof AppState & keyof HydrationState): void => {
     const source = state[key] as { bySessionId?: Record<string, unknown> } | undefined;
     if (!source) return;
@@ -486,6 +488,7 @@ export function hydrateUI(draft: Draft<AppState>, state: HydrationState): void {
   }
 }
 
+/** Merge SSR quick-chat terminal tabs per workspace, restoring the active and last-used terminal tab when they still exist. */
 function hydrateQuickTerminalState(
   draft: Draft<AppState>,
   quickChat: NonNullable<HydrationState["quickChat"]>,
@@ -516,6 +519,7 @@ function hydrateQuickTerminalState(
   }
 }
 
+/** After merging quick-chat sessions, keep the client's active chat/terminal selection, falling back to the previous workspace's session or terminal tab when the selection no longer exists. */
 function restoreQuickChatSelection(
   draft: Draft<AppState>,
   previousSessions: AppState["quickChat"]["sessions"],

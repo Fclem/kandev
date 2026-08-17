@@ -3,6 +3,7 @@ import { filterEphemeral, toSerializedDockview } from "./serializer";
 import { panel, PROMPT_HISTORY_PANEL_ID } from "./constants";
 import type { LayoutPanel, LayoutState } from "./types";
 
+/** Builds an ephemeral LayoutPanel whose title is its id. */
 function ephemeralPanel(id: string, component: string): LayoutPanel {
   return { id, component, title: id };
 }

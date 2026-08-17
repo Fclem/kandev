@@ -17,6 +17,9 @@ import { PanelRoot } from "./panel-primitives";
 
 type PromptHistoryPanelContentProps = { onNavigateToPrompt?: (messageId: string) => void };
 
+/** The prompt-history panel: builds entries from the session's messages and
+ * turns and renders one expandable row per prompt; shows an empty-state
+ * message for passthrough sessions or when there are no entries. */
 export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryPanelContentProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -58,11 +61,14 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   );
 }
 
+/** Tracks the panel root's height via ResizeObserver and returns 40% of it as
+ * a CSS max-height string (falling back to "40vh") for expanded prompt rows. */
 function usePanelRowMaxHeight(rootRef: RefObject<HTMLDivElement | null>) {
   const [maxHeight, setMaxHeight] = useState<string>("40vh");
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
+    /** Recomputes the row max-height from the current root height. */
     const updateHeight = () =>
       setMaxHeight(root.clientHeight ? `${Math.round(root.clientHeight * 0.4)}px` : "40vh");
     updateHeight();
@@ -83,6 +89,9 @@ type PromptHistoryRowProps = {
   onNavigate?: (messageId: string) => void;
 };
 
+/** One prompt-history row: a scroll-to-prompt jump button, the prompt text
+ * (truncated, or expanded into a scrollable box), its relative time and
+ * duration, plus an expand/collapse toggle when the text overflows. */
 function PromptHistoryRow({
   sessionId,
   entry,
@@ -99,6 +108,7 @@ function PromptHistoryRow({
   useEffect(() => {
     const text = textRef.current;
     if (!text) return;
+    /** Recomputes whether the prompt text overflows its single-line span. */
     const update = () => setOverflow(text.scrollWidth > text.clientWidth);
     update();
     const observer = new ResizeObserver(update);
@@ -167,6 +177,8 @@ function PromptHistoryRow({
   );
 }
 
+/** Renders the formatted duration label for a prompt row, or null when the
+ * entry has no recorded duration. */
 function PromptDuration({
   durationSeconds,
   index,

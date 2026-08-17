@@ -28,6 +28,7 @@ afterEach(async () => {
   await i18n.changeLanguage("en");
 });
 
+/** Builds a one-column, one-group LayoutState whose panel list uses the given registry panel ids. */
 function layoutWith(panelIds: string[]): LayoutState {
   return {
     columns: [{ id: "col", groups: [{ id: "group", panels: panelIds.map(panel) }] }],
@@ -95,6 +96,7 @@ describe("panelTitle", () => {
 });
 
 describe("layout round trip", () => {
+  /** Serializes the given layout and returns the title map dockview stores per panel. */
   const titlesOf = (state: LayoutState) => {
     const serialized = toSerializedDockview(state, 1000, 800, new Map());
     return (serialized as unknown as { panels: Record<string, { title: string }> }).panels;

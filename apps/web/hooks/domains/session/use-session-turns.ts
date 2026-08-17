@@ -9,6 +9,7 @@ const lastAppliedSequence = new Map<string, number>();
 /** Bounded retries with backoff for transient turn-fetch failures. */
 const MAX_TURN_FETCH_ATTEMPTS = 3;
 
+/** Subscribe to a session's turns, fetching and hydrating them on demand with bounded retries and backoff; returns cached turns once hydrated, otherwise an empty array. */
 export function useSessionTurns(sessionId: string | null): Turn[] {
   const turns = useAppStore((state) => (sessionId ? state.turns.bySession[sessionId] : undefined));
   const hydrated = useAppStore((state) =>

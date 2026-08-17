@@ -25,8 +25,10 @@ const DIVIDER_SCROLL_CONTAINER_TEST_ID = "divider-scroll-container";
 const SCROLL_TO_MESSAGE_ROOT = "scroll-to-message-root";
 const MISSING_SCROLL_CONTAINER_ERROR = "scroll container did not render";
 const TEST_MESSAGES = [{} as Message];
+/** Always returns false: the harness never locks programmatic scrolling. */
 const NEVER_LOCKED = () => false;
 
+/** Renders a scroll container wired to useScrollToDividerOrBottom with mocked divider geometry. */
 function Harness({
   itemCount,
   anchoredBarOffsetPx,
@@ -69,6 +71,7 @@ function Harness({
   );
 }
 
+/** Builds a DOMRect-like object positioned at the given top with the given height. */
 function createRect(top: number, height: number): DOMRect {
   return {
     x: 0,
@@ -83,6 +86,7 @@ function createRect(top: number, height: number): DOMRect {
   } as DOMRect;
 }
 
+/** Renders a scroll container running useAutoScroll and exposes its markNotNearBottom callback. */
 function AutoScrollHarness({
   isWorking,
   hasUnreadDivider,
@@ -108,6 +112,7 @@ function AutoScrollHarness({
   return <div ref={scrollRef} data-testid="auto-scroll-container" />;
 }
 
+/** Stubs scrollHeight (1000) and clientHeight (400) onto an element. */
 function setScrollMetrics(element: HTMLElement) {
   Object.defineProperty(element, "scrollHeight", { configurable: true, value: 1000 });
   Object.defineProperty(element, "clientHeight", { configurable: true, value: 400 });
@@ -257,6 +262,7 @@ type ScrollToMessageHandle = (
   options?: { align?: "start" | "center" },
 ) => boolean;
 
+/** Renders a scroll root containing the given message rows and reports the useScrollToMessage handle. */
 function ScrollToMessageHarness({
   rows,
   onHandle,
@@ -295,6 +301,7 @@ describe("useScrollToMessage — root-scoped row lookup", () => {
     scrollIntoView.mockRestore();
   });
 
+  /** Renders a ScrollToMessageHarness for the given rows and returns its scroll handle. */
   function renderHandle(rows: string[]) {
     const boxed: { current: ScrollToMessageHandle | null } = { current: null };
     render(

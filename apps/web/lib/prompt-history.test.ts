@@ -6,6 +6,7 @@ const MESSAGE_ID = "message-1";
 const TURN_ID = "turn-1";
 const CREATED_AT = "2026-01-01T00:00:00.000Z";
 
+/** Builds a user Message with fixed defaults, merged with the given overrides. */
 function message(overrides: Partial<Message>): Message {
   return {
     id: MESSAGE_ID,
@@ -19,6 +20,7 @@ function message(overrides: Partial<Message>): Message {
   };
 }
 
+/** Builds a Turn with fixed defaults, merged with the given overrides. */
 function turn(overrides: Partial<Turn>): Turn {
   return {
     id: TURN_ID,

@@ -48,6 +48,7 @@ const SESSION_ID = "session-1";
 const WORKSPACE_ID = "workspace-office";
 const WORKFLOW_ID = "workflow-1";
 
+/** Builds a Task with default test fields, merged with the given overrides. */
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: TASK_ID,
@@ -65,6 +66,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   } as Task;
 }
 
+/** Resets mocks and seeds every API mock with its default hydration response. */
 function mockDefaultHydrationData() {
   vi.clearAllMocks();
   mocks.fetchTask.mockResolvedValue(makeTask());
@@ -87,6 +89,7 @@ function mockDefaultHydrationData() {
   });
 }
 
+/** Builds a completed session object for the test task and session ids. */
 function makeSession() {
   return {
     id: SESSION_ID,

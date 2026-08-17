@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
-import { IconChevronDown, IconChevronUp, IconNavigation } from "@tabler/icons-react";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconClock,
+  IconHourglass,
+  IconNavigation,
+} from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
 import { useSessionMessages } from "@/hooks/domains/session/use-session-messages";
 import { useSessionTurnsState } from "@/hooks/domains/session/use-session-turns";
 import { useMessageFavorite } from "@/hooks/domains/session/use-message-favorite";
-import { formatDateTime, formatRelative } from "@/lib/i18n/formats";
+import { formatDateTime, formatRelativeCompact } from "@/lib/i18n/formats";
 import { cn } from "@/lib/utils";
 import {
   buildPromptHistoryEntries,
@@ -142,12 +148,12 @@ function PromptHistoryRow({
           <Button
             variant="ghost"
             size="icon"
-            className="absolute left-1 top-1/2 z-10 size-11 -translate-y-1/2 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 focus-visible:bg-background/90 sm:size-8 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+            className="absolute left-1 top-1/2 z-10 size-11 -translate-y-1/2 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 focus-visible:bg-background/90 sm:size-6 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
             aria-label={t("task:scrollToPrompt")}
             data-testid={`prompt-history-jump-${index}`}
             onClick={() => onNavigate?.(entry.messageId)}
           >
-            <IconNavigation size={16} />
+            <IconNavigation size={14} />
           </Button>
           <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
             {entry.content}
@@ -179,20 +185,24 @@ function PromptHistoryRow({
           )}
         </div>
       </div>
-      <time
-        dateTime={entry.sentAt}
-        title={formatDateTime(entry.sentAt)}
-        className="shrink-0 text-xs text-muted-foreground"
-      >
-        {formatRelative(entry.sentAt)}
-      </time>
-      <PromptDuration durationSeconds={entry.durationSeconds} index={index} />
+      <div className="flex shrink-0 flex-col items-end gap-0.5 text-xs leading-tight text-muted-foreground">
+        <time
+          dateTime={entry.sentAt}
+          title={formatDateTime(entry.sentAt)}
+          className="inline-flex items-center gap-1"
+        >
+          <IconClock className="h-3 w-3 shrink-0" aria-hidden="true" />
+          {formatRelativeCompact(entry.sentAt)}
+        </time>
+        <PromptDuration durationSeconds={entry.durationSeconds} index={index} />
+      </div>
     </div>
   );
 }
 
 /** Renders the formatted duration label for a prompt row, or null when the
- * entry has no recorded duration. */
+ * entry has no recorded duration. The hourglass marks it as elapsed time
+ * and matches the surrounding text size. */
 function PromptDuration({
   durationSeconds,
   index,
@@ -205,8 +215,9 @@ function PromptDuration({
   return (
     <span
       data-testid={`prompt-history-duration-${index}`}
-      className="shrink-0 text-xs text-muted-foreground"
+      className="inline-flex items-center gap-1"
     >
+      <IconHourglass className="h-3 w-3 shrink-0" aria-hidden="true" />
       {formatPromptDuration(durationSeconds, {
         s: t("task:durationUnitSeconds"),
         m: t("task:durationUnitMinutes"),

@@ -360,9 +360,9 @@ describe("PromptHistoryPanelContent — duration rendering", () => {
 describe("PromptHistoryPanelContent — time element", () => {
   it.each([
     { name: "just now", now: "2026-01-01T12:00:30.000Z", expected: "just now" },
-    { name: "5m", now: "2026-01-01T12:05:00.000Z", expected: "5m ago" },
-    { name: "3h", now: "2026-01-01T15:00:00.000Z", expected: "3h ago" },
-    { name: "2d", now: "2026-01-03T12:00:00.000Z", expected: "2d ago" },
+    { name: "5m", now: "2026-01-01T12:05:00.000Z", expected: "5m" },
+    { name: "3h", now: "2026-01-01T15:00:00.000Z", expected: "3h" },
+    { name: "2d", now: "2026-01-03T12:00:00.000Z", expected: "2d" },
   ])("renders the $name bucket of the compact formatRelative ladder", ({ now, expected }) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(now));

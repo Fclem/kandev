@@ -5,7 +5,9 @@ import { IconChevronDown, IconChevronUp, IconNavigation } from "@tabler/icons-re
 import { useAppStore } from "@/components/state-provider";
 import { useSessionMessages } from "@/hooks/domains/session/use-session-messages";
 import { useSessionTurns } from "@/hooks/domains/session/use-session-turns";
+import { useMessageFavorite } from "@/hooks/domains/session/use-message-favorite";
 import { formatRelative } from "@/lib/i18n/formats";
+import { cn } from "@/lib/utils";
 import {
   buildPromptHistoryEntries,
   formatPromptDuration,
@@ -43,6 +45,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
       {entries.map((entry, index) => (
         <PromptHistoryRow
           key={entry.messageId}
+          sessionId={sessionId}
           entry={entry}
           index={index}
           expanded={expanded === entry.messageId}
@@ -71,6 +74,7 @@ function usePanelRowMaxHeight(rootRef: RefObject<HTMLDivElement | null>) {
 }
 
 type PromptHistoryRowProps = {
+  sessionId: string | null;
   entry: PromptHistoryEntry;
   index: number;
   expanded: boolean;
@@ -80,6 +84,7 @@ type PromptHistoryRowProps = {
 };
 
 function PromptHistoryRow({
+  sessionId,
   entry,
   index,
   expanded,
@@ -88,6 +93,7 @@ function PromptHistoryRow({
   onNavigate,
 }: PromptHistoryRowProps) {
   const { t } = useTranslation();
+  const { isFavorite } = useMessageFavorite(sessionId ?? "", entry.messageId);
   const textRef = useRef<HTMLSpanElement>(null);
   const [overflow, setOverflow] = useState(false);
   useEffect(() => {
@@ -113,9 +119,15 @@ function PromptHistoryRow({
         <IconNavigation size={16} />
       </Button>
       <div className="min-w-0 flex-1">
-        {/* Same bubble as the transcript's user message (rounded-2xl
-            bg-primary/30, inherited font) with lighter padding. */}
-        <div className="overflow-hidden rounded-2xl bg-primary/30 px-3 py-1.5">
+        {/* Same bubble as the transcript's user message: markdown-body
+            font, rounded-2xl, blue when not favorited / yellow when the
+            message is starred — with lighter padding. */}
+        <div
+          className={cn(
+            "markdown-body markdown-body-user overflow-hidden rounded-2xl px-3 py-1.5",
+            isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
+          )}
+        >
           <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
             {entry.content}
           </span>

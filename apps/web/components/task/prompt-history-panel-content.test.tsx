@@ -30,6 +30,7 @@ vi.mock("@/hooks/domains/session/use-session-turns", () => ({
 }));
 
 import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
+import { useMessageFavoritesStore } from "@/lib/state/slices/message-favorites";
 
 const SESSION_A = "session-a";
 const SESSION_B = "session-b";
@@ -158,6 +159,8 @@ beforeEach(() => {
 afterEach(async () => {
   cleanup();
   vi.unstubAllGlobals();
+  useMessageFavoritesStore.setState({ bySession: {} });
+  sessionStorage.clear();
   await i18n.changeLanguage("en");
 });
 
@@ -187,7 +190,21 @@ describe("PromptHistoryPanelContent — rows and test IDs", () => {
     expect(bubble?.classList.contains("bg-primary/30")).toBe(true);
     expect(bubble?.classList.contains("px-3")).toBe(true);
     expect(bubble?.classList.contains("py-1.5")).toBe(true);
+    // Same font as the transcript user message (markdown-body 13px).
+    expect(bubble?.classList.contains("markdown-body")).toBe(true);
+    expect(bubble?.classList.contains("markdown-body-user")).toBe(true);
     expect(bubble?.textContent).toContain("bubbled prompt");
+  });
+
+  it("turns the bubble yellow when the transcript message is starred", () => {
+    useMessageFavoritesStore.getState().toggleFavorite(SESSION_A, "message-1");
+    messagesBySession[SESSION_A] = [message({ id: "message-1", content: "starred prompt" })];
+
+    render(<PromptHistoryPanelContent />);
+
+    const bubble = row(0).querySelector(".rounded-2xl");
+    expect(bubble?.classList.contains("bg-yellow-200/50")).toBe(true);
+    expect(bubble?.classList.contains("bg-primary/30")).toBe(false);
   });
 
   it("renders the empty state when the session has no user prompts", () => {

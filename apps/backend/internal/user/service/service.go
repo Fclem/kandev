@@ -19,9 +19,11 @@ import (
 	"go.uber.org/zap"
 )
 
+// ErrUserSettingsConflict marks an exhausted conditional settings update.
 var (
-	ErrUserNotFound = errors.New("user not found")
-	ErrValidation   = errors.New("validation error")
+	ErrUserNotFound         = errors.New("user not found")
+	ErrValidation           = errors.New("validation error")
+	ErrUserSettingsConflict = store.ErrUserSettingsRevisionConflict
 )
 
 const (
@@ -178,6 +180,10 @@ func (s *Service) UpdateUserSettings(ctx context.Context, req *UpdateUserSetting
 		taskCreatePatch = req.TaskCreateLastUsed
 	}
 	return s.updateUserSettingsCAS(ctx, func(settings *models.UserSettings) (bool, error) {
+		// The shallow copy is safe only while every apply* helper replaces
+		// reference fields (slices, maps, and json.RawMessage) instead of
+		// mutating them in place. In-place mutation would alias before and make
+		// DeepEqual miss the write.
 		before := *settings
 		if err := applyBasicSettings(settings, req); err != nil {
 			return false, fmt.Errorf("%w: %s", ErrValidation, err.Error())
@@ -242,7 +248,11 @@ func (s *Service) updateUserSettingsCAS(
 		}
 		lastErr = err
 	}
-	return nil, lastErr
+	s.logger.Warn("user settings update exhausted CAS retries",
+		zap.Int("attempts", maxUserSettingsCASAttempts),
+		zap.Error(lastErr),
+	)
+	return nil, fmt.Errorf("user settings update exhausted after %d attempts: %w", maxUserSettingsCASAttempts, lastErr)
 }
 
 // RecordTaskCreateLastUsed persists the last task-creation choices (a no-op

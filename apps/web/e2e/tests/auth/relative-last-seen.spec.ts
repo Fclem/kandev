@@ -15,6 +15,7 @@ import { watchWs } from "../../helpers/causal-waits";
  */
 const ADMIN = { email: "admin@demo.dev", password: "adminpass123", displayName: "Ada Admin" };
 const SECURITY_PATH = "/settings/account/security";
+const CURRENT_SESSION_ROW = '[data-testid="account-sessions-row"][data-current-session="true"]';
 
 /** Fetches the user's current last_seen_display setting from the settings API. */
 async function readLastSeenDisplay(ctx: BrowserContext, baseUrl: string): Promise<string> {
@@ -76,10 +77,10 @@ test.describe.serial("relative last seen (desktop)", () => {
         await expect(select).toBeVisible({ timeout: 15_000 });
 
         await select.click();
-        await page.getByRole("option", { name: "Relative time" }).click();
+        await page.getByRole("listbox").getByRole("option", { name: "Relative time" }).click();
         await page.getByRole("button", { name: "Save changes" }).click();
 
-        const relative = page.getByTestId("last-seen-relative").first();
+        const relative = page.locator(CURRENT_SESSION_ROW).getByTestId("last-seen-relative");
         await expect(relative).toBeVisible({ timeout: 15_000 });
 
         // Hover reveals the absolute timestamp in a tooltip, matching the
@@ -137,15 +138,19 @@ test.describe.serial("relative last seen (desktop)", () => {
         await pageB.goto(SECURITY_PATH);
         await expect(pageB.getByTestId("last-seen-relative")).toHaveCount(0);
         await pageB.getByTestId("last-seen-display-select").click();
-        await pageB.getByRole("option", { name: "Relative time" }).click();
+        await pageB.getByRole("listbox").getByRole("option", { name: "Relative time" }).click();
         await pageB.getByRole("button", { name: "Save changes" }).click();
-        await expect(pageB.getByTestId("last-seen-relative").first()).toBeVisible({
+        await expect(
+          pageB.locator(CURRENT_SESSION_ROW).getByTestId("last-seen-relative"),
+        ).toBeVisible({
           timeout: 15_000,
         });
 
         // Tab A observes the change over WebSocket, without a reload.
         await settingsUpdated;
-        await expect(pageA.getByTestId("last-seen-relative").first()).toBeVisible();
+        await expect(
+          pageA.locator(CURRENT_SESSION_ROW).getByTestId("last-seen-relative"),
+        ).toBeVisible();
       } finally {
         await restoreLastSeenDisplay(ctxA, backend.baseUrl, original);
       }

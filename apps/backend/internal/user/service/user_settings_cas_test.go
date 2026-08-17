@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -43,6 +44,10 @@ type casFakeRepo struct {
 	// forceConflictNext makes the next upsert return a conflict without
 	// committing, then clears itself (used to force a retry deterministically).
 	forceConflictNext bool
+
+	// forceConflictCount makes the next N upserts return a conflict without
+	// committing (used to force retry exhaustion deterministically).
+	forceConflictCount int
 
 	// blockNextUpsert, when true, blocks the next upsert until releaseUpsert
 	// is closed, then clears itself. Used to force a stale-CAS interleaving.
@@ -147,6 +152,11 @@ func (f *casFakeRepo) UpsertUserSettingsPreservingTaskCreateLastUsed(
 	record := casUpsert{expectedRevision: expectedRevision, defaultEditorID: settings.DefaultEditorID}
 	if f.forceConflictNext {
 		f.forceConflictNext = false
+		f.upserts = append(f.upserts, record)
+		return nil, store.ErrUserSettingsRevisionConflict
+	}
+	if f.forceConflictCount > 0 {
+		f.forceConflictCount--
 		f.upserts = append(f.upserts, record)
 		return nil, store.ErrUserSettingsRevisionConflict
 	}
@@ -437,6 +447,30 @@ func TestUpdateUserSettingsSameValuePatchIsNoop(t *testing.T) {
 	}
 	if got == nil || got.Revision != base.Revision {
 		t.Fatalf("no-op returned settings = %+v, want current revision %d", got, base.Revision)
+	}
+}
+
+// TestUpdateUserSettingsCASExhaustionWrapsConflict verifies callers can
+// distinguish a bounded retry exhaustion from an unexpected storage failure.
+func TestUpdateUserSettingsCASExhaustionWrapsConflict(t *testing.T) {
+	repo := newCASFakeRepo(&models.UserSettings{UserID: store.DefaultUserID})
+	repo.forceConflictCount = maxUserSettingsCASAttempts
+	svc := newCASService(repo, &casEventBus{})
+
+	_, err := svc.UpdateUserSettings(context.Background(), &UpdateUserSettingsRequest{
+		LastSeenDisplay: ptr(models.LastSeenDisplayRelative),
+	})
+	if err == nil {
+		t.Fatal("expected retry exhaustion error, got nil")
+	}
+	if !errors.Is(err, store.ErrUserSettingsRevisionConflict) {
+		t.Fatalf("error = %v, want ErrUserSettingsRevisionConflict", err)
+	}
+	if !strings.Contains(err.Error(), "exhausted") {
+		t.Fatalf("error = %v, want retry exhaustion context", err)
+	}
+	if got := len(repo.upsertLog()); got != maxUserSettingsCASAttempts {
+		t.Fatalf("upsert attempts = %d, want %d", got, maxUserSettingsCASAttempts)
 	}
 }
 

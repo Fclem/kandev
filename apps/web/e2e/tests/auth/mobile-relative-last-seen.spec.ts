@@ -15,6 +15,7 @@ import { login, setupAdmin } from "../../helpers/auth";
  */
 const ADMIN = { email: "admin@demo.dev", password: "adminpass123", displayName: "Ada Admin" };
 const SECURITY_PATH = "/settings/account/security";
+const CURRENT_SESSION_ROW = '[data-testid="account-sessions-row"][data-current-session="true"]';
 
 test.describe.serial("relative last seen (mobile)", () => {
   test.beforeAll(async ({ backend }) => {
@@ -70,7 +71,7 @@ test.describe.serial("relative last seen (mobile)", () => {
         expect(triggerBox!.height).toBeGreaterThanOrEqual(44);
 
         await trigger.tap();
-        const option = page.getByRole("option", { name: "Relative time" });
+        const option = page.getByRole("listbox").getByRole("option", { name: "Relative time" });
         await expect(option).toBeVisible();
         // The dropdown entrance animation (zoom-in-95 over 100ms) scales the
         // whole content, so a one-shot boundingBox() can measure mid-flight
@@ -83,7 +84,7 @@ test.describe.serial("relative last seen (mobile)", () => {
         await page.getByRole("button", { name: "Save changes" }).tap();
 
         // Relative labels render without hover, with no horizontal overflow.
-        const relative = page.getByTestId("last-seen-relative").first();
+        const relative = page.locator(CURRENT_SESSION_ROW).getByTestId("last-seen-relative");
         await expect(relative).toBeVisible({ timeout: 15_000 });
         const overflow = await page.evaluate(
           () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

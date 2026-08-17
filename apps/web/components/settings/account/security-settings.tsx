@@ -304,7 +304,11 @@ function SessionsTable({
       </TableHeader>
       <TableBody>
         {sessions.map((session) => (
-          <TableRow key={session.id} data-testid="account-sessions-row">
+          <TableRow
+            key={session.id}
+            data-testid="account-sessions-row"
+            data-current-session={session.current ? "true" : "false"}
+          >
             <TableCell className="text-xs">
               {session.user_agent}
               {session.current && (

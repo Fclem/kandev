@@ -80,6 +80,7 @@ test.describe.serial("relative last seen (mobile)", () => {
           .poll(async () => Math.round((await option.boundingBox())?.height ?? 0))
           .toBeGreaterThanOrEqual(44);
         await option.tap();
+        await page.getByRole("button", { name: "Save changes" }).tap();
 
         // Relative labels render without hover, with no horizontal overflow.
         const relative = page.getByTestId("last-seen-relative").first();
@@ -89,11 +90,14 @@ test.describe.serial("relative last seen (mobile)", () => {
         );
         expect(overflow).toBe(false);
 
-        // The absolute stamp stays reachable without a tooltip, via the
-        // trigger's accessible name / native title.
+        // The absolute stamp stays reachable through an explicit touch drawer.
         const absolute = await relative.getAttribute("title");
         expect(absolute).toBeTruthy();
         await expect(relative).toHaveAttribute("aria-label", absolute!);
+        await relative.tap();
+        const absoluteDetails = page.getByTestId("last-seen-absolute");
+        await expect(absoluteDetails).toBeVisible();
+        await expect(absoluteDetails).toHaveText(absolute!);
       } finally {
         const res = await ctx.request.patch(`${backend.baseUrl}/api/v1/user/settings`, {
           data: { last_seen_display: original },

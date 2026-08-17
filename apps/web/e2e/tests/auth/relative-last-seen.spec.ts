@@ -37,11 +37,17 @@ async function restoreLastSeenDisplay(
 }
 
 test.describe.serial("relative last seen (desktop)", () => {
-  test.beforeAll(async ({ backend }) => {
+  test.beforeAll(async ({ browser, backend }) => {
     await backend.restart({
       KANDEV_FEATURES_AUTH: "true",
       KANDEV_DATABASE_PATH: path.join(backend.tmpDir, "kandev-relative-last-seen.db"),
     });
+    const setupContext = await browser.newContext({ baseURL: backend.frontendUrl });
+    try {
+      await setupAdmin(setupContext, backend.baseUrl, ADMIN);
+    } finally {
+      await setupContext.close();
+    }
   });
 
   test.afterAll(async ({ backend }) => {
@@ -54,7 +60,6 @@ test.describe.serial("relative last seen (desktop)", () => {
   }) => {
     const ctx = await browser.newContext({ baseURL: backend.frontendUrl });
     try {
-      await setupAdmin(ctx, backend.baseUrl, ADMIN);
       await login(ctx, backend.baseUrl, ADMIN);
       let original = "absolute";
       try {
@@ -72,6 +77,7 @@ test.describe.serial("relative last seen (desktop)", () => {
 
         await select.click();
         await page.getByRole("option", { name: "Relative time" }).click();
+        await page.getByRole("button", { name: "Save changes" }).click();
 
         const relative = page.getByTestId("last-seen-relative").first();
         await expect(relative).toBeVisible({ timeout: 15_000 });
@@ -132,6 +138,7 @@ test.describe.serial("relative last seen (desktop)", () => {
         await expect(pageB.getByTestId("last-seen-relative")).toHaveCount(0);
         await pageB.getByTestId("last-seen-display-select").click();
         await pageB.getByRole("option", { name: "Relative time" }).click();
+        await pageB.getByRole("button", { name: "Save changes" }).click();
         await expect(pageB.getByTestId("last-seen-relative").first()).toBeVisible({
           timeout: 15_000,
         });

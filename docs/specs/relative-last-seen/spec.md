@@ -17,7 +17,8 @@ question a user is asking.
 
 Relative time is inherently stale the moment it renders, so the label must live-update, and users
 who need the exact moment still need access to it. This feature adds a per-user display option on
-the security page that switches the column to relative time with an absolute-time tooltip.
+the security page that switches the column to relative time with an absolute-time tooltip on fine
+pointer devices and a touch drawer on coarse-pointer devices.
 
 ## What
 
@@ -27,9 +28,13 @@ the security page that switches the column to relative time with an absolute-tim
   the option.
 - With **Relative time** selected, the "Last seen" column renders a locale-aware relative label
   ("now", "5 minutes ago", "yesterday") that re-renders as time passes while the page is open.
-- Hovering (or keyboard-focusing) a relative label shows a tooltip with the absolute timestamp.
+- Hovering (or keyboard-focusing) a relative label shows a tooltip with the absolute timestamp on
+  fine-pointer devices. Tapping the label opens a touch drawer with the absolute timestamp on
+  coarse-pointer devices.
 - The choice is a per-user persisted setting (`last_seen_display`), shared across the account and
   synced between tabs via the existing user-settings WebSocket push.
+- Changing the select updates a local draft and the table preview. The shared **Save changes**
+  action persists the draft. The shared **Reset** action discards the draft.
 
 ## Permissions
 
@@ -38,9 +43,9 @@ The option is a per-user preference on an account page; it requires only an auth
 
 ## Failure modes
 
-- **Settings write fails:** the select falls back to the previous value and shows the error copy;
-  the page remains usable. The relative/absolute rendering never depends on a successful write to
-  display.
+- **Settings write fails:** the select keeps the draft and shows the error copy. The page remains
+  usable, and the user can retry the shared **Save changes** action. The relative/absolute rendering
+  never depends on a successful write to display.
 - **Own-write echo vs unrelated snapshots:** the backend publishes a `user.settings.updated`
   event for this tab's own write before the PATCH response returns, and the gateway broadcasts it
   to every subscriber, including the initiating tab; the event is a full snapshot that any
@@ -61,11 +66,10 @@ The option is a per-user preference on an account page; it requires only an auth
   but `formatDateTime` (used for the tooltip) throws `RangeError` on an invalid date. The relative
   cell must validate the timestamp once and render neither the tooltip nor the absolute label when
   it is unparseable, so the cell degrades to an empty cell instead of crashing the render.
-- **Tooltip unavailable (touch/coarse pointer):** the absolute time remains reachable without the
-  tooltip. The relative label's trigger carries the absolute timestamp as its accessible name and
-  native `title` fallback, so touch users and assistive tech get the exact moment even though no
-  hover path exists. The tooltip is a convenience, never the only channel. Mobile E2E proves the
-  select and relative labels work at the Pixel 5 viewport without hover.
+- **Tooltip unavailable (touch/coarse pointer):** the absolute time remains reachable through the
+  relative label's explicit tap action. The tap opens a drawer with the exact timestamp. The
+  trigger also carries the absolute timestamp as its accessible name, and the fine-pointer path
+  keeps the native `title` fallback. Mobile E2E proves the tap path at the Pixel 5 viewport.
 
 ## Scenarios
 
@@ -73,16 +77,20 @@ The option is a per-user preference on an account page; it requires only an auth
   Active sessions table renders, **THEN** the Last seen column shows absolute timestamps exactly as
   before.
 - **GIVEN** the Last seen select, **WHEN** the user picks **Relative time**, **THEN** the column
-  switches to relative labels immediately and the choice persists to user settings.
+  switches to relative labels immediately and the local draft becomes dirty.
+- **GIVEN** a dirty Last seen draft, **WHEN** the user activates **Save changes**, **THEN** the
+  choice persists to user settings and the draft becomes clean.
+- **GIVEN** a dirty Last seen draft, **WHEN** the user activates **Reset**, **THEN** the select and
+  table return to the confirmed setting without a settings write.
 - **GIVEN** Relative time selected and a session last seen 3 minutes ago, **WHEN** the page stays
   open for a minute, **THEN** the label advances (for example from "3 minutes ago" to "4 minutes
   ago") without a page reload.
-- **GIVEN** a relative label, **WHEN** the user hovers or keyboard-focuses it (the trigger is
-  focusable), **THEN** a tooltip shows the absolute timestamp for that session, and the absolute
-  timestamp is also exposed as the trigger's accessible name and native title.
-- **GIVEN** a coarse-pointer device with no hover, **WHEN** a relative label renders, **THEN** the
-  absolute timestamp is still reachable via the label's accessible name/title, and the select and
-  relative labels remain usable at the phone viewport.
+- **GIVEN** a relative label on a fine-pointer device, **WHEN** the user hovers or keyboard-focuses
+  it (the trigger is focusable), **THEN** a tooltip shows the absolute timestamp for that session,
+  and the absolute timestamp is also exposed as the trigger's accessible name and native title.
+- **GIVEN** a coarse-pointer device with no hover, **WHEN** the user taps a relative label, **THEN**
+  a drawer shows the absolute timestamp, and the select and relative labels remain usable at the
+  phone viewport.
 - **GIVEN** the user selects **Absolute time** again, **WHEN** the table renders, **THEN** absolute
   timestamps return and the persisted value flips back.
 - **GIVEN** the option changed in another tab, **WHEN** the user-settings push arrives, **THEN**

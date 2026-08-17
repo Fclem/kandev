@@ -13,14 +13,12 @@ spec: "../../specs/relative-last-seen/spec.md"
 ## Acceptance
 
 - **Desktop** (`auth` project, Desktop Chrome): the file groups its tests in
-  `test.describe.serial` (single-shot `setupAdmin` + shared worker backend/DB; without serial
-  grouping, setup/restore/backend restart race across tests), restarts the worker backend with auth
-  on and its OWN `KANDEV_DATABASE_PATH` (auth setup is single-shot and the worker DB survives
-  restarts; a shared DB makes the focused command order-dependent), calls `setupAdmin`, then logs
-  in. Opening `/settings/account/security` shows the Last seen select; switching to Relative time
-  renders a relative label in the Last seen column and persists the setting (verified via the
-  user-settings API); hovering the relative label reveals a tooltip containing the absolute
-  timestamp.
+  `test.describe.serial` (shared worker backend/DB and backend restart still require serial
+  ordering), restarts the worker backend with auth on and its OWN `KANDEV_DATABASE_PATH`, creates
+  the administrator in `beforeAll` so a focused test run is independent, then logs in per test.
+  Opening `/settings/account/security` shows the Last seen select. Switching to Relative time
+  updates the local draft. The shared Save action persists the setting. A relative label appears in
+  the Last seen column, and hovering it reveals a tooltip containing the absolute timestamp.
 - **Cross-tab** (same desktop spec, serial): two browser contexts on the same backend, BOTH
   authenticated (Playwright contexts have isolated cookie stores and the auth helpers set cookies
   per context, so context B must `login` separately — or be created from context A's captured
@@ -34,13 +32,13 @@ spec: "../../specs/relative-last-seen/spec.md"
 - **Mobile** (`mobile-chrome` project, Pixel 5): the spec spreads `...devices["Pixel 5"]` into a
   manual `browser.newContext` (manual contexts do not inherit project device options) and asserts
   the resulting viewport width; with its own DB + `setupAdmin`, the Last seen select is operated
-  with touch-native `tap()` on the trigger and the Relative time option (mouse-semantics
-  `click`/`selectOption` would not prove touch), relative labels render without hover, and there is
-  no horizontal document overflow. The absolute stamp is asserted via the trigger's title /
-  accessible name, not the tooltip. The Last seen trigger and options get a mobile-appropriate
-  touch target (min-h-11 / 44px at phone widths via responsive classes on this instance — the
-  shared Select defaults to a 28px trigger and items — per /mobile-parity), and the mobile spec
-  asserts the trigger's and option's bounding boxes are >= 44px in the active dimension.
+  with touch-native `tap()` on the trigger and the Relative time option, then saved with the shared
+  Save action. Relative labels render without hover, there is no horizontal document overflow, and
+  tapping a relative label opens a drawer with the exact timestamp. The Last seen trigger and
+  options get a mobile-appropriate touch target (min-h-11 / 44px at phone widths via responsive
+  classes on this instance — the shared Select defaults to a 28px trigger and items — per
+  /mobile-parity), and the mobile spec asserts the trigger's and option's bounding boxes are >=
+  44px in the active dimension.
 - The original setting is restored in `finally` and the baseline backend is restarted in
   `afterAll` in both specs so the worker is reusable.
 

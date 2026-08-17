@@ -10,6 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@kandev/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kandev/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@kandev/ui/drawer";
 import { Badge } from "@kandev/ui/badge";
 import { IconDevices, IconKey } from "@tabler/icons-react";
 import { ApiError } from "@/lib/api/client";
@@ -20,12 +28,14 @@ import {
   type AuthSession,
 } from "@/lib/api/domains/auth-api";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { useSettingsSaveContributor } from "@/components/settings/settings-save-provider";
 import { useSettingsTargetRegistration } from "@/components/settings/settings-target-provider";
 import { ACCOUNT_SETTINGS_TARGETS } from "@/lib/settings-discovery/catalog/account";
 import { formatDateTime, formatRelativeTime } from "@/lib/i18n/formats";
 import { SettingsCardHeader } from "@/components/settings/settings-card-header";
 import { SettingsErrorText, SettingsFieldLabel } from "@/components/settings/settings-typography";
 import { useNow } from "@/hooks/use-now";
+import { useTouchDrawer } from "@/hooks/use-compact-task-chrome";
 import { useAppStore, useAppStoreApi } from "@/components/state-provider";
 import { createQueuedUserSettingsSyncWithResponse } from "@/lib/user-settings-sync";
 import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
@@ -173,6 +183,9 @@ function LastSeenCell({ lastSeenAt, display }: { lastSeenAt: string; display: La
 
 /** Renders a live-updating relative last-seen time with an absolute-time tooltip. */
 function RelativeLastSeenCell({ lastSeenAt }: { lastSeenAt: Date }) {
+  const { t } = useTranslation();
+  const usesTouchDrawer = useTouchDrawer();
+  const [open, setOpen] = useState(false);
   // Tick every second while the timestamp is under a minute old (second-scale
   // labels like "45 seconds ago" need live updates), then every minute once
   // the age crosses a minute. The interval is recomputed on each render, so
@@ -181,6 +194,36 @@ function RelativeLastSeenCell({ lastSeenAt }: { lastSeenAt: Date }) {
   const intervalMs = ageMs < 60_000 ? 1_000 : 60_000;
   const now = useNow(intervalMs);
   const absolute = formatDateTime(lastSeenAt);
+  const relative = formatRelativeTime(lastSeenAt, now);
+
+  if (usesTouchDrawer) {
+    return (
+      <TableCell className="text-xs">
+        <Drawer open={open} onOpenChange={setOpen}>
+          <DrawerTrigger asChild>
+            <button
+              type="button"
+              aria-label={absolute}
+              title={absolute}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              className="min-h-11 cursor-pointer rounded-sm px-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-testid="last-seen-relative"
+            >
+              <time dateTime={lastSeenAt.toISOString()}>{relative}</time>
+            </button>
+          </DrawerTrigger>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>{t("account:lastSeen")}</DrawerTitle>
+              <DrawerDescription data-testid="last-seen-absolute">{absolute}</DrawerDescription>
+            </DrawerHeader>
+          </DrawerContent>
+        </Drawer>
+      </TableCell>
+    );
+  }
+
   return (
     <TableCell className="text-xs">
       <Tooltip>
@@ -193,7 +236,7 @@ function RelativeLastSeenCell({ lastSeenAt }: { lastSeenAt: Date }) {
             className="cursor-default rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-testid="last-seen-relative"
           >
-            {formatRelativeTime(lastSeenAt, now)}
+            {relative}
           </time>
         </TooltipTrigger>
         <TooltipContent>{absolute}</TooltipContent>
@@ -298,29 +341,46 @@ function SessionsCard() {
   const { sessions, loaded, error, reload, setError } = useSessionsList();
   const savedDisplay = useAppStore((state) => state.userSettings.lastSeenDisplay);
   const store = useAppStoreApi();
-  const [optimisticDisplay, setOptimisticDisplay] = useState<LastSeenDisplay | null>(null);
-  const latestRevision = useRef(0);
-  const display = optimisticDisplay ?? savedDisplay;
+  const [draftDisplay, setDraftDisplay] = useState<LastSeenDisplay>(savedDisplay);
+  const hasLocalDraft = useRef(false);
+  const isDirty = draftDisplay !== savedDisplay;
 
-  /** Optimistically updates the last-seen display preference and syncs it to the backend. */
-  const onDisplayChange = useCallback(
-    (next: LastSeenDisplay) => {
-      const revision = ++latestRevision.current;
-      setOptimisticDisplay(next);
-      void syncLastSeenDisplay(next)
-        .then((response) => {
-          const state = store.getState();
-          state.setUserSettings(mapUserSettingsResponse(response, state.userSettings));
-          if (latestRevision.current === revision) setOptimisticDisplay(null);
-        })
-        .catch(() => {
-          if (latestRevision.current !== revision) return;
-          setOptimisticDisplay(null);
-          toast.error(t("account:failedToSaveLastSeenDisplay"));
+  useEffect(() => {
+    if (!hasLocalDraft.current) setDraftDisplay(savedDisplay);
+  }, [savedDisplay]);
+
+  const onDisplayChange = useCallback((next: LastSeenDisplay) => {
+    hasLocalDraft.current = true;
+    setDraftDisplay(next);
+  }, []);
+
+  useSettingsSaveContributor({
+    id: "account-last-seen-display",
+    order: 30,
+    revision: draftDisplay,
+    isDirty,
+    save: async (revision) => {
+      const submitted = revision as LastSeenDisplay;
+      try {
+        const response = await syncLastSeenDisplay(submitted);
+        const state = store.getState();
+        state.setUserSettings(mapUserSettingsResponse(response, state.userSettings));
+        const confirmed = store.getState().userSettings.lastSeenDisplay;
+        setDraftDisplay((current) => {
+          if (current !== submitted) return current;
+          hasLocalDraft.current = false;
+          return confirmed;
         });
+      } catch (error) {
+        toast.error(t("account:failedToSaveLastSeenDisplay"));
+        throw error;
+      }
     },
-    [store, t],
-  );
+    discard: () => {
+      hasLocalDraft.current = false;
+      setDraftDisplay(savedDisplay);
+    },
+  });
 
   /** Revokes a session and reloads the sessions list. */
   const onRevoke = async (id: string) => {
@@ -335,6 +395,7 @@ function SessionsCard() {
   return (
     <SettingsCard
       discoveryTargetId={ACCOUNT_SETTINGS_TARGETS.sessions}
+      isDirty={isDirty}
       data-testid="account-sessions-card"
     >
       <SettingsCardHeader
@@ -348,7 +409,7 @@ function SessionsCard() {
         {/* The display preference is independent of session rows, so the
             select (and its discovery target) stays reachable during loading
             and when the sessions API fails. */}
-        <LastSeenDisplaySelect value={display} onChange={onDisplayChange} />
+        <LastSeenDisplaySelect value={draftDisplay} onChange={onDisplayChange} />
         {error && (
           <SettingsErrorText data-testid="account-sessions-error">{error}</SettingsErrorText>
         )}
@@ -358,7 +419,7 @@ function SessionsCard() {
           </div>
         )}
         {loaded && sessions.length > 0 && (
-          <SessionsTable sessions={sessions} display={display} onRevoke={onRevoke} />
+          <SessionsTable sessions={sessions} display={draftDisplay} onRevoke={onRevoke} />
         )}
       </CardContent>
     </SettingsCard>

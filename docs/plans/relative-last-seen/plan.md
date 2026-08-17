@@ -11,45 +11,31 @@ status: done
 Add a persisted per-user enum setting `last_seen_display` (`"absolute"` default | `"relative"`) and
 a select on the Active sessions card of `/settings/account/security`. In relative mode the Last seen
 column renders a live-updating, locale-aware relative label with the absolute timestamp in a
-tooltip. The setting follows the established `changes_panel_layout` pattern end to end: JSON-blob
-user settings on the backend, boot-payload + WS-push hydration on the frontend, immediate-save
-select in the UI.
+fine-pointer tooltip or a coarse-pointer touch drawer. The setting follows the established
+`changes_panel_layout` pattern end to end: JSON-blob user settings on the backend, boot-payload +
+WS-push hydration on the frontend, and the shared manual-save settings flow in the UI.
 
 ## Design decisions
 
-- **Immediate save, no save contributor.** The security page has no local-draft state (password
-  change and revoke are immediate actions). A display select applies and persists on change, like
-  the locale select and kanban step-visibility toggles. No floating Save control is introduced.
-- **Queued writes, optimistic display derived from a confirmed baseline, own-echo correlated.**
-  Writes go through `createQueuedUserSettingsSyncWithResponse`. The optimistic value lives in local
-  component state (`optimisticDisplay`), never written into the store; the store's
-  `userSettings.lastSeenDisplay` is the confirmed baseline, updated by exactly two unchanged
-  ingestion paths: a successful PATCH response mapped with
-  `mapUserSettingsResponse(response, current)` and applied through `setUserSettings` (which
+- **Shared manual save.** The select edits a local draft. The shared `Save changes` action calls
+  `useSettingsSaveContributor` and persists the draft. The shared `Reset` action restores the
+  confirmed value. A failed save keeps the draft dirty so the user can retry.
+- **Queued write with revision-aware confirmation.** The contributor save uses
+  `createQueuedUserSettingsSyncWithResponse`. The draft lives in local component state and is
+  never written into the store directly. The store's `userSettings.lastSeenDisplay` is the
+  confirmed baseline, updated by exactly two ingestion paths: a successful PATCH response mapped
+  with `mapUserSettingsResponse(response, current)` and applied through `setUserSettings` (which
   discards older revisions), and a newer `user.settings.updated` WS snapshot through the existing
-  handler path (`mapUserSettingsData` + handler revision gate, unchanged per task 02). On
-  failure the optimistic override is dropped and the cell falls back to the confirmed baseline, but
-  only when the failed write is still the latest operation. This is the
-  `use-app-status-bar-order.ts` pattern (`optimisticOrder` vs `savedOrder`): it survives
-  consecutive failures (two failed writes settle on the last server-confirmed value, not on the
-  value before the last selection).
-- **Pending-write gating; no writer-id correlation, no store metadata.** The backend publishes the
-  settings event BEFORE the PATCH response returns and broadcasts to every subscriber, including
-  the initiating tab (service.go:202-206, user_notifications.go:49-60), and the event is a FULL
-  snapshot: any user-settings write anywhere (any tab, any field) re-asserts the server's current
-  `last_seen_display`, and full-snapshot HTTP responses are applied by callers that build from a
-  fresh default state (use-ensure-user-settings, layout-preset-selector). A writer-id scheme would
-  require tagging EVERY browser user-settings writer (app-status-bar order, review top bar, ...)
-  to distinguish same-tab snapshots, and still cannot tell whether a foreign snapshot changed
-  `last_seen_display` or merely re-asserted the old value. Instead the security component gates on
-  its own pending write: while a select write is in flight, store changes do NOT clear the
-  optimistic override (own echoes, unrelated snapshots, and fresh-default response mappings all
-  re-assert values that are either the pre-write baseline or the write's own confirmation); the
-  override clears only when the LATEST operation settles (success applies the confirmed value,
-  failure drops to the store baseline, both via the latest-operation guard). The WS handler stays
-  unchanged (no skip), so the store still converges through own echoes even if the component
-  unmounts mid-write; after settle, the cell always renders server truth, including a foreign
-  `last_seen_display` change that landed while the write was pending.
+  handler path (`mapUserSettingsData` + handler revision gate, unchanged per task 02). A save
+  response reconciles the draft with the revision-gated store result, so a newer foreign snapshot
+  wins. A failed save leaves the submitted draft in place.
+- **Revision-gated draft reconciliation; no writer-id correlation or store metadata.** The backend
+  publishes the settings event before the PATCH response and broadcasts a full snapshot to every
+  subscriber. A newer local draft stays visible while Save is in flight. The unchanged WebSocket
+  handler applies own echoes and foreign snapshots to the confirmed store. After a successful
+  response, the component reconciles the draft with the revision-gated store result. A failed save
+  keeps the draft dirty for retry. A writer-id scheme is not needed because the shared settings
+  provider owns Save and Reset, and the store remains the confirmed baseline.
 - **Default `"absolute"`** preserves current behavior for users who never opt in.
 - **`formatRelativeTime` from `@/lib/i18n/formats`** (locale-aware, accepts `now`) renders the
   relative label; the shared `useNow` hook drives the live update only while the cell is in
@@ -57,7 +43,9 @@ select in the UI.
   absolute mode), with an age-aware cadence: tick every second while the timestamp is under a
   minute old (second-scale labels need live updates) and every minute once the age crosses a
   minute.
-- **Tooltip** uses `@kandev/ui/tooltip` with `formatDateTime(last_seen_at)` content.
+- **Exact time disclosure** uses `@kandev/ui/tooltip` with `formatDateTime(last_seen_at)` on
+  fine-pointer devices. Coarse-pointer devices use the shipped `useTouchDrawer` and Drawer
+  pattern to show the same timestamp after a tap.
 
 ## Backend
 
@@ -146,29 +134,23 @@ select in the UI.
   - Read `userSettings.lastSeenDisplay` from the store in `SessionsCard`.
   - Add a labeled select (Absolute time / Relative time) in the card, above the table, with a
     discovery target id `ACCOUNT_SETTINGS_TARGETS.lastSeenDisplay` and self-documenting copy.
-  - On change: keep the optimistic value in local component state (never write it into the store);
-    send a queued `createQueuedUserSettingsSyncWithResponse({ last_seen_display })` write with a
-    latest-operation revision guard. On failure, drop the optimistic override and fall back to the
-    store's confirmed baseline (only when the failed write is still the latest) and show error
-    copy. Apply successful responses through `mapUserSettingsResponse` INTO `setUserSettings` only
-    (never a raw store write): `setUserSettings` discards older revisions, so a deferred PATCH
-    response arriving after a newer cross-tab WS event cannot regress the value or revision.
-  - Gate reconciliation on the pending write itself: while the select's write is in flight, store
-    changes do NOT clear the optimistic override (own echoes, unrelated same-tab snapshots from
-    app-status-bar/review writers, and fresh-default full-snapshot response mappers all re-assert
-    the pre-write baseline or the write's own confirmation and must not kill a newer queued
-    selection). The override clears only when the LATEST operation settles: success applies the
-    confirmed value, failure drops to the store baseline, both guarded by the latest-operation
-    counter. After settle the cell always renders server truth, including a foreign
-    `last_seen_display` change that landed while the write was pending.
+  - On change: keep the draft in local component state and mark the `SessionsCard` dirty. Register
+    the field with `useSettingsSaveContributor`. The contributor's `save` sends a queued
+    `createQueuedUserSettingsSyncWithResponse({ last_seen_display })` write. The contributor's
+    `discard` restores the confirmed store value. A failed save keeps the draft dirty and shows
+    error copy so the shared Save action can retry.
+  - Apply successful responses through `mapUserSettingsResponse` into `setUserSettings` only
+    (never a raw store write). `setUserSettings` discards older revisions, so a deferred PATCH
+    response arriving after a newer cross-tab WS event cannot regress the value or revision. After
+    the response, reconcile the draft with the revision-gated store result. A newer foreign value
+    therefore wins when it supersedes the submitted response.
   - Extract a small `LastSeenCell` component: absolute mode renders `formatDateTime`; relative mode
-    mounts a `useNow(30_000)` ticking wrapper and renders a `Tooltip`-wrapped
-    `formatRelativeTime(last_seen_at, now)` label. The relative trigger is focusable
-    (`tabIndex={0}`, semantic element) and carries the absolute timestamp as its accessible name
-    and native `title` fallback, so touch and assistive-tech users reach the exact moment without
-    hover; the tooltip (`formatDateTime` content) is a convenience channel. The cell validates the
-    timestamp once; when unparseable it renders an empty cell with no tooltip (guarding the
-    `formatDateTime` tooltip content, which throws `RangeError` on invalid dates).
+    mounts a ticking `useNow` wrapper and renders a `formatRelativeTime(last_seen_at, now)` label.
+    Fine-pointer devices use a focusable semantic trigger and a `Tooltip` with the absolute time.
+    Coarse-pointer devices use an explicit tap trigger and the shipped `useTouchDrawer` Drawer
+    pattern to show the same absolute time. The cell validates the timestamp once; when unparseable
+    it renders an empty cell with no disclosure surface (guarding the `formatDateTime` content,
+    which throws `RangeError` on invalid dates).
 - `apps/web/lib/settings-discovery/catalog/account.ts`: add `lastSeenDisplay:
   "setting-account-last-seen-display"` target and a `kind: "control"` discovery definition. The
   SessionsCard's `SettingsCard` already registers the `sessions` target and accepts exactly one
@@ -218,35 +200,21 @@ select in the UI.
   existing `recordingUserRepository`/`recordingEventBus` fakes, which share one mutable
   `getSettings` pointer, mutate unprotected fields, and append events unsynchronized
   (service_test.go:1741-1801), racing under `go test -race`.
-- **Frontend:** `ssr/user-settings.test.ts` for `parseLastSeenDisplay` and
-  `mapUserSettingsData` default/round-trip; `users.test.ts` WS-handler assertions (valid applies,
-  unknown normalizes to `"absolute"`, omitted keeps current, stale revision ignored); component
-  test for `SessionsCard`/`LastSeenCell` (absolute by default, relative label renders, tooltip
-  shows absolute time on hover, Tab focus opens the tooltip, trigger exposes the absolute
-  timestamp via accessible name/title, label advances under fake timers, unparseable `last_seen_at`
-  renders an empty cell without crashing, select persists via the queued sync, a stale failed
-  write does not revert a newer successful selection, two consecutive failures settle on the
-  server-confirmed baseline rather than the value before the last selection, a pending local write
-  is NOT cleared by an unrelated full snapshot while in flight (own echo, same-tab
-  app-status-bar/review write, or fresh-default `mapUserSettingsResponse` carrying the old
-  `last_seen_display`; the override survives until its own operation settles), a deferred PATCH
-  response arriving after a newer WS event is discarded by the `setUserSettings` revision guard, a
-  foreign `last_seen_display` change landing while a write is pending renders after that write
-  settles, a queued A-then-B selection keeps B's optimistic value visible while A settles (the
-  store briefly confirms A but the latest-operation guard prevents A from clearing B; when B
-  settles the override clears and the cell renders the confirmed value, or a newer foreign value
-  that superseded it), and an unmount/remount schedule: a pending write started, the component
-  unmounted, an own/newer WS snapshot delivered, the PATCH resolved (success) and rejected
-  (failure), then remount — the store converges and the rendered value is correct in both paths
-  with no stale-override or unhandled-rejection side effects).
+- **Frontend:** `ssr/user-settings.test.ts` covers `parseLastSeenDisplay` and
+  `mapUserSettingsData`; `users.test.ts` covers valid, unknown, omitted, and stale WebSocket
+  snapshots. The `SessionsCard` tests cover the absolute default, relative labels, fine-pointer
+  tooltip and keyboard focus, coarse-pointer drawer disclosure, live ticking, invalid timestamps,
+  local draft state, shared Save and Reset actions, failed-save retry state, revision-gated PATCH
+  responses, foreign WebSocket updates, and unmount/remount convergence.
 - **E2E (desktop + mobile + cross-tab):** add `apps/web/e2e/tests/auth/relative-last-seen.spec.ts`
   (Desktop Chrome, `auth` project) grouped in `test.describe.serial` (single-shot `setupAdmin` +
   shared worker backend/DB require serial ordering), restarting the worker backend with auth on and
   its OWN `KANDEV_DATABASE_PATH` (auth setup is single-shot and worker DB is preserved across
   restart; without a dedicated DB the focused command collides with sibling auth specs), calling
-  `setupAdmin`, logging in, opening `/settings/account/security`, switching to Relative time,
-  asserting a relative label renders with an absolute tooltip on hover, restoring the original
-  setting in `finally`, and restarting the baseline backend in `afterAll`. The same file adds a
+  `setupAdmin` in `beforeAll` so focused test runs are independent, logging in, opening
+  `/settings/account/security`, switching to Relative time, saving through the shared Save action,
+  and asserting a relative label renders with an absolute tooltip on hover. Restore the original
+  setting in `finally`, and restart the baseline backend in `afterAll`. The same file adds a
   two-context cross-tab scenario that arms `watchWs(pageA)` BEFORE `pageA.goto` (it only sees
   sockets opened after it is called) AND arms the subscription wait (`const subscriptionAck =
   watcher.waitForResponse("user.subscribe")`) before the same `goto`, then awaits `subscriptionAck`
@@ -257,9 +225,10 @@ select in the UI.
   project, named `mobile-*` so the project routes it) that spreads `...devices["Pixel 5"]` into a
   manual `browser.newContext` (manual contexts do not inherit project device options), asserts the
   resulting viewport width, uses its own DB + `setupAdmin`, operates the select with touch-native
-  `tap()` on the trigger and option, proves relative labels render without hover and without
-  horizontal overflow, asserts the absolute stamp via the trigger's title/accessible name, and
-  restores the setting. The Last seen trigger and options get a mobile-appropriate touch target
+  `tap()` on the trigger and option, saves through the shared Save action, proves relative labels
+  render without hover and without horizontal overflow, taps a relative label, and asserts the
+  absolute stamp in the touch drawer. Restore the setting. The Last seen trigger and options get a
+  mobile-appropriate touch target
   (min-h-11 / 44px at phone widths via responsive classes on this instance, per /mobile-parity —
   the shared Select defaults to 28px trigger/items), and the mobile E2E asserts the trigger's and
   option's bounding boxes meet 44px in the active dimension.
@@ -294,14 +263,14 @@ cd apps/web && pnpm e2e:run --project mobile-chrome tests/auth/mobile-relative-l
 
 ## Risks
 
-- The select lives on a page without a save contributor; immediate-save keeps it consistent with
-  the page but diverges from the floating-save pages. Accepted: the page has no other draft state,
-  and the setting applies globally the moment it changes.
+- The select shares the floating Save and Reset actions with the other `/settings` configuration
+  controls. Its table preview updates from the local draft, while the durable setting changes only
+  after Save.
 - Live ticking is wasted work if the user never switches to relative mode; the ticking interval is
   created only inside the relative-mode cell component, so absolute mode stays inert.
-- Tooltip timing/positioning inside a table cell: use the standard Radix tooltip; E2E verifies
-  hover reveals the absolute stamp. On touch there is no hover, so mobile parity does not depend on
-  the tooltip; the mobile spec proves the select and relative labels at the Pixel 5 viewport.
+- Tooltip timing/positioning inside a table cell: use the standard Radix tooltip for fine-pointer
+  devices. Coarse-pointer devices use the shipped Drawer pattern, and mobile E2E taps the label and
+  asserts the visible absolute stamp.
 - The hand-built backend JSON codec paths and the WS event snapshot are easy to miss because the
   model struct change alone looks sufficient; task 01 lists each path explicitly and tests the
   stored-JSON round trip and the published event map.

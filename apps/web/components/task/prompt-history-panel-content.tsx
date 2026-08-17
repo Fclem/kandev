@@ -91,7 +91,8 @@ type PromptHistoryRowProps = {
 
 /** One prompt-history row: a scroll-to-prompt jump button, the prompt text
  * (truncated, or expanded into a scrollable box), its relative time and
- * duration, plus an expand/collapse toggle when the text overflows. */
+ * duration, plus an expand/collapse chevron that floats over the truncated
+ * text's ellipsis inside the bubble when the text overflows. */
 function PromptHistoryRow({
   sessionId,
   entry,
@@ -131,24 +132,44 @@ function PromptHistoryRow({
       <div className="min-w-0 flex-1">
         {/* Same bubble as the transcript's user message: markdown-body
             font, rounded-2xl, blue when not favorited / yellow when the
-            message is starred — with lighter padding. */}
+            message is starred — with lighter padding. The expand/collapse
+            chevron floats inside the bubble at the end of the truncated
+            line (over the ellipsis) instead of trailing the row. */}
         <div
           className={cn(
-            "markdown-body markdown-body-user overflow-hidden rounded-2xl px-3 py-1.5",
+            "markdown-body markdown-body-user relative overflow-hidden rounded-2xl px-3 py-1.5",
             isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
           )}
         >
-          <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
+          <span ref={textRef} className={expanded ? "hidden" : "block truncate pr-8"}>
             {entry.content}
           </span>
           {expanded && (
             <div
               data-testid={`prompt-history-expanded-box-${index}`}
-              className="overflow-y-auto whitespace-normal"
+              className="overflow-y-auto whitespace-normal pr-8"
               style={{ maxHeight }}
             >
               {entry.content}
             </div>
+          )}
+          {showToggle && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "absolute z-10 size-6 cursor-pointer rounded-md",
+                expanded
+                  ? "right-1 top-1"
+                  : "right-1 top-1/2 -translate-y-1/2 bg-background/70 hover:bg-background/90",
+              )}
+              aria-expanded={expanded}
+              aria-label={t(expanded ? "task:collapsePrompt" : "task:expandPrompt")}
+              data-testid={`prompt-history-expand-${index}`}
+              onClick={onToggle}
+            >
+              {expanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+            </Button>
           )}
         </div>
       </div>
@@ -160,19 +181,6 @@ function PromptHistoryRow({
         {formatRelative(entry.sentAt)}
       </time>
       <PromptDuration durationSeconds={entry.durationSeconds} index={index} />
-      {showToggle && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8 shrink-0 cursor-pointer"
-          aria-expanded={expanded}
-          aria-label={t(expanded ? "task:collapsePrompt" : "task:expandPrompt")}
-          data-testid={`prompt-history-expand-${index}`}
-          onClick={onToggle}
-        >
-          {expanded ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
-        </Button>
-      )}
     </div>
   );
 }

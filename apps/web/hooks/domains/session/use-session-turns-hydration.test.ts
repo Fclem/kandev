@@ -44,6 +44,7 @@ const BASE_TIMESTAMP = "2026-08-10T10:00:00Z";
 const COMPLETION_AT = "2026-08-10T10:55:00Z";
 const LIVE_UPDATED_AT = "2026-08-10T11:00:00Z";
 const SAME_SECOND_COMPLETION = "2026-08-10T10:05:00Z";
+const BACKEND_DOWN = "backend down";
 
 /** Builds a REST-shaped turn row; overrides win for race-specific fields. */
 function makeTurn(id: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -132,6 +133,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearInFlightTurnsLoadForTest();
+  vi.useRealTimers();
 });
 
 describe("ensureSessionTurnsLoaded — hydration and marker", () => {
@@ -265,7 +267,7 @@ describe("ensureSessionTurnsLoaded — guards and races", () => {
   });
 
   it("gives up after exhausting retries and leaves the marker unset for a later fetch", async () => {
-    mockListSessionTurns.mockRejectedValue(new Error("backend down"));
+    mockListSessionTurns.mockRejectedValue(new Error(BACKEND_DOWN));
     const store = makeStore();
 
     await ensureSessionTurnsLoaded(SESSION_ID, store as never);
@@ -281,6 +283,83 @@ describe("ensureSessionTurnsLoaded — guards and races", () => {
     expect(mockListSessionTurns).toHaveBeenCalledTimes(4);
     expect(store.markTurnsLoaded).toHaveBeenCalledTimes(1);
   });
+});
+describe("ensureSessionTurnsLoaded — recovery scheduling", () => {
+  it("recovers after retry exhaustion via a scheduled delayed retry", async () => {
+    vi.useFakeTimers();
+    try {
+      mockListSessionTurns.mockRejectedValue(new Error(BACKEND_DOWN));
+      const store = makeStore();
+
+      const hydration = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+      // Attempt 1 fails immediately; attempts 2-3 are gated by backoff timers.
+      await vi.advanceTimersByTimeAsync(750);
+      await hydration;
+
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(3);
+      expect(store.markTurnsLoaded).not.toHaveBeenCalled();
+
+      // The backend returns; the scheduled recovery retries WITHOUT any
+      // unrelated lifecycle event (visibility, reconnect, session switch).
+      mockListSessionTurns.mockResolvedValueOnce(EMPTY_TURNS);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(4);
+      expect(store.markTurnsLoaded).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a single pending recovery per session", async () => {
+    vi.useFakeTimers();
+    try {
+      mockListSessionTurns.mockRejectedValue(new Error(BACKEND_DOWN));
+      const store = makeStore();
+
+      const first = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+      await vi.advanceTimersByTimeAsync(750);
+      await first; // exhausted -> recovery scheduled
+
+      const second = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+      await vi.advanceTimersByTimeAsync(750);
+      await second; // exhausted again -> must NOT stack a second timer
+
+      mockListSessionTurns.mockResolvedValueOnce(EMPTY_TURNS);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // 3 + 3 immediate attempts + exactly ONE recovery = 7.
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(7);
+      expect(store.markTurnsLoaded).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry after exhaustion when the session is removed", async () => {
+    vi.useFakeTimers();
+    try {
+      mockListSessionTurns.mockRejectedValue(new Error(BACKEND_DOWN));
+      const store = makeStore();
+
+      const hydration = ensureSessionTurnsLoaded(SESSION_ID, store as never);
+      await vi.advanceTimersByTimeAsync(750);
+      await hydration; // exhausted -> recovery scheduled
+
+      // The session is deleted while the backend is down; the pending
+      // recovery must fire into a no-op (no fetch, no marker resurrection).
+      store.setSessions({});
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockListSessionTurns).toHaveBeenCalledTimes(3);
+      expect(store.markTurnsLoaded).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("skips the fetch when the session is absent from the store at entry", async () => {
     mockListSessionTurns.mockResolvedValue(EMPTY_TURNS);
@@ -293,7 +372,6 @@ describe("ensureSessionTurnsLoaded — guards and races", () => {
     expect(store.addTurn).not.toHaveBeenCalled();
   });
 });
-
 describe("ensureSessionTurnsLoaded — REST/WS reconciliation", () => {
   it("reconciles an older WS start-snapshot with the newer REST completion", async () => {
     // A `session.turn.started` was delivered but the matching

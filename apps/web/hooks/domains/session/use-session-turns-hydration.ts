@@ -16,15 +16,59 @@ const inFlightTurnsLoad = new Map<string, Promise<void>>();
 // either way, so without a retry the regression stays visible until an
 // unrelated lifecycle event (visibility change, reconnect, session switch)
 // triggers another fetch. Retry a bounded number of times with backoff; the
-// in-flight entry covers the retry window, and after exhaustion the marker is
-// still unset so the next natural fetch retries.
+// in-flight entry covers the retry window. After exhaustion a DELAYED
+// recovery hydration is scheduled (see scheduleTurnHydrationRecovery), so a
+// session whose turn history keeps failing resolves as soon as the backend
+// recovers — no unrelated trigger required.
 const TURN_HYDRATION_MAX_ATTEMPTS = 3;
 const TURN_HYDRATION_RETRY_BASE_MS = 250;
 const TURN_HYDRATION_RETRY_MAX_MS = 1_000;
 
-/** Test seam: drop in-flight entries so tests don't leak dedup state. */
+// Prolonged outages: the recovery delay doubles per schedule (capped) so a
+// long outage retries occasionally instead of hammering the endpoint, and
+// only one recovery timer per session is ever pending.
+const TURN_HYDRATION_RECOVERY_BASE_MS = 30_000;
+const TURN_HYDRATION_RECOVERY_MAX_MS = 300_000;
+const recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const recoveryDelayBySession = new Map<string, number>();
+
+/** Test seam: drop in-flight entries and pending recovery timers so tests
+ * don't leak dedup state or scheduled work. */
 export function clearInFlightTurnsLoadForTest(): void {
   inFlightTurnsLoad.clear();
+  for (const timer of recoveryTimers.values()) clearTimeout(timer);
+  recoveryTimers.clear();
+  recoveryDelayBySession.clear();
+}
+
+/**
+ * Schedules a delayed recovery hydration after retry exhaustion, so a
+ * session whose turn-history fetch keeps failing does not stay broken until
+ * an unrelated lifecycle event happens to trigger another fetch. No-op when
+ * a recovery is already scheduled, the loaded marker was set meanwhile
+ * (hydration succeeded), or the session is gone. When the timer fires it
+ * re-enters ensureSessionTurnsLoaded; on success the marker is set and the
+ * chain stops. Backoff doubles per schedule (capped at
+ * TURN_HYDRATION_RECOVERY_MAX_MS); the per-session delay entry is a bounded
+ * bookkeeping value that is only consulted while the session stays unloaded.
+ */
+function scheduleTurnHydrationRecovery(
+  sessionId: string,
+  store: ReturnType<typeof useAppStoreApi>,
+): void {
+  if (recoveryTimers.has(sessionId)) return;
+  const state = store.getState();
+  if (state.turns.loadedBySession[sessionId] || !state.taskSessions.items[sessionId]) return;
+  const delay = Math.min(
+    recoveryDelayBySession.get(sessionId) ?? TURN_HYDRATION_RECOVERY_BASE_MS,
+    TURN_HYDRATION_RECOVERY_MAX_MS,
+  );
+  recoveryDelayBySession.set(sessionId, Math.min(delay * 2, TURN_HYDRATION_RECOVERY_MAX_MS));
+  const timer = setTimeout(() => {
+    recoveryTimers.delete(sessionId);
+    void ensureSessionTurnsLoaded(sessionId, store);
+  }, delay);
+  recoveryTimers.set(sessionId, timer);
 }
 
 /**
@@ -90,9 +134,11 @@ async function fetchAndReconcileSessionTurns(
  * without turns are fetched exactly once; it is cleared only by session
  * removal (the store slice deletes it) or not set at all on failure.
  * Transient failures are retried with bounded backoff inside this call
- * (see fetchAndReconcileSessionTurns); after exhaustion the marker stays
- * unset so the next natural trigger retries. Enrichment only — never delays
- * or fails message loading.
+ * (see fetchAndReconcileSessionTurns); after exhaustion a delayed recovery
+ * hydration is scheduled (see scheduleTurnHydrationRecovery), so a
+ * prolonged outage resolves on its own once the endpoint recovers — no
+ * unrelated lifecycle trigger required. Enrichment only — never delays or
+ * fails message loading.
  */
 export async function ensureSessionTurnsLoaded(
   sessionId: string,
@@ -120,7 +166,13 @@ export async function ensureSessionTurnsLoaded(
       for (let attempt = 1; ; attempt++) {
         if (await fetchAndReconcileSessionTurns(store, sessionId, hydrationEpoch)) return;
         debug("turn fetch attempt failed", { sessionId, attempt });
-        if (attempt >= TURN_HYDRATION_MAX_ATTEMPTS) return;
+        if (attempt >= TURN_HYDRATION_MAX_ATTEMPTS) {
+          // Guaranteed eventual recovery: schedule a delayed retry so a
+          // prolonged outage resolves once the endpoint returns, without
+          // requiring an unrelated lifecycle event.
+          scheduleTurnHydrationRecovery(sessionId, store);
+          return;
+        }
         const delay = Math.min(
           TURN_HYDRATION_RETRY_BASE_MS * 2 ** (attempt - 1),
           TURN_HYDRATION_RETRY_MAX_MS,

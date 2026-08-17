@@ -52,9 +52,11 @@ select in the UI.
   `last_seen_display` change that landed while the write was pending.
 - **Default `"absolute"`** preserves current behavior for users who never opt in.
 - **`formatRelativeTime` from `@/lib/i18n/formats`** (locale-aware, accepts `now`) renders the
-  relative label; the shared `useNow(30_000)` hook drives the live update only while the cell is in
+  relative label; the shared `useNow` hook drives the live update only while the cell is in
   relative mode (mounted in a dedicated child component so the interval is never created in
-  absolute mode).
+  absolute mode), with an age-aware cadence: tick every second while the timestamp is under a
+  minute old (second-scale labels need live updates) and every minute once the age crosses a
+  minute.
 - **Tooltip** uses `@kandev/ui/tooltip` with `formatDateTime(last_seen_at)` content.
 
 ## Backend

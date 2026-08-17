@@ -165,7 +165,13 @@ function LastSeenCell({ lastSeenAt, display }: { lastSeenAt: string; display: La
 }
 
 function RelativeLastSeenCell({ lastSeenAt }: { lastSeenAt: Date }) {
-  const now = useNow(30_000);
+  // Tick every second while the timestamp is under a minute old (second-scale
+  // labels like "45 seconds ago" need live updates), then every minute once
+  // the age crosses a minute. The interval is recomputed on each render, so
+  // useNow re-creates its timer exactly when the cadence changes.
+  const ageMs = Math.abs(Date.now() - lastSeenAt.getTime());
+  const intervalMs = ageMs < 60_000 ? 1_000 : 60_000;
+  const now = useNow(intervalMs);
   const absolute = formatDateTime(lastSeenAt);
   return (
     <TableCell className="text-xs">

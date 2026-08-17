@@ -90,6 +90,25 @@ function RemountHarness({ holder, mounted }: { holder: StoreHolder; mounted: boo
   );
 }
 
+// renderRelativeWithFakeTime mounts the card in relative mode under fake
+// timers at a fixed clock, optionally overriding the session's last_seen_at.
+async function renderRelativeWithFakeTime(lastSeenAt?: string) {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-15T15:45:00Z"));
+  if (lastSeenAt) {
+    authApiMocks.listSessions.mockResolvedValue({
+      sessions: [{ ...SESSION, last_seen_at: lastSeenAt }],
+    });
+  }
+  renderSecurity({ lastSeenDisplay: "relative" });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+}
+
 async function chooseDisplay(name: "Absolute time" | "Relative time") {
   fireEvent.click(screen.getByTestId(SELECT_TEST_ID));
   fireEvent.click(await screen.findByRole("option", { name }));
@@ -477,23 +496,26 @@ describe("Last seen display write and lifecycle races", () => {
     view.unmount();
   });
 
-  it("advances the relative label as time passes while the page stays open", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-15T15:45:00Z"));
-    renderSecurity({ lastSeenDisplay: "relative" });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+  it("ticks every second while the timestamp is under a minute old", async () => {
+    // last_seen 55s before now: "55 seconds ago", well past the just-now
+    // threshold so a one-second advance changes the label.
+    await renderRelativeWithFakeTime("2026-08-15T15:44:05Z");
+
+    const before = screen.getByTestId(RELATIVE_TEST_ID).textContent;
+    act(() => {
+      vi.advanceTimersByTime(1_000);
     });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    expect(screen.getByTestId(RELATIVE_TEST_ID).textContent).not.toBe(before);
+  });
+
+  it("ticks every minute once the timestamp is a minute or more old", async () => {
+    await renderRelativeWithFakeTime();
 
     const before = screen.getByTestId(RELATIVE_TEST_ID).textContent;
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
-    const after = screen.getByTestId(RELATIVE_TEST_ID).textContent;
-    expect(after).not.toBe(before);
+    expect(screen.getByTestId(RELATIVE_TEST_ID).textContent).not.toBe(before);
   });
 });
 

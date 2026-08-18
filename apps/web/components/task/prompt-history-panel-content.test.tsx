@@ -415,10 +415,9 @@ describe("PromptHistoryPanelContent — expand/collapse behavior", () => {
     return text;
   }
 
-  it("shows the chevron when the collapsed text overflows and hides it after a width change", () => {
+  it("shows the chevron on hover when the collapsed text overflows", () => {
     renderOverflowingRow();
-    expect(expandButton(0)).toBeTruthy();
-
+    expect(expandButton(0).className).toContain("group-hover:opacity-100");
     const text = row(0).querySelector("span");
     if (!text) throw new Error(SPAN_NOT_RENDERED);
     setGeometry(text, { scrollWidth: 60 });

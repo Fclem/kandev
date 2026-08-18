@@ -176,7 +176,7 @@ function PromptHistoryRow({
               variant="ghost"
               size="icon"
               className={cn(
-                "absolute right-1 z-10 size-11 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 sm:size-6",
+                "absolute right-1 z-10 size-11 cursor-pointer rounded-md bg-background/70 opacity-0 transition-opacity hover:bg-background/90 group-hover:opacity-100 focus-visible:opacity-100 sm:size-6",
                 expanded ? "top-1" : "top-1/2 -translate-y-1/2",
               )}
               aria-expanded={expanded}

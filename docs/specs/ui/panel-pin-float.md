@@ -56,14 +56,16 @@ message queue pin gave to queue management.
   display state.
 - **Desktop-only.** The dockview workbench does not render on phone viewports
   (the mobile task surface is a separate composition without dockview:
-  `mobile-task-layout` plus `session-mobile-bottom-nav` / the mobile
-  right-panel surface), so the pin control appears only where the workbench
-  renders — consistent with the message queue pin. Floating/collapse is
-  intentionally absent from the mobile state model; panel-access parity on
-  phone is covered by the retained-path mobile scenario in task-05 (no
-  existing mobile spec proves panel reachability, so one narrow
-  `mobile-*.spec.ts` scenario is added, naming the exact mobile entry
-  control, the asserted panel set, and viewport-containment checks).
+  `mobile-task-layout` plus `session-mobile-bottom-nav`, which exposes
+  localized Plan/Changes/Files/Terminal buttons), so the pin control appears
+  only where the workbench renders — consistent with the message queue pin.
+  Floating/collapse is intentionally absent from the mobile state model;
+  panel-access parity on phone is covered by the retained-path scenario in
+  task-05: `apps/web/e2e/tests/mobile-panel-access.spec.ts` (test title
+  "mobile task panels remain reachable"), which opens a task on the mobile
+  project, activates Plan/Changes/Files/Terminal through the bottom-nav
+  buttons (stable test ids added where missing), and asserts reachability
+  plus viewport containment / no horizontal overflow.
 
 ## Data model
 
@@ -87,7 +89,10 @@ FloatingGroupState
   columnId         string        # root LayoutColumn id the group lived in
   columnIndex      number        # index of that column in the columns array
   columnKind       "center" | "side" | "custom"   # see Placement capture
-  columnPinned     boolean       # column's pinned/width metadata at float time
+  columnPinned     boolean       # column's pinned flag at float time
+  columnWidth      number | null # root column width (px) at float time
+  columnMinWidth   number | null # root column min width, if any
+  columnMaxWidth   number | null # root column max width, if any
   treePath         number[] | null   # path into the column's tree (or groups index)
   edge             "left" | "right" | "top" | "bottom"   # collapsed-bar edge
   orientation      "vertical" | "horizontal"             # derived from columnKind + position
@@ -193,11 +198,19 @@ Float/dock/restore are **transactions** with an operation journal:
    phase state; its explicit `begin → advance → settle` API is the only path
    that mutates `floatingGroups`, the detach registry, the journal, or the
    token. While a transaction is in any phase, float/dock/reset/toggle-right
-   actions are **rejected (not queued)** — the pin control renders disabled
-   during the busy window, so a pin click mid-transaction cannot re-enter the
-   phase machine; programmatic actions get a non-destructive no-op with a
-   debug log. Re-entrancy tests cover mutation, portals-adopted, rollback,
-   and stale-cleanup phases.
+   actions are **rejected (not queued)**; **every** public layout-mutation
+   boundary is guarded the same way — the add-panel resolver
+   (`focusOrAddFloatingOrGridPanel`), `buildDefaultLayout`, preset/custom
+   apply, maximize/exit, and direct programmatic panel actions return a
+   non-destructive no-op with a debug reason while busy (a programmatic add
+   mid-transaction would mutate the live grid after the journal snapshot and
+   make rollback stale). A single store/coordinator selector
+   `isFloatingTransactionBusy(envId)` is consumed by **all three pin
+   surfaces** — the grid group header, the floating window header, and the
+   collapsed edge bar — which render the pin disabled during the busy window,
+   so no pin click can re-enter the phase machine. Re-entrancy tests cover
+   mutation, portals-adopted, rollback, and stale-cleanup phases, per surface
+   and for programmatic add/reset during each.
 3. **Commit:** only after every removal/materialization succeeded, commit the
    store entry, persist the floating blob, then `persistEnvLayoutNow`.
 4. **Failure recovery:** if any step throws mid-mutation, run the recovery
@@ -205,27 +218,44 @@ Float/dock/restore are **transactions** with an operation journal:
    `finally` and is token-guarded (a stale transaction's cleanup never clears a
    newer transaction's state).
 5. **Bidirectional crash-consistent commit (durable journal marker):** a
-   per-env **operation journal** (`kandev.dockview.env-floating-journal.<envId>`)
-   is written **before** any mutation and holds the complete before/after
-   blob+layout snapshots for the transaction. **`recoverFloatingJournalOnce(api,
-   envId)` is the single pre-restore gate**: idempotent (generation-tagged),
-   it runs before every restore entry (initial mount, env-switch fast/slow,
-   maximize restore, preset/custom apply, `toggleRightPanels`, reset/default
-   build) and recovers an incomplete journal deterministically — the
-   after-state is applied if the mutation completed (both keys validated),
-   otherwise the before-state is re-applied — then clears the journal. Both
-   write paths return/throw status (the current `setEnvLayout`/
-   `persistEnvLayoutNow` swallow failures — status-returning APIs are part of
-   the contract). The recovery matrix covers float, dock, and restore in
-   **both** crash directions (after blob write / after layout write): a dock
-   crash after the blob write (group removed from blob, old floated layout
-   still live) is recovered by the journal's before-state, never by idempotent
-   guessing. The two-key divergence rules in step 6 are the journal-free
-   fallback only (journal lost/unreadable), not the primary guarantee.
-   **Journal size budget:** floating state plus journal are bounded by a
-   documented total serialized budget (per-env; shared sessionStorage quota);
-   the preflight in step 1 fails non-destructively with an explicit warning
-   before mutation when the budget would be exceeded.
+   per-env **operation journal**
+   (`kandev.dockview.env-floating-journal.<envId>`) is written **before** any
+   mutation and holds:
+   ```
+   { version, envId, transactionId, phase: "mutating" | "committed",
+     before: { floatingDigest, layoutDigest },
+     after:  { floatingDigest, layoutDigest },
+     snapshots: { beforeFloating, beforeLayout, afterFloating, afterLayout } }
+   ```
+   Recovery is **digest-based, never schema-validity-based**: for each key,
+   the current stored value is compared against the before/after digests, and
+   the four partial-write orderings are handled explicitly — blob-written/
+   layout-old applies the after pair; layout-written/blob-old applies the
+   after pair; both-old applies before; both-after applies after (the
+   `phase` marker records whether the mutation itself completed). The journal
+   is cleared only after the chosen pair is persisted **and** verified
+   against the after digests. Both write paths return/throw status (the
+   current `setEnvLayout`/`persistEnvLayoutNow` swallow failures —
+   status-returning APIs are part of the contract). **`recoverFloatingJournalOnce(api,
+   envId)` is the single pre-restore gate**: it reads the persisted journal
+   `{envId, transactionId, phase, digests}`, is idempotent via an in-memory
+   recovery cache keyed by `(envId, transactionId, api instance)` — never one
+   global generation, so env B's journal is never skipped by env A's recovery
+   and a new API instance re-checks a still-present journal — and runs before
+   every restore entry (initial mount, env-switch fast/slow, maximize
+   restore, preset/custom apply, `toggleRightPanels`, reset/default build).
+   The recovery matrix covers float, dock, and restore in **both** crash
+   directions, with deterministic tests for all four partial-write orderings
+   including a write throwing after storage mutation. The two-key divergence
+   rules in step 6 are the journal-free fallback only (journal
+   lost/unreadable), not the primary guarantee.
+   **Size budgets:** a per-env cap (96 KB default: blob + journal
+   snapshots) **and** a **global floating allocation budget** across all
+   environments' blobs + journals (default 384 KB), enforced by scanning the
+   owned storage prefix before any mutation; the step-1 preflight fails
+   non-destructively with an explicit warning when either cap would be
+   exceeded (the shared tab sessionStorage quota is never exhausted by
+   floating state alone).
 6. **Divergence-tolerant restore + portal-safe recovery phase:** when no
    journal exists (lost/corrupt), `restoreFloatingAfterLayout` is idempotent:
    a group present in the restored grid whose blob entry says float is floated
@@ -238,7 +268,15 @@ Float/dock/restore are **transactions** with an operation journal:
    collision policy (survivors dock into the saved column when it exists,
    else the live column of the conflicting panel), so no tab, payload, or
    display state disappears silently — the cleaned result is persisted and a
-   debug log records the dropped conflicting entries. Recovery runs as a
+   debug log records the dropped conflicting entries. **Group-id allocation
+   is collision-safe:** materialization runs `allocateUniqueGroupId(savedId)`
+   — the saved id is reused only when it is absent from the live grid or owned
+   by the exact group being restored; otherwise a bounded generated id is
+   allocated and a saved→live group mapping is preserved for active-panel and
+   tree insertion (dockview group ids are global in the live grid, so a stale
+   id left by a conflicting panel can never be reused for the survivor
+   group). Salvage and group-id collision tests cover the saved column and
+   the live conflicting column. Recovery runs as a
    **phase model**: `mutating → restoring → portals-adopted →
    persist-recovered → settled`; the restore gate stays up through portal
    adoption, and only the portals-adopted phase may persist the journaled
@@ -346,14 +384,18 @@ rather than a global id set:
    default/route-intent build fallthrough.
 2. Env switch fast path and slow path (`lib/state/dockview-env-switch.ts`),
    including `applyInitialRouteLayout` and the post-`fromJSON` fixups.
-3. Maximize restore (`restoreMaximizeFromStorage`) — **defined ordering:**
-   `recoverFloatingJournalOnce` runs first; floating session entries are
-   reconciled/mapped (including `floatingSessionWinner` written before the
-   auto-session hook in this branch); floating state is restored **against
-   the saved `preMaximizeLayout`** (the pre-max layout is the placement
-   source; the two-column overlay is never mutated), or materialization is
-   deferred until maximize exit — one of the two, explicitly, with a reload +
-   task-switch + simultaneous-maximize + stale-floating-chat test.
+3. Maximize restore (`restoreMaximizeFromStorage`) — **one selected
+   sequence (defer-until-exit):** `recoverFloatingJournalOnce` runs first;
+   floating session entries are reconciled/mapped (including
+   `floatingSessionWinner` written before the auto-session hook in this
+   branch); the two-column overlay is **never mutated** — a per-env
+   **pending-floating-restore marker** is set instead, and materialization/
+   re-float runs only after `exitMaximizedLayout` applies the pre-max layout
+   and its rAF settles. While maximized, floating windows render above the
+   overlay with their saved display state; the E2E asserts the visibility
+   during maximize and the restore after exit. The alternative (pre-max clone
+   materialization on the live API) is rejected because the overlay is the
+   live grid while maximized.
 4. Preset and custom layout apply (`applyLayout` / `applyLayoutAndSet`).
 5. `toggleRightPanels` (`lib/state/dockview-store.ts`) — its own rAF clears
    the restore gate; floating restore must already be settled there (no-op if
@@ -407,18 +449,21 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   same-turn and same-frame replacement; a transition spanning longer task
   gaps (multi-frame animation, deferred navigation) may collapse and is
   documented as such, not silently claimed.
-- **Layer inventory (mandatory, auditable):** every floating-capable panel's
-  interactive layer owners (Radix Dialog/Popover/DropdownMenu/ContextMenu/
-  HoverCard surfaces inside chat, plan, terminal, files, changes, diff,
-  plugins, and editors) must call `useFloatingOwnedLayer`. The inventory is
-  supplied as a **callsite table** (in task-03's completion report and a
-  tracked file): each row names the exact component/file, the Radix primitive
-  family, and the registration mechanism. The **host/plugin boundary** is
-  defined: plugin-DOM layers register through a host API
-  (`host.ui.registerFloatingOwnedLayer`-style, exposed to task panels), since
-  the plugin registry is reactive only for registrations, not an owned-layer
-  lifecycle boundary. An unregistered layer is a collapse bug by contract;
-  one real test per primitive family, including a plugin-panel layer.
+- **Layer inventory (mandatory, auditable deliverable):** every
+  floating-capable panel's interactive layer owners (Radix
+  Dialog/Popover/DropdownMenu/ContextMenu/HoverCard surfaces inside chat,
+  plan, terminal, files, changes, diff, plugins, and editors) must call
+  `useFloatingOwnedLayer`. The inventory is tracked at
+  `docs/plans/panel-pin-float/owned-layer-inventory.md` (created in task-03):
+  each row names the exact component/file, the Radix primitive family, and
+  the registration mechanism. The **host/plugin API is concrete** — the plugin
+  SDK/types/host gain `host.ui.registerFloatingOwnedLayer(layerRoot: HTMLElement)
+  : () => void` (idempotent; unregister on close, unmount, and plugin
+  unregistration; plugin ownership validated against the registered task
+  panel), implemented in `lib/plugins/host-api.ts` with the registry cleanup
+  wired into `unregisterPlugin`. An unregistered layer is a collapse bug by
+  contract; one real test per primitive family, including a plugin-panel
+  layer.
 - True outside interaction still collapses: clicking the grid, the app
   sidebar, or the page chrome while no owned layer is open collapses the
   window on pointerdown; with layers open, the first click closes the layers
@@ -517,17 +562,23 @@ in the group's saved tab order.
   is dropped, and `activePanelId` points to the winner's new id (or the first
   surviving panel if the winner itself was dropped). Duplicate mappings never
   occur because each floating entry maps at most one old id.
-- **Placement normalization:** `fromDockviewApi` derives unrecognized root
-  column ids from the first panel id (`layout-manager/serializer.ts`), so a
-  center chat group captured after chat was replaced by `session:<A>` can hold
-  `columnId: "session:<A>"` — which no longer exists after a switch to
-  `session:<B>`, and the materializer would insert a new root column instead
-  of returning to center. On session replacement the coordinator therefore
-  also normalizes placement: a center-kind floating entry's `columnId`/
-  `columnIndex` are rewritten to the live center column identity, and any
-  other entry's column is rewritten to its live equivalent when its saved id
-  is derived from a replaced panel. Tested with an A→B session switch, reload,
-  and dock asserting center placement.
+- **Placement normalization (defined moment):** `fromDockviewApi` derives
+  unrecognized root column ids from the first panel id
+  (`layout-manager/serializer.ts`), so a center chat group captured after chat
+  was replaced by `session:<A>` can hold `columnId: "session:<A>"` — which no
+  longer exists after a switch to `session:<B>`, and the materializer would
+  insert a new root column instead of returning to center. Normalization runs
+  in a **post-apply hook** — after the synchronous layout/session replacement
+  AND the incoming-session insertion have completed (fast, slow,
+  route-intent, maximize-restore, and reload paths alike) — and resolves the
+  root column by **direct live group membership plus index**, never through
+  `fromDockviewApi`'s panel-derived ids and never through `findCenterGroupId`'s
+  fabricated fallback. When no real center column exists, normalization
+  returns `isCenterKnown=false` and the entry keeps the custom fallback
+  (vertical/right); it rewrites `columnId`/`columnIndex` to the live center
+  only when a real center is known. Tested with an A→B session switch (fast,
+  slow, delayed replacement), reload, maximize restore, and dock asserting
+  center placement.
 
 The coordinator runs before `restoreMissingSessionPanel`,
 `addCurrentSessionSiblings`, **and `useAutoSessionTab`'s ensure path**
@@ -589,33 +640,38 @@ replacement orderings.
   no pinned-right panels remain (an empty group/column serializes to an empty
   branch that dockview may reject and that corrupts later classification).
   **One authoritative meaning for `rightPanelsVisible`:** the bit is exactly
-  **live right-column presence** — derived from the live grid at all times
-  (restore, float, dock, toggle, preset/default assignment), never persisted
-  separately, never an independent intent. Toggle semantics follow from that:
-  show with no pinned-right panels is a no-op (there is nothing to show);
-  hide when the column is already absent is a no-op; floating the last right
-  group sets the bit false via derivation, so mid-session and post-reload
-  behavior are identical. Every preset/default assignment of the bit is
-  replaced by the shared live detector. `enforcePinnedTargets`'s state-level
-  gate uses the same live pinned-right-column predicate (a single
-  authoritative detector shared with `dockview-layout-setup.ts`), never the
-  bit alone. Tested with one and both right groups floated (incl. an ordinary
-  terminal id), hide→show while floating, float-last-right → hide → show →
-  reload, plan/preview/vscode presets, and container resize, asserting the
-  serialized tree is legal (no empty branch/leaf).
+  **live canonical pinned-right-column presence**, defined by the single
+  predicate `hasLivePinnedRightColumn` — a root column that is (a) pinned
+  (carries pinned/width metadata) and (b) identified by canonical right-group
+  ids or pinned-column metadata, **never** merely "a column right of center"
+  and **never** an unpinned preset side column. Plan/preview/vscode layouts
+  have unpinned side columns: the predicate returns false for them (matching
+  today's preset assignments), and applying a preset never hides a
+  plan/preview/vscode side column as a right-panel toggle. The bit is derived
+  from this predicate at all times (restore, float, dock, toggle,
+  preset/default assignment), never persisted, never an independent intent;
+  show with no pinned-right panels and hide without one are no-ops. The
+  toggle, `enforcePinnedTargets`, and `dockview-layout-setup`'s detection all
+  share this one predicate. Tested with one and both right groups floated
+  (incl. an ordinary terminal id), hide→show while floating,
+  float-last-right → hide → show → reload, plan/preview/vscode/compact
+  presets (asserting the predicate and bit values), and container resize,
+  asserting the serialized tree is legal (no empty branch/leaf).
 - **Storage-write failure after float/dock:** the commit fails closed — the
   transaction rolls back (journal re-apply) and the group stays pinned with a
   console warning. A reload or env switch can therefore never observe a
   missing floated group that the user believes exists; the worst case is the
   pin simply not sticking.
-- **Journal/floating state size budget:** floating state plus the operation
-  journal share the tab's sessionStorage quota with all task environments. A
-  documented total serialized budget per env (default 96 KB: blob + journal
-  before/after snapshots) is preflighted before any mutation (State machine,
-  step 1); exceeding it fails the transaction non-destructively with a console
-  warning — the float does not happen, nothing is corrupted, and the user's
-  existing pinned/docked state is untouched. Near-limit and quota-full
-  behavior is tested.
+- **Journal/floating state size budgets:** floating state plus the operation
+  journal share the tab's sessionStorage quota with all task environments and
+  other Kandev storage. Two caps are preflighted before any mutation (State
+  machine, step 1): a **per-env cap** (96 KB: blob + journal before/after
+  snapshots) and a **global floating allocation budget** across all
+  environments' blobs + journals (384 KB), enforced by scanning the owned
+  storage prefix. Exceeding either fails the transaction non-destructively
+  with a console warning — the float does not happen, nothing is corrupted,
+  and the user's existing pinned/docked state is untouched. Near-limit,
+  multi-env-combined, and quota-full behavior is tested.
 - **Reset layout / "clear UI state":** reset is an **id-aware docking merge**
   with explicit collision precedence: the reset layout owns group/column
   **placement**, the floating definition owns the panel **payload** (component,
@@ -776,6 +832,42 @@ replacement orderings.
   restore entry runs (including maximize-only and route-intent branches),
   **THEN** `recoverFloatingJournalOnce` runs before the first `fromJSON` and
   no ordinary restore/divergence logic interprets the journaled mutation.
+- **GIVEN** a crash after the blob write (blob has after-digest, layout has
+  before-digest, both keys individually valid), **WHEN** digest-based journal
+  recovery runs, **THEN** the after pair is applied and verified — the four
+  partial-write orderings each recover deterministically, including a write
+  throwing after storage mutation.
+- **GIVEN** a saved group id collides with a live group in the destination
+  column during salvage/dock, **WHEN** materialization runs, **THEN**
+  `allocateUniqueGroupId` reuses the id only when absent/owned, otherwise
+  allocates a bounded generated id with a saved→live mapping — no overwrite,
+  no merge.
+- **GIVEN** the user switches to the plan preset (unpinned side column),
+  **WHEN** `rightPanelsVisible` is derived, **THEN** the
+  `hasLivePinnedRightColumn` predicate returns false (the plan side column is
+  never treated as a pinned-right target and never hidden by the toggle).
+- **GIVEN** a float transaction is mid-phase, **WHEN** a programmatic
+  add-panel or reset action fires, **THEN** it returns a non-destructive
+  no-op with a debug reason (all public layout-mutation boundaries are busy-
+  guarded), and all three pin surfaces render disabled.
+- **GIVEN** env A's journal is recovered, **WHEN** env B's journal recovery
+  runs on the same api, **THEN** B's journal is recovered independently (the
+  recovery cache is keyed by envId + transactionId + api instance; a new api
+  instance re-checks a still-present journal).
+- **GIVEN** two environments' floating state plus journals approach the
+  global budget, **WHEN** another float is attempted, **THEN** the preflight
+  fails non-destructively before mutation.
+- **GIVEN** a task restores with a saved maximize state and floating entries,
+  **WHEN** the maximize-restore branch runs, **THEN** the overlay is never
+  mutated; a pending-floating-restore marker is set and materialization runs
+  only after `exitMaximizedLayout`'s rAF settles, with the E2E asserting
+  visibility during maximize.
+- **GIVEN** a floating center group's column id derives from `session:<A>`
+  and the task switches to `session:<B>`, **WHEN** the post-apply
+  normalization hook runs after the incoming session insertion, **THEN** the
+  entry's column is rewritten to the real live center column (or keeps the
+  custom fallback when no real center exists) — never a fabricated or
+  panel-derived id.
 - **GIVEN** the floating blob plus journal would exceed the size budget,
   **WHEN** the user unpins a group, **THEN** the transaction fails
   non-destructively before any mutation, the group stays pinned, and a

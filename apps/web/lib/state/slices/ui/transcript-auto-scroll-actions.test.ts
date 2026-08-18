@@ -44,17 +44,4 @@ describe("transcript auto-scroll actions", () => {
     store.getState().setTranscriptScrollTop("session-a", 400);
     expect(store.getState().transcriptAutoScroll.scrollTopBySessionId["session-a"]).toBe(400);
   });
-  it("setVisibleTranscriptPromptIds replaces the visible prompt set per session", () => {
-    store.getState().setVisibleTranscriptPromptIds("session-a", ["prompt-1", "prompt-2"]);
-    store.getState().setVisibleTranscriptPromptIds("session-b", ["prompt-3"]);
-    expect(store.getState().visibleTranscriptPromptIdsBySessionId["session-a"]).toEqual([
-      "prompt-1",
-      "prompt-2",
-    ]);
-    expect(store.getState().visibleTranscriptPromptIdsBySessionId["session-b"]).toEqual([
-      "prompt-3",
-    ]);
-    store.getState().setVisibleTranscriptPromptIds("session-a", []);
-    expect(store.getState().visibleTranscriptPromptIdsBySessionId["session-a"]).toEqual([]);
-  });
 });

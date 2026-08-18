@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
-import {
-  IconChevronDown,
-  IconChevronUp,
-  IconClock,
-  IconHourglass,
-  IconNavigation,
-} from "@tabler/icons-react";
+import { IconChevronDown, IconChevronUp, IconClock, IconHourglass } from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
 import { useSessionMessages } from "@/hooks/domains/session/use-session-messages";
 import { useSessionTurnsState } from "@/hooks/domains/session/use-session-turns";
@@ -31,14 +25,6 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const rootRef = useRef<HTMLDivElement>(null);
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
-  const visibleTranscriptPromptIds = useAppStore(
-    (state) =>
-      (sessionId ? state.visibleTranscriptPromptIdsBySessionId?.[sessionId] : undefined) ?? [],
-  );
-  const visibleTranscriptPromptIdSet = useMemo(
-    () => new Set(visibleTranscriptPromptIds),
-    [visibleTranscriptPromptIds],
-  );
   const { messages } = useSessionMessages(sessionId);
   const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
   const entries = useMemo(() => {
@@ -71,7 +57,6 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
           index={index}
           expanded={expanded === entry.messageId}
           maxHeight={maxHeight}
-          isVisibleInTranscript={visibleTranscriptPromptIdSet.has(entry.messageId)}
           onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
           onNavigate={onNavigateToPrompt}
         />
@@ -104,23 +89,21 @@ type PromptHistoryRowProps = {
   index: number;
   expanded: boolean;
   maxHeight: string;
-  isVisibleInTranscript: boolean;
   onToggle: () => void;
   onNavigate?: (messageId: string) => void;
 };
 
 /** One prompt-history row: the prompt text (truncated, or expanded into a
  * scrollable box) inside the transcript-style bubble, its relative time and
- * duration. A jump button floats over the bubble's left edge when the prompt
- * is outside the visible transcript; the expand/collapse chevron floats over
- * the truncated text's ellipsis when it overflows. */
+ * duration. The bubble is directly clickable for transcript navigation; the
+ * expand/collapse chevron floats over the truncated text's ellipsis when it
+ * overflows. */
 function PromptHistoryRow({
   sessionId,
   entry,
   index,
   expanded,
   maxHeight,
-  isVisibleInTranscript,
   onToggle,
   onNavigate,
 }: PromptHistoryRowProps) {
@@ -144,29 +127,26 @@ function PromptHistoryRow({
       <div className="min-w-0 flex-1">
         {/* Same bubble as the transcript's user message: markdown-body
             font, rounded-2xl, blue when not favorited / yellow when the
-            message is starred — with lighter padding. The jump button
-            floats inside the bubble's left edge (revealed on hover for
-            fine pointers, always visible on touch) and the expand/collapse
-            chevron floats at the end of the truncated line (over the
-            ellipsis), both overlapping the text to keep rows compact. */}
+            message is starred — with lighter padding. The prompt bubble is
+            directly clickable for transcript navigation. */}
         <div
+          role="button"
+          tabIndex={0}
           className={cn(
-            "markdown-body markdown-body-user group relative overflow-hidden rounded-2xl px-3 py-1.5",
+            "markdown-body markdown-body-user group relative cursor-pointer overflow-hidden rounded-2xl px-3 py-1.5",
             isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
           )}
+          onClick={(event) => {
+            if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+            onNavigate?.(entry.messageId);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+            event.preventDefault();
+            onNavigate?.(entry.messageId);
+          }}
         >
-          {!isVisibleInTranscript && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute left-1 top-1/2 z-10 size-11 -translate-y-1/2 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 focus-visible:bg-background/90 sm:size-6 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
-              aria-label={t("task:scrollToPrompt")}
-              data-testid={`prompt-history-jump-${index}`}
-              onClick={() => onNavigate?.(entry.messageId)}
-            >
-              <IconNavigation size={14} />
-            </Button>
-          )}
           <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
             {entry.content}
           </span>

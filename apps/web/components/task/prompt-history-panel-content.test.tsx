@@ -9,7 +9,6 @@ const { state, messagesBySession, turnsBySession, turnsHydratedBySession } = vi.
     taskSessions: {
       items: {} as Record<string, { name?: string; is_passthrough?: boolean }>,
     },
-    visibleTranscriptPromptIdsBySessionId: {} as Record<string, string[]>,
   },
   messagesBySession: {} as Record<string, Message[]>,
   turnsBySession: {} as Record<string, Turn[]>,
@@ -54,7 +53,6 @@ const TURN_ID = "turn-1";
 const OVERFLOW_SCROLL_WIDTH = 600;
 const EXPAND_TEST_ID = "prompt-history-expand-0";
 const PANEL_TEST_ID = "prompt-history-panel";
-const JUMP_TEST_ID = "prompt-history-jump";
 const COLLAPSED_WIDTH = 100;
 const SPAN_NOT_RENDERED = "text span did not render";
 
@@ -168,7 +166,6 @@ beforeEach(() => {
     [SESSION_B]: { name: "Agent B", is_passthrough: false },
     [PASSTHROUGH]: { name: "PT", is_passthrough: true },
   };
-  state.visibleTranscriptPromptIdsBySessionId = {};
   messagesBySession[SESSION_A] = [];
   messagesBySession[SESSION_B] = [];
   turnsBySession[SESSION_A] = [];
@@ -197,8 +194,8 @@ describe("PromptHistoryPanelContent — rows and test IDs", () => {
     expect(screen.getByTestId(PANEL_TEST_ID)).toBeTruthy();
     expect(row(0).textContent).toContain(NEWER_PROMPT);
     expect(row(1).textContent).toContain(OLDER_PROMPT);
-    expect(screen.getByTestId(`${JUMP_TEST_ID}-0`)).toBeTruthy();
-    expect(screen.getByTestId(`${JUMP_TEST_ID}-1`)).toBeTruthy();
+    expect(row(0).querySelector(".cursor-pointer")).toBeTruthy();
+    expect(row(1).querySelector(".cursor-pointer")).toBeTruthy();
   });
 
   it("styles the prompt like the transcript user bubble with lighter padding", () => {
@@ -245,20 +242,18 @@ describe("PromptHistoryPanelContent — rows and test IDs", () => {
 
     expect(screen.getByTestId(PANEL_TEST_ID).textContent).toBe("No prompts yet.");
     expect(screen.queryByTestId(/^prompt-history-row-/)).toBeNull();
-    expect(screen.queryByTestId(/^prompt-history-jump-/)).toBeNull();
   });
 });
 
 describe("PromptHistoryPanelContent — navigation seam", () => {
-  it("invokes the injected callback with the row's messageId", () => {
+  it("invokes the injected callback when the prompt row is clicked", () => {
     messagesBySession[SESSION_A] = [message({ id: "prompt-1" })];
     const onNavigateToPrompt = vi.fn();
 
     render(<PromptHistoryPanelContent onNavigateToPrompt={onNavigateToPrompt} />);
-    expect(screen.getByTestId(`${JUMP_TEST_ID}-0`).getAttribute("aria-label")).toBe(
-      "Scroll to prompt",
-    );
-    fireEvent.click(screen.getByTestId(`${JUMP_TEST_ID}-0`));
+    const prompt = row(0).querySelector<HTMLElement>(".cursor-pointer");
+    expect(prompt).toBeTruthy();
+    fireEvent.click(prompt!);
 
     expect(onNavigateToPrompt).toHaveBeenCalledWith("prompt-1");
   });
@@ -267,26 +262,7 @@ describe("PromptHistoryPanelContent — navigation seam", () => {
     messagesBySession[SESSION_A] = [message()];
 
     render(<PromptHistoryPanelContent />);
-    fireEvent.click(screen.getByTestId(`${JUMP_TEST_ID}-0`));
-  });
-
-  it("hides navigation for visible prompts and restores it after visibility changes", () => {
-    messagesBySession[SESSION_A] = [
-      message({ id: "visible-prompt", content: "visible prompt" }),
-      message({ id: "hidden-prompt", content: "hidden prompt", created_at: LATER_TIME }),
-    ];
-    state.visibleTranscriptPromptIdsBySessionId[SESSION_A] = ["visible-prompt"];
-
-    const { rerender } = render(<PromptHistoryPanelContent />);
-
-    expect(screen.queryByTestId(`${JUMP_TEST_ID}-0`)).toBeTruthy();
-    expect(screen.queryByTestId(`${JUMP_TEST_ID}-1`)).toBeNull();
-
-    state.visibleTranscriptPromptIdsBySessionId[SESSION_A] = [];
-    rerender(<PromptHistoryPanelContent />);
-
-    expect(screen.getByTestId(`${JUMP_TEST_ID}-0`)).toBeTruthy();
-    expect(screen.getByTestId(`${JUMP_TEST_ID}-1`)).toBeTruthy();
+    fireEvent.click(screen.getByTestId("prompt-history-row-0"));
   });
 });
 describe("PromptHistoryPanelContent — active-session switch", () => {

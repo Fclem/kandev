@@ -107,7 +107,6 @@ export const defaultUIState: UISliceState = {
     enabledBySessionId: {},
     scrollTopBySessionId: {},
   },
-  visibleTranscriptPromptIdsBySessionId: {},
   reviewPRSelection: { selectedKeyByTaskId: {} },
   documentPanel: { activeDocumentBySessionId: {} },
   systemHealth: { issues: [], checks: [], healthy: true, loaded: false, loading: false },
@@ -387,17 +386,6 @@ export const createUISlice: StateCreator<UISlice, [["zustand/immer", never]], []
     set((draft) => {
       draft.transcriptAutoScroll.scrollTopBySessionId[sessionId] = scrollTop;
       setStoredAutoScrollTop(sessionId, scrollTop);
-    }),
-  setVisibleTranscriptPromptIds: (sessionId, messageIds) =>
-    set((draft) => {
-      const current = draft.visibleTranscriptPromptIdsBySessionId[sessionId];
-      if (
-        current?.length === messageIds.length &&
-        current.every((id, index) => id === messageIds[index])
-      ) {
-        return;
-      }
-      draft.visibleTranscriptPromptIdsBySessionId[sessionId] = [...messageIds];
     }),
   setReviewPRSelection: (taskId, selectedKey) =>
     set((draft) => {

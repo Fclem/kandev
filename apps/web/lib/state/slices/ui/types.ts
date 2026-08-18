@@ -264,8 +264,6 @@ export type UISliceState = {
   mobileSession: MobileSessionState;
   chatInput: ChatInputState;
   transcriptAutoScroll: TranscriptAutoScrollState;
-  /** Prompt IDs currently intersecting each live session transcript viewport. */
-  visibleTranscriptPromptIdsBySessionId: Record<string, string[]>;
   reviewPRSelection: ReviewPRSelectionState;
   documentPanel: DocumentPanelState;
   systemHealth: SystemHealthState;
@@ -323,7 +321,6 @@ export type UISliceActions = {
   setCancelTurnPending: (sessionId: string, pending: boolean) => void;
   setTranscriptAutoScrollEnabled: (sessionId: string, enabled: boolean) => void;
   setTranscriptScrollTop: (sessionId: string, scrollTop: number) => void;
-  setVisibleTranscriptPromptIds: (sessionId: string, messageIds: readonly string[]) => void;
   setReviewPRSelection: (taskId: string, selectedKey: string) => void;
   setActiveDocument: (sessionId: string, doc: ActiveDocument | null) => void;
   setSystemHealth: (response: SystemHealthResponse) => void;

@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 33
-prior-round: 32
+revision: 34
+prior-round: 33
 ---
 
 # Floating (unpinned) workbench panels
@@ -201,7 +201,13 @@ FloatingPanelDef                   # complete definition so a floated panel can
   params       Record<string, unknown>   # must be JSON-safe (see guard)
 ```
 
-Persisted under sessionStorage key `kandev.dockview.env-floating.<envId>`.
+Persisted under sessionStorage key `kandev.dockview.env-floating.<envId>`
+where `<envId>` is ALWAYS `encodeURIComponent(envId)` via the single
+canonical key constructor (all examples in this spec use `<envId>` as
+shorthand for the encoded form; the raw-interpolated v3/legacy keys are
+migrated once — see Migration — with collision handling: an encoded key
+colliding with a legacy raw key resolves by exact-bytes check, never by
+overwrite).
 **The layout/maximize key coexistence table is explicit (the stale
 "alongside v3" phrasing is removed): v3 READ keys `env-layout-v3` and
 `env-maximize-v3`; v4 WRITE keys `env-layout-v4` and `env-maximize-v4`;
@@ -222,6 +228,12 @@ panel ids or group ids within the blob are rejected deterministically (first
 occurrence wins, later ones dropped). Invalid entries are dropped
 individually; an unreadable blob defaults to `{}` (all groups pinned).
 
+**Reset runs through the SAME journaled transaction as docking:** the
+  merged grid + floating-blob clear are one coordinator pair (journal →
+  blob → layout → verified); pair-persistence failure rolls back BOTH (the
+  floating blob is NOT cleared on a failed reset commit) and returns the
+  typed rejected result; a reset quota-full/partial-write test asserts
+  grid, floating blob, journal, and next-reload consistency.**
 **Layout persistence invariant:** the env layout keeps reflecting the **live
 grid** (floated groups absent), exactly as it does today. The floating blob
 carries everything needed to materialize floated groups back into the grid and
@@ -350,7 +362,14 @@ loses the incoming session, or mutates the maximize overlay:
    `sv.setConstraints` + `resizeView` same-frame sequence and prove the
    captured widths survive narrow/min-max conflict cases — the "or
    explicit constraint override" alternative is NOT acceptable without a
-   concrete API contract)** (partial-width retention and re-clamped
+   concrete API contract); **if the spike proves the override cannot be
+   implemented (dockview recomputes constraints internally), the DESIGN
+   FALLBACK is triggered: mid-drag rollback relaxes to within-constraint
+   restoration (captured widths clamped to the captured min/max — the
+   captured constraint set is still reapplied, so the deviation is
+   bounded and documented) with a spec revision and a deviation note in
+   task-01; the spike result determines the contract, and task-01 is NOT
+   accepted until one of the two paths is recorded** (partial-width retention and re-clamped
    restoration are rejected); narrow-container and min/max-conflict cases
    assert the exact captured values and target storage; live width, target width, sidecar, and next-reload
    assertions cover busy-mid-drag and busy-before-mouseup; mousedown, mouseup, layout events, and
@@ -495,7 +514,11 @@ loses the incoming session, or mutates the maximize overlay:
   public result algebra covers EVERY layout-mutating boundary: pin
   click, float/dock, storage quota-full, journal/quarantine,
   busy/lease-held, stale identity, and recovery failures each return the
-  same discriminated type with a reason enum and locale keys; the
+  same discriminated type with the EXHAUSTIVE reason enum
+  `busy | quota-full | journal-unavailable | quarantine | stale-identity |
+  invalid-definition | lease-held | settle-timeout | recovery-pending` and
+  locale keys `task:floatingError.*` (one per reason) + `task:floatingRetry`
+  + `task:floatingCancel`; the
   "non-destructive no-op with debug reason" and "console warning" paths
   are REPLACED by typed results surfaced as localized failure/retry/cancel
   state, and every terminal result is tested**;
@@ -504,10 +527,17 @@ loses the incoming session, or mutates the maximize overlay:
   DEFERRED until the floating transaction/portal ownership settles, then
   lease release/transfer happens BEFORE `releaseByEnv` runs (tests:
   A-maximized/B-requested, env-scoped floating panel); **a coordinator-owned
-  SETTLE DEADLINE (5 s, watchdog) applies: on expiry the pending env
-  switch CANCELLS with the typed rejected result and localized
-  retry/cancel UI; hung-lease, timeout, unmount, and target-deletion
-  paths are tested**; transaction 2 (exit) starts after the
+  SETTLE DEADLINE applies: one timer handle + `{generation, intentId,
+  deadline}` with an ABSOLUTE 5 s deadline from the switch request (no
+  progress-reset — steady progress cannot defer expiry); settle and
+  expiry are serialized atomically: settlement CLAIMS the intentId
+  (compare-and-clear) before completing, so an expiry that fires at the
+  same moment sees the intent already claimed and becomes a generation
+  no-op; expiry cancels with the typed rejected result + localized
+  retry/cancel UI; late callbacks (settle after expiry, expiry after
+  settle) are generation no-ops; boundary ordering is tested with an
+  injected timer, not sleeps; hung-lease, timeout, unmount, and
+  target-deletion paths are covered**; transaction 2 (exit) starts after the
   exit rAF, consumes the pending marker, performs the regular pre-max
   restore with exactly one `fromJSON` under coordinator-internal busy
   ownership, runs identity/session validation and the planned-equivalence
@@ -519,7 +549,9 @@ loses the incoming session, or mutates the maximize overlay:
   the declared transient boundary (equivalence-assertion mismatch after a
   resize); persistent structural mismatch, a fromJSON throw after partial
   native mutation, stale registry, or portal/lease failure FAILS CLOSED —
-  lease invalidated, rebuild from validated live state, never a blind
+  lease invalidated, rebuild from the IMMUTABLE PRE-CALL native/layout
+  snapshot + registry captured before the first fromJSON (never a
+  post-partial live capture, which is by definition untrustworthy), never a blind
   second fromJSON; exact call counts asserted per class**;
   token/generation ownership, busy-clearing, and portal release/adoption
   ordering are specified per transaction; tests cover overlay-settle, exit,
@@ -584,9 +616,9 @@ half-formed marker that fails the journal guard's digest recomputation);
 cached digest alone never authorizes AFTER + committed; only
 `afterPairVerified` does. Cached-digest-but-unverified unloads write the
 BEFORE pair + `aborted` (tests: hashing finished but storage
-verification has not).** After digests are cached, unload validates
-phase/generation and, when the pair is verified, writes the complete
-pair normally. Mutation-and-unload-while-hashing-pending,
+verification has not).** **Explicit unload phase table: digest-ready
+alone ALWAYS writes BEFORE + `aborted`; ONLY `afterPairVerified` writes
+AFTER + normal completion.** Mutation-and-unload-while-hashing-pending,
 unload-before-each-digest-completes, and close-during-mutation tests cover
 the ordering. The hash implementation is a **named direct
 declared dependency** (e.g. `@noble/hashes/sha256`) or an audited vendored
@@ -746,7 +778,7 @@ Float/dock/restore are **transactions** with an operation journal:
    (`kandev.dockview.env-floating-journal.<envId>`) is written **before** any
    mutation and holds:
    ```
-   { version, envId, transactionId, phase: "mutating" | "committed" | "aborted",
+   { version, envId, transactionId, phase: "mutating" | "aborted",
      before: { floatingDigest, layoutDigest },
      after:  { floatingDigest, layoutDigest },
      raw: { beforeFloating, beforeLayout, afterFloating, afterLayout } }
@@ -761,7 +793,16 @@ Float/dock/restore are **transactions** with an operation journal:
    writes — verify equality and clear the journal; only a genuine
    before-mismatch (current bytes differ from the before digests) writes
    the before pair via verified writes before clearing; an unexpected
-   digest remains fail-closed (quarantine + repair record)**; the journal guard, type guard, and recovery matrix all
+   digest remains fail-closed (quarantine + repair record)**; **journal
+   clear is itself a verified operation: `clearVerifiedJournal` reads back
+   absence and caches recovery success ONLY after absence is verified;
+   clear failure retains the journal + suppression state and returns a
+   typed retryable result (retried on the next recovery); PARTIAL
+   before-pair writes during aborted unload are safe by construction —
+   the before digests are the pre-transaction state, so any subset of
+   before writes still matches the before digests and recovery completes
+   the before pair idempotently; clear-throw and partial-write tests are
+   specified**; the journal guard, type guard, and recovery matrix all
    accept `aborted` explicitly, and round-trip + unload-before-digest
    recovery tests cover it.
    **Digest protocol (exact):** each target storage value is serialized
@@ -783,17 +824,12 @@ Float/dock/restore are **transactions** with an operation journal:
    hashing/verification. **Journal writes are verified the same way** (a
    failed journal write aborts the transaction before any mutation).
    **Write/verify ordering:** journal → blob → layout → **read-back verify
-   of both keys → phase transition (`committed`) → read-back of the
-   journal marker itself** → journal clear; a crash between final pair
-   verification and the marker write is a `mutating` both-after row settled
-   by equality, and a crash between marker write and its read-back is a
-   verified `committed` row; **marker read-back failure retries ONLY the
-   marker write + read-back (idempotent, bounded at 2 attempts) — the
-   pair is already verified, so no re-mutation and no pair re-write;
-   persistent marker-read failure still clears the journal because the
-   pair is verified (the marker is advisory); `mutating` + both-after is a
-   TERMINAL equality row: recovery verifies equality, clears the journal,
-   and NEVER writes `committed` or re-mutates**; a throw after any storage
+   of both keys → journal clear**; **the `committed` phase is REMOVED: the
+   VERIFIED PAIR is the sole terminal evidence — digest equality settles
+   both-after rows, so a `mutating` + both-after row is a TERMINAL
+   equality row (verify equality, clear the journal, never re-mutate, and
+   never write a second marker); there is no advisory marker to retry or
+   gate downstream state**; a throw after any storage
    mutation is a recoverable state via the phase marker (a
    `phase-write-throw-after-mutation` recovery case is specified and tested).
    **Recovery is a phase-aware decision matrix, never inference:** for each
@@ -806,11 +842,11 @@ Float/dock/restore are **transactions** with an operation journal:
    | blob-after / layout-before | after pair | after digests |
    | layout-after / blob-before | after pair | after digests |
    | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
-   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable, VERSIONED repair record** (`kandev.dockview.env-repair.<envId>` with `{version, transactionId, envId, createdAt, journalRawDigest, quarantineKey, targetRawDigests}` — **`journalRawDigest` is DEFINED as SHA-256(TextEncoder(exact raw journal string read before quarantine)) with a golden vector; on load it is recomputed, the quarantined value's digest must match, and `quarantineKey === deterministicQuarantineKey(envId, journalRawDigest)` is required; mismatch ⇒ malformed ⇒ fail closed (nothing is deleted)**; the quarantine digest/key and target raw digests are IN the record so `clearRepair` identifies the exact quarantine copy; a record missing these fields is malformed and fails closed) — an **app-shell repair registry** scans only the owned `env-repair.*` prefix and renders an env/task-labeled banner on home, settings, AND task mounts (**CURRENT-TAB scope documented: sessionStorage is per-tab; cross-tab records are not visible until the tab mounts the env**); **the quarantine digest/key and transaction identity are part of the guarded repair state, and EVERY restore gate returns `quarantined` — suppressing materialization/salvage — while a repair record exists, even after reload/new API instance (the in-memory cache never bridges reloads; the durable record does)**; `loadRepair(envId)` runs on every mount and `clearRepair(envId, transactionId)` is token-guarded with **verified deletion ordering (repair record DELETED LAST, after quarantine → floating blob → layout/journal are all verified; or the clear is journaled and the record restored on any later failure)**, memory updated only after the entire deletion transaction is durably verified (a failed clear keeps the banner); **the clear uses a DURABLE CLEAR JOURNAL — key `kandev.dockview.env-repair-clear.<envId>` with `{version, envId, transactionId, generation, targetDigests, phase}` schema and an explicit phase machine `pending → verifying → done` (failed/unknown retained as `pending`; each phase has an idempotent reload action; recovery order = **write `pending` BEFORE any deletion → delete/verify quarantine → transition `verifying` → verify quarantine absence + record consistency → delete/verify the original journal + repair record → write `done` and delete the clear journal LAST** — **the clear journal is its own durable record (`kandev.dockview.env-repair-clear.<envId>` = `{version, envId, transactionId, phase: "pending"|"verifying"|"done", targets: [repairKey, quarantineKey, journalKey], createdAt}`); the delete+verify of EACH target is itself journaled (the phase advances only after the previous target is verified absent); crash-before/after each delete is recovered by re-running the phase machine; a repeated mount re-enters the machine idempotently**; **`done` is a TERMINAL, idempotently re-deletable record that RETAINS suppression: a mount that sees a `done` clear journal (with repair/quarantine already absent) re-deletes it and keeps suppression until clear-journal absence is verified — suppression lifts only when a mount observes BOTH no clear journal AND no repair record**; any present repair record OR incomplete clear journal keeps restore/materialization suppressed until verified completion; crash-at-each-delete tests), recovery-before-restore entry, owned-key-index/budget membership, and `cleanupTaskStorage` deletion after generation invalidation (task-01 owns it) — with idempotent retry and generation checks (a partial clear never loses the suppression record while quarantine remains, and never leaves indefinite suppression without a retry state); clear-failure, reload/navigation-mid-clear, and retry tests; STALE-RECORD POLICY: untrusted repair state is NEVER auto-cleared; the banner shows record age with retry/verified-clear actions and quarantine is retained until verified (a TTL, if any, never silently re-enables restore — it switches to a documented read-only/recovery state); beforeunload/reopen, task-remount, stale-age, and cross-tab tests**; **SUPPRESSION SCOPE: while repair is active, existing live grid panels REMAIN USABLE and only floating restore/materialization/mutations are blocked; **PORTAL TRANSFER ON REPAIR ACTIVATION: adoption of new portals stops, floating ownership is released, and each recoverable portal is REATTACHED **by LOGICAL group/column identity** — **a MINIMAL `create-materializable-column` REPAIR-CONTROL transform is EXPLICITLY ALLOWED under the repair token when the floating group's original slot was removed/sanitized away (no portal adoption, no persistence, rollback guarantees; a call-order test proves it cannot invoke normal float/dock/materializer code)**; retained-detached-with-non-rendering-lease is the documented alternative for env-scoped panels; a repair-activation-after-adoption test covers one floating-only portal and one existing-grid portal** — repair controls are reachable via the app shell on task/home/settings mounts (banner visibility + clear/retry without entering the unsafe restore path is an E2E scenario)**; **an explicit allow/deny matrix covers native grid reads (allow), ordinary grid edits (allow), persistence (allow for the current validated grid — CLEAR RETAINS THE LAYOUT KEY and removes only repair/quarantine/floating state; the current validated native grid is synchronously serialized + persisted BEFORE any deletion, with a replacement pair journaled and verified before the old repair record is removed; reload-during-clear and clear-before-debounce tests), floating actions (deny), restore/recovery (deny), portal adoption (deny), env switch (allow, generation-checked), and repair controls (allow)**; `cleanupTaskStorage` removes repair + quarantine keys; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, settings-mount, confirmation-failure, and cleanup tests |
-   The `phase` marker (`mutating` vs `committed`) refines the both-after row
-   (a `committed` marker with both-after means the mutation finished; a
-   `mutating` marker with both-after is still settled by equality), never
-   replaces digest evidence. The journal is cleared only after the selected
+   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable, VERSIONED repair record** (`kandev.dockview.env-repair.<envId>` with `{version, transactionId, envId, createdAt, journalRawDigest, quarantineKey, targetRawDigests}` — **`journalRawDigest` is DEFINED as SHA-256(TextEncoder(exact raw journal string read before quarantine)) with a golden vector; on load it is recomputed, the quarantined value's digest must match, and `quarantineKey === deterministicQuarantineKey(envId, journalRawDigest)` is required; mismatch ⇒ malformed ⇒ fail closed (nothing is deleted)**; the quarantine digest/key and target raw digests are IN the record so `clearRepair` identifies the exact quarantine copy; a record missing these fields is malformed and fails closed) — an **app-shell repair registry** scans only the owned `env-repair.*` prefix and renders an env/task-labeled banner on home, settings, AND task mounts (**CURRENT-TAB scope documented: sessionStorage is per-tab; cross-tab records are not visible until the tab mounts the env**); **the quarantine digest/key and transaction identity are part of the guarded repair state, and EVERY restore gate returns `quarantined` — suppressing materialization/salvage — while a repair record exists, even after reload/new API instance (the in-memory cache never bridges reloads; the durable record does)**; `loadRepair(envId)` runs on every mount and `clearRepair(envId, transactionId)` is token-guarded with **verified deletion ordering (repair record DELETED LAST, after quarantine → floating blob → layout/journal are all verified; or the clear is journaled and the record restored on any later failure)**, memory updated only after the entire deletion transaction is durably verified (a failed clear keeps the banner); **the clear uses a DURABLE CLEAR JOURNAL — key `kandev.dockview.env-repair-clear.<envId>` with `{version, envId, transactionId, generation, targetDigests, phase}` schema and an explicit phase machine `pending → verifying → done` (failed/unknown retained as `pending`; each phase has an idempotent reload action; recovery order = **write `pending` BEFORE any deletion → delete/verify quarantine → transition `verifying` → verify quarantine absence + record consistency → delete/verify the original journal + repair record → write `done` and delete the clear journal LAST** — **the clear journal is its own durable record (`kandev.dockview.env-repair-clear.<envId>` = `{version, envId, transactionId, phase: "pending"|"verifying"|"done", targets: [repairKey, quarantineKey, journalKey], createdAt}`); the delete+verify of EACH target is itself journaled (the phase advances only after the previous target is verified absent); crash-before/after each delete is recovered by re-running the phase machine; a repeated mount re-enters the machine idempotently; a PRE-CLEAR ADMISSION CHECK reserves the exact clear-record bytes before any deletion — if the reservation fails (quota-full-before-clear), NO deletion starts, suppression stays up, and the user gets the typed `{status:"rejected", reason:"quota-full"}` + retry UI**; **`done` is a TERMINAL, idempotently re-deletable record that RETAINS suppression: a mount that sees a `done` clear journal (with repair/quarantine already absent) re-deletes it and keeps suppression until clear-journal absence is verified — suppression lifts only when a mount observes BOTH no clear journal AND no repair record**; any present repair record OR incomplete clear journal keeps restore/materialization suppressed until verified completion; crash-at-each-delete tests), recovery-before-restore entry, owned-key-index/budget membership, and `cleanupTaskStorage` deletion after generation invalidation (task-01 owns it) — with idempotent retry and generation checks (a partial clear never loses the suppression record while quarantine remains, and never leaves indefinite suppression without a retry state); clear-failure, reload/navigation-mid-clear, and retry tests; STALE-RECORD POLICY: untrusted repair state is NEVER auto-cleared; the banner shows record age with retry/verified-clear actions and quarantine is retained until verified (a TTL, if any, never silently re-enables restore — it switches to a documented read-only/recovery state); beforeunload/reopen, task-remount, stale-age, and cross-tab tests**; **SUPPRESSION SCOPE: while repair is active, existing live grid panels REMAIN USABLE and only floating restore/materialization/mutations are blocked; **PORTAL TRANSFER ON REPAIR ACTIVATION: adoption of new portals stops, floating ownership is released, and each recoverable portal is REATTACHED **by LOGICAL group/column identity** — **a MINIMAL `create-materializable-column` REPAIR-CONTROL transform is EXPLICITLY ALLOWED under the repair token when the floating group's original slot was removed/sanitized away (no portal adoption, no persistence, rollback guarantees; a call-order test proves it cannot invoke normal float/dock/materializer code)**; retained-detached-with-non-rendering-lease is the documented alternative for env-scoped panels; a repair-activation-after-adoption test covers one floating-only portal and one existing-grid portal** — repair controls are reachable via the app shell on task/home/settings mounts (banner visibility + clear/retry without entering the unsafe restore path is an E2E scenario)**; **an explicit allow/deny matrix covers native grid reads (allow), ordinary grid edits (allow), persistence (allow for the current validated grid — CLEAR RETAINS THE LAYOUT KEY and removes only repair/quarantine/floating state; the current validated native grid is synchronously serialized + persisted BEFORE any deletion, with a replacement pair journaled and verified before the old repair record is removed; reload-during-clear and clear-before-debounce tests), floating actions (deny), restore/recovery (deny), portal adoption (deny), env switch (allow, generation-checked), and repair controls (allow)**; `cleanupTaskStorage` removes repair + quarantine keys; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, settings-mount, confirmation-failure, and cleanup tests |
+   The `phase` marker (`mutating` only) never
+   replaces digest evidence; both-after rows are settled by digest equality
+   alone (there is no `committed` refinement — the verified pair is the
+   terminal evidence). The journal is cleared only after the selected
    target is verified. Both write paths return/throw status (the current
    `setEnvLayout`/`persistEnvLayoutNow` swallow failures — status-returning
    APIs are part of the contract). **`recoverFloatingJournalOnce(api,
@@ -826,7 +862,14 @@ Float/dock/restore are **transactions** with an operation journal:
    repair record + FULL SUPPRESSION — journal-free divergence rules NEVER
    apply to a present invalid/mismatched/unexpected journal (they apply ONLY
    when no journal exists); a restore of an invalid journal cannot call the
-   materializer or adopt portals (tests prove it). Quarantine uses a
+   materializer or adopt portals (tests prove it). **Journal reads return
+   a typed result `absent | present(raw) | unavailable(error)`: a
+   read error (quota/private-mode throw — the current
+   `getSessionStorage`/`getEnvLayout` helpers swallow read failures and
+   return fallbacks, local-storage.ts:7-17/301-310) is NEVER treated as
+   absent — `unavailable` FAILS CLOSED with full suppression and a typed
+   retryable result, and journal-free divergence recovery runs ONLY on a
+   verified `absent`**; Quarantine uses a
    **verified, idempotent protocol** — sessionStorage has
    no rename primitive, so quarantine derives **one deterministic key from
    `(envId, original raw digest)`** (`...-journal.<envId>.corrupt-<digest>`):
@@ -845,7 +888,12 @@ Float/dock/restore are **transactions** with an operation journal:
   that avoids the second full copy (the former is the chosen default);
   quota-full behavior retains the original
   journal and never caches recovery; max-size corrupt journal under
-  quota-full tests; quarantine keys count toward the budget, are removed by bounded
+  quota-full tests; quarantine keys count toward the budget **— the COMPLETE owned-key set
+   (floating, journal, quarantine, repair, repair-clear, layout-v4,
+   maximize-v4) is byte-accounted in BOTH the per-env cap and the global
+   384 KB index, and the recovery allowance is reserved ATOMICALLY across
+   environments before any mutation (a float preflight can never pass and
+   then leave no global capacity for mandatory recovery)** — and are removed by bounded
    per-env/task corrupt-key cleanup in `cleanupTaskStorage`, and the recovery
    cache records success only after durable quarantine or verified original
    absence. Crash-after-copy, repeated-restart, and cleanup cases are
@@ -948,7 +996,7 @@ Float/dock/restore are **transactions** with an operation journal:
    status-returning `persistSettledPair(envId, before, after, token)` with
    transaction/generation ownership, exact raw before/after snapshots, and a
    documented lock/queue/reject policy (a second writer while one is
-   mid-pair is rejected with a debug reason, never interleaved); the current
+   mid-pair is rejected with `{status:"rejected", reason:"busy"}`, never interleaved); the current
    independent `setEnvLayout`/`persistEnvLayoutNow` writers are replaced, so
    no path can compute a different pair or swallow a failure. Race-ordering
    tests cover a scheduled debounce, float begin, each individual write, and
@@ -1151,6 +1199,13 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   Radix portals move focus) is in no owned region; or Escape per the Escape
   contract. Only the focused/last-interacted expanded window collapses; other
   floating groups keep their display state.
+- **Focusout deferral while an owned layer is open:** `focusout` is
+  routed through the SAME pending/refcount/generation lease as pointerdown
+  (below): a focusout whose relatedTarget is in no owned region is DEFERRED
+  while any owned layer of the window is open — Radix menus/dialogs move
+  focus before dismissing, so the collapse must wait for the layer's
+  `onOpenChange(false)` + rAF, never firing mid-layer; a real
+  focusout-with-open-layer test is specified.
 - **Pointerdown deferral while an owned layer is open:** window-capture
   `pointerdown` fires before Radix's own outside-interaction handler, so a
   click on the grid while a menu/dialog is open would otherwise collapse the
@@ -1192,11 +1247,22 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   render-bound opaque `floatingOwnedLayerCapability` (injected at
   `PluginTaskPanel` render, bound to the exact portal instance, revoked in
   `PluginTaskPanel` cleanup and `unregisterPlugin`), and
-  `host.ui.registerFloatingOwnedLayer(capability, layerRoot): () => void` is
+  `host.ui.registerFloatingOwnedLayer(capability, openHandlers): () => void` is
   added **together** to `apps/packages/plugin-sdk/src/index.ts` (the
   `PluginUIApi` type, as a callable outside the mapped component type), the
   host implementation `apps/web/lib/plugins/host-api.ts`, and the host
   contract docs (`docs/plans/plugins/PLUGIN-API.md` + `apps/web/lib/plugins/types.ts`).
+  **Ownership proof = per-open handshake, not a root node:** Radix layers
+  portal their content to `document.body`, so a WeakMap from capability to
+  portal instance can never prove an arbitrary body node was opened by the
+  panel. Instead the plugin passes a **per-open handshake object** — the
+  host returns `{ onOpenChange(open: boolean), onDismiss() }` bound to the
+  capability + portal generation; the plugin spreads `onOpenChange` onto
+  the Radix root, so the ONLY way the layer counts as open is a real
+  open-state transition on that panel's Radix instance. A body node
+  without that binding is not an owned layer; unrelated nodes are
+  rejected. Registration = open=true transition; unregistration =
+  open=false / onDismiss / cleanup.
   The host stores a WeakMap/token binding from capability to portal instance;
   a plugin rendering two task panels cannot register a layer from one panel
   against the other, and a hoarded plugin-scoped function cannot be reused
@@ -1267,9 +1333,13 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
 - `order` is allocated from the per-env monotonic `nextOrder` counter; after a
   group is removed, its order is not reused.
 - **Exhaustion policy:** at the `nextOrder` cap (10 000), a new float fails
-  non-destructively — the group stays pinned and a console warning is logged.
+  non-destructively — the group stays pinned and the typed
+  `{status:"rejected", reason:"quota-full"}` result with localized
+  `task:floatingError.quota-full` is surfaced.
   No clamping or reuse (reuse would break monotonicity and stable z-order).
-- Rendering order is stable: sort by `(order, groupId)`.
+- Rendering order is stable: sort by `(order, groupLogicalId)` — native
+  groupId regenerates across fromJSON/reload (a non-authoritative hint) and
+  is used for diagnostics only; floating E2E/test ids embed `groupLogicalId`.
 - Offsets and z-index are formulas of `order`: offset = `order × 12px` from
   the edge; z-index = `1000 + order`; an expanded window renders above
   collapsed bars of the same edge.
@@ -1375,7 +1445,9 @@ replacement orderings.
 
 - **sessionStorage unavailable (private mode / quota):** floating commits
   **fail closed** exactly like any other blob-write failure — the transaction
-  rolls back and the group stays pinned, with a console warning. There is no
+  rolls back and the group stays pinned, with the typed
+  `{status:"rejected", reason:"quota-full"}` + localized result surfaced.
+  There is no
   separate "ephemeral floating" mode: a float that cannot be persisted does
   not happen, so a reload can never lose a floated group the user believes
   exists. (This is the single policy; see the State machine, steps 4-7.)
@@ -1508,7 +1580,8 @@ replacement orderings.
   branch/leaf).
 - **Storage-write failure after float/dock:** the commit fails closed — the
   transaction rolls back (journal re-apply) and the group stays pinned with a
-  console warning. A reload or env switch can therefore never observe a
+  typed `{status:"rejected", reason:"quota-full"}` + localized result. A
+  reload or env switch can therefore never observe a
   missing floated group that the user believes exists; the worst case is the
   pin simply not sticking.
 - **Journal/floating state size budgets:** floating state plus the operation
@@ -1518,7 +1591,7 @@ replacement orderings.
   snapshots) and a **global floating allocation budget** across all
   environments' blobs + journals (384 KB), enforced by scanning the owned
   storage prefix. Exceeding either fails the transaction non-destructively
-  with a console warning — the float does not happen, nothing is corrupted,
+  with a typed rejected result — the float does not happen, nothing is corrupted,
   and the user's existing pinned/docked state is untouched. Near-limit,
   multi-env-combined, and quota-full behavior is tested.
 - **Reset layout / "clear UI state":** reset is an **id-aware docking merge**
@@ -1542,15 +1615,26 @@ replacement orderings.
   retained (payload-wins is never a blanket override for sessions). **An EXACT
   placeholder allow-list keyed by panel id → (component, allowed params,
   allowed title) governs EVERY persisted definition: `session:` panels
-  match the exact grammar `session:<validated-id>` (the live sanitizer's
+  match the exact grammar `^session:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$` (lowercase UUID v4, ASCII only, length 44; the live session-id format is UUID — the sanitizer's
   `id.startsWith("session:")` + component-Set check at
   dockview-layout-restore.ts:79-97 is REPLACED by the closed table:
   canonical component, title, tabComponent, and a DEEP STRUCTURAL params
   schema (exact keys + value types + size bounds, no extra keys);
   malformed ids, known ids with wrong component/params, and unknown ids
   FAIL CLOSED (definition rejected, blob treated as suspect, never
-  payload-wins) before reset/materialization; chat, terminal-default, and
-  every other placeholder follow the same closed table, with tests
+  payload-wins) before reset/materialization; the CLOSED TABLE is committed here (ids and components from the live
+  registry `dockview-desktop-layout.tsx` components map /
+  `dockview-panel-content.tsx` PANEL_RENDERERS): chat → ChatContent
+  (params `{sessionId}` for session:*), diff-viewer → DiffViewerContent,
+  file-editor → FileEditorPanel, commit-detail → CommitDetailPanel,
+  changes → ChangesContent, files → FilesContent, terminal →
+  TerminalPanel, browser → BrowserPanel, vscode → VscodePanel, plan →
+  PlanContent, todos → TodosContent, pr-detail / review-detail →
+  ReviewDetailPanelComponent, mr-detail → MRDetailPanelComponent,
+  plugin-panel → PluginPanel (params = plugin manifest contract), plus
+  the two alias ids diff-files→changes and all-files→files; params are
+  schema-bounded per entry (session:* ⇒ `{sessionId: uuid}` only),
+  with tests
   covering corrupt and user-mutated blobs.** Valid
   session insertion is canonical:** every valid active session gets a
   session tab — via the merger's center-chat replacement when the reset
@@ -1695,7 +1779,7 @@ replacement orderings.
   exists in both surfaces.
 - **GIVEN** the floating blob write fails during a float commit, **WHEN** the
   transaction settles, **THEN** the transaction rolls back, the group stays
-  pinned, and a console warning is logged — no panel is lost on the next
+  pinned, and a typed rejected result is surfaced — no panel is lost on the next
   reload.
 - **GIVEN** a transaction whose journal write itself fails, **WHEN** the
   transaction starts, **THEN** it aborts before any mutation (journal writes
@@ -1879,7 +1963,8 @@ replacement orderings.
   never treated as a pinned-right target and never hidden by the toggle).
 - **GIVEN** a float transaction is mid-phase, **WHEN** a programmatic
   add-panel or reset action fires, **THEN** it returns a non-destructive
-  no-op with a debug reason (all public layout-mutation boundaries are busy-
+  typed `{status:"rejected", reason:"busy"}` result with a localized
+  busy reason (all public layout-mutation boundaries are busy-
   guarded), and all three pin surfaces render disabled.
 - **GIVEN** env A's journal is recovered, **WHEN** env B's journal recovery
   runs on the same api, **THEN** B's journal is recovered independently (the
@@ -1902,7 +1987,7 @@ replacement orderings.
 - **GIVEN** the floating blob plus journal would exceed the size budget,
   **WHEN** the user unpins a group, **THEN** the transaction fails
   non-destructively before any mutation, the group stays pinned, and a
-  console warning is logged.
+  typed rejected result is surfaced.
 - **GIVEN** a center chat group floated under `session:<A>` is switched to
   `session:<B>`, **WHEN** placement normalization runs, **THEN** the entry's
   column identity is rewritten to the live center column and docking returns

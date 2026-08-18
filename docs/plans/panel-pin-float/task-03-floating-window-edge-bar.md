@@ -29,7 +29,9 @@ spec: "../../specs/ui/panel-pin-float.md"
   reacquire** so hoarded tokens are rejected; **absent on mobile** where
   floating is desktop-only and host registration is rejected), and
   `host.ui.registerFloatingOwnedLayer(capability,
-  layerRoot) => () => void` is added to the SDK types
+  openHandlers) => () => void` (per-open onOpenChange handshake; a body-
+  portaled root node alone is NOT ownership proof — the plugin spreads the
+  returned `onOpenChange` onto its Radix root) is added to the SDK types
   (`apps/packages/plugin-sdk/src/index.ts`, as a callable outside the mapped
   component type), `lib/plugins/host-api.ts` (WeakMap token binding), and the
   contract docs; a hoarded plugin-scoped function cannot be reused across
@@ -78,7 +80,7 @@ node scripts/check-owned-layer-inventory.mjs   # executable gate: static AST sca
 - `apps/web/hooks/use-panel-active.ts` (extended/replaced: lease-record-backed active authority, `acceptPanelActive` routing, api-null = floating-store-backed virtual active state)
 - `apps/web/components/task/dockview-floating-coordinator.ts` (new; owned regions, pointer/focus/Escape ownership with same-frame lease, `useFloatingOwnedLayer`, stacking)
 - `apps/web/components/task/dockview-desktop-layout.tsx` (mount overlay)
-- `apps/packages/plugin-sdk/src/index.ts` + `apps/web/lib/plugins/types.ts` + `apps/web/lib/plugins/host-api.ts` + `docs/plans/plugins/PLUGIN-API.md` (`host.ui.registerFloatingOwnedLayer(capability, layerRoot)` — SDK type, host implementation with WeakMap binding, ownership capability, docs; all four change together)
+- `apps/packages/plugin-sdk/src/index.ts` + `apps/web/lib/plugins/types.ts` + `apps/web/lib/plugins/host-api.ts` + `docs/plans/plugins/PLUGIN-API.md` (`host.ui.registerFloatingOwnedLayer(capability, openHandlers)` — SDK type, host implementation with per-open handshake + WeakMap binding, ownership capability, docs; all four change together)
 - `apps/web/components/task/plugin-task-panel.tsx` (render-bound `floatingOwnedLayerCapability` injection + cleanup revocation)
 - `apps/web/lib/plugins/registry.ts` (`unregisterPlugin` owned-layer cleanup)
 - `apps/web/scripts/check-owned-layer-inventory.mjs` (new, with focused

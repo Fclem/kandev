@@ -8,8 +8,8 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 33 incorporates the
-round-32 adversarial review** (this package has been adversarially reviewed
+the existing env layout / maximize persistence. **Revision 34 incorporates the
+round-33 adversarial review** (this package has been adversarially reviewed
 every round): an atomic coordinator-owned `transferPanelLease` with an
 explicit detached-capability rule and a GLOBAL live-api lease (one active
 transaction across env switches), a deterministic operation plan computed at
@@ -41,7 +41,9 @@ per-env sessionStorage pattern.
 
 1. **Live env layout always.** The persisted env layout reflects the live
    grid (floated groups absent), unchanged from today. The floating blob
-   (`kandev.dockview.env-floating.<envId>`, versioned + type-guarded like
+   (`kandev.dockview.env-floating.<envId>` with `<envId>` =
+   `encodeURIComponent(envId)` via the one canonical key constructor,
+   versioned + type-guarded like
    `isEnvMaximizeState`) carries complete `FloatingPanelDef`s (id, component,
    title, tabComponent, params) + placement metadata (columnId, columnIndex,
    columnKind, columnPinned, treePath, edge, orientation, size, order,
@@ -117,7 +119,10 @@ per-env sessionStorage pattern.
    `begin` consumes any retained marker
    first; the marker clears only after a successful settle restore or
    **Root-column metadata lives INSIDE the blob**
-   (`EnvFloatingState.rootColumns`, incl. `role`), rebuilt after every layout
+   (`EnvFloatingState.rootColumns`, incl. `role` — a DENORMALIZED CACHE;
+  the validated v4 LayoutState / normalized-live registry is the sole
+  writable role authority, and the materializer applies registry roles
+  over any cache copy), rebuilt after every layout
    apply and reload, invalidated on preset/reset/env switch, covered by the
    journal, budget, and cleanup — no third storage key; the blob also carries
    a durable `identities` map (group/column UUIDs) that survives an empty

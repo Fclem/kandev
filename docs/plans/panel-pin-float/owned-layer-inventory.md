@@ -11,9 +11,13 @@ collapses while the layer is open (a contract violation).
 Legend for `Status`: `audited` = callsite confirmed in the baseline and the
 hook is applied by this feature (or layer-free proof); `to-wire` = callsite
 confirmed, hook must be applied during task-03; `verify` = candidate surface,
-confirm during task-03. **Source audit status (revision 33): COMPLETE —
+confirm during task-03. **Source audit status (revision 34): COMPLETE —
 every row below is file/line-anchored from live source (scout audit
-2026-08-18); the former directory-level chat/plan rows are replaced with the
+2026-08-18 + parent verification 2026-08-18: model-config-selector.tsx
+587-614 added, the github/gitlab/review reachable surface is a bounded
+per-file enumeration with exact ranges via the AST gate, settings/connection
+surfaces are declared out-of-scope with panel-reachability proofs); the
+former directory-level chat/plan rows are replaced with the
 real owners; browser/todos/vscode/dev-server carry layer-free proofs; the
 `@kandev/ui` wrappers (not direct @radix-ui imports) are the primitive
 channel.**
@@ -44,7 +48,7 @@ channel.**
 | chat (`chat`) | HoverCard | `chat/tiptap-mention-extension.tsx` 142-154 (mention chip) | to-wire |
 | chat (`chat`) | DropdownMenu | `sessions-dropdown.tsx` 273-343 (SessionsDropdown; doc's session-menu.tsx does NOT exist) | to-wire |
 | chat (`chat`) | DropdownMenu | `mode-selector.tsx` 176-196 (ModeSelector) | to-wire |
-| chat (`chat`) | DropdownMenu (verify) | `model-selector.tsx` (custom listbox, no @kandev/ui overlay — confirm) | verify |
+| chat (`chat`) | Popover | `model-selector.tsx` (custom trigger) → `components/model-config-selector.tsx` 587-614 (Popover open/onOpenChange + PopoverContent 598) — the REAL layer owner (model-selector.tsx:9-14 imports it) | to-wire |
 | chat (`chat`) | none | queue controls (SubmitButton/cancel, chat-input-toolbar-primitives.tsx 144-193) = plain buttons, layer-free | audited |
 | plan (`plan`) | custom floating (non-radix) | `plan-selection-popover.tsx` 287-319 (createPortal div — owned-layer treatment DECIDED at task-03; doc's plan-panel-popovers.tsx does NOT exist) | to-wire |
 | plan (`plan`) | Popover | `task-plan-revisions.tsx` 137-174 (TaskPlanRevisions) | to-wire |
@@ -70,7 +74,10 @@ channel.**
 | review (`review`) | Dialog | `review/review-dialog-surface.tsx` 100-162 (ReviewDialogSurface) | to-wire |
 | review (`review`) | DropdownMenu | `review/review-top-bar.tsx` 79-97 (settings) | to-wire |
 | review (`review`) | DropdownMenu | `review/review-diff-toolbar.tsx` 224-292 (FileDiffToolbar) | to-wire |
-| pr / mr (`github`) | enumerate | ~37 further components/github files with Dialogs/Drawers/Selects/Popovers (github-app-policy-dialog, github-connection-dialog, review-watch-dialog, repo-filter-selector…) — enumerated at task-03 if full review surface in scope | verify |
+| pr / mr / review reachable surface (github) | Dialog, Popover, Drawer, Select | bounded enumeration of overlay-bearing non-test files reachable from pr-detail/mr-detail/review-detail: `github/pr-ci-popover.tsx`, `github/pr-ci-automation-rows.tsx`, `github/pr-mergeability-row.tsx`, `github/pr-mergeability-notice.tsx`, `github/issue-watch-dialog.tsx`, `github/review-watch-dialog.tsx`, `github/repo-filter-selector.tsx`, `github/my-github/save-preset-dialog.tsx`, `github/my-github/presets-sidebar.tsx`, `github/my-github/presets-scope-bar.tsx`, `github/my-github/list-toolbar.tsx`, `github/my-github/quick-task-launcher.tsx`, `github/my-github/issue-list.tsx` | to-wire (ranges via AST gate) |
+| pr / mr / review reachable surface (gitlab) | Dialog, Popover, Drawer | bounded enumeration reachable from mr-detail: `gitlab/mr-ci-popover.tsx`, `gitlab/mr-status-chip.tsx`, `gitlab/mr-status-chip-drawer.tsx`, `gitlab/mr-status-chip-popover.tsx`, `gitlab/mr-status-chip-trigger.tsx`, `gitlab/mr-topbar-button.tsx`, `gitlab/mr-merge-button.tsx`, `gitlab/mr-reviewer-control.tsx`, `gitlab/mr-automation-controls.tsx`, `gitlab/mr-task-icon.tsx`, `gitlab/watch-dialog.tsx`, `gitlab/delete-watch-dialog.tsx`, `gitlab/task-mr-link-dialog.tsx`, `gitlab/my-gitlab/list-toolbar.tsx`, `gitlab/my-gitlab/presets-sidebar.tsx`, `gitlab/my-gitlab/presets-scope-bar.tsx`, `gitlab/my-gitlab/save-preset-dialog.tsx` | to-wire (ranges via AST gate) |
+| pr / mr / review reachable surface (review) | Dialog, DropdownMenu, Popover | bounded enumeration reachable from review-detail: `review/review-dialog.tsx`, `review/review-diff-list.tsx`, `review/review-file-tree.tsx`, `review/review-comments-overview.tsx`, `review/review-findings-overview.tsx`, `review/review-findings-button.tsx`, `review/review-fix-comments-button.tsx`, `review/review-pr-selector.tsx`, `review/walkthrough-overlay.tsx`, `review/review-repository-identity.ts` (no overlay — identity helper) | to-wire (ranges via AST gate) |
+| github/gitlab settings + connection surfaces | Dialog, Select, Drawer | OUT OF SCOPE (settings-page surfaces, not rendered inside dockview panels): github-app-connection-panel, github-connection-dialog, github-app-import-guide, github-app-registration-list, github-access-help, github-cli-form, action-presets-section, default-queries-section, github-repo-scope-section, github-connection-settings-form, gitlab-settings — the AST gate asserts none is reachable from a floating-capable panel; a panel-reachability proof is recorded per file | to-wire (proofs via AST gate) |
 | todos (`todos`) | none | LAYER-FREE PROOF: TodosContent = plain list; TodoIndicator popovers belong to the chat chip, not todo rows; no row menu | audited |
 | vscode / dev-server | none | LAYER-FREE PROOF: vscode-panel.tsx + dev-server-preview-button.tsx import/render no overlay primitive | audited |
 | plugin panels (`plugin-panel`) | any (plugin-owned) | via `host.ui.registerFloatingOwnedLayer` (per-panel capability) — capability DOES NOT exist yet (sdk index.ts:492-494, host-api.ts 205+/373+, plugin-task-panel.tsx); task-03 deliverable; plugin-task-panel.tsx root is layer-free | to-wire |
@@ -93,9 +100,13 @@ not render on phone viewports; the mobile task surface owns its own layers.
 - Host panels: `useFloatingOwnedLayer(layerRoot)` — idempotent unregister on
   Radix `onOpenChange(false)` AND React cleanup (unmount, navigation,
   ancestor teardown).
-- Plugin panels: `host.ui.registerFloatingOwnedLayer(capability, layerRoot)
-  => () => void` (**two arguments, matching the SDK/spec contract exactly** —
-  the opaque `floatingOwnedLayerCapability` type is defined in the SDK, and
+- Plugin panels: `host.ui.registerFloatingOwnedLayer(capability,
+  openHandlers) => () => void` (**per-open handshake, matching the SDK/spec
+  contract exactly**: the plugin spreads the returned `onOpenChange` onto
+  the Radix root — a body-portaled root node alone is NOT accepted as
+  ownership proof; registration happens on open=true, unregistration on
+  open=false / onDismiss / cleanup. The opaque
+  `floatingOwnedLayerCapability` type is defined in the SDK, and
   the mobile rejection result and unregister semantics are declared here).
   **Per-panel capability channel:** the host issues an opaque ownership
   capability at `PluginTaskPanel` render time from a portal-instance

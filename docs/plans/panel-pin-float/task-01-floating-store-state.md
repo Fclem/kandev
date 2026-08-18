@@ -88,8 +88,12 @@ spec: "../../specs/ui/panel-pin-float.md"
   float-while-maximized uses `restoreForFloat` the same way)** — recheck
   envId, generation, api instance, marker; clear only after a successful
   settle restore or invalidation; a new begin consumes the retained marker.
-  **`EnvFloatingState.rootColumns`** carries the authoritative root-column
-  metadata (incl. `columnRole`) inside the blob with **coalesced
+  **`EnvFloatingState.rootColumns`** carries root-column metadata (incl.
+  `columnRole`) as a DENORMALIZED CACHE inside the blob — the validated v4
+  LayoutState / normalized-live registry is the sole writable role
+  authority; the materializer resolves roles registry-first and a cache
+  copy can never change materialized role or `rightPanelsVisible` (a
+  cache-corruption test proves it) — with **coalesced
   persistence** (in-memory updates during layout applies; blob/journal
   written only at settled boundaries when bytes changed; no floating groups
   + unchanged sidecar ⇒ no write). **One sole pair writer:**

@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 25
-prior-round: 24
+revision: 26
+prior-round: 25
 ---
 
 # Floating (unpinned) workbench panels
@@ -77,7 +77,10 @@ every tab in the group floats and collapses together, because the maximize
 control it sits beside is group-scoped.
 
 ```
-floatingGroups: Record<groupId, FloatingGroupState>   # in useDockviewStore
+floatingGroups: Record<groupLogicalId, FloatingGroupState>   # in useDockviewStore
+                  # KEYED BY THE LOGICAL ID (native groupId is a current hint
+                  # only); actions/selectors use groupLogicalId; no native-key
+                  # rekeying is ever needed
 ```
 
 ```
@@ -95,9 +98,15 @@ EnvFloatingState                     # persisted as JSON, versioned
                # old-v3 migration: runs ONCE as `migrateEnvLayoutV3(raw,
                # envId)` — a versioned, one-time-marked transform on the raw
                # v3 native JSON BEFORE fromJSON, with a **CLOSED role table**:
-               # center candidate = the pinned/center column holding chat or
-               # session:* (chat stripped → the remaining center column by
-               # position); pinned-right = the pinned column containing
+               # center candidate = the column holding chat or
+               # session:* (chat-in-left/middle/right each assigned by the
+               # table); **'stripped' means the chat/session PANEL DEFINITION
+               # is removed while the root column is RETAINED**; chat-stripped
+               # → the remaining column at the center position index (first
+               # column when only two columns exist, else the middle index);
+               # an originally-absent chat follows the same positional rule;
+               # MULTIPLE chat/session candidates FAIL CLOSED (ambiguous);
+               # zero-column layouts fail migration; pinned-right = the pinned column containing
                # files/changes (tie → leftmost); side-other = known preset
                # side columns (plan/preview/vscode); custom = any unknown
                # column; no center/right candidate ⇒ roles assigned by the
@@ -260,20 +269,32 @@ loses the incoming session, or mutates the maximize overlay:
   `applyLayoutAndSet`/materializer application). **Ground truth — explicit comparison matrix and enforcement order:**
   (a) EXACT bytes for the persisted envelope, panel identity, role, and
   placement fields; (b) canonical structural equality for the native tree
-  and generated IDs; (c) GEOMETRY compared against a documented
-  measured-container projection with tolerance (widths are never
-  byte-compared — the measured container differs per restore); the
+  and generated IDs; (c) GEOMETRY compared via a **bounded projection predicate**: inputs =
+  `(plannedContainerW/H, assertedLiveW/H, rootWidths, minWidths,
+  maxWidths, pinnedFlags)`; widths are projected/distributed with a
+  documented algorithm and rounding rule, and accepted iff each root width
+  is within `max(2px, 1% of the asserted container width)` of the projected
+  value (chosen bound; min/max constraints respected); resize during
+  `[fromJSON, assertion]` is frozen/deferred, or the assertion recaptures
+  and reprojects against the assertion container (one declared mode); a
+  resize-between-plan-and-assertion fixture asserts the exact
+  accept/replan behavior (widths are never byte-compared — the measured
+  container differs per restore); the
   equivalence assertion runs BEFORE portal adoption/commit and a mismatch
   rolls back and replans (regenerated IDs and session insertion are covered
   by mismatch tests); the persisted after is the PLAN's raw after.
-  **Enforcement ordering:** `enforcePinnedTargets`/`onDidLayoutChange`
-  resizing is INCLUDED in the pure plan's deterministic targets and live
-  enforcement callbacks are SUPPRESSED until the assertion/commit — the
-  post-enforcement live state is recaptured before persistence ONLY when
-  enforcement is excluded from the plan (one declared mode); a test changing
-  the measured container between planned sizing and `onDidLayoutChange`
-  asserts live, persisted, and next-reload identity under the declared
-  comparison rules. Then:
+  **Enforcement ordering (mechanism):** the coordinator exposes phases
+  `planned → applied → asserting → rollback → committing`; BOTH proactive
+  `enforcePinnedTargets` calls and the reactive `onDidLayoutChange` handler
+  REJECT unless passed the active coordinator token/phase — enforcement is
+  INCLUDED in the pure plan's deterministic targets, and on an assertion
+  mismatch suppression is KEPT through rollback, the plan is rebuilt from
+  validated live state, asserted again, and cleared in a token-guarded
+  `finally` (never leaving the grid uncorrected or a stale callback
+  mutating it); a test changing the measured container between planned
+  sizing and `onDidLayoutChange` asserts live, persisted, and next-reload
+  identity under the declared comparison rules, plus throw/mismatch/
+  resize-callback/stale-callback-after-newer-transaction cases. Then:
   unwrap + sanitize → `api.fromJSON` ONCE →
   session/ephemeral replacement and incoming-session insertion (folded into
   the planned JSON; runtime replacement is a no-op guard) → a
@@ -373,10 +394,16 @@ loses the incoming session, or mutates the maximize overlay:
   materialization completes at maximize exit. A route dispatcher selects maximize-only when a valid
   maximize blob exists, regular otherwise (malformed/failed maximize falls
   back to regular).
-  **Maximize fromJSON count is explicit:** the maximize route performs ONE
-  overlay `fromJSON` and ONE post-exit pre-max `fromJSON` (two calls total,
-  one per phase, both under one coordinator, never a pre-max apply while
-  the overlay is live); call-order tests assert the exact per-phase count.
+  **Maximize is an explicit TWO-PHASE route:** overlay phase = exactly one
+  native `fromJSON`, NO pre-max apply/reconciliation; exit phase = post-rAF
+  regular pre-max restore with exactly one `fromJSON`, coordinator-internal
+  busy ownership, identity/session validation, and planned-equivalence
+  assertion BEFORE portal adoption; call-order tests assert the exact
+  per-phase count and that the exit phase re-enters the busy gate.
+**Fast env-switch is a distinct zero-`fromJSON` route:** it mutates
+  panels/active views in place (the live fast path) and has its OWN
+  planning/equivalence/identity/enforcement contract with separate
+  call-order tests — it is NOT part of the regular single-`fromJSON` route.
 Call-order tests cover initial, fast/slow switch, route-intent, custom,
 maximize-only, and fallthrough paths, asserting no stale/duplicate session,
 no overlay mutation, and portal-above-overlay visibility during maximize. `getEnvLayout`
@@ -626,7 +653,7 @@ Float/dock/restore are **transactions** with an operation journal:
    | blob-after / layout-before | after pair | after digests |
    | layout-after / blob-before | after pair | after digests |
    | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
-   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable, VERSIONED repair record** (`kandev.dockview.env-repair.<envId>` with `{version, transactionId, envId, createdAt}` — key/schema/guard defined) — `loadRepair(envId)` runs on EVERY mount (task AND settings; the banner renders wherever the app mounts) and `clearRepair(envId, transactionId)` is token-guarded with **verified deletion ordering: repair record → quarantine → floating blob → layout/journal keys**, memory updated synchronously only after verified removal (a failed clear keeps the banner); `cleanupTaskStorage` removes repair + quarantine keys; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, settings-mount, confirmation-failure, and cleanup tests |
+   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable, VERSIONED repair record** (`kandev.dockview.env-repair.<envId>` with `{version, transactionId, envId, createdAt}` — key/schema/guard defined) — an **app-shell repair registry** scans only the owned `env-repair.*` prefix and renders an env/task-labeled banner on home, settings, AND task mounts; `loadRepair(envId)` runs on every mount and `clearRepair(envId, transactionId)` is token-guarded with **verified deletion ordering (repair record DELETED LAST, after quarantine → floating blob → layout/journal are all verified; or the clear is journaled and the record restored on any later failure)**, memory updated only after the entire deletion transaction is durably verified (a failed clear keeps the banner); `cleanupTaskStorage` removes repair + quarantine keys; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, settings-mount, confirmation-failure, and cleanup tests |
    The `phase` marker (`mutating` vs `committed`) refines the both-after row
    (a `committed` marker with both-after means the mutation finished; a
    `mutating` marker with both-after is still settled by equality), never
@@ -640,10 +667,14 @@ Float/dock/restore are **transactions** with an operation journal:
    env match, transaction id shape, phase enum, tagged-digest shape, raw
    snapshot bounds (per-env cap), and exact raw JSON-shape, then
    **recomputes SHA-256 from each raw snapshot and requires it to equal the
-   journal's tagged digest** before any target is selected. A journal that
-   fails validation or digest recomputation is treated as **unreadable**
-   (journal-free divergence rules, using the caller's explicit `envId`) and
-   **quarantined through a verified, idempotent protocol** — sessionStorage has
+   journal's tagged digest** before any target is selected. **The journal
+   decision is EXCLUSIVE:** a journal that fails validation or digest
+   recomputation is **present-but-invalid** ⇒ quarantine (below) + durable
+   repair record + FULL SUPPRESSION — journal-free divergence rules NEVER
+   apply to a present invalid/mismatched/unexpected journal (they apply ONLY
+   when no journal exists); a restore of an invalid journal cannot call the
+   materializer or adopt portals (tests prove it). Quarantine uses a
+   **verified, idempotent protocol** — sessionStorage has
    no rename primitive, so quarantine derives **one deterministic key from
    `(envId, original raw digest)`** (`...-journal.<envId>.corrupt-<digest>`):
    copy the raw bytes to that key, read-back verify the copy, then remove the
@@ -667,8 +698,9 @@ Float/dock/restore are **transactions** with an operation journal:
    both-before crash, the no-op equality row, read-back mismatch
    after-mutation, a phase-write throw after mutation, and setItem throwing
    before/after mutation). The two-key
-   divergence rules in step 6 are the journal-free fallback only (journal
-   lost/unreadable/invalid), not the primary guarantee.
+   divergence rules in step 6 are the journal-free fallback ONLY for an
+   ABSENT journal (never for a present invalid/mismatched/unexpected one),
+   not the primary guarantee.
    **Size budgets:** a per-env cap (96 KB default: blob + journal
    snapshots) **and** a **global floating allocation budget** across all
    environments' blobs + journals (default 384 KB). The budget is enforced
@@ -1472,7 +1504,8 @@ replacement orderings.
 - **GIVEN** a syntactically valid journal whose raw snapshot digest does not
   recompute, **WHEN** recovery runs, **THEN** the journal is treated as
   unreadable and quarantined (`.corrupt` suffix) — never trusted, never
-  re-recovered on every restore; journal-free divergence rules apply with the
+  re-recovered on every restore; journal-free divergence rules NEVER apply
+  to a present invalid journal (they apply only when no journal exists); the
   caller's `envId`.
 - **GIVEN** a plugin hoards a registration function across renders, **WHEN**
   it registers a layer root, **THEN** the host requires the render-bound

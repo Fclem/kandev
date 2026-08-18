@@ -12,7 +12,7 @@ spec: "../../specs/ui/panel-pin-float.md"
 
 ## Acceptance
 
-- `useDockviewStore` exposes `floatingGroups: Record<string, FloatingGroupState>` (**groupId + groupLogicalId**, **columnId + columnLogicalId**, columnIndex, columnKind, **columnRole**, columnPinned, **columnWidth, columnMinWidth, columnMaxWidth**, treePath as a **tagged `{kind: "tree", path} | {kind: "flat", index}`**, edge, orientation, size, panels as full `FloatingPanelDef[]`, activePanelId, display, order) — **all authoritative identity/role fields are in this shape** (never native/traversal ids, never membership-inferred role; acceptance tests fail if native ids or membership inference are used) — plus the `identities`/`rootColumns` (keyed by `columnLogicalId`) sidecar, the v4 normalized-layout registry, and actions `floatGroup(groupId)`, `dockGroup(groupId)`, `setFloatingDisplay(groupId, display)`, `setFloatingActivePanel(groupId, panelId)`.
+- `useDockviewStore` exposes `floatingGroups: Record<groupLogicalId, FloatingGroupState>` (**groupId + groupLogicalId**, **columnId + columnLogicalId**, columnIndex, columnKind, **columnRole**, columnPinned, **columnWidth, columnMinWidth, columnMaxWidth**, treePath as a **tagged `{kind: "tree", path} | {kind: "flat", index}`**, edge, orientation, size, panels as full `FloatingPanelDef[]`, activePanelId, display, order) — **all authoritative identity/role fields are in this shape** (never native/traversal ids, never membership-inferred role; acceptance tests fail if native ids or membership inference are used) — plus the `identities`/`rootColumns` (keyed by `columnLogicalId`) sidecar, the v4 normalized-layout registry, and actions `floatGroup(groupId)`, `dockGroup(groupId)`, `setFloatingDisplay(groupId, display)`, `setFloatingActivePanel(groupId, panelId)`.
 - **Placement classifier:** a pure function over the live `LayoutState` (root column id/index/pinned metadata) plus an **explicit nullable center identity** (`centerColumnId, isCenterKnown` — `findCenterGroupId` fabricates ids when no center exists, so an unknown center classifies as the documented custom fallback, never by promoting an arbitrary side column) classifies each group as side/vertical (non-center root column, edge by index relative to center) or center/horizontal (center column, bottom edge). It MUST NOT use `isCenterCandidateGroupId` as the decision; plan/preview/vscode/compact root columns classify as side/vertical on the right edge. Covered by tests for all five presets, a nested custom layout, and no-center/unknown-center cases.
 - **Materializer:** re-dock/restore recreate groups by cloning the live layout, inserting the saved root column at `columnIndex` with pinned/width metadata when absent, inserting the group **atomically into both `column.tree` and `column.groups`** (one mutation helper; `serializeColumn` prefers `tree` while `serializePanels` iterates only `groups`, so a tree-only insert loses panel definitions), and applying through the existing serializer/`applyLayoutAndSet` machinery. `fallbackGroupPosition` is the explicit existing-group fallback only. Docking the last group in an emptied side column recreates the side column, never a center fallback; missing-column, no-center, and tree+flat round-trip cases are tested.
 - **Detach registry:** canonical nested type `Map<envId, Map<panelId, token>>`
@@ -41,9 +41,14 @@ spec: "../../specs/ui/panel-pin-float.md"
   writer, removed), `local-storage.ts` (v3 prefixes), `e2e/helpers/
   dockview-persistence.ts`, `pane-resize-right.spec.ts`,
   `plan-panel-indicator.spec.ts`, `saved-layout-session-isolation.spec.ts`,
-  and `settings/layout-profiles.spec.ts` — each migrated to the v4 helper
-  or explicitly classified as a legacy-fixture read, and the manifest
-  validator fails on any unclassified literal);
+  and `settings/layout-profiles.spec.ts`, plus
+  `sessionless-task-switch.spec.ts` (which WRITES `kandev.dockview.env-layout.<envId>`
+  as a test fixture) and `plan-panel-indicator.spec.ts` (reads the legacy
+  global localStorage key) — each migrated to the v4 helper or explicitly
+  classified as a **test-fixture seed (read-only legacy reads and
+  fixture-classified seeds are legal; production code NEVER writes v3/
+  localStorage keys)**, and the manifest validator fails on any unclassified
+  literal);
   `apps/web/e2e/helpers/dockview-persistence.ts` prefixes + all layout
   consumers are updated together; old-v3-restore, v4 round-trip,
   tree/flat-equality, maximize-slot migration, and e2e-helper-compatibility

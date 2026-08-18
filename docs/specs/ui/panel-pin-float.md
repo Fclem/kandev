@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 37
-prior-round: 36
+revision: 38
+prior-round: 37
 ---
 
 # Floating (unpinned) workbench panels
@@ -526,9 +526,18 @@ loses the incoming session, or mutates the maximize overlay:
   v4 writers, marker-only/malformed migration behavior defined); a
   same-tab reload while maximized reconstructs a FRESH portal lease from
   live validated state at mount time — a persisted epoch is a marker, NEVER
-  an owner token (marker-only and malformed-maximize cases are tested); **MOUNT PROTOCOL (happens-before): recover/validate envelope →
-  atomically install the validated logical registry + floating lease →
-  acquire detached portals → render/adopt; the markerless reload test
+  an owner token (marker-only and malformed-maximize cases are tested); **MOUNT PROTOCOL (happens-before): the reload path runs an explicit
+  HYDRATE TRANSACTION that atomically claims the GLOBAL api lease from
+  IDLE (begin-hydrate → validate envelope → install the validated
+  logical registry + fresh floating lease → acquire detached portals →
+  render/adopt → settle-hydrate) BEFORE registry installation or portal
+  acquisition — the in-memory coordinator is IDLE after a reload while
+  the persisted marker + detached lease already exist, so without the
+  hydrate claim a competing restore/mutator could pass an IDLE check or
+  another env could start first; while the pending marker remains, the
+  hydrate lease is NOT released (transaction-1 lease semantics: released
+  only at exit-restore or explicit invalidation); reload + competing
+  env/mutator ordering tests; the markerless reload test
   asserts BOTH content visibility above the overlay AND registry
   readiness (no unbound native identity / api:null-inactive first
   render).** **the state is renamed `pendingGridMaterialization` and its gating is
@@ -548,9 +557,12 @@ loses the incoming session, or mutates the maximize overlay:
   public result algebra covers EVERY layout-mutating boundary: pin
   click, float/dock, storage quota-full, journal/quarantine,
   busy/lease-held, stale identity, and recovery failures each return the
-  same discriminated type with the EXHAUSTIVE reason enum
-  `busy | quota-full | journal-unavailable | quarantine | stale-identity |
-  invalid-definition | lease-held | settle-timeout | recovery-pending` and
+  same discriminated type with the EXHAUSTIVE reason enum (generated
+  from the committed matrix's `OperationReason` set —
+  result-matrix.md):
+  `busy | lease-held | quota-full | settle-timeout | invalid-definition |
+  stale-session | stale-identity | recovery-pending | journal-unavailable |
+  quarantine | repair-active | recovered-with-drops` and
   locale keys `task:floatingError.*` (one per reason) + `task:floatingRetry`
   + `task:floatingCancel`; **an exhaustive OPERATION × REASON × ACTION
   matrix is COMMITTED as `docs/plans/panel-pin-float/result-matrix.md` —
@@ -613,11 +625,16 @@ loses the incoming session, or mutates the maximize overlay:
   ITSELF is a nested coordinator transaction: it runs INSIDE the already
   held outer lease via a PRIVATE entry protocol `beginNested(outerToken)`
   → `advanceNested` → `settleNested` (same generation, unique nested id,
-  legal parent phases: nested entry is valid only from outer
-  `restoring`/rollback phases; `advance`/`settle` are nested-specific
-  operations — the OUTER `settle` is REJECTED/waits while a nested
-  transaction is active, so outer settlement cannot race a mid-phase
-  nested rebuild; token-guarded failure/abort cleanup per nested phase
+  legal parent phases: nested entry is valid ONLY from outer
+  `restoring`/rollback phases — the one-fromJSON equivalence RETRY is a
+  DISTINCT NON-NESTED transition: the second attempt re-plans from the
+  frozen pre-restore state and re-enters `planned → applied → asserting`
+  inside the SAME outer transaction (no nested id, no beginNested);
+  `advance`/`settle` are nested-specific
+  operations — the OUTER `settle` called while a nested transaction is
+  active returns the typed `{status:"rejected", reason:"busy"}` result
+  (matrix row 25); the caller waits and retries settle after
+  `settleNested`; token-guarded failure/abort cleanup per nested phase
   with defined reload behavior for each), with its own nested phase enum
   `nested-prepare → nested-apply → nested-verify → nested-settle`
   (nested-abort/repair on any failure), immutable native/layout/registry
@@ -1363,14 +1380,21 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   @kandev/ui wrappers do exactly this, dialog.tsx:37-45), so the host's
   returned handler is a `(open: boolean) => void` that on rejection
   SYNCHRONOUSLY invokes an explicit `requestClose(reason)` callback /
-  controlled-state setter owned by the plugin — HOST CLOSE IS
-  AUTHORITATIVE: the adapter calls `requestClose` AND the host performs
-  its own close bookkeeping (refcount decrement, active-open map
-  removal); the plugin must render closed on `requestClose` (controlled
-  Radix root); ordering: open=true transition → admission check → owned
-  or (rejected + requestClose + host bookkeeping); tests: rejected
-  second-root closes, host refcount consistent, Radix dismissal state,
-  retry after close.**
+  controlled-state setter owned by the plugin. **HOST CLOSE IS
+  AUTHORITATIVE AND OBSERVABLE: the host does NOT decrement its refcount
+  or remove the active-open map entry on rejection — it retains the
+  active lease until the plugin emits an ACTUAL `open=false`
+  acknowledgement through the same adapter (no optimistic bookkeeping,
+  because a non-controlled plugin can ignore `requestClose`); a
+  noncompliant plugin (no ack within the lease timeout) keeps the
+  window expanded, keeps the lease, and surfaces a TYPED PLUGIN CONTRACT
+  FAILURE (locale key) instead of a phantom unregister; the window
+  collapses only after a real ack or the failure path's explicit
+  teardown.** Ordering: open=true transition → admission check → owned
+  or (rejected + requestClose + lease retained pending ack); tests:
+  rejected second-root closes, host refcount consistent (incl. an
+  INTENTIONALLY UNCONTROLLED plugin), Radix dismissal state, retry after
+  close.**
   The host stores a WeakMap/token binding from capability to portal instance;
   a plugin rendering two task panels cannot register a layer from one panel
   against the other, and a hoarded plugin-scoped function cannot be reused

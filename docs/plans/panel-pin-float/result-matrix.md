@@ -1,67 +1,95 @@
-# Floating-panels result matrix (revision 37, committed)
+# Floating-panels result matrix (revision 38, committed)
 
 The single machine-readable operation × reason × action matrix required by
 `docs/specs/ui/panel-pin-float.md` (Result algebra) and
-`docs/plans/panel-pin-float/task-04-integration-lifecycle.md`. One closed
-`LayoutMutationResult` union:
+`docs/plans/panel-pin-float/task-04-integration-lifecycle.md`.
 
-```
-type LayoutMutationResult =
-  | { status: "applied" }
-  | { status: "pruned"; reason: "stale-session"; dropped: { id: string; reason: string }[] }
-  | { status: "recovered-with-drops"; dropped: { id: string; reason: string }[] }
-  | { status: "skipped"; reason: "stale-identity" }
-  | { status: "rejected"; reason: RejectedReason; retry: boolean }
-  | { status: "suppressed"; reason: SuppressedReason; retry: boolean }
-  | { status: "terminal"; reason: TerminalReason; action: "repair-clear" | "export" | "retry" | "cancel" }
+## Canonical schema (ONE vocabulary, disjoint categories)
 
-RejectedReason = "busy" | "lease-held" | "quota-full" | "settle-timeout" | "invalid-definition"
-SuppressedReason = "journal-unavailable" | "quarantine" | "repair-active" | "recovery-pending"
-TerminalReason = "quarantine" | "repair-active" | "journal-unavailable"
-```
+**`ResultStatus`** (the outcome): `applied | pruned | recovered-with-drops |
+skipped | rejected | suppressed | terminal`.
+
+**`OperationReason`** (why; one per row): `busy | lease-held | quota-full |
+settle-timeout | invalid-definition | stale-session | stale-identity |
+recovery-pending | journal-unavailable | quarantine | repair-active |
+recovered-with-drops`.
+
+- `stale-session` is the reason for status `pruned`.
+- `recovered-with-drops` is BOTH a status and a reason (status for the
+  salvage outcome; reason carries the dropped list).
+- `journal-unavailable`, `quarantine`, `repair-active` appear ONLY as
+  `suppressed` or `terminal` — never both, per row below.
+- Locale keys: `task:floatingError.<reason>` for every OperationReason that
+  surfaces (busy, lease-held, quota-full, settle-timeout, invalid-definition,
+  journal-unavailable, quarantine, repair-active, recovery-pending,
+  recoveredWithDrops, pruned — stale-session/stale-identity are silent
+  outcomes with debug-only keys), plus `task:floatingRetry`,
+  `task:floatingCancel`. Enumeration is generated from this file by the
+  locale gate.
+
+**Invariant: every operation state maps to EXACTLY ONE (status, reason,
+action) row.** A compile-time/test assertion iterates the closed sets of
+operation states (below) and fails if any state is covered by zero or two
+rows.
 
 ## Matrix
 
-Every row: operation / source state → reason → suppression scope → user
-action → terminal? → cleared by. Locale keys: `task:floatingError.<reason>`,
-`task:floatingRetry`, `task:floatingCancel`.
+| # | Operation / source state | Status | Reason | Suppression scope | User action | Terminal? | Cleared by |
+|---|---|---|---|---|---|---|---|
+| 1 | pin / float / dock / toggle / add-panel / preset / maximize while a transaction is mid-phase | rejected | busy | current env (controls disabled) | disabled control / toast | no | transaction settle |
+| 2 | any public mutator while the GLOBAL api lease is held by ANOTHER env | rejected | lease-held | all envs (mutators rejected) | disabled / toast | no | global lease release |
+| 3 | float/dock/persist write fails with quota | rejected | quota-full | current env | retry (free space) | no | retry after space freed |
+| 4 | env-switch settle deadline expiry | terminal | settle-timeout | current env | retry / cancel | yes | user retry or cancel |
+| 5 | invalid persisted definition rejected by the closed allow-list | recovered-with-drops | invalid-definition | current env | repair UI shows dropped list | no | result recorded + surviving state persisted |
+| 6 | journal READ error (typed read `unavailable`) | suppressed | journal-unavailable | ALL envs (fail-closed, no materialization) | retry (never blind) | yes | verified journal read succeeds |
+| 7 | present invalid/mismatched/unexpected journal | terminal | quarantine | ALL envs (full suppression) | repair-clear / export (NOT retry) | yes | repair-clear completes (durable `done`) |
+| 8 | durable repair record active / clear in progress | terminal | repair-active | ALL envs (full suppression) | repair-clear progress UI | yes | clear-journal terminal `done` |
+| 9 | restore/persist deferred while a pending restore or unload-drain is active | suppressed | recovery-pending | current env (deferred, controls disabled) | none (automatic) | no | drain settles |
+| 10 | stale/deleted-session pruning at resolve (revalidation failed) | pruned | stale-session | entry only | none (silent by contract) | yes | — |
+| 11 | salvage/materialization drops (invalid def, orphaned) | recovered-with-drops | recovered-with-drops | current env | repair UI shows dropped [{id, reason}] | no | result recorded + surviving state persisted |
+| 12 | absent/stale enforcement token | skipped | stale-identity | current env (no-op cleanup outcome) | none | yes | — |
+| 13 | recovery both-before row (pre-mutation crash), restore ok | applied | — | current env | none (automatic restore) | no | recovery settle |
+| 14 | recovery blob-after/layout-before or layout-after/blob-before, apply ok | applied | — | current env | none (automatic) | no | recovery settle |
+| 15 | recovery both-after/both-equal, no-op precondition holds (no native mutation invoked) | applied | — | current env | none (equality verified, journal cleared) | no | recovery settle |
+| 16a | recovery both-equal BUT fromJSON/apply WAS invoked — native snapshot rebuild succeeds | applied | — | current env | none (native rebuild + verify) | no | rebuild settle |
+| 16b | recovery both-equal BUT fromJSON/apply WAS invoked — native rebuild FAILS | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
+| 17 | unload: digest-ready, pair unverified | applied | — | current env | write BEFORE pair + `aborted` journal | no | next recovery |
+| 18 | unload: afterPairVerified | applied | — | current env | write AFTER pair, verify, clear journal | no | next recovery |
+| 19 | maximize t1 (overlay) failure — rollback ok | rejected | busy | current env | typed rejected + rollback (grid unchanged) | no | rollback settle |
+| 20a | maximize t2 (exit) failure, equivalence retry ok | applied | — | current env | retry re-plans + re-applies | no | retry settle |
+| 20b | maximize t2 (exit) persistent failure | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
+| 21 | nested rebuild/rollback failure (partial native mutation) | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
+| 22 | reset: forward apply ok, pair write fails, rollback ok | rejected | quota-full | current env | rollback applied + typed rejected | no | rollback settle |
+| 23 | reset: rollback also fails (budget exhausted) | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
+| 24 | custom/RADIX layer second-open rejection (per-open handshake) | rejected | busy | layer only | requestClose + host close signal | no | layer closes |
+| 25 | outer `settle` called while a nested transaction is active | rejected | busy | current env | nested settle first | no | nested settle |
 
-| # | Operation / source state | Reason | Suppression scope | User action | Terminal? | Cleared by |
-|---|---|---|---|---|---|---|
-| 1 | pin / float / dock / reset / toggle / add-panel / preset / maximize while a transaction is mid-phase | `busy` | current env (controls disabled) | disabled control / toast | no | transaction settle |
-| 2 | any public mutator while the GLOBAL api lease is held by ANOTHER env | `lease-held` | all envs (mutators rejected) | disabled / toast | no | lease release |
-| 3 | float/dock/persist write fails with quota | `quota-full` | current env | retry (free space) | no | retry after space freed |
-| 4 | env-switch settle deadline expiry | `settle-timeout` | current env | retry / cancel | yes | user retry or cancel |
-| 5 | invalid persisted definition rejected by the closed allow-list | `invalid-definition` | current env | recovered-with-drops result (see 15) | no | definition dropped + result recorded |
-| 6 | journal READ error (typed read `unavailable`) | `journal-unavailable` | ALL envs (fail-closed, no materialization) | retry (never blind) | yes (until verified read) | verified journal read succeeds |
-| 7 | present invalid/mismatched/unexpected journal | `quarantine` | ALL envs (full suppression) | repair-clear / export (NOT retry) | yes (until cleared) | repair-clear completes (durable `done`) |
-| 8 | durable repair record active / clear in progress | `repair-active` | ALL envs (full suppression) | repair-clear progress UI | yes (until cleared) | clear-journal terminal `done` |
-| 9 | restore/persist deferred while a pending restore or unload-drain is active | `recovery-pending` | current env (deferred, controls disabled) | none (automatic) | no | drain settles |
-| 10 | stale/deleted-session pruning at resolve (revalidation failed) | `stale-session` (pruned) | entry only | none (silent by contract) | yes | — |
-| 11 | salvage/materialization drops (invalid def, orphaned) | `recovered-with-drops` | current env | repair UI shows dropped [{id, reason}] | no | result recorded + surviving state persisted |
-| 12 | absent/stale enforcement token | `stale-identity` (skipped) | current env (no-op cleanup outcome) | none | yes | — |
-| 13 | recovery both-before row (pre-mutation crash) | — (internal) | — | restore before pair, verified, clear journal | no | recovery settle |
-| 14 | recovery blob-after/layout-before or layout-after/blob-before | — (internal) | — | apply+verify after pair, clear journal | no | recovery settle |
-| 15 | recovery both-after/both-equal with no-op precondition | — (internal) | — | verify equality, clear journal (no write) | no | recovery settle |
-| 16 | recovery both-equal but fromJSON/apply WAS invoked | — (internal, guarded by nested rebuild) | — | native snapshot rebuild/rebind BEFORE clear; rebuild failure → row 7/8 | no | rebuild settle or repair |
-| 17 | unload: digest-ready, pair unverified | — (internal) | — | write BEFORE pair + `aborted` journal | no | next recovery |
-| 18 | unload: afterPairVerified | — (internal) | — | write AFTER pair, `mutating` journal, verify, clear | no | next recovery |
-| 19 | maximize t1 (overlay) failure | `busy` / rollback | current env | typed rejected + rollback (grid unchanged) | no | rollback settle |
-| 20 | maximize t2 (exit) failure incl. persistent equivalence mismatch | `terminal` (quarantine/repair-active) | ALL envs | repair-clear / export | yes | repair-clear |
-| 21 | nested rebuild/rollback failure (partial native mutation) | `terminal` (quarantine/repair-active) | ALL envs | repair-clear / export | yes | repair-clear |
-| 22 | reset: forward apply ok, pair write fails, rollback ok | — (internal) | — | rollback applied + typed rejected | no | rollback settle |
-| 23 | reset: rollback also fails (budget exhausted) | `terminal` (quarantine/repair-active) | ALL envs | repair-clear / export | yes | repair-clear |
-| 24 | custom/RADIX layer second-open rejection (per-open handshake) | `busy` (layer admission) | layer only | requestClose + host close signal | no | layer closes |
+## Closed operation-state sets (for the exactly-once assertion)
+
+1. Public mutators: pin, float, dock, reset, toggle, add-panel, preset,
+   maximize t1, maximize t2 exit, env-switch, plugin layer open.
+2. Recovery matrix rows: both-before, blob-after/layout-before,
+   layout-after/blob-before, both-after/equal-noop, both-equal-after-invoke
+   (2 branches), unexpected (row 7), journal-read-unavailable (row 6).
+3. Unload phases: digest-ready (17), afterPairVerified (18), normal
+   completion (same as 18).
+4. Maximize: t1 failure (19), t2 retry (20a), t2 persistent (20b).
+5. Nested rebuild: each nested phase failure → 21; nested-active outer
+   settle → 25.
+6. Reset rollback: rollback ok (22), rollback exhausted (23).
+7. Suppression states: journal-unavailable (6), quarantine (7),
+   repair-active (8), recovery-pending (9).
 
 ## Cross-artifact coverage assertion
 
-- Every recovery-matrix row (13-16), unload-phase row (17-18), maximize
-  transaction state (19-20), nested-rebuild state (21), and reset-rollback
-  state (22-23) maps to EXACTLY ONE outcome and UI action above.
-- Terminal states (6, 7, 8, 20, 21, 23) share ONE clearing mechanism:
-  verified journal/repair-clear. No UI path may attempt materialization or
-  portal adoption while rows 6-8 are active.
+- The spec's reason enum (`docs/specs/ui/panel-pin-float.md`, Result
+  algebra) MUST list exactly the OperationReason values above; the enum is
+  generated/verified from this file.
+- Every terminal state shares ONE clearing mechanism: verified
+  journal/repair-clear. No UI path may attempt materialization or portal
+  adoption while rows 6-8 are active.
 - The exhaustive switch over `LayoutMutationResult` (task-04) is compiled
-  with `exhaustive` checks; adding a state without a row here fails CI.
-- Locale keys must exist for every reason in `task:floatingError.*` (i18n
-  gate; pseudo-locale completeness check).
+  with `exhaustive` checks and the exactly-once assertion above; adding a
+  state without a row fails CI.
+- Locale keys must exist for every surfaced reason in `task:floatingError.*`
+  (i18n gate; pseudo-locale completeness check).

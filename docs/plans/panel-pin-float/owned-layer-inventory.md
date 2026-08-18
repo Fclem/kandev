@@ -11,7 +11,7 @@ collapses while the layer is open (a contract violation).
 Legend for `Status`: `audited` = callsite confirmed in the baseline and the
 hook is applied by this feature (or layer-free proof); `to-wire` = callsite
 confirmed, hook must be applied during task-03; `verify` = candidate surface,
-confirm during task-03. **Source audit status (revision 36): COMPLETE —
+confirm during task-03. **Source audit status (revision 37): COMPLETE —
 every row below is file/line-anchored from live source (scout audit
 2026-08-18 + parent verification 2026-08-18: model-config-selector.tsx
 587-614 added, the github/gitlab/review reachable surface is a bounded
@@ -89,14 +89,21 @@ line range (or an explicit layer-free proof for the panel). `to-wire` and
 only when every row is `audited` (source-confirmed registration wired) or the
 panel is proven layer-free. A layer found during the audit that is not in this
 table is a collapse bug until registered. **Exact-anchor mechanism for the
-broad reachable-surface rows (github/gitlab/review): the AST gate
-(`check-owned-layer-inventory.mjs`) GENERATES and VALIDATES exact
-file:line anchors mechanically from the live source against these rows —
-an implementation may not hand-wave ranges; the gate reports every
-primitive-to-row mapping and fails if a discovered primitive lacks a row;
-out-of-scope settings/connection rows flip to `audited` only when their
-panel-reachability proofs are attached (the gate asserts no overlay is
-reachable from a floating-capable panel).**
+broad reachable-surface rows (github/gitlab/review): the ACCEPTANCE
+SOURCE OF TRUTH is a COMMITTED GENERATED ANCHOR ARTIFACT
+(`apps/web/config/owned-layer-inventory.generated.json`, declared schema:
+`{ file, component, primitiveFamily, renderStart, renderEnd, inventoryRowId }`)
+produced by the AST generator from live source and committed with the
+feature; the AST gate (`check-owned-layer-inventory.mjs`) is
+VALIDATION-ONLY — it compares the generated artifact against BOTH the
+live source (anchors must still resolve to the same primitive) AND the
+inventory rows (every artifact entry maps to a row, every row has at
+least one artifact entry or a layer-free proof), and fails on any drift
+or a discovered primitive without a row; out-of-scope settings/connection
+rows flip to `audited` only when their panel-reachability proofs are
+attached (the gate asserts no overlay is reachable from a floating-
+capable panel). The markdown is the human-readable view; the generated
+artifact is the acceptance source.**
 
 ## Mobile
 
@@ -121,12 +128,24 @@ not owned); a lease keyed only by component/capability can count an
 unrelated body portal as owned — rejected. **DOCKED-PANEL RULE: the
 floating lease is NULLABLE — a docked plan panel opens its popover with NO
 lease and the owned-region coordinator is a NO-OP for it (no floating
-window to collapse); the concrete transport is a `FloatingWindowLeaseProvider`
-React context rendered by the floating overlay, read by
-`useFloatingOwnedLayer` inside panel content adopted through
-PanelPortalHost/entry.element — NOT DOM ancestry (the reparented slot is
-unrelated to the overlay root); tests: docked-popover no-op, floating-
-popover lease, reparent + body-portal outside pointer/focusout.**
+window to collapse). DOCKED-TO-FLOATING HANDOFF: if a layer is ALREADY
+open when its group floats, the float transaction performs an ATOMIC
+handoff — existing open registrations are transferred to the new window's
+lease/generation BEFORE the persistent content is reparented (an
+open=true transition is NOT re-fired; the registration moves with its
+lease identity); float-while-open and open-at-the-same-frame-as-float
+races are covered by tests; there is no window where an already-open
+layer is unowned during the transition frame.** **TRANSPORT:
+`FloatingWindowLeaseProvider` is rendered at the WORKBENCH ROOT — ABOVE
+BOTH PanelPortalHost and the floating overlay, because React context
+follows the React OWNER tree, not the destination DOM node: a provider
+inside the overlay is NOT an ancestor of content rendered by the sibling
+PanelPortalHost even after the DOM element is reparented
+(panel-portal-host.tsx:31-54, 82-115). The provider holds
+`Map<portalInstanceKey, lease>`; the floating overlay registers its lease
+per groupLogicalId + generation; `useFloatingOwnedLayer` looks up BY
+PORTAL INSTANCE KEY (never DOM ancestry); a lease-read-before-and-after-
+DOM-reparent test is required.**
 Tests: panel reparent + body-
 portal outside pointer and focusout.** A real
 custom-portal test (open → outside pointerdown → no collapse → close →

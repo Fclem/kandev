@@ -11,7 +11,7 @@ collapses while the layer is open (a contract violation).
 Legend for `Status`: `audited` = callsite confirmed in the baseline and the
 hook is applied by this feature (or layer-free proof); `to-wire` = callsite
 confirmed, hook must be applied during task-03; `verify` = candidate surface,
-confirm during task-03. **Source audit status (revision 38): COMPLETE —
+confirm during task-03. **Source audit status (revision 39): COMPLETE —
 every row below is file/line-anchored from live source (scout audit
 2026-08-18 + parent verification 2026-08-18: model-config-selector.tsx
 587-614 added, the github/gitlab/review reachable surface is a bounded
@@ -111,7 +111,13 @@ developer and CI targets; CI fails if the generator's output differs from
 the committed artifact (uncommitted-diff failure) and then runs the
 validator against the committed artifact; authors regenerate after every
 source change to an owned-layer file, before commit/PR; a stale-artifact
-fixture is tested.**
+fixture is tested.** **GENERATOR COMPLETENESS IS INDEPENDENTLY CHECKED:
+the generator's input set is asserted to EQUAL an independently derived
+set — every panel-content file reachable from the desktop component
+registry / import graph (broad source scan) must appear in the generator
+input globs; a newly added panel directory outside the globs is caught by
+this set-equality assertion (test: add an out-of-glob panel dir, the gate
+fails); diff-only validation can never bless an incomplete artifact.**
 
 ## Mobile
 
@@ -172,6 +178,13 @@ re-acquire path updates api/params/component but not envId — fixed);
 `useFloatingOwnedLayer` is an explicit NO-OP outside a desktop workbench
 provider (mobile task layout, session-mobile-layout.tsx — no floating
 window exists); tests: docked, floating, mobile, re-acquire rotation.**
+**portalInstanceKey is CONTEXT/PROVIDER IDENTITY ONLY: createPortal's
+React key REMAINS the stable panelId for the entry's lifetime — rotating
+the React key on reacquire would REMOUNT TaskPlanPanel/terminal/editor/
+plugin trees and violate content liveness; the instance key rotates only
+in the lease map; true portal RELEASE (which may remount) is
+DISTINGUISHED from RE-ACQUIRE (no remount); PTY/editor liveness + context-
+key rotation tests.**
 Tests: panel reparent + body-
 portal outside pointer and focusout.** A real
 custom-portal test (open → outside pointerdown → no collapse → close →

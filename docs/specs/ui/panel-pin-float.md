@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 39
-prior-round: 38
+revision: 40
+prior-round: 39
 ---
 
 # Floating (unpinned) workbench panels
@@ -537,13 +537,18 @@ loses the incoming session, or mutates the maximize overlay:
   hydrate claim a competing restore/mutator could pass an IDLE check or
   another env could start first; OTHER envs with persisted markers are
   discovered deterministically (marker index) and hydrated SERIALLY on
-  env switch (each `beginHydrate(envId)` re-claims the global lease from
-  IDLE; markers of non-active envs are retained, never consumed); while
+  env switch; **hydrate uses an explicit handoff protocol with NO
+  externally observable IDLE gap: coordinator states `hydrating(A) →
+  hydrate-handoff(B) → hydrating(B)` under ONE generation/queue — the
+  global lease is transferred DIRECTLY from A to B (reserve-B happens
+  BEFORE release-A; all other begins are rejected while the queue is
+  non-empty; a third env/mutator can never win the released lease);
+  markers of non-active envs are retained, never consumed; while
   the pending marker remains, the
   hydrate lease is NOT released (transaction-1 lease semantics: released
   only at exit-restore or explicit invalidation); stale-env markers are
   deleted with generation invalidation; hydrate failure for one env is
-  isolated (quarantine that env only); reload + competing
+  isolated (quarantine that env only); A/B/C scheduling tests; reload + competing
   env/mutator ordering tests + A/B-markers-with-switch-during-hydrate; the markerless reload test
   asserts BOTH content visibility above the overlay AND registry
   readiness (no unbound native identity / api:null-inactive first
@@ -1406,7 +1411,13 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   timeout wins; timeout-before-ack emits the typed
   `{status:"terminal", reason:"plugin-contract-failure"}` result, REVOKES
   the capability/handshake, unregisters the layer, and ends the retained
-  lease — after revocation the window MAY collapse normally); late ack
+  lease — after revocation the window MAY collapse normally); **timeout
+  revocation is followed by a coordinator-owned ONE-SHOT REISSUE: the
+  next open transition on that panel receives a FRESH capability, so a
+  timeout never poisons a still-mounted panel (the revoked capability
+  dies; the panel is not permanently disabled; no remount required) —
+  this is the single exception to capability stability, and it is
+tested (timeout → recovery → successful next open)**; late ack
   after revocation is a generation no-op; tests: ack-before-timeout,
   exact-boundary, timeout-before-ack, unmount/unregister, late ack.** Ordering: open=true transition → admission check → owned
   or (rejected + requestClose + lease retained pending ack); tests:
@@ -1422,7 +1433,7 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   token, so an open layer survives); it is revoked only on actual portal
   release or plugin unregistration, and **rotated on reacquire** (a released
   and reacquired portal gets a fresh token, so a hoarded old token is
-  rejected). **Mobile:** the same `PluginTaskPanel` renders on phone, but
+  rejected); **the one exception is the ack-timeout one-shot reissue above**. **Mobile:** the same `PluginTaskPanel` renders on phone, but
   floating ownership is desktop-only — on mobile the capability is absent
   and host registration is rejected (documented, tested). Unregister is
   idempotent on close,

@@ -1,4 +1,4 @@
-# Floating-panels result matrix (revision 40, committed)
+# Floating-panels result matrix (revision 41, committed)
 
 The single machine-readable operation × reason × action matrix required by
 `docs/specs/ui/panel-pin-float.md` (Result algebra) and
@@ -16,7 +16,7 @@ internal transitions use `automatic`):
 busy | lease-held | quota-full | settle-timeout | invalid-definition |
 stale-session | stale-identity | recovery-pending | journal-unavailable |
 quarantine | repair-active | recovered-with-drops | apply-failed |
-portal-failed | plugin-contract-failure | automatic
+portal-failed | plugin-contract-failure | intent-cancelled | automatic
 ```
 
 - `stale-session` is the reason for status `pruned` (silent outcome; locale
@@ -34,8 +34,9 @@ portal-failed | plugin-contract-failure | automatic
   invalidDefinition, journalUnavailable, quarantine, repairActive,
   recoveryPending, recoveredWithDrops, applyFailed, portalFailed,
   pluginContractFailure, pruned) plus `task:floatingRetry`,
-  `task:floatingCancel`. `automatic`, `stale-session`, `stale-identity`
-  have NO surfaced locale key. Locale enumeration and row count are
+  `task:floatingCancel`. `automatic`, `stale-session`, `stale-identity`, `intent-cancelled`
+  have NO surfaced locale key (intent-cancelled keeps a debug-only
+  telemetry label). Locale enumeration and row count are
   GENERATED from this file by the locale gate.
 
 **Invariant: every operation state maps to EXACTLY ONE (status, reason,
@@ -43,7 +44,7 @@ action) row — every row has a reason (never `—`).** A compile-time/test
 assertion iterates the CLOSED operation-state union (below) and fails if
 any state is covered by zero or two rows.
 
-## Matrix (27 rows; count generated from this file)
+## Matrix (37 rows; count generated from this file)
 
 | # | Operation / source state | Status | Reason | Suppression scope | User action | Terminal? | Cleared by |
 |---|---|---|---|---|---|---|---|
@@ -74,18 +75,29 @@ any state is covered by zero or two rows.
 | 23 | reset: rollback also fails (budget exhausted) | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
 | 24 | custom/RADIX layer second-open rejection (per-open handshake) | rejected | busy | layer only | requestClose + host close signal | no | layer closes (real open=false ack) |
 | 25 | outer `settle` called while a nested transaction is active | rejected | busy | current env | nested settle first | no | nested settle |
-| 26 | portal adoption/lease failure (portal-failed) | terminal | portal-failed | current env | retry / repair UI | no | retry or repair-clear |
-| 27 | plugin layer noncompliance (requestClose ignored / ack timeout) | terminal | plugin-contract-failure | layer only | revoke capability + typed failure UI | yes | capability revoked + layer unregistered |
+| 26 | portal adoption/lease failure (portal-failed) | rejected | portal-failed | current env | retry / repair UI | no | retry or repair-clear |
+| 27 | plugin layer noncompliance (requestClose ignored / ack timeout) | terminal | plugin-contract-failure | layer only | revoke the OPEN's capability + typed failure UI | yes | open capability revoked (next open receives a FRESH per-open capability) |
 | 28 | env-switch retry at settle succeeds | applied | automatic | current env | none (deferred switch applied) | no | settle |
 | 29 | env-switch retry at settle still busy (second failure) | terminal | settle-timeout | current env | retry / cancel (one-shot terminal) | yes | user retry or cancel |
 | 30 | env-switch intent cancelled (user cancel / unmount / target-deleted) | skipped | stale-identity | current env | none | yes | — |
 | 31 | quarantine copy or clear fails (copy/remove error, retry retained) | suppressed | repair-active | ALL envs | retry clear (never cached recovered) | no | verified copy/absence or repair-clear |
 | 32 | journal-free divergence recovery on VERIFIED ABSENT journal, restore ok | applied | automatic | current env | none (automatic) | no | restore settle |
 | 33 | journal-free divergence salvage with drops | recovered-with-drops | recovered-with-drops | current env | repair UI shows dropped list | no | result recorded + state persisted |
+| 34 | NORMAL SUCCESS transitions (successful float/dock/pin/toggle/preset apply) | applied | automatic | current env | none | no | operation completed |
+| 35 | reset forward native apply/fromJSON PARTIAL failure (before pair persistence), rollback ok | rejected | apply-failed | current env | typed rejected + rollback (grid restored) | no | rollback settle |
+| 36 | maximize t1 ROLLBACK failure | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
+| 37 | recovery selected-target write/verify failure (journal retained, retry) | suppressed | repair-active | ALL envs | retry (never cached recovered) | no | verified target write/absence |
+| 38 | env-switch intent cancelled (user cancel / unmount / target-deleted) | skipped | intent-cancelled | current env | none | yes | — |
 
 ## CLOSED operation-state union (for the exactly-once assertion)
 
-Every state the coordinator, recovery, unload, suppression, maximize,
+**Scope rule: NORMAL SUCCESS transitions that are NOT LayoutMutationResult
+values are admitted explicitly** — pinned→floating-expanded, floating
+collapse/expand, and NORMAL plugin open/close are state transitions, NOT
+results: they have no row by definition (the union's every-member maps
+once; these members are declared result-free and the assertion verifies
+that exclusion). Every OTHER state the coordinator, recovery, unload,
+suppression, maximize,
 nested, reset, env-switch, portal, and plugin machines can reach — each maps
 to exactly one row above:
 
@@ -111,6 +123,12 @@ to exactly one row above:
     (27), normal open/close (no row — admitted, not a result).
 11. Prune/salvage/allow-list: invalid-definition (5), stale-session (10),
     salvage drops (11, 33), stale-identity skip (12).
+12. Normal success (result-free, excluded): pinned→floating-expanded,
+    floating collapse/expand, normal plugin open/close — declared
+    non-results; the assertion checks they are NOT covered by any row.
+13. Failure boundaries: reset forward apply partial failure (35),
+    maximize t1 rollback failure (36), recovery selected-target
+    write/verify failure (37), env-switch intent cancelled (38).
 
 ## Cross-artifact coverage assertion
 
@@ -125,9 +143,10 @@ to exactly one row above:
 - The exhaustive switch over `LayoutMutationResult` (task-04) is compiled
   with `exhaustive` checks and the exactly-once assertion over the closed
   union above; adding a state without a row fails CI.
-- Row count (33) and the locale-key list are GENERATED from this file; the
+- Row count (38) and the locale-key list are GENERATED from this file; the
   spec/plan "24 rows" prose is replaced by "rows generated from
-  result-matrix.md".
+  result-matrix.md". Assertion: `status == "terminal"` IFF
+  `Terminal? == yes` (generated cross-check over all rows).
 - Locale keys must exist for every surfaced reason in `task:floatingError.*`
   (i18n gate; pseudo-locale completeness check); `automatic`/
   `stale-session`/`stale-identity` are excluded from the key generation.

@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 46
-prior-round: 45
+revision: 47
+prior-round: 46
 ---
 
 # Floating (unpinned) workbench panels
@@ -206,7 +206,7 @@ FloatingPanelDef                   # complete definition so a floated panel can
   id           string             # be recreated after a reload or env switch
   component    string
   title        string             # canonical English title (reload fallback only)
-  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; ONE `normalizeFloatingPanelDef` runs at EVERY boundary — load, live capture/registry, reset, materialization, persistence — mapping absent → null BEFORE validation; the closed guard accepts ONLY string|null for this field and REJECTS undefined; the live `LayoutPanel` type becomes `tabComponent: string | null` (types.ts:1-7 no longer optional-undefined); params keep JSON null rules; absent/null/string/undefined/extra-key round-trip tests through load, persist, reset/materialization, and live definition)
+  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; TWO DISTINCT FUNCTIONS: `normalizePersistedFloatingPanelDef` (load/persistence — maps absent → null BEFORE validation; the closed guard accepts ONLY string|null for this field and REJECTS undefined) vs `captureFloatingPanelDef` (live capture/registry/materialization — copies live fields WITHOUT recursively normalizing `params`; NO normalizer may walk `DockviewPanel.params`); the live `LayoutPanel` type becomes `tabComponent: string | null` (types.ts:1-7 no longer optional-undefined); absent/null/string/undefined/extra-key round-trip tests + load→capture→persist + live-param-preservation tests)
   params       Record<string, unknown>   # must be JSON-safe (see guard)
 ```
 
@@ -517,7 +517,16 @@ loses the incoming session, or mutates the maximize overlay:
   verifies all expected leases, releases floating leases, and settles;
   deadline expiry CANCELS/ABORTS with verified rollback/rebuild,
   clears the rAF + timer, and returns the typed terminal result;
-  hidden-tab/no-rAF tests**; `api: null` is never
+  hidden-tab/no-rAF tests**; **BACKGROUND-TAB ROLLBACK POLICY: the
+  deadline ATOMICALLY claims the handoff, revokes floating authority,
+  and performs a SYNCHRONOUS API rollback from the immutable snapshot
+  WITHOUT rAF/layout measurement (no geometry reads — the snapshot
+  supplies everything); visibility-only DOM adoption repair is QUEUED;
+  if the synchronous API rollback itself cannot run hidden (adapter
+  reports blocked), the coordinator PERSISTS QUARANTINE and sets a
+  `visibilitychange` continuation with a HARD MAX deadline; hidden-tab
+  tests assert native call count, lease state, busy clearing, and
+  post-visibility repair**; `api: null` is never
   treated as inactive (`use-panel-active.ts` is extended/replaced and added
   to task-03's files). **Global api lease:** there is ONE live Dockview api
   and ONE global active transaction — env switch, task teardown, reset, and
@@ -601,10 +610,14 @@ loses the incoming session, or mutates the maximize overlay:
   (addPlanPanel, toggleRightPanels, applyCustomLayout, …) is KEPT and
   internally routes through the typed adapter methods (no consumer
   rewrite); **ONLY THE ADAPTER OWNS THE RAW `DockviewApi` MUTATION
-  REFERENCE — the store keeps at most an OBSERVER-ONLY api handle and
-  NEVER invokes raw mutations itself; the raw-call allowlist is the
-  ADAPTER MODULE ONLY ("store wrappers" are REMOVED from the
-  allowlist); every task-workbench raw mutator (fromJSON, layout,
+  REFERENCE — an exported `DockviewObserverApi` FACADE (read +
+  subscription members ONLY, no mutators — the raw type does not
+  distinguish them, so the facade is a WRAPPED TYPE, not a cast) is what
+  the store and all other modules receive; raw `DockviewApi` is PRIVATE
+  to the adapter and consumers request mutations via adapter COMMANDS;
+  the AST allowlist is a SECONDARY gate; a COMPILE FIXTURE fails if a
+  store action can reach fromJSON/layout/addPanel through its stored
+  handle; every task-workbench raw mutator (fromJSON, layout,
   addPanel, removePanel, resize, constraints, applyLayout) is
   enumerated; a test proves a store wrapper cannot bypass the adapter**;
   a caller manifest lists every store action + its
@@ -655,6 +668,14 @@ loses the incoming session, or mutates the maximize overlay:
   transitions: claim → success-consume OR claim → transient-requeue
   (same key) OR terminal-consume (durable); tests: duplicate-discovery,
   retry-after-claim, crash-before-requeue, terminal-consume.**
+  **RELOAD CONTINUITY: on mount the fresh coordinator HYDRATES the
+  persisted `(envId, markerGeneration, attempt)` as the SOLE record —
+  generation is PRESERVED, a retry ATOMICALLY increments attempt (never
+  restarts at 1 — restart would defeat retry caps and split one logical
+  hydrate into many), a NEW markerGeneration is NEVER allocated for an
+  existing record (would queue a second hydrate of the same env); a
+  missing/invalid persisted attempt ENTERS the fail-closed repair path,
+  never defaults to attempt 1.**
   HYDRATE FAILURE TABLE: transient pre-hydrate/adoption failure
   (validation, lease acquisition, portal acquisition) REQUeUES exactly
   one marker-hydrate(B) (claim undone — B is never stuck unhydrated);
@@ -682,7 +703,12 @@ loses the incoming session, or mutates the maximize overlay:
   markerless); the marker is consumed only after exit rAF + validated
   pre-max restore + successful grid-side materialization; a markerless
   reload assertion checks DOM visibility above the overlay AND absence
-  from the overlay/grid**; **competing mutations (preset/reset/add-panel/layout) between the two
+  from the overlay/grid**; **TWO EXPLICIT GATES WITH PRECEDENCE: `busy` (coordinator lease
+  ownership — mutators return rejected/busy) vs `recovery-pending`
+  (pending grid insertion — mutators return suppressed/recovery-pending;
+  `isBusy` is NOT the only UI gate; each public mutator has an exact
+  status+reason per gate, and controls render disabled for either)**
+  **competing mutations (preset/reset/add-panel/layout) between the two
   transactions are REJECTED while `pendingGridMaterialization` exists
   (the safer option — rebase is rejected because it can silently restore
   stale pre-max over newer state); **every public mutator returns a
@@ -775,7 +801,14 @@ loses the incoming session, or mutates the maximize overlay:
   generation; NO structural-equivalence tolerance (a benign
   reserialization that changed bytes is a digest mismatch = stale —
   freshness is byte-exact by design); stable-key/number rules apply only
-  to migration-generated bytes; golden-vector + reserialization test.** route matrix: (a) schema-valid AND base digest
+  to migration-generated bytes; golden-vector + reserialization test.**
+  **CANONICAL WRITER INVARIANT: EVERY v4 env-layout write (settled
+  debounce, unload, preset, reset, env-switch, migration) uses ONE
+  canonical serializer with VERSIONED canonicalization rules (stable
+  key order, number formatting, omission/null rules) — benign
+  reserialization is impossible by construction, so byte-exact freshness
+  never discards a usable maximize; a golden semantic-equality +
+  identical-bytes reserialization test covers all writer paths.** route matrix: (a) schema-valid AND base digest
   matches the CURRENT env layout ⇒ maximize-only; (b) malformed envelope
   / no native call needed ⇒ discard + fall through to regular;
   (c) REGULAR LAYOUT CHANGED since maximize (digest mismatch) ⇒ REGULAR
@@ -806,7 +839,16 @@ loses the incoming session, or mutates the maximize overlay:
   (c) maximize post-mutation failure ⇒ maximize terminal path (regular
   never selected); (d) the maximize envelope is discarded only AFTER a
   verified regular success (retained across a regular failure);
-  exact-call-count + storage-envelope tests.** persistent structural mismatch, a fromJSON throw after partial
+  exact-call-count + storage-envelope tests.** **POST-FALLBACK CLEANUP
+  IS ONE IDEMPOTENT COORDINATOR TRANSACTION: verify regular pair →
+  write a DURABLE cleanup phase/record → clear the maximize envelope
+  + persisted epoch → compare-and-clear the in-memory
+  pendingGridMaterialization marker under the same generation → verify
+  absence → publish settled; a crash at ANY boundary is recovered by
+  re-running the same idempotent cleanup (recovery distinguishes
+  "regular pair committed, envelope still present" from "regular
+  failed" via the cleanup record); storage + marker assertions per
+  boundary.** persistent structural mismatch, a fromJSON throw after partial
   native mutation, stale registry, or portal/lease failure FAILS CLOSED —
   lease invalidated, rebuild from the IMMUTABLE PRE-CALL native/layout
   snapshot + registry captured before the first fromJSON (never a
@@ -1082,6 +1124,13 @@ Float/dock/restore are **transactions** with an operation journal:
   16/17); UNKNOWN/missing attempt state after reload FAILS CLOSED
   (rebuild/quarantine — never clears as no-op); tests:
   crash-after-marker-before-call, during-call, equal-after-call.**
+  **`started` MEANS "the native invocation MAY have begun": recovery
+  REQUIRES the rebuild even for the crash-window-after-marker-write-
+  before-call (a wasted native apply is ACCEPTED and is the documented
+  conservative contract — never a no-op, never a second blind mutation);
+  the rebuild runs with persistence suppression and portal exclusion
+  (no layout/removal events or portal churn visible to the user), and
+  tests assert bounded calls + no user-visible detach.**
   **`aborted` semantics (exact):** a structurally valid `aborted` journal
    is the SAFE-BEFORE-PAIR form written by the hash-pending unload path —
    its `before` digests are the cached pre-mutation pair, its `after`
@@ -1778,8 +1827,10 @@ in the group's saved tab order.
   cannot double-skip. **ALL-FLOATING-SESSION-IDS RULE: `shouldSkipPanelEnsure`
   skips EVERY session id currently owned by a floating group (an atomic
   `floatingSessionIds` ownership query), not only `floatingSessionWinner` —
-  **OWNERSHIP QUERY CONTRACT: the query returns `{ids, envId,
-  generation, transactionId}` from ONE coordinator snapshot — ids are
+  **OWNERSHIP QUERY CONTRACT: the query returns `{floatingIds,
+  reservedIds, gridOwnedIds, envId,
+  generation, transactionId, phase}` from ONE coordinator snapshot —
+  ids are
   RAW SessionIds (normalizing `session:<id>` panel ids to raw ids,
   matching the hook's `effectiveSessionId` input); the domain is
   FLOATING ENTRIES ONLY
@@ -1950,12 +2001,17 @@ replacement orderings.
   **One authoritative meaning for `rightPanelsVisible`:** the bit is exactly
   **live canonical pinned-right-column presence**, defined by the single
   concrete predicate `hasLivePinnedRightColumn(api, columnMetadata)` that
-  consumes **only** the persisted `role` field from `EnvFloatingState.rootColumns`
-  (captured from an explicit `LayoutColumn.role` assigned by presets/
+  consumes **only** the VALIDATED REGISTRY/LIVE-LAYOUT role map
+  (from an explicit `LayoutColumn.role` assigned by presets/
   custom-layout normalization, with a documented migration default for old
-  layouts — **never inferred from width, canonical group ids, or panel
-  membership**): the predicate returns true iff a root column's persisted
-  role is `"pinned-right"` AND the column is live with matching pinned state.
+  layouts — **never inferred from width, canonical group ids, panel
+  membership, OR the sidecar cache**): the predicate returns true iff a
+  live root column's registry role is `"pinned-right"` AND the column is
+  live with matching pinned state; the sidecar `rootColumns` role is
+  DIAGNOSTIC/WEAKENING-ONLY — a stale sidecar can never positively
+  qualify a column (registry says side-other/custom ⇒ FALSE regardless of
+  the sidecar), and sidecar-only input is REJECTED at the type boundary;
+  stale-sidecar/live-role conflict vectors are tested.
   Plan/preview/vscode side columns carry `side-other`/`custom` roles and
   always return false (matching today's preset assignments) and are never
   hidden as right-panel toggles; a custom pinned ordinary-terminal-only right

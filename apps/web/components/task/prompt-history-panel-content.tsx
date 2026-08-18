@@ -139,7 +139,7 @@ function PromptHistoryRow({
           role="button"
           tabIndex={0}
           className={cn(
-            "markdown-body markdown-body-user group relative min-h-11 cursor-pointer overflow-hidden rounded-2xl px-3 py-1.5 md:min-h-0",
+            "markdown-body markdown-body-user group relative flex min-h-11 cursor-pointer items-center overflow-hidden rounded-2xl px-3 py-1.5 md:min-h-0",
             isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
           )}
           onClick={(event) => {
@@ -159,13 +159,13 @@ function PromptHistoryRow({
               aria-hidden="true"
             />
           )}
-          <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
+          <span ref={textRef} className={expanded ? "hidden" : "min-w-0 flex-1 truncate"}>
             {entry.content}
           </span>
           {expanded && (
             <div
               data-testid={`prompt-history-expanded-box-${index}`}
-              className="overflow-y-auto whitespace-normal"
+              className="min-w-0 flex-1 overflow-y-auto whitespace-normal"
               style={{ maxHeight }}
             >
               {entry.content}

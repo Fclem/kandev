@@ -57,11 +57,12 @@ message queue pin gave to queue management.
 - **Desktop-only.** The dockview workbench does not render on phone viewports
   (the mobile task surface is a separate composition without dockview: the
   `mobile-task-layout` with its own panel access via the mobile bottom nav /
-  right-panel surface, which is exercised by existing mobile E2E specs), so
-  the pin control appears only where the workbench renders — consistent with
-  the message queue pin. Floating/collapse is intentionally absent from the
-  mobile state model; panel access parity on phone is the existing mobile
-  surface, not this feature.
+  right-panel surface), so the pin control appears only where the workbench
+  renders — consistent with the message queue pin. Floating/collapse is
+  intentionally absent from the mobile state model; panel-access parity on
+  phone is covered by the retained-path mobile scenario in task-05 (no
+  existing mobile spec currently proves panel reachability, so one narrow
+  `mobile-*.spec.ts` scenario is added with this feature).
 
 ## Data model
 
@@ -113,9 +114,10 @@ depth-bounded at 64 so a deeply nested value cannot overflow the validator),
 numeric fields (`order`, `nextOrder`, `size`, `columnIndex`) must be finite,
 nonnegative, and within practical maxima (order/nextOrder ≤ 10 000, size ≤
 100 000, columnIndex ≤ 64), `nextOrder` is **normalized on load to
-max(accepted group orders) + 1** (a valid-looking blob with a stale counter
-cannot reuse an existing order and break monotonicity; if the normalized
-counter exceeds the cap, allocation fails non-destructively), and duplicate
+max(raw nextOrder, max(accepted group orders) + 1)** — the persisted
+high-water counter is preserved even when the highest-order group was removed
+(no accepted groups does NOT reset the counter to 1); if the normalized
+counter exceeds the cap, allocation fails non-destructively — and duplicate
 panel ids or group ids within the blob are rejected deterministically (first
 occurrence wins, later ones dropped). Invalid entries are dropped
 individually; an unreadable blob defaults to `{}` (all groups pinned).
@@ -186,44 +188,56 @@ Float/dock/restore are **transactions** with an operation journal:
    dock/restore: materialize via the `LayoutState` materializer).
 3. **Commit:** only after every removal/materialization succeeded, commit the
    store entry, persist the floating blob, then `persistEnvLayoutNow`.
-4. **Failure recovery:** if any step throws mid-mutation, re-apply the
-   journaled `LayoutState`, drop the partial entry, and keep the previous
-   floating blob. **Rollback is a portal-safe restore transaction:** it sets
-   the restore gate around the `fromJSON` re-apply, registers/excludes every
-   currently live panel that must survive (and re-consumes nothing already
-   consumed), uses target-env exclusion sets in `reconcile`/`releaseByEnv`,
-   and clears the gate only after portal adoption — a rollback can never
-   release a portal or park/stop a terminal/vscode process. Suppression
-   cleanup runs in `finally` and is token-guarded (a stale transaction's
-   cleanup never clears a newer transaction's state).
-5. **Crash-consistent commit protocol (two sessionStorage keys):** commit
-   writes the floating blob first, then the env layout; both write paths
+4. **Failure recovery:** if any step throws mid-mutation, run the recovery
+   phase (see step 6) and drop the partial entry. Suppression cleanup runs in
+   `finally` and is token-guarded (a stale transaction's cleanup never clears a
+   newer transaction's state).
+5. **Bidirectional crash-consistent commit (durable journal marker):** a
+   per-env **operation journal** (`kandev.dockview.env-floating-journal.<envId>`)
+   is written **before** any mutation and holds the complete before/after
+   blob+layout snapshots for the transaction. On startup (before any restore),
+   an incomplete journal is recovered deterministically: the after-state is
+   applied if the mutation completed (both keys validated), otherwise the
+   before-state is re-applied — the journal is then cleared. Both write paths
    return/throw status (the current `setEnvLayout`/`persistEnvLayoutNow`
-   swallow failures — the contract requires status). On layout-write failure
-   after a successful blob write, the previous blob is re-written (best
-   effort), the grid is rolled back portal-safely, and the group stays pinned.
-   **Divergence tolerance:** `restoreFloatingAfterLayout` must be idempotent
-   for a blob/layout divergence left by a crash between the two writes — a
-   group present in the restored grid whose blob entry says it floats is
-   floated by the normal materialize-then-float path (the existing group is
-   reused, never duplicated); a blob entry with no grid group is materialized
-   fresh. `beforeunload` during a transaction writes the **journaled
-   pre-transaction layout**, never `api.toJSON()` (the mutated live grid), so
-   an unload cannot persist a partial or held-back state. Commit/recovery
-   validates both keys before clearing any transaction marker.
-6. **Persistence suppression:** a store-owned transaction token
-   (`floatingTransactionToken` with token-guarded begin/end actions; the same
-   field is read by `setupLayoutPersistence`, so there is no module-local flag
-   and no import cycle) gates **every** layout-persistence entry point through
-   one `canPersistLayout()` guard: `persistNow`, the debounce callback, the
-   `onDidLayoutChange` handler, and the `beforeunload` flush
-   (`dockview-layout-setup.ts:346-403`). On transaction begin the guard also
-   cancels/holds an already-scheduled debounce timer and marks it dirty, so a
-   timer scheduled before the transaction cannot fire mid-transaction.
-   Persistence runs only after commit or journal recovery (explicit
-   `persistEnvLayoutNow`), and the token is reset on unmount. Ordinary
-   unregistered closes are unaffected (their cleanup does not depend on the
-   guard).
+   swallow failures — status-returning APIs are part of the contract). The
+   recovery matrix covers float, dock, and restore in **both** crash
+   directions (after blob write / after layout write): a dock crash after the
+   blob write (group removed from blob, old floated layout still live) is
+   recovered by the journal's before-state, never by idempotent guessing. The
+   two-key divergence rules in step 6 are the journal-free fallback only
+   (journal lost/unreadable), not the primary guarantee.
+6. **Divergence-tolerant restore + portal-safe recovery phase:** when no
+   journal exists (lost/corrupt), `restoreFloatingAfterLayout` is idempotent:
+   a group present in the restored grid whose blob entry says float is floated
+   by the normal materialize-then-float path (the existing group is reused).
+   **Same-id/different-column resolution:** reuse is authorized only on exact
+   group identity plus the complete saved panel-id set and saved placement; if
+   any saved panel id exists in a **different** live group/column, the
+   floating entry is dropped (the live panel is the deterministic authority —
+   never materialize a duplicate or move an unrelated group), and the cleaned
+   result is persisted. Recovery runs as a **phase model**:
+   `mutating → restoring → portals-adopted → persist-recovered → settled`;
+   the restore gate stays up through portal adoption, and only the
+   portals-adopted phase may persist the journaled layout (through the
+   status-returning API); token cleanup is generation-guarded and happens at
+   settled.
+7. **Persistence suppression + single unload handler:** a store-owned
+   transaction token (`floatingTransactionToken` with token-guarded begin/end
+   actions; the same field is read by `setupLayoutPersistence`, so there is no
+   module-local flag and no import cycle) gates **every** layout-persistence
+   entry point through one `canPersistLayout()` guard: `persistNow`, the
+   debounce callback, the `onDidLayoutChange` handler, and the `beforeunload`
+   flush (`dockview-layout-setup.ts:346-405`). The unload handler is **one
+   idempotent, transaction-aware handler** (the existing listener is replaced,
+   not duplicated): during an active transaction it writes the journaled
+   pre-transaction layout and never `api.toJSON()`; otherwise it performs the
+   normal live flush. On transaction begin the guard also cancels/holds an
+   already-scheduled debounce timer and marks it dirty, so a timer scheduled
+   before the transaction cannot fire mid-transaction. Persistence runs only
+   at the settled phase (explicit `persistEnvLayoutNow`), and the token is
+   reset on unmount. Ordinary unregistered closes are unaffected (their
+   cleanup does not depend on the guard).
 
 - **float(groupId):** if `groupId` is the maximized group, first restore the
   pre-max layout and derive the target's placement from `preMaximizeLayout`
@@ -351,13 +365,19 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   without its dismiss callback still decrements the refcount. Pending collapse
   is stored with the event/generation that created it and cleared when the
   window or its layer owner unmounts. **Zero-refcount application is deferred
-  to a microtask** and re-checks window generation, pending generation, and
-  refcount before collapsing, so a Radix close-then-open replacement (menu →
-  dialog, nested dialog, navigation replacement) where the refcount passes
-  through zero transiently (1 → 0 → 1 in one turn) never collapses the window;
-  two layers closing in either order never collapse while the second is open,
-  and a successor window reusing the same group id never inherits a stale
-  pending collapse.
+  past the microtask and held by a same-frame lease:** the pending collapse
+  applies only at the next animation frame if the refcount is still zero AND
+  no new owned layer registered since the pointerdown (a Radix
+  close-then-open replacement — menu → dialog, nested dialog, navigation
+  replacement — within the same synchronous turn or the same frame never
+  collapses; a successor registered by a later effect before the frame
+  boundary cancels the pending collapse, which re-arms only on a fresh
+  outside pointerdown). Two layers closing in either order never collapse
+  while the second is open, and a successor window reusing the same group id
+  never inherits a stale pending collapse. The guaranteed-handoff contract is
+  same-turn and same-frame replacement; a transition spanning longer task
+  gaps (multi-frame animation, deferred navigation) may collapse and is
+  documented as such, not silently claimed.
 - **Layer inventory (mandatory):** every floating-capable panel's interactive
   layer owners (Radix Dialog/Popover/DropdownMenu/ContextMenu/HoverCard
   surfaces inside chat, plan, terminal, files, changes, diff, plugins, and
@@ -440,11 +460,17 @@ in the group's saved tab order.
 
 - **Winner ownership is store-owned and explicit:** the coordinator writes a
   store field — `floatingSessionWinner: { sessionId, envId, generation } | null` —
-  atomically with the replacement, and `shouldSkipPanelEnsure`
-  (`dockview-session-tabs.ts`) consumes it (matching sessionId + envId +
-  current generation) before the hook's ensure effect runs. The hook skips
-  only the winner id for grid insertion/activation; unrelated current-session
-  siblings are still ensured as today (their anchor is the existing
+  atomically with the replacement. The field is **memory-only (never
+  persisted)** and consumed by an atomic **compare-and-clear**
+  `consumeFloatingSessionWinner(sessionId, envId, generation)` called from
+  `shouldSkipPanelEnsure` (`dockview-session-tabs.ts`) before the hook's
+  ensure effect runs — consumption is one-shot, so repeated/StrictMode effects
+  cannot double-skip. Stale winners (generation or env mismatch) are cleared
+  on generation/env transition and on every terminal path (ensure failure,
+  unmount, env switch); a newer generation is never cleared by an older
+  cleanup. The hook skips only the winner id for grid
+  insertion/activation; unrelated current-session siblings are still ensured
+  as today (their anchor is the existing
   `addCurrentSessionSiblings`/`ensureSiblingPanels` behavior, with an explicit
   anchor when the winner floats).
 - **Winner floats, absent from the grid:** the incoming session id is **not**
@@ -473,7 +499,7 @@ replacement orderings.
   rolls back and the group stays pinned, with a console warning. There is no
   separate "ephemeral floating" mode: a float that cannot be persisted does
   not happen, so a reload can never lose a floated group the user believes
-  exists. (This is the single policy; see the State machine, steps 4-5.)
+  exists. (This is the single policy; see the State machine, steps 4-7.)
 - **Layout rebuild / preset switch / env switch while floating:** the floating
   blob is re-applied after the grid restore completes (Restore call sites). A
   floated panel whose definition cannot be materialized (e.g. its session was
@@ -492,11 +518,11 @@ replacement orderings.
   windows render above the maximized grid. Floating the group that is
   currently maximized restores the pre-max layout first, then floats the
   group, as one transaction.
-- **Partial transaction failure:** the journal recovery in the State machine
-  re-applies the pre-transaction layout; no half-floated grid, orphaned
-  portal, or unrecoverable blob survives. The transaction-scoped persistence
-  suppression (State machine, step 5) guarantees the partial layout is never
-  persisted before commit or recovery.
+- **Partial transaction failure:** the recovery phase in the State machine
+  (steps 4-7: journal marker, divergence-tolerant restore, portal-safe
+  phases) guarantees the partial layout is never persisted before the
+  portals-adopted phase, and a reload recovers deterministically from the
+  operation journal.
 - **Right-width enforcement with floated right groups:** `enforcePinnedTargets`
   must only restore the right column target when a **live pinned-right column
   exists** (`hasPinnedRightColumn`-style check on the live grid). With all
@@ -509,16 +535,25 @@ replacement orderings.
   re-adds the right column wholesale from `defaultLayout()` (`dockview-store.ts`),
   which would re-insert `files`/`changes`/`terminal-default` while those ids
   float — duplicate identity across grid and floating surfaces, or dockview
-  replacing the floating copy. The show path is floating-aware: floating
-  groups stay absent (their ids are excluded from the re-added column) or the
-  toggle is treated as an explicit dock for them. **Empty-state legality:**
-  after excluding floating ids, groups with zero remaining panels are removed
-  and the right column is dropped entirely when no pinned-right panels remain
-  (an empty group/column serializes to an empty branch that dockview may
-  reject and that corrupts later classification); `rightPanelsVisible` stays
-  an independent intent/visibility bit. Tested with one and both right groups
-  floated, hide→show while floating, and container resize, asserting the
-  serialized tree is legal (no empty branch/leaf).
+  replacing the floating copy. The show path is floating-aware: **every**
+  floating panel id (not only the default `files`/`changes`/`terminal-default`
+  set — custom and ordinary right panels included) is excluded from the
+  re-added column or the toggle is treated as an explicit dock for them.
+  **Empty-state legality:** after excluding floating ids, groups with zero
+  remaining panels are removed and the right column is dropped entirely when
+  no pinned-right panels remain (an empty group/column serializes to an empty
+  branch that dockview may reject and that corrupts later classification).
+  **Visibility contract:** `rightPanelsVisible` is an independent
+  intent/visibility bit that is **derived from the live grid on every
+  restore** (right column present ⇒ true) and not persisted separately; hide
+  when the column is already absent is a no-op that still records `false`;
+  show with zero pinned groups records the intent without serializing an
+  empty column. `enforcePinnedTargets`'s state-level gate uses the same live
+  pinned-right-column predicate (a single authoritative detector shared with
+  `dockview-layout-setup.ts`), never the bit alone. Tested with one and both
+  right groups floated (incl. an ordinary terminal id), hide→show while
+  floating, reload, and container resize, asserting the serialized tree is
+  legal (no empty branch/leaf).
 - **Storage-write failure after float/dock:** the commit fails closed — the
   transaction rolls back (journal re-apply) and the group stays pinned with a
   console warning. A reload or env switch can therefore never observe a
@@ -532,7 +567,13 @@ replacement orderings.
   definitions are validated against the active task/session set and env
   before merging: stale/deleted/absent-session definitions are dropped, and
   when no valid session remains the reset chat placeholder/default behavior is
-  retained (payload-wins is never a blanket override for sessions). Existing
+  retained (payload-wins is never a blanket override for sessions). **Valid
+  session insertion is canonical:** every valid active session gets a
+  session tab — via the merger's center-chat replacement when the reset
+  target has a center column, and via a **documented fallback when it does
+  not**: session panels are appended to the first column's first group and
+  the active session is set there, so the auto-session hook observes the
+  resulting identity without a second insertion. Existing
   reset panels (chat, files, changes, terminal) are reused by id — never
   duplicated — and the floating definition's payload wins for same-id valid
   panels, so a floated ordinary terminal keeps its real terminal id rather
@@ -648,10 +689,39 @@ replacement orderings.
   transaction settles, **THEN** the transaction rolls back, the group stays
   pinned, and a console warning is logged — no panel is lost on the next
   reload.
+- **GIVEN** a dock transaction crashes after the blob write (group removed
+  from the blob, old floated layout still live), **WHEN** the workbench
+  restarts, **THEN** the operation journal's before-state is re-applied and
+  the group is recovered — the journal-free divergence rules are never the
+  primary guarantee for a mid-transaction crash.
 - **GIVEN** a crash leaves the floating blob and env layout divergent (blob
-  says float, grid has the group), **WHEN** the workbench restores, **THEN**
-  `restoreFloatingAfterLayout` reuses the existing grid group and floats it —
-  no duplicate id, no lost panel.
+  says float, grid has the group, no journal), **WHEN** the workbench
+  restores, **THEN** `restoreFloatingAfterLayout` reuses the existing grid
+  group and floats it — no duplicate id, no lost panel.
+- **GIVEN** a saved floating panel id exists in a different live group/column
+  than the blob's placement (journal lost), **WHEN** restore runs, **THEN**
+  the live panel is the deterministic authority, the floating entry is
+  dropped, and no duplicate panel id is materialized.
+- **GIVEN** the tab unloads during a transaction, **WHEN** the single
+  transaction-aware unload handler runs, **THEN** exactly one write occurs
+  (the journaled pre-transaction layout), and no second listener overwrites
+  it with the mutated grid.
+- **GIVEN** a failed float leaves the recovery phase mid-way, **WHEN** the
+  phase model completes, **THEN** portals are adopted before the journaled
+  layout is persisted, and storage equals the pre-transaction layout.
+- **GIVEN** the user resets with a valid active session but a reset target
+  without a center column, **WHEN** the reset merges, **THEN** the session
+  panel lands in the first column's first group with the active session set,
+  and the auto-session hook does not insert a second one.
+- **GIVEN** the user re-shows the right panels while all right groups float,
+  **WHEN** the show path runs, **THEN** every floating id is excluded
+  (including ordinary/custom right panels), empty groups and the empty right
+  column are removed, and after a reload `rightPanelsVisible` is derived from
+  the live grid — enforcement never resizes the center to the right target.
+- **GIVEN** a Radix menu→dialog→menu replacement spans more than one frame,
+  **WHEN** the same-frame lease expires, **THEN** the window may collapse
+  (documented handoff boundary) — same-turn and same-frame replacements are
+  the guaranteed cases.
 - **GIVEN** a float transaction's journal rollback re-applies the pre-
   transaction layout, **WHEN** the rollback completes, **THEN** no portal was
   released and no terminal/vscode process was stopped (the rollback ran as a

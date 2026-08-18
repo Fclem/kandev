@@ -8,14 +8,15 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. Revision 6 incorporates the
-round-5 adversarial review (this package has been adversarially reviewed every
-round): a crash-consistent two-key commit protocol with divergence-tolerant
-restore and portal-safe journal rollback, store-owned `floatingSessionWinner`
-consumed by `shouldSkipPanelEnsure`, microtask-deferred pending-collapse
-application, session-aware reset merge, empty-right legality, `nextOrder`
-normalization, a mandatory owned-layer inventory, and a single fail-closed
-storage policy.
+the existing env layout / maximize persistence. Revision 7 incorporates the
+round-6 adversarial review (this package has been adversarially reviewed every
+round): a bidirectional operation-journal commit protocol with a recovery
+matrix, a portal-safe phase model (`mutating → restoring → portals-adopted →
+persist-recovered → settled`), same-id/different-column divergence authority,
+one transaction-aware unload handler, canonical reset session insertion,
+derived `rightPanelsVisible` with a shared live-right detector, a same-frame
+owned-layer lease, `floatingSessionWinner` compare-and-clear lifecycle, and
+high-water `nextOrder` preservation.
 
 ## Architecture
 
@@ -75,27 +76,30 @@ per-env sessionStorage pattern.
    serializer/`applyLayoutAndSet` machinery. `fallbackGroupPosition`
    (`dockview-layout-builders.ts:272`) is the explicit existing-group fallback
    only, never the column-creation mechanism.
-4. **Transactions with journal + crash-consistent commit.** Every float/dock/
-   restore: capture+validate → mutate → commit → on throw mid-mutation,
-   re-apply the journaled LayoutState **as a portal-safe restore transaction**
-   (restore gate around `fromJSON`, exclusion sets, gate cleared only after
-   portal adoption). Commit writes the floating blob first, then the env
-   layout, with write status (the current `setEnvLayout`/`persistEnvLayoutNow`
-   swallow errors — new status-returning APIs are part of the contract); a
-   layout-write failure after a successful blob write re-writes the previous
-   blob (best effort) and rolls back to pinned. **Divergence tolerance:**
-   `restoreFloatingAfterLayout` is idempotent for a blob/layout split (group
-   in grid + blob floats → float the existing group). `beforeunload` during a
-   transaction writes the journaled pre-transaction layout, never
-   `api.toJSON()`. A store-owned transaction token
-   (`floatingTransactionToken`, token-guarded begin/end; read by
-   `setupLayoutPersistence`) gates every persistence entry point
+4. **Transactions with journal + portal-safe phase model.** Every float/dock/
+   restore: capture+validate → mutate → commit. A per-env **operation journal**
+   (`kandev.dockview.env-floating-journal.<envId>`) is written **before**
+   mutation with complete before/after blob+layout snapshots and recovered
+   deterministically on startup (after-state if the mutation completed, else
+   before-state; journal cleared after recovery) — the recovery matrix covers
+   float/dock/restore in both crash directions, so a dock crash after the blob
+   write never loses the group. Recovery runs the phase model
+   `mutating → restoring → portals-adopted → persist-recovered → settled`:
+   the restore gate stays up through portal adoption; only the
+   portals-adopted phase persists the journaled layout (through status-
+   returning APIs — the current `setEnvLayout`/`persistEnvLayoutNow` swallow
+   errors); token cleanup is generation-guarded at settled. **Journal-free
+   fallback** (`restoreFloatingAfterLayout`) is idempotent with a
+   same-id/different-column rule: live panel identity is the authority and the
+   floating entry is dropped — never a duplicate. A store-owned
+   `floatingTransactionToken` gates every persistence entry point
    (`persistNow`, debounce callback, `onDidLayoutChange`, `beforeunload`)
-   through one `canPersistLayout()`; an already-scheduled timer is
-   cancelled/held and marked dirty. **Single storage policy: fail closed** on
-   every blob-write failure (private mode included) — the transaction rolls
-   back and the group stays pinned; there is no ephemeral floating mode.
-5. **Owned-region focus with refcounted, microtask-deferred pending collapse.**
+   through one `canPersistLayout()`; the unload path is **one idempotent
+   transaction-aware handler** (existing listener replaced, never duplicated)
+   writing the journaled pre-transaction layout during a transaction.
+   **Single storage policy: fail closed** on every blob-write failure —
+   rollback to pinned; no ephemeral floating mode.
+5. **Owned-region focus with refcounted, same-frame-leased pending collapse.**
    One module-level coordinator (pattern: `hooks/use-panel-search.ts`) with
    owned regions = floating window subtree + any Radix layer opened from
    within it (`useFloatingOwnedLayer`; idempotent unregister on dismiss AND
@@ -103,39 +107,47 @@ per-env sessionStorage pattern.
    floating-capable panel** — chat, plan, terminal, files, changes, diff,
    plugins, editors). Collapse on: window-capture pointerdown outside all
    owned regions (**pending while the window's owned-layer refcount is above
-   zero; zero-refcount application deferred to a microtask that re-checks
-   window generation, pending generation, and refcount** — a close-then-open
-   Radix replacement never collapses); `focusout` to outside (relatedTarget
-   after a microtask); Escape on the **bubble** phase honoring
-   `event.defaultPrevented`. Only the focused/last-interacted expanded window
-   collapses.
-6. **Reset is an id-aware docking merge, session-aware.** The reset layout
-   owns group/column placement; the floating definition owns the panel payload
-   and saved tab order; the active panel is merged explicitly — **scoped to
-   valid definitions**: `session:*` floating defs are validated against the
-   active session set and dropped when stale (reset chat placeholder retained
-   when no valid session remains). Reset-default panels are reused by id (a
-   floated ordinary terminal keeps its real terminal id); floating state
-   clears only after the merged grid is committed; groups do not re-float.
+   zero; application deferred past the microtask and held by a same-frame
+   lease that re-checks window generation, pending generation, refcount, and
+   new-registration — same-turn and same-frame Radix replacements never
+   collapse; longer task gaps may, and that boundary is documented**);
+   `focusout` to outside (relatedTarget after a microtask); Escape on the
+   **bubble** phase honoring `event.defaultPrevented`. Only the
+   focused/last-interacted expanded window collapses.
+6. **Reset is an id-aware docking merge, session-aware, with a canonical
+   session fallback.** The reset layout owns group/column placement; the
+   floating definition owns the panel payload and saved tab order; the active
+   panel is merged explicitly — scoped to valid definitions (`session:*` defs
+   validated against the active session set; stale dropped; reset chat
+   placeholder retained when none remain; **a valid active session with no
+   center column lands in the first column's first group with the active
+   session set, so the auto-session hook never double-inserts**). Reset-default
+   panels are reused by id (a floated ordinary terminal keeps its real
+   terminal id); floating state clears only after the merged grid is
+   committed; groups do not re-float.
 7. **Restore call sites (exhaustive).** `restoreFloatingAfterLayout`
    (idempotent) runs before `isRestoringLayout` clears at: initial mount
    `restoreEnvLayout` (all three branches: saved env layout /
    `tryRestoreMaximizeOnly` / default+route-intent — `dockview-layout-restore.ts`),
    env-switch fast and slow paths (`dockview-env-switch.ts`), maximize restore,
    preset/custom apply, `toggleRightPanels` (`dockview-store.ts:523-567`), and
-   reset/default build. One focused test per call site.
+   reset/default build. Journal recovery runs before all of these. One focused
+   test per call site.
 8. **Identity coordination (session + right panels).** Session replacement is
    one coordinator over grid + floating entries; the winner is written to a
-   store-owned `floatingSessionWinner: { sessionId, envId, generation } | null`
-   atomically with replacement and consumed by `shouldSkipPanelEnsure`
-   (`dockview-session-tabs.ts`) before the always-mounted `useAutoSessionTab`
-   hook's ensure effect (skips only the winner id; unrelated siblings ensured
-   as today). The `toggleRightPanels` show path is floating-aware: floating
-   ids excluded, **empty groups removed and the right column dropped when no
-   pinned-right panels remain** (no empty branch/leaf in the serialized tree);
-   `rightPanelsVisible` stays an independent bit. `enforcePinnedTargets`
-   restores the right target only when a live pinned-right column exists. No
-   panel id ever exists in both surfaces.
+   store-owned, **memory-only** `floatingSessionWinner: { sessionId, envId,
+   generation } | null` atomically with replacement and consumed one-shot via
+   atomic **compare-and-clear** `consumeFloatingSessionWinner(...)` from
+   `shouldSkipPanelEnsure` (skips only the winner id; unrelated siblings
+   ensured as today; stale winners cleared on generation/env transition and
+   terminal paths, never clearing a newer generation). The `toggleRightPanels`
+   show path is floating-aware: **every** floating id excluded, empty groups
+   removed, the right column dropped when no pinned-right panels remain; the
+   serialized tree stays legal. `rightPanelsVisible` is **derived from the
+   live grid on every restore** (not persisted); the enforcement gate and the
+   toggle share one authoritative live pinned-right-column detector (with
+   `dockview-layout-setup.ts`), never `sv.length - 1` guessing. No panel id
+   ever exists in both surfaces.
 
 ## Files
 
@@ -185,24 +197,28 @@ per-env sessionStorage pattern.
   nested custom + plan-preset side classification + no-center/unknown-center
   custom fallback), materializer (missing column, no-center, tree-path insert,
   tree+flat round-trip with an existing nested tree), maximize→float ordering,
-  last-group-in-column re-dock, transaction journal recovery (throw-on-remove,
+  last-group-in-column re-dock, transaction journal recovery (**full matrix:
+  float/dock/restore × both crash directions**, throw-on-remove,
   throw-on-materialize, blob-write failure → fail-closed rollback to pinned,
-  blob-success/layout-failure divergence, timer scheduled before transaction
-  start, unload during transaction writes journaled layout), display/active
-  setters, persistence round-trip + type-guard rejection (undefined/cyclic/
-  oversized params, negative/oversized numerics, duplicate ids, order
-  exhaustion at 9 999/10 000/next, stale `nextOrder` normalization),
-  env save/restore, reset-as-merge (payload-wins collisions incl. floated
-  ordinary terminal; stale session defs dropped; chat placeholder retained),
-  stacking allocation.
+  journal before/after validation, journal recovery before any restore,
+  timer scheduled before transaction start, unload during transaction writes
+  journaled layout exactly once), same-id/different-column authority (no
+  duplicate materialization), display/active setters, persistence round-trip
+  + type-guard rejection (undefined/cyclic/oversized params,
+  negative/oversized numerics, duplicate ids, order exhaustion at
+  9 999/10 000/next, stale `nextOrder` normalization preserving the high-water
+  mark), env save/restore, reset-as-merge (payload-wins collisions incl.
+  floated ordinary terminal; stale session defs dropped; chat placeholder
+  retained; valid-session-without-center-column fallback), stacking
+  allocation.
 - `apps/web/components/task/dockview-floating-panel.test.tsx` (new) — expanded
   window, owned-region collapse (outside pointer, focusout, portaled Radix
   layer open = owned), pointerdown deferral (outside click while a menu is
   open stays expanded until dismissal; pending collapse cancelled on
   owned-region click; layer closed via unmount/navigation decrements; two
-  layers closing in both orders; **close-then-open replacement with transient
-  zero refcount does not collapse**; successor window inherits no stale
-  pending collapse), Escape rules (defaultPrevented wins; nested
+  layers closing in both orders; **close-then-open replacement same-turn and
+  same-frame; cross-frame boundary documented**; successor window inherits no
+  stale pending collapse), Escape rules (defaultPrevented wins; nested
   AlertDialog/DropdownMenu), vertical/horizontal bar, tablist semantics +
   roving tabindex + Arrow/Home/End, title-click expand+activate, pin re-dock,
   stacking/offsets, empty-group removal, reactive title update on plugin
@@ -253,14 +269,28 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 
 ## Risks
 
+- **Bidirectional journal consistency:** the operation journal, its recovery
+  matrix, and the phases are the whole crash story; the journal must be
+  written before mutation and cleared only after both keys validate.
+- **Single unload handler:** one idempotent transaction-aware handler (never
+  a second listener); a duplicated flush can overwrite the journaled layout
+  with the mutated grid.
+- **Same-frame lease:** pending collapse must survive same-turn and same-frame
+  Radix replacements; the cross-frame boundary must be documented, not
+  silently claimed.
+- **Winner lifecycle:** compare-and-clear consumption, memory-only field,
+  stale-winner cleanup on every terminal path without clearing a newer
+  generation.
+- **Right-visibility derivation:** `rightPanelsVisible` derived from the live
+  grid on restore; one authoritative live pinned-right detector shared by the
+  toggle and enforcement.
+- **Reset session fallback:** valid sessions without a center column must land
+  in the first column's first group, or the auto-session hook double-inserts.
 - **Two-key crash consistency:** the blob→layout write order, write-status
   APIs, divergence-tolerant restore, and journaled beforeunload are the whole
   story; any single miss re-exposes split-blob state on reload.
 - **Portal-safe rollback:** journal recovery must run as a restore-gated,
   exclusion-set transaction or rollback itself releases portals.
-- **Transient-zero refcount:** pending collapse must be applied only after a
-  microtask re-check (generation + refcount), or a Radix close-then-open
-  replacement collapses the window mid-transition.
 - **Empty-right legality:** excluding floating ids must also drop empty groups
   and the empty right column, or the serializer emits an illegal branch that
   corrupts the next restore.
@@ -277,9 +307,6 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
   `shouldSkipPanelEnsure` before the hook's ensure effect, or the incoming
   session id lands in both surfaces; the toggle-show path must not re-add
   floating right ids.
-- **Pointerdown deferral cancellation:** pending collapse must be refcounted
-  (React cleanup + dismiss), generation-tagged, and cleared on unmount, or a
-  stale pending collapse collapses a successor window.
 - **Detach registry leaks:** if a registered id is never removed from the grid
   (transaction aborted before removal), the registration must still be cleared
   on settle or the next real close of that tab skips cleanup. Consume-once +
@@ -298,8 +325,3 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 - **Maximize interplay:** float of the maximized group must derive placement
   from `preMaximizeLayout` and sequence removals so the trailing restore rAF
   does not reassert the overlay.
-- **Owned-region focus:** Radix layers portaled to `body` must register with
-  the coordinator or the window collapses under an open menu; the
-  `useFloatingOwnedLayer` hook is mandatory, and pointerdown must be deferred
-  while a layer is open (Radix's own outside handler runs after window
-  capture).

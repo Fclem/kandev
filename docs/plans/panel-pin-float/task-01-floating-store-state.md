@@ -24,7 +24,14 @@ spec: "../../specs/ui/panel-pin-float.md"
   dockview JSON + normalized `LayoutState` carrying `logicalId`/`role`);
   **explicit v3-read/v4-write key constants** (v3 read until v4 written; v3
   deleted only after the validated v4 apply; the envelope `version` field is
-  the idempotence marker); - **Dockview API SPIKE (blocking, against pinned `dockview-core ^4.13.1`):**
+  the idempotence marker); - **Normalized types EXPLICIT (blocking): `lib/state/layout-manager/types.ts`
+  gains `logicalId: UUID` on every normalized LayoutGroup/LayoutColumn,
+  `role` on LayoutColumn, and `tabComponent: string | null` (the live
+  optional-undefined form is replaced); SEPARATE legacy/native input
+  types are defined; acceptance: v4 restore cannot compile/validate
+  without identity/role, tree/flat ids match, and the runtime guard is
+  fail-closed even when legacy input is cast.
+- **Dockview API SPIKE (blocking, against pinned `dockview-core ^4.13.1`):**
   document the exact `sv.setConstraints` + `resizeView` same-frame
   sequence used by mid-drag rollback, prove captured widths survive
   narrow/min-max conflict cases, and record the result in the task

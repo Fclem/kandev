@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 45
-prior-round: 44
+revision: 46
+prior-round: 45
 ---
 
 # Floating (unpinned) workbench panels
@@ -133,7 +133,10 @@ EnvFloatingState                     # persisted as JSON, versioned
                # constraint metadata, and the sidecar is persisted only after
                # a validated post-apply live capture**; migrated roles are
                # persisted before any hasLivePinnedRightColumn decision and
-               # later restores consume only stored roles (never re-inferred) rebuilt in memory after every layout
+               # later restores consume only stored roles (never re-inferred)
+               # — the registry/live role map REMAINS the authority; the
+               # sidecar can only weaken (never strengthen) a pinned-right
+               # qualification rebuilt in memory after every layout
                # apply and reload, invalidated on preset/reset/env switch,
                # covered by the same journal transaction, budget, and cleanup
                # as the groups — there is no third storage key; native
@@ -186,8 +189,12 @@ FloatingGroupState
                   # persisted column role (M5): distinguishes a custom pinned
                   # right terminal column from pinned plan/preview/vscode
                   # side columns; captured with the geometry, kept in the
-                  # sidecar, and the single input to hasLivePinnedRightColumn
-                  # alongside live membership and pinned state
+                  # sidecar as DIAGNOSTIC/CACHE input to hasLivePinnedRightColumn
+                  # alongside live membership and pinned state — the
+                  # validated registry/live-layout role map is the
+                  # AUTHORITY (a stale/corrupted sidecar can never qualify
+                  # a column; precedence: registry role > live pinned state
+                  # > sidecar cache)
   orientation      "vertical" | "horizontal"             # derived from columnKind + position
   size             number       # px: window width for vertical, height for horizontal
   panels           FloatingPanelDef[]   # full tab definitions, tab order
@@ -199,7 +206,7 @@ FloatingPanelDef                   # complete definition so a floated panel can
   id           string             # be recreated after a reload or env switch
   component    string
   title        string             # canonical English title (reload fallback only)
-  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; load normalization maps absent → null BEFORE validation; the closed guard accepts ONLY string|null for this field and REJECTS undefined; params keep JSON null rules; absent/null/string/undefined/extra-key round-trip tests through load, persist, reset/materialization)
+  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; ONE `normalizeFloatingPanelDef` runs at EVERY boundary — load, live capture/registry, reset, materialization, persistence — mapping absent → null BEFORE validation; the closed guard accepts ONLY string|null for this field and REJECTS undefined; the live `LayoutPanel` type becomes `tabComponent: string | null` (types.ts:1-7 no longer optional-undefined); params keep JSON null rules; absent/null/string/undefined/extra-key round-trip tests through load, persist, reset/materialization, and live definition)
   params       Record<string, unknown>   # must be JSON-safe (see guard)
 ```
 
@@ -310,7 +317,15 @@ identity. **ONE role authority: the validated v4 `LayoutState` envelope /
   matcher builds a BIPARTITE CANDIDATE MAP and REQUIRES a unique perfect
   assignment for every non-empty logical object — missing, duplicate, or
   partial assignment FAILS CLOSED (native state preserved, NO
-  capture/materialization); fixtures: two-identical-candidates,
+  capture/materialization); **EXACT TIE RULE: candidates are ordered
+  by the FULL signature tuple (byte-lexicographic); if two logical
+  objects remain INDISTINGUISHABLE (identical signature AND identical
+  tie values — e.g. two identical panel multisets in one column whose
+  paths regenerated identically), the ENTIRE binding/materialization
+  attempt is REJECTED (fail closed — never arbitrary ordering);
+  fixture: two-identical-candidates-remain-identical-after-fromJSON
+  with the expected fail-closed result;** fixtures:
+  two-identical-candidates,
   inserted-column, cardinality mismatch; capture/materialization is
   PROHIBITED
   until the liveRegistry install succeeds — the spec's "installed after
@@ -494,7 +509,15 @@ loses the incoming session, or mutates the maximize overlay:
   verified rollback (phase `aborted`); stale grid cleanups after
   `settled`/`aborted` are rejected; assertions run immediately before
   transfer, during dual mount, after each portal, after rAF, and after
-  settle**; `api: null` is never
+  settle**. **OWNER + BACKGROUND SAFETY: the COORDINATOR owns the rAF
+  callback AND an ABSOLUTE generation-bound handoff DEADLINE (timer
+  independent of rAF — a background/hidden tab that throttles or
+  suppresses rAF can never leave dual DOM/leases/busy open forever);
+  the rAF callback only REPORTS adoption; the coordinator ATOMICALLY
+  verifies all expected leases, releases floating leases, and settles;
+  deadline expiry CANCELS/ABORTS with verified rollback/rebuild,
+  clears the rAF + timer, and returns the typed terminal result;
+  hidden-tab/no-rAF tests**; `api: null` is never
   treated as inactive (`use-panel-active.ts` is extended/replaced and added
   to task-03's files). **Global api lease:** there is ONE live Dockview api
   and ONE global active transaction — env switch, task teardown, reset, and
@@ -577,9 +600,14 @@ loses the incoming session, or mutates the maximize overlay:
   PUBLIC COMPATIBILITY SURFACE: every current `useDockviewStore` action
   (addPlanPanel, toggleRightPanels, applyCustomLayout, …) is KEPT and
   internally routes through the typed adapter methods (no consumer
-  rewrite; the adapter is the sole raw-mutation caller); the static gate
-  permits raw dockview calls ONLY inside the adapter module and the
-  store wrappers; a caller manifest lists every store action + its
+  rewrite); **ONLY THE ADAPTER OWNS THE RAW `DockviewApi` MUTATION
+  REFERENCE — the store keeps at most an OBSERVER-ONLY api handle and
+  NEVER invokes raw mutations itself; the raw-call allowlist is the
+  ADAPTER MODULE ONLY ("store wrappers" are REMOVED from the
+  allowlist); every task-workbench raw mutator (fromJSON, layout,
+  addPanel, removePanel, resize, constraints, applyLayout) is
+  enumerated; a test proves a store wrapper cannot bypass the adapter**;
+  a caller manifest lists every store action + its
   adapter method.** matrix 28 is
   classified
   only when the marker is false AND the snapshot is unchanged; 29
@@ -619,7 +647,14 @@ loses the incoming session, or mutates the maximize overlay:
   leave a second B marker; `claimMarker` consumes the COMPLETE
   equivalent set or proves only one exists; tests: duplicate-marker,
   switch-during-hydrate — one hydrate, one consume, one requeue on
-  transient failure.**
+  transient failure.** **THE COORDINATOR IS THE SOLE MARKER WRITER:
+  marker records are ONE logical operation `{envId, markerGeneration,
+  attempt}` — `markerGeneration` is allocated by the coordinator at
+  discovery; a TRANSIENT-FAILURE retry REUSES the same key (attempt+1)
+  so discovery+retry is ONE logical hydrate, never two items; atomic
+  transitions: claim → success-consume OR claim → transient-requeue
+  (same key) OR terminal-consume (durable); tests: duplicate-discovery,
+  retry-after-claim, crash-before-requeue, terminal-consume.**
   HYDRATE FAILURE TABLE: transient pre-hydrate/adoption failure
   (validation, lease acquisition, portal acquisition) REQUeUES exactly
   one marker-hydrate(B) (claim undone — B is never stuck unhydrated);
@@ -732,9 +767,15 @@ loses the incoming session, or mutates the maximize overlay:
   169/252-253, which calls `api.fromJSON` a second time, is REWRITTEN to
   a single selected route; env-layout + maximize-blob coexistence gets a
   call-order test).** **MAXIMIZE ENVELOPE FRESHNESS: the v4 maximize
-  envelope PERSISTS an immutable base-layout digest (SHA-256 of the
-  canonical env layout bytes the overlay was applied over) + the env
-  layout generation; route matrix: (a) schema-valid AND base digest
+  envelope PERSISTS an immutable base-layout digest + the env
+  layout generation; **DIGEST BYTE CONTRACT: the input is the EXACT
+  PRE-OVERLAY RAW v4 ENV-LAYOUT sessionStorage string, captured at route
+  start before any overlay mutation, hashed as UTF-8 bytes; on route
+  selection it is compared against the EXACT CURRENTLY STORED string +
+  generation; NO structural-equivalence tolerance (a benign
+  reserialization that changed bytes is a digest mismatch = stale —
+  freshness is byte-exact by design); stable-key/number rules apply only
+  to migration-generated bytes; golden-vector + reserialization test.** route matrix: (a) schema-valid AND base digest
   matches the CURRENT env layout ⇒ maximize-only; (b) malformed envelope
   / no native call needed ⇒ discard + fall through to regular;
   (c) REGULAR LAYOUT CHANGED since maximize (digest mismatch) ⇒ REGULAR
@@ -755,7 +796,17 @@ loses the incoming session, or mutates the maximize overlay:
   TERMINAL/quarantine/rebuild path FIRST — only after VERIFIED native
   restoration may the regular route be selected (never a blind second
   apply; maximize-specific throw-before-call, throw-after-mutation, and
-  recovery tests with exact fromJSON counts).** persistent structural mismatch, a fromJSON throw after partial
+  recovery tests with exact fromJSON counts).** **FALLBACK CASCADE
+  TABLE keyed by (max route attempted, marker, snapshot equality,
+  regular-route mutation state): (a) maximize pre-call failure → regular
+  pre-call failure ⇒ regular's typed failure returned (no maximize error
+  leaks); (b) maximize pre-call failure → regular INVOCATION/partial
+  mutation ⇒ REGULAR quarantine/rebuild path (one terminal owner — the
+  maximize pre-call error is NEVER returned after regular mutation);
+  (c) maximize post-mutation failure ⇒ maximize terminal path (regular
+  never selected); (d) the maximize envelope is discarded only AFTER a
+  verified regular success (retained across a regular failure);
+  exact-call-count + storage-envelope tests.** persistent structural mismatch, a fromJSON throw after partial
   native mutation, stale registry, or portal/lease failure FAILS CLOSED —
   lease invalidated, rebuild from the IMMUTABLE PRE-CALL native/layout
   snapshot + registry captured before the first fromJSON (never a
@@ -1021,7 +1072,17 @@ Float/dock/restore are **transactions** with an operation journal:
      after:  { floatingDigest, layoutDigest },
      raw: { beforeFloating, beforeLayout, afterFloating, afterLayout } }
    ```
-   **`aborted` semantics (exact):** a structurally valid `aborted` journal
+   **Attempt state is DURABLE in the journal: `attemptState:
+  "not-started" | "started" | "returned"` is WRITTEN BEFORE native
+  invocation (verified write, same crash semantics as the pair) and
+  updated to `returned` only after the native call completes and the
+  pair read-back verifies; the both-equal NO-OP row (matrix 15) requires
+  `attemptState == "not-started"`; a both-equal journal with
+  `started`/`returned` runs the native snapshot rebuild path (matrix
+  16/17); UNKNOWN/missing attempt state after reload FAILS CLOSED
+  (rebuild/quarantine — never clears as no-op); tests:
+  crash-after-marker-before-call, during-call, equal-after-call.**
+  **`aborted` semantics (exact):** a structurally valid `aborted` journal
    is the SAFE-BEFORE-PAIR form written by the hash-pending unload path —
    its `before` digests are the cached pre-mutation pair, its `after`
    digests are the SAME cached pair (nothing was applied), and recovery
@@ -1563,7 +1624,12 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   `onCapabilityChange` COMPARE-AND-CLEARS the token and is a generation
   no-op after terminal — a fresh capability can NEVER be delivered after
   revocation; tests: callback-after-terminal, callback-vs-timeout at the
-  exact boundary**;
+  exact boundary**; **DUPLICATE DELIVERY IS IDEMPOTENT: the delivered
+  token is retained as a TOMBSTONE until handshake teardown — a second
+  delivery of the SAME token is an idempotent no-op returning the same
+  success (StrictMode/replayed subscriptions); a different/old token is
+  a generation no-op; NEITHER starts a second timer or revocation;
+  duplicate-callback-before/after-plugin-retry tests**;
   the plugin re-reads with the fresh generation and retries;
   a stale attempt is idempotent (repeated stale use returns the same
   typed rejection without further state change); teardown/unmount clears
@@ -1724,11 +1790,16 @@ in the group's saved tab order.
   readiness barrier; DURING THE NAMED HANDOFF
   WINDOW (dock/float transfer) floating ownership WINS (the skip applies)
   and the grid insertion is suppressed by the second generation check;
-  A and B ownership during replacement is BOTH reserved in the
-  transaction mapping (the query reflects the mapping, never an
-  intermediate empty set); query-before-removal, during-handoff, and
-  after-commit schedules are tested; detached-lease, grid-only, and
-  grid+floating cases are each tested;
+  **PHASE TABLE for A→B winner replacement: `floatingIds` (floating
+  entries only), `reservedIds` (being-replaced — both A and B reserved
+  in the transaction mapping during the handoff, SEPARATE from the
+  floating-only query), `gridOwnedIds`; A is SKIPPED while floating;
+  B is NOT skipped once its target is the grid (B is not in the
+  floating-only query — the intended grid insertion proceeds); the
+  reservation set never leaks into the floating-only snapshot; the
+  second generation check prevents a stale insertion during the actual
+  handoff; query-before-removal, during-handoff, post-commit, and
+  B-ensure tests assert EXACT ID SETS;**
   the same normalized query serves materialization fail-closed** —
   a session that exists ONLY in a floating group, or a non-winner floating
   session, can never be re-added to the grid by the auto-session hook;

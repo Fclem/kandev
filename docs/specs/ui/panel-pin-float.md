@@ -83,6 +83,13 @@ EnvFloatingState                     # persisted as JSON, versioned
   version      1
   nextOrder    number            # monotonic stack-order counter for this env
   groups       Record<groupId, FloatingGroupState>
+  rootColumns  Record<columnId, { pinned: boolean; width: number;
+                                  minWidth: number | null; maxWidth: number | null }>
+               # authoritative root-column metadata sidecar, INSIDE the blob:
+               # rebuilt from live root columns after every layout apply and
+               # reload, invalidated on preset/reset/env switch, covered by
+               # the same journal transaction, budget, and cleanup as the
+               # groups — there is no third storage key.
 
 FloatingGroupState
   groupId          string        # original grid group id (informational)
@@ -96,6 +103,12 @@ FloatingGroupState
   treePath         null | { kind: "tree", path: number[] } | { kind: "flat", index: number }
                   # tagged placement: tree path vs flat groups index are
                   # distinct coordinate systems and never conflated
+                  # Shape-change mapping (exact): flat -> tree destination =
+                  # DFS leaf order index, clamped to the last leaf; tree ->
+                  # flat destination = leaf order index, clamped to the last
+                  # flat group; out-of-range paths clamp to the last valid
+                  # leaf/group. The expected leaf for flat->tree and tree->
+                  # flat (incl. out-of-range) is asserted in round-trip tests.
   edge             "left" | "right" | "top" | "bottom"   # collapsed-bar edge
   orientation      "vertical" | "horizontal"             # derived from columnKind + position
   size             number       # px: window width for vertical, height for horizontal
@@ -210,14 +223,20 @@ Float/dock/restore are **transactions** with an operation journal:
    coordinator:** `recoverFloatingJournalOnce` and `restoreFloatingAfterLayout`
    acquire the same phase/token; a restore completion arriving during
    mutation/portals-adopted/rollback/stale-cleanup is **skipped with a
-   retained pending-floating-restore marker**. **The marker has a guaranteed
-   drain:** the coordinator's settle path runs a callback/queue that — after
-   the transaction reaches settled — rechecks `envId`, transaction generation,
-   the api instance, and the marker before invoking restore against the fresh
-   layout; the marker is cleared only after a successful settle restore (or
-   invalidation on env switch/unmount/generation change). Every restore entry
-   is tested against each busy phase, including the drain after each. A
-   single store/coordinator selector
+   retained pending-floating-restore marker**. **The marker has a guaranteed,
+   ordered drain:** the drain runs **synchronously inside `settle`, before
+   the busy flag clears** — there is no microtask/frame window in which a new
+   `begin` can interleave — and rechecks `envId`, transaction generation, the
+   api instance, and the marker before invoking restore against the fresh
+   layout. If the drain cannot run (marker invalidated by env switch/unmount/
+   generation change), it is cleared without restore; if a new transaction
+   began, its `begin` consumes any retained marker first (marker survives
+   into the new transaction's settle). The marker is cleared only after a
+   successful settle restore or invalidation. A deterministic schedule test
+   covers: skipped restore → settle schedules drain → begin a new
+   transaction → settle → restore runs exactly once against the fresh
+   API/layout. Every restore entry is tested against each busy phase,
+   including the drain after each. A single store/coordinator selector
    `isFloatingTransactionBusy(envId)` is consumed by **all three pin
    surfaces** — the grid group header, the floating window header, and the
    collapsed edge bar — which render the pin disabled during the busy window,
@@ -276,7 +295,18 @@ Float/dock/restore are **transactions** with an operation journal:
    `setEnvLayout`/`persistEnvLayoutNow` swallow failures — status-returning
    APIs are part of the contract). **`recoverFloatingJournalOnce(api,
    envId)` is the single pre-restore gate**: it reads the persisted journal
-   `{envId, transactionId, phase, digests}`, is idempotent via an in-memory
+   `{envId, transactionId, phase, digests}` and **validates it before
+   trusting it** — `isEnvFloatingJournal(journal, envId)` checks version,
+   env match, transaction id shape, phase enum, tagged-digest shape, raw
+   snapshot bounds (per-env cap), and exact raw JSON-shape, then
+   **recomputes SHA-256 from each raw snapshot and requires it to equal the
+   journal's tagged digest** before any target is selected. A journal that
+   fails validation or digest recomputation is treated as **unreadable**
+   (journal-free divergence rules, using the caller's explicit `envId`),
+   quarantined (renamed to a `.corrupt` suffix so it is never re-recovered on
+   every restore), and removed only by a verified operation; malformed-JSON,
+   wrong-env, bad-digest, invalid-raw, oversized-raw, and failed-removal
+   cases are tested. Recovery is idempotent via an in-memory
    recovery cache keyed by `(envId, transactionId, api instance)` — never one
    global generation, so env B's journal is never skipped by env A's recovery
    and a new API instance re-checks a still-present journal — and runs before
@@ -284,16 +314,23 @@ Float/dock/restore are **transactions** with an operation journal:
    restore, preset/custom apply, `toggleRightPanels`, reset/default build).
    Deterministic tests cover all matrix rows (including the pre-mutation
    both-before crash, the no-op equality row, read-back mismatch
-   after-mutation, and a phase-write throw after mutation). The two-key
+   after-mutation, a phase-write throw after mutation, and setItem throwing
+   before/after mutation). The two-key
    divergence rules in step 6 are the journal-free fallback only (journal
-   lost/unreadable), not the primary guarantee.
+   lost/unreadable/invalid), not the primary guarantee.
    **Size budgets:** a per-env cap (96 KB default: blob + journal
    snapshots) **and** a **global floating allocation budget** across all
    environments' blobs + journals (default 384 KB). The budget is enforced
    through a **validated owned-key index** maintained by the coordinator
-   (built on load/recovery and updated on budget-changing writes), so the
-   prefix scan never re-iterates unrelated sessionStorage keys on every
-   toggle; a later storage-write failure after a passing preflight (quota
+   (built on load/recovery and updated on budget-changing writes): before
+   every budget decision the index is validated by comparing each indexed
+   owned key against its stored raw length/digest and the key set, and a
+   mismatch (external same-tab mutation — sessionStorage emits no
+   same-document event) triggers one bounded prefix-scan rebuild, so the
+   scan never re-iterates unrelated sessionStorage keys on every toggle.
+   Coordinator writes are the only sanctioned mutation path for owned keys
+   (external mutation handling is documented, not silently tolerated); a
+   later storage-write failure after a passing preflight (quota
    race with unrelated Kandev storage) still fails closed via the journal
    rollback — the rollback/journal policy, not the preflight, is the
    correctness backstop. Near-limit, multi-env-combined, and quota-full
@@ -513,24 +550,31 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   documented as such, not silently claimed.
 - **Layer inventory (mandatory, auditable deliverable):** every
   floating-capable panel's interactive layer owners (Radix
-  Dialog/Popover/DropdownMenu/ContextMenu/HoverCard surfaces inside chat,
-  plan, terminal, files, changes, diff, plugins, and editors) must call
+  Dialog/Popover/DropdownMenu/ContextMenu/HoverCard/Drawer surfaces inside
+  chat, plan, terminal, files, changes, diff, plugins, and editors) must call
   `useFloatingOwnedLayer`. The inventory is tracked at
-  `docs/plans/panel-pin-float/owned-layer-inventory.md` (exists; completed in
-  task-03): each row names the exact component/file, the Radix primitive
-  family, and the registration mechanism. The **host/plugin API is concrete
-  and contract-complete** — `host.ui.registerFloatingOwnedLayer(layerRoot:
-  HTMLElement): () => void` is added **together** to
-  `apps/packages/plugin-sdk/src/index.ts` (the `PluginUIApi` type), the host
-  implementation `apps/web/lib/plugins/host-api.ts`, and the host contract
-  docs (`docs/plans/plugins/PLUGIN-API.md` + `apps/web/lib/plugins/types.ts`).
-  **Ownership validation:** the host issues an ownership capability at task-
-  panel render (the plugin's registered task-panel portal), and registration
-  validates `layerRoot` against that portal — a plugin ID closure alone is
-  never trusted; unregister is idempotent on close, unmount, and plugin
-  unregistration, with cleanup wired into `unregisterPlugin`. An unregistered
-  layer is a collapse bug by contract; one real test per primitive family,
-  including a plugin-panel layer.
+  `docs/plans/panel-pin-float/owned-layer-inventory.md` (exists; every row
+  must reach exact file/line or an explicit layer-free proof before task-03
+  is accepted — `to-wire`/`verify` are audit-baseline states, not completion):
+  each row names the exact component/file + primitive range, the Radix
+  primitive family, and the registration mechanism. The **host/plugin API is
+  concrete and transport-complete** — `PluginTaskPanelProps` gains a
+  render-bound opaque `floatingOwnedLayerCapability` (injected at
+  `PluginTaskPanel` render, bound to the exact portal instance, revoked in
+  `PluginTaskPanel` cleanup and `unregisterPlugin`), and
+  `host.ui.registerFloatingOwnedLayer(capability, layerRoot): () => void` is
+  added **together** to `apps/packages/plugin-sdk/src/index.ts` (the
+  `PluginUIApi` type, as a callable outside the mapped component type), the
+  host implementation `apps/web/lib/plugins/host-api.ts`, and the host
+  contract docs (`docs/plans/plugins/PLUGIN-API.md` + `apps/web/lib/plugins/types.ts`).
+  The host stores a WeakMap/token binding from capability to portal instance;
+  a plugin rendering two task panels cannot register a layer from one panel
+  against the other, and a hoarded plugin-scoped function cannot be reused
+  across renders or after unmount. Unregister is idempotent on close,
+  unmount, and plugin unregistration, with cleanup wired into
+  `unregisterPlugin`. An unregistered layer is a collapse bug by contract;
+  one real test per primitive family, including a plugin-panel layer
+  (hoarding, cross-panel use, unmount revocation, unregister cleanup).
 - True outside interaction still collapses: clicking the grid, the app
   sidebar, or the page chrome while no owned layer is open collapses the
   window on pointerdown; with layers open, the first click closes the layers
@@ -722,12 +766,18 @@ replacement orderings.
   remaining panels are removed and the right column is dropped entirely when
   no pinned-right panels remain (an empty group/column serializes to an empty
   branch that dockview may reject and that corrupts later classification).
-  **Filtering is tree-aware:** the exclusion updates BOTH the column's flat
-  `groups` AND its nested `tree` through one tree+flat filtering helper (the
-  current `removeRightPanelTabs` filters only flat groups while the serializer
-  prefers `tree` — a nested right column would serialize the stale tree and
-  reintroduce duplicates or an illegal empty branch); nested right columns,
-  empty leaves, and ordinary/custom floating ids are tested.
+  **Filtering is tree-aware and identity-preserving:** the exclusion updates
+  BOTH the column's flat `groups` AND its nested `tree` through one traversal
+  keyed by stable group id (or object identity where available) that computes
+  each filtered group **exactly once** and reuses that exact result in both
+  the tree leaf and the flat array (the live capture shares the same
+  `LayoutGroup` object between tree leaf and flat `groups`, so independent
+  transforms would normalize a group twice or produce divergent copies);
+  empty leaves/branches are removed consistently, and a post-filter assertion
+  checks the tree leaf group-id set equals the flat group-id set. Tests cover
+  shared-object-identity groups AND structurally-equal-but-not-identical
+  groups, nested right columns, empty leaves, and ordinary/custom floating
+  ids.
   **One authoritative meaning for `rightPanelsVisible`:** the bit is exactly
   **live canonical pinned-right-column presence**, defined by the single
   concrete predicate `hasLivePinnedRightColumn(api, columnMetadata)` whose
@@ -915,6 +965,31 @@ replacement orderings.
 - **GIVEN** a storage write silently truncates a value, **WHEN**
   `writeVerified` reads it back, **THEN** the mismatch is a failed write that
   enters journal rollback (mismatch-after-mutation is a matrix row).
+- **GIVEN** a syntactically valid journal whose raw snapshot digest does not
+  recompute, **WHEN** recovery runs, **THEN** the journal is treated as
+  unreadable and quarantined (`.corrupt` suffix) — never trusted, never
+  re-recovered on every restore; journal-free divergence rules apply with the
+  caller's `envId`.
+- **GIVEN** a plugin hoards a registration function across renders, **WHEN**
+  it registers a layer root, **THEN** the host requires the render-bound
+  capability and rejects the hoarded call (capability is revoked at unmount
+  and plugin unregistration).
+- **GIVEN** a restore was skipped and its settle scheduled the drain, **WHEN**
+  a new transaction begins before the drain, **THEN** `begin` consumes the
+  retained marker and the restore runs exactly once at the new settle against
+  the fresh API/layout.
+- **GIVEN** a saved flat placement is docked into a column with a tree,
+  **WHEN** the materializer applies the shape-change mapping, **THEN** the
+  flat index maps to the DFS leaf-order index (clamped) and the expected leaf
+  is asserted.
+- **GIVEN** the user switches presets while a floating group's column had
+  pinned metadata, **WHEN** the sidecar rebuilds after the layout apply,
+  **THEN** the stored root-column metadata is refreshed (stale pinned state
+  never drives `rightPanelsVisible`).
+- **GIVEN** a right column's tree leaves and flat groups share object
+  identity, **WHEN** the tree+flat filtering helper excludes floating ids,
+  **THEN** each group is filtered exactly once and reused in both
+  representations, and the leaf/group id sets are asserted equal.
 - **GIVEN** a restore was skipped because a transaction was busy, **WHEN**
   the transaction settles, **THEN** the settle drain rechecks
   envId/generation/api/marker and invokes restore against the fresh layout,

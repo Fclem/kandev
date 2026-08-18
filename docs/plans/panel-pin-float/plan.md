@@ -8,17 +8,19 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. Revision 11 incorporates the
-round-10 adversarial review (this package has been adversarially reviewed every
-round): a phase-aware recovery decision matrix (selected target verified, not
-always after), `writeVerified` read-back failure semantics, a guaranteed
-settle drain for skipped restores, an arm-per-expected-removal detach
-registry, tagged tree/flat placement, a root-column metadata sidecar for the
-pinned-right predicate (never width-as-pinned), tree-aware right-panel
-filtering, task-deletion generation invalidation, a tagged absent/present
-digest union, budget-index rebuild rules, the named `restoreFloatingMaximize`
-coordinator, and an auditable owned-layer inventory with a per-panel
-capability channel for the host API.
+the existing env layout / maximize persistence. Revision 12 incorporates the
+round-11 adversarial review (this package has been adversarially reviewed every
+round): journal integrity validation (`isEnvFloatingJournal` + digest
+recomputation + corrupt-journal quarantine), a transport-complete per-panel
+plugin capability (render-bound token in `PluginTaskPanelProps` + two-arg
+method + WeakMap binding + revocation), root-column metadata embedded inside
+the blob (no third key; rebuilt on layout apply/reload, invalidated on
+preset/reset/env switch), a synchronous ordered settle drain (before the busy
+flag clears; `begin` consumes retained markers), exact treePath shape-change
+mapping (DFS leaf-order clamp), identity-preserving tree+flat filtering with
+group-id-set assertions, budget-index validation before every decision, and
+the inventory completed with the discovered Drawer/PullDropdown owners and a
+blocking audit rule.
 
 ## Architecture
 
@@ -92,28 +94,40 @@ per-env sessionStorage pattern.
    raw storage bytes with a **tagged absent/present union** (absence is never
    conflated with a stored marker value); every write is **`writeVerified`**
    (set → read back exact bytes → compare; any mismatch is a failed write
-   entering rollback). **Recovery is a phase-aware decision matrix**:
+   **Recovery is a phase-aware decision matrix**:
    both-before → verify the before pair and clear; partial → apply/verify the
    after pair; both-after/equal → settled — the journal clears only after the
-   **selected target** is verified, never "always after". Recovery cache
+   **selected target** is verified, never "always after". **Journal
+   integrity:** `isEnvFloatingJournal(journal, envId)` validates version/env/
+   phase/transaction/digest/raw shape and **recomputes SHA-256 from each raw
+   snapshot** before any target is selected; an invalid or mismatched journal
+   is quarantined (`.corrupt` suffix) and treated as unreadable (journal-free
+   fallback with the caller's envId). Recovery cache
    keyed by `(envId, transactionId, api instance)`; `recoverFloatingJournalOnce`
-   runs before every restore entry. **Size budgets:** per-env cap (96 KB) +
-   **global allocation budget** (384 KB) enforced via a validated owned-key
-   index (built on load/recovery; rebuilt when the index cannot be validated
-   or an owned key changes externally — the prefix scan is the rebuild path
-   only, not per-toggle); quota races after preflight fail closed via journal
-   rollback (the backstop). Recovery runs the phase model `mutating →
+   runs before every restore entry. **Settle drain is synchronous and
+   ordered:** it runs inside `settle` before the busy flag clears (no
+   interleaving `begin` window); a new `begin` consumes any retained marker
+   first; the marker clears only after a successful settle restore or
+   invalidation. **Root-column metadata lives INSIDE the blob**
+   (`EnvFloatingState.rootColumns`), rebuilt after every layout apply and
+   reload, invalidated on preset/reset/env switch, covered by the journal,
+   budget, and cleanup — no third storage key. **Size budgets:** per-env cap
+   (96 KB) + **global allocation budget** (384 KB) enforced via a validated
+   owned-key index whose entries are checked against stored raw
+   length/digest + key set before every decision (one bounded prefix-scan
+   rebuild on mismatch; sessionStorage has no same-document event); quota
+   races after preflight fail closed via journal rollback (the backstop).
+   Recovery runs the phase model `mutating →
    restoring → portals-adopted → persist-recovered → settled`; only
    portals-adopted persists the journaled layout (status-returning APIs);
-   token cleanup is generation-guarded at settled. **Skipped restores have a
-   guaranteed settle drain** (recheck envId/generation/api/marker; clear only
-   after a successful settle restore or invalidation). Journal-free fallback:
+   token cleanup is generation-guarded at settled. Journal-free fallback:
    per-panel salvage + `allocateUniqueGroupId` + **tagged tree/flat
-   placement** (distinct coordinate systems never conflated). **Task deletion
-   invalidates the env generation before cleanup** so a late settle can never
-   rewrite deleted keys. One transaction-aware unload handler; **single
-   storage policy: fail closed** — rollback to pinned; no ephemeral floating
-   mode.
+   placement with an exact shape-change mapping** (flat→tree = DFS
+   leaf-order index clamp; tree→flat = leaf-order index clamp). **Task
+   deletion invalidates the env generation before cleanup** so a late settle
+   can never rewrite deleted keys. One transaction-aware unload handler;
+   **single storage policy: fail closed** — rollback to pinned; no ephemeral
+   floating mode.
 5. **Owned-region focus with refcounted, same-frame-leased pending collapse.**
    One module-level coordinator (pattern: `hooks/use-panel-search.ts`) with
    owned regions = floating window subtree + any Radix layer opened from
@@ -304,6 +318,22 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 
 ## Risks
 
+- **Journal integrity:** `isEnvFloatingJournal` + digest recomputation are
+  mandatory before any target selection; a corrupt journal must quarantine,
+  not loop.
+- **Capability transport:** the render-bound capability must reach the plugin
+  (props + two-arg method + WeakMap), or ownership validation is impossible.
+- **Settle-drain ordering:** synchronous inside settle before busy clears;
+  a new begin consumes the marker — no interleaving window.
+- **Sidecar-in-blob:** rootColumns inside `EnvFloatingState`, rebuilt on
+  every layout apply/reload, invalidated on preset/reset/env switch — never a
+  third key.
+- **TreePath shape-change mapping:** exact DFS leaf-order clamp rules with
+  asserted expected leaves.
+- **Identity-preserving filtering:** one traversal, group-id-set equality
+  asserted after filtering.
+- **Budget-index validation:** entries checked against stored raw
+  length/digest before every decision; one bounded rebuild on mismatch.
 - **Digest-based recovery:** schema validity can never decide partial-write
   state; per-key digests + the phase marker + all four partial-write
   orderings are the only correct basis.

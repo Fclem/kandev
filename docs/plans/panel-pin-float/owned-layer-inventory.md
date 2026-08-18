@@ -17,6 +17,8 @@ applied during task-03; `verify` = candidate surface, confirm during task-03.
 | Panel (component) | Primitive family | Exact owner (component/file) | Status |
 |---|---|---|---|
 | changes / diff | Dialog, HoverCard | `changes-panel-header.tsx` (Dialog ~139-170; HoverCard ~306-311) | to-wire |
+| changes / diff | Drawer | `changes-panel-header.tsx` (touch Drawer ~293-302) | to-wire |
+| changes / diff | DropdownMenu | `changes-panel-header.tsx` (PullDropdown ~411-425) | to-wire |
 | changes / diff | ContextMenu | `changes-tab.tsx` (ContextMenu ~118-136) | to-wire |
 | changes / diff | DropdownMenu | `changes-top-bar.tsx` (DropdownMenu ~59-77) | to-wire |
 | chat / session tabs (`chat`) | DropdownMenu, Dialog, Popover, ContextMenu | `components/task/chat/` — audit each file during task-03: message actions, session menu, queue controls, feedback popover | to-wire |
@@ -29,10 +31,13 @@ applied during task-03; `verify` = candidate surface, confirm during task-03.
 | vscode / dev-server | none | no owned layers expected | verify |
 | plugin panels (`plugin-panel`) | any (plugin-owned) | via `host.ui.registerFloatingOwnedLayer` (per-panel capability) | to-wire |
 
-**Audit rule (task-03):** every Radix primitive that opens a layer inside a
-floating-capable panel must be a row here with its exact file (and line when
-the primitive is unambiguous). A layer found during the audit that is not in
-this table is a collapse bug until registered.
+**Audit rule (task-03, blocking):** every Radix primitive that opens a layer
+inside a floating-capable panel must be a row here with its exact file and
+line range (or an explicit layer-free proof for the panel). `to-wire` and
+`verify` are **audit-baseline states, not completion**: task-03 is accepted
+only when every row is `audited` (source-confirmed registration wired) or the
+panel is proven layer-free. A layer found during the audit that is not in this
+table is a collapse bug until registered.
 
 ## Mobile
 

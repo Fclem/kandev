@@ -93,7 +93,9 @@ FloatingGroupState
   columnWidth      number | null # root column width (px) at float time
   columnMinWidth   number | null # root column min width, if any
   columnMaxWidth   number | null # root column max width, if any
-  treePath         number[] | null   # path into the column's tree (or groups index)
+  treePath         null | { kind: "tree", path: number[] } | { kind: "flat", index: number }
+                  # tagged placement: tree path vs flat groups index are
+                  # distinct coordinate systems and never conflated
   edge             "left" | "right" | "top" | "bottom"   # collapsed-bar edge
   orientation      "vertical" | "horizontal"             # derived from columnKind + position
   size             number       # px: window width for vertical, height for horizontal
@@ -204,12 +206,17 @@ Float/dock/restore are **transactions** with an operation journal:
    apply, maximize/exit, and direct programmatic panel actions return a
    a non-destructive no-op with a debug reason while busy (a programmatic add
    mid-transaction would mutate the live grid after the journal snapshot and
-   make rollback stale). **Restore/recovery paths enter the same
+   **Restore/recovery paths enter the same
    coordinator:** `recoverFloatingJournalOnce` and `restoreFloatingAfterLayout`
    acquire the same phase/token; a restore completion arriving during
    mutation/portals-adopted/rollback/stale-cleanup is **skipped with a
-   retained pending-floating-restore marker** (never executed from a stale
-   snapshot), and every restore entry is tested against each busy phase. A
+   retained pending-floating-restore marker**. **The marker has a guaranteed
+   drain:** the coordinator's settle path runs a callback/queue that — after
+   the transaction reaches settled — rechecks `envId`, transaction generation,
+   the api instance, and the marker before invoking restore against the fresh
+   layout; the marker is cleared only after a successful settle restore (or
+   invalidation on env switch/unmount/generation change). Every restore entry
+   is tested against each busy phase, including the drain after each. A
    single store/coordinator selector
    `isFloatingTransactionBusy(envId)` is consumed by **all three pin
    surfaces** — the grid group header, the floating window header, and the
@@ -234,28 +241,38 @@ Float/dock/restore are **transactions** with an operation journal:
      raw: { beforeFloating, beforeLayout, afterFloating, afterLayout } }
    ```
    **Digest protocol (exact):** each target storage value is serialized
-   **once**; the digest is a versioned hash (SHA-256, `version: 1`) of the
-   **exact bytes written to sessionStorage** for that key (the raw JSON
-   string, byte-for-byte — never a re-stringified parse), with an explicit
-   **absent sentinel** (digest of the marker string `"__absent__"`) for keys
-   that do not exist before/after; `raw` retains the exact strings so
-   recovery never re-serializes. **Journal writes are status-returning and
-   read-back verified** (the journal itself is written, re-read, and compared
-   before any mutation begins — a failed journal write aborts the
-   transaction). **Write/verify ordering:** journal → blob → layout → phase
-   transition → read-back verify of both keys → journal clear; every write
-   returns status and is read-back verified; a throw after any storage
+   **once**; the digest is a **tagged union** — `{kind: "absent"}` or
+   `{kind: "present", sha256}` — over the **exact bytes written to
+   sessionStorage** for that key (the raw JSON string, byte-for-byte — never
+   a re-stringified parse), so absence is never conflated with a stored value
+   whose bytes equal a marker string; `raw` retains the exact strings so
+   recovery never re-serializes. **Writes are verified, not just
+   status-returning:** every write goes through `writeVerified(key, raw)` —
+   set, read back the exact raw bytes, compare against what was written; any
+   mismatch (silent truncation/alteration included) is a **failed write** that
+   enters the journal rollback path (mismatch-after-mutation is a row in the
+   recovery matrix). The coordinator remains busy across the (bounded) async
+   hashing/verification. **Journal writes are verified the same way** (a
+   failed journal write aborts the transaction before any mutation).
+   **Write/verify ordering:** journal → blob → layout → phase transition →
+   read-back verify of both keys → journal clear; a throw after any storage
    mutation is a recoverable state via the phase marker (a
    `phase-write-throw-after-mutation` recovery case is specified and tested).
-   **Recovery is digest-based, never schema-validity-based:** for each key,
-   the current stored value's digest is compared against the before/after
-   digests; the four partial-write orderings are handled explicitly —
-   blob-after/layout-before applies the after pair; layout-after/blob-before
-   applies the after pair; both-before applies the before pair; **both-after
-   and both-equal (no-op) are settled states** (equality never requires a
-   phase inference or an unnecessary write). The journal is cleared only
-   after the chosen pair is persisted **and** verified against the after
-   digests. Both write paths return/throw status (the current
+   **Recovery is a phase-aware decision matrix, never inference:** for each
+   key, the current stored value's digest is compared against the before/
+   after digests, and the **selected target pair is the one that is verified
+   before the journal is cleared**:
+   | observed | target | verify + clear against |
+   |---|---|---|
+   | both-before (pre-mutation crash) | before pair | before digests |
+   | blob-after / layout-before | after pair | after digests |
+   | layout-after / blob-before | after pair | after digests |
+   | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
+   The `phase` marker (`mutating` vs `committed`) refines the both-after row
+   (a `committed` marker with both-after means the mutation finished; a
+   `mutating` marker with both-after is still settled by equality), never
+   replaces digest evidence. The journal is cleared only after the selected
+   target is verified. Both write paths return/throw status (the current
    `setEnvLayout`/`persistEnvLayoutNow` swallow failures — status-returning
    APIs are part of the contract). **`recoverFloatingJournalOnce(api,
    envId)` is the single pre-restore gate**: it reads the persisted journal
@@ -265,11 +282,10 @@ Float/dock/restore are **transactions** with an operation journal:
    and a new API instance re-checks a still-present journal — and runs before
    every restore entry (initial mount, env-switch fast/slow, maximize
    restore, preset/custom apply, `toggleRightPanels`, reset/default build).
-   The recovery matrix covers float, dock, and restore in **both** crash
-   directions, with deterministic tests for all four partial-write orderings
-   plus the no-op equality row, including a write throwing after storage
-   mutation and a phase-write throw after mutation. The two-key divergence
-   rules in step 6 are the journal-free fallback only (journal
+   Deterministic tests cover all matrix rows (including the pre-mutation
+   both-before crash, the no-op equality row, read-back mismatch
+   after-mutation, and a phase-write throw after mutation). The two-key
+   divergence rules in step 6 are the journal-free fallback only (journal
    lost/unreadable), not the primary guarantee.
    **Size budgets:** a per-env cap (96 KB default: blob + journal
    snapshots) **and** a **global floating allocation budget** across all
@@ -382,8 +398,16 @@ rather than a global id set:
 
 - The registry is keyed by **panel id** with a record `{ envId, token }`
   (panel ids are unique within the live grid; the env tag travels with the
-  record so lookups never depend on the mutable current store env). A float
-  transaction registers each panel id it intends to remove.
+  record so lookups never depend on the mutable current store env).
+  **Registrations are armed per expected removal, not for the transaction
+  lifetime:** immediately before each synchronous `removePanel`/`fromJSON`
+  that the transaction performs, the exact panel ids being removed are
+  registered; each registration is consumed once by the matching
+  `onDidRemovePanel` and the set is drained when the operation completes. A
+  panel registered but never removed (operation aborted) is unregistered by
+  the settle cleanup. This keeps a **real user close** of a still-live tab
+  during an async phase or after a throw distinct from an expected detach —
+  the user close is never registered at that moment and runs full cleanup.
 - `setupPortalCleanup`'s `onDidRemovePanel` runs a fixed decision order:
   1. **Registered id with the current token** → consume the registration
      (remove it from the registry) and skip `release`, terminal park/stop,
@@ -416,10 +440,12 @@ rather than a global id set:
 2. Env switch fast path and slow path (`lib/state/dockview-env-switch.ts`),
    including `applyInitialRouteLayout` and the post-`fromJSON` fixups.
 3. Maximize restore — **one selected sequence (defer-until-exit) via one
-   shared coordinator:** both maximize-restore callers —
+   shared coordinator** (`restoreFloatingMaximize` in
+   `lib/state/dockview-floating.ts`, the single symbol both callers invoke):
+   both maximize-restore callers —
    `tryRestoreMaximizeOnly` (initial mount, `dockview-layout-restore.ts`) and
    `restoreMaximizeFromStorage` (env switch, `dockview-store.ts`) — route
-   through the same maximize-restore coordinator. Sequence:
+   through it. Sequence:
    `recoverFloatingJournalOnce` runs first; floating session entries are
    reconciled/mapped (including `floatingSessionWinner` written before the
    auto-session hook in this branch); the two-column overlay is **never
@@ -696,27 +722,33 @@ replacement orderings.
   remaining panels are removed and the right column is dropped entirely when
   no pinned-right panels remain (an empty group/column serializes to an empty
   branch that dockview may reject and that corrupts later classification).
+  **Filtering is tree-aware:** the exclusion updates BOTH the column's flat
+  `groups` AND its nested `tree` through one tree+flat filtering helper (the
+  current `removeRightPanelTabs` filters only flat groups while the serializer
+  prefers `tree` — a nested right column would serialize the stale tree and
+  reintroduce duplicates or an illegal empty branch); nested right columns,
+  empty leaves, and ordinary/custom floating ids are tested.
   **One authoritative meaning for `rightPanelsVisible`:** the bit is exactly
   **live canonical pinned-right-column presence**, defined by the single
-  concrete predicate `hasLivePinnedRightColumn(api)` implemented against the
-  live dockview API: walk the root splitview (`getRootSplitview(api)`) and
-  map each root column to the groups it contains (via the same traversal
-  `fromDockviewApi` uses); a root column is a **pinned-right column** iff it
-  (a) contains a canonical right-group id (`RIGHT_TOP_GROUP` or
-  `RIGHT_BOTTOM_GROUP`), or (b) is inferred pinned by the serializer's
-  existing pinned inference (a column whose panels include `files`/`changes`
-  or carry pinned/width metadata). Unpinned plan/preview/vscode side columns
-  are explicitly **not** pinned-right columns — the predicate returns false
-  for them (matching today's preset assignments), and applying a preset never
-  hides a plan/preview/vscode side column as a right-panel toggle. An
-  ordinary-terminal-only right column (only `terminal-default` or an ordinary
-  terminal, no files/changes) counts via its canonical group id; custom
-  layouts count only when pinned metadata or canonical ids are present.
-  The bit is derived from this predicate at all times (restore, float, dock,
-  toggle, preset/default assignment), never persisted, never an independent
-  intent; show with no pinned-right panels and hide without one are no-ops.
-  The toggle, `enforcePinnedTargets`, and `dockview-layout-setup`'s detection
-  all share this one predicate. Tested with one and both right groups floated
+  concrete predicate `hasLivePinnedRightColumn(api, columnMetadata)` whose
+  data source is an **authoritative root-column metadata sidecar** — a
+  per-env record (persisted alongside the floating blob, rebuilt on restore)
+  of root-column `{ columnId, pinned, width, minWidth, maxWidth }` captured by
+  `captureRootColumnGeometry` (the serializer's inferred-pinned state plus the
+  floating transactions' own captures; **plain width is never treated as
+  pinnedness** — width exists for every root column). The predicate returns
+  true iff a root column is marked pinned in the sidecar AND contains a
+  canonical right-group id (`RIGHT_TOP_GROUP`/`RIGHT_BOTTOM_GROUP`) or
+  `files`/`changes`-inferred pinned content; unpinned plan/preview/vscode
+  side columns return false (matching today's preset assignments), and a
+  custom pinned ordinary-terminal-only right column is recognized only when
+  the sidecar records its pinned state (never inferred from width). Applying
+  a preset never hides a plan/preview/vscode side column as a right-panel
+  toggle. The bit is derived from this predicate at all times (restore,
+  float, dock, toggle, preset/default assignment), never persisted as intent;
+  show with no pinned-right panels and hide without one are no-ops. The
+  toggle, `enforcePinnedTargets`, and `dockview-layout-setup`'s detection all
+  share this one predicate. Tested with one and both right groups floated
   (incl. an ordinary terminal id), hide→show while floating,
   float-last-right → hide → show → reload, plan/preview/vscode/compact
   presets (asserting the predicate and bit values), and container resize,
@@ -760,8 +792,13 @@ replacement orderings.
   after the merged grid is committed and persisted. The floating preference is
   cleared — groups do not re-float after reset. `cleanupTaskStorage` removes
   the floating key **and the journal key** (`kandev.dockview.env-floating-journal.<envId>`)
-  alongside the layout/maximize keys; task-deletion cleanup with an incomplete
-  journal is tested.
+  alongside the layout/maximize keys. **Deletion is cancellation-safe:** task
+  deletion/mount teardown first invalidates the env's transaction generation
+  (the coordinator's settle drain and any in-flight phase re-check
+  generation and refuse to write after invalidation), then cleans the keys —
+  a later settle can never rewrite a deleted env's blob or journal after
+  cleanup; task-deletion cleanup with an incomplete journal and with an
+  in-flight transaction is tested.
 
 ## Persistence guarantees
 
@@ -871,6 +908,34 @@ replacement orderings.
 - **GIVEN** a transaction whose journal write itself fails, **WHEN** the
   transaction starts, **THEN** it aborts before any mutation (journal writes
   are status-returning and read-back verified).
+- **GIVEN** a crash immediately after the verified journal write (both target
+  keys at before digests), **WHEN** recovery runs, **THEN** the before pair is
+  verified and the journal cleared — the matrix verifies the selected target,
+  never "always after".
+- **GIVEN** a storage write silently truncates a value, **WHEN**
+  `writeVerified` reads it back, **THEN** the mismatch is a failed write that
+  enters journal rollback (mismatch-after-mutation is a matrix row).
+- **GIVEN** a restore was skipped because a transaction was busy, **WHEN**
+  the transaction settles, **THEN** the settle drain rechecks
+  envId/generation/api/marker and invokes restore against the fresh layout,
+  clearing the marker only on success.
+- **GIVEN** the user closes a still-live tab during an async transaction
+  phase, **WHEN** the close fires, **THEN** it runs full cleanup (the detach
+  registry is armed per expected removal, so the close was never registered
+  as an expected detach).
+- **GIVEN** a saved placement uses a flat groups index but the destination
+  column has a tree, **WHEN** the materializer docks, **THEN** the tagged
+  placement (`kind: "flat"`) applies the documented shape-change fallback —
+  no group lands in the wrong leaf.
+- **GIVEN** a task is deleted while its env has an in-flight transaction,
+  **WHEN** the deletion invalidates the env generation and cleans the keys,
+  **THEN** a late settle refuses to write (no post-cleanup resurrection).
+- **GIVEN** a plugin renders two task panels, **WHEN** it registers an owned
+  layer root from one panel, **THEN** the host validates the per-panel
+  capability and rejects registration for the other panel.
+- **GIVEN** the right column's nested tree contains floating ids, **WHEN**
+  the show path excludes them, **THEN** the tree+flat filtering helper updates
+  both representations — no stale tree reintroduces the ids.
 - **GIVEN** a legitimate no-op transaction (before bytes equal after bytes),
   **WHEN** digest recovery evaluates it, **THEN** equality is treated as
   settled — no phase inference, no unnecessary write.

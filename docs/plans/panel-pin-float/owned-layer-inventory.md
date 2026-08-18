@@ -14,19 +14,25 @@ applied during task-03; `verify` = candidate surface, confirm during task-03.
 
 ## Desktop dockview panels
 
-| Panel (component) | Primitive family | Likely layer owners (component/file) | Status |
+| Panel (component) | Primitive family | Exact owner (component/file) | Status |
 |---|---|---|---|
-| chat / session tabs (`chat`) | DropdownMenu, Dialog, Popover, ContextMenu | `components/task/chat/` (message actions, session menu, queue panel controls, feedback popover) | to-wire |
-| plan (`plan`) | Popover, Dialog | `components/task/plan/` (plan panel popovers, tiptap toolbar menus) | to-wire |
+| changes / diff | Dialog, HoverCard | `changes-panel-header.tsx` (Dialog ~139-170; HoverCard ~306-311) | to-wire |
+| changes / diff | ContextMenu | `changes-tab.tsx` (ContextMenu ~118-136) | to-wire |
+| changes / diff | DropdownMenu | `changes-top-bar.tsx` (DropdownMenu ~59-77) | to-wire |
+| chat / session tabs (`chat`) | DropdownMenu, Dialog, Popover, ContextMenu | `components/task/chat/` — audit each file during task-03: message actions, session menu, queue controls, feedback popover | to-wire |
+| plan (`plan`) | Popover, Dialog | `components/task/plan/` — plan panel popovers, tiptap toolbar menus | to-wire |
 | terminal (`terminal`) | ContextMenu, Dialog | xterm right-click menu, terminal tab rename/destroy menu, `TerminalScriptsDropdown` (`dockview-header-actions.tsx`) | to-wire |
 | files (`files`) | ContextMenu, Popover | file-tree context menu, hover actions | to-wire |
-| changes / diff (`changes`, `diff-files`, `all-files`, `diff-viewer`, `file-editor`, `commit-detail`) | Popover, Dialog, ContextMenu | `components/diff/`, review-finding popovers, comment popups, `walkthrough-step-card` | to-wire |
 | browser (`browser`) | Popover, Dialog | browser panel URL bar, inspect annotations popup | verify |
 | pr-detail / mr-detail / review-detail | Popover, Dialog, DropdownMenu | review surfaces, action menus | verify |
 | todos (`todos`) | DropdownMenu | todo list row menus | verify |
-| vscode (`vscode`) | none (iframe host) | no owned layers expected | verify |
-| dev-server (`terminal`) | none | no owned layers expected | verify |
-| plugin panels (`plugin-panel`) | any (plugin-owned) | via `host.ui.registerFloatingOwnedLayer` (host-issued ownership validated against the plugin's task-panel portal) | to-wire |
+| vscode / dev-server | none | no owned layers expected | verify |
+| plugin panels (`plugin-panel`) | any (plugin-owned) | via `host.ui.registerFloatingOwnedLayer` (per-panel capability) | to-wire |
+
+**Audit rule (task-03):** every Radix primitive that opens a layer inside a
+floating-capable panel must be a row here with its exact file (and line when
+the primitive is unambiguous). A layer found during the audit that is not in
+this table is a collapse bug until registered.
 
 ## Mobile
 
@@ -39,10 +45,16 @@ not render on phone viewports; the mobile task surface owns its own layers.
   Radix `onOpenChange(false)` AND React cleanup (unmount, navigation,
   ancestor teardown).
 - Plugin panels: `host.ui.registerFloatingOwnedLayer(layerRoot: HTMLElement)
-  => () => void` — the host validates `layerRoot` against the calling
-  plugin's registered task-panel portal (ownership capability issued by the
-  host, not trusted plugin ID closure); unregister is idempotent on close,
-  unmount, and plugin unregistration (`unregisterPlugin` cleanup).
+  => () => void`. **Per-panel capability channel:** the host issues an opaque
+  ownership capability at `PluginTaskPanel` render time (bound to the exact
+  portal element/instance for that panel render, revoked on unmount and
+  plugin unregistration), and `registerFloatingOwnedLayer` requires and
+  validates that capability — a plugin rendering two task panels cannot
+  register a layer root from one panel against the other, and a plugin ID
+  closure alone is never trusted. `PluginUIApi` gains the method as a
+  callable (outside the mapped component type); unregister is idempotent on
+  close, unmount, and `unregisterPlugin` cleanup. Tested: same-plugin
+  different-panel rejection, unmount revocation, unregister cleanup.
 
 ## Test matrix (task-03)
 

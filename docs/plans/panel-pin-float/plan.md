@@ -8,18 +8,17 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. Revision 10 incorporates the
-round-9 adversarial review (this package has been adversarially reviewed every
-round): an exact digest protocol (raw bytes, versioned hash, absent sentinel,
-read-back verification, no-op equality row), a durable journal write/verify
-ordering, a complete `allocateUniqueGroupId` contract (namespace, reservation,
-cap, reload re-derivation), a concrete `hasLivePinnedRightColumn(api)`
-implementation path, restore/recovery entering the transaction coordinator,
-floating-winner center-intent preservation, one shared maximize-restore
-coordinator for both call paths with a token-guarded pending marker, an
-ownership-validated host API across SDK/types/host/docs, an authoritative
-root-column geometry helper, journal-key cleanup, the maintained
-`owned-layer-inventory.md`, and the named mobile retained-path spec.
+the existing env layout / maximize persistence. Revision 11 incorporates the
+round-10 adversarial review (this package has been adversarially reviewed every
+round): a phase-aware recovery decision matrix (selected target verified, not
+always after), `writeVerified` read-back failure semantics, a guaranteed
+settle drain for skipped restores, an arm-per-expected-removal detach
+registry, tagged tree/flat placement, a root-column metadata sidecar for the
+pinned-right predicate (never width-as-pinned), tree-aware right-panel
+filtering, task-deletion generation invalidation, a tagged absent/present
+digest union, budget-index rebuild rules, the named `restoreFloatingMaximize`
+coordinator, and an auditable owned-layer inventory with a per-panel
+capability channel for the host API.
 
 ## Architecture
 
@@ -84,29 +83,37 @@ per-env sessionStorage pattern.
    operation/generation and phase state via explicit `begin → advance →
    settle`; while busy, every public layout-mutation boundary (float/dock/
    reset/toggle, the add-panel resolver, `buildDefaultLayout`, preset/custom
-   apply, maximize/exit, programmatic actions) **rejects** with a
-   non-destructive no-op and debug reason, and all three pin surfaces (grid
-   header, floating header, collapsed bar) render disabled via
-   `isFloatingTransactionBusy(envId)`. A per-env **operation journal**
-   (`kandev.dockview.env-floating-journal.<envId>`) is written **before**
-   mutation holding `{envId, transactionId, phase, before/after digests +
-   snapshots}`; **`recoverFloatingJournalOnce(api, envId)` is the single
-   idempotent pre-restore gate** using **digest comparison** (the four
-   partial-write orderings handled explicitly; never schema-validity
-   guessing) with a recovery cache keyed by `(envId, transactionId, api
-   instance)` — env-isolated, never one global generation — and runs before
-   every restore entry. **Size budgets:** per-env cap (96 KB) plus a
-   **global floating allocation budget** (384 KB across all envs' blobs +
-   journals, prefix-scan enforced), preflighted non-destructively. Recovery
-   runs the phase model `mutating → restoring → portals-adopted →
-   persist-recovered → settled`; only portals-adopted persists the journaled
-   layout (status-returning APIs — the current `setEnvLayout`/
-   `persistEnvLayoutNow` swallow errors); token cleanup is generation-guarded
-   at settled. Journal-free fallback is idempotent with **per-panel salvage**
-   and **collision-safe group-id allocation** (`allocateUniqueGroupId`).
-   One transaction-aware unload handler replaces the existing listener.
-   **Single storage policy: fail closed** on every blob-write failure —
-   rollback to pinned; no ephemeral floating mode.
+   apply, maximize/exit, programmatic actions) **and restore/recovery paths**
+   reject/skip with a non-destructive result, and all three pin surfaces
+   render disabled via `isFloatingTransactionBusy(envId)`. A per-env
+   **operation journal** (`kandev.dockview.env-floating-journal.<envId>`) is
+   written **before** mutation holding `{envId, transactionId, phase, tagged
+   before/after digests, raw strings}`; digests are SHA-256 over the exact
+   raw storage bytes with a **tagged absent/present union** (absence is never
+   conflated with a stored marker value); every write is **`writeVerified`**
+   (set → read back exact bytes → compare; any mismatch is a failed write
+   entering rollback). **Recovery is a phase-aware decision matrix**:
+   both-before → verify the before pair and clear; partial → apply/verify the
+   after pair; both-after/equal → settled — the journal clears only after the
+   **selected target** is verified, never "always after". Recovery cache
+   keyed by `(envId, transactionId, api instance)`; `recoverFloatingJournalOnce`
+   runs before every restore entry. **Size budgets:** per-env cap (96 KB) +
+   **global allocation budget** (384 KB) enforced via a validated owned-key
+   index (built on load/recovery; rebuilt when the index cannot be validated
+   or an owned key changes externally — the prefix scan is the rebuild path
+   only, not per-toggle); quota races after preflight fail closed via journal
+   rollback (the backstop). Recovery runs the phase model `mutating →
+   restoring → portals-adopted → persist-recovered → settled`; only
+   portals-adopted persists the journaled layout (status-returning APIs);
+   token cleanup is generation-guarded at settled. **Skipped restores have a
+   guaranteed settle drain** (recheck envId/generation/api/marker; clear only
+   after a successful settle restore or invalidation). Journal-free fallback:
+   per-panel salvage + `allocateUniqueGroupId` + **tagged tree/flat
+   placement** (distinct coordinate systems never conflated). **Task deletion
+   invalidates the env generation before cleanup** so a late settle can never
+   rewrite deleted keys. One transaction-aware unload handler; **single
+   storage policy: fail closed** — rollback to pinned; no ephemeral floating
+   mode.
 5. **Owned-region focus with refcounted, same-frame-leased pending collapse.**
    One module-level coordinator (pattern: `hooks/use-panel-search.ts`) with
    owned regions = floating window subtree + any Radix layer opened from

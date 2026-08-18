@@ -8,16 +8,17 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 22 incorporates the
-round-21 adversarial review** (this package has been adversarially reviewed
-every round): an implementable per-panel lease-record active-state authority
-with an atomic `acceptPanelActive` critical section, a single no-salvage-
-render repair policy (suppress all floating UI/mutations while repair is
-active), a committed machine-readable consumer manifest with a validator
-step, validate-only v4 identity semantics with fresh native-ID registry
-installation, snapshot-before-busy async hashing with a named locked hash
-dependency, inclusive monotonic-clock tombstone TTL boundaries, and the
-repair UI assigned to task-04.
+the existing env layout / maximize persistence. **Revision 23 incorporates the
+round-22 adversarial review** (this package has been adversarially reviewed
+every round): an atomic coordinator-owned `transferPanelLease` with an
+explicit detached-capability rule and a GLOBAL live-api lease (one active
+transaction across env switches), a deterministic operation plan computed at
+`begin` (mutation executes the plan or aborts; `aborted` journal form for
+hash-pending unload), a single-`fromJSON` contract satisfied BY CONSTRUCTION
+(final native JSON + registry built before the call), a memory-only
+normalized-live-layout registry, required `LayoutColumn.role` in all
+normalized constructors, a uniform no-salvage-render repair policy (plan
+contradiction removed), and the changes-panel-dialogs inventory row.
 
 ## Architecture
 
@@ -344,7 +345,7 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 - **Active-state authority:** grid-vs-floating generation with atomic handoff;
   stale grid events never win while detached.
 - **Untrusted-journal policy:** ONE fail-closed path (invalid/mismatched/
-  unexpected all quarantine + repair record + read-only salvage); clear via
+  unexpected all quarantine + repair record + full suppression — NO read-only salvage rendering); clear via
   AlertDialog removes quarantine + both keys.
 - **Identity precondition on every restore route** (once per restored state).
 - **UTF-8 canonical encoding** for digests and budgets.

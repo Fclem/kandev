@@ -63,8 +63,12 @@ node scripts/check-owned-layer-inventory.mjs   # executable gate: static AST sca
                                                # output mapping each discovered
                                                # owner to an inventory row
                                                # (file:line -> row); fails on any
-                                               # row still to-wire/verify or on
-                                               # an unlisted primitive; wired
+                                               # row still to-wire/verify, on an
+                                               # unlisted primitive, or on BROAD
+                                               # DIRECTORY-LEVEL rows (every row
+                                               # must be an exact
+                                               # component/file + line range or
+                                               # a layer-free proof); wired
                                                # into CI
 ```
 

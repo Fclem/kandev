@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 22
-prior-round: 21
+revision: 23
+prior-round: 22
 ---
 
 # Floating (unpinned) workbench panels
@@ -224,10 +224,18 @@ call-order fixtures prove no capture/materializer runs before the check. **The l
 cannot carry custom fields, so a store-owned **normalized-live-layout
 registry** keys logical metadata by the NATIVE group/column ids and is
 merged into every capture: `fromDockviewApi`/capture accept that registry
-and fail closed when a native object has no mapping; the registry is rebuilt
-from the v4 envelope after every `fromJSON`, and updated on add/remove,
-dock, preset, reset, and resize — native-ID regeneration can never orphan a
-logical identity. **Layout persistence is
+and fail closed when a native object has no mapping; the registry is
+**MEMORY-ONLY (never serialized)** — it is built from the validated v4
+envelope after every `fromJSON` using only validated native-key hints plus
+canonical semantic signatures, and atomically swapped in before session
+replacement/capture (a v4 validation failure leaves native state untouched
+and blocks materialization); it is rebuilt on add/remove, dock, preset,
+reset, and resize — native-ID regeneration can never orphan a logical
+identity. **`LayoutColumn.role` is REQUIRED** in normalized columns and in
+every built-in/custom-v4 constructor (presets gain explicit role fields);
+membership inference is permitted ONLY inside the documented v3 migration,
+and missing/duplicate v4 roles fail closed before `rightPanelsVisible` is
+derived. **Layout persistence is
 versioned:** the env layout key is bumped to **v4** and stores a **versioned
 envelope** — `{ version: 4, dockview: <native serialized JSON>,
   layout: <normalized LayoutState carrying logicalId/role> }` — because
@@ -237,8 +245,18 @@ traversal-derived ids; **every restore route uses one envelope-aware adapter
 **separate route contracts** — a wrong ordering creates duplicate session ids,
 loses the incoming session, or mutates the maximize overlay:
 - **Regular v4 layout (initial mount, env fast/slow, custom, preset,
-  fallthrough):** unwrap + sanitize the native value → `api.fromJSON` ONCE →
-  session/ephemeral replacement and incoming-session insertion → a **defined
+  fallthrough):** **the single-`fromJSON` contract holds by CONSTRUCTION:**
+  the final native JSON (including the reconciliation results: session/
+  ephemeral replacement, incoming insertion, and normalized placement/role
+  applied into the native tree) is built BEFORE the one `api.fromJSON` call,
+  together with the fresh normalized native-ID registry — the existing
+  `applyLayoutAndSet`/materializer paths are NOT used for reconciliation
+  (they would serialize and call `fromJSON` a second time); the normalized
+  reconciliation operates on the planned native JSON + registry pair, then:
+  unwrap + sanitize → `api.fromJSON` ONCE →
+  session/ephemeral replacement and incoming-session insertion (already
+  folded into the planned JSON; runtime replacement is a no-op guard) → a
+  **defined
   normalized-state reconciliation** with a **staged algorithm**:
   1. **Native→logical binding:** before the diff, map each native
      group/column to a normalized candidate — first by a persisted native key
@@ -283,13 +301,30 @@ loses the incoming session, or mutates the maximize overlay:
   `activePanelId` only when the source is authoritative (a stale grid
   callback after float is rejected; callbacks for OTHER panels/groups are
   scoped to their own lease and never overwrite the floating group's active
-  tab). Same-panel dual mounting (grid slot + floating window) is allowed
+  tab). **Authority transfer is one coordinator-owned synchronous operation:
+  `transferPanelLease(panelId, from, to, generation, apiInstance)` runs
+  atomically BEFORE the corresponding mutation** (float: grid owner revoked
+  immediately before remove/`fromJSON`; dock: floating owner revoked before
+  `fromJSON`, grid adoption after the post-rAF; maximize exit: same ordering)
+  — external active callbacks are rejected during the transfer window, and
+  floating callbacks validate owner+generation via an **explicit detached
+  capability / null-api rule** (a floating tab click has no Dockview api —
+  it authorizes with the lease's floating generation, never `apiInstance`).
+  Same-panel dual mounting (grid slot + floating window) is allowed
   ONLY during the named handoff window (post-rAF adoption at dock) with
   exactly one authoritative owner at every instant; `api: null` is never
   treated as inactive (`use-panel-active.ts` is extended/replaced and added
-  to task-03's files). Tests cover float-before-active-event,
+  to task-03's files). **Global api lease:** there is ONE live Dockview api
+  and ONE global active transaction — env switch, task teardown, reset, and
+  every restore acquire/reject that lease (a switch to env B while env A is
+  in mutation/portal-adoption is rejected with a debug reason); every async
+  phase rechecks `{envId, generation, api, currentLayoutEnvId}` before any
+  mutation or write; deterministic A-busy→B-switch and
+  A-settle-after-B-switch tests cover the race. Tests cover
+  float-before-active-event,
   delayed-old-grid-event-after-float, dock-before-event, maximize reload,
-  different-panel callbacks, and active-tab changes in both surfaces; the floating window adopts those detached
+  different-panel callbacks, floating-click-during-handoff, and active-tab
+  changes in both surfaces; the floating window adopts those detached
   portals in a documented stacking context (explicit z-index above Dockview's
   maximize overlay); on maximize exit the floating owner is marked released
   BEFORE `fromJSON`, the grid slot acquires each portal **exactly once after
@@ -338,14 +373,23 @@ implementation** (pure-JS — `crypto.subtle` is async and unavailable in some
 insecure contexts; Node and browser paths must produce identical bytes, with
 jsdom/Node/insecure-HTTP tests). **The one-time migration hash is the ONLY
 synchronous hash** — ordinary journal hashing for float/dock commits uses
-**async hashing with an explicit snapshot-before-busy ordering: `begin`
-synchronously captures the immutable exact raw before/after strings, assigns
-the generation, and marks busy BEFORE any async hashing starts**; all
-mutations are rejected/held while hashing is pending; digests are cached
-keyed by `(envId, transactionId, pair bytes)`; the unload path uses the
-cache ONLY after phase/generation validation, otherwise it synchronously
-writes the cached before pair plus a retained aborted journal (it never
-starts a new expensive hash). The hash implementation is a **named direct
+**a deterministic operation plan computed synchronously at `begin`, BEFORE
+any mutation**: the plan derives the final after `LayoutState` (float
+removal / dock materialization are deterministic transforms), serializes the
+immutable exact raw before/after strings and the journal schema ONCE, and
+the mutation must EXECUTE that plan or abort (a user close or callback that
+changes the planned result aborts the transaction and re-plans, never
+mutates a stale plan); `begin` assigns the generation and marks busy before
+async hashing starts; all mutations are rejected/held while hashing is
+pending; digests are cached keyed by `(envId, transactionId, pair bytes)`.
+**Hash-pending unload uses an explicit `aborted` journal form:** if the
+after digests are still pending, the synchronous unload path writes the
+cached before pair plus a structurally valid `aborted` journal (never a
+half-formed marker that fails the journal guard's digest recomputation);
+after digests are cached, unload validates phase/generation and writes the
+complete pair normally. Mutation-and-unload-while-hashing-pending,
+unload-before-each-digest-completes, and close-during-mutation tests cover
+the ordering. The hash implementation is a **named direct
 declared dependency** (e.g. `@noble/hashes/sha256`) or an audited vendored
 module — never an undeclared transitive import — locked in `apps/web/
 package.json`, with a static dependency check and a benchmark/threshold

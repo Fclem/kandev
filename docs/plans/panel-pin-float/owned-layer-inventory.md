@@ -20,6 +20,7 @@ applied during task-03; `verify` = candidate surface, confirm during task-03.
 | changes / diff | Drawer | `changes-panel-header.tsx` (touch Drawer ~293-302) | to-wire |
 | changes / diff | DropdownMenu | `changes-panel-header.tsx` (PullDropdown ~411-425) | to-wire |
 | changes / diff | ContextMenu | `changes-tab.tsx` (ContextMenu ~118-136) | to-wire |
+| changes / diff | Dialog, AlertDialog | `changes-panel-dialogs.tsx` (Dialog/AlertDialog imports ~8-24; AlertDialog open ~56) | to-wire |
 | changes / diff | DropdownMenu | `changes-top-bar.tsx` (DropdownMenu ~59-77) | to-wire |
 | chat / session tabs (`chat`) | DropdownMenu, Dialog, Popover, ContextMenu | `components/task/chat/` — audit each file during task-03: message actions, session menu, queue controls, feedback popover | to-wire |
 | plan (`plan`) | Popover, Dialog | `components/task/plan/` — plan panel popovers, tiptap toolbar menus | to-wire |

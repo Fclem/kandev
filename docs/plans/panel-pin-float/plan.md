@@ -8,17 +8,16 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 21 incorporates the
-round-20 adversarial review** (this package has been adversarially reviewed
-every round): a single coordinator-owned tombstone TTL (30 s) with no
-token-carrying-event claim, `normalizeLayoutIdentities` on every restore
-route, explicit grid-vs-floating active-state authority with atomic handoff,
-a unified fail-closed untrusted-journal policy (persisted repair record,
-read-only salvage, AlertDialog clear), canonical UTF-8 byte encoding with
-Unicode golden vectors, separation of the one-time synchronous migration hash
-from async ordinary journal hashing (precomputed digests, direct declared
-dependency, benchmark threshold), a machine-readable consumer manifest with a
-legacy-key validator, and the corrected task-03 dependency graph.
+the existing env layout / maximize persistence. **Revision 22 incorporates the
+round-21 adversarial review** (this package has been adversarially reviewed
+every round): an implementable per-panel lease-record active-state authority
+with an atomic `acceptPanelActive` critical section, a single no-salvage-
+render repair policy (suppress all floating UI/mutations while repair is
+active), a committed machine-readable consumer manifest with a validator
+step, validate-only v4 identity semantics with fresh native-ID registry
+installation, snapshot-before-busy async hashing with a named locked hash
+dependency, inclusive monotonic-clock tombstone TTL boundaries, and the
+repair UI assigned to task-04.
 
 ## Architecture
 

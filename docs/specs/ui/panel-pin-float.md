@@ -2,6 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
+revision: 22
+prior-round: 21
 ---
 
 # Floating (unpinned) workbench panels
@@ -208,16 +210,17 @@ normalized `LayoutGroup`/`LayoutColumn`:** a synchronous
 `normalizeLayoutIdentities(state)` precondition runs on EVERY reset/custom/
 default path (legacy v3 included — reset must never run against an
 un-migrated layout) **and on EVERY restore route** (`readEnvLayoutForRestore`/
-the single apply adapter validates or normalizes identities on initial,
-env-switch fast/slow, maximize-only, custom-envelope/legacy, and fallthrough
-routes alike — normalization runs once per restored state, immediately after
-the native restore and before session replacement/reconciliation, with a
-cost/invalidation rule stating when the normalized registry is rebuilt), and
-fails closed before `mapLayoutGroups`, the
-materializer, or any capture when any group/column lacks or duplicates
-identity; reset-before-migration, duplicate/undefined-identity, and
-call-order fixtures (no capture/materializer runs before the check) cover
-it. **The live Dockview model
+the single apply adapter) with **TWO explicit modes**: v3/legacy input
+ASSIGNS deterministic UUIDs (migration); **v4 input is VALIDATE-ONLY** —
+every group/column must carry a valid unique UUID-format `logicalId`, an
+allowed `role`, and tree/flat identity equality, then a FRESH native-ID
+registry is installed atomically after the single `fromJSON` and before
+session replacement/reconciliation (missing/duplicate identity returns a
+typed fail-closed result that prevents capture/materialization — v4 never
+mints new ids). The operation is O(groups + columns), runs once per restored
+state, and the normalized registry is invalidated/rebuilt on every
+`fromJSON`, add/remove, dock, preset, reset, and resize (events enumerated);
+call-order fixtures prove no capture/materializer runs before the check. **The live Dockview model
 cannot carry custom fields, so a store-owned **normalized-live-layout
 registry** keys logical metadata by the NATIVE group/column ids and is
 merged into every capture: `fromDockviewApi`/capture accept that registry
@@ -271,18 +274,22 @@ loses the incoming session, or mutates the maximize overlay:
   slot cleanup can never release a newly adopted portal), and the
   expected-detach registry token stays valid through all delayed removal
   callbacks; the **detached content contract** defines virtual active state
-  with **explicit active-state authority: the portal lease/store carries a
-  `grid | floating` generation with atomic handoff** — while detached, the
-  floating store's `activePanelId` is authoritative and ALL grid
-  `onDidActiveChange` callbacks for that panel are ignored (stale grid
-  events after float never win); after dock, the grid lease is acquired and
-  authority transfers only after the post-rAF adoption; `api: null` is never
-  treated as inactive (`usePanelActive` is extended or replaced by the
-  floating-store-backed variant), and API-null rendering for
-  terminal/chat/plugin/file-editor panels is tested along with
-  float-before-active-event, delayed-old-grid-event-after-float,
-  dock-before-event, maximize reload, and active-tab changes in both
-  surfaces; the floating window adopts those detached
+  with **implementable active-state authority**: the portal manager/store
+  holds a **per-panel lease record `{ owner: "grid" | "floating",
+  generation, apiInstance }`**, and EVERY Dockview `onDidActiveChange`
+  callback routes through one atomic critical section
+  `acceptPanelActive(panelId, source, generation, apiInstance)` that
+  validates the source generation against the lease and mutates
+  `activePanelId` only when the source is authoritative (a stale grid
+  callback after float is rejected; callbacks for OTHER panels/groups are
+  scoped to their own lease and never overwrite the floating group's active
+  tab). Same-panel dual mounting (grid slot + floating window) is allowed
+  ONLY during the named handoff window (post-rAF adoption at dock) with
+  exactly one authoritative owner at every instant; `api: null` is never
+  treated as inactive (`use-panel-active.ts` is extended/replaced and added
+  to task-03's files). Tests cover float-before-active-event,
+  delayed-old-grid-event-after-float, dock-before-event, maximize reload,
+  different-panel callbacks, and active-tab changes in both surfaces; the floating window adopts those detached
   portals in a documented stacking context (explicit z-index above Dockview's
   maximize overlay); on maximize exit the floating owner is marked released
   BEFORE `fromJSON`, the grid slot acquires each portal **exactly once after
@@ -331,11 +338,19 @@ implementation** (pure-JS — `crypto.subtle` is async and unavailable in some
 insecure contexts; Node and browser paths must produce identical bytes, with
 jsdom/Node/insecure-HTTP tests). **The one-time migration hash is the ONLY
 synchronous hash** — ordinary journal hashing for float/dock commits uses
-**async hashing with exact raw digests PRECOMPUTED/cached before mutation**
-(the unload path uses the cached digests, never starting a new expensive
-hash), with a benchmark/threshold acceptance for worst-case 96 KB blobs; the
-hash dependency is a direct declared dependency (or an audited vendored
-implementation — never an undeclared transitive import). The canonical
+**async hashing with an explicit snapshot-before-busy ordering: `begin`
+synchronously captures the immutable exact raw before/after strings, assigns
+the generation, and marks busy BEFORE any async hashing starts**; all
+mutations are rejected/held while hashing is pending; digests are cached
+keyed by `(envId, transactionId, pair bytes)`; the unload path uses the
+cache ONLY after phase/generation validation, otherwise it synchronously
+writes the cached before pair plus a retained aborted journal (it never
+starts a new expensive hash). The hash implementation is a **named direct
+declared dependency** (e.g. `@noble/hashes/sha256`) or an audited vendored
+module — never an undeclared transitive import — locked in `apps/web/
+package.json`, with a static dependency check and a benchmark/threshold
+acceptance for worst-case 96 KB blobs; a mutation-and-unload-while-hashing-
+pending test covers the ordering. The canonical
   input maps to a UUID by taking the SHA-256 first 16 bytes, setting byte
   6's high nibble to `0x5` (version 5) and the RFC 4122 variant bits in
   byte 8, with documented byte order and string formatting and golden
@@ -525,7 +540,7 @@ Float/dock/restore are **transactions** with an operation journal:
    | blob-after / layout-before | after pair | after digests |
    | layout-after / blob-before | after pair | after digests |
    | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
-   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable repair record keyed by (envId, transactionId)** — loaded on every mount; while repair is active NO automatic floating/layout mutation runs and salvage is READ-ONLY (journal-free divergence rules may render for display but never write); a localized, non-dismissable repair banner names the owner (the dockview store/coordinator), offers export and an AlertDialog-style explicit clear confirmation; clear removes the quarantine copies AND both target keys after confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, confirmation-failure, and cleanup tests |
+   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable repair record keyed by (envId, transactionId)** — loaded on every mount; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; clear removes the quarantine copies AND both target keys after confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, confirmation-failure, and cleanup tests |
    The `phase` marker (`mutating` vs `committed`) refines the both-after row
    (a `committed` marker with both-after means the mutation finished; a
    `mutating` marker with both-after is still settled by equality), never
@@ -726,16 +741,20 @@ rather than a global id set:
   by **`(api instance, panelId, operationUUID)`**; operation UUIDs are unique
   per coordinator operation (never a per-env resetting counter). **Tombstone
   retention is ONE contract:** coordinator-owned tombstones with a **bounded
-  TTL (30 s)**, recorded with the operation UUID at arm time and dropped by a
+  TTL (30 s)**, using a **monotonic injected clock with an inclusive boundary
+  (`now >= expiresAt` is expired)**, one timer per tombstone (or a documented
+  min-heap), recorded with the operation UUID at arm time and dropped by a
   coordinator-owned timer on expiry (an idle app never accumulates them
-  unbounded); a delayed `fromJSON` removal arriving within the TTL is
+  unbounded; timers are cleaned on unmount); a delayed `fromJSON` removal
+  arriving within the TTL is
   correlated via the tombstone, after expiry it is treated as a real user
   close (documented — the TTL bounds the correlation window);
   registrations are armed immediately around each synchronous
   remove/`fromJSON`. A real user close is never registered and never consumes
   a detach entry. Idle/no-successor, event-before-successor,
-  delayed-old-event-after-successor, duplicate-delivery, and timer-expiry
-  tests cover the contract. **Portal env
+  delayed-old-event-after-successor, duplicate-delivery, and **fake-timer
+  expiry tests at TTL-1ms, TTL, and TTL+1ms plus timer cleanup on unmount**
+  cover the contract deterministically (no wall-clock sleeps). **Portal env
   ownership on reacquire:** `acquire` on an existing entry updates
   api/params/component AND re-validates/updates `entry.envId` (a same panel
   id reacquired under a new env carries the new env; old-env blob entries

@@ -71,6 +71,7 @@ node scripts/check-owned-layer-inventory.mjs   # executable gate: static AST sca
 ## Files Likely Touched
 
 - `apps/web/components/task/dockview-floating-panel.tsx` (new; expanded window, collapsed bar, portal adoption, tablist semantics, reactive title subscription)
+- `apps/web/hooks/use-panel-active.ts` (extended/replaced: lease-record-backed active authority, `acceptPanelActive` routing, api-null = floating-store-backed virtual active state)
 - `apps/web/components/task/dockview-floating-coordinator.ts` (new; owned regions, pointer/focus/Escape ownership with same-frame lease, `useFloatingOwnedLayer`, stacking)
 - `apps/web/components/task/dockview-desktop-layout.tsx` (mount overlay)
 - `apps/packages/plugin-sdk/src/index.ts` + `apps/web/lib/plugins/types.ts` + `apps/web/lib/plugins/host-api.ts` + `docs/plans/plugins/PLUGIN-API.md` (`host.ui.registerFloatingOwnedLayer(capability, layerRoot)` — SDK type, host implementation with WeakMap binding, ownership capability, docs; all four change together)

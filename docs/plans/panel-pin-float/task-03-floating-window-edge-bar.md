@@ -76,6 +76,11 @@ node scripts/check-owned-layer-inventory.mjs   # executable gate: static AST sca
 - `apps/packages/plugin-sdk/src/index.ts` + `apps/web/lib/plugins/types.ts` + `apps/web/lib/plugins/host-api.ts` + `docs/plans/plugins/PLUGIN-API.md` (`host.ui.registerFloatingOwnedLayer(capability, layerRoot)` — SDK type, host implementation with WeakMap binding, ownership capability, docs; all four change together)
 - `apps/web/components/task/plugin-task-panel.tsx` (render-bound `floatingOwnedLayerCapability` injection + cleanup revocation)
 - `apps/web/lib/plugins/registry.ts` (`unregisterPlugin` owned-layer cleanup)
+- `apps/web/scripts/check-owned-layer-inventory.mjs` (new, with focused
+  fixtures/tests: alias imports, member JSX, wrappers, dynamic references,
+  generated/mobile exclusions, an intentionally unlisted primitive) + a
+  `check:owned-layers` package script + web/CI wiring (the gate fails CI if
+  any row remains `to-wire`/`verify` or an unlisted primitive is found)
 - `docs/plans/panel-pin-float/owned-layer-inventory.md` (audit completion)
 - `apps/web/components/task/dockview-floating-panel.test.tsx` (new; incl. pointerdown deferral while a menu is open, reactive title update on plugin re-registration while detached, real Radix Escape ordering, plugin-panel layer ownership rejection)
 - Reuse: `panelPortalManager` (`lib/layout/panel-portal-manager.ts`), `usePanelSearch` pointer-outside pattern (`hooks/use-panel-search.ts`), `panelTitle()` (`lib/state/layout-manager/panel-title.ts`), `PinButton` from task-02

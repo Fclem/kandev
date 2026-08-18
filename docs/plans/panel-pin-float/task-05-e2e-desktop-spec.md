@@ -33,7 +33,7 @@ spec: "../../specs/ui/panel-pin-float.md"
   - **rollback portal safety**: forcing a mid-transaction failure does not release a terminal portal or stop its process, and storage equals the pre-transaction layout after the portals-adopted phase.
 - The spec uses the repo's causal-wait helpers (`e2e/helpers/causal-waits.ts`) and the `SessionPage` page object additions (`clickMaximize` style helpers for `dockview-pin-btn`); no new sleeps.
 - **Fault-injection seam (E2E-build-only, exact):** `vite.config.ts` gains
-  `define: { __KANDEV_FLOATING_TEST_HOOKS__: JSON.stringify(process.env.VITE_FLOATING_TEST_HOOKS === "1") }`; `package.json` `build:e2e` sets
+  `define: { __KANDEV_FLOATING_TEST_HOOKS__: JSON.stringify(process.env.VITE_FLOATING_TEST_HOOKS === "1") }`; **`vite-env.d.ts` gains `declare const __KANDEV_FLOATING_TEST_HOOKS__: boolean`** (the pseudo-locale precedent declares its compile-time constant there; without it typecheck fails); `package.json` `build:e2e` sets
   `VITE_FLOATING_TEST_HOOKS=1` (and only there); every hook export is gated
   behind the compile-time constant, so the production artifact is compiled
   without the seam (`__floatingTestHooks__` absent in the plain `build`

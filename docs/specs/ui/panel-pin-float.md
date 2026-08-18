@@ -122,10 +122,13 @@ EnvFloatingState                     # persisted as JSON, versioned
 ```
 FloatingGroupState
   groupId          string        # original grid group id (informational)
-  columnId         string        # root LayoutColumn id the group lived in
-  columnLogicalId  string        # the persisted logicalId (M4 placement identity);
-                  # native columnId is a non-authoritative hint only — capture,
-                  # materializer, and sidecar lookups key on columnLogicalId
+  groupLogicalId   string        # the persisted logical group identity (THE
+                  # placement identity; native groupId is a hint only)
+  columnId         string        # root LayoutColumn NATIVE id (non-authoritative hint)
+  columnLogicalId  string        # the persisted logicalId — THE placement
+                  # identity key for capture, materializer, and sidecar lookups;
+                  # the rootColumns sidecar is keyed by columnLogicalId, never
+                  # native ids (one key space everywhere)
   columnIndex      number        # index of that column in the columns array
   columnKind       "center" | "side" | "custom"   # see Placement capture
   columnPinned     boolean       # column's pinned flag at float time
@@ -204,11 +207,23 @@ envelope** — `{ version: 4, dockview: <native serialized JSON>,
   layout: <normalized LayoutState carrying logicalId/role> }` — because
 native dockview JSON drops custom fields while `fromDockviewApi` regenerates
 traversal-derived ids; **every restore route uses one envelope-aware adapter
-`readEnvLayoutForRestore()`** that unwraps to `{native, normalized}` — the
-native value is sanitized and passed to `api.fromJSON`, then the normalized
-`LayoutState` is applied after the native restore (initial mount,
-env-switch fast/slow, custom layout, maximize-only, and fallthrough routes
-all unwrap before sanitize/fromJSON — never the raw envelope); `getEnvLayout`
+`readEnvLayoutForRestore()`** that unwraps to `{native, normalized}` with
+**separate route contracts** — a wrong ordering creates duplicate session ids,
+loses the incoming session, or mutates the maximize overlay:
+- **Regular v4 layout (initial mount, env fast/slow, custom, preset,
+  fallthrough):** unwrap + sanitize the native value → `api.fromJSON` ONCE →
+  session/ephemeral replacement and incoming-session insertion → a **defined
+  normalized-state reconciliation** (the normalized `LayoutState` is applied
+  as a metadata reconciliation, with persisted `session:*` panels EXCLUDED —
+  the live session insertion owns those; never a second full `fromJSON` that
+  could reintroduce stale sessions) → fixups/bootstrap → floating restore.
+- **Maximize-only:** unwrap the native two-column overlay → `fromJSON` once;
+  the normalized pre-max `LayoutState` stays ONLY in the store
+  (`preMaximizeLayout`); it is **never applied while maximized** (no
+  unmaximize, no overlay mutation); post-exit restore applies it.
+Call-order tests cover initial, fast/slow switch, route-intent, custom,
+maximize-only, and fallthrough paths, asserting no stale/duplicate session
+and no overlay mutation. `getEnvLayout`
 reads v4, and a **v3→v4 migration
 (`migrateEnvLayoutV3(raw, envId)`)** assigns UUIDs once and writes v4 only
 after a validated apply, keeping a v3 reader fallback; **explicit
@@ -221,13 +236,26 @@ dockview-persistence.ts` prefixes and all layout consumers are updated
 together, with old-v3-restore, v4 round-trip, tree/flat-equality, and e2e-
 helper-compatibility tests. **The maximize slot is versioned too:** the
 `preMaximizeLayout` state stored with maximize uses the same v4 normalized
-`LayoutState` schema (old maximize blobs migrate before `applySavedMaximize`),
-so reload-while-maximized and env-switch-while-maximized never lose
-`logicalId`/`role`/placement. **The legacy `dockview-layout-v3` localStorage
+`LayoutState` schema, with explicit `MAXIMIZE_V3_READ_PREFIX`/
+`MAXIMIZE_V4_WRITE_PREFIX` constants: v3 maximize blobs are read on upgrade,
+only `preMaximizeLayout` is migrated to normalized v4 (the native
+`maximizedDockviewJson` is retained untouched), the migrated native overlay
+is applied validated, the pre-max state restores after maximize exit, and v3
+is deleted only after that validated apply — with retry/idempotence and
+malformed/partial-migration behavior defined; reload-while-maximized and
+env-switch-while-maximized never lose `logicalId`/`role`/placement, and the
+pre-max state is never applied to the live overlay. **The legacy
+`dockview-layout-v3` localStorage
 write is removed** — the env sessionStorage v4 slot is the sole authoritative
 layout surface, and tests/helpers that observed the legacy key are migrated
 (there is exactly one layout persistence surface: the v4 env slot, through
-the sole pair writer). The blob's `identities` map is a
+the sole pair writer).
+**Migration UUID derivation is crash-idempotent:** v3 migration UUIDs are
+derived from a **documented stable semantic identity** — canonical panel-id
+sets per group/column plus role — with collision/ambiguity rejection (no
+third marker key; a crash before the v4 write cannot mint different ids on
+the next load because the derivation is deterministic; crash-before-v4-write
+and repeated-retry tests assert id stability). The blob's `identities` map is a
 **secondary cache keyed by `logicalId`**, never the source of truth: capture
 reads the group/column's own `logicalId` from the live layout (no
 traversal-derived `group-n` ids are ever treated as identity); a group or
@@ -509,16 +537,18 @@ Float/dock/restore are **transactions** with an operation journal:
    and the unload handler writes a complete pair using a **synchronous digest
    path or the prevalidated cached BEFORE pair + aborted marker** — it never
    awaits an async hash or abandons a half write; the handler is tested
-   without awaiting promises. **Unload writes a complete, journal-consistent
-   pair:**
-   during an active transaction the handler synchronously chooses ONE of the
-   two journal states — either both raw BEFORE values plus an aborted/cleared
-   journal, or both raw AFTER values plus a committed marker — and writes
-   that complete pair with `writeVerified`; it never writes a half pair or
-   calls `api.toJSON()`. The choice is deterministic (default: abort to
-   before unless the mutation phase had already fully committed in the
-   journal); tests cover unload after each individual blob/layout mutation
-   and assert the post-reload policy, not just "consistent state". Outside a
+   **Unload writes a complete, journal-consistent
+   pair with a deterministic phase table:** `mutating` or any phase whose
+   AFTER pair has NOT completed synchronous verification ⇒ write the cached
+   BEFORE pair + aborted/retained journal; ONLY a journal whose AFTER pair has
+   completed synchronous verification ⇒ write AFTER + committed marker. The
+   journal marker ordering matches this definition (the `committed` phase is
+   set only after final read-back verification, never before), and a
+   synchronous `writeVerified` failure retains a recoverable journal and
+   leaves the original state; tests cover the phase-write-throw and
+   final-readback windows, not only individual blob/layout writes. It never
+   writes a half pair or
+   calls `api.toJSON()`. Outside a
    transaction the handler performs the normal live flush. On transaction
    begin the guard also cancels/holds an already-scheduled debounce timer and
    marks it dirty, so a timer scheduled before the transaction cannot fire
@@ -998,16 +1028,21 @@ replacement orderings.
   right-panel toggle. The bit is derived from this predicate at all times
   (restore, float, dock, toggle, preset/default assignment), never persisted
   as intent; show with no pinned-right panels and hide without one are
-  **Role bootstrap ordering (no sidecar hole):** one `ensureRolesBootstrapped(api,
-  envId)` boundary runs after each synchronous layout apply AND before any
-  enforcement/toggle/predicate call, normalizing live `LayoutColumn.role`
-  values and rebuilding the in-memory `rootColumns` sidecar from the
+  **Role bootstrap ordering (no sidecar hole):** one coordinator-owned
+  **`applyLayoutAndBootstrap`/`settleLayoutApply` wrapper** is the single
+  choke point used by EVERY layout apply path (`applyLayoutAndSet`, fast/slow
+  switch, restore, maximize exit, preset/custom/reset, toggle) and invokes
+  `ensureRolesBootstrapped(api, envId)` after each synchronous apply AND
+  before enforcement/toggle/predicate reads; enforcement additionally calls
+  bootstrap defensively before reading, and a static callsite test (or
+  exhaustive direct-call inventory) fails when a new apply path bypasses the
+  wrapper. Bootstrap normalizes live `LayoutColumn.role`
+  values and rebuilds the in-memory `rootColumns` sidecar from the
   **authoritative live state** (first mount with an empty/absent blob
   included); the predicate itself fails closed (or bootstraps lazily from the
   live state) when called before bootstrap; **sidecar persistence is
-  prohibited while `isRestoringLayout` or a transaction is busy** (a
-  mid-restore bootstrap must never persist partial roles); then derives
-  visibility/enforcement, then schedules complete-pair persistence;
+  prohibited while `isRestoringLayout` or a transaction is busy**; then
+  derives visibility/enforcement, then schedules complete-pair persistence;
   first-mount, empty-blob, preset/reset-invalidation,
   mid-restore, and immediate-resize/toggle-before-debounce tests cover the
   ordering.

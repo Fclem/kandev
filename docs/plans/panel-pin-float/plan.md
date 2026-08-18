@@ -8,19 +8,19 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 16 incorporates the
-round-15 adversarial review** (this package has been adversarially reviewed
-every round): an envelope-aware restore adapter (`readEnvLayoutForRestore`)
-used by every restore route, explicit v3-read/v4-write key constants with the
-envelope version as the idempotence marker, a versioned maximize slot,
-removal of the legacy `dockview-layout-v3` localStorage writer,
-`columnLogicalId`/`groupLogicalId` as the sole placement identity, a
-normalized (not recovered) old-v3 geometry fallback, synchronous prevalidated
-unload writes, a single exported `floatingTransactionFacade` value with a
-source-boundary import test, an `ensureRolesBootstrapped` boundary, a concrete
-plugin-unregister revocation bridge, an `isSavedLayoutEnvelope`
-discriminator for custom layouts, and the exact `__KANDEV_FLOATING_TEST_HOOKS__`
-compile-time define.
+the existing env layout / maximize persistence. **Revision 17 incorporates the
+round-16 adversarial review** (this package has been adversarially reviewed
+every round): separate restore route contracts for regular vs maximize-only
+v4 layouts (normalized reconciliation excludes persisted session panels; the
+pre-max state is never applied while maximized), explicit
+`MAXIMIZE_V3_READ_PREFIX`/`MAXIMIZE_V4_WRITE_PREFIX` migration, crash-
+idempotent semantic migration UUID derivation, a unified
+`columnLogicalId`/`groupLogicalId` placement key space (sidecar keyed by
+logical ids), a deterministic unload phase table, a coordinator-owned
+`applyLayoutAndBootstrap` choke point, the `isSavedLayoutEnvelope`
+discriminator, named legacy-localStorage E2E migrations, the
+`vite-env.d.ts` hook declaration, and the AST-gate deliverables wired into
+task files and CI.
 
 ## Architecture
 
@@ -342,6 +342,28 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 
 ## Risks
 
+- **Restore route contracts:** regular v4 = fromJSON once → session
+  replacement → normalized reconciliation (session panels excluded); maximize
+  = native overlay only, pre-max never applied while maximized; call-order
+  tests for every route.
+- **Maximize migration:** V3_READ/V4_WRITE prefixes, pre-max-only migration,
+  native retained, delete-after-validated-apply.
+- **Legacy-localStorage E2E consumers:** both specs named and migrated.
+- **One placement key space:** sidecar keyed by `columnLogicalId`;
+  `groupLogicalId` on the group state; semantic stable keys for generated
+  preset groups.
+- **Unload phase table:** mutating/unverified ⇒ BEFORE + aborted journal;
+  only verified-AFTER ⇒ AFTER + committed; failures retain the journal.
+- **Bootstrap choke point:** `applyLayoutAndBootstrap` wrapper on every apply
+  path + defensive bootstrap in enforcement + static callsite test.
+- **Envelope discriminator:** own version===4 + dockview + layout.columns +
+  identity/role fields; collision fixtures.
+- **Migration UUID determinism:** semantic derivation, never traversal;
+  crash-before-v4-write + retry tests.
+- **vite-env.d.ts declaration** for the hook constant.
+- **Old-v3 terminal-only right columns remain no-pinned-right** (normalized
+  limitation; custom v4 layouts get explicit roles).
+- **AST gate deliverables** (script + fixtures + package script + CI).
 - **Layout v4 envelope:** native dockview JSON cannot carry `logicalId`/`role`;
   the versioned envelope + one-time migration + v3 fallback + e2e-helper
   prefix updates must land together or saved layouts break.
@@ -353,7 +375,7 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 - **Role bootstrap ordering:** normalize → rebuild sidecar → derive
   visibility → schedule persistence; first mount with empty blob must not see
   a phantom pinned-right gap.
-- **Facade boundary:** only `FloatingTransactionFacade` is exported;
+- **Facade boundary:** only `floatingTransactionFacade` is exported;
   source-boundary test fails on non-facade imports.
 - **Nested registry type:** `Map<envId, Map<panelId, token>>` canonical in
   spec/plan/task-01 (no panel-id-keyed contradiction).

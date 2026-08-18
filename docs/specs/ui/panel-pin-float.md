@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 44
-prior-round: 43
+revision: 45
+prior-round: 44
 ---
 
 # Floating (unpinned) workbench panels
@@ -199,7 +199,7 @@ FloatingPanelDef                   # complete definition so a floated panel can
   id           string             # be recreated after a reload or env switch
   component    string
   title        string             # canonical English title (reload fallback only)
-  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; load normalization maps absent → null; absent/present round-trip tests)
+  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; load normalization maps absent → null BEFORE validation; the closed guard accepts ONLY string|null for this field and REJECTS undefined; params keep JSON null rules; absent/null/string/undefined/extra-key round-trip tests through load, persist, reset/materialization)
   params       Record<string, unknown>   # must be JSON-safe (see guard)
 ```
 
@@ -302,8 +302,17 @@ identity. **ONE role authority: the validated v4 `LayoutState` envelope /
   `plannedRegistry` (the PRE-CALL plan of native ids, built before the
   single fromJSON) and `liveRegistry` (the POST-CALL binding installed
   after fromJSON regenerates native ids); post-call native ids are
-  MATCHED to planned logical ids by the identity rules (logicalId is the
-  key; native ids are hints), and capture/materialization is PROHIBITED
+  MATCHED to planned logical ids by a VERSIONED SEMANTIC SIGNATURE
+  (logicalId is absent from native Dockview JSON, so the match is:
+  role + normalized root-column index + canonical tree path + sorted
+  non-session panel-id/component multiset + bounded geometry projection
+  [min, width, max], exact UTF-8 encoding, explicit tie rules); the
+  matcher builds a BIPARTITE CANDIDATE MAP and REQUIRES a unique perfect
+  assignment for every non-empty logical object — missing, duplicate, or
+  partial assignment FAILS CLOSED (native state preserved, NO
+  capture/materialization); fixtures: two-identical-candidates,
+  inserted-column, cardinality mismatch; capture/materialization is
+  PROHIBITED
   until the liveRegistry install succeeds — the spec's "installed after
   the single fromJSON" (identity section) and "built before" (restore
   contract) are thus BOTH true of their respective forms and the
@@ -476,7 +485,16 @@ loses the incoming session, or mutates the maximize overlay:
   it authorizes with the lease's floating generation, never `apiInstance`).
   Same-panel dual mounting (grid slot + floating window) is allowed
   ONLY during the named handoff window (post-rAF adoption at dock) with
-  exactly one authoritative owner at every instant; `api: null` is never
+  exactly one authoritative owner at every instant; **the boundary is a
+  NAMED STATE: `handoff = {operationUUID, generation, expectedPanelIds,
+  phase}` — phase `adopting` STARTS at the atomic lease transfer; dual
+  DOM is legal ONLY while `phase == "adopting"`; the window ENDS when
+  the post-rAF callback has acquired every expected grid lease AND
+  floating leases are released (phase `settled`), or TERMINALLY via
+  verified rollback (phase `aborted`); stale grid cleanups after
+  `settled`/`aborted` are rejected; assertions run immediately before
+  transfer, during dual mount, after each portal, after rAF, and after
+  settle**; `api: null` is never
   treated as inactive (`use-panel-active.ts` is extended/replaced and added
   to task-03's files). **Global api lease:** there is ONE live Dockview api
   and ONE global active transaction — env switch, task teardown, reset, and
@@ -548,14 +566,21 @@ loses the incoming session, or mutates the maximize overlay:
   DOM `appendChild(entry.element)` in usePortalSlot is adoption, NOT the
   native call), (c) resets the marker after the call returns/throws;
   bypassing the adapter is a STATIC ERROR (all callsites rewritten; a
-  source-boundary test rejects direct fromJSON calls); **ENCAPSULATION:
+  source-boundary test rejects direct fromJSON calls); **ENCAPSULATION + MIGRATION CONTRACT:
   the adapter module is the ONLY exported mutation surface — raw
   dockview mutation functions (`fromJSON`, `layout`, `addPanel`,
   `removePanel`, `resizeView`, constraints, `applyLayout`) are NOT
   exported from their home modules (applier.ts, dockview-layout-
   restore.ts, dockview-env-switch.ts, dockview-store.ts), and the static
   gate checks EVERY mutation method against an approved-adapter
-  allowlist, not just fromJSON**; matrix 28 is
+  allowlist, not just fromJSON. **EXISTING STORE ACTIONS REMAIN THE
+  PUBLIC COMPATIBILITY SURFACE: every current `useDockviewStore` action
+  (addPlanPanel, toggleRightPanels, applyCustomLayout, …) is KEPT and
+  internally routes through the typed adapter methods (no consumer
+  rewrite; the adapter is the sole raw-mutation caller); the static gate
+  permits raw dockview calls ONLY inside the adapter module and the
+  store wrappers; a caller manifest lists every store action + its
+  adapter method.** matrix 28 is
   classified
   only when the marker is false AND the snapshot is unchanged; 29
   otherwise; tests: failure before adoption, after DOM adoption but
@@ -589,6 +614,12 @@ loses the incoming session, or mutates the maximize overlay:
   coordinator/store transition (the claim removes at most ONE queued
   marker-hydrate(B); markerless B runs the plain switch hydrate — the
   claim is a no-op; duplicate switch intents coalesce to one claim).
+  **MARKER QUEUE IDENTITY IS UNIQUE BY `(envId, markerGeneration)` with
+  atomic upsert/dedupe — duplicate discovery or a retry marker can NEVER
+  leave a second B marker; `claimMarker` consumes the COMPLETE
+  equivalent set or proves only one exists; tests: duplicate-marker,
+  switch-during-hydrate — one hydrate, one consume, one requeue on
+  transient failure.**
   HYDRATE FAILURE TABLE: transient pre-hydrate/adoption failure
   (validation, lease acquisition, portal acquisition) REQUeUES exactly
   one marker-hydrate(B) (claim undone — B is never stuck unhydrated);
@@ -700,13 +731,31 @@ loses the incoming session, or mutates the maximize overlay:
   `applyFixupsWithMaximize` chain in dockview-layout-restore.ts:161-
   169/252-253, which calls `api.fromJSON` a second time, is REWRITTEN to
   a single selected route; env-layout + maximize-blob coexistence gets a
-  call-order test).** **"one fromJSON" is defined per
+  call-order test).** **MAXIMIZE ENVELOPE FRESHNESS: the v4 maximize
+  envelope PERSISTS an immutable base-layout digest (SHA-256 of the
+  canonical env layout bytes the overlay was applied over) + the env
+  layout generation; route matrix: (a) schema-valid AND base digest
+  matches the CURRENT env layout ⇒ maximize-only; (b) malformed envelope
+  / no native call needed ⇒ discard + fall through to regular;
+  (c) REGULAR LAYOUT CHANGED since maximize (digest mismatch) ⇒ REGULAR
+  WINS or explicit fail-closed repair — a stale pre-max overlay is
+  NEVER reapplied over newer layout state; (d) both surfaces describe a
+  maximized layout ⇒ ONE canonical source (the env layout) with an
+  equality assertion against the envelope's stored layout; tests:
+  changed-layout-after-maximize, redundant-maximized-layout,
+  stale-envelope, before any native apply.** **"one fromJSON" is defined per
   ATTEMPT with a bounded retry (max 2 attempts, second attempt re-plans
   from the frozen pre-restore state before calling fromJSON again);
   resize-between-plan-and-assertion is tested and the actual call count
   is asserted; **failure-boundary contract: retry is eligible ONLY for
   the declared transient boundary (equivalence-assertion mismatch after a
-  resize); persistent structural mismatch, a fromJSON throw after partial
+  resize); **MAXIMIZE FALLBACK SPLIT: schema-invalid or PRE-CALL failure with
+  `nativeMutationStarted=false` MAY fall through to the regular route;
+  ANY invocation/partial mutation (marker true) enters the
+  TERMINAL/quarantine/rebuild path FIRST — only after VERIFIED native
+  restoration may the regular route be selected (never a blind second
+  apply; maximize-specific throw-before-call, throw-after-mutation, and
+  recovery tests with exact fromJSON counts).** persistent structural mismatch, a fromJSON throw after partial
   native mutation, stale registry, or portal/lease failure FAILS CLOSED —
   lease invalidated, rebuild from the IMMUTABLE PRE-CALL native/layout
   snapshot + registry captured before the first fromJSON (never a
@@ -723,7 +772,7 @@ loses the incoming session, or mutates the maximize overlay:
   `advance`/`settle` are nested-specific
   operations — the OUTER `settle` called while a nested transaction is
   active returns the typed `{status:"rejected", reason:"busy"}` result
-  (matrix row 25); the caller waits and retries settle after
+  (matrix row 27); the caller waits and retries settle after
   `settleNested`; token-guarded failure/abort cleanup per nested phase
   with defined reload behavior for each), with its own nested phase enum
   `nested-prepare → nested-apply → nested-verify → nested-settle`
@@ -1508,6 +1557,13 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   never delivered) that closes and cleans the handshake with the typed
   plugin-contract-failure result and capability revocation — no
   infinite pending loop; the reissue attempt has its own 3 s deadline**;
+  **LATE RESURRECTION IS IMPOSSIBLE: each reissue carries a UNIQUE
+  token/generation; the terminal timeout ATOMICALLY claims and cancels
+  the token + timer, revokes the handshake, and records terminal state;
+  `onCapabilityChange` COMPARE-AND-CLEARS the token and is a generation
+  no-op after terminal — a fresh capability can NEVER be delivered after
+  revocation; tests: callback-after-terminal, callback-vs-timeout at the
+  exact boundary**;
   the plugin re-reads with the fresh generation and retries;
   a stale attempt is idempotent (repeated stale use returns the same
   typed rejection without further state change); teardown/unmount clears
@@ -1656,14 +1712,23 @@ in the group's saved tab order.
   cannot double-skip. **ALL-FLOATING-SESSION-IDS RULE: `shouldSkipPanelEnsure`
   skips EVERY session id currently owned by a floating group (an atomic
   `floatingSessionIds` ownership query), not only `floatingSessionWinner` —
-  **OWNERSHIP QUERY CONTRACT: the query returns RAW SessionIds
-  (normalizing `session:<id>` panel ids to raw ids, matching the hook's
-  `effectiveSessionId` input); the domain is FLOATING ENTRIES ONLY
+  **OWNERSHIP QUERY CONTRACT: the query returns `{ids, envId,
+  generation, transactionId}` from ONE coordinator snapshot — ids are
+  RAW SessionIds (normalizing `session:<id>` panel ids to raw ids,
+  matching the hook's `effectiveSessionId` input); the domain is
+  FLOATING ENTRIES ONLY
   (grid-visible session tabs are NOT in the query — a session may
-  legitimately exist in multiple grid groups); DURING THE NAMED HANDOFF
+  legitimately exist in multiple grid groups); `shouldSkipPanelEnsure`
+  VALIDATES the snapshot immediately before ensure/insertion and, on
+  mismatch (query vs current transaction), retries/deferr under the
+  readiness barrier; DURING THE NAMED HANDOFF
   WINDOW (dock/float transfer) floating ownership WINS (the skip applies)
   and the grid insertion is suppressed by the second generation check;
-  detached-lease, grid-only, and grid+floating cases are each tested;
+  A and B ownership during replacement is BOTH reserved in the
+  transaction mapping (the query reflects the mapping, never an
+  intermediate empty set); query-before-removal, during-handoff, and
+  after-commit schedules are tested; detached-lease, grid-only, and
+  grid+floating cases are each tested;
   the same normalized query serves materialization fail-closed** —
   a session that exists ONLY in a floating group, or a non-winner floating
   session, can never be re-added to the grid by the auto-session hook;

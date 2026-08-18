@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 23
-prior-round: 22
+revision: 24
+prior-round: 23
 ---
 
 # Floating (unpinned) workbench panels
@@ -94,11 +94,16 @@ EnvFloatingState                     # persisted as JSON, versioned
                # by presets/custom-layout normalization (with a documented
                # old-v3 migration: runs ONCE as `migrateEnvLayoutV3(raw,
                # envId)` — a versioned, one-time-marked transform on the raw
-               # v3 native JSON BEFORE fromJSON, with the exact root-column
-               # geometry source, precedence for multiple right candidates,
-               # and a closed policy for no/ambiguous candidates (default
-               # right = the pinned column containing files/changes; tie →
-               # leftmost; none → no pinned-right role); **raw v3 lacks
+               # v3 native JSON BEFORE fromJSON, with a **CLOSED role table**:
+               # center candidate = the pinned/center column holding chat or
+               # session:* (chat stripped → the remaining center column by
+               # position); pinned-right = the pinned column containing
+               # files/changes (tie → leftmost); side-other = known preset
+               # side columns (plan/preview/vscode); custom = any unknown
+               # column; no center/right candidate ⇒ roles assigned by the
+               # closed table with no pinned-right role when absent; vectors
+               # cover empty/no-chat, plan/preview/vscode, multiple right
+               # candidates, and custom layouts; **raw v3 lacks
                # min/max constraint fields — missing old constraints are
                # NORMALIZED (not recovered) from the preset/default role and
                # constraint metadata, and the sidecar is persisted only after
@@ -245,17 +250,23 @@ traversal-derived ids; **every restore route uses one envelope-aware adapter
 **separate route contracts** — a wrong ordering creates duplicate session ids,
 loses the incoming session, or mutates the maximize overlay:
 - **Regular v4 layout (initial mount, env fast/slow, custom, preset,
-  fallthrough):** **the single-`fromJSON` contract holds by CONSTRUCTION:**
-  the final native JSON (including the reconciliation results: session/
-  ephemeral replacement, incoming insertion, and normalized placement/role
-  applied into the native tree) is built BEFORE the one `api.fromJSON` call,
-  together with the fresh normalized native-ID registry — the existing
-  `applyLayoutAndSet`/materializer paths are NOT used for reconciliation
-  (they would serialize and call `fromJSON` a second time); the normalized
-  reconciliation operates on the planned native JSON + registry pair, then:
+  fallthrough):** **the single-`fromJSON` contract holds by CONSTRUCTION via
+  ONE pure native-JSON planning transform:** the planner computes the final
+  native JSON (session/ephemeral replacement, incoming insertion, fixups,
+  sizing, role/placement reconciliation — EVERY post-apply transform folded
+  in as pure state transforms) BEFORE the one `api.fromJSON` call, together
+  with the fresh normalized native-ID registry; post-call work is
+  **observational/rebinding only** (never a second `fromJSON`, never
+  `applyLayoutAndSet`/materializer application). **Ground truth:** after the
+  single `fromJSON`, the live state is canonical-captured and **asserted
+  semantically/byte-equivalent to the planned after** BEFORE portal adoption
+  or commit; a mismatch rolls back and replans (width fixups, regenerated
+  IDs, and session insertion are covered by mismatch tests); the persisted
+  after is the PLAN's raw after, and the equivalence assertion enforces
+  plan==live. Then:
   unwrap + sanitize → `api.fromJSON` ONCE →
-  session/ephemeral replacement and incoming-session insertion (already
-  folded into the planned JSON; runtime replacement is a no-op guard) → a
+  session/ephemeral replacement and incoming-session insertion (folded into
+  the planned JSON; runtime replacement is a no-op guard) → a
   **defined
   normalized-state reconciliation** with a **staged algorithm**:
   1. **Native→logical binding:** before the diff, map each native
@@ -317,10 +328,21 @@ loses the incoming session, or mutates the maximize overlay:
   to task-03's files). **Global api lease:** there is ONE live Dockview api
   and ONE global active transaction — env switch, task teardown, reset, and
   every restore acquire/reject that lease (a switch to env B while env A is
-  in mutation/portal-adoption is rejected with a debug reason); every async
+  in mutation/portal-adoption is **deferred, not silently dropped**: the
+  switch returns a discriminated `switched | deferred | rejected` result,
+  retains the desired env, and retries once at settle with generation checks
+  (or blocks navigation with a localized retry UI — one, deterministically;
+  A-busy → B-requested → A-settle assertions cover the state machine);
+  every async
   phase rechecks `{envId, generation, api, currentLayoutEnvId}` before any
   mutation or write; deterministic A-busy→B-switch and
-  A-settle-after-B-switch tests cover the race. Tests cover
+  A-settle-after-B-switch tests cover the race. **Lease-transfer abort
+  path:** every mutation wrapper returns a typed failure; if
+  `removePanel`/`fromJSON` throws AFTER the transfer, the coordinator
+  **transfers the lease back (or invalidates it) in the same critical
+  section**, rejects active callbacks during rollback, and clears the lease
+  with the panel when the panel no longer exists; throw/cancellation/unmount
+  tests cover each mutation. Tests cover
   float-before-active-event,
   delayed-old-grid-event-after-float, dock-before-event, maximize reload,
   different-panel callbacks, floating-click-during-handoff, and active-tab
@@ -584,7 +606,7 @@ Float/dock/restore are **transactions** with an operation journal:
    | blob-after / layout-before | after pair | after digests |
    | layout-after / blob-before | after pair | after digests |
    | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
-   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable repair record keyed by (envId, transactionId)** — loaded on every mount; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; clear removes the quarantine copies AND both target keys after confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, confirmation-failure, and cleanup tests |
+   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable, VERSIONED repair record** (`kandev.dockview.env-repair.<envId>` with `{version, transactionId, envId, createdAt}` — key/schema/guard defined) — `loadRepair(envId)` runs on EVERY mount (task AND settings; the banner renders wherever the app mounts) and `clearRepair(envId, transactionId)` is token-guarded with **verified deletion ordering: repair record → quarantine → floating blob → layout/journal keys**, memory updated synchronously only after verified removal (a failed clear keeps the banner); `cleanupTaskStorage` removes repair + quarantine keys; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, settings-mount, confirmation-failure, and cleanup tests |
    The `phase` marker (`mutating` vs `committed`) refines the both-after row
    (a `committed` marker with both-after means the mutation finished; a
    `mutating` marker with both-after is still settled by equality), never

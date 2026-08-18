@@ -24,10 +24,14 @@ spec: "../../specs/ui/panel-pin-float.md"
   dockview JSON + normalized `LayoutState` carrying `logicalId`/`role`);
   **explicit v3-read/v4-write key constants** (v3 read until v4 written; v3
   deleted only after the validated v4 apply; the envelope `version` field is
-  the idempotence marker); **`readEnvLayoutForRestore()`** is the single
-  envelope-aware adapter — native value sanitized → `api.fromJSON`, then the
-  normalized `LayoutState` applied after the native restore (initial,
-  env-switch fast/slow, custom, maximize-only, fallthrough); `migrateEnvLayoutV3(raw, envId)`
+  the idempotence marker); **restore applies the SINGLE-`fromJSON`
+  BY-CONSTRUCTION contract** — ONE pure native-JSON planning transform builds
+  the final native JSON (all fixups/session/role folded in) + the fresh
+  normalized native-ID registry BEFORE the single `api.fromJSON`, post-call
+  work is observational/rebinding only (never a second fromJSON), and the
+  live state is canonical-captured and asserted semantically/byte-equivalent
+  to the planned after BEFORE portal adoption or commit (mismatch rolls back
+  and replans); `migrateEnvLayoutV3(raw, envId)`
   assigns UUIDs once, persists v4 only after a validated apply, keeps a v3
   reader fallback, and retries a failed apply without minting new UUIDs;
   **the maximize slot uses the same v4 normalized schema** (`MAXIMIZE_V3_READ_PREFIX`/`MAXIMIZE_V4_WRITE_PREFIX`; v3 blobs read on upgrade, only `preMaximizeLayout` migrated to normalized v4, native `maximizedDockviewJson` retained untouched, v3 deleted only after a validated apply + post-exit pre-max restore, with retry/idempotence and malformed/partial-migration behavior defined; the pre-max state is never applied to the live overlay); **migration UUIDs derive from a documented stable semantic identity** (canonical panel-id sets + role, with collision/ambiguity rejection) so a crash before the v4 write cannot mint different ids on retry (crash-before-v4-write and repeated-retry tests); **the legacy

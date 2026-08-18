@@ -8,19 +8,16 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 14 incorporates the
-round-13 adversarial review** (this package has been adversarially reviewed
-every round): deterministic idempotent quarantine keyed by `(envId, raw
-digest)`, first-class persisted `logicalId` fields on `LayoutGroup`/
-`LayoutColumn` with an explicit old-v3 migration (identities never derive
-from membership/traversal), a persisted `LayoutColumn.role` with a documented
-migration policy driving `hasLivePinnedRightColumn`, a public-facade-only
-coordinator boundary (internal ops in a factory closure, plugin capability
-protection via host-side binding), blob-level composite `(panelId, envId)`
-registry bookkeeping with documented same-ID-live-coexistence impossibility,
-the debounce as a complete-pair settled transaction (zero-group sidecar
-changes still write), an executable inventory gate, `VITE_FLOATING_TEST_HOOKS`
-E2E-only fault wiring, and unload complete-pair semantics.
+the existing env layout / maximize persistence. **Revision 15 incorporates the
+round-14 adversarial review** (this package has been adversarially reviewed
+every round): a versioned v4 layout envelope (native dockview JSON +
+normalized `LayoutState` carrying `logicalId`/`role`, with a one-time
+`migrateEnvLayoutV3`), a sole coordinator-owned pair writer
+(`persistSettledPair`) routing every persistence path, a named
+`FloatingTransactionFacade` with a source-boundary import test, a synchronous
+role bootstrap before any predicate call, nested `Map<envId, Map<panelId,
+token>>` registry bookkeeping, versioned custom-layout envelopes, and the
+executable inventory/AST gates.
 
 ## Architecture
 
@@ -118,12 +115,23 @@ per-env sessionStorage pattern.
    transition to settled or failed-settled, so busy can never stick); a new
    `begin` consumes any retained marker
    first; the marker clears only after a successful settle restore or
-   invalidation. **Root-column metadata lives INSIDE the blob**
+   **Root-column metadata lives INSIDE the blob**
    (`EnvFloatingState.rootColumns`, incl. `role`), rebuilt after every layout
    apply and reload, invalidated on preset/reset/env switch, covered by the
    journal, budget, and cleanup — no third storage key; the blob also carries
    a durable `identities` map (group/column UUIDs) that survives an empty
-   floating state so refloat after dock never mints a new identity. **Size
+   floating state so refloat after dock never mints a new identity. **The
+   persisted LAYOUT schema is versioned (v4 envelope)** — `{version: 4,
+   dockview, layout}` so `logicalId`/`role` survive native dockview
+   serialization; `migrateEnvLayoutV3(raw, envId)` assigns UUIDs and roles
+   once (versioned marker; right = pinned column with files/changes, tie →
+   leftmost, none → no pinned-right role) and persists v4 only after a
+   validated apply, with a v3 reader fallback and e2e-helper prefix updates.
+   **A synchronous role bootstrap** normalizes live `LayoutColumn.role` and
+   rebuilds the in-memory sidecar BEFORE any `hasLivePinnedRightColumn` call.
+   **One sole pair writer** (`persistSettledPair`) routes every persistence
+   path (debounce/unload, `persistEnvLayoutNow`, `saveOutgoingEnv`,
+   preset/custom/reset, float/dock) with a lock/queue/reject policy. **Size
    budgets:** per-env cap
    (96 KB) + **global allocation budget** (384 KB) enforced via a validated
    owned-key index whose entries are checked against stored raw
@@ -331,6 +339,22 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 
 ## Risks
 
+- **Layout v4 envelope:** native dockview JSON cannot carry `logicalId`/`role`;
+  the versioned envelope + one-time migration + v3 fallback + e2e-helper
+  prefix updates must land together or saved layouts break.
+- **Sole pair writer:** every persistence path through `persistSettledPair`
+  with lock/queue/reject; two writers computing different pairs is the
+  failure mode.
+- **Migration idempotence:** one-time marker; later restores consume stored
+  roles, never re-infer.
+- **Role bootstrap ordering:** normalize → rebuild sidecar → derive
+  visibility → schedule persistence; first mount with empty blob must not see
+  a phantom pinned-right gap.
+- **Facade boundary:** only `FloatingTransactionFacade` is exported;
+  source-boundary test fails on non-facade imports.
+- **Nested registry type:** `Map<envId, Map<panelId, token>>` canonical in
+  spec/plan/task-01 (no panel-id-keyed contradiction).
+- **Custom-layout envelopes:** versioned metadata for `SavedLayoutConfig`.
 - **Settle-drain reentrancy:** `drainPendingRestore`/`restoreForFloat` are
   coordinator-owned with internal tokens and recursion guards, or the drain
   is re-rejected by its own busy gate.

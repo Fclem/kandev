@@ -48,11 +48,19 @@ spec: "../../specs/ui/panel-pin-float.md"
 ```bash
 cd apps/web && pnpm vitest run components/task/dockview-floating-panel.test.tsx components/task/dockview-group-actions.test.tsx
 cd apps/web && pnpm run typecheck
-node scripts/check-owned-layer-inventory.mjs   # NEW executable gate: fails on any
-                                               # row still to-wire/verify or on an
-                                               # unlisted Radix primitive found by
-                                               # the source audit; wired into the
-                                               # task's CI step
+node scripts/check-owned-layer-inventory.mjs   # executable gate: static AST scan
+                                               # (defined parser + file globs,
+                                               # canonical Radix primitive import
+                                               # + @kandev/ui wrapper map, test/
+                                               # generated/mobile exclusions,
+                                               # failure output mapping each
+                                               # discovered owner to an inventory
+                                               # row) fails on any row still
+                                               # to-wire/verify or on an unlisted
+                                               # primitive; fixtures cover
+                                               # aliases, wrappers, dynamic refs,
+                                               # and an intentionally unlisted
+                                               # primitive; wired into CI
 ```
 
 ## Files Likely Touched

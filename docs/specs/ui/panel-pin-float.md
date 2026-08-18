@@ -90,11 +90,15 @@ EnvFloatingState                     # persisted as JSON, versioned
                # authoritative root-column metadata sidecar, INSIDE the blob:
                # role is captured from an explicit LayoutColumn.role assigned
                # by presets/custom-layout normalization (with a documented
-               # old-v3 migration: an old right column is inferred ONCE from
-               # pinned + files/changes content at migration and persisted as
-               # role "pinned-right"; every other column defaults to
-               # "side-other"/"custom") — never inferred live from
-               # width/panel membership after migration; rebuilt in memory after every layout
+               # old-v3 migration: runs ONCE as `migrateEnvLayoutV3(raw,
+               # envId)` — a versioned, one-time-marked transform on the raw
+               # v3 native JSON BEFORE fromJSON, with the exact root-column
+               # geometry source, precedence for multiple right candidates,
+               # and a closed policy for no/ambiguous candidates (default
+               # right = the pinned column containing files/changes; tie →
+               # leftmost; none → no pinned-right role); migrated roles are
+               # persisted before any hasLivePinnedRightColumn decision and
+               # later restores consume only stored roles (never re-inferred) rebuilt in memory after every layout
                # apply and reload, invalidated on preset/reset/env switch,
                # covered by the same journal transaction, budget, and cleanup
                # as the groups — there is no third storage key. Persistence is
@@ -187,7 +191,17 @@ identity is a **first-class persisted field on the live layout schema** —
 presets, custom-layout normalization, and a documented old-v3 migration that
 assigns UUIDs once and persists them), carried through the serializer
 (including the tree+flat synchronization — both representations hold the same
-`logicalId`), preset merges, dock, and reset. The blob's `identities` map is a
+`logicalId`), preset merges, dock, and reset. **Layout persistence is
+versioned:** the env layout key is bumped to **v4** and stores a **versioned
+envelope** — `{ version: 4, dockview: <native serialized JSON>,
+  layout: <normalized LayoutState carrying logicalId/role> }` — because
+native dockview JSON drops custom fields while `fromDockviewApi` regenerates
+traversal-derived ids; `getEnvLayout` reads v4, and a **v3→v4 migration
+(`migrateEnvLayoutV3(raw, envId)`)** assigns UUIDs once and writes v4 only
+after a validated apply, keeping a v3 reader fallback; `apps/web/e2e/helpers/
+dockview-persistence.ts` prefixes and all layout consumers are updated
+together, with old-v3-restore, v4 round-trip, tree/flat-equality, and e2e-
+helper-compatibility tests. The blob's `identities` map is a
 **secondary cache keyed by `logicalId`**, never the source of truth: capture
 reads the group/column's own `logicalId` from the live layout (no
 traversal-derived `group-n` ids are ever treated as identity); a group or
@@ -279,15 +293,21 @@ Float/dock/restore are **transactions** with an operation journal:
    phase/recursion guard** so its restore invocation is not re-rejected by
    the busy gate it runs under (restore paths invoked *outside* the
    coordinator's internal operations are still busy-rejected), and recursive
-   settle is impossible. **The internal operations live in a factory closure
-   and only a public facade is exported** from `floating-transaction.ts`;
-   the Symbol/capability is never exported, and internal operations are
-   invoked only from coordinator-owned callbacks (cross-file restore callers
-   use the facade, which validates env/generation/api/phase before
-   delegating); a forged/plain token or stale/released capability can never
-   invoke an internal operation — plugin-facing capabilities are protected
-   by host-side WeakMap/portal-generation binding, not token secrecy, and
-   source-internal imports are explicitly not part of the plugin API.**
+   **The internal operations live in a factory closure
+   and only a public facade is exported** — `floating-transaction.ts`
+   exports exactly one named `FloatingTransactionFacade` contract (documented
+   method signatures and return values: `begin(envId)`, `advance(envId)`,
+   `settle(envId)`, `isBusy(envId)`, `persistSettledPair(...)`); internal
+   `drainPendingRestore` and `restoreForFloat` are absent from all exports,
+   and cross-file callers (`restoreFloatingMaximize`,
+   `restoreFloatingAfterLayout`, every restore entry) import ONLY the facade
+   and never the closure internals — enforced by a compile-time/source-
+   boundary test that fails on any non-facade import of
+   `floating-transaction.ts`. A forged/plain token or stale/released
+   capability can never invoke an internal operation — plugin-facing
+   capabilities are protected by host-side WeakMap/portal-generation binding,
+   not token secrecy, and source-internal imports are explicitly not part of
+   the plugin API.**
    `settle` is **async and keeps busy through portal
    adoption and the drain**; **portal adoption and the drain run in a
    `try/finally` that always token-guards the transition to `settled` (or an
@@ -467,12 +487,24 @@ Float/dock/restore are **transactions** with an operation journal:
    transaction the handler performs the normal live flush. On transaction
    begin the guard also cancels/holds an already-scheduled debounce timer and
    marks it dirty, so a timer scheduled before the transaction cannot fire
-   mid-transaction. Persistence runs only at the settled phase (explicit
-   `persistEnvLayoutNow`), and the token is reset on unmount. **Ordinary
+   **Persistence runs only at the settled phase** (explicit
+   `persistEnvLayoutNow`), and the token is reset on unmount. **One sole
+   pair writer:** every layout/blob write — the ordinary debounce and
+   unload flush, `persistEnvLayoutNow`, `saveOutgoingEnv`, preset/custom/
+   reset apply, and float/dock — routes through one coordinator-owned,
+   status-returning `persistSettledPair(envId, before, after, token)` with
+   transaction/generation ownership, exact raw before/after snapshots, and a
+   documented lock/queue/reject policy (a second writer while one is
+   mid-pair is rejected with a debug reason, never interleaved); the current
+   independent `setEnvLayout`/`persistEnvLayoutNow` writers are replaced, so
+   no path can compute a different pair or swallow a failure. Race-ordering
+   tests cover a scheduled debounce, float begin, each individual write, and
+   unload in both directions.
+   **Ordinary
    layout changes with zero floating groups:** the debounce callback IS the
-   settled boundary and runs as a coordinator transaction for the complete
-   blob/layout pair through the journal whenever either the sidecar bytes or
-   the layout bytes changed — a zero-group sidecar change (role/geometry
+   settled boundary and runs `persistSettledPair` for the complete
+   blob/layout pair whenever either the sidecar bytes or the layout bytes
+   changed — a zero-group sidecar change (role/geometry
    refresh) still writes the pair (the blob can exist with `groups: {}`), so
    a crash cannot leave role metadata behind the live layout; ordinary
    preset/resize crashes and zero-group persistence are tested. Ordinary
@@ -926,7 +958,15 @@ replacement orderings.
   right-panel toggle. The bit is derived from this predicate at all times
   (restore, float, dock, toggle, preset/default assignment), never persisted
   as intent; show with no pinned-right panels and hide without one are
-  no-ops. The toggle, `enforcePinnedTargets`, and `dockview-layout-setup`'s
+  no-ops. **Role bootstrap ordering (no sidecar hole):** a synchronous role
+  bootstrap normalizes the live `LayoutColumn.role` values and rebuilds the
+  in-memory `rootColumns` sidecar **before any predicate call** (first mount
+  with an empty/absent blob included — the normalized live layout is the
+  authority and the sidecar is only its persisted cache), then derives
+  visibility/enforcement, then schedules complete-pair persistence;
+  first-mount, empty-blob, preset/reset-invalidation, and
+  immediate-resize/toggle-before-debounce tests cover the ordering. The
+  toggle, `enforcePinnedTargets`, and `dockview-layout-setup`'s
   detection all share this one predicate, and materialization prefers
   **validated live-layout geometry** over the persisted sidecar when both
   exist (a stale sidecar after an interrupted resize never wins over the

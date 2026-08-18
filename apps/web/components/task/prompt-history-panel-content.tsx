@@ -23,13 +23,26 @@ import { PanelRoot } from "./panel-primitives";
 
 type PromptHistoryPanelContentProps = { onNavigateToPrompt?: (messageId: string) => void };
 
-/** The prompt-history panel: builds entries from the session's messages and
- * turns and renders one expandable row per prompt; shows an empty-state
- * message for passthrough sessions or when there are no entries. */
+/** The prompt-history panel: builds entries from the selected session's
+ * messages and turns and renders one expandable row per prompt; shows an
+ * empty-state message for passthrough sessions or when there are no entries.
+ * Tasks with multiple sessions get a switcher at the top; the active session
+ * is the default selection. */
 export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryPanelContentProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
-  const sessionId = useAppStore((state) => state.tasks.activeSessionId);
+  const activeSessionId = useAppStore((state) => state.tasks.activeSessionId);
+  const activeTaskId = useAppStore((state) => state.tasks.activeTaskId);
+  const taskSessions = useAppStore((state) =>
+    activeTaskId
+      ? Object.values(state.taskSessions.items).filter((s) => s.task_id === activeTaskId)
+      : [],
+  );
+  const agentProfiles = useAppStore((state) => state.agentProfiles.items);
+  const [sessionOverride, setSessionOverride] = useState<string | null>(null);
+  // A task switch resets the override back to the active session.
+  useEffect(() => setSessionOverride(null), [activeTaskId]);
+  const sessionId = sessionOverride ?? activeSessionId;
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
   const { messages } = useSessionMessages(sessionId);
   const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
@@ -55,6 +68,20 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
 
   return (
     <PanelRoot ref={rootRef} data-testid="prompt-history-panel" className="overflow-y-auto p-2">
+      {taskSessions.length > 1 && (
+        <select
+          data-testid="prompt-history-session-select"
+          value={sessionId ?? ""}
+          onChange={(event) => setSessionOverride(event.target.value || null)}
+          className="mb-2 w-full cursor-pointer rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+        >
+          {taskSessions.map((taskSession) => (
+            <option key={taskSession.id} value={taskSession.id}>
+              {sessionLabel(taskSession, agentProfiles, t("task:session"))}
+            </option>
+          ))}
+        </select>
+      )}
       {entries.map((entry, index) => (
         <PromptHistoryRow
           key={entry.messageId}
@@ -69,6 +96,22 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
       ))}
     </PanelRoot>
   );
+}
+
+/** Compact session label for the switcher: user name, else the agent profile
+ * label's short form, else the given fallback label. */
+function sessionLabel(
+  taskSession: { name?: string; agent_profile_id?: string },
+  profiles: readonly { id: string; label: string }[],
+  fallback: string,
+): string {
+  if (taskSession.name) return taskSession.name;
+  const profile = profiles.find((p) => p.id === taskSession.agent_profile_id);
+  if (profile) {
+    const parts = profile.label.split(" \u2022 ");
+    return parts[1] || parts[0] || profile.label;
+  }
+  return fallback;
 }
 
 /** Tracks the panel root's height via ResizeObserver and returns 40% of it as
@@ -101,10 +144,9 @@ type PromptHistoryRowProps = {
 
 /** One prompt-history row: the prompt text (truncated, or expanded into a
  * scrollable box) inside the transcript-style bubble, its relative time and
- * duration. A jump button floats over the bubble's left edge (revealed on
- * hover for fine pointers, always visible on touch) and an expand/collapse
- * chevron floats over the truncated text's ellipsis when the text overflows,
- * both overlapping the text to keep rows compact. */
+ * duration. A jump button floats over the bubble's left edge and an
+ * expand/collapse chevron floats over the truncated text's ellipsis when the
+ * text overflows, both overlapping the text to keep rows compact. */
 function PromptHistoryRow({
   sessionId,
   entry,
@@ -138,20 +180,19 @@ function PromptHistoryRow({
         {/* Same bubble as the transcript's user message: markdown-body
             font, rounded-2xl, blue when not favorited / yellow when the
             message is starred — with lighter padding. The jump button
-            floats inside the bubble's left edge (revealed on hover for
-            fine pointers, always visible on touch) and the expand/collapse
+            floats inside the bubble's left edge and the expand/collapse
             chevron floats at the end of the truncated line (over the
             ellipsis), both overlapping the text to keep rows compact. */}
         <div
           className={cn(
-            "markdown-body markdown-body-user group relative overflow-hidden rounded-2xl px-3 py-1.5",
+            "markdown-body markdown-body-user relative overflow-hidden rounded-2xl px-3 py-1.5",
             isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
           )}
         >
           <Button
             variant="ghost"
             size="icon"
-            className="absolute left-1 top-1/2 z-10 size-11 -translate-y-1/2 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 focus-visible:bg-background/90 sm:size-6 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+            className="absolute left-1 top-1/2 z-10 size-11 -translate-y-1/2 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 focus-visible:bg-background/90 sm:size-6"
             aria-label={t("task:scrollToPrompt")}
             data-testid={`prompt-history-jump-${index}`}
             onClick={() => onNavigate?.(entry.messageId)}
@@ -188,7 +229,7 @@ function PromptHistoryRow({
           )}
         </div>
       </div>
-      <div className="flex w-28 min-w-28 shrink-0 flex-col items-end gap-0.5 text-xs leading-tight text-muted-foreground sm:w-32 sm:min-w-32">
+      <div className="flex shrink-0 flex-col items-end gap-0.5 text-xs leading-tight text-muted-foreground">
         <time
           dateTime={entry.sentAt}
           title={formatDateTime(entry.sentAt)}

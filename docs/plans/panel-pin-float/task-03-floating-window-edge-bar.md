@@ -3,7 +3,7 @@ id: "03-floating-window-edge-bar"
 title: "Floating window, collapsed edge bar, and owned-region coordinator"
 status: pending
 wave: 3
-depends_on: ["01-floating-store-state"]
+depends_on: ["01-floating-store-state", "02-header-pin-control"]
 plan: "plan.md"
 spec: "../../specs/ui/panel-pin-float.md"
 ---

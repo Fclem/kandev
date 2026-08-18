@@ -207,9 +207,17 @@ assigns UUIDs once and persists them), carried through the serializer
 normalized `LayoutGroup`/`LayoutColumn`:** a synchronous
 `normalizeLayoutIdentities(state)` precondition runs on EVERY reset/custom/
 default path (legacy v3 included — reset must never run against an
-un-migrated layout) and fails closed before `mapLayoutGroups` or the
-materializer when any group/column lacks or duplicates identity;
-reset-before-migration and duplicate/undefined-identity fixtures cover it. **The live Dockview model
+un-migrated layout) **and on EVERY restore route** (`readEnvLayoutForRestore`/
+the single apply adapter validates or normalizes identities on initial,
+env-switch fast/slow, maximize-only, custom-envelope/legacy, and fallthrough
+routes alike — normalization runs once per restored state, immediately after
+the native restore and before session replacement/reconciliation, with a
+cost/invalidation rule stating when the normalized registry is rebuilt), and
+fails closed before `mapLayoutGroups`, the
+materializer, or any capture when any group/column lacks or duplicates
+identity; reset-before-migration, duplicate/undefined-identity, and
+call-order fixtures (no capture/materializer runs before the check) cover
+it. **The live Dockview model
 cannot carry custom fields, so a store-owned **normalized-live-layout
 registry** keys logical metadata by the NATIVE group/column ids and is
 merged into every capture: `fromDockviewApi`/capture accept that registry
@@ -263,10 +271,18 @@ loses the incoming session, or mutates the maximize overlay:
   slot cleanup can never release a newly adopted portal), and the
   expected-detach registry token stays valid through all delayed removal
   callbacks; the **detached content contract** defines virtual active state
-  (floating-store-backed `usePanelActive` — `api: null` is never treated as
-  inactive) and API-null rendering for terminal/chat/plugin/file-editor
-  panels (header/tab code must not dereference the dockview api while
-  detached); the floating window adopts those detached
+  with **explicit active-state authority: the portal lease/store carries a
+  `grid | floating` generation with atomic handoff** — while detached, the
+  floating store's `activePanelId` is authoritative and ALL grid
+  `onDidActiveChange` callbacks for that panel are ignored (stale grid
+  events after float never win); after dock, the grid lease is acquired and
+  authority transfers only after the post-rAF adoption; `api: null` is never
+  treated as inactive (`usePanelActive` is extended or replaced by the
+  floating-store-backed variant), and API-null rendering for
+  terminal/chat/plugin/file-editor panels is tested along with
+  float-before-active-event, delayed-old-grid-event-after-float,
+  dock-before-event, maximize reload, and active-tab changes in both
+  surfaces; the floating window adopts those detached
   portals in a documented stacking context (explicit z-index above Dockview's
   maximize overlay); on maximize exit the floating owner is marked released
   BEFORE `fromJSON`, the grid slot acquires each portal **exactly once after
@@ -313,14 +329,21 @@ field length-delimited (4-byte big-endian length prefix per field), sorted by
 UTF-8 bytes — hashed with a **synchronous, cross-runtime SHA-256
 implementation** (pure-JS — `crypto.subtle` is async and unavailable in some
 insecure contexts; Node and browser paths must produce identical bytes, with
-jsdom/Node/insecure-HTTP tests), and mapped to a UUID by taking the first 16
-bytes, setting **byte 6's high nibble to `0x5` (version 5)** and the RFC 4122
-variant bits in **byte 8**, with documented byte order and string formatting
-and **golden vectors**; duplicate panel ids, empty sets, and duplicate source
-keys are rejected BEFORE hashing; a `canonicalKey → source path` map is
-maintained during migration to reject post-truncation UUID collisions before
-writing v4. v3 derivation runs ONCE (v4 logical ids are thereafter
-authoritative and membership changes NEVER re-derive them). The blob's `identities` map is a
+jsdom/Node/insecure-HTTP tests). **The one-time migration hash is the ONLY
+synchronous hash** — ordinary journal hashing for float/dock commits uses
+**async hashing with exact raw digests PRECOMPUTED/cached before mutation**
+(the unload path uses the cached digests, never starting a new expensive
+hash), with a benchmark/threshold acceptance for worst-case 96 KB blobs; the
+hash dependency is a direct declared dependency (or an audited vendored
+implementation — never an undeclared transitive import). The canonical
+  input maps to a UUID by taking the SHA-256 first 16 bytes, setting byte
+  6's high nibble to `0x5` (version 5) and the RFC 4122 variant bits in
+  byte 8, with documented byte order and string formatting and golden
+  vectors; duplicate panel ids, empty sets, and duplicate source keys are
+  rejected BEFORE hashing; a `canonicalKey → source path` map is maintained
+  during migration to reject post-truncation UUID collisions before writing
+  v4; v3 derivation runs ONCE (v4 logical ids are thereafter authoritative
+  and membership changes NEVER re-derive them). The blob's `identities` map is a
 **secondary cache keyed by `logicalId`**, never the source of truth: capture
 reads the group/column's own `logicalId` from the live layout (no
 traversal-derived `group-n` ids are ever treated as identity); a group or
@@ -471,7 +494,11 @@ Float/dock/restore are **transactions** with an operation journal:
      raw: { beforeFloating, beforeLayout, afterFloating, afterLayout } }
    ```
    **Digest protocol (exact):** each target storage value is serialized
-   **once**; the digest is a **tagged union** — `{kind: "absent"}` or
+   **once** and converted to bytes via the **canonical UTF-8 `TextEncoder`
+   conversion** (sessionStorage stores DOM strings, not bytes — the
+   string-to-byte encoding is part of the contract; all size budgets count
+   UTF-8 bytes, and Unicode/non-ASCII golden vectors cover parity across
+   jsdom/Node); the digest is a **tagged union** — `{kind: "absent"}` or
    `{kind: "present", sha256}` — over the **exact bytes written to
    sessionStorage** for that key (the raw JSON string, byte-for-byte — never
    a re-stringified parse), so absence is never conflated with a stored value
@@ -498,7 +525,7 @@ Float/dock/restore are **transactions** with an operation journal:
    | blob-after / layout-before | after pair | after digests |
    | layout-after / blob-before | after pair | after digests |
    | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
-   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **explicit state machine: quarantine the journal under a deterministic key and surface a localized, non-dismissable repair banner** (env + transaction id, with export/clear actions); repeated automatic recovery is suppressed while the banner is active; the banner is the only repair path (clear = drop both keys and the journal after explicit user confirmation); one-key, both-key, absent/present mismatch, reload/retry, and cleanup tests |
+   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable repair record keyed by (envId, transactionId)** — loaded on every mount; while repair is active NO automatic floating/layout mutation runs and salvage is READ-ONLY (journal-free divergence rules may render for display but never write); a localized, non-dismissable repair banner names the owner (the dockview store/coordinator), offers export and an AlertDialog-style explicit clear confirmation; clear removes the quarantine copies AND both target keys after confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, confirmation-failure, and cleanup tests |
    The `phase` marker (`mutating` vs `committed`) refines the both-after row
    (a `committed` marker with both-after means the mutation finished; a
    `mutating` marker with both-after is still settled by equality), never
@@ -696,17 +723,19 @@ rather than a global id set:
   composite key), holding one record `{ token }` per entry. **Event
   correlation WITHOUT token-carrying events:** `onDidRemovePanel` receives
   only the panel object — it NEVER carries a token — so the registry matches
-  by **monotonic `(api instance, panelId, operationUUID)`**: operation UUIDs
-  are unique per coordinator operation (never a per-env resetting counter, so
-  consecutive operations on the stable api instance cannot collide);
+  by **`(api instance, panelId, operationUUID)`**; operation UUIDs are unique
+  per coordinator operation (never a per-env resetting counter). **Tombstone
+  retention is ONE contract:** coordinator-owned tombstones with a **bounded
+  TTL (30 s)**, recorded with the operation UUID at arm time and dropped by a
+  coordinator-owned timer on expiry (an idle app never accumulates them
+  unbounded); a delayed `fromJSON` removal arriving within the TTL is
+  correlated via the tombstone, after expiry it is treated as a real user
+  close (documented — the TTL bounds the correlation window);
   registrations are armed immediately around each synchronous
-  remove/`fromJSON`, and **delayed `fromJSON` removals are correlated via
-  operation tombstones retained until a defined barrier** (the tombstone is
-  dropped only after the operation settles AND the next operation begins, or
-  a bounded retention window elapses — whichever is earlier is documented;
-  a delayed old removal after settle is distinguishable from a user close
-  while the tombstone lives, and a real user close is never registered and
-  never consumes a detach entry). **Portal env
+  remove/`fromJSON`. A real user close is never registered and never consumes
+  a detach entry. Idle/no-successor, event-before-successor,
+  delayed-old-event-after-successor, duplicate-delivery, and timer-expiry
+  tests cover the contract. **Portal env
   ownership on reacquire:** `acquire` on an existing entry updates
   api/params/component AND re-validates/updates `entry.envId` (a same panel
   id reacquired under a new env carries the new env; old-env blob entries

@@ -8,18 +8,17 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 20 incorporates the
-round-19 adversarial review** (this package has been adversarially reviewed
-every round): canonicalized reconciliation signature inputs (session-excluded,
-normalized-index), a detached-portal lease/rendering contract with
-virtual active state and stale-owner-ignoring release, coordinator-owned
-replacement barrier with AbortController timeout and
-`isSessionReplacementPending` gates, exact UUID v5 bytes with a synchronous
-cross-runtime hash, mandatory `logicalId` with a `normalizeLayoutIdentities`
-precondition, operation-UUID event correlation with tombstones, a committed
-layout-key consumer matrix with a legacy-key scan, an explicit
-unexpected-row repair state machine (quarantine + non-dismissable banner),
-and the explicit `SavedLayoutConfig.layout` union schema.
+the existing env layout / maximize persistence. **Revision 21 incorporates the
+round-20 adversarial review** (this package has been adversarially reviewed
+every round): a single coordinator-owned tombstone TTL (30 s) with no
+token-carrying-event claim, `normalizeLayoutIdentities` on every restore
+route, explicit grid-vs-floating active-state authority with atomic handoff,
+a unified fail-closed untrusted-journal policy (persisted repair record,
+read-only salvage, AlertDialog clear), canonical UTF-8 byte encoding with
+Unicode golden vectors, separation of the one-time synchronous migration hash
+from async ordinary journal hashing (precomputed digests, direct declared
+dependency, benchmark threshold), a machine-readable consumer manifest with a
+legacy-key validator, and the corrected task-03 dependency graph.
 
 ## Architecture
 
@@ -341,6 +340,20 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 
 ## Risks
 
+- **Tombstone TTL (30 s):** single coordinator-owned contract; idle apps
+  never accumulate; post-TTL delayed removals are real closes (documented).
+- **Active-state authority:** grid-vs-floating generation with atomic handoff;
+  stale grid events never win while detached.
+- **Untrusted-journal policy:** ONE fail-closed path (invalid/mismatched/
+  unexpected all quarantine + repair record + read-only salvage); clear via
+  AlertDialog removes quarantine + both keys.
+- **Identity precondition on every restore route** (once per restored state).
+- **UTF-8 canonical encoding** for digests and budgets.
+- **SHA separation:** migration hash synchronous one-time; ordinary commits
+  async with precomputed digests; direct dependency + benchmark.
+- **Consumer manifest:** machine-readable + legacy-key validator in the
+  frontend gate.
+- **task-03 depends_on fixed** (includes task-02).
 - **Reconciliation diff contract:** native owns payloads, normalized owns
   identity/placement/role, session panels excluded; one live instance per
   panel id; duplicate-prevention tests.
@@ -352,7 +365,7 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 - **Normalized-live-layout registry:** keyed by native ids, merged into every
   capture, fail-closed on unmapped objects.
 - **Bootstrap callsite table + bypass test.**
-- **Tree+flat reset merging** via the shared helper.
+- **Tree+flat reset merging** via the shared pure helper.
 - **Domain-tagged canonicalization** (kind + role + sorted ids, SHA-256→UUID).
 - **`isSerializedDockviewShape`** central guard.
 - **CI anchor** (frontend-tests.yml job + exact command).

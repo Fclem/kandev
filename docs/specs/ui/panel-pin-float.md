@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 38
-prior-round: 37
+revision: 39
+prior-round: 38
 ---
 
 # Floating (unpinned) workbench panels
@@ -527,17 +527,24 @@ loses the incoming session, or mutates the maximize overlay:
   same-tab reload while maximized reconstructs a FRESH portal lease from
   live validated state at mount time — a persisted epoch is a marker, NEVER
   an owner token (marker-only and malformed-maximize cases are tested); **MOUNT PROTOCOL (happens-before): the reload path runs an explicit
-  HYDRATE TRANSACTION that atomically claims the GLOBAL api lease from
+  HYDRATE TRANSACTION, `beginHydrate(envId)`, for EXACTLY ONE active env:
+  it atomically claims the GLOBAL api lease from
   IDLE (begin-hydrate → validate envelope → install the validated
   logical registry + fresh floating lease → acquire detached portals →
   render/adopt → settle-hydrate) BEFORE registry installation or portal
   acquisition — the in-memory coordinator is IDLE after a reload while
   the persisted marker + detached lease already exist, so without the
   hydrate claim a competing restore/mutator could pass an IDLE check or
-  another env could start first; while the pending marker remains, the
+  another env could start first; OTHER envs with persisted markers are
+  discovered deterministically (marker index) and hydrated SERIALLY on
+  env switch (each `beginHydrate(envId)` re-claims the global lease from
+  IDLE; markers of non-active envs are retained, never consumed); while
+  the pending marker remains, the
   hydrate lease is NOT released (transaction-1 lease semantics: released
-  only at exit-restore or explicit invalidation); reload + competing
-  env/mutator ordering tests; the markerless reload test
+  only at exit-restore or explicit invalidation); stale-env markers are
+  deleted with generation invalidation; hydrate failure for one env is
+  isolated (quarantine that env only); reload + competing
+  env/mutator ordering tests + A/B-markers-with-switch-during-hydrate; the markerless reload test
   asserts BOTH content visibility above the overlay AND registry
   readiness (no unbound native identity / api:null-inactive first
   render).** **the state is renamed `pendingGridMaterialization` and its gating is
@@ -562,15 +569,18 @@ loses the incoming session, or mutates the maximize overlay:
   result-matrix.md):
   `busy | lease-held | quota-full | settle-timeout | invalid-definition |
   stale-session | stale-identity | recovery-pending | journal-unavailable |
-  quarantine | repair-active | recovered-with-drops` and
+  quarantine | repair-active | recovered-with-drops | apply-failed |
+  portal-failed | plugin-contract-failure | automatic` and
   locale keys `task:floatingError.*` (one per reason) + `task:floatingRetry`
   + `task:floatingCancel`; **an exhaustive OPERATION × REASON × ACTION
   matrix is COMMITTED as `docs/plans/panel-pin-float/result-matrix.md` —
   one closed `LayoutMutationResult` union (applied | pruned |
   recovered-with-drops | skipped | rejected | suppressed | terminal) with
-  24 operation rows, every one mapped to suppression scope, user action,
+  ALL rows (33; count GENERATED from the file, never hand-copied), every
+  one carrying exactly one (status, reason, action) mapped to suppression
+  scope, user action,
   terminality, and clearing condition (implemented as a switch with an
-  exhaustiveness test): each row defines suppression scope (none / current
+  exhaustiveness test over the CLOSED operation-state union): each row defines suppression scope (none / current
   env / all envs), user action (retry / cancel / repair-clear / export /
   none), terminal-or-transient, and what clears it — `busy`/`lease-held`
   = transient, auto-retry or disabled control; `quota-full` = transient,
@@ -1390,7 +1400,15 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   window expanded, keeps the lease, and surfaces a TYPED PLUGIN CONTRACT
   FAILURE (locale key) instead of a phantom unregister; the window
   collapses only after a real ack or the failure path's explicit
-  teardown.** Ordering: open=true transition → admission check → owned
+  teardown.** **ACK TIMEOUT IS BOUNDED AND COORDINATOR-OWNED: 3 s
+  deadline stored as `{capability, handshake, generation, deadline}`;
+  ack vs timeout are serialized with compare-and-clear (ack-before-
+  timeout wins; timeout-before-ack emits the typed
+  `{status:"terminal", reason:"plugin-contract-failure"}` result, REVOKES
+  the capability/handshake, unregisters the layer, and ends the retained
+  lease — after revocation the window MAY collapse normally); late ack
+  after revocation is a generation no-op; tests: ack-before-timeout,
+  exact-boundary, timeout-before-ack, unmount/unregister, late ack.** Ordering: open=true transition → admission check → owned
   or (rejected + requestClose + lease retained pending ack); tests:
   rejected second-root closes, host refcount consistent (incl. an
   INTENTIONALLY UNCONTROLLED plugin), Radix dismissal state, retry after

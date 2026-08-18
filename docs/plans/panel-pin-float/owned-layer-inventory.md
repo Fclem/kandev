@@ -11,7 +11,7 @@ collapses while the layer is open (a contract violation).
 Legend for `Status`: `audited` = callsite confirmed in the baseline and the
 hook is applied by this feature (or layer-free proof); `to-wire` = callsite
 confirmed, hook must be applied during task-03; `verify` = candidate surface,
-confirm during task-03. **Source audit status (revision 37): COMPLETE —
+confirm during task-03. **Source audit status (revision 38): COMPLETE —
 every row below is file/line-anchored from live source (scout audit
 2026-08-18 + parent verification 2026-08-18: model-config-selector.tsx
 587-614 added, the github/gitlab/review reachable surface is a bounded
@@ -103,7 +103,15 @@ or a discovered primitive without a row; out-of-scope settings/connection
 rows flip to `audited` only when their panel-reachability proofs are
 attached (the gate asserts no overlay is reachable from a floating-
 capable panel). The markdown is the human-readable view; the generated
-artifact is the acceptance source.**
+artifact is the acceptance source.** **GENERATOR LIFECYCLE is
+REPRODUCIBLE: `generate-owned-layer-inventory.mjs` (named, with exact
+command `node scripts/generate-owned-layer-inventory.mjs`, deterministic
+source globs + canonical ordering + schema) runs BEFORE validation in the
+developer and CI targets; CI fails if the generator's output differs from
+the committed artifact (uncommitted-diff failure) and then runs the
+validator against the committed artifact; authors regenerate after every
+source change to an owned-layer file, before commit/PR; a stale-artifact
+fixture is tested.**
 
 ## Mobile
 
@@ -135,7 +143,15 @@ lease/generation BEFORE the persistent content is reparented (an
 open=true transition is NOT re-fired; the registration moves with its
 lease identity); float-while-open and open-at-the-same-frame-as-float
 races are covered by tests; there is no window where an already-open
-layer is unowned during the transition frame.** **TRANSPORT:
+layer is unowned during the transition frame.** **The swap is ONE
+coordinator critical-section operation,
+`transferFloatingLayerLease(portalInstanceKey, oldLease, newLease,
+generation)`: validates the current entry, replaces the map entry in a
+SINGLE store update (never delete-then-set — a synchronous
+`useFloatingOwnedLayer` read can never observe a null window), returns
+the new lease to both owner trees, and rejects stale callbacks (wrong
+generation); deterministic read-before/during/after transfer test
+asserts no null window and exactly one owner at every instant.** **TRANSPORT:
 `FloatingWindowLeaseProvider` is rendered at the WORKBENCH ROOT — ABOVE
 BOTH PanelPortalHost and the floating overlay, because React context
 follows the React OWNER tree, not the destination DOM node: a provider
@@ -145,7 +161,17 @@ PanelPortalHost even after the DOM element is reparented
 `Map<portalInstanceKey, lease>`; the floating overlay registers its lease
 per groupLogicalId + generation; `useFloatingOwnedLayer` looks up BY
 PORTAL INSTANCE KEY (never DOM ancestry); a lease-read-before-and-after-
-DOM-reparent test is required.**
+DOM-reparent test is required.** **portalInstanceKey is an EXPLICIT
+contract: `PortalEntry` gains an instance-key field (opaque, per portal
+instance, independent of panelId — createPortal currently keys by panelId,
+panel-portal-manager.ts:41-52); `renderPanel`/`PanelPortalHost` pass it
+through React context around each createPortal render so content reads the
+SAME key the overlay registration uses; key rotation on reacquire and the
+envId update are ONE atomic store update in PanelPortalManager (the current
+re-acquire path updates api/params/component but not envId — fixed);
+`useFloatingOwnedLayer` is an explicit NO-OP outside a desktop workbench
+provider (mobile task layout, session-mobile-layout.tsx — no floating
+window exists); tests: docked, floating, mobile, re-acquire rotation.**
 Tests: panel reparent + body-
 portal outside pointer and focusout.** A real
 custom-portal test (open → outside pointerdown → no collapse → close →

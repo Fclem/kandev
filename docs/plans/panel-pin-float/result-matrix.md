@@ -1,4 +1,4 @@
-# Floating-panels result matrix (revision 42, committed)
+# Floating-panels result matrix (revision 43, committed)
 
 The single machine-readable operation × reason × action matrix required by
 `docs/specs/ui/panel-pin-float.md` (Result algebra) and
@@ -16,7 +16,7 @@ internal transitions use `automatic`):
 busy | lease-held | quota-full | settle-timeout | invalid-definition |
 stale-session | stale-identity | recovery-pending | journal-unavailable |
 quarantine | repair-active | recovered-with-drops | apply-failed |
-portal-failed | plugin-contract-failure | intent-cancelled | automatic
+portal-failed | plugin-contract-failure | stale-capability | intent-cancelled | automatic
 ```
 
 - `stale-session` is the reason for status `pruned` (silent outcome; locale
@@ -44,7 +44,7 @@ action) row — every row has a reason (never `—`).** A compile-time/test
 assertion iterates the CLOSED operation-state union (below) and fails if
 any state is covered by zero or two rows.
 
-## Matrix (38 rows; count generated from this file — the generator parses rows, never trusts headings)
+## Matrix (40 rows; count generated from this file — the generator parses rows, never trusts headings; a validator asserts the generated count against EVERY cross-artifact declaration)
 
 | # | Operation / source state | Status | Reason | Suppression scope | User action | Terminal? | Cleared by |
 |---|---|---|---|---|---|---|---|
@@ -75,7 +75,7 @@ any state is covered by zero or two rows.
 | 23 | reset: rollback also fails (budget exhausted) | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
 | 24 | custom/RADIX layer second-open rejection (per-open handshake) | rejected | busy | layer only | requestClose + host close signal | no | layer closes (real open=false ack) |
 | 25 | outer `settle` called while a nested transaction is active | rejected | busy | current env | nested settle first | no | nested settle |
-| 26a | portal adoption/lease failure — PREFLIGHT, provably no native mutation | rejected | portal-failed | current env | retry (safe: no mutation occurred) | no | retry or repair-clear |
+| 26a | portal adoption/lease failure — PREFLIGHT (nativeMutationStarted false + snapshot unchanged) | rejected | portal-failed | current env | RETRY ONLY (no durable repair state exists — repair-clear is impossible unless a repair record was explicitly created) | no | retry |
 | 26b | portal adoption/lease failure — POST-partial adoption (native mutation invoked) | terminal | portal-failed | ALL envs | quarantine + repair-clear / export (fail-closed: lease invalidated, fresh validated rebuild) | yes | repair-clear |
 | 27 | plugin layer noncompliance (requestClose ignored / ack timeout) | terminal | plugin-contract-failure | layer only | revoke the OPEN's capability + typed failure UI | yes | open capability revoked (next open receives a FRESH per-open capability) |
 | 28 | env-switch retry at settle succeeds | applied | automatic | current env | none (deferred switch applied) | no | settle |
@@ -89,6 +89,7 @@ any state is covered by zero or two rows.
 | 35 | maximize t1 ROLLBACK failure | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
 | 36 | recovery selected-target write/verify failure (journal retained, retry) | suppressed | repair-active | ALL envs | retry (never cached recovered) | no | verified target write/absence |
 | 37 | env-switch intent cancelled (user cancel / unmount / target-deleted) | skipped | intent-cancelled | current env | none | yes | — |
+| 38 | plugin uses a REVOKED cached capability (stale props) | rejected | stale-capability | layer only | synchronous no-side-effect rejection — re-read via requestCapability + retry with the fresh generation (NO second revocation, NO second timer) | no | requestCapability re-read + retry |
 
 ## CLOSED operation-state union (for the exactly-once assertion)
 
@@ -121,10 +122,14 @@ to exactly one row above:
    second failure (29), user-cancel/unmount/target-deleted (37).
 9. Portal: preflight failure (26a), post-partial-adoption failure (26b).
 10. Plugin layers, discriminated by `PluginLayerAdmission =
-    first-open-admitted | duplicate-open-rejected | close-ack`:
+    first-open-admitted | duplicate-open-rejected | close-ack | ack-timeout`:
     first-open-admitted → NON-RESULT (excluded, no row); duplicate-open-
-    rejected → row 24; close-ack → NON-RESULT (excluded); noncompliance
-    ack-timeout → row 27. The generator iterates the admission
+    rejected → row 24 (the ADMISSION-CHECK RESULT is the observable
+    transition consumed by the generator); close-ack → NON-RESULT
+    (excluded; close-ack IS the handshake's actual open=false callback);
+    ack-timeout → row 27 (host-side timer observation, no plugin
+    internals needed); generator fixture: host-only, two roots + an
+    intentionally uncontrolled plugin. The generator iterates the admission
     discriminator values and rejects a state covered by zero or two rows
     (or a row covering a non-result value).
 11. Prune/salvage/allow-list: invalid-definition (5), stale-session (10),
@@ -154,11 +159,12 @@ to exactly one row above:
 - The exhaustive switch over `LayoutMutationResult` (task-04) is compiled
   with `exhaustive` checks and the exactly-once assertion over the closed
   union above; adding a state without a row fails CI.
-- Row count (38) and the locale-key list are GENERATED from this file; the
+- Row count (40) and the locale-key list are GENERATED from this file; the
   spec/plan "24 rows" prose is replaced by "rows generated from
   result-matrix.md". Assertion: `status == "terminal"` IFF
   `Terminal? == yes` (generated cross-check over all rows).
 - Locale keys must exist for every surfaced reason in `task:floatingError.*`
   (i18n gate; pseudo-locale completeness check); `automatic`/
   `stale-session`/`stale-identity`/`intent-cancelled` are excluded from
-  the key generation.
+  the key generation; `stale-capability` HAS a locale key
+  (`task:floatingError.staleCapability`).

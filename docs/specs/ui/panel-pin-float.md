@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 41
-prior-round: 40
+revision: 42
+prior-round: 41
 ---
 
 # Floating (unpinned) workbench panels
@@ -531,7 +531,15 @@ loses the incoming session, or mutates the maximize overlay:
   POST-partial-adoption failure (native mutation invoked) is TERMINAL —
   lease invalidated, quarantine + durable repair, fresh validated rebuild
   (matrix 26b); the nested/repair failure path (spec fail-closed
-  quarantine) is the same terminal class.** **MOUNT PROTOCOL (happens-before): the reload path runs an explicit
+  quarantine) is the same terminal class.** **The boundary is EVIDENCED:
+  a coordinator-owned boundary record captures a PRE-ADOPTION NATIVE
+  SNAPSHOT and a `nativeMutationStarted` marker set IMMEDIATELY BEFORE
+  the native mutation call (the DOM `appendChild(entry.element)` in
+  usePortalSlot is adoption, NOT the native call): 26a is classified
+  only when the marker is false AND the snapshot is unchanged; 26b
+  otherwise; tests: failure before adoption, after DOM adoption but
+  before native invocation, during native invocation, after partial
+  native mutation.** **MOUNT PROTOCOL (happens-before): the reload path runs an explicit
   HYDRATE TRANSACTION, `beginHydrate(envId)`, for EXACTLY ONE active env:
   it atomically claims the GLOBAL api lease from
   IDLE (begin-hydrate → validate envelope → install the validated
@@ -551,10 +559,17 @@ loses the incoming session, or mutates the maximize overlay:
   QUEUE CONTRACT: items are typed (`marker-hydrate` vs `switch-intent`),
   FIFO within type with SWITCH-INTENT PRIORITY over marker-hydrates (a
   user's switch intent is never starved by a marker backlog), duplicate
-  switch intents COALESCE (latest target wins); when the queue drains,
+  switch intents COALESCE (latest target wins); **SELF-FIRST: a
+  `switch-intent(B)` CLAIMS/CONSUMES B's marker as its own target hydrate
+  BEFORE any other marker is processed (B is hydrated exactly once — the
+  switch's own hydrate and any queued marker-hydrate(B) are the SAME
+  operation, never duplicated; non-target markers are retained);** when
+  the queue drains,
   a generation-bound `hydrate-settled` signal wakes EXACTLY ONE deferred
   switch (the head item), which then begins its own hydrate; switch-
   during-hydrating(A) enqueues the intent ahead of marker-B;
+  A/B/C + B-marker-queued + switch-during-A tests assert exactly ONE
+  B hydrate;
   markers of non-active envs are retained, never consumed; while
   the pending marker remains, the
   hydrate lease is NOT released (transaction-1 lease semantics: released
@@ -1439,7 +1454,15 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   additionally, before EVERY open the plugin MUST re-read via
   `requestCapability()` — a stale cached `PluginTaskPanelProps` capability
   is never trusted and using a revoked capability is a TYPED
-  stale-capability failure (the plugin re-reads and retries); the next
+  `{status:"rejected", reason:"stale-capability"}` failure (matrix row
+  38) — SYNCHRONOUS, no side effects: NO second revocation, NO second ack
+  timer (the revocation already happened at timeout); `requestCapability`
+  itself has NO timer (it is a synchronous store read of the current
+  generation); the plugin re-reads with the fresh generation and retries;
+  a stale attempt is idempotent (repeated stale use returns the same
+  typed rejection without further state change); teardown/unmount clears
+  the handshake; retry ordering: stale → typed failure → fresh
+  capability → successful next open; the next
   open transition on that panel receives the FRESH capability, so a
   timeout never poisons a still-mounted panel (the revoked capability
   dies; the panel is not permanently disabled; no remount required) —
@@ -1580,7 +1603,15 @@ in the group's saved tab order.
   `consumeFloatingSessionWinner(sessionId, envId, generation)` called from
   `shouldSkipPanelEnsure` (`dockview-session-tabs.ts`) before the hook's
   ensure effect runs — consumption is one-shot, so repeated/StrictMode effects
-  cannot double-skip. Stale winners (generation or env mismatch) are cleared
+  cannot double-skip. **ALL-FLOATING-SESSION-IDS RULE: `shouldSkipPanelEnsure`
+  skips EVERY session id currently owned by a floating group (an atomic
+  `floatingSessionIds` ownership query), not only `floatingSessionWinner` —
+  a session that exists ONLY in a floating group, or a non-winner floating
+  session, can never be re-added to the grid by the auto-session hook;
+  materialization and ensure both FAIL CLOSED on an existing live id
+  (one live instance per panelId); tests: current floating session,
+  stale winner, non-winner stale entries, StrictMode reruns,
+  hook-before/after replacement.** Stale winners (generation or env mismatch) are cleared
   on generation/env transition and on every terminal path (ensure failure,
   unmount, env switch); a newer generation is never cleared by an older
   cleanup.

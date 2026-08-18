@@ -7,6 +7,7 @@ export type PromptHistoryEntry = {
   sentAt: string;
   durationSeconds: number | null;
   isLastPrompt: boolean;
+  isAgentPrompt: boolean;
 };
 
 export type PromptDurationUnits = {
@@ -16,6 +17,12 @@ export type PromptDurationUnits = {
 };
 
 type PromptWithTimestamp = Message & { timestamp: number };
+
+/** Returns whether a user prompt was sent by another task's agent. */
+function isAgentPrompt(message: Message): boolean {
+  const senderTaskId = message.metadata?.sender_task_id;
+  return typeof senderTaskId === "string" && senderTaskId.length > 0;
+}
 
 /** Parse a date string into a millisecond epoch timestamp, returning `null` for missing or unparseable values. */
 function timestamp(value: string | undefined): number | null {
@@ -99,6 +106,7 @@ export function buildPromptHistoryEntries(
       sentAt: prompt.created_at,
       durationSeconds,
       isLastPrompt: index === sessionPrompts.length - 1,
+      isAgentPrompt: isAgentPrompt(prompt),
     };
   });
 

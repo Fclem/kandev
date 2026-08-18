@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
-import { IconChevronDown, IconChevronUp, IconClock, IconHourglass } from "@tabler/icons-react";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconClock,
+  IconHourglass,
+  IconRobot,
+} from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
 import { useSessionMessages } from "@/hooks/domains/session/use-session-messages";
 import { useSessionTurnsState } from "@/hooks/domains/session/use-session-turns";
@@ -147,6 +153,12 @@ function PromptHistoryRow({
             onNavigate?.(entry.messageId);
           }}
         >
+          {entry.isAgentPrompt && (
+            <IconRobot
+              className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom"
+              aria-hidden="true"
+            />
+          )}
           <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
             {entry.content}
           </span>

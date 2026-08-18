@@ -182,6 +182,21 @@ describe("buildPromptHistoryEntries", () => {
   it.each(ENTRY_CASES)("$name", ({ messages, turns, expected }) => {
     expect(buildPromptHistoryEntries(messages, turns)).toMatchObject(expected);
   });
+  it("marks inter-task agent prompts without marking ordinary user prompts", () => {
+    const entries = buildPromptHistoryEntries(
+      [
+        message({
+          id: "agent-prompt",
+          metadata: { sender_task_id: "sender-task" },
+        }),
+        message({ id: "user-prompt", created_at: "2026-01-01T00:00:01.000Z" }),
+      ],
+      [],
+    );
+
+    expect(entries[0]).toMatchObject({ messageId: "user-prompt", isAgentPrompt: false });
+    expect(entries[1]).toMatchObject({ messageId: "agent-prompt", isAgentPrompt: true });
+  });
 });
 
 describe("formatPromptDuration", () => {

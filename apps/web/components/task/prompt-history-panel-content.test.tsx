@@ -213,6 +213,24 @@ describe("PromptHistoryPanelContent — rows and test IDs", () => {
     expect(bubble?.classList.contains("markdown-body-user")).toBe(true);
     expect(bubble?.textContent).toContain("bubbled prompt");
   });
+  it("starts agent-owned prompts with the robot icon used by the transcript header", () => {
+    messagesBySession[SESSION_A] = [
+      message({
+        metadata: {
+          sender_task_id: "sender-task",
+          sender_task_title: "Sending task",
+          sender_session_id: "sender-session",
+        },
+      }),
+    ];
+
+    render(<PromptHistoryPanelContent />);
+
+    const bubble = row(0).querySelector(".rounded-2xl");
+    const robot = bubble?.querySelector("svg.tabler-icon-robot");
+    expect(robot).toBeTruthy();
+    expect(bubble?.firstElementChild).toBe(robot);
+  });
 
   it("turns the bubble yellow when the transcript message is starred", () => {
     useMessageFavoritesStore.getState().toggleFavorite(SESSION_A, "message-1");

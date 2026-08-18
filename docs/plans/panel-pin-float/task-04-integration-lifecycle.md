@@ -20,6 +20,13 @@ spec: "../../specs/ui/panel-pin-float.md"
   5. `toggleRightPanels` (`lib/state/dockview-store.ts`), where the restore is a no-op if already applied;
   6. reset/default build.
   No docked flash appears after any restore.
+- **Env-switch deferral with coordinator-owned settle deadline (5 s
+  watchdog):** deferred switches cancel with the typed rejected result and
+  localized retry/cancel UI on expiry; hung-lease, timeout, unmount, and
+  target-deletion paths are tested. One public result algebra covers pin
+  click, float/dock, quota-full, journal/quarantine, busy/lease-held,
+  stale identity, and recovery failures (reason enum + locale keys;
+  debug-only no-ops replaced by typed results).
 - **Session replacement (single coordinator over grid + floating + auto-session hook):** `replaceStaleSessionPanels` returns an old→new mapping applied to floating entries (panelIds, `FloatingPanelDef`s, portal params/title, `activePanelId`). The deterministic **winner** is the group's active stale panel, else the first stale floating panel in saved tab order. The winner is written to a store-owned, **memory-only** field — `floatingSessionWinner: { sessionId, envId, generation } | null` — atomically with replacement and consumed **one-shot** via atomic compare-and-clear `consumeFloatingSessionWinner(sessionId, envId, generation)` from `shouldSkipPanelEnsure` (`dockview-session-tabs.ts`) before the always-mounted `useAutoSessionTab` hook's ensure effect — written before the hook in **both** env-switch and maximize-restore branches; the hook skips only the winner id (unrelated current-session siblings are ensured as today via `addCurrentSessionSiblings`/`ensureSiblingPanels`, with an explicit anchor when the winner floats). Stale winners (generation/env mismatch) are cleared on generation/env transition and every terminal path (ensure failure, unmount, env switch); a newer generation is never cleared by an older cleanup; repeated/StrictMode effects cannot double-skip. **Placement normalization (post-apply hook, floating-winner edge):** replacement also runs a
   post-apply hook — after the synchronous layout/session replacement AND
   incoming-session insertion (fast, slow, route-intent, maximize-restore,

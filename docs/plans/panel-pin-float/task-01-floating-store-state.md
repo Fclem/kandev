@@ -24,7 +24,12 @@ spec: "../../specs/ui/panel-pin-float.md"
   dockview JSON + normalized `LayoutState` carrying `logicalId`/`role`);
   **explicit v3-read/v4-write key constants** (v3 read until v4 written; v3
   deleted only after the validated v4 apply; the envelope `version` field is
-  the idempotence marker); **restore applies the SINGLE-`fromJSON`
+  the idempotence marker); - **Dockview API SPIKE (blocking, against pinned `dockview-core ^4.13.1`):**
+  document the exact `sv.setConstraints` + `resizeView` same-frame
+  sequence used by mid-drag rollback, prove captured widths survive
+  narrow/min-max conflict cases, and record the result in the task
+  notes before the rollback implementation is accepted.
+- **restore applies the SINGLE-`fromJSON`
   BY-CONSTRUCTION contract** — ONE pure native-JSON planning transform builds
   the final native JSON (all fixups/session/role folded in) + the fresh
   normalized native-ID registry BEFORE the single `api.fromJSON`, post-call

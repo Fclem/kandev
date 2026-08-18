@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 26
-prior-round: 25
+revision: 27
+prior-round: 26
 ---
 
 # Floating (unpinned) workbench panels
@@ -81,13 +81,16 @@ floatingGroups: Record<groupLogicalId, FloatingGroupState>   # in useDockviewSto
                   # KEYED BY THE LOGICAL ID (native groupId is a current hint
                   # only); actions/selectors use groupLogicalId; no native-key
                   # rekeying is ever needed
+                  # Public actions accept groupLogicalId; grid-header clicks
+                  # resolve via resolveLogicalGroupId(nativeGroupId, registry)
+                  # and reject unmapped native ids
 ```
 
 ```
 EnvFloatingState                     # persisted as JSON, versioned
   version      1
   nextOrder    number            # monotonic stack-order counter for this env
-  groups       Record<groupId, FloatingGroupState>
+  groups       Record<groupLogicalId, FloatingGroupState>   # logical key (native groupId is a validated hint/value only)
   rootColumns  Record<columnLogicalId, { pinned: boolean; width: number;
                                   minWidth: number | null; maxWidth: number | null;
                                   role: "center" | "pinned-right" |
@@ -106,7 +109,17 @@ EnvFloatingState                     # persisted as JSON, versioned
                # column when only two columns exist, else the middle index);
                # an originally-absent chat follows the same positional rule;
                # MULTIPLE chat/session candidates FAIL CLOSED (ambiguous);
-               # zero-column layouts fail migration; pinned-right = the pinned column containing
+               # zero-column layouts fail migration; **EMPTY-STRIP
+               # representation: a column left with zero panels after
+               # stripping RETAINS its logical column metadata in the
+               # normalized sidecar but the empty native column is OMITTED
+               # until a panel is materialized (the sanitizer already
+               # removes empty leaves/branches and nulls an empty root);
+               # stripped ids are removed from panels and every tree/flat
+               # view list, activeView is repaired, empty branches are
+               # pruned, and the logical center role is preserved
+               # separately; only-chat, chat-in-right, both-empty, and
+               # fromJSON-validity fixtures**; pinned-right = the pinned column containing
                # files/changes (tie → leftmost); side-other = known preset
                # side columns (plan/preview/vscode); custom = any unknown
                # column; no center/right candidate ⇒ roles assigned by the
@@ -274,7 +287,12 @@ loses the incoming session, or mutates the maximize overlay:
   maxWidths, pinnedFlags)`; widths are projected/distributed with a
   documented algorithm and rounding rule, and accepted iff each root width
   is within `max(2px, 1% of the asserted container width)` of the projected
-  value (chosen bound; min/max constraints respected); resize during
+  value (chosen bound; min/max constraints respected); **pinned/side
+  column widths are PLANNED; the CENTER width is DERIVED as the remaining
+  width after deterministic integer rounding (all remainder assigned to
+  center), clamped/redistributed under min/max conflicts, and subject to
+  the SAME projection/tolerance rule; 350px, narrow-container,
+  multi-side-column, and min/max-conflict vectors cover it**; resize during
   `[fromJSON, assertion]` is frozen/deferred, or the assertion recaptures
   and reprojects against the assertion container (one declared mode); a
   resize-between-plan-and-assertion fixture asserts the exact
@@ -286,7 +304,11 @@ loses the incoming session, or mutates the maximize overlay:
   **Enforcement ordering (mechanism):** the coordinator exposes phases
   `planned → applied → asserting → rollback → committing`; BOTH proactive
   `enforcePinnedTargets` calls and the reactive `onDidLayoutChange` handler
-  REJECT unless passed the active coordinator token/phase — enforcement is
+  REJECT unless passed the active coordinator token/phase — **the token is
+  a store-owned `{transactionId, generation, phase}` lease read by both
+  paths (proactive store calls read it directly; the reactive callback
+  reads it from the store at fire time), one atomic validate-and-mutate
+  gate, and absent/stale tokens no-op with a debug reason** — enforcement is
   INCLUDED in the pure plan's deterministic targets, and on an assertion
   mismatch suppression is KEPT through rollback, the plan is rebuilt from
   validated live state, asserted again, and cleared in a token-guarded
@@ -394,12 +416,18 @@ loses the incoming session, or mutates the maximize overlay:
   materialization completes at maximize exit. A route dispatcher selects maximize-only when a valid
   maximize blob exists, regular otherwise (malformed/failed maximize falls
   back to regular).
-  **Maximize is an explicit TWO-PHASE route:** overlay phase = exactly one
-  native `fromJSON`, NO pre-max apply/reconciliation; exit phase = post-rAF
-  regular pre-max restore with exactly one `fromJSON`, coordinator-internal
-  busy ownership, identity/session validation, and planned-equivalence
-  assertion BEFORE portal adoption; call-order tests assert the exact
-  per-phase count and that the exit phase re-enters the busy gate.
+  **Maximize = TWO coordinator transactions (chosen):** transaction 1
+  (overlay apply) performs exactly one native `fromJSON`, settles — while
+  retaining a GENERATION-BOUND pending marker and the floating portal
+  lease — and clears busy (unrelated layout mutations are NOT blocked for
+  the whole maximized interval); transaction 2 (exit) starts after the
+  exit rAF, consumes the pending marker, performs the regular pre-max
+  restore with exactly one `fromJSON` under coordinator-internal busy
+  ownership, runs identity/session validation and the planned-equivalence
+  assertion BEFORE portal adoption, then settles and releases the lease;
+  token/generation ownership, busy-clearing, and portal release/adoption
+  ordering are specified per transaction; tests cover overlay-settle, exit,
+  reload, env switch, and a competing mutation between the two phases.
 **Fast env-switch is a distinct zero-`fromJSON` route:** it mutates
   panels/active views in place (the live fast path) and has its OWN
   planning/equivalence/identity/enforcement contract with separate
@@ -653,7 +681,7 @@ Float/dock/restore are **transactions** with an operation journal:
    | blob-after / layout-before | after pair | after digests |
    | layout-after / blob-before | after pair | after digests |
    | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
-   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable, VERSIONED repair record** (`kandev.dockview.env-repair.<envId>` with `{version, transactionId, envId, createdAt}` — key/schema/guard defined) — an **app-shell repair registry** scans only the owned `env-repair.*` prefix and renders an env/task-labeled banner on home, settings, AND task mounts; `loadRepair(envId)` runs on every mount and `clearRepair(envId, transactionId)` is token-guarded with **verified deletion ordering (repair record DELETED LAST, after quarantine → floating blob → layout/journal are all verified; or the clear is journaled and the record restored on any later failure)**, memory updated only after the entire deletion transaction is durably verified (a failed clear keeps the banner); `cleanupTaskStorage` removes repair + quarantine keys; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, settings-mount, confirmation-failure, and cleanup tests |
+   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable, VERSIONED repair record** (`kandev.dockview.env-repair.<envId>` with `{version, transactionId, envId, createdAt}` — key/schema/guard defined) — an **app-shell repair registry** scans only the owned `env-repair.*` prefix and renders an env/task-labeled banner on home, settings, AND task mounts (**CURRENT-TAB scope documented: sessionStorage is per-tab; cross-tab records are not visible until the tab mounts the env**); **the quarantine digest/key and transaction identity are part of the guarded repair state, and EVERY restore gate returns `quarantined` — suppressing materialization/salvage — while a repair record exists, even after reload/new API instance (the in-memory cache never bridges reloads; the durable record does)**; `loadRepair(envId)` runs on every mount and `clearRepair(envId, transactionId)` is token-guarded with **verified deletion ordering (repair record DELETED LAST, after quarantine → floating blob → layout/journal are all verified; or the clear is journaled and the record restored on any later failure)**, memory updated only after the entire deletion transaction is durably verified (a failed clear keeps the banner); `cleanupTaskStorage` removes repair + quarantine keys; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, settings-mount, confirmation-failure, and cleanup tests |
    The `phase` marker (`mutating` vs `committed`) refines the both-after row
    (a `committed` marker with both-after means the mutation finished; a
    `mutating` marker with both-after is still settled by equality), never

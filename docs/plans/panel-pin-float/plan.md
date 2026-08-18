@@ -8,19 +8,18 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 19 incorporates the
-round-18 adversarial review** (this package has been adversarially reviewed
-every round): a staged native→logical reconciliation algorithm with an
-explicit ambiguity policy, a detached-portal ownership protocol for
-maximize-only materialization (owner tokens, one-owner-per-panel, z-index
-above the maximize overlay), a winner readiness barrier with bounded timeout
-and pre-mutation consumption, deterministic winner-group ordering, an
-event-correlation mechanism for the detach registry, a pure
-`mapLayoutGroups(state, transform)` helper, a versioned canonicalization wire
-protocol with golden vectors, an exhaustive layout-key consumer table with a
-legacy-key scan, a scoped bootstrap bypass gate, an `unexpected`-digest
-recovery row, enumerated active-group shapes, and the
-`Record<columnLogicalId, RootColumnMetadata>` sidecar key guard.
+the existing env layout / maximize persistence. **Revision 20 incorporates the
+round-19 adversarial review** (this package has been adversarially reviewed
+every round): canonicalized reconciliation signature inputs (session-excluded,
+normalized-index), a detached-portal lease/rendering contract with
+virtual active state and stale-owner-ignoring release, coordinator-owned
+replacement barrier with AbortController timeout and
+`isSessionReplacementPending` gates, exact UUID v5 bytes with a synchronous
+cross-runtime hash, mandatory `logicalId` with a `normalizeLayoutIdentities`
+precondition, operation-UUID event correlation with tombstones, a committed
+layout-key consumer matrix with a legacy-key scan, an explicit
+unexpected-row repair state machine (quarantine + non-dismissable banner),
+and the explicit `SavedLayoutConfig.layout` union schema.
 
 ## Architecture
 

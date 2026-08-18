@@ -203,7 +203,13 @@ identity is a **first-class persisted field on the live layout schema** —
 presets, custom-layout normalization, and a documented old-v3 migration that
 assigns UUIDs once and persists them), carried through the serializer
 (including the tree+flat synchronization — both representations hold the same
-`logicalId`), preset merges, dock, and reset. **The live Dockview model
+`logicalId`), preset merges, dock, and reset. **`logicalId` is MANDATORY in
+normalized `LayoutGroup`/`LayoutColumn`:** a synchronous
+`normalizeLayoutIdentities(state)` precondition runs on EVERY reset/custom/
+default path (legacy v3 included — reset must never run against an
+un-migrated layout) and fails closed before `mapLayoutGroups` or the
+materializer when any group/column lacks or duplicates identity;
+reset-before-migration and duplicate/undefined-identity fixtures cover it. **The live Dockview model
 cannot carry custom fields, so a store-owned **normalized-live-layout
 registry** keys logical metadata by the NATIVE group/column ids and is
 merged into every capture: `fromDockviewApi`/capture accept that registry
@@ -223,11 +229,16 @@ loses the incoming session, or mutates the maximize overlay:
   fallthrough):** unwrap + sanitize the native value → `api.fromJSON` ONCE →
   session/ephemeral replacement and incoming-session insertion → a **defined
   normalized-state reconciliation** with a **staged algorithm**:
-  1. **Native→normalized binding:** before the diff, map each native
+  1. **Native→logical binding:** before the diff, map each native
      group/column to a normalized candidate — first by a persisted native key
      (when the v4 registry carries one), then by a **length-delimited
-     semantic signature** (role + column index + complete sorted panel-id
-     multiset); ambiguous or duplicate candidates are rejected.
+     semantic signature** computed over **CANONICALIZED inputs**: both sides
+     are normalized AFTER session/ephemeral replacement, `session:*` ids are
+     EXCLUDED from both multisets, and the index is the position in the same
+     normalized root-column sequence (never the pre-diff native index, which
+     shifts when a column is inserted/removed); ambiguous or duplicate
+     candidates are rejected. Fixtures cover a column inserted before the
+     candidate and an A→B session replacement.
   2. **Diff:** match priority = logical group identity → panel ID → the
      closed fallback (component/panel semantic, then position; otherwise
      fail-closed); exactly ONE live instance per panel ID; **native owns
@@ -247,15 +258,23 @@ loses the incoming session, or mutates the maximize overlay:
   while-maximized renders the saved floating content above the overlay via
   an explicit detached-portal protocol:** a new `acquireDetached(panelId,
   component, params, envId)` portal-manager API creates `PortalEntry`s with
-  `api: null` (the manager currently requires a Dockview panel api), owned by
-  an **owner token + generation**; the floating window adopts those detached
+  `api: null`, owned by an **owner token + generation**; **lease records
+  make `release(ownerToken, generation)` ignore stale owners** (an old grid
+  slot cleanup can never release a newly adopted portal), and the
+  expected-detach registry token stays valid through all delayed removal
+  callbacks; the **detached content contract** defines virtual active state
+  (floating-store-backed `usePanelActive` — `api: null` is never treated as
+  inactive) and API-null rendering for terminal/chat/plugin/file-editor
+  panels (header/tab code must not dereference the dockview api while
+  detached); the floating window adopts those detached
   portals in a documented stacking context (explicit z-index above Dockview's
   maximize overlay); on maximize exit the floating owner is marked released
   BEFORE `fromJSON`, the grid slot acquires each portal **exactly once after
   the exit rAF**, and one-owner-per-panel-id is asserted throughout (a grid
   slot and the floating window can never fight over the same DOM node —
-  adoption is lease-based). The grid-side pending materialization completes
-  at maximize exit. A route dispatcher selects maximize-only when a valid
+  adoption is lease-based). Release-before-`fromJSON` and delayed-stale-
+  cleanup tests cover the ownership boundary. The grid-side pending
+  materialization completes at maximize exit. A route dispatcher selects maximize-only when a valid
   maximize blob exists, regular otherwise (malformed/failed maximize falls
   back to regular, with exactly one `fromJSON` per selected route).
 Call-order tests cover initial, fast/slow switch, route-intent, custom,
@@ -291,14 +310,17 @@ the sole pair writer).
 versioned wire protocol:** canonical input is UTF-8 encoded as
 `v1` ‖ `kind("group"|"column")` ‖ `role` ‖ sorted unique panel ids — each
 field length-delimited (4-byte big-endian length prefix per field), sorted by
-UTF-8 bytes — hashed SHA-256, and mapped to a UUID by taking the first 16
-bytes with UUID v5 variant bits set (documented byte order); duplicate panel
-ids, empty sets, and duplicate source keys are rejected BEFORE hashing; a
-`canonicalKey → source path` map is maintained during migration to reject
-post-truncation UUID collisions before writing v4. v3 derivation runs ONCE
-(v4 logical ids are thereafter authoritative and membership changes NEVER
-re-derive them); a crash before the v4 write cannot mint different ids
-(golden vectors, not only property tests, assert the encoding). The blob's `identities` map is a
+UTF-8 bytes — hashed with a **synchronous, cross-runtime SHA-256
+implementation** (pure-JS — `crypto.subtle` is async and unavailable in some
+insecure contexts; Node and browser paths must produce identical bytes, with
+jsdom/Node/insecure-HTTP tests), and mapped to a UUID by taking the first 16
+bytes, setting **byte 6's high nibble to `0x5` (version 5)** and the RFC 4122
+variant bits in **byte 8**, with documented byte order and string formatting
+and **golden vectors**; duplicate panel ids, empty sets, and duplicate source
+keys are rejected BEFORE hashing; a `canonicalKey → source path` map is
+maintained during migration to reject post-truncation UUID collisions before
+writing v4. v3 derivation runs ONCE (v4 logical ids are thereafter
+authoritative and membership changes NEVER re-derive them). The blob's `identities` map is a
 **secondary cache keyed by `logicalId`**, never the source of truth: capture
 reads the group/column's own `logicalId` from the live layout (no
 traversal-derived `group-n` ids are ever treated as identity); a group or
@@ -476,7 +498,7 @@ Float/dock/restore are **transactions** with an operation journal:
    | blob-after / layout-before | after pair | after digests |
    | layout-after / blob-before | after pair | after digests |
    | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
-   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | journal retained/quarantined and divergence surfaced for repair — never overwrite an unknown newer value, never clear the evidence; one-key, both-key, absent/present mismatch, and retry tests |
+   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **explicit state machine: quarantine the journal under a deterministic key and surface a localized, non-dismissable repair banner** (env + transaction id, with export/clear actions); repeated automatic recovery is suppressed while the banner is active; the banner is the only repair path (clear = drop both keys and the journal after explicit user confirmation); one-key, both-key, absent/present mismatch, reload/retry, and cleanup tests |
    The `phase` marker (`mutating` vs `committed`) refines the both-after row
    (a `committed` marker with both-after means the mutation finished; a
    `mutating` marker with both-after is still settled by equality), never
@@ -672,13 +694,19 @@ rather than a global id set:
 
 - The registry is keyed by **composite `(panelId, envId)`** (nested map or
   composite key), holding one record `{ token }` per entry. **Event
-  correlation without token-carrying events:** `onDidRemovePanel` receives
-  only the panel object, so the registry matches by **(api instance,
-  panelId, operation generation)** — registrations are armed immediately
-  around each synchronous remove/`fromJSON` (a token stored only in a
-  synchronous call frame cannot survive delayed `fromJSON` removals), and
-  delayed removals are correlated by generation; a real user close is never
-  registered at that moment and never consumes a detach entry. **Portal env
+  correlation WITHOUT token-carrying events:** `onDidRemovePanel` receives
+  only the panel object — it NEVER carries a token — so the registry matches
+  by **monotonic `(api instance, panelId, operationUUID)`**: operation UUIDs
+  are unique per coordinator operation (never a per-env resetting counter, so
+  consecutive operations on the stable api instance cannot collide);
+  registrations are armed immediately around each synchronous
+  remove/`fromJSON`, and **delayed `fromJSON` removals are correlated via
+  operation tombstones retained until a defined barrier** (the tombstone is
+  dropped only after the operation settles AND the next operation begins, or
+  a bounded retention window elapses — whichever is earlier is documented;
+  a delayed old removal after settle is distinguishable from a user close
+  while the tombstone lives, and a real user close is never registered and
+  never consumes a detach entry). **Portal env
   ownership on reacquire:** `acquire` on an existing entry updates
   api/params/component AND re-validates/updates `entry.envId` (a same panel
   id reacquired under a new env carries the new env; old-env blob entries
@@ -931,21 +959,21 @@ in the group's saved tab order.
   then the active-panel/first-tab rule applies within that group; two-group
   tests cover active stale panels in both with reversed insertion order.
   **Delayed replacement has a readiness barrier with a bounded timeout:** a
-  per-env replacement-generation state makes the always-mounted
-  `useAutoSessionTab` hook DEFER every mutation (including the pending-
-  session rebuild and reconciliation steps that currently run before the
-  ensure guard) while replacement is pending — the winner is checked/
-  consumed BEFORE any hook mutation, not only before ensure; each
-  replacement generation has an abort/failure terminal transition and a
-  bounded timeout whose fail-closed policy is atomic (keep the existing
-  floating winner and suppress only that ensure, or clear the winner and let
-  normal insertion proceed — one, deterministically), and stale-generation
-  cleanup can never clear a successor; if the hook ever ran first and
-  inserted the incoming id, the coordinator atomically re-evaluates and
-  MOVES the already-added winner back to the floating entry (no id ever
-  exists in both surfaces). Tested with replacement-after-first-effect,
-  StrictMode rerun, delayed WS ordering, and replacement-never-completing
-  timeout. The field is **memory-only (never
+  **coordinator-owned** per-env barrier (an `AbortController`-based timer
+  owned by the coordinator, duration 10 s, cancelled on success/failure/
+  timeout/env-switch/unmount — never leaked) exposes
+  `isSessionReplacementPending(envId)` which is included in EVERY mutation
+  gate (float/dock/reset/preset/toggle/add-panel) and disables the pin
+  controls; the selected fail-closed timeout policy is: **keep the existing
+  floating winner and suppress only that ensure** (documented; the
+  alternative is rejected). The hook DEFERS every mutation (the pending-
+  session rebuild and reconciliation steps included) while replacement is
+  pending and the winner is checked/consumed BEFORE any hook mutation, not
+  only before ensure; if the hook ever ran first and inserted the incoming
+  id, the coordinator atomically re-evaluates and MOVES the already-added
+  winner back to the floating entry (no id ever exists in both surfaces);
+  tested with replacement-after-first-effect, StrictMode rerun, delayed WS
+  ordering, and replacement-never-completing timeout. The field is **memory-only (never
   persisted)** and consumed by an atomic **compare-and-clear**
   `consumeFloatingSessionWinner(sessionId, envId, generation)` called from
   `shouldSkipPanelEnsure` (`dockview-session-tabs.ts`) before the hook's

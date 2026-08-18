@@ -31,6 +31,14 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const rootRef = useRef<HTMLDivElement>(null);
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
+  const visibleTranscriptPromptIds = useAppStore(
+    (state) =>
+      (sessionId ? state.visibleTranscriptPromptIdsBySessionId?.[sessionId] : undefined) ?? [],
+  );
+  const visibleTranscriptPromptIdSet = useMemo(
+    () => new Set(visibleTranscriptPromptIds),
+    [visibleTranscriptPromptIds],
+  );
   const { messages } = useSessionMessages(sessionId);
   const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
   const entries = useMemo(() => {
@@ -63,6 +71,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
           index={index}
           expanded={expanded === entry.messageId}
           maxHeight={maxHeight}
+          isVisibleInTranscript={visibleTranscriptPromptIdSet.has(entry.messageId)}
           onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
           onNavigate={onNavigateToPrompt}
         />
@@ -95,22 +104,23 @@ type PromptHistoryRowProps = {
   index: number;
   expanded: boolean;
   maxHeight: string;
+  isVisibleInTranscript: boolean;
   onToggle: () => void;
   onNavigate?: (messageId: string) => void;
 };
 
 /** One prompt-history row: the prompt text (truncated, or expanded into a
  * scrollable box) inside the transcript-style bubble, its relative time and
- * duration. A jump button floats over the bubble's left edge (revealed on
- * hover for fine pointers, always visible on touch) and an expand/collapse
- * chevron floats over the truncated text's ellipsis when the text overflows,
- * both overlapping the text to keep rows compact. */
+ * duration. A jump button floats over the bubble's left edge when the prompt
+ * is outside the visible transcript; the expand/collapse chevron floats over
+ * the truncated text's ellipsis when it overflows. */
 function PromptHistoryRow({
   sessionId,
   entry,
   index,
   expanded,
   maxHeight,
+  isVisibleInTranscript,
   onToggle,
   onNavigate,
 }: PromptHistoryRowProps) {
@@ -145,16 +155,18 @@ function PromptHistoryRow({
             isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
           )}
         >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute left-1 top-1/2 z-10 size-11 -translate-y-1/2 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 focus-visible:bg-background/90 sm:size-6 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
-            aria-label={t("task:scrollToPrompt")}
-            data-testid={`prompt-history-jump-${index}`}
-            onClick={() => onNavigate?.(entry.messageId)}
-          >
-            <IconNavigation size={14} />
-          </Button>
+          {!isVisibleInTranscript && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute left-1 top-1/2 z-10 size-11 -translate-y-1/2 cursor-pointer rounded-md bg-background/70 hover:bg-background/90 focus-visible:bg-background/90 sm:size-6 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+              aria-label={t("task:scrollToPrompt")}
+              data-testid={`prompt-history-jump-${index}`}
+              onClick={() => onNavigate?.(entry.messageId)}
+            >
+              <IconNavigation size={14} />
+            </Button>
+          )}
           <span ref={textRef} className={expanded ? "hidden" : "block truncate"}>
             {entry.content}
           </span>

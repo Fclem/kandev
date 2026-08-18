@@ -232,6 +232,7 @@ export type AppState = KanbanSlice & {
   mobileSession: (typeof defaultUIState)["mobileSession"];
   chatInput: (typeof defaultUIState)["chatInput"];
   transcriptAutoScroll: (typeof defaultUIState)["transcriptAutoScroll"];
+  visibleTranscriptPromptIdsBySessionId: (typeof defaultUIState)["visibleTranscriptPromptIdsBySessionId"];
   reviewPRSelection: (typeof defaultUIState)["reviewPRSelection"];
   documentPanel: (typeof defaultUIState)["documentPanel"];
   systemHealth: (typeof defaultUIState)["systemHealth"];
@@ -343,6 +344,7 @@ export type AppState = KanbanSlice & {
   setCancelTurnPending: UIA["setCancelTurnPending"];
   setTranscriptAutoScrollEnabled: UIA["setTranscriptAutoScrollEnabled"];
   setTranscriptScrollTop: UIA["setTranscriptScrollTop"];
+  setVisibleTranscriptPromptIds: UIA["setVisibleTranscriptPromptIds"];
   setReviewPRSelection: UIA["setReviewPRSelection"];
   setActiveDocument: (sessionId: string, doc: UISliceTypes.ActiveDocument | null) => void;
   setSystemHealth: (response: SystemHealthResponse) => void;

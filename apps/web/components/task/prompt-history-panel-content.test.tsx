@@ -9,6 +9,7 @@ const { state, messagesBySession, turnsBySession, turnsHydratedBySession } = vi.
     taskSessions: {
       items: {} as Record<string, { name?: string; is_passthrough?: boolean }>,
     },
+    visibleTranscriptPromptIdsBySessionId: {} as Record<string, string[]>,
   },
   messagesBySession: {} as Record<string, Message[]>,
   turnsBySession: {} as Record<string, Turn[]>,
@@ -167,6 +168,7 @@ beforeEach(() => {
     [SESSION_B]: { name: "Agent B", is_passthrough: false },
     [PASSTHROUGH]: { name: "PT", is_passthrough: true },
   };
+  state.visibleTranscriptPromptIdsBySessionId = {};
   messagesBySession[SESSION_A] = [];
   messagesBySession[SESSION_B] = [];
   turnsBySession[SESSION_A] = [];
@@ -267,8 +269,26 @@ describe("PromptHistoryPanelContent — navigation seam", () => {
     render(<PromptHistoryPanelContent />);
     fireEvent.click(screen.getByTestId(`${JUMP_TEST_ID}-0`));
   });
-});
 
+  it("hides navigation for visible prompts and restores it after visibility changes", () => {
+    messagesBySession[SESSION_A] = [
+      message({ id: "visible-prompt", content: "visible prompt" }),
+      message({ id: "hidden-prompt", content: "hidden prompt", created_at: LATER_TIME }),
+    ];
+    state.visibleTranscriptPromptIdsBySessionId[SESSION_A] = ["visible-prompt"];
+
+    const { rerender } = render(<PromptHistoryPanelContent />);
+
+    expect(screen.queryByTestId(`${JUMP_TEST_ID}-0`)).toBeTruthy();
+    expect(screen.queryByTestId(`${JUMP_TEST_ID}-1`)).toBeNull();
+
+    state.visibleTranscriptPromptIdsBySessionId[SESSION_A] = [];
+    rerender(<PromptHistoryPanelContent />);
+
+    expect(screen.getByTestId(`${JUMP_TEST_ID}-0`)).toBeTruthy();
+    expect(screen.getByTestId(`${JUMP_TEST_ID}-1`)).toBeTruthy();
+  });
+});
 describe("PromptHistoryPanelContent — active-session switch", () => {
   it("re-derives rows for the new active session and shows the empty state for null", () => {
     messagesBySession[SESSION_A] = [message({ id: "a-prompt", content: "A session prompt" })];

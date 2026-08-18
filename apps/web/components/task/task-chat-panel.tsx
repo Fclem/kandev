@@ -411,6 +411,13 @@ export const TaskChatPanel = memo(function TaskChatPanel({
     onPendingScrollConsumed,
     `${allMessages.length}:${isInitialMessagesLoading}`,
   );
+  const setVisibleTranscriptPromptIds = useAppStore((state) => state.setVisibleTranscriptPromptIds);
+  const handleVisiblePromptIdsChange = useCallback(
+    (messageIds: readonly string[]) => {
+      if (resolvedSessionId) setVisibleTranscriptPromptIds(resolvedSessionId, messageIds);
+    },
+    [resolvedSessionId, setVisibleTranscriptPromptIds],
+  );
   const lastPromptMessageId = useMemo(() => getLastUserMessageId(allMessages), [allMessages]);
   const lastPromptMessage = useMemo(
     () =>
@@ -523,11 +530,13 @@ export const TaskChatPanel = memo(function TaskChatPanel({
           childrenByParentToolCallId={childrenByParentToolCallId}
           taskId={taskId ?? undefined}
           sessionId={resolvedSessionId}
+          isVisible={isVisible}
           messagesLoading={messagesLoading}
           isWorking={isWorking}
           sessionState={session?.state}
           worktreePath={getSessionWorkspacePath(session)}
           onOpenFile={onOpenFile}
+          onVisiblePromptIdsChange={handleVisiblePromptIdsChange}
           dividerBeforeItemKey={dividerBeforeItemKey}
           lastPromptMessageId={lastPromptMessageId}
           onLastPromptEdgeChange={setLastPromptEdge}

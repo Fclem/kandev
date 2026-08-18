@@ -28,6 +28,8 @@ export type MessageListProps = {
   childrenByParentToolCallId: Map<string, Message[]>;
   taskId?: string;
   sessionId: string | null;
+  /** Whether the transcript is currently displayed to the user. */
+  isVisible?: boolean;
   messagesLoading: boolean;
   isWorking: boolean;
   sessionState?: TaskSessionState;
@@ -45,6 +47,8 @@ export type MessageListProps = {
    * transcript), fully `"below"` it (not yet reached, e.g. browsing earlier
    * history), or still `"visible"` (some intersection remains). */
   onLastPromptEdgeChange?: (edge: LastPromptEdge) => void;
+  /** Called when the set of user prompts intersecting the viewport changes. */
+  onVisiblePromptIdsChange?: (messageIds: readonly string[]) => void;
   /** Id of the earliest user-sent message, when known. Drives the
    * scroll-to-start button. */
   firstMessageId?: string | null;
@@ -167,6 +171,17 @@ export function resolveLastPromptEdge(container: HTMLElement, target: HTMLElemen
   if (targetRect.bottom < containerRect.top - tolerance) return "above";
   if (targetRect.top > containerRect.bottom + tolerance) return "below";
   return "visible";
+}
+
+/** Returns the prompt IDs with any visible intersection in the transcript viewport. */
+export function resolveVisiblePromptIds(
+  container: HTMLElement,
+  promptIds: readonly string[],
+): string[] {
+  return promptIds.filter((messageId) => {
+    const target = document.getElementById(`msg-${messageId}`);
+    return target ? resolveLastPromptEdge(container, target) === "visible" : false;
+  });
 }
 
 /** Derives the anchored bar's visibility and the always-on scroll button's

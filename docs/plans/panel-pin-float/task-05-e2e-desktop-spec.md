@@ -32,7 +32,20 @@ spec: "../../specs/ui/panel-pin-float.md"
   - **same-id/different-column authority**: a saved floating id present in a different live group restores without materializing a duplicate;
   - **rollback portal safety**: forcing a mid-transaction failure does not release a terminal portal or stop its process, and storage equals the pre-transaction layout after the portals-adopted phase.
 - The spec uses the repo's causal-wait helpers (`e2e/helpers/causal-waits.ts`) and the `SessionPage` page object additions (`clickMaximize` style helpers for `dockview-pin-btn`); no new sleeps.
-- **Fault-injection seam:** simulated crashes at exact journal/blob/layout write points and silent truncation need a deterministic **test-only storage adapter and phase hooks** (injected via a `__floatingTestHooks__` global, mirrored by the e2e build), with cleanup after each test; native sessionStorage cannot reproduce process boundaries. The exhaustive crash matrix (four partial-write orderings, mismatch-after-mutation, set-throw) lives in unit/integration tests; E2E covers reload-recovery smoke (journal present → reload → consistent state), not the full matrix.
+- **Fault-injection seam (E2E-build-only):** simulated crashes at exact
+  journal/blob/layout write points and silent truncation need a deterministic
+  **test-only storage adapter and phase hooks** (`__floatingTestHooks__`),
+  gated behind an **explicit E2E-only Vite define** (`VITE_FLOATING_TEST_HOOKS`,
+  set only by the E2E fixture build) — the production artifact is compiled
+  **without** the seam, so shipped users/plugins can never install hooks that
+  force storage throws, truncation, phase pauses, or simulated crashes
+  (NODE_ENV alone is insufficient: this repo's E2E/runtime build is
+  production mode). The E2E spec asserts the global exists in the E2E build
+  and is absent in the production bundle, with cleanup after each test. The
+  exhaustive crash matrix (four partial-write orderings, mismatch-after-
+  mutation, set-throw) lives in unit/integration tests; E2E covers
+  reload-recovery smoke (journal present → reload → consistent state), not
+  the full matrix.
 - Mobile: the dockview workbench does not render on phone viewports — the mobile task surface (`mobile-task-layout` + `session-mobile-bottom-nav`, which exposes localized Plan/Changes/Files/Terminal buttons) keeps panels reachable, and floating/collapse is intentionally absent from the mobile state model. This task adds `apps/web/e2e/tests/mobile-panel-access.spec.ts` — test "mobile task panels remain reachable" — which opens a task on the mobile project, activates Plan/Changes/Files/Terminal through the bottom-nav buttons (stable test ids added where missing), and asserts reachability plus viewport containment / no horizontal overflow; plus the written justification.
 
 ## Verification

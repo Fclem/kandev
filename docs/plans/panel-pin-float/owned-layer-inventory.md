@@ -49,17 +49,22 @@ not render on phone viewports; the mobile task surface owns its own layers.
 - Host panels: `useFloatingOwnedLayer(layerRoot)` — idempotent unregister on
   Radix `onOpenChange(false)` AND React cleanup (unmount, navigation,
   ancestor teardown).
-- Plugin panels: `host.ui.registerFloatingOwnedLayer(layerRoot: HTMLElement)
-  => () => void`. **Per-panel capability channel:** the host issues an opaque
-  ownership capability at `PluginTaskPanel` render time (bound to the exact
-  portal element/instance for that panel render, revoked on unmount and
-  plugin unregistration), and `registerFloatingOwnedLayer` requires and
-  validates that capability — a plugin rendering two task panels cannot
-  register a layer root from one panel against the other, and a plugin ID
-  closure alone is never trusted. `PluginUIApi` gains the method as a
-  callable (outside the mapped component type); unregister is idempotent on
-  close, unmount, and `unregisterPlugin` cleanup. Tested: same-plugin
-  different-panel rejection, unmount revocation, unregister cleanup.
+- Plugin panels: `host.ui.registerFloatingOwnedLayer(capability, layerRoot)
+  => () => void` (**two arguments, matching the SDK/spec contract exactly** —
+  the opaque `floatingOwnedLayerCapability` type is defined in the SDK, and
+  the mobile rejection result and unregister semantics are declared here).
+  **Per-panel capability channel:** the host issues an opaque ownership
+  capability at `PluginTaskPanel` render time from a portal-instance
+  generation (bound to the exact portal element/instance for that panel
+  render, `useRef`-stable across benign re-renders, revoked on actual
+  release and plugin unregistration, rotated on reacquire, absent on mobile
+  where host registration is rejected), and `registerFloatingOwnedLayer`
+  requires and validates that capability — a plugin rendering two task panels
+  cannot register a layer root from one panel against the other, and a plugin
+  ID closure alone is never trusted. Unregister is idempotent on close,
+  unmount, and `unregisterPlugin` cleanup. Tested: same-plugin
+  different-panel rejection, unmount revocation, release-reacquire rotation,
+  benign re-render stability, mobile rejection, unregister cleanup.
 
 ## Test matrix (task-03)
 

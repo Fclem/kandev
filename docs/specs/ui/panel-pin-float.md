@@ -84,19 +84,31 @@ EnvFloatingState                     # persisted as JSON, versioned
   nextOrder    number            # monotonic stack-order counter for this env
   groups       Record<groupId, FloatingGroupState>
   rootColumns  Record<columnId, { pinned: boolean; width: number;
-                                  minWidth: number | null; maxWidth: number | null }>
+                                  minWidth: number | null; maxWidth: number | null;
+                                  role: "center" | "pinned-right" |
+                                        "side-other" | "custom" }>
                # authoritative root-column metadata sidecar, INSIDE the blob:
-               # rebuilt in memory after every layout apply and reload,
-               # invalidated on preset/reset/env switch, covered by the same
-               # journal transaction, budget, and cleanup as the groups —
-               # there is no third storage key. Persistence is COALESCED:
-               # the sidecar updates in memory during layout applies and the
-               # blob/journal are written only at a settled boundary and only
-               # when the serialized bytes actually changed (no floating
-               # groups + unchanged sidecar ⇒ no floating/journal write at
-               # all) — ordinary preset/toggle/custom applies never amplify
-               # into blob+journal writes.
-
+               # role is captured from an explicit LayoutColumn.role assigned
+               # by presets/custom-layout normalization (with a documented
+               # migration default for old layouts) — never inferred from
+               # width/panel membership; rebuilt in memory after every layout
+               # apply and reload, invalidated on preset/reset/env switch,
+               # covered by the same journal transaction, budget, and cleanup
+               # as the groups — there is no third storage key. Persistence is
+               # COALESCED: sidecar updates in memory during layout applies
+               # and flush with the same verified debounce/beforeunload
+               # transaction as the live layout (geometry durability equals
+               # layout durability); the blob/journal are written only at a
+               # settled boundary and only when the serialized bytes actually
+               # changed (no floating groups + unchanged sidecar ⇒ no write).
+  identities   Record<"group" | "column", Record<logicalKey, uuid>>
+               # durable logical identity map (M4): UUIDs for every logical
+               # group and root column, written whenever the identity set
+               # changes (NOT gated on groups being non-empty — the key
+               # survives an empty floating state), preserved across dock/
+               # refloat/preset/reset, so a sibling/first-panel change never
+               # mints a new identity for the same logical group/column.
+```
 FloatingGroupState
   groupId          string        # original grid group id (informational)
   columnId         string        # root LayoutColumn id the group lived in
@@ -259,8 +271,15 @@ Float/dock/restore are **transactions** with an operation journal:
    phase/recursion guard** so its restore invocation is not re-rejected by
    the busy gate it runs under (restore paths invoked *outside* the
    coordinator's internal operations are still busy-rejected), and recursive
-   settle is impossible. `settle` is **async and keeps busy through portal
-   adoption and the drain**; a drain that throws or schedules another restore
+   settle is impossible. **The internal operations are closure/private and
+   authorized by a coordinator-owned `Symbol`/opaque capability checked
+   together with env, generation, api instance, and expected phase — a plain
+   exported helper or string token is never enough.** `settle` is **async and keeps busy through portal
+   adoption and the drain**; **portal adoption and the drain run in a
+   `try/finally` that always token-guards the transition to `settled` (or an
+   explicit failed-settled state) from every phase, so a throw during
+   adoption or the drain can never leave `busy` stuck — busy clears exactly
+   once, asserted in thrown/rejected/cancelled adoption and drain tests**; a drain that throws or schedules another restore
    fails the marker clear (marker retained, debug-logged, re-armed at the
    next settle). A new transaction's `begin` consumes any retained marker
    first, and the drain rechecks `envId`, generation, api instance, and the
@@ -340,16 +359,21 @@ Float/dock/restore are **transactions** with an operation journal:
    journal's tagged digest** before any target is selected. A journal that
    fails validation or digest recomputation is treated as **unreadable**
    (journal-free divergence rules, using the caller's explicit `envId`) and
-   **quarantined through a verified atomic protocol** — sessionStorage has no
-   rename primitive, so quarantine copies the raw bytes to a unique key
-   (`...-journal.<envId>.corrupt-<n>`, collision-avoided), read-back verifies
-   the copy, then removes the original and verifies its absence; a failed
-   copy or removal keeps the original (never cached as recovered) and is
-   retried on the next recovery; quarantine keys count toward the budget and
-   are covered by `cleanupTaskStorage`; the recovery cache records success
-   only after durable quarantine or verified original absence.
-   Set-failure, silent-alteration, remove-failure, collision, and restart
-   cases are tested. Recovery is idempotent via an in-memory
+   **quarantined through a verified, idempotent protocol** — sessionStorage has
+   no rename primitive, so quarantine derives **one deterministic key from
+   `(envId, original raw digest)`** (`...-journal.<envId>.corrupt-<digest>`):
+   copy the raw bytes to that key, read-back verify the copy, then remove the
+   original and verify its absence. If the deterministic quarantine key
+   already exists on a retry, it is read and verified and the flow proceeds
+   directly to verified original removal — **a second copy is never allocated
+   for the same original** (a crash between copy and remove cannot accumulate
+   `.corrupt-<n>` copies on repeated restarts). A failed copy or removal
+   keeps the original (never cached as recovered) and is retried on the next
+   recovery; quarantine keys count toward the budget, are removed by bounded
+   per-env/task corrupt-key cleanup in `cleanupTaskStorage`, and the recovery
+   cache records success only after durable quarantine or verified original
+   absence. Crash-after-copy, repeated-restart, and cleanup cases are
+   tested. Recovery is idempotent via an in-memory
    recovery cache keyed by `(envId, transactionId, api instance)` — never one
    global generation, so env B's journal is never skipped by env A's recovery
    and a new API instance re-checks a still-present journal — and runs before
@@ -417,14 +441,22 @@ Float/dock/restore are **transactions** with an operation journal:
    debounce callback, the `onDidLayoutChange` handler, and the `beforeunload`
    flush (`dockview-layout-setup.ts:346-405`). The unload handler is **one
    idempotent, transaction-aware handler** (the existing listener is replaced,
-   not duplicated): during an active transaction it writes the journaled
-   pre-transaction layout and never `api.toJSON()`; otherwise it performs the
-   normal live flush. On transaction begin the guard also cancels/holds an
-   already-scheduled debounce timer and marks it dirty, so a timer scheduled
-   before the transaction cannot fire mid-transaction. Persistence runs only
-   at the settled phase (explicit `persistEnvLayoutNow`), and the token is
-   reset on unmount. Ordinary unregistered closes are unaffected (their
-   cleanup does not depend on the guard).
+   not duplicated). **Unload writes a complete, journal-consistent pair:**
+   during an active transaction the handler synchronously chooses ONE of the
+   two journal states — either both raw BEFORE values plus an aborted/cleared
+   journal, or both raw AFTER values plus a committed marker — and writes
+   that complete pair with `writeVerified`; it never writes a half pair or
+   calls `api.toJSON()`. The choice is deterministic (default: abort to
+   before unless the mutation phase had already fully committed in the
+   journal); tests cover unload after each individual blob/layout mutation
+   and assert the post-reload policy, not just "consistent state". Outside a
+   transaction the handler performs the normal live flush. On transaction
+   begin the guard also cancels/holds an already-scheduled debounce timer and
+   marks it dirty, so a timer scheduled before the transaction cannot fire
+   mid-transaction. Persistence runs only at the settled phase (explicit
+   `persistEnvLayoutNow`), and the token is reset on unmount. Ordinary
+   unregistered closes are unaffected (their cleanup does not depend on the
+   guard).
 
 - **float(groupId):** if `groupId` is the maximized group, first restore the
   pre-max layout and derive the target's placement from `preMaximizeLayout`
@@ -476,18 +508,27 @@ stops, and `handleMaximizeExitOnLastClose` may exit maximize.
 Float/restore removals are **non-destructive**, scoped by a **detach registry**
 rather than a global id set:
 
-- The registry is keyed by **panel id** with a record `{ envId, token }`
-  (panel ids are unique within the live grid; the env tag travels with the
-  record so lookups never depend on the mutable current store env).
+- The registry is keyed by **composite `(panelId, envId)`** (nested map or
+  composite key), holding one record `{ token }` per entry — a same panel id
+  floating in two envs holds two distinct records, and one map value can
+  never shadow the other. The env tag comes from the key itself, never from
+  the mutable current store env.
   **Registrations are armed per expected removal, not for the transaction
   lifetime:** immediately before each synchronous `removePanel`/`fromJSON`
-  that the transaction performs, the exact panel ids being removed are
-  registered; each registration is consumed once by the matching
-  `onDidRemovePanel` and the set is drained when the operation completes. A
+  that the transaction performs, the exact `(panelId, envId)` pairs being
+  removed are registered; each registration is consumed once by the matching
+  `onDidRemovePanel` (which receives the transaction token with the removal
+  call) and the set is drained when the operation completes. A
   panel registered but never removed (operation aborted) is unregistered by
   the settle cleanup. This keeps a **real user close** of a still-live tab
   during an async phase or after a throw distinct from an expected detach —
   the user close is never registered at that moment and runs full cleanup.
+  `releaseByEnv(envId)`/`reconcile` evaluate the **full entry tuple**
+  (`panelId`, entry `envId`, token) — a same-id panel in the old env is
+  released while the target env's registration is preserved; the callsite env
+  direction is documented (`saveOutgoingEnv` passes the OUTGOING env), and
+  simultaneous A/B registration + stale-token tests cover old-entry-first
+  removal with target preservation.
 - `setupPortalCleanup`'s `onDidRemovePanel` runs a fixed decision order:
   1. **Registered id with the current token** → consume the registration
      (remove it from the registry) and skip `release`, terminal park/stop,
@@ -844,29 +885,32 @@ replacement orderings.
   ids, flat ids, and panel ids all matching.
   **One authoritative meaning for `rightPanelsVisible`:** the bit is exactly
   **live canonical pinned-right-column presence**, defined by the single
-  concrete predicate `hasLivePinnedRightColumn(api, columnMetadata)` whose
-  data source is an **authoritative root-column metadata sidecar** — a
-  per-env record (persisted alongside the floating blob, rebuilt on restore)
-  of root-column `{ columnId, pinned, width, minWidth, maxWidth }` captured by
-  `captureRootColumnGeometry` (the serializer's inferred-pinned state plus the
-  floating transactions' own captures; **plain width is never treated as
-  pinnedness** — width exists for every root column). The predicate returns
-  true iff a root column is marked pinned in the sidecar AND contains a
-  canonical right-group id (`RIGHT_TOP_GROUP`/`RIGHT_BOTTOM_GROUP`) or
-  `files`/`changes`-inferred pinned content; unpinned plan/preview/vscode
-  side columns return false (matching today's preset assignments), and a
-  custom pinned ordinary-terminal-only right column is recognized only when
-  the sidecar records its pinned state (never inferred from width). Applying
-  a preset never hides a plan/preview/vscode side column as a right-panel
-  toggle. The bit is derived from this predicate at all times (restore,
-  float, dock, toggle, preset/default assignment), never persisted as intent;
-  show with no pinned-right panels and hide without one are no-ops. The
-  toggle, `enforcePinnedTargets`, and `dockview-layout-setup`'s detection all
-  share this one predicate. Tested with one and both right groups floated
+  concrete predicate `hasLivePinnedRightColumn(api, columnMetadata)` that
+  consumes **only** the persisted `role` field from `EnvFloatingState.rootColumns`
+  (captured from an explicit `LayoutColumn.role` assigned by presets/
+  custom-layout normalization, with a documented migration default for old
+  layouts — **never inferred from width, canonical group ids, or panel
+  membership**): the predicate returns true iff a root column's persisted
+  role is `"pinned-right"` AND the column is live with matching pinned state.
+  Plan/preview/vscode side columns carry `side-other`/`custom` roles and
+  always return false (matching today's preset assignments) and are never
+  hidden as right-panel toggles; a custom pinned ordinary-terminal-only right
+  column is recognized because its normalized role is `"pinned-right"`.
+  Applying a preset never hides a plan/preview/vscode side column as a
+  right-panel toggle. The bit is derived from this predicate at all times
+  (restore, float, dock, toggle, preset/default assignment), never persisted
+  as intent; show with no pinned-right panels and hide without one are
+  no-ops. The toggle, `enforcePinnedTargets`, and `dockview-layout-setup`'s
+  detection all share this one predicate, and materialization prefers
+  **validated live-layout geometry** over the persisted sidecar when both
+  exist (a stale sidecar after an interrupted resize never wins over the
+  live grid). Tested with one and both right groups floated
   (incl. an ordinary terminal id), hide→show while floating,
   float-last-right → hide → show → reload, plan/preview/vscode/compact
-  presets (asserting the predicate and bit values), and container resize,
-  asserting the serialized tree is legal (no empty branch/leaf).
+  presets (asserting the predicate and bit values), custom pinned terminal
+  columns before and after float/reload with no floating groups, and
+  container resize, asserting the serialized tree is legal (no empty
+  branch/leaf).
 - **Storage-write failure after float/dock:** the commit fails closed — the
   transaction rolls back (journal re-apply) and the group stays pinned with a
   console warning. A reload or env switch can therefore never observe a
@@ -1107,6 +1151,32 @@ replacement orderings.
   capability is re-read, **THEN** the portal-instance-generation token is
   stable (useRef) — the layer survives the benign re-render; a released and
   reacquired portal rotates the token, rejecting a hoarded old one.
+- **GIVEN** a crash between quarantine copy and original removal, **WHEN**
+  recovery retries, **THEN** the deterministic `(envId, raw digest)` key is
+  found and verified and the flow proceeds to original removal — no second
+  `.corrupt-<n>` copy accumulates across restarts, and bounded corrupt-key
+  cleanup removes leftovers.
+- **GIVEN** a group docks and later refloats after a sibling change, **WHEN**
+  capture runs, **THEN** the durable identity map in the blob (surviving the
+  empty floating state) supplies the same UUID — no new identity is minted.
+- **GIVEN** a custom pinned terminal-only column, **WHEN**
+  `hasLivePinnedRightColumn` runs, **THEN** only the persisted
+  `role: "pinned-right"` (assigned by layout normalization, never inferred)
+  qualifies it — plan/preview/vscode side columns with `side-other`/`custom`
+  roles never do.
+- **GIVEN** a throw during portal adoption in the drain, **WHEN** the
+  `try/finally` settles, **THEN** busy clears exactly once (failed-settled)
+  and the retained marker re-arms for the next settle — no stuck busy.
+- **GIVEN** the same panel id floats in env A and env B, **WHEN** env A
+  switches away, **THEN** the composite `(panelId, envId)` registry entries
+  release the old entry and preserve the target env's registration.
+- **GIVEN** the tab unloads after the blob write but before the layout write,
+  **WHEN** the transaction-aware unload handler runs, **THEN** it writes a
+  complete journal-consistent pair (default: both before values + aborted
+  journal) with `writeVerified` — never a half pair.
+- **GIVEN** the production bundle is inspected, **WHEN**
+  `__floatingTestHooks__` is probed, **THEN** it is absent (the seam is
+  compiled only into the E2E build via `VITE_FLOATING_TEST_HOOKS`).
 - **GIVEN** a saved group id derives from traversal order, **WHEN** a sibling
   panel changes, **THEN** the persisted UUID identity is stable — the saved
   id never silently changes.

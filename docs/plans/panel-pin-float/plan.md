@@ -103,14 +103,20 @@ per-env sessionStorage pattern.
    is quarantined (`.corrupt` suffix) and treated as unreadable (journal-free
    fallback with the caller's envId). Recovery cache
    keyed by `(envId, transactionId, api instance)`; `recoverFloatingJournalOnce`
-   runs before every restore entry. **Settle drain is synchronous and
-   ordered:** it runs inside `settle` before the busy flag clears (no
-   interleaving `begin` window); a new `begin` consumes any retained marker
+   runs before every restore entry. **Settle drain is the same async settle
+   operation, ordered before busy clears** (no interleaving `begin` window;
+   the drain is a coordinator-owned internal operation authorized by an
+   opaque Symbol capability with a `try/finally` that always token-guards the
+   transition to settled or failed-settled, so busy can never stick); a new
+   `begin` consumes any retained marker
    first; the marker clears only after a successful settle restore or
    invalidation. **Root-column metadata lives INSIDE the blob**
-   (`EnvFloatingState.rootColumns`), rebuilt after every layout apply and
-   reload, invalidated on preset/reset/env switch, covered by the journal,
-   budget, and cleanup — no third storage key. **Size budgets:** per-env cap
+   (`EnvFloatingState.rootColumns`, incl. `role`), rebuilt after every layout
+   apply and reload, invalidated on preset/reset/env switch, covered by the
+   journal, budget, and cleanup — no third storage key; the blob also carries
+   a durable `identities` map (group/column UUIDs) that survives an empty
+   floating state so refloat after dock never mints a new identity. **Size
+   budgets:** per-env cap
    (96 KB) + **global allocation budget** (384 KB) enforced via a validated
    owned-key index whose entries are checked against stored raw
    length/digest + key set before every decision (one bounded prefix-scan

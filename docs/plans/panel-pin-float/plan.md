@@ -8,8 +8,8 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 47 incorporates the
-round-46 adversarial review** (this package has been adversarially reviewed
+the existing env layout / maximize persistence. **Revision 48 incorporates the
+round-47 adversarial review** (this package has been adversarially reviewed
 every round): an atomic coordinator-owned `transferPanelLease` with an
 explicit detached-capability rule and a GLOBAL live-api lease (one active
 transaction across env switches), a deterministic operation plan computed at

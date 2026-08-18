@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 47
-prior-round: 46
+revision: 48
+prior-round: 47
 ---
 
 # Floating (unpinned) workbench panels
@@ -612,10 +612,17 @@ loses the incoming session, or mutates the maximize overlay:
   rewrite); **ONLY THE ADAPTER OWNS THE RAW `DockviewApi` MUTATION
   REFERENCE — an exported `DockviewObserverApi` FACADE (read +
   subscription members ONLY, no mutators — the raw type does not
-  distinguish them, so the facade is a WRAPPED TYPE, not a cast) is what
+  distinguish them, so the facade is a RUNTIME OBJECT built from
+  SELECTED read/subscription CLOSURES with NO raw object exposed —
+  there is nothing to cast, `(observer as unknown as DockviewApi)`
+  cannot recover the raw api) is what
   the store and all other modules receive; raw `DockviewApi` is PRIVATE
-  to the adapter and consumers request mutations via adapter COMMANDS;
-  the AST allowlist is a SECONDARY gate; a COMPILE FIXTURE fails if a
+  to the adapter closure and consumers request mutations via adapter
+  COMMANDS;
+  the AST allowlist is a SECONDARY gate; a PRODUCTION source-boundary
+  rule REJECTS `as unknown as DockviewApi` casts and any raw
+  `DockviewApi` import/storage outside approved adapter modules
+  (negative static fixture); a COMPILE FIXTURE fails if a
   store action can reach fromJSON/layout/addPanel through its stored
   handle; every task-workbench raw mutator (fromJSON, layout,
   addPanel, removePanel, resize, constraints, applyLayout) is
@@ -808,7 +815,16 @@ loses the incoming session, or mutates the maximize overlay:
   key order, number formatting, omission/null rules) — benign
   reserialization is impossible by construction, so byte-exact freshness
   never discards a usable maximize; a golden semantic-equality +
-  identical-bytes reserialization test covers all writer paths.** route matrix: (a) schema-valid AND base digest
+  identical-bytes reserialization test covers all writer paths.**
+  **SERIALIZER VERSION COUPLING: `canonicalizerVersion` is PERSISTED in
+  the maximize envelope alongside the digest + generation; equality of
+  canonicalizerVersion is REQUIRED before maximize-only selection;
+  version mismatch (e.g. a v4.1 envelope read after a v4.2 writer) is
+  treated EXPLICITLY: re-canonicalize the envelope's stored layout under
+  the CURRENT version and re-digest + compare (migration path), or if
+  re-canonicalization is unavailable, treat as STALE and fall through
+  (never accept under incompatible rules); v4.1→v4.2 golden vectors +
+  route-selection tests.** route matrix: (a) schema-valid AND base digest
   matches the CURRENT env layout ⇒ maximize-only; (b) malformed envelope
   / no native call needed ⇒ discard + fall through to regular;
   (c) REGULAR LAYOUT CHANGED since maximize (digest mismatch) ⇒ REGULAR
@@ -848,7 +864,15 @@ loses the incoming session, or mutates the maximize overlay:
   re-running the same idempotent cleanup (recovery distinguishes
   "regular pair committed, envelope still present" from "regular
   failed" via the cleanup record); storage + marker assertions per
-  boundary.** persistent structural mismatch, a fromJSON throw after partial
+  boundary.** **CLEANUP RECORD STORAGE CONTRACT: canonical encoded key
+  `kandev.dockview.env-floating-cleanup.<encodeURIComponent(envId)>`
+  with a VERSIONED schema `{version, transactionId, generation, phase:
+  "pending"|"done", expectedEnvelopeDigest, expectedMarkerDigest,
+  createdAt}`; write point = BEFORE the first deletion (pending);
+  compare-and-clear to done/absent only after ALL targets verified
+  absent; the record is ADDED to the owned-key matrix, the per-env/
+  global budget accounting, the exact-match cleanup matrix, and the
+  recovery/cleanup tests (crash at each cleanup boundary).** persistent structural mismatch, a fromJSON throw after partial
   native mutation, stale registry, or portal/lease failure FAILS CLOSED —
   lease invalidated, rebuild from the IMMUTABLE PRE-CALL native/layout
   snapshot + registry captured before the first fromJSON (never a
@@ -1131,6 +1155,17 @@ Float/dock/restore are **transactions** with an operation journal:
   the rebuild runs with persistence suppression and portal exclusion
   (no layout/removal events or portal churn visible to the user), and
   tests assert bounded calls + no user-visible detach.**
+  **OBSERVER SUPPRESSION SCOPE: a coordinator-owned
+  `{transactionId, generation, phase, observerSuppressed}` lease is
+  INHERITED by nested rebuilds; EVERY dockview observer (enforcement,
+  width tracking, persistence, panel-removal cleanup, active/session/
+  sidecar) RETURNS before any mutation/cleanup while
+  `observerSuppressed` is active — synthetic rebuild events are never
+  processed as user mutations (the current `isRestoringLayout`-only
+  removal observer is extended to the suppression lease); user events
+  are distinguished from rebuild events by the lease's generation/phase;
+  deterministic event-emission tests prove no observer mutation and no
+  user-visible detach during rebuild and rollback.**
   **`aborted` semantics (exact):** a structurally valid `aborted` journal
    is the SAFE-BEFORE-PAIR form written by the hash-pending unload path —
    its `before` digests are the cached pre-mutation pair, its `after`
@@ -1241,11 +1276,16 @@ Float/dock/restore are **transactions** with an operation journal:
   quota-full behavior retains the original
   journal and never caches recovery; max-size corrupt journal under
   quota-full tests; quarantine keys count toward the budget **— the COMPLETE owned-key set
-   (floating, journal, quarantine, repair, repair-clear, layout-v4,
-   maximize-v4) is byte-accounted in BOTH the per-env cap and the global
+   (floating, journal, quarantine, repair, repair-clear, cleanup,
+   layout-v4, maximize-v4) is byte-accounted in BOTH the per-env cap and the global
    384 KB index, and the recovery allowance is reserved ATOMICALLY across
    environments before any mutation (a float preflight can never pass and
-   then leave no global capacity for mandatory recovery)** — and are removed by bounded
+   then leave no global capacity for mandatory recovery); ONE BUDGET
+   TABLE (single source for the validator + tests) lists every owned
+   key, per-env/global cap inclusion, raw-byte accounting rule, reserved
+   recovery allowance, and whether unrelated layout/maximize bytes count
+   against the floating cap — a preflight under one interpretation can
+   never pass and fail post-mutation under another** — and are removed by bounded
    per-env/task corrupt-key cleanup in `cleanupTaskStorage`, and the recovery
    cache records success only after durable quarantine or verified original
    absence. Crash-after-copy, repeated-restart, and cleanup cases are
@@ -1850,7 +1890,14 @@ in the group's saved tab order.
   reservation set never leaks into the floating-only snapshot; the
   second generation check prevents a stale insertion during the actual
   handoff; query-before-removal, during-handoff, post-commit, and
-  B-ensure tests assert EXACT ID SETS;**
+  B-ensure tests assert EXACT ID SETS;** **TOTAL PRECEDENCE for
+  overlapping membership (an id in 2+ sets): `floatingIds` ⇒ SKIP,
+  else `reservedIds` ⇒ DEFER (readiness barrier), else
+  `gridOwnedIds` ⇒ PROCEED, else normal ensure; the INVARIANT is that
+  the snapshot sets are DISJOINT — a violated invariant returns the
+  typed `{status:"skipped", reason:"stale-identity"}` (never insert);
+  overlap vectors tested: A/B overlap, duplicate reservations, stale
+  snapshots.**
   the same normalized query serves materialization fail-closed** —
   a session that exists ONLY in a floating group, or a non-winner floating
   session, can never be re-added to the grid by the auto-session hook;

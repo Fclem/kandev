@@ -1,4 +1,4 @@
-# Floating-panels result matrix (revision 48, committed)
+# Floating-panels result matrix (revision 49, committed)
 
 The single machine-readable operation × reason × action matrix required by
 `docs/specs/ui/panel-pin-float.md` (Result algebra) and

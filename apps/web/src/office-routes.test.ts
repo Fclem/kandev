@@ -1,9 +1,16 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// The scoped cookie helpers derive the default port from the API base URL;
+// pin it so scoped-name fixtures are deterministic.
+vi.mock("@/lib/config", () => ({
+  getBackendConfig: () => ({ apiBaseUrl: "http://localhost:8443" }),
+}));
 
 import {
   __resetIdParamsPromiseCacheForTests,
   idParamsPromise,
   resolveActiveOfficeWorkspaceId,
+  resolveOfficeBootstrapWorkspaceId,
 } from "./office-routes";
 
 describe("resolveActiveOfficeWorkspaceId", () => {
@@ -70,6 +77,60 @@ describe("resolveActiveOfficeWorkspaceId", () => {
     );
 
     expect(activeId).toBe(wsOffice1);
+  });
+});
+
+describe("resolveOfficeBootstrapWorkspaceId (OfficeRoutes cookie reads)", () => {
+  const wsOffice1 = "ws-office-1";
+  const wsOffice2 = "ws-office-2";
+  const wsKanban = "ws-kanban-1";
+  const items = [
+    { id: wsOffice1, office_workflow_id: "office-flow-1" },
+    { id: wsOffice2, office_workflow_id: "office-flow-2" },
+  ];
+
+  beforeEach(() => {
+    document.cookie = "kandev-active-workspace=; path=/; max-age=0";
+    document.cookie = "office-active-workspace=; path=/; max-age=0";
+    document.cookie = "kandev-active-workspace_8443=; path=/; max-age=0";
+    document.cookie = "office-active-workspace_8443=; path=/; max-age=0";
+  });
+
+  it("route override beats cookies naming a different workspace (invariant)", () => {
+    document.cookie = "kandev-active-workspace_8443=ws-office-1; path=/";
+    document.cookie = "office-active-workspace_8443=ws-office-1; path=/";
+
+    expect(resolveOfficeBootstrapWorkspaceId(items, wsOffice2, null)).toBe(wsOffice2);
+  });
+
+  it("hydrates the scoped general cookie with no route or unprefixed cookie (failing-before)", () => {
+    // Non-first fixture: pre-change the reader only sees unprefixed names, so
+    // this resolves to the first office workspace instead of ws-office-2.
+    document.cookie = "kandev-active-workspace_8443=ws-office-2; path=/";
+
+    expect(resolveOfficeBootstrapWorkspaceId(items, null, null)).toBe(wsOffice2);
+  });
+
+  it("prefers the scoped office cookie when the general cookie names a kanban workspace (failing-before)", () => {
+    // Pre-change the effect reads only the unprefixed office cookie (absent),
+    // so this falls to settings/first instead of ws-office-2.
+    document.cookie = `kandev-active-workspace_8443=${wsKanban}; path=/`;
+    document.cookie = "office-active-workspace_8443=ws-office-2; path=/";
+
+    expect(resolveOfficeBootstrapWorkspaceId(items, null, null)).toBe(wsOffice2);
+  });
+
+  it("falls back to the legacy unprefixed office cookie when no scoped one exists", () => {
+    document.cookie = "office-active-workspace=ws-office-2; path=/";
+
+    expect(resolveOfficeBootstrapWorkspaceId(items, null, null)).toBe(wsOffice2);
+  });
+
+  it("resolves settings, then first, when no cookie names an office workspace", () => {
+    document.cookie = `kandev-active-workspace_8443=${wsKanban}; path=/`;
+
+    expect(resolveOfficeBootstrapWorkspaceId(items, null, wsOffice2)).toBe(wsOffice2);
+    expect(resolveOfficeBootstrapWorkspaceId(items, null, null)).toBe(wsOffice1);
   });
 });
 

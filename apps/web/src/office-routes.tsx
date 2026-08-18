@@ -33,7 +33,9 @@ import {
   LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE,
   mapWorkspaceItem,
   readActiveWorkspaceCookie,
-  readCookie,
+  readScopedCookie,
+  resolveOfficeWorkspaceId,
+  type OfficeWorkspaceItem,
 } from "@/lib/routing/route-bootstrap";
 import type { WorkspaceState } from "@/lib/state/slices/workspace/types";
 import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
@@ -221,11 +223,9 @@ function useOfficeRouteBootstrap(
       const officeWorkspaceItems = workspaceItems.filter(
         (workspace) => workspace.office_workflow_id,
       );
-      const activeWorkspaceId = resolveActiveOfficeWorkspaceId(
+      const activeWorkspaceId = resolveOfficeBootstrapWorkspaceId(
         officeWorkspaceItems,
         routeWorkspaceId,
-        readActiveWorkspaceCookie(),
-        readCookie(LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE),
         userSettingsResponse?.settings?.workspace_id ?? null,
       );
 
@@ -255,20 +255,38 @@ function useOfficeRouteBootstrap(
 }
 
 export function resolveActiveOfficeWorkspaceId(
-  workspaceItems: { id: string; office_workflow_id?: string | null }[],
+  workspaceItems: OfficeWorkspaceItem[],
   routeWorkspaceId: string | null,
   activeCookieWorkspaceId: string | null,
   officeCookieWorkspaceId: string | null,
   settingsWorkspaceId: string | null,
 ): string | null {
-  return (
-    workspaceItems.find((workspace) => workspace.id === routeWorkspaceId)?.id ??
-    workspaceItems.find((workspace) => workspace.id === activeCookieWorkspaceId)?.id ??
-    workspaceItems.find((workspace) => workspace.id === officeCookieWorkspaceId)?.id ??
-    workspaceItems.find((workspace) => workspace.id === settingsWorkspaceId)?.id ??
-    workspaceItems[0]?.id ??
-    null
-  );
+  return resolveOfficeWorkspaceId(workspaceItems, {
+    routeWorkspaceId,
+    generalWorkspaceId: activeCookieWorkspaceId,
+    officeWorkspaceId: officeCookieWorkspaceId,
+    settingsWorkspaceId,
+  });
+}
+
+/**
+ * Resolves the office active workspace for the client bootstrap effect from
+ * the live cookie jar: general family (scoped, then legacy) and office family
+ * (scoped, then legacy), with the route override and settings as the other
+ * candidates. Kept as one exported function so the effect's cookie reads are
+ * unit-testable without rendering the hook.
+ */
+export function resolveOfficeBootstrapWorkspaceId(
+  officeWorkspaceItems: OfficeWorkspaceItem[],
+  routeWorkspaceId: string | null,
+  settingsWorkspaceId: string | null,
+): string | null {
+  return resolveOfficeWorkspaceId(officeWorkspaceItems, {
+    routeWorkspaceId,
+    generalWorkspaceId: readActiveWorkspaceCookie(),
+    officeWorkspaceId: readScopedCookie(LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE),
+    settingsWorkspaceId,
+  });
 }
 
 type AgentRouteMatch = {

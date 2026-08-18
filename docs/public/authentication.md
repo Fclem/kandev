@@ -65,6 +65,16 @@ External MCP clients (Claude Code, Cursor connecting to `/mcp`) must be configur
 
 `/health` (readiness probes), the login/setup/invite pages, `GET /api/v1/features`, and self-authenticating webhook receivers (automation webhooks with `X-Webhook-Secret`, office channel HMAC webhooks, plugin webhooks). Everything else requires a session or token.
 
+## Multiple instances on one host
+
+Browsers match cookies by host and ignore the port, so several auth-enabled kandev instances on the same host (same IP, different ports) would otherwise share one cookie jar. Kandev isolates them by port-scoping its instance-identity cookie **names**: `kandev_session_<port>`, `kandev-active-workspace_<port>`, and `office-active-workspace_<port>` on a ported host, plain names on a default-port host. Logging into one instance no longer logs the others out, and selecting a workspace in one no longer changes what the others boot into.
+
+**Reverse proxies must preserve the browser hostname.** The CORS/WS origin gate compares the browser `Origin` hostname with the request `Host` and ignores `X-Forwarded-Host` and ports. The proxy may either preserve the full `Host` (`public.example:8443`) or rewrite only the port and forward a correct `X-Forwarded-Host` (the cookie resolver takes the public port from it). Rewriting a **non-loopback hostname** is rejected with 403 before authentication. Loopback-alias rewrites (e.g. `localhost` → `127.0.0.1`) pass the gate by design.
+
+**Session-cookie migration.** Old auth-enabled builds conflict with each other via the shared unprefixed `kandev_session`; an upgraded instance ignores the legacy session token and requires one re-login (the new build never reads the unprefixed session cookie, so this holds on rollback and re-upgrade too). Workspace selections keep their validated legacy read fallback, so a pre-upgrade selection survives.
+
+A custom `auth.cookieName` (see [configuration](configuration.md#auth)) disables automatic port isolation and must be unique per cookie host. It does not change the origin gate, which compares hostnames independently of cookie names. Instances served on the same host at default ports over different schemes (HTTP `:80` + HTTPS `:443`) carry no port in their Host and keep the plain names; they are not isolated by this mechanism.
+
 ## What is isolated
 
 When authentication is on, everything in a workspace is private to its owner and returns "not found" to anyone else, even if they know the ID: workspaces, tasks, workflows, sessions, plans, walkthroughs, terminals, VS Code, port previews, git snapshots, Workspace secrets, repository bindings, **and the workspace's third-party integration settings (GitHub/GitLab/Jira/Linear/Sentry/Azure) and automations**. A user's Global secrets are also private to that user. Admins manage users but do not see other users' workspaces or secrets.

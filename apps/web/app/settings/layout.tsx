@@ -11,6 +11,7 @@ import {
 import {
   ACTIVE_WORKSPACE_COOKIE,
   mapWorkspaceItem,
+  readScopedCookieStoreValue,
   resolveSettingsActiveWorkspaceId,
 } from "@/lib/routing/route-bootstrap";
 import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
@@ -48,7 +49,7 @@ async function SettingsLayoutServer({ children }: { children: React.ReactNode })
       // `readCookies()` is client-only in this path; during SSR this is empty.
       // Settings active workspace selection is completed on first client render by
       // spa-routes via `readActiveWorkspaceCookie()`.
-      cookieStore?.get(ACTIVE_WORKSPACE_COOKIE)?.value ?? null,
+      readScopedCookieStoreValue(cookieStore, ACTIVE_WORKSPACE_COOKIE),
       userSettingsResponse?.settings?.workspace_id ?? null,
     );
     initialState = {

@@ -300,6 +300,42 @@ func TestInvalidCredentialsAreRejected(t *testing.T) {
 	}
 }
 
+// TestEnabledModeScopedSessionCookieAuthenticates pins the middleware's
+// request-aware cookie resolution: on a ported Host it reads the
+// port-scoped session cookie name.
+func TestEnabledModeScopedSessionCookieAuthenticates(t *testing.T) {
+	svc := newTestService(t, true)
+	token := setupAdmin(t, svc)
+	router := newTestRouter(svc)
+
+	rec := doRequest(router, http.MethodGet, "/api/v1/probe", func(r *http.Request) {
+		r.Host = "127.0.0.1:8443"
+		r.AddCookie(&http.Cookie{Name: "kandev_session_8443", Value: token})
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("probe with scoped session: %d body=%s", rec.Code, rec.Body.String())
+	}
+	if contains(rec.Body.String(), `"synthetic":true`) {
+		t.Fatal("real session must not be synthetic")
+	}
+}
+
+// TestEnabledModeRejectsForeignPortSessionCookie pins per-port resolution: a
+// token carried under another port's scoped name is not read for this Host.
+func TestEnabledModeRejectsForeignPortSessionCookie(t *testing.T) {
+	svc := newTestService(t, true)
+	token := setupAdmin(t, svc)
+	router := newTestRouter(svc)
+
+	rec := doRequest(router, http.MethodGet, "/api/v1/probe", func(r *http.Request) {
+		r.Host = "127.0.0.1:8443"
+		r.AddCookie(&http.Cookie{Name: "kandev_session_9443", Value: token})
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("probe with foreign-port session: %d, want 401", rec.Code)
+	}
+}
+
 func contains(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }

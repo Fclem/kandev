@@ -58,7 +58,7 @@ func SyntheticIdentity() authn.Identity {
 // bearer. Shared with the WS gateway's upgrade-time check.
 func ResolveRequest(c *gin.Context, svc *auth.Service) (authn.Identity, bool) {
 	ctx := c.Request.Context()
-	if cookie, err := c.Cookie(svc.CookieName()); err == nil && cookie != "" {
+	if cookie, err := c.Cookie(svc.CookieNameForRequest(c.Request)); err == nil && cookie != "" {
 		if identity, ok := svc.ResolveSessionToken(ctx, cookie); ok {
 			return identity, true
 		}

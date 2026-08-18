@@ -1,6 +1,7 @@
 import {
   ACTIVE_WORKSPACE_COOKIE,
   LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE,
+  scopedCookieName,
 } from "@/lib/routing/route-bootstrap";
 import { isOfficeWorkspace, type ModeWorkspace } from "@/lib/state/slices/workspace/selectors";
 
@@ -28,8 +29,10 @@ export function rememberWorkspaceSelectionById(id: string, kind: "office" | "kan
   if (!id || typeof document === "undefined") return;
   writeWorkspaceCookie(ACTIVE_WORKSPACE_COOKIE, id);
   // The office boot paths (`app/office/layout.tsx` and the office route
-  // bootstrap) still read the legacy cookie to pick an office workspace when
-  // the unified one names a kanban board, so it is kept in step here.
+  // bootstrap) read the office-family cookie (scoped name first, legacy
+  // unprefixed name as read-only fallback) to pick an office workspace when
+  // the unified one names a kanban board, so it is kept in step here. Legacy
+  // names are never written — only the port-scoped names are.
   if (kind === "office") {
     writeWorkspaceCookie(LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE, id);
   }
@@ -37,5 +40,5 @@ export function rememberWorkspaceSelectionById(id: string, kind: "office" | "kan
 
 function writeWorkspaceCookie(name: string, value: string): void {
   if (typeof document === "undefined") return;
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${ACTIVE_WORKSPACE_COOKIE_MAX_AGE}; samesite=strict`;
+  document.cookie = `${scopedCookieName(name)}=${encodeURIComponent(value)}; path=/; max-age=${ACTIVE_WORKSPACE_COOKIE_MAX_AGE}; samesite=strict`;
 }

@@ -1,3 +1,4 @@
+import { getBackendConfig } from "@/lib/config";
 import type { WorkspaceState } from "@/lib/state/slices/workspace/types";
 import type { ListWorkspacesResponse } from "@/lib/types/http";
 
@@ -5,6 +6,64 @@ export const ACTIVE_WORKSPACE_COOKIE = "kandev-active-workspace";
 export const LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE = "office-active-workspace";
 
 type WorkspaceItem = ListWorkspacesResponse["workspaces"][number];
+
+/**
+ * The API origin port. Browsers ignore port when matching cookies, so multiple
+ * kandev instances on one host (same IP, different ports) share one cookie
+ * jar; suffixing cookie names with this port isolates each instance's
+ * selection. Derived from the API base URL, NOT `window.location.port` — they
+ * only match in same-origin deployments (split-origin dev runs the SPA on the
+ * web port and the API on the backend port).
+ */
+export function apiOriginPort(): string {
+  return new URL(getBackendConfig().apiBaseUrl).port;
+}
+
+/**
+ * Port-scopes a cookie name: `kandev-active-workspace` + port `8443` →
+ * `kandev-active-workspace_8443`. An empty/missing port keeps the plain name,
+ * so default-port (no port in the URL) deployments are unchanged.
+ */
+export function scopedCookieName(name: string, port?: string): string {
+  const suffix = port ?? apiOriginPort();
+  return suffix ? `${name}_${suffix}` : name;
+}
+
+/**
+ * Reads the port-scoped cookie first, falling back to the legacy unprefixed
+ * name so a pre-upgrade selection survives. The explicit `port` parameter
+ * keeps the helper pure and unit-testable without jsdom Location stubbing.
+ * An empty cookie value is treated as absent: expired/deleted cookies can
+ * linger as empty entries in document.cookie and must not shadow the
+ * fallback.
+ */
+export function readScopedCookie(name: string, port?: string): string | null {
+  const scoped = readCookie(scopedCookieName(name, port));
+  if (scoped) return scoped;
+  const legacy = readCookie(name);
+  return legacy || null;
+}
+
+type ScopedCookieStore = {
+  get(name: string): { value: string } | undefined;
+};
+
+/**
+ * Scoped-first + legacy fallback for server-component readers that hold a
+ * `readCookies()` CookieStore instead of document.cookie. Shares
+ * `scopedCookieName` with the document-cookie readers, so both families derive
+ * the identical name.
+ */
+export function readScopedCookieStoreValue(
+  cookieStore: ScopedCookieStore | null | undefined,
+  name: string,
+  port?: string,
+): string | null {
+  if (!cookieStore) return null;
+  const scoped = cookieStore.get(scopedCookieName(name, port))?.value || null;
+  if (scoped) return scoped;
+  return cookieStore.get(name)?.value || null;
+}
 
 export function mapWorkspaceItem(ws: WorkspaceItem): WorkspaceState["items"][number] {
   return {
@@ -34,7 +93,41 @@ export function readCookie(name: string): string | null {
 }
 
 export function readActiveWorkspaceCookie(): string | null {
-  return readCookie(ACTIVE_WORKSPACE_COOKIE) || null;
+  return readScopedCookie(ACTIVE_WORKSPACE_COOKIE);
+}
+
+export type OfficeWorkspaceItem = { id: string; office_workflow_id?: string | null };
+
+export type OfficeWorkspaceCandidates = {
+  routeWorkspaceId?: string | null;
+  generalWorkspaceId?: string | null;
+  officeWorkspaceId?: string | null;
+  settingsWorkspaceId?: string | null;
+};
+
+/**
+ * Canonical office active-workspace resolver (frontend half of the
+ * fix-multi-instance-cookie-isolation task-03 contract). Precedence:
+ * explicit route override → general cookie when it names an office workspace
+ * → office cookie → user settings → first office workspace. Every candidate is
+ * validated against the office workspace set passed in. `routeWorkspaceId` is
+ * a client/page-only candidate: server layouts and the backend boot payload
+ * are cookie-first by design and pass null.
+ */
+export function resolveOfficeWorkspaceId(
+  workspaceItems: OfficeWorkspaceItem[],
+  candidates: OfficeWorkspaceCandidates,
+): string | null {
+  const { routeWorkspaceId, generalWorkspaceId, officeWorkspaceId, settingsWorkspaceId } =
+    candidates;
+  return (
+    workspaceItems.find((workspace) => workspace.id === routeWorkspaceId)?.id ??
+    workspaceItems.find((workspace) => workspace.id === generalWorkspaceId)?.id ??
+    workspaceItems.find((workspace) => workspace.id === officeWorkspaceId)?.id ??
+    workspaceItems.find((workspace) => workspace.id === settingsWorkspaceId)?.id ??
+    workspaceItems[0]?.id ??
+    null
+  );
 }
 
 type SettingsWorkspaceItem = {

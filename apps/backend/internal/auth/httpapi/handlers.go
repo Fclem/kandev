@@ -93,7 +93,7 @@ func (h *Handlers) setup(c *gin.Context) {
 		h.writeAuthError(c, err)
 		return
 	}
-	setSessionCookie(c, h.svc.CookieName(), token, h.svc.SessionTTL())
+	setSessionCookie(c, h.svc.CookieNameForRequest(c.Request), token, h.svc.SessionTTL())
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }
 
@@ -108,7 +108,7 @@ func (h *Handlers) login(c *gin.Context) {
 		h.writeAuthError(c, err)
 		return
 	}
-	setSessionCookie(c, h.svc.CookieName(), token, h.svc.SessionTTL())
+	setSessionCookie(c, h.svc.CookieNameForRequest(c.Request), token, h.svc.SessionTTL())
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }
 
@@ -120,7 +120,7 @@ func (h *Handlers) logout(c *gin.Context) {
 			return
 		}
 	}
-	clearSessionCookie(c, h.svc.CookieName())
+	clearSessionCookie(c, h.svc.CookieNameForRequest(c.Request))
 	c.Status(http.StatusNoContent)
 }
 

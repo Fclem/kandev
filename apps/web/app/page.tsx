@@ -16,7 +16,7 @@ import { toQuickTerminalTab } from "@/lib/api/domains/quick-terminal-api";
 import { snapshotToState } from "@/lib/ssr/mapper";
 import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
 import { resolveDesiredWorkflowId } from "@/lib/kanban/resolve-workflow";
-import { ACTIVE_WORKSPACE_COOKIE } from "@/lib/routing/route-bootstrap";
+import { ACTIVE_WORKSPACE_COOKIE, readScopedCookieStoreValue } from "@/lib/routing/route-bootstrap";
 import { resolveActiveId } from "@/lib/ssr/resolve-active-id";
 import { readCookies } from "@/lib/server/cookies";
 import type { AppState } from "@/lib/state/store";
@@ -236,7 +236,7 @@ export default async function Page({ searchParams }: PageProps) {
     // choice survives a refresh even when userSettings is not updated on select.
     // Kanban home only resolves against kanban workspaces; office workspaces
     // belong under /office.
-    const cookieWorkspaceId = cookieStore?.get(ACTIVE_WORKSPACE_COOKIE)?.value ?? null;
+    const cookieWorkspaceId = readScopedCookieStoreValue(cookieStore, ACTIVE_WORKSPACE_COOKIE);
     // `readCookies()` is client-only in this code path; during SSR this is empty.
     // Workspace selection still works because spa-routes.tsx re-hydrates from
     // `readActiveWorkspaceCookie()` and the generic resolver on first client render.

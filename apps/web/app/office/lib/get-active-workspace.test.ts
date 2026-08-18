@@ -13,6 +13,12 @@ vi.mock("@/lib/api/domains/settings-api", () => ({
   updateUserSettings: vi.fn(),
 }));
 
+// The scoped cookie helpers derive the default port from the API base URL;
+// pin it so scoped-name fixtures are deterministic.
+vi.mock("@/lib/config", () => ({
+  getBackendConfig: () => ({ apiBaseUrl: "http://localhost:8443" }),
+}));
+
 import { readCookies } from "@/lib/server/cookies";
 import { listWorkspaces, fetchUserSettings } from "@/lib/api";
 import { updateUserSettings } from "@/lib/api/domains/settings-api";
@@ -34,10 +40,10 @@ function makeSettings(workspaceId: string) {
   return { settings: { workspace_id: workspaceId } };
 }
 
-function makeCookieStore(workspaceId: string | null) {
+// CookieStore mock keyed by exact cookie name (scoped or legacy).
+function makeCookieStore(entries: Record<string, string>) {
   return {
-    get: (name: string) =>
-      name === "office-active-workspace" && workspaceId ? { value: workspaceId } : undefined,
+    get: (name: string) => (name in entries ? { value: entries[name] } : undefined),
   };
 }
 
@@ -48,7 +54,7 @@ beforeEach(() => {
   mockUpdateUserSettings.mockReset();
   mockUpdateUserSettings.mockResolvedValue({} as never);
   // Default: no cookie set
-  mockReadCookies.mockResolvedValue(makeCookieStore(null) as never);
+  mockReadCookies.mockResolvedValue(makeCookieStore({}) as never);
 });
 
 afterEach(() => {
@@ -81,7 +87,9 @@ describe("getActiveWorkspaceId", () => {
 
   describe("cookie wins after URL param misses", () => {
     it("returns the cookie workspace and does NOT call updateUserSettings", async () => {
-      mockReadCookies.mockResolvedValue(makeCookieStore(OFFICE_WS_ID_2) as never);
+      mockReadCookies.mockResolvedValue(
+        makeCookieStore({ "office-active-workspace": OFFICE_WS_ID_2 }) as never,
+      );
       mockListWorkspaces.mockResolvedValue({ workspaces: [OFFICE_WS, OFFICE_WS_2] } as never);
       mockFetchUserSettings.mockResolvedValue(makeSettings(KANBAN_WS_ID) as never);
 
@@ -92,7 +100,9 @@ describe("getActiveWorkspaceId", () => {
     });
 
     it("ignores cookie when it does not match any office workspace", async () => {
-      mockReadCookies.mockResolvedValue(makeCookieStore("ws-stale") as never);
+      mockReadCookies.mockResolvedValue(
+        makeCookieStore({ "office-active-workspace": "ws-stale" }) as never,
+      );
       mockListWorkspaces.mockResolvedValue({ workspaces: [OFFICE_WS] } as never);
       mockFetchUserSettings.mockResolvedValue(makeSettings(OFFICE_WS_ID) as never);
 
@@ -137,5 +147,68 @@ describe("getActiveWorkspaceId", () => {
       expect(result).toBeNull();
       expect(mockUpdateUserSettings).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("getActiveWorkspaceId — port-scoped cookie reads", () => {
+  it("prefers the scoped office cookie over the legacy name", async () => {
+    mockReadCookies.mockResolvedValue(
+      makeCookieStore({
+        "office-active-workspace": OFFICE_WS_ID,
+        "office-active-workspace_8443": OFFICE_WS_ID_2,
+      }) as never,
+    );
+    mockListWorkspaces.mockResolvedValue({ workspaces: [OFFICE_WS, OFFICE_WS_2] } as never);
+    mockFetchUserSettings.mockResolvedValue(makeSettings(KANBAN_WS_ID) as never);
+
+    const result = await getActiveWorkspaceId();
+
+    expect(result).toBe(OFFICE_WS_ID_2);
+    expect(mockUpdateUserSettings).not.toHaveBeenCalled();
+  });
+
+  it("prefers the scoped general cookie over the office cookie when it names an office workspace", async () => {
+    mockReadCookies.mockResolvedValue(
+      makeCookieStore({
+        "kandev-active-workspace_8443": OFFICE_WS_ID,
+        "office-active-workspace_8443": OFFICE_WS_ID_2,
+      }) as never,
+    );
+    mockListWorkspaces.mockResolvedValue({ workspaces: [OFFICE_WS, OFFICE_WS_2] } as never);
+    mockFetchUserSettings.mockResolvedValue(makeSettings(KANBAN_WS_ID) as never);
+
+    const result = await getActiveWorkspaceId();
+
+    expect(result).toBe(OFFICE_WS_ID);
+    expect(mockUpdateUserSettings).not.toHaveBeenCalled();
+  });
+
+  it("falls through a kanban general cookie to the scoped office cookie", async () => {
+    mockReadCookies.mockResolvedValue(
+      makeCookieStore({
+        "kandev-active-workspace_8443": KANBAN_WS_ID,
+        "office-active-workspace_8443": OFFICE_WS_ID_2,
+      }) as never,
+    );
+    mockListWorkspaces.mockResolvedValue({ workspaces: [OFFICE_WS, OFFICE_WS_2] } as never);
+    mockFetchUserSettings.mockResolvedValue(makeSettings(KANBAN_WS_ID) as never);
+
+    const result = await getActiveWorkspaceId();
+
+    expect(result).toBe(OFFICE_WS_ID_2);
+    expect(mockUpdateUserSettings).not.toHaveBeenCalled();
+  });
+
+  it("ignores scoped cookies when the office feature list does not contain them", async () => {
+    mockReadCookies.mockResolvedValue(
+      makeCookieStore({ "office-active-workspace_8443": "ws-stale" }) as never,
+    );
+    mockListWorkspaces.mockResolvedValue({ workspaces: [OFFICE_WS] } as never);
+    mockFetchUserSettings.mockResolvedValue(makeSettings(OFFICE_WS_ID) as never);
+
+    const result = await getActiveWorkspaceId();
+
+    expect(result).toBe(OFFICE_WS_ID);
+    expect(mockUpdateUserSettings).not.toHaveBeenCalled();
   });
 });

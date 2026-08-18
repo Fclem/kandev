@@ -1,5 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE } from "@/lib/routing/route-bootstrap";
+
+// The write path scopes names with the API-origin port; pin it so the
+// assertions are deterministic.
+vi.mock("@/lib/config", () => ({
+  getBackendConfig: () => ({ apiBaseUrl: "http://localhost:8443" }),
+}));
+
 import {
   rememberWorkspaceSelection,
   rememberWorkspaceSelectionById,
@@ -18,6 +25,8 @@ describe("app sidebar workspace navigation", () => {
   beforeEach(() => {
     document.cookie = "kandev-active-workspace=; path=/; max-age=0";
     document.cookie = "office-active-workspace=; path=/; max-age=0";
+    document.cookie = "kandev-active-workspace_8443=; path=/; max-age=0";
+    document.cookie = "office-active-workspace_8443=; path=/; max-age=0";
   });
 
   it("routes workspace home by active workspace type", () => {
@@ -26,12 +35,15 @@ describe("app sidebar workspace navigation", () => {
     expect(workspaceHomeHref(undefined)).toBe("/?home=overview");
   });
 
-  it("records the active workspace in one write", () => {
+  it("records the active workspace in one write under the port-scoped names", () => {
     rememberWorkspaceSelection(kanban);
     rememberWorkspaceSelection(office);
 
-    expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}=office-1`);
-    expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=office-1`);
+    expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}_8443=office-1`);
+    expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}_8443=office-1`);
+    // The legacy unprefixed names are read-only fallback — no new writes.
+    expect(document.cookie).not.toContain(`${ACTIVE_WORKSPACE_COOKIE}=`);
+    expect(document.cookie).not.toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=`);
   });
 
   it("does not write the legacy office cookie for a kanban selection", () => {
@@ -41,18 +53,18 @@ describe("app sidebar workspace navigation", () => {
     // The office boot paths read the legacy cookie to pick an office workspace
     // when the unified cookie names a kanban board, so a kanban selection must
     // leave it pointing at the office workspace last used.
-    expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}=kanban-1`);
-    expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=office-1`);
+    expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}_8443=kanban-1`);
+    expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}_8443=office-1`);
   });
 
-  it("writes active and legacy office workspace cookies with an encoded id", () => {
+  it("writes scoped active and office workspace cookies with an encoded id", () => {
     rememberWorkspaceSelection(officeWithReservedChars);
 
     expect(document.cookie).toContain(
-      `${ACTIVE_WORKSPACE_COOKIE}=${encodeURIComponent(officeWithReservedChars.id)}`,
+      `${ACTIVE_WORKSPACE_COOKIE}_8443=${encodeURIComponent(officeWithReservedChars.id)}`,
     );
     expect(document.cookie).toContain(
-      `${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=${encodeURIComponent(officeWithReservedChars.id)}`,
+      `${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}_8443=${encodeURIComponent(officeWithReservedChars.id)}`,
     );
   });
 
@@ -61,7 +73,9 @@ describe("app sidebar workspace navigation", () => {
     // else, so there is no record to pass.
     rememberWorkspaceSelectionById("office-new", "office");
 
-    expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}=office-new`);
-    expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=office-new`);
+    expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}_8443=office-new`);
+    expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}_8443=office-new`);
+    expect(document.cookie).not.toContain(`${ACTIVE_WORKSPACE_COOKIE}=`);
+    expect(document.cookie).not.toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=`);
   });
 });

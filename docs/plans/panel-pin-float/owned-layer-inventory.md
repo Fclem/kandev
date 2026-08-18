@@ -22,8 +22,8 @@ applied during task-03; `verify` = candidate surface, confirm during task-03.
 | changes / diff | ContextMenu | `changes-tab.tsx` (ContextMenu ~118-136) | to-wire |
 | changes / diff | Dialog, AlertDialog | `changes-panel-dialogs.tsx` (Dialog/AlertDialog imports ~8-24; AlertDialog open ~56) | to-wire |
 | changes / diff | DropdownMenu | `changes-top-bar.tsx` (DropdownMenu ~59-77) | to-wire |
-| chat / session tabs (`chat`) | DropdownMenu, Dialog, Popover, ContextMenu | `components/task/chat/` — audit each file during task-03: message actions, session menu, queue controls, feedback popover | to-wire |
-| plan (`plan`) | Popover, Dialog | `components/task/plan/` — plan panel popovers, tiptap toolbar menus | to-wire |
+| chat / session tabs (`chat`) | DropdownMenu, Dialog, Popover, ContextMenu | `chat/chat-input-toolbar-primitives.tsx` (~298), `chat/message-actions.tsx` (~212, ~264), `chat/session-menu.tsx`, `chat/queue-controls.tsx`, `chat/feedback-popover.tsx` (exact ranges confirmed during task-03 audit) | to-wire |
+| plan (`plan`) | Popover, Dialog | `plan/plan-panel-popovers.tsx`, `plan/tiptap-toolbar-menu.tsx` (exact ranges confirmed during task-03 audit) | to-wire |
 | terminal (`terminal`) | ContextMenu, Dialog | xterm right-click menu, terminal tab rename/destroy menu, `TerminalScriptsDropdown` (`dockview-header-actions.tsx`) | to-wire |
 | files (`files`) | ContextMenu, Popover | file-tree context menu, hover actions | to-wire |
 | browser (`browser`) | Popover, Dialog | browser panel URL bar, inspect annotations popup | verify |

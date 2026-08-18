@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 31
-prior-round: 30
+revision: 32
+prior-round: 31
 ---
 
 # Floating (unpinned) workbench panels
@@ -263,8 +263,15 @@ and blocks materialization); it is rebuilt on add/remove, dock, preset,
 reset, and resize — native-ID regeneration can never orphan a logical
 identity. **ONE role authority: the validated v4 `LayoutState` envelope /
   normalized-live registry** — the floating-blob `rootColumns` sidecar is a
-  CACHE only; the empty-blob bootstrap input is the validated v4 envelope
-  (never membership inference); `hasLivePinnedRightColumn` accepts that
+  CACHE only (its role entries are DENORMALIZED copies, never written
+  back as authority, and `FloatingGroupState.columnRole` is marked a
+  derived cache field — the v4 LayoutState/registry role map is the ONLY
+  writable role representation); the empty-blob bootstrap input is the validated v4 envelope
+  (never membership inference); **v3-first-mount bootstrap is an explicit
+  sequence: read v3 slot → run the migration transform → normalized v4 +
+  native-ID registry installed → single fromJSON → THEN bootstrap
+  sidecar/visibility; v4 is written and v3 deleted only after the
+  validated apply (a v3-first-mount call-order fixture covers it)**; `hasLivePinnedRightColumn` accepts that
   validated role map; a no-floating first-mount test proves plan/preview/
   vscode = `side-other` and custom pinned terminal = `pinned-right`.
   **`LayoutColumn.role` is REQUIRED** in normalized columns and in
@@ -456,7 +463,12 @@ loses the incoming session, or mutates the maximize overlay:
   v4 writers, marker-only/malformed migration behavior defined); a
   same-tab reload while maximized reconstructs a FRESH portal lease from
   live validated state at mount time — a persisted epoch is a marker, NEVER
-  an owner token (marker-only and malformed-maximize cases are tested); **the state is renamed `pendingGridMaterialization` and its gating is
+  an owner token (marker-only and malformed-maximize cases are tested); **MOUNT PROTOCOL (happens-before): recover/validate envelope →
+  atomically install the validated logical registry + floating lease →
+  acquire detached portals → render/adopt; the markerless reload test
+  asserts BOTH content visibility above the overlay AND registry
+  readiness (no unbound native identity / api:null-inactive first
+  render).** **the state is renamed `pendingGridMaterialization` and its gating is
   UNambiguous: a valid maximize (epoch present OR `null`) suppresses GRID
   INSERTION ONLY — detached portal acquisition/rendering is IMMEDIATE and
   NEVER marker-gated (floating windows render above the overlay even
@@ -466,13 +478,23 @@ loses the incoming session, or mutates the maximize overlay:
   from the overlay/grid**; **competing mutations (preset/reset/add-panel/layout) between the two
   transactions are REJECTED while `pendingGridMaterialization` exists
   (the safer option — rebase is rejected because it can silently restore
-  stale pre-max over newer state)
+  stale pre-max over newer state); **every public mutator returns a
+  DISCRIMINATED result (`{status:"rejected", reason, retry}` vs
+  `{status:"applied", …}`) and affected controls are disabled with a
+  localized reason (toast/banner) — per-operation-family tests**
   — it never silently overwrites newer state with stale pre-max; env
-  switch never releases a still-owned portal lease**; transaction 2 (exit) starts after the
+  switch never releases a still-owned portal lease — **an env switch is
+  DEFERRED until the floating transaction/portal ownership settles, then
+  lease release/transfer happens BEFORE `releaseByEnv` runs (tests:
+  A-maximized/B-requested, env-scoped floating panel)**; transaction 2 (exit) starts after the
   exit rAF, consumes the pending marker, performs the regular pre-max
   restore with exactly one `fromJSON` under coordinator-internal busy
   ownership, runs identity/session validation and the planned-equivalence
-  assertion BEFORE portal adoption, then settles and releases the lease;
+  assertion BEFORE portal adoption, then settles and releases the lease; **"one fromJSON" is defined per
+  ATTEMPT with a bounded retry (max 2 attempts, second attempt re-plans
+  from the frozen pre-restore state before calling fromJSON again);
+  resize-between-plan-and-assertion is tested and the actual call count
+  is asserted**;
   token/generation ownership, busy-clearing, and portal release/adoption
   ordering are specified per transaction; tests cover overlay-settle, exit,
   reload, env switch, and a competing mutation between the two phases.
@@ -692,11 +714,19 @@ Float/dock/restore are **transactions** with an operation journal:
    (`kandev.dockview.env-floating-journal.<envId>`) is written **before** any
    mutation and holds:
    ```
-   { version, envId, transactionId, phase: "mutating" | "committed",
+   { version, envId, transactionId, phase: "mutating" | "committed" | "aborted",
      before: { floatingDigest, layoutDigest },
      after:  { floatingDigest, layoutDigest },
      raw: { beforeFloating, beforeLayout, afterFloating, afterLayout } }
    ```
+   **`aborted` semantics (exact):** a structurally valid `aborted` journal
+   is the SAFE-BEFORE-PAIR form written by the hash-pending unload path —
+   its `before` digests are the cached pre-mutation pair, its `after`
+   digests are the SAME cached pair (nothing was applied), and recovery
+   treats it as a both-before row (restore the before pair, never
+   quarantine); the journal guard, type guard, and recovery matrix all
+   accept `aborted` explicitly, and round-trip + unload-before-digest
+   recovery tests cover it.
    **Digest protocol (exact):** each target storage value is serialized
    **once** and converted to bytes via the **canonical UTF-8 `TextEncoder`
    conversion** (sessionStorage stores DOM strings, not bytes — the
@@ -715,8 +745,13 @@ Float/dock/restore are **transactions** with an operation journal:
    recovery matrix). The coordinator remains busy across the (bounded) async
    hashing/verification. **Journal writes are verified the same way** (a
    failed journal write aborts the transaction before any mutation).
-   **Write/verify ordering:** journal → blob → layout → phase transition →
-   read-back verify of both keys → journal clear; a throw after any storage
+   **Write/verify ordering:** journal → blob → layout → **read-back verify
+   of both keys → phase transition (`committed`) → read-back of the
+   journal marker itself** → journal clear; a crash between final pair
+   verification and the marker write is a `mutating` both-after row settled
+   by equality, and a crash between marker write and its read-back is a
+   verified `committed` row (marker read-back failure retains the journal
+   and retries); a throw after any storage
    mutation is a recoverable state via the phase marker (a
    `phase-write-throw-after-mutation` recovery case is specified and tested).
    **Recovery is a phase-aware decision matrix, never inference:** for each
@@ -729,7 +764,7 @@ Float/dock/restore are **transactions** with an operation journal:
    | blob-after / layout-before | after pair | after digests |
    | layout-after / blob-before | after pair | after digests |
    | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
-   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable, VERSIONED repair record** (`kandev.dockview.env-repair.<envId>` with `{version, transactionId, envId, createdAt, journalRawDigest, quarantineKey, targetRawDigests}` — **`journalRawDigest` is DEFINED as SHA-256(TextEncoder(exact raw journal string read before quarantine)) with a golden vector; on load it is recomputed, the quarantined value's digest must match, and `quarantineKey === deterministicQuarantineKey(envId, journalRawDigest)` is required; mismatch ⇒ malformed ⇒ fail closed (nothing is deleted)**; the quarantine digest/key and target raw digests are IN the record so `clearRepair` identifies the exact quarantine copy; a record missing these fields is malformed and fails closed) — an **app-shell repair registry** scans only the owned `env-repair.*` prefix and renders an env/task-labeled banner on home, settings, AND task mounts (**CURRENT-TAB scope documented: sessionStorage is per-tab; cross-tab records are not visible until the tab mounts the env**); **the quarantine digest/key and transaction identity are part of the guarded repair state, and EVERY restore gate returns `quarantined` — suppressing materialization/salvage — while a repair record exists, even after reload/new API instance (the in-memory cache never bridges reloads; the durable record does)**; `loadRepair(envId)` runs on every mount and `clearRepair(envId, transactionId)` is token-guarded with **verified deletion ordering (repair record DELETED LAST, after quarantine → floating blob → layout/journal are all verified; or the clear is journaled and the record restored on any later failure)**, memory updated only after the entire deletion transaction is durably verified (a failed clear keeps the banner); **the clear uses a DURABLE CLEAR JOURNAL — key `kandev.dockview.env-repair-clear.<envId>` with `{version, envId, transactionId, generation, targetDigests, phase}` schema and an explicit phase machine `pending → verifying → done` (failed/unknown retained as `pending`; each phase has an idempotent reload action; recovery order = **write `pending` BEFORE any deletion → delete/verify quarantine → transition `verifying` → verify quarantine absence + record consistency → delete/verify the original journal + repair record → write `done` and delete the clear journal LAST**; any present repair record OR incomplete clear journal keeps restore/materialization suppressed until verified completion; crash-at-each-delete tests), recovery-before-restore entry, owned-key-index/budget membership, and `cleanupTaskStorage` deletion after generation invalidation (task-01 owns it) — with idempotent retry and generation checks (a partial clear never loses the suppression record while quarantine remains, and never leaves indefinite suppression without a retry state); clear-failure, reload/navigation-mid-clear, and retry tests; STALE-RECORD POLICY: untrusted repair state is NEVER auto-cleared; the banner shows record age with retry/verified-clear actions and quarantine is retained until verified (a TTL, if any, never silently re-enables restore — it switches to a documented read-only/recovery state); beforeunload/reopen, task-remount, stale-age, and cross-tab tests**; **SUPPRESSION SCOPE: while repair is active, existing live grid panels REMAIN USABLE and only floating restore/materialization/mutations are blocked; **PORTAL TRANSFER ON REPAIR ACTIVATION: adoption of new portals stops, floating ownership is released, and each recoverable portal is REATTACHED **by LOGICAL group/column identity** — **a MINIMAL `create-materializable-column` REPAIR-CONTROL transform is EXPLICITLY ALLOWED under the repair token when the floating group's original slot was removed/sanitized away (no portal adoption, no persistence, rollback guarantees; a call-order test proves it cannot invoke normal float/dock/materializer code)**; retained-detached-with-non-rendering-lease is the documented alternative for env-scoped panels; a repair-activation-after-adoption test covers one floating-only portal and one existing-grid portal** — repair controls are reachable via the app shell on task/home/settings mounts (banner visibility + clear/retry without entering the unsafe restore path is an E2E scenario)**; **an explicit allow/deny matrix covers native grid reads (allow), ordinary grid edits (allow), persistence (allow for the current validated grid — CLEAR RETAINS THE LAYOUT KEY and removes only repair/quarantine/floating state; the current validated native grid is synchronously serialized + persisted BEFORE any deletion, with a replacement pair journaled and verified before the old repair record is removed; reload-during-clear and clear-before-debounce tests), floating actions (deny), restore/recovery (deny), portal adoption (deny), env switch (allow, generation-checked), and repair controls (allow)**; `cleanupTaskStorage` removes repair + quarantine keys; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, settings-mount, confirmation-failure, and cleanup tests |
+   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | **ONE policy for EVERY untrusted journal (invalid OR mismatched OR unexpected): quarantine the raw journal under the deterministic key AND persist a durable, VERSIONED repair record** (`kandev.dockview.env-repair.<envId>` with `{version, transactionId, envId, createdAt, journalRawDigest, quarantineKey, targetRawDigests}` — **`journalRawDigest` is DEFINED as SHA-256(TextEncoder(exact raw journal string read before quarantine)) with a golden vector; on load it is recomputed, the quarantined value's digest must match, and `quarantineKey === deterministicQuarantineKey(envId, journalRawDigest)` is required; mismatch ⇒ malformed ⇒ fail closed (nothing is deleted)**; the quarantine digest/key and target raw digests are IN the record so `clearRepair` identifies the exact quarantine copy; a record missing these fields is malformed and fails closed) — an **app-shell repair registry** scans only the owned `env-repair.*` prefix and renders an env/task-labeled banner on home, settings, AND task mounts (**CURRENT-TAB scope documented: sessionStorage is per-tab; cross-tab records are not visible until the tab mounts the env**); **the quarantine digest/key and transaction identity are part of the guarded repair state, and EVERY restore gate returns `quarantined` — suppressing materialization/salvage — while a repair record exists, even after reload/new API instance (the in-memory cache never bridges reloads; the durable record does)**; `loadRepair(envId)` runs on every mount and `clearRepair(envId, transactionId)` is token-guarded with **verified deletion ordering (repair record DELETED LAST, after quarantine → floating blob → layout/journal are all verified; or the clear is journaled and the record restored on any later failure)**, memory updated only after the entire deletion transaction is durably verified (a failed clear keeps the banner); **the clear uses a DURABLE CLEAR JOURNAL — key `kandev.dockview.env-repair-clear.<envId>` with `{version, envId, transactionId, generation, targetDigests, phase}` schema and an explicit phase machine `pending → verifying → done` (failed/unknown retained as `pending`; each phase has an idempotent reload action; recovery order = **write `pending` BEFORE any deletion → delete/verify quarantine → transition `verifying` → verify quarantine absence + record consistency → delete/verify the original journal + repair record → write `done` and delete the clear journal LAST**; **`done` is a TERMINAL, idempotently re-deletable record that RETAINS suppression: a mount that sees a `done` clear journal (with repair/quarantine already absent) re-deletes it and keeps suppression until clear-journal absence is verified — suppression lifts only when a mount observes BOTH no clear journal AND no repair record**; any present repair record OR incomplete clear journal keeps restore/materialization suppressed until verified completion; crash-at-each-delete tests), recovery-before-restore entry, owned-key-index/budget membership, and `cleanupTaskStorage` deletion after generation invalidation (task-01 owns it) — with idempotent retry and generation checks (a partial clear never loses the suppression record while quarantine remains, and never leaves indefinite suppression without a retry state); clear-failure, reload/navigation-mid-clear, and retry tests; STALE-RECORD POLICY: untrusted repair state is NEVER auto-cleared; the banner shows record age with retry/verified-clear actions and quarantine is retained until verified (a TTL, if any, never silently re-enables restore — it switches to a documented read-only/recovery state); beforeunload/reopen, task-remount, stale-age, and cross-tab tests**; **SUPPRESSION SCOPE: while repair is active, existing live grid panels REMAIN USABLE and only floating restore/materialization/mutations are blocked; **PORTAL TRANSFER ON REPAIR ACTIVATION: adoption of new portals stops, floating ownership is released, and each recoverable portal is REATTACHED **by LOGICAL group/column identity** — **a MINIMAL `create-materializable-column` REPAIR-CONTROL transform is EXPLICITLY ALLOWED under the repair token when the floating group's original slot was removed/sanitized away (no portal adoption, no persistence, rollback guarantees; a call-order test proves it cannot invoke normal float/dock/materializer code)**; retained-detached-with-non-rendering-lease is the documented alternative for env-scoped panels; a repair-activation-after-adoption test covers one floating-only portal and one existing-grid portal** — repair controls are reachable via the app shell on task/home/settings mounts (banner visibility + clear/retry without entering the unsafe restore path is an E2E scenario)**; **an explicit allow/deny matrix covers native grid reads (allow), ordinary grid edits (allow), persistence (allow for the current validated grid — CLEAR RETAINS THE LAYOUT KEY and removes only repair/quarantine/floating state; the current validated native grid is synchronously serialized + persisted BEFORE any deletion, with a replacement pair journaled and verified before the old repair record is removed; reload-during-clear and clear-before-debounce tests), floating actions (deny), restore/recovery (deny), portal adoption (deny), env switch (allow, generation-checked), and repair controls (allow)**; `cleanupTaskStorage` removes repair + quarantine keys; while repair is active the native grid is UNTOUCHED and **ALL floating windows, edge bars, and floating/layout mutations are SUPPRESSED** (no read-only salvage rendering — the salvage-render alternative is rejected because adopting portals or presenting unverified state as authoritative violates fail-closed); the only UI is a localized, non-dismissable repair banner (owner: the dockview store/coordinator) with export and an AlertDialog-style explicit clear confirmation; repeated automatic recovery is suppressed while the banner is active; reload, task-switch, settings-mount, confirmation-failure, and cleanup tests |
    The `phase` marker (`mutating` vs `committed`) refines the both-after row
    (a `committed` marker with both-after means the mutation finished; a
    `mutating` marker with both-after is still settled by equality), never
@@ -760,10 +795,12 @@ Float/dock/restore are **transactions** with an operation journal:
    for the same original** (a crash between copy and remove cannot accumulate
    `.corrupt-<n>` copies on repeated restarts). A failed copy or removal
    keeps the original (never cached as recovered) and is retried on the next
-   recovery; repair records, clear journals, and quarantine copies count
-  toward the owned allocation budget (or a fixed repair-safety allowance is
-  reserved; quota-full behavior retains the original journal and never
-  caches recovery); quarantine keys count toward the budget, are removed by bounded
+   recovery; a FIXED repair-safety allowance (4 KiB per env) is reserved OUTSIDE the
+  normal owned allocation budget so a repair can ALWAYS persist its
+  suppression state (repair records, clear journals, and quarantine copies
+  are accounted inside it); quota-full behavior retains the original
+  journal and never caches recovery; tests prove a repair always persists
+  under quota-full; quarantine keys count toward the budget, are removed by bounded
    per-env/task corrupt-key cleanup in `cleanupTaskStorage`, and the recovery
    cache records success only after durable quarantine or verified original
    absence. Crash-after-copy, repeated-restart, and cleanup cases are
@@ -900,8 +937,13 @@ Float/dock/restore are **transactions** with an operation journal:
 Re-dock and restore both recreate groups through one code path:
 
 1. Clone the live layout (`fromDockviewApi`) into a delta `LayoutState`.
-2. If the saved root column (`columnId`, `columnIndex`, pinned/width metadata)
-   is absent, insert it at `columnIndex` (clamped) with its saved metadata.
+2. Look up the saved root column **by `columnLogicalId`/normalized
+   registry FIRST**; the native `columnId` is only a validated hint — if
+   the logical column exists, use it; if a NATIVE key exists without the
+   logical id (regenerated key), resolve by logical identity, never insert
+   a duplicate; only when neither resolves, insert at `columnIndex`
+   (clamped) with its saved metadata, and FAIL CLOSED on ambiguous
+   matches (two live columns claiming the same logical id).
 3. Insert a group at the saved `treePath` **and** into the column's `groups`
    array in one atomic mutation helper. Both representations must stay
    consistent: `serializeColumn` prefers `column.tree` while `serializePanels`
@@ -1468,7 +1510,13 @@ replacement orderings.
   cleared — groups do not re-float after reset. `cleanupTaskStorage` removes
   the floating key **and the journal key, governed by ONE authoritative
   cleanup matrix (committed machine-readable owned-key matrix + validator
-  with EXACT constructed key matches — base keys = prefix + encoded envId;
+  with EXACT constructed key matches — base keys = prefix + `encodeURIComponent(envId)` — the ONE canonical
+  encoding used by every writer/reader/validator/cleanup helper (the
+  current raw-interpolation writers are migrated), with reserved-character
+  and adversarial-prefix-key tests; **E2E helpers MUST call a shared
+  test-safe key-constructor module (or a single exported contract
+  constant) instead of copying the prefix — the matrix validator and
+  runtime writers share the same constructor**;
   quarantine keys = exact base journal key + `.corrupt-<lowercase-hex-
   digest>`; NEVER delete arbitrary `startsWith('kandev.dockview.env-')`
   keys; an adversarial user key with an owned prefix survives cleanup)

@@ -139,7 +139,7 @@ function PromptHistoryRow({
           role="button"
           tabIndex={0}
           className={cn(
-            "markdown-body markdown-body-user group relative cursor-pointer overflow-hidden rounded-2xl px-3 py-1.5",
+            "markdown-body markdown-body-user group relative min-h-11 cursor-pointer overflow-hidden rounded-2xl px-3 py-1.5 md:min-h-0",
             isFavorite ? "bg-yellow-200/50 dark:bg-yellow-500/10" : "bg-primary/30",
           )}
           onClick={(event) => {

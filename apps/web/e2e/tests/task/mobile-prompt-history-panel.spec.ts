@@ -60,12 +60,11 @@ test.describe("Prompt history panel on mobile", () => {
     await expect(historyPanel).toBeVisible({ timeout: 10_000 });
     const row = testPage.getByTestId("prompt-history-row-0");
     await expect(row).toContainText(seedPrompt);
-    expect(
-      (await row.getByTestId("prompt-history-jump-0").boundingBox())?.height,
-    ).toBeGreaterThanOrEqual(44);
+    const prompt = row.locator('[role="button"]').first();
+    const promptBox = await prompt.boundingBox();
+    expect(promptBox?.height).toBeGreaterThanOrEqual(44);
 
-    await row.getByTestId("prompt-history-jump-0").tap();
-    await expect(session.activeChat()).toBeVisible();
+    await prompt.tap();
     await expect(testPage.locator(`#msg-${promptMessage.id}`)).toBeAttached();
   });
 });

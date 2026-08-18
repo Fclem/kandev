@@ -131,7 +131,7 @@ test.describe("Prompt history panel", () => {
     // (6) Transcript jump: scroll the transcript AWAY (to the bottom — the
     // anchored last-prompt bar reserves a tall scroll-margin at the top, so a
     // top-anchored target near the top could not be aligned), re-activate
-    // history, click the arrow, and assert the sentinel prompt row is
+    // history, click the prompt bubble, and assert the sentinel prompt row is
     // top-aligned in the ACTIVE chat container (portal-mounted inactive
     // panels duplicate the rows, so everything must be scoped to the visible
     // chat).
@@ -142,7 +142,7 @@ test.describe("Prompt history panel", () => {
       el.scrollTop = el.scrollHeight;
     });
     await session.clickTab("Prompt history");
-    await sentinelRow.getByTestId("prompt-history-jump-0").click();
+    await sentinelRow.locator('[role="button"]').first().click();
 
     await expect(session.activeChat()).toBeVisible();
     const msg = chat.locator(`#msg-${sentinelMessageId}`);

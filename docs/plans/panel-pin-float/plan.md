@@ -8,17 +8,18 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. Revision 9 incorporates the
-round-8 adversarial review (this package has been adversarially reviewed every
-round): digest-based journal recovery with a durable phase marker (all four
-partial-write orderings), collision-safe group-id allocation, the exact
-`hasLivePinnedRightColumn` predicate, busy-guards on every layout-mutation
-boundary with all three pin surfaces observing `isFloatingTransactionBusy`,
-per-`(envId, transactionId, api)` recovery caching, a global floating
-allocation budget, a defined post-apply placement-normalization hook, the
-selected defer-until-exit maximize sequence, root-column geometry in the blob,
-a tracked owned-layer inventory file with a concrete host API, and a named
-mobile retained-path spec.
+the existing env layout / maximize persistence. Revision 10 incorporates the
+round-9 adversarial review (this package has been adversarially reviewed every
+round): an exact digest protocol (raw bytes, versioned hash, absent sentinel,
+read-back verification, no-op equality row), a durable journal write/verify
+ordering, a complete `allocateUniqueGroupId` contract (namespace, reservation,
+cap, reload re-derivation), a concrete `hasLivePinnedRightColumn(api)`
+implementation path, restore/recovery entering the transaction coordinator,
+floating-winner center-intent preservation, one shared maximize-restore
+coordinator for both call paths with a token-guarded pending marker, an
+ownership-validated host API across SDK/types/host/docs, an authoritative
+root-column geometry helper, journal-key cleanup, the maintained
+`owned-layer-inventory.md`, and the named mobile retained-path spec.
 
 ## Architecture
 

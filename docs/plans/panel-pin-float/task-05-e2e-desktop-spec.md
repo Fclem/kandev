@@ -44,6 +44,8 @@ cd apps/web && pnpm run typecheck
 ## Files Likely Touched
 
 - `apps/web/e2e/tests/task/panel-pin.spec.ts` (new)
+- `apps/web/e2e/tests/mobile-panel-access.spec.ts` (new)
+- `apps/web/components/task/mobile/session-mobile-bottom-nav.tsx` (stable panel-button test ids where missing) and `apps/web/components/task/mobile/session-mobile-layout.tsx` (selectors, if needed)
 - `apps/web/e2e/pages/session-page.ts` (pin/floating helpers)
 - `apps/web/e2e/helpers/dockview-persistence.ts` (floating-blob assertions)
 

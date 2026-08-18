@@ -37,9 +37,12 @@ cd apps/web && pnpm run typecheck
 ## Files Likely Touched
 
 - `apps/web/components/task/dockview-floating-panel.tsx` (new; expanded window, collapsed bar, portal adoption, tablist semantics, reactive title subscription)
-- `apps/web/components/task/dockview-floating-coordinator.ts` (new; owned regions, pointer/focus/Escape ownership with pointerdown deferral, `useFloatingOwnedLayer`, stacking)
+- `apps/web/components/task/dockview-floating-coordinator.ts` (new; owned regions, pointer/focus/Escape ownership with same-frame lease, `useFloatingOwnedLayer`, stacking)
 - `apps/web/components/task/dockview-desktop-layout.tsx` (mount overlay)
-- `apps/web/components/task/dockview-floating-panel.test.tsx` (new; incl. pointerdown deferral while a menu is open, reactive title update on plugin re-registration while detached, real Radix Escape ordering)
+- `apps/packages/plugin-sdk/src/index.ts` + `apps/web/lib/plugins/types.ts` + `apps/web/lib/plugins/host-api.ts` + `docs/plans/plugins/PLUGIN-API.md` (`host.ui.registerFloatingOwnedLayer` — SDK type, host implementation, ownership capability, docs; all four change together)
+- `apps/web/lib/plugins/registry.ts` (`unregisterPlugin` owned-layer cleanup)
+- `docs/plans/panel-pin-float/owned-layer-inventory.md` (audit completion)
+- `apps/web/components/task/dockview-floating-panel.test.tsx` (new; incl. pointerdown deferral while a menu is open, reactive title update on plugin re-registration while detached, real Radix Escape ordering, plugin-panel layer ownership rejection)
 - Reuse: `panelPortalManager` (`lib/layout/panel-portal-manager.ts`), `usePanelSearch` pointer-outside pattern (`hooks/use-panel-search.ts`), `panelTitle()` (`lib/state/layout-manager/panel-title.ts`), `PinButton` from task-02
 
 ## Inputs

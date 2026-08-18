@@ -83,7 +83,7 @@ EnvFloatingState                     # persisted as JSON, versioned
   version      1
   nextOrder    number            # monotonic stack-order counter for this env
   groups       Record<groupId, FloatingGroupState>
-  rootColumns  Record<columnId, { pinned: boolean; width: number;
+  rootColumns  Record<columnLogicalId, { pinned: boolean; width: number;
                                   minWidth: number | null; maxWidth: number | null;
                                   role: "center" | "pinned-right" |
                                         "side-other" | "custom" }>
@@ -105,7 +105,9 @@ EnvFloatingState                     # persisted as JSON, versioned
                # later restores consume only stored roles (never re-inferred) rebuilt in memory after every layout
                # apply and reload, invalidated on preset/reset/env switch,
                # covered by the same journal transaction, budget, and cleanup
-               # as the groups — there is no third storage key. Persistence is
+               # as the groups — there is no third storage key; native
+               # columnId is NEVER a sidecar key (a guard rejects/migrates
+               # native-keyed sidecars). Persistence is
                # COALESCED: sidecar updates in memory during layout applies
                # and flush with the same verified debounce/beforeunload
                # transaction as the live layout (geometry durability equals
@@ -220,31 +222,42 @@ loses the incoming session, or mutates the maximize overlay:
 - **Regular v4 layout (initial mount, env fast/slow, custom, preset,
   fallthrough):** unwrap + sanitize the native value → `api.fromJSON` ONCE →
   session/ephemeral replacement and incoming-session insertion → a **defined
-  normalized-state reconciliation** with a **deterministic diff contract**:
-  match priority is logical group identity → panel ID → a closed semantic
-  fallback; exactly ONE live instance per panel ID (duplicate-prevention);
-  the **native payload owns component/params/title/tabComponent for
-  live/env-scoped panels** (terminal ids, editors, browser urls — native
-  params are authoritative) while the **normalized state owns
-  identity/placement/role/active-tab**; persisted `session:*` panels are
-  EXCLUDED (the live session insertion owns those); native-only
-  non-session panels are retained, normalized-only non-session panels are
-  materialized fresh; group placement and the active tab are reconciled from
-  the normalized state; never a second full `fromJSON`. Duplicate-prevention
-  tests cover `terminal-default`, ordinary `shell-<uuid>`, files/changes,
-  plugin, and env-scoped panels. → fixups/bootstrap → floating restore.
+  normalized-state reconciliation** with a **staged algorithm**:
+  1. **Native→normalized binding:** before the diff, map each native
+     group/column to a normalized candidate — first by a persisted native key
+     (when the v4 registry carries one), then by a **length-delimited
+     semantic signature** (role + column index + complete sorted panel-id
+     multiset); ambiguous or duplicate candidates are rejected.
+  2. **Diff:** match priority = logical group identity → panel ID → the
+     closed fallback (component/panel semantic, then position; otherwise
+     fail-closed); exactly ONE live instance per panel ID; **native owns
+     component/params/title/tabComponent for live/env-scoped panels** while
+     **normalized owns identity/placement/role/active-tab**; persisted
+     `session:*` panels EXCLUDED.
+  3. **Ambiguity policy:** on any ambiguity the native state is preserved and
+     only the unmappable normalized metadata is dropped (never a silent
+     move of a terminal/editor/browser payload); duplicates are rejected.
+  Duplicate-prevention fixtures cover same panel ID in two normalized groups
+  and a session replacement that changes the first panel. → fixups/bootstrap
+  → floating restore.
 - **Maximize-only:** unwrap the native two-column overlay → `fromJSON` once;
   the normalized pre-max `LayoutState` stays ONLY in the store
   (`preMaximizeLayout`); it is **never applied while maximized** (no
   unmaximize, no overlay mutation); post-exit restore applies it. **Reload-
-  while-maximized renders the saved floating content above the overlay by
-  materializing the floating panels' PORTALS only** (defs registered into
-  the portal manager so the floating window can adopt them — never touching
-  the grid or the two-column overlay, never duplicate grid ids); the
-  grid-side pending materialization completes at maximize exit. A route
-  dispatcher selects maximize-only when a valid maximize blob exists,
-  regular otherwise (malformed/failed maximize falls back to regular, with
-  exactly one `fromJSON` per selected route).
+  while-maximized renders the saved floating content above the overlay via
+  an explicit detached-portal protocol:** a new `acquireDetached(panelId,
+  component, params, envId)` portal-manager API creates `PortalEntry`s with
+  `api: null` (the manager currently requires a Dockview panel api), owned by
+  an **owner token + generation**; the floating window adopts those detached
+  portals in a documented stacking context (explicit z-index above Dockview's
+  maximize overlay); on maximize exit the floating owner is marked released
+  BEFORE `fromJSON`, the grid slot acquires each portal **exactly once after
+  the exit rAF**, and one-owner-per-panel-id is asserted throughout (a grid
+  slot and the floating window can never fight over the same DOM node —
+  adoption is lease-based). The grid-side pending materialization completes
+  at maximize exit. A route dispatcher selects maximize-only when a valid
+  maximize blob exists, regular otherwise (malformed/failed maximize falls
+  back to regular, with exactly one `fromJSON` per selected route).
 Call-order tests cover initial, fast/slow switch, route-intent, custom,
 maximize-only, and fallthrough paths, asserting no stale/duplicate session,
 no overlay mutation, and portal-above-overlay visibility during maximize. `getEnvLayout`
@@ -274,17 +287,18 @@ write is removed** — the env sessionStorage v4 slot is the sole authoritative
 layout surface, and tests/helpers that observed the legacy key are migrated
 (there is exactly one layout persistence surface: the v4 env slot, through
 the sole pair writer).
-**Migration UUID derivation is crash-idempotent and deterministic:**
-canonical input is **domain-tagged** — `kind(group|column) + role + sorted
-unique panel-id set`, length-delimited encoded, mapped via a documented
-SHA-256→UUID truncation; duplicate panel ids, empty/ambiguous sets, and the
-same canonical key across distinct groups/columns are rejected. v3
-derivation runs ONCE (v4 logical ids are thereafter authoritative and
-membership changes NEVER re-derive them — a group identity changes on member
-addition only by persisting the new canonical id at the next capture, never
-by re-deriving the old one); a crash before the v4 write cannot mint
-different ids on the next load (deterministic derivation); crash-before-
-v4-write and repeated-retry tests assert id stability. The blob's `identities` map is a
+**Migration UUID derivation is crash-idempotent and deterministic with a
+versioned wire protocol:** canonical input is UTF-8 encoded as
+`v1` ‖ `kind("group"|"column")` ‖ `role` ‖ sorted unique panel ids — each
+field length-delimited (4-byte big-endian length prefix per field), sorted by
+UTF-8 bytes — hashed SHA-256, and mapped to a UUID by taking the first 16
+bytes with UUID v5 variant bits set (documented byte order); duplicate panel
+ids, empty sets, and duplicate source keys are rejected BEFORE hashing; a
+`canonicalKey → source path` map is maintained during migration to reject
+post-truncation UUID collisions before writing v4. v3 derivation runs ONCE
+(v4 logical ids are thereafter authoritative and membership changes NEVER
+re-derive them); a crash before the v4 write cannot mint different ids
+(golden vectors, not only property tests, assert the encoding). The blob's `identities` map is a
 **secondary cache keyed by `logicalId`**, never the source of truth: capture
 reads the group/column's own `logicalId` from the live layout (no
 traversal-derived `group-n` ids are ever treated as identity); a group or
@@ -462,6 +476,7 @@ Float/dock/restore are **transactions** with an operation journal:
    | blob-after / layout-before | after pair | after digests |
    | layout-after / blob-before | after pair | after digests |
    | both-after or both-equal (no-op) | settled | after digests (equality needs no write) |
+   | **unexpected (a key's digest is neither its before nor its after)** | **fail closed** | journal retained/quarantined and divergence surfaced for repair — never overwrite an unknown newer value, never clear the evidence; one-key, both-key, absent/present mismatch, and retry tests |
    The `phase` marker (`mutating` vs `committed`) refines the both-after row
    (a `committed` marker with both-after means the mutation finished; a
    `mutating` marker with both-after is still settled by equality), never
@@ -656,15 +671,18 @@ Float/restore removals are **non-destructive**, scoped by a **detach registry**
 rather than a global id set:
 
 - The registry is keyed by **composite `(panelId, envId)`** (nested map or
-  composite key), holding one record `{ token }` per entry. **Live-grid
-  scope:** a panel id exists in at most ONE env's live grid at any time
-  (only one env is live; the portal manager's single `Map<string, PortalEntry>`
-  is per-live-panel), so same-ID live coexistence is impossible — the
-  composite key exists for **blob-level bookkeeping** (a same id in the old
-  env's blob vs the new env's live grid), never to model two live portals.
-  The overlapping-id scenario is therefore: old-env blob entry released /
-  superseded while the new env's live entry is preserved, verified with
-  stale-token and old-entry-first tests.
+  composite key), holding one record `{ token }` per entry. **Event
+  correlation without token-carrying events:** `onDidRemovePanel` receives
+  only the panel object, so the registry matches by **(api instance,
+  panelId, operation generation)** — registrations are armed immediately
+  around each synchronous remove/`fromJSON` (a token stored only in a
+  synchronous call frame cannot survive delayed `fromJSON` removals), and
+  delayed removals are correlated by generation; a real user close is never
+  registered at that moment and never consumes a detach entry. **Portal env
+  ownership on reacquire:** `acquire` on an existing entry updates
+  api/params/component AND re-validates/updates `entry.envId` (a same panel
+  id reacquired under a new env carries the new env; old-env blob entries
+  are bookkeeping only — the live portal has exactly one env at a time).
   **Registrations are armed per expected removal, not for the transaction
   lifetime:** immediately before each synchronous `removePanel`/`fromJSON`
   that the transaction performs, the exact `(panelId, envId)` pairs being
@@ -907,15 +925,27 @@ in the group's saved tab order.
 
 - **Winner ownership is store-owned and explicit:** the coordinator writes a
   store field — `floatingSessionWinner: { sessionId, envId, generation } | null` —
-  atomically with the replacement. **Delayed replacement has a readiness
-  barrier:** a per-env replacement-generation state makes the always-mounted
-  `useAutoSessionTab` hook DEFER its ensure while replacement is pending —
-  once replacement completes, the winner decision is consumed before the
-  hook effect proceeds; if the hook ever ran first and inserted the incoming
-  id, the coordinator atomically re-evaluates and MOVES the already-added
-  winner back to the floating entry (no id ever exists in both surfaces);
-  tested with replacement-after-first-effect, StrictMode rerun, and delayed
-  WS ordering. The field is **memory-only (never
+  atomically with replacement. **Global group ordering:** when several
+  floating groups contain stale session panels, the winner group is selected
+  first by a **deterministic total order** (`order`, then `groupLogicalId`),
+  then the active-panel/first-tab rule applies within that group; two-group
+  tests cover active stale panels in both with reversed insertion order.
+  **Delayed replacement has a readiness barrier with a bounded timeout:** a
+  per-env replacement-generation state makes the always-mounted
+  `useAutoSessionTab` hook DEFER every mutation (including the pending-
+  session rebuild and reconciliation steps that currently run before the
+  ensure guard) while replacement is pending — the winner is checked/
+  consumed BEFORE any hook mutation, not only before ensure; each
+  replacement generation has an abort/failure terminal transition and a
+  bounded timeout whose fail-closed policy is atomic (keep the existing
+  floating winner and suppress only that ensure, or clear the winner and let
+  normal insertion proceed — one, deterministically), and stale-generation
+  cleanup can never clear a successor; if the hook ever ran first and
+  inserted the incoming id, the coordinator atomically re-evaluates and
+  MOVES the already-added winner back to the floating entry (no id ever
+  exists in both surfaces). Tested with replacement-after-first-effect,
+  StrictMode rerun, delayed WS ordering, and replacement-never-completing
+  timeout. The field is **memory-only (never
   persisted)** and consumed by an atomic **compare-and-clear**
   `consumeFloatingSessionWinner(sessionId, envId, generation)` called from
   `shouldSkipPanelEnsure` (`dockview-session-tabs.ts`) before the hook's
@@ -923,7 +953,7 @@ in the group's saved tab order.
   cannot double-skip. Stale winners (generation or env mismatch) are cleared
   on generation/env transition and on every terminal path (ensure failure,
   unmount, env switch); a newer generation is never cleared by an older
-  cleanup. The hook skips only the winner id for grid
+  cleanup.
   insertion/activation; unrelated current-session siblings are still ensured
   as today (their anchor is the existing
   `addCurrentSessionSiblings`/`ensureSiblingPanels` behavior, with an explicit
@@ -1073,7 +1103,12 @@ replacement orderings.
   reset/default, maximize exit, and materializer paths: every native
   `fromJSON` and `applyLayout` call goes through one adapter (or an
   immediate `settleLayoutApply` follows each direct native restore), and a
-  static AST/source-boundary test rejects bypasses. The wrapper invokes
+  static AST/source-boundary test rejects bypasses **scoped to
+  task-workbench production sources only** (approved adapter modules are
+  enumerated; office-dockview, settings layout editor, and other non-task
+  `fromJSON`/`applyLayout` uses are explicit fixtures/exclusions; a new
+  task restore bypass fails with the exact callsite and required adapter).
+  The wrapper invokes
   `ensureRolesBootstrapped(api, envId)` after each synchronous apply AND
   before enforcement/toggle/predicate reads; enforcement additionally calls
   bootstrap defensively before reading. Bootstrap normalizes live `LayoutColumn.role`
@@ -1117,13 +1152,16 @@ replacement orderings.
   **placement**, the floating definition owns the panel **payload** (component,
   params, tabComponent) and saved tab order, and the active panel is merged
   explicitly — **scoped to valid definitions**, and **executed through the
-  same single tree+flat mutation helper as the materializer** (the existing
-  merger maps only `col.groups` and leaves `col.tree` stale while the
-  serializer prefers the tree — reset/preset merges must transform each
-  group once by stable identity, reuse the transformed object in both
-  representations, remove empty leaves/branches, and assert tree/flat/panel
-  id equality; nested-tree reset merge tests are required, not only
-  materializer tests). `session:*` floating
+  same single tree+flat mutation helper as the materializer**, specified as
+  a **pure `mapLayoutGroups(state: LayoutState, transform): LayoutState`
+  function** (no live api): traverses each group once by stable identity,
+  reuses the transformed object in the corresponding tree leaf and flat
+  array, removes empty branches/leaves, and asserts tree/flat/panel id
+  equality; the materializer and reset both call it and then apply the
+  resulting state via the existing applier (the existing merger maps only
+  `col.groups` and leaves `col.tree` stale while the serializer prefers the
+  tree; nested-tree reset merge tests are required, not only materializer
+  tests). `session:*` floating
   definitions are validated against the active task/session set and env
   before merging: stale/deleted/absent-session definitions are dropped, and
   when no valid session remains the reset chat placeholder/default behavior is

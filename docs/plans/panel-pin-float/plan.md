@@ -8,18 +8,19 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 18 incorporates the
-round-17 adversarial review** (this package has been adversarially reviewed
-every round): a deterministic reconciliation diff contract (native owns
-payloads, normalized owns identity/placement/role, session panels excluded),
-a maximize route that materializes only floating portals above the overlay
-(never the pre-max layout) with a route dispatcher, a winner readiness
-barrier for delayed replacement, a normalized-live-layout registry keyed by
-native ids, an explicit bootstrap callsite table with a bypass-rejecting
-source-boundary test, tree+flat-consistent reset/preset merging,
-domain-tagged semantic migration canonicalization, the central
-`isSerializedDockviewShape` guard, anchored CI wiring, and corrected
-revision metadata.
+the existing env layout / maximize persistence. **Revision 19 incorporates the
+round-18 adversarial review** (this package has been adversarially reviewed
+every round): a staged native→logical reconciliation algorithm with an
+explicit ambiguity policy, a detached-portal ownership protocol for
+maximize-only materialization (owner tokens, one-owner-per-panel, z-index
+above the maximize overlay), a winner readiness barrier with bounded timeout
+and pre-mutation consumption, deterministic winner-group ordering, an
+event-correlation mechanism for the detach registry, a pure
+`mapLayoutGroups(state, transform)` helper, a versioned canonicalization wire
+protocol with golden vectors, an exhaustive layout-key consumer table with a
+legacy-key scan, a scoped bootstrap bypass gate, an `unexpected`-digest
+recovery row, enumerated active-group shapes, and the
+`Record<columnLogicalId, RootColumnMetadata>` sidecar key guard.
 
 ## Architecture
 

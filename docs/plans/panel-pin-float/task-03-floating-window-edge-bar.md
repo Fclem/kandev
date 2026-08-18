@@ -49,18 +49,23 @@ spec: "../../specs/ui/panel-pin-float.md"
 cd apps/web && pnpm vitest run components/task/dockview-floating-panel.test.tsx components/task/dockview-group-actions.test.tsx
 cd apps/web && pnpm run typecheck
 node scripts/check-owned-layer-inventory.mjs   # executable gate: static AST scan
-                                               # (defined parser + file globs,
-                                               # canonical Radix primitive import
-                                               # + @kandev/ui wrapper map, test/
-                                               # generated/mobile exclusions,
-                                               # failure output mapping each
-                                               # discovered owner to an inventory
-                                               # row) fails on any row still
-                                               # to-wire/verify or on an unlisted
-                                               # primitive; fixtures cover
-                                               # aliases, wrappers, dynamic refs,
-                                               # and an intentionally unlisted
-                                               # primitive; wired into CI
+                                               # using the repo's Babel parseSync
+                                               # (typescript + jsx plugins),
+                                               # file globs over panel content
+                                               # sources, imports canonicalized
+                                               # through the Vite aliases
+                                               # (@kandev/ui wrappers and
+                                               # <X.DropdownMenu> member JSX
+                                               # matched), test/generated/mobile
+                                               # exclusions, dynamic references
+                                               # handled via an explicit
+                                               # fixture/allowlist, and failure
+                                               # output mapping each discovered
+                                               # owner to an inventory row
+                                               # (file:line -> row); fails on any
+                                               # row still to-wire/verify or on
+                                               # an unlisted primitive; wired
+                                               # into CI
 ```
 
 ## Files Likely Touched

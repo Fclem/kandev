@@ -8,16 +8,19 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 15 incorporates the
-round-14 adversarial review** (this package has been adversarially reviewed
-every round): a versioned v4 layout envelope (native dockview JSON +
-normalized `LayoutState` carrying `logicalId`/`role`, with a one-time
-`migrateEnvLayoutV3`), a sole coordinator-owned pair writer
-(`persistSettledPair`) routing every persistence path, a named
-`FloatingTransactionFacade` with a source-boundary import test, a synchronous
-role bootstrap before any predicate call, nested `Map<envId, Map<panelId,
-token>>` registry bookkeeping, versioned custom-layout envelopes, and the
-executable inventory/AST gates.
+the existing env layout / maximize persistence. **Revision 16 incorporates the
+round-15 adversarial review** (this package has been adversarially reviewed
+every round): an envelope-aware restore adapter (`readEnvLayoutForRestore`)
+used by every restore route, explicit v3-read/v4-write key constants with the
+envelope version as the idempotence marker, a versioned maximize slot,
+removal of the legacy `dockview-layout-v3` localStorage writer,
+`columnLogicalId`/`groupLogicalId` as the sole placement identity, a
+normalized (not recovered) old-v3 geometry fallback, synchronous prevalidated
+unload writes, a single exported `floatingTransactionFacade` value with a
+source-boundary import test, an `ensureRolesBootstrapped` boundary, a concrete
+plugin-unregister revocation bridge, an `isSavedLayoutEnvelope`
+discriminator for custom layouts, and the exact `__KANDEV_FLOATING_TEST_HOOKS__`
+compile-time define.
 
 ## Architecture
 

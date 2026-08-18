@@ -96,7 +96,11 @@ EnvFloatingState                     # persisted as JSON, versioned
                # geometry source, precedence for multiple right candidates,
                # and a closed policy for no/ambiguous candidates (default
                # right = the pinned column containing files/changes; tie →
-               # leftmost; none → no pinned-right role); migrated roles are
+               # leftmost; none → no pinned-right role); **raw v3 lacks
+               # min/max constraint fields — missing old constraints are
+               # NORMALIZED (not recovered) from the preset/default role and
+               # constraint metadata, and the sidecar is persisted only after
+               # a validated post-apply live capture**; migrated roles are
                # persisted before any hasLivePinnedRightColumn decision and
                # later restores consume only stored roles (never re-inferred) rebuilt in memory after every layout
                # apply and reload, invalidated on preset/reset/env switch,
@@ -119,6 +123,9 @@ EnvFloatingState                     # persisted as JSON, versioned
 FloatingGroupState
   groupId          string        # original grid group id (informational)
   columnId         string        # root LayoutColumn id the group lived in
+  columnLogicalId  string        # the persisted logicalId (M4 placement identity);
+                  # native columnId is a non-authoritative hint only — capture,
+                  # materializer, and sidecar lookups key on columnLogicalId
   columnIndex      number        # index of that column in the columns array
   columnKind       "center" | "side" | "custom"   # see Placement capture
   columnPinned     boolean       # column's pinned flag at float time
@@ -196,12 +203,31 @@ versioned:** the env layout key is bumped to **v4** and stores a **versioned
 envelope** — `{ version: 4, dockview: <native serialized JSON>,
   layout: <normalized LayoutState carrying logicalId/role> }` — because
 native dockview JSON drops custom fields while `fromDockviewApi` regenerates
-traversal-derived ids; `getEnvLayout` reads v4, and a **v3→v4 migration
+traversal-derived ids; **every restore route uses one envelope-aware adapter
+`readEnvLayoutForRestore()`** that unwraps to `{native, normalized}` — the
+native value is sanitized and passed to `api.fromJSON`, then the normalized
+`LayoutState` is applied after the native restore (initial mount,
+env-switch fast/slow, custom layout, maximize-only, and fallthrough routes
+all unwrap before sanitize/fromJSON — never the raw envelope); `getEnvLayout`
+reads v4, and a **v3→v4 migration
 (`migrateEnvLayoutV3(raw, envId)`)** assigns UUIDs once and writes v4 only
-after a validated apply, keeping a v3 reader fallback; `apps/web/e2e/helpers/
+after a validated apply, keeping a v3 reader fallback; **explicit
+v3-read/v4-write key constants** define coexistence (v3 read until v4 is
+written; v3 deleted only after the validated v4 apply; the envelope's
+`version` field is the idempotence marker — no third marker key) with
+retry-on-failed-apply semantics that never mint new UUIDs;
+`apps/web/e2e/helpers/
 dockview-persistence.ts` prefixes and all layout consumers are updated
 together, with old-v3-restore, v4 round-trip, tree/flat-equality, and e2e-
-helper-compatibility tests. The blob's `identities` map is a
+helper-compatibility tests. **The maximize slot is versioned too:** the
+`preMaximizeLayout` state stored with maximize uses the same v4 normalized
+`LayoutState` schema (old maximize blobs migrate before `applySavedMaximize`),
+so reload-while-maximized and env-switch-while-maximized never lose
+`logicalId`/`role`/placement. **The legacy `dockview-layout-v3` localStorage
+write is removed** — the env sessionStorage v4 slot is the sole authoritative
+layout surface, and tests/helpers that observed the legacy key are migrated
+(there is exactly one layout persistence surface: the v4 env slot, through
+the sole pair writer). The blob's `identities` map is a
 **secondary cache keyed by `logicalId`**, never the source of truth: capture
 reads the group/column's own `logicalId` from the live layout (no
 traversal-derived `group-n` ids are ever treated as identity); a group or
@@ -295,19 +321,21 @@ Float/dock/restore are **transactions** with an operation journal:
    coordinator's internal operations are still busy-rejected), and recursive
    **The internal operations live in a factory closure
    and only a public facade is exported** — `floating-transaction.ts`
-   exports exactly one named `FloatingTransactionFacade` contract (documented
-   method signatures and return values: `begin(envId)`, `advance(envId)`,
-   `settle(envId)`, `isBusy(envId)`, `persistSettledPair(...)`); internal
-   `drainPendingRestore` and `restoreForFloat` are absent from all exports,
-   and cross-file callers (`restoreFloatingMaximize`,
-   `restoreFloatingAfterLayout`, every restore entry) import ONLY the facade
-   and never the closure internals — enforced by a compile-time/source-
-   boundary test that fails on any non-facade import of
-   `floating-transaction.ts`. A forged/plain token or stale/released
-   capability can never invoke an internal operation — plugin-facing
-   capabilities are protected by host-side WeakMap/portal-generation binding,
-   not token secrecy, and source-internal imports are explicitly not part of
-   the plugin API.**
+   exports exactly ONE public value, `floatingTransactionFacade` (a runtime
+   object; its type is derived and never separately imported by callers),
+   with documented methods `begin(envId)`, `advance(envId)`,
+   `settle(envId)`, `isBusy(envId)`, `persistSettledPair(...)`;
+   internal `drainPendingRestore` and `restoreForFloat` are absent from all
+   exports, and cross-file callers (`restoreFloatingMaximize`,
+   `restoreFloatingAfterLayout`, every restore entry) import ONLY the
+   `floatingTransactionFacade` value — enforced by a source-boundary test
+   that fails on any non-facade import of `floating-transaction.ts`
+   (covering direct imports, re-exports/barrels, and dynamic imports; type-
+   only imports of the derived type are permitted). A forged/plain token or
+   stale/released capability can never invoke an internal operation —
+   plugin-facing capabilities are protected by host-side WeakMap/portal-
+   generation binding, not token secrecy, and source-internal imports are
+   explicitly not part of the plugin API.**
    `settle` is **async and keeps busy through portal
    adoption and the drain**; **portal adoption and the drain run in a
    `try/finally` that always token-guards the transition to `settled` (or an
@@ -475,7 +503,14 @@ Float/dock/restore are **transactions** with an operation journal:
    debounce callback, the `onDidLayoutChange` handler, and the `beforeunload`
    flush (`dockview-layout-setup.ts:346-405`). The unload handler is **one
    idempotent, transaction-aware handler** (the existing listener is replaced,
-   not duplicated). **Unload writes a complete, journal-consistent pair:**
+   not duplicated). **Unload is synchronous and prevalidated:** the exact raw
+   before/after bytes and digests are **precomputed and cached before any
+   unload-sensitive phase** (they are already available from the journal),
+   and the unload handler writes a complete pair using a **synchronous digest
+   path or the prevalidated cached BEFORE pair + aborted marker** — it never
+   awaits an async hash or abandons a half write; the handler is tested
+   without awaiting promises. **Unload writes a complete, journal-consistent
+   pair:**
    during an active transaction the handler synchronously chooses ONE of the
    two journal states — either both raw BEFORE values plus an aborted/cleared
    journal, or both raw AFTER values plus a committed marker — and writes
@@ -728,7 +763,12 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   and host registration is rejected (documented, tested). Unregister is
   idempotent on close,
   unmount, and plugin unregistration, with cleanup wired into
-  `unregisterPlugin`. An unregistered layer is a collapse bug by contract;
+  `unregisterPlugin`. **The revocation bridge is concrete:** a host-owned
+  revocation registry keyed by plugin/portal generation is invoked
+  **synchronously from `unregisterPlugin` before `notify`**, revoking every
+  live layer of that plugin even before React cleanup re-renders the panel;
+  an unregister-while-layer-open test covers that window. An unregistered
+  layer is a collapse bug by contract;
   one real test per primitive family, including a plugin-panel layer
   (hoarding, cross-panel use, unmount revocation, release-reacquire
   rotation, benign re-render stability, mobile rejection, unregister
@@ -958,14 +998,19 @@ replacement orderings.
   right-panel toggle. The bit is derived from this predicate at all times
   (restore, float, dock, toggle, preset/default assignment), never persisted
   as intent; show with no pinned-right panels and hide without one are
-  no-ops. **Role bootstrap ordering (no sidecar hole):** a synchronous role
-  bootstrap normalizes the live `LayoutColumn.role` values and rebuilds the
-  in-memory `rootColumns` sidecar **before any predicate call** (first mount
-  with an empty/absent blob included — the normalized live layout is the
-  authority and the sidecar is only its persisted cache), then derives
+  **Role bootstrap ordering (no sidecar hole):** one `ensureRolesBootstrapped(api,
+  envId)` boundary runs after each synchronous layout apply AND before any
+  enforcement/toggle/predicate call, normalizing live `LayoutColumn.role`
+  values and rebuilding the in-memory `rootColumns` sidecar from the
+  **authoritative live state** (first mount with an empty/absent blob
+  included); the predicate itself fails closed (or bootstraps lazily from the
+  live state) when called before bootstrap; **sidecar persistence is
+  prohibited while `isRestoringLayout` or a transaction is busy** (a
+  mid-restore bootstrap must never persist partial roles); then derives
   visibility/enforcement, then schedules complete-pair persistence;
-  first-mount, empty-blob, preset/reset-invalidation, and
-  immediate-resize/toggle-before-debounce tests cover the ordering. The
+  first-mount, empty-blob, preset/reset-invalidation,
+  mid-restore, and immediate-resize/toggle-before-debounce tests cover the
+  ordering.
   toggle, `enforcePinnedTargets`, and `dockview-layout-setup`'s
   detection all share this one predicate, and materialization prefers
   **validated live-layout geometry** over the persisted sidecar when both

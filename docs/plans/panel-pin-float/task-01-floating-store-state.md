@@ -22,11 +22,24 @@ spec: "../../specs/ui/panel-pin-float.md"
 - **Layout persistence is versioned:** the env layout key bumps to **v4**
   with a versioned envelope `{ version: 4, dockview, layout }` (native
   dockview JSON + normalized `LayoutState` carrying `logicalId`/`role`);
-  `migrateEnvLayoutV3(raw, envId)` assigns UUIDs once, persists v4 only
-  after a validated apply, keeps a v3 reader fallback, and
+  **explicit v3-read/v4-write key constants** (v3 read until v4 written; v3
+  deleted only after the validated v4 apply; the envelope `version` field is
+  the idempotence marker); **`readEnvLayoutForRestore()`** is the single
+  envelope-aware adapter — native value sanitized → `api.fromJSON`, then the
+  normalized `LayoutState` applied after the native restore (initial,
+  env-switch fast/slow, custom, maximize-only, fallthrough); `migrateEnvLayoutV3(raw, envId)`
+  assigns UUIDs once, persists v4 only after a validated apply, keeps a v3
+  reader fallback, and retries a failed apply without minting new UUIDs;
+  **the maximize slot uses the same v4 normalized schema** (old maximize
+  blobs migrate before `applySavedMaximize`); **the legacy
+  `dockview-layout-v3` localStorage write is removed** (the v4 env slot is
+  the sole layout surface; tests/helpers migrated);
   `apps/web/e2e/helpers/dockview-persistence.ts` prefixes + all layout
   consumers are updated together; old-v3-restore, v4 round-trip,
-  tree/flat-equality, and e2e-helper-compatibility tests.
+  tree/flat-equality, maximize-slot migration, and e2e-helper-compatibility
+  tests. **Placement identity:** `FloatingGroupState.columnLogicalId`
+  (and `groupLogicalId` on defs) is the persisted placement identity; the
+  native `columnId`/`groupId` are non-authoritative hints.
 - **Transactions: one coordinator + digest journal + phase model:** a single coordinator (`floating-transaction.ts`) owns the per-env operation/generation and phase state (`begin → advance → settle`); while busy, **every public layout-mutation boundary** (float/dock/reset/toggle, the add-panel resolver, `buildDefaultLayout`, preset/custom apply, maximize/exit, programmatic actions) **and restore/recovery paths** (`recoverFloatingJournalOnce`, `restoreFloatingAfterLayout` enter the same coordinator — a restore completion during a busy phase is skipped with a retained pending-floating-restore marker, never executed from a stale snapshot) **reject/skip** non-destructively, and all three pin surfaces (grid header, floating header, collapsed bar) render disabled via `isFloatingTransactionBusy(envId)`; re-entrancy tests cover mutation, portals-adopted, rollback, and stale-cleanup phases, per surface and per programmatic action/restore entry. A per-env **operation journal** (`kandev.dockview.env-floating-journal.<envId>`) is written **before** mutation holding `{envId, transactionId, phase, before/after digests, raw before/after strings}`. **Digest protocol:** values are serialized once; digests are SHA-256 (`version: 1`) over the exact raw bytes written to sessionStorage (never a re-stringified parse), with an explicit absent sentinel; journal writes are status-returning and read-back verified, and the write/verify ordering is journal → blob → layout → phase → read-back verify → clear, with a specified phase-write-throw-after-mutation recovery. **`recoverFloatingJournalOnce(api, envId)`** uses digest comparison (four partial-write orderings + **no-op equality = settled**), with a recovery cache keyed by `(envId, transactionId, api instance)` — env-isolated, never one global generation. **Size budgets:** per-env cap (96 KB) and a **global floating allocation budget** (384 KB) enforced through a **validated owned-key index** (built on load/recovery, updated on budget-changing writes — no full prefix scan per toggle); quota races after a passing preflight fail closed via the journal rollback (the backstop). Recovery runs the phase model `mutating → restoring → portals-adopted → persist-recovered → settled`; only the portals-adopted phase persists the journaled layout through **status-returning APIs**; token cleanup is generation-guarded at settled. Journal-free restore is idempotent with **per-panel salvage** and **`allocateUniqueGroupId`** (saved id reused only when absent/owned by the exact group; otherwise `group-floating-<n>` from a dedicated namespace reserved against `api.groups` + same-operation allocations, attempt cap 64 — exhaustion fails non-destructively; saved→live mapping re-derived from saved ids against live ids on every reload). A store-owned transaction token gates every persistence entry point through one `canPersistLayout()`; the unload path is **one idempotent transaction-aware handler** writing the journaled pre-transaction layout. **Single storage policy: fail closed** on every blob-write failure — rollback to pinned; no ephemeral floating mode.
 - **Recovery decision matrix + verified writes + journal integrity:**
   `recoverFloatingJournalOnce` uses the phase-aware matrix (both-before →

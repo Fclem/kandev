@@ -44,6 +44,8 @@ spec: "../../specs/ui/panel-pin-float.md"
 
 ```bash
 cd apps/web && pnpm vitest run lib/state/dockview-env-switch.test.ts lib/state/dockview-layout-builders.test.ts lib/state/dockview-panel-actions.test.ts lib/state/dockview-floating-store.test.ts lib/state/dockview-store.test.ts lib/state/dockview-pinned-enforce.test.ts
+node scripts/check-layout-consumers.mjs   # manifest validator (sole-allowlist, all versions + fixture seeds)
+# repair unit/E2E: pnpm vitest run <repair tests> && pnpm e2e:raw <repair spec>
 cd apps/web && pnpm run typecheck
 ```
 

@@ -11,7 +11,7 @@ collapses while the layer is open (a contract violation).
 Legend for `Status`: `audited` = callsite confirmed in the baseline and the
 hook is applied by this feature (or layer-free proof); `to-wire` = callsite
 confirmed, hook must be applied during task-03; `verify` = candidate surface,
-confirm during task-03. **Source audit status (revision 41): COMPLETE —
+confirm during task-03. **Source audit status (revision 42): COMPLETE —
 every row below is file/line-anchored from live source (scout audit
 2026-08-18 + parent verification 2026-08-18: model-config-selector.tsx
 587-614 added, the github/gitlab/review reachable surface is a bounded
@@ -125,6 +125,23 @@ explicit manifest of lazy-loaded panel components; worker files and
 non-panel utilities EXCLUDED by the same rules) → generator → validator;
 any set difference (a file in the scan absent from the globs, or vice
 versa) FAILS the step; a lazy-import fixture is tested.**
+**LAZY-MANIFEST DRIFT IS INDEPENDENTLY CHECKED: the committed manifest
+(`apps/web/config/lazy-panel-manifest.json`, declared schema) is
+VALIDATED against literal dynamic-import AST references in the source
+(roots: `import()`/`lazy(` call sites) PLUS the desktop registry —
+missing, extra, duplicate, and unresolvable entries all FAIL; the
+independent reachability scan derives its lazy targets from the AST
+references, NEVER trusting the manifest, so a newly added lazy panel
+omitted from the manifest is caught by the AST-vs-manifest mismatch even
+if the scan globs still match; fixtures: omitted-lazy-entry,
+stale-manifest.**
+**VARIABLE SPECIFIERS (`import(variableName)` / lazy with a
+non-literal specifier) are REJECTED BY DEFAULT: the validator FAILS on a
+variable-specifier call site UNLESS a versioned manifest entry declares a
+FINITE, statically validated allowlist of possible modules, each with a
+reachability proof; an allowlist entry naming an unregistered component
+also fails; fixtures: variable-import-no-allowlist (fail),
+valid-allowlist (pass), allowlist-with-unregistered-component (fail).**
 
 ## Mobile
 

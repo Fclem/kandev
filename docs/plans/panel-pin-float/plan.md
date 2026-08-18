@@ -8,8 +8,8 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 42 incorporates the
-round-41 adversarial review** (this package has been adversarially reviewed
+the existing env layout / maximize persistence. **Revision 43 incorporates the
+round-42 adversarial review** (this package has been adversarially reviewed
 every round): an atomic coordinator-owned `transferPanelLease` with an
 explicit detached-capability rule and a GLOBAL live-api lease (one active
 transaction across env switches), a deterministic operation plan computed at
@@ -202,7 +202,10 @@ per-env sessionStorage pattern.
    store-owned, **memory-only** `floatingSessionWinner: { sessionId, envId,
    generation } | null` atomically with replacement and consumed one-shot via
    atomic **compare-and-clear** `consumeFloatingSessionWinner(...)` from
-   `shouldSkipPanelEnsure` (skips only the winner id; unrelated siblings
+   `shouldSkipPanelEnsure` (skips EVERY floating-owned session id via the
+   atomic `floatingSessionIds` query — winner AND non-winner — while
+   `floatingSessionWinner` compare-and-clear remains for replacement
+   ownership; unrelated grid-only siblings
    ensured as today; stale winners cleared on generation/env transition and
    terminal paths, never clearing a newer generation). Replacement also
    **normalizes placement in a post-apply hook** — after the synchronous

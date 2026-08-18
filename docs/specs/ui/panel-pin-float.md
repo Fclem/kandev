@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 42
-prior-round: 41
+revision: 43
+prior-round: 42
 ---
 
 # Floating (unpinned) workbench panels
@@ -527,16 +527,21 @@ loses the incoming session, or mutates the maximize overlay:
   same-tab reload while maximized reconstructs a FRESH portal lease from
   live validated state at mount time — a persisted epoch is a marker, NEVER
   an owner token (marker-only and malformed-maximize cases are tested); **PORTAL FAILURE BOUNDARY SPLIT: preflight portal/lease failure
-  (provably no native mutation) is retryable `rejected` (matrix 26a);
+  (provably no native mutation) is retryable `rejected` (matrix 28);
   POST-partial-adoption failure (native mutation invoked) is TERMINAL —
   lease invalidated, quarantine + durable repair, fresh validated rebuild
-  (matrix 26b); the nested/repair failure path (spec fail-closed
-  quarantine) is the same terminal class.** **The boundary is EVIDENCED:
-  a coordinator-owned boundary record captures a PRE-ADOPTION NATIVE
-  SNAPSHOT and a `nativeMutationStarted` marker set IMMEDIATELY BEFORE
-  the native mutation call (the DOM `appendChild(entry.element)` in
-  usePortalSlot is adoption, NOT the native call): 26a is classified
-  only when the marker is false AND the snapshot is unchanged; 26b
+  (matrix 29); the nested/repair failure path (spec fail-closed
+  quarantine) is the same terminal class.** **The boundary is EVIDENCED
+  and IMPLEMENTABLE: ALL task-workbench native mutations route through
+  ONE coordinator-owned `invokeNativeMutation` adapter that (a) captures
+  the PRE-ADOPTION native snapshot, (b) sets a `nativeMutationStarted`
+  marker IMMEDIATELY BEFORE every `fromJSON`/native mutation call (the
+  DOM `appendChild(entry.element)` in usePortalSlot is adoption, NOT the
+  native call), (c) resets the marker after the call returns/throws;
+  bypassing the adapter is a STATIC ERROR (all callsites rewritten; a
+  source-boundary test rejects direct fromJSON calls); matrix 28 is
+  classified
+  only when the marker is false AND the snapshot is unchanged; 29
   otherwise; tests: failure before adoption, after DOM adoption but
   before native invocation, during native invocation, after partial
   native mutation.** **MOUNT PROTOCOL (happens-before): the reload path runs an explicit
@@ -593,7 +598,7 @@ loses the incoming session, or mutates the maximize overlay:
   DISCRIMINATED result (`{status:"rejected", reason, retry}` vs
   `{status:"applied", …}`) and affected controls are disabled with a
   localized reason (toast/banner) — per-operation-family tests; **the
-  RESULT CHANNEL is explicit: `applied` (incl. row 33 normal success) is
+  RESULT CHANNEL is explicit: `applied` (incl. row 36 normal success) is
   returned to AWAITED/PROGRAMMATIC callers and is SILENT for
   user-initiated normal operations (a successful pin click NEVER shows a
   success toast — localized UI is reserved for rejected/terminal/
@@ -608,9 +613,12 @@ loses the incoming session, or mutates the maximize overlay:
   `busy | lease-held | quota-full | settle-timeout | invalid-definition |
   stale-session | stale-identity | recovery-pending | journal-unavailable |
   quarantine | repair-active | recovered-with-drops | apply-failed |
-  portal-failed | plugin-contract-failure | intent-cancelled | automatic`
+  portal-failed | plugin-contract-failure | stale-capability |
+  intent-cancelled | automatic`
   (intent-cancelled = env-switch user-cancel/unmount/target-deleted, ONE
-  row — never also stale-identity) and
+  row — never also stale-identity; stale-capability = revoked-cached-
+  capability rejection, matrix row 41, locale
+  `task:floatingError.staleCapability`) and
   locale keys `task:floatingError.*` (one per reason) + `task:floatingRetry`
   + `task:floatingCancel`; **an exhaustive OPERATION × REASON × ACTION
   matrix is COMMITTED as `docs/plans/panel-pin-float/result-matrix.md` —
@@ -1455,10 +1463,15 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   `requestCapability()` — a stale cached `PluginTaskPanelProps` capability
   is never trusted and using a revoked capability is a TYPED
   `{status:"rejected", reason:"stale-capability"}` failure (matrix row
-  38) — SYNCHRONOUS, no side effects: NO second revocation, NO second ack
+  41) — SYNCHRONOUS, no side effects: NO second revocation, NO second ack
   timer (the revocation already happened at timeout); `requestCapability`
   itself has NO timer (it is a synchronous store read of the current
-  generation); the plugin re-reads with the fresh generation and retries;
+  generation) BUT it returns `{status:"pending-reissue"}` while a reissue
+  is in flight (the revoked generation is NEVER handed out as fresh); the
+  plugin MUST await `onCapabilityChange` before retrying (callback-
+  before-request and request-before-callback are both defined and
+  tested — a request during reissue returns pending-reissue, never the
+  revoked value); the plugin re-reads with the fresh generation and retries;
   a stale attempt is idempotent (repeated stale use returns the same
   typed rejection without further state change); teardown/unmount clears
   the handshake; retry ordering: stale → typed failure → fresh

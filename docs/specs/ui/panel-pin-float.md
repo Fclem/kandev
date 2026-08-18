@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 24
-prior-round: 23
+revision: 25
+prior-round: 24
 ---
 
 # Floating (unpinned) workbench panels
@@ -257,13 +257,23 @@ loses the incoming session, or mutates the maximize overlay:
   in as pure state transforms) BEFORE the one `api.fromJSON` call, together
   with the fresh normalized native-ID registry; post-call work is
   **observational/rebinding only** (never a second `fromJSON`, never
-  `applyLayoutAndSet`/materializer application). **Ground truth:** after the
-  single `fromJSON`, the live state is canonical-captured and **asserted
-  semantically/byte-equivalent to the planned after** BEFORE portal adoption
-  or commit; a mismatch rolls back and replans (width fixups, regenerated
-  IDs, and session insertion are covered by mismatch tests); the persisted
-  after is the PLAN's raw after, and the equivalence assertion enforces
-  plan==live. Then:
+  `applyLayoutAndSet`/materializer application). **Ground truth — explicit comparison matrix and enforcement order:**
+  (a) EXACT bytes for the persisted envelope, panel identity, role, and
+  placement fields; (b) canonical structural equality for the native tree
+  and generated IDs; (c) GEOMETRY compared against a documented
+  measured-container projection with tolerance (widths are never
+  byte-compared — the measured container differs per restore); the
+  equivalence assertion runs BEFORE portal adoption/commit and a mismatch
+  rolls back and replans (regenerated IDs and session insertion are covered
+  by mismatch tests); the persisted after is the PLAN's raw after.
+  **Enforcement ordering:** `enforcePinnedTargets`/`onDidLayoutChange`
+  resizing is INCLUDED in the pure plan's deterministic targets and live
+  enforcement callbacks are SUPPRESSED until the assertion/commit — the
+  post-enforcement live state is recaptured before persistence ONLY when
+  enforcement is excluded from the plan (one declared mode); a test changing
+  the measured container between planned sizing and `onDidLayoutChange`
+  asserts live, persisted, and next-reload identity under the declared
+  comparison rules. Then:
   unwrap + sanitize → `api.fromJSON` ONCE →
   session/ephemeral replacement and incoming-session insertion (folded into
   the planned JSON; runtime replacement is a no-op guard) → a
@@ -330,19 +340,25 @@ loses the incoming session, or mutates the maximize overlay:
   every restore acquire/reject that lease (a switch to env B while env A is
   in mutation/portal-adoption is **deferred, not silently dropped**: the
   switch returns a discriminated `switched | deferred | rejected` result,
-  retains the desired env, and retries once at settle with generation checks
-  (or blocks navigation with a localized retry UI — one, deterministically;
-  A-busy → B-requested → A-settle assertions cover the state machine);
+  retains the desired env, and retries once at settle with generation checks;
+  **a second busy/failed retry is a ONE-SHOT terminal `rejected` transition**
+  — the desired env is cleared (or surfaced explicitly) with a localized
+  error/retry UI whose user action re-attempts or cancels (no implicit retry
+  loop; target-deleted/unmount cancel the deferred intent);
+  A-busy → B-requested → A-settle → retry-success/retry-busy/retry-failure,
+  cancellation, unmount, and target-deleted assertions cover the state
+  machine;
   every async
   phase rechecks `{envId, generation, api, currentLayoutEnvId}` before any
   mutation or write; deterministic A-busy→B-switch and
   A-settle-after-B-switch tests cover the race. **Lease-transfer abort
-  path:** every mutation wrapper returns a typed failure; if
-  `removePanel`/`fromJSON` throws AFTER the transfer, the coordinator
-  **transfers the lease back (or invalidates it) in the same critical
-  section**, rejects active callbacks during rollback, and clears the lease
-  with the panel when the panel no longer exists; throw/cancellation/unmount
-  tests cover each mutation. Tests cover
+  path (boundary defined):** every mutation wrapper returns a typed failure;
+  **transfer-back is legal ONLY when the wrapped mutation provably did not
+  start (no api call/observable mutation)**; ANY throw/cancellation after
+  invocation INVALIDATES the lease and the associated panel record in the
+  same critical section, rejects active callbacks during rollback, and
+  rebuilds ownership from the validated live state; pre-call,
+  partial-mutation, cancellation, and unmount tests cover each branch. Tests cover
   float-before-active-event,
   delayed-old-grid-event-after-float, dock-before-event, maximize reload,
   different-panel callbacks, floating-click-during-handoff, and active-tab
@@ -356,7 +372,11 @@ loses the incoming session, or mutates the maximize overlay:
   cleanup tests cover the ownership boundary. The grid-side pending
   materialization completes at maximize exit. A route dispatcher selects maximize-only when a valid
   maximize blob exists, regular otherwise (malformed/failed maximize falls
-  back to regular, with exactly one `fromJSON` per selected route).
+  back to regular).
+  **Maximize fromJSON count is explicit:** the maximize route performs ONE
+  overlay `fromJSON` and ONE post-exit pre-max `fromJSON` (two calls total,
+  one per phase, both under one coordinator, never a pre-max apply while
+  the overlay is live); call-order tests assert the exact per-phase count.
 Call-order tests cover initial, fast/slow switch, route-intent, custom,
 maximize-only, and fallthrough paths, asserting no stale/duplicate session,
 no overlay mutation, and portal-above-overlay visibility during maximize. `getEnvLayout`
@@ -829,8 +849,11 @@ rather than a global id set:
   lifetime:** immediately before each synchronous `removePanel`/`fromJSON`
   that the transaction performs, the exact `(panelId, envId)` pairs being
   removed are registered; each registration is consumed once by the matching
-  `onDidRemovePanel` (which receives the transaction token with the removal
-  call) and the set is drained when the operation completes. A
+  `onDidRemovePanel` **— the Dockview callback carries ONLY the panel object
+  and NEVER a token; correlation is exclusively via the armed registry
+  `(api instance, panelId, operationUUID)` records plus the bounded TTL
+  tombstones (see Event correlation)** — and the set is drained when the
+  operation completes. A
   panel registered but never removed (operation aborted) is unregistered by
   the settle cleanup. This keeps a **real user close** of a still-live tab
   during an async phase or after a throw distinct from an expected detach —

@@ -36,8 +36,14 @@ spec: "../../specs/ui/panel-pin-float.md"
   reader fallback, and retries a failed apply without minting new UUIDs;
   **the maximize slot uses the same v4 normalized schema** (`MAXIMIZE_V3_READ_PREFIX`/`MAXIMIZE_V4_WRITE_PREFIX`; v3 blobs read on upgrade, only `preMaximizeLayout` migrated to normalized v4, native `maximizedDockviewJson` retained untouched, v3 deleted only after a validated apply + post-exit pre-max restore, with retry/idempotence and malformed/partial-migration behavior defined; the pre-max state is never applied to the live overlay); **migration UUIDs derive from a documented stable semantic identity** (canonical panel-id sets + role, with collision/ambiguity rejection) so a crash before the v4 write cannot mint different ids on retry (crash-before-v4-write and repeated-retry tests); **the legacy
   `dockview-layout-v3` localStorage write is removed** (the v4 env slot is
-  the sole layout surface; `pane-resize-right.spec.ts` and
-  `plan-panel-indicator.spec.ts` migrated to the v4 helper);
+  the sole layout surface; **the migration checklist enumerates EVERY
+  current legacy consumer**: `dockview-layout-setup.ts` (production global
+  writer, removed), `local-storage.ts` (v3 prefixes), `e2e/helpers/
+  dockview-persistence.ts`, `pane-resize-right.spec.ts`,
+  `plan-panel-indicator.spec.ts`, `saved-layout-session-isolation.spec.ts`,
+  and `settings/layout-profiles.spec.ts` — each migrated to the v4 helper
+  or explicitly classified as a legacy-fixture read, and the manifest
+  validator fails on any unclassified literal);
   `apps/web/e2e/helpers/dockview-persistence.ts` prefixes + all layout
   consumers are updated together; old-v3-restore, v4 round-trip,
   tree/flat-equality, maximize-slot migration, and e2e-helper-compatibility

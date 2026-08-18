@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 35
-prior-round: 34
+revision: 36
+prior-round: 35
 ---
 
 # Floating (unpinned) workbench panels
@@ -238,12 +238,20 @@ individually; an unreadable blob defaults to `{}` (all groups pinned).
   snapshot is captured before the merged apply; the coordinator stays
   busy through apply → pair persistence → verification → (on failure) a
   ROLLBACK PHASE that re-applies + verifies the pre-reset grid under the
-  same lease; if the rollback itself partially fails or throws, the
+  same lease; PERSISTENCE SUPPRESSION (the `canPersistLayout` guard)
+  covers the ENTIRE reset window — merged apply, pair persistence,
+  verification, AND the rollback phase — so a rollback re-apply can never
+  fire onDidLayoutChange/debounce/beforeunload hooks with intermediate
+  state; the rollback has its OWN fromJSON budget (1 rollback apply per
+  attempt, max 2 rollback attempts — separate from the forward-apply
+  budget, asserted by call count); if the rollback itself partially
+  fails or throws, the
   journal/repair record is RETAINED (fail-closed, materialization and
   portal adoption forbidden) and a fresh validated rebuild is required;
   memory `floatingGroups`/blob are cleared only after BOTH grid and pair
   commit; tests: reset partial-apply, blob-write failure, layout-write
-  failure, rollback-throw, reload, portal-liveness.**
+  failure, rollback-throw, rollback fromJSON call-count, persistence-hook
+  suppression during rollback, reload, portal-liveness.**
 **Layout persistence invariant:** the env layout keeps reflecting the **live
 grid** (floated groups absent), exactly as it does today. The floating blob
 carries everything needed to materialize floated groups back into the grid and
@@ -537,10 +545,15 @@ loses the incoming session, or mutates the maximize overlay:
   = transient, auto-retry or disabled control; `quota-full` = transient,
   retry after freeing space; `journal-unavailable` = suppression until a
   verified read succeeds (retryable, never blind); `quarantine` /
-  repair-active = suppression until repair-clear, user action is
-  clear/export NOT retry; `recovery-pending` = active DEFERRED state
+  `repair-active` = suppression until repair-clear, user action is
+  clear/export NOT retry (locale key `task:floatingError.repairActive`);
+  `recovery-pending` = active DEFERRED state
   (controls disabled, not terminal); `stale-identity` /
   `invalid-definition` = pruned/recovered-with-drops result;
+  `pruned` = expected stale-session outcome (`task:floatingError.pruned`,
+  silent by contract); `recovered-with-drops` = salvage outcome with the
+  dropped [{id, reason}] list surfaced in repair UI
+  (`task:floatingError.recoveredWithDrops`);
   `settle-timeout` = terminal rejected + retry/cancel; NO UI path may
   attempt materialization while quarantine, repair-active, or
   journal-unavailable suppression is active**; the
@@ -578,15 +591,25 @@ loses the incoming session, or mutates the maximize overlay:
   snapshot + registry captured before the first fromJSON (never a
   post-partial live capture, which is by definition untrustworthy), never a blind
   second fromJSON; exact call counts asserted per class**; **the REBUILD
-  ITSELF is a nested coordinator transaction (same lease/generation):
-  bounded attempts (2), explicit pre/post native snapshots, journal the
-  persisted pair BEFORE invoking the rebuild apply, and on rebuild
+  ITSELF is a nested coordinator transaction: it runs INSIDE the already
+  held outer lease (no re-entrant begin — a nested capability on the same
+  generation), with its own nested phase enum
+  `nested-prepare → nested-apply → nested-verify → nested-settle`
+  (nested-abort/repair on any failure), immutable native/layout/registry
+  pre-call snapshots, a bounded fromJSON budget (1 per nested attempt,
+  2 attempts), and suppression OWNERSHIP inherited from the outer lease
+  (all persistence hooks stay suppressed through the nested apply,
+  verify, and any nested rollback); the persisted pair is journaled
+  BEFORE the rebuild apply, and on rebuild
   failure — including a rollback that partially mutates or throws —
   enter a DURABLE FAIL-CLOSED repair state (quarantine + repair record;
   materialization and portal adoption forbidden; a fresh validated
-  rebuild required), never claiming recovery; tests: partial first apply
+  rebuild required), never claiming recovery; a partial NATIVE mutation
+  is durably represented by the retained journal + repair record (a
+  reload re-enters recovery against that record, never the live grid);
+  tests: partial first apply
   + partial rollback, rollback throw, reload after rollback failure,
-  exact portal ownership**;
+  exact portal ownership, nested-phase crash at each boundary**;
   token/generation ownership, busy-clearing, and portal release/adoption
   ordering are specified per transaction; tests cover overlay-settle, exit,
   reload, env switch, and a competing mutation between the two phases.
@@ -1310,7 +1333,13 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   idempotent (no refcount underflow, no unregistering a different layer);
   tests: one handshake spread on TWO roots (second open rejected),
   two handshakes on one capability (separate leases allowed), duplicate
-  open=true, and close-ordering.**
+  open=true, and close-ordering.** **REJECTION IS TRANSPORTED BACK:
+  `onOpenChange` returns a RESULT (`{status:"owned"} | {status:
+  "rejected", reason}`) and the host issues a CLOSE SIGNAL (an error
+  callback / host-driven close) on rejection so a Radix root that already
+  rendered open=true is closed IMMEDIATELY — no UI/refcount divergence;
+  the plugin is obligated to close a rejected root (test: rejected
+  second-root closure and retry).**
   The host stores a WeakMap/token binding from capability to portal instance;
   a plugin rendering two task panels cannot register a layer from one panel
   against the other, and a hoarded plugin-scoped function cannot be reused
@@ -1676,7 +1705,15 @@ replacement orderings.
   plus bounded length (≤ 200 chars) and JSON-safe encoding; NO UUID grammar
   is imposed (live fixtures/persisted sessions use `session-1`, `sess-*`,
   `s1`; the backend generates UUIDs only when the caller leaves the id
-  empty, session.go:630-633 — a UUID regex would DROP valid sessions); the
+  empty, session.go:630-633 — a UUID regex would DROP valid sessions);
+  **VALIDATION IS SPLIT BY PHASE: at LOAD only STRUCTURAL validation
+  (session:<id> shape, bounded length, JSON-safe) — membership is NOT
+  checked at load because active sessions may still be resolving (the
+  load-time sanitizer dropping unresolved-but-valid sessions would lose
+  chat tabs); at RESOLVE (before materialization/reset, against a
+  task/session snapshot) MEMBERSHIP is validated — unresolved-session
+  definitions are RETAINED and re-validated on the next resolve tick, and
+  only a resolve-time non-member is dropped (stale-session pruning)***; the
   sanitizer's
   `id.startsWith("session:")` + component-Set check at
   dockview-layout-restore.ts:79-97 is REPLACED by the closed table:
@@ -1695,7 +1732,8 @@ replacement orderings.
   ReviewDetailPanelComponent, mr-detail → MRDetailPanelComponent,
   plugin-panel → PluginPanel (params = plugin manifest contract), plus
   the two alias ids diff-files→changes and all-files→files; params are
-  schema-bounded per entry (session:* ⇒ `{sessionId: uuid}` only),
+  schema-bounded per entry (session:* ⇒ `{sessionId: string}` — the
+  OPAQUE session id, bounded length; never a UUID-only rule),
   with tests
   covering corrupt and user-mutated blobs.** Valid
   session insertion is canonical:** every valid active session gets a

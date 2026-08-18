@@ -11,7 +11,7 @@ collapses while the layer is open (a contract violation).
 Legend for `Status`: `audited` = callsite confirmed in the baseline and the
 hook is applied by this feature (or layer-free proof); `to-wire` = callsite
 confirmed, hook must be applied during task-03; `verify` = candidate surface,
-confirm during task-03. **Source audit status (revision 34): COMPLETE —
+confirm during task-03. **Source audit status (revision 35): COMPLETE —
 every row below is file/line-anchored from live source (scout audit
 2026-08-18 + parent verification 2026-08-18: model-config-selector.tsx
 587-614 added, the github/gitlab/review reachable surface is a bounded
@@ -102,7 +102,16 @@ floating window subtree. It MUST use the host `useFloatingOwnedLayer` lease
 with an explicit open/close lifecycle (register on open, unregister on
 close/unmount — same pending/refcount/generation semantics as Radix layers);
 a custom portal that cannot prove an open-state transition is NOT an owned
-layer and can be collapsed by outside focus/pointer while open. A real
+layer and can be collapsed by outside focus/pointer while open. **The lease
+is bound to the FLOATING-WINDOW ROOT TOKEN (`{groupLogicalId, generation}`),
+not to the panel's DOM location: panel content is portaled by
+PanelPortalHost into entry.element siblings OUTSIDE Dockview
+(panel-portal-host.tsx:28-57), so region checks use the floating overlay
+root/window lease; the token propagates through adopted portal content and
+is REQUIRED for custom registration (a body-portal without a valid token is
+not owned); a lease keyed only by component/capability can count an
+unrelated body portal as owned — rejected. Tests: panel reparent + body-
+portal outside pointer and focusout.** A real
 custom-portal test (open → outside pointerdown → no collapse → close →
 collapse) is specified; this row flips to `audited` only after the wiring
 lands.

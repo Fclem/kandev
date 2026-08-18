@@ -8,8 +8,8 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 35 incorporates the
-round-34 adversarial review** (this package has been adversarially reviewed
+the existing env layout / maximize persistence. **Revision 36 incorporates the
+round-35 adversarial review** (this package has been adversarially reviewed
 every round): an atomic coordinator-owned `transferPanelLease` with an
 explicit detached-capability rule and a GLOBAL live-api lease (one active
 transaction across env switches), a deterministic operation plan computed at
@@ -108,8 +108,11 @@ per-env sessionStorage pattern.
    snapshot** before any target is selected; an invalid or mismatched journal
    is quarantined via an idempotent deterministic key `(envId, raw digest)`
    (copy → verify → remove original → verify absence; never a second copy per
-   original; bounded corrupt-key cleanup) and treated as unreadable (journal-free
-   fallback with the caller's envId). Recovery cache
+   original; bounded corrupt-key cleanup) and treated as present-but-invalid: **quarantine + durable repair record +
+   FULL SUPPRESSION — journal-free fallback NEVER applies to a present
+   invalid/mismatched/unexpected journal (only to a VERIFIED absent one);
+   no salvage/materialization from untrusted evidence; contract test:
+   present-invalid never materializes**. Recovery cache
    keyed by `(envId, transactionId, api instance)`; `recoverFloatingJournalOnce`
    runs before every restore entry. **Settle drain is the same async settle
    operation, ordered before busy clears** (no interleaving `begin` window;

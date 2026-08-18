@@ -28,14 +28,17 @@ spec: "../../specs/ui/panel-pin-float.md"
   **`isEnvFloatingJournal(journal, envId)` validates version/env/phase/
   transaction/digest/raw shape and recomputes SHA-256 from each raw snapshot
   before any target is selected; an invalid/mismatched journal is
-  quarantined through a **verified atomic protocol** (copy to a unique
-  `...-journal.<envId>.corrupt-<n>` key, read-back verify the copy, remove
-  the original, verify absence; a failed copy/removal keeps the original and
-  is never cached as recovered; quarantine keys count toward budget and are
-  covered by `cleanupTaskStorage`) and treated as unreadable (journal-free
-  fallback with the caller's envId) — malformed-JSON, wrong-env, bad-digest,
-  invalid-raw, oversized-raw, set-failure, silent-alteration,
-  remove-failure, collision, and restart tests.** **Skipped restores
+  quarantined through a **verified, idempotent protocol with ONE
+  deterministic key `(envId, raw digest)`** (`...-journal.<envId>.corrupt-<digest>`:
+  copy → read-back verify → remove original → verify absence; an existing
+  deterministic key is verified and the flow proceeds directly to original
+  removal — a second copy is never allocated for the same original, so
+  crash-after-copy cannot accumulate `.corrupt-<n>` copies across restarts;
+  a failed copy/removal keeps the original and is never cached as recovered;
+  quarantine keys count toward budget and are removed by bounded
+  per-env/task corrupt-key cleanup in `cleanupTaskStorage`; crash-after-copy,
+  repeated-restart, and cleanup tests) and treated as unreadable (journal-free
+  fallback with the caller's envId). **Skipped restores
   drain via coordinator-owned `drainPendingRestore` (internal token +
   recursion guard, async settle keeping busy through portal adoption;
   float-while-maximized uses `restoreForFloat` the same way)** — recheck

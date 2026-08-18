@@ -8,18 +8,19 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. Revision 13 incorporates the
-round-12 adversarial review (this package has been adversarially reviewed every
-round): a reentrancy-safe settle drain and float-while-maximized via
-coordinator-owned internal operations (`drainPendingRestore`/`restoreForFloat`
-with internal tokens and recursion guards), a verified atomic journal
-quarantine protocol, sidecar persistence coalescing (settled-boundary,
-bytes-changed-only writes), portal-instance-generation capabilities with
-release-reacquire rotation and mobile rejection, mandatory stable logical
-group/root-column identities, a persisted `columnRole` field driving
-`hasLivePinnedRightColumn`, a total identity rule for tree+flat filtering,
-env-qualified detach exclusions, a total DFS traversal definition, and a
-fault-injection test seam for the crash matrix.
+the existing env layout / maximize persistence. **Revision 14 incorporates the
+round-13 adversarial review** (this package has been adversarially reviewed
+every round): deterministic idempotent quarantine keyed by `(envId, raw
+digest)`, first-class persisted `logicalId` fields on `LayoutGroup`/
+`LayoutColumn` with an explicit old-v3 migration (identities never derive
+from membership/traversal), a persisted `LayoutColumn.role` with a documented
+migration policy driving `hasLivePinnedRightColumn`, a public-facade-only
+coordinator boundary (internal ops in a factory closure, plugin capability
+protection via host-side binding), blob-level composite `(panelId, envId)`
+registry bookkeeping with documented same-ID-live-coexistence impossibility,
+the debounce as a complete-pair settled transaction (zero-group sidecar
+changes still write), an executable inventory gate, `VITE_FLOATING_TEST_HOOKS`
+E2E-only fault wiring, and unload complete-pair semantics.
 
 ## Architecture
 
@@ -48,18 +49,23 @@ per-env sessionStorage pattern.
    columnKind, columnPinned, treePath, edge, orientation, size, order,
    display), so floated groups can be **materialized** after any reload/env
    switch/layout rebuild and re-floated.
-2. **Detach registry, not a global id set.** The registry is keyed by panel id
-   with records `{ envId, token }` (panel ids are unique in the live grid; the
-   env tag travels with the record, so lookups never depend on the mutable
-   current store env). `setupPortalCleanup`'s `onDidRemovePanel` decision
-   order: (1) registered id with the current token → consume the registration
-   and skip close side effects, regardless of `isRestoringLayout`; (2)
+2. **Detach registry, not a global id set.** Registrations are keyed by
+   composite `(panelId, envId)` records `{ token }` — a same panel id in the
+   old env's blob vs the new env's live grid is distinct (blob-level
+   bookkeeping; same-ID live coexistence is impossible because only one env
+   is live and the portal manager holds one entry per live panel).
+   `setupPortalCleanup`'s `onDidRemovePanel` decision order: (1) registered
+   `(panelId, envId)` with the current token → consume the registration and
+   skip close side effects, regardless of `isRestoringLayout`; (2)
    unregistered while `isRestoringLayout` → return (existing behavior); (3)
    unregistered otherwise → full cleanup (a user closing a floated tab
-   mid-transaction is an ordinary close). `panelPortalManager.reconcile`/
-   `releaseByEnv` take an explicit exclusion set derived from the **target
-   env's** registered ids. Stale tokens never clear newer registrations; the
-   env's registry clears on transaction settle (success/failure/unmount).
+   mid-transaction is an ordinary close). Registrations are armed per
+   expected removal (immediately around each synchronous remove/`fromJSON`,
+   consumed once, drained on operation end). `panelPortalManager.reconcile`/
+   `releaseByEnv` take an env-qualified exclusion predicate over
+   `(panelId, entryEnvId, token)`; `saveOutgoingEnv` passes the OUTGOING env.
+   Stale tokens never clear newer registrations; the env's registry clears on
+   transaction settle (success/failure/unmount).
 3. **Placement classifier + materializer over LayoutState.** Dockview exposes
    no left/right/top/bottom group location, and `isCenterCandidateGroupId`
    misclassifies plan/preview/custom columns (it returns true for every group
@@ -100,7 +106,9 @@ per-env sessionStorage pattern.
    integrity:** `isEnvFloatingJournal(journal, envId)` validates version/env/
    phase/transaction/digest/raw shape and **recomputes SHA-256 from each raw
    snapshot** before any target is selected; an invalid or mismatched journal
-   is quarantined (`.corrupt` suffix) and treated as unreadable (journal-free
+   is quarantined via an idempotent deterministic key `(envId, raw digest)`
+   (copy → verify → remove original → verify absence; never a second copy per
+   original; bounded corrupt-key cleanup) and treated as unreadable (journal-free
    fallback with the caller's envId). Recovery cache
    keyed by `(envId, transactionId, api instance)`; `recoverFloatingJournalOnce`
    runs before every restore entry. **Settle drain is the same async settle

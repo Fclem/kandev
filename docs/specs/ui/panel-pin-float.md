@@ -90,8 +90,11 @@ EnvFloatingState                     # persisted as JSON, versioned
                # authoritative root-column metadata sidecar, INSIDE the blob:
                # role is captured from an explicit LayoutColumn.role assigned
                # by presets/custom-layout normalization (with a documented
-               # migration default for old layouts) — never inferred from
-               # width/panel membership; rebuilt in memory after every layout
+               # old-v3 migration: an old right column is inferred ONCE from
+               # pinned + files/changes content at migration and persisted as
+               # role "pinned-right"; every other column defaults to
+               # "side-other"/"custom") — never inferred live from
+               # width/panel membership after migration; rebuilt in memory after every layout
                # apply and reload, invalidated on preset/reset/env switch,
                # covered by the same journal transaction, budget, and cleanup
                # as the groups — there is no third storage key. Persistence is
@@ -177,17 +180,22 @@ carries everything needed to materialize floated groups back into the grid and
 re-float them. The env layout is never replaced by a pre-float snapshot and
 the floating blob never contains a layout.
 
-**Stable identity (M4):** logical group ids and root-column ids are
-**mandatory stable persisted identities**, never derived at capture time from
-current panel membership or traversal order — `LayoutGroup.id` is optional
-and plan-preset groups carry no id, the serializer generates traversal-local
-`group-n` ids, and root column ids are inferred from the first panel, so a
-saved id can change when a sibling or first panel changes. Capture assigns (or
-reuses, when present) a **persisted UUID** for every logical group and root
-column at float time; panel identity and position are used only as a validated
-fallback (never the primary identity); duplicate and unknown identities are
-rejected; sibling-change and first-panel-change tests prove the saved ids
-survive.
+**Stable identity (M4, attachment boundary):** logical group and root-column
+identity is a **first-class persisted field on the live layout schema** —
+`LayoutGroup` gains `logicalId: string` and `LayoutColumn` gains
+`logicalId: string` (+ `role`), populated by layout normalization (built-in
+presets, custom-layout normalization, and a documented old-v3 migration that
+assigns UUIDs once and persists them), carried through the serializer
+(including the tree+flat synchronization — both representations hold the same
+`logicalId`), preset merges, dock, and reset. The blob's `identities` map is a
+**secondary cache keyed by `logicalId`**, never the source of truth: capture
+reads the group/column's own `logicalId` from the live layout (no
+traversal-derived `group-n` ids are ever treated as identity); a group or
+column without a `logicalId` fails closed with ambiguity rejection (never a
+silent new identity). Sibling/first-panel changes therefore never affect a
+saved identity, because the id lives on the object, not in its position.
+Dock-to-different-column-to-refloat, sibling-change, and first-panel-change
+tests prove the ids survive.
 
 ## Placement capture (at unpin time, from the live `LayoutState`)
 
@@ -271,10 +279,16 @@ Float/dock/restore are **transactions** with an operation journal:
    phase/recursion guard** so its restore invocation is not re-rejected by
    the busy gate it runs under (restore paths invoked *outside* the
    coordinator's internal operations are still busy-rejected), and recursive
-   settle is impossible. **The internal operations are closure/private and
-   authorized by a coordinator-owned `Symbol`/opaque capability checked
-   together with env, generation, api instance, and expected phase — a plain
-   exported helper or string token is never enough.** `settle` is **async and keeps busy through portal
+   settle is impossible. **The internal operations live in a factory closure
+   and only a public facade is exported** from `floating-transaction.ts`;
+   the Symbol/capability is never exported, and internal operations are
+   invoked only from coordinator-owned callbacks (cross-file restore callers
+   use the facade, which validates env/generation/api/phase before
+   delegating); a forged/plain token or stale/released capability can never
+   invoke an internal operation — plugin-facing capabilities are protected
+   by host-side WeakMap/portal-generation binding, not token secrecy, and
+   source-internal imports are explicitly not part of the plugin API.**
+   `settle` is **async and keeps busy through portal
    adoption and the drain**; **portal adoption and the drain run in a
    `try/finally` that always token-guards the transition to `settled` (or an
    explicit failed-settled state) from every phase, so a throw during
@@ -454,7 +468,14 @@ Float/dock/restore are **transactions** with an operation journal:
    begin the guard also cancels/holds an already-scheduled debounce timer and
    marks it dirty, so a timer scheduled before the transaction cannot fire
    mid-transaction. Persistence runs only at the settled phase (explicit
-   `persistEnvLayoutNow`), and the token is reset on unmount. Ordinary
+   `persistEnvLayoutNow`), and the token is reset on unmount. **Ordinary
+   layout changes with zero floating groups:** the debounce callback IS the
+   settled boundary and runs as a coordinator transaction for the complete
+   blob/layout pair through the journal whenever either the sidecar bytes or
+   the layout bytes changed — a zero-group sidecar change (role/geometry
+   refresh) still writes the pair (the blob can exist with `groups: {}`), so
+   a crash cannot leave role metadata behind the live layout; ordinary
+   preset/resize crashes and zero-group persistence are tested. Ordinary
    unregistered closes are unaffected (their cleanup does not depend on the
    guard).
 
@@ -509,10 +530,15 @@ Float/restore removals are **non-destructive**, scoped by a **detach registry**
 rather than a global id set:
 
 - The registry is keyed by **composite `(panelId, envId)`** (nested map or
-  composite key), holding one record `{ token }` per entry — a same panel id
-  floating in two envs holds two distinct records, and one map value can
-  never shadow the other. The env tag comes from the key itself, never from
-  the mutable current store env.
+  composite key), holding one record `{ token }` per entry. **Live-grid
+  scope:** a panel id exists in at most ONE env's live grid at any time
+  (only one env is live; the portal manager's single `Map<string, PortalEntry>`
+  is per-live-panel), so same-ID live coexistence is impossible — the
+  composite key exists for **blob-level bookkeeping** (a same id in the old
+  env's blob vs the new env's live grid), never to model two live portals.
+  The overlapping-id scenario is therefore: old-env blob entry released /
+  superseded while the new env's live entry is preserved, verified with
+  stale-token and old-entry-first tests.
   **Registrations are armed per expected removal, not for the transaction
   lifetime:** immediately before each synchronous `removePanel`/`fromJSON`
   that the transaction performs, the exact `(panelId, envId)` pairs being

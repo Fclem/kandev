@@ -60,6 +60,7 @@ cd apps/web && pnpm run typecheck
 - `apps/web/e2e/tests/task/panel-pin.spec.ts` (new)
 - `apps/web/e2e/tests/mobile-panel-access.spec.ts` (new)
 - `apps/web/components/task/mobile/session-mobile-bottom-nav.tsx` (stable panel-button test ids where missing) and `apps/web/components/task/mobile/session-mobile-layout.tsx` (selectors, if needed)
+- `apps/web/vite.config.ts` + `apps/web/package.json` (`build:e2e` adds `VITE_FLOATING_TEST_HOOKS=1`; the define compiles the seam ONLY into the E2E build) + `apps/web/e2e/fixtures` (E2E build wiring)
 - `apps/web/e2e/pages/session-page.ts` (pin/floating helpers)
 - `apps/web/e2e/helpers/dockview-persistence.ts` (floating-blob assertions)
 

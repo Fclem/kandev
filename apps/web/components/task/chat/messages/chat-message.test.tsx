@@ -294,13 +294,13 @@ function renderAgentMessageWithSession(
     <StateProvider
       initialState={{
         taskSessions: { items: { "sess-1": taskSession } },
-          turns: {
-            bySession: { "sess-1": turn ? [turn] : [] },
-            activeBySession: { "sess-1": turn?.id ?? null },
-            loadedBySession: {},
-            reconcileEpochBySession: {},
-            settledBoundaryBySession: {},
-          },
+        turns: {
+          bySession: { "sess-1": turn ? [turn] : [] },
+          activeBySession: { "sess-1": turn?.id ?? null },
+          loadedBySession: {},
+          reconcileEpochBySession: {},
+          settledBoundaryBySession: {},
+        },
       }}
     >
       {children}

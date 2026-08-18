@@ -81,8 +81,12 @@ spec: "../../specs/ui/panel-pin-float.md"
   a failed copy/removal keeps the original and is never cached as recovered;
   quarantine keys count toward budget and are removed by bounded
   per-env/task corrupt-key cleanup in `cleanupTaskStorage`; crash-after-copy,
-  repeated-restart, and cleanup tests) and treated as unreadable (journal-free
-  fallback with the caller's envId). **Skipped restores
+  repeated-restart, and cleanup tests) and treated as present-but-invalid:
+  **quarantine + durable repair record + FULL SUPPRESSION — journal-free
+  fallback NEVER applies to a present invalid/mismatched/unexpected
+  journal; salvage runs ONLY on a VERIFIED absent journal; a
+  present-invalid path can never materialize or adopt portals (cross-
+  artifact assertion)**. **Skipped restores
   drain via coordinator-owned `drainPendingRestore` (internal token +
   recursion guard, async settle keeping busy through portal adoption;
   float-while-maximized uses `restoreForFloat` the same way)** — recheck

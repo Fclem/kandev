@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 36
-prior-round: 35
+revision: 37
+prior-round: 36
 ---
 
 # Floating (unpinned) workbench panels
@@ -95,7 +95,9 @@ EnvFloatingState                     # persisted as JSON, versioned
                                   minWidth: number | null; maxWidth: number | null;
                                   role: "center" | "pinned-right" |
                                         "side-other" | "custom" }>
-               # authoritative root-column metadata sidecar, INSIDE the blob:
+               # denormalized geometry/role CACHE, INSIDE the blob (NOT authority —
+               # the validated v4 LayoutState / normalized-live registry is
+               # the sole writable role authority):
                # role is captured from an explicit LayoutColumn.role assigned
                # by presets/custom-layout normalization (with a documented
                # old-v3 migration: runs ONCE as `migrateEnvLayoutV3(raw,
@@ -244,7 +246,11 @@ individually; an unreadable blob defaults to `{}` (all groups pinned).
   fire onDidLayoutChange/debounce/beforeunload hooks with intermediate
   state; the rollback has its OWN fromJSON budget (1 rollback apply per
   attempt, max 2 rollback attempts — separate from the forward-apply
-  budget, asserted by call count); if the rollback itself partially
+  budget, asserted by call count); **TOTAL RESET BUDGET is stated
+  explicitly: `1 forward + max 2 rollback = max 3 reset fromJSON calls`
+  with separate forward/rollback counters; a rollback attempt that
+  partially mutates or throws consumes its attempt and goes to the next
+  (bounded), then fail-closed repair on exhaustion**; if the rollback itself partially
   fails or throws, the
   journal/repair record is RETAINED (fail-closed, materialization and
   portal adoption forbidden) and a fresh validated rebuild is required;
@@ -465,7 +471,16 @@ loses the incoming session, or mutates the maximize overlay:
   treated as inactive (`use-panel-active.ts` is extended/replaced and added
   to task-03's files). **Global api lease:** there is ONE live Dockview api
   and ONE global active transaction — env switch, task teardown, reset, and
-  every restore acquire/reject that lease (a switch to env B while env A is
+  every restore acquire/reject that lease. **Per-env gates consult the
+  GLOBAL lease: `isBusy(envB)`/`isFloatingTransactionBusy(envB)` return
+  `lease-held` (not merely busy) while env A holds the lease, with the
+  `{status:"rejected", reason:"lease-held"}` result and ALL-env
+  suppression scope (matrix row 2); a per-env transaction can acquire the
+  sole global lease only from the IDLE state (lease acquisition is part
+  of `begin(envId)` and is rejected `lease-held` otherwise); no per-env
+  mutation wrapper may run without holding the global lease — same-env
+  and other-env calls are tested at every public boundary (A-busy /
+  B-requested per operation).** (a switch to env B while env A is
   in mutation/portal-adoption is **deferred, not silently dropped**: the
   switch returns a discriminated `switched | deferred | rejected` result,
   retains the desired env, and retries once at settle with generation checks;
@@ -538,7 +553,11 @@ loses the incoming session, or mutates the maximize overlay:
   invalid-definition | lease-held | settle-timeout | recovery-pending` and
   locale keys `task:floatingError.*` (one per reason) + `task:floatingRetry`
   + `task:floatingCancel`; **an exhaustive OPERATION × REASON × ACTION
-  matrix accompanies the enum (implemented as a switch with an
+  matrix is COMMITTED as `docs/plans/panel-pin-float/result-matrix.md` —
+  one closed `LayoutMutationResult` union (applied | pruned |
+  recovered-with-drops | skipped | rejected | suppressed | terminal) with
+  24 operation rows, every one mapped to suppression scope, user action,
+  terminality, and clearing condition (implemented as a switch with an
   exhaustiveness test): each row defines suppression scope (none / current
   env / all envs), user action (retry / cancel / repair-clear / export /
   none), terminal-or-transient, and what clears it — `busy`/`lease-held`
@@ -592,8 +611,14 @@ loses the incoming session, or mutates the maximize overlay:
   post-partial live capture, which is by definition untrustworthy), never a blind
   second fromJSON; exact call counts asserted per class**; **the REBUILD
   ITSELF is a nested coordinator transaction: it runs INSIDE the already
-  held outer lease (no re-entrant begin — a nested capability on the same
-  generation), with its own nested phase enum
+  held outer lease via a PRIVATE entry protocol `beginNested(outerToken)`
+  → `advanceNested` → `settleNested` (same generation, unique nested id,
+  legal parent phases: nested entry is valid only from outer
+  `restoring`/rollback phases; `advance`/`settle` are nested-specific
+  operations — the OUTER `settle` is REJECTED/waits while a nested
+  transaction is active, so outer settlement cannot race a mid-phase
+  nested rebuild; token-guarded failure/abort cleanup per nested phase
+  with defined reload behavior for each), with its own nested phase enum
   `nested-prepare → nested-apply → nested-verify → nested-settle`
   (nested-abort/repair on any failure), immutable native/layout/registry
   pre-call snapshots, a bounded fromJSON budget (1 per nested attempt,
@@ -1333,13 +1358,19 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   idempotent (no refcount underflow, no unregistering a different layer);
   tests: one handshake spread on TWO roots (second open rejected),
   two handshakes on one capability (separate leases allowed), duplicate
-  open=true, and close-ordering.** **REJECTION IS TRANSPORTED BACK:
-  `onOpenChange` returns a RESULT (`{status:"owned"} | {status:
-  "rejected", reason}`) and the host issues a CLOSE SIGNAL (an error
-  callback / host-driven close) on rejection so a Radix root that already
-  rendered open=true is closed IMMEDIATELY — no UI/refcount divergence;
-  the plugin is obligated to close a rejected root (test: rejected
-  second-root closure and retry).**
+  open=true, and close-ordering.** **REJECTION IS TRANSPORTED BACK VIA A VOID-COMPATIBLE ADAPTER:
+  Radix consumes `(open: boolean) => void` and discards any return (the
+  @kandev/ui wrappers do exactly this, dialog.tsx:37-45), so the host's
+  returned handler is a `(open: boolean) => void` that on rejection
+  SYNCHRONOUSLY invokes an explicit `requestClose(reason)` callback /
+  controlled-state setter owned by the plugin — HOST CLOSE IS
+  AUTHORITATIVE: the adapter calls `requestClose` AND the host performs
+  its own close bookkeeping (refcount decrement, active-open map
+  removal); the plugin must render closed on `requestClose` (controlled
+  Radix root); ordering: open=true transition → admission check → owned
+  or (rejected + requestClose + host bookkeeping); tests: rejected
+  second-root closes, host refcount consistent, Radix dismissal state,
+  retry after close.**
   The host stores a WeakMap/token binding from capability to portal instance;
   a plugin rendering two task panels cannot register a layer from one panel
   against the other, and a hoarded plugin-scoped function cannot be reused
@@ -1713,7 +1744,16 @@ replacement orderings.
   chat tabs); at RESOLVE (before materialization/reset, against a
   task/session snapshot) MEMBERSHIP is validated — unresolved-session
   definitions are RETAINED and re-validated on the next resolve tick, and
-  only a resolve-time non-member is dropped (stale-session pruning)***; the
+  only a resolve-time non-member is dropped (stale-session pruning);
+  **TOCTOU PROTOCOL: the snapshot is acquired ONCE per coordinator
+  transaction with an immutable version/generation; resolve-to-
+  materialize is bound to that single transaction (busy-guarded, so a
+  session deletion or snapshot replacement cannot interleave); membership
+  is REVALIDATED immediately before payload creation/materialization
+  against the SAME snapshot version; a changed snapshot (task/session
+  deleted mid-transaction) aborts that entry with the stale-session
+  pruning result, never materializes it; a session deleted after resolve
+  but before materialization is caught by the revalidation***; the
   sanitizer's
   `id.startsWith("session:")` + component-Set check at
   dockview-layout-restore.ts:79-97 is REPLACED by the closed table:

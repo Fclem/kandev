@@ -11,7 +11,7 @@ collapses while the layer is open (a contract violation).
 Legend for `Status`: `audited` = callsite confirmed in the baseline and the
 hook is applied by this feature (or layer-free proof); `to-wire` = callsite
 confirmed, hook must be applied during task-03; `verify` = candidate surface,
-confirm during task-03. **Source audit status (revision 35): COMPLETE —
+confirm during task-03. **Source audit status (revision 36): COMPLETE —
 every row below is file/line-anchored from live source (scout audit
 2026-08-18 + parent verification 2026-08-18: model-config-selector.tsx
 587-614 added, the github/gitlab/review reachable surface is a bounded
@@ -88,7 +88,15 @@ line range (or an explicit layer-free proof for the panel). `to-wire` and
 `verify` are **audit-baseline states, not completion**: task-03 is accepted
 only when every row is `audited` (source-confirmed registration wired) or the
 panel is proven layer-free. A layer found during the audit that is not in this
-table is a collapse bug until registered.
+table is a collapse bug until registered. **Exact-anchor mechanism for the
+broad reachable-surface rows (github/gitlab/review): the AST gate
+(`check-owned-layer-inventory.mjs`) GENERATES and VALIDATES exact
+file:line anchors mechanically from the live source against these rows —
+an implementation may not hand-wave ranges; the gate reports every
+primitive-to-row mapping and fails if a discovered primitive lacks a row;
+out-of-scope settings/connection rows flip to `audited` only when their
+panel-reachability proofs are attached (the gate asserts no overlay is
+reachable from a floating-capable panel).**
 
 ## Mobile
 
@@ -110,7 +118,16 @@ PanelPortalHost into entry.element siblings OUTSIDE Dockview
 root/window lease; the token propagates through adopted portal content and
 is REQUIRED for custom registration (a body-portal without a valid token is
 not owned); a lease keyed only by component/capability can count an
-unrelated body portal as owned — rejected. Tests: panel reparent + body-
+unrelated body portal as owned — rejected. **DOCKED-PANEL RULE: the
+floating lease is NULLABLE — a docked plan panel opens its popover with NO
+lease and the owned-region coordinator is a NO-OP for it (no floating
+window to collapse); the concrete transport is a `FloatingWindowLeaseProvider`
+React context rendered by the floating overlay, read by
+`useFloatingOwnedLayer` inside panel content adopted through
+PanelPortalHost/entry.element — NOT DOM ancestry (the reparented slot is
+unrelated to the overlay root); tests: docked-popover no-op, floating-
+popover lease, reparent + body-portal outside pointer/focusout.**
+Tests: panel reparent + body-
 portal outside pointer and focusout.** A real
 custom-portal test (open → outside pointerdown → no collapse → close →
 collapse) is specified; this row flips to `audited` only after the wiring
@@ -145,7 +162,10 @@ lands.
 ## Test matrix (task-03)
 
 One real test per primitive family, each inside a floating window: Dialog,
-Popover, DropdownMenu, ContextMenu, HoverCard, plus one plugin-panel layer.
+Popover, DropdownMenu, ContextMenu, HoverCard, **Drawer (real Drawer test —
+McpIndicator/message-timestamp rows), plus one plugin-panel layer;
+AlertDialog is explicitly covered BY the Dialog test family (same
+owned-layer lease wiring) and flagged in the test name.**
 
 ## Audit procedure
 

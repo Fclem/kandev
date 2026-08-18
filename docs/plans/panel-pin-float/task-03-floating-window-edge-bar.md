@@ -45,7 +45,9 @@ spec: "../../specs/ui/panel-pin-float.md"
   (`apps/packages/plugin-sdk/src/index.ts`, as a callable outside the mapped
   component type), `lib/plugins/host-api.ts` (WeakMap token binding), and the
   contract docs; a hoarded plugin-scoped function cannot be reused across
-  renders or after unmount. One real test per primitive family, including
+  renders or after unmount. One real test per primitive family (Dialog, Popover, DropdownMenu,
+  ContextMenu, HoverCard, **Drawer, plus AlertDialog via the Dialog
+  family**), including
   plugin hoarding, cross-panel rejection, unmount revocation, release-
   reacquire rotation, benign re-render stability, mobile rejection, and
   unregister cleanup.

@@ -26,8 +26,8 @@ export type SessionTurnsState = {
 /** Subscribe to a session's turns and expose readiness for derived views. */
 export function useSessionTurnsState(sessionId: string | null): SessionTurnsState {
   const turns = useAppStore((state) => (sessionId ? state.turns.bySession[sessionId] : undefined));
-  const hydrated = useAppStore((state) =>
-    sessionId ? Boolean(state.turns.hydratedBySession[sessionId]) : true,
+  const loaded = useAppStore((state) =>
+    sessionId ? Boolean(state.turns.loadedBySession[sessionId]) : true,
   );
   const activeSessionId = useAppStore((state) => state.tasks.activeSessionId);
   const store = useAppStoreApi();
@@ -49,9 +49,13 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
   }, [activeSessionId]);
 
   useEffect(() => {
-    if (!sessionId || hydrated) return;
+    if (!sessionId || loaded) return;
     const generation = activeGeneration.current.value;
     const sequence = ++fetchSequence;
+    // Capture the reconciliation epoch when the fetch starts: an
+    // authoritative active-marker clear that lands mid-flight must not be
+    // resurrected by this hydration (see mergeTurnsSnapshot).
+    const hydrationEpoch = store.getState().turns.reconcileEpochBySession[sessionId] ?? 0;
     let disposed = false;
     const controller = new AbortController();
     let retryTimer: number | undefined;
@@ -79,7 +83,7 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
         if (sequence < appliedSequence) return;
         failedAttemptsRef.current = 0;
         lastAppliedSequence.set(sessionId, sequence);
-        store.getState().replaceSessionTurns(sessionId, fetchedTurns);
+        store.getState().mergeTurnsSnapshot(sessionId, fetchedTurns, hydrationEpoch);
       })
       .catch((error: unknown) => {
         if (disposed) return;
@@ -114,15 +118,15 @@ export function useSessionTurnsState(sessionId: string | null): SessionTurnsStat
       // hydration, so a re-created same-ID session cannot be poisoned. Fully
       // hydrated sessions keep the entry — session IDs are UUIDs, so reuse is
       // not a production concern.
-      if (!store.getState().turns.hydratedBySession[sessionId]) {
+      if (!store.getState().turns.loadedBySession[sessionId]) {
         lastAppliedSequence.delete(sessionId);
       }
     };
-  }, [sessionId, hydrated, store, activeSessionId, retryTick]);
+  }, [sessionId, loaded, store, activeSessionId, retryTick]);
 
   return {
-    turns: hydrated ? (turns ?? EMPTY_TURNS) : EMPTY_TURNS,
-    isHydrated: hydrated,
+    turns: loaded ? (turns ?? EMPTY_TURNS) : EMPTY_TURNS,
+    isHydrated: loaded,
   };
 }
 

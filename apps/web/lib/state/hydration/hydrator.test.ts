@@ -654,7 +654,7 @@ it.each([true, false])(
       );
     });
 
-    expect(result.turns.hydratedBySession).toEqual(forceMerge ? { "session-1": true } : {});
+    expect(result.turns.loadedBySession).toEqual(forceMerge ? { "session-1": true } : {});
   },
 );
 
@@ -667,5 +667,5 @@ it("marks an absent inactive session after ordinary turn hydration", () => {
     );
   });
 
-  expect(result.turns.hydratedBySession["session-1"]).toBe(true);
+  expect(result.turns.loadedBySession["session-1"]).toBe(true);
 });

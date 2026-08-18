@@ -163,8 +163,8 @@ describe("fetchSessionDataForTask initial hydration", () => {
   });
 
   it("leaves the hydration marker absent when the SSR turns fetch fails", async () => {
-    // Task 01 contract: a rejected optional turns hydration must NOT mark the
-    // session hydrated, so the client hook re-fetches turns on first render.
+    // A rejected optional turns hydration must not mark the session loaded,
+    // so the client hook can fetch turns on first render.
     const session = makeSession();
     mocks.listTaskSessions.mockResolvedValue({ sessions: [session], total: 1 });
     mocks.fetchTaskSession.mockResolvedValue({ session });
@@ -175,8 +175,8 @@ describe("fetchSessionDataForTask initial hydration", () => {
     const hydratedState = mergeInitialState(result.initialState);
 
     expect(hydratedState.turns.bySession[SESSION_ID]).toBeUndefined();
-    expect(hydratedState.turns.hydratedBySession[SESSION_ID]).toBeUndefined();
-    expect(hydratedState.turns.hydratedBySession).toEqual({});
+    expect(hydratedState.turns.loadedBySession[SESSION_ID]).toBeUndefined();
+    expect(hydratedState.turns.loadedBySession).toEqual({});
   });
 
   it("hydrates the persisted model selector before the first render", async () => {

@@ -130,7 +130,10 @@ function PromptHistoryRow({
   }, []);
   const showToggle = overflow || expanded;
   return (
-    <div data-testid={`prompt-history-row-${index}`} className="flex items-start gap-1 py-1">
+    <div
+      data-testid={`prompt-history-row-${index}`}
+      className="flex items-start gap-2 py-1 sm:gap-3"
+    >
       <div className="min-w-0 flex-1">
         {/* Same bubble as the transcript's user message: markdown-body
             font, rounded-2xl, blue when not favorited / yellow when the
@@ -185,11 +188,11 @@ function PromptHistoryRow({
           )}
         </div>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-0.5 text-xs leading-tight text-muted-foreground">
+      <div className="flex w-28 min-w-28 shrink-0 flex-col items-end gap-0.5 text-xs leading-tight text-muted-foreground sm:w-32 sm:min-w-32">
         <time
           dateTime={entry.sentAt}
           title={formatDateTime(entry.sentAt)}
-          className="inline-flex items-center gap-1"
+          className="inline-flex w-full items-center justify-end gap-1 whitespace-nowrap"
         >
           <IconClock className="h-3 w-3 shrink-0" aria-hidden="true" />
           {formatRelativeCompact(entry.sentAt)}
@@ -215,7 +218,7 @@ function PromptDuration({
   return (
     <span
       data-testid={`prompt-history-duration-${index}`}
-      className="inline-flex items-center gap-1"
+      className="inline-flex w-full items-center justify-end gap-1 whitespace-nowrap tabular-nums"
     >
       <IconHourglass className="h-3 w-3 shrink-0" aria-hidden="true" />
       {formatPromptDuration(durationSeconds, {

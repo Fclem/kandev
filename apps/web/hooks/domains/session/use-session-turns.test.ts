@@ -7,11 +7,12 @@ const state = {
   tasks: { activeSessionId: "session-a" as string | null },
   turns: {
     bySession: { "session-a": [] as Turn[], "session-b": [] as Turn[] } as Record<string, Turn[]>,
-    hydratedBySession: {} as Record<string, boolean>,
+    loadedBySession: {} as Record<string, boolean>,
+    reconcileEpochBySession: {} as Record<string, number>,
   },
-  replaceSessionTurns: vi.fn((sessionId: string, turns: Turn[]) => {
+  mergeTurnsSnapshot: vi.fn((sessionId: string, turns: Turn[]) => {
     state.turns.bySession[sessionId] = [...(state.turns.bySession[sessionId] ?? []), ...turns];
-    state.turns.hydratedBySession[sessionId] = true;
+    state.turns.loadedBySession[sessionId] = true;
   }),
 };
 
@@ -62,7 +63,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.tasks.activeSessionId = "session-a";
   state.turns.bySession = { "session-a": [], "session-b": [] };
-  state.turns.hydratedBySession = {};
+  state.turns.loadedBySession = {};
+  state.turns.reconcileEpochBySession = {};
   mockListSessionTurns.mockResolvedValue({ turns: [turn("turn-a")], total: 1 });
 });
 
@@ -76,7 +78,11 @@ describe("useSessionTurns", () => {
     expect(result.current).toEqual([]);
 
     await waitFor(() =>
-      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]),
+      expect(state.mergeTurnsSnapshot).toHaveBeenCalledWith(
+        "session-a",
+        [turn("turn-a")],
+        expect.any(Number),
+      ),
     );
 
     // After the marker lands the merged turns (live + fetched) are exposed.
@@ -95,7 +101,7 @@ describe("useSessionTurns", () => {
   });
 
   it("does not refetch a hydrated session", () => {
-    state.turns.hydratedBySession["session-a"] = true;
+    state.turns.loadedBySession["session-a"] = true;
     renderHook(() => useSessionTurns("session-a"));
 
     expect(mockListSessionTurns).not.toHaveBeenCalled();
@@ -123,7 +129,11 @@ describe("useSessionTurns", () => {
     resolveA({ turns: [turn("stale")], total: 1 });
 
     await act(async () => {});
-    expect(state.replaceSessionTurns).not.toHaveBeenCalledWith("session-a", [turn("stale")]);
+    expect(state.mergeTurnsSnapshot).not.toHaveBeenCalledWith(
+      "session-a",
+      [turn("stale")],
+      expect.any(Number),
+    );
   });
 
   it("discards a generation-0 response after an A→B→A active-session round trip", async () => {
@@ -151,11 +161,19 @@ describe("useSessionTurns", () => {
     // even though the active session is A again.
     deferred[2].resolve({ turns: [turn("latest")], total: 1 });
     await act(async () => {});
-    expect(state.replaceSessionTurns).toHaveBeenLastCalledWith("session-a", [turn("latest")]);
+    expect(state.mergeTurnsSnapshot).toHaveBeenLastCalledWith(
+      "session-a",
+      [turn("latest")],
+      expect.any(Number),
+    );
 
     deferred[0].resolve({ turns: [turn("stale")], total: 1 });
     await act(async () => {});
-    expect(state.replaceSessionTurns).not.toHaveBeenCalledWith("session-a", [turn("stale")]);
+    expect(state.mergeTurnsSnapshot).not.toHaveBeenCalledWith(
+      "session-a",
+      [turn("stale")],
+      expect.any(Number),
+    );
   });
 });
 
@@ -164,7 +182,7 @@ describe("useSessionTurns — ordering and isolation", () => {
     // Task 01 stale-sequence discard: two concurrent fetches for the same
     // session (two mounted hook instances share the module fetch sequence).
     // The newer response applies first; the older response must be discarded
-    // by `sequence < appliedSequence` and never reach replaceSessionTurns.
+    // by `sequence < appliedSequence` and never reach mergeTurnsSnapshot.
     const deferredA: Array<{ resolve: (v: { turns: Turn[]; total: number }) => void }> = [];
     const deferredB: Array<{ resolve: (v: { turns: Turn[]; total: number }) => void }> = [];
     mockListSessionTurns
@@ -186,14 +204,22 @@ describe("useSessionTurns — ordering and isolation", () => {
     // Newer response lands first and applies.
     deferredB[0].resolve({ turns: [turn("stale-b")], total: 1 });
     await waitFor(() =>
-      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("stale-b")]),
+      expect(state.mergeTurnsSnapshot).toHaveBeenCalledWith(
+        "session-a",
+        [turn("stale-b")],
+        expect.any(Number),
+      ),
     );
 
     // The older response must be discarded by the sequence check.
     deferredA[0].resolve({ turns: [turn("stale-a")], total: 1 });
     await act(async () => {});
-    expect(state.replaceSessionTurns).not.toHaveBeenCalledWith("session-a", [turn("stale-a")]);
-    expect(state.replaceSessionTurns).toHaveBeenCalledTimes(1);
+    expect(state.mergeTurnsSnapshot).not.toHaveBeenCalledWith(
+      "session-a",
+      [turn("stale-a")],
+      expect.any(Number),
+    );
+    expect(state.mergeTurnsSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it("tracks the applied sequence per session so sibling fetches do not invalidate each other", async () => {
@@ -220,11 +246,15 @@ describe("useSessionTurns — ordering and isolation", () => {
     // earlier-sequence response must still apply (isolation by session).
     deferredB[0].resolve({ turns: [turnB], total: 1 });
     await act(async () => {});
-    expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-b", [turnB]);
+    expect(state.mergeTurnsSnapshot).toHaveBeenCalledWith("session-b", [turnB], expect.any(Number));
 
     deferredA[0].resolve({ turns: [turn("turn-a")], total: 1 });
     await act(async () => {});
-    expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]);
+    expect(state.mergeTurnsSnapshot).toHaveBeenCalledWith(
+      "session-a",
+      [turn("turn-a")],
+      expect.any(Number),
+    );
   });
 
   it("hydrates a sibling session lazily when its marker is absent", async () => {
@@ -236,7 +266,11 @@ describe("useSessionTurns — ordering and isolation", () => {
       expect.objectContaining({ init: expect.anything() }),
     );
     await waitFor(() =>
-      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-b", [turn("turn-a")]),
+      expect(state.mergeTurnsSnapshot).toHaveBeenCalledWith(
+        "session-b",
+        [turn("turn-a")],
+        expect.any(Number),
+      ),
     );
   });
 });
@@ -264,7 +298,11 @@ describe("useSessionTurns — fetch failure recovery", () => {
       });
       await act(async () => {});
       expect(mockListSessionTurns).toHaveBeenCalledTimes(2);
-      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]);
+      expect(state.mergeTurnsSnapshot).toHaveBeenCalledWith(
+        "session-a",
+        [turn("turn-a")],
+        expect.any(Number),
+      );
 
       rerender();
       expect(result.current).toEqual([turn("turn-a")]);
@@ -306,7 +344,11 @@ describe("useSessionTurns — fetch failure recovery", () => {
       });
       await act(async () => {});
       expect(mockListSessionTurns).toHaveBeenCalledTimes(4);
-      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]);
+      expect(state.mergeTurnsSnapshot).toHaveBeenCalledWith(
+        "session-a",
+        [turn("turn-a")],
+        expect.any(Number),
+      );
 
       rerender();
       expect(result.current).toEqual([turn("turn-a")]);
@@ -340,7 +382,11 @@ describe("useSessionTurns — hung request timeout", () => {
       });
       await act(async () => {});
       expect(mockListSessionTurns).toHaveBeenCalledTimes(2);
-      expect(state.replaceSessionTurns).toHaveBeenCalledWith("session-a", [turn("turn-a")]);
+      expect(state.mergeTurnsSnapshot).toHaveBeenCalledWith(
+        "session-a",
+        [turn("turn-a")],
+        expect.any(Number),
+      );
 
       rerender();
       expect(result.current).toEqual([turn("turn-a")]);
@@ -353,7 +399,7 @@ describe("useSessionTurns — hung request timeout", () => {
   it("applies the turn response despite an independent live commit mid-flight", async () => {
     // Task 01 cross-resource isolation: a message/turn commit landing in the
     // store after the turns fetch started must not invalidate the response —
-    // replaceSessionTurns merges over whatever the store holds.
+    // mergeTurnsSnapshot merges over whatever the store holds.
     let resolveFetch!: (value: { turns: Turn[]; total: number }) => void;
     mockListSessionTurns.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -370,7 +416,7 @@ describe("useSessionTurns — hung request timeout", () => {
     // message event completing a turn before listSessionTurns resolves).
     state.turns.bySession["session-a"] = [turn("live-before"), turn("live-mid")];
     resolveFetch({ turns: [turn("turn-a")], total: 1 });
-    await waitFor(() => expect(state.replaceSessionTurns).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(state.mergeTurnsSnapshot).toHaveBeenCalledTimes(1));
 
     rerender();
     expect(result.current).toEqual([turn("live-before"), turn("live-mid"), turn("turn-a")]);

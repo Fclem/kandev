@@ -3,16 +3,16 @@ import { defaultState, mergeInitialState } from "./default-state";
 import type { HydrationState } from "./store";
 
 describe("turn hydration state", () => {
-  it("defaults and deep-merges hydrated session markers", () => {
+  it("defaults and deep-merges loaded session markers", () => {
     const state = mergeInitialState({
       turns: {
         bySession: {},
         activeBySession: {},
-        hydratedBySession: { "session-1": true },
+        loadedBySession: { "session-1": true },
       },
     } as HydrationState);
 
-    expect(defaultState.turns.hydratedBySession).toEqual({});
-    expect(state.turns.hydratedBySession).toEqual({ "session-1": true });
+    expect(defaultState.turns.loadedBySession).toEqual({});
+    expect(state.turns.loadedBySession).toEqual({ "session-1": true });
   });
 });

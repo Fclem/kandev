@@ -398,4 +398,12 @@ test.describe("Task layout profile defaults", () => {
     await testPage.getByRole("button", { name: "Cancel" }).click();
     expect((await apiClient.getUserSettings()).settings.saved_layouts).toHaveLength(1);
   });
+  test("adds Prompt History through the layout editor", async ({ testPage }) => {
+    const layouts = new LayoutSettingsPage(testPage);
+    await layouts.open();
+
+    await expect(layouts.editor.locator(".dv-tab", { hasText: "Prompt History" })).toHaveCount(0);
+    await layouts.addPanel("Prompt History");
+    await expect(layouts.editor.locator(".dv-tab", { hasText: "Prompt History" })).toBeVisible();
+  });
 });

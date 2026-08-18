@@ -52,6 +52,7 @@ const placeholderComponents = {
   // so Settings > Layouts renders a generic box instead of throwing on an
   // unknown tabComponent (AC8), regardless of which plugin registered it.
   "plugin-panel": PlaceholderPanel,
+  "prompt-history": PlaceholderPanel,
   todos: PlaceholderPanel,
 };
 

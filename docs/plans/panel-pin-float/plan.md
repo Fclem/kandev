@@ -8,19 +8,18 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. Revision 12 incorporates the
-round-11 adversarial review (this package has been adversarially reviewed every
-round): journal integrity validation (`isEnvFloatingJournal` + digest
-recomputation + corrupt-journal quarantine), a transport-complete per-panel
-plugin capability (render-bound token in `PluginTaskPanelProps` + two-arg
-method + WeakMap binding + revocation), root-column metadata embedded inside
-the blob (no third key; rebuilt on layout apply/reload, invalidated on
-preset/reset/env switch), a synchronous ordered settle drain (before the busy
-flag clears; `begin` consumes retained markers), exact treePath shape-change
-mapping (DFS leaf-order clamp), identity-preserving tree+flat filtering with
-group-id-set assertions, budget-index validation before every decision, and
-the inventory completed with the discovered Drawer/PullDropdown owners and a
-blocking audit rule.
+the existing env layout / maximize persistence. Revision 13 incorporates the
+round-12 adversarial review (this package has been adversarially reviewed every
+round): a reentrancy-safe settle drain and float-while-maximized via
+coordinator-owned internal operations (`drainPendingRestore`/`restoreForFloat`
+with internal tokens and recursion guards), a verified atomic journal
+quarantine protocol, sidecar persistence coalescing (settled-boundary,
+bytes-changed-only writes), portal-instance-generation capabilities with
+release-reacquire rotation and mobile rejection, mandatory stable logical
+group/root-column identities, a persisted `columnRole` field driving
+`hasLivePinnedRightColumn`, a total identity rule for tree+flat filtering,
+env-qualified detach exclusions, a total DFS traversal definition, and a
+fault-injection test seam for the crash matrix.
 
 ## Architecture
 
@@ -318,13 +317,31 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 
 ## Risks
 
+- **Settle-drain reentrancy:** `drainPendingRestore`/`restoreForFloat` are
+  coordinator-owned with internal tokens and recursion guards, or the drain
+  is re-rejected by its own busy gate.
+- **Quarantine atomicity:** verified copy → verified absence → cache; a
+  failed quarantine is never cached as recovered; quarantine keys count
+  toward budget and cleanup.
+- **Sidecar write amplification:** sidecar updates in memory; blob/journal
+  writes only at settled boundaries when bytes changed — ordinary applies
+  must never amplify into journal writes.
+- **Capability stability:** portal-instance generation, useRef-stable,
+  rotated on reacquire, absent on mobile.
+- **Stable identity:** logical group/root-column ids are mandatory persisted
+  UUIDs — never derived from membership/traversal; duplicate/unknown
+  rejection.
+- **columnRole:** the persisted role field (not inference) drives
+  `hasLivePinnedRightColumn`.
+- **Filtering total identity:** unique group ids assigned before filtering;
+  undefined/duplicate ids fail closed.
+- **Env-qualified exclusions:** predicate over (panelId, entryEnvId, token),
+  never a plain id set.
 - **Journal integrity:** `isEnvFloatingJournal` + digest recomputation are
   mandatory before any target selection; a corrupt journal must quarantine,
   not loop.
 - **Capability transport:** the render-bound capability must reach the plugin
   (props + two-arg method + WeakMap), or ownership validation is impossible.
-- **Settle-drain ordering:** synchronous inside settle before busy clears;
-  a new begin consumes the marker — no interleaving window.
 - **Sidecar-in-blob:** rootColumns inside `EnvFloatingState`, rebuilt on
   every layout apply/reload, invalidated on preset/reset/env switch — never a
   third key.

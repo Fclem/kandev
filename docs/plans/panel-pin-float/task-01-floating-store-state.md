@@ -25,19 +25,31 @@ spec: "../../specs/ui/panel-pin-float.md"
   tagged absent/present union over exact raw storage bytes; every write is
   `writeVerified` (set → read back exact bytes → compare; any mismatch is a
   failed write entering rollback; a failed journal write aborts before
-  mutation). **`isEnvFloatingJournal(journal, envId)` validates version/env/
-  phase/transaction/digest/raw shape and recomputes SHA-256 from each raw
-  snapshot before any target is selected; an invalid/mismatched journal is
-  quarantined (`.corrupt`) and treated as unreadable (journal-free fallback
-  with the caller's envId) — malformed-JSON, wrong-env, bad-digest,
-  invalid-raw, oversized-raw, and failed-removal tests.** **Skipped restores
-  drain synchronously at settle before the busy flag clears** (recheck
+  **`isEnvFloatingJournal(journal, envId)` validates version/env/phase/
+  transaction/digest/raw shape and recomputes SHA-256 from each raw snapshot
+  before any target is selected; an invalid/mismatched journal is
+  quarantined through a **verified atomic protocol** (copy to a unique
+  `...-journal.<envId>.corrupt-<n>` key, read-back verify the copy, remove
+  the original, verify absence; a failed copy/removal keeps the original and
+  is never cached as recovered; quarantine keys count toward budget and are
+  covered by `cleanupTaskStorage`) and treated as unreadable (journal-free
+  fallback with the caller's envId) — malformed-JSON, wrong-env, bad-digest,
+  invalid-raw, oversized-raw, set-failure, silent-alteration,
+  remove-failure, collision, and restart tests.** **Skipped restores
+  drain via coordinator-owned `drainPendingRestore` (internal token +
+  recursion guard, async settle keeping busy through portal adoption;
+  float-while-maximized uses `restoreForFloat` the same way)** — recheck
   envId, generation, api instance, marker; clear only after a successful
-  settle restore or invalidation; a new begin consumes the retained marker).
+  settle restore or invalidation; a new begin consumes the retained marker.
   **`EnvFloatingState.rootColumns`** carries the authoritative root-column
-  metadata inside the blob (rebuilt after every layout apply/reload,
-  invalidated on preset/reset/env switch, covered by journal/budget/cleanup —
-  no third key). **Task deletion invalidates the env generation before
+  metadata (incl. `columnRole`) inside the blob with **coalesced
+  persistence** (in-memory updates during layout applies; blob/journal
+  written only at settled boundaries when bytes changed; no floating groups
+  + unchanged sidecar ⇒ no write). **Stable identity:** capture assigns
+  persisted UUIDs to every logical group and root column (panel/position
+  identity is a validated fallback only); duplicate/unknown identities are
+  rejected; sibling/first-panel-change tests prove saved ids survive.
+  **Task deletion invalidates the env generation before
   cleanup**, so a late settle can never rewrite deleted keys; the budget
   index validates every indexed key against stored raw length/digest before
   each decision (one bounded rebuild on mismatch).

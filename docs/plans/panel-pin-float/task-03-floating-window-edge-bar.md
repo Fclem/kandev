@@ -22,17 +22,21 @@ spec: "../../specs/ui/panel-pin-float.md"
   HoverCard/Drawer inside chat, plan, terminal, files, changes, diff,
   plugins, editors (the changes-* rows incl. the header Drawer ~293-302 and
   PullDropdown ~411-425 are already source-confirmed). The **host/plugin API
-  is transport-complete**: `PluginTaskPanelProps` gains a render-bound opaque
-  `floatingOwnedLayerCapability` (injected at render, bound to the exact
-  portal instance, revoked in `PluginTaskPanel` cleanup and
-  `unregisterPlugin`), and `host.ui.registerFloatingOwnedLayer(capability,
+**transport-complete**: `PluginTaskPanelProps` gains a render-bound opaque
+  `floatingOwnedLayerCapability` issued from a **portal-instance generation**
+  (stable via `useRef` across benign re-renders so an open layer survives;
+  revoked on actual portal release or `unregisterPlugin`; **rotated on
+  reacquire** so hoarded tokens are rejected; **absent on mobile** where
+  floating is desktop-only and host registration is rejected), and
+  `host.ui.registerFloatingOwnedLayer(capability,
   layerRoot) => () => void` is added to the SDK types
   (`apps/packages/plugin-sdk/src/index.ts`, as a callable outside the mapped
   component type), `lib/plugins/host-api.ts` (WeakMap token binding), and the
   contract docs; a hoarded plugin-scoped function cannot be reused across
   renders or after unmount. One real test per primitive family, including
-  plugin hoarding, cross-panel rejection, unmount revocation, and unregister
-  cleanup.
+  plugin hoarding, cross-panel rejection, unmount revocation, release-
+  reacquire rotation, benign re-render stability, mobile rejection, and
+  unregister cleanup.
 - **Escape contract:** the coordinator listens on the **bubble** phase and honors `event.defaultPrevented` — a Radix dismissable layer or editor handler that handles Escape wins; otherwise Escape collapses the focused expanded window. No capture-phase claim.
 - The collapsed bar is a semantic `tablist` with `tab` roles, `aria-selected`, an accessible group label, **roving tabindex** (one tab stop on the active tab), Arrow Up/Down and Left/Right navigation (both axes accepted in either orientation), Home/End, Enter/Space activation, Escape collapse, and focus return on expand/collapse. It is a **vertical** title bar (titles stacked) for side groups and a **horizontal** title bar (titles in a row) for horizontal groups, showing each tab's title (registry ids via `panelTitle()`, unknown ids via the live portal/dockview title, falling back to the persisted definition title) in tab order with the active tab highlighted, plus the pin control (a separate button in DOM order after the tablist). Title resolution is **reactive**: the overlay subscribes to the plugin registry and portal manager so a plugin re-registration or session replacement re-renders the bar while the panel is detached.
 - Clicking a title sets it active and expands the window; clicking the bar's pin control re-docks the group.

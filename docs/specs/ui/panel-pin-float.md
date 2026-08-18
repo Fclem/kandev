@@ -86,10 +86,16 @@ EnvFloatingState                     # persisted as JSON, versioned
   rootColumns  Record<columnId, { pinned: boolean; width: number;
                                   minWidth: number | null; maxWidth: number | null }>
                # authoritative root-column metadata sidecar, INSIDE the blob:
-               # rebuilt from live root columns after every layout apply and
-               # reload, invalidated on preset/reset/env switch, covered by
-               # the same journal transaction, budget, and cleanup as the
-               # groups — there is no third storage key.
+               # rebuilt in memory after every layout apply and reload,
+               # invalidated on preset/reset/env switch, covered by the same
+               # journal transaction, budget, and cleanup as the groups —
+               # there is no third storage key. Persistence is COALESCED:
+               # the sidecar updates in memory during layout applies and the
+               # blob/journal are written only at a settled boundary and only
+               # when the serialized bytes actually changed (no floating
+               # groups + unchanged sidecar ⇒ no floating/journal write at
+               # all) — ordinary preset/toggle/custom applies never amplify
+               # into blob+journal writes.
 
 FloatingGroupState
   groupId          string        # original grid group id (informational)
@@ -104,12 +110,22 @@ FloatingGroupState
                   # tagged placement: tree path vs flat groups index are
                   # distinct coordinate systems and never conflated
                   # Shape-change mapping (exact): flat -> tree destination =
-                  # DFS leaf order index, clamped to the last leaf; tree ->
-                  # flat destination = leaf order index, clamped to the last
-                  # flat group; out-of-range paths clamp to the last valid
-                  # leaf/group. The expected leaf for flat->tree and tree->
-                  # flat (incl. out-of-range) is asserted in round-trip tests.
+                  # DFS leaf-order index clamp; tree -> flat destination =
+                  # leaf order index clamp; out-of-range paths clamp to the
+                  # last valid leaf/group. DFS traversal is total: left-to-
+                  # right child order, branches before/after leaves per
+                  # preorder (leaf-order = the order leaves are visited in a
+                  # left-to-right preorder walk); a zero-leaf or invalid
+                  # destination fails the materialization non-destructively.
+                  # The expected leaf for flat->tree and tree->flat (incl.
+                  # out-of-range) is asserted in round-trip tests.
   edge             "left" | "right" | "top" | "bottom"   # collapsed-bar edge
+  columnRole       "center" | "pinned-right" | "side-other" | "custom"
+                  # persisted column role (M5): distinguishes a custom pinned
+                  # right terminal column from pinned plan/preview/vscode
+                  # side columns; captured with the geometry, kept in the
+                  # sidecar, and the single input to hasLivePinnedRightColumn
+                  # alongside live membership and pinned state
   orientation      "vertical" | "horizontal"             # derived from columnKind + position
   size             number       # px: window width for vertical, height for horizontal
   panels           FloatingPanelDef[]   # full tab definitions, tab order
@@ -148,6 +164,18 @@ grid** (floated groups absent), exactly as it does today. The floating blob
 carries everything needed to materialize floated groups back into the grid and
 re-float them. The env layout is never replaced by a pre-float snapshot and
 the floating blob never contains a layout.
+
+**Stable identity (M4):** logical group ids and root-column ids are
+**mandatory stable persisted identities**, never derived at capture time from
+current panel membership or traversal order — `LayoutGroup.id` is optional
+and plan-preset groups carry no id, the serializer generates traversal-local
+`group-n` ids, and root column ids are inferred from the first panel, so a
+saved id can change when a sibling or first panel changes. Capture assigns (or
+reuses, when present) a **persisted UUID** for every logical group and root
+column at float time; panel identity and position are used only as a validated
+fallback (never the primary identity); duplicate and unknown identities are
+rejected; sibling-change and first-panel-change tests prove the saved ids
+survive.
 
 ## Placement capture (at unpin time, from the live `LayoutState`)
 
@@ -224,18 +252,27 @@ Float/dock/restore are **transactions** with an operation journal:
    acquire the same phase/token; a restore completion arriving during
    mutation/portals-adopted/rollback/stale-cleanup is **skipped with a
    retained pending-floating-restore marker**. **The marker has a guaranteed,
-   ordered drain:** the drain runs **synchronously inside `settle`, before
-   the busy flag clears** — there is no microtask/frame window in which a new
-   `begin` can interleave — and rechecks `envId`, transaction generation, the
-   api instance, and the marker before invoking restore against the fresh
-   layout. If the drain cannot run (marker invalidated by env switch/unmount/
-   generation change), it is cleared without restore; if a new transaction
-   began, its `begin` consumes any retained marker first (marker survives
-   into the new transaction's settle). The marker is cleared only after a
-   successful settle restore or invalidation. A deterministic schedule test
-   covers: skipped restore → settle schedules drain → begin a new
-   transaction → settle → restore runs exactly once against the fresh
-   API/layout. Every restore entry is tested against each busy phase,
+   ordered drain with no reentrancy paradox:** the drain is a
+   **coordinator-owned internal operation** (`drainPendingRestore(token)`)
+   that runs inside `settle` **after the portal-adoption phase completes but
+   before the busy flag clears**; it carries an **internal token and a
+   phase/recursion guard** so its restore invocation is not re-rejected by
+   the busy gate it runs under (restore paths invoked *outside* the
+   coordinator's internal operations are still busy-rejected), and recursive
+   settle is impossible. `settle` is **async and keeps busy through portal
+   adoption and the drain**; a drain that throws or schedules another restore
+   fails the marker clear (marker retained, debug-logged, re-armed at the
+   next settle). A new transaction's `begin` consumes any retained marker
+   first, and the drain rechecks `envId`, generation, api instance, and the
+   marker before invoking restore against the fresh layout.
+   **Float-while-maximized uses the same internal mechanism:** `floatGroup`
+   on the maximized group calls the coordinator-owned `restoreForFloat`
+   (internal token, recursion guard) that restores the pre-max layout
+   through the same busy-protected path, so the maximize/exit busy guards
+   never deadlock the float. Deterministic schedule tests cover: skipped
+   restore → settle → begin → settle (restore runs exactly once), drain
+   throw, drain scheduling another restore, and float while maximized. Every
+   restore entry is tested against each busy phase,
    including the drain after each. A single store/coordinator selector
    `isFloatingTransactionBusy(envId)` is consumed by **all three pin
    surfaces** — the grid group header, the floating window header, and the
@@ -302,10 +339,16 @@ Float/dock/restore are **transactions** with an operation journal:
    **recomputes SHA-256 from each raw snapshot and requires it to equal the
    journal's tagged digest** before any target is selected. A journal that
    fails validation or digest recomputation is treated as **unreadable**
-   (journal-free divergence rules, using the caller's explicit `envId`),
-   quarantined (renamed to a `.corrupt` suffix so it is never re-recovered on
-   every restore), and removed only by a verified operation; malformed-JSON,
-   wrong-env, bad-digest, invalid-raw, oversized-raw, and failed-removal
+   (journal-free divergence rules, using the caller's explicit `envId`) and
+   **quarantined through a verified atomic protocol** — sessionStorage has no
+   rename primitive, so quarantine copies the raw bytes to a unique key
+   (`...-journal.<envId>.corrupt-<n>`, collision-avoided), read-back verifies
+   the copy, then removes the original and verifies its absence; a failed
+   copy or removal keeps the original (never cached as recovered) and is
+   retried on the next recovery; quarantine keys count toward the budget and
+   are covered by `cleanupTaskStorage`; the recovery cache records success
+   only after durable quarantine or verified original absence.
+   Set-failure, silent-alteration, remove-failure, collision, and restart
    cases are tested. Recovery is idempotent via an in-memory
    recovery cache keyed by `(envId, transactionId, api instance)` — never one
    global generation, so env B's journal is never skipped by env A's recovery
@@ -457,10 +500,15 @@ rather than a global id set:
      floated tab mid-transaction is an ordinary close: cleanup runs, the
      portal releases, and the transaction drops that panel from its
      definitions when it notices the id is gone).
-- `panelPortalManager.reconcile` and `releaseByEnv` accept an explicit
-  exclusion set derived from the **target env's** registered ids, so a panel
-  id that also exists in another env's blob is still released when its own
-  env switches away.
+- `panelPortalManager.reconcile` and `releaseByEnv` take an explicit
+  **env-qualified exclusion** — a predicate over `(panelId, entryEnvId,
+  token)` or a record set keyed by `(panelId, envId)`, never a plain id
+  set: the portal manager is globally keyed by panel id with per-entry
+  `envId`, so a same panel id in the old env and the target env's floating
+  state must be distinguished by comparing entry env + token inside
+  `releaseByEnv`/`reconcile`. The callsite env direction is documented and
+  overlapping-id-across-envs tests cover old-env release while the target
+  env's registration is preserved.
 - A stale transaction (token mismatch) never clears a newer transaction's
   registrations. The registry is cleared for the env on transaction settle
   (success, failure, or unmount).
@@ -570,11 +618,22 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   The host stores a WeakMap/token binding from capability to portal instance;
   a plugin rendering two task panels cannot register a layer from one panel
   against the other, and a hoarded plugin-scoped function cannot be reused
-  across renders or after unmount. Unregister is idempotent on close,
+  across renders or after unmount. **Capability stability:** the capability is
+  issued from a **portal-instance generation** and kept stable for the
+  instance's lifetime via `useRef` (a benign re-render never issues a new
+  token, so an open layer survives); it is revoked only on actual portal
+  release or plugin unregistration, and **rotated on reacquire** (a released
+  and reacquired portal gets a fresh token, so a hoarded old token is
+  rejected). **Mobile:** the same `PluginTaskPanel` renders on phone, but
+  floating ownership is desktop-only — on mobile the capability is absent
+  and host registration is rejected (documented, tested). Unregister is
+  idempotent on close,
   unmount, and plugin unregistration, with cleanup wired into
   `unregisterPlugin`. An unregistered layer is a collapse bug by contract;
   one real test per primitive family, including a plugin-panel layer
-  (hoarding, cross-panel use, unmount revocation, unregister cleanup).
+  (hoarding, cross-panel use, unmount revocation, release-reacquire
+  rotation, benign re-render stability, mobile rejection, unregister
+  cleanup).
 - True outside interaction still collapses: clicking the grid, the app
   sidebar, or the page chrome while no owned layer is open collapses the
   window on pointerdown; with layers open, the first click closes the layers
@@ -777,7 +836,12 @@ replacement orderings.
   checks the tree leaf group-id set equals the flat group-id set. Tests cover
   shared-object-identity groups AND structurally-equal-but-not-identical
   groups, nested right columns, empty leaves, and ordinary/custom floating
-  ids.
+  ids. **Total identity rule (M6):** the traversal is keyed by unique group
+  id only — capture assigns unique logical ids to every group BEFORE
+  filtering (per the stable-identity rule) or carries a WeakMap identity
+  token from capture into both forms; undefined or duplicate group ids fail
+  closed before filtering, and the post-filter assertion covers tree leaf
+  ids, flat ids, and panel ids all matching.
   **One authoritative meaning for `rightPanelsVisible`:** the bit is exactly
   **live canonical pinned-right-column presence**, defined by the single
   concrete predicate `hasLivePinnedRightColumn(api, columnMetadata)` whose
@@ -1025,6 +1089,35 @@ replacement orderings.
   center), **WHEN** placement normalization runs, **THEN** the entry's center
   intent is preserved and normalization is deferred until dock, which returns
   to center.
+- **GIVEN** a skipped restore whose drain is invoked inside `settle`, **WHEN**
+  the drain calls the restore path, **THEN** the coordinator-owned
+  `drainPendingRestore` internal token lets it run despite the busy gate —
+  no re-rejection, no recursion; a drain throw retains the marker for the
+  next settle.
+- **GIVEN** the user floats the maximized group, **WHEN** `restoreForFloat`
+  runs, **THEN** the pre-max layout is restored through the busy-protected
+  internal path — the maximize/exit guards never deadlock the float.
+- **GIVEN** a corrupt journal's quarantine copy fails, **WHEN** recovery
+  retries, **THEN** the original journal is retained and never cached as
+  recovered (verified copy → verified absence → cache ordering).
+- **GIVEN** an ordinary preset switch with no floating groups, **WHEN** the
+  sidecar updates, **THEN** the blob/journal are not written (coalesced
+  persistence — settled boundary + bytes changed only).
+- **GIVEN** a plugin panel re-renders while a layer is open, **WHEN** the
+  capability is re-read, **THEN** the portal-instance-generation token is
+  stable (useRef) — the layer survives the benign re-render; a released and
+  reacquired portal rotates the token, rejecting a hoarded old one.
+- **GIVEN** a saved group id derives from traversal order, **WHEN** a sibling
+  panel changes, **THEN** the persisted UUID identity is stable — the saved
+  id never silently changes.
+- **GIVEN** a pinned custom terminal-only right column, **WHEN**
+  `hasLivePinnedRightColumn` runs, **THEN** the persisted `columnRole:
+  "pinned-right"` recognizes it — plan/preview/vscode side columns with
+  `side-other`/`custom` roles never qualify.
+- **GIVEN** the same panel id floats in two envs, **WHEN** the old env
+  switches away, **THEN** the env-qualified exclusion predicate
+  `(panelId, entryEnvId, token)` releases the old entry while preserving the
+  target env's registration.
 - **GIVEN** the user exits maximize and reloads immediately, **WHEN** the
   pending-floating-restore marker is re-evaluated on the next mount, **THEN**
   the journal and marker remain consistent and the group restores correctly.

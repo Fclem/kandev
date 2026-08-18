@@ -8,8 +8,8 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 43 incorporates the
-round-42 adversarial review** (this package has been adversarially reviewed
+the existing env layout / maximize persistence. **Revision 44 incorporates the
+round-43 adversarial review** (this package has been adversarially reviewed
 every round): an atomic coordinator-owned `transferPanelLease` with an
 explicit detached-capability rule and a GLOBAL live-api lease (one active
 transaction across env switches), a deterministic operation plan computed at
@@ -220,7 +220,7 @@ per-env sessionStorage pattern.
    floating-aware (**every** floating id excluded), removes empty groups,
    drops the right column when no pinned-right panels remain (legal
    serialized tree). The enforcement gate, toggle, and layout-setup detection
-   share this one predicate. No panel id ever exists in both surfaces.
+   share this one predicate. No panel id ever exists in both surfaces OUTSIDE the named dock/float handoff window (bounded handoff generation: dual DOM mount legal, exactly one authoritative owner).
 
 ## Files
 
@@ -348,8 +348,9 @@ Per task: targeted unit runs (`cd apps/web && pnpm vitest run <file>`),
 full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. Result
 matrix: `node scripts/generate-floating-result-contract.mjs` generates the
 reason enum, row count, and locale-key list from result-matrix.md; CI order:
-generate → git-diff check → matrix validator (exactly-once + terminality
-IFF) → locale-key validator (all six catalogs + key parity). E2E:
+generate → git-diff check → matrix validator (exactly-once + ONE-WAY
+terminality `terminal ⇒ Terminal?=yes`; pruned/skipped final outcomes are
+legal — fixture) → locale-key validator (all six catalogs + key parity). E2E:
 `cd apps/web && pnpm e2e:raw tests/task/panel-pin.spec.ts` (mock profile,
 `KANDEV_E2E_MOCK=true`).
 

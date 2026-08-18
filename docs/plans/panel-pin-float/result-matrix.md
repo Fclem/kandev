@@ -1,4 +1,4 @@
-# Floating-panels result matrix (revision 44, committed)
+# Floating-panels result matrix (revision 45, committed)
 
 The single machine-readable operation × reason × action matrix required by
 `docs/specs/ui/panel-pin-float.md` (Result algebra) and
@@ -100,16 +100,20 @@ that exclusion).
 
 **Discriminator domains are SEPARATE (admission vs lifecycle):**
 
-- `PluginLayerAdmission = first-open-admitted | duplicate-open-rejected` —
-  the ADMISSION-CHECK RESULT is the observable host-side transition:
-  first-open-admitted → NON-RESULT (excluded); duplicate-open-rejected →
-  row 26.
+- `PluginLayerAdmission = first-open-admitted | duplicate-open-rejected |
+  revoked-capability-at-admission` — the ADMISSION-CHECK RESULT is the
+  observable host-side transition: first-open-admitted → NON-RESULT
+  (excluded); duplicate-open-rejected → row 26, and its subsequent real
+  open=false acknowledgement is `rejected-duplicate-close-ack`
+  (NON-RESULT, distinct from lifecycle close-ack);
+  revoked-capability-at-admission (a revoked/stale capability used at
+  ANY admission, before OR after it ever admitted an open) → row 41
+  (pre-admission reachability is EXPLICIT).
 - `PluginLayerLifecycle = open-owned | close-ack | ack-timeout` — edges:
   open-owned (after a successful admission) → close-ack is NON-RESULT
   (close-ack IS the handshake's actual open=false callback); open-owned →
   ack-timeout ONLY when the plugin ignores requestClose (row 30); ack-
-  timeout is NOT reachable from first-open-admitted directly; row 41
-  (stale-capability) is a separate synchronous admission-adjacent check.
+  timeout is NOT reachable from first-open-admitted directly.
 - `FloatTransition = result-bearing-commit | result-free-visual-state` —
   the commit returns `applied` (row 36); the visual expand/collapse is a
   NON-result.
@@ -158,7 +162,8 @@ that exclusion).
   `intent-cancelled`) are terminal-in-effect but NOT `terminal` status.
   Generated assertion: `status == "terminal"` ⇒ `Terminal? == yes`
   (one-way implication — `pruned`/`skipped` rows legitimately have
-  `Terminal? == yes` without `terminal` status). No UI path may attempt
+  `Terminal? == yes` without `terminal` status; plan/task acceptance
+  MUST use this one-way form — a two-way IFF would reject rows 10/12/40). No UI path may attempt
   materialization or portal adoption while rows 6-8 are active.
 - The exhaustive switch over `LayoutMutationResult` (task-04) is compiled
   with `exhaustive` checks and the exactly-once assertion over the CLOSED

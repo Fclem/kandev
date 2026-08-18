@@ -105,6 +105,12 @@ node scripts/check-owned-layer-inventory.mjs   # executable gate: static AST sca
   found)
 - `docs/plans/panel-pin-float/owned-layer-inventory.md` (audit completion)
 - `apps/web/components/task/dockview-floating-panel.test.tsx` (new; incl. pointerdown deferral while a menu is open, reactive title update on plugin re-registration while detached, real Radix Escape ordering, plugin-panel layer ownership rejection)
+- **Touched (ownership explicit): `lib/layout/panel-portal-host.tsx` (adds
+  `FloatingWindowLeaseProvider` context around each createPortal render +
+  portalInstanceKey context transport; React key STAYS the stable
+  panelId), `lib/layout/panel-portal-manager.ts` (PortalEntry
+  portalInstanceKey + atomic reacquire envId update), the workbench-root
+  provider component, plus the reparent/no-null-lease test.**
 - Reuse: `panelPortalManager` (`lib/layout/panel-portal-manager.ts`), `usePanelSearch` pointer-outside pattern (`hooks/use-panel-search.ts`), `panelTitle()` (`lib/state/layout-manager/panel-title.ts`), `PinButton` from task-02
 
 ## Inputs

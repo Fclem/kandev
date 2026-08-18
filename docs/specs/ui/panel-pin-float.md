@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 49
-prior-round: 48
+revision: 50
+prior-round: 49
 ---
 
 # Floating (unpinned) workbench panels
@@ -206,7 +206,7 @@ FloatingPanelDef                   # complete definition so a floated panel can
   id           string             # be recreated after a reload or env switch
   component    string
   title        string             # canonical English title (reload fallback only)
-  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; TWO DISTINCT FUNCTIONS: `normalizePersistedFloatingPanelDef` (load/persistence — maps absent → null BEFORE validation; the closed guard accepts ONLY string|null for this field and REJECTS undefined) vs `captureFloatingPanelDef` (live capture/registry/materialization — returns the CANONICAL `FloatingPanelDef` shape: `tabComponent: live.tabComponent ?? null`, params preserved EXACTLY, NO recursive walk — NO normalizer may walk `DockviewPanel.params`); PERSIST ACCEPTS ONLY THE CANONICAL SHAPE (capture itself normalizes the top-level field); the load normalizer is IDEMPOTENT; **FIELD MAPPING EXPLICIT: `FloatingPanelDef.tabComponent` IS the Dockview tab-renderer key (the same key the live serializer writes as `panel.view.tabComponent`); capture-at-float-time always reflects the last capture (a panel whose live tab header differs from its persisted definition is resolved by re-capture); per-panel round trips: null, custom tab renderer, differing header-vs-definition**; the live `LayoutPanel` type becomes `tabComponent: string | null` (types.ts:1-7 no longer optional-undefined); absent/null/string/undefined/extra-key round-trip tests + load→capture→persist + live-param-preservation tests)
+  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; TWO DISTINCT FUNCTIONS: `normalizePersistedFloatingPanelDef` (load/persistence — maps absent → null BEFORE validation; the closed guard accepts ONLY string|null for this field and REJECTS undefined) vs `captureFloatingPanelDef` (live capture/registry/materialization — returns the CANONICAL `FloatingPanelDef` shape: `tabComponent: live.tabComponent ?? null`, params preserved EXACTLY, NO recursive walk — NO normalizer may walk `DockviewPanel.params`); PERSIST ACCEPTS ONLY THE CANONICAL SHAPE (capture itself normalizes the top-level field); the load normalizer is IDEMPOTENT; **FIELD MAPPING EXPLICIT: `FloatingPanelDef.tabComponent` IS the Dockview tab-renderer key (the same key the live serializer writes as `panel.view.tabComponent`); capture-at-float-time always reflects the last capture (a panel whose live tab header differs from its persisted definition is resolved by re-capture); per-panel round trips: null, custom tab renderer, differing header-vs-definition**; **RELOAD PRECEDENCE: materialization RE-RESOLVES the tab renderer from the CURRENT panel registry by stable panel id when available; the persisted tabComponent is a FALLBACK only for unknown/plugin ids; the resolved value is canonicalized + persisted after successful materialization (reload-after-registry-change + null/custom renderer tests); EMPTY-STRING tabComponent is REJECTED (validate non-empty string or null — presence, not truthiness)**; the live `LayoutPanel` type becomes `tabComponent: string | null` (types.ts:1-7 no longer optional-undefined); absent/null/string/undefined/extra-key round-trip tests + load→capture→persist + live-param-preservation tests)
   params       Record<string, unknown>   # must be JSON-safe (see guard)
 ```
 
@@ -534,7 +534,14 @@ loses the incoming session, or mutates the maximize overlay:
   outside the facade; adapter cannot synchronously verify ⇒ QUARANTINE
   + durable repair RETAINED, visibility continuation set, LEASE NOT
   CLEARED until verified; synchronous-call budget test caps verification
-  calls;** hidden-tab
+  calls; **toJSON SIDE-EFFECT PROOF: an adapter-level test against the
+  pinned dockview-core ^4.13.1 proves toJSON is side-effect-free and
+  does NOT force layout or emit layout events; if that cannot be
+  guaranteed, hidden-tab verification uses an IMMUTABLE CACHED native
+  snapshot instead, suppression stays active, and ANY unexpected
+  event/layout mutation during verification is classified VERIFICATION
+  FAILURE → quarantine (journal never cleared); hidden-tab +
+  event-emission tests cover both paths**;** hidden-tab
   tests assert native call count, lease state, busy clearing, and
   post-visibility repair**; `api: null` is never
   treated as inactive (`use-panel-active.ts` is extended/replaced and added
@@ -629,6 +636,16 @@ loses the incoming session, or mutates the maximize overlay:
   the store and all other modules receive; raw `DockviewApi` is PRIVATE
   to the adapter closure and consumers request mutations via adapter
   COMMANDS;
+  **FACADE LIFETIME: ONE facade per DockviewApi INSTANCE with an
+  immutable apiInstance/generation identity; on API replacement (env
+  switch/reload) the facade is DISPOSED + REPLACED ATOMICALLY;
+  `dispose()` UNSUBSCRIBES EVERY raw-api subscription the facade owns
+  (including the width-tracking + layout subscriptions at
+  dockview-layout-setup.ts:172/333), invalidates its generation, and
+  makes LATE callbacks no-ops (dispose-during-callback and old-
+  callback-after-new-api tests covering both subscription families);
+  every read/subscription callback REJECTS stale instances; the store's
+  `api` field is cut over to the facade only.**
   the AST allowlist is a SECONDARY gate; a PRODUCTION source-boundary
   rule REJECTS `as unknown as DockviewApi` casts and any raw
   `DockviewApi` import/storage outside approved adapter modules
@@ -893,12 +910,17 @@ loses the incoming session, or mutates the maximize overlay:
   **CLEANUP-RECOVERY STATE MACHINE: record presence ALONE never blocks
   restore when all expected targets verify absent (stale done is
   validated by transaction/generation/digests, then an IDEMPOTENT
-  delete attempt on every mount); pending/done records that fail
-  validation ⇒ fail-closed repair path; record DELETION failure retains
-  the record and returns a retryable cleanup result (retried on the
-  next mount — owned storage never leaks silently); tests:
-  delete-throws-after-target-absence, stale-done-on-reload,
-  record/key divergence.** persistent structural mismatch, a fromJSON throw after partial
+  delete attempt on every mount); CORRUPT-RECORD-WITH-ABSENT-TARGETS:
+  after INDEPENDENTLY verifying absence of the fixed target keys, the
+  invalid record is deleted/quarantined and restore PROCEEDS (no
+  materialization — the target state is objectively absent); if target
+  ENUMERATION is unavailable OR any target is present/unknown, the
+  record is RETAINED and restore is SUPPRESSED; record DELETION failure
+  retains the record and returns a retryable cleanup result (retried on
+  the next mount — owned storage never leaks silently); tests:
+  corrupt-pending-all-absent (proceed), corrupt-done-all-absent
+  (proceed), one-target-present (suppress), delete-throws-after-target-
+  absence, stale-done-on-reload, record/key divergence.** persistent structural mismatch, a fromJSON throw after partial
   native mutation, stale registry, or portal/lease failure FAILS CLOSED —
   lease invalidated, rebuild from the IMMUTABLE PRE-CALL native/layout
   snapshot + registry captured before the first fromJSON (never a
@@ -1935,7 +1957,17 @@ in the group's saved tab order.
   the snapshot sets are DISJOINT — a violated invariant returns the
   typed `{status:"skipped", reason:"stale-identity"}` (never insert);
   overlap vectors tested: A/B overlap, duplicate reservations, stale
-  snapshots.**
+  snapshots.** **DEFER RETRY TRIGGER: a coordinator-owned MONOTONIC
+  OWNERSHIP REVISION + generation-bound "reservation cleared /
+  replacement settled" signal; the real `useAutoSessionTab` hook
+  captures revision R, re-runs the ownership query + ensure EXACTLY
+  ONCE on the matching ownership-transition signal, and COMPARE-AND-
+  CLEARS the consumed revision BEFORE ensure (a revision bump CAUSED BY
+  that ensure is NOT eligible for the same attempt — no feedback loop);
+  cancelled on env switch/unmount; the timeout is a FAILURE path, not a
+  retry trigger; tests: effect-before-reservation-clear,
+  clear-before-effect, event-before-successor, successor-before-event,
+  ensure-bumps-revision (no re-run), StrictMode reruns, timeout.**
   the same normalized query serves materialization fail-closed** —
   a session that exists ONLY in a floating group, or a non-winner floating
   session, can never be re-added to the grid by the auto-session hook;
@@ -2259,7 +2291,12 @@ replacement orderings.
   legacy state that a later restore or reused env identity can
   resurrect; deletion-before-migration-completes tests; the
   implementation cutover REMOVES the baseline v3 writers, not just adds
-  v4 writers)** — generation is
+  v4 writers)** **V3-ONLY DELETION PATH: `cleanupTaskStorage` with NO
+  v4 key present (migration never completed) invalidates generation and
+  then VERIFIED-REMOVES EVERY v3 RAW AND ENCODED layout/maximize key
+  (both the raw-interpolated legacy form AND the canonical encoded
+  form — collision-safe exact-byte handling); a v3-only deletion test
+  asserts no legacy key survives and no v4 write is attempted** — generation is
   invalidated before deleting EVERY key, and deletion tests cover an
   incomplete repair journal, a quarantine copy, and a clear in flight (a
   late clear can never resurrect a deleted task's state)** (`kandev.dockview.env-floating-journal.<envId>`)

@@ -27,6 +27,14 @@ spec: "../../specs/ui/panel-pin-float.md"
   click, float/dock, quota-full, journal/quarantine, busy/lease-held,
   stale identity, and recovery failures (reason enum + locale keys;
   debug-only no-ops replaced by typed results).
+- **BUDGET VALIDATOR OWNED here (acceptance):**
+  `scripts/validate-floating-budget.mjs` parses `budget-table.md` (strict
+  markdown table schema), validates the table against the shared key
+  constructor + cleanup matrix, and FAILS on table/implementation drift;
+  package script `pnpm run validate:floating-budget`; required CI step
+  BEFORE tests; fixtures: conditional post-state (zero-floating→first-
+  float preflight reservation), recovery-allowance reservation, v3
+  transient keys; a preflight/post-mutation identity assertion.
 - **Result-matrix generator OWNED here (acceptance):**
   `scripts/generate-floating-result-contract.mjs` with declared input
   (result-matrix.md) / OUTPUT PATHS + SCHEMAS (`apps/web/config/

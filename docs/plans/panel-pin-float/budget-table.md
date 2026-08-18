@@ -1,4 +1,4 @@
-# Floating-panels owned-key budget table (revision 50, committed)
+# Floating-panels owned-key budget table (revision 51, committed)
 
 The SINGLE source of truth for floating-panels storage accounting. Consumed
 by the budget validator (`scripts/validate-floating-budget.mjs`) and its
@@ -27,6 +27,13 @@ cleanup record + fixed overhead per env).
 
 1. Preflight (float/dock/persist) computes the post-write totals under the
    table above; a single interpretation is used BEFORE and AFTER mutation.
+   **PREFLIGHT RESERVES THE COMPLETE POST-COMMIT OWNED-KEY SET: the
+   conditional layout-v4/maximize-v4 bytes a SUCCESSFUL float will newly
+   make countable are RESERVED ATOMICALLY before native mutation and
+   released only on verified rollback or commit — a zero-floating
+   preflight can never pass and then exceed the cap post-commit;
+   zero-floating-to-first-float near-cap test asserts preflight and
+   post-commit totals are IDENTICAL.**
 2. The recovery allowance is reserved before any normal write and can never
    be consumed by normal (non-recovery) bytes.
 3. Conditional keys (`layout-v4`/`maximize-v4`) are included ONLY per the

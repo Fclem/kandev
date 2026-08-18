@@ -23,7 +23,9 @@ spec: "../../specs/ui/panel-pin-float.md"
   - **keyboard collapse**: tabbing out of the expanded window collapses it without a pointer event; Escape collapses only when focus is inside the window and no descendant handled it;
   - **portaled-menu suppression**: opening a Radix DropdownMenu inside a floating window and pressing Escape closes the menu without collapsing the window; clicking outside while the menu is open keeps the window expanded until the menu closes;
   - **two groups on the same edge** stack without overlap and each bar's titles remain clickable;
-  - **reset** while groups float docks them all into the grid and clears floating storage.
+  - **reset-merge** while groups float: reset-default panels (chat/terminal) are reused by id, floating tabs merge preserving order/active, no duplicate ids, floating storage cleared, groups do not re-float;
+  - **right-groups-floated width**: with all right groups floated, a container resize does not resize the center column to the right target;
+  - **portaled-menu pointerdown**: clicking outside while a menu inside the floating window is open keeps the window expanded until the menu closes (pending collapse), and a second outside click collapses it.
 - The spec uses the repo's causal-wait helpers (`e2e/helpers/causal-waits.ts`) and the `SessionPage` page object additions (`clickMaximize` style helpers for `dockview-pin-btn`); no new sleeps.
 - Mobile: written justification in the spec — the dockview workbench does not render on phone viewports (separate `mobile-task-layout`), so no mobile E2E is added for this surface.
 

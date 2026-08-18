@@ -41,45 +41,61 @@ per-env sessionStorage pattern.
    columnKind, columnPinned, treePath, edge, orientation, size, order,
    display), so floated groups can be **materialized** after any reload/env
    switch/layout rebuild and re-floated.
-2. **Detach registry, not a global id set.** `floatingDetachRegistry:
-   Map<envId, Map<panelId, transactionToken>>` in the store. `setupPortalCleanup`
-   skips close side effects only for registered ids with the **current**
-   token, then consumes the registration (one expected removal per panel).
-   Ordinary closes — including a user closing a floated tab mid-transaction —
-   run the full cleanup path. `panelPortalManager.reconcile`/`releaseByEnv`
-   take an explicit per-env exclusion set, so same ids in other envs still
-   release. Stale tokens never clear newer registrations; the env's registry
-   clears on transaction settle (success/failure/unmount).
+2. **Detach registry, not a global id set.** The registry is keyed by panel id
+   with records `{ envId, token }` (panel ids are unique in the live grid; the
+   env tag travels with the record, so lookups never depend on the mutable
+   current store env). `setupPortalCleanup`'s `onDidRemovePanel` decision
+   order: (1) registered id with the current token → consume the registration
+   and skip close side effects, regardless of `isRestoringLayout`; (2)
+   unregistered while `isRestoringLayout` → return (existing behavior); (3)
+   unregistered otherwise → full cleanup (a user closing a floated tab
+   mid-transaction is an ordinary close). `panelPortalManager.reconcile`/
+   `releaseByEnv` take an explicit exclusion set derived from the **target
+   env's** registered ids. Stale tokens never clear newer registrations; the
+   env's registry clears on transaction settle (success/failure/unmount).
 3. **Placement classifier + materializer over LayoutState.** Dockview exposes
    no left/right/top/bottom group location, and `isCenterCandidateGroupId`
    misclassifies plan/preview/custom columns (it returns true for every group
    except three constants — `layout-manager/applier.ts:37-39`). Classification
    is a pure function over the live `LayoutState` (root column id/index/
-   pinned metadata + live `centerGroupId`); plan/preview/vscode/compact root
-   columns classify as side/vertical on their edge. Re-dock/restore
-   materialize missing columns/groups by cloning the live layout, inserting
-   the saved column at `columnIndex` with metadata, inserting the group at the
-   saved `treePath` (creating branch nodes), and applying through the existing
+   pinned metadata) plus an **explicit, nullable center identity**
+   (`centerColumnId, isCenterKnown`) — `findCenterGroupId` fabricates ids when
+   no center exists (`applier.ts:45-55`), so an unknown center classifies as
+   the documented custom fallback, never by promoting an arbitrary side
+   column. Plan/preview/vscode/compact root columns classify as side/vertical
+   on their edge. Re-dock/restore materialize missing columns/groups by
+   cloning the live layout, inserting the saved column at `columnIndex` with
+   metadata, inserting the group **atomically into both `column.tree` and
+   `column.groups`** (one mutation helper — `serializeColumn` prefers `tree`
+   while `serializePanels` iterates only `groups`,
+   `layout-manager/serializer.ts`), and applying through the existing
    serializer/`applyLayoutAndSet` machinery. `fallbackGroupPosition`
    (`dockview-layout-builders.ts:272`) is the explicit existing-group fallback
    only, never the column-creation mechanism.
-4. **Transactions with journal.** Every float/dock/restore: capture+validate
-   → mutate → commit (store + blob + `persistEnvLayoutNow`) → on throw
-   mid-mutation, re-apply the journaled LayoutState and drop the partial
-   entry. Suppression cleanup in `finally`, token-guarded. Storage failure is
-   non-fatal (in-memory authoritative, ephemeral).
-5. **Owned-region focus.** One module-level coordinator (pattern:
-   `hooks/use-panel-search.ts`) with owned regions = floating window subtree +
-   any Radix layer opened from within it (`useFloatingOwnedLayer` hook wired to
-   the existing `onOpenChange` handlers). Collapse on: window-capture
-   pointerdown outside all owned regions; `focusout` to outside (relatedTarget
-   checked after a microtask for Radix portals); Escape on the **bubble**
-   phase honoring `event.defaultPrevented` (Radix dismissable layers win).
-   Only the focused/last-interacted expanded window collapses.
-6. **Reset docks.** Reset materializes every floating group into the reset
-   target grid (side → right column, center → center column, fallback
-   center), clears floating memory+storage only after the grid contains them,
-   persists; groups do not re-float after reset.
+4. **Transactions with journal + persistence suppression.** Every float/dock/
+   restore: capture+validate → mutate → commit (store + blob +
+   `persistEnvLayoutNow`) → on throw mid-mutation, re-apply the journaled
+   LayoutState and drop the partial entry. A transaction-scoped suppression
+   flag (distinct from `isRestoringLayout`) defers the debounced layout
+   auto-save (`setupLayoutPersistence`) and `trackPinnedWidths` capture for
+   the transaction's duration; persistence runs only after commit or journal
+   recovery. Suppression cleanup in `finally`, token-guarded. Storage failure
+   is non-fatal (in-memory authoritative, ephemeral).
+5. **Owned-region focus with pointerdown deferral.** One module-level
+   coordinator (pattern: `hooks/use-panel-search.ts`) with owned regions =
+   floating window subtree + any Radix layer opened from within it
+   (`useFloatingOwnedLayer` hook wired to the existing `onOpenChange`
+   handlers). Collapse on: window-capture pointerdown outside all owned
+   regions (**deferred while an owned layer is open**: the collapse is
+   pending until the last owned layer closes, cancelled if the pointerdown
+   landed inside an owned region); `focusout` to outside (relatedTarget after
+   a microtask); Escape on the **bubble** phase honoring
+   `event.defaultPrevented` (Radix dismissable layers win). Only the
+   focused/last-interacted expanded window collapses.
+6. **Reset is an id-aware docking merge.** Reset reuses reset-default panels
+   by id, merges floating tabs preserving saved order/active, adds only
+   missing definitions, clears floating memory+storage only after the merged
+   grid is committed, persists; groups do not re-float after reset.
 7. **Restore call sites (exhaustive).** `restoreFloatingAfterLayout`
    (idempotent) runs before `isRestoringLayout` clears at: initial mount
    `restoreEnvLayout` (all three branches: saved env layout /
@@ -87,6 +103,15 @@ per-env sessionStorage pattern.
    env-switch fast and slow paths (`dockview-env-switch.ts`), maximize restore,
    preset/custom apply, `toggleRightPanels` (`dockview-store.ts:523-567`), and
    reset/default build. One focused test per call site.
+8. **Right-width enforcement gate + session coordinator.** `enforcePinnedTargets`
+   restores the right target only when a live pinned-right column exists
+   (with all right groups floated, `sv.length - 1` is the center column —
+   `dockview-pinned-enforce.ts`); `rightPanelsVisible` derives from the live
+   grid/floating state where appropriate. Session replacement is one
+   coordinator over grid + floating entries: a floating winner suppresses the
+   grid insertion of the incoming id (`restoreMissingSessionPanel`/
+   `addCurrentSessionSiblings`), a grid winner drops the floating stale copy;
+   no panel id ever exists in both surfaces.
 
 ## Files
 
@@ -133,35 +158,46 @@ per-env sessionStorage pattern.
 
 - `apps/web/lib/state/dockview-floating-store.test.ts` (new) — float/dock
   transitions, placement classifier (default/compact/plan/preview/vscode +
-  nested custom + plan-preset side classification), materializer (missing
-  column, no-center, tree-path insert), maximize→float ordering, last-group-
-  in-column re-dock, transaction journal recovery (throw-on-remove,
-  throw-on-materialize, storage failure), display/active setters, persistence
-  round-trip + type-guard rejection (undefined/cyclic/oversized params),
-  env save/restore, reset-as-docking, stacking allocation.
+  nested custom + plan-preset side classification + no-center/unknown-center
+  custom fallback), materializer (missing column, no-center, tree-path insert,
+  tree+flat round-trip with an existing nested tree), maximize→float ordering,
+  last-group-in-column re-dock, transaction journal recovery (throw-on-remove,
+  throw-on-materialize, storage failure, deferred persistence between
+  removals), display/active setters, persistence round-trip + type-guard
+  rejection (undefined/cyclic/oversized params, negative/oversized numerics,
+  duplicate ids), env save/restore, reset-as-merge, stacking allocation.
 - `apps/web/components/task/dockview-floating-panel.test.tsx` (new) — expanded
   window, owned-region collapse (outside pointer, focusout, portaled Radix
-  layer open = owned), Escape rules (defaultPrevented wins; nested
+  layer open = owned), pointerdown deferral (outside click while a menu is
+  open stays expanded until dismissal; pending collapse cancelled on
+  owned-region click), Escape rules (defaultPrevented wins; nested
   AlertDialog/DropdownMenu), vertical/horizontal bar, tablist semantics +
   roving tabindex + Arrow/Home/End, title-click expand+activate, pin re-dock,
-  stacking/offsets, empty-group removal.
+  stacking/offsets, empty-group removal, reactive title update on plugin
+  re-registration while detached.
 - `apps/web/components/task/dockview-group-actions.test.tsx` — pin button
   placement/aria/tooltip/click.
 - `apps/web/lib/layout/panel-portal-manager.test.ts` — detach-vs-close:
-  registered ids survive removePanel + reconcile; unregistered close releases;
-  same id across envs; exclusion-set semantics.
+  registered ids survive removePanel + reconcile (synchronous and delayed
+  `fromJSON` removals); unregistered close releases; same id across envs;
+  exclusion-set semantics.
 - `apps/web/lib/state/dockview-env-switch.test.ts` — floating session
   replacement (single stale, multi-stale winner rule, delayed replacement,
-  active-tab rewrite), fast + slow path restore.
+  active-tab rewrite, winner-floats-only suppresses grid insertion — no id in
+  both surfaces, winner-in-grid drops floating copy), fast + slow path
+  restore.
 - `apps/web/lib/state/dockview-panel-actions.test.ts` — duplicate prevention
   for plan/terminal/preview/review/plugin/session actions with floated panels.
+- `apps/web/lib/state/dockview-pinned-enforce.test.ts` — right target not
+  applied when all right groups float (one and both floated, toggle-right-
+  panels while floating, container resize).
 - `apps/web/lib/local-storage.test.ts` — floating key helpers + guard +
   `cleanupTaskStorage`.
 - `apps/web/e2e/tests/task/panel-pin.spec.ts` (new, desktop) — full matrix:
   float/collapse/expand/dock, reload recreation, plan-preset orientation,
   maximize→float, task switch with floated chat, terminal liveness, keyboard
   collapse, portaled-menu collapse suppression, two groups on one edge,
-  reset docks.
+  reset-merge.
 
 ## Dependencies
 
@@ -184,9 +220,14 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
   (transaction aborted before removal), the registration must still be cleared
   on settle or the next real close of that tab skips cleanup. Consume-once +
   settle-clear are both required; test the abort path.
-- **Materializer divergence:** the delta-LayoutState insert must go through
-  the existing serializer/`applyLayoutAndSet`, or dockview's tree invariants
-  (alternating branch orientation, pinned columns) silently break.
+- **Materializer divergence:** the delta-LayoutState insert must update both
+  `column.tree` and `column.groups` atomically and go through the existing
+  serializer/`applyLayoutAndSet`, or dockview's tree invariants (alternating
+  branch orientation, pinned columns) silently break and `serializePanels`
+  drops the group's definitions.
+- **Enforcement gate:** missing the live-pinned-right-column check lets
+  `enforcePinnedTargets` resize the center to the right target when all right
+  groups float; the gate and its tests are mandatory.
 - **Restore ordering:** one missed completion point (e.g. `toggleRightPanels`
   or the initial maximize-only branch) re-exposes the reload blocker; the
   call-site table in the spec is the checklist and each entry has a test.
@@ -195,4 +236,6 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
   does not reassert the overlay.
 - **Owned-region focus:** Radix layers portaled to `body` must register with
   the coordinator or the window collapses under an open menu; the
-  `useFloatingOwnedLayer` hook is mandatory, not optional.
+  `useFloatingOwnedLayer` hook is mandatory, and pointerdown must be deferred
+  while a layer is open (Radix's own outside handler runs after window
+  capture).

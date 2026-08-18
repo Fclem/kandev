@@ -1706,5 +1706,7 @@
   "expandPrompt": "展开提示",
   "promptHistory": "提示历史",
   "promptHistoryEmpty": "暂无提示。",
+  "loadOlderPrompts": "加载更早的提示",
+  "loadingOlderPrompts": "正在加载更早的提示…",
   "scrollToPrompt": "滚动到提示"
 }

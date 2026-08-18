@@ -943,6 +943,8 @@
   "position": "Position {{positionLabel}}",
   "promptHistory": "Prompt history",
   "promptHistoryEmpty": "No prompts yet.",
+  "loadOlderPrompts": "Load older prompts",
+  "loadingOlderPrompts": "Loading older prompts...",
   "expandPrompt": "Expand prompt",
   "collapsePrompt": "Collapse prompt",
   "scrollToPrompt": "Scroll to prompt",

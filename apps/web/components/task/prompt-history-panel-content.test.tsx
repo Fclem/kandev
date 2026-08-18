@@ -3,17 +3,23 @@ import i18n from "i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Message, Turn } from "@/lib/types/http";
 
-const { state, messagesBySession, turnsBySession, turnsHydratedBySession } = vi.hoisted(() => ({
-  state: {
-    tasks: { activeSessionId: "session-a" as string | null },
-    taskSessions: {
-      items: {} as Record<string, { name?: string; is_passthrough?: boolean }>,
+const { state, messagesBySession, turnsBySession, turnsHydratedBySession, lazyMessages } =
+  vi.hoisted(() => ({
+    state: {
+      tasks: { activeSessionId: "session-a" as string | null },
+      taskSessions: {
+        items: {} as Record<string, { name?: string; is_passthrough?: boolean }>,
+      },
     },
-  },
-  messagesBySession: {} as Record<string, Message[]>,
-  turnsBySession: {} as Record<string, Turn[]>,
-  turnsHydratedBySession: {} as Record<string, boolean>,
-}));
+    messagesBySession: {} as Record<string, Message[]>,
+    turnsBySession: {} as Record<string, Turn[]>,
+    turnsHydratedBySession: {} as Record<string, boolean>,
+    lazyMessages: {
+      hasMore: false,
+      isLoading: false,
+      loadMore: vi.fn(),
+    },
+  }));
 
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (value: typeof state) => unknown) => selector(state),
@@ -23,6 +29,9 @@ vi.mock("@/hooks/domains/session/use-session-messages", () => ({
   useSessionMessages: (sessionId: string | null) => ({
     messages: sessionId ? (messagesBySession[sessionId] ?? []) : [],
   }),
+}));
+vi.mock("@/hooks/use-lazy-load-messages", () => ({
+  useLazyLoadMessages: () => lazyMessages,
 }));
 
 vi.mock("@/hooks/domains/session/use-session-turns", () => ({
@@ -171,6 +180,8 @@ beforeEach(() => {
   turnsBySession[SESSION_A] = [];
   turnsBySession[SESSION_B] = [];
   turnsHydratedBySession[SESSION_A] = true;
+  lazyMessages.hasMore = false;
+  lazyMessages.isLoading = false;
   turnsHydratedBySession[SESSION_B] = true;
 });
 
@@ -230,6 +241,16 @@ describe("PromptHistoryPanelContent — rows and test IDs", () => {
     const robot = bubble?.querySelector("svg.tabler-icon-robot");
     expect(robot).toBeTruthy();
     expect(bubble?.firstElementChild).toBe(robot);
+  });
+  it("loads older prompts through the shared transcript pagination", () => {
+    messagesBySession[SESSION_A] = [message({ content: "recent prompt" })];
+    lazyMessages.hasMore = true;
+
+    render(<PromptHistoryPanelContent />);
+
+    fireEvent.click(screen.getByTestId("prompt-history-load-older"));
+
+    expect(lazyMessages.loadMore).toHaveBeenCalledTimes(1);
   });
 
   it("turns the bubble yellow when the transcript message is starred", () => {

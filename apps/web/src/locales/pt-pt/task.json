@@ -1706,5 +1706,7 @@
   "expandPrompt": "Expandir prompt",
   "promptHistory": "Histórico de prompts",
   "promptHistoryEmpty": "Ainda sem prompts.",
+  "loadOlderPrompts": "Carregar prompts mais antigos",
+  "loadingOlderPrompts": "A carregar prompts mais antigos...",
   "scrollToPrompt": "Ir para o prompt"
 }

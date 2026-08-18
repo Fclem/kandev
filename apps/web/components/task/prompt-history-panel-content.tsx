@@ -9,6 +9,7 @@ import {
   IconRobot,
 } from "@tabler/icons-react";
 import { useAppStore } from "@/components/state-provider";
+import { useLazyLoadMessages } from "@/hooks/use-lazy-load-messages";
 import { useSessionMessages } from "@/hooks/domains/session/use-session-messages";
 import { useSessionTurnsState } from "@/hooks/domains/session/use-session-turns";
 import { useMessageFavorite } from "@/hooks/domains/session/use-message-favorite";
@@ -32,6 +33,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
   const { messages } = useSessionMessages(sessionId);
+  const { loadMore, hasMore, isLoading: isLoadingOlder } = useLazyLoadMessages(sessionId);
   const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
   const entries = useMemo(() => {
     const derived = buildPromptHistoryEntries(messages, turns);
@@ -40,33 +42,42 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   }, [messages, turns, turnsHydrated]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const maxHeight = usePanelRowMaxHeight(rootRef);
-
-  if (session?.is_passthrough || entries.length === 0) {
-    return (
-      <PanelRoot
-        ref={rootRef}
-        data-testid="prompt-history-panel"
-        className="p-4 text-sm text-muted-foreground"
-      >
-        {t("task:promptHistoryEmpty")}
-      </PanelRoot>
-    );
-  }
+  const isPassthrough = session?.is_passthrough ?? false;
+  const hasEntries = !isPassthrough && entries.length > 0;
 
   return (
     <PanelRoot ref={rootRef} data-testid="prompt-history-panel" className="overflow-y-auto p-2">
-      {entries.map((entry, index) => (
-        <PromptHistoryRow
-          key={entry.messageId}
-          sessionId={sessionId}
-          entry={entry}
-          index={index}
-          expanded={expanded === entry.messageId}
-          maxHeight={maxHeight}
-          onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
-          onNavigate={onNavigateToPrompt}
-        />
-      ))}
+      {hasEntries ? (
+        entries.map((entry, index) => (
+          <PromptHistoryRow
+            key={entry.messageId}
+            sessionId={sessionId}
+            entry={entry}
+            index={index}
+            expanded={expanded === entry.messageId}
+            maxHeight={maxHeight}
+            onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
+            onNavigate={onNavigateToPrompt}
+          />
+        ))
+      ) : (
+        <div className="p-2 text-sm text-muted-foreground">{t("task:promptHistoryEmpty")}</div>
+      )}
+      {!isPassthrough && hasMore && (
+        <div className="flex justify-center py-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="cursor-pointer text-xs text-muted-foreground"
+            data-testid="prompt-history-load-older"
+            disabled={isLoadingOlder}
+            onClick={() => void loadMore()}
+          >
+            {t(isLoadingOlder ? "task:loadingOlderPrompts" : "task:loadOlderPrompts")}
+          </Button>
+        </div>
+      )}
     </PanelRoot>
   );
 }

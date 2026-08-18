@@ -181,4 +181,68 @@ test.describe("Prompt history panel", () => {
     });
     expect(Math.abs(elTop - listTop - targetMargin)).toBeLessThanOrEqual(2);
   });
+  test("loads older prompts and navigates after transcript backfill", async ({
+    testPage,
+    apiClient,
+    seedData,
+  }) => {
+    const olderPrompt = "Prompt history older pagination prompt";
+    const newerPrompt = "Prompt history newer pagination prompt";
+    const task = await apiClient.createTaskWithAgent(
+      seedData.workspaceId,
+      "Prompt history pagination task",
+      seedData.agentProfileId,
+      {
+        description: olderPrompt,
+        workflow_id: seedData.workflowId,
+        workflow_step_id: seedData.startStepId,
+        repository_ids: [seedData.repositoryId],
+      },
+    );
+    if (!task.session_id)
+      throw new Error("Prompt history pagination task did not create a session");
+    const sessionId = task.session_id;
+    const settled = async () => {
+      const { sessions } = await apiClient.listTaskSessions(task.id);
+      return DONE_STATES.includes(sessions[0]?.state ?? "");
+    };
+    await expect.poll(settled, { timeout: 45_000 }).toBe(true);
+    await apiClient.seedAgentMessages(sessionId, 110, "Prompt history pagination filler");
+    await apiClient.addUserMessage(task.id, sessionId, newerPrompt);
+
+    let olderMessageId: string | null = null;
+    await expect
+      .poll(async () => {
+        const { messages } = await apiClient.listSessionMessages(sessionId);
+        olderMessageId =
+          messages.find(
+            (message) => message.author_type === "user" && message.content === olderPrompt,
+          )?.id ?? null;
+        return messages.some(
+          (message) => message.author_type === "user" && message.content === newerPrompt,
+        );
+      })
+      .toBe(true);
+    if (!olderMessageId) throw new Error("Older prompt was not persisted");
+
+    await testPage.goto(`/t/${task.id}`);
+    const session = new SessionPage(testPage);
+    await session.waitForLoad();
+    await session.waitForDockviewReady();
+    await session.addPanelButton().click();
+    await testPage.getByTestId("add-panel-prompt-history-item").click();
+
+    const panel = testPage.getByTestId("prompt-history-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(newerPrompt);
+    await expect(panel).not.toContainText(olderPrompt);
+
+    await panel.getByTestId("prompt-history-load-older").click();
+    await expect(panel).toContainText(olderPrompt);
+    const olderRow = panel.getByTestId("prompt-history-row-1");
+    await olderRow.locator('[role="button"]').first().click();
+
+    await expect(session.activeChat()).toBeVisible();
+    await expect(session.activeChat().locator(`#msg-${olderMessageId}`)).toBeAttached();
+  });
 });

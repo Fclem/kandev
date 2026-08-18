@@ -201,7 +201,14 @@ identity is a **first-class persisted field on the live layout schema** —
 presets, custom-layout normalization, and a documented old-v3 migration that
 assigns UUIDs once and persists them), carried through the serializer
 (including the tree+flat synchronization — both representations hold the same
-`logicalId`), preset merges, dock, and reset. **Layout persistence is
+`logicalId`), preset merges, dock, and reset. **The live Dockview model
+cannot carry custom fields, so a store-owned **normalized-live-layout
+registry** keys logical metadata by the NATIVE group/column ids and is
+merged into every capture: `fromDockviewApi`/capture accept that registry
+and fail closed when a native object has no mapping; the registry is rebuilt
+from the v4 envelope after every `fromJSON`, and updated on add/remove,
+dock, preset, reset, and resize — native-ID regeneration can never orphan a
+logical identity. **Layout persistence is
 versioned:** the env layout key is bumped to **v4** and stores a **versioned
 envelope** — `{ version: 4, dockview: <native serialized JSON>,
   layout: <normalized LayoutState carrying logicalId/role> }` — because
@@ -213,17 +220,34 @@ loses the incoming session, or mutates the maximize overlay:
 - **Regular v4 layout (initial mount, env fast/slow, custom, preset,
   fallthrough):** unwrap + sanitize the native value → `api.fromJSON` ONCE →
   session/ephemeral replacement and incoming-session insertion → a **defined
-  normalized-state reconciliation** (the normalized `LayoutState` is applied
-  as a metadata reconciliation, with persisted `session:*` panels EXCLUDED —
-  the live session insertion owns those; never a second full `fromJSON` that
-  could reintroduce stale sessions) → fixups/bootstrap → floating restore.
+  normalized-state reconciliation** with a **deterministic diff contract**:
+  match priority is logical group identity → panel ID → a closed semantic
+  fallback; exactly ONE live instance per panel ID (duplicate-prevention);
+  the **native payload owns component/params/title/tabComponent for
+  live/env-scoped panels** (terminal ids, editors, browser urls — native
+  params are authoritative) while the **normalized state owns
+  identity/placement/role/active-tab**; persisted `session:*` panels are
+  EXCLUDED (the live session insertion owns those); native-only
+  non-session panels are retained, normalized-only non-session panels are
+  materialized fresh; group placement and the active tab are reconciled from
+  the normalized state; never a second full `fromJSON`. Duplicate-prevention
+  tests cover `terminal-default`, ordinary `shell-<uuid>`, files/changes,
+  plugin, and env-scoped panels. → fixups/bootstrap → floating restore.
 - **Maximize-only:** unwrap the native two-column overlay → `fromJSON` once;
   the normalized pre-max `LayoutState` stays ONLY in the store
   (`preMaximizeLayout`); it is **never applied while maximized** (no
-  unmaximize, no overlay mutation); post-exit restore applies it.
+  unmaximize, no overlay mutation); post-exit restore applies it. **Reload-
+  while-maximized renders the saved floating content above the overlay by
+  materializing the floating panels' PORTALS only** (defs registered into
+  the portal manager so the floating window can adopt them — never touching
+  the grid or the two-column overlay, never duplicate grid ids); the
+  grid-side pending materialization completes at maximize exit. A route
+  dispatcher selects maximize-only when a valid maximize blob exists,
+  regular otherwise (malformed/failed maximize falls back to regular, with
+  exactly one `fromJSON` per selected route).
 Call-order tests cover initial, fast/slow switch, route-intent, custom,
-maximize-only, and fallthrough paths, asserting no stale/duplicate session
-and no overlay mutation. `getEnvLayout`
+maximize-only, and fallthrough paths, asserting no stale/duplicate session,
+no overlay mutation, and portal-above-overlay visibility during maximize. `getEnvLayout`
 reads v4, and a **v3→v4 migration
 (`migrateEnvLayoutV3(raw, envId)`)** assigns UUIDs once and writes v4 only
 after a validated apply, keeping a v3 reader fallback; **explicit
@@ -250,12 +274,17 @@ write is removed** — the env sessionStorage v4 slot is the sole authoritative
 layout surface, and tests/helpers that observed the legacy key are migrated
 (there is exactly one layout persistence surface: the v4 env slot, through
 the sole pair writer).
-**Migration UUID derivation is crash-idempotent:** v3 migration UUIDs are
-derived from a **documented stable semantic identity** — canonical panel-id
-sets per group/column plus role — with collision/ambiguity rejection (no
-third marker key; a crash before the v4 write cannot mint different ids on
-the next load because the derivation is deterministic; crash-before-v4-write
-and repeated-retry tests assert id stability). The blob's `identities` map is a
+**Migration UUID derivation is crash-idempotent and deterministic:**
+canonical input is **domain-tagged** — `kind(group|column) + role + sorted
+unique panel-id set`, length-delimited encoded, mapped via a documented
+SHA-256→UUID truncation; duplicate panel ids, empty/ambiguous sets, and the
+same canonical key across distinct groups/columns are rejected. v3
+derivation runs ONCE (v4 logical ids are thereafter authoritative and
+membership changes NEVER re-derive them — a group identity changes on member
+addition only by persisting the new canonical id at the next capture, never
+by re-deriving the old one); a crash before the v4 write cannot mint
+different ids on the next load (deterministic derivation); crash-before-
+v4-write and repeated-retry tests assert id stability. The blob's `identities` map is a
 **secondary cache keyed by `logicalId`**, never the source of truth: capture
 reads the group/column's own `logicalId` from the live layout (no
 traversal-derived `group-n` ids are ever treated as identity); a group or
@@ -878,7 +907,15 @@ in the group's saved tab order.
 
 - **Winner ownership is store-owned and explicit:** the coordinator writes a
   store field — `floatingSessionWinner: { sessionId, envId, generation } | null` —
-  atomically with the replacement. The field is **memory-only (never
+  atomically with the replacement. **Delayed replacement has a readiness
+  barrier:** a per-env replacement-generation state makes the always-mounted
+  `useAutoSessionTab` hook DEFER its ensure while replacement is pending —
+  once replacement completes, the winner decision is consumed before the
+  hook effect proceeds; if the hook ever ran first and inserted the incoming
+  id, the coordinator atomically re-evaluates and MOVES the already-added
+  winner back to the floating entry (no id ever exists in both surfaces);
+  tested with replacement-after-first-effect, StrictMode rerun, and delayed
+  WS ordering. The field is **memory-only (never
   persisted)** and consumed by an atomic **compare-and-clear**
   `consumeFloatingSessionWinner(sessionId, envId, generation)` called from
   `shouldSkipPanelEnsure` (`dockview-session-tabs.ts`) before the hook's
@@ -1030,13 +1067,16 @@ replacement orderings.
   as intent; show with no pinned-right panels and hide without one are
   **Role bootstrap ordering (no sidecar hole):** one coordinator-owned
   **`applyLayoutAndBootstrap`/`settleLayoutApply` wrapper** is the single
-  choke point used by EVERY layout apply path (`applyLayoutAndSet`, fast/slow
-  switch, restore, maximize exit, preset/custom/reset, toggle) and invokes
+  choke point used by EVERY layout apply path — with an explicit **callsite
+  table** naming initial saved restore, maximize-only restore, env-switch
+  fast/slow, route-intent, custom envelope/legacy, preset, toggle,
+  reset/default, maximize exit, and materializer paths: every native
+  `fromJSON` and `applyLayout` call goes through one adapter (or an
+  immediate `settleLayoutApply` follows each direct native restore), and a
+  static AST/source-boundary test rejects bypasses. The wrapper invokes
   `ensureRolesBootstrapped(api, envId)` after each synchronous apply AND
   before enforcement/toggle/predicate reads; enforcement additionally calls
-  bootstrap defensively before reading, and a static callsite test (or
-  exhaustive direct-call inventory) fails when a new apply path bypasses the
-  wrapper. Bootstrap normalizes live `LayoutColumn.role`
+  bootstrap defensively before reading. Bootstrap normalizes live `LayoutColumn.role`
   values and rebuilds the in-memory `rootColumns` sidecar from the
   **authoritative live state** (first mount with an empty/absent blob
   included); the predicate itself fails closed (or bootstraps lazily from the
@@ -1076,7 +1116,14 @@ replacement orderings.
   with explicit collision precedence: the reset layout owns group/column
   **placement**, the floating definition owns the panel **payload** (component,
   params, tabComponent) and saved tab order, and the active panel is merged
-  explicitly — **scoped to valid definitions**. `session:*` floating
+  explicitly — **scoped to valid definitions**, and **executed through the
+  same single tree+flat mutation helper as the materializer** (the existing
+  merger maps only `col.groups` and leaves `col.tree` stale while the
+  serializer prefers the tree — reset/preset merges must transform each
+  group once by stable identity, reuse the transformed object in both
+  representations, remove empty leaves/branches, and assert tree/flat/panel
+  id equality; nested-tree reset merge tests are required, not only
+  materializer tests). `session:*` floating
   definitions are validated against the active task/session set and env
   before merging: stale/deleted/absent-session definitions are dropped, and
   when no valid session remains the reset chat placeholder/default behavior is

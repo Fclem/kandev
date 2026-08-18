@@ -8,19 +8,18 @@ Add a per-group pin toggle to the dockview workbench group headers (left of the
 maximize control, message-queue pin icons). Unpinning floats the group over
 the workbench; it collapses to an edge title bar when unfocused and re-docks
 on pin click. State persists per task environment in sessionStorage, mirroring
-the existing env layout / maximize persistence. **Revision 17 incorporates the
-round-16 adversarial review** (this package has been adversarially reviewed
-every round): separate restore route contracts for regular vs maximize-only
-v4 layouts (normalized reconciliation excludes persisted session panels; the
-pre-max state is never applied while maximized), explicit
-`MAXIMIZE_V3_READ_PREFIX`/`MAXIMIZE_V4_WRITE_PREFIX` migration, crash-
-idempotent semantic migration UUID derivation, a unified
-`columnLogicalId`/`groupLogicalId` placement key space (sidecar keyed by
-logical ids), a deterministic unload phase table, a coordinator-owned
-`applyLayoutAndBootstrap` choke point, the `isSavedLayoutEnvelope`
-discriminator, named legacy-localStorage E2E migrations, the
-`vite-env.d.ts` hook declaration, and the AST-gate deliverables wired into
-task files and CI.
+the existing env layout / maximize persistence. **Revision 18 incorporates the
+round-17 adversarial review** (this package has been adversarially reviewed
+every round): a deterministic reconciliation diff contract (native owns
+payloads, normalized owns identity/placement/role, session panels excluded),
+a maximize route that materializes only floating portals above the overlay
+(never the pre-max layout) with a route dispatcher, a winner readiness
+barrier for delayed replacement, a normalized-live-layout registry keyed by
+native ids, an explicit bootstrap callsite table with a bypass-rejecting
+source-boundary test, tree+flat-consistent reset/preset merging,
+domain-tagged semantic migration canonicalization, the central
+`isSerializedDockviewShape` guard, anchored CI wiring, and corrected
+revision metadata.
 
 ## Architecture
 
@@ -342,6 +341,21 @@ full gate: `make fmt` → `make typecheck` → `make test` → `make lint`. E2E:
 
 ## Risks
 
+- **Reconciliation diff contract:** native owns payloads, normalized owns
+  identity/placement/role, session panels excluded; one live instance per
+  panel id; duplicate-prevention tests.
+- **Maximize route:** portal-only materialization above the overlay (never
+  the pre-max layout); route dispatcher with exactly one fromJSON per
+  selected route.
+- **Winner readiness barrier:** hook defers ensure while replacement pending;
+  atomic move-back if the hook ran first.
+- **Normalized-live-layout registry:** keyed by native ids, merged into every
+  capture, fail-closed on unmapped objects.
+- **Bootstrap callsite table + bypass test.**
+- **Tree+flat reset merging** via the shared helper.
+- **Domain-tagged canonicalization** (kind + role + sorted ids, SHA-256→UUID).
+- **`isSerializedDockviewShape`** central guard.
+- **CI anchor** (frontend-tests.yml job + exact command).
 - **Restore route contracts:** regular v4 = fromJSON once → session
   replacement → normalized reconciliation (session panels excluded); maximize
   = native overlay only, pre-max never applied while maximized; call-order

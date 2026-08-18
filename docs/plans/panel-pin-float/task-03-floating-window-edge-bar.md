@@ -79,8 +79,11 @@ node scripts/check-owned-layer-inventory.mjs   # executable gate: static AST sca
 - `apps/web/scripts/check-owned-layer-inventory.mjs` (new, with focused
   fixtures/tests: alias imports, member JSX, wrappers, dynamic references,
   generated/mobile exclusions, an intentionally unlisted primitive) + a
-  `check:owned-layers` package script + web/CI wiring (the gate fails CI if
-  any row remains `to-wire`/`verify` or an unlisted primitive is found)
+  `check:owned-layers` package script + **`.github/workflows/frontend-tests.yml`
+  required-job wiring** (exact `pnpm --filter @kandev/web check:owned-layers`
+  invocation alongside the existing lint/typecheck/i18n gates; the gate
+  fails CI if any row remains `to-wire`/`verify` or an unlisted primitive is
+  found)
 - `docs/plans/panel-pin-float/owned-layer-inventory.md` (audit completion)
 - `apps/web/components/task/dockview-floating-panel.test.tsx` (new; incl. pointerdown deferral while a menu is open, reactive title update on plugin re-registration while detached, real Radix Escape ordering, plugin-panel layer ownership rejection)
 - Reuse: `panelPortalManager` (`lib/layout/panel-portal-manager.ts`), `usePanelSearch` pointer-outside pattern (`hooks/use-panel-search.ts`), `panelTitle()` (`lib/state/layout-manager/panel-title.ts`), `PinButton` from task-02

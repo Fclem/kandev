@@ -5,20 +5,10 @@ import type { Message, Turn } from "@/lib/types/http";
 
 const { state, messagesBySession, turnsBySession, turnsHydratedBySession } = vi.hoisted(() => ({
   state: {
-    tasks: { activeSessionId: "session-a" as string | null, activeTaskId: null as string | null },
+    tasks: { activeSessionId: "session-a" as string | null },
     taskSessions: {
-      items: {} as Record<
-        string,
-        {
-          id?: string;
-          name?: string;
-          is_passthrough?: boolean;
-          task_id?: string;
-          agent_profile_id?: string;
-        }
-      >,
+      items: {} as Record<string, { name?: string; is_passthrough?: boolean }>,
     },
-    agentProfiles: { items: [] as { id: string; label: string }[] },
   },
   messagesBySession: {} as Record<string, Message[]>,
   turnsBySession: {} as Record<string, Turn[]>,
@@ -48,9 +38,6 @@ import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
 import { useMessageFavoritesStore } from "@/lib/state/slices/message-favorites";
 import { formatDateTime } from "@/lib/i18n/formats";
 
-const TASK_ID = "task-1";
-const PROMPT_A = "prompt from A";
-const PROMPT_B = "prompt from B";
 const SESSION_A = "session-a";
 const SESSION_B = "session-b";
 const PASSTHROUGH = "session-passthrough";
@@ -97,7 +84,7 @@ function message(overrides: Partial<Message> = {}): Message {
   return {
     id: "message-1",
     session_id: SESSION_A as Message["session_id"],
-    task_id: TASK_ID as Message["task_id"],
+    task_id: "task-1" as Message["task_id"],
     author_type: "user",
     content: "A prompt that is rendered in history",
     type: "message",
@@ -111,7 +98,7 @@ function turn(overrides: Partial<Turn> = {}): Turn {
   return {
     id: "turn-1",
     session_id: SESSION_A as Turn["session_id"],
-    task_id: TASK_ID as Turn["task_id"],
+    task_id: "task-1" as Turn["task_id"],
     started_at: BASE_TIME,
     created_at: BASE_TIME,
     updated_at: BASE_TIME,
@@ -279,57 +266,6 @@ describe("PromptHistoryPanelContent — navigation seam", () => {
 
     render(<PromptHistoryPanelContent />);
     fireEvent.click(screen.getByTestId(`${JUMP_TEST_ID}-0`));
-  });
-});
-
-describe("PromptHistoryPanelContent — session switcher", () => {
-  it("renders a switcher for multi-session tasks and switches the shown rows", () => {
-    state.tasks.activeTaskId = TASK_ID;
-    state.taskSessions.items[SESSION_A] = {
-      ...state.taskSessions.items[SESSION_A],
-      id: SESSION_A,
-      task_id: TASK_ID,
-    };
-    state.taskSessions.items[SESSION_B] = {
-      ...state.taskSessions.items[SESSION_B],
-      id: SESSION_B,
-      task_id: TASK_ID,
-    };
-    messagesBySession[SESSION_A] = [message({ id: "a-prompt", content: PROMPT_A })];
-    messagesBySession[SESSION_B] = [
-      message({
-        id: "b-prompt",
-        content: PROMPT_B,
-        session_id: SESSION_B as Message["session_id"],
-      }),
-    ];
-
-    render(<PromptHistoryPanelContent />);
-    const select = screen.getByTestId("prompt-history-session-select") as HTMLSelectElement;
-    expect(select).toBeTruthy();
-    // Defaults to the active session (A).
-    expect(row(0).textContent).toContain(PROMPT_A);
-    expect(screen.queryByText(PROMPT_B)).toBeNull();
-
-    fireEvent.change(select, { target: { value: SESSION_B } });
-    expect(row(0).textContent).toContain(PROMPT_B);
-    expect(screen.queryByText(PROMPT_A)).toBeNull();
-
-    state.tasks.activeTaskId = null;
-  });
-
-  it("hides the switcher when the task has a single session", () => {
-    state.tasks.activeTaskId = TASK_ID;
-    state.taskSessions.items[SESSION_A] = {
-      ...state.taskSessions.items[SESSION_A],
-      id: SESSION_A,
-      task_id: TASK_ID,
-    };
-    messagesBySession[SESSION_A] = [message({ id: "a-prompt", content: PROMPT_A })];
-
-    render(<PromptHistoryPanelContent />);
-    expect(screen.queryByTestId("prompt-history-session-select")).toBeNull();
-    expect(row(0).textContent).toContain(PROMPT_A);
   });
 });
 

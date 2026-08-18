@@ -50,7 +50,7 @@ channel.**
 | chat (`chat`) | DropdownMenu | `mode-selector.tsx` 176-196 (ModeSelector) | to-wire |
 | chat (`chat`) | Popover | `model-selector.tsx` (custom trigger) → `components/model-config-selector.tsx` 587-614 (Popover open/onOpenChange + PopoverContent 598) — the REAL layer owner (model-selector.tsx:9-14 imports it) | to-wire |
 | chat (`chat`) | none | queue controls (SubmitButton/cancel, chat-input-toolbar-primitives.tsx 144-193) = plain buttons, layer-free | audited |
-| plan (`plan`) | custom floating (non-radix) | `plan-selection-popover.tsx` 287-319 (createPortal div — owned-layer treatment DECIDED at task-03; doc's plan-panel-popovers.tsx does NOT exist) | to-wire |
+| plan (`plan`) | custom floating (non-radix) | `plan-selection-popover.tsx` 287-319 (createPortal div — owned-layer treatment DECIDED: host `useFloatingOwnedLayer` lease with explicit open/close lifecycle; doc's plan-panel-popovers.tsx does NOT exist) | to-wire |
 | plan (`plan`) | Popover | `task-plan-revisions.tsx` 137-174 (TaskPlanRevisions) | to-wire |
 | plan (`plan`) | Dialog | `task-plan-revisions.tsx` 495-530 (revert-confirm) | to-wire |
 | plan (`plan`) | Dialog | `task-plan-diff-dialog.tsx` 63-106 (PlanRevisionDiffDialog) | to-wire |
@@ -94,6 +94,18 @@ table is a collapse bug until registered.
 
 Not applicable: the dockview workbench (and therefore floating panels) does
 not render on phone viewports; the mobile task surface owns its own layers.
+
+## Custom (non-Radix) portal ownership
+
+`plan-selection-popover.tsx:287-319` portals to `document.body` outside the
+floating window subtree. It MUST use the host `useFloatingOwnedLayer` lease
+with an explicit open/close lifecycle (register on open, unregister on
+close/unmount — same pending/refcount/generation semantics as Radix layers);
+a custom portal that cannot prove an open-state transition is NOT an owned
+layer and can be collapsed by outside focus/pointer while open. A real
+custom-portal test (open → outside pointerdown → no collapse → close →
+collapse) is specified; this row flips to `audited` only after the wiring
+lands.
 
 ## Registration contract
 

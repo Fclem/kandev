@@ -14,6 +14,16 @@ spec: "../../specs/ui/panel-pin-float.md"
 
 - A floating overlay (`components/task/dockview-floating-panel.tsx`, new) mounted inside the `DockviewDesktopLayout` root renders one entry per `floatingGroups` entry, absolutely positioned over the workbench with z-index above the dockview grid. Expanded windows show a header (tab strip with active tab highlighted + pin control) and the active panel's content adopted from `panelPortalManager` (same portal element the grid uses; content stays alive across float/dock).
 - **Owned-region coordinator** (`dockview-floating-coordinator.ts`, pattern: `hooks/use-panel-search.ts`): a floating window's region = its DOM subtree plus any Radix layer opened from within it (`useFloatingOwnedLayer` hook wired to the existing `onOpenChange` handlers, with an **idempotent unregister that also runs on React cleanup** — unmount, navigation, ancestor teardown — so a layer closed without its dismiss callback still decrements the window's owned-layer refcount). Collapse triggers: window-capture pointerdown whose target is in no owned region — **pending while the window's owned-layer refcount is above zero; zero-refcount application is deferred past the microtask and held by a same-frame lease** that re-checks window generation, pending generation, refcount, and new registration before collapsing (same-turn and same-frame Radix close-then-open replacements never collapse; a successor registered by a later effect before the frame boundary cancels the pending collapse, which re-arms only on a fresh outside pointerdown; the cross-frame boundary is documented, not silently claimed); `focusout` whose `relatedTarget` (checked after a microtask, for Radix portal focus moves) is in no owned region; or Escape per the Escape contract. Only the focused/last-interacted expanded window collapses; other floating groups keep their display state.
+- **Focusout acceptance (mandatory, three concrete cases):** (1)
+  focus INTO an open owned layer is never a collapse candidate
+  (relatedTarget inside the layer); (2) focusout to an outside target with
+  NO owned layer open collapses immediately; (3) focusout while an owned
+  layer is open defers (pending), and when the layer closes while focus
+  is still outside, the pending collapse fires at the next frame.
+- **Custom (non-Radix) portal ownership:** `plan-selection-popover.tsx`
+  287-319 uses the host `useFloatingOwnedLayer` lease with explicit
+  open/close lifecycle (inventory row flips to `audited` only after the
+  wiring lands).
 - **Layer inventory (mandatory, blocking deliverable):** the task ships
   `docs/plans/panel-pin-float/owned-layer-inventory.md` — a callsite table
   where every row reaches **exact file/line or an explicit layer-free proof**

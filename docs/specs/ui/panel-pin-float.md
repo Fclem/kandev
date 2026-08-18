@@ -183,16 +183,11 @@ Float/dock/restore are **transactions** with an operation journal:
    journaled `LayoutState`, drop the partial entry, and keep the previous
    floating blob. Suppression cleanup runs in `finally` and is token-guarded
    (a stale transaction's cleanup never clears a newer transaction's state).
-   Storage-write failure is non-fatal: the in-memory state stays authoritative
-   for the session and degrades to ephemeral (documented, no crash).
-5. **Persistence suppression:** a transaction-scoped suppression flag (distinct
-   from `isRestoringLayout`) cancels/defer the debounced layout auto-save
-   (`setupLayoutPersistence`'s `onDidLayoutChange` handler) and the
-   `trackPinnedWidths` width capture for the transaction's duration, because
-   float/dock removals and materializations fire layout-change events that
-   would otherwise persist a partial live grid before commit. Persistence runs
-   only after commit or after journal recovery. Ordinary unregistered closes
-   are unaffected (their cleanup does not depend on the suppression flag).
+   **Storage commits fail closed:** if the floating blob cannot be written, the
+   transaction rolls back (journal re-apply) and the group stays pinned, with
+   a console warning — the worst case is "the pin did not stick", never a lost
+   panel. The env layout is written only after a successful commit.
+5. **Persistence suppression:** a store-owned transaction token (`floatingTransactionToken` with token-guarded begin/end actions; the same field is read by `setupLayoutPersistence`, so there is no module-local flag and no import cycle) gates **every** layout-persistence entry point through one `canPersistLayout()` guard: `persistNow`, the debounce callback, the `onDidLayoutChange` handler, and the `beforeunload` flush (`dockview-layout-setup.ts:346-403`). On transaction begin the guard also cancels/holds an already-scheduled debounce timer and marks it dirty, so a timer scheduled before the transaction cannot fire mid-transaction. Persistence runs only after commit or journal recovery (explicit `persistEnvLayoutNow`), and the token is reset on unmount. Ordinary unregistered closes are unaffected (their cleanup does not depend on the guard).
 
 - **float(groupId):** if `groupId` is the maximized group, first restore the
   pre-max layout and derive the target's placement from `preMaximizeLayout`
@@ -311,10 +306,18 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   click on the grid while a menu/dialog is open would otherwise collapse the
   window before the layer can close. While any owned layer of a window is
   open, an outside `pointerdown` marks that window's collapse as **pending**
-  (it does not collapse yet); the pending collapse is applied when the last
-  owned layer of that window closes (its dismiss callback), and is cancelled
-  if the pointerdown actually landed inside an owned region. A second outside
-  interaction after the layers have closed collapses immediately.
+  (it does not collapse yet); the pending collapse is applied when the window's
+  owned-layer **refcount reaches zero**, and is cancelled if the pointerdown
+  actually landed inside an owned region.
+- **Owned-layer lifecycle:** `useFloatingOwnedLayer` returns an idempotent
+  unregister that runs on **both** `onOpenChange(false)` and React cleanup
+  (unmount, route navigation, ancestor teardown), so a layer that disappears
+  without its dismiss callback still decrements the refcount. Pending collapse
+  is stored with the event/generation that created it and cleared when the
+  window or its layer owner unmounts; it applies only at refcount zero, so two
+  layers closing in either order never collapse while the second is open, and
+  a successor window reusing the same group id never inherits a stale pending
+  collapse.
 - True outside interaction still collapses: clicking the grid, the app
   sidebar, or the page chrome while no owned layer is open collapses the
   window on pointerdown; with layers open, the first click closes the layers
@@ -360,6 +363,9 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
 
 - `order` is allocated from the per-env monotonic `nextOrder` counter; after a
   group is removed, its order is not reused.
+- **Exhaustion policy:** at the `nextOrder` cap (10 000), a new float fails
+  non-destructively — the group stays pinned and a console warning is logged.
+  No clamping or reuse (reuse would break monotonicity and stable z-order).
 - Rendering order is stable: sort by `(order, groupId)`.
 - Offsets and z-index are formulas of `order`: offset = `order × 12px` from
   the edge; z-index = `1000 + order`; an expanded window renders above
@@ -396,10 +402,16 @@ in the group's saved tab order.
   surviving panel if the winner itself was dropped). Duplicate mappings never
   occur because each floating entry maps at most one old id.
 
-The coordinator runs before `restoreMissingSessionPanel` and
-`addCurrentSessionSiblings` in both env-switch paths, and is tested for
-stale-only-floating, stale-in-grid-plus-floating, and delayed replacement
-orderings.
+The coordinator runs before `restoreMissingSessionPanel`,
+`addCurrentSessionSiblings`, **and `useAutoSessionTab`'s ensure path**
+(`dockview-desktop-layout.tsx` always mounts the hook; it calls
+`ensureSessionPanel` when the active session panel is missing from the grid).
+The coordinator's winner decision is visible to the hook's ensure/reconcile
+guard before its effect runs, so a floating winner skips session-tab
+insertion and activation for that id; grid winners are ensured as today. The
+coordinator is tested through the real desktop hook, not only direct tests of
+`replaceStaleSessionPanels`, for stale-only-floating, stale-in-grid-plus-
+floating, and delayed replacement orderings.
 
 ## Failure modes
 
@@ -437,21 +449,35 @@ orderings.
   `rightPanelsVisible` may still be true; the current
   `restoreColumnToTarget(sv, sv.length - 1, target)` (`dockview-pinned-enforce.ts`)
   would resize the center column to the right target. `rightPanelsVisible` is
-  derived from the live grid/floating state where appropriate. Tested with one
-  and both right groups floated, `toggleRightPanels` while floating, and
-  container resize.
-- **Reset layout / "clear UI state":** reset is an **id-aware docking merge**.
-  The reset target grid already contains default panels (chat, files, changes,
-  terminal); each floating group is merged into its target group **by panel
-  id** — existing reset panels are reused (not duplicated), floating tabs are
-  merged preserving saved tab order and the active panel, and only missing
+  derived from the live grid/floating state where appropriate.
+- **`toggleRightPanels` show path with floated right groups:** the show path
+  re-adds the right column wholesale from `defaultLayout()` (`dockview-store.ts`),
+  which would re-insert `files`/`changes`/`terminal-default` while those ids
+  float — duplicate identity across grid and floating surfaces, or dockview
+  replacing the floating copy. The show path is floating-aware: floating
+  groups stay absent (their ids are excluded from the re-added column) or the
+  toggle is treated as an explicit dock for them; `rightPanelsVisible` is
+  tracked independently of whether a floating right group exists. Tested with
+  one and both right groups floated, hide→show while floating, and container
+  resize.
+- **Storage-write failure after float/dock:** the commit fails closed — the
+  transaction rolls back (journal re-apply) and the group stays pinned with a
+  console warning. A reload or env switch can therefore never observe a
+  missing floated group that the user believes exists; the worst case is the
+  pin simply not sticking.
+- **Reset layout / "clear UI state":** reset is an **id-aware docking merge**
+  with explicit collision precedence: the reset layout owns group/column
+  **placement**, the floating definition owns the panel **payload** (component,
+  params, tabComponent) and saved tab order, and the active panel is merged
+  explicitly. Existing reset panels (chat, files, changes, terminal) are
+  reused by id — never duplicated — and the floating definition's payload
+  wins, so a floated ordinary terminal keeps its real terminal id rather than
+  being retargeted to the default `terminal-default` params. Floating tabs
+  merge preserving saved tab order and the active panel; only missing
   definitions are added. Floating state (memory + storage) is cleared only
   after the merged grid is committed and persisted. The floating preference is
   cleared — groups do not re-float after reset. `cleanupTaskStorage` removes
   the floating key alongside the layout/maximize keys.
-- **Storage write failure after float/dock:** the in-memory state is
-  authoritative for the session; the blob may be stale until the next
-  successful write; behavior degrades to ephemeral (documented, no crash).
 
 ## Persistence guarantees
 
@@ -542,10 +568,26 @@ orderings.
   the reset grid reuses those panels by id, floating tabs merge preserving
   saved order and active tab, no duplicate panel ids exist, floating storage
   is cleared, and the groups do not re-float.
-- **GIVEN** a float transaction removes panels, **WHEN** the debounced layout
-  auto-save would fire between removals, **THEN** no partial layout is
-  persisted; the env layout is written only after the transaction commits or
-  the journal restores.
+- **GIVEN** a float transaction starts while a debounced layout auto-save is
+  already scheduled, **WHEN** the timer fires or the tab unloads mid-
+  transaction, **THEN** no partial layout is persisted; the env layout is
+  written only after the transaction commits or the journal restores.
+- **GIVEN** a floating `session:*` group is the winner of a session switch,
+  **WHEN** the desktop `useAutoSessionTab` hook runs, **THEN** it skips
+  grid insertion and activation for the incoming id (the id lives only in the
+  floating group), and a grid winner is still ensured as today.
+- **GIVEN** the user hides and re-shows the right panels while right groups
+  float, **WHEN** the show path re-adds the right column, **THEN** floating
+  panel ids are excluded (or the toggle docks them explicitly) and no panel id
+  exists in both surfaces.
+- **GIVEN** the floating blob write fails during a float commit, **WHEN** the
+  transaction settles, **THEN** the transaction rolls back, the group stays
+  pinned, and a console warning is logged — no panel is lost on the next
+  reload.
+- **GIVEN** two owned layers are open in one floating window, **WHEN** they
+  close in either order (including via unmount or navigation without dismiss
+  callbacks), **THEN** the window collapses only after both are gone, and a
+  successor window reusing the group id inherits no stale pending collapse.
 - **GIVEN** a stale `session:*` panel exists only in a floating group, **WHEN**
   the user switches tasks (incoming session active), **THEN** the incoming id
   is added only to the floating group (not also to the grid), and no panel id

@@ -5,7 +5,6 @@ import { createSessionSlice } from "./session-slice";
 import { createSessionRuntimeSlice } from "../session-runtime/session-runtime-slice";
 import type { SessionSlice } from "./types";
 import type { SessionRuntimeSlice } from "../session-runtime/types";
-import type { Turn } from "@/lib/types/http";
 
 type CombinedSlice = SessionSlice & SessionRuntimeSlice;
 

@@ -6,11 +6,11 @@ describe("turn hydration state", () => {
   it("defaults and deep-merges loaded session markers", () => {
     const state = mergeInitialState({
       turns: {
-        bySession: {},
+        bySession: { "session-1": [] },
         activeBySession: {},
-        loadedBySession: { "session-1": true },
+        loadedBySession: {},
       },
-    } as HydrationState);
+    } as unknown as HydrationState);
 
     expect(defaultState.turns.loadedBySession).toEqual({});
     expect(state.turns.loadedBySession).toEqual({ "session-1": true });

@@ -27,9 +27,11 @@ spec: "../../specs/ui/panel-pin-float.md"
   - **right-groups-floated width**: with all right groups floated, a container resize does not resize the center column to the right target;
   - **toggle-right-panels with floated right groups**: hide→show does not re-insert floating ids (no duplicate across surfaces);
   - **portaled-menu pointerdown**: clicking outside while a menu inside the floating window is open keeps the window expanded until the menu closes (pending collapse), and a second outside click collapses it;
-  - **unload mid-transaction**: reloading while a float transaction is in flight never persists a partial layout (group either floats or stays pinned consistently).
+  - **unload mid-transaction**: reloading while a float transaction is in flight never persists a partial layout (the journaled pre-transaction layout is written on unload; the group either floats or stays pinned consistently);
+  - **two-key divergence**: blob/layout split after a simulated crash restores consistently (no duplicate id, no lost panel);
+  - **rollback portal safety**: forcing a mid-transaction failure does not release a terminal portal or stop its process.
 - The spec uses the repo's causal-wait helpers (`e2e/helpers/causal-waits.ts`) and the `SessionPage` page object additions (`clickMaximize` style helpers for `dockview-pin-btn`); no new sleeps.
-- Mobile: written justification in the spec — the dockview workbench does not render on phone viewports (the mobile task surface replaces it with `mobile-task-layout` plus its own panel navigation, e.g. the mobile bottom-nav right-panel surface, which has no dockview pin/floating equivalent); floating has no intentional mobile equivalent in this feature, so no mobile E2E is added.
+- Mobile: the dockview workbench does not render on phone viewports — the mobile task surface (`mobile-task-layout` + `session-mobile-bottom-nav`, exercised by existing mobile E2E specs) keeps Plan/Changes/Files/Terminal reachable, and floating/collapse is intentionally absent from the mobile state model. The retained-path mobile test is the existing mobile bottom-nav panel-access coverage; no new mobile E2E is added for this surface (documented in the spec).
 
 ## Verification
 

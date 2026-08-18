@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 40
-prior-round: 39
+revision: 41
+prior-round: 40
 ---
 
 # Floating (unpinned) workbench panels
@@ -526,7 +526,12 @@ loses the incoming session, or mutates the maximize overlay:
   v4 writers, marker-only/malformed migration behavior defined); a
   same-tab reload while maximized reconstructs a FRESH portal lease from
   live validated state at mount time — a persisted epoch is a marker, NEVER
-  an owner token (marker-only and malformed-maximize cases are tested); **MOUNT PROTOCOL (happens-before): the reload path runs an explicit
+  an owner token (marker-only and malformed-maximize cases are tested); **PORTAL FAILURE BOUNDARY SPLIT: preflight portal/lease failure
+  (provably no native mutation) is retryable `rejected` (matrix 26a);
+  POST-partial-adoption failure (native mutation invoked) is TERMINAL —
+  lease invalidated, quarantine + durable repair, fresh validated rebuild
+  (matrix 26b); the nested/repair failure path (spec fail-closed
+  quarantine) is the same terminal class.** **MOUNT PROTOCOL (happens-before): the reload path runs an explicit
   HYDRATE TRANSACTION, `beginHydrate(envId)`, for EXACTLY ONE active env:
   it atomically claims the GLOBAL api lease from
   IDLE (begin-hydrate → validate envelope → install the validated
@@ -543,6 +548,13 @@ loses the incoming session, or mutates the maximize overlay:
   global lease is transferred DIRECTLY from A to B (reserve-B happens
   BEFORE release-A; all other begins are rejected while the queue is
   non-empty; a third env/mutator can never win the released lease);
+  QUEUE CONTRACT: items are typed (`marker-hydrate` vs `switch-intent`),
+  FIFO within type with SWITCH-INTENT PRIORITY over marker-hydrates (a
+  user's switch intent is never starved by a marker backlog), duplicate
+  switch intents COALESCE (latest target wins); when the queue drains,
+  a generation-bound `hydrate-settled` signal wakes EXACTLY ONE deferred
+  switch (the head item), which then begins its own hydrate; switch-
+  during-hydrating(A) enqueues the intent ahead of marker-B;
   markers of non-active envs are retained, never consumed; while
   the pending marker remains, the
   hydrate lease is NOT released (transaction-1 lease semantics: released
@@ -565,7 +577,13 @@ loses the incoming session, or mutates the maximize overlay:
   stale pre-max over newer state); **every public mutator returns a
   DISCRIMINATED result (`{status:"rejected", reason, retry}` vs
   `{status:"applied", …}`) and affected controls are disabled with a
-  localized reason (toast/banner) — per-operation-family tests; **ONE
+  localized reason (toast/banner) — per-operation-family tests; **the
+  RESULT CHANNEL is explicit: `applied` (incl. row 33 normal success) is
+  returned to AWAITED/PROGRAMMATIC callers and is SILENT for
+  user-initiated normal operations (a successful pin click NEVER shows a
+  success toast — localized UI is reserved for rejected/terminal/
+  recovered-with-drops outcomes); no-success-toast + returned-result
+  acceptance tests**; **ONE
   public result algebra covers EVERY layout-mutating boundary: pin
   click, float/dock, storage quota-full, journal/quarantine,
   busy/lease-held, stale identity, and recovery failures each return the
@@ -575,13 +593,16 @@ loses the incoming session, or mutates the maximize overlay:
   `busy | lease-held | quota-full | settle-timeout | invalid-definition |
   stale-session | stale-identity | recovery-pending | journal-unavailable |
   quarantine | repair-active | recovered-with-drops | apply-failed |
-  portal-failed | plugin-contract-failure | automatic` and
+  portal-failed | plugin-contract-failure | intent-cancelled | automatic`
+  (intent-cancelled = env-switch user-cancel/unmount/target-deleted, ONE
+  row — never also stale-identity) and
   locale keys `task:floatingError.*` (one per reason) + `task:floatingRetry`
   + `task:floatingCancel`; **an exhaustive OPERATION × REASON × ACTION
   matrix is COMMITTED as `docs/plans/panel-pin-float/result-matrix.md` —
   one closed `LayoutMutationResult` union (applied | pruned |
   recovered-with-drops | skipped | rejected | suppressed | terminal) with
-  ALL rows (33; count GENERATED from the file, never hand-copied), every
+  ALL rows (count GENERATED from the file — the generator parses rows,
+  never trusts headings; never hand-copied), every
   one carrying exactly one (status, reason, action) mapped to suppression
   scope, user action,
   terminality, and clearing condition (implemented as a switch with an
@@ -1413,11 +1434,18 @@ expansion/collapse, with **owned regions** rather than raw subtree checks:
   the capability/handshake, unregisters the layer, and ends the retained
   lease — after revocation the window MAY collapse normally); **timeout
   revocation is followed by a coordinator-owned ONE-SHOT REISSUE: the
-  next open transition on that panel receives a FRESH capability, so a
+  host mints the replacement and DELIVERS it via a subscription callback
+  the plugin receives at handshake time (`onCapabilityChange(newCap)`);
+  additionally, before EVERY open the plugin MUST re-read via
+  `requestCapability()` — a stale cached `PluginTaskPanelProps` capability
+  is never trusted and using a revoked capability is a TYPED
+  stale-capability failure (the plugin re-reads and retries); the next
+  open transition on that panel receives the FRESH capability, so a
   timeout never poisons a still-mounted panel (the revoked capability
   dies; the panel is not permanently disabled; no remount required) —
   this is the single exception to capability stability, and it is
-tested (timeout → recovery → successful next open)**; late ack
+tested (timeout → reissue → successful next open, incl. a plugin that
+retains old props)**; late ack
   after revocation is a generation no-op; tests: ack-before-timeout,
   exact-boundary, timeout-before-ack, unmount/unregister, late ack.** Ordering: open=true transition → admission check → owned
   or (rejected + requestClose + lease retained pending ack); tests:

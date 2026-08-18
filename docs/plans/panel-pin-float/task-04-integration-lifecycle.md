@@ -27,6 +27,16 @@ spec: "../../specs/ui/panel-pin-float.md"
   click, float/dock, quota-full, journal/quarantine, busy/lease-held,
   stale identity, and recovery failures (reason enum + locale keys;
   debug-only no-ops replaced by typed results).
+- **Result-matrix generator OWNED here (acceptance):**
+  `scripts/generate-floating-result-contract.mjs` with declared input
+  (result-matrix.md) / output (reason enum + row count + locale-key list)
+  schemas; package script `pnpm run generate:floating-result-contract` and
+  exact CI command `node scripts/generate-floating-result-contract.mjs
+  --check` (`git diff --exit-code` semantics); task-04 verification RUNS
+  the generator + matrix validator (exactly-once + terminality-IFF) +
+  locale-key validator; a test proves the generated outputs derive from
+  the COMMITTED matrix (tamper the matrix → generation changes → CI
+  fails).
 - **Session replacement (single coordinator over grid + floating + auto-session hook):** `replaceStaleSessionPanels` returns an old→new mapping applied to floating entries (panelIds, `FloatingPanelDef`s, portal params/title, `activePanelId`). The deterministic **winner** is the group's active stale panel, else the first stale floating panel in saved tab order. The winner is written to a store-owned, **memory-only** field — `floatingSessionWinner: { sessionId, envId, generation } | null` — atomically with replacement and consumed **one-shot** via atomic compare-and-clear `consumeFloatingSessionWinner(sessionId, envId, generation)` from `shouldSkipPanelEnsure` (`dockview-session-tabs.ts`) before the always-mounted `useAutoSessionTab` hook's ensure effect — written before the hook in **both** env-switch and maximize-restore branches; the hook skips only the winner id (unrelated current-session siblings are ensured as today via `addCurrentSessionSiblings`/`ensureSiblingPanels`, with an explicit anchor when the winner floats). Stale winners (generation/env mismatch) are cleared on generation/env transition and every terminal path (ensure failure, unmount, env switch); a newer generation is never cleared by an older cleanup; repeated/StrictMode effects cannot double-skip. **Placement normalization (post-apply hook, floating-winner edge):** replacement also runs a
   post-apply hook — after the synchronous layout/session replacement AND
   incoming-session insertion (fast, slow, route-intent, maximize-restore,

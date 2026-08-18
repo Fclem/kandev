@@ -1,4 +1,4 @@
-# Floating-panels result matrix (revision 41, committed)
+# Floating-panels result matrix (revision 42, committed)
 
 The single machine-readable operation × reason × action matrix required by
 `docs/specs/ui/panel-pin-float.md` (Result algebra) and
@@ -44,7 +44,7 @@ action) row — every row has a reason (never `—`).** A compile-time/test
 assertion iterates the CLOSED operation-state union (below) and fails if
 any state is covered by zero or two rows.
 
-## Matrix (37 rows; count generated from this file)
+## Matrix (38 rows; count generated from this file — the generator parses rows, never trusts headings)
 
 | # | Operation / source state | Status | Reason | Suppression scope | User action | Terminal? | Cleared by |
 |---|---|---|---|---|---|---|---|
@@ -75,19 +75,20 @@ any state is covered by zero or two rows.
 | 23 | reset: rollback also fails (budget exhausted) | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
 | 24 | custom/RADIX layer second-open rejection (per-open handshake) | rejected | busy | layer only | requestClose + host close signal | no | layer closes (real open=false ack) |
 | 25 | outer `settle` called while a nested transaction is active | rejected | busy | current env | nested settle first | no | nested settle |
-| 26 | portal adoption/lease failure (portal-failed) | rejected | portal-failed | current env | retry / repair UI | no | retry or repair-clear |
+| 26a | portal adoption/lease failure — PREFLIGHT, provably no native mutation | rejected | portal-failed | current env | retry (safe: no mutation occurred) | no | retry or repair-clear |
+| 26b | portal adoption/lease failure — POST-partial adoption (native mutation invoked) | terminal | portal-failed | ALL envs | quarantine + repair-clear / export (fail-closed: lease invalidated, fresh validated rebuild) | yes | repair-clear |
 | 27 | plugin layer noncompliance (requestClose ignored / ack timeout) | terminal | plugin-contract-failure | layer only | revoke the OPEN's capability + typed failure UI | yes | open capability revoked (next open receives a FRESH per-open capability) |
 | 28 | env-switch retry at settle succeeds | applied | automatic | current env | none (deferred switch applied) | no | settle |
 | 29 | env-switch retry at settle still busy (second failure) | terminal | settle-timeout | current env | retry / cancel (one-shot terminal) | yes | user retry or cancel |
-| 30 | env-switch intent cancelled (user cancel / unmount / target-deleted) | skipped | stale-identity | current env | none | yes | — |
-| 31 | quarantine copy or clear fails (copy/remove error, retry retained) | suppressed | repair-active | ALL envs | retry clear (never cached recovered) | no | verified copy/absence or repair-clear |
-| 32 | journal-free divergence recovery on VERIFIED ABSENT journal, restore ok | applied | automatic | current env | none (automatic) | no | restore settle |
-| 33 | journal-free divergence salvage with drops | recovered-with-drops | recovered-with-drops | current env | repair UI shows dropped list | no | result recorded + state persisted |
-| 34 | NORMAL SUCCESS transitions (successful float/dock/pin/toggle/preset apply) | applied | automatic | current env | none | no | operation completed |
-| 35 | reset forward native apply/fromJSON PARTIAL failure (before pair persistence), rollback ok | rejected | apply-failed | current env | typed rejected + rollback (grid restored) | no | rollback settle |
-| 36 | maximize t1 ROLLBACK failure | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
-| 37 | recovery selected-target write/verify failure (journal retained, retry) | suppressed | repair-active | ALL envs | retry (never cached recovered) | no | verified target write/absence |
-| 38 | env-switch intent cancelled (user cancel / unmount / target-deleted) | skipped | intent-cancelled | current env | none | yes | — |
+
+| 30 | quarantine copy or clear fails (copy/remove error, retry retained) | suppressed | repair-active | ALL envs | retry clear (never cached recovered) | no | verified copy/absence or repair-clear |
+| 31 | journal-free divergence recovery on VERIFIED ABSENT journal, restore ok | applied | automatic | current env | none (automatic) | no | restore settle |
+| 32 | journal-free divergence salvage with drops | recovered-with-drops | recovered-with-drops | current env | repair UI shows dropped list | no | result recorded + state persisted |
+| 33 | NORMAL SUCCESS transitions (successful float/dock/pin/toggle/preset apply) | applied | automatic | current env | none | no | operation completed |
+| 34 | reset forward native apply/fromJSON PARTIAL failure (before pair persistence), rollback ok | rejected | apply-failed | current env | typed rejected + rollback (grid restored) | no | rollback settle |
+| 35 | maximize t1 ROLLBACK failure | terminal | quarantine | ALL envs | repair-clear / export | yes | repair-clear |
+| 36 | recovery selected-target write/verify failure (journal retained, retry) | suppressed | repair-active | ALL envs | retry (never cached recovered) | no | verified target write/absence |
+| 37 | env-switch intent cancelled (user cancel / unmount / target-deleted) | skipped | intent-cancelled | current env | none | yes | — |
 
 ## CLOSED operation-state union (for the exactly-once assertion)
 
@@ -117,18 +118,28 @@ to exactly one row above:
 7. Suppression states: journal-unavailable (6), quarantine (7),
    repair-active (8), recovery-pending (9).
 8. Env-switch branches: deferred-then-retry-success (28), retry-busy
-   second failure (29), user-cancel/unmount/target-deleted (30).
-9. Portal: adoption/lease failure (26).
-10. Plugin layers: second-open rejection (24), noncompliance ack-timeout
-    (27), normal open/close (no row — admitted, not a result).
+   second failure (29), user-cancel/unmount/target-deleted (37).
+9. Portal: preflight failure (26a), post-partial-adoption failure (26b).
+10. Plugin layers, discriminated by `PluginLayerAdmission =
+    first-open-admitted | duplicate-open-rejected | close-ack`:
+    first-open-admitted → NON-RESULT (excluded, no row); duplicate-open-
+    rejected → row 24; close-ack → NON-RESULT (excluded); noncompliance
+    ack-timeout → row 27. The generator iterates the admission
+    discriminator values and rejects a state covered by zero or two rows
+    (or a row covering a non-result value).
 11. Prune/salvage/allow-list: invalid-definition (5), stale-session (10),
-    salvage drops (11, 33), stale-identity skip (12).
+    salvage drops (11, 32), stale-identity skip (12).
 12. Normal success (result-free, excluded): pinned→floating-expanded,
-    floating collapse/expand, normal plugin open/close — declared
-    non-results; the assertion checks they are NOT covered by any row.
-13. Failure boundaries: reset forward apply partial failure (35),
-    maximize t1 rollback failure (36), recovery selected-target
-    write/verify failure (37), env-switch intent cancelled (38).
+    floating collapse/expand, normal plugin open/close, and normal
+    close-ack — declared non-results; the assertion checks they are NOT
+    covered by any row; SUCCESSFUL float/dock/pin operations ARE
+    result-bearing (row 33, status applied) — the float discriminator is
+    `FloatTransition = result-bearing-commit | result-free-visual-state`
+    (the commit returns `applied`; the visual expand/collapse is a
+    non-result).
+13. Failure boundaries: reset forward apply partial failure (34),
+    maximize t1 rollback failure (35), recovery selected-target
+    write/verify failure (36), env-switch intent cancelled (37).
 
 ## Cross-artifact coverage assertion
 
@@ -149,4 +160,5 @@ to exactly one row above:
   `Terminal? == yes` (generated cross-check over all rows).
 - Locale keys must exist for every surfaced reason in `task:floatingError.*`
   (i18n gate; pseudo-locale completeness check); `automatic`/
-  `stale-session`/`stale-identity` are excluded from the key generation.
+  `stale-session`/`stale-identity`/`intent-cancelled` are excluded from
+  the key generation.

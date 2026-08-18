@@ -11,7 +11,7 @@ collapses while the layer is open (a contract violation).
 Legend for `Status`: `audited` = callsite confirmed in the baseline and the
 hook is applied by this feature (or layer-free proof); `to-wire` = callsite
 confirmed, hook must be applied during task-03; `verify` = candidate surface,
-confirm during task-03. **Source audit status (revision 39): COMPLETE —
+confirm during task-03. **Source audit status (revision 40): COMPLETE —
 every row below is file/line-anchored from live source (scout audit
 2026-08-18 + parent verification 2026-08-18: model-config-selector.tsx
 587-614 added, the github/gitlab/review reachable surface is a bounded
@@ -118,6 +118,13 @@ registry / import graph (broad source scan) must appear in the generator
 input globs; a newly added panel directory outside the globs is caught by
 this set-equality assertion (test: add an out-of-glob panel dir, the gate
 fails); diff-only validation can never bless an incomplete artifact.**
+**Set-equality runs in the SAME CI step: ONE command executes
+`scan-panel-content` (import-graph walk from the desktop registry with
+EXACT source-root/glob rules; dynamic/lazy imports resolved via an
+explicit manifest of lazy-loaded panel components; worker files and
+non-panel utilities EXCLUDED by the same rules) → generator → validator;
+any set difference (a file in the scan absent from the globs, or vice
+versa) FAILS the step; a lazy-import fixture is tested.**
 
 ## Mobile
 

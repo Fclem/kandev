@@ -2,8 +2,8 @@
 status: draft
 created: 2026-08-18
 owner: kandev
-revision: 48
-prior-round: 47
+revision: 49
+prior-round: 48
 ---
 
 # Floating (unpinned) workbench panels
@@ -206,7 +206,7 @@ FloatingPanelDef                   # complete definition so a floated panel can
   id           string             # be recreated after a reload or env switch
   component    string
   title        string             # canonical English title (reload fallback only)
-  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; TWO DISTINCT FUNCTIONS: `normalizePersistedFloatingPanelDef` (load/persistence — maps absent → null BEFORE validation; the closed guard accepts ONLY string|null for this field and REJECTS undefined) vs `captureFloatingPanelDef` (live capture/registry/materialization — copies live fields WITHOUT recursively normalizing `params`; NO normalizer may walk `DockviewPanel.params`); the live `LayoutPanel` type becomes `tabComponent: string | null` (types.ts:1-7 no longer optional-undefined); absent/null/string/undefined/extra-key round-trip tests + load→capture→persist + live-param-preservation tests)
+  tabComponent string | null       # wire schema: NULL not undefined (JSON drops undefined — persisted panels must round-trip; TWO DISTINCT FUNCTIONS: `normalizePersistedFloatingPanelDef` (load/persistence — maps absent → null BEFORE validation; the closed guard accepts ONLY string|null for this field and REJECTS undefined) vs `captureFloatingPanelDef` (live capture/registry/materialization — returns the CANONICAL `FloatingPanelDef` shape: `tabComponent: live.tabComponent ?? null`, params preserved EXACTLY, NO recursive walk — NO normalizer may walk `DockviewPanel.params`); PERSIST ACCEPTS ONLY THE CANONICAL SHAPE (capture itself normalizes the top-level field); the load normalizer is IDEMPOTENT; **FIELD MAPPING EXPLICIT: `FloatingPanelDef.tabComponent` IS the Dockview tab-renderer key (the same key the live serializer writes as `panel.view.tabComponent`); capture-at-float-time always reflects the last capture (a panel whose live tab header differs from its persisted definition is resolved by re-capture); per-panel round trips: null, custom tab renderer, differing header-vs-definition**; the live `LayoutPanel` type becomes `tabComponent: string | null` (types.ts:1-7 no longer optional-undefined); absent/null/string/undefined/extra-key round-trip tests + load→capture→persist + live-param-preservation tests)
   params       Record<string, unknown>   # must be JSON-safe (see guard)
 ```
 
@@ -524,7 +524,17 @@ loses the incoming session, or mutates the maximize overlay:
   supplies everything); visibility-only DOM adoption repair is QUEUED;
   if the synchronous API rollback itself cannot run hidden (adapter
   reports blocked), the coordinator PERSISTS QUARANTINE and sets a
-  `visibilitychange` continuation with a HARD MAX deadline; hidden-tab
+  `visibilitychange` continuation with a HARD MAX deadline; **VERIFICATION
+  IS SYNCHRONOUS: post-rollback verification = Dockview API
+  STRUCTURAL/native snapshot equality + registry/lease equality via a
+  read-only `DockviewObserverApi.toJSON()`/native-snapshot method backed
+  by the CURRENT API instance (apiInstance/generation checked) — toJSON
+  is a serialization, NOT a measurement, and is EXPLICITLY PERMITTED
+  under suppression; verification NEVER touches the raw DockviewApi
+  outside the facade; adapter cannot synchronously verify ⇒ QUARANTINE
+  + durable repair RETAINED, visibility continuation set, LEASE NOT
+  CLEARED until verified; synchronous-call budget test caps verification
+  calls;** hidden-tab
   tests assert native call count, lease state, busy clearing, and
   post-visibility repair**; `api: null` is never
   treated as inactive (`use-panel-active.ts` is extended/replaced and added
@@ -820,10 +830,17 @@ loses the incoming session, or mutates the maximize overlay:
   the maximize envelope alongside the digest + generation; equality of
   canonicalizerVersion is REQUIRED before maximize-only selection;
   version mismatch (e.g. a v4.1 envelope read after a v4.2 writer) is
-  treated EXPLICITLY: re-canonicalize the envelope's stored layout under
-  the CURRENT version and re-digest + compare (migration path), or if
-  re-canonicalization is unavailable, treat as STALE and fall through
-  (never accept under incompatible rules); v4.1→v4.2 golden vectors +
+  treated EXPLICITLY: **the migration path FIRST parses BOTH the
+  envelope's stored layout AND the current layout into the validated
+  normalized LayoutState and compares the COMPLETE SEMANTIC projection
+  (identity, role, placement, panels, active, geometry) — re-
+  canonicalization + re-digest is permitted ONLY when semantic equality
+  holds; a genuinely changed layout (any meaningful field differs) is
+  classified STALE → regular/fail-closed recovery, NEVER accepted via
+  re-serialized byte equality; v4.1→v4.2 vectors: bytes-change-
+  semantics-equal (migrate), one-meaningful-field-changes (stale)**; or
+  if re-canonicalization is unavailable, treat as STALE and fall through
+  (never accept under incompatible rules); golden vectors +
   route-selection tests.** route matrix: (a) schema-valid AND base digest
   matches the CURRENT env layout ⇒ maximize-only; (b) malformed envelope
   / no native call needed ⇒ discard + fall through to regular;
@@ -872,7 +889,16 @@ loses the incoming session, or mutates the maximize overlay:
   compare-and-clear to done/absent only after ALL targets verified
   absent; the record is ADDED to the owned-key matrix, the per-env/
   global budget accounting, the exact-match cleanup matrix, and the
-  recovery/cleanup tests (crash at each cleanup boundary).** persistent structural mismatch, a fromJSON throw after partial
+  recovery/cleanup tests (crash at each cleanup boundary).**
+  **CLEANUP-RECOVERY STATE MACHINE: record presence ALONE never blocks
+  restore when all expected targets verify absent (stale done is
+  validated by transaction/generation/digests, then an IDEMPOTENT
+  delete attempt on every mount); pending/done records that fail
+  validation ⇒ fail-closed repair path; record DELETION failure retains
+  the record and returns a retryable cleanup result (retried on the
+  next mount — owned storage never leaks silently); tests:
+  delete-throws-after-target-absence, stale-done-on-reload,
+  record/key divergence.** persistent structural mismatch, a fromJSON throw after partial
   native mutation, stale registry, or portal/lease failure FAILS CLOSED —
   lease invalidated, rebuild from the IMMUTABLE PRE-CALL native/layout
   snapshot + registry captured before the first fromJSON (never a
@@ -1166,6 +1192,12 @@ Float/dock/restore are **transactions** with an operation journal:
   are distinguished from rebuild events by the lease's generation/phase;
   deterministic event-emission tests prove no observer mutation and no
   user-visible detach during rebuild and rollback.**
+  **POST-REBUILD WRITE BOUNDARY: rebuild + verify run while suppressed;
+  suppression is cleared ONLY after verification; then EXACTLY ONE
+  token/generation-guarded `persistSettledPair`/persisted-rebuilt-state
+  command is called (never the observer/debounce path); only then is
+  `settled` published; the same rule applies to nested rebuild and
+  rollback; a call-count test asserts exactly one guarded persist.**
   **`aborted` semantics (exact):** a structurally valid `aborted` journal
    is the SAFE-BEFORE-PAIR form written by the hash-pending unload path —
    its `before` digests are the cached pre-mutation pair, its `after`
@@ -1281,11 +1313,17 @@ Float/dock/restore are **transactions** with an operation journal:
    384 KB index, and the recovery allowance is reserved ATOMICALLY across
    environments before any mutation (a float preflight can never pass and
    then leave no global capacity for mandatory recovery); ONE BUDGET
-   TABLE (single source for the validator + tests) lists every owned
-   key, per-env/global cap inclusion, raw-byte accounting rule, reserved
-   recovery allowance, and whether unrelated layout/maximize bytes count
-   against the floating cap — a preflight under one interpretation can
-   never pass and fail post-mutation under another** — and are removed by bounded
+   TABLE (COMMITTED as `docs/plans/panel-pin-float/budget-table.md` — the
+   machine-readable single source for the validator + tests) lists every
+   owned key (incl. the cleanup record and TRANSIENT v3 read keys),
+   per-env/global cap inclusion, CONDITIONAL accounting for
+   layout-v4/maximize-v4 (counted only when the env has floating state —
+   a zero-floating env's layout persistence is never blocked by the
+   floating cap), reserved
+   recovery allowance, and raw-byte rules — a preflight under one
+   interpretation can
+   never pass and fail post-mutation under another; prose duplicates are
+   REMOVED** — and are removed by bounded
    per-env/task corrupt-key cleanup in `cleanupTaskStorage`, and the recovery
    cache records success only after durable quarantine or verified original
    absence. Crash-after-copy, repeated-restart, and cleanup cases are
@@ -2213,8 +2251,15 @@ replacement orderings.
   digest>`; NEVER delete arbitrary `startsWith('kandev.dockview.env-')`
   keys; an adversarial user key with an owned prefix survives cleanup)
   covering ALL owned keys: env-floating, env-journal, env-repair,
-  env-repair-clear, deterministic `.corrupt-<digest>` quarantine keys,
-  env-layout-v4, and env-maximize-v4 — generation is
+  env-repair-clear, env-floating-cleanup, deterministic `.corrupt-<digest>`
+  quarantine keys,
+  env-layout-v4, env-maximize-v4, **AND the transient v3 read/fallback
+  keys env-layout-v3 + env-maximize-v3 (retained only until a validated
+  v4 apply — a failed/partial migration must never leave recoverable
+  legacy state that a later restore or reused env identity can
+  resurrect; deletion-before-migration-completes tests; the
+  implementation cutover REMOVES the baseline v3 writers, not just adds
+  v4 writers)** — generation is
   invalidated before deleting EVERY key, and deletion tests cover an
   incomplete repair journal, a quarantine copy, and a clear in flight (a
   late clear can never resurrect a deleted task's state)** (`kandev.dockview.env-floating-journal.<envId>`)

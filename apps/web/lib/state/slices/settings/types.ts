@@ -446,6 +446,7 @@ export type UserSettingsState = {
   lastSeenDisplay: LastSeenDisplay;
   systemMetricsDisplay: { showInTopbar: boolean; simplified: boolean };
   appStatusBarEnabled: boolean;
+  resolveSessionHostnames: boolean;
   appStatusBarOrder: AppStatusBarOrderState;
   quickChatTabOrderByWorkspace: Record<string, string[]>;
   hiddenWorkflowStepIds: Record<string, string[]>;

@@ -1,6 +1,7 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RunEvent } from "@/lib/api/domains/office-extended-api";
+import type { RunEventAppendedPayload } from "@/lib/types/backend";
 import { useRunLiveSync } from "./use-run-live-sync";
 
 const clients = vi.hoisted(() => ({
@@ -10,6 +11,19 @@ const clients = vi.hoisted(() => ({
 vi.mock("@/lib/ws/connection", () => ({
   getWebSocketClient: () => clients.active,
   useWebSocketClient: () => clients.active,
+}));
+
+const handlers = vi.hoisted(() => ({
+  listener: undefined as ((payload: RunEventAppendedPayload) => void) | undefined,
+}));
+
+vi.mock("@/lib/ws/handlers/run", () => ({
+  subscribeRunEvents: (_runId: string, listener: (payload: RunEventAppendedPayload) => void) => {
+    handlers.listener = listener;
+    return () => {
+      handlers.listener = undefined;
+    };
+  },
 }));
 
 function runEvent(seq: number, eventType: string): RunEvent {
@@ -40,6 +54,7 @@ const initialProps: Props = { runId: "run-1", initialEvents: [], initialStatus: 
 describe("useRunLiveSync", () => {
   beforeEach(() => {
     clients.active = { subscribeRun: vi.fn(() => vi.fn()) };
+    handlers.listener = undefined;
   });
 
   it("does not loop when the snapshot reference changes but its content does not", () => {
@@ -56,6 +71,27 @@ describe("useRunLiveSync", () => {
     expect(clients.active.subscribeRun).toHaveBeenCalledOnce();
     expect(result.current.events).toEqual([]);
     expect(result.current.status).toBe("claimed");
+  });
+
+  it("does not clobber a live event when a fresh but unchanged snapshot rerenders", () => {
+    // A caller that supplies a fresh-but-unchanged `initialEvents` array (the
+    // exact scenario the snapshot guard exists for) must not erase events that
+    // arrived over the WS. The snapshot sync decision has to compare against
+    // the last incoming snapshot, not against the live-event dedup set: once
+    // the first WS event adds its seq to the dedup set, comparing the stale
+    // snapshot against that set looks like a content change and resets events
+    // (and the dedup set) to the snapshot, making the live event vanish.
+    const { result, rerender } = renderLiveSync(initialProps);
+
+    const liveEvent = runEvent(1, "started");
+    act(() => {
+      handlers.listener!({ run_id: "run-1", event: liveEvent });
+    });
+    expect(result.current.events).toEqual([liveEvent]);
+
+    rerender({ ...initialProps, initialEvents: [] });
+
+    expect(result.current.events).toEqual([liveEvent]);
   });
 
   it("re-syncs events when the snapshot content actually changes", () => {

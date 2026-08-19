@@ -61,12 +61,16 @@ export function useLazyLoadMessages(sessionId: string | null) {
         stateRef.current = {
           hasMore: result.hasMore,
           oldestCursor: result.oldestCursor,
-          isLoadingMore: false,
+          // Keep the current value: the coordinator clears the store's shared
+          // isLoadingMore only when the session's LAST flight settles (this
+          // join may be one of several), and the store subscription syncs
+          // this ref afterwards. Forcing false here could bypass the
+          // concurrent-request guard below.
+          isLoadingMore: stateRef.current.isLoadingMore,
         };
         return result.count;
       } catch (error) {
         console.error("[useLazyLoadMessages] Error loading messages:", error);
-        stateRef.current.isLoadingMore = false;
         return 0;
       }
     }

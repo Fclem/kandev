@@ -141,7 +141,20 @@ func (r *Repository) createUserMessageWithBoundary(
 ) error {
 	driver := r.db.DriverName()
 	nm := dialect.NormalizedMicrosecond(driver, "created_at")
+	return r.executeBoundaryTransaction(ctx, message, requestsInput, messageType, metadataJSON, driver, nm)
+}
 
+// executeBoundaryTransaction runs one per-session write boundary: begin a
+// transaction, take the session turn-write lock (advisory on PostgreSQL, no-op
+// on SQLite), resolve the prompt-ordering timestamp and ordinal, and insert
+// the user message row. Any failure restores the message's caller-visible
+// CreatedAt/UpdatedAt/PromptIndex so a retry re-resolves from scratch.
+func (r *Repository) executeBoundaryTransaction(
+	ctx context.Context,
+	message *models.Message,
+	requestsInput int,
+	messageType, metadataJSON, driver, nm string,
+) error {
 	origCreatedAt := message.CreatedAt
 	origUpdatedAt := message.UpdatedAt
 	origPromptIndex := message.PromptIndex
@@ -151,59 +164,6 @@ func (r *Repository) createUserMessageWithBoundary(
 		message.PromptIndex = origPromptIndex
 	}
 
-	run := func(execer messageBoundaryExecer) error {
-		now := r.nowUTC()
-		created := message.CreatedAt
-		if created.IsZero() {
-			created = now
-		}
-
-		maxKeyStr, maxKeyValid, err := r.readSessionMaxUserKey(ctx, execer, driver, nm, message.TaskSessionID)
-		if err != nil {
-			return err
-		}
-
-		created, err = resolvePromptOrderingTime(message.CreatedAt.IsZero(), created, sql.NullString{String: maxKeyStr, Valid: maxKeyValid}, now)
-		if err != nil {
-			return err
-		}
-		newKey := formatPromptKey(created)
-
-		var ordinal int
-		// The count predicate compares the per-row normalized key against the
-		// new key literal. On Postgres the key is the native TIMESTAMP column,
-		// and a bound Go string is typed `text` (no implicit cast in operator
-		// resolution), so the literal must be cast explicitly.
-		bound := "?"
-		if dialect.IsPostgres(driver) {
-			bound = "CAST(? AS timestamp)"
-		}
-		if err := execer.QueryRowContext(ctx, execer.Rebind(fmt.Sprintf(
-			"SELECT COUNT(*) FROM task_session_messages WHERE task_session_id = ? AND author_type = ? AND (%s < %s OR (%s = %s AND id <= ?))",
-			nm, bound, nm, bound,
-		)), message.TaskSessionID, string(models.MessageAuthorUser), newKey, newKey, message.ID).Scan(&ordinal); err != nil {
-			return fmt.Errorf("count session user messages: %w", err)
-		}
-		// The count covers the session's EXISTING user rows up to the new
-		// row's ordering position (the row itself is not yet inserted, so the
-		// id <= self disjunct cannot match it); the new row's ordinal is
-		// therefore count + 1, matching GetMessageWithPromptIndex's
-		// self-inclusive correlated count by construction.
-		message.CreatedAt = created
-		message.PromptIndex = ordinal + 1
-		if message.UpdatedAt.IsZero() {
-			message.UpdatedAt = created
-		}
-		if err := r.insertMessageRow(ctx, execer, message, requestsInput, messageType, metadataJSON); err != nil {
-			restore()
-			return err
-		}
-		return nil
-	}
-
-	// One per-session write boundary on both dialects. lockSessionTurnWrites
-	// takes the advisory session lock on PostgreSQL and is a no-op on SQLite,
-	// whose single-writer pool already serializes message insertion.
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin user message creation: %w", err)
@@ -212,7 +172,51 @@ func (r *Repository) createUserMessageWithBoundary(
 	if err := lockSessionTurnWrites(ctx, tx, driver, message.TaskSessionID); err != nil {
 		return err
 	}
-	if err := run(tx); err != nil {
+
+	now := r.nowUTC()
+	created := message.CreatedAt
+	if created.IsZero() {
+		created = now
+	}
+
+	maxKeyStr, maxKeyValid, err := r.readSessionMaxUserKey(ctx, tx, driver, nm, message.TaskSessionID)
+	if err != nil {
+		return err
+	}
+
+	created, err = resolvePromptOrderingTime(message.CreatedAt.IsZero(), created, sql.NullString{String: maxKeyStr, Valid: maxKeyValid}, now)
+	if err != nil {
+		return err
+	}
+	newKey := formatPromptKey(created)
+
+	var ordinal int
+	// The count predicate compares the per-row normalized key against the
+	// new key literal. On Postgres the key is the native TIMESTAMP column,
+	// and a bound Go string is typed `text` (no implicit cast in operator
+	// resolution), so the literal must be cast explicitly.
+	bound := "?"
+	if dialect.IsPostgres(driver) {
+		bound = "CAST(? AS timestamp)"
+	}
+	if err := tx.QueryRowContext(ctx, tx.Rebind(fmt.Sprintf(
+		"SELECT COUNT(*) FROM task_session_messages WHERE task_session_id = ? AND author_type = ? AND (%s < %s OR (%s = %s AND id <= ?))",
+		nm, bound, nm, bound,
+	)), message.TaskSessionID, string(models.MessageAuthorUser), newKey, newKey, message.ID).Scan(&ordinal); err != nil {
+		return fmt.Errorf("count session user messages: %w", err)
+	}
+	// The count covers the session's EXISTING user rows up to the new
+	// row's ordering position (the row itself is not yet inserted, so the
+	// id <= self disjunct cannot match it); the new row's ordinal is
+	// therefore count + 1, matching GetMessageWithPromptIndex's
+	// self-inclusive correlated count by construction.
+	message.CreatedAt = created
+	message.PromptIndex = ordinal + 1
+	if message.UpdatedAt.IsZero() {
+		message.UpdatedAt = created
+	}
+	if err := r.insertMessageRow(ctx, tx, message, requestsInput, messageType, metadataJSON); err != nil {
+		restore()
 		return err
 	}
 	if err := tx.Commit(); err != nil {

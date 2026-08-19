@@ -16,9 +16,9 @@ Kandev will use `kandev-active-workspace` as the general browser cookie for the 
 separately. Generic boot paths (Home, Settings, Tasks, integration) read
 **only the general family** — `kandev-active-workspace` / the scoped
 `kandev-active-workspace_<port>` — and resolve settings/first when only an
-office cookie exists. Only office boot paths (`officeWorkspaces`,
-`office-routes.tsx`, the office layout, `get-active-workspace`) read the
-**office family** (`office-active-workspace` / the scoped
+office cookie exists. Only office boot paths (`officeWorkspaces` and the
+client `OfficeRoutes` in `src/office-routes.tsx`) read the **office family**
+(`office-active-workspace` / the scoped
 `office-active-workspace_<port>`), as one candidate among general, office,
 and settings. The backend generic reader previously consulted the legacy
 office name; that candidate is removed to match the frontend generic reader.

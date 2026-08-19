@@ -17,11 +17,11 @@ import (
 // PortSuffix returns "_<port>" derived from the request host, or "" when no
 // usable port is present. X-Forwarded-Host (first value, trimmed) wins over
 // Host so a proxy that rewrites only the port can carry the browser's
-// host:port. The HTTP boundary (backendapp.stripUntrustedForwardedHost)
-// removes X-Forwarded-Host from untrusted peers, so a value present here is
-// proxy-authored. A suffix requires a decimal port in 1..65535: nonnumeric
-// service names and out-of-range values yield no suffix. A nil request
-// yields "".
+// host:port. The HTTP boundary (httpmw.StripUntrustedForwardedHost,
+// registered in backendapp.buildHTTPServer) removes X-Forwarded-Host from
+// untrusted peers, so a value present here is proxy-authored. A suffix
+// requires a decimal port in 1..65535: nonnumeric service names and
+// out-of-range values yield no suffix. A nil request yields "".
 func PortSuffix(r *http.Request) string {
 	if r == nil {
 		return ""

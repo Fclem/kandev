@@ -396,6 +396,21 @@ func TestStripUntrustedForwardedHostTrustedPeerKeeps(t *testing.T) {
 	}
 }
 
+// TestStripUntrustedForwardedHostIPv4MappedPeerKeeps pins the IPv4-mapped
+// IPv6 equivalence: gin compares the IPv4 form of an IPv4-mapped peer against
+// the trusted list, and the matcher must agree (fail-closed here would break
+// the port-rewrite cookie flow for dual-stack proxies).
+func TestStripUntrustedForwardedHostIPv4MappedPeerKeeps(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "[::ffff:10.0.0.5]:5555"
+	req.Header.Set("X-Forwarded-Host", "public.example:8443")
+	rec := httptest.NewRecorder()
+	stripRouter("10.0.0.0/8", "10.0.0.5").ServeHTTP(rec, req)
+	if got := rec.Body.String(); got != "public.example:8443" {
+		t.Fatalf("IPv4-mapped trusted XFH body = %q, want public.example:8443", got)
+	}
+}
+
 // TestStripUntrustedForwardedHostCIDRExcludesOutOfRangePeer pins the CIDR
 // boundary: the peer just outside the trusted prefix is untrusted.
 func TestStripUntrustedForwardedHostCIDRExcludesOutOfRangePeer(t *testing.T) {

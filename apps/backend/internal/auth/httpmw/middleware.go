@@ -99,7 +99,7 @@ func newTrustedProxyMatcher(trusted []string) *trustedProxyMatcher {
 			continue
 		}
 		if addr, err := netip.ParseAddr(entry); err == nil {
-			m.addresses = append(m.addresses, addr)
+			m.addresses = append(m.addresses, addr.Unmap())
 		}
 	}
 	return m
@@ -107,12 +107,16 @@ func newTrustedProxyMatcher(trusted []string) *trustedProxyMatcher {
 
 // contains reports whether host is one of the trusted addresses or inside one
 // of the trusted prefixes. Unparsable peers (Unix sockets, empty RemoteAddr)
-// are never trusted.
+// are never trusted. IPv4-mapped IPv6 peers are unmapped so the matcher
+// agrees with gin's trust decision (which compares the IPv4 form): if the two
+// ever diverged, the strip would fail CLOSED (dropping a header gin trusts),
+// breaking the port-rewrite cookie flow rather than security.
 func (m *trustedProxyMatcher) contains(host string) bool {
 	addr, err := netip.ParseAddr(host)
 	if err != nil {
 		return false
 	}
+	addr = addr.Unmap()
 	for _, a := range m.addresses {
 		if a == addr {
 			return true

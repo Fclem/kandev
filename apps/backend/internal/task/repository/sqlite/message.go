@@ -317,6 +317,7 @@ func (r *Repository) resolveMessageCursor(ctx context.Context, sessionID string,
 	return nil, nil
 }
 
+// buildListMessagesQuery assembles the paginated message list query and bound arguments, ordering rows by the normalized-microsecond key with cursor and limit bounds.
 func buildListMessagesQuery(driverName, sessionID string, opts models.ListMessagesOptions, cursor *models.Message, cursorKey string, sortDir string, limit int) (string, []interface{}) {
 	nm := dialect.NormalizedMicrosecond(driverName, "created_at")
 	// The cursor bound is the normalized key literal `YYYY-MM-DD HH:MM:SS.ffffff`

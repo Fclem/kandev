@@ -34,6 +34,7 @@ func seedPriorUserMessages(t *testing.T, repo interface {
 	return seeded
 }
 
+// eventData extracts the structured data payload from a published bus event.
 func eventData(t *testing.T, bus *MockEventBus) map[string]interface{} {
 	t.Helper()
 	return singlePublishedEventData(t, bus)
@@ -255,6 +256,7 @@ type capturingMessagesRepo struct {
 	createdAtZeroAtRepoEntry []bool
 }
 
+// CreateMessage persists a message in the fake repository, mirroring the repository contract.
 func (m *capturingMessagesRepo) CreateMessage(ctx context.Context, message *models.Message) error {
 	m.createdAtZeroAtRepoEntry = append(m.createdAtZeroAtRepoEntry, message.CreatedAt.IsZero())
 	return m.MessageRepository.CreateMessage(ctx, message)

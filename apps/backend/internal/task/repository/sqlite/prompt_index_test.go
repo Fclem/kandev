@@ -108,6 +108,7 @@ func frontendMicrosecondKey(t *testing.T, rfc3339 string) string {
 	return formatPromptKey(time.Unix(0, (parsed.UnixNano()/1000)*1000))
 }
 
+// TestPromptIndexReadsAndPagination verifies derived prompt ordinals across live creation, indexed reads, and paginated lists.
 func TestPromptIndexReadsAndPagination(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
@@ -164,6 +165,7 @@ func TestPromptIndexReadsAndPagination(t *testing.T) {
 	assertPromptOrdinals(t, ctx, repo, "sess-PB", wantB)
 }
 
+// TestPromptIndexTiedMicrosecondPagesContiguous verifies that pages split within a tied-microsecond burst keep contiguous ordinals.
 func TestPromptIndexTiedMicrosecondPagesContiguous(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
@@ -216,6 +218,7 @@ func TestPromptIndexTiedMicrosecondPagesContiguous(t *testing.T) {
 	}
 }
 
+// TestPromptIndexOffsetRowsMatchFrontendUTCKey verifies the offset-style key matches the frontend UTC normalized key for the same rows.
 func TestPromptIndexOffsetRowsMatchFrontendUTCKey(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()

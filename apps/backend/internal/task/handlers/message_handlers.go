@@ -290,6 +290,7 @@ type wsAddMessageRequest struct {
 	EntityReferences  []v1.EntityReference   `json:"entity_references,omitempty"`
 }
 
+// wsAddMessage handles an incoming add-message WebSocket action, persisting the user message and dispatching the turn and orchestrator flow.
 func (h *MessageHandlers) wsAddMessage(ctx context.Context, msg *ws.Message) (*ws.Message, error) {
 	var req wsAddMessageRequest
 	if err := msg.ParsePayload(&req); err != nil {

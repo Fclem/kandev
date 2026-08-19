@@ -47,10 +47,12 @@ type messageBoundaryExecer interface {
 	Rebind(query string) string
 }
 
+// formatPromptKey renders a UTC time in the normalized prompt-order key layout used by the per-session ordering boundary and pagination cursors.
 func formatPromptKey(t time.Time) string {
 	return t.UTC().Format(promptKeyLayout)
 }
 
+// parsePromptKey parses a normalized prompt-order key back into a UTC time.
 func parsePromptKey(s string) (time.Time, error) {
 	return time.Parse(promptKeyLayout, s)
 }

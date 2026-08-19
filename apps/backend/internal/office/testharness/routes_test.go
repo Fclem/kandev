@@ -492,6 +492,7 @@ func seedMessageAndCollect(t *testing.T, body map[string]interface{}) (*sqlitere
 	return repo, sessResp.SessionID, resp.MessageID, published
 }
 
+// TestSeedMessageUserAuthorPersistsPromptIndex verifies that a seeded user message is persisted with a derived prompt index.
 func TestSeedMessageUserAuthorPersistsPromptIndex(t *testing.T) {
 	repo, _, messageID, published := seedMessageAndCollect(t, map[string]interface{}{
 		"type":        "message",
@@ -534,6 +535,7 @@ func TestSeedMessageUserAuthorPersistsPromptIndex(t *testing.T) {
 	}
 }
 
+// TestSeedMessageDefaultsToAgentWithoutPromptIndex verifies that non-user seeded messages carry no prompt index.
 func TestSeedMessageDefaultsToAgentWithoutPromptIndex(t *testing.T) {
 	repo, _, messageID, published := seedMessageAndCollect(t, map[string]interface{}{
 		"type":    "message",
@@ -562,6 +564,7 @@ func TestSeedMessageDefaultsToAgentWithoutPromptIndex(t *testing.T) {
 	}
 }
 
+// TestSeedMessageExplicitPastTimestampRejected verifies that explicit timestamps before the newest session message are rejected.
 func TestSeedMessageExplicitPastTimestampRejected(t *testing.T) {
 	repo, _, messageID, _ := seedMessageAndCollect(t, map[string]interface{}{
 		"type":        "message",
@@ -599,6 +602,7 @@ func seedSessionIDFromMessage(t *testing.T, repo *sqliterepo.Repository, message
 	return msg.TaskSessionID
 }
 
+// TestSeedMessageExplicitCreatedAtPreserved verifies that an explicit future-ordered created_at is preserved on the persisted row.
 func TestSeedMessageExplicitCreatedAtPreserved(t *testing.T) {
 	explicit := time.Date(2026, 8, 19, 10, 0, 0, 123456000, time.UTC)
 	repo, _, messageID, published := seedMessageAndCollect(t, map[string]interface{}{
@@ -644,6 +648,7 @@ func TestSeedMessageExplicitCreatedAtPreserved(t *testing.T) {
 	}
 }
 
+// TestSeedMessageUserOrdinalsIncrement verifies that consecutive seeded user messages receive strictly increasing ordinals.
 func TestSeedMessageUserOrdinalsIncrement(t *testing.T) {
 	repo, sessionID, _, _ := seedMessageAndCollect(t, map[string]interface{}{
 		"type":        "message",

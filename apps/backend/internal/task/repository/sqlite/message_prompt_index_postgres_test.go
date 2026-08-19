@@ -23,6 +23,7 @@ func openPostgresRepo(t *testing.T) *Repository {
 	return repo
 }
 
+// seedPostgresSession creates a task session and user message rows in an isolated PostgreSQL schema for concurrency tests.
 func seedPostgresSession(t *testing.T, repo *Repository, taskID, sessionID, turnID string, base time.Time) {
 	t.Helper()
 	ctx := context.Background()

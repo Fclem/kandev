@@ -692,6 +692,7 @@ func seedMessageHandler(repo *sqliterepo.Repository, eventBus bus.EventBus, log 
 	}
 }
 
+// publishMessageAdded emits a message-added bus event for a seeded message so connected clients receive it without a refresh.
 func publishMessageAdded(ctx context.Context, eventBus bus.EventBus, msg *models.Message, log *logger.Logger) {
 	if eventBus == nil {
 		return

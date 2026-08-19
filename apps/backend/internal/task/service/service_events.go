@@ -925,6 +925,7 @@ func messageEventChangesPendingAction(eventType string, message *models.Message)
 	}
 }
 
+// newMessageEvent builds a bus event for a message lifecycle change, embedding the message's prompt index when present.
 func newMessageEvent(eventType string, message *models.Message) *bus.Event {
 
 	messageType := string(message.Type)

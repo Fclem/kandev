@@ -489,6 +489,7 @@ function useRouteData({
 
   useEffect(() => {
     if (bootstrappedRef.current) return;
+    promoteLegacyWorkspaceSelection(store.getState().workspaces.items);
     if (skipBootstrap) return;
     bootstrappedRef.current = true;
     let cancelled = false;

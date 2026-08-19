@@ -221,6 +221,7 @@ function useOfficeRouteBootstrap(
       }
 
       const workspaceItems = workspacesResponse.workspaces.map(mapWorkspaceItem);
+      promoteLegacyWorkspaceSelection(workspaceItems);
       const officeWorkspaceItems = workspaceItems.filter(
         (workspace) => workspace.office_workflow_id,
       );

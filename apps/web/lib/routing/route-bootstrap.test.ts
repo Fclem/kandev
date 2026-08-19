@@ -391,6 +391,24 @@ describe("structural guard: workspace-cookie lookups stay scoped", () => {
     }
   });
 
+  it("promotes validated legacy selections in every live reader", () => {
+    const compact = (file: string) => read(file).replace(/\s+/g, "").replace(/,/g, "");
+
+    for (const file of readers) {
+      expect(
+        compact(file).includes("promoteLegacyWorkspaceSelection(workspaceItems)"),
+        `${file} must promote the general workspace cookie after validation`,
+      ).toBe(true);
+    }
+
+    expect(
+      compact("src/office-routes.tsx").includes(
+        "promoteLegacyWorkspaceSelection(officeWorkspaceItemsLEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE)",
+      ),
+      "office-routes must also promote the office workspace cookie",
+    ).toBe(true);
+  });
+
   it("the sidebar writer scopes names and leaves legacy cookies untouched", () => {
     const source = read(writer);
     expect(source.includes("scopedCookieName("), `${writer} must write scoped names`).toBe(true);

@@ -29,6 +29,7 @@ func TestPortSuffix(t *testing.T) {
 		{"XFH wins on conflicting ports", "public.example:8443", "public.example:9443", "_9443"},
 		{"XFH comma separated first", "internal:38429", "public.example:8443, other:9443", "_8443"},
 		{"XFH whitespace padded", "internal:38429", "  public.example:8443 , other:9443", "_8443"},
+		{"XFH whitespace only", "internal:38429", "   ", ""},
 		{"XFH no port", "internal:38429", "public.example", ""},
 		{"IPv6 bracket", "[::1]:8080", "", "_8080"},
 		{"IPv6 zone", "[fe80::1%25eth0]:8080", "", "_8080"},

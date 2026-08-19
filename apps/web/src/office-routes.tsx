@@ -254,21 +254,6 @@ function useOfficeRouteBootstrap(
   return bootstrap;
 }
 
-export function resolveActiveOfficeWorkspaceId(
-  workspaceItems: OfficeWorkspaceItem[],
-  routeWorkspaceId: string | null,
-  activeCookieWorkspaceId: string | null,
-  officeCookieWorkspaceId: string | null,
-  settingsWorkspaceId: string | null,
-): string | null {
-  return resolveOfficeWorkspaceId(workspaceItems, {
-    routeWorkspaceId,
-    generalWorkspaceId: activeCookieWorkspaceId,
-    officeWorkspaceId: officeCookieWorkspaceId,
-    settingsWorkspaceId,
-  });
-}
-
 /**
  * Resolves the office active workspace for the client bootstrap effect from
  * the live cookie jar: general family (scoped, then legacy) and office family

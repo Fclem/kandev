@@ -13,13 +13,17 @@
 package httpmw
 
 import (
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/auth"
 	"github.com/kandev/kandev/internal/auth/authn"
+	"github.com/kandev/kandev/internal/common/logger"
 	userstore "github.com/kandev/kandev/internal/user/store"
 )
 
@@ -47,6 +51,88 @@ func Middleware(svc *auth.Service) gin.HandlerFunc {
 		c.Header("WWW-Authenticate", "Bearer")
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 	}
+}
+
+// StripUntrustedForwardedHost removes X-Forwarded-Host from requests whose
+// immediate peer is not a trusted proxy. Browsers never send
+// X-Forwarded-Host; only a reverse proxy in front of the backend should, and
+// only to carry the browser's original host:port through a port-rewrite to
+// the port-scoped cookie-name resolver (httpcookie.PortSuffix). Without this
+// gate a non-browser client could pick its own forwarded host, and with it
+// its own port-scoped cookie name, by setting the header directly. The same
+// trusted list that gates X-Forwarded-For (gin's ClientIP via
+// SetTrustedProxies) gates this header so the two trust decisions cannot
+// diverge; an untrusted value is dropped (with a warning) and the resolver
+// falls back to the request Host. backendapp passes the list returned by its
+// configureTrustedProxies, so the two uses share one configuration.
+func StripUntrustedForwardedHost(trusted []string, log *logger.Logger) gin.HandlerFunc {
+	matcher := newTrustedProxyMatcher(trusted)
+	return func(c *gin.Context) {
+		if c.GetHeader("X-Forwarded-Host") == "" {
+			return
+		}
+		peer := remoteAddrHost(c.Request.RemoteAddr)
+		if matcher.contains(peer) {
+			return
+		}
+		log.Warn("ignoring X-Forwarded-Host from untrusted peer",
+			zap.String("peer", peer),
+			zap.String("forwarded_host", c.GetHeader("X-Forwarded-Host")))
+		c.Request.Header.Del("X-Forwarded-Host")
+	}
+}
+
+// trustedProxyMatcher matches a peer IP against the trusted-proxy list (bare
+// IPs and CIDRs, the same entries configureTrustedProxies handed to gin).
+type trustedProxyMatcher struct {
+	addresses []netip.Addr
+	prefixes  []netip.Prefix
+}
+
+func newTrustedProxyMatcher(trusted []string) *trustedProxyMatcher {
+	m := &trustedProxyMatcher{}
+	for _, entry := range trusted {
+		if strings.Contains(entry, "/") {
+			if prefix, err := netip.ParsePrefix(entry); err == nil {
+				m.prefixes = append(m.prefixes, prefix)
+			}
+			continue
+		}
+		if addr, err := netip.ParseAddr(entry); err == nil {
+			m.addresses = append(m.addresses, addr)
+		}
+	}
+	return m
+}
+
+// contains reports whether host is one of the trusted addresses or inside one
+// of the trusted prefixes. Unparsable peers (Unix sockets, empty RemoteAddr)
+// are never trusted.
+func (m *trustedProxyMatcher) contains(host string) bool {
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	for _, a := range m.addresses {
+		if a == addr {
+			return true
+		}
+	}
+	for _, p := range m.prefixes {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+// remoteAddrHost returns the host part of a RemoteAddr ("IP:port"), or the
+// whole value when it has no port.
+func remoteAddrHost(remoteAddr string) string {
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host
+	}
+	return remoteAddr
 }
 
 // SyntheticIdentity is the implicit identity used while auth is disabled.

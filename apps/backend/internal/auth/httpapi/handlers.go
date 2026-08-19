@@ -120,7 +120,16 @@ func (h *Handlers) logout(c *gin.Context) {
 			return
 		}
 	}
-	clearSessionCookie(c, h.svc.CookieNameForRequest(c.Request))
+	// Clear the effective (port-scoped) name and, on a ported host, the
+	// legacy unprefixed jar from before the isolation fix (inert: nothing
+	// reads it, but it would linger up to its TTL and re-send to every
+	// instance on the host). CookieName() yields the same name for custom
+	// names and default-port hosts, so this is a single clear there.
+	scopedName := h.svc.CookieNameForRequest(c.Request)
+	clearSessionCookie(c, scopedName)
+	if baseName := h.svc.CookieName(); baseName != scopedName {
+		clearSessionCookie(c, baseName)
+	}
 	c.Status(http.StatusNoContent)
 }
 

@@ -13,11 +13,11 @@ const GENERAL_COOKIE = "kandev-active-workspace";
 const OFFICE_COOKIE = "office-active-workspace";
 
 import {
+  apiOriginPort,
   mapWorkspaceItem,
   readActiveWorkspaceCookie,
   readCookie,
   readScopedCookie,
-  readScopedCookieStoreValue,
   resolveOfficeWorkspaceId,
   resolveSettingsActiveWorkspaceId,
   scopedCookieName,
@@ -161,30 +161,27 @@ describe("readScopedCookie", () => {
 
     expect(readActiveWorkspaceCookie()).toBe("scoped-1");
   });
-});
 
-describe("readScopedCookieStoreValue", () => {
-  const scopedStore = {
-    get: (name: string) => {
-      if (name === `${GENERAL_COOKIE}_8443`) return { value: "scoped-1" };
-      if (name === GENERAL_COOKIE) return { value: "legacy-1" };
-      return undefined;
-    },
-  };
-  const legacyStore = {
-    get: (name: string) => (name === GENERAL_COOKIE ? { value: "legacy-1" } : undefined),
-  };
-
-  it("reads the scoped cookieStore entry first", () => {
-    expect(readScopedCookieStoreValue(scopedStore, GENERAL_COOKIE, "8443")).toBe("scoped-1");
-  });
-
-  it("falls back to the legacy entry when no scoped one exists", () => {
-    expect(readScopedCookieStoreValue(legacyStore, GENERAL_COOKIE, "8443")).toBe("legacy-1");
-  });
-
-  it("returns null for a null cookieStore (readCookies failure)", () => {
-    expect(readScopedCookieStoreValue(null, GENERAL_COOKIE)).toBeNull();
+  it("derives no port server-side without a configured API base URL", () => {
+    // Fail-closed: a server-side helper beside the backend has no browser
+    // origin, so the dev default port must not leak into cookie names.
+    const env = { ...process.env };
+    try {
+      delete process.env.KANDEV_API_BASE_URL;
+      const originalWindow = globalThis.window;
+      // happy-dom defines window; simulate a server context.
+      Object.defineProperty(globalThis, "window", { value: undefined, configurable: true });
+      try {
+        expect(apiOriginPort()).toBe("");
+      } finally {
+        Object.defineProperty(globalThis, "window", {
+          value: originalWindow,
+          configurable: true,
+        });
+      }
+    } finally {
+      process.env = env;
+    }
   });
 });
 
@@ -263,70 +260,74 @@ describe("structural guard: workspace-cookie lookups stay scoped", () => {
   const here = path.dirname(new URL(import.meta.url).pathname);
   const read = (file: string) => fs.readFileSync(path.resolve(here, "..", "..", file), "utf8");
 
-  const cookieStoreReaders = [
-    "app/page.tsx",
-    "app/settings/layout.tsx",
-    "app/office/layout.tsx",
-    "app/office/lib/get-active-workspace.ts",
+  // The live consumers of the workspace-cookie families. The Next-style
+  // server-component layer that previously held these lookups
+  // (app/office/layout.tsx, app/office/lib/get-active-workspace.ts,
+  // app/page.tsx, app/settings/layout.tsx) was unreachable in the Vite SPA
+  // and removed; every reader that remains runs in the browser.
+  const readers = [
+    "src/office-routes.tsx", // office boot: general then office family
+    "src/kanban-route.tsx", // kanban boot: general family
+    "src/settings-routes.tsx", // settings boot: general family
+    "src/spa-routes.tsx", // generic boot re-hydration: general family
   ];
-  const allConsumers = [...cookieStoreReaders, "src/office-routes.tsx"];
+  const writer = "components/app-sidebar/app-sidebar-workspace-navigation.ts";
+  const allConsumers = [...readers, writer];
 
   const workspaceCookieNames = `(ACTIVE_WORKSPACE_COOKIE|LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE|"${GENERAL_COOKIE}"|"${OFFICE_COOKIE}")`;
 
   it("negative: no consumer performs a direct workspace-cookie lookup", () => {
     for (const file of allConsumers) {
       const source = read(file);
-      // Direct cookieStore.get(...) or readCookie(...) with a workspace-cookie
-      // name (literal or exported constant) is forbidden — the scoped helpers
-      // are the only allowed read path.
-      const direct = new RegExp(`(cookieStore\\.get|readCookie)\\s*\\(\\s*${workspaceCookieNames}`);
+      // Direct readCookie(...) with a workspace-cookie name (literal or
+      // exported constant) is forbidden — the scoped helpers are the only
+      // allowed read path.
+      const direct = new RegExp(`readCookie\\s*\\(\\s*${workspaceCookieNames}`);
       expect(direct.test(source), `${file} must not read workspace cookies directly`).toBe(false);
     }
   });
 
-  it("positive: each reader references its mandated scoped helper", () => {
-    for (const file of cookieStoreReaders) {
+  it("positive: each reader reads via a scoped-first helper", () => {
+    for (const file of readers) {
+      const source = read(file);
       expect(
-        read(file).includes("readScopedCookieStoreValue"),
-        `${file} must read via readScopedCookieStoreValue`,
+        source.includes("readActiveWorkspaceCookie") || source.includes("readScopedCookie"),
+        `${file} must read via a scoped-first helper`,
       ).toBe(true);
     }
-    expect(read("src/office-routes.tsx").includes("readScopedCookie")).toBe(true);
   });
 
   it("passes the correct cookie names per reader", () => {
     // Whitespace- and trailing-comma-agnostic match: formatting must not
     // break the contract check.
     const compact = (file: string) => read(file).replace(/\s+/g, "").replace(/,/g, "");
-    // Kanban readers pass only the general constant.
-    for (const file of ["app/page.tsx", "app/settings/layout.tsx"]) {
+    // The office boot reads the office family (general first) to pick an
+    // office workspace when the unified cookie names a kanban board.
+    const officeSource = compact("src/office-routes.tsx");
+    const general = officeSource.indexOf("readActiveWorkspaceCookie()");
+    const office = officeSource.indexOf("readScopedCookie(LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE)");
+    expect(general, "office-routes must read the general family first").toBeGreaterThan(-1);
+    expect(office, "office-routes must read the office family").toBeGreaterThan(-1);
+    expect(general, "office-routes must read the general family before the office family").toBeLessThan(
+      office,
+    );
+    // Kanban and settings boot read only the general family.
+    for (const file of ["src/kanban-route.tsx", "src/settings-routes.tsx", "src/spa-routes.tsx"]) {
       const source = compact(file);
       expect(
-        source.includes("readScopedCookieStoreValue(cookieStoreACTIVE_WORKSPACE_COOKIE)"),
-        `${file} must read the general cookie via the constant`,
+        source.includes("readActiveWorkspaceCookie()"),
+        `${file} must read the general cookie via the scoped reader`,
       ).toBe(true);
       expect(source.includes("LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE")).toBe(false);
     }
-    // Office readers pass both constants, general first.
-    for (const file of ["app/office/layout.tsx", "app/office/lib/get-active-workspace.ts"]) {
-      const source = compact(file);
-      const general = source.indexOf(
-        "readScopedCookieStoreValue(cookieStoreACTIVE_WORKSPACE_COOKIE)",
-      );
-      const office = source.indexOf(
-        "readScopedCookieStoreValue(cookieStoreLEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE)",
-      );
-      expect(general, `${file} must reference the general constant`).toBeGreaterThan(-1);
-      expect(office, `${file} must reference the office constant`).toBeGreaterThan(-1);
-      expect(general, `${file} must read the general family before the office family`).toBeLessThan(
-        office,
-      );
-    }
-    // The sync office effect reads its office candidate via readScopedCookie.
+  });
+
+  it("the sidebar writer scopes names and expires the legacy twins", () => {
+    const source = read(writer);
+    expect(source.includes("scopedCookieName("), `${writer} must write scoped names`).toBe(true);
     expect(
-      compact("src/office-routes.tsx").includes(
-        "readScopedCookie(LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE)",
-      ),
+      source.includes("max-age=0"),
+      `${writer} must expire the legacy unprefixed twins on write`,
     ).toBe(true);
   });
 });

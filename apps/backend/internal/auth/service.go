@@ -139,9 +139,8 @@ func (s *Service) Mode() Mode {
 
 // CookieName returns the configured session cookie name (request-less form).
 // An explicitly configured auth.cookieName is returned verbatim; the empty
-// default resolves to the base name. Contexts without a request (tests, the
-// gateway capability flow) must pass this form or use
-// CookieNameForRequest with a request.
+// default resolves to the base name. Contexts without a request (tests) must
+// pass this form or use CookieNameForRequest with a request.
 func (s *Service) CookieName() string {
 	if name := strings.TrimSpace(s.cfg.Auth.CookieName); name != "" {
 		return name

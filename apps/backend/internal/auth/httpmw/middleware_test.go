@@ -10,11 +10,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/kandev/kandev/internal/auth"
 	"github.com/kandev/kandev/internal/auth/authn"
 	authstore "github.com/kandev/kandev/internal/auth/store"
 	"github.com/kandev/kandev/internal/common/config"
+	"github.com/kandev/kandev/internal/common/logger"
 	userstore "github.com/kandev/kandev/internal/user/store"
 )
 
@@ -338,4 +342,120 @@ func TestEnabledModeRejectsForeignPortSessionCookie(t *testing.T) {
 
 func contains(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
+}
+
+// echoXFH handler reports whether X-Forwarded-Host reached the handler.
+func echoXFH(c *gin.Context) {
+	if xfh := c.GetHeader("X-Forwarded-Host"); xfh != "" {
+		c.String(http.StatusOK, xfh)
+		return
+	}
+	c.String(http.StatusOK, "stripped")
+}
+
+func stripRouter(trusted ...string) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(StripUntrustedForwardedHost(trusted, mustNopLogger()))
+	router.GET("/", echoXFH)
+	return router
+}
+
+func mustNopLogger() *logger.Logger {
+	log, err := logger.NewFromZap(zap.NewNop())
+	if err != nil {
+		panic(err)
+	}
+	return log
+}
+
+// TestStripUntrustedForwardedHostUntrustedPeerStrips pins the secure default:
+// without a trusted-proxy list, an X-Forwarded-Host presented by the peer is
+// dropped before the handler (and the cookie resolver) sees it.
+func TestStripUntrustedForwardedHostUntrustedPeerStrips(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Forwarded-Host", "public.example:8443")
+	rec := httptest.NewRecorder()
+	stripRouter().ServeHTTP(rec, req)
+	if got := rec.Body.String(); got != "stripped" {
+		t.Fatalf("untrusted XFH body = %q, want stripped", got)
+	}
+}
+
+// TestStripUntrustedForwardedHostTrustedPeerKeeps pins the opt-in behavior: a
+// peer inside the trusted list may carry X-Forwarded-Host (the proxy-authored
+// browser host:port) through to the cookie resolver.
+func TestStripUntrustedForwardedHostTrustedPeerKeeps(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.5:5555"
+	req.Header.Set("X-Forwarded-Host", "public.example:8443")
+	rec := httptest.NewRecorder()
+	stripRouter("10.0.0.0/8").ServeHTTP(rec, req)
+	if got := rec.Body.String(); got != "public.example:8443" {
+		t.Fatalf("trusted XFH body = %q, want public.example:8443", got)
+	}
+}
+
+// TestStripUntrustedForwardedHostCIDRExcludesOutOfRangePeer pins the CIDR
+// boundary: the peer just outside the trusted prefix is untrusted.
+func TestStripUntrustedForwardedHostCIDRExcludesOutOfRangePeer(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.168.1.7:5555"
+	req.Header.Set("X-Forwarded-Host", "public.example:8443")
+	rec := httptest.NewRecorder()
+	stripRouter("192.168.0.0/24").ServeHTTP(rec, req)
+	if got := rec.Body.String(); got != "stripped" {
+		t.Fatalf("out-of-CIDR XFH body = %q, want stripped", got)
+	}
+}
+
+// TestStripUntrustedForwardedHostNoHeaderUntouched pins the no-op path: a
+// request without the header passes through unchanged.
+func TestStripUntrustedForwardedHostNoHeaderUntouched(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	stripRouter().ServeHTTP(rec, req)
+	if got := rec.Body.String(); got != "stripped" {
+		t.Fatalf("no-header body = %q, want stripped (handler default)", got)
+	}
+}
+
+// TestStripUntrustedForwardedHostWarns pins the operator signal: stripping an
+// untrusted X-Forwarded-Host emits a warning naming the peer, so a
+// misconfigured proxy (or a client trying to pick its own cookie scope) is
+// visible in the logs instead of silently no-opping.
+func TestStripUntrustedForwardedHostWarns(t *testing.T) {
+	core, logs := observer.New(zapcore.WarnLevel)
+	log, err := logger.NewFromZap(zap.New(core))
+	if err != nil {
+		t.Fatalf("observer logger: %v", err)
+	}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(StripUntrustedForwardedHost(nil, log))
+	router.GET("/", echoXFH)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.9:5555"
+	req.Header.Set("X-Forwarded-Host", "public.example:8443")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if got := rec.Body.String(); got != "stripped" {
+		t.Fatalf("warn-test body = %q, want stripped", got)
+	}
+	warned := false
+	for _, entry := range logs.All() {
+		if !strings.Contains(entry.Message, "X-Forwarded-Host") {
+			continue
+		}
+		warned = true
+		for _, field := range entry.Context {
+			if field.Key == "peer" && field.String != "203.0.113.9" {
+				t.Fatalf("warning peer = %q, want 203.0.113.9", field.String)
+			}
+		}
+	}
+	if !warned {
+		t.Fatal("no X-Forwarded-Host warning was logged")
+	}
 }

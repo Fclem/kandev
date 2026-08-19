@@ -141,12 +141,21 @@ test.describe("Sidebar — cross-workspace isolation", () => {
     await expect(taskInList(testPage, "Workspace A Task")).not.toBeVisible();
   });
 
-  test("writes the port-scoped workspace cookie, not the unprefixed name", async ({
+  test("writes the port-scoped workspace cookie and expires the legacy twin", async ({
     testPage,
     apiClient,
     backend,
   }) => {
     const workspaceB = await apiClient.createWorkspace("Workspace B Cookie Scope");
+
+    // Simulate a pre-upgrade jar: the legacy unprefixed cookie exists before
+    // any selection is made post-upgrade.
+    await testPage.addInitScript(
+      ({ baseName }) => {
+        document.cookie = `${baseName}=pre-upgrade; path=/`;
+      },
+      { baseName: ACTIVE_WORKSPACE_COOKIE },
+    );
 
     const kanban = new KanbanPage(testPage);
     await kanban.goto();
@@ -158,19 +167,25 @@ test.describe("Sidebar — cross-workspace isolation", () => {
     await expect(kanban.board).toBeVisible();
 
     // The selection is recorded under the port-scoped name, and the legacy
-    // unprefixed name is never written (read-only fallback only).
+    // unprefixed twin (which the scoped-first readers consult as read-only
+    // fallback) is expired so no other instance on the host falls back to the
+    // shared pre-upgrade value.
     await expect
       .poll(() => activeWorkspaceCookie(testPage, String(backend.port)))
       .toBe(workspaceB.id);
     const cookieState = await testPage.evaluate(
       ({ baseName, port }) => ({
-        unprefixed: document.cookie.includes(`${baseName}=`),
+        unprefixedValue: document.cookie
+          .split(";")
+          .map((part) => part.trim())
+          .find((part) => part.startsWith(`${baseName}=`))
+          ?.slice(baseName.length + 1) ?? null,
         scoped: document.cookie.includes(`${baseName}_${port}=`),
       }),
       { baseName: ACTIVE_WORKSPACE_COOKIE, port: String(backend.port) },
     );
     expect(cookieState.scoped, "scoped cookie must be present").toBe(true);
-    expect(cookieState.unprefixed, "unprefixed cookie must not be written").toBe(false);
+    expect(cookieState.unprefixedValue, "legacy cookie must be expired").not.toBe("pre-upgrade");
   });
 
   test("creates only in the selected workspace after switching from an open task", async ({

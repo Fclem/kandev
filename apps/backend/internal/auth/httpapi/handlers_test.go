@@ -12,14 +12,26 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
+	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/auth"
 	authhttpmw "github.com/kandev/kandev/internal/auth/httpmw"
 	authstore "github.com/kandev/kandev/internal/auth/store"
 	"github.com/kandev/kandev/internal/common/config"
 	commonhttpmw "github.com/kandev/kandev/internal/common/httpmw"
+	"github.com/kandev/kandev/internal/common/logger"
 	userstore "github.com/kandev/kandev/internal/user/store"
 )
+
+// testLogger returns a discard logger for fixtures that must pass one.
+func testLogger(t *testing.T) *logger.Logger {
+	t.Helper()
+	log, err := logger.NewFromZap(zap.NewNop())
+	if err != nil {
+		t.Fatalf("nop logger: %v", err)
+	}
+	return log
+}
 
 // newAuthService builds an auth service from cfg over an in-memory store
 // pair. Shared by the plain and CORS-gated fixtures.
@@ -82,13 +94,17 @@ func newAPIFixtureWithCfg(t *testing.T, cfg *config.Config, trustedProxies ...st
 
 // newCORSGatedAPIFixture mirrors the production stack: the CORS/WS origin
 // gate (httpmw.AllowedOrigin, the same decision branch as
-// backendapp.corsMiddleware) runs before the auth middleware, as in
-// buildHTTPServer. Used for the reverse-proxy contract tests.
-func newCORSGatedAPIFixture(t *testing.T, cfg *config.Config) (*gin.Engine, *auth.Service) {
+// newCORSGatedAPIFixture mirrors the production chain for the reverse-proxy
+// contract tests: the CORS origin gate (as in backendapp.corsMiddleware) runs
+// before the auth middleware, as in buildHTTPServer, and — like
+// buildHTTPServer — X-Forwarded-Host is honored only when the request's peer
+// is in the given trusted-proxy list (mirroring KANDEV_TRUSTED_PROXIES).
+func newCORSGatedAPIFixture(t *testing.T, cfg *config.Config, trustedProxies ...string) (*gin.Engine, *auth.Service) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	svc := newAuthService(t, cfg)
 	router := gin.New()
+	router.Use(authhttpmw.StripUntrustedForwardedHost(trustedProxies, testLogger(t)))
 	router.Use(func(c *gin.Context) {
 		if origin := c.GetHeader("Origin"); origin != "" {
 			if !commonhttpmw.AllowedOrigin(origin, c.Request.Host) {
@@ -489,7 +505,8 @@ func TestSessionCookieScopedToPortedHost(t *testing.T) {
 }
 
 // TestSessionCookieLogoutClearsScopedName pins the logout/clear path: the
-// same scoped name login wrote is cleared.
+// same scoped name login wrote is cleared, and on a ported host the legacy
+// unprefixed jar from before the isolation fix is cleared too.
 func TestSessionCookieLogoutClearsScopedName(t *testing.T) {
 	router, _ := newAPIFixture(t, true)
 	client := &apiClient{t: t, router: router}
@@ -502,10 +519,13 @@ func TestSessionCookieLogoutClearsScopedName(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("logout: %d", rec.Code)
 	}
-	assertSessionCookieNames(t, rec, "kandev_session", "kandev_session_8443")
+	assertSessionCookieNames(t, rec, "kandev_session", "kandev_session_8443", "kandev_session")
 	for _, cookie := range rec.Result().Cookies() {
-		if cookie.Name == "kandev_session_8443" && cookie.MaxAge >= 0 {
-			t.Fatalf("logout did not expire the scoped cookie: %+v", cookie)
+		switch cookie.Name {
+		case "kandev_session_8443", "kandev_session":
+			if cookie.MaxAge >= 0 {
+				t.Fatalf("logout did not expire %q: %+v", cookie.Name, cookie)
+			}
 		}
 	}
 	if client.cookie != nil {
@@ -722,11 +742,45 @@ func TestProxyContractPreservedHost(t *testing.T) {
 }
 
 // TestProxyContractPortRewriteDerivesPublicPortFromXFH drives the compliant
-// setup (b): a same-hostname port rewrite with a correct X-Forwarded-Host.
-// The gate passes (ports are not compared) and the failing-before assertion
-// is the cookie resolver deriving _8443 from XFH, not _38429 from the
-// internal Host.
+// setup (b): a same-hostname port rewrite with a correct X-Forwarded-Host
+// from a TRUSTED reverse proxy (peer inside KANDEV_TRUSTED_PROXIES, as in
+// buildHTTPServer). The gate passes (ports are not compared) and the
+// failing-before assertion is the cookie resolver deriving _8443 from XFH,
+// not _38429 from the internal Host.
 func TestProxyContractPortRewriteDerivesPublicPortFromXFH(t *testing.T) {
+	router, _ := newCORSGatedAPIFixture(t, authFixtureConfig(), "10.0.0.0/8")
+	client := &apiClient{t: t, router: router}
+
+	rec := client.do(http.MethodPost, "/api/v1/auth/setup", map[string]any{
+		"email": "admin@x.dev", "password": "adminpass123", "display_name": "Admin",
+	}, func(req *http.Request) {
+		req.RemoteAddr = "10.0.0.5:5555" // inside the trusted proxy range
+		req.Host = "public.example:38429"
+		req.Header.Set("X-Forwarded-Host", "public.example:8443")
+		req.Header.Set("Origin", "https://public.example:8443")
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("setup through port rewrite: %d body=%s", rec.Code, rec.Body.String())
+	}
+	assertSessionCookieNames(t, rec, "kandev_session", "kandev_session_8443")
+
+	if rec := client.do(http.MethodGet, "/api/v1/users", nil, func(req *http.Request) {
+		req.RemoteAddr = "10.0.0.5:5555"
+		req.Host = "public.example:38429"
+		req.Header.Set("X-Forwarded-Host", "public.example:8443")
+		req.Header.Set("Origin", "https://public.example:8443")
+	}); rec.Code != http.StatusOK {
+		t.Fatalf("authenticated call through port rewrite: %d, want 200", rec.Code)
+	}
+}
+
+// TestProxyContractPortRewriteUntrustedXFHIgnored pins the secure default:
+// an UNTRUSTED peer's X-Forwarded-Host is stripped before the cookie resolver
+// runs (browsers never send the header, so only proxies or scripts do), and
+// the suffix falls back to the request Host. This is the silent no-op the
+// pre-fix resolver would have performed; the strip middleware now drops the
+// header with a warning instead.
+func TestProxyContractPortRewriteUntrustedXFHIgnored(t *testing.T) {
 	router, _ := newCORSGatedAPIFixture(t, authFixtureConfig())
 	client := &apiClient{t: t, router: router}
 
@@ -738,16 +792,16 @@ func TestProxyContractPortRewriteDerivesPublicPortFromXFH(t *testing.T) {
 		req.Header.Set("Origin", "https://public.example:8443")
 	})
 	if rec.Code != http.StatusOK {
-		t.Fatalf("setup through port rewrite: %d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("setup through untrusted XFH: %d body=%s", rec.Code, rec.Body.String())
 	}
-	assertSessionCookieNames(t, rec, "kandev_session", "kandev_session_8443")
+	assertSessionCookieNames(t, rec, "kandev_session", "kandev_session_38429")
 
 	if rec := client.do(http.MethodGet, "/api/v1/users", nil, func(req *http.Request) {
 		req.Host = "public.example:38429"
 		req.Header.Set("X-Forwarded-Host", "public.example:8443")
 		req.Header.Set("Origin", "https://public.example:8443")
 	}); rec.Code != http.StatusOK {
-		t.Fatalf("authenticated call through port rewrite: %d, want 200", rec.Code)
+		t.Fatalf("authenticated call through untrusted XFH: %d, want 200", rec.Code)
 	}
 }
 

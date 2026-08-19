@@ -16,6 +16,14 @@ type WorkspaceItem = ListWorkspacesResponse["workspaces"][number];
  * web port and the API on the backend port).
  */
 export function apiOriginPort(): string {
+  if (typeof window === "undefined" && !process.env.KANDEV_API_BASE_URL) {
+    // Server-side helper beside the backend with no configured base URL: the
+    // dev default port means nothing on the real host, and scoping against it
+    // would produce a cookie name no browser ever writes. Unscoped is the
+    // fail-closed default; the browser (which has the real origin) is the
+    // only live cookie reader.
+    return "";
+  }
   return new URL(getBackendConfig().apiBaseUrl).port;
 }
 
@@ -42,27 +50,6 @@ export function readScopedCookie(name: string, port?: string): string | null {
   if (scoped) return scoped;
   const legacy = readCookie(name);
   return legacy || null;
-}
-
-type ScopedCookieStore = {
-  get(name: string): { value: string } | undefined;
-};
-
-/**
- * Scoped-first + legacy fallback for server-component readers that hold a
- * `readCookies()` CookieStore instead of document.cookie. Shares
- * `scopedCookieName` with the document-cookie readers, so both families derive
- * the identical name.
- */
-export function readScopedCookieStoreValue(
-  cookieStore: ScopedCookieStore | null | undefined,
-  name: string,
-  port?: string,
-): string | null {
-  if (!cookieStore) return null;
-  const scoped = cookieStore.get(scopedCookieName(name, port))?.value || null;
-  if (scoped) return scoped;
-  return cookieStore.get(name)?.value || null;
 }
 
 export function mapWorkspaceItem(ws: WorkspaceItem): WorkspaceState["items"][number] {

@@ -94,6 +94,23 @@ describe("useRunLiveSync", () => {
     expect(result.current.events).toEqual([liveEvent]);
   });
 
+  it("merges a changed snapshot without dropping a live event", () => {
+    const initialEvent = runEvent(1, "init");
+    const liveEvent = runEvent(2, "started");
+    const snapshotEvent = runEvent(3, "step");
+    const { result, rerender } = renderLiveSync({
+      ...initialProps,
+      initialEvents: [initialEvent],
+    });
+
+    act(() => {
+      handlers.listener!({ run_id: "run-1", event: liveEvent });
+    });
+    rerender({ ...initialProps, initialEvents: [initialEvent, snapshotEvent] });
+
+    expect(result.current.events).toEqual([initialEvent, liveEvent, snapshotEvent]);
+  });
+
   it("re-syncs events when the snapshot content actually changes", () => {
     const started = runEvent(1, "started");
     const { result, rerender } = renderLiveSync(initialProps);

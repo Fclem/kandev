@@ -69,10 +69,11 @@ export function useRunLiveSync(
     }
     lastSnapshotRef.current = { runId, seqs: nextSeqs };
     if (prev.runId === runId) {
-      // Fresh snapshot for the same run: keep live-added seqs (never disturb
-      // them) and fold the snapshot's seqs into the dedup set so a reconnect
-      // replay of a snapshot-covered event cannot double-insert.
+      // Fresh snapshot for the same run: merge it with live-added events and
+      // fold its seqs into the dedup set so reconnect replays cannot duplicate.
       for (const seq of nextSeqs) seenSeqsRef.current.add(seq);
+      setEvents((current) => mergeRunEvents(current, initialEvents));
+      return;
     } else {
       // Different run: restart dedup from the new snapshot; seqs are per-run.
       seenSeqsRef.current = new Set(nextSeqs);
@@ -129,4 +130,14 @@ function mergeRunEvent(prev: RunEvent[], evt: RunEvent): RunEvent[] {
   }
   next.splice(lo, 0, evt);
   return next;
+}
+
+function mergeRunEvents(current: RunEvent[], snapshot: RunEvent[]): RunEvent[] {
+  if (current.length === 0) return snapshot;
+  if (snapshot.length === 0) return current;
+
+  const bySeq = new Map<number, RunEvent>();
+  for (const event of current) bySeq.set(event.seq, event);
+  for (const event of snapshot) bySeq.set(event.seq, event);
+  return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
 }

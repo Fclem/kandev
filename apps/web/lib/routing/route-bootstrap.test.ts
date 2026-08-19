@@ -6,8 +6,10 @@ import path from "node:path";
 // port so scoped-name assertions are deterministic and independent of the
 // jsdom default origin (http://localhost:3000).
 vi.mock("@/lib/config", () => ({
-  getBackendConfig: () => ({ apiBaseUrl: "http://localhost:8443" }),
+  getBackendConfig: vi.fn(() => ({ apiBaseUrl: "http://localhost:8443" })),
 }));
+
+import { getBackendConfig } from "@/lib/config";
 
 const GENERAL_COOKIE = "kandev-active-workspace";
 const OFFICE_COOKIE = "office-active-workspace";
@@ -15,6 +17,7 @@ const OFFICE_COOKIE = "office-active-workspace";
 import {
   apiOriginPort,
   mapWorkspaceItem,
+  promoteLegacyWorkspaceSelection,
   readActiveWorkspaceCookie,
   readCookie,
   readScopedCookie,
@@ -129,6 +132,71 @@ describe("scopedCookieName", () => {
     // (jsdom default :3000), or the backend would read a different name.
     expect(window.location.port).toBe("3000");
     expect(scopedCookieName(GENERAL_COOKIE)).toBe("kandev-active-workspace_8443");
+  });
+});
+
+describe("promoteLegacyWorkspaceSelection", () => {
+  beforeEach(() => {
+    document.cookie = `${GENERAL_COOKIE}=; path=/; max-age=0`;
+    document.cookie = `${GENERAL_COOKIE}_8443=; path=/; max-age=0`;
+    document.cookie = `${OFFICE_COOKIE}=; path=/; max-age=0`;
+    document.cookie = `${OFFICE_COOKIE}_8443=; path=/; max-age=0`;
+  });
+
+  it("copies a validated legacy selection into the scoped cookie on first boot", () => {
+    document.cookie = `${GENERAL_COOKIE}=kanban-1; path=/`;
+
+    promoteLegacyWorkspaceSelection([{ id: "kanban-1" }, { id: "office-1" }]);
+
+    // The scoped cookie is now written and the legacy name is untouched (it
+    // is another instance's live cookie / the migration fallback for others).
+    expect(document.cookie).toContain(`${GENERAL_COOKIE}_8443=kanban-1`);
+    expect(document.cookie).toContain(`${GENERAL_COOKIE}=kanban-1`);
+  });
+
+  it("is a no-op when the scoped cookie already exists", () => {
+    document.cookie = `${GENERAL_COOKIE}=legacy-1; path=/`;
+    document.cookie = `${GENERAL_COOKIE}_8443=scoped-1; path=/`;
+
+    promoteLegacyWorkspaceSelection([{ id: "scoped-1" }, { id: "legacy-1" }]);
+
+    expect(readScopedCookie(GENERAL_COOKIE, "8443")).toBe("scoped-1");
+    expect(document.cookie).toContain(`${GENERAL_COOKIE}=legacy-1`);
+  });
+
+  it("is a no-op when the legacy value does not name a workspace", () => {
+    document.cookie = `${GENERAL_COOKIE}=stale-id; path=/`;
+
+    promoteLegacyWorkspaceSelection([{ id: "kanban-1" }]);
+
+    // No scoped twin was written (assert on VALUE: an empty lingering entry
+    // may exist after the cleanup, and readScopedCookie would return the
+    // legacy fallback anyway).
+    expect(document.cookie).not.toContain(`${GENERAL_COOKIE}_8443=stale-id`);
+  });
+
+  it("is a no-op on a no-port instance (scoped == legacy)", () => {
+    document.cookie = `${GENERAL_COOKIE}=kanban-1; path=/`;
+    vi.mocked(getBackendConfig).mockReturnValue({ apiBaseUrl: "http://localhost" });
+    try {
+      promoteLegacyWorkspaceSelection([{ id: "kanban-1" }]);
+      // No scoped twin exists to write; the plain name is the scoped name.
+      expect(readScopedCookie(GENERAL_COOKIE, "")).toBe("kanban-1");
+      expect(document.cookie).not.toContain(`${GENERAL_COOKIE}_=`);
+    } finally {
+      vi.mocked(getBackendConfig).mockReturnValue({ apiBaseUrl: "http://localhost:8443" });
+    }
+  });
+
+  it("promotes the office family under its own name", () => {
+    document.cookie = `${OFFICE_COOKIE}=office-1; path=/`;
+
+    promoteLegacyWorkspaceSelection([{ id: "office-1" }], OFFICE_COOKIE);
+
+    expect(document.cookie).toContain(`${OFFICE_COOKIE}_8443=office-1`);
+    expect(document.cookie).toContain(`${OFFICE_COOKIE}=office-1`);
+    // The general family is untouched.
+    expect(readScopedCookie(GENERAL_COOKIE, "8443")).toBeNull();
   });
 });
 

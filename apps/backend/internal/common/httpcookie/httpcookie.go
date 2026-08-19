@@ -21,10 +21,12 @@ import (
 // registered in backendapp.buildHTTPServer) removes X-Forwarded-Host from
 // untrusted peers, so a value present here is proxy-authored. A suffix
 // requires a decimal port in 1..65535: nonnumeric service names and
-// out-of-range values yield no suffix. The default scheme ports 80 and 443
-// yield NO suffix — browsers omit them from Host, and the SPA's API origin
-// derivation (URL.port) also reports "" for them, so suffixing them would
-// split one instance's cookies across two names. A nil request yields "".
+// out-of-range values yield no suffix. The scheme's default port yields NO
+// suffix: 443 for TLS (direct or X-Forwarded-Proto: https) and 80 otherwise.
+// This mirrors the SPA's API-origin derivation, where URL.port reports "" for
+// the scheme-default port only — so http://host:443 stays "_443" on both
+// sides instead of splitting one instance's cookies across two names. A nil
+// request yields "".
 func PortSuffix(r *http.Request) string {
 	if r == nil {
 		return ""
@@ -41,10 +43,21 @@ func PortSuffix(r *http.Request) string {
 	if err != nil || n < 1 || n > 65535 {
 		return ""
 	}
-	if n == 80 || n == 443 {
+	if n == defaultPortForRequest(r) {
 		return ""
 	}
 	return "_" + port
+}
+
+// defaultPortForRequest returns the scheme's default port: 443 when the
+// request arrived over TLS (directly or via X-Forwarded-Proto), 80 otherwise.
+// Mirrors the Secure-cookie flag logic (requestIsTLS) so the two scheme
+// decisions cannot diverge.
+func defaultPortForRequest(r *http.Request) int {
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		return 443
+	}
+	return 80
 }
 
 // ScopedName returns base suffixed with the request's port suffix, or "" when

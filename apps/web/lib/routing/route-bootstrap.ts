@@ -5,6 +5,9 @@ import type { ListWorkspacesResponse } from "@/lib/types/http";
 export const ACTIVE_WORKSPACE_COOKIE = "kandev-active-workspace";
 export const LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE = "office-active-workspace";
 
+// One year; matches the sidebar writer's selection-cookie lifetime.
+const WORKSPACE_COOKIE_MAX_AGE = 31536000;
+
 type WorkspaceItem = ListWorkspacesResponse["workspaces"][number];
 
 /**
@@ -84,6 +87,34 @@ export function readCookie(name: string): string | null {
 
 export function readActiveWorkspaceCookie(): string | null {
   return readScopedCookie(ACTIVE_WORKSPACE_COOKIE);
+}
+
+/**
+ * One-time promotion of a validated legacy selection into the scoped cookie.
+ *
+ * A ported instance whose scoped cookie was never written (fresh upgrade, or
+ * no explicit selection yet on this instance) falls back to the legacy
+ * unprefixed name on every boot, keeping it coupled to the shared jar. Once
+ * the boot resolves a legacy value that names one of the instance's own
+ * workspaces, copy it into the port-scoped name so later boots read the
+ * scoped cookie — without touching the legacy name, which is the live
+ * selection cookie of any default-port instance on the host and the
+ * migration fallback for other instances (spec: no proactive legacy
+ * scrubbing). No-op when the scoped cookie already exists, the legacy value
+ * is absent or invalid, or the instance has no port (scoped == legacy).
+ */
+export function promoteLegacyWorkspaceSelection(
+  workspaceItems: { id: string }[],
+  name: string = ACTIVE_WORKSPACE_COOKIE,
+): void {
+  if (typeof document === "undefined") return;
+  const port = apiOriginPort();
+  if (!port) return;
+  const scoped = `${name}_${port}`;
+  if (readCookie(scoped)) return;
+  const legacy = readCookie(name);
+  if (!legacy || !workspaceItems.some((ws) => ws.id === legacy)) return;
+  document.cookie = `${scoped}=${encodeURIComponent(legacy)}; path=/; max-age=${WORKSPACE_COOKIE_MAX_AGE}; samesite=strict`;
 }
 
 export type OfficeWorkspaceItem = { id: string; office_workflow_id?: string | null };

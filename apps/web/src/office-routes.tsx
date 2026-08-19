@@ -32,6 +32,7 @@ import { useRouter, useSearchParams } from "@/lib/routing/client-router";
 import {
   LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE,
   mapWorkspaceItem,
+  promoteLegacyWorkspaceSelection,
   readActiveWorkspaceCookie,
   readScopedCookie,
   resolveOfficeWorkspaceId,
@@ -223,6 +224,11 @@ function useOfficeRouteBootstrap(
       const officeWorkspaceItems = workspaceItems.filter(
         (workspace) => workspace.office_workflow_id,
       );
+      // Same one-time promotion as the generic boot, for the office family:
+      // a validated legacy office selection is copied into its scoped name so
+      // a ported instance stops falling back to the shared jar on every boot
+      // (legacy name stays untouched — default-port instances' live cookie).
+      promoteLegacyWorkspaceSelection(officeWorkspaceItems, LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE);
       const activeWorkspaceId = resolveOfficeBootstrapWorkspaceId(
         officeWorkspaceItems,
         routeWorkspaceId,

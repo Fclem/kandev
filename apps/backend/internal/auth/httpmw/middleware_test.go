@@ -345,6 +345,7 @@ func contains(haystack, needle string) bool {
 }
 
 // echoXFH handler reports whether X-Forwarded-Host reached the handler.
+// echoXFH reports whether X-Forwarded-Host reached the handler.
 func echoXFH(c *gin.Context) {
 	if xfh := c.GetHeader("X-Forwarded-Host"); xfh != "" {
 		c.String(http.StatusOK, xfh)
@@ -353,6 +354,8 @@ func echoXFH(c *gin.Context) {
 	c.String(http.StatusOK, "stripped")
 }
 
+// stripRouter builds a gin router with the X-Forwarded-Host strip middleware
+// (trusted list as given) and an echoXFH handler that reports what reached it.
 func stripRouter(trusted ...string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -361,6 +364,7 @@ func stripRouter(trusted ...string) *gin.Engine {
 	return router
 }
 
+// mustNopLogger returns a discard logger for strip-middleware tests.
 func mustNopLogger() *logger.Logger {
 	log, err := logger.NewFromZap(zap.NewNop())
 	if err != nil {

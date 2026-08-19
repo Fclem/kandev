@@ -183,6 +183,7 @@ func assertSessionCookieNames(t *testing.T, rec *httptest.ResponseRecorder, filt
 	}
 }
 
+// equalStrings reports whether two string slices are identical, in order.
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

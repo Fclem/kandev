@@ -112,6 +112,10 @@ func (h *Handlers) login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }
 
+// logout terminates the current session (if any) and clears its port-scoped
+// session cookie. The unprefixed base name is deliberately left untouched —
+// on a host serving a default-port instance it is that instance's live
+// session cookie (see spec: no proactive legacy scrubbing).
 func (h *Handlers) logout(c *gin.Context) {
 	identity, ok := authn.FromGin(c)
 	if ok && identity.SessionID != "" {

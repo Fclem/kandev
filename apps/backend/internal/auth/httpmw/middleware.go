@@ -91,6 +91,9 @@ type trustedProxyMatcher struct {
 	prefixes  []netip.Prefix
 }
 
+// newTrustedProxyMatcher indexes the trusted-proxy list (bare IPs and CIDRs)
+// for O(1) peer matching. IPv4-mapped entries are normalized to their IPv4
+// form so the matcher agrees with gin's trust decision (see contains).
 func newTrustedProxyMatcher(trusted []string) *trustedProxyMatcher {
 	m := &trustedProxyMatcher{}
 	for _, entry := range trusted {
@@ -147,6 +150,8 @@ func (m *trustedProxyMatcher) contains(host string) bool {
 	return false
 }
 
+// remoteAddrHost returns the host part of a RemoteAddr ("IP:port"), or the
+// whole value when it has no port.
 // remoteAddrHost returns the host part of a RemoteAddr ("IP:port"), or the
 // whole value when it has no port.
 func remoteAddrHost(remoteAddr string) string {

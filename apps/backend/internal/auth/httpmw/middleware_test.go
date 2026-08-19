@@ -428,9 +428,9 @@ func TestStripUntrustedForwardedHostMappedFormCIDRKeeps(t *testing.T) {
 }
 
 // TestStripUntrustedForwardedHostDegenerateMappedCIDRFailsClosed pins the
-// unsupported corner: a mapped-form CIDR with fewer than 96 bits degenerates
-// to trust-all in gin; the matcher refuses it, so the header is stripped
-// (fail closed) rather than silently trusting everything.
+// unsupported corner: a mapped-form CIDR with fewer than 96 bits matches no
+// IPv4-form peer in gin (dead entry); the matcher mirrors that by skipping it
+// (fail closed) rather than silently trusting something gin would not.
 func TestStripUntrustedForwardedHostDegenerateMappedCIDRFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "203.0.113.9:5555"
@@ -439,6 +439,22 @@ func TestStripUntrustedForwardedHostDegenerateMappedCIDRFailsClosed(t *testing.T
 	stripRouter("::ffff:10.0.0.0/90").ServeHTTP(rec, req)
 	if got := rec.Body.String(); got != "stripped" {
 		t.Fatalf("degenerate mapped CIDR body = %q, want stripped", got)
+	}
+}
+
+// TestStripUntrustedForwardedHostMappedForm96MirrorsGin pins the /96
+// boundary: a mapped-form /96 degenerates to 0.0.0.0/0 in gin (trusts every
+// IPv4 peer), and the matcher mirrors that trust instead of failing closed —
+// failing closed there would strip a header gin trusts and break the
+// port-rewrite cookie flow for the config.
+func TestStripUntrustedForwardedHostMappedForm96MirrorsGin(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.9:5555" // any IPv4 peer
+	req.Header.Set("X-Forwarded-Host", "public.example:8443")
+	rec := httptest.NewRecorder()
+	stripRouter("::ffff:10.0.0.0/96").ServeHTTP(rec, req)
+	if got := rec.Body.String(); got != "public.example:8443" {
+		t.Fatalf("mapped /96 body = %q, want public.example:8443 (gin trusts all IPv4)", got)
 	}
 }
 

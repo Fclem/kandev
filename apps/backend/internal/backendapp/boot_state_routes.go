@@ -891,10 +891,14 @@ func readActiveWorkspaceCookie(req *http.Request) string {
 	if req == nil {
 		return ""
 	}
-	for _, name := range []string{
-		httpcookie.ScopedName(req, activeWorkspaceCookie),
-		activeWorkspaceCookie,
-	} {
+	// On a default-port host the scoped name IS the legacy name; reading the
+	// same cookie twice is a no-op, so only probe the legacy name when the
+	// port actually scopes it.
+	names := []string{httpcookie.ScopedName(req, activeWorkspaceCookie)}
+	if scoped := names[0]; scoped != activeWorkspaceCookie {
+		names = append(names, activeWorkspaceCookie)
+	}
+	for _, name := range names {
 		cookie, err := req.Cookie(name)
 		if err == nil {
 			if value := strings.TrimSpace(cookie.Value); value != "" {
@@ -912,10 +916,13 @@ func readOfficeWorkspaceCookie(req *http.Request) string {
 	if req == nil {
 		return ""
 	}
-	for _, name := range []string{
-		httpcookie.ScopedName(req, legacyOfficeWorkspaceCookie),
-		legacyOfficeWorkspaceCookie,
-	} {
+	// Same default-port dedupe as readActiveWorkspaceCookie: the scoped name
+	// equals the legacy name when the Host carries no (non-default) port.
+	names := []string{httpcookie.ScopedName(req, legacyOfficeWorkspaceCookie)}
+	if scoped := names[0]; scoped != legacyOfficeWorkspaceCookie {
+		names = append(names, legacyOfficeWorkspaceCookie)
+	}
+	for _, name := range names {
 		cookie, err := req.Cookie(name)
 		if err == nil {
 			if value := strings.TrimSpace(cookie.Value); value != "" {

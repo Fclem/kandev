@@ -21,7 +21,10 @@ import (
 // registered in backendapp.buildHTTPServer) removes X-Forwarded-Host from
 // untrusted peers, so a value present here is proxy-authored. A suffix
 // requires a decimal port in 1..65535: nonnumeric service names and
-// out-of-range values yield no suffix. A nil request yields "".
+// out-of-range values yield no suffix. The default scheme ports 80 and 443
+// yield NO suffix — browsers omit them from Host, and the SPA's API origin
+// derivation (URL.port) also reports "" for them, so suffixing them would
+// split one instance's cookies across two names. A nil request yields "".
 func PortSuffix(r *http.Request) string {
 	if r == nil {
 		return ""
@@ -36,6 +39,9 @@ func PortSuffix(r *http.Request) string {
 	}
 	n, err := strconv.Atoi(port)
 	if err != nil || n < 1 || n > 65535 {
+		return ""
+	}
+	if n == 80 || n == 443 {
 		return ""
 	}
 	return "_" + port

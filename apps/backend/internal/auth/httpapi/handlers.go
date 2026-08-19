@@ -120,16 +120,13 @@ func (h *Handlers) logout(c *gin.Context) {
 			return
 		}
 	}
-	// Clear the effective (port-scoped) name and, on a ported host, the
-	// legacy unprefixed jar from before the isolation fix (inert: nothing
-	// reads it, but it would linger up to its TTL and re-send to every
-	// instance on the host). CookieName() yields the same name for custom
-	// names and default-port hosts, so this is a single clear there.
-	scopedName := h.svc.CookieNameForRequest(c.Request)
-	clearSessionCookie(c, scopedName)
-	if baseName := h.svc.CookieName(); baseName != scopedName {
-		clearSessionCookie(c, baseName)
-	}
+	// Clear only the effective (port-scoped) name. The unprefixed base name is
+	// deliberately left alone: on a host serving a default-port instance (or a
+	// not-yet-upgraded one), it is that instance's LIVE session cookie, not an
+	// inert legacy jar — expiring it would log the other instance out (see
+	// docs/specs/fix-multi-instance-cookie-isolation/spec.md: the upgraded
+	// instance does not proactively delete the legacy cookie).
+	clearSessionCookie(c, h.svc.CookieNameForRequest(c.Request))
 	c.Status(http.StatusNoContent)
 }
 

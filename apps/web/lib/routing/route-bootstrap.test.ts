@@ -308,9 +308,10 @@ describe("structural guard: workspace-cookie lookups stay scoped", () => {
     const office = officeSource.indexOf("readScopedCookie(LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE)");
     expect(general, "office-routes must read the general family first").toBeGreaterThan(-1);
     expect(office, "office-routes must read the office family").toBeGreaterThan(-1);
-    expect(general, "office-routes must read the general family before the office family").toBeLessThan(
-      office,
-    );
+    expect(
+      general,
+      "office-routes must read the general family before the office family",
+    ).toBeLessThan(office);
     // Kanban and settings boot read only the general family.
     for (const file of ["src/kanban-route.tsx", "src/settings-routes.tsx", "src/spa-routes.tsx"]) {
       const source = compact(file);
@@ -322,12 +323,13 @@ describe("structural guard: workspace-cookie lookups stay scoped", () => {
     }
   });
 
-  it("the sidebar writer scopes names and expires the legacy twins", () => {
+  it("the sidebar writer scopes names and leaves legacy cookies untouched", () => {
     const source = read(writer);
     expect(source.includes("scopedCookieName("), `${writer} must write scoped names`).toBe(true);
-    expect(
-      source.includes("max-age=0"),
-      `${writer} must expire the legacy unprefixed twins on write`,
-    ).toBe(true);
+    // The legacy unprefixed names are read-only fallback: never written and
+    // never expired (spec: no proactive legacy cookie scrubbing — on a host
+    // with a default-port instance the unprefixed name is that instance's
+    // live selection cookie).
+    expect(source.includes("max-age=0"), `${writer} must not expire cookies`).toBe(false);
   });
 });

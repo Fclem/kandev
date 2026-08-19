@@ -39,16 +39,12 @@ export function rememberWorkspaceSelectionById(id: string, kind: "office" | "kan
 
 function writeWorkspaceCookie(name: string, value: string): void {
   if (typeof document === "undefined") return;
-  const scoped = scopedCookieName(name);
-  document.cookie = `${scoped}=${encodeURIComponent(value)}; path=/; max-age=${ACTIVE_WORKSPACE_COOKIE_MAX_AGE}; samesite=strict`;
-  // A pre-upgrade jar can still carry the legacy unprefixed cookie, which the
-  // scoped-first readers (frontend and boot-state) consult as read-only
-  // fallback. Once any instance records its own scoped selection, the shared
-  // legacy value must be expired: it would otherwise keep every instance
-  // without its own scoped cookie pinned to the last pre-upgrade selection —
-  // the cross-instance bleed this isolation fix removes. No-op when the port
-  // is empty (scoped == legacy name; the write above already recorded it).
-  if (scoped !== name) {
-    document.cookie = `${name}=; path=/; max-age=0; samesite=strict`;
-  }
+  document.cookie = `${scopedCookieName(name)}=${encodeURIComponent(value)}; path=/; max-age=${ACTIVE_WORKSPACE_COOKIE_MAX_AGE}; samesite=strict`;
+  // The legacy unprefixed name is deliberately left untouched: on a host
+  // serving a default-port instance it is that instance's LIVE selection
+  // cookie, and for upgraded ported instances it is the validated migration
+  // fallback until each writes its own scoped value. Scrubbing it from one
+  // instance would change the other instances' next boot (see
+  // docs/specs/fix-multi-instance-cookie-isolation/spec.md: the upgraded
+  // instance does not proactively delete the legacy cookie).
 }

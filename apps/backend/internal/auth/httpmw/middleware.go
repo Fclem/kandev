@@ -54,7 +54,9 @@ func Middleware(svc *auth.Service) gin.HandlerFunc {
 }
 
 // StripUntrustedForwardedHost removes X-Forwarded-Host from requests whose
-// immediate peer is not a trusted proxy. Browsers never send
+// immediate peer is not a trusted proxy. It is a pure header-modifier: it
+// never aborts, so gin continues to the next handler automatically once the
+// function returns (no c.Next() call needed). Browsers never send
 // X-Forwarded-Host; only a reverse proxy in front of the backend should, and
 // only to carry the browser's original host:port through a port-rewrite to
 // the port-scoped cookie-name resolver (httpcookie.PortSuffix). Without this

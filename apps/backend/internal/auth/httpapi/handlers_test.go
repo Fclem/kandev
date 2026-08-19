@@ -505,8 +505,9 @@ func TestSessionCookieScopedToPortedHost(t *testing.T) {
 }
 
 // TestSessionCookieLogoutClearsScopedName pins the logout/clear path: the
-// same scoped name login wrote is cleared, and on a ported host the legacy
-// unprefixed jar from before the isolation fix is cleared too.
+// same scoped name login wrote is cleared, and the unprefixed base name is
+// left untouched — on a host serving a default-port instance it is that
+// instance's live session cookie (see spec: no proactive legacy scrubbing).
 func TestSessionCookieLogoutClearsScopedName(t *testing.T) {
 	router, _ := newAPIFixture(t, true)
 	client := &apiClient{t: t, router: router}
@@ -519,13 +520,10 @@ func TestSessionCookieLogoutClearsScopedName(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("logout: %d", rec.Code)
 	}
-	assertSessionCookieNames(t, rec, "kandev_session", "kandev_session_8443", "kandev_session")
+	assertSessionCookieNames(t, rec, "kandev_session", "kandev_session_8443")
 	for _, cookie := range rec.Result().Cookies() {
-		switch cookie.Name {
-		case "kandev_session_8443", "kandev_session":
-			if cookie.MaxAge >= 0 {
-				t.Fatalf("logout did not expire %q: %+v", cookie.Name, cookie)
-			}
+		if cookie.Name == "kandev_session_8443" && cookie.MaxAge >= 0 {
+			t.Fatalf("logout did not expire the scoped cookie: %+v", cookie)
 		}
 	}
 	if client.cookie != nil {

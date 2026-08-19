@@ -4,10 +4,8 @@ import { LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE } from "@/lib/routing/route-boots
 // The write path scopes names with the API-origin port; pin it so the
 // assertions are deterministic.
 vi.mock("@/lib/config", () => ({
-  getBackendConfig: vi.fn(() => ({ apiBaseUrl: "http://localhost:8443" })),
+  getBackendConfig: () => ({ apiBaseUrl: "http://localhost:8443" }),
 }));
-
-import { getBackendConfig } from "@/lib/config";
 
 import {
   rememberWorkspaceSelection,
@@ -43,10 +41,9 @@ describe("app sidebar workspace navigation", () => {
 
     expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}_8443=office-1`);
     expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}_8443=office-1`);
-    // The legacy unprefixed names are never written (read-only fallback only);
-    // they may only appear as empty expired entries from the twin-cleanup.
-    expect(document.cookie).not.toContain(`${ACTIVE_WORKSPACE_COOKIE}=office-1`);
-    expect(document.cookie).not.toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=office-1`);
+    // The legacy unprefixed names are read-only fallback — never written.
+    expect(document.cookie).not.toContain(`${ACTIVE_WORKSPACE_COOKIE}=`);
+    expect(document.cookie).not.toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=`);
   });
 
   it("does not write the legacy office cookie for a kanban selection", () => {
@@ -78,35 +75,24 @@ describe("app sidebar workspace navigation", () => {
 
     expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}_8443=office-new`);
     expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}_8443=office-new`);
-    expect(document.cookie).not.toContain(`${ACTIVE_WORKSPACE_COOKIE}=office-new`);
-    expect(document.cookie).not.toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=office-new`);
+    expect(document.cookie).not.toContain(`${ACTIVE_WORKSPACE_COOKIE}=`);
+    expect(document.cookie).not.toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=`);
   });
 
-  it("expires a pre-upgrade legacy cookie when the scoped twin is written", () => {
-    // Pre-upgrade jar: only the unprefixed names exist.
+  it("leaves a pre-existing legacy cookie untouched when the scoped twin is written", () => {
+    // Pre-upgrade jar (or a default-port instance sharing the host): the
+    // unprefixed names hold a value that must survive — it is either the
+    // migration fallback for other instances or another instance's live
+    // selection. The write path must not scrub it (spec: no proactive legacy
+    // cookie deletion).
     document.cookie = `${ACTIVE_WORKSPACE_COOKIE}=pre-upgrade; path=/`;
     document.cookie = `${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=pre-upgrade; path=/`;
 
     rememberWorkspaceSelection(office);
 
-    // The scoped twin is recorded and the legacy value is gone (empty
-    // expired entry at most), so no other instance on the host falls back to
-    // the shared pre-upgrade selection.
     expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}_8443=office-1`);
     expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}_8443=office-1`);
-    expect(document.cookie).not.toContain(`${ACTIVE_WORKSPACE_COOKIE}=pre-upgrade`);
-    expect(document.cookie).not.toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=pre-upgrade`);
-  });
-
-  it("keeps the plain name when there is no port (scoped == legacy)", () => {
-    vi.mocked(getBackendConfig).mockReturnValue({ apiBaseUrl: "http://localhost" });
-    try {
-      rememberWorkspaceSelection(kanban);
-      // No-port instance: the write itself is the plain name, so the cleanup
-      // must not expire what was just recorded.
-      expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}=kanban-1`);
-    } finally {
-      vi.mocked(getBackendConfig).mockReturnValue({ apiBaseUrl: "http://localhost:8443" });
-    }
+    expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}=pre-upgrade`);
+    expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=pre-upgrade`);
   });
 });

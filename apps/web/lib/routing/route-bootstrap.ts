@@ -43,11 +43,14 @@ export function scopedCookieName(name: string, port?: string): string {
  * keeps the helper pure and unit-testable without jsdom Location stubbing.
  * An empty cookie value is treated as absent: expired/deleted cookies can
  * linger as empty entries in document.cookie and must not shadow the
- * fallback.
+ * fallback. On a default-port instance the scoped name IS the legacy name,
+ * so the fallback read is skipped (identical call, no-op).
  */
 export function readScopedCookie(name: string, port?: string): string | null {
-  const scoped = readCookie(scopedCookieName(name, port));
+  const scopedName = scopedCookieName(name, port);
+  const scoped = readCookie(scopedName);
   if (scoped) return scoped;
+  if (scopedName === name) return null;
   const legacy = readCookie(name);
   return legacy || null;
 }

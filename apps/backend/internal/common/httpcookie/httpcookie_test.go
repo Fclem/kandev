@@ -24,7 +24,8 @@ func TestPortSuffix(t *testing.T) {
 	}{
 		{"ported host", "127.0.0.1:8443", "", "_8443"},
 		{"no port", "example.com", "", ""},
-		{"default port 80", "example.com:80", "", "_80"},
+		{"default port 80", "example.com:80", "", ""},
+		{"default port 443", "example.com:443", "", ""},
 		{"XFH wins over host", "internal:38429", "public.example:8443", "_8443"},
 		{"XFH wins on conflicting ports", "public.example:8443", "public.example:9443", "_9443"},
 		{"XFH comma separated first", "internal:38429", "public.example:8443, other:9443", "_8443"},

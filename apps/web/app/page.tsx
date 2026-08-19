@@ -103,6 +103,7 @@ async function loadSnapshotState(
       metaBySession: {
         [sessionId]: {
           isLoading: false,
+          isLoadingMore: false,
           hasMore: messagesResponse.has_more ?? false,
           oldestCursor: messages[0]?.id ?? null,
         },

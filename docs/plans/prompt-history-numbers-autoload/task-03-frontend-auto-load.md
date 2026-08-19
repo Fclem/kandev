@@ -1,7 +1,7 @@
 ---
 id: "03-frontend-auto-load"
 title: "Frontend auto-load sentinel"
-status: pending
+status: done
 wave: 3
 depends_on: ["02-frontend-numbering"]
 plan: "plan.md"
@@ -72,4 +72,15 @@ Summary, files changed, exact commands and results, blockers/risks, then mark th
 
 ## Results
 
-Pending.
+Implemented and verified 2026-08-19.
+
+Summary: Transcript's private `useLazyLoadSentinel` moved to `apps/web/hooks/use-lazy-load-sentinel.ts` with options `rootMargin` (default "200px 0px 0px 0px"), `rearmWhileIntersecting` (default false), `joinInFlightWhileLoading` (default false); firing rule `hasMore && !blocked && (!isLoadingMore || join)` with `blocked` never bypassed; panel re-arm unobserves before awaiting and re-observes only after a positive result (stale completions ignored); rejected/zero-result loads re-observe disarmed (arm on observed exit; `onUserGesture` retry while disarmed+intersecting). New shared coordinator `hooks/domains/session/older-message-pagination.ts`: per-(session, cursor) in-flight promises, first-request-wins limit, zero-row cursor retention, `isLoadingMore` owned by the coordinator (cleared only when the last in-flight settles, never touching initial `isLoading`). Store metadata split: `metaBySession.isLoadingMore` added everywhere (types, slice, EMPTY_META, store action types, SSR/page hydrations); `prependMessages` clears only `isLoadingMore`. `useLazyLoadMessages` returns `isLoadingMore` and routes through the coordinator; `message-backfill.ts` uses the coordinator with a 1000-message budget (`floor(1000 / effectiveLimit)` page count); `useDrainOlderMessages` blocks on `messagesLoading || isLoadingMore`, tracks cumulative `fetchedMessageCount` (reset on reactivation, stop at ≥1000, stop on zero batch). All `useLazyLoadMessages` consumers migrated (`message-list-native.tsx`, `task-chat-panel.tsx`, `message-list-native-scroll.ts` with `blocked = messagesLoading`). Panel: passthrough-first unconditional empty state; `shouldPaginate = hasMore && !entries.some(promptNumber === 1)`; sentinel with `{ rootMargin: "0px 0px 200px 0px", rearmWhileIntersecting: true, joinInFlightWhileLoading: true }`; `task:loadingOlderMessages` row only while `shouldPaginate && isLoadingMore`; neutral `task:loading` when empty + messagesLoading; definitive empty only when empty + !hasMore + !messagesLoading; `onWheel`/`onTouchMove` gesture retry; no button.
+
+Files changed: `lib/state/slices/session/types.ts`, `lib/state/slices/session/session-slice.ts`, `lib/state/store.ts`, `hooks/domains/session/older-message-pagination.ts` (new), `hooks/domains/session/message-backfill.ts`, `hooks/domains/session/use-session-messages.ts`, `hooks/use-lazy-load-messages.ts`, `hooks/use-lazy-load-sentinel.ts` (new), `components/task/chat/message-list-native-scroll.ts`, `components/task/chat/message-list-native.tsx`, `components/task/task-chat-panel.tsx`, `components/task/chat/use-drain-older-messages.ts`, `components/task/prompt-history-panel-content.tsx`, `app/page.tsx`, `lib/ssr/mapper.ts`; tests: `hooks/use-lazy-load-sentinel.test.ts` (new), `hooks/domains/session/older-message-pagination.test.ts` (new), `hooks/domains/session/use-session-messages.test.ts`, `components/task/chat/use-drain-older-messages.test.ts`, `components/task/chat/message-list-shared.test.tsx`, `components/task/prompt-history-panel-content.test.tsx`.
+
+Commands and results:
+- `cd apps && pnpm --filter @kandev/web test -- hooks/domains/session/older-message-pagination.test.ts hooks/domains/session/use-session-messages.test.ts components/task/chat/use-drain-older-messages.test.ts components/task/chat/message-list-native.test.tsx components/task/chat/message-list-shared.test.tsx hooks/use-lazy-load-sentinel.test.ts components/task/prompt-history-panel-content.test.tsx` — 7 files, 164 tests passed.
+- `cd apps/web && pnpm run typecheck` — ok (0 errors).
+- eslint on all touched files — 0 problems (scoped `max-params`/`max-lines-per-function` disables with justifications on the unified sentinel hook; file-level `max-lines` disables with justifications on `session-slice.ts` and the panel spec).
+
+Blockers/risks: none.

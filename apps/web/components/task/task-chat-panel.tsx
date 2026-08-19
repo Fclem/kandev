@@ -441,7 +441,7 @@ export const TaskChatPanel = memo(function TaskChatPanel({
   const [isFirstMessageHidden, setIsFirstMessageHidden] = useState(false);
   const showScrollToStartButton =
     showScrollToStart && Boolean(firstMessageId) && isFirstMessageHidden;
-  const { loadMore, hasMore, isLoading: isLoadingMore } = useLazyLoadMessages(resolvedSessionId);
+  const { loadMore, hasMore, isLoadingMore } = useLazyLoadMessages(resolvedSessionId);
   // A paginated session's `firstMessageId` only reflects the oldest message in
   // the currently loaded page while `hasMore` is true — jumping there directly
   // lands on a partial-page boundary, not the transcript's real start. Drain

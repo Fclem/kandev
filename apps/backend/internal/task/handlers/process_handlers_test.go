@@ -223,6 +223,9 @@ func (m *mockRepository) CreateMessage(ctx context.Context, message *models.Mess
 func (m *mockRepository) GetMessage(ctx context.Context, id string) (*models.Message, error) {
 	return nil, nil
 }
+func (m *mockRepository) GetMessageWithPromptIndex(ctx context.Context, id string) (*models.Message, error) {
+	return nil, nil
+}
 func (m *mockRepository) GetMessageByToolCallID(ctx context.Context, sessionID, toolCallID string) (*models.Message, error) {
 	return nil, nil
 }

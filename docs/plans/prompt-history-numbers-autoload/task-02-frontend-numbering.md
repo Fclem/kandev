@@ -1,7 +1,7 @@
 ---
 id: "02-frontend-numbering"
 title: "Frontend prompt numbering"
-status: pending
+status: done
 wave: 2
 depends_on: ["01-backend-prompt-index"]
 plan: "plan.md"
@@ -61,4 +61,15 @@ Summary, files changed, exact commands and results, blockers/risks, then mark th
 
 ## Results
 
-Pending.
+Implemented and verified 2026-08-19.
+
+Summary: `Message` (`lib/types/http.ts`) and WS `MessageAddedPayload` (`lib/types/session-events.ts`) carry `prompt_index?: number`; `toMessage` maps it. `PromptHistoryEntry` gains `promptNumber: number | null` (from `prompt_index`, null when absent/0). `lib/prompt-history.ts` now parses RFC3339/RFC3339Nano into a full BigInt epoch-nanosecond key (fraction stripped before whole-second `Date.parse`, offset suffix retained for UTC normalization, digit run right-padded to nine digits), orders by `epochNanoseconds / 1000n` with id tie-break (BigInt, never Number), and computes duration bounds with full-nanosecond subtraction floored to seconds and clamped at zero. `message-signature.ts` includes `prompt_index` in both signature branches and carries a known ordinal forward onto payloads that omit it. The panel renders a `#N` label (`PromptNumberLabel`, `data-testid="prompt-history-number-<index>"`) at the bubble start before the robot icon, visible in collapsed and expanded states, only when `promptNumber !== null`; no i18n keys (precedent `#${pr.pr_number}`).
+
+Files changed: `apps/web/lib/types/http.ts`, `apps/web/lib/types/session-events.ts`, `apps/web/lib/ws/handlers/messages.ts`, `apps/web/lib/prompt-history.ts`, `apps/web/lib/state/slices/session/message-signature.ts`, `apps/web/components/task/prompt-history-panel-content.tsx`, tests: `lib/prompt-history.test.ts`, `components/task/prompt-history-panel-content.test.tsx`, `lib/ws/handlers/messages.test.ts`, `lib/state/slices/session/session-slice.merge-messages.test.ts`.
+
+Commands and results:
+- `cd apps && pnpm --filter @kandev/web test -- lib/prompt-history.test.ts components/task/prompt-history-panel-content.test.tsx lib/ws/handlers/messages.test.ts lib/state/slices/session/session-slice.merge-messages.test.ts` — 4 files, 75 tests passed.
+- `cd apps/web && pnpm run typecheck` — ok (ES2017 target: BigInt via `BigInt(...)` calls, no `n` literals).
+- eslint (default + i18n configs) on changed files — 0 problems.
+
+Blockers/risks: none. Note: the SQLite driver stores `YYYY-MM-DD HH:MM:SS[.fffffffff]+00:00` text; the backend's normalized key is the authority, and the frontend floor division `epochNanoseconds / 1000n` was verified against it in Task 01 fixtures.

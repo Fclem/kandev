@@ -113,6 +113,7 @@ export function taskToState(
             metaBySession: {
               [resolvedSessionId]: {
                 isLoading: false,
+                isLoadingMore: false,
                 hasMore: messages.hasMore ?? false,
                 oldestCursor: messages.oldestCursor ?? messages.items[0]?.id ?? null,
               },

@@ -312,7 +312,7 @@ func (h *MessageHandlers) wsAddMessage(ctx context.Context, msg *ws.Message) (*w
 	// before checking the live session state or running turn-start hooks so a
 	// retry is a read, not a second prompt.
 	if req.ClientMessageID != "" {
-		existing, err := h.service.GetMessage(ctx, req.ClientMessageID)
+		existing, err := h.service.GetMessageWithPromptIndex(ctx, req.ClientMessageID)
 		switch {
 		case err == nil && existing != nil:
 			// The turn-start hook may switch the task's primary session before

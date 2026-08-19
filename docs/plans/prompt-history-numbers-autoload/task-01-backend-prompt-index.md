@@ -1,7 +1,7 @@
 ---
 id: "01-backend-prompt-index"
 title: "Backend prompt_index contract"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -61,4 +61,15 @@ Summary, files changed, exact commands and results, blockers/risks, then mark th
 
 ## Results
 
-Pending.
+Implemented and verified 2026-08-19.
+
+Summary: `v1.Message` / `models.Message` carry `prompt_index` (omitempty, zero for non-user rows); `ToAPI` copies it. Repository: new 13-column `scanPromptIndexedMessageRows` for `ListMessagesPaginated` (ordered CTE with a session-wide window aggregate, cursor predicate and `LIMIT (limit+1)` only in the outer SELECT), dedicated `GetMessageWithPromptIndex` (correlated count), cursor bound derived via the SQL `normalized_microsecond` expression (`messageCursorKey`), and an atomic per-session create boundary for user messages (`createUserMessageWithBoundary`): live zero-timestamp creates advance a colliding/backward ordering key by one microsecond tick within a bounded lead window (`ErrMessageClockSkew` otherwise), explicit timestamps must be strictly after the session's newest user message (`ErrMessageTimestampNotAfterNewest`), and failed attempts restore caller-visible `CreatedAt`/`UpdatedAt`/`PromptIndex`. Service: idempotent replay reads and user `UpdateMessage` event publication use `GetMessageWithPromptIndex`; `newMessageEvent` emits `prompt_index` when > 0; agent streaming stays on the hot 12-column path. Dialect: `NormalizedMicrosecond` (SQLite `datetime()` UTC normalization with a separate right-padded/truncated fraction digit run; PostgreSQL identity) plus `PromptOrderIndexDDL` for the one additive expression index `(task_session_id, normalized_microsecond(created_at), id)` (`ensurePromptOrderIndex`).
+
+Files changed: `apps/backend/internal/task/models/models.go`, `apps/backend/pkg/api/v1/task.go`, `apps/backend/internal/db/dialect/promptindex.go`, `apps/backend/internal/task/repository/sqlite/base_schema.go`, `apps/backend/internal/task/repository/sqlite/message.go`, `apps/backend/internal/task/repository/sqlite/message_prompt_index.go` (new), `apps/backend/internal/task/repository/interface.go`, `apps/backend/internal/task/service/service_messages.go`, `apps/backend/internal/task/service/service_events.go`, `apps/backend/internal/task/handlers/message_handlers.go`, tests: `prompt_index_test.go` (new), `prompt_index_create_test.go` (new), `clarification_scanner_test.go` (new), `message_prompt_index_postgres_test.go` (new), `service_prompt_index_test.go` (new), plus mock updates in `handlers/message_handlers_blocked_test.go`, `handlers/process_handlers_test.go`, `orchestrator/executor/executor_mocks_test.go`.
+
+Commands and results:
+- `go build ./...` — ok.
+- `go test ./internal/task/models ./internal/task/repository/sqlite ./internal/task/service ./internal/task/handlers -count=1` — all ok (0.016s / 30.678s / 87.522s / 11.448s).
+- `go test -run 'TestPostgres.*PromptIndex' ./internal/task/repository/sqlite` — skips without `KANDEV_TEST_POSTGRES_DSN` (CI postgres job supplies it); compiles and skips cleanly.
+
+Blockers/risks: PostgreSQL dialect assertions are env-gated and unverified locally (no DSN); they repeat the SQLite assertions through `OpenIsolatedPostgres` / `openIsolatedPostgresMultiConn`. SQLite stores timestamps as `YYYY-MM-DD HH:MM:SS[.fffffffff]+00:00` text (Go's string scan re-formats to RFC3339Nano), which the dialect helper normalizes with `datetime()` plus a dot-guarded fraction digit run; exact-second and offset-bearing rows were covered by fixtures.

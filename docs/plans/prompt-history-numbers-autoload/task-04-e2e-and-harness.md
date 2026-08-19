@@ -1,7 +1,7 @@
 ---
 id: "04-e2e-and-harness"
 title: "E2E coverage and harness author_type"
-status: pending
+status: done
 wave: 4
 depends_on: ["03-frontend-auto-load"]
 plan: "plan.md"
@@ -67,4 +67,15 @@ Summary, files changed, exact commands and results (including the harness test a
 
 ## Results
 
-Pending.
+Implemented and verified 2026-08-19.
+
+Summary: The e2e harness `POST /api/v1/_test/messages` accepts optional `author_type` (default `agent`) and RFC3339 `created_at`; user seeds are read back through `GetMessageWithPromptIndex` so the live WS event carries the same `prompt_index` as the HTTP list path, and `publishMessageAdded` serializes `created_at` with `time.RFC3339Nano` plus `prompt_index` for user rows. `seedSessionMessage` passes `authorType`/`createdAt` through. New shared seed helper `e2e/helpers/prompt-history-long-seed.ts` (121-prompt session, pre-seed count assertion, `seedBase = max(created_at) + 1s`, marker first at `seedBase`, remaining 119 at one-microsecond-aligned timestamps ≥1ms apart, strict stored-order refetch). Desktop spec asserts exactly one pre-send user message and `#2`/`#1` on rows 0/1; mobile spec asserts `#1` and adds the long-history Pixel test (held older-page request, `task:loadingOlderMessages`, release, repeat CDP touch scrolls to `#1`, no `load-older-messages`); new `prompt-history-auto-load.spec.ts` proves both behaviors (held request → loading row → release → bounded scroll loop to `#1`, marker `#2`, no button).
+
+Files changed: `apps/backend/internal/office/testharness/routes.go`, `apps/backend/internal/office/testharness/routes_test.go`, `apps/web/e2e/helpers/api-client.ts`, `apps/web/e2e/helpers/prompt-history-long-seed.ts` (new), `apps/web/e2e/tests/task/prompt-history-auto-load.spec.ts` (new), `apps/web/e2e/tests/task/prompt-history-panel.spec.ts`, `apps/web/e2e/tests/task/mobile-prompt-history-panel.spec.ts`.
+
+Commands and results:
+- `cd apps/backend && go test ./internal/office/testharness/...` — ok.
+- `cd apps/web && pnpm e2e:run -- e2e/tests/task/prompt-history-auto-load.spec.ts e2e/tests/task/prompt-history-panel.spec.ts` — 2 passed (fresh build; the desktop numbering spec and the auto-load spec).
+- `cd apps/web && pnpm e2e:run -- --project mobile-chrome --no-build -- e2e/tests/task/mobile-prompt-history-panel.spec.ts` — 2 passed (Pixel 5: jump + long-history touch-scroll).
+
+Blockers/risks: none. Deviation note: the desktop auto-load spec holds `/messages?before=...` requests until a `panelScrollTriggered` flag; the plan's "set the flag immediately before scrolling" was implemented as release-after-assert because no transcript/backfill before-request fires automatically for a settled 121-prompt session (the last prompt is in the first page), so the panel's own sentinel request is the one held. Initial seed attempt failed with identical whole-second timestamps (the seed helper's fraction regex replaced instead of padded); fixed by padding the millisecond fraction to 6 digits.

@@ -83,7 +83,10 @@ Every plan must include tests. Per-behavior:
 
 ## Verification Results
 
-Pending. On completion, synchronize with each task's `## Results`.
+All four tasks implemented and verified 2026-08-19. Per-task commands/results are in each task file's `## Results`; the full suite passed:
+- Backend: `go build ./...`; `go test ./internal/task/models ./internal/task/repository/sqlite ./internal/task/service ./internal/task/handlers` (all ok); `go test ./internal/office/testharness/...` (ok); Postgres tests compile and skip without `KANDEV_TEST_POSTGRES_DSN` (CI postgres job supplies it).
+- Frontend: Task 02 unit set (75 tests), Task 03 unit set (164 tests) and `pnpm run typecheck` all pass; eslint clean on every touched file.
+- E2E: `pnpm e2e:run -- e2e/tests/task/prompt-history-auto-load.spec.ts e2e/tests/task/prompt-history-panel.spec.ts` (2 passed), `pnpm e2e:run -- --project mobile-chrome --no-build -- e2e/tests/task/mobile-prompt-history-panel.spec.ts` (2 passed).
 
 ## Implementation Waves And Parallel Candidates
 
@@ -91,16 +94,16 @@ All sequential â€” each task consumes the prior task's contract (backend field â
 
 ```
 Wave 1:
-- [ ] [task-01-backend-prompt-index](task-01-backend-prompt-index.md)
+- [x] [task-01-backend-prompt-index](task-01-backend-prompt-index.md)
 
 Wave 2:
-- [ ] [task-02-frontend-numbering](task-02-frontend-numbering.md)
+- [x] [task-02-frontend-numbering](task-02-frontend-numbering.md)
 
 Wave 3:
-- [ ] [task-03-frontend-auto-load](task-03-frontend-auto-load.md)
+- [x] [task-03-frontend-auto-load](task-03-frontend-auto-load.md)
 
 Wave 4:
-- [ ] [task-04-e2e-and-harness](task-04-e2e-and-harness.md)
+- [x] [task-04-e2e-and-harness](task-04-e2e-and-harness.md)
 ```
 
 ## Open Questions

@@ -950,6 +950,12 @@ func newMessageEvent(eventType string, message *models.Message) *bus.Event {
 		"updated_at": message.UpdatedAt.Format(time.RFC3339Nano),
 	}
 
+	// User messages carry their stable prompt ordinal so WS consumers can
+	// render the panel label without an extra fetch; agent rows omit it.
+	if message.PromptIndex > 0 {
+		data["prompt_index"] = message.PromptIndex
+	}
+
 	if hasHidden {
 		data["raw_content"] = message.Content
 	}

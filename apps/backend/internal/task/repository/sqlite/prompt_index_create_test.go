@@ -45,9 +45,6 @@ func TestLiveCreateAdvancesCollidingTimestamps(t *testing.T) {
 	if got := formatPromptKey(second.CreatedAt); got != formatPromptKey(first.CreatedAt.Add(time.Microsecond)) {
 		t.Errorf("key advance = %q, want %q (one microsecond tick)", got, formatPromptKey(first.CreatedAt.Add(time.Microsecond)))
 	}
-	if second.CreatedAt.After(fixed.Add(promptIndexLeadWindow)) {
-		t.Errorf("advanced timestamp %v is beyond the lead window", second.CreatedAt)
-	}
 
 	// Reread order and indexed reads agree with the assigned ordinals.
 	got1, err := repo.GetMessageWithPromptIndex(ctx, "live-zzz")
@@ -63,12 +60,13 @@ func TestLiveCreateAdvancesCollidingTimestamps(t *testing.T) {
 	}
 }
 
-// TestLiveCreateOverWindowClockSkewReturnsRetryableError pins the bounded
-// lead window: when the session's newest user message is ahead of the clock
-// by more than the window, a live create must return a retryable error
-// instead of stamping a message far in the future, and must leave the
-// caller-visible CreatedAt/PromptIndex fields untouched.
-func TestLiveCreateOverWindowClockSkewReturnsRetryableError(t *testing.T) {
+// TestLiveCreateBackwardClockClampsInsteadOfBlocking pins the durable-ordinal
+// regression: when the host clock is behind the session's newest user message
+// (here by more than the old one-minute lead window), a live create must
+// still succeed. The ordering timestamp clamps forward by one tick — the
+// ordinal comes from the session's durable sequence counter, never from the
+// timestamp — so a backward clock correction cannot block new prompts.
+func TestLiveCreateBackwardClockClampsInsteadOfBlocking(t *testing.T) {
 	repo := newRepoForSessionTests(t)
 	ctx := context.Background()
 	seedForMsgTest(t, repo, "task-SKEW", "sess-SKEW", "turn-SKEW")
@@ -90,29 +88,80 @@ func TestLiveCreateOverWindowClockSkewReturnsRetryableError(t *testing.T) {
 		t.Fatalf("seed ordinal = %d, want 1", seed.PromptIndex)
 	}
 
-	// A live create at the fixed clock would need to advance past the seed,
-	// beyond the lead window: reject with the retryable sentinel and keep the
-	// model clean for the retry.
+	// Backward clock correction: a live create at a clock ten minutes behind
+	// the seed must not be blocked; its ordering timestamp clamps to one tick
+	// after the seed and it receives the next durable ordinal.
+	repo.clockNow = func() time.Time { return fixed.Add(-10 * time.Minute) }
 	live := &models.Message{
 		ID: "skew-live", TaskSessionID: "sess-SKEW", TurnID: "turn-SKEW",
 		AuthorType: models.MessageAuthorUser, Content: "live",
 	}
-	err := repo.CreateMessage(ctx, live)
-	if !errors.Is(err, ErrMessageClockSkew) {
-		t.Fatalf("live create error = %v, want ErrMessageClockSkew", err)
-	}
-	if !live.CreatedAt.IsZero() || live.PromptIndex != 0 {
-		t.Errorf("failed attempt mutated model: CreatedAt=%v PromptIndex=%d, want zero/0", live.CreatedAt, live.PromptIndex)
-	}
-
-	// Once the clock catches up, the same create succeeds with the next
-	// ordinal.
-	repo.clockNow = func() time.Time { return fixed.Add(3 * time.Minute) }
 	if err := repo.CreateMessage(ctx, live); err != nil {
-		t.Fatalf("create after clock catch-up: %v", err)
+		t.Fatalf("backward-clock create must not block: %v", err)
 	}
 	if live.PromptIndex != 2 {
-		t.Errorf("ordinal after catch-up = %d, want 2", live.PromptIndex)
+		t.Errorf("backward-clock ordinal = %d, want 2", live.PromptIndex)
+	}
+	if got := formatPromptKey(live.CreatedAt); got != formatPromptKey(seed.CreatedAt.Add(time.Microsecond)) {
+		t.Errorf("clamped key = %q, want %q (one tick after seed)", got, formatPromptKey(seed.CreatedAt.Add(time.Microsecond)))
+	}
+	got, err := repo.GetMessageWithPromptIndex(ctx, live.ID)
+	if err != nil {
+		t.Fatalf("reread live: %v", err)
+	}
+	if got.PromptIndex != 2 {
+		t.Errorf("reread ordinal = %d, want 2", got.PromptIndex)
+	}
+}
+
+// TestPromptIndexDurableAcrossDeletion covers the delete-after-publish
+// regression: ordinals already delivered to clients must not change when an
+// earlier prompt is deleted, and the session's durable sequence must never
+// reuse a deleted prompt's ordinal.
+func TestPromptIndexDurableAcrossDeletion(t *testing.T) {
+	repo := newRepoForSessionTests(t)
+	ctx := context.Background()
+	seedForMsgTest(t, repo, "task-DEL", "sess-DEL", "turn-DEL")
+	repo.clockNow = func() time.Time { return time.Date(2026, 8, 19, 11, 0, 0, 0, time.UTC) }
+
+	a := &models.Message{ID: "del-a", TaskSessionID: "sess-DEL", TurnID: "turn-DEL", AuthorType: models.MessageAuthorUser, Content: "A"}
+	if err := repo.CreateMessage(ctx, a); err != nil {
+		t.Fatalf("create A: %v", err)
+	}
+	b := &models.Message{ID: "del-b", TaskSessionID: "sess-DEL", TurnID: "turn-DEL", AuthorType: models.MessageAuthorUser, Content: "B"}
+	if err := repo.CreateMessage(ctx, b); err != nil {
+		t.Fatalf("create B: %v", err)
+	}
+	if a.PromptIndex != 1 || b.PromptIndex != 2 {
+		t.Fatalf("initial ordinals = (%d, %d), want (1, 2)", a.PromptIndex, b.PromptIndex)
+	}
+
+	// Delete the earlier prompt A after B (#2) was published.
+	if err := repo.DeleteMessage(ctx, a.ID); err != nil {
+		t.Fatalf("delete A: %v", err)
+	}
+	gotB, err := repo.GetMessageWithPromptIndex(ctx, b.ID)
+	if err != nil {
+		t.Fatalf("reread B: %v", err)
+	}
+	if gotB.PromptIndex != 2 {
+		t.Errorf("B ordinal after deleting A = %d, want 2 (published ordinal must not renumber)", gotB.PromptIndex)
+	}
+
+	// A new prompt must continue the sequence, never reuse #1.
+	c := &models.Message{ID: "del-c", TaskSessionID: "sess-DEL", TurnID: "turn-DEL", AuthorType: models.MessageAuthorUser, Content: "C"}
+	if err := repo.CreateMessage(ctx, c); err != nil {
+		t.Fatalf("create C: %v", err)
+	}
+	if c.PromptIndex != 3 {
+		t.Errorf("C ordinal = %d, want 3 (no reuse after delete)", c.PromptIndex)
+	}
+	gotC, err := repo.GetMessageWithPromptIndex(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("reread C: %v", err)
+	}
+	if gotC.PromptIndex != 3 {
+		t.Errorf("reread C ordinal = %d, want 3", gotC.PromptIndex)
 	}
 }
 

@@ -48,7 +48,7 @@ The message JSON contract (`v1.Message`, served by the paginated `GET /api/v1/ta
 
 Live user-message creation assigns the ordering timestamp and `prompt_index` under one per-session write boundary before publishing the WebSocket event. Concurrent user creates therefore cannot publish duplicate or stale live ordinals; HTTP/refetch remains the authoritative repair path for older or externally seeded rows.
 
-The field is read-time derived for paginated list/dedicated indexed-get queries (no stored data column): the message repository computes it with a session-scoped count of user messages up to and including the row, so existing databases need no data-column migration.
+The field is persisted per user message at creation: `prompt_seq` is allocated from a per-session monotonic sequence inside the same write boundary that assigns the ordering timestamp, so ordinals are stable across pagination, message deletion, and clock corrections. Existing databases gain the column through an idempotent migration that backfills historical rows with their previously derived ordinal and seeds each session's counter.
 
 ## Out of scope
 

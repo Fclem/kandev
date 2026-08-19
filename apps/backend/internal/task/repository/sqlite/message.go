@@ -69,9 +69,9 @@ func (r *Repository) insertMessageRow(
 	messageType, metadataJSON string,
 ) error {
 	_, err := execer.ExecContext(ctx, r.db.Rebind(`
-		INSERT INTO task_session_messages (id, task_session_id, task_id, turn_id, author_type, author_id, content, requests_input, type, metadata, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`), message.ID, message.TaskSessionID, message.TaskID, message.TurnID, message.AuthorType, message.AuthorID, message.Content, requestsInput, messageType, metadataJSON, message.CreatedAt, message.UpdatedAt)
+		INSERT INTO task_session_messages (id, task_session_id, task_id, turn_id, author_type, author_id, content, requests_input, type, metadata, created_at, updated_at, prompt_seq)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`), message.ID, message.TaskSessionID, message.TaskID, message.TurnID, message.AuthorType, message.AuthorID, message.Content, requestsInput, messageType, metadataJSON, message.CreatedAt, message.UpdatedAt, message.PromptIndex)
 	return err
 }
 
@@ -328,34 +328,24 @@ func buildListMessagesQuery(driverName, sessionID string, opts models.ListMessag
 	if dialect.IsPostgres(driverName) {
 		bound = "CAST(? AS timestamp)"
 	}
-	// The window aggregate runs over the FULL session inside the ordered CTE
-	// (no limit), so prompt_index stays absolute rather than page-relative;
-	// the cursor predicate, ORDER BY, and LIMIT (limit+1) live only in the
-	// outer SELECT. The outer ORDER BY/cursor predicate use the SAME
-	// normalized-microsecond key as the window, so every page is contiguous in
-	// ordinal order and the sentinel `promptNumber === 1` stop can never skip
-	// a higher-ordinal prompt sharing a microsecond.
-	query := fmt.Sprintf(`
-		WITH session_messages AS (
-			SELECT id, task_session_id, task_id, turn_id, author_type, author_id, content, requests_input, type, metadata, created_at, updated_at,
-			       CASE WHEN author_type = 'user' THEN
-			         SUM(CASE WHEN author_type = 'user' THEN 1 ELSE 0 END) OVER (
-			           PARTITION BY task_session_id
-			           ORDER BY %s, id
-			           ROWS UNBOUNDED PRECEDING
-			         )
-			       ELSE 0 END AS prompt_index
-			FROM task_session_messages
-			WHERE task_session_id = ?
-		)
-		SELECT id, task_session_id, task_id, turn_id, author_type, author_id, content, requests_input, type, metadata, created_at, updated_at, prompt_index
-		FROM session_messages`, nm)
+	// prompt_index is the durable per-session ordinal persisted at creation
+	// (prompt_seq), so it is a plain column: absolute rather than
+	// page-relative by construction, no window pass needed. The cursor
+	// predicate, ORDER BY, and LIMIT (limit+1) use the same normalized key as
+	// the rest of the package, so every page is contiguous in ordinal order
+	// and the sentinel `promptNumber === 1` stop can never skip a
+	// higher-ordinal prompt sharing a microsecond.
+	query := `
+		SELECT id, task_session_id, task_id, turn_id, author_type, author_id, content, requests_input, type, metadata, created_at, updated_at,
+		       CASE WHEN author_type = 'user' THEN prompt_seq ELSE 0 END AS prompt_index
+		FROM task_session_messages
+		WHERE task_session_id = ?`
 	args := []interface{}{sessionID}
 	if cursor != nil {
 		if opts.Before != "" {
-			query += fmt.Sprintf(" WHERE (%s < %s OR (%s = %s AND id < ?))", nm, bound, nm, bound)
+			query += fmt.Sprintf(" AND (%s < %s OR (%s = %s AND id < ?))", nm, bound, nm, bound)
 		} else if opts.After != "" {
-			query += fmt.Sprintf(" WHERE (%s > %s OR (%s = %s AND id > ?))", nm, bound, nm, bound)
+			query += fmt.Sprintf(" AND (%s > %s OR (%s = %s AND id > ?))", nm, bound, nm, bound)
 		}
 		args = append(args, cursorKey, cursorKey, cursor.ID)
 	}

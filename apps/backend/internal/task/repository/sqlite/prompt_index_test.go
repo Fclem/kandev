@@ -35,9 +35,20 @@ func insertPromptRowWithRawTimestamp(t *testing.T, repo *Repository, id, session
 	}
 }
 
-// assertPromptOrdinals asserts the indexed read (correlated count) and the
-// paginated window read agree on every user row's ordinal and that both
-// return zero for agent rows.
+// backfillPromptSeqForTest assigns fixture-inserted legacy rows their derived
+// ordinals exactly as the production migration does (see backfillPromptSeq),
+// so the fixture tests exercise the same upgrade path the indexed readers
+// serve after migration.
+func backfillPromptSeqForTest(t *testing.T, repo *Repository) {
+	t.Helper()
+	if err := repo.backfillPromptSeq(); err != nil {
+		t.Fatalf("backfill prompt_seq: %v", err)
+	}
+}
+
+// assertPromptOrdinals asserts the indexed read (persisted prompt_seq) and
+// the paginated read agree on every user row's ordinal and that both return
+// zero for agent rows.
 func assertPromptOrdinals(t *testing.T, ctx context.Context, repo *Repository, sessionID string, want map[string]int) {
 	t.Helper()
 	for id, wantIndex := range want {
@@ -129,6 +140,10 @@ func TestPromptIndexReadsAndPagination(t *testing.T) {
 	insertPromptRow(t, repo, "pb-user-1", "sess-PB", "turn-PB", "user", "prompt 1", now.Add(time.Minute))
 	insertPromptRow(t, repo, "pb-user-2", "sess-PB", "turn-PB", "user", "prompt 2", now.Add(2*time.Minute))
 
+	// The fixture rows bypass the create boundary (the legacy-row shape), so
+	// assign ordinals with the production backfill like a migrated database.
+	backfillPromptSeqForTest(t, repo)
+
 	// Ordinary hot paths stay legacy: GetMessage and full ListMessages return
 	// zero PromptIndex even for user rows.
 	legacy, err := repo.GetMessage(ctx, "pa-user-1")
@@ -180,6 +195,8 @@ func TestPromptIndexTiedMicrosecondPagesContiguous(t *testing.T) {
 	insertPromptRow(t, repo, "tie-aaa", "sess-TIE", "turn-TIE", "user", "earlier instant, earlier id", tsEarlier)
 	insertPromptRow(t, repo, "tie-mmm", "sess-TIE", "turn-TIE", "user", "middle id, same microsecond", tsLater)
 
+	backfillPromptSeqForTest(t, repo)
+
 	want := map[string]int{"tie-aaa": 1, "tie-mmm": 2, "tie-zzz": 3}
 	assertPromptOrdinals(t, ctx, repo, "sess-TIE", want)
 
@@ -229,6 +246,8 @@ func TestPromptIndexOffsetRowsMatchFrontendUTCKey(t *testing.T) {
 	insertPromptRowWithRawTimestamp(t, repo, "off-user-1", "sess-OFF", "turn-OFF", "user", "offset prompt 1", "2026-08-18 10:00:00.123456+02:00")
 	insertPromptRowWithRawTimestamp(t, repo, "off-user-2", "sess-OFF", "turn-OFF", "user", "offset prompt 2", "2026-08-18 10:00:01.000000+02:00")
 	insertPromptRowWithRawTimestamp(t, repo, "off-agent", "sess-OFF", "turn-OFF", "agent", "offset reply", "2026-08-18 10:00:02.000000+02:00")
+
+	backfillPromptSeqForTest(t, repo)
 
 	want := map[string]int{"off-user-1": 1, "off-user-2": 2, "off-agent": 0}
 	assertPromptOrdinals(t, ctx, repo, "sess-OFF", want)

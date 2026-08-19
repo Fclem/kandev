@@ -18,19 +18,10 @@ import (
 // text; the same literal is cast to `timestamp` on PostgreSQL.
 const promptKeyLayout = "2006-01-02 15:04:05.000000"
 
-// promptIndexLeadWindow bounds how far ahead of the current wall clock a live
-// user-message create may advance its ordering timestamp to keep the
-// session's prompt ordering monotonic. A clock that is behind the session's
-// newest user message by more than this window is treated as over-window
-// skew: advancing would stamp the message far in the future, so the create
-// fails with a retryable error instead.
-const promptIndexLeadWindow = time.Minute
-
-// ErrMessageClockSkew is returned by live user-message creates when the
-// timestamp advance needed to stay after the session's newest user message
-// would exceed promptIndexLeadWindow. Retryable: once the clock catches up
-// (or the skew is repaired), the same create succeeds.
-var ErrMessageClockSkew = errors.New("message clock skew exceeds prompt-ordering lead window")
+// promptIndexLeadWindow bounded how far a live create could advance its
+// ordering timestamp; it was removed when prompt ordinals moved to a durable
+// per-session sequence that no longer depends on timestamp comparisons. See
+// the migration history for the derived-ordinal predecessor design.
 
 // ErrMessageTimestampNotAfterNewest is returned when an explicit user-message
 // timestamp is not strictly after the session's newest user message. Explicit
@@ -57,15 +48,16 @@ func parsePromptKey(s string) (time.Time, error) {
 	return time.Parse(promptKeyLayout, s)
 }
 
-// resolvePromptOrderingTime applies the atomic create-boundary timestamp
-// rules for a user message. Live creates (zero timestamp) keep the session's
-// prompt ordering monotonic: a colliding or backward key is advanced by one
-// microsecond tick, bounded by promptIndexLeadWindow (an over-window skew
-// returns a retryable error instead of a future timestamp). Explicit
-// timestamps are preserved only when strictly after the session's newest user
-// message. maxKey is the session's newest user-message normalized key (NULL
-// when the session has no user rows).
-func resolvePromptOrderingTime(live bool, created time.Time, maxKey sql.NullString, now time.Time) (time.Time, error) {
+// resolvePromptOrderingTime applies the create-boundary timestamp rules for a
+// user message. Live creates (zero timestamp) keep the session's ordering
+// monotonic: a colliding or backward key is clamped forward by one microsecond
+// tick. Clamping is unbounded on purpose — the prompt ordinal comes from the
+// durable per-session sequence, not this timestamp, so a backward clock
+// correction can never block new prompts; the timestamp only keeps pagination
+// order stable. Explicit timestamps are preserved only when strictly after
+// the session's newest user message. maxKey is the session's newest
+// user-message normalized key (NULL when the session has no user rows).
+func resolvePromptOrderingTime(live bool, created time.Time, maxKey sql.NullString) (time.Time, error) {
 	if !maxKey.Valid || maxKey.String == "" {
 		return created, nil
 	}
@@ -78,14 +70,7 @@ func resolvePromptOrderingTime(live bool, created time.Time, maxKey sql.NullStri
 		if err != nil {
 			return time.Time{}, fmt.Errorf("parse session max user-message key %q: %w", maxKey.String, err)
 		}
-		advanced = advanced.Add(time.Microsecond)
-		if advanced.After(now.Add(promptIndexLeadWindow)) {
-			return time.Time{}, fmt.Errorf(
-				"%w: session's newest user message (%s) is %s ahead of now",
-				ErrMessageClockSkew, maxKey.String, advanced.Sub(now).Round(time.Microsecond),
-			)
-		}
-		return advanced, nil
+		return advanced.Add(time.Microsecond), nil
 	}
 	if newKey <= maxKey.String {
 		return time.Time{}, fmt.Errorf(
@@ -94,6 +79,31 @@ func resolvePromptOrderingTime(live bool, created time.Time, maxKey sql.NullStri
 		)
 	}
 	return created, nil
+}
+
+// allocatePromptSeq advances the session's durable prompt-sequence counter by
+// one and returns the new ordinal. It runs inside the per-session create
+// boundary, which serializes all user-message creates for the session (the
+// advisory session lock on PostgreSQL, the single-writer pool on SQLite), so
+// the read-increment-write is atomic. Deletion never decrements the counter:
+// published ordinals stay stable, and a deleted prompt's ordinal is never
+// reused.
+func (r *Repository) allocatePromptSeq(ctx context.Context, execer messageBoundaryExecer, sessionID string) (int, error) {
+	var lastSeq int
+	err := execer.QueryRowContext(ctx, execer.Rebind(
+		`SELECT last_seq FROM task_session_prompt_seq WHERE task_session_id = ?`,
+	), sessionID).Scan(&lastSeq)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("read session prompt sequence: %w", err)
+	}
+	seq := lastSeq + 1
+	if _, err := execer.ExecContext(ctx, execer.Rebind(`
+		INSERT INTO task_session_prompt_seq (task_session_id, last_seq) VALUES (?, ?)
+		ON CONFLICT(task_session_id) DO UPDATE SET last_seq = excluded.last_seq
+	`), sessionID, seq); err != nil {
+		return 0, fmt.Errorf("advance session prompt sequence: %w", err)
+	}
+	return seq, nil
 }
 
 // readSessionMaxUserKey returns the session's newest user-message normalized
@@ -129,12 +139,13 @@ func (r *Repository) readSessionMaxUserKey(
 }
 
 // createUserMessageWithBoundary persists a user message with its
-// prompt-ordering timestamp and ordinal assigned inside the per-session write
-// boundary (a transaction on both dialects; PostgreSQL additionally takes the
-// session turn-write advisory lock, and SQLite's single-writer pool provides
-// the same serialization). The caller-visible CreatedAt and PromptIndex fields
-// are only committed on success, so a failed attempt (clock-skew rejection,
-// busy retry, concurrent winner) leaves the retried model untouched.
+// prompt-ordering timestamp and durable prompt ordinal assigned inside the
+// per-session write boundary (a transaction on both dialects; PostgreSQL
+// additionally takes the session turn-write advisory lock, and SQLite's
+// single-writer pool provides the same serialization). The caller-visible
+// CreatedAt and PromptIndex fields are only committed on success, so a failed
+// attempt (rejected explicit timestamp, busy retry, concurrent winner) leaves
+// the retried model untouched.
 func (r *Repository) createUserMessageWithBoundary(
 	ctx context.Context,
 	message *models.Message,
@@ -186,34 +197,22 @@ func (r *Repository) executeBoundaryTransaction(
 		return err
 	}
 
-	created, err = resolvePromptOrderingTime(message.CreatedAt.IsZero(), created, sql.NullString{String: maxKeyStr, Valid: maxKeyValid}, now)
+	created, err = resolvePromptOrderingTime(message.CreatedAt.IsZero(), created, sql.NullString{String: maxKeyStr, Valid: maxKeyValid})
 	if err != nil {
 		return err
 	}
-	newKey := formatPromptKey(created)
 
-	var ordinal int
-	// The count predicate compares the per-row normalized key against the
-	// new key literal. On Postgres the key is the native TIMESTAMP column,
-	// and a bound Go string is typed `text` (no implicit cast in operator
-	// resolution), so the literal must be cast explicitly.
-	bound := "?"
-	if dialect.IsPostgres(driver) {
-		bound = "CAST(? AS timestamp)"
+	// The ordinal comes from the session's durable sequence counter (inside
+	// this serialized boundary), never from the timestamp or the remaining
+	// rows: deletion of an earlier prompt cannot renumber this row, and a
+	// backward clock correction cannot block allocation.
+	seq, err := r.allocatePromptSeq(ctx, tx, message.TaskSessionID)
+	if err != nil {
+		return err
 	}
-	if err := tx.QueryRowContext(ctx, tx.Rebind(fmt.Sprintf(
-		"SELECT COUNT(*) FROM task_session_messages WHERE task_session_id = ? AND author_type = ? AND (%s < %s OR (%s = %s AND id <= ?))",
-		nm, bound, nm, bound,
-	)), message.TaskSessionID, string(models.MessageAuthorUser), newKey, newKey, message.ID).Scan(&ordinal); err != nil {
-		return fmt.Errorf("count session user messages: %w", err)
-	}
-	// The count covers the session's EXISTING user rows up to the new
-	// row's ordering position (the row itself is not yet inserted, so the
-	// id <= self disjunct cannot match it); the new row's ordinal is
-	// therefore count + 1, matching GetMessageWithPromptIndex's
-	// self-inclusive correlated count by construction.
+
 	message.CreatedAt = created
-	message.PromptIndex = ordinal + 1
+	message.PromptIndex = seq
 	if message.UpdatedAt.IsZero() {
 		message.UpdatedAt = created
 	}
@@ -229,32 +228,22 @@ func (r *Repository) executeBoundaryTransaction(
 }
 
 // GetMessageWithPromptIndex retrieves a message by ID with its prompt_index
-// derived from a correlated COUNT over the session's user rows using the same
-// normalized-microsecond predicate as the live-create transaction, so live,
-// replay, and read ordinals agree by construction. Non-user rows return zero.
-// This is the 13-column read used by the idempotent WS replay/response path
-// and user update-event publication; hot-path GetMessage stays on the
-// 12-column scan.
+// read from the durable per-session prompt sequence (prompt_seq), which is
+// allocated at creation inside the write boundary and survives message
+// deletion. Non-user rows return zero. This is the 13-column read used by the
+// idempotent WS replay/response path and user update-event publication;
+// hot-path GetMessage stays on the 12-column scan.
 func (r *Repository) GetMessageWithPromptIndex(ctx context.Context, id string) (*models.Message, error) {
-	drv := r.ro.DriverName()
-	nmM := dialect.NormalizedMicrosecond(drv, "m.created_at")
-	nmU := dialect.NormalizedMicrosecond(drv, "u.created_at")
 	message := &models.Message{}
 	var requestsInput int
 	var messageType string
 	var metadataJSON string
-	query := fmt.Sprintf(`
-		SELECT m.id, m.task_session_id, m.task_id, m.turn_id, m.author_type, m.author_id,
-		       m.content, m.requests_input, m.type, m.metadata, m.created_at, m.updated_at,
-		       CASE WHEN m.author_type = 'user' THEN (
-		         SELECT COUNT(*) FROM task_session_messages u
-		         WHERE u.task_session_id = m.task_session_id
-		           AND u.author_type = 'user'
-		           AND (%[1]s < %[2]s OR (%[1]s = %[2]s AND u.id <= m.id))
-		       ) ELSE 0 END AS prompt_index
-		FROM task_session_messages m
-		WHERE m.id = ?
-	`, nmU, nmM)
+	query := `
+		SELECT id, task_session_id, task_id, turn_id, author_type, author_id,
+		       content, requests_input, type, metadata, created_at, updated_at,
+		       CASE WHEN author_type = 'user' THEN prompt_seq ELSE 0 END AS prompt_index
+		FROM task_session_messages
+		WHERE id = ?`
 	err := r.ro.QueryRowContext(ctx, r.ro.Rebind(query), id).Scan(
 		&message.ID, &message.TaskSessionID, &message.TaskID, &message.TurnID, &message.AuthorType, &message.AuthorID,
 		&message.Content, &requestsInput, &messageType, &metadataJSON, &message.CreatedAt, &message.UpdatedAt,

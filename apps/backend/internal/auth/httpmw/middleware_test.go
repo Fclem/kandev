@@ -411,6 +411,37 @@ func TestStripUntrustedForwardedHostIPv4MappedPeerKeeps(t *testing.T) {
 	}
 }
 
+// TestStripUntrustedForwardedHostMappedFormCIDRKeeps pins the mapped-form
+// CIDR normalization: gin treats ::ffff:10.0.0.0/120 as 10.0.0.0/24 and
+// trusts peers under it in either representation; the matcher must agree.
+func TestStripUntrustedForwardedHostMappedFormCIDRKeeps(t *testing.T) {
+	for _, peer := range []string{"10.0.0.5:5555", "[::ffff:10.0.0.5]:5555"} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = peer
+		req.Header.Set("X-Forwarded-Host", "public.example:8443")
+		rec := httptest.NewRecorder()
+		stripRouter("::ffff:10.0.0.0/120").ServeHTTP(rec, req)
+		if got := rec.Body.String(); got != "public.example:8443" {
+			t.Fatalf("mapped-form CIDR peer %q: XFH body = %q, want public.example:8443", peer, got)
+		}
+	}
+}
+
+// TestStripUntrustedForwardedHostDegenerateMappedCIDRFailsClosed pins the
+// unsupported corner: a mapped-form CIDR with fewer than 96 bits degenerates
+// to trust-all in gin; the matcher refuses it, so the header is stripped
+// (fail closed) rather than silently trusting everything.
+func TestStripUntrustedForwardedHostDegenerateMappedCIDRFailsClosed(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.9:5555"
+	req.Header.Set("X-Forwarded-Host", "public.example:8443")
+	rec := httptest.NewRecorder()
+	stripRouter("::ffff:10.0.0.0/90").ServeHTTP(rec, req)
+	if got := rec.Body.String(); got != "stripped" {
+		t.Fatalf("degenerate mapped CIDR body = %q, want stripped", got)
+	}
+}
+
 // TestStripUntrustedForwardedHostCIDRExcludesOutOfRangePeer pins the CIDR
 // boundary: the peer just outside the trusted prefix is untrusted.
 func TestStripUntrustedForwardedHostCIDRExcludesOutOfRangePeer(t *testing.T) {

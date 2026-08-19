@@ -93,7 +93,21 @@ func newTrustedProxyMatcher(trusted []string) *trustedProxyMatcher {
 	m := &trustedProxyMatcher{}
 	for _, entry := range trusted {
 		if strings.Contains(entry, "/") {
-			if prefix, err := netip.ParsePrefix(entry); err == nil {
+			prefix, err := netip.ParsePrefix(entry)
+			if err != nil {
+				continue
+			}
+			if prefix.Addr().Is4In6() {
+				// gin normalizes IPv4-mapped CIDRs to their IPv4 form
+				// (::ffff:10.0.0.0/120 → 10.0.0.0/24, mask sliced 96 bits
+				// shorter); mirror it so the two trust decisions cannot
+				// diverge. A mapped-form CIDR with fewer than 96 bits
+				// degenerates to a /0 in gin — not mirrored; it fails
+				// closed here (header stripped) and is not a supported
+				// configuration.
+				prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+			}
+			if prefix.IsValid() {
 				m.prefixes = append(m.prefixes, prefix)
 			}
 			continue

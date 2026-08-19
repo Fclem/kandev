@@ -43,7 +43,17 @@ export function useRunLiveSync(
   const seenSeqsRef = useRef<Set<number>>(new Set(initialEvents.map((e) => e.seq)));
 
   useEffect(() => {
-    seenSeqsRef.current = new Set(initialEvents.map((e) => e.seq));
+    const nextSeqs = new Set(initialEvents.map((e) => e.seq));
+    if (
+      seenSeqsRef.current.size === nextSeqs.size &&
+      [...nextSeqs].every((seq) => seenSeqsRef.current.has(seq))
+    ) {
+      // Same event set as the current snapshot. Skip the state write so an
+      // unstable `initialEvents` reference (a fresh array literal on every
+      // render) cannot feed an endless render->effect cycle.
+      return;
+    }
+    seenSeqsRef.current = nextSeqs;
     setEvents(initialEvents);
   }, [initialEvents]);
 

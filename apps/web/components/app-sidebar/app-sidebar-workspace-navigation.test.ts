@@ -21,6 +21,20 @@ const officeWithReservedChars = {
   office_workflow_id: "wf-office-reserved",
 };
 
+// Reads a cookie's value, treating an empty entry (lingering `name=` after an
+// expired write) as absent — the same semantics as the production reader
+// (readCookie: "an empty cookie value is treated as absent").
+function cookieValue(name: string): string | null {
+  const prefix = `${name}=`;
+  const entry = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+  if (!entry) return null;
+  const value = decodeURIComponent(entry.slice(prefix.length));
+  return value || null;
+}
+
 describe("app sidebar workspace navigation", () => {
   beforeEach(() => {
     document.cookie = "kandev-active-workspace=; path=/; max-age=0";
@@ -42,8 +56,11 @@ describe("app sidebar workspace navigation", () => {
     expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}_8443=office-1`);
     expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}_8443=office-1`);
     // The legacy unprefixed names are read-only fallback — never written.
-    expect(document.cookie).not.toContain(`${ACTIVE_WORKSPACE_COOKIE}=`);
-    expect(document.cookie).not.toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=`);
+    // Assert on VALUES, not presence: some environments keep an empty
+    // `name=` entry after a max-age=0 cleanup, and an empty value is
+    // equivalent to absent (readCookie treats it as such).
+    expect(cookieValue(ACTIVE_WORKSPACE_COOKIE)).toBeNull();
+    expect(cookieValue(LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE)).toBeNull();
   });
 
   it("does not write the legacy office cookie for a kanban selection", () => {
@@ -75,8 +92,8 @@ describe("app sidebar workspace navigation", () => {
 
     expect(document.cookie).toContain(`${ACTIVE_WORKSPACE_COOKIE}_8443=office-new`);
     expect(document.cookie).toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}_8443=office-new`);
-    expect(document.cookie).not.toContain(`${ACTIVE_WORKSPACE_COOKIE}=`);
-    expect(document.cookie).not.toContain(`${LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE}=`);
+    expect(cookieValue(ACTIVE_WORKSPACE_COOKIE)).toBeNull();
+    expect(cookieValue(LEGACY_OFFICE_ACTIVE_WORKSPACE_COOKIE)).toBeNull();
   });
 
   it("leaves a pre-existing legacy cookie untouched when the scoped twin is written", () => {

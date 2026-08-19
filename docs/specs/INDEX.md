@@ -104,6 +104,7 @@ Kandev's task model: documents, execution stages, labels, blocker escalation, su
 | [agent-generated-titles](tasks/agent-generated-titles.md) | approved |
 | [task-create-executor-default](tasks/task-create-executor-default.md) | approved |
 | [task-create-workflow-memory](tasks/task-create-workflow-memory.md) | approved |
+| [task-create-escape-dismissal](tasks/task-create-escape-dismissal.md) | complete |
 | [repository-sets](repository-sets/spec.md) | building |
 | [external-id-idempotency](tasks/external-id-idempotency/spec.md) | draft |
 | [prompt-attachments](tasks/prompt-attachments.md) | draft |
@@ -211,6 +212,7 @@ Subscription quota tracking and per-agent cheap-model profile routing.
 | [message-queue-management](ui/message-queue-management.md) | shipped |
 | [message-queue-merge](ui/message-queue-merge.md) | shipped |
 | [message-queue-reorder](ui/message-queue-reorder.md) | building |
+| [message-queue-run](ui/message-queue-run.md) | shipped |
 | [message-queue-send-now](ui/message-queue-send-now.md) | shipped |
 | [settings-manual-save](ui/settings-manual-save.md) | shipped |
 | [settings-discovery](ui/settings-discovery.md) | shipped |

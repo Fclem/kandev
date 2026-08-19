@@ -16,7 +16,13 @@ type StoreLike = ReturnType<typeof useAppStoreApi>;
 
 function makeStore(initialMeta?: Partial<Meta>) {
   const meta: Record<string, Meta> = {};
-  const bySession: Record<string, Array<{ id: string; created_at: string }>> = {};
+  // Like the real store, sessions with pagination state already have message
+  // entries; the purge guard keys on bySession absence, so seed the sessions
+  // the tests paginate.
+  const bySession: Record<string, Array<{ id: string; created_at: string }>> = {
+    s1: [],
+    s2: [],
+  };
   let prependCalls = 0;
   const setMeta = (sessionId: string, patch: Partial<Meta>) => {
     const defaults: Meta = {
@@ -30,6 +36,10 @@ function makeStore(initialMeta?: Partial<Meta>) {
   };
   const store = {
     getState: () => ({
+      messages: {
+        bySession,
+        metaBySession: meta,
+      },
       setMessagesMetadata: (sessionId: string, patch: { isLoadingMore?: boolean }) => {
         setMeta(sessionId, patch);
       },
@@ -155,7 +165,9 @@ describe("requestOlderMessages", () => {
     expect(meta.s1.oldestCursor).toBe("m1");
     expect(listTaskSessionMessages).toHaveBeenCalledTimes(2);
   });
+});
 
+describe("requestOlderMessages — joins and purged-session lifecycle", () => {
   it("exposes the in-flight promise via joinOlderMessages and shares its result", async () => {
     const { store, bySession } = makeStore();
     let resolvePage: (value: { messages: unknown[]; has_more: boolean }) => void = () => {};
@@ -187,5 +199,30 @@ describe("requestOlderMessages", () => {
     const done = await requestOlderMessages({ sessionId: "s1", cursor: "m9", limit: 20, store });
     expect(done.count).toBe(0);
     expect(joinOlderMessages("s1", "m9")).toBeNull(); // settled flight is gone
+  });
+
+  it("does not resurrect purged session state when the response lands after deletion", async () => {
+    const { store, bySession, meta, prependCalls } = makeStore();
+    let resolvePage: (value: { messages: unknown[]; has_more: boolean }) => void = () => {};
+    listTaskSessionMessages.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePage = resolve;
+      }),
+    );
+
+    const pending = requestOlderMessages({ sessionId: "s1", cursor: "m3", limit: 20, store });
+    // The session is deleted while the request is in flight: the store purge
+    // removes its bySession/metaBySession entries.
+    delete bySession.s1;
+    delete meta.s1;
+
+    resolvePage(pageResponse(["m3", "m2", "m1"], false));
+    const result = await pending;
+
+    expect(result.count).toBe(3);
+    // The prepend must NOT have recreated the purged session state.
+    expect(prependCalls()).toBe(0);
+    expect(bySession.s1).toBeUndefined();
+    expect(meta.s1).toBeUndefined();
   });
 });

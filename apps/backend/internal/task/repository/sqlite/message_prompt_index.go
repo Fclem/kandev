@@ -94,6 +94,38 @@ func resolvePromptOrderingTime(live bool, created time.Time, maxKey sql.NullStri
 	return created, nil
 }
 
+// readSessionMaxUserKey returns the session's newest user-message normalized
+// key in the exact key layout, and whether any user row exists. On SQLite the
+// key expression yields the text directly; on PostgreSQL the native TIMESTAMP
+// is scanned and formatted (scanning a timestamp into a string yields RFC3339,
+// which the key parse and lexicographic comparison do not understand).
+func (r *Repository) readSessionMaxUserKey(
+	ctx context.Context,
+	execer messageBoundaryExecer,
+	driver, nm, sessionID string,
+) (string, bool, error) {
+	query := fmt.Sprintf(
+		"SELECT max(%s) FROM task_session_messages WHERE task_session_id = ? AND author_type = ?",
+		nm,
+	)
+	args := []interface{}{sessionID, string(models.MessageAuthorUser)}
+	if dialect.IsPostgres(driver) {
+		var maxKey sql.NullTime
+		if err := execer.QueryRowContext(ctx, execer.Rebind(query), args...).Scan(&maxKey); err != nil {
+			return "", false, fmt.Errorf("read session max user-message key: %w", err)
+		}
+		if !maxKey.Valid {
+			return "", false, nil
+		}
+		return formatPromptKey(maxKey.Time), true, nil
+	}
+	var maxKey sql.NullString
+	if err := execer.QueryRowContext(ctx, execer.Rebind(query), args...).Scan(&maxKey); err != nil {
+		return "", false, fmt.Errorf("read session max user-message key: %w", err)
+	}
+	return maxKey.String, maxKey.Valid && maxKey.String != "", nil
+}
+
 // createUserMessageWithBoundary persists a user message with its
 // prompt-ordering timestamp and ordinal assigned inside the per-session write
 // boundary (a transaction on both dialects; PostgreSQL additionally takes the
@@ -126,24 +158,29 @@ func (r *Repository) createUserMessageWithBoundary(
 			created = now
 		}
 
-		var maxKey sql.NullString
-		if err := execer.QueryRowContext(ctx, execer.Rebind(fmt.Sprintf(
-			"SELECT max(%s) FROM task_session_messages WHERE task_session_id = ? AND author_type = ?",
-			nm,
-		)), message.TaskSessionID, string(models.MessageAuthorUser)).Scan(&maxKey); err != nil {
-			return fmt.Errorf("read session max user-message key: %w", err)
+		maxKeyStr, maxKeyValid, err := r.readSessionMaxUserKey(ctx, execer, driver, nm, message.TaskSessionID)
+		if err != nil {
+			return err
 		}
 
-		created, err := resolvePromptOrderingTime(message.CreatedAt.IsZero(), created, maxKey, now)
+		created, err = resolvePromptOrderingTime(message.CreatedAt.IsZero(), created, sql.NullString{String: maxKeyStr, Valid: maxKeyValid}, now)
 		if err != nil {
 			return err
 		}
 		newKey := formatPromptKey(created)
 
 		var ordinal int
+		// The count predicate compares the per-row normalized key against the
+		// new key literal. On Postgres the key is the native TIMESTAMP column,
+		// and a bound Go string is typed `text` (no implicit cast in operator
+		// resolution), so the literal must be cast explicitly.
+		bound := "?"
+		if dialect.IsPostgres(driver) {
+			bound = "CAST(? AS timestamp)"
+		}
 		if err := execer.QueryRowContext(ctx, execer.Rebind(fmt.Sprintf(
-			"SELECT COUNT(*) FROM task_session_messages WHERE task_session_id = ? AND author_type = ? AND (%s < ? OR (%s = ? AND id <= ?))",
-			nm, nm,
+			"SELECT COUNT(*) FROM task_session_messages WHERE task_session_id = ? AND author_type = ? AND (%s < %s OR (%s = %s AND id <= ?))",
+			nm, bound, nm, bound,
 		)), message.TaskSessionID, string(models.MessageAuthorUser), newKey, newKey, message.ID).Scan(&ordinal); err != nil {
 			return fmt.Errorf("count session user messages: %w", err)
 		}

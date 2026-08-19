@@ -79,7 +79,12 @@ export function requestOlderMessages(params: {
     current.count -= 1;
     current.byCursor.delete(cursor);
     if (current.count === 0) {
-      store.getState().setMessagesMetadata(sessionId, { isLoadingMore: false });
+      // Only touch the store when the session still has message state: it
+      // may have been deleted while the request was in flight, and clearing
+      // the flag would recreate a purged meta entry.
+      if (store.getState().messages?.bySession?.[sessionId] !== undefined) {
+        store.getState().setMessagesMetadata(sessionId, { isLoadingMore: false });
+      }
     }
     if (current.count === 0 && current.byCursor.size === 0) {
       inFlightBySession.delete(sessionId);
@@ -113,9 +118,16 @@ async function performRequest(
     newOldestId: newOldestCursor,
     newOldestCreatedAt: ordered[0]?.created_at ?? null,
   });
-  store.getState().prependMessages(sessionId, ordered, {
-    hasMore,
-    oldestCursor: newOldestCursor,
-  });
+  // The session may have been deleted/archived while this request was in
+  // flight: the store purge removes bySession/metaBySession entries, and an
+  // unconditional prepend would resurrect orphaned conversation state. A
+  // request can only legitimately be in flight when the session's message
+  // state existed at start, so its absence now means it was purged.
+  if (store.getState().messages?.bySession?.[sessionId] !== undefined) {
+    store.getState().prependMessages(sessionId, ordered, {
+      hasMore,
+      oldestCursor: newOldestCursor,
+    });
+  }
   return { count: ordered.length, effectiveLimit: limit, hasMore, oldestCursor: newOldestCursor };
 }

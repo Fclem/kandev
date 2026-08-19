@@ -481,11 +481,28 @@ export const TaskChatPanel = memo(function TaskChatPanel({
       lastPromptLookupPagesRef.current = 0;
       return;
     }
-    if (isLoadingMore || lastPromptLookupPagesRef.current >= MAX_LAST_PROMPT_LOOKUP_PAGES) return;
+    // Never start an older-page lookup against a stale SSR cursor while the
+    // session's initial/refetch load is in flight: both writes independently
+    // update hasMore/oldestCursor, and completion order could regress the
+    // pagination metadata.
+    if (
+      messagesLoading ||
+      isLoadingMore ||
+      lastPromptLookupPagesRef.current >= MAX_LAST_PROMPT_LOOKUP_PAGES
+    )
+      return;
     if (!shouldLoadMoreForTranscriptTarget("last_prompt", allMessages, hasMore)) return;
     lastPromptLookupPagesRef.current += 1;
     void loadMore();
-  }, [allMessages, hasMore, isLoadingMore, loadMore, lastPromptMessageId, resolvedSessionId]);
+  }, [
+    allMessages,
+    hasMore,
+    isLoadingMore,
+    loadMore,
+    lastPromptMessageId,
+    messagesLoading,
+    resolvedSessionId,
+  ]);
   const search = useSessionSearch(resolvedSessionId, loadMore);
   const { label: agentLabel, name: agentName } = useSessionAgentIdentity(resolvedSessionId);
   usePanelSearch({

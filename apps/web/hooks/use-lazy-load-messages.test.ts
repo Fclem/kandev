@@ -24,6 +24,10 @@ vi.mock("@/components/state-provider", () => ({
     }),
   useAppStoreApi: () => ({
     getState: () => ({
+      messages: {
+        bySession: { s1: [] as Array<{ id: string }> },
+        metaBySession: { s1: storeMock.meta },
+      },
       setMessagesMetadata: storeMock.setMessagesMetadata,
       prependMessages: (_sessionId: string, messages: Array<{ id: string }>, _meta: unknown) => {
         storeMock.prepended = [...messages, ...storeMock.prepended];

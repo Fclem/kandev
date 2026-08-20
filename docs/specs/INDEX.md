@@ -142,6 +142,7 @@ Per-workspace credentials and triage triggers for external services.
 |---|---|
 | [azure-devops-integration](azure-devops-integration/spec.md) | shipped |
 | [bitbucket-plugin](bitbucket-plugin/spec.md) | approved |
+| [deepseek-credits-plugin](deepseek-credits-plugin/spec.md) | draft |
 | [slack](integrations/slack.md) | archived — moved to `kandev-plugin-slack` |
 | [external-mcp](integrations/external-mcp.md) | draft |
 | [mcp-tool-argument-validation](integrations/mcp-tool-argument-validation.md) | shipped |

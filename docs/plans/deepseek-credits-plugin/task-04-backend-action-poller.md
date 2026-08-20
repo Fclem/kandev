@@ -1,7 +1,7 @@
 ---
 id: "04-backend-action-poller"
 title: "balance.get action and snapshot poller"
-status: pending
+status: done
 wave: 2
 depends_on: ["03-backend-balance-client"]
 plan: "plan.md"
@@ -187,3 +187,57 @@ unconfigured and pre-SetHost loading.
 - Keep the poller goroutine bounded to the plugin process lifetime; it must not
   outlive `SetHost` teardown expectations (process exit reaps it, as in
   provider-usage).
+
+## Results
+
+Completed 2026-08-20 (plugin repo commit `74c5877`).
+
+TDD: `server/plugin_test.go` (34 tests) written first (red: symbols
+undefined), then `server/plugin.go` + `server/main.go` rewritten (green).
+
+Implementation notes:
+
+- `SetHost` sets the initial-loading pending flag synchronously BEFORE the
+  poller goroutine starts (no gap in the loading classification); poller
+  fetches immediately then every `poll_minutes` (floor 1, enforced at runtime
+  because `minimum: 1` is declarative only).
+- Singleflight join: `startFetch` starts one fetch or JOINS the in-flight one;
+  completion is broadcast via a closed `done` channel (an earlier single-value
+  channel design deadlocked the joined waiter — the poll starter consumed the
+  only value — caught by the suite, redesigned so every waiter reads the
+  stored outcome).
+- Cooldown checked FIRST in the refresh path (5 s anchored on last COMPLETED
+  attempt, success or failure) and wins over an in-flight join.
+- HTTP 200 for every domain status; unknown action keys rejected with 404;
+  malformed/non-boolean bodies treated as `refresh: false` (no panic).
+- Config precedence NON-EMPTY trimmed secret > NON-EMPTY trimmed
+  `DEEPSEEK_API_KEY` > unconfigured; zero-fetch unconfigured poller.
+- `warn_below` effective value (10 default; <= 0 → 10) present whenever a key
+  is configured and SetHost ran; null only for unconfigured and pre-SetHost
+  loading.
+- `server/balance.go` unchanged from task 03 (kept client free of plugin
+  state; removed the unused `errBalanceCode` helper).
+
+Exact verification (plugin worktree):
+
+```sh
+make test-backend   # ok — go test ./server/... (all 34 plugin + 12 client tests pass)
+make vet            # ok
+make build          # ok — bin/kandev-deepseek-credits
+gofmt -l .          # no output (after gofmt -w)
+go test -race -count=1 ./server/...   # ok — race-clean
+```
+
+Case coverage: status windows (ok/loading/unconfigured/error), pre-SetHost
+loading with `warn_below: null`, no-gap loading from the synchronous pending
+flag, failed initial poll → error with `balance_infos: null`, poll failure
+after success retains the snapshot, config precedence + whitespace trimming
+(empty/whitespace stored key and env count as unset; stray-whitespace keys
+authenticate trimmed), refresh rebuild vs plain-cache, cooldown (incl.
+post-FAILURE cooldown serving the cached error state), join in-flight poll,
+join post-failure retry (recovery ok / failure error, never loading),
+cooldown-wins-over-join precedence, warn_below defaults/parsing,
+poll_minutes floor, is_available bool/null, fetched_at RFC 3339, unknown key
+rejection, malformed bodies, refresh with extra keys, plain call during
+in-flight retry. Response shape dump confirmed exact (status/error/
+fetched_at/is_available/balance_infos/warn_below).

@@ -149,7 +149,7 @@ Wave 1:
 - [x] [task 03 — DeepSeek balance client](task-03-backend-balance-client.md)
 
 Wave 2:
-- [ ] [task 04 — balance.get action and poller](task-04-backend-action-poller.md)
+- [x] [task 04 — balance.get action and poller](task-04-backend-action-poller.md)
 
 Wave 3:
 - [ ] [task 05 — chat-top-bar pill and panel](task-05-ui-pill-panel.md)

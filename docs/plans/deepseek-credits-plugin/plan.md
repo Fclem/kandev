@@ -143,7 +143,7 @@ Sequential by default; only the user may authorize subagents.
 
 ```
 Wave 0:
-- [ ] [task 02 — plugin repository bootstrap](task-02-plugin-repository-bootstrap.md)
+- [x] [task 02 — plugin repository bootstrap](task-02-plugin-repository-bootstrap.md)
 
 Wave 1:
 - [ ] [task 03 — DeepSeek balance client](task-03-backend-balance-client.md)

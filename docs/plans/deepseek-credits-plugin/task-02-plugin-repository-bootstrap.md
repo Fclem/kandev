@@ -1,7 +1,7 @@
 ---
 id: "02-plugin-repository-bootstrap"
 title: "Dedicated plugin repository bootstrap"
-status: pending
+status: done
 wave: 0
 depends_on: []
 plan: "plan.md"
@@ -133,3 +133,27 @@ Confirm the archive layout with `tar tzf kandev-deepseek-credits-<version>.tar.g
   template's current documented targets.
 - The plugin worktree must resolve the SDK `replace`; a missing `../kandev`
   checkout breaks `go build` and packaging.
+
+## Results
+
+Completed 2026-08-20.
+
+- `gh repo create kdlbs/kandev-plugin-deepseek-credits --template kdlbs/kandev-plugin-template --public` → refused as predicted: `GraphQL: Fclem does not have the correct permissions to execute CloneTemplateRepository`.
+- Fallback executed: created public author-owned repo `https://github.com/Fclem/kandev-plugin-deepseek-credits` from `kdlbs/kandev-plugin-template`; attached to this task via `add_branch_to_task_kandev` (repository_id `a00f8bcb-5bce-4ad4-b2a9-f2bb8d54be58`); materialized as a local sibling worktree at `…/we-want-to-create-a_wuer51ad/kandev-plugin-deepseek-credits`, with `…/we-want-to-create-a_wuer51ad/kandev` a symlink to the monorepo checkout `kdlbs-kandev` so the `replace github.com/kandev/kandev => ../kandev/apps/backend` resolves (documented in the plugin README "Developing against the SDK"). Manifest `repo_url` stays `https://github.com/kdlbs/kandev-plugin-deepseek-credits` per task-06; a maintainer transfer of `Fclem/kandev-plugin-deepseek-credits` → `kdlbs/` is the pending bootstrap request.
+- Identity renamed everywhere: manifest id/display_name/description/author, README, go.mod module line, Makefile BIN/PKG_OUT/clean glob, `server/plugin.go` error string, `server/main.go` doc comment, `ui/bundle.js` registration id + line-39 rename comment + demo-page title string. `min_kandev_version: "0.88.0"`. Capabilities/webhooks removed; example `greeting`/`api_token` config replaced by the spec's `config_schema` (final contract, task-06 asserts it).
+- Example-only surfaces trimmed: `recipes/`, `package.json`, `package-lock.json`, `tsconfig.recipes.json` removed; `test-recipes`/`typecheck-recipes`/`audit-recipes` Makefile targets dropped; `test` rewired to `test-backend`; `go test ./server/...` / `go vet ./server/...` (recipe paths dropped); recipe steps + npm cache stripped from ci.yml verify job and release.yml publish Verify step; base-floor job renamed ("Action contract floor on Kandev v0.88.0") and pinned `ref: v0.88.0`; release.yml's three `kandev-plugin-template` references renamed.
+- Makefile `fmt` changed to the failing check `test -z "$$(gofmt -l .)"` (literal line confirmed via grep).
+
+Exact verification (run from the plugin worktree, commit `7602a5b`):
+
+```sh
+make fmt                    # ok — test -z "$(gofmt -l .)" passed (no unformatted files)
+make vet                    # ok — go vet ./server/... clean
+make test-backend           # ok — go test ./server/... → ok kandev-plugin-deepseek-credits/server 0.010s
+make build                  # ok — bin/kandev-deepseek-credits built
+make verify-package-host    # ok — plugin-pack wrote kandev-deepseek-credits-0.1.0.tar.gz; sha256sum -c checksums.txt: manifest.yaml: OK, server/plugin-linux-amd64: OK, ui/bundle.js: OK
+grep -q 'test -z "$$(gofmt -l .)"' Makefile   # matches (literal $$ verified via content grep)
+tar tzf kandev-deepseek-credits-0.1.0.tar.gz  # manifest.yaml, server/plugin-linux-amd64, ui/bundle.js, checksums.txt
+```
+
+CI on the plugin repo could not be exercised locally (PR CI runs on GitHub); the first PR CI run is pending the repo being pushed with a branch. Worktree state is clean at the task-02 commit.

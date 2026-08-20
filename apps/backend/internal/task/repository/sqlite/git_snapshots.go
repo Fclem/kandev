@@ -106,6 +106,10 @@ func (r *Repository) UpsertLatestLiveGitSnapshot(ctx context.Context, snapshot *
 	return tx.Commit()
 }
 
+// serializeSnapshotJSON marshals a snapshot's Files and Metadata maps into
+// their JSON-text column forms. Nil maps serialize to "{}" (the sentinel
+// that scans back to a nil map), preserving the row shape for both SQLite
+// and Postgres.
 func serializeSnapshotJSON(snapshot *models.GitSnapshot) (string, string, error) {
 	filesJSON := "{}"
 	if snapshot.Files != nil {
@@ -277,6 +281,9 @@ type gitSnapshotScanner interface {
 	Scan(dest ...interface{}) error
 }
 
+// scanGitSnapshot scans one task_session_git_snapshots row (all 13 columns)
+// into a GitSnapshot, decoding the JSON-text files/metadata columns. The "{}"
+// sentinel scans back to nil maps so empty rows round-trip cleanly.
 func scanGitSnapshot(scanner gitSnapshotScanner) (*models.GitSnapshot, error) {
 	snapshot := &models.GitSnapshot{}
 	var snapshotType string

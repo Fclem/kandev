@@ -176,15 +176,26 @@ function turn(overrides: Partial<Turn> = {}): Turn {
   };
 }
 
-/** Stubs the given scrollWidth/clientWidth/clientHeight values onto an element. */
+/** Stubs the given scrollWidth/scrollHeight/clientWidth/clientHeight values onto an element. */
 function setGeometry(
   element: Element,
-  overrides: { scrollWidth?: number; clientWidth?: number; clientHeight?: number },
+  overrides: {
+    scrollWidth?: number;
+    scrollHeight?: number;
+    clientWidth?: number;
+    clientHeight?: number;
+  },
 ) {
   if (overrides.scrollWidth !== undefined) {
     Object.defineProperty(element, "scrollWidth", {
       configurable: true,
       value: overrides.scrollWidth,
+    });
+  }
+  if (overrides.scrollHeight !== undefined) {
+    Object.defineProperty(element, "scrollHeight", {
+      configurable: true,
+      value: overrides.scrollHeight,
     });
   }
   if (overrides.clientWidth !== undefined) {
@@ -254,6 +265,7 @@ beforeEach(() => {
 afterEach(async () => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   useMessageFavoritesStore.setState({ bySession: {} });
   sessionStorage.clear();
   await i18n.changeLanguage("en");
@@ -789,8 +801,8 @@ describe("PromptHistoryPanelContent — auto-load sentinel", () => {
   });
 });
 
-describe("PromptHistoryPanelContent — auto-load loading states", () => {
-  it("shows the older-page loading message only while shouldPaginate && isLoadingMore", () => {
+describe("PromptHistoryPanelContent — loading message placement and continuity", () => {
+  it("shows the loading message only while shouldPaginate && isLoadingMore", () => {
     pagination.hasMore = true;
     messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
 
@@ -802,26 +814,85 @@ describe("PromptHistoryPanelContent — auto-load loading states", () => {
     const loading = screen.getByTestId(LOADING_OLDER_TEST_ID);
     expect(loading.textContent).toBe("Loading older messages...");
 
-    // Floating-overlay contract (flicker regression): the indicator is
-    // absolutely positioned inside the panel root (the positioned containing
-    // block), so it never participates in content layout and cannot reflow the
-    // rows or move the sentinel while older pages stream in.
+    // Loading message disappears when the load settles (after the grace
+    // window; the grace test below covers the settle timing).
+    pagination.isLoadingMore = false;
+    rerender(<PromptHistoryPanelContent />);
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
+  });
+
+  it("floats the loading message only when the panel content scrolls, and sits under the last message otherwise", () => {
+    pagination.hasMore = true;
+    messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
+    const { rerender } = render(<PromptHistoryPanelContent />);
     const panel = screen.getByTestId(PANEL_TEST_ID);
+    // The content wrapper is the panel's first child; scrollability is
+    // measured from it against the panel root's client height.
+    const content = panel.firstElementChild as HTMLElement;
+
+    pagination.isLoadingMore = true;
+    rerender(<PromptHistoryPanelContent />);
+    let loading = screen.getByTestId(LOADING_OLDER_TEST_ID);
+
+    // Default metrics (0/0): content does not overflow, so the message is
+    // in-flow under the last message and the panel root is no containing
+    // block.
+    expect(panel.className).not.toContain("relative");
+    expect(loading.className).not.toContain("absolute");
+    expect(loading.className).toContain("py-2");
+    expect(loading.parentElement).toBe(panel);
+    // The sentinel stays the final in-flow child; the indicator is never its
+    // preceding sibling, so it cannot shift sentinel geometry.
+    expect(screen.getByTestId(SENTINEL_TEST_ID).previousElementSibling).not.toBe(loading);
+
+    // Content overflows the panel (it scrolls): the message floats at the
+    // panel bottom, out of the content flow.
+    setGeometry(content, { scrollHeight: 600 });
+    setGeometry(panel, { clientHeight: 400 });
+    rerender(<PromptHistoryPanelContent />);
+    loading = screen.getByTestId(LOADING_OLDER_TEST_ID);
     expect(panel.className).toContain("relative");
     expect(loading.className).toContain("absolute");
     expect(loading.className).toContain("pointer-events-none");
     expect(loading.className).toContain("z-10");
     expect(loading.parentElement).toBe(panel);
-    // The sentinel stays the final in-flow child; the overlay is not its
-    // preceding sibling, so the indicator cannot shift sentinel geometry.
     expect(screen.getByTestId(SENTINEL_TEST_ID).previousElementSibling).not.toBe(loading);
-
-    // Loading message disappears when the load settles.
-    pagination.isLoadingMore = false;
-    rerender(<PromptHistoryPanelContent />);
-    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
   });
 
+  it("keeps the loading message mounted across consecutive loads so it does not flicker", () => {
+    vi.useFakeTimers();
+    pagination.hasMore = true;
+    messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
+    const { rerender } = render(<PromptHistoryPanelContent />);
+    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
+
+    pagination.isLoadingMore = true;
+    rerender(<PromptHistoryPanelContent />);
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
+
+    // The request settles, but the sentinel's re-arm fires the next page
+    // within the grace window: the message stays mounted (no per-page flash).
+    pagination.isLoadingMore = false;
+    rerender(<PromptHistoryPanelContent />);
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
+
+    // Next page starts and settles within the window: still continuous.
+    pagination.isLoadingMore = true;
+    rerender(<PromptHistoryPanelContent />);
+    pagination.isLoadingMore = false;
+    rerender(<PromptHistoryPanelContent />);
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
+
+    // No new load arrives: once the grace expires the message disappears.
+    act(() => vi.advanceTimersByTime(400));
+    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
+    vi.useRealTimers();
+  });
+});
+
+describe("PromptHistoryPanelContent — auto-load loading states", () => {
   it("shows neutral loading, not empty, when messagesLoading is true with no entries", () => {
     pagination.messagesLoading = true;
     pagination.hasMore = false;
@@ -839,10 +910,10 @@ describe("PromptHistoryPanelContent — auto-load loading states", () => {
 
     expect(screen.getByTestId(PANEL_TEST_ID).textContent).toBe("Loading older messages...");
     expect(screen.getByTestId(SENTINEL_TEST_ID)).toBeTruthy();
-    // Empty-state loading uses the same floating overlay: absolute inside the
-    // positioned panel root, never in the content flow.
-    expect(screen.getByTestId(PANEL_TEST_ID).className).toContain("relative");
-    expect(screen.getByTestId(LOADING_OLDER_TEST_ID).className).toContain("absolute");
+    // An empty panel has nothing to scroll: the message is in-flow under the
+    // (empty) list, never floating.
+    expect(screen.getByTestId(PANEL_TEST_ID).className).not.toContain("relative");
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID).className).not.toContain("absolute");
   });
 
   it("renders the definitive empty state only when entries are empty, hasMore is false, and loading ended", () => {

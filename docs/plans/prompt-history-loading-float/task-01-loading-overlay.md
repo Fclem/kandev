@@ -26,19 +26,26 @@ analysis.
 
 ## Acceptance
 
-- When `shouldPaginate && isLoadingMore`, the loading message renders as a
-  floating overlay pinned to the bottom of the panel root: the indicator keeps
-  `data-testid="prompt-history-loading-older"` and the `task:loadingOlderMessages`
-  copy, is absolutely positioned within the panel root (`absolute`, not in
-  flow), is `pointer-events-none`, and sits above the rows (`z-10`).
-- The panel root is the positioned containing block (`relative`) in the rows
-  branch and in the empty `isLoadingMore` branch, so the overlay anchors to the
-  panel viewport, not to the scroll content; the overlay's presence never
-  changes the scrollable content height.
-- When `isLoadingMore` is false, no indicator renders. With zero entries and
-  `isLoadingMore` true, the panel shows the floating loading message (not the
-  neutral `task:loading` text or the empty state) and keeps the sentinel.
-  Passthrough sessions remain an unconditional no-controls empty state.
+- The rows and the sentinel live in a content wrapper; scrollability is
+  measured from the wrapper alone (`wrapper.scrollHeight > root.clientHeight`,
+  re-measured after every commit), so the indicator can never flip the mode.
+- When the prompt rows overflow the panel (panel scrolls) and the loading
+  message is shown, it renders as a floating overlay pinned to the bottom of
+  the panel root: the indicator keeps `data-testid="prompt-history-loading-older"`
+  and the `task:loadingOlderMessages` copy, is absolutely positioned within the
+  panel root (`absolute`, not in flow), is `pointer-events-none`, and sits
+  above the rows (`z-10`); the panel root is the positioned containing block
+  (`relative`).
+- When the rows fit (panel does not scroll) and in the zero-entries branch
+  (which can never scroll), the loading message is an in-flow row directly
+  under the last message (after the sentinel), and the panel root is not a
+  containing block.
+- Flicker: the loading message stays mounted for a 400 ms grace window after a
+  page settles, so consecutive auto-loads render one continuous indicator; it
+  disappears once a settle is not followed by another load within the window
+  or pagination ends. With zero entries, the loading message shows instead of
+  the neutral `task:loading` text or the empty state. Passthrough sessions
+  remain an unconditional no-controls empty state.
 - Sentinel behavior, pagination, and the shared lazy-load hooks are untouched;
   all existing sentinel/loading unit tests in
   `prompt-history-panel-content.test.tsx` stay green unchanged.
@@ -53,17 +60,21 @@ cd apps/web && pnpm vitest run components/task/prompt-history-panel-content.test
 
 Add/extend regression tests in `prompt-history-panel-content.test.tsx`:
 
-1. Extend "shows the older-page loading row only while shouldPaginate &&
-   isLoadingMore" (or add a sibling test): while `isLoadingMore`, assert the
-   loading element's class list contains the overlay contract
-   (`absolute`, `pointer-events-none`, `z-10`) and that the panel root class
-   list contains `relative`; assert the loading element is not the sentinel's
-   preceding in-flow sibling (the sentinel's `previousElementSibling` is not
-   the loading element). These assert the layout contract that prevents
-   reflow-driven flicker.
-2. The zero-entries + `isLoadingMore` case keeps asserting the panel's
+1. Mode test: with default geometry (content does not overflow), the loading
+   element is in-flow (`py-2`, not `absolute`) and the panel root has no
+   `relative`; stub the content wrapper's `scrollHeight` above the panel
+   root's `clientHeight` (via the file's `setGeometry` helper, extended with
+   `scrollHeight`) and rerender: the loading element carries the overlay
+   contract (`absolute`, `pointer-events-none`, `z-10`), the panel root is
+   `relative`, and in both modes the sentinel's `previousElementSibling` is
+   not the loading element.
+2. Grace test (fake timers): after `isLoadingMore` settles, the loading
+   element stays mounted through the 400 ms window and across a load that
+   starts and settles within it; it disappears once the grace expires without
+   a new load.
+3. The zero-entries + `isLoadingMore` case keeps asserting the panel's
    `textContent` is exactly "Loading older messages..." with the sentinel
-   present.
+   present, and asserts the in-flow (non-floating) placement.
 
 Global checks:
 
@@ -79,10 +90,10 @@ cd apps/web && pnpm e2e:raw -- e2e/tests/task/mobile-prompt-history-panel.spec.t
 ```
 
 In `prompt-history-auto-load.spec.ts`, before releasing the held older-page
-request, capture `scrollHeight` via `panel.evaluate((el) => el.scrollHeight)`;
-after `prompt-history-loading-older` is visible, assert `scrollHeight` is
-unchanged (the floating overlay must not alter content layout). The existing
-"visible while held" assertion stays valid.
+request, capture `scrollHeight` (and whether the panel scrolls); after
+`prompt-history-loading-older` is visible, assert `scrollHeight` is unchanged
+when the panel scrolls (the floating overlay must not alter content layout).
+The existing "visible while held" assertion stays valid.
 
 ## Files Likely Touched
 

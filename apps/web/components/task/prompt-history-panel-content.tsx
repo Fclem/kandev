@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
@@ -27,6 +27,11 @@ type PromptHistoryPanelContentProps = { onNavigateToPrompt?: (messageId: string)
 
 const SENTINEL_TEST_ID = "prompt-history-sentinel";
 const LOADING_OLDER_TEST_ID = "prompt-history-loading-older";
+/** Minimum-display window for the loading message: after a page settles, keep
+ * the message mounted for this long so the sentinel's re-arm loop (next page
+ * firing right after a positive settle) renders a continuous indicator instead
+ * of a per-page flash. */
+const LOADING_GRACE_MS = 400;
 
 /** The prompt-history panel: builds entries from the session's messages and
  * turns and renders one expandable row per prompt. Older pages auto-load via
@@ -49,11 +54,19 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   }, [messages, turns, turnsHydrated]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const maxHeight = usePanelRowMaxHeight(rootRef);
-
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Floating only when the prompt rows actually overflow the panel (the panel
+  // scrolls); measured from a dedicated content wrapper so the loading
+  // indicator's own presence can never flip the answer.
+  const isScrollable = usePanelContentScrollable(rootRef, contentRef);
+  // Minimum-display grace so consecutive auto-loads show one continuous
+  // indicator instead of a per-page flash.
+  const showLoadingGrace = useLoadingGrace(isLoadingMore);
   // Pagination continues while the server reports older messages and no loaded
   // entry is the session's first prompt (#1). If payloads omit ordinals, the
   // hasMore term alone drives exhaustion.
   const shouldPaginate = hasMore && !entries.some((entry) => entry.promptNumber === 1);
+  const showLoading = shouldPaginate && (isLoadingMore || showLoadingGrace);
   const { sentinelRef, onUserGesture } = useLazyLoadSentinel(
     rootRef,
     shouldPaginate,
@@ -87,8 +100,8 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
     // root element (and its ResizeObserver) survives the empty→rows
     // transition; only the inner content and wrapper classes vary.
     const spec = emptyEntriesSpec({
+      showLoading,
       messagesLoading,
-      isLoadingMore,
       hasMore,
       sentinelRef,
       emptyText: t("task:promptHistoryEmpty"),
@@ -112,40 +125,59 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
     <PanelRoot
       ref={rootRef}
       data-testid="prompt-history-panel"
-      className="relative overflow-y-auto p-2"
+      className={cn("overflow-y-auto p-2", isScrollable && "relative")}
       onWheel={shouldPaginate ? onUserGesture : undefined}
       onTouchMove={shouldPaginate ? onUserGesture : undefined}
     >
-      {entries.map((entry, index) => (
-        <PromptHistoryRow
-          key={entry.messageId}
-          sessionId={sessionId}
-          entry={entry}
-          index={index}
-          expanded={expanded === entry.messageId}
-          maxHeight={maxHeight}
-          onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
-          onNavigate={onNavigateToPrompt}
-        />
-      ))}
-      {/* The sentinel stays the final in-flow child so its geometry is stable
-       * while loading; the loading message is a floating overlay pinned to the
-       * panel bottom (absolute inside the relative root), out of the content
-       * flow, so its presence cannot reflow the rows or shift the sentinel. */}
-      {shouldPaginate && (
-        <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
-      )}
-      {shouldPaginate && isLoadingMore && (
-        <div
-          data-testid={LOADING_OLDER_TEST_ID}
-          className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center"
-        >
-          <div className="rounded-full border border-border bg-card/95 px-3 py-1 text-xs text-muted-foreground shadow-sm">
-            {t("task:loadingOlderMessages")}
-          </div>
-        </div>
+      {/* Content wrapper: the sentinel stays the final in-flow child with a
+       * stable geometry, and scrollability is measured from this wrapper alone
+       * so the loading indicator can never reflow the rows or shift the
+       * sentinel. */}
+      <div ref={contentRef} className="shrink-0">
+        {entries.map((entry, index) => (
+          <PromptHistoryRow
+            key={entry.messageId}
+            sessionId={sessionId}
+            entry={entry}
+            index={index}
+            expanded={expanded === entry.messageId}
+            maxHeight={maxHeight}
+            onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
+            onNavigate={onNavigateToPrompt}
+          />
+        ))}
+        {shouldPaginate && (
+          <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
+        )}
+      </div>
+      {showLoading && (
+        <LoadingMoreMessage floating={isScrollable} text={t("task:loadingOlderMessages")} />
       )}
     </PanelRoot>
+  );
+}
+
+/** The "loading older messages" indicator. `floating` pins it to the panel
+ * bottom, out of the content flow (full panel, so its presence cannot change
+ * the scroll layout); `inline` renders it in the content flow directly under
+ * the last message (short panel). */
+function LoadingMoreMessage({ floating, text }: { floating: boolean; text: string }) {
+  return floating ? (
+    <div
+      data-testid={LOADING_OLDER_TEST_ID}
+      className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center"
+    >
+      <div className="rounded-full border border-border bg-card/95 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+        {text}
+      </div>
+    </div>
+  ) : (
+    <div
+      data-testid={LOADING_OLDER_TEST_ID}
+      className="py-2 text-center text-xs text-muted-foreground"
+    >
+      {text}
+    </div>
   );
 }
 
@@ -156,7 +188,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
  * so the caller keeps a stable PanelRoot element across branch switches. */
 function emptyEntriesSpec({
   messagesLoading,
-  isLoadingMore,
+  showLoading,
   hasMore,
   sentinelRef,
   emptyText,
@@ -164,29 +196,24 @@ function emptyEntriesSpec({
   loadingOlderText,
 }: {
   messagesLoading: boolean;
-  isLoadingMore: boolean;
+  showLoading: boolean;
   hasMore: boolean;
   sentinelRef: (node: HTMLDivElement | null) => void;
   emptyText: string;
   loadingText: string;
   loadingOlderText: string;
 }): { content: React.ReactNode; wrapperClass: string; interactive: boolean } {
-  if (isLoadingMore) {
+  if (showLoading) {
+    // No entries means the panel has nothing to scroll: the loading message
+    // sits in the content flow under the (empty) list, never floating.
     return {
       content: (
         <>
           <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
-          <div
-            data-testid={LOADING_OLDER_TEST_ID}
-            className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center"
-          >
-            <div className="rounded-full border border-border bg-card/95 px-3 py-1 text-xs text-muted-foreground shadow-sm">
-              {loadingOlderText}
-            </div>
-          </div>
+          <LoadingMoreMessage floating={false} text={loadingOlderText} />
         </>
       ),
-      wrapperClass: "relative overflow-y-auto p-2",
+      wrapperClass: "overflow-y-auto p-2",
       interactive: true,
     };
   }
@@ -230,6 +257,40 @@ function usePanelRowMaxHeight(rootRef: RefObject<HTMLDivElement | null>) {
     return () => observer.disconnect();
   }, [rootRef]);
   return maxHeight;
+}
+
+/** True when the prompt rows overflow the panel root, i.e. the panel actually
+ * scrolls. Measured from a dedicated content wrapper (rows + sentinel) so the
+ * loading indicator's own presence never affects the answer, and re-measured
+ * after every commit (pages append, rows expand/collapse, panel resizes). */
+function usePanelContentScrollable(
+  rootRef: RefObject<HTMLDivElement | null>,
+  contentRef: RefObject<HTMLDivElement | null>,
+): boolean {
+  const [isScrollable, setIsScrollable] = useState(false);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const content = contentRef.current;
+    setIsScrollable(Boolean(root && content && content.scrollHeight > root.clientHeight));
+  });
+  return isScrollable;
+}
+
+/** Minimum-display grace for the loading message: once a load starts, keep the
+ * message mounted for LOADING_GRACE_MS after the request settles so the
+ * sentinel's re-arm loop (next page firing right after a positive settle)
+ * renders a continuous indicator instead of a per-page flash. */
+function useLoadingGrace(isLoadingMore: boolean): boolean {
+  const [showGrace, setShowGrace] = useState(false);
+  useEffect(() => {
+    if (isLoadingMore) {
+      setShowGrace(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowGrace(false), LOADING_GRACE_MS);
+    return () => window.clearTimeout(timer);
+  }, [isLoadingMore]);
+  return showGrace;
 }
 
 /** The small `#N` ordinal label at the start of a prompt bubble. Rendered

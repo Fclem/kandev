@@ -62,13 +62,18 @@ kandevTest.describe("Prompt history auto-load", () => {
         el.scrollTop = el.scrollHeight;
       });
       const scrollHeightBefore = await panel.evaluate((el) => el.scrollHeight);
+      const scrollableBefore = await panel.evaluate((el) => el.scrollHeight > el.clientHeight);
       await expect(panel.getByTestId("prompt-history-loading-older")).toBeVisible({
         timeout: 10_000,
       });
-      // The loading message is a floating overlay at the panel bottom, out of
-      // the content flow: its presence must not change the scrollable height
-      // (the flicker regression - an in-flow row would grow scrollHeight).
-      expect(await panel.evaluate((el) => el.scrollHeight)).toBe(scrollHeightBefore);
+      // When the panel content scrolls, the loading message floats at the
+      // panel bottom, out of the content flow: its presence must not change
+      // the scrollable height (the flicker regression - an in-flow row would
+      // grow scrollHeight). A short panel renders the message in-flow under
+      // the last message, where no scroll position exists to jitter.
+      if (scrollableBefore) {
+        expect(await panel.evaluate((el) => el.scrollHeight)).toBe(scrollHeightBefore);
+      }
       await expect(panel.getByText(SECOND_PROMPT_MARKER)).toHaveCount(0);
       expect(heldOlderRequests.length).toBeGreaterThanOrEqual(1);
 

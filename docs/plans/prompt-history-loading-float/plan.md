@@ -4,15 +4,19 @@ created: 2026-08-20
 status: done
 ---
 
-# Implementation Plan: Floating prompt-history loading message
+# Implementation Plan: Prompt-history loading message without flicker
 
 ## Overview
 
-Move the prompt-history panel's "Loading older messages..." indicator out of the
-content flow and pin it as a floating overlay at the bottom of the panel. The
-indicator keeps its `prompt-history-loading-older` test id and the
-`task:loadingOlderMessages` copy; only its presentation and layout
-participation change. Sentinel, pagination, and store logic are untouched.
+Make the prompt-history panel's "Loading older messages..." indicator flicker-free
+and placement-aware. When the prompt rows overflow the panel (the panel
+scrolls) it floats at the bottom of the panel, out of the content flow; when
+the rows fit, it sits in the content flow directly under the last message. In
+both modes the indicator can never reflow the rows or move the sentinel, and a
+short minimum-display grace keeps it mounted across consecutive auto-loads so
+it never flashes per page. The indicator keeps its `prompt-history-loading-older`
+test id and the `task:loadingOlderMessages` copy. Sentinel, pagination, and
+store logic are untouched.
 
 ## Confirmed root cause
 
@@ -40,20 +44,27 @@ position, which is the visible flicker.
 
 ## Fix
 
-Render the indicator as a floating overlay anchored to the panel viewport:
-
-- The `PanelRoot` in the rows branch and in the empty `isLoadingMore` branch
-  gains `relative`, making it the positioned containing block (the panel root
-  is already the `IntersectionObserver` root, so anchoring to it keeps the
-  overlay pinned to the panel's visible bottom regardless of scroll).
-- The indicator becomes an absolutely positioned, `pointer-events-none`
+- Wrap the rows and the sentinel in a content wrapper and measure scrollability
+  from the wrapper alone (`wrapper.scrollHeight > root.clientHeight`,
+  re-measured after every commit via `useLayoutEffect`): the loading
+  indicator's own presence can never flip the answer, so the mode cannot
+  oscillate. The sentinel stays the final in-flow child of the wrapper, giving
+  it a stable geometry in both modes.
+- Scrollable panel: `PanelRoot` gains `relative` (the positioned containing
+  block) and the indicator is an absolutely positioned, `pointer-events-none`
   centered chip at the panel bottom (`absolute inset-x-0 bottom-2 z-10 flex
-  justify-center`), so it never participates in content layout and never
-  intercepts row clicks or scroll.
-- Conditions unchanged: shown only while `shouldPaginate && isLoadingMore`
-  (rows branch) or while `isLoadingMore` with zero entries (empty branch, where
-  older-page loading keeps precedence over neutral loading and the empty
-  state). Passthrough stays an unconditional no-controls empty state.
+  justify-center`), out of the content flow.
+- Short panel (and the zero-entries branch, which can never scroll): the
+  indicator is a plain in-flow row after the sentinel, directly under the last
+  message.
+- Flicker: a `LOADING_GRACE_MS` (400 ms) minimum-display window keeps the
+  indicator mounted after each page settles, so the sentinel's re-arm loop
+  (next page firing right after a positive settle) renders one continuous
+  indicator instead of a per-page flash. It disappears once a settle is not
+  followed by another load within the window, or when pagination ends
+  (`shouldPaginate` false).
+- Visibility unchanged: shown only while `shouldPaginate && (isLoadingMore ||
+  grace)`. Passthrough stays an unconditional no-controls empty state.
 - No new copy: reuse `task:loadingOlderMessages`; no locale changes.
 
 ## Task waves

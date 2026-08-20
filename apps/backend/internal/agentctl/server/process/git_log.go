@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/kandev/kandev/internal/common/unidiff"
@@ -575,24 +576,23 @@ func diffHeaderNewPath(header string) (string, bool) {
 		return "", false
 	}
 	if strings.HasPrefix(rest, `"`) {
-		// Quoted: `"a/<old>" "b/<new>"`. Both tokens are C-quoted, so the
-		// second token starts after the first closing quote, one space, and
-		// the opening quote of the second token.
-		closeIdx := strings.IndexByte(rest[1:], '"')
-		if closeIdx < 0 {
+		// Quoted: `"a/<old>" "b/<new>"`. Both tokens are C-quoted, so scan
+		// the first token's closing quote escape-aware: a `\"` inside the
+		// path must not be read as the end of the token. The second token
+		// starts right after the closing quote and the separating space.
+		oldEnd := quotedTokenEnd(rest)
+		if oldEnd < 0 || oldEnd >= len(rest) || rest[oldEnd] != ' ' {
 			return "", false
 		}
-		// closeIdx is the index within rest[1:]; the closing quote sits at
-		// rest[closeIdx+1], followed by a space, then the second token.
-		after := rest[closeIdx+3:]
+		after := rest[oldEnd+1:]
 		if !strings.HasPrefix(after, `"`) {
 			return "", false
 		}
-		closeIdx2 := strings.IndexByte(after[1:], '"')
-		if closeIdx2 < 0 {
+		newEnd := quotedTokenEnd(after)
+		if newEnd < 0 {
 			return "", false
 		}
-		newPath := unquoteGitPath(after[:closeIdx2+2])
+		newPath := unquoteGitPath(after[:newEnd])
 		return strings.TrimPrefix(newPath, "b/"), true
 	}
 	bIdx := strings.Index(rest, " b/")
@@ -616,49 +616,96 @@ func diffWholeLinePath(prefix, line string) (string, bool) {
 	return unquoteGitPath(rest), true
 }
 
+// quotedTokenEnd returns the index just past the closing quote of the first
+// C-quoted token in s (which must start with `"`), or -1 when unterminated.
+// Escapes are honored: a `\"` inside the path is content, not a terminator.
+func quotedTokenEnd(s string) int {
+	if !strings.HasPrefix(s, `"`) {
+		return -1
+	}
+	for i := 1; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++ // skip the escaped byte
+		case '"':
+			return i + 1
+		}
+	}
+	return -1
+}
+
 // diffBinaryFilesNewPath parses the new-side path off a
 // `Binary files a/<old> and b/<new> differ` line (git's shape for binary
 // sections, which carry no ---/+++ file lines). Both sides may be C-quoted:
 // `Binary files "a/<old>" and "b/<new>" differ`.
+//
+// For a binary content change git emits the SAME path on both sides, so the
+// separator whose two sides unquote to equal paths is authoritative — this
+// resolves paths that themselves contain ` and b/` (a valid filename; the
+// first-candidate scan would split inside the old path). When no candidate
+// matches (binary rename with differing paths), the first ` and ` whose
+// right side starts the `b/` token wins.
 func diffBinaryFilesNewPath(line string) (string, bool) {
 	rest, ok := strings.CutPrefix(line, "Binary files ")
 	if !ok {
 		return "", false
 	}
-	// Locate the ` and ` separator directly before the new-side `b/` token
-	// (optionally quoted). Scanning left-to-right keeps a ` and b/` sequence
-	// inside the old path from shadowing the separator only when the old path
-	// itself contains that exact sequence — pathological, and git's text
-	// format cannot disambiguate it either.
+	rest = strings.TrimSuffix(rest, " differ")
+	if rest == "" {
+		return "", false
+	}
+
+	firstSep := -1
 	search := rest
+	base := 0
 	for {
 		sep := strings.Index(search, " and ")
 		if sep < 0 {
-			return "", false
-		}
-		after := search[sep+5:]
-		if after == "" {
-			return "", false
-		}
-		if after[0] == '"' {
-			after = after[1:]
-		}
-		if strings.HasPrefix(after, "b/") {
-			// The new side starts right after the separator, optionally
-			// quoted; the trailing ` differ` (outside the quotes) is cut.
-			search = search[sep+5:]
 			break
 		}
-		search = search[sep+5:]
+		abs := base + sep
+		right := search[sep+5:]
+		rightBare := strings.TrimPrefix(right, `"`)
+		if strings.HasPrefix(rightBare, "b/") {
+			if firstSep == -1 {
+				firstSep = abs
+			}
+			// Equal-paths check: the left side is everything before this
+			// candidate separator; both sides may be quoted.
+			leftPath, leftOK := binarySidePath(rest[:abs])
+			rightPath, rightOK := binarySidePath(right)
+			if leftOK && rightOK && leftPath == rightPath {
+				return rightPath, true
+			}
+		}
+		base = abs + 5
+		search = rest[base:]
 	}
-	newSide := strings.TrimSuffix(search, " differ")
-	if strings.HasPrefix(newSide, `"`) && strings.HasSuffix(newSide, `"`) {
-		newSide = unquoteGitPath(newSide)
-	}
-	if !strings.HasPrefix(newSide, "b/") {
+	if firstSep == -1 {
 		return "", false
 	}
-	return strings.TrimPrefix(newSide, "b/"), true
+	newSide, ok := binarySidePath(rest[firstSep+5:])
+	if !ok {
+		return "", false
+	}
+	return newSide, true
+}
+
+// binarySidePath strips the `a/` or `b/` prefix (optionally inside git's
+// C-quotes) off one side of a `Binary files` line, returning the unquoted
+// path.
+func binarySidePath(side string) (string, bool) {
+	if strings.HasPrefix(side, `"`) {
+		unquoted, err := strconv.Unquote(side)
+		if err != nil {
+			return "", false
+		}
+		side = unquoted
+	}
+	if !strings.HasPrefix(side, "a/") && !strings.HasPrefix(side, "b/") {
+		return "", false
+	}
+	return side[2:], true
 }
 
 // diffFileLinePath reads the path off one `+++ <path>` or `--- <path>` file

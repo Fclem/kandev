@@ -465,6 +465,20 @@ func TestGetLatestGitSnapshot_UnarchivedResumePrefersCompleted(t *testing.T) {
 		if got.HeadCommit != "live-after-resume" {
 			t.Errorf("expected live-after-resume, got %q — stale archive row outranks resumed live status", got.HeadCommit)
 		}
+
+		// The batch selector has a separate ROW_NUMBER() expression; it must
+		// agree for the rank-2 live-monitor vs rank-3 stale-archive case too.
+		gotBatch, err := repo.GetLatestGitSnapshotsBySessionIDs(ctx, []string{sessionID})
+		if err != nil {
+			t.Fatalf("GetLatestGitSnapshotsBySessionIDs: %v", err)
+		}
+		snap := gotBatch[sessionID]
+		if snap == nil {
+			t.Fatal("expected a snapshot for session, got none")
+		}
+		if snap.HeadCommit != "live-after-resume" {
+			t.Errorf("expected live-after-resume in batch query, got %q — batch served stale archive row", snap.HeadCommit)
+		}
 	})
 
 	t.Run("archive still wins while the task remains archived", func(t *testing.T) {

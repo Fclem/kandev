@@ -465,6 +465,29 @@ func TestParseCommitDiffWithOptions_SpecialPaths(t *testing.T) {
 				"new mode 100755\n",
 			wantPath: "caf\u00e9 b/mode.sh",
 		},
+		{
+			name: "mode-only change with escaped quote in path parses the quoted header",
+			output: "diff --git \"a/has\\\"quote.sh\" \"b/has\\\"quote.sh\"\n" +
+				"old mode 100644\n" +
+				"new mode 100755\n",
+			wantPath: "has\"quote.sh",
+		},
+		{
+			name: "binary path containing and b-slash splits on the equal-paths separator",
+			output: "diff --git a/old and b/thing.bin b/old and b/thing.bin\n" +
+				"index 6735744..d7bf111 100644\n" +
+				"Binary files a/old and b/thing.bin and b/old and b/thing.bin differ\n",
+			wantPath: "old and b/thing.bin",
+		},
+		{
+			name: "binary rename with and b-slash in new path keeps the new path",
+			output: "diff --git a/x.bin b/old and b/thing.bin\n" +
+				"similarity index 50%\n" +
+				"rename from x.bin\n" +
+				"rename to old and b/thing.bin\n" +
+				"Binary files a/x.bin and b/old and b/thing.bin differ\n",
+			wantPath: "old and b/thing.bin",
+		},
 	}
 
 	gitOp := &GitOperator{}

@@ -162,11 +162,14 @@ func (r *Repository) getGitSnapshotByOrder(ctx context.Context, sessionID, order
 }
 
 // GetLatestGitSnapshot retrieves the best git snapshot for a session.
-// Prefers archive snapshots (terminal cumulative diff captured at archive time)
-// over agent_completed snapshots (captured at exact completion time), which are
-// preferred over live_monitor snapshots (periodic polls that may contain stale
-// data if the poll raced with agent completion). Falls back to
-// most-recent-by-time when none of those exist.
+// An archive snapshot (terminal cumulative diff captured at archive time) is
+// authoritative only while its owning task is still archived; once the task
+// is unarchived and its session resumes, the archive row is stale and newer
+// agent_completed / live_monitor rows describe the current execution.
+// agent_completed (captured at exact completion time) is preferred over
+// live_monitor (periodic polls that may contain stale data if the poll raced
+// with agent completion). Falls back to most-recent-by-time when none of
+// those exist.
 // Returns sql.ErrNoRows if no snapshot is found.
 func (r *Repository) GetLatestGitSnapshot(ctx context.Context, sessionID string) (*models.GitSnapshot, error) {
 	query := `
@@ -176,8 +179,14 @@ func (r *Repository) GetLatestGitSnapshot(ctx context.Context, sessionID string)
 		WHERE session_id = ?
 		ORDER BY
 			CASE
-				WHEN snapshot_type = 'archive' THEN 0
+				WHEN snapshot_type = 'archive' AND EXISTS (
+					SELECT 1 FROM task_sessions ts
+					JOIN tasks t ON t.id = ts.task_id
+					WHERE ts.id = task_session_git_snapshots.session_id
+					  AND t.archived_at IS NOT NULL
+				) THEN 0
 				WHEN triggered_by = 'agent_completed' THEN 1
+				WHEN snapshot_type = 'archive' THEN 3
 				ELSE 2
 			END,
 			created_at DESC
@@ -188,9 +197,9 @@ func (r *Repository) GetLatestGitSnapshot(ctx context.Context, sessionID string)
 
 // GetLatestGitSnapshotsBySessionIDs loads one authoritative snapshot per
 // session in one query per placeholder-sized chunk. It mirrors
-// GetLatestGitSnapshot's archive > agent_completed > live_monitor preference
-// without introducing an N+1 read when task-list summaries repair historical
-// rows.
+// GetLatestGitSnapshot's archive(while archived) > agent_completed >
+// live_monitor > archive(stale) preference without introducing an N+1 read
+// when task-list summaries repair historical rows.
 func (r *Repository) GetLatestGitSnapshotsBySessionIDs(
 	ctx context.Context,
 	sessionIDs []string,
@@ -211,8 +220,14 @@ func (r *Repository) GetLatestGitSnapshotsBySessionIDs(
 					       PARTITION BY session_id
 					       ORDER BY
 					               CASE
-						               WHEN snapshot_type = 'archive' THEN 0
+						               WHEN snapshot_type = 'archive' AND EXISTS (
+							               SELECT 1 FROM task_sessions ts
+							               JOIN tasks t ON t.id = ts.task_id
+							               WHERE ts.id = task_session_git_snapshots.session_id
+							                 AND t.archived_at IS NOT NULL
+						               ) THEN 0
 						               WHEN triggered_by = 'agent_completed' THEN 1
+						               WHEN snapshot_type = 'archive' THEN 3
 						               ELSE 2
 					               END,
 					               created_at DESC

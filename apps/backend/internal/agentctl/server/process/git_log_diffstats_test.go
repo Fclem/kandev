@@ -436,6 +436,35 @@ func TestParseCommitDiffWithOptions_SpecialPaths(t *testing.T) {
 				"+added\n",
 			wantPath: "apps/new/file.go",
 		},
+		{
+			name: "pure rename without hunks keeps the rename to line path",
+			output: "diff --git a/old b.txt b/new b.txt\n" +
+				"similarity index 100%\n" +
+				"rename from old b.txt\n" +
+				"rename to new b.txt\n",
+			wantPath: "new b.txt",
+		},
+		{
+			name: "binary section with b-slash path parses the Binary files line",
+			output: "diff --git a/name b/binary.bin b/name b/binary.bin\n" +
+				"index 6735744..d7bf111 100644\n" +
+				"Binary files a/name b/binary.bin and b/name b/binary.bin differ\n",
+			wantPath: "name b/binary.bin",
+		},
+		{
+			name: "quoted binary section unquotes the Binary files line",
+			output: "diff --git \"a/caf\\303\\251 b.bin\" \"b/caf\\303\\251 b.bin\"\n" +
+				"index a6a3e7f..073ea92 100644\n" +
+				"Binary files \"a/caf\\303\\251 b.bin\" and \"b/caf\\303\\251 b.bin\" differ\n",
+			wantPath: "caf\u00e9 b.bin",
+		},
+		{
+			name: "mode-only change on a quoted path parses the quoted header",
+			output: "diff --git \"a/caf\\303\\251 b/mode.sh\" \"b/caf\\303\\251 b/mode.sh\"\n" +
+				"old mode 100644\n" +
+				"new mode 100755\n",
+			wantPath: "caf\u00e9 b/mode.sh",
+		},
 	}
 
 	gitOp := &GitOperator{}

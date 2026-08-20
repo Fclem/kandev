@@ -468,23 +468,16 @@ func (g *GitOperator) parseCommitDiffWithOptions(output string, opts parseCommit
 		// Re-add the "diff --git " prefix
 		diffContent := "diff --git " + part
 
-		// Extract file path from the diff header
-		// Format: diff --git a/path/to/file b/path/to/file
-		lines := strings.SplitN(diffContent, "\n", 2)
-		if len(lines) == 0 {
+		// Extract the file path. git's per-file `+++ b/<path>` line is the
+		// authoritative source: it carries exactly one path, so spaces and
+		// literal ` b/` sequences inside a filename can't be confused with
+		// the old/new separator, and git C-quotes paths containing tabs,
+		// non-ASCII bytes, quotes, or backslashes (core.quotePath, default
+		// on) — a header-only split would drop those entirely.
+		filePath, ok := diffSectionPath(diffContent)
+		if !ok {
 			continue
 		}
-
-		header := lines[0]
-		// Extract path from "diff --git a/<path> b/<path>".
-		// We cannot split by space because paths may contain spaces.
-		// Instead, strip the known prefix and find the " b/" separator.
-		pathsPart := strings.TrimPrefix(header, "diff --git ")
-		bIdx := strings.Index(pathsPart, " b/")
-		if bIdx == -1 {
-			continue
-		}
-		filePath := pathsPart[bIdx+3:]
 
 		// Determine file status from diff content
 		status := fileStatusModified
@@ -518,6 +511,64 @@ func (g *GitOperator) parseCommitDiffWithOptions(output string, opts parseCommit
 	}
 
 	return files
+}
+
+// diffSectionPath extracts the new-side path of one `diff --git` section.
+// The `+++ b/<path>` file line is the authoritative source: git writes it
+// once per section, exactly one path per line, so spaces and literal ` b/`
+// sequences inside filenames can't confuse the old/new split, and git
+// C-quotes paths containing special bytes (tabs, non-ASCII, quotes,
+// backslashes) the same way it quotes the header. Deleted files carry
+// `+++ /dev/null`, so their path falls back to the `--- a/<path>` line.
+// Sections with neither file line (mode-only changes, binary
+// `Binary files … differ`) fall back to the `diff --git` header split.
+// A single trailing tab on a file line is git's marker for paths that end in
+// whitespace; it is stripped but any real trailing whitespace is kept.
+func diffSectionPath(diffContent string) (string, bool) {
+	// First pass prefers the `+++ b/<path>` line: in a rename section the
+	// `--- a/<old>` line precedes it, and the new-side path is what the
+	// changes panel shows. `+++ /dev/null` (deleted files) yields nothing,
+	// so the second pass falls back to the `--- a/<path>` old-side line.
+	for _, line := range strings.Split(diffContent, "\n") {
+		if path, ok := diffFileLinePath("+++", line); ok {
+			return path, true
+		}
+	}
+	for _, line := range strings.Split(diffContent, "\n") {
+		if path, ok := diffFileLinePath("---", line); ok {
+			return path, true
+		}
+	}
+	lines := strings.SplitN(diffContent, "\n", 2)
+	if len(lines) == 0 {
+		return "", false
+	}
+	pathsPart := strings.TrimPrefix(lines[0], "diff --git ")
+	bIdx := strings.Index(pathsPart, " b/")
+	if bIdx == -1 {
+		return "", false
+	}
+	return unquoteGitPath(pathsPart[bIdx+3:]), true
+}
+
+// diffFileLinePath reads the path off one `+++ <path>` or `--- <path>` file
+// line (per git's per-section file headers), returning ok=false for
+// `/dev/null` sides and non-file lines. Quoted paths (git C-quoting) carry
+// the `a/`/`b/` prefix inside the quotes; the trailing-tab whitespace marker
+// sits outside them, so it is stripped before unquoting.
+func diffFileLinePath(prefix, line string) (string, bool) {
+	rest, ok := strings.CutPrefix(line, prefix+" ")
+	if !ok {
+		return "", false
+	}
+	if strings.HasPrefix(rest, "/dev/null") {
+		return "", false
+	}
+	path := unquoteGitPath(strings.TrimSuffix(rest, "\t"))
+	if prefix == "+++" {
+		return strings.TrimPrefix(path, "b/"), true
+	}
+	return strings.TrimPrefix(path, "a/"), true
 }
 
 // numstatByPath indexes the `<adds>\t<dels>\t<path>` rows git writes for

@@ -347,6 +347,112 @@ func TestParseCommitDiffWithOptions_EntriesCarryPath(t *testing.T) {
 	}
 }
 
+// TestParseCommitDiffWithOptions_SpecialPaths guards path extraction against
+// git's quoting and separator rules. git C-quotes paths containing tabs,
+// non-ASCII bytes, quotes, or backslashes (core.quotePath, default on) —
+// a naive first-` b/` split drops them entirely — and a path containing the
+// literal sequence ` b/` mis-splits the header. The parser must read the
+// path off the per-file `+++ b/<path>` line, which git writes once per
+// section and is unambiguous.
+func TestParseCommitDiffWithOptions_SpecialPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		output   string
+		wantPath string
+	}{
+		{
+			name: "tab in path is C-quoted by git",
+			output: "diff --git \"a/a\\tb.txt\" \"b/a\\tb.txt\"\n" +
+				"new file mode 100644\n" +
+				"index 0000000..e69de29\n" +
+				"--- /dev/null\n" +
+				"+++ \"b/a\\tb.txt\"\n" +
+				"@@ -0,0 +1 @@\n" +
+				"+content\n",
+			wantPath: "a\tb.txt",
+		},
+		{
+			name: "non-ASCII path is C-quoted with octal escapes",
+			output: "diff --git \"a/caf\\303\\251.txt\" \"b/caf\\303\\251.txt\"\n" +
+				"new file mode 100644\n" +
+				"--- /dev/null\n" +
+				"+++ \"b/caf\\303\\251.txt\"\n" +
+				"@@ -0,0 +1 @@\n" +
+				"+caf\u00e9\n",
+			wantPath: "caf\u00e9.txt",
+		},
+		{
+			name: "quote char in path is C-quoted",
+			output: "diff --git \"a/has\\\"quote.txt\" \"b/has\\\"quote.txt\"\n" +
+				"new file mode 100644\n" +
+				"--- /dev/null\n" +
+				"+++ \"b/has\\\"quote.txt\"\n" +
+				"@@ -0,0 +1 @@\n" +
+				"+content\n",
+			wantPath: "has\"quote.txt",
+		},
+		{
+			name: "path containing literal b-slash splits via the +++ line",
+			output: "diff --git a/name b/dir.txt b/name b/dir.txt\n" +
+				"new file mode 100644\n" +
+				"--- /dev/null\n" +
+				"+++ b/name b/dir.txt\n" +
+				"@@ -0,0 +1 @@\n" +
+				"+content\n",
+			wantPath: "name b/dir.txt",
+		},
+		{
+			name: "trailing-whitespace path keeps the tab marker stripped",
+			output: "diff --git a/trail.txt  b/trail.txt \n" +
+				"index 111..222 100644\n" +
+				"--- a/trail.txt \t\n" +
+				"+++ b/trail.txt \t\n" +
+				"@@ -1 +1 @@\n" +
+				"-old\n" +
+				"+new\n",
+			wantPath: "trail.txt ",
+		},
+		{
+			name: "quoted path ending in whitespace strips the outer marker",
+			output: "diff --git \"a/weird \\\"quote.txt \" \"b/weird \\\"quote.txt \"\n" +
+				"index 111..222 100644\n" +
+				"--- \"a/weird \\\"quote.txt \"\t\n" +
+				"+++ \"b/weird \\\"quote.txt \"\t\n" +
+				"@@ -1 +1 @@\n" +
+				"-old\n" +
+				"+new\n",
+			wantPath: "weird \"quote.txt ",
+		},
+		{
+			name: "renamed file keeps the new path from the +++ line",
+			output: "diff --git a/apps/old/file.go b/apps/new/file.go\n" +
+				"similarity index 90%\n" +
+				"rename from apps/old/file.go\n" +
+				"rename to apps/new/file.go\n" +
+				"--- a/apps/old/file.go\n" +
+				"+++ b/apps/new/file.go\n" +
+				"@@ -1,2 +1,3 @@\n" +
+				" package p\n" +
+				"+added\n",
+			wantPath: "apps/new/file.go",
+		},
+	}
+
+	gitOp := &GitOperator{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files := gitOp.parseCommitDiffWithOptions(tt.output, parseCommitDiffOptions{})
+			entry, ok := files[tt.wantPath].(map[string]interface{})
+			if !ok {
+				t.Fatalf("no entry for %q; got keys %v", tt.wantPath, keysOf(files))
+			}
+			if got, _ := entry["path"].(string); got != tt.wantPath {
+				t.Errorf("entry path = %#v, want %#v", got, tt.wantPath)
+			}
+		})
+	}
+}
+
 // TestGetCumulativeDiff_CountsDashAndPlusPrefixedContent covers the second
 // caller, which builds its diff from `git diff <base>` rather than `git show`.
 func TestGetCumulativeDiff_CountsDashAndPlusPrefixedContent(t *testing.T) {

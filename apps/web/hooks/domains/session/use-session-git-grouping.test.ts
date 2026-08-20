@@ -39,6 +39,20 @@ describe("aggregateFilesAcrossRepos", () => {
   it("preserves existing paths and falls back to empty list without status", () => {
     expect(aggregateFilesAcrossRepos([], undefined)).toEqual([]);
   });
+
+  it("splits a composite repo\\x00path key when backfilling a missing path", () => {
+    // Multi-repo cumulative payloads key files as `<repo>\x00<path>`. If such
+    // an entry ever lacks the stamped `path`, the backfill must split the key
+    // (like splitReviewFileKey) instead of stamping the NUL composite into
+    // FileInfo.path — the changes tree splits on '/', so a composite path
+    // would surface as one bogus filename and break per-repo grouping.
+    const out = aggregateFilesAcrossRepos([], {
+      files: {
+        "repoA\u0000lib/util.ts": { status: "added", staged: false } as never,
+      },
+    } as never);
+    expect(out).toEqual([{ status: "added", staged: false, path: "lib/util.ts" }]);
+  });
 });
 
 describe("groupPathsByRepoName", () => {

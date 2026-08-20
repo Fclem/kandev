@@ -262,6 +262,83 @@ func TestGetLatestGitSnapshot_PrefersAgentCompletedOverNewerLiveMonitor(t *testi
 	}
 }
 
+// TestGetLatestGitSnapshot_PrefersArchiveOverAgentCompleted guards the
+// terminal-replay invariant: an archive snapshot (final cumulative diff captured
+// at archive time) must be selected over an older agent_completed row. Before the
+// ordering fix, GetLatestGitSnapshot preferred triggered_by='agent_completed'
+// regardless of snapshot_type, so archived tasks that had completed a turn were
+// replayed from a stale live-status row and the archive snapshot (with the
+// cumulative-diff files carrying `path`) was never surfaced. See round-2 review
+// blocker on d18c1a312.
+func TestGetLatestGitSnapshot_PrefersArchiveOverAgentCompleted(t *testing.T) {
+	ctx := context.Background()
+	repo, cleanup := createTestSQLiteRepo(t)
+	defer cleanup()
+
+	const taskID = "task-arch"
+	const sessionID = "session-arch"
+	seedTaskAndSession(t, ctx, repo, taskID, sessionID)
+
+	// An agent_completed row exists from the last completed turn (older).
+	completed := &models.GitSnapshot{
+		SessionID:   sessionID,
+		Branch:      "feature",
+		HeadCommit:  "completed-head",
+		TriggeredBy: "agent_completed",
+		Metadata:    map[string]interface{}{"branch_additions": float64(5), "branch_deletions": float64(2)},
+	}
+	if err := repo.CreateGitSnapshot(ctx, completed); err != nil {
+		t.Fatalf("create agent_completed: %v", err)
+	}
+
+	// The archive snapshot carries the final cumulative diff (with path fields).
+	archive := &models.GitSnapshot{
+		SessionID:    sessionID,
+		SnapshotType: models.SnapshotTypeArchive,
+		Branch:       "feature",
+		HeadCommit:   "archive-head",
+		BaseCommit:   "base000",
+		Files: map[string]interface{}{
+			"file.txt": map[string]interface{}{
+				"path":      "file.txt",
+				"status":    "modified",
+				"additions": float64(3),
+				"deletions": float64(1),
+			},
+		},
+	}
+	if err := repo.CreateGitSnapshot(ctx, archive); err != nil {
+		t.Fatalf("create archive: %v", err)
+	}
+
+	t.Run("single query", func(t *testing.T) {
+		got, err := repo.GetLatestGitSnapshot(ctx, sessionID)
+		if err != nil {
+			t.Fatalf("GetLatestGitSnapshot: %v", err)
+		}
+		if got.HeadCommit != "archive-head" {
+			t.Errorf("expected archive-head, got %q — archive snapshot shadowed by agent_completed row", got.HeadCommit)
+		}
+		if got.SnapshotType != models.SnapshotTypeArchive {
+			t.Errorf("expected snapshot_type=archive, got %q", got.SnapshotType)
+		}
+	})
+
+	t.Run("batch query", func(t *testing.T) {
+		got, err := repo.GetLatestGitSnapshotsBySessionIDs(ctx, []string{sessionID})
+		if err != nil {
+			t.Fatalf("GetLatestGitSnapshotsBySessionIDs: %v", err)
+		}
+		snap := got[sessionID]
+		if snap == nil {
+			t.Fatal("expected a snapshot for session, got none")
+		}
+		if snap.HeadCommit != "archive-head" {
+			t.Errorf("expected archive-head, got %q — batch query shadowed by agent_completed row", snap.HeadCommit)
+		}
+	})
+}
+
 func TestDeleteLiveMonitorSnapshots(t *testing.T) {
 	ctx := context.Background()
 	repo, cleanup := createTestSQLiteRepo(t)

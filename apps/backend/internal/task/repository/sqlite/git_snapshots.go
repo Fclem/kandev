@@ -162,10 +162,11 @@ func (r *Repository) getGitSnapshotByOrder(ctx context.Context, sessionID, order
 }
 
 // GetLatestGitSnapshot retrieves the best git snapshot for a session.
-// Prefers agent_completed snapshots (captured at exact completion time) over
-// live_monitor snapshots (periodic polls that may contain stale data if the
-// poll raced with agent completion). Falls back to most-recent-by-time when
-// no agent_completed snapshot exists.
+// Prefers archive snapshots (terminal cumulative diff captured at archive time)
+// over agent_completed snapshots (captured at exact completion time), which are
+// preferred over live_monitor snapshots (periodic polls that may contain stale
+// data if the poll raced with agent completion). Falls back to
+// most-recent-by-time when none of those exist.
 // Returns sql.ErrNoRows if no snapshot is found.
 func (r *Repository) GetLatestGitSnapshot(ctx context.Context, sessionID string) (*models.GitSnapshot, error) {
 	query := `
@@ -174,7 +175,11 @@ func (r *Repository) GetLatestGitSnapshot(ctx context.Context, sessionID string)
 		FROM task_session_git_snapshots
 		WHERE session_id = ?
 		ORDER BY
-			CASE WHEN triggered_by = 'agent_completed' THEN 0 ELSE 1 END,
+			CASE
+				WHEN snapshot_type = 'archive' THEN 0
+				WHEN triggered_by = 'agent_completed' THEN 1
+				ELSE 2
+			END,
 			created_at DESC
 		LIMIT 1
 	`
@@ -183,8 +188,9 @@ func (r *Repository) GetLatestGitSnapshot(ctx context.Context, sessionID string)
 
 // GetLatestGitSnapshotsBySessionIDs loads one authoritative snapshot per
 // session in one query per placeholder-sized chunk. It mirrors
-// GetLatestGitSnapshot's agent_completed preference without introducing an
-// N+1 read when task-list summaries repair historical rows.
+// GetLatestGitSnapshot's archive > agent_completed > live_monitor preference
+// without introducing an N+1 read when task-list summaries repair historical
+// rows.
 func (r *Repository) GetLatestGitSnapshotsBySessionIDs(
 	ctx context.Context,
 	sessionIDs []string,
@@ -203,8 +209,13 @@ func (r *Repository) GetLatestGitSnapshotsBySessionIDs(
 				       ahead, behind, files, triggered_by, metadata, created_at,
 				       ROW_NUMBER() OVER (
 					       PARTITION BY session_id
-					       ORDER BY CASE WHEN triggered_by = 'agent_completed' THEN 0 ELSE 1 END,
-					                created_at DESC
+					       ORDER BY
+					               CASE
+						               WHEN snapshot_type = 'archive' THEN 0
+						               WHEN triggered_by = 'agent_completed' THEN 1
+						               ELSE 2
+					               END,
+					               created_at DESC
 				       ) AS row_number
 				FROM task_session_git_snapshots
 				WHERE session_id IN (` + placeholders + `)

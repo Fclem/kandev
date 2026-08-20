@@ -969,6 +969,49 @@ describe("PromptHistoryPanelContent — loading message continuity", () => {
     rerender(<PromptHistoryPanelContent />);
     expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
   });
+
+  it("carries the grace onto a session that is already loading when switched to", () => {
+    vi.useFakeTimers();
+    pagination.hasMore = true;
+    messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
+    messagesBySession[SESSION_B] = [message({ id: "b1", prompt_index: 5, content: "prompt" })];
+    const { rerender } = render(<PromptHistoryPanelContent />);
+
+    // A loads and settles: grace active for A.
+    pagination.isLoadingMore = true;
+    rerender(<PromptHistoryPanelContent />);
+    pagination.isLoadingMore = false;
+    rerender(<PromptHistoryPanelContent />);
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
+
+    // B is ALREADY loading when the user switches (transcript-initiated
+    // request): the indicator shows via the shared isLoadingMore flag.
+    pagination.isLoadingMore = true;
+    state.tasks.activeSessionId = SESSION_B;
+    rerender(<PromptHistoryPanelContent />);
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
+
+    // B's request settles: the carried-over grace keeps the indicator mounted
+    // through the window (no flash before the sentinel re-arms the next page).
+    pagination.isLoadingMore = false;
+    rerender(<PromptHistoryPanelContent />);
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
+
+    // The next page starts and settles within the window: still continuous.
+    pagination.isLoadingMore = true;
+    rerender(<PromptHistoryPanelContent />);
+    pagination.isLoadingMore = false;
+    rerender(<PromptHistoryPanelContent />);
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
+
+    // No further load: the grace expires and the indicator disappears.
+    act(() => vi.advanceTimersByTime(400));
+    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
+    vi.useRealTimers();
+  });
 });
 
 describe("overflowsPanel — padding-aware overflow boundary", () => {

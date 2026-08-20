@@ -333,8 +333,11 @@ function useLoadingGrace(sessionId: string | null, isLoadingMore: boolean): bool
   });
   useEffect(() => {
     if (grace.sessionId !== sessionId) {
-      // The active session changed: drop the previous session's grace.
-      setGrace({ sessionId, show: false });
+      // The active session changed: drop the previous session's grace, but
+      // carry over an already in-flight load of the new session (the shared
+      // per-session flag can be true from a transcript-initiated request), so
+      // its settle still gets the minimum-display grace.
+      setGrace({ sessionId, show: isLoadingMore });
       return;
     }
     if (isLoadingMore) {

@@ -160,6 +160,46 @@ describe("useLazyLoadMessages minUserPromptsPerLoad", () => {
     expect(storeMock.bySession.filter((m) => m.author_type === "user")).toHaveLength(3);
   });
 
+  it("continues the accumulation loop after joining a request once it settles", async () => {
+    const { promise: pagePromise, resolve: resolvePage } = Promise.withResolvers<unknown>();
+    listTaskSessionMessages.mockReturnValueOnce(pagePromise);
+    listTaskSessionMessages.mockResolvedValueOnce(
+      wireTypedResponse([{ id: "m1", author_type: "user" }], false),
+    );
+    const { result } = renderHook(() => useLazyLoadMessages("s1", { minUserPromptsPerLoad: 3 }));
+
+    // A transcript-owned request is in flight for the current cursor; the
+    // panel's loadMore joins it.
+    storeMock.meta.isLoadingMore = true;
+    const loadPromise = result.current.loadMore();
+    // The joined flight is the session's LAST: the coordinator clears the
+    // store's flag before the join promise resolves.
+    await act(async () => {
+      storeMock.meta.isLoadingMore = false;
+      resolvePage(
+        wireTypedResponse(
+          [
+            { id: "m4", author_type: "user" },
+            { id: "m3", author_type: "agent" },
+          ],
+          true,
+        ),
+      );
+    });
+    await act(async () => {
+      await loadPromise;
+    });
+
+    // The loop continued past the joined page (page 2 fetched) instead of
+    // stopping on the stale in-flight flag.
+    expect(listTaskSessionMessages).toHaveBeenCalledTimes(2);
+    expect(listTaskSessionMessages).toHaveBeenNthCalledWith(2, "s1", {
+      limit: 20,
+      before: "m3",
+      sort: "desc",
+    });
+  });
+
   it("stops after a zero-result page even when the threshold is unmet", async () => {
     listTaskSessionMessages
       .mockResolvedValueOnce(wireTypedResponse([{ id: "m1", author_type: "user" }], true))

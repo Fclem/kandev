@@ -289,15 +289,20 @@ export function useLazyLoadSentinel(
 
   useSentinelObserver({ scrollRef, rootMargin, fireLoad, refs });
 
-  // Callback ref — stores the node and observes if the observer already exists
+  // Callback ref — stores the node and observes if the observer already
+  // exists. Only the sentinel is ever observed, so a remount swaps the
+  // observation with unobserve+observe rather than disconnect(), which would
+  // silently drop any other target the observer might hold.
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    const previous = sentinelNodeRef.current;
     sentinelNodeRef.current = node;
     const observer = observerRef.current;
-    if (observer) {
-      observer.disconnect();
-      if (node) {
-        observer.observe(node);
-      }
+    if (!observer) return;
+    if (previous && previous !== node) {
+      observer.unobserve(previous);
+    }
+    if (node) {
+      observer.observe(node);
     }
   }, []);
 

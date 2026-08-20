@@ -78,12 +78,15 @@ export function useLazyLoadMessages(sessionId: string | null, options?: LazyLoad
         stateRef.current = {
           hasMore: result.hasMore,
           oldestCursor: result.oldestCursor,
-          // Keep the current value: the coordinator clears the store's shared
-          // isLoadingMore only when the session's LAST flight settles (this
-          // join may be one of several), and the store subscription syncs
-          // this ref afterwards. Forcing false here could bypass the
-          // concurrent-request guard below.
-          isLoadingMore: stateRef.current.isLoadingMore,
+          // The coordinator clears the store's shared isLoadingMore when the
+          // session's LAST flight settles (this join may be one of several).
+          // Reflect the settled store value so a follow-up page in the
+          // minUserPromptsPerLoad loop is not blocked by a stale in-flight
+          // flag, while still blocking fresh requests when other flights
+          // remain in flight.
+          isLoadingMore:
+            store.getState().messages.metaBySession[sessionId]?.isLoadingMore ??
+            stateRef.current.isLoadingMore,
         };
         return result.count;
       } catch (error) {

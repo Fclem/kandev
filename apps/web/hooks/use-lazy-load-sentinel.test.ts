@@ -91,6 +91,26 @@ describe("useLazyLoadSentinel", () => {
     expect(loadMore).toHaveBeenCalledTimes(1);
   });
 
+  it("swaps observations with unobserve+observe when the sentinel remounts", () => {
+    const scrollRef = makeScrollRef();
+    const loadMore = vi.fn(async () => 20);
+    const { result } = renderHook(() =>
+      useLazyLoadSentinel(scrollRef, true, false, false, loadMore),
+    );
+    const first = document.createElement("div");
+    act(() => result.current.sentinelRef(first));
+    const record = records[0];
+    expect(record.targets).toContain(first);
+
+    // Remount: the old node is unobserved (not disconnected) and the new one
+    // observed, so any other target the observer might hold survives.
+    const second = document.createElement("div");
+    act(() => result.current.sentinelRef(second));
+    expect(record.unobserved).toContain(first);
+    expect(record.targets).toContain(second);
+    expect(record.disconnected).toBe(false);
+  });
+
   it("fires loadMore on intersection when eligible", async () => {
     const scrollRef = makeScrollRef();
     const loadMore = vi.fn(async () => 20);

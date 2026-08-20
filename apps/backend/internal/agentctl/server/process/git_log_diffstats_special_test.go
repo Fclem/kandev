@@ -246,6 +246,9 @@ func TestGetCumulativeDiff_StablePrefixesIgnoreGitDiffConfig(t *testing.T) {
 			repoDir, cleanup := setupTestRepo(t)
 			t.Cleanup(cleanup)
 
+			if err := os.MkdirAll(filepath.Join(repoDir, "src"), 0o755); err != nil {
+				t.Fatalf("mkdir src: %v", err)
+			}
 			writeFile(t, repoDir, "src/config.txt", "before\n")
 			runGit(t, repoDir, "add", ".")
 			runGit(t, repoDir, "commit", "-m", "seed config file")

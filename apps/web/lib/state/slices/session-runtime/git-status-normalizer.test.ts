@@ -49,7 +49,7 @@ describe("normalizeGitStatusFiles", () => {
 
 describe("normalizeGitStatusEntry", () => {
   it("returns the same entry when all file records already use the current shape", () => {
-    const entry = { files: { "src/app.ts": file() } } as GitStatusEntry;
+    const entry = { files: { "src/app.ts": file() } } as unknown as GitStatusEntry;
 
     expect(normalizeGitStatusEntry(entry)).toBe(entry);
   });

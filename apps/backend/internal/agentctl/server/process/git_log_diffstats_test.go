@@ -2,6 +2,8 @@ package process
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -473,6 +475,20 @@ func TestParseCommitDiffWithOptions_SpecialPaths(t *testing.T) {
 			wantPath: "has\"quote.sh",
 		},
 		{
+			name: "mode-only change with b-slash path splits on the equal-paths separator",
+			output: "diff --git a/mode name b/dir.sh b/mode name b/dir.sh\n" +
+				"old mode 100644\n" +
+				"new mode 100755\n",
+			wantPath: "mode name b/dir.sh",
+		},
+		{
+			name: "mode-only change with quote and b-slash in path",
+			output: "diff --git \"a/weird\\\"quote b/file.sh\" \"b/weird\\\"quote b/file.sh\"\n" +
+				"old mode 100644\n" +
+				"new mode 100755\n",
+			wantPath: "weird\"quote b/file.sh",
+		},
+		{
 			name: "binary path containing and b-slash splits on the equal-paths separator",
 			output: "diff --git a/old and b/thing.bin b/old and b/thing.bin\n" +
 				"index 6735744..d7bf111 100644\n" +
@@ -502,6 +518,43 @@ func TestParseCommitDiffWithOptions_SpecialPaths(t *testing.T) {
 				t.Errorf("entry path = %#v, want %#v", got, tt.wantPath)
 			}
 		})
+	}
+}
+
+// TestGetCumulativeDiff_ModeOnlyBSlashPath covers the round-5 blocker with
+// real git output: a chmod-only change on a path containing the literal
+// sequence ` b/` produces an unquoted header with no ---/+++ lines
+// (`diff --git a/mode name b/dir.sh b/mode name b/dir.sh` + old mode/new
+// mode). The first ` b/` lies inside the old path, so the equal-paths
+// separator rule must select the correct split.
+func TestGetCumulativeDiff_ModeOnlyBSlashPath(t *testing.T) {
+	repoDir, cleanup := setupTestRepo(t)
+	t.Cleanup(cleanup)
+
+	if err := os.MkdirAll(filepath.Join(repoDir, "mode name b"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeFile(t, repoDir, "mode name b/dir.sh", "#!/bin/sh\necho hi\n")
+	runGit(t, repoDir, "add", ".")
+	runGit(t, repoDir, "commit", "-m", "seed: add script")
+	base := strings.TrimSpace(runGit(t, repoDir, "rev-parse", "HEAD"))
+
+	if err := os.Chmod(filepath.Join(repoDir, "mode name b/dir.sh"), 0o755); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	gitOp := NewGitOperator(repoDir, newTestLogger(t), nil)
+	result, err := gitOp.GetCumulativeDiff(context.Background(), base)
+	if err != nil {
+		t.Fatalf("GetCumulativeDiff returned error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("GetCumulativeDiff failed: %s", result.Error)
+	}
+
+	const wantPath = "mode name b/dir.sh"
+	if _, ok := result.Files[wantPath].(map[string]interface{}); !ok {
+		t.Fatalf("no entry for %q; got keys %v", wantPath, keysOf(result.Files))
 	}
 }
 

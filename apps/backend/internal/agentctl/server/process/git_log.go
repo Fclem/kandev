@@ -595,11 +595,56 @@ func diffHeaderNewPath(header string) (string, bool) {
 		newPath := unquoteGitPath(after[:newEnd])
 		return strings.TrimPrefix(newPath, "b/"), true
 	}
-	bIdx := strings.Index(rest, " b/")
-	if bIdx == -1 {
+	// Unquoted: `a/<old> b/<new>`. A path that itself contains ` b/` renders
+	// unquoted and the first occurrence splits inside the old path. Mode-only
+	// changes (the main consumer of this fallback) always carry identical
+	// old/new paths, so scan candidates and prefer the separator whose two
+	// sides unquote to equal paths — the same rule the binary parser uses.
+	// Fall back to the first candidate when none match (a hypothetical
+	// rename-without-rename-lines would land here).
+	firstSep := -1
+	search := rest
+	base := 0
+	for {
+		sep := strings.Index(search, " b/")
+		if sep < 0 {
+			break
+		}
+		// `abs` points at the space; the `b/` prefix of the new side starts
+		// one byte later, so the right side (prefix included) is rest[abs+1:].
+		abs := base + sep
+		if firstSep == -1 {
+			firstSep = abs
+		}
+		left, leftOK := headerSidePath(rest[:abs], "a/")
+		right, rightOK := headerSidePath(rest[abs+1:], "b/")
+		if leftOK && rightOK && left == right {
+			return right, true
+		}
+		base = abs + 3
+		search = rest[base:]
+	}
+	if firstSep == -1 {
 		return "", false
 	}
-	return unquoteGitPath(rest[bIdx+3:]), true
+	return unquoteGitPath(rest[firstSep+3:]), true
+}
+
+// headerSidePath strips a fixed a/ or b/ prefix (optionally inside git's
+// C-quotes) off one side of a diff header or Binary files line, returning the
+// unquoted path.
+func headerSidePath(side, prefix string) (string, bool) {
+	if strings.HasPrefix(side, `"`) {
+		unquoted, err := strconv.Unquote(side)
+		if err != nil {
+			return "", false
+		}
+		side = unquoted
+	}
+	if !strings.HasPrefix(side, prefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(side, prefix), true
 }
 
 // diffWholeLinePath reads a path off a line whose entire remainder is the

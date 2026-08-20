@@ -73,6 +73,11 @@ position, which is the visible flicker.
   (`shouldPaginate` false).
 - Visibility unchanged: shown only while `shouldPaginate && (isLoadingMore ||
   grace)`. Passthrough stays an unconditional no-controls empty state.
+- Older-page loads accumulate at least 10 new user prompts per sentinel
+  trigger: `useLazyLoadMessages(sessionId, { minUserPromptsPerLoad })` loops
+  message pages (20 messages each) until the threshold, pagination exhaustion,
+  a zero-result page, or a 10-page cap. The transcript (no option) keeps its
+  single-page behavior.
 - No new copy: reuse `task:loadingOlderMessages`; no locale changes.
 
 ## Task waves

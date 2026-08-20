@@ -23,6 +23,10 @@ const pagination = vi.hoisted(() => ({
   loadMore: vi.fn(async () => 0),
 }));
 
+const lazyLoadOptions = vi.hoisted(() => ({
+  current: null as null | { minUserPromptsPerLoad?: number },
+}));
+
 vi.mock("@/components/state-provider", () => ({
   useAppStore: (selector: (value: typeof state) => unknown) => selector(state),
 }));
@@ -35,11 +39,17 @@ vi.mock("@/hooks/domains/session/use-session-messages", () => ({
 }));
 
 vi.mock("@/hooks/use-lazy-load-messages", () => ({
-  useLazyLoadMessages: () => ({
-    loadMore: pagination.loadMore,
-    hasMore: pagination.hasMore,
-    isLoadingMore: pagination.isLoadingMore,
-  }),
+  useLazyLoadMessages: (
+    _sessionId: string | null,
+    options?: { minUserPromptsPerLoad?: number },
+  ) => {
+    lazyLoadOptions.current = options ?? null;
+    return {
+      loadMore: pagination.loadMore,
+      hasMore: pagination.hasMore,
+      isLoadingMore: pagination.isLoadingMore,
+    };
+  },
 }));
 
 vi.mock("@/hooks/domains/session/use-session-turns", () => ({
@@ -257,6 +267,7 @@ beforeEach(() => {
   pagination.isLoadingMore = false;
   pagination.messagesLoading = false;
   pagination.loadMore.mockResolvedValue(0);
+  lazyLoadOptions.current = null;
   state.tasks.activeSessionId = SESSION_A;
   state.taskSessions.items = {
     [SESSION_A]: { name: "Agent A", is_passthrough: false },
@@ -695,6 +706,14 @@ describe("PromptHistoryPanelContent — expand/collapse behavior", () => {
 });
 
 describe("PromptHistoryPanelContent — auto-load sentinel", () => {
+  it("requests at least 10 user prompts per older-page load", () => {
+    pagination.hasMore = true;
+    messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
+    render(<PromptHistoryPanelContent />);
+
+    expect(lazyLoadOptions.current).toEqual({ minUserPromptsPerLoad: 10 });
+  });
+
   it("keeps the sentinel while hasMore and no entry is prompt #1, and loads on intersection", async () => {
     pagination.hasMore = true;
     messagesBySession[SESSION_A] = [

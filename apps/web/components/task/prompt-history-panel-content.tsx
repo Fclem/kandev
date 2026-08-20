@@ -36,6 +36,10 @@ type PromptHistoryPanelContentProps = { onNavigateToPrompt?: (messageId: string)
 const SENTINEL_TEST_ID = "prompt-history-sentinel";
 const LOADING_OLDER_TEST_ID = "prompt-history-loading-older";
 const SCROLL_TEST_ID = "prompt-history-scroll";
+/** Older-page loads must accumulate at least this many new prompts per
+ * trigger, so short message pages (agent replies dilute the user prompts) do
+ * not trickle in a few rows at a time. */
+const MIN_OLDER_PROMPTS_PER_LOAD = 10;
 /** Minimum-display window for the loading message: after a page settles, keep
  * the message mounted for this long so the sentinel's re-arm loop (next page
  * firing right after a positive settle) renders a continuous indicator instead
@@ -55,7 +59,9 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const sessionId = useAppStore((state) => state.tasks.activeSessionId);
   const session = useAppStore((state) => (sessionId ? state.taskSessions.items[sessionId] : null));
   const { messages, isLoading: messagesLoading } = useSessionMessages(sessionId);
-  const { loadMore, hasMore, isLoadingMore } = useLazyLoadMessages(sessionId);
+  const { loadMore, hasMore, isLoadingMore } = useLazyLoadMessages(sessionId, {
+    minUserPromptsPerLoad: MIN_OLDER_PROMPTS_PER_LOAD,
+  });
   const { turns, isHydrated: turnsHydrated } = useSessionTurnsState(sessionId);
   const entries = useMemo(() => {
     const derived = buildPromptHistoryEntries(messages, turns);

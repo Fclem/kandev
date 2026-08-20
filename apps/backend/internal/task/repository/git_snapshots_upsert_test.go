@@ -596,6 +596,62 @@ func TestGetLatestGitSnapshot_UnarchivedResumePrefersCompleted(t *testing.T) {
 			t.Errorf("expected archive-head, got %q — archive lost while task is still archived", got.HeadCommit)
 		}
 	})
+
+	t.Run("current live row beats pre-archive completion row", func(t *testing.T) {
+		repo, cleanup := createTestSQLiteRepo(t)
+		defer cleanup()
+
+		const taskID = "task-resume-generation"
+		const sessionID = "session-resume-generation"
+		seedTaskAndSession(t, ctx, repo, taskID, sessionID)
+		base := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+
+		if err := repo.CreateGitSnapshot(ctx, &models.GitSnapshot{
+			SessionID:   sessionID,
+			HeadCommit:  "pre-archive-completed",
+			TriggeredBy: "agent_completed",
+			CreatedAt:   base,
+		}); err != nil {
+			t.Fatalf("create pre-archive completion: %v", err)
+		}
+		if err := repo.ArchiveTask(ctx, taskID); err != nil {
+			t.Fatalf("archive task: %v", err)
+		}
+		if err := repo.CreateGitSnapshot(ctx, &models.GitSnapshot{
+			SessionID:    sessionID,
+			SnapshotType: models.SnapshotTypeArchive,
+			HeadCommit:   "archive-head",
+			CreatedAt:    base.Add(time.Minute),
+		}); err != nil {
+			t.Fatalf("create archive: %v", err)
+		}
+		if _, err := repo.UnarchiveTask(ctx, taskID); err != nil {
+			t.Fatalf("unarchive task: %v", err)
+		}
+		if err := repo.UpsertLatestLiveGitSnapshot(ctx, &models.GitSnapshot{
+			SessionID:  sessionID,
+			HeadCommit: "live-after-resume",
+			CreatedAt:  base.Add(2 * time.Minute),
+		}); err != nil {
+			t.Fatalf("create resumed live snapshot: %v", err)
+		}
+
+		got, err := repo.GetLatestGitSnapshot(ctx, sessionID)
+		if err != nil {
+			t.Fatalf("GetLatestGitSnapshot: %v", err)
+		}
+		if got.HeadCommit != "live-after-resume" {
+			t.Errorf("head commit = %q, want current live row instead of pre-archive completion", got.HeadCommit)
+		}
+
+		gotBatch, err := repo.GetLatestGitSnapshotsBySessionIDs(ctx, []string{sessionID})
+		if err != nil {
+			t.Fatalf("GetLatestGitSnapshotsBySessionIDs: %v", err)
+		}
+		if gotBatch[sessionID] == nil || gotBatch[sessionID].HeadCommit != "live-after-resume" {
+			t.Errorf("batch head commit = %v, want current live row", gotBatch[sessionID])
+		}
+	})
 }
 
 // TestGetLatestGitSnapshot_TieBreakerIsDeterministic guards the equal-rank

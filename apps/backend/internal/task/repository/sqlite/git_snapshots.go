@@ -26,10 +26,10 @@ const TriggeredByLiveMonitor = "live_monitor"
 //     was unarchived but not yet resumed and no non-archive snapshot newer
 //     than this archive row exists yet (a reload in that window must not
 //     regress to pre-archive state).
-//   - rank 1: agent_completed snapshots (captured at exact completion time).
+//   - rank 1: agent_completed snapshots from the current execution generation.
 //   - rank 2: live_monitor snapshots (periodic polls; may race completion).
-//   - rank 3: archive snapshots that are stale (task unarchived AND a newer
-//     non-archive snapshot exists — resumed execution has moved on).
+//   - rank 3: pre-archive completions and archive snapshots that are stale
+//     (task unarchived AND a newer non-archive snapshot exists).
 //
 // Ties within a rank break by created_at DESC, then id DESC so the selection
 // is deterministic even when Postgres stores multiple writes at the same
@@ -50,6 +50,12 @@ const snapshotRankExpr = `
 						  AND newer.created_at > task_session_git_snapshots.created_at
 					)
 				) THEN 0
+				WHEN triggered_by = 'agent_completed' AND EXISTS (
+					SELECT 1 FROM task_session_git_snapshots archive
+					WHERE archive.session_id = task_session_git_snapshots.session_id
+					  AND archive.snapshot_type = 'archive'
+					  AND archive.created_at > task_session_git_snapshots.created_at
+				) THEN 3
 				WHEN triggered_by = 'agent_completed' THEN 1
 				WHEN snapshot_type = 'archive' THEN 3
 				ELSE 2

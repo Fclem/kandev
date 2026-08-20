@@ -271,7 +271,13 @@ func (g *GitOperator) GetCumulativeDiff(ctx context.Context, baseCommit string) 
 	// `-` with nothing to compare — but both routes report 0/0 for them anyway,
 	// since a binary block carries no hunk.) Adding the flag would change a
 	// production git invocation for a difference no test can observe.
-	diffOutput, err := g.runGitCommand(ctx, "diff", baseCommit)
+	diffOutput, err := g.runGitCommand(
+		ctx,
+		"diff",
+		"--src-prefix=a/",
+		"--dst-prefix=b/",
+		baseCommit,
+	)
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to get diff: %s", err.Error())
 		return result, nil
@@ -407,6 +413,8 @@ func (g *GitOperator) ShowCommit(ctx context.Context, commitSHA string) (*Commit
 		"--stat",
 		"--numstat",
 		"-p",
+		"--src-prefix=a/",
+		"--dst-prefix=b/",
 		commitSHA,
 	)
 	if err != nil {

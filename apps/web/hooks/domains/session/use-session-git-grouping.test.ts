@@ -40,7 +40,7 @@ describe("aggregateFilesAcrossRepos", () => {
     expect(aggregateFilesAcrossRepos([], undefined)).toEqual([]);
   });
 
-  it("splits a composite repo\\x00path key when backfilling a missing path", () => {
+  it("restores path and repository from composite keys", () => {
     // Multi-repo cumulative payloads key files as `<repo>\x00<path>`. If such
     // an entry ever lacks the stamped `path`, the backfill must split the key
     // (like splitReviewFileKey) instead of stamping the NUL composite into
@@ -51,7 +51,23 @@ describe("aggregateFilesAcrossRepos", () => {
         "repoA\u0000lib/util.ts": { status: "added", staged: false } as never,
       },
     } as never);
-    expect(out).toEqual([{ status: "added", staged: false, path: "lib/util.ts" }]);
+    expect(out).toEqual([
+      { status: "added", staged: false, path: "lib/util.ts", repository_name: "repoA" },
+    ]);
+  });
+
+  it("keeps same relative paths distinct across repositories", () => {
+    const out = aggregateFilesAcrossRepos([], {
+      files: {
+        "repoA\u0000README.md": { status: "modified", staged: false } as never,
+        "repoB\u0000README.md": { status: "modified", staged: false } as never,
+      },
+    } as never);
+
+    expect(out).toEqual([
+      { status: "modified", staged: false, path: "README.md", repository_name: "repoA" },
+      { status: "modified", staged: false, path: "README.md", repository_name: "repoB" },
+    ]);
   });
 });
 

@@ -233,6 +233,42 @@ func TestGetCumulativeDiff_ModeOnlyBSlashPath(t *testing.T) {
 	}
 }
 
+func TestGetCumulativeDiff_StablePrefixesIgnoreGitDiffConfig(t *testing.T) {
+	for _, diffConfig := range []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "no prefix", key: "diff.noprefix", value: "true"},
+		{name: "mnemonic prefix", key: "diff.mnemonicPrefix", value: "true"},
+	} {
+		t.Run(diffConfig.name, func(t *testing.T) {
+			repoDir, cleanup := setupTestRepo(t)
+			t.Cleanup(cleanup)
+
+			writeFile(t, repoDir, "src/config.txt", "before\n")
+			runGit(t, repoDir, "add", ".")
+			runGit(t, repoDir, "commit", "-m", "seed config file")
+			base := strings.TrimSpace(runGit(t, repoDir, "rev-parse", "HEAD"))
+			runGit(t, repoDir, "config", diffConfig.key, diffConfig.value)
+			writeFile(t, repoDir, "src/config.txt", "after\n")
+
+			result, err := NewGitOperator(repoDir, newTestLogger(t), nil).GetCumulativeDiff(
+				context.Background(), base,
+			)
+			if err != nil {
+				t.Fatalf("GetCumulativeDiff returned error: %v", err)
+			}
+			if !result.Success {
+				t.Fatalf("GetCumulativeDiff failed: %s", result.Error)
+			}
+			if _, ok := result.Files["src/config.txt"].(map[string]interface{}); !ok {
+				t.Fatalf("no entry for src/config.txt; got keys %v", keysOf(result.Files))
+			}
+		})
+	}
+}
+
 // TestParseCommitDiffWithOptions_HeaderTokenInsideBody guards the section
 // boundary against a patch body (or filename) containing the literal
 // `diff --git ` byte sequence. git only emits that token at the start of a

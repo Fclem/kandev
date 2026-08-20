@@ -23,7 +23,7 @@ import {
 import { useMultiRepoSummary } from "./use-session-git-summary";
 import { deriveSessionGitValues } from "./use-session-git-derived";
 import { useScopedStageOperations } from "./use-scoped-stage-operations";
-import { splitReviewFileKey } from "@/components/review/types";
+import { normalizeGitStatusFiles } from "@/lib/state/slices/session-runtime/git-status-normalizer";
 
 /**
  * Per-repo result emitted by frontend-side fan-outs (commit, push, pull,
@@ -217,30 +217,23 @@ export function repositoryScopesForMutation(
  * sat under the key (no `path` field) — the changes tree splits on
  * `file.path` and crashes on `undefined`, so a missing path must never reach
  * consumers. Multi-repo cumulative keys are `<repo>\x00<path>` composites;
- * the key is split with the shared `splitReviewFileKey` convention so the
- * NUL composite never bleeds into the displayed path.
+ * the normalizer restores both the path and repository scope from that key.
  */
 export function aggregateFilesAcrossRepos(
   statusByRepo: ReturnType<typeof useSessionGitStatusByRepo>,
   gitStatus: ReturnType<typeof useSessionGitStatus>,
 ): FileInfo[] {
-  const stampPath = (key: string, file: FileInfo): FileInfo =>
-    file.path ? file : { ...file, path: splitReviewFileKey(key).path };
   if (statusByRepo.length > 0) {
     const out: FileInfo[] = [];
     for (const { repository_name, status } of statusByRepo) {
       if (!status?.files) continue;
-      for (const [key, file] of Object.entries(status.files)) {
-        out.push(
-          repository_name ? { ...stampPath(key, file), repository_name } : stampPath(key, file),
-        );
+      for (const file of Object.values(normalizeGitStatusFiles(status.files) ?? {})) {
+        out.push(repository_name ? { ...file, repository_name } : file);
       }
     }
     return out;
   }
-  return gitStatus?.files
-    ? Object.entries(gitStatus.files).map(([key, file]) => stampPath(key, file))
-    : [];
+  return Object.values(normalizeGitStatusFiles(gitStatus?.files) ?? {});
 }
 
 type StageDispatchArgs = {

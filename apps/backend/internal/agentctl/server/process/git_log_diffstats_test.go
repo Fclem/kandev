@@ -539,8 +539,17 @@ func TestGetCumulativeDiff_ModeOnlyBSlashPath(t *testing.T) {
 	runGit(t, repoDir, "commit", "-m", "seed: add script")
 	base := strings.TrimSpace(runGit(t, repoDir, "rev-parse", "HEAD"))
 
+	// Pin core.filemode so the chmod below reliably produces a mode-only
+	// diff. Git's default (auto) disables executable-bit tracking on
+	// filesystems without chmod support; on those the test cannot produce
+	// the fixture it exists to prove, so skip with an explicit reason rather
+	// than fail.
+	runGit(t, repoDir, "config", "core.filemode", "true")
 	if err := os.Chmod(filepath.Join(repoDir, "mode name b/dir.sh"), 0o755); err != nil {
 		t.Fatalf("chmod: %v", err)
+	}
+	if diff := runGit(t, repoDir, "diff"); !strings.Contains(diff, "old mode") {
+		t.Skipf("filesystem does not track executable bits; skipping mode-only regression (diff=%q)", diff)
 	}
 
 	gitOp := NewGitOperator(repoDir, newTestLogger(t), nil)

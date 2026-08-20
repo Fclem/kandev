@@ -64,7 +64,11 @@ func fullGitSnapshot(sessionID string, createdAt time.Time) *models.GitSnapshot 
 				"additions": float64(12),
 			},
 		},
-		TriggeredBy: "agent_completed",
+		// Production archive rows (captureArchiveDiff) carry no trigger; the
+		// trigger field must stay empty so ordering tests exercise the
+		// conditional `archive AND task archived` rank, not a
+		// triggered_by=agent_completed rank.
+		TriggeredBy: "",
 		Metadata: map[string]interface{}{
 			"reason":  "task archived",
 			"attempt": float64(2),

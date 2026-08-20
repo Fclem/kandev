@@ -1,7 +1,7 @@
 ---
 id: "03-backend-balance-client"
 title: "DeepSeek balance client"
-status: pending
+status: done
 wave: 1
 depends_on: ["02-plugin-repository-bootstrap"]
 plan: "plan.md"
@@ -76,3 +76,38 @@ redaction assertion.
   response differs, update the fixture with captured evidence and note it.
 - Keep the client free of plugin/global state so task 04 can call it from the
   poller without refactoring.
+
+## Results
+
+Completed 2026-08-20 (plugin repo commit `8a102e0`).
+
+TDD: `server/balance_test.go` written first (red: symbols undefined), then
+`server/balance.go` (green).
+
+- `fetchBalance(ctx, apiKey)` → `GET {balanceAPIBase}/user/balance` with
+  `Authorization: Bearer <key>`; `balanceAPIBase` package var defaults to
+  `https://api.deepseek.com` (injectable for tests); 10 s client timeout and
+  1 MiB response cap enforced (cap+1 read detects oversized bodies).
+- Taxonomy: `invalid_key` (401), `insufficient_balance` (402), `rate_limited`
+  (429), `timeout` (client deadline), `network` (dial/transport), `http`
+  (other non-2xx), `bad_response` (malformed JSON, missing `is_available`,
+  missing `balance_infos`, currency outside `{CNY, USD}`, non-finite-decimal
+  balance fields, oversized body). Empty `balance_infos` is a valid snapshot
+  with `is_available` honored. Order preserved.
+- Redaction: every error message asserts absence of the key, "Authorization",
+  and "Bearer" (assertSecretFree helper).
+
+Exact verification (plugin worktree):
+
+```sh
+make test-backend   # ok — go test ./server/... → ok kandev-plugin-deepseek-credits/server
+make vet            # ok
+gofmt -l .          # no output
+```
+
+Case list (all PASS): GoldenPayload; PreservesBalanceInfosOrder;
+ErrorTaxonomy (401 invalid key, 402 insufficient balance, 429 rate limited,
+500 upstream, 502 bad gateway); MalformedBody; WrongShape (missing
+is_available, EUR currency, non-numeric total/granted/topped_up, missing
+balance_infos); EmptyBalanceInfosIsValid (available + unavailable); OversizedBody;
+Timeout (50 ms client deadline vs 200 ms server); NetworkError (refused).

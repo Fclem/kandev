@@ -146,7 +146,7 @@ Wave 0:
 - [x] [task 02 — plugin repository bootstrap](task-02-plugin-repository-bootstrap.md)
 
 Wave 1:
-- [ ] [task 03 — DeepSeek balance client](task-03-backend-balance-client.md)
+- [x] [task 03 — DeepSeek balance client](task-03-backend-balance-client.md)
 
 Wave 2:
 - [ ] [task 04 — balance.get action and poller](task-04-backend-action-poller.md)

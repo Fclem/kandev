@@ -155,7 +155,7 @@ Wave 3:
 - [x] [task 05 — chat-top-bar pill and panel](task-05-ui-pill-panel.md)
 
 Wave 4:
-- [ ] [task 06 — manifest, config, package](task-06-manifest-config-package.md)
+- [x] [task 06 — manifest, config, package](task-06-manifest-config-package.md)
 
 Wave 5:
 - [ ] [task 07 — disposable-instance smoke test](task-07-instance-smoke-test.md)

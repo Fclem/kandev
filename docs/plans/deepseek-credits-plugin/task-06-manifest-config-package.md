@@ -1,7 +1,7 @@
 ---
 id: "06-manifest-config-package"
 title: "Manifest, config schema, and package validation"
-status: pending
+status: done
 wave: 4
 depends_on: ["04-backend-action-poller", "05-ui-pill-panel"]
 plan: "plan.md"
@@ -126,3 +126,50 @@ tar tzf kandev-deepseek-credits-0.1.0.tar.gz
   contents explicitly rather than trusting the Makefile echo.
 - `go mod tidy` must not strip entries needed by `plugin-pack`; keep running
   the pack from the SDK module context exactly as the template Makefile does.
+
+## Results
+
+Completed 2026-08-20 (plugin repo commit `db521a3`).
+
+- `manifest.yaml` was finalized in task 02 (identity rename + spec contract);
+  task 06 verified it exactly and locked it with `server/manifest_test.go`
+  (NEW, plain YAML parse of `../manifest.yaml` via `gopkg.in/yaml.v3` — the
+  SDK manifest package is `internal` to the kandev module). `go mod tidy`
+  promoted yaml.v3 to a direct dependency (go.mod only; go.sum unchanged).
+- Manifest test asserts: `id: kandev-deepseek-credits`,
+  `display_name: "DeepSeek Credits"` (pinned), exact spec `description`
+  string, `author: "kandev"` (not `your-name-here`),
+  `repo_url: https://github.com/kdlbs/kandev-plugin-deepseek-credits`,
+  `api_version: 1`, SemVer-shaped `version` (NOT exact — the release workflow
+  bumps it and re-runs tests on the tag), `min_kandev_version: "0.88.0"`,
+  `categories: ["analytics"]`, the five `runtime.executables`,
+  `ui.bundle: "/ui/bundle.js"`, exactly ONE action (`balance.get`,
+  `scope: workspace`, `max_body_bytes: 1024`), `config_schema` with `api_key`
+  `secret: true` + `format: password` (the only secret markers the host
+  honors), `poll_minutes` default 5 + declarative `minimum`, `warn_below`
+  default 10, `title` + non-empty `description` on all three properties, and
+  the ABSENCE of `webhooks` and `capabilities`.
+- Makefile `VERSION := 0.1.0` == manifest `version: "0.1.0"`; `PKG_OUT`
+  derives `kandev-deepseek-credits-0.1.0.tar.gz`; `test` runs backend + bundle
+  tests; `fmt`/`vet` clean. CI workflows confirmed matching (ci.yml verify
+  runs `make test` with Node for the bundle tests; base-floor pins
+  `v0.88.0`).
+
+Exact verification (plugin worktree):
+
+```sh
+make fmt                  # ok (one formatting pass on the new test file, then clean)
+make vet                  # ok
+make test                 # ok — backend go tests + node --check + node --test (22 bundle tests)
+make verify-package-host  # ok — checksums.txt: manifest.yaml OK, server/plugin-linux-amd64 OK, ui/bundle.js OK
+tar tzf kandev-deepseek-credits-0.1.0.tar.gz
+  # manifest.yaml, server/plugin-linux-amd64, ui/bundle.js, checksums.txt
+make verify-package       # ok (CI, all five platforms) — darwin-amd64, darwin-arm64,
+  # linux-amd64, linux-arm64, windows-amd64.exe, manifest.yaml, ui/bundle.js,
+  # checksums.txt all verified; no recipes/package.json leaked
+```
+
+`go mod tidy` produced a 1-line go.mod diff (yaml.v3 indirect → direct);
+`plugin-pack` still runs from the SDK module context per the template Makefile
+(`cd ../kandev/apps/backend && go run ./cmd/plugin-pack …`), so tidy did not
+strip any packaging dependency.

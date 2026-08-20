@@ -158,7 +158,7 @@ Wave 4:
 - [x] [task 06 — manifest, config, package](task-06-manifest-config-package.md)
 
 Wave 5:
-- [ ] [task 07 — disposable-instance smoke test](task-07-instance-smoke-test.md)
+- [x] [task 07 — disposable-instance smoke test](task-07-instance-smoke-test.md)
 ```
 
 Task 01 (design package) is complete: this plan, the spec, and the task files.

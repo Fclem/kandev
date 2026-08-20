@@ -37,8 +37,15 @@ func TestPostgresGitSnapshotLifecycle(t *testing.T) {
 	// Archive the task so the archive snapshot's conditional rank-0 branch
 	// (`snapshot_type='archive' AND task archived`) is the one being tested —
 	// with the task unarchived the row would rank as a stale archive instead.
-	if err := repo.ArchiveTask(ctx, "task-git-pg"); err != nil {
-		t.Fatalf("ArchiveTask: %v", err)
+	// Set archived_at directly rather than calling ArchiveTask: that method
+	// also purges the messagequeue in the same transaction, and on Postgres a
+	// missing queue table aborts the tx so the later Commit() fails with
+	// "commit unexpectedly resulted in rollback". The snapshot ordering only
+	// needs the archived_at flag.
+	if _, err := repo.db.Exec(repo.db.Rebind(
+		`UPDATE tasks SET archived_at = ?, updated_at = ? WHERE id = ?`),
+		time.Now().UTC(), time.Now().UTC(), "task-git-pg"); err != nil {
+		t.Fatalf("archive task: %v", err)
 	}
 
 	base := time.Date(2026, 3, 4, 5, 6, 7, 123456000, time.UTC)
@@ -95,8 +102,10 @@ func TestPostgresGitSnapshotLifecycle(t *testing.T) {
 
 	// Unarchive + resume: a newer agent_completed row must now outrank the
 	// stale archive row in both selectors (round-3 lifecycle fix parity).
-	if _, err := repo.UnarchiveTask(ctx, "task-git-pg"); err != nil {
-		t.Fatalf("UnarchiveTask: %v", err)
+	if _, err := repo.db.Exec(repo.db.Rebind(
+		`UPDATE tasks SET archived_at = NULL, updated_at = ? WHERE id = ?`),
+		time.Now().UTC(), "task-git-pg"); err != nil {
+		t.Fatalf("unarchive task: %v", err)
 	}
 	if err := repo.CreateGitSnapshot(ctx, &models.GitSnapshot{
 		ID: "snap-pg-resumed", SessionID: "session-git-pg-a",

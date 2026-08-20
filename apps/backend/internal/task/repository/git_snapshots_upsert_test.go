@@ -338,11 +338,9 @@ func TestGetLatestGitSnapshot_PrefersArchiveOverAgentCompleted(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetLatestGitSnapshotsBySessionIDs: %v", err)
 		}
-		snap := got[sessionID]
-		if snap == nil {
+		if snap := got[sessionID]; snap == nil {
 			t.Fatal("expected a snapshot for session, got none")
-		}
-		if snap.HeadCommit != "archive-head" {
+		} else if snap.HeadCommit != "archive-head" {
 			t.Errorf("expected archive-head, got %q — batch query shadowed by agent_completed row", snap.HeadCommit)
 		}
 	})
@@ -416,11 +414,9 @@ func TestGetLatestGitSnapshot_UnarchivedResumePrefersCompleted(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetLatestGitSnapshotsBySessionIDs: %v", err)
 			}
-			snap := got[sessionID]
-			if snap == nil {
+			if snap := got[sessionID]; snap == nil {
 				t.Fatal("expected a snapshot for session, got none")
-			}
-			if snap.HeadCommit != "completed-after-resume" {
+			} else if snap.HeadCommit != "completed-after-resume" {
 				t.Errorf("expected completed-after-resume, got %q — batch query served stale archive row", snap.HeadCommit)
 			}
 		})
@@ -473,11 +469,9 @@ func TestGetLatestGitSnapshot_UnarchivedResumePrefersCompleted(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetLatestGitSnapshotsBySessionIDs: %v", err)
 		}
-		snap := gotBatch[sessionID]
-		if snap == nil {
+		if snap := gotBatch[sessionID]; snap == nil {
 			t.Fatal("expected a snapshot for session, got none")
-		}
-		if snap.HeadCommit != "live-after-resume" {
+		} else if snap.HeadCommit != "live-after-resume" {
 			t.Errorf("expected live-after-resume in batch query, got %q — batch served stale archive row", snap.HeadCommit)
 		}
 	})

@@ -209,22 +209,35 @@ export function repositoryScopesForMutation(
  * Builds the SessionGit's flat file list. For multi-repo workspaces it
  * stamps each FileInfo with its repository_name so consumers can group;
  * for single-repo it returns the legacy single-status files unchanged.
+ *
+ * Each entry is stamped with `path` from the map key when the payload entry
+ * omits it. Git-status payloads always carry `path`, but the DB-snapshot
+ * fallback can replay archived cumulative-diff entries whose older shape only
+ * sat under the key (no `path` field) — the changes tree splits on
+ * `file.path` and crashes on `undefined`, so a missing path must never reach
+ * consumers.
  */
-function aggregateFilesAcrossRepos(
+export function aggregateFilesAcrossRepos(
   statusByRepo: ReturnType<typeof useSessionGitStatusByRepo>,
   gitStatus: ReturnType<typeof useSessionGitStatus>,
 ): FileInfo[] {
+  const stampPath = (key: string, file: FileInfo): FileInfo =>
+    file.path ? file : { ...file, path: key };
   if (statusByRepo.length > 0) {
     const out: FileInfo[] = [];
     for (const { repository_name, status } of statusByRepo) {
       if (!status?.files) continue;
-      for (const f of Object.values(status.files)) {
-        out.push(repository_name ? { ...f, repository_name } : f);
+      for (const [key, file] of Object.entries(status.files)) {
+        out.push(
+          repository_name ? { ...stampPath(key, file), repository_name } : stampPath(key, file),
+        );
       }
     }
     return out;
   }
-  return gitStatus?.files ? Object.values(gitStatus.files) : [];
+  return gitStatus?.files
+    ? Object.entries(gitStatus.files).map(([key, file]) => stampPath(key, file))
+    : [];
 }
 
 type StageDispatchArgs = {

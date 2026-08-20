@@ -1,5 +1,45 @@
 import { describe, it, expect } from "vitest";
-import { groupPathsByRepoName, repositoryScopesForMutation } from "./use-session-git";
+import {
+  aggregateFilesAcrossRepos,
+  groupPathsByRepoName,
+  repositoryScopesForMutation,
+} from "./use-session-git";
+
+describe("aggregateFilesAcrossRepos", () => {
+  it("stamps path from the map key when a status entry lacks its own path", () => {
+    // Archived-task DB snapshots can replay cumulative-diff entries whose
+    // older shape only sat under the key (no `path` field). The changes tree
+    // splits on file.path, so the fallback must not surface undefined.
+    const out = aggregateFilesAcrossRepos([], {
+      files: {
+        "apps/a.go": { path: "apps/a.go", status: "modified", staged: false },
+        "readme.md": { status: "modified", staged: false } as never,
+      },
+    } as never);
+    expect(out.map((f) => f.path).sort()).toEqual(["apps/a.go", "readme.md"]);
+  });
+
+  it("stamps path per repo in multi-repo statuses lacking it", () => {
+    const out = aggregateFilesAcrossRepos(
+      [
+        {
+          repository_name: "frontend",
+          status: {
+            files: { "app.tsx": { status: "modified", staged: false } as never },
+          },
+        } as never,
+      ],
+      undefined,
+    );
+    expect(out).toEqual([
+      { status: "modified", staged: false, path: "app.tsx", repository_name: "frontend" },
+    ]);
+  });
+
+  it("preserves existing paths and falls back to empty list without status", () => {
+    expect(aggregateFilesAcrossRepos([], undefined)).toEqual([]);
+  });
+});
 
 describe("groupPathsByRepoName", () => {
   it("splits paths by repository_name, preserving insertion order per bucket", () => {

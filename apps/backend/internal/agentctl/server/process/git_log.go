@@ -504,6 +504,7 @@ func (g *GitOperator) parseCommitDiffWithOptions(output string, opts parseCommit
 		totalDiffBytes += len(diffOut)
 
 		fileEntry := map[string]interface{}{
+			"path":      filePath,
 			"status":    status,
 			"staged":    false,
 			"additions": additions,

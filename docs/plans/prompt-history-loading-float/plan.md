@@ -78,6 +78,11 @@ position, which is the visible flicker.
   message pages (20 messages each) until the threshold, pagination exhaustion,
   a zero-result page, or a 10-page cap. The transcript (no option) keeps its
   single-page behavior.
+- While the user is pinned at the bottom, a positive settle scrolls the
+  scroller back to the new bottom (`stickToBottomWhileLoading` in
+  `useLazyLoadSentinel`, tracked via scroll events so content growth never
+  clears the pin), keeping the re-armed sentinel in view so loading continues
+  without a scroll-away. Scrolling away cancels the stick.
 - No new copy: reuse `task:loadingOlderMessages`; no locale changes.
 
 ## Task waves

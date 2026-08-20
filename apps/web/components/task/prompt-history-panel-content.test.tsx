@@ -705,7 +705,7 @@ describe("PromptHistoryPanelContent — expand/collapse behavior", () => {
   });
 });
 
-describe("PromptHistoryPanelContent — auto-load sentinel", () => {
+describe("PromptHistoryPanelContent — auto-load behavior", () => {
   it("requests at least 10 user prompts per older-page load", () => {
     pagination.hasMore = true;
     messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
@@ -714,6 +714,38 @@ describe("PromptHistoryPanelContent — auto-load sentinel", () => {
     expect(lazyLoadOptions.current).toEqual({ minUserPromptsPerLoad: 10 });
   });
 
+  it("sticks to the bottom after a load while the user is pinned, so older pages keep loading", async () => {
+    pagination.hasMore = true;
+    let resolveLoad: (value: number) => void = () => {};
+    pagination.loadMore.mockImplementation(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
+    render(<PromptHistoryPanelContent />);
+    const scroller = screen.getByTestId(SCROLL_TEST_ID) as HTMLElement;
+    // Content (600) overflows the 400px viewport; the user pins at the bottom.
+    setGeometry(scroller, { scrollHeight: 600, clientHeight: 400 });
+    scroller.scrollTop = 200;
+    scroller.dispatchEvent(new Event("scroll"));
+    await act(async () => {});
+
+    // Rows append while the load is in flight; the settle must re-pin the
+    // scroller to the new bottom so the sentinel stays in view for the next
+    // page.
+    fireIntersection(true);
+    setGeometry(scroller, { scrollHeight: 800 });
+    await act(async () => {
+      resolveLoad(20);
+    });
+    expect(pagination.loadMore).toHaveBeenCalledTimes(1);
+    expect(scroller.scrollTop).toBe(800);
+  });
+});
+
+describe("PromptHistoryPanelContent — auto-load sentinel", () => {
   it("keeps the sentinel while hasMore and no entry is prompt #1, and loads on intersection", async () => {
     pagination.hasMore = true;
     messagesBySession[SESSION_A] = [

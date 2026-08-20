@@ -172,7 +172,98 @@ describe("useLazyLoadSentinel — re-arm, disarm, and stale completions", () => 
     await act(async () => {});
     expect(loadMore).toHaveBeenCalledTimes(2);
   });
+});
 
+describe("useLazyLoadSentinel — stickToBottomWhileLoading", () => {
+  it("sticks to the bottom after a positive load while the user is pinned, keeping the sentinel in view", async () => {
+    const scrollRef = makeScrollRef();
+    const scroller = scrollRef.current!;
+    // The user is pinned at the bottom: content (600) overflows the 400px
+    // viewport and the scroll position sits at the old bottom (200 + 400).
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 600 });
+    scroller.scrollTop = 200;
+    let resolveLoad: (value: number) => void = () => {};
+    const loadMore = vi.fn(
+      () =>
+        new Promise<number>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    const { result } = renderHook(() =>
+      useLazyLoadSentinel(scrollRef, true, false, false, loadMore, {
+        rearmWhileIntersecting: true,
+        joinInFlightWhileLoading: true,
+        stickToBottomWhileLoading: true,
+      }),
+    );
+    // The initial pin check runs in an effect.
+    await act(async () => {});
+    const node = document.createElement("div");
+    act(() => result.current.sentinelRef(node));
+
+    fire(records[0], true, node);
+    // Rows are appended while the load is in flight (scrollHeight grows to
+    // 800); the user stays at the old bottom. The settle must scroll the
+    // scroller back to the new bottom so the sentinel stays intersecting.
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 800 });
+    await act(async () => {
+      resolveLoad(20);
+    });
+    expect(loadMore).toHaveBeenCalledTimes(1);
+    expect(scroller.scrollTop).toBe(800);
+  });
+
+  it("does not stick when the user is not pinned at the bottom", async () => {
+    const scrollRef = makeScrollRef();
+    const scroller = scrollRef.current!;
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 600 });
+    scroller.scrollTop = 0; // scrolled near the top: not pinned
+    const loadMore = vi.fn(async () => 20);
+    const { result } = renderHook(() =>
+      useLazyLoadSentinel(scrollRef, true, false, false, loadMore, {
+        rearmWhileIntersecting: true,
+        joinInFlightWhileLoading: true,
+        stickToBottomWhileLoading: true,
+      }),
+    );
+    await act(async () => {});
+    const node = document.createElement("div");
+    act(() => result.current.sentinelRef(node));
+
+    fire(records[0], true, node);
+    await act(async () => {});
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 800 });
+    await act(async () => {});
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  it("does not stick without the option (transcript behavior)", async () => {
+    const scrollRef = makeScrollRef();
+    const scroller = scrollRef.current!;
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 600 });
+    scroller.scrollTop = 200;
+    const loadMore = vi.fn(async () => 20);
+    const { result } = renderHook(() =>
+      useLazyLoadSentinel(scrollRef, true, false, false, loadMore, {
+        rearmWhileIntersecting: true,
+      }),
+    );
+    await act(async () => {});
+    const node = document.createElement("div");
+    act(() => result.current.sentinelRef(node));
+
+    fire(records[0], true, node);
+    await act(async () => {});
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 800 });
+    await act(async () => {});
+    expect(scroller.scrollTop).toBe(200);
+  });
+});
+
+describe("useLazyLoadSentinel — re-arm, disarm, and stale completions", () => {
   it("does not re-arm after a positive result when rearmWhileIntersecting is false", async () => {
     const scrollRef = makeScrollRef();
     const loadMore = vi.fn(async () => 20);

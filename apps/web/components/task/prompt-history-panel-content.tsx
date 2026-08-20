@@ -95,6 +95,9 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
       rootMargin: "0px 0px 200px 0px",
       rearmWhileIntersecting: true,
       joinInFlightWhileLoading: true,
+      // Keep loading while the user waits at the bottom: appended rows would
+      // push the sentinel below the viewport and stall the auto-load.
+      stickToBottomWhileLoading: true,
     },
   );
 

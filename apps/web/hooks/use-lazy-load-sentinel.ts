@@ -11,6 +11,13 @@ export type LazyLoadSentinelOptions = {
   /** Fire (and join) even while an older-page request is in flight. Never
    * bypasses `blocked`. Defaults to false. */
   joinInFlightWhileLoading?: boolean;
+  /** After a positive load, if the user is pinned at the bottom of the scroll
+   * container, scroll it back to the new bottom so the re-armed sentinel stays
+   * in view and the next page keeps loading without a scroll-away/scroll-back.
+   * Appended rows otherwise push the sentinel below the viewport while the
+   * user waits at the bottom. Defaults to false (the transcript's scroll-up
+   * list never sticks). */
+  stickToBottomWhileLoading?: boolean;
 };
 
 /**
@@ -52,16 +59,25 @@ export function useLazyLoadSentinel(
     rootMargin = "200px 0px 0px 0px",
     rearmWhileIntersecting = false,
     joinInFlightWhileLoading = false,
+    stickToBottomWhileLoading = false,
   } = options ?? {};
 
   const stateRef = useRef({ hasMore, blocked, isLoadingMore });
   useEffect(() => {
     stateRef.current = { hasMore, blocked, isLoadingMore };
   }, [hasMore, blocked, isLoadingMore]);
-  const optionsRef = useRef({ rearmWhileIntersecting, joinInFlightWhileLoading });
+  const optionsRef = useRef({
+    rearmWhileIntersecting,
+    joinInFlightWhileLoading,
+    stickToBottomWhileLoading,
+  });
   useEffect(() => {
-    optionsRef.current = { rearmWhileIntersecting, joinInFlightWhileLoading };
-  }, [rearmWhileIntersecting, joinInFlightWhileLoading]);
+    optionsRef.current = {
+      rearmWhileIntersecting,
+      joinInFlightWhileLoading,
+      stickToBottomWhileLoading,
+    };
+  }, [rearmWhileIntersecting, joinInFlightWhileLoading, stickToBottomWhileLoading]);
 
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelNodeRef = useRef<HTMLDivElement | null>(null);
@@ -69,6 +85,34 @@ export function useLazyLoadSentinel(
   /** When true, ignore intersections until an observed exit arms the hook. */
   const disarmedRef = useRef(false);
   const intersectingRef = useRef(false);
+  /** Whether the user is pinned at the scroll container's bottom. Updated only
+   * by scroll events (content growth does not fire scroll events), so it stays
+   * true while a load appends rows beneath a user waiting at the bottom. */
+  const pinnedRef = useRef(false);
+  /** How close to the bottom counts as pinned. */
+  const STICK_BOTTOM_TOLERANCE_PX = 24;
+
+  // Track the user's bottom pin via scroll events. Attached per commit (like
+  // the panel's scrollability observer) so it reconnects when the scroller
+  // first appears, but the pin itself is initialized exactly once: content
+  // growth fires neither scroll events nor a re-initialization, so the pin
+  // survives rows being appended beneath the viewport while a load runs.
+  const pinnedInitializedRef = useRef(false);
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const updatePinned = () => {
+      pinnedRef.current =
+        scroller.scrollTop + scroller.clientHeight >=
+        scroller.scrollHeight - STICK_BOTTOM_TOLERANCE_PX;
+    };
+    if (!pinnedInitializedRef.current) {
+      pinnedInitializedRef.current = true;
+      updatePinned();
+    }
+    scroller.addEventListener("scroll", updatePinned, { passive: true });
+    return () => scroller.removeEventListener("scroll", updatePinned);
+  });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -97,6 +141,16 @@ export function useLazyLoadSentinel(
         disarmedRef.current = false;
         if (optionsRef.current.rearmWhileIntersecting) {
           observerRef.current.observe(node);
+        }
+        // Appended rows push the sentinel below the viewport while the user
+        // waits at the bottom, so the re-armed observer never fires. Scroll
+        // back to the new bottom to keep it in view and the next page loading.
+        if (
+          optionsRef.current.stickToBottomWhileLoading &&
+          pinnedRef.current &&
+          scrollRef.current
+        ) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
         return;
       }

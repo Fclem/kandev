@@ -1,7 +1,7 @@
 ---
 spec: ../../specs/ui/prompt-turn-duration.md
 created: 2026-08-20
-status: draft
+status: done
 ---
 
 # Implementation Plan: Prompt Turn Duration on Message Hover
@@ -84,7 +84,11 @@ export function messageTurnDurationSeconds(message: Message, turn: Turn | null):
 
 ## Verification Results
 
-Pending. On completion, synchronize with each task's `## Results`.
+- `cd apps/web && pnpm vitest run lib/prompt-history.test.ts` — passed: 1 file, 39 tests.
+- `cd apps/web && pnpm vitest run components/task/chat/messages/message-actions.test.tsx lib/prompt-history.test.ts` — passed: 2 files, 50 tests.
+- Focused ESLint and `cd apps/web && pnpm run typecheck` — passed.
+- `make fmt && make -C apps/backend build && make -C apps/backend e2e-plugin-package && cd apps/web && pnpm run build:e2e` — passed.
+- Desktop and Pixel 5 mobile duration E2E specs, plus `pnpm run e2e:sleep-ratchet` — passed.
 
 ---
 
@@ -100,7 +104,7 @@ Wave 2:
 - [x] [task-02-message-actions-ui](task-02-message-actions-ui.md)
 
 Wave 3:
-- [ ] [task-03-e2e](task-03-e2e.md)
+- [x] [task-03-e2e](task-03-e2e.md)
 ```
 
 ## Open Questions

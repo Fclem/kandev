@@ -1,7 +1,7 @@
 ---
 id: "03-e2e"
 title: "E2E hover duration spec"
-status: in_progress
+status: done
 wave: 3
 depends_on: ["02-message-actions-ui"]
 plan: "plan.md"
@@ -37,4 +37,9 @@ spec: "../../specs/ui/prompt-turn-duration.md"
 
 ## Results
 
-Pending. Record exact commands run with outcomes, generated artifacts (trace/screenshots on failure), and cleanup evidence.
+- TDD red: `cd apps/web && pnpm e2e:raw tests/task/prompt-turn-duration.spec.ts --project=chromium` failed as expected when the outer `#msg-<id>` hover target did not activate the descendant `.group` state; the three retry traces are in the Playwright test-results directory.
+- Verification: `make fmt`, `make -C apps/backend build`, `make -C apps/backend e2e-plugin-package`, and `cd apps/web && pnpm run build:e2e` passed.
+- Verification: `cd apps/web && pnpm e2e:raw tests/task/prompt-turn-duration.spec.ts --project=chromium` passed: 1 test.
+- Verification: `cd apps/web && pnpm e2e:raw tests/task/mobile-prompt-turn-duration.spec.ts --project=mobile-chrome` passed: 1 test.
+- Verification: `cd apps/web && pnpm run e2e:sleep-ratchet` passed.
+- Generated artifacts: production web bundle, backend binaries, plugin E2E package, and failed retry traces. Build outputs are required E2E artifacts; failed traces are retained for the recorded red run.

@@ -5,10 +5,11 @@ import { placeholderComponents } from "./layout-editor";
 describe("layout editor placeholder components", () => {
   it("renders every reusable panel the Add panel menu offers", () => {
     for (const id of REUSABLE_PANEL_IDS) {
-      const component = PANEL_REGISTRY[id].component;
+      const entry = PANEL_REGISTRY[id];
+      expect(entry, `PANEL_REGISTRY missing entry for reusable panel ${id}`).toBeDefined();
       expect(
-        placeholderComponents[component],
-        `placeholder for reusable panel ${id} (component ${component})`,
+        placeholderComponents[entry?.component],
+        `placeholder for reusable panel ${id} (component ${entry?.component})`,
       ).toBeDefined();
     }
   });

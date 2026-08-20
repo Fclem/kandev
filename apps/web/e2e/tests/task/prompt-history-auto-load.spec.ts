@@ -55,14 +55,14 @@ kandevTest.describe("Prompt history auto-load", () => {
       await expect(panel.getByTestId("prompt-history-number-0")).toHaveText("#121");
       await expect(panel.getByText(SECOND_PROMPT_MARKER)).toHaveCount(0);
 
-      // Scroll the panel to the bottom: the sentinel fires an older-page
-      // request (held), the loading message shows while isLoadingMore is true,
-      // and the marker is still absent.
+      // Baseline the scroll layout BEFORE the sentinel fires: scrollTop below
+      // triggers the held older-page request, and an in-flow loading row would
+      // already have grown scrollHeight by the time the indicator is visible.
+      const scrollHeightBefore = await panel.evaluate((el) => el.scrollHeight);
+      const scrollableBefore = await panel.evaluate((el) => el.scrollHeight > el.clientHeight);
       await panel.evaluate((el) => {
         el.scrollTop = el.scrollHeight;
       });
-      const scrollHeightBefore = await panel.evaluate((el) => el.scrollHeight);
-      const scrollableBefore = await panel.evaluate((el) => el.scrollHeight > el.clientHeight);
       await expect(panel.getByTestId("prompt-history-loading-older")).toBeVisible({
         timeout: 10_000,
       });
@@ -73,6 +73,7 @@ kandevTest.describe("Prompt history auto-load", () => {
       // the last message, where no scroll position exists to jitter.
       if (scrollableBefore) {
         expect(await panel.evaluate((el) => el.scrollHeight)).toBe(scrollHeightBefore);
+        await expect(panel.getByTestId("prompt-history-loading-older")).toHaveClass(/absolute/);
       }
       await expect(panel.getByText(SECOND_PROMPT_MARKER)).toHaveCount(0);
       expect(heldOlderRequests.length).toBeGreaterThanOrEqual(1);

@@ -27,8 +27,11 @@ analysis.
 ## Acceptance
 
 - The rows and the sentinel live in a content wrapper; scrollability is
-  measured from the wrapper alone (`wrapper.scrollHeight > root.clientHeight`,
-  re-measured after every commit), so the indicator can never flip the mode.
+  measured from the wrapper alone against the root's scrollable content box
+  (`wrapper.scrollHeight > root.clientHeight - verticalPadding`, padding read
+  from `getComputedStyle`; re-measured after every commit AND on external root
+  resize via ResizeObserver), so the indicator can never flip the mode and a
+  width-only dockview drag cannot leave the mode stale.
 - When the prompt rows overflow the panel (panel scrolls) and the loading
   message is shown, it renders as a floating overlay pinned to the bottom of
   the panel root: the indicator keeps `data-testid="prompt-history-loading-older"`
@@ -43,9 +46,11 @@ analysis.
 - Flicker: the loading message stays mounted for a 400 ms grace window after a
   page settles, so consecutive auto-loads render one continuous indicator; it
   disappears once a settle is not followed by another load within the window
-  or pagination ends. With zero entries, the loading message shows instead of
-  the neutral `task:loading` text or the empty state. Passthrough sessions
-  remain an unconditional no-controls empty state.
+  or pagination ends. The grace is scoped to the active session: switching
+  sessions within the window hides the indicator for the new session (it has no
+  in-flight load of its own). With zero entries, the loading message shows
+  instead of the neutral `task:loading` text or the empty state. Passthrough
+  sessions remain an unconditional no-controls empty state.
 - Sentinel behavior, pagination, and the shared lazy-load hooks are untouched;
   all existing sentinel/loading unit tests in
   `prompt-history-panel-content.test.tsx` stay green unchanged.

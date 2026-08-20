@@ -1,4 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@kandev/ui/button";
 import {
@@ -60,8 +68,8 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   // indicator's own presence can never flip the answer.
   const isScrollable = usePanelContentScrollable(rootRef, contentRef);
   // Minimum-display grace so consecutive auto-loads show one continuous
-  // indicator instead of a per-page flash.
-  const showLoadingGrace = useLoadingGrace(isLoadingMore);
+  // indicator instead of a per-page flash (scoped to the active session).
+  const showLoadingGrace = useLoadingGrace(sessionId, isLoadingMore);
   // Pagination continues while the server reports older messages and no loaded
   // entry is the session's first prompt (#1). If payloads omit ordinals, the
   // hasMore term alone drives exhaustion.
@@ -259,37 +267,75 @@ function usePanelRowMaxHeight(rootRef: RefObject<HTMLDivElement | null>) {
   return maxHeight;
 }
 
+/** True when `contentHeight` exceeds the root's scrollable (content-box)
+ * height. `rootClientHeight` includes the root's vertical padding, which is
+ * not part of the scrollable viewport, so it is subtracted. */
+export function overflowsPanel(
+  contentHeight: number,
+  rootClientHeight: number,
+  verticalPadding: number,
+): boolean {
+  return contentHeight > rootClientHeight - verticalPadding;
+}
+
 /** True when the prompt rows overflow the panel root, i.e. the panel actually
  * scrolls. Measured from a dedicated content wrapper (rows + sentinel) so the
- * loading indicator's own presence never affects the answer, and re-measured
- * after every commit (pages append, rows expand/collapse, panel resizes). */
+ * loading indicator's own presence never affects the answer. Re-measured after
+ * every commit (pages append, rows expand/collapse) and whenever the panel
+ * root resizes externally (e.g. a dockview width-only drag commits no React
+ * render). */
 function usePanelContentScrollable(
   rootRef: RefObject<HTMLDivElement | null>,
   contentRef: RefObject<HTMLDivElement | null>,
 ): boolean {
   const [isScrollable, setIsScrollable] = useState(false);
-  useLayoutEffect(() => {
+  const measure = useCallback(() => {
     const root = rootRef.current;
     const content = contentRef.current;
-    setIsScrollable(Boolean(root && content && content.scrollHeight > root.clientHeight));
+    if (!root || !content) return false;
+    const style = getComputedStyle(root);
+    const verticalPadding =
+      (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    return overflowsPanel(content.scrollHeight, root.clientHeight, verticalPadding);
+  }, [rootRef, contentRef]);
+  useLayoutEffect(() => {
+    setIsScrollable(measure());
   });
+  // The panel root is mounted in every branch, so observing it once covers
+  // external size changes; content changes are React-driven and re-measured by
+  // the per-commit layout effect above.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const observer = new ResizeObserver(() => setIsScrollable(measure()));
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [rootRef, measure]);
   return isScrollable;
 }
 
 /** Minimum-display grace for the loading message: once a load starts, keep the
  * message mounted for LOADING_GRACE_MS after the request settles so the
  * sentinel's re-arm loop (next page firing right after a positive settle)
- * renders a continuous indicator instead of a per-page flash. */
-function useLoadingGrace(isLoadingMore: boolean): boolean {
+ * renders a continuous indicator instead of a per-page flash. Scoped to the
+ * active session: switching sessions cancels the previous session's grace so
+ * the new session never shows the indicator without its own in-flight load. */
+function useLoadingGrace(sessionId: string | null, isLoadingMore: boolean): boolean {
   const [showGrace, setShowGrace] = useState(false);
+  const sessionRef = useRef(sessionId);
   useEffect(() => {
+    if (sessionRef.current !== sessionId) {
+      sessionRef.current = sessionId;
+      setShowGrace(false);
+      return;
+    }
     if (isLoadingMore) {
       setShowGrace(true);
       return;
     }
     const timer = window.setTimeout(() => setShowGrace(false), LOADING_GRACE_MS);
     return () => window.clearTimeout(timer);
-  }, [isLoadingMore]);
+  }, [sessionId, isLoadingMore]);
   return showGrace;
 }
 

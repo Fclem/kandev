@@ -51,7 +51,7 @@ vi.mock("@/hooks/domains/session/use-session-turns", () => ({
   }),
 }));
 
-import { PromptHistoryPanelContent } from "./prompt-history-panel-content";
+import { PromptHistoryPanelContent, overflowsPanel } from "./prompt-history-panel-content";
 import { useMessageFavoritesStore } from "@/lib/state/slices/message-favorites";
 import { formatDateTime } from "@/lib/i18n/formats";
 
@@ -859,6 +859,27 @@ describe("PromptHistoryPanelContent — loading message placement and continuity
     expect(screen.getByTestId(SENTINEL_TEST_ID).previousElementSibling).not.toBe(loading);
   });
 
+  it("re-measures scrollability on an external panel-root resize without a render", () => {
+    pagination.hasMore = true;
+    messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
+    const { rerender } = render(<PromptHistoryPanelContent />);
+    const panel = screen.getByTestId(PANEL_TEST_ID);
+    const content = panel.firstElementChild as HTMLElement;
+
+    pagination.isLoadingMore = true;
+    rerender(<PromptHistoryPanelContent />);
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID).className).not.toContain("absolute");
+
+    // A dockview width-only drag changes the panel size without committing a
+    // React render; the root ResizeObserver must re-measure and flip the mode.
+    setGeometry(content, { scrollHeight: 600 });
+    setGeometry(panel, { clientHeight: 400 });
+    fireResize(panel);
+
+    expect(panel.className).toContain("relative");
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID).className).toContain("absolute");
+  });
+
   it("keeps the loading message mounted across consecutive loads so it does not flicker", () => {
     vi.useFakeTimers();
     pagination.hasMore = true;
@@ -889,6 +910,41 @@ describe("PromptHistoryPanelContent — loading message placement and continuity
     act(() => vi.advanceTimersByTime(400));
     expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
     vi.useRealTimers();
+  });
+
+  it("resets the loading grace when the active session switches", () => {
+    vi.useFakeTimers();
+    pagination.hasMore = true;
+    messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
+    messagesBySession[SESSION_B] = [message({ id: "b1", prompt_index: 5, content: "prompt" })];
+    const { rerender } = render(<PromptHistoryPanelContent />);
+
+    // Session A loads and settles: its grace keeps the indicator mounted.
+    pagination.isLoadingMore = true;
+    rerender(<PromptHistoryPanelContent />);
+    pagination.isLoadingMore = false;
+    rerender(<PromptHistoryPanelContent />);
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID)).toBeTruthy();
+
+    // Switching to session B (paginatable but NOT loading) within the grace
+    // window must hide the indicator: B has no in-flight load of its own.
+    state.tasks.activeSessionId = SESSION_B;
+    rerender(<PromptHistoryPanelContent />);
+    expect(screen.queryByTestId(LOADING_OLDER_TEST_ID)).toBeNull();
+    vi.useRealTimers();
+  });
+});
+
+describe("overflowsPanel — padding-aware overflow boundary", () => {
+  it("compares content height against the root's scrollable content box", () => {
+    // A p-2 root (8px top + 8px bottom) leaves clientHeight - 16 as the
+    // scrollable viewport; 390px of content in a 400px panel really scrolls.
+    expect(overflowsPanel(390, 400, 16)).toBe(true);
+    expect(overflowsPanel(384, 400, 16)).toBe(false);
+    // No padding: the boundary is the client height itself.
+    expect(overflowsPanel(400, 400, 0)).toBe(false);
+    expect(overflowsPanel(401, 400, 0)).toBe(true);
   });
 });
 

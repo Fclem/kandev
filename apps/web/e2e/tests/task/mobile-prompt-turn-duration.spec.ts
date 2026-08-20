@@ -54,17 +54,16 @@ test.describe("Prompt turn duration on mobile", () => {
     await expect(duration).toBeVisible();
     await expect(actions).toHaveCSS("opacity", "1");
     await expect(duration).toHaveCSS("white-space", "nowrap");
-    const contained = await actions.evaluate(
-      (action, durationElement) => {
-        const durationRect = (durationElement as HTMLElement).getBoundingClientRect();
-        const actionRect = (action as HTMLElement).getBoundingClientRect();
-        return {
-          fits: (action as HTMLElement).scrollWidth <= (action as HTMLElement).clientWidth,
-          contained: durationRect.left >= actionRect.left && durationRect.right <= actionRect.right,
-        };
-      },
-      await duration.elementHandle(),
+    const durationBox = await duration.boundingBox();
+    const actionsBox = await actions.boundingBox();
+    const fits = await actions.evaluate(
+      (action) => (action as HTMLElement).scrollWidth <= (action as HTMLElement).clientWidth,
     );
-    expect(contained).toEqual({ fits: true, contained: true });
+    const contained =
+      !!durationBox &&
+      !!actionsBox &&
+      durationBox.x >= actionsBox.x &&
+      durationBox.x + durationBox.width <= actionsBox.x + actionsBox.width;
+    expect({ fits, contained }).toEqual({ fits: true, contained: true });
   });
 });

@@ -1,7 +1,7 @@
 ---
 id: "05-ui-pill-panel"
 title: "chat-top-bar pill and hover/tap panel"
-status: pending
+status: done
 wave: 3
 depends_on: ["04-backend-action-poller"]
 plan: "plan.md"
@@ -111,3 +111,63 @@ boundary that the backend always answers 200 with body-encoded errors;
   If `host.i18n.t` is used anyway, an `en` catalog must be registered via
   `registry.registerTranslations` first: without a registered catalog `t()`
   falls back to the raw key (`host-api.ts` `defaultValue: options?.defaultValue ?? key`).
+
+## Results
+
+Completed 2026-08-20 (plugin repo commit `ed3ddbc`).
+
+TDD: `test/bundle.test.mjs` (22 tests) written against `ui/bundle.js` (red:
+bundle was still the template demo), then the bundle rewritten (green). Host
+contracts verified against the monorepo at implementation time:
+`PluginActionInput` (`apps/packages/plugin-sdk/src/index.ts`) = `{ workspaceId?,
+taskId?, sessionId?, repositoryId?, body?: unknown }` — the forced-refresh flag
+travels in `body`; `chat-top-bar` slotProps `{ taskId, taskTitle, workspaceId,
+activeSessionId, sessionIds }` (PLUGIN-API.md).
+
+Implementation notes:
+
+- Registers exactly `chat-top-bar`; null/empty `workspaceId` renders nothing
+  and issues no `invokeAction`.
+- Pill: `Ds` monogram chip on brand-hue (`#4D6BFE`) rounded square + primary
+  total via `Intl.NumberFormat` (`narrowSymbol`: ¥/$; compact notation above
+  1e6). Colors: calm indigo `#8085e6`, amber `#e0a95e` below server-sent
+  `warn_below`, muted coral `#d97b6c` when `is_available` false (coral wins).
+  Neutral loading (pulsing) vs unavailable (static) distinction via
+  `data-deepseek-state` + injected keyframes. Icon-only (no Intl call, no
+  RangeError) for empty `balance_infos`, colored by `is_available`.
+- Panel: `position: fixed` below the trigger (`usagePopoverPosition` copied
+  from provider-usage), padding-bridge + 260 ms close timer, click/tap toggles
+  (nothing hover-only); total/granted/topped-up, every currency entry,
+  unavailable status LEADS when `is_available` false, `Updated …` via
+  `host.utils.formatRelativeTime`, Refresh control, unconfigured guidance
+  (Settings path + `DEEPSEEK_API_KEY`), loading text, error reason + settings
+  path. Phone sizing 44 px via `@media (max-width:639px)`.
+- Data: 60 s silent re-read with `{ workspaceId }` (no body); Refresh sends
+  `{ workspaceId, body: { refresh: true } }`; a rejected `invokeAction` is
+  transient (last render kept, next interval retries); `destroy` clears the
+  interval and removes injected styles.
+- Hardcoded English copy per the reference convention (plugin repos are not
+  covered by the monorepo i18n ratchet).
+
+Exact verification (plugin worktree):
+
+```sh
+node --check ui/bundle.js          # ok
+node --test test/bundle.test.mjs   # 22/22 pass
+make test-backend                  # ok — go test ./server/...
+make vet                           # ok
+gofmt -l .                         # no output
+make test                          # ok — backend + bundle
+```
+
+Case coverage: exactly one slot (`chat-top-bar`); desktop/phone style
+geometry; pill balance formatting; amber below warn_below; coral when
+unavailable; coral-wins-over-amber; neutral loading before the first snapshot;
+unconfigured guidance; loading panel text; error-no-snapshot neutral pill +
+reason; error keeps last-known render; panel breakdown/status/last-updated;
+multi-currency (pill first entry, panel every entry); EMPTY balance_infos
+icon-only; hover open + mouseleave close timer + padding-bridge cancel; click
+toggle; null/empty workspaceId no-render no-fetch; invokeAction arg shape
+(silent no-body, Refresh body, open-load plain); transient rejection keeps
+render and retries; destroy cleanup; formatBalance (¥/$/compact); popover
+position + clamping.

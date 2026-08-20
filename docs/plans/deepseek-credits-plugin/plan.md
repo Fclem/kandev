@@ -152,7 +152,7 @@ Wave 2:
 - [x] [task 04 — balance.get action and poller](task-04-backend-action-poller.md)
 
 Wave 3:
-- [ ] [task 05 — chat-top-bar pill and panel](task-05-ui-pill-panel.md)
+- [x] [task 05 — chat-top-bar pill and panel](task-05-ui-pill-panel.md)
 
 Wave 4:
 - [ ] [task 06 — manifest, config, package](task-06-manifest-config-package.md)

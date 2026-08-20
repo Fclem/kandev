@@ -26,23 +26,28 @@ analysis.
 
 ## Acceptance
 
+- The panel root is a positioned outer wrapper (`relative overflow-hidden`);
+  the scrollable content lives in a distinct inner scroller
+  (`data-testid="prompt-history-scroll"`, `h-full min-h-0 overflow-y-auto
+  p-2`). The floating message anchors to the outer wrapper, so it never
+  scrolls with the content (an absolutely positioned child of a scroll
+  container moves with its content).
 - The rows and the sentinel live in a content wrapper; scrollability is
-  measured from the wrapper alone against the root's scrollable content box
-  (`wrapper.scrollHeight > root.clientHeight - verticalPadding`, padding read
-  from `getComputedStyle`; re-measured after every commit AND on external root
-  resize via ResizeObserver), so the indicator can never flip the mode and a
-  width-only dockview drag cannot leave the mode stale.
+  measured from the wrapper alone against the scroller's content box
+  (`wrapper.scrollHeight > scroller.clientHeight - verticalPadding`, padding
+  read from `getComputedStyle`; re-measured after every commit AND on external
+  resize via a per-commit scroller ResizeObserver), so the indicator can never
+  flip the mode and a width-only dockview drag cannot leave the mode stale.
 - When the prompt rows overflow the panel (panel scrolls) and the loading
   message is shown, it renders as a floating overlay pinned to the bottom of
-  the panel root: the indicator keeps `data-testid="prompt-history-loading-older"`
+  the panel viewport: the indicator keeps `data-testid="prompt-history-loading-older"`
   and the `task:loadingOlderMessages` copy, is absolutely positioned within the
-  panel root (`absolute`, not in flow), is `pointer-events-none`, and sits
-  above the rows (`z-10`); the panel root is the positioned containing block
-  (`relative`).
+  outer wrapper (`absolute`, not in flow), is `pointer-events-none`, and sits
+  above the rows (`z-10`).
 - When the rows fit (panel does not scroll) and in the zero-entries branch
-  (which can never scroll), the loading message is an in-flow row directly
-  under the last message (after the sentinel), and the panel root is not a
-  containing block.
+  (which can never scroll), the loading message is an in-flow row inside the
+  scroller directly under the last message (after the sentinel), never
+  floating.
 - Flicker: the loading message stays mounted for a 400 ms grace window after a
   page settles, so consecutive auto-loads render one continuous indicator; it
   disappears once a settle is not followed by another load within the window

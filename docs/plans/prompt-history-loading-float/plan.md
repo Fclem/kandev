@@ -44,19 +44,27 @@ position, which is the visible flicker.
 
 ## Fix
 
+- The panel root is a positioned outer wrapper (`relative overflow-hidden`)
+  whose scrollable content lives in a distinct inner scroller (`h-full
+  min-h-0 overflow-y-auto p-2`). This is REQUIRED for the floating placement:
+  an absolutely positioned child of a scroll container anchors to the scrolled
+  content and moves with it, so the floating message must anchor to the outer
+  wrapper (the panel viewport) as a sibling of the scroller.
 - Wrap the rows and the sentinel in a content wrapper and measure scrollability
-  from the wrapper alone (`wrapper.scrollHeight > root.clientHeight`,
-  re-measured after every commit via `useLayoutEffect`): the loading
-  indicator's own presence can never flip the answer, so the mode cannot
-  oscillate. The sentinel stays the final in-flow child of the wrapper, giving
-  it a stable geometry in both modes.
-- Scrollable panel: `PanelRoot` gains `relative` (the positioned containing
-  block) and the indicator is an absolutely positioned, `pointer-events-none`
-  centered chip at the panel bottom (`absolute inset-x-0 bottom-2 z-10 flex
-  justify-center`), out of the content flow.
+  from the wrapper alone against the scroller's content box
+  (`wrapper.scrollHeight > scroller.clientHeight - verticalPadding`,
+  re-measured after every commit via `useLayoutEffect`, plus a per-commit
+  `ResizeObserver` on the scroller that also attaches when the scroller first
+  appears): the loading indicator's own presence can never flip the answer, so
+  the mode cannot oscillate. The sentinel stays the final in-flow child of the
+  wrapper, giving it a stable geometry in both modes.
+- Scrollable panel: the indicator is an absolutely positioned,
+  `pointer-events-none` centered chip at the panel bottom (`absolute inset-x-0
+  bottom-2 z-10 flex justify-center`) anchored to the outer wrapper, out of the
+  content flow and fixed to the panel viewport regardless of scroll position.
 - Short panel (and the zero-entries branch, which can never scroll): the
-  indicator is a plain in-flow row after the sentinel, directly under the last
-  message.
+  indicator is a plain in-flow row inside the scroller after the sentinel,
+  directly under the last message.
 - Flicker: a `LOADING_GRACE_MS` (400 ms) minimum-display window keeps the
   indicator mounted after each page settles, so the sentinel's re-arm loop
   (next page firing right after a positive settle) renders one continuous

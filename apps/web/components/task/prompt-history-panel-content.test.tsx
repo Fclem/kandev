@@ -76,6 +76,7 @@ const BUBBLE_SELECTOR = ".rounded-2xl";
 const LONG_PROMPT_TEXT = "long prompt text";
 const SENTINEL_TEST_ID = "prompt-history-sentinel";
 const LOADING_OLDER_TEST_ID = "prompt-history-loading-older";
+const SCROLL_TEST_ID = "prompt-history-scroll";
 const EMPTY_TEXT = "No prompts yet.";
 
 type ObserverEntry = { element: Element; callback: ResizeObserverCallback };
@@ -791,11 +792,12 @@ describe("PromptHistoryPanelContent — auto-load sentinel", () => {
     await act(async () => {});
     expect(pagination.loadMore).toHaveBeenCalledTimes(2);
 
-    // Wheel/touch retry path while disarmed and intersecting.
+    // Wheel/touch retry path while disarmed and intersecting. The gesture
+    // handlers live on the panel's inner scroller.
     pagination.loadMore.mockClear();
     fireIntersection(true);
     await act(async () => {});
-    fireEvent.wheel(screen.getByTestId(PANEL_TEST_ID));
+    fireEvent.wheel(screen.getByTestId(SCROLL_TEST_ID));
     await act(async () => {});
     expect(pagination.loadMore).toHaveBeenCalledTimes(1);
   });
@@ -834,63 +836,71 @@ describe("PromptHistoryPanelContent — loading message placement", () => {
     messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
     const { rerender } = render(<PromptHistoryPanelContent />);
     const panel = screen.getByTestId(PANEL_TEST_ID);
-    // The content wrapper is the panel's first child; scrollability is
-    // measured from it against the panel root's client height.
-    const content = panel.firstElementChild as HTMLElement;
+    // The scroller is the panel's first child; the content wrapper (rows +
+    // sentinel) is the scroller's first child. Scrollability is measured from
+    // the wrapper against the scroller's content box.
+    const scroller = panel.firstElementChild as HTMLElement;
+    const content = scroller.firstElementChild as HTMLElement;
+    expect(scroller.getAttribute("data-testid")).toBe(SCROLL_TEST_ID);
 
     pagination.isLoadingMore = true;
     rerender(<PromptHistoryPanelContent />);
     let loading = screen.getByTestId(LOADING_OLDER_TEST_ID);
 
     // Default metrics (0/0): content does not overflow, so the message is
-    // in-flow under the last message and the panel root is no containing
-    // block.
-    expect(panel.className).not.toContain("relative");
+    // in-flow inside the scroller, directly under the last message.
     expect(loading.className).not.toContain("absolute");
     expect(loading.className).toContain("py-2");
-    expect(loading.parentElement).toBe(panel);
-    // The sentinel stays the final in-flow child; the indicator is never its
-    // preceding sibling, so it cannot shift sentinel geometry.
+    expect(loading.parentElement).toBe(scroller);
+    // The sentinel stays the final in-flow child of the content wrapper; the
+    // indicator is never its preceding sibling, so it cannot shift sentinel
+    // geometry.
     expect(screen.getByTestId(SENTINEL_TEST_ID).previousElementSibling).not.toBe(loading);
 
-    // Content overflows the panel (it scrolls): the message floats at the
-    // panel bottom, out of the content flow.
+    // Content overflows the scroller (the panel scrolls): the message floats
+    // at the panel bottom, anchored to the panel viewport (the outer relative
+    // root, NOT the scroller - an absolute child of the scroller would scroll
+    // with the content).
     setGeometry(content, { scrollHeight: 600 });
-    setGeometry(panel, { clientHeight: 400 });
+    setGeometry(scroller, { clientHeight: 400 });
     rerender(<PromptHistoryPanelContent />);
     loading = screen.getByTestId(LOADING_OLDER_TEST_ID);
-    expect(panel.className).toContain("relative");
     expect(loading.className).toContain("absolute");
     expect(loading.className).toContain("pointer-events-none");
     expect(loading.className).toContain("z-10");
     expect(loading.parentElement).toBe(panel);
+    expect(panel.className).toContain("relative");
     expect(screen.getByTestId(SENTINEL_TEST_ID).previousElementSibling).not.toBe(loading);
   });
 
-  it("re-measures scrollability on an external panel-root resize without a render", () => {
+  it("re-measures scrollability on an external scroller resize without a render", () => {
     pagination.hasMore = true;
     messagesBySession[SESSION_A] = [message({ id: "m1", prompt_index: 2, content: "prompt" })];
     const { rerender } = render(<PromptHistoryPanelContent />);
     const panel = screen.getByTestId(PANEL_TEST_ID);
-    const content = panel.firstElementChild as HTMLElement;
+    const scroller = panel.firstElementChild as HTMLElement;
+    const content = scroller.firstElementChild as HTMLElement;
 
     pagination.isLoadingMore = true;
     rerender(<PromptHistoryPanelContent />);
     expect(screen.getByTestId(LOADING_OLDER_TEST_ID).className).not.toContain("absolute");
 
     // A dockview width-only drag changes the panel size without committing a
-    // React render; the root ResizeObserver must re-measure and flip the mode.
+    // React render; the scroller ResizeObserver must re-measure and flip the
+    // mode.
     setGeometry(content, { scrollHeight: 600 });
-    setGeometry(panel, { clientHeight: 400 });
-    fireResize(panel);
+    setGeometry(scroller, { clientHeight: 400 });
+    fireResize(scroller);
 
     expect(panel.className).toContain("relative");
     expect(screen.getByTestId(LOADING_OLDER_TEST_ID).className).toContain("absolute");
   });
 
   it("disconnects its ResizeObservers on unmount", () => {
+    // Render the rows branch so the scroller (and its observer) exists.
+    messagesBySession[SESSION_A] = [message({ id: "m1", content: "prompt" })];
     const { unmount } = render(<PromptHistoryPanelContent />);
-    // Row max-height observer + scrollability observer.
+    // Row max-height observer + scrollability observer (recreated per commit).
     expect(resizeObserverInstances.length).toBeGreaterThanOrEqual(2);
     unmount();
     expect(resizeObserverInstances.every((instance) => instance.disconnected)).toBe(true);
@@ -1044,10 +1054,12 @@ describe("PromptHistoryPanelContent — auto-load loading states", () => {
 
     expect(screen.getByTestId(PANEL_TEST_ID).textContent).toBe("Loading older messages...");
     expect(screen.getByTestId(SENTINEL_TEST_ID)).toBeTruthy();
-    // An empty panel has nothing to scroll: the message is in-flow under the
-    // (empty) list, never floating.
-    expect(screen.getByTestId(PANEL_TEST_ID).className).not.toContain("relative");
+    // An empty panel has nothing to scroll: the message is in-flow inside the
+    // scroller under the (empty) list, never floating.
     expect(screen.getByTestId(LOADING_OLDER_TEST_ID).className).not.toContain("absolute");
+    expect(screen.getByTestId(LOADING_OLDER_TEST_ID).parentElement).toBe(
+      screen.getByTestId(SCROLL_TEST_ID),
+    );
   });
 
   it("renders the definitive empty state only when entries are empty, hasMore is false, and loading ended", () => {
@@ -1080,8 +1092,9 @@ describe("PromptHistoryPanelContent — auto-load loading states", () => {
     await act(async () => {});
     expect(pagination.loadMore).toHaveBeenCalledTimes(1);
 
-    // Disarmed and still intersecting: a wheel gesture retries.
-    fireEvent.wheel(screen.getByTestId(PANEL_TEST_ID));
+    // Disarmed and still intersecting: a wheel gesture on the scroller
+    // retries.
+    fireEvent.wheel(screen.getByTestId(SCROLL_TEST_ID));
     await act(async () => {});
     expect(pagination.loadMore).toHaveBeenCalledTimes(2);
   });

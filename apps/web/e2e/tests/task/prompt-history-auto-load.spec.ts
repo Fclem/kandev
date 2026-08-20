@@ -58,13 +58,14 @@ kandevTest.describe("Prompt history auto-load", () => {
       // Baseline the scroll layout BEFORE the sentinel fires: scrollTop below
       // triggers the held older-page request, and an in-flow loading row would
       // already have grown scrollHeight by the time the indicator is visible.
-      const scrollHeightBefore = await panel.evaluate((el) => el.scrollHeight);
-      const scrollableBefore = await panel.evaluate((el) => el.scrollHeight > el.clientHeight);
+      const scroller = panel.getByTestId("prompt-history-scroll");
+      const scrollHeightBefore = await scroller.evaluate((el) => el.scrollHeight);
+      const scrollableBefore = await scroller.evaluate((el) => el.scrollHeight > el.clientHeight);
       // The seeded history (100 initial rows in a 900x900 viewport) must
       // overflow the panel; otherwise the floating assertions below would
       // silently skip instead of proving the no-reflow contract.
       expect(scrollableBefore).toBe(true);
-      await panel.evaluate((el) => {
+      await scroller.evaluate((el) => {
         el.scrollTop = el.scrollHeight;
       });
       await expect(panel.getByTestId("prompt-history-loading-older")).toBeVisible({
@@ -74,7 +75,7 @@ kandevTest.describe("Prompt history auto-load", () => {
       // bottom, out of the content flow: its presence must not change the
       // scrollable height (the flicker regression - an in-flow row would grow
       // scrollHeight).
-      expect(await panel.evaluate((el) => el.scrollHeight)).toBe(scrollHeightBefore);
+      expect(await scroller.evaluate((el) => el.scrollHeight)).toBe(scrollHeightBefore);
       await expect(panel.getByTestId("prompt-history-loading-older")).toHaveClass(/absolute/);
       await expect(panel.getByText(SECOND_PROMPT_MARKER)).toHaveCount(0);
       expect(heldOlderRequests.length).toBeGreaterThanOrEqual(1);

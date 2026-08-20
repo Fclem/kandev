@@ -35,6 +35,7 @@ type PromptHistoryPanelContentProps = { onNavigateToPrompt?: (messageId: string)
 
 const SENTINEL_TEST_ID = "prompt-history-sentinel";
 const LOADING_OLDER_TEST_ID = "prompt-history-loading-older";
+const SCROLL_TEST_ID = "prompt-history-scroll";
 /** Minimum-display window for the loading message: after a page settles, keep
  * the message mounted for this long so the sentinel's re-arm loop (next page
  * firing right after a positive settle) renders a continuous indicator instead
@@ -47,6 +48,7 @@ const LOADING_GRACE_MS = 400;
  * with no load-more button. Passthrough sessions are an unconditional
  * empty-state with NO controls (rows, arrows, sentinel, loading indicators):
  * the transcript the arrow would jump to does not exist. */
+// eslint-disable-next-line max-lines-per-function -- composition root wiring every panel hook (messages, pagination, sentinel, grace, scrollability) plus the passthrough/empty/rows branches; splitting would fragment the branch invariants
 export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryPanelContentProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -63,10 +65,12 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const [expanded, setExpanded] = useState<string | null>(null);
   const maxHeight = usePanelRowMaxHeight(rootRef);
   const contentRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   // Floating only when the prompt rows actually overflow the panel (the panel
-  // scrolls); measured from a dedicated content wrapper so the loading
-  // indicator's own presence can never flip the answer.
-  const isScrollable = usePanelContentScrollable(rootRef, contentRef);
+  // scrolls); measured from the dedicated content wrapper against the inner
+  // scroller's content box, so the loading indicator's own presence can never
+  // flip the answer.
+  const isScrollable = usePanelContentScrollable(scrollRef, contentRef);
   // Minimum-display grace so consecutive auto-loads show one continuous
   // indicator instead of a per-page flash (scoped to the active session).
   const showLoadingGrace = useLoadingGrace(sessionId, isLoadingMore);
@@ -76,7 +80,7 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   const shouldPaginate = hasMore && !entries.some((entry) => entry.promptNumber === 1);
   const showLoading = shouldPaginate && (isLoadingMore || showLoadingGrace);
   const { sentinelRef, onUserGesture } = useLazyLoadSentinel(
-    rootRef,
+    scrollRef,
     shouldPaginate,
     messagesLoading,
     isLoadingMore,
@@ -106,7 +110,8 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
   if (entries.length === 0) {
     // Keep PanelRoot as the stable top-level element in every branch so the
     // root element (and its ResizeObserver) survives the empty→rows
-    // transition; only the inner content and wrapper classes vary.
+    // transition; the scroller structure matches the rows branch (an empty
+    // panel never scrolls, so the loading message stays in-flow).
     const spec = emptyEntriesSpec({
       showLoading,
       messagesLoading,
@@ -120,11 +125,15 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
       <PanelRoot
         ref={rootRef}
         data-testid="prompt-history-panel"
-        className={spec.wrapperClass}
-        onWheel={spec.interactive ? onUserGesture : undefined}
-        onTouchMove={spec.interactive ? onUserGesture : undefined}
+        className="relative overflow-hidden"
       >
-        {spec.content}
+        <PromptHistoryScroller
+          scrollRef={scrollRef}
+          interactive={spec.interactive}
+          onUserGesture={onUserGesture}
+        >
+          {spec.content}
+        </PromptHistoryScroller>
       </PanelRoot>
     );
   }
@@ -133,35 +142,73 @@ export function PromptHistoryPanelContent({ onNavigateToPrompt }: PromptHistoryP
     <PanelRoot
       ref={rootRef}
       data-testid="prompt-history-panel"
-      className={cn("overflow-y-auto p-2", isScrollable && "relative")}
-      onWheel={shouldPaginate ? onUserGesture : undefined}
-      onTouchMove={shouldPaginate ? onUserGesture : undefined}
+      className="relative overflow-hidden"
     >
-      {/* Content wrapper: the sentinel stays the final in-flow child with a
-       * stable geometry, and scrollability is measured from this wrapper alone
-       * so the loading indicator can never reflow the rows or shift the
-       * sentinel. */}
-      <div ref={contentRef} className="shrink-0">
-        {entries.map((entry, index) => (
-          <PromptHistoryRow
-            key={entry.messageId}
-            sessionId={sessionId}
-            entry={entry}
-            index={index}
-            expanded={expanded === entry.messageId}
-            maxHeight={maxHeight}
-            onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
-            onNavigate={onNavigateToPrompt}
-          />
-        ))}
-        {shouldPaginate && (
-          <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
+      {/* The scroller is a distinct inner element so the floating loading
+       * message can anchor to the panel viewport (the outer relative root)
+       * instead of the scrolled content: an absolutely positioned child of a
+       * scroll container moves with its content. The sentinel stays the final
+       * in-flow child of the content wrapper with a stable geometry, and
+       * scrollability is measured from that wrapper alone against this
+       * scroller's content box. */}
+      <PromptHistoryScroller
+        scrollRef={scrollRef}
+        interactive={shouldPaginate}
+        onUserGesture={onUserGesture}
+      >
+        <div ref={contentRef} className="shrink-0">
+          {entries.map((entry, index) => (
+            <PromptHistoryRow
+              key={entry.messageId}
+              sessionId={sessionId}
+              entry={entry}
+              index={index}
+              expanded={expanded === entry.messageId}
+              maxHeight={maxHeight}
+              onToggle={() => setExpanded(expanded === entry.messageId ? null : entry.messageId)}
+              onNavigate={onNavigateToPrompt}
+            />
+          ))}
+          {shouldPaginate && (
+            <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />
+          )}
+        </div>
+        {showLoading && !isScrollable && (
+          <LoadingMoreMessage floating={false} text={t("task:loadingOlderMessages")} />
         )}
-      </div>
-      {showLoading && (
-        <LoadingMoreMessage floating={isScrollable} text={t("task:loadingOlderMessages")} />
+      </PromptHistoryScroller>
+      {showLoading && isScrollable && (
+        <LoadingMoreMessage floating text={t("task:loadingOlderMessages")} />
       )}
     </PanelRoot>
+  );
+}
+
+/** The panel's inner scroll container. It is a distinct element from the
+ * positioned outer root so the floating loading message can anchor to the
+ * panel viewport instead of the scrolled content (an absolutely positioned
+ * child of a scroll container moves with its content). */
+function PromptHistoryScroller({
+  scrollRef,
+  interactive,
+  onUserGesture,
+  children,
+}: {
+  scrollRef: RefObject<HTMLDivElement | null>;
+  interactive: boolean;
+  onUserGesture: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      ref={scrollRef}
+      data-testid={SCROLL_TEST_ID}
+      className="h-full min-h-0 overflow-y-auto p-2"
+      onWheel={interactive ? onUserGesture : undefined}
+      onTouchMove={interactive ? onUserGesture : undefined}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -210,7 +257,7 @@ function emptyEntriesSpec({
   emptyText: string;
   loadingText: string;
   loadingOlderText: string;
-}): { content: React.ReactNode; wrapperClass: string; interactive: boolean } {
+}): { content: React.ReactNode; interactive: boolean } {
   if (showLoading) {
     // No entries means the panel has nothing to scroll: the loading message
     // sits in the content flow under the (empty) list, never floating.
@@ -221,14 +268,12 @@ function emptyEntriesSpec({
           <LoadingMoreMessage floating={false} text={loadingOlderText} />
         </>
       ),
-      wrapperClass: "overflow-y-auto p-2",
       interactive: true,
     };
   }
   if (messagesLoading) {
     return {
-      content: loadingText,
-      wrapperClass: "p-4 text-sm text-muted-foreground",
+      content: <div className="p-4 text-sm text-muted-foreground">{loadingText}</div>,
       interactive: false,
     };
   }
@@ -238,13 +283,11 @@ function emptyEntriesSpec({
     // declaring the session empty.
     return {
       content: <div ref={sentinelRef} data-testid={SENTINEL_TEST_ID} aria-hidden="true" />,
-      wrapperClass: "overflow-y-auto p-2",
       interactive: true,
     };
   }
   return {
-    content: emptyText,
-    wrapperClass: "p-4 text-sm text-muted-foreground",
+    content: <div className="p-4 text-sm text-muted-foreground">{emptyText}</div>,
     interactive: false,
   };
 }
@@ -278,39 +321,36 @@ export function overflowsPanel(
   return contentHeight > rootClientHeight - verticalPadding;
 }
 
-/** True when the prompt rows overflow the panel root, i.e. the panel actually
- * scrolls. Measured from a dedicated content wrapper (rows + sentinel) so the
- * loading indicator's own presence never affects the answer. Re-measured after
- * every commit (pages append, rows expand/collapse) and whenever the panel
- * root resizes externally (e.g. a dockview width-only drag commits no React
- * render). */
+/** True when the prompt rows overflow the scroller, i.e. the panel actually
+ * scrolls. Measured from a dedicated content wrapper (rows + sentinel) against
+ * the inner scroller's content box so the loading indicator's own presence
+ * never affects the answer. Re-measured after every commit (pages append, rows
+ * expand/collapse) and whenever the scroller resizes externally (e.g. a
+ * dockview width-only drag commits no React render). The observer is recreated
+ * per commit so it also attaches when the scroller first appears (the
+ * passthrough and empty branches do not render it). */
 function usePanelContentScrollable(
-  rootRef: RefObject<HTMLDivElement | null>,
+  scrollRef: RefObject<HTMLDivElement | null>,
   contentRef: RefObject<HTMLDivElement | null>,
 ): boolean {
   const [isScrollable, setIsScrollable] = useState(false);
   const measure = useCallback(() => {
-    const root = rootRef.current;
+    const scroller = scrollRef.current;
     const content = contentRef.current;
-    if (!root || !content) return false;
-    const style = getComputedStyle(root);
+    if (!scroller || !content) return false;
+    const style = getComputedStyle(scroller);
     const verticalPadding =
       (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
-    return overflowsPanel(content.scrollHeight, root.clientHeight, verticalPadding);
-  }, [rootRef, contentRef]);
+    return overflowsPanel(content.scrollHeight, scroller.clientHeight, verticalPadding);
+  }, [scrollRef, contentRef]);
   useLayoutEffect(() => {
     setIsScrollable(measure());
-  });
-  // The panel root is mounted in every branch, so observing it once covers
-  // external size changes; content changes are React-driven and re-measured by
-  // the per-commit layout effect above.
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
+    const scroller = scrollRef.current;
+    if (!scroller) return;
     const observer = new ResizeObserver(() => setIsScrollable(measure()));
-    observer.observe(root);
+    observer.observe(scroller);
     return () => observer.disconnect();
-  }, [rootRef, measure]);
+  });
   return isScrollable;
 }
 

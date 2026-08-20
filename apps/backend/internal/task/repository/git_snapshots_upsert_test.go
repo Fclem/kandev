@@ -346,6 +346,87 @@ func TestGetLatestGitSnapshot_PrefersArchiveOverAgentCompleted(t *testing.T) {
 	})
 }
 
+// TestGetLatestGitSnapshot_UnarchivedBeforeResumeKeepsArchive guards the
+// unarchive-before-resume window: httpUnarchiveTask / UnarchiveTaskTree only
+// clear archived_at and restore branches/workspaces — no snapshot is written
+// until the session is resumed and the agent completes another turn. During
+// that window the terminal archive row must remain authoritative; demoting it
+// below an older agent_completed row would make a reload or task-list fallback
+// show pre-archive files and diff counts. The archive row loses rank-0 only
+// once a non-archive snapshot newer than it exists. Codex review P1 on PR
+// #2851.
+func TestGetLatestGitSnapshot_UnarchivedBeforeResumeKeepsArchive(t *testing.T) {
+	ctx := context.Background()
+	repo, cleanup := createTestSQLiteRepo(t)
+	defer cleanup()
+
+	const taskID = "task-unarchive-pending"
+	const sessionID = "session-unarchive-pending"
+	seedTaskAndSession(t, ctx, repo, taskID, sessionID)
+
+	// Older agent_completed row from a turn before the archive.
+	completed := &models.GitSnapshot{
+		SessionID:   sessionID,
+		Branch:      "feature",
+		HeadCommit:  "completed-before-archive",
+		TriggeredBy: "agent_completed",
+	}
+	if err := repo.CreateGitSnapshot(ctx, completed); err != nil {
+		t.Fatalf("create agent_completed: %v", err)
+	}
+
+	// Task is archived; the terminal archive snapshot is captured.
+	if err := repo.ArchiveTask(ctx, taskID); err != nil {
+		t.Fatalf("archive task: %v", err)
+	}
+	archive := &models.GitSnapshot{
+		SessionID:    sessionID,
+		SnapshotType: models.SnapshotTypeArchive,
+		Branch:       "feature",
+		HeadCommit:   "archive-head",
+		BaseCommit:   "base000",
+		Files: map[string]interface{}{
+			"file.txt": map[string]interface{}{
+				"path":      "file.txt",
+				"status":    "modified",
+				"additions": float64(3),
+				"deletions": float64(1),
+			},
+		},
+	}
+	if err := repo.CreateGitSnapshot(ctx, archive); err != nil {
+		t.Fatalf("create archive: %v", err)
+	}
+
+	// Task is unarchived but NOT yet resumed: no newer snapshot exists.
+	if _, err := repo.UnarchiveTask(ctx, taskID); err != nil {
+		t.Fatalf("unarchive task: %v", err)
+	}
+
+	// The archive row must still win — it is the newest snapshot and the
+	// only terminal state; the older agent_completed row is pre-archive.
+	t.Run("single query", func(t *testing.T) {
+		got, err := repo.GetLatestGitSnapshot(ctx, sessionID)
+		if err != nil {
+			t.Fatalf("GetLatestGitSnapshot: %v", err)
+		}
+		if got.HeadCommit != "archive-head" {
+			t.Errorf("expected archive-head, got %q — pre-archive agent_completed row outranks terminal archive before resume", got.HeadCommit)
+		}
+	})
+	t.Run("batch query", func(t *testing.T) {
+		got, err := repo.GetLatestGitSnapshotsBySessionIDs(ctx, []string{sessionID})
+		if err != nil {
+			t.Fatalf("GetLatestGitSnapshotsBySessionIDs: %v", err)
+		}
+		if snap := got[sessionID]; snap == nil {
+			t.Fatal("expected a snapshot for session, got none")
+		} else if snap.HeadCommit != "archive-head" {
+			t.Errorf("expected archive-head in batch, got %q", snap.HeadCommit)
+		}
+	})
+}
+
 // TestGetLatestGitSnapshot_UnarchivedResumePrefersCompleted guards the
 // lifecycle-conditional archive ranking: an archive snapshot is authoritative
 // only while its owning task is still archived. ArchiveTask captures one, but

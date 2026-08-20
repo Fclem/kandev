@@ -156,6 +156,15 @@ func TestCreateGitSnapshotRoundTripsEveryField(t *testing.T) {
 		t.Fatalf("CreateGitSnapshot: %v", err)
 	}
 
+	// Archive the task so GetLatestGitSnapshot selects the archive row via
+	// its rank-0 branch (snapshot_type='archive' AND task archived) rather
+	// than merely being the only row — the fixture's intent is the
+	// authoritative-archive read, and the row is only the sole row here by
+	// construction. (Claude review note on PR #2851.)
+	if err := repo.ArchiveTask(ctx, "task-snap-full"); err != nil {
+		t.Fatalf("ArchiveTask: %v", err)
+	}
+
 	got, err := repo.GetLatestGitSnapshot(ctx, "session-snap-full")
 	if err != nil {
 		t.Fatalf("GetLatestGitSnapshot: %v", err)

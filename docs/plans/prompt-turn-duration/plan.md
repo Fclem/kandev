@@ -94,7 +94,7 @@ Small feature; three sequential tasks, no parallel candidates (each depends on t
 
 ```
 Wave 1:
-- [ ] [task-01-duration-helper](task-01-duration-helper.md)
+- [x] [task-01-duration-helper](task-01-duration-helper.md)
 
 Wave 2:
 - [ ] [task-02-message-actions-ui](task-02-message-actions-ui.md)

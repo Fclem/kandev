@@ -1,7 +1,7 @@
 ---
 id: "01-duration-helper"
 title: "Duration helper with unit tests"
-status: pending
+status: done
 wave: 1
 depends_on: []
 plan: "plan.md"
@@ -33,4 +33,6 @@ spec: "../../specs/ui/prompt-turn-duration.md"
 
 ## Results
 
-Pending. Record exact commands run with outcomes, generated artifacts, and cleanup evidence.
+- TDD red: `cd apps/web && pnpm vitest run lib/prompt-history.test.ts` failed as expected: 5 assertions received `null` before `messageTurnDurationSeconds` existed.
+- Verification: `cd apps/web && pnpm vitest run lib/prompt-history.test.ts` passed: 1 file, 39 tests.
+- Generated artifacts: none. Cleanup: no generated artifacts to remove.
